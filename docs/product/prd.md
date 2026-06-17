@@ -22,12 +22,21 @@ LCSP là nền tảng hỗ trợ tuân thủ pháp lý cho doanh nghiệp sử d
 
 PRD này không tạo architecture document, backlog, implementation plan hoặc code. Các quyết định kỹ thuật sâu hơn phải được xử lý ở artifact downstream sau khi PRD được review.
 
+### Requirement Governance
+
+Canonical implementation requirement identifiers live in `docs/specs/functional-requirements.md`.
+
+- `FR-001..FR-056` are the canonical functional requirement identifiers for implementation, acceptance, traceability and future story work.
+- PRD `FR-E*` headings below are product narrative/source aliases only.
+- PRD `FR-E*` aliases must not be used as canonical story, implementation, acceptance or traceability identifiers.
+- When this PRD and a canonical requirements catalog disagree on identifier status, the canonical catalog wins for implementation planning.
+
 ## 2. Goals & Success Metrics
 
 ### Product Goals
 
 - Giúp Manager hoàn tất assessment bằng ngôn ngữ nghiệp vụ/pháp lý, không cần hiểu scanner, GitHub Actions hoặc source code.
-- Thu thập technical evidence từ Developer theo workflow được Manager dẫn dắt.
+- Thu thập technical evidence qua GitHub App read-only Repository Scan trong workflow do Manager dẫn dắt; Developer có thể hỗ trợ như optional collaborator.
 - Ngăn hệ thống tạo risk level khi chỉ có self-report từ Wizard.
 - Đối chiếu WizardProfile và TechnicalProfile để tạo VerifiedProfile trước classification.
 - Đảm bảo final report có audit trail: wizard answers, evidence metadata, conflict resolution, attestation, classification output, legal citation và document version.
@@ -66,6 +75,8 @@ Manager owns business/legal truth:
 
 Developer là technical task participant. Trong MVP, Developer bao gồm developer, tech lead, DevOps, security engineer hoặc người hiểu source code/deployment/evidence.
 
+Developer là optional collaborator trong MVP. Developer không phải điều kiện bắt buộc để Manager hoàn tất complete A-to-Z golden path, unlock classification hoặc generate final report.
+
 Developer owns technical truth:
 
 - repo/branch/commit có đúng không;
@@ -92,26 +103,34 @@ Manager mặc định có toàn quyền trong assessment:
 
 - `CREATE_ASSESSMENT`
 - `EDIT_WIZARD`
+- `CONNECT_REPOSITORY`
+- `RUN_REPOSITORY_SCAN`
+- `VIEW_TECHNICAL_FINDINGS`
+- `REVIEW_AI_USAGE_FLOW`
 - `INVITE_DEVELOPER`
 - `ASSIGN_DEVELOPER_POLICY`
 - `VIEW_ALL_PROGRESS`
 - `RESOLVE_BUSINESS_CONFLICTS`
+- `RESOLVE_TECHNICAL_CONFLICTS`
+- `FINALIZE_CONFLICT_RESOLUTION`
 - `APPROVE_VERIFIED_PROFILE`
 - `UNLOCK_CLASSIFICATION_AFTER_GATES`
 - `GENERATE_REPORT`
 - `EXPORT_AUDIT_TRAIL`
+
+Manager is the required and sufficient role for completing an MVP assessment. Manager can perform every active MVP action that Developer may later receive through delegation.
 
 ### Developer Policies
 
 Developer chỉ làm được task/policy được Manager cấp:
 
 - `CONNECT_REPOSITORY`
-- `RUN_SCAN`
-- `UPLOAD_EVIDENCE`
+- `RUN_REPOSITORY_SCAN`
 - `VIEW_TECHNICAL_FINDINGS`
-- `CONFIRM_FINDINGS`
+- `VIEW_ASSIGNED_REPOSITORY`
+- `RESPOND_TO_TECHNICAL_CLARIFICATION`
 - `ATTEST_TECHNICAL_CLAIMS`
-- `RESOLVE_TECHNICAL_CONFLICTS`
+- `VIEW_ASSIGNED_CONFLICT`
 - `VIEW_LIMITED_ASSESSMENT_CONTEXT`
 
 ### Developer Restrictions
@@ -119,6 +138,7 @@ Developer chỉ làm được task/policy được Manager cấp:
 Developer không được:
 
 - `EDIT_WIZARD_BUSINESS_ANSWERS`
+- `FINALIZE_CONFLICT_RESOLUTION`
 - `APPROVE_VERIFIED_PROFILE`
 - `RUN_FINAL_CLASSIFICATION`
 - `GENERATE_FINAL_REPORT`
@@ -127,23 +147,39 @@ Developer không được:
 - `INVITE_OTHER_USERS`
 - `MANAGE_ASSESSMENT_SETTINGS`
 
-### Dual Confirmation Rule
+### MVP Conflict Resolution Rule
 
-Material conflicts require dual confirmation from Manager and Developer. Developer xác nhận technical truth; Manager xác nhận business/legal meaning.
+Trong MVP, mọi conflict được route thành Manager conflict resolution task. Manager reviews WizardProfile, TechnicalProfile và AIUsageFlow evidence, sau đó resolve hoặc update thông tin liên quan. Developer có thể cung cấp structured attestation theo `FR-046` nếu được giao scoped task, nhưng attestation không phải điều kiện bắt buộc để resume workflow. Delegated technical clarification workflow thuộc `FR-052` và là Deferred/Future.
+
+Post-MVP, Manager may delegate selected technical clarification permissions to Developer, but delegation never removes Manager permissions and Developer technical input does not automatically finalize conflict resolution.
+
+### OAuth/OIDC Login Boundary
+
+OAuth/OIDC user login is an active MVP authentication capability. OAuth/OIDC login dùng để xác thực danh tính người dùng vào LCSP. GitHub App connection dùng để cấp read-only repository access cho Repository Scan. Hai boundary này tách biệt:
+
+| Capability | Purpose |
+| --- | --- |
+| OAuth/OIDC Login | Đăng nhập/xác thực danh tính người dùng vào LCSP |
+| GitHub App Connection | Cấp quyền read-only để LCSP scan repository |
+| Repository Scan | Tạo TechnicalEvidenceReport từ repository đã kết nối |
+
+OAuth/OIDC login không tự kết nối GitHub repository, không cấp repository scan permission và không thay thế LCSP authorization/RBAC.
+
+Enterprise SSO/SAML/directory federation remains Deferred/Future unless explicitly activated later.
 
 ## 5. End-to-End User Journey
 
 ### UJ-1: Manager starts an evidence-based assessment
 
-Manager tạo assessment mới, điền Wizard bằng ngôn ngữ nghiệp vụ, xem readiness/preliminary indicators, thấy technical evidence đang thiếu, và mời Developer với policy phù hợp. Giá trị đạt được khi Manager hiểu assessment cần evidence gì mà không phải tự xử lý source code.
+Manager tạo assessment mới, đăng nhập bằng password/email hoặc OAuth/OIDC, điền Wizard bằng ngôn ngữ nghiệp vụ, xem readiness/preliminary indicators, kết nối GitHub repository và chạy Repository Scan nếu muốn hoàn tất assessment một mình. Giá trị đạt được khi Manager có thể hoàn tất MVP flow mà không cần Developer assignment.
 
 ### UJ-2: Developer supplies technical evidence as an assigned task
 
-Developer nhận task từ Manager, kết nối GitHub repo hoặc upload Local/CI/manual evidence, review findings, xác nhận technical truth hoặc bổ sung structured technical attestation nếu scanner evidence chưa đủ. Giá trị đạt được khi evidence có provenance và LCSP có thể chạy evidence gates.
+Developer, nếu được mời, nhận delegated technical task từ Manager, có thể hỗ trợ repository connection, scan review hoặc technical clarification trong scope được cấp. Giá trị đạt được khi Manager có thể nhận thêm technical input mà không mất quyền owner/final resolver.
 
-### UJ-3: Manager and Developer resolve a material conflict
+### UJ-3: Manager resolves a conflict
 
-LCSP phát hiện conflict có thể ảnh hưởng risk level. Developer xác nhận finding có đúng production logic không. Manager xác nhận ý nghĩa nghiệp vụ/pháp lý của finding. Giá trị đạt được khi VerifiedProfile chỉ được tạo sau khi material conflict đã resolve đúng vai trò.
+LCSP phát hiện conflict có thể ảnh hưởng risk level. Orchestrator pause workflow, API tạo Manager conflict resolution task, Manager review WizardProfile, TechnicalProfile và AIUsageFlow, rồi resolve hoặc cập nhật thông tin liên quan. Giá trị đạt được khi VerifiedProfile chỉ được tạo sau khi conflict đã resolve, không phụ thuộc Developer assignment.
 
 ### UJ-4: Manager generates final compliance report after classification is unlocked
 
@@ -158,20 +194,27 @@ Nếu chưa thể cung cấp technical evidence, Manager có thể xuất readin
 ### In Scope
 
 - Manager-led assessment flow.
+- OAuth/OIDC user login as active MVP authentication capability.
 - Web Wizard cho Manager.
-- Developer invitation và task/policy assignment.
-- Developer Workspace cho technical evidence tasks.
-- GitHub App read-only scan là default MVP evidence path.
-- Local/CI scanner report upload hoặc manual technical evidence JSON ở mức alternative.
+- Standalone Python Worker (`lcsp-scanner-worker`) thực thi Repository Scan độc lập.
+- First-class Python static AST/CST analysis (imports, packages, functions, AI usage, I/O patterns).
+- TypeScript/JavaScript analysis qua node subprocess adapter tích hợp.
+- Kết nối GitHub repository (read-only) và Repository Scan tự động.
+- Tích hợp nhà cung cấp LLM thật (Gemini, Claude, hoặc GPT) cho happy-path risk classification và document generation.
+- Legal corpus bảo toàn provenance từ nguồn chính phủ chính thức, tổ chức thành các phiên bản `LegalCorpusVersion` bất biến.
+- Hybrid retriever kết hợp pgvector (semantic search) và full-text search (FTS) trên PostgreSQL để truy xuất cơ sở pháp lý.
+- Lưu trữ tài liệu kết quả bằng real S3-compatible object storage.
+- Developer invitation và task/policy assignment as optional collaboration.
+- Developer Workspace cho optional technical evidence/clarification tasks.
 - Evidence schema completeness gate.
 - Context-aware quality threshold gate ở mức MVP.
-- Reconciliation giữa WizardProfile và TechnicalProfile.
+- Reconciliation giữa WizardProfile, TechnicalProfile và AIUsageFlow.
 - Conflict Score, Evidence Confidence Score và AI Intervention Score.
 - VerifiedProfile creation sau reconciliation.
 - Risk classification chỉ sau VerifiedProfile.
 - Gap analysis dựa trên risk result.
 - Compliance report/document generation với gating.
-- Audit trail cho toàn bộ decision path.
+- Audit trail cho toàn bộ decision path (bao gồm retrieval audit và model run audit).
 
 ### Out of Scope for MVP
 
@@ -183,7 +226,12 @@ Nếu chưa thể cung cấp technical evidence, Manager có thể xuất readin
 - Public auditor/regulator portal.
 - Direct editing of raw legal corpus/rules by end users.
 - Final report khi còn material/critical conflict unresolved.
+- Enterprise SSO/SAML/directory federation, domain-restricted login, SCIM provisioning hoặc advanced organization identity policy.
+- Local/CI scanner report upload hoặc manual technical evidence JSON trong MVP main flow.
 - Risk level khi chỉ có Wizard/self-report.
+- Deterministic mock LLM gateway làm mặc định cho happy-path classification (chỉ dùng cho tests, offline CI, dev không cấu hình key).
+- Local JSONL legal corpus seed làm nguồn dữ liệu chính thức (chỉ dùng làm test fixture).
+- Local filesystem artifact storage làm kho lưu trữ chính thức (chỉ dùng cho local development).
 
 ## 7. Functional Requirements
 
@@ -268,32 +316,36 @@ risk_level = not_available
 
 ### Epic 3 - Technical Evidence Collection
 
-**Description:** Developer provides technical evidence through default GitHub App read-only scan or enterprise-safe alternatives.
+**Description:** Manager provides MVP technical evidence by connecting GitHub repository and running Repository Scan. Developer may assist only as optional delegated collaborator; enterprise-safe alternatives are Deferred/Future.
 
 #### FR-E3-1: GitHub App read-only evidence path
 
-Developer with `CONNECT_REPOSITORY` and `RUN_SCAN` can connect selected repository and run read-only scan.
+Manager can connect selected repository and run read-only scan for own assessment. This GitHub App read-only Repository Scan is the MVP golden technical-evidence path. Developer may do the same only when delegated `CONNECT_REPOSITORY` and `RUN_REPOSITORY_SCAN`.
 
 **Consequences:**
 - Raw source code must not be sent to LLM.
 - Raw source code must not be stored long term.
 - Evidence report must include provenance metadata.
+- Manager can complete the A-to-Z golden path without Developer participation.
 
-#### FR-E3-2: Local/CI evidence upload
+#### FR-E3-2: Deferred Local/CI evidence upload
 
-Developer with `UPLOAD_EVIDENCE` can upload Local/CI scanner report.
-
-**Consequences:**
-- Uploaded report must go through schema completeness gate.
-- Uploaded report must include source type and provenance.
-
-#### FR-E3-3: Manual technical evidence JSON upload
-
-Developer with `UPLOAD_EVIDENCE` can upload manual technical evidence JSON when scanner runs outside LCSP or dynamic/wrapper logic is not detected automatically.
+Local/CI scanner report upload is Deferred/Future and maps to canonical `FR-050`. It is not part of the active MVP main flow and must not be represented as an MVP evidence path unless reopened through change control.
 
 **Consequences:**
-- Manual evidence must be structured.
-- Free-text comment cannot unlock classification.
+- Active MVP evidence collection uses GitHub App read-only Repository Scan.
+- Future Local/CI reports must go through schema completeness, privacy, provenance and quality gates.
+- Future Local/CI reports must include source type and provenance.
+- Local/CI upload cannot independently unlock MVP classification.
+
+#### FR-E3-3: Deferred manual technical evidence JSON upload
+
+Manual technical evidence JSON upload is Deferred/Future and maps to canonical `FR-051`. It is not part of the active MVP main flow and must not be represented as an MVP evidence path unless reopened through change control.
+
+**Consequences:**
+- Future manual evidence must be structured and provenance-bound.
+- Free-text comment cannot bypass gates.
+- Manual evidence JSON cannot independently unlock MVP classification.
 
 #### FR-E3-4: Privacy flags validation
 
@@ -302,13 +354,17 @@ System validates privacy flags for every technical evidence report.
 **Consequences:**
 - Evidence is rejected if privacy flags indicate raw source uploaded/stored improperly, full AST uploaded when disallowed, raw source sent to LLM, or secrets not redacted where required.
 
-#### FR-E3-5: Human technical attestation as supplement
+#### FR-E3-5: Optional human technical attestation as supplement
 
-Developer can provide structured human technical attestation only as controlled evidence supplement.
+Developer can provide structured human technical attestation only as optional controlled supplemental input through a scoped Developer task. This maps to canonical `FR-045` and `FR-046`; `FR-045` disclosure/audit applies whenever attestation influences a material decision.
 
 **Consequences:**
+- Attestation is not required for the MVP golden path.
 - Attestation requires role-bound claims, scope, reason, supporting evidence refs where available and signed timestamp.
 - Attestation cannot replace machine-generated metadata listed in A3.
+- Attestation cannot independently unlock classification.
+- Attestation cannot finalize conflict resolution; Manager remains final resolver.
+- Free text cannot bypass evidence gates.
 
 ### Epic 4 - Evidence Quality Gate
 
@@ -365,12 +421,14 @@ System computes Conflict Score for each conflict.
 - Conflict Score is the only score that can block workflow.
 - Evidence Confidence Score and AI Intervention Score are supporting signals only.
 
-#### FR-E5-3: Route technical conflicts to Developer
+#### FR-E5-3: Route technical conflicts to Manager
 
-Technical conflicts such as dependency use, false positive/negative, repo/branch/commit or production scope are routed to Developer.
+Technical conflicts such as dependency use, false positive/negative, repo/branch/commit or production scope are routed to Manager in MVP. Manager may request re-scan/correction and may consider optional structured attestation submitted through `FR-046`; the delegated Developer clarification workflow in `FR-052` is Deferred/Future and not required to resume the MVP workflow.
 
 **Consequences:**
-- Developer can resolve only technical truth.
+- Manager is the final resolver for MVP technical conflicts.
+- Structured attestation is supplemental input only and cannot unlock classification by itself.
+- Delegated technical clarification workflow (`FR-052`) is Deferred/Future.
 - Resolution is audited.
 
 #### FR-E5-4: Route business/legal conflicts to Manager
@@ -381,12 +439,12 @@ Business/legal conflicts such as purpose, affected users, human review process o
 - Manager can resolve business/legal truth.
 - Resolution is audited.
 
-#### FR-E5-5: Require dual confirmation for material conflicts
+#### FR-E5-5: Manager resolves MVP conflicts
 
-Any material conflict that can change risk level requires confirmation from both Manager and Developer.
+Any conflict that can affect risk level creates a Manager conflict resolution task. Manager resolution is required and sufficient to resume MVP workflow when evidence is adequate.
 
 **Consequences:**
-- Final classification remains blocked until dual confirmation completes.
+- Final classification remains blocked until Manager resolves the conflict and reconciliation passes.
 - LCSP must not infer final truth without required confirmation.
 
 #### FR-E5-6: Block critical unresolved conflicts
@@ -395,7 +453,8 @@ Critical conflicts remain blocking until resolved.
 
 **Consequences:**
 - No final report is generated while critical conflict is unresolved.
-- Assessment state remains `RECONCILIATION_REQUIRED`, `DEVELOPER_CONFIRMATION_REQUIRED` or `MANAGER_CONFIRMATION_REQUIRED`.
+- Assessment state remains `RECONCILIATION_REQUIRED`, `CONFLICT_RESOLUTION_REQUIRED` or `MANAGER_CONFIRMATION_REQUIRED`.
+- `DEVELOPER_CONFIRMATION_REQUIRED` is not an MVP blocking state; delegated Developer clarification is Deferred/Future under `FR-052` and cannot unlock classification by itself.
 
 ### Epic 6 - Verified Profile & Risk Classification
 
@@ -503,7 +562,7 @@ System records evidence source type, provenance, scanner/report version, ruleset
 System records conflict score, conflict type, resolver role, decision, rationale and timestamps.
 
 **Consequences:**
-- Material conflicts show dual confirmation where required.
+- Conflict resolution shows Manager final resolution and any optional delegated clarification used as input.
 
 #### FR-E8-4: Audit human technical attestation
 
@@ -553,16 +612,17 @@ PRD-level state model:
 
 - `WIZARD_IN_PROGRESS`: Manager đang điền Wizard.
 - `SELF_DECLARED_READINESS`: Wizard submitted, chưa có technical evidence, chỉ readiness/preliminary indicators.
-- `TECHNICAL_EVIDENCE_REQUIRED`: Cần Developer/repo/report.
+- `TECHNICAL_EVIDENCE_REQUIRED`: Cần GitHub Repository Scan result; Manager can complete this path without Developer assignment.
 - `DEVELOPER_INVITED`: Manager đã mời Developer.
-- `EVIDENCE_COLLECTION_IN_PROGRESS`: Developer đang kết nối repo, chạy scan hoặc upload report.
+- `EVIDENCE_COLLECTION_IN_PROGRESS`: Legacy umbrella state; MVP uses Manager-owned repository connection/scan states.
 - `TECHNICAL_EVIDENCE_MISSING`: Chưa có report.
 - `TECHNICAL_EVIDENCE_REJECTED`: Report thiếu schema hoặc vi phạm privacy.
 - `TECHNICAL_EVIDENCE_INSUFFICIENT`: Report hợp lệ nhưng quality thấp.
 - `TECHNICAL_EVIDENCE_READY`: Report đủ schema và đạt quality.
 - `RECONCILIATION_REQUIRED`: Có conflict cần xử lý.
-- `DEVELOPER_CONFIRMATION_REQUIRED`: Cần Developer xác nhận technical truth.
-- `MANAGER_CONFIRMATION_REQUIRED`: Cần Manager xác nhận business/legal meaning.
+- `CONFLICT_RESOLUTION_REQUIRED`: Có conflict, cần Manager xử lý trước khi classification.
+- `MANAGER_CONFIRMATION_REQUIRED`: Cần Manager resolve conflict hoặc confirm business/legal/technical interpretation.
+- `DEVELOPER_CONFIRMATION_REQUIRED`: Legacy/post-MVP optional delegated clarification; không phải MVP blocking state.
 - `VERIFIED_PROFILE_READY`: VerifiedProfile đã sẵn sàng.
 - `READY_FOR_CLASSIFICATION`: Đủ điều kiện chạy Risk Classification Agent.
 - `CLASSIFIED`: Risk classification hoàn tất với legal trace.
@@ -580,7 +640,7 @@ Rules:
 
 - Supporting signal only.
 - Không tự block workflow.
-- Có thể kích hoạt Developer confirmation nếu cao và mâu thuẫn với Wizard.
+- Có thể kích hoạt Manager conflict resolution nếu cao và mâu thuẫn với Wizard.
 
 ### AI Intervention Score
 
@@ -623,13 +683,22 @@ AND conflict ảnh hưởng đến risk classification hoặc nghĩa vụ pháp 
 
 ### Minimum Evidence Sources
 
-Accepted evidence sources for MVP/near-MVP:
+Accepted evidence sources:
 
-- GitHub App read-only scan.
-- Local/CI scanner report.
-- Manual technical evidence JSON.
-- API probe result, if available.
-- Structured human technical attestation as supplement.
+**Active MVP golden evidence path**
+
+- GitHub App read-only Repository Scan.
+
+**Optional MVP supplemental input**
+
+- Structured human technical attestation, only through scoped Developer task, only as supplemental input and never as an independent classification unlock.
+
+**Deferred/Future evidence paths**
+
+- Local/CI scanner report upload (`FR-050`).
+- Manual technical evidence JSON upload (`FR-051`).
+- Delegated technical clarification (`FR-052`).
+- API probe evidence, unless separately approved through change control.
 
 ### Minimum Evidence Schema Groups
 
@@ -661,7 +730,7 @@ Each dimension may be `DETECTED`, `NOT_DETECTED` or `UNKNOWN`, but the field mus
 
 ### Attestation Guardrails
 
-Human technical attestation can supplement low-quality scanner evidence only if:
+Human technical attestation is optional supplemental input and can be considered only if:
 
 - source type is structured as human technical attestation;
 - attester is authorized Developer;
@@ -671,6 +740,8 @@ Human technical attestation can supplement low-quality scanner evidence only if:
 - supporting evidence refs are included where available;
 - signed timestamp is recorded;
 - audit trail records who, what, when, why and based on which evidence.
+
+Attestation is not required for the golden path and cannot independently unlock classification or finalize conflict resolution.
 
 Attestation cannot replace these machine-generated or external metadata:
 
@@ -688,21 +759,22 @@ Attestation cannot replace these machine-generated or external metadata:
 
 ## 12. Reconciliation Rules
 
-- LCSP compares WizardProfile and TechnicalProfile only after technical evidence is accepted for reconciliation.
-- Technical conflict is resolved by Developer.
-- Business/legal conflict is resolved by Manager.
-- Material conflict that can change risk level requires both Manager and Developer.
+- LCSP compares WizardProfile, TechnicalProfile and AIUsageFlow only after technical evidence is accepted for reconciliation.
+- Any MVP conflict pauses workflow and creates a Manager conflict-resolution task.
+- Manager reviews WizardProfile, TechnicalProfile and AIUsageFlow evidence, then resolves or updates relevant information.
+- Manager remains final resolver for technical, business/legal and cross-boundary MVP conflicts.
+- Developer may provide technical clarification if assigned, but Developer is not required to resume MVP workflow.
 - LCSP coordinates and records the process but does not act as the human authority.
-- VerifiedProfile cannot be created while material/critical conflict remains unresolved.
+- VerifiedProfile cannot be created while any conflict remains unresolved.
 - Every conflict resolution must be auditable.
 
 Examples:
 
-- Scanner detects dependency/package AI use: Developer resolves.
-- Scanner false positive/false negative: Developer resolves.
+- Scanner detects dependency/package AI use: Manager resolves or requests re-scan/correction.
+- Scanner false positive/false negative: Manager resolves with evidence review; optional structured attestation may supplement under `FR-046`; delegated Developer clarification remains Deferred/Future under `FR-052`.
 - Wizard business purpose is wrong: Manager resolves.
-- AI affects decision/workflow: Manager and Developer resolve.
-- Auto decision or human oversight conflict: Manager and Developer resolve.
+- AI affects decision/workflow: Manager resolves using WizardProfile, TechnicalProfile and AIUsageFlow evidence.
+- Auto decision or human oversight conflict: Manager resolves; optional structured attestation does not finalize the conflict, and delegated Developer clarification remains Deferred/Future under `FR-052`.
 
 ## 13. Reporting Rules
 
@@ -726,7 +798,7 @@ LCSP audit trail must record:
 - Scope and privacy flags.
 - Evidence gate result and reason.
 - Conflict records, score and required resolver.
-- Manager and Developer confirmations.
+- Manager conflict resolutions and any optional structured attestation that materially influences a decision.
 - Human technical attestation claims.
 - VerifiedProfile version.
 - Classification output and rule/citation trace.
@@ -797,8 +869,8 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - Attestation must have schema.
 - Attestation claims must be role-bound.
 - Manager can confirm only business/legal meaning.
-- Developer can confirm only technical truth.
-- Critical claims need dual confirmation.
+- Manager is the final reviewer for classification-relevant attestation in MVP.
+- Developer can provide technical clarification only when delegated, and that clarification does not finalize conflict resolution.
 - Attestation must include provenance, scope, reason and timestamp.
 - Attestation cannot replace machine-generated or external metadata:
   - report hash;
@@ -817,7 +889,7 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - Define attestation claim schema.
 - Define allowed Developer claims and Manager confirmations.
 - Test abuse cases: "bỏ qua scanner", unsupported claim, missing provenance, manager-only technical override.
-- Require product review before attestation can unlock classification in critical contexts.
+- Require product review before attestation can influence any classification-relevant Manager decision in critical contexts. Attestation must not independently unlock classification.
 
 ## 16. Open Questions
 
@@ -839,12 +911,12 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - GitHub App read-only acceptance by target MVP users needs validation.
 - Scope coverage for monorepos needs definition.
 - Stale evidence behavior when commit/branch changes needs decision.
-- API probe evidence trust model needs decision.
+- Local/CI report upload (`FR-050`), manual evidence JSON (`FR-051`), delegated technical clarification (`FR-052`) and API probe evidence are Deferred/Future unless reopened by change control.
 
 ### Attestation
 
-- Exact list of Developer-attestable claims needs confirmation.
-- Confidence impact of attestation needs decision.
+- Exact list of optional Developer-attestable claims needs confirmation.
+- Confidence impact of attestation needs decision, with the constraint that attestation cannot bypass gates or independently unlock classification.
 - Policy for excessive attestation use needs decision.
 
 ### Reporting
@@ -860,10 +932,10 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - AC-2: Risk Classification Agent cannot run before VerifiedProfile exists.
 - AC-3: Technical evidence must pass schema completeness gate before reconciliation.
 - AC-4: Technical evidence must pass quality threshold gate before classification unlock.
-- AC-5: Material conflicts block final classification/report until resolved.
-- AC-6: Material conflicts that can change risk level require both Manager and Developer confirmation.
+- AC-5: Any unresolved conflict blocks final classification/report until resolved.
+- AC-6: Manager conflict resolution is required and sufficient for MVP conflict completion when evidence gates pass.
 - AC-7: Evidence Confidence Score and AI Intervention Score never block workflow alone.
-- AC-8: Conflict Score can block workflow according to material/critical threshold.
+- AC-8: Conflict handling uses binary MVP routing: conflict exists or not. Conflict Score may explain seriousness but does not create multiple routes.
 - AC-9: Human technical attestation cannot replace machine-generated metadata listed in A3.
 - AC-10: Final report includes legal citation/rule trace or is not final.
 - AC-11: Final report discloses human technical attestation when used for classification.
@@ -885,8 +957,7 @@ Architecture may proceed to explore system boundaries and feasibility only if it
 - no risk level without technical evidence;
 - no Risk Classification before VerifiedProfile;
 - no human attestation bypass for machine-generated metadata;
-- Conflict Score is the only blocking score;
-- material conflicts require dual Manager + Developer confirmation;
+- any unresolved conflict blocks classification/report until Manager resolution is complete;
 - Wizard-only remains readiness/preliminary indicators only.
 
 Before final architecture signoff, product must validate or carry forward these blockers:
