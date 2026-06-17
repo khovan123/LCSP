@@ -1,0 +1,2311 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LCSP — Đặc tả kỹ thuật toàn diện</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --ink: #16202e;
+      --muted: #5b6670;
+      --bg: #ffffff;
+      --surface: #f5f7f8;
+      --surface2: #eef1f3;
+      --border: #e0e5ea;
+      --border2: #cdd4db;
+      --accent: #0f6e56;
+      --accent-soft: #e1f0eb;
+      --link: #185fa5;
+      --hi: #a32d2d;
+      --hi-bg: #fbeeee;
+      --med: #854f0b;
+      --med-bg: #fbf1de;
+      --lo: #3b6d11;
+      --lo-bg: #eef5e2;
+      --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+      --sans: "Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html {
+      scroll-behavior: smooth
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.65;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 268px minmax(0, 1fr);
+      max-width: 1280px;
+      margin: 0 auto
+    }
+
+    /* sidebar */
+    aside {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      padding: 28px 18px 60px;
+      background: var(--surface)
+    }
+
+    aside .brand {
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -.01em
+    }
+
+    aside .brand small {
+      display: block;
+      font-weight: 500;
+      color: var(--muted);
+      font-size: 11.5px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      margin-top: 4px
+    }
+
+    aside nav {
+      margin-top: 22px
+    }
+
+    aside nav a {
+      display: block;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      padding: 5px 10px;
+      border-radius: 7px;
+      border-left: 2px solid transparent
+    }
+
+    aside nav a:hover {
+      background: var(--surface2);
+      color: var(--ink)
+    }
+
+    aside nav a .n {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      margin-right: 8px
+    }
+
+    /* main */
+    main {
+      padding: 46px 54px 120px;
+      min-width: 0
+    }
+
+    .doc-head {
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 22px;
+      margin-bottom: 8px
+    }
+
+    .doc-head .kicker {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--accent)
+    }
+
+    .doc-head h1 {
+      font-size: 30px;
+      line-height: 1.18;
+      margin: 10px 0 6px;
+      letter-spacing: -.02em;
+      font-weight: 700
+    }
+
+    .doc-head .vi {
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 500
+    }
+
+    .abstract {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin: 26px 0 10px;
+      font-size: 14px
+    }
+
+    .abstract b {
+      color: var(--accent)
+    }
+
+    h2 {
+      font-size: 22px;
+      margin: 64px 0 14px;
+      padding-top: 14px;
+      letter-spacing: -.015em;
+      font-weight: 600;
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      border-top: 1px solid var(--border)
+    }
+
+    h2 .num {
+      font-family: var(--mono);
+      font-size: 14px;
+      color: #fff;
+      background: var(--accent);
+      border-radius: 7px;
+      padding: 3px 9px;
+      font-weight: 500;
+      letter-spacing: .02em
+    }
+
+    h3 {
+      font-size: 16.5px;
+      margin: 34px 0 10px;
+      font-weight: 600;
+      color: var(--ink)
+    }
+
+    h4 {
+      font-size: 14px;
+      margin: 22px 0 8px;
+      font-weight: 600;
+      color: var(--accent)
+    }
+
+    p {
+      margin: 10px 0
+    }
+
+    ul,
+    ol {
+      margin: 10px 0;
+      padding-left: 22px
+    }
+
+    li {
+      margin: 5px 0
+    }
+
+    a {
+      color: var(--link)
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--surface2);
+      padding: 1px 6px;
+      border-radius: 5px;
+      color: #243042
+    }
+
+    .ref {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--accent-soft);
+      color: #0b4a3a;
+      padding: 1px 6px;
+      border-radius: 5px;
+      white-space: nowrap
+    }
+
+    pre {
+      background: #0f1722;
+      color: #e7edf3;
+      border-radius: 12px;
+      padding: 18px 20px;
+      overflow: auto;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.55;
+      margin: 16px 0;
+      border: 1px solid #1d2a3a
+    }
+
+    pre .c {
+      color: #7d93a8
+    }
+
+    /* tables */
+    .tw {
+      overflow-x: auto;
+      margin: 16px 0;
+      border: 1px solid var(--border);
+      border-radius: 12px
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 13px
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 9px 13px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top
+    }
+
+    thead th {
+      background: var(--surface2);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: .02em;
+      color: #2a3645;
+      position: sticky;
+      top: 0
+    }
+
+    tbody tr:nth-child(even) {
+      background: var(--surface)
+    }
+
+    tbody tr:hover {
+      background: var(--accent-soft)
+    }
+
+    td code {
+      font-size: 11.5px
+    }
+
+    .badge {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 500;
+      padding: 2px 7px;
+      border-radius: 20px;
+      white-space: nowrap;
+      display: inline-block
+    }
+
+    .b-hi {
+      background: var(--hi-bg);
+      color: var(--hi)
+    }
+
+    .b-med {
+      background: var(--med-bg);
+      color: var(--med)
+    }
+
+    .b-lo {
+      background: var(--lo-bg);
+      color: var(--lo)
+    }
+
+    .b-must {
+      background: #e7eef7;
+      color: #1b4a7a
+    }
+
+    .b-opt {
+      background: var(--surface2);
+      color: var(--muted)
+    }
+
+    /* diagram cards */
+    .fig {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 10px 4px;
+      margin: 20px 0;
+      background: var(--bg)
+    }
+
+    .fig .cap {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 8px 8px 10px;
+      font-family: var(--mono);
+      letter-spacing: .02em
+    }
+
+    .fig .cap b {
+      color: var(--accent);
+      font-weight: 500
+    }
+
+    .mermaid {
+      display: flex;
+      justify-content: center;
+      overflow-x: auto;
+      padding: 8px 4px;
+      background-color: #cdd4db;
+    }
+
+    .note {
+      border-left: 3px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 0 10px 10px 0;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 13.5px
+    }
+
+    .note b {
+      color: #0b4a3a
+    }
+
+    .warn {
+      border-left: 3px solid var(--med);
+      background: var(--med-bg);
+      border-radius: 0 10px 10px 0;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-size: 13.5px
+    }
+
+    .warn b {
+      color: var(--med)
+    }
+
+    .cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px
+    }
+
+    @media(max-width:980px) {
+      .layout {
+        grid-template-columns: 1fr
+      }
+
+      aside {
+        position: static;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--border)
+      }
+
+      main {
+        padding: 30px 20px 80px
+      }
+
+      .cols {
+        grid-template-columns: 1fr
+      }
+    }
+
+    @media print {
+      aside {
+        display: none
+      }
+
+      main {
+        padding: 0
+      }
+
+      .fig,
+      pre,
+      .tw {
+        break-inside: avoid
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand">LCSP<small>Đặc tả kỹ thuật</small></div>
+      <nav>
+        <a href="#s1"><span class="n">01</span>Bối cảnh &amp; vấn đề</a>
+        <a href="#s2"><span class="n">02</span>Mục tiêu, phạm vi, người dùng</a>
+        <a href="#s3"><span class="n">03</span>Lộ trình ưu tiên</a>
+        <a href="#s4"><span class="n">04</span>Danh mục tính năng</a>
+        <a href="#s5"><span class="n">05</span>Kiến trúc &amp; tech stack</a>
+        <a href="#s6"><span class="n">06</span>Mô hình multi-agent</a>
+        <a href="#s7"><span class="n">07</span>Luồng end-to-end</a>
+        <a href="#s8"><span class="n">08</span>Luồng Scanner</a>
+        <a href="#s9"><span class="n">09</span>Pipeline agent (graph)</a>
+        <a href="#s10"><span class="n">10</span>RAG &amp; refer-to</a>
+        <a href="#s11"><span class="n">11</span>Dataset</a>
+        <a href="#s12"><span class="n">12</span>Quyết định kỹ thuật</a>
+        <a href="#s13"><span class="n">13</span>Mô hình dữ liệu</a>
+        <a href="#s14"><span class="n">14</span>API endpoints</a>
+        <a href="#s15"><span class="n">15</span>Triển khai &amp; hạ tầng</a>
+        <a href="#s16"><span class="n">16</span>Kiểm thử</a>
+        <a href="#s17"><span class="n">17</span>File demo &amp; ví dụ</a>
+      </nav>
+    </aside>
+    <main>
+      <div class="doc-head">
+        <div class="kicker">Capstone CP_SEP490 · FA26 · v1.0</div>
+        <h1>LCSP — Legal Compliance Support Platform</h1>
+        <div class="vi">Nền tảng hỗ trợ tuân thủ pháp lý cho doanh nghiệp sử dụng AI tại Việt Nam</div>
+      </div>
+      <div class="abstract">
+        Tài liệu này là <b>đặc tả kỹ thuật hợp nhất</b> của LCSP: bối cảnh, tính năng, kiến trúc, mô hình multi-agent,
+        luồng end-to-end (web → services → scanner → agent pipeline → hồ sơ), thiết kế RAG chống mất ngữ cảnh và bảo
+        toàn
+        tham chiếu chéo (Điều/Khoản/Điểm), cách xây dataset, tổng hợp quyết định công nghệ, mô hình dữ liệu, kiểm thử,
+        lộ trình triển khai và các file demo. Mục tiêu: đọc xong là đủ hiểu để bắt đầu build.
+      </div>
+      <h2 id="s1"><span class="num">01</span> Bối cảnh &amp; vấn đề</h2>
+      <p>Luật Trí tuệ nhân tạo của Việt Nam (<span class="ref">Luật 134/2025/QH15</span>, hiệu lực 01/03/2026) và <span
+          class="ref">Nghị định 142/2026/NĐ-CP</span> yêu cầu mọi doanh nghiệp phát triển, cung cấp hoặc triển khai hệ
+        thống AI tại Việt Nam phải: tự phân loại hệ thống theo mức rủi ro, chuẩn bị hồ sơ kỹ thuật và hoàn tất đánh giá
+        hợp chuẩn trước các mốc bắt buộc (<b>03/2027</b> cho ngành chung, <b>09/2027</b> cho ngành thiết yếu).</p>
+      <p>Hiện chưa có công cụ số chuyên dụng nào tại Việt Nam hỗ trợ quy trình này. Doanh nghiệp phải tự diễn giải quy
+        định nằm rải rác ở hơn 4 văn bản pháp luật, thuê tư vấn pháp lý tốn kém, và lưu trữ hồ sơ thủ công — quy trình
+        mất 2–4 tuần và chi phí cao. Các công cụ quốc tế (xây cho EU AI Act) không áp dụng được do khác biệt nền tảng về
+        ngôn ngữ, tiêu chí phân loại rủi ro và mẫu biểu pháp lý.</p>
+
+      <h3>Ba thách thức cốt lõi</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:30px">#</th>
+              <th>Thách thức</th>
+              <th>Hệ quả</th>
+              <th>LCSP giải quyết bằng</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Phân loại sai mức rủi ro AI do tiêu chí pháp lý phân tán</td>
+              <td>Tuân thủ thiếu/thừa, rủi ro pháp lý</td>
+              <td>Hard-rule engine + Classification Agent có citation</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Nghĩa vụ tuân thủ phân mảnh trên nhiều văn bản</td>
+              <td>Bỏ sót nghĩa vụ, không biết deadline</td>
+              <td>Gap Analysis Agent + RAG trên corpus pháp luật</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Không tạo được audit trail có cấu trúc khi bị thanh tra</td>
+              <td>Không chứng minh được căn cứ quyết định</td>
+              <td>Audit log bất biến + tài liệu có chữ ký số + trace</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="s2"><span class="num">02</span> Mục tiêu, phạm vi &amp; người dùng</h2>
+      <h3>Mục tiêu</h3>
+      <ul>
+        <li>Tự động phân loại hệ thống AI theo mức rủi ro (<span class="badge b-hi">HIGH</span> <span
+            class="badge b-med">MEDIUM</span> <span class="badge b-lo">LOW</span>) theo tiêu chí Luật AI.</li>
+        <li>Xác định nghĩa vụ tuân thủ áp dụng kèm trích dẫn điều khoản cụ thể.</li>
+        <li>Sinh hồ sơ tuân thủ theo mẫu MoST (Bộ KH&amp;CN) với audit log bất biến và chữ ký số.</li>
+        <li>Tích hợp kiểm tra tuân thủ vào pipeline phát triển phần mềm (CI/CD, GitHub).</li>
+      </ul>
+      <h3>Sản phẩm đầu ra (3 giao diện, 1 backend)</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Đầu ra</th>
+              <th>Đối tượng</th>
+              <th>Mô tả</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Web Wizard</b></td>
+              <td>SME, compliance officer (không rành kỹ thuật)</td>
+              <td>Quy trình 7 bước có hướng dẫn, sinh hồ sơ PDF</td>
+            </tr>
+            <tr>
+              <td><b>compliai-cli</b></td>
+              <td>Developer, DevSecOps</td>
+              <td>Chạy đánh giá tuân thủ ngay từ terminal</td>
+            </tr>
+            <tr>
+              <td><b>compliance-action</b></td>
+              <td>CI/CD pipeline</td>
+              <td>GitHub Action tự kích hoạt khi code thay đổi</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Phạm vi</h3>
+      <div class="cols">
+        <div>
+          <h4>Trong phạm vi</h4>
+          <ul>
+            <li>Phân loại rủi ro, phân tích gap, sinh hồ sơ cho thị trường VN.</li>
+            <li>Scanner source code read-only qua GitHub App.</li>
+            <li>Corpus pháp luật tiếng Việt có version &amp; trace.</li>
+          </ul>
+        </div>
+        <div>
+          <h4>Ngoài phạm vi (MVP)</h4>
+          <ul>
+            <li>Tư vấn pháp lý ràng buộc (LCSP là công cụ hỗ trợ, không thay luật sư).</li>
+            <li>Nộp hồ sơ trực tiếp lên cổng MoST.</li>
+            <li>Hỗ trợ đa quốc gia / khung luật ngoài VN.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Người dùng &amp; vai trò</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Vai trò</th>
+              <th>Giao diện chính</th>
+              <th>Việc làm chính</th>
+              <th>Trách nhiệm trong assessment</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Manager / Legal / Compliance Officer</td>
+              <td>Web Wizard</td>
+              <td>Khai báo bối cảnh nghiệp vụ/pháp lý, xác nhận xung đột, ký hồ sơ</td>
+              <td>Chủ sở hữu assessment</td>
+            </tr>
+            <tr>
+              <td>Developer</td>
+              <td>Web / GitHub App</td>
+              <td>Kết nối repo, chạy scan, giải đáp xung đột kỹ thuật</td>
+              <td>Cung cấp technical evidence</td>
+            </tr>
+            <tr>
+              <td>DevSecOps</td>
+              <td>CLI / GitHub Action</td>
+              <td>Tích hợp kiểm tra tuân thủ vào CI/CD</td>
+              <td>Gate tuân thủ tự động</td>
+            </tr>
+            <tr>
+              <td>Supervisor / Reviewer</td>
+              <td>Web</td>
+              <td>Rà soát kết quả phân loại &amp; hồ sơ</td>
+              <td>Kiểm tra chất lượng</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="s3"><span class="num">03</span> Lộ trình triển khai theo ưu tiên</h2>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Phase</th>
+              <th>Hạng mục</th>
+              <th>Phụ thuộc</th>
+              <th>Tính năng</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>P0 — Nền tảng</b></td>
+              <td>Legal Corpus (D1) + Rules (D2) + RAG ingestion + ChromaDB</td>
+              <td>—</td>
+              <td>F5</td>
+            </tr>
+            <tr>
+              <td><b>P0 — Core agent</b></td>
+              <td>Hard-rule engine + Classification + Gap + LangGraph + audit</td>
+              <td>D1, D2</td>
+              <td>F1, F2, F4</td>
+            </tr>
+            <tr>
+              <td><b>P0 — Wizard + API</b></td>
+              <td>NestJS + Prisma + RabbitMQ + SSE + Web Wizard 7 bước</td>
+              <td>core agent</td>
+              <td>F6, F8</td>
+            </tr>
+            <tr>
+              <td><b>P0 — Document</b></td>
+              <td>Template MoST + docxtpl + LibreOffice + MinIO</td>
+              <td>gap</td>
+              <td>F3</td>
+            </tr>
+            <tr>
+              <td><b>P0 — Scanner</b></td>
+              <td>GitHub App + Syft/Knip/deptry/Semgrep/tree-sitter + Normalizer</td>
+              <td>wizard</td>
+              <td>F7</td>
+            </tr>
+            <tr>
+              <td><b>P1</b></td>
+              <td>CLI + GitHub Action + e-signature</td>
+              <td>API ổn định</td>
+              <td>F9, F10, F11</td>
+            </tr>
+            <tr>
+              <td><b>P2</b></td>
+              <td>Legal update tracking + hybrid retrieval + AWS S3 migrate</td>
+              <td>MVP done</td>
+              <td>F12</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="s4"><span class="num">04</span> Danh mục tính năng</h2>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Mã</th>
+              <th>Tính năng</th>
+              <th>Mô tả</th>
+              <th>Actor</th>
+              <th>Ưu tiên</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>F1</td>
+              <td>AI Risk Classification</td>
+              <td>Phân loại High/Medium/Low theo hard-block rule + input wizard theo Luật 134/2025</td>
+              <td>System</td>
+              <td><span class="badge b-must">P0</span></td>
+            </tr>
+            <tr>
+              <td>F2</td>
+              <td>Compliance Gap Analysis</td>
+              <td>Liệt kê top gap kèm trích dẫn điều khoản và deadline áp dụng</td>
+              <td>System</td>
+              <td><span class="badge b-must">P0</span></td>
+            </tr>
+            <tr>
+              <td>F3</td>
+              <td>Document Generation</td>
+              <td>Sinh hồ sơ theo mẫu MoST, export PDF không chỉnh sửa</td>
+              <td>System</td>
+              <td><span class="badge b-must">P0</span></td>
+            </tr>
+            <tr>
+              <td>F4</td>
+              <td>Audit Log Management</td>
+              <td>Ghi toàn bộ lịch sử đánh giá, version control, log chống giả mạo</td>
+              <td>System</td>
+              <td><span class="badge b-must">P0</span></td>
+            </tr>
+            <tr>
+              <td>F5</td>
+              <td>RAG Legal Corpus</td>
+              <td>Tìm kiếm thông minh trên corpus pháp luật VN hỗ trợ agent reasoning</td>
+              <td>System</td>
+              <td><span class="badge b-must">P0</span></td>
+            </tr>
+            <tr>
+              <td>F6</td>
+              <td>7-Step Compliance Wizard</td>
+              <td>Giao diện web hướng dẫn cho người không có chuyên môn pháp lý</td>
+              <td>Manager/Legal</td>
+              <td><span class="badge b-must">P0</span></td>
+            </tr>
+            <tr>
+              <td>F7</td>
+              <td>Source Code Scanner</td>
+              <td>Quét repo read-only tạo technical evidence (Syft/Knip/deptry/Semgrep/tree-sitter)</td>
+              <td>Developer</td>
+              <td><span class="badge b-must">P0</span></td>
+            </tr>
+            <tr>
+              <td>F8</td>
+              <td>Reconciliation</td>
+              <td>Đối chiếu wizard vs evidence, yêu cầu xác nhận khi mâu thuẫn</td>
+              <td>Manager+Dev</td>
+              <td><span class="badge b-must">P0</span></td>
+            </tr>
+            <tr>
+              <td>F9</td>
+              <td>Command-Line Tool</td>
+              <td>Chạy đánh giá tuân thủ từ terminal</td>
+              <td>DevSecOps</td>
+              <td><span class="badge b-opt">P1</span></td>
+            </tr>
+            <tr>
+              <td>F10</td>
+              <td>GitHub Actions Integration</td>
+              <td>Kích hoạt kiểm tra tuân thủ trong CI/CD khi code đổi</td>
+              <td>DevSecOps</td>
+              <td><span class="badge b-opt">P1</span></td>
+            </tr>
+            <tr>
+              <td>F11</td>
+              <td>Electronic Signature</td>
+              <td>Người đại diện pháp luật ký số hồ sơ cuối trước khi export</td>
+              <td>Legal</td>
+              <td><span class="badge b-opt">P1</span></td>
+            </tr>
+            <tr>
+              <td>F12</td>
+              <td>Legal Update Tracking</td>
+              <td>Báo khi văn bản pháp luật cập nhật, đánh dấu hồ sơ cần đánh giá lại</td>
+              <td>System</td>
+              <td><span class="badge b-opt">P2</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <h2 id="s5"><span class="num">05</span> Kiến trúc tổng thể &amp; tech stack</h2>
+      <div class="fig">
+        <pre class="mermaid">
+flowchart TB
+  subgraph FE["Features"]
+    W["Web Wizard<br/>Next.js"]:::feat
+    C["compliai-cli"]:::feat
+    G["compliance-action<br/>GitHub Action"]:::feat
+  end
+  NG["Nginx + HTTPS<br/>route / · /api · /events · /files"]:::edge
+  subgraph API["NestJS API (Prisma)"]
+    direction LR
+    A1["assessment · github · scan"]:::svc
+    A2["classify · gap · document · audit · storage"]:::svc
+  end
+  MQ(["RabbitMQ<br/>jobs · progress · resume"]):::queue
+  subgraph WK["Python LangGraph Worker"]
+    direction LR
+    SC["Scanner pipeline"]:::comp
+    AG["Agent pipeline"]:::comp
+  end
+  PG[("PostgreSQL")]:::data
+  MN[("MinIO")]:::data
+  CH[("ChromaDB")]:::data
+  LLM["Gemini LLM"]:::ext
+  GH["GitHub App API"]:::ext
+
+  W & C & G -->|REST + SSE| NG --> API
+  API -->|publish/consume AMQP| MQ <--> WK
+  SC -->|TechnicalProfile| AG
+  API -->|Prisma| PG
+  API -->|S3 SDK| MN
+  WK --> PG & MN
+  AG -->|vector query| CH
+  AG -->|low-temp calls| LLM
+  SC -->|read-only| GH
+  classDef feat fill:#efe9fb,stroke:#7f77dd,color:#26215c;
+  classDef edge fill:#eef1f3,stroke:#888780,color:#2c2c2a;
+  classDef svc fill:#e1f0eb,stroke:#0f6e56,color:#04342c;
+  classDef comp fill:#e1f0eb,stroke:#0f6e56,color:#04342c;
+  classDef queue fill:#fbf1de,stroke:#ba7517,color:#412402;
+  classDef data fill:#eef1f3,stroke:#5f5e5a,color:#2c2c2a;
+  classDef ext fill:#eef1f3,stroke:#888780,color:#2c2c2a;
+</pre>
+        <div class="cap"><b>Hình 5.1</b> — Kiến trúc tổng thể: 3 feature → Nginx → NestJS → RabbitMQ → worker (scanner +
+          agent) → tầng dữ liệu &amp; dịch vụ ngoài.</div>
+      </div>
+
+      <h3>Tech stack</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Tầng</th>
+              <th>Công nghệ</th>
+              <th>Vai trò</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Front-end</td>
+              <td>Next.js</td>
+              <td>Web Wizard 7 bước, nhận progress qua SSE</td>
+            </tr>
+            <tr>
+              <td>Back-end API</td>
+              <td>Nest.js + Prisma</td>
+              <td>Orchestration, REST, SSE, publish job</td>
+            </tr>
+            <tr>
+              <td>Agent runtime</td>
+              <td>Python + LangGraph</td>
+              <td>Scanner + multi-agent pipeline</td>
+            </tr>
+            <tr>
+              <td>Message broker</td>
+              <td>RabbitMQ</td>
+              <td>Decouple API ↔ worker, retry, back-pressure</td>
+            </tr>
+            <tr>
+              <td>Relational DB</td>
+              <td>PostgreSQL</td>
+              <td>org, ai_system, rules, assessment, audit, checkpoint</td>
+            </tr>
+            <tr>
+              <td>Vector DB</td>
+              <td>ChromaDB</td>
+              <td>Lưu embedding legal corpus cho RAG</td>
+            </tr>
+            <tr>
+              <td>Object storage</td>
+              <td>MinIO (S3-compatible)</td>
+              <td>PDF, DOCX, logo, evidence</td>
+            </tr>
+            <tr>
+              <td>Embedding</td>
+              <td>BAAI/bge-m3</td>
+              <td>Encode văn bản pháp luật (long context 8192)</td>
+            </tr>
+            <tr>
+              <td>LLM</td>
+              <td>Gemini 2.5 Flash</td>
+              <td>Classification / gap / document (temp thấp)</td>
+            </tr>
+            <tr>
+              <td>Doc pipeline</td>
+              <td>docxtpl/Docxtemplater + LibreOffice</td>
+              <td>Fill template DOCX → PDF không chỉnh sửa</td>
+            </tr>
+            <tr>
+              <td>Realtime</td>
+              <td>SSE</td>
+              <td>Progress một chiều server → client</td>
+            </tr>
+            <tr>
+              <td>Reverse proxy</td>
+              <td>Nginx + Certbot/Let's Encrypt</td>
+              <td>Routing + HTTPS miễn phí</td>
+            </tr>
+            <tr>
+              <td>Deploy</td>
+              <td>Docker + VPS</td>
+              <td>Docker Compose cho MVP</td>
+            </tr>
+            <tr>
+              <td>Testing</td>
+              <td>Jest · Pytest · Playwright · Newman</td>
+              <td>Backend · agent · E2E · API contract</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="s6"><span class="num">06</span> Mô hình multi-agent</h2>
+      <h3>Quyết định thiết kế: agent team có điều phối, không phải team tự trị</h3>
+      <p>LCSP triển khai theo mô hình <b>orchestrated agent team</b>: một <b>orchestrator cố định</b> (LangGraph
+        runtime) điều phối các <b>specialist sub-agent</b> chạy theo thứ tự xác định, thay vì để các agent tự "thương
+        lượng" tự do. Lý do nằm ở bản chất domain pháp lý:</p>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Tiêu chí</th>
+              <th>Agent team tự trị (autonomous)</th>
+              <th>Agent team có điều phối (LCSP chọn)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Tính tái lặp</td>
+              <td>Thấp — cùng input có thể ra khác output</td>
+              <td>Cao — thứ tự &amp; rule cố định, audit lại được</td>
+            </tr>
+            <tr>
+              <td>Truy vết pháp lý</td>
+              <td>Khó trace ai quyết định gì</td>
+              <td>Mỗi node ghi audit riêng, có thể đối chất</td>
+            </tr>
+            <tr>
+              <td>Chi phí token</td>
+              <td>Bùng nổ do vòng lặp hội thoại</td>
+              <td>Kiểm soát — mỗi agent gọi LLM 1 lần</td>
+            </tr>
+            <tr>
+              <td>Chống hallucination</td>
+              <td>Phụ thuộc LLM</td>
+              <td>Hard-rule chạy trước, rule thắng LLM</td>
+            </tr>
+            <tr>
+              <td>Human-in-the-loop</td>
+              <td>Khó chèn điểm dừng</td>
+              <td>Interrupt tại Reconciliation, resume sạch</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Mỗi sub-agent có <b>contract hẹp</b> (input/output schema cố định, một nhiệm vụ), được điều phối bởi
+        orchestrator + một "gate" là Reconciliation. Đây là điểm khác biệt mấu chốt so với chatbot multi-agent: LCSP là
+        một <b>DAG xác định</b> có checkpoint, không phải hội thoại mở.</p>
+
+      <h3>Sơ đồ giao tiếp giữa các agent</h3>
+      <div class="fig">
+        <pre class="mermaid">
+sequenceDiagram
+  participant API as NestJS API
+  participant ORC as Orchestrator (graph)
+  participant REC as Reconciliation
+  participant USR as User
+  participant RAG as RAG retriever
+  participant CLS as Classification
+  participant GAP as Gap analysis
+  participant DOC as Document gen
+  participant AUD as Audit log
+  API->>ORC: job(assessment_id)
+  ORC->>REC: verified? (wizard + technical_profile)
+  alt có mâu thuẫn
+    REC-->>USR: RECONCILIATION_REQUIRED (interrupt)
+    USR-->>REC: confirm (resume)
+  end
+  REC->>AUD: ghi flags
+  ORC->>RAG: query(verified_profile)
+  RAG-->>ORC: retrieved_chunks (chunk_id, legal_ref)
+  ORC->>CLS: classify(profile, chunks, hard_rules)
+  CLS->>AUD: model/prompt/temp/triggered_rules
+  ORC->>GAP: gaps(risk, obligations, evidence)
+  GAP->>AUD: trace
+  ORC->>DOC: generate(profile, gap, citations)
+  DOC->>AUD: doc_ids + checksum
+  ORC-->>API: DOCUMENT_GENERATED
+</pre>
+        <div class="cap"><b>Hình 6.1</b> — Giao tiếp tuần tự giữa orchestrator và các sub-agent; Reconciliation là gate
+          human-in-the-loop; mọi agent ghi vào audit.</div>
+      </div>
+
+      <h3>Contract của từng agent</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Input</th>
+              <th>Output (schema)</th>
+              <th>Temp</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Reconciliation</td>
+              <td>WizardProfile + TechnicalProfile</td>
+              <td><code>ReconciliationResult</code> → VerifiedProfile</td>
+              <td>0.1</td>
+            </tr>
+            <tr>
+              <td>Risk Classification</td>
+              <td>VerifiedProfile + chunks + hard rules</td>
+              <td><code>RiskClassificationResult</code></td>
+              <td>0.1</td>
+            </tr>
+            <tr>
+              <td>Gap Analysis</td>
+              <td>risk + obligations + evidence</td>
+              <td><code>GapReport</code></td>
+              <td>0.2</td>
+            </tr>
+            <tr>
+              <td>Document Generation</td>
+              <td>VerifiedProfile + GapReport + citations</td>
+              <td><code>ComplianceDocumentSections</code></td>
+              <td>0.3</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <h2 id="s7"><span class="num">07</span> Luồng end-to-end hoàn chỉnh</h2>
+      <div class="fig">
+        <pre class="mermaid">
+flowchart TD
+  S0([User mở assessment]):::st --> W1["Web Wizard 7 bước<br/>khai business/legal"]:::feat
+  W1 --> A0["NestJS tạo Assessment ID<br/>status WIZARD_SUBMITTED"]:::svc
+  A0 --> Q{"Cung cấp<br/>technical evidence?"}:::dec
+  Q -->|Connect GitHub| GH["GitHub App read-only<br/>chọn repo"]:::feat
+  GH --> SCAN["Scanner pipeline<br/>(xem §7)"]:::comp
+  SCAN --> EV["TechnicalProfile<br/>TECHNICAL_EVIDENCE_READY"]:::svc
+  Q -->|Skip| RC0
+  EV --> RC0["READY_FOR_CLASSIFICATION<br/>publish job → RabbitMQ"]:::queue
+  RC0 --> REC["Reconciliation agent"]:::comp
+  REC --> CF{"Mâu thuẫn?"}:::dec
+  CF -->|Có| HUM["RECONCILIATION_REQUIRED<br/>user xác nhận (interrupt)"]:::hum
+  HUM --> REC
+  CF -->|Không| RAG["RAG retrieve<br/>BGE-M3 + ChromaDB"]:::comp
+  RAG --> CLS["Classification<br/>hard-rule + LLM → CLASSIFIED"]:::comp
+  CLS --> GAP["Gap analysis<br/>→ GAP_ANALYZED"]:::comp
+  GAP --> DOC["Document gen<br/>template→PDF→MinIO"]:::comp
+  DOC --> SIGN["Ký số (tùy chọn)"]:::feat
+  SIGN --> END([DOCUMENT_GENERATED]):::st
+  classDef st fill:#eef1f3,stroke:#5f5e5a,color:#2c2c2a;
+  classDef feat fill:#efe9fb,stroke:#7f77dd,color:#26215c;
+  classDef svc fill:#e6f1fb,stroke:#185fa5,color:#042c53;
+  classDef comp fill:#e1f0eb,stroke:#0f6e56,color:#04342c;
+  classDef queue fill:#fbf1de,stroke:#ba7517,color:#412402;
+  classDef hum fill:#fbf1de,stroke:#ba7517,color:#412402;
+  classDef dec fill:#fff,stroke:#888780,color:#2c2c2a;
+</pre>
+        <div class="cap"><b>Hình 7.1</b> — Luồng xuyên suốt từ web đến hồ sơ. Scanner và agent pipeline là 2 pha tuần
+          tự, bàn giao qua TechnicalProfile.</div>
+      </div>
+
+      <h3>Máy trạng thái assessment</h3>
+      <div class="fig">
+        <pre class="mermaid">
+stateDiagram-v2
+  [*] --> DRAFT
+  DRAFT --> WIZARD_SUBMITTED: nộp wizard
+  WIZARD_SUBMITTED --> WAITING_FOR_GITHUB: cần evidence
+  WIZARD_SUBMITTED --> READY_FOR_CLASSIFICATION: skip evidence
+  WAITING_FOR_GITHUB --> GITHUB_CONNECTED: chọn repo
+  GITHUB_CONNECTED --> SCANNING_REPOSITORY
+  SCANNING_REPOSITORY --> TECHNICAL_EVIDENCE_READY
+  TECHNICAL_EVIDENCE_READY --> RECONCILIATION_REQUIRED: có mâu thuẫn
+  TECHNICAL_EVIDENCE_READY --> READY_FOR_CLASSIFICATION: khớp
+  RECONCILIATION_REQUIRED --> READY_FOR_CLASSIFICATION: user confirm
+  READY_FOR_CLASSIFICATION --> CLASSIFIED
+  CLASSIFIED --> GAP_ANALYZED
+  GAP_ANALYZED --> DOCUMENT_GENERATED
+  DOCUMENT_GENERATED --> [*]
+  READY_FOR_CLASSIFICATION --> FAILED: lỗi validate
+  FAILED --> [*]
+</pre>
+        <div class="cap"><b>Hình 7.2</b> — Trạng thái khớp bảng Web UI Status; mỗi chuyển trạng thái phát một SSE event.
+        </div>
+      </div>
+
+      <h3>Bảng bước thực thi</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Bước</th>
+              <th>Thực thi bởi</th>
+              <th>Cơ chế</th>
+              <th>Trạng thái sau</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Khai wizard 7 bước</td>
+              <td>Manager/Legal</td>
+              <td>REST POST /assessments</td>
+              <td>WIZARD_SUBMITTED</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Kết nối GitHub + chọn repo</td>
+              <td>Developer</td>
+              <td>GitHub App install + callback</td>
+              <td>GITHUB_CONNECTED</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Quét repo tạo evidence</td>
+              <td>Scanner worker</td>
+              <td>installation token read-only</td>
+              <td>TECHNICAL_EVIDENCE_READY</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>Đối chiếu wizard vs evidence</td>
+              <td>Reconciliation agent</td>
+              <td>diff + interrupt nếu lệch</td>
+              <td>RECONCILIATION_REQUIRED / READY</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>Truy xuất căn cứ pháp lý</td>
+              <td>RAG retriever</td>
+              <td>BGE-M3 + ChromaDB top-k</td>
+              <td>(nội bộ)</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>Phân loại rủi ro</td>
+              <td>Classification agent</td>
+              <td>hard-rule + LLM 0.1</td>
+              <td>CLASSIFIED</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>Phân tích gap</td>
+              <td>Gap agent</td>
+              <td>obligations + LLM 0.2</td>
+              <td>GAP_ANALYZED</td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td>Sinh hồ sơ</td>
+              <td>Document agent</td>
+              <td>template→LibreOffice→MinIO</td>
+              <td>DOCUMENT_GENERATED</td>
+            </tr>
+            <tr>
+              <td>9</td>
+              <td>Ký số &amp; export</td>
+              <td>Legal representative</td>
+              <td>e-signature</td>
+              <td>(hoàn tất)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="s8"><span class="num">08</span> Luồng Scanner &amp; thu thập bằng chứng</h2>
+      <p>Scanner <b>không kết luận pháp lý</b>. Nó chỉ tạo technical evidence; kết luận được thực hiện sau khi
+        Reconciliation kết hợp wizard answers, evidence, API probe và legal rules. Raw source code <b>không bao giờ gửi
+          cho LLM</b> — LLM chỉ nhận technical profile/evidence summary.</p>
+      <div class="fig">
+        <pre class="mermaid">
+flowchart LR
+  R["Repository<br/>(read-only)"]:::data --> SY["Syft<br/>SBOM/deps"]:::comp
+  SY --> KN["Knip / deptry<br/>unused deps"]:::comp
+  KN --> SG["Semgrep<br/>AI pattern rules"]:::comp
+  SG --> TS["tree-sitter<br/>AST · import · call graph"]:::comp
+  TS --> NM["Evidence Normalizer"]:::comp
+  NM --> TR["Technical Evidence<br/>Report + confidence"]:::svc
+  TR --> RC["Reconciliation →<br/>Classification"]:::comp
+  classDef data fill:#eef1f3,stroke:#5f5e5a,color:#2c2c2a;
+  classDef comp fill:#e1f0eb,stroke:#0f6e56,color:#04342c;
+  classDef svc fill:#e6f1fb,stroke:#185fa5,color:#042c53;
+</pre>
+        <div class="cap"><b>Hình 8.1</b> — Scanner pipeline: từ repo đến Technical Evidence Report.</div>
+      </div>
+
+      <h3>Công cụ scanner</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Vai trò</th>
+              <th>Output</th>
+              <th>Giới hạn</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Syft</td>
+              <td>SBOM, liệt kê package/dependency</td>
+              <td>SBOM JSON (CycloneDX/SPDX)</td>
+              <td>Không biết package có dùng thật không</td>
+            </tr>
+            <tr>
+              <td>Knip</td>
+              <td>Kiểm tra JS/TS dependency dùng thật?</td>
+              <td>unused/missing deps</td>
+              <td>Cần entrypoint config đúng</td>
+            </tr>
+            <tr>
+              <td>deptry</td>
+              <td>Kiểm tra Python dependency dùng thật?</td>
+              <td>unused/missing/transitive</td>
+              <td>Dynamic import có thể sót</td>
+            </tr>
+            <tr>
+              <td>Semgrep</td>
+              <td>Custom rule phát hiện pattern AI</td>
+              <td>Findings JSON/SARIF</td>
+              <td>Cần viết &amp; bảo trì rule</td>
+            </tr>
+            <tr>
+              <td>tree-sitter</td>
+              <td>AST, import graph, call graph</td>
+              <td>Graph summary (không lưu full AST)</td>
+              <td>Cross-file/dynamic dispatch phức tạp</td>
+            </tr>
+            <tr>
+              <td>Evidence Normalizer</td>
+              <td>Chuẩn hóa findings thành evidence thống nhất</td>
+              <td>TechnicalProfile + RepoScanFinding[]</td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>GitHub App — quyền &amp; luồng cấp quyền</h3>
+      <div class="cols">
+        <div>
+          <h4>Quyền xin (least privilege)</h4>
+          <div class="tw">
+            <table>
+              <thead>
+                <tr>
+                  <th>Permission</th>
+                  <th>Level</th>
+                  <th>Bắt buộc</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Metadata</td>
+                  <td>Read</td>
+                  <td>Có</td>
+                </tr>
+                <tr>
+                  <td>Contents</td>
+                  <td>Read</td>
+                  <td>Có</td>
+                </tr>
+                <tr>
+                  <td>Pull requests</td>
+                  <td>Read</td>
+                  <td>Khi CI/CD</td>
+                </tr>
+                <tr>
+                  <td>Checks</td>
+                  <td>R/W</td>
+                  <td>Tùy chọn</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h4>Tuyệt đối không xin (MVP)</h4>
+          <ul style="font-size:13px">
+            <li>Administration · Workflows</li>
+            <li>Secrets / Actions secrets</li>
+            <li>Issues · Packages · Deployments</li>
+          </ul>
+          <p style="font-size:13px">Repository selection = <b>Only selected repositories</b>; token cài đặt ngắn hạn,
+            chỉ dùng khi scan; user có thể disconnect bất cứ lúc nào.</p>
+        </div>
+      </div>
+
+      <h3>Confidence scoring (không kết luận binary)</h3>
+      <p>Mỗi evidence đóng góp điểm; signal yếu (chỉ khai báo dependency) không đủ kết luận, signal mạnh (model call +
+        decision output + domain) mới ảnh hưởng phân loại.</p>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Evidence</th>
+              <th>Score</th>
+              <th>Evidence</th>
+              <th>Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>AI package declared (Syft)</td>
+              <td>+0.10</td>
+              <td>Model call (Semgrep)</td>
+              <td>+0.30</td>
+            </tr>
+            <tr>
+              <td>Confirmed used (Knip/deptry)</td>
+              <td>+0.20</td>
+              <td>LLM API call</td>
+              <td>+0.30</td>
+            </tr>
+            <tr>
+              <td>Marked unused</td>
+              <td>−0.30</td>
+              <td>Automated decision output</td>
+              <td>+0.30</td>
+            </tr>
+            <tr>
+              <td>AI import detected</td>
+              <td>+0.20</td>
+              <td>AI-to-decision call graph</td>
+              <td>+0.30</td>
+            </tr>
+            <tr>
+              <td>Wizard xác nhận đúng domain</td>
+              <td>+0.20</td>
+              <td>API probe xác nhận runtime</td>
+              <td>+0.30</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><b>Ví dụ:</b> scikit-learn declared (+0.10) → deptry confirm used (+0.20) → Semgrep
+        <code>model.predict()</code> (+0.30) → <code>approved</code> output (+0.30) → wizard finance credit scoring
+        (+0.20) = 1.10 → cap 0.95 → <b>confidence 95%</b>.
+      </div>
+
+      <div class="warn"><b>Chính sách bảo mật:</b> least privilege · selected repos only · short-lived token · không gửi
+        raw code cho LLM · không lưu raw code dài hạn · secret redaction (Gitleaks) trước khi lưu snippet · snippet tắt
+        mặc định · chỉ lưu graph summary · audit (actor, repo, commit SHA, scanner version, ruleset version) ·
+        revocation.</div>
+      <h2 id="s89"><span class="num">09</span> Pipeline agent chi tiết (graph)</h2>
+      <div class="fig">
+        <pre class="mermaid">
+flowchart TD
+  J([Job từ RabbitMQ<br/>AssessmentState]):::st --> LC["load_context<br/>nạp wizard + technical + rules"]:::comp
+  LC --> RC["reconcile<br/>diff field-by-field"]:::comp
+  RC --> D{flags?}:::dec
+  D -->|NEEDS_CONFIRMATION| HM["interrupt → user confirm<br/>resume(feedback)"]:::hum
+  HM --> RC
+  D -->|none| RL["retrieve_legal<br/>RAG top-k + reference expansion"]:::comp
+  RL --> CL["classify<br/>(A) hard-rule engine<br/>(B) LLM 0.1 · rule thắng"]:::comp
+  CL --> GP["gap_analysis<br/>obligations vs evidence · 0.2"]:::comp
+  GP --> DC["generate_document<br/>fill template → PDF · 0.3"]:::comp
+  DC --> EN([persist + audit]):::st
+  CL -.-> AU[(audit_trail)]:::data
+  GP -.-> AU
+  DC -.-> AU
+  classDef st fill:#eef1f3,stroke:#5f5e5a,color:#2c2c2a;
+  classDef comp fill:#e1f0eb,stroke:#0f6e56,color:#04342c;
+  classDef hum fill:#fbf1de,stroke:#ba7517,color:#412402;
+  classDef dec fill:#fff,stroke:#888780,color:#2c2c2a;
+  classDef data fill:#eef1f3,stroke:#5f5e5a,color:#2c2c2a;
+</pre>
+        <div class="cap"><b>Hình 9.1</b> — Graph LangGraph: 5 node tuyến tính, vòng human-in-the-loop ở reconcile, audit
+          ghi sau mỗi node.</div>
+      </div>
+
+      <h3>Chi tiết từng node</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Node</th>
+              <th>Lớp deterministic (chạy trước)</th>
+              <th>LLM dùng cho</th>
+              <th>Temp</th>
+              <th>Cập nhật state</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>load_context</td>
+              <td>Đọc DB (không LLM)</td>
+              <td>—</td>
+              <td>—</td>
+              <td>wizard_profile, technical_profile</td>
+            </tr>
+            <tr>
+              <td>reconcile</td>
+              <td>diff field theo ngưỡng confidence</td>
+              <td>diễn giải mâu thuẫn</td>
+              <td>0.1</td>
+              <td>flags, verified_profile, human_feedback</td>
+            </tr>
+            <tr>
+              <td>retrieve_legal</td>
+              <td>build query + reference expansion</td>
+              <td>—</td>
+              <td>—</td>
+              <td>retrieved_chunks</td>
+            </tr>
+            <tr>
+              <td>classify</td>
+              <td>hard-rule engine → sàn risk</td>
+              <td>xếp risk + chọn citation</td>
+              <td>0.1</td>
+              <td>risk_result (rule thắng)</td>
+            </tr>
+            <tr>
+              <td>gap_analysis</td>
+              <td>lọc obligations theo risk+role</td>
+              <td>trạng thái MET/PARTIAL/MISSING</td>
+              <td>0.2</td>
+              <td>gap_report</td>
+            </tr>
+            <tr>
+              <td>generate_document</td>
+              <td>fill field + checksum</td>
+              <td>viết đoạn văn xuôi</td>
+              <td>0.3</td>
+              <td>documents</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note"><b>Ba bất biến của pipeline:</b> (1) <b>Rule thắng LLM</b> — <code>enforce_floor()</code> không
+        cho LLM hạ risk dưới sàn hard-block. (2) <b>Validate cứng</b> — output LLM sai schema Pydantic → retry ≤2
+        (temp→0) → fail thì <code>FAILED</code>, không bao giờ trôi dữ liệu sai. (3) <b>Truy vết</b> — mỗi node ghi
+        <code>model_version</code>, <code>prompt_version</code>, <code>temperature</code>, <code>triggered_rules</code>,
+        <code>retrieved_chunks</code>.
+      </div>
+
+      <h3>Human-in-the-loop &amp; resume</h3>
+      <p>Khi reconcile phát hiện mâu thuẫn (vd wizard khai <code>auto_decision=NO</code> nhưng evidence thấy
+        <code>AUTOMATED_APPROVAL</code>), node gọi <code>interrupt()</code>. Checkpointer (PostgresSaver) lưu state,
+        worker nhả job. NestJS hiển thị conflict; user confirm → publish <code>action=resume</code> → worker gọi
+        <code>graph.invoke(Command(resume=feedback))</code> trên cùng <code>thread_id = assessment_id</code>.
+      </p>
+
+      <h3>Ví dụ I/O của agent (có trace)</h3>
+      <pre><span class="c"># classification output — luôn kèm trace, không chỉ text</span>
+{
+  "assessment_id": "ASM_001", "system_id": "SYS_001",
+  "risk_level": "HIGH", "confidence": 0.91,
+  "triggered_rules": ["R_HIGH_FIN_001"],
+  "legal_refs": ["ND142_ART_12_CLAUSE_1"],
+  "retrieved_chunks": ["DOC_ND142_2026_ART_12_C1"],
+  "prompt_version": "classification_prompt_v1.2",
+  "model_version": "gemini-2.5-flash"
+}</pre>
+
+      <h2 id="s10"><span class="num">10</span> RAG &amp; Legal Corpus — chống mất ngữ cảnh, bảo toàn refer-to</h2>
+      <p>Đây là phần quyết định chất lượng pháp lý. Văn bản luật <b>không được chunk mù theo token</b>: một Khoản có thể
+        bị cắt giữa câu, hoặc một Điều dẫn chiếu sang Điều khác sẽ mất ngữ cảnh. LCSP segment theo cấu trúc pháp luật và
+        giải quyết tham chiếu chéo (refer-to) ngay từ khâu ingestion.</p>
+
+      <div class="fig">
+        <pre class="mermaid">
+flowchart TD
+  subgraph ING["Ingestion (offline)"]
+    direction TB
+    EX["Extract<br/>PyMuPDF/pdfplumber/python-docx"]:::comp
+    SEG["Segment theo cấu trúc<br/>Chương→Mục→Điều→Khoản→Điểm"]:::comp
+    XR["Parse refer-to<br/>'Điều/khoản/điểm ...' → references[]"]:::comp
+    MD["Gắn metadata + parent IDs<br/>+ stable IDs"]:::comp
+    EM["Embed BGE-M3<br/>(giữ nguyên Khoản/Điểm)"]:::comp
+    EX-->SEG-->XR-->MD-->EM
+  end
+  EM --> CHR[("ChromaDB<br/>legal_chunks + xref graph")]:::data
+  subgraph RET["Retrieval (online)"]
+    direction TB
+    QB["Build query từ verified_profile"]:::comp
+    TK["Top-k dense retrieval"]:::comp
+    RE["Reference expansion<br/>kéo thêm điều/khoản được dẫn chiếu (1-hop)"]:::comp
+    PC["Parent-context attach<br/>gắn tiêu đề Điều cho mỗi Khoản"]:::comp
+    AS["Assemble context<br/>dedup + sắp theo thứ tự pháp lý"]:::comp
+    QB-->TK-->RE-->PC-->AS
+  end
+  CHR --> TK
+  CHR --> RE
+  AS --> AGENT["→ Classification / Gap / Document"]:::svc
+  classDef comp fill:#e1f0eb,stroke:#0f6e56,color:#04342c;
+  classDef data fill:#eef1f3,stroke:#5f5e5a,color:#2c2c2a;
+  classDef svc fill:#e6f1fb,stroke:#185fa5,color:#042c53;
+</pre>
+        <div class="cap"><b>Hình 10.1</b> — Ingestion bảo toàn cấu trúc + xref; retrieval mở rộng tham chiếu để không
+          mất
+          ngữ cảnh.</div>
+      </div>
+
+      <h3>Nguyên tắc bảo toàn ngữ cảnh</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Vấn đề</th>
+              <th>Cách LCSP xử lý</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Chunk cắt giữa Khoản</td>
+              <td>Đơn vị base = <b>Khoản</b>; Khoản dài giữ nguyên (BGE-M3 tới 8192 token), không split mid-clause.</td>
+            </tr>
+            <tr>
+              <td>Khoản/Điểm trôi nổi mất ngữ cảnh Điều</td>
+              <td><b>Parent-context attach:</b> mỗi chunk Khoản/Điểm luôn kèm tiêu đề + số Điều cha trong metadata và
+                khi assemble.</td>
+            </tr>
+            <tr>
+              <td>Điều X dẫn chiếu Điều Y ("theo quy định tại...")</td>
+              <td><b>Reference expansion:</b> khi retrieve trúng X, tự kéo thêm Y (1-hop) từ xref graph, đánh dấu là
+                "referenced context".</td>
+            </tr>
+            <tr>
+              <td>Không biết chunk thuộc văn bản/điều nào</td>
+              <td><b>Stable hierarchical IDs</b> + metadata <code>doc_id, article_id, clause_id, point_id</code>.</td>
+            </tr>
+            <tr>
+              <td>Điều khoản bị sửa đổi/bãi bỏ</td>
+              <td><b>Version pinning:</b> <code>effective_date</code> + <code>version</code> + <code>checksum</code>;
+                chunk hết hiệu lực bị flag, không retrieve cho assessment mới.</td>
+            </tr>
+            <tr>
+              <td>Trả về chunk nhưng agent bịa điều khoản</td>
+              <td>Chỉ cho phép citation nằm trong <code>retrieved_chunks</code>; legal_ref ngoài tập này bị loại ở
+                validate.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Xử lý refer-to (tham chiếu chéo) chi tiết</h3>
+      <p>Ở bước ingestion, một parser quét text mỗi segment, nhận diện các mẫu dẫn chiếu tiếng Việt và resolve thành ID
+        chuẩn:</p>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Mẫu trong văn bản</th>
+              <th>Resolve thành</th>
+              <th>Loại cạnh xref</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"theo quy định tại Điều 12"</td>
+              <td><span class="ref">ND142_ART_12</span></td>
+              <td>REFERS_TO_ARTICLE</td>
+            </tr>
+            <tr>
+              <td>"khoản 2 Điều 15"</td>
+              <td><span class="ref">ND142_ART_15_CLAUSE_2</span></td>
+              <td>REFERS_TO_CLAUSE</td>
+            </tr>
+            <tr>
+              <td>"điểm a khoản 1 Điều 22"</td>
+              <td><span class="ref">ND142_ART_22_CLAUSE_1_POINT_A</span></td>
+              <td>REFERS_TO_POINT</td>
+            </tr>
+            <tr>
+              <td>"quy định tại khoản này"</td>
+              <td>chính clause hiện tại (self)</td>
+              <td>SELF</td>
+            </tr>
+            <tr>
+              <td>"Luật An ninh mạng 2018"</td>
+              <td><span class="ref">DOC_CYBERSEC_2018</span></td>
+              <td>REFERS_TO_DOC (cross-document)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Các cạnh này lưu thành <b>xref graph</b> trong metadata (<code>references[]</code>). Khi retrieve, reference
+        expansion duyệt 1-hop để gom đủ điều/khoản/điểm liên quan. Cross-document refer-to (vd Nghị định dẫn chiếu Luật
+        ANM) cũng được nối nếu văn bản đích có trong corpus.</p>
+
+      <div class="note"><b>Vì sao chọn BGE-M3:</b> hỗ trợ 100+ ngôn ngữ, long context tới 8192 token (hợp Điều/Khoản
+        dài), và dense + sparse + multi-vector — cho phép nâng cấp lên hybrid retrieval mà không đổi model. e5-large là
+        phương án đơn giản hơn nếu chunk ngắn.</div>
+      <h2 id="s11"><span class="num">11</span> Dataset</h2>
+      <p>Dataset của LCSP là <b>knowledge + rules + scenario/evidence/evaluation</b>, không phải dataset train ML truyền
+        thống. Mục tiêu: giúp agent truy xuất đúng luật, ra quyết định có căn cứ, không mất ngữ cảnh.</p>
+      <h3>7 loại dataset</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Tên</th>
+              <th>Nội dung</th>
+              <th>Nguồn/cách tạo</th>
+              <th>Dùng để</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>D1</td>
+              <td>Legal Corpus</td>
+              <td>Văn bản gốc: AI Law, nghị định, BVDLCN, an ninh mạng, thông tư/mẫu biểu</td>
+              <td>Nguồn official (PDF/DOCX/HTML)</td>
+              <td>RAG, citation, doc gen</td>
+            </tr>
+            <tr>
+              <td>D2</td>
+              <td>Compliance Rules</td>
+              <td>Rule cấu trúc hóa: condition, requirement, risk_level, legal_ref</td>
+              <td>Thủ công từ D1 + review nhóm</td>
+              <td>Hard rules, gap checklist</td>
+            </tr>
+            <tr>
+              <td>D3</td>
+              <td>Wizard Question Mapping</td>
+              <td>Map câu hỏi wizard ↔ field AISystem ↔ rule</td>
+              <td>Từ nghiệp vụ compliance</td>
+              <td>Thu đúng dữ liệu cần</td>
+            </tr>
+            <tr>
+              <td>D4</td>
+              <td>Business Scenarios</td>
+              <td>Case fintech, healthcare, HR, chatbot, spam filter...</td>
+              <td>Tự tạo theo thực tế SME</td>
+              <td>Đánh giá classification accuracy</td>
+            </tr>
+            <tr>
+              <td>D5</td>
+              <td>Repository Evidence</td>
+              <td>Mock repos: dependency, schema, code pattern</td>
+              <td>Tự tạo GitHub/local</td>
+              <td>Test Scanner Agent</td>
+            </tr>
+            <tr>
+              <td>D6</td>
+              <td>API Probe Evidence</td>
+              <td>Mock APIs trả score/text/bbox/classification</td>
+              <td>FastAPI/NestJS</td>
+              <td>Test API Prober</td>
+            </tr>
+            <tr>
+              <td>D7</td>
+              <td>Evaluation</td>
+              <td>Ground truth: expected_risk, expected_rules, expected_citations</td>
+              <td>Từ D2–D4 + review</td>
+              <td>Benchmark accuracy, citation, hallucination</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>11.1 Quy trình xây Legal Corpus (D1)</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Bước</th>
+              <th>Cách làm</th>
+              <th>Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Inventory văn bản</td>
+              <td>doc_id, tên, số hiệu, ngày hiệu lực, nguồn, version, checksum</td>
+              <td>legal_documents.csv</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Thu thập file gốc</td>
+              <td>Ưu tiên official, lưu raw không sửa</td>
+              <td>raw/*.pdf│docx│html</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Checksum</td>
+              <td>SHA256 từng file chứng minh version</td>
+              <td>checksum field</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>Extract text</td>
+              <td>PyMuPDF (text), pdfplumber (bảng), python-docx, HTML parse</td>
+              <td>extracted/*.txt</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>Clean text</td>
+              <td>Bỏ header/footer/số trang/watermark; chuẩn unicode; <b>giữ nguyên số Điều/Khoản/Điểm</b></td>
+              <td>clean_text/*.txt</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>Segment pháp luật</td>
+              <td><b>Không chunk theo token mù</b> — tách Chương→Mục→Điều→Khoản→Điểm</td>
+              <td>legal_segments.jsonl</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>Parse refer-to + metadata</td>
+              <td>doc_id, article_id, clause_id, references[], topic, risk_level, obligation_type, applies_to_role,
+                effective_date</td>
+              <td>metadata per chunk</td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td>Manual QA</td>
+              <td>Sample 10–20% segment kiểm tra thiếu Điều/Khoản</td>
+              <td>qa_report.md</td>
+            </tr>
+            <tr>
+              <td>9</td>
+              <td>Embed</td>
+              <td>BGE-M3 encode chunk_text + metadata → ChromaDB</td>
+              <td>collection legal_chunks</td>
+            </tr>
+            <tr>
+              <td>10</td>
+              <td>Retrieval test</td>
+              <td>30–50 query tiếng Việt, kiểm tra top-k đúng Điều/Khoản</td>
+              <td>retrieval_eval.csv</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>11.2 Quy trình tạo Compliance Rules (D2)</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Việc</th>
+              <th>Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Đọc từng Điều/Khoản, xác định nghĩa vụ, điều kiện, vai trò</td>
+              <td>raw_obligations.xlsx</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Chuẩn hóa: mỗi nghĩa vụ một row (requirement_id, name, legal_ref)</td>
+              <td>compliance_rules.csv</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Map risk level (HIGH/MEDIUM/LOW/ALL)</td>
+              <td>risk_level column</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>Map role (DEVELOPER/PROVIDER/DEPLOYER)</td>
+              <td>applies_to_roles</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>Map wizard question + evidence signal</td>
+              <td>wizard_questions.csv, evidence_mapping.csv</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>Review conflict → priority/hard-block</td>
+              <td>rule_priority</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>Import PostgreSQL</td>
+              <td>tables legal_rules, wizard_questions</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>11.3 Scenario / Evidence / Evaluation (D4–D7)</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Nhóm</th>
+              <th>Cách tạo</th>
+              <th>Ground truth</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Scenario HIGH</td>
+              <td>Case ảnh hưởng quyền lợi/lĩnh vực thiết yếu (credit scoring, medical, recruitment, biometric)</td>
+              <td>expected_risk=HIGH</td>
+            </tr>
+            <tr>
+              <td>Scenario MEDIUM</td>
+              <td>AI tương tác/generate content cần minh bạch (chatbot, news gen, voice clone)</td>
+              <td>expected_risk=MEDIUM</td>
+            </tr>
+            <tr>
+              <td>Scenario LOW</td>
+              <td>Ít ảnh hưởng (spam filter, autocomplete, recommendation)</td>
+              <td>expected_risk=LOW</td>
+            </tr>
+            <tr>
+              <td>Mock Repo</td>
+              <td>Code/schema/deps khớp scenario</td>
+              <td>repo_scan_expected.json</td>
+            </tr>
+            <tr>
+              <td>Mock API</td>
+              <td>Endpoint thể hiện hành vi AI</td>
+              <td>api_probe_expected.json</td>
+            </tr>
+            <tr>
+              <td>Evaluation</td>
+              <td>Ghép scenario + expected risk/rules/citations</td>
+              <td>accuracy, citation accuracy, schema validity</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>11.4 Stable IDs &amp; naming (chống mất context)</h3>
+      <div class="cols">
+        <div>
+          <h4>Naming convention</h4>
+          <pre><span class="c"># raw files</span>
+LAW_AI_134_2025__v1__raw.pdf
+ND_142_2026__v1__raw.pdf
+ND_13_2023__v1__raw.pdf
+CYBERSECURITY_LAW_2018__v1__raw.pdf</pre>
+        </div>
+        <div>
+          <h4>Hierarchical stable IDs</h4>
+          <pre>DOC_ND142_2026
+DOC_ND142_2026_ART_12
+DOC_ND142_2026_ART_12_CLAUSE_1
+DOC_ND142_2026_ART_12_CLAUSE_1_POINT_A</pre>
+        </div>
+      </div>
+      <h4>ID liên kết để không mất context</h4>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Mục đích</th>
+              <th>Ví dụ</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>legal_ref</td>
+              <td>Link rule/gap/doc tới Điều/Khoản/Điểm</td>
+              <td><span class="ref">ND142_ART_12_CLAUSE_1</span></td>
+            </tr>
+            <tr>
+              <td>rule_id</td>
+              <td>Link output classification/gap tới rule</td>
+              <td><span class="ref">R_HIGH_FIN_001</span></td>
+            </tr>
+            <tr>
+              <td>system_id</td>
+              <td>Link mọi dữ liệu của một AI system</td>
+              <td><span class="ref">SYS_001</span></td>
+            </tr>
+            <tr>
+              <td>evidence_id</td>
+              <td>Link kết luận tới bằng chứng</td>
+              <td><span class="ref">EVD_REPO_004</span></td>
+            </tr>
+            <tr>
+              <td>assessment_id</td>
+              <td>Link một lần đánh giá end-to-end</td>
+              <td><span class="ref">ASM_20260611_001</span></td>
+            </tr>
+            <tr>
+              <td>chunk_id</td>
+              <td>Trace retrieval trả về chunk nào</td>
+              <td><span class="ref">DOC_ND142_2026_ART_12_C1</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Ví dụ legal segment có refer-to</h4>
+      <pre><span class="c">// legal_segments.jsonl — một dòng/segment, references[] là xref graph</span>
+{
+  "chunk_id": "DOC_ND142_2026_ART_12_CLAUSE_1",
+  "doc_id": "DOC_ND142_2026",
+  "article_id": "ART_12", "clause_id": "CLAUSE_1", "point_id": null,
+  "parent_article_title": "Điều 12. Đánh giá hợp chuẩn hệ thống AI rủi ro cao",
+  "text": "Hệ thống AI rủi ro cao phải thực hiện đánh giá hợp chuẩn theo quy định tại Điều 15 của Nghị định này.",
+  "references": [
+    {"target": "DOC_ND142_2026_ART_15", "type": "REFERS_TO_ARTICLE"}
+  ],
+  "risk_level": "HIGH", "obligation_type": "CONFORMITY_ASSESSMENT",
+  "applies_to_role": ["PROVIDER","DEPLOYER"],
+  "effective_date": "2026-03-01", "version": "v1", "checksum": "sha256:..."
+}</pre>
+      <h2 id="s12"><span class="num">12</span> Tổng hợp quyết định kỹ thuật</h2>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Hạng mục</th>
+              <th>Quyết định</th>
+              <th>Thiết lập</th>
+              <th>Lý do</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Temperature</td>
+              <td>Theo loại agent, không cố định</td>
+              <td>Classify 0.1 · Gap 0.2 · Document 0.3</td>
+              <td>Tối ưu bằng evaluation dataset</td>
+            </tr>
+            <tr>
+              <td>Object storage</td>
+              <td>MinIO cho MVP, giữ interface S3</td>
+              <td>S3_FORCE_PATH_STYLE, abstraction StorageService</td>
+              <td>Chi phí thấp, dễ migrate AWS S3 sau</td>
+            </tr>
+            <tr>
+              <td>Document generation</td>
+              <td>DOCX template → fill → PDF</td>
+              <td>Docxtemplater/docxtpl + LibreOffice headless</td>
+              <td>Giữ đúng mẫu DOCX official, không HTML→PDF</td>
+            </tr>
+            <tr>
+              <td>Document processing</td>
+              <td>PyMuPDF + pdfplumber + python-docx</td>
+              <td>Unstructured để phase 2</td>
+              <td>Nhanh, nhẹ, đủ cho MVP</td>
+            </tr>
+            <tr>
+              <td>Embedding</td>
+              <td>BAAI/bge-m3</td>
+              <td>long context 8192, dense/sparse/multi-vector</td>
+              <td>Hợp văn bản pháp luật dài</td>
+            </tr>
+            <tr>
+              <td>Realtime</td>
+              <td>SSE (không WebSocket)</td>
+              <td>text/event-stream qua Nginx</td>
+              <td>Đơn giản, đủ cho progress một chiều</td>
+            </tr>
+            <tr>
+              <td>Testing</td>
+              <td>4 lớp</td>
+              <td>Jest · Pytest · Playwright · Newman</td>
+              <td>Phủ backend, agent, E2E, API contract</td>
+            </tr>
+            <tr>
+              <td>Reverse proxy</td>
+              <td>Nginx + Certbot</td>
+              <td>Let's Encrypt SSL miễn phí</td>
+              <td>Hợp Docker Compose trên VPS</td>
+            </tr>
+            <tr>
+              <td>LLM cost</td>
+              <td>temp thấp + output schema</td>
+              <td>cache + log, retry có kiểm soát</td>
+              <td>Giảm retry, kiểm soát token</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="s13"><span class="num">13</span> Mô hình dữ liệu</h2>
+      <div class="fig">
+        <pre class="mermaid">
+erDiagram
+  ORGANIZATION ||--o{ AI_SYSTEM : owns
+  AI_SYSTEM ||--o{ ASSESSMENT : has
+  ASSESSMENT ||--o| GITHUB_REPO_LINK : links
+  ASSESSMENT ||--o{ REPO_SCAN_RESULT : produces
+  REPO_SCAN_RESULT ||--o{ REPO_SCAN_FINDING : contains
+  ASSESSMENT ||--o| RISK_RESULT : classifies
+  ASSESSMENT ||--o| GAP_REPORT : analyzes
+  ASSESSMENT ||--o{ COMPLIANCE_DOC : generates
+  ASSESSMENT ||--o{ AUDIT_LOG : traces
+  LEGAL_RULE ||--o{ RISK_RESULT : triggers
+  ASSESSMENT {
+    string assessment_id PK
+    string ai_system_id FK
+    string status
+    datetime created_at
+  }
+  REPO_SCAN_RESULT {
+    string id PK
+    string commit_sha
+    string scanner_version
+    string ruleset_version
+    json technical_profile
+    bool raw_code_stored
+  }
+  RISK_RESULT {
+    string id PK
+    string risk_level
+    float confidence
+    json triggered_rules
+    json legal_refs
+  }
+  AUDIT_LOG {
+    string id PK
+    string node
+    string model_version
+    string prompt_version
+    float temperature
+  }
+  LEGAL_RULE {
+    string rule_id PK
+    string risk_level
+    string legal_ref
+    bool hard_block
+  }
+</pre>
+        <div class="cap"><b>Hình 13.1</b> — Các entity chính. Mọi quyết định của agent đều móc về assessment + audit_log
+          + legal_rule để truy vết.</div>
+      </div>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Entity</th>
+              <th>Vai trò</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GitHubInstallation / GitHubRepositoryLink</td>
+              <td>Lưu installation_id, repo mapping, scan_mode read-only</td>
+            </tr>
+            <tr>
+              <td>RepoScanResult / RepoScanFinding</td>
+              <td>Kết quả scan + từng finding (source_tool, evidence_type, signal_strength, snippet tắt)</td>
+            </tr>
+            <tr>
+              <td>RiskResult / GapReport / ComplianceDoc</td>
+              <td>Output 3 agent, có version &amp; legal_refs</td>
+            </tr>
+            <tr>
+              <td>LegalRule / WizardQuestion</td>
+              <td>Rule engine + mapping câu hỏi wizard</td>
+            </tr>
+            <tr>
+              <td>AuditLog</td>
+              <td>Trace bất biến: node, model/prompt version, temperature, triggered_rules, chunks</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="s14"><span class="num">14</span> API endpoints</h2>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Endpoint</th>
+              <th>Mục đích</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>POST</code></td>
+              <td>/api/assessments</td>
+              <td>Submit wizard, tạo assessment</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td>/api/assessments/:id</td>
+              <td>Lấy assessment detail</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td>/api/assessments/:id/events</td>
+              <td>SSE stream progress</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td>/api/assessments/:id/github/connect</td>
+              <td>Tạo GitHub App install URL</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td>/api/github/callback</td>
+              <td>Nhận callback từ GitHub</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td>/api/assessments/:id/repositories/select</td>
+              <td>Chọn repo/branch</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td>/api/assessments/:id/scans/start</td>
+              <td>Bắt đầu scan</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td>/api/assessments/:id/scans/latest</td>
+              <td>Kết quả scan mới nhất</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td>/api/assessments/:id/reconciliation/confirm</td>
+              <td>Xác nhận conflict (resume graph)</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td>/api/assessments/:id/classify</td>
+              <td>Chạy classification</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td>/api/assessments/:id/gap-analysis</td>
+              <td>Chạy gap analysis</td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td>/api/assessments/:id/documents/generate</td>
+              <td>Sinh hồ sơ</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <h2 id="s15"><span class="num">15</span> Triển khai &amp; hạ tầng</h2>
+      <div class="fig">
+        <pre class="mermaid">
+flowchart TB
+  B["Browser (Next.js)"]:::feat -->|REST + SSE| NG["Nginx + HTTPS<br/>Let's Encrypt"]:::edge
+  NG --> NJ["NestJS API"]:::svc
+  NJ -->|Prisma| PG[("PostgreSQL")]:::data
+  NJ -->|S3 SDK| MN[("MinIO")]:::data
+  NJ -->|publish| MQ(["RabbitMQ"]):::queue
+  MQ --> PW["Python LangGraph Workers<br/>scanner + agents"]:::comp
+  PW --> PG
+  PW --> MN
+  PW -->|BGE-M3| CH[("ChromaDB")]:::data
+  PW -->|LLM| GM["Gemini API"]:::ext
+  PW -->|LibreOffice| MN
+  classDef feat fill:#efe9fb,stroke:#7f77dd,color:#26215c;
+  classDef edge fill:#eef1f3,stroke:#888780,color:#2c2c2a;
+  classDef svc fill:#e6f1fb,stroke:#185fa5,color:#042c53;
+  classDef comp fill:#e1f0eb,stroke:#0f6e56,color:#04342c;
+  classDef queue fill:#fbf1de,stroke:#ba7517,color:#412402;
+  classDef data fill:#eef1f3,stroke:#5f5e5a,color:#2c2c2a;
+  classDef ext fill:#eef1f3,stroke:#888780,color:#2c2c2a;
+</pre>
+        <div class="cap"><b>Hình 15.1</b> — Triển khai Docker Compose trên VPS. Nginx route <code>/</code>→Next.js,
+          <code>/api</code>→NestJS, <code>/events</code>→SSE (<code>proxy_buffering off</code>),
+          <code>/files</code>→MinIO.
+        </div>
+      </div>
+      <div class="note"><b>Lưu ý SSE qua Nginx:</b> route <code>/api/assessments/</code> bắt buộc
+        <code>proxy_buffering off;</code> nếu không event sẽ bị giữ lại và progress UI không cập nhật realtime.
+      </div>
+
+      <h2 id="s16"><span class="num">16</span> Kiểm thử</h2>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Test gì</th>
+              <th>Khi chạy</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Jest</td>
+              <td>Next.js components, NestJS services/controllers, rule engine TS</td>
+              <td>PR push</td>
+            </tr>
+            <tr>
+              <td>Pytest</td>
+              <td>LangGraph nodes, RAG retrieval, parser, scanner, eval scripts</td>
+              <td>PR push</td>
+            </tr>
+            <tr>
+              <td>Newman</td>
+              <td>API regression / contract</td>
+              <td>Before merge</td>
+            </tr>
+            <tr>
+              <td>Playwright</td>
+              <td>7-step wizard, login, upload, scan, view report, download PDF</td>
+              <td>Nightly / trước demo</td>
+            </tr>
+            <tr>
+              <td>Eval dataset</td>
+              <td>Risk accuracy, citation accuracy, schema validity, hallucination</td>
+              <td>Release</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><b>Test agent độc lập:</b> <code>llm._raw_generate</code> và các Protocol (Repo, DocService)
+        được cô lập để mock — mỗi node test được với fake <code>Deps</code>, không cần DB/LLM thật.</div>
+
+      <h2 id="s17"><span class="num">17</span> File demo &amp; ví dụ</h2>
+      <p>Các artifact mẫu để bắt đầu build. Package agent đầy đủ (<code>lcsp_agents/</code>: state, schemas, llm,
+        retrieval, rules_engine, nodes, graph, worker) đã được tạo riêng kèm tài liệu này.</p>
+
+      <h4>17.1 docker-compose (MVP)</h4>
+      <pre><span class="c"># docker-compose.yml — rút gọn</span>
+services:
+  nginx:    { image: nginx, ports: ["80:80","443:443"] }
+  nextjs:   { build: ./web, expose: ["3000"] }
+  nestjs:   { build: ./api, expose: ["4000"] }
+  worker:   { build: ./worker }          <span class="c"># Python LangGraph (scanner + agents)</span>
+  rabbitmq: { image: rabbitmq:3-management }
+  postgres: { image: postgres:16, volumes: ["pg_data:/var/lib/postgresql/data"] }
+  chromadb: { image: chromadb/chroma }
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports: ["9000:9000","9001:9001"]
+    volumes: ["minio_data:/data"]</pre>
+
+      <h4>17.2 compliance_rules.csv (D2)</h4>
+      <pre>rule_id,risk_level,condition,requirement,legal_ref,priority,hard_block
+R_HIGH_FIN_001,HIGH,"sector=FINANCE AND auto_decision=YES","Perform conformity assessment",ND142_ART_12,CRITICAL,true
+R_HIGH_DOC_001,HIGH,"risk_level=HIGH","Prepare technical documentation",ND142_ART_15,CRITICAL,false
+R_MED_LABEL_001,MEDIUM,"ai_type=CHATBOT OR generated_content=YES","Disclose AI interaction / label AI content",ND142_ART_22,HIGH,false</pre>
+
+      <h4>17.3 Scenario evaluation (D4/D7)</h4>
+      <pre>{
+  "scenario_id": "SCN_FIN_001",
+  "name": "AI Credit Scoring for Consumer Loan",
+  "sector": ["FINANCE"], "ai_type": "DECISION_ENGINE",
+  "data_types": ["PERSONAL","FINANCIAL"], "auto_decision": "YES",
+  "repo_fixture": "repositories/fintech-credit-scoring-high",
+  "expected_risk": "HIGH",
+  "expected_rules": ["R_HIGH_FIN_001","R_HIGH_DOC_001"],
+  "expected_legal_refs": ["ND142_ART_12","ND142_ART_15"]
+}</pre>
+
+      <h4>17.4 Semgrep custom rule (scanner)</h4>
+      <pre>rules:
+  - id: lcsp-python-ml-inference
+    message: "Detected possible ML inference call"
+    severity: INFO
+    languages: [python]
+    pattern-either:
+      - pattern: $MODEL.predict(...)
+      - pattern: $MODEL.predict_proba(...)
+      - pattern: $MODEL.generate(...)
+    metadata:
+      lcsp_category: "AI_USAGE"
+      evidence_type: "MODEL_CALL_DETECTED"
+      signal_strength: "STRONG"
+      compliance_impact: "AFFECTS_CLASSIFICATION"</pre>
+
+      <h4>17.5 Embedding ingestion (RAG)</h4>
+      <pre>from FlagEmbedding import BGEM3FlagModel
+model = BGEM3FlagModel('BAAI/bge-m3', use_fp16=True)
+emb = model.encode([chunk_text], max_length=8192)
+collection.add(
+  ids=[chunk_id],                 <span class="c"># DOC_ND142_2026_ART_12_CLAUSE_1</span>
+  documents=[chunk_text],
+  embeddings=[emb['dense_vecs'][0]],
+  metadatas=[{**metadata, "references": json.dumps(references)}]
+)</pre>
+
+      <h4>17.6 Reconciliation conflict (human-in-the-loop)</h4>
+      <pre>{
+  "reconciliation_flags": [{
+    "field": "data_types",
+    "wizard_value": ["NONE"],
+    "evidence_value": ["PERSONAL","FINANCIAL"],
+    "resolution": "NEEDS_CONFIRMATION"
+  }],
+  "verified_profile_status": "PENDING_USER_CONFIRMATION"
+}</pre>
+
+      <h4>17.7 Cấu hình agent đóng băng (config/agents.yml)</h4>
+      <pre>model_version: gemini-2.5-flash
+agents:
+  classification:      { temperature: 0.1, prompt_version: classification_prompt_v1.2 }
+  gap_analysis:        { temperature: 0.2, prompt_version: gap_prompt_v1.1 }
+  document_generation: { temperature: 0.3, prompt_version: doc_prompt_v1.0 }
+retrieval: { embedding_model: BAAI/bge-m3, collection: legal_chunks, top_k: 8 }</pre>
+
+      <div class="note" style="margin-top:40px">
+        <b>Sẵn sàng triển khai.</b> Đọc theo thứ tự: §1–3 (hiểu bài toán) → §4–5 (kiến trúc &amp; mô hình agent) → §6–9
+        (luồng + RAG) → §10 (dataset, build trước) → §16 (lộ trình P0). Code khởi điểm: package
+        <code>lcsp_agents/</code>.
+      </div>
+
+    </main>
+  </div>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    mermaid.initialize({
+      startOnLoad: true, securityLevel: 'loose', theme: 'base',
+      flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+      themeVariables: {
+        fontFamily: 'Inter, sans-serif', fontSize: '13px',
+        primaryColor: '#e1f0eb', primaryBorderColor: '#0f6e56', primaryTextColor: '#16202e',
+        lineColor: '#8a97a4', secondaryColor: '#f5f7f8', tertiaryColor: '#eef1f3',
+        clusterBkg: '#f5f7f8', clusterBorder: '#cdd4db'
+      }
+    });
+  </script>
+</body>
+
+</html>

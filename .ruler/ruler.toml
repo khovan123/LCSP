@@ -1,0 +1,98 @@
+# Ruler Configuration File
+# See https://ai.intellectronica.net/ruler for documentation.
+
+# To specify which agents are active by default when --agents is not used,
+# uncomment and populate the following line. If omitted, all agents are active.
+# default_agents = ["copilot", "claude"]
+
+# Enable nested rule loading from nested .ruler directories
+# When enabled, ruler will search for and process .ruler directories throughout the project hierarchy
+# nested = false
+
+# [gitignore]
+# enabled = true
+# local = false  # set true to write generated ignores to .git/info/exclude instead
+
+# [backup]
+# enabled = true  # set false to disable .bak backup files
+
+# --- Agent Specific Configurations ---
+# You can enable/disable agents and override their default output paths here.
+# Use lowercase agent identifiers: aider, amp, claude, cline, codex, copilot, cursor, jetbrains-ai, kilocode, pi, windsurf
+
+# [agents.copilot]
+# enabled = true
+# output_path = ".github/copilot-instructions.md"
+
+# [agents.aider]
+# enabled = true
+# output_path_instructions = "AGENTS.md"
+# output_path_config = ".aider.conf.yml"
+
+# [agents.gemini-cli]
+# enabled = true
+
+# --- MCP Servers ---
+# Define Model Context Protocol servers here. Two examples:
+# 1. A stdio server (local executable)
+# 2. A remote server (HTTP-based)
+
+# [mcp_servers.example_stdio]
+# command = "node"
+# args = ["scripts/your-mcp-server.js"]
+# env = { API_KEY = "replace_me" }
+
+# [mcp_servers.example_remote]
+# url = "https://api.example.com/mcp"
+# headers = { Authorization = "Bearer REPLACE_ME" }
+
+# Added by ctx sync --rules
+[mcp]
+enabled = true
+merge_strategy = "merge"
+
+[mcp_servers.ctx-mcp]
+command = "node"
+args = ["/home/khovan/.codex/marketplaces/contextos/plugins/ctx/mcp/server.js"]
+
+[agents.codex]
+enabled = true
+output_path = "AGENTS.md"
+
+[agents.codex.mcp]
+enabled = true
+merge_strategy = "merge"
+
+[agents.claude]
+enabled = true
+output_path = "CLAUDE.md"
+
+[agents.claude.mcp]
+enabled = true
+merge_strategy = "merge"
+
+[agents.antigravity]
+enabled = true
+output_path = "AGENTS.md"
+
+[agents.antigravity.mcp]
+enabled = true
+merge_strategy = "merge"
+
+[agents.copilot]
+enabled = true
+output_path = "AGENTS.md"
+
+[agents.copilot.mcp]
+enabled = true
+merge_strategy = "merge"
+
+# Imported by ctx sync --rules from Codex MCP config
+[mcp_servers.code-review-graph]
+command = "/home/khovan/.local/share/pipx/venvs/code-review-graph/bin/python"
+args = ["-m", "code_review_graph", "serve"]
+
+# Imported by ctx sync --rules from Codex MCP config
+[mcp_servers.agentmemory]
+command = "npx"
+args = ["-y", "@agentmemory/mcp"]
