@@ -578,6 +578,8 @@ VerifiedProfile must include traceability back to Wizard answers, evidence refs,
 
 Risk Classification Agent is downstream of VerifiedProfile.
 
+Detailed multi-agent orchestration, agent inventory, LangGraph state, legal RAG sequence and citation guardrails are specified in `docs/architecture/multi-agent-system-architecture.md`.
+
 Allowed inputs:
 
 | Input | Allowed |
@@ -604,6 +606,8 @@ The agent may assist reasoning, but hard rules and validated legal corpus have p
 ## 15. Legal Corpus / RAG Architecture
 
 Legal Corpus/RAG supports classification with versioned and traceable legal basis.
+
+Detailed Legal Retrieval / RAG Agent responsibilities, shared state fields, retrieval sequence and blocked/degraded behavior are specified in `docs/architecture/multi-agent-system-architecture.md`.
 
 Core responsibilities:
 
@@ -682,6 +686,8 @@ ADR-008 remains **Needs Validation**. Final enforcement rules depend on A3 valid
 
 Document generation is downstream of risk classification and gap analysis.
 
+Detailed Gap Analysis Agent and Document Generation Agent flow, input/output contracts, guardrails and document-generation sequence are specified in `docs/architecture/multi-agent-system-architecture.md`.
+
 Inputs:
 
 | Input | Required |
@@ -717,6 +723,8 @@ Report must explicitly state:
 ## 18. Audit Trail Architecture
 
 Audit trail must be append-oriented and trace major lifecycle decisions.
+
+Detailed Audit Logger Node requirements for agent runs, input refs, output hash, model/version, status/error and metadata-only storage are specified in `docs/architecture/multi-agent-system-architecture.md`.
 
 Audit events:
 

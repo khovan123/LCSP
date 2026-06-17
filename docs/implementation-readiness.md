@@ -17,7 +17,7 @@ IMPLEMENTATION_NOT_READY
 | Brainstorming | `docs/brainstorming/*` |
 | Product | `docs/product/product-brief.md`, `docs/product/prd.md` |
 | Validation | `docs/product/validation-plan.md`, `validation-execution-plan.md`, `validation-results-template.md`, `validation-run-checklist.md` |
-| Architecture | `docs/architecture/*` |
+| Architecture | `docs/architecture/*`, including `docs/architecture/multi-agent-system-architecture.md` |
 | Detailed Design | `docs/design/use-case-specification.md`, `functional-requirements.md`, `non-functional-requirements.md`, `business-rules.md`, `erd.md`, `ux-specification.md`, `flowcharts.md`, `sequence-diagrams.md`, `traceability-matrix.md`, `use-case-comparison-report.md` |
 | Specs | `docs/specs/*` |
 | Security | `docs/security/*` |

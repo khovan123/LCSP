@@ -4,6 +4,8 @@
 
 Tài liệu này mô tả sequence diagram cho các flow chính của LCSP. Tên use case và ID khớp với `docs/design/use-case-specification.md`.
 
+Detailed multi-agent sequences for Evidence to VerifiedProfile, Human-in-the-loop Conflict Resolution, Risk Classification with Legal RAG and Document Generation are maintained in `docs/architecture/multi-agent-system-architecture.md`.
+
 ## Sequence Diagram List
 
 | Sequence | Related Use Cases | Related Business Rules |
