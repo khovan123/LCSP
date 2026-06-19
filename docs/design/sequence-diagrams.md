@@ -4,21 +4,23 @@
 
 Tài liệu này mô tả sequence diagram cho các flow chính của LCSP. Tên use case và ID khớp với `docs/design/use-case-specification.md`.
 
-Detailed multi-agent sequences for Evidence to VerifiedProfile, Human-in-the-loop Conflict Resolution, Risk Classification with Legal RAG and Document Generation are maintained in `docs/architecture/multi-agent-system-architecture.md`.
+Detailed multi-agent sequences for Evidence to VerifiedProfile, Human-in-the-loop Conflict Resolution, Risk Classification with Legal RAG and Document Generation are maintained in `docs/architecture/multi-agent-system-architecture.md`. That architecture document is the source of truth for Orchestrator-controlled agent routing, LLM Gateway boundaries, RAG/citation guardrails and audit-every-node behavior.
 
 ## Sequence Diagram List
 
 | Sequence | Related Use Cases | Related Business Rules |
 | --- | --- | --- |
 | Register and Login | UC-M01-01, UC-M01-02 | BR-001, BR-003 |
+| Sign In with OAuth/OIDC | UC-M01-14 | BR-086, BR-087, BR-088 |
 | Setup MFA Using Authenticator App | UC-M01-04, UC-M01-05 | BR-006, BR-007, BR-011 |
 | Login With MFA | UC-M01-02, UC-M01-10, UC-M01-05 | BR-008, BR-009 |
 | Disable / Reset MFA | UC-M01-06, UC-M01-07 | BR-010, BR-012, BR-013 |
 | Manager Creates Assessment | UC-M03-01 | BR-018, BR-023 |
 | Manager Invites Developer | UC-M02-04, UC-M02-05 | BR-020, BR-021 |
-| Developer Provides GitHub Evidence | UC-M04-02, UC-M04-08 | BR-032, BR-057, BR-058, BR-077 |
-| Developer Uploads Local/CI Evidence | UC-M04-03 | BR-033 |
+| Manager Runs Repository Scan | UC-M04-02, UC-M04-08 | BR-032, BR-057, BR-058, BR-077 |
+| Scanner-to-AIUsageFlow Static Analysis Sequence | UC-M04-08, UC-M05-01..UC-M05-05, UC-M06-01 | BR-080..BR-085 |
 | Evidence Gate Processing | UC-M05-01, UC-M05-02, UC-M05-03, UC-M05-05 | BR-036, BR-037, BR-038, BR-040 |
+| AI Usage Flow Analysis | UC-M05-04, UC-M06-01, UC-M07-01 | BR-080..BR-084 |
 | Reconciliation with Conflict | UC-M06-01..UC-M06-06 | BR-041..BR-048 |
 | Human Attestation | UC-M04-07, UC-M09-05 | BR-052..BR-056, BR-070 |
 | VerifiedProfile Creation and Approval | UC-M06-07, UC-M06-08 | BR-045, BR-078 |
@@ -205,33 +207,116 @@ sequenceDiagram
 
 Failure path: Developer receives no Manager permissions. Related use cases: UC-M02-04 Invite Developer, UC-M02-05 Assign Developer Policy.
 
-## Developer Provides GitHub Evidence
+## Sign In with OAuth/OIDC
 
 ```mermaid
 sequenceDiagram
-  participant D as Developer
-  participant FE as Developer Workspace
+  participant U as User
+  participant FE as LCSP Login UI
+  participant API as API Backend
+  participant IdP as OAuth/OIDC Provider
+  participant Auth as Auth Module
+  participant Audit as Audit Module
+  U->>FE: Select OAuth/OIDC provider
+  FE->>API: Initiate OAuth/OIDC login
+  API->>Auth: Create authorization request with PKCE/state/nonce
+  Auth-->>FE: Redirect to provider
+  FE->>IdP: Authorization request
+  IdP-->>API: Callback with code/state
+  API->>Auth: Validate redirect URI, state, nonce, issuer, audience, expiry
+  Auth->>Auth: Apply safe account linking policy
+  alt MFA enabled in LCSP
+    Auth-->>FE: MFA challenge required
+  else session allowed
+    Auth-->>API: Create LCSP session
+    API->>Audit: Write OAUTH_LOGIN_SUCCESS / OAUTH_ACCOUNT_LINKED
+  end
+```
+
+Failure path: invalid callback/state/nonce/provider token is rejected and audited. OAuth/OIDC login does not create GitHub repository connection and does not grant repository scan permission. Related use case: UC-M01-14 Sign In with OAuth/OIDC.
+
+## Manager Runs Repository Scan
+
+```mermaid
+sequenceDiagram
+  participant M as Manager
+  participant FE as Manager Workspace
   participant API as API Backend
   participant GH as GitHub
+  participant Q as Queue
   participant W as Python Worker
+  participant Scanner as Scanner
+  participant Gate as Evidence Gate Module
+  participant Usage as AI Usage Flow Analysis Node
   participant Audit as Audit Module
-  D->>FE: Connect repository
+  M->>FE: Connect repository
   FE->>API: Select repo/branch/commit
   API->>GH: Read-only access request
   GH-->>API: Repo metadata/token scope
   API->>Audit: Write GITHUB_REPOSITORY_CONNECTED
-  D->>FE: Run Scan or Re-scan
+  M->>FE: Click Run Repository Scan
   FE->>API: Request repository scan
-  API->>API: Check RUN_SCAN policy and valid branch/commit
-  API->>W: Queue scan job
-  W->>W: Scan temporary workspace
-  W-->>API: Normalized evidence report
-  API->>Audit: Write REPOSITORY_SCAN_STARTED / REPOSITORY_SCAN_COMPLETED
+  API->>API: Check Manager ownership or delegated RUN_REPOSITORY_SCAN policy and valid branch/commit
+  API->>Q: Create scan job
+  Q->>W: Dispatch scan job
+  W->>Scanner: Run repository scan in temporary workspace
+  Scanner-->>W: TechnicalEvidenceReport
+  W->>Gate: Evidence normalization + schema gate + quality gate
+  Gate-->>W: TechnicalProfile or rejected/insufficient status
+  W->>Usage: Analyze AI purpose/input/output/downstream action/affected subjects/human review
+  Usage-->>W: AIUsageFlow with evidence refs or uncertainty
+  W-->>API: Scan/evidence gate status
+  API->>Audit: Write REPOSITORY_SCAN_STARTED / REPOSITORY_SCAN_COMPLETED / EVIDENCE_GATE_RESULT / AI_USAGE_FLOW_ANALYZED
 ```
 
-Failure path: missing `RUN_SCAN` policy, invalid branch/commit, scan failure or source privacy violation blocks evidence readiness. Raw source is not sent to LLM and not stored long-term. Related use cases: UC-M04-02 Connect GitHub Repository, UC-M04-08 Run Repository Scan.
+Failure path: delegated Developer missing `RUN_REPOSITORY_SCAN` policy, invalid branch/commit, scan failure or source privacy violation blocks evidence readiness. Manager can run scan without Developer assignment. Raw source is not sent to LLM and not stored long-term. Related use cases: UC-M04-02 Connect GitHub Repository, UC-M04-08 Run Repository Scan.
 
-## Developer Uploads Local/CI Evidence
+## Scanner-to-AIUsageFlow Static Analysis Sequence
+
+```mermaid
+sequenceDiagram
+  participant M as Manager
+  participant API as NestJS API
+  participant Q as Queue
+  participant W as Python Worker
+  participant GH as GitHub App
+  participant WS as Temporary Workspace
+  participant Inv as Inventory/Manifest Analyzer
+  participant Parsers as Tree-sitter + TS Sidecar + Python Analyzer
+  participant Det as Scanner Detectors
+  participant Graph as NetworkX Evidence Graph
+  participant DB as PostgreSQL
+  participant Gate as Schema/Quality Gates
+  participant TP as TechnicalProfile Builder
+  participant UF as AI Usage Flow Analysis
+  participant R as Reconciliation
+  M->>API: Request Repository Scan
+  API->>Q: Create RepositoryScanJob with repo/branch/commit refs
+  Q->>W: Deliver job
+  W->>GH: Resolve read-only repository access
+  W->>WS: Create isolated temporary workspace
+  W->>WS: Shallow clone pinned commit SHA
+  WS->>Inv: Repository inventory + manifest/config analysis
+  Inv->>Parsers: Static parse and semantic analysis
+  Parsers->>Det: AI invocation, input, output, downstream action, human-review and domain signals
+  Det->>Graph: Build call/data/control/evidence paths
+  Graph->>DB: Persist graph metadata, refs, hashes and coverage limitations only
+  Graph-->>W: TechnicalFinding records
+  W->>DB: Persist TechnicalEvidenceReport metadata/report hash
+  W->>WS: Cleanup raw source workspace
+  W->>Gate: Schema Gate then Quality Gate
+  Gate->>TP: Accepted evidence
+  TP->>UF: TechnicalProfile + evidence refs
+  UF->>R: AIUsageFlow claim-level evidence or uncertainty
+```
+
+Boundary: raw source exists only in the temporary workspace and is deleted after scan success/failure handling. Scanner does not execute customer code, installs, builds, tests, Docker, CI workflows, scripts or API probes. LLM Gateway is not used by the scanner; AIUsageFlow may later use only sanitized metadata and evidence reference IDs.
+
+## Deferred / Future Evidence Sequences
+
+Not part of MVP main workflow.
+
+### Developer Uploads Local/CI Evidence
 
 ```mermaid
 sequenceDiagram
@@ -275,29 +360,54 @@ sequenceDiagram
 
 Related use cases: UC-M05-01 Validate Evidence Schema, UC-M05-02 Validate Privacy Flags, UC-M05-03 Evaluate Evidence Quality, UC-M05-05 Mark Evidence as Rejected, Insufficient, or Ready.
 
+## AI Usage Flow Analysis
+
+```mermaid
+sequenceDiagram
+  participant W as Python Worker
+  participant TP as TechnicalProfile Builder
+  participant UF as AI Usage Flow Analysis Node
+  participant R as Reconciliation Module
+  participant Legal as Legal Corpus/RAG
+  participant Audit as Audit Module
+  TP-->>W: TechnicalProfile ready
+  W->>UF: Analyze TechnicalProfile + findings + Wizard context
+  UF->>UF: Identify business_process, ai_purpose, input/output, downstream action, affected subject, human review, automation level, harm potential
+  alt usage purpose unclear
+    UF-->>R: AIUsageFlow uncertainty with evidence refs
+    R->>Audit: Write AI_USAGE_FLOW_UNCERTAIN
+  else usage purpose clear
+    UF-->>R: AIUsageFlow with evidence refs
+    R->>Audit: Write AI_USAGE_FLOW_ANALYZED
+  end
+  R->>Legal: Later rule matching uses VerifiedProfile + AIUsageFlow
+```
+
+Failure path: unclear or conflicting usage purpose creates reconciliation conflict/confirmation rather than overclaiming risk. Related concepts: TechnicalProfile, AIUsageFlow, Reconciliation, Legal Rule Matching.
+
 ## Reconciliation with Conflict
 
 ```mermaid
 sequenceDiagram
   participant R as Reconciliation Module
-  participant S as Scoring Module
+  participant API as API Backend
   participant M as Manager
-  participant D as Developer
+  participant V as VerifiedProfile Builder
   participant Audit as Audit Module
-  R->>R: Compare WizardProfile and TechnicalProfile
-  R->>S: Calculate Conflict Score
-  alt material or critical conflict
-    R->>M: Request business/legal confirmation
-    R->>D: Request technical confirmation
-    M-->>R: Confirm business/legal meaning
-    D-->>R: Confirm technical truth
-    R->>Audit: Write DUAL_CONFIRMATION_COMPLETED
-  else non-material conflict
-    R->>M: Route or auto-resolve based on owner
+  R->>R: Compare WizardProfile with TechnicalProfile + AIUsageFlow
+  alt CONFLICT_FOUND
+    R->>API: Pause workflow and create Manager conflict resolution task
+    API-->>M: Show WizardProfile, TechnicalProfile, AIUsageFlow and evidence refs
+    M-->>API: Resolve conflict, request correction or request re-scan
+    API-->>R: Conflict resolution recorded
+    R->>Audit: Write CONFLICT_RESOLVED_BY_MANAGER
+    R->>V: Build VerifiedProfile
+  else NO_CONFLICT_FOUND
+    R->>V: Build VerifiedProfile
   end
 ```
 
-Failure path: unresolved material/critical conflict sets `BLOCKED_BY_CONFLICT`. Related use cases: UC-M06-01..UC-M06-06.
+Failure path: unresolved conflict keeps classification locked and final report blocked. Developer clarification may be added post-MVP as optional input, but no MVP sequence depends on Developer action. Related use cases: UC-M06-01..UC-M06-06.
 
 ## Human Attestation
 
@@ -338,12 +448,12 @@ sequenceDiagram
     V->>Audit: Write VERIFIED_PROFILE_CREATED
     V->>M: Show VerifiedProfile candidate
     M-->>V: Approve business/legal meaning
-    V->>V: Check no unresolved material/critical conflict and required Developer confirmations
+    V->>V: Check no unresolved conflict and required confirmations
     V->>Audit: Write VERIFIED_PROFILE_APPROVED
   end
 ```
 
-Failure path: approval is blocked if required Developer confirmation is missing or material/critical conflict remains unresolved. Related use cases: UC-M06-07 Create VerifiedProfile, UC-M06-08 Review and Approve VerifiedProfile.
+Failure path: approval is blocked if required confirmation is missing or any conflict remains unresolved. Related use cases: UC-M06-07 Create VerifiedProfile, UC-M06-08 Review and Approve VerifiedProfile.
 
 ## Risk Classification with Legal Citation
 
@@ -353,12 +463,12 @@ sequenceDiagram
   participant Legal as Legal Corpus/RAG
   participant Agent as Risk Classification Agent
   participant Audit as Audit Module
-  API->>Legal: Retrieve versioned rules/citations
+  API->>Legal: Retrieve versioned rules/citations using VerifiedProfile + AIUsageFlow
   alt critical citation missing
     API->>Audit: Write CLASSIFICATION_BLOCKED_OR_DEGRADED
     API-->>API: Block or degrade classification
   else citations available
-    API->>Agent: Send VerifiedProfile + legal rules
+    API->>Agent: Send VerifiedProfile + AIUsageFlow + legal rules
     Agent-->>API: Classification with rule trace
     API->>Audit: Write RISK_CLASSIFICATION_RUN
   end
@@ -379,7 +489,7 @@ sequenceDiagram
   M->>API: Request report/export
   alt no technical evidence
     API->>Doc: Generate readiness-only export
-  else unresolved material/critical conflict
+  else unresolved conflict
     API-->>M: Final report blocked
   else gates pass
     API->>Gap: Retrieve GapAnalysisResult
@@ -414,5 +524,5 @@ Related use case: UC-M09-01 Write Audit Event.
 | Assumption | Affected Sequence Diagrams |
 | --- | --- |
 | A1 | Manager Creates Assessment, Evidence Gate Processing, Reconciliation with Conflict |
-| A2 | Risk Classification with Legal Citation, Document Generation |
+| A2 | AI Usage Flow Analysis, Risk Classification with Legal Citation, Document Generation |
 | A3 | Manager Invites Developer, Reconciliation with Conflict, Human Attestation, Audit Event Recording |

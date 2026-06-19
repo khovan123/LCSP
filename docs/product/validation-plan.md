@@ -37,8 +37,8 @@ Ngoài scope:
 | Assumption | Risk | Owner | Validation Method | Acceptance Threshold | Failure Condition | PRD Update Trigger |
 |---|---|---|---|---|---|---|
 | A1 - Wizard simplicity vs completeness | Wizard quá đơn giản thì thiếu business/legal truth; quá chi tiết thì Manager không hoàn tất hoặc cần Developer hỗ trợ | Product Manager, phối hợp UX/Domain Reviewer | Wizard question review, WizardProfile mapping, scenario walkthrough, user testing với Manager persona | Manager hiểu câu hỏi không cần Developer; Wizard capture đủ critical fields; mỗi câu hỏi quan trọng map được về WizardProfile | Manager không hiểu câu hỏi; thiếu critical field; câu hỏi dùng thuật ngữ code; câu hỏi không map được field | Sửa Wizard scope, wording, progressive disclosure, field model hoặc readiness behavior trong PRD |
-| A2 - Legal corpus / rule reliability | Classification yếu nếu legal rules không versioned/cited/traceable; LLM suy luận luật không có căn cứ | Product Manager, phối hợp Legal/Domain Rule Owner | Rule inventory review, rule-to-source trace test, scenario classification trace test, citation audit | 100% critical classification rules có legal source, citation, version/effective date nếu có, rule_id; 100% risk output trace được rule_id | Rule thiếu citation/version/source; risk output thiếu rule trace; LLM tạo conclusion không có retrieved rule/citation | Sửa classification requirements, legal corpus scope, rule schema, degraded/blocked behavior trong PRD |
-| A3 - Human attestation abuse risk | Manager/Developer dùng attestation để hợp thức hóa evidence yếu hoặc bypass scanner/evidence | Product Manager, phối hợp Compliance/Governance Reviewer | Attestation schema review, role-claim matrix review, abuse-case testing, audit trail inspection | 100% attestation có role/claim/reason/scope/timestamp/assessment id/audit log; 100% critical attestation có dual confirmation; 0 attestation thay machine-generated metadata | Free-text attestation unlocks classification; role claim sai; critical claim thiếu dual confirmation; metadata khách quan bị thay bằng attestation | Sửa attestation requirements, permission model, reporting disclosure, blocking rules hoặc audit requirements trong PRD |
+| A2 - Legal corpus / rule reliability | Classification yếu nếu legal rules không versioned/cited/traceable; LLM suy luận luật không có căn cứ; scanner + AI Usage Flow có thể map sai usage purpose sang legal corpus/rule | Product Manager, phối hợp Legal/Domain Rule Owner và AI Usage Flow Reviewer | Rule inventory review, rule-to-source trace test, scenario classification trace test, citation audit, AIUsageFlow-to-rule mapping test | 100% critical classification rules có legal source, citation, version/effective date nếu có, rule_id; 100% risk output trace được rule_id; A2-b usage-purpose mapping đạt acceptance threshold | Rule thiếu citation/version/source; risk output thiếu rule trace; LLM tạo conclusion không có retrieved rule/citation; usage purpose map sai rule/corpus hoặc confidence/uncertainty không được ghi | Sửa classification requirements, legal corpus scope, rule schema, AIUsageFlow contract, degraded/blocked behavior trong PRD |
+| A3 - Human attestation abuse risk | Manager/Developer dùng attestation hoặc delegated clarification để hợp thức hóa evidence yếu hoặc bypass scanner/evidence | Product Manager, phối hợp Compliance/Governance Reviewer | Attestation schema review, Manager final-resolution review, delegated permission review, abuse-case testing, audit trail inspection | 100% attestation có role/claim/reason/scope/timestamp/assessment id/audit log; 100% MVP conflict resolution có Manager final resolution; 0 attestation thay machine-generated metadata | Free-text attestation unlocks classification; role claim sai; Developer clarification tự finalize conflict; metadata khách quan bị thay bằng attestation | Sửa attestation requirements, permission model, reporting disclosure, blocking rules hoặc audit requirements trong PRD |
 
 ## A1 - Wizard Simplicity vs Completeness
 
@@ -133,6 +133,8 @@ LCSP không thể là evidence-based compliance platform nếu Risk Classificati
 - Mapping từ risk output sang rule_id.
 - Legal corpus/rule version.
 - Scenario evaluation set.
+- AIUsageFlow fixtures từ repository scan cho từng scenario.
+- Expected usage-purpose to legal-rule mapping.
 
 ### Owner
 
@@ -150,6 +152,54 @@ LCSP không thể là evidence-based compliance platform nếu Risk Classificati
   - HR screening / recruitment AI.
 - Kiểm tra degraded/blocked behavior khi legal rule/citation thiếu.
 - Kiểm tra LLM không tạo legal conclusion nếu thiếu retrieved legal rule/citation.
+- Kiểm tra A2-b: scanner + AI Usage Flow Analysis có đủ chính xác để map usage purpose sang legal rule/corpus không.
+
+### A2-b - Scanner + AI Usage Flow to Legal Rule Mapping
+
+Question:
+
+```text
+Scanner + AI Usage Flow Analysis có đủ chính xác để map usage purpose sang legal rule/corpus không?
+```
+
+Why this matters:
+
+Legal corpus có thể đúng và có citation, nhưng LCSP vẫn sẽ classification sai nếu AIUsageFlow hiểu sai business purpose. Ví dụ repo có OpenAI API không đồng nghĩa high risk; cần biết AI dùng để summarize nội bộ, rank ứng viên, score khoản vay hay auto approve/reject.
+
+Data to validate:
+
+- Scanner findings for AI input/output/decision-flow/human-review/user-impact/domain-context signals.
+- AIUsageFlow output: `business_process`, `ai_purpose`, `automation_level`, `affected_subjects`, `ai_input_types`, `human_review`, `potential_harm_categories`, `evidence_refs`, `confidence`.
+- Expected legal corpus/rule set for each usage scenario.
+- Ground-truth scenario label reviewed by Product + Legal/Domain Rule Owner.
+
+Validation method:
+
+1. Prepare labeled scenario fixtures for at least:
+   - Internal summarization / internal assistant.
+   - Loan approval / credit scoring.
+   - HR screening / recruitment ranking.
+   - Customer-facing chatbot with no automated decision.
+2. For each fixture, run scanner/evidence review and derive AIUsageFlow.
+3. Compare derived `business_process`, `ai_purpose`, `automation_level`, `affected_subjects`, `human_review` and `potential_harm_categories` with expected labels.
+4. Check that Legal RAG / Rule Matching selects the expected rule family/corpus.
+5. Check that unclear or low-confidence usage purpose is marked `unknown` / `unclear` and routes to confirmation instead of forcing a legal classification.
+
+Acceptance threshold:
+
+- 100% high-impact fixtures map to the correct legal rule family/corpus or are explicitly blocked for uncertainty.
+- 0 provider/model-only mapping accepted as sufficient legal-rule basis.
+- 0 internal summarization/internal assistant fixtures are mapped to automated decision/high-impact rules solely because an AI provider/framework is present.
+- 100% AIUsageFlow claims used for legal matching have `evidence_refs`.
+- If usage purpose confidence is below threshold, classification is blocked/degraded or routed to confirmation.
+
+Failure condition:
+
+- Scanner/AIUsageFlow maps internal summarization to automated decision/high-impact legal rules without evidence.
+- Loan approval or HR ranking usage is missed or mapped to generic low-risk/internal-assistant rules.
+- Legal Rule Matching ignores `AIUsageFlow` fields and uses only provider/model/dependency.
+- Unclear usage purpose still produces final classification.
+- AIUsageFlow conclusion lacks evidence refs for critical purpose/downstream-action claims.
 
 ### Legal Rule Source
 
@@ -185,6 +235,7 @@ Pass khi tất cả điều kiện sau đạt:
 - 100% critical classification rules có legal source, citation, version, effective date nếu có và `rule_id`.
 - 100% risk classification output trong scenario validation trace được về `rule_id`.
 - 100% `rule_id` trace được về legal document/version.
+- A2-b usage-purpose to rule/corpus mapping passes the acceptance threshold above.
 - Không có final classification nếu thiếu legal citation cho rule quan trọng.
 - LLM không tạo legal conclusion nếu không có retrieved legal rule/citation.
 
@@ -197,6 +248,8 @@ Fail nếu một trong các điều kiện sau xảy ra:
 - Rule_id không trace được về legal document/version.
 - Classification vẫn final khi legal citation thiếu cho field quan trọng.
 - LLM tạo conclusion pháp lý không có retrieved legal rule/citation.
+- AIUsageFlow maps usage purpose to wrong legal corpus/rule family without blocking or confirmation.
+- Classification relies only on model/provider/framework detection.
 
 ### If Failed, What PRD Must Change
 
@@ -204,6 +257,7 @@ Fail nếu một trong các điều kiện sau xảy ra:
 - Sửa Evidence/Legal Corpus assumptions và Open Questions.
 - Bổ sung rule schema requirements.
 - Bổ sung rule approval/review owner.
+- Sửa AIUsageFlow contract, scanner finding requirements hoặc rule matching inputs.
 - Thu hẹp MVP classification scope nếu legal rules chưa đủ.
 
 ## A3 - Human Attestation Abuse Risk
@@ -218,7 +272,7 @@ Structured human technical attestation giúp LCSP xử lý trường hợp scann
 - Role-claim matrix.
 - Danh sách allowed claims.
 - Danh sách forbidden claims.
-- Danh sách dual-confirmation claims.
+- Danh sách claims cần Manager final review hoặc optional delegated clarification.
 - Audit log fields.
 - Report disclosure behavior.
 - Abuse-case test results.
@@ -234,7 +288,7 @@ Structured human technical attestation giúp LCSP xử lý trường hợp scann
 - Review role-bound claims:
   - Manager chỉ confirm business/legal meaning.
   - Developer chỉ confirm technical truth.
-- Review critical claims cần dual confirmation.
+- Review critical claims cần Manager final review và không được để Developer clarification tự unlock classification.
 - Test abuse cases:
   - Developer viết "bỏ qua scanner" dạng free text.
   - Manager cố confirm technical truth.
@@ -277,7 +331,7 @@ Attestation không được thay các metadata khách quan:
 
 ### Dual-Confirmation Claims
 
-Các claim cần Manager + Developer:
+Các claim cần Manager final review trong MVP; post-MVP có thể dùng optional Developer clarification:
 
 - auto decision;
 - AI-assisted decision;
@@ -309,7 +363,7 @@ Pass khi tất cả điều kiện sau đạt:
 
 - 100% attestation có role, claim, reason, scope, timestamp và assessment_id.
 - 100% attestation được ghi audit log.
-- 100% critical attestation có dual confirmation.
+- 100% classification-relevant attestation có Manager final review.
 - 0 trường hợp attestation thay machine-generated metadata.
 - 0 trường hợp Manager confirm technical truth.
 - 0 trường hợp Developer confirm business/legal meaning.
@@ -321,7 +375,7 @@ Fail nếu một trong các điều kiện sau xảy ra:
 
 - Free-text attestation unlocks classification.
 - Attestation thiếu role, claim, reason, scope, timestamp hoặc assessment_id.
-- Critical claim thiếu dual confirmation.
+- Critical claim hoặc delegated clarification tự unlock classification mà không có Manager final review.
 - Attestation thay report hash, scanner version, ruleset version, scan timestamp, repo/commit metadata, legal corpus version, evidence report integrity hoặc machine-generated privacy flags.
 - Report không disclose khi classification dùng attestation.
 
@@ -338,8 +392,8 @@ Fail nếu một trong các điều kiện sau xảy ra:
 | Assumption | Minimum Pass Threshold |
 |---|---|
 | A1 - Wizard simplicity vs completeness | Manager hiểu Wizard không cần Developer; Wizard capture đủ critical fields; 100% câu hỏi quan trọng map về WizardProfile; unknown critical fields không trở thành final input |
-| A2 - Legal corpus / rule reliability | 100% critical rules có source/citation/version/rule_id; 100% risk output trace về rule_id; no final classification without required legal citation; LLM không tạo legal conclusion thiếu retrieved rule/citation |
-| A3 - Human attestation abuse risk | 100% attestation có role/claim/reason/scope/timestamp/assessment_id/audit; 100% critical attestation dual-confirmed; 0 attestation thay machine-generated metadata; report disclose khi dùng attestation |
+| A2 - Legal corpus / rule reliability | 100% critical rules có source/citation/version/rule_id; 100% risk output trace về rule_id; A2-b usage-purpose mapping đúng legal corpus/rule family hoặc blocked/uncertain; no final classification without required legal citation; LLM không tạo legal conclusion thiếu retrieved rule/citation |
+| A3 - Human attestation abuse risk | 100% attestation có role/claim/reason/scope/timestamp/assessment_id/audit; 100% classification-relevant attestation có Manager final review; 0 Developer clarification tự finalize conflict; 0 attestation thay machine-generated metadata; report disclose khi dùng attestation |
 
 ## PRD Update Triggers
 

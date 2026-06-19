@@ -54,6 +54,44 @@ Rule applicability may depend on:
 - external_llm_usage
 - biometric_or_high_impact_use
 - technical evidence findings
+- AIUsageFlow.business_process
+- AIUsageFlow.ai_purpose
+- AIUsageFlow.automation_level
+- AIUsageFlow.affected_subjects
+- AIUsageFlow.ai_input_types
+- AIUsageFlow.human_review
+- AIUsageFlow.potential_harm_categories
+
+## AI Usage Flow for Rule Matching
+
+Legal RAG / Rule Matching must not rely only on model/provider/framework presence.
+
+Incorrect:
+
+```text
+Repo has OpenAI API -> high risk
+```
+
+Correct:
+
+```text
+Repo has OpenAI API
++ AI used in loan approval
++ AI output creates a risk score
++ score is used to approve/reject customer
++ financial/personal data is processed
+-> retrieve legal rules for automated decision, high-impact use, financial service and affected person protections
+```
+
+| AI Usage Flow Field | Legal Rule Matching Purpose |
+| --- | --- |
+| `business_process` | Xác định lĩnh vực áp dụng luật |
+| `ai_purpose` | Xác định AI là assistive, recommendation, scoring hay decision |
+| `automation_level` | Xác định mức tự động hóa |
+| `affected_subjects` | Xác định ai bị ảnh hưởng |
+| `ai_input_types` / data types | Xác định dữ liệu cá nhân/nhạy cảm |
+| `human_review` | Xác định giảm/không giảm rủi ro |
+| `potential_harm_categories` | Xác định rule/corpus về nguy hại |
 
 ## Degraded / Blocked Behavior
 
@@ -67,3 +105,5 @@ Rule applicability may depend on:
 ## No Unsupported Legal Conclusion Rule
 
 LLM must not create legal conclusions unless grounded in retrieved legal rule/citation. Hard rules take precedence over LLM interpretation.
+
+Risk Classification output must cite legal rules selected from VerifiedProfile + AIUsageFlow context. If usage purpose is unclear or conflicts with WizardProfile, classification remains blocked until reconciliation resolves the uncertainty.

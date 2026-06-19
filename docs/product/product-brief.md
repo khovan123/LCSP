@@ -32,23 +32,23 @@ Manager cần:
 
 - điền Web Wizard bằng ngôn ngữ nghiệp vụ, không phải thuật ngữ kỹ thuật;
 - hiểu assessment đang thiếu technical evidence nào;
-- mời Developer thực hiện technical tasks;
-- xử lý conflict thuộc business/legal meaning;
+- kết nối GitHub repository và chạy Repository Scan nếu muốn hoàn tất assessment mà không cần Developer;
+- mời Developer thực hiện technical tasks như optional collaboration, không phải điều kiện bắt buộc;
+- xử lý mọi conflict trong MVP, gồm business/legal conflict và technical conflict dựa trên scanner findings/evidence;
 - approve VerifiedProfile;
 - generate report khi đủ điều kiện.
 
 ### Developer
 
-Developer là người sở hữu technical truth. Trong MVP, Developer bao gồm developer, tech lead, DevOps, security engineer hoặc người hiểu source code/deployment/evidence.
+Developer là optional technical collaborator. Trong MVP, Developer bao gồm developer, tech lead, DevOps, security engineer hoặc người hiểu source code/deployment/evidence, nhưng Developer không phải điều kiện bắt buộc để hoàn tất MVP assessment.
 
 Developer cần:
 
-- kết nối repo hoặc upload evidence report;
-- chạy scan/re-scan;
+- kết nối repo hoặc chạy scan/re-scan nếu Manager đã delegated quyền kỹ thuật;
 - review technical findings;
 - xác nhận false positive/false negative;
 - cung cấp structured technical attestation khi scanner evidence chưa đủ;
-- xử lý technical conflicts được giao.
+- cung cấp input cho technical conflicts được giao, nhưng Manager là final resolver trong MVP.
 
 ## 4. Current Pain Points
 
@@ -67,27 +67,28 @@ Tầm nhìn dài hơn là LCSP có thể hỗ trợ nhiều evidence modes: GitH
 
 ## 6. Core Workflow
 
-MVP nên dùng **Manager-led workflow with task-based Developer participation**.
+MVP dùng **Manager-led workflow với Developer participation optional**.
 
 ```text
 Manager creates assessment
 -> Manager fills Web Wizard
 -> LCSP detects technical evidence required
--> Manager invites Developer
--> Manager selects Developer policy
--> Developer connects repo / uploads report / confirms findings
+-> Manager connects GitHub Repository
+-> Manager runs Repository Scan
 -> LCSP runs schema + quality gates
+-> LCSP builds TechnicalProfile
+-> LCSP runs AI Usage Flow Analysis
 -> LCSP performs reconciliation
 -> If conflict:
-     - Developer resolves technical truth
-     - Manager resolves business/legal meaning
+     - Manager reviews WizardProfile, TechnicalProfile and AIUsageFlow
+     - Manager resolves or confirms the conflict
 -> LCSP creates VerifiedProfile
 -> Manager approves VerifiedProfile
 -> LCSP unlocks Risk Classification
 -> Manager generates final report
 ```
 
-Nguyên tắc: Manager owns the assessment. Developer only receives technical tasks assigned by Manager. LCSP tracks progress, evidence gates, reconciliation and audit trail.
+Nguyên tắc: Manager owns the assessment and is the required and sufficient role for completing MVP flow. Developer only receives technical tasks assigned by Manager and is optional. LCSP tracks progress, evidence gates, reconciliation and audit trail.
 
 Trace: `decision-candidates.md` Candidate 8; `brainstorming-summary.md` Workflow model.
 
@@ -97,13 +98,13 @@ MVP nên tập trung vào:
 
 - Web Wizard cho Manager.
 - Manager-led assessment workspace.
-- Developer task workspace.
-- GitHub App read-only scan làm default evidence path.
-- Upload evidence report/manual technical JSON ở mức tối thiểu nếu cần fallback.
+- OAuth/OIDC user login as active MVP authentication capability, alongside password/email auth and Authenticator App MFA where enabled.
+- Manager-owned GitHub App read-only Repository Scan làm active MVP evidence path.
+- Developer task workspace as optional collaborator path.
 - Evidence schema completeness gate.
 - Context-aware quality threshold gate ở mức rule bảo thủ.
-- Reconciliation WizardProfile vs TechnicalProfile.
-- Dual-confirmation cho material conflicts.
+- Reconciliation WizardProfile vs TechnicalProfile + AIUsageFlow.
+- Manager-only MVP conflict resolution.
 - Risk Classification Agent chỉ sau VerifiedProfile.
 - Readiness-only output khi chưa có technical evidence.
 - Audit trail cho evidence, conflict resolution, attestation và final approval.
@@ -137,13 +138,14 @@ Trace: `brainstorming-summary.md` Core Problem; `next-step-recommendation.md` Co
 MVP chỉ expose 2 role: Manager và Developer.
 
 - Manager owns business/legal truth.
-- Developer owns technical truth.
+- Manager is the superset MVP role and can perform all active technical actions required to complete assessment.
+- Developer is optional and receives delegated technical permissions only.
 
 Trace: `decision-candidates.md` Candidate 7.
 
 ### Manager-led workflow
 
-Manager là assessment owner. Developer chỉ tham gia theo policy/task được Manager cấp.
+Manager là assessment owner, superset role và final resolver trong MVP. Developer chỉ tham gia theo policy/task được Manager cấp, không là dependency bắt buộc.
 
 Trace: `decision-candidates.md` Candidate 8.
 
@@ -161,7 +163,7 @@ Trace: `decision-candidates.md` Candidate 2.
 
 ### Hybrid evidence strategy
 
-GitHub App read-only là default MVP evidence path. Local/CI scanner hoặc manual evidence upload là enterprise-safe alternative.
+GitHub Repository Scan qua GitHub App read-only là active MVP evidence path. Local/CI scanner hoặc manual evidence upload là Deferred/Future/Enterprise alternative.
 
 Trace: `decision-candidates.md` Candidate 3.
 
@@ -238,12 +240,11 @@ Manager mặc định có toàn quyền trong assessment:
 Manager có thể cấp một hoặc nhiều policy cho Developer:
 
 - `CONNECT_REPOSITORY`
-- `RUN_SCAN`
-- `UPLOAD_EVIDENCE`
+- `RUN_REPOSITORY_SCAN`
 - `VIEW_TECHNICAL_FINDINGS`
-- `CONFIRM_FINDINGS`
+- `RESPOND_TO_TECHNICAL_CLARIFICATION`
 - `ATTEST_TECHNICAL_CLAIMS`
-- `RESOLVE_TECHNICAL_CONFLICTS`
+- `VIEW_ASSIGNED_CONFLICT`
 - `VIEW_LIMITED_ASSESSMENT_CONTEXT`
 
 Developer không có quyền:
@@ -313,9 +314,9 @@ TECHNICAL_EVIDENCE_READY
 
 LCSP không xác nhận sự thật cuối cùng. LCSP phát hiện mâu thuẫn, giải thích bằng ngôn ngữ phù hợp, điều phối task xác nhận và ghi audit trail.
 
-- Developer xác nhận technical truth: code/evidence có đúng không, repo/branch/commit có đúng không, scanner có false positive không, logic đó có chạy production không.
-- Manager xác nhận business/legal truth: hệ thống dùng để làm gì, ảnh hưởng ai, có human review không, quyết định nghiệp vụ là gì.
-- Material conflicts require dual confirmation from Manager and Developer.
+- Manager là final resolver trong MVP cho cả business/legal conflict và technical conflict. Manager có thể review scanner findings, yêu cầu re-scan/correction hoặc dùng delegated Developer clarification nếu có.
+- Developer là optional technical collaborator sau khi được Manager giao quyền theo phạm vi cụ thể. Developer input không tự unlock classification hoặc finalize conflict.
+- Mọi conflict chưa resolve đều block Risk Classification và final report cho đến khi Manager hoàn tất resolution.
 
 ### Score model
 

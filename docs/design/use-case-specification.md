@@ -18,11 +18,11 @@ IMPLEMENTATION_NOT_READY
 
 | Actor | Vai trò |
 | --- | --- |
-| Manager | Assessment owner, sở hữu business/legal truth, mời Developer, resolve business/legal conflict, approve VerifiedProfile, generate report khi đủ gate |
-| Developer | Nhận task/policy do Manager cấp, sở hữu technical truth, cung cấp evidence, confirm technical finding, attest technical claim trong phạm vi được cấp |
+| Manager | Required and sufficient MVP role; assessment owner; owns business/legal truth; can connect repository, run scan, review technical evidence, resolve all MVP conflicts, approve VerifiedProfile and generate report when gates pass |
+| Developer | Optional technical collaborator; receives scoped delegated task/policy from Manager; not required for MVP success path |
 | LCSP System | Điều phối workflow, evidence gates, reconciliation, scoring, audit, classification/document jobs |
 | GitHub | External repo provider cho GitHub App read-only scan |
-| Local/CI Scanner Environment | Môi trường enterprise-safe để tạo/upload evidence report |
+| Local/CI Scanner Environment | Deferred/Future enterprise evidence environment, không thuộc MVP main flow |
 | LLM Provider | Chỉ nhận VerifiedProfile/normalized evidence/legal context, không nhận raw source code |
 | Legal Corpus | Nguồn legal rule/citation có version và traceability |
 
@@ -34,7 +34,6 @@ flowchart LR
   Developer((Developer))
   System((LCSP System))
   GitHub[(GitHub)]
-  LocalCI[(Local/CI Scanner)]
   LLM[(LLM Provider)]
   Legal[(Legal Corpus)]
 
@@ -47,6 +46,7 @@ flowchart LR
     UC_M01_11[UC-M01-11 Verify Email]
     UC_M01_12[UC-M01-12 Change Password]
     UC_M01_13[UC-M01-13 Manage Personal Profile]
+    UC_M01_14[UC-M01-14 Sign In with OAuth/OIDC]
   end
 
   subgraph M03[Module 3 - Assessment Setup & Web Wizard]
@@ -60,14 +60,14 @@ flowchart LR
     UC_M04_01[UC-M04-01 Accept Developer Task]
     UC_M04_02[UC-M04-02 Connect GitHub Repository]
     UC_M04_08[UC-M04-08 Run Repository Scan]
-    UC_M04_03[UC-M04-03 Upload Local/CI Scanner Report]
+    UC_M04_05[UC-M04-05 Review Technical Findings]
     UC_M04_07[UC-M04-07 Provide Structured Technical Attestation]
   end
 
   subgraph M06[Module 6 - Reconciliation & VerifiedProfile]
     UC_M06_01[UC-M06-01 Detect Conflict]
     UC_M06_02[UC-M06-02 Calculate Conflict Score]
-    UC_M06_06[UC-M06-06 Perform Dual Confirmation]
+    UC_M06_06[UC-M06-06 Post-MVP Delegated Technical Clarification]
     UC_M06_07[UC-M06-07 Create VerifiedProfile]
     UC_M06_08[UC-M06-08 Review and Approve VerifiedProfile]
   end
@@ -88,7 +88,6 @@ flowchart LR
   System --> M06
   System --> M07
   UC_M04_02 --> GitHub
-  UC_M04_03 --> LocalCI
   UC_M07_01 --> Legal
   UC_M07_02 --> LLM
 ```
@@ -110,6 +109,7 @@ flowchart LR
 | M01 | UC-M01-11 | Verify Email | Manager/Developer, LCSP System | None |
 | M01 | UC-M01-12 | Change Password | Manager/Developer, LCSP System | Open Question |
 | M01 | UC-M01-13 | Manage Personal Profile | Manager/Developer, LCSP System | Open Question |
+| M01 | UC-M01-14 | Sign In with OAuth/OIDC | Manager/Developer, OAuth/OIDC Provider, LCSP System | None |
 | M02 | UC-M02-01 | Create Organization | Manager, LCSP System | None |
 | M02 | UC-M02-02 | Manage Organization Members | Manager, LCSP System | None |
 | M02 | UC-M02-03 | Assign Manager Role | Manager, LCSP System | None |
@@ -123,13 +123,11 @@ flowchart LR
 | M03 | UC-M03-05 | View Self-Declared Readiness | Manager, LCSP System | A1 |
 | M03 | UC-M03-06 | View Preliminary Indicators | Manager, LCSP System | A1 |
 | M04 | UC-M04-01 | Accept Developer Task | Developer, LCSP System | None |
-| M04 | UC-M04-02 | Connect GitHub Repository | Developer, GitHub, LCSP System | None |
-| M04 | UC-M04-03 | Upload Local/CI Scanner Report | Developer, Local/CI Scanner Environment, LCSP System | None |
-| M04 | UC-M04-04 | Upload Manual Technical Evidence JSON | Developer, LCSP System | A3 |
-| M04 | UC-M04-05 | Review Technical Findings | Developer, LCSP System | None |
+| M04 | UC-M04-02 | Connect GitHub Repository | Manager; optional delegated Developer; GitHub; LCSP System | None |
+| M04 | UC-M04-05 | Review Technical Findings | Manager; optional delegated Developer; LCSP System | None |
 | M04 | UC-M04-06 | Confirm Technical Truth | Developer, LCSP System | A3 |
 | M04 | UC-M04-07 | Provide Structured Technical Attestation | Developer, LCSP System | A3 |
-| M04 | UC-M04-08 | Run Repository Scan | Developer, LCSP System | None |
+| M04 | UC-M04-08 | Run Repository Scan | Manager; optional delegated Developer; LCSP System | None |
 | M05 | UC-M05-01 | Validate Evidence Schema | LCSP System | None |
 | M05 | UC-M05-02 | Validate Privacy Flags | LCSP System | None |
 | M05 | UC-M05-03 | Evaluate Evidence Quality | LCSP System | A1 |
@@ -137,10 +135,10 @@ flowchart LR
 | M05 | UC-M05-05 | Mark Evidence as Rejected, Insufficient, or Ready | LCSP System | A1 |
 | M06 | UC-M06-01 | Detect Conflict | LCSP System | A1/A3 |
 | M06 | UC-M06-02 | Calculate Conflict Score | LCSP System | A1/A3 |
-| M06 | UC-M06-03 | Route Conflict to Manager or Developer | LCSP System | A3 |
-| M06 | UC-M06-04 | Resolve Technical Conflict | Developer, LCSP System | A3 |
+| M06 | UC-M06-03 | Route Conflict to Manager | LCSP System; Manager | A3 |
+| M06 | UC-M06-04 | Resolve Technical Conflict | Manager; optional delegated Developer input; LCSP System | A3 |
 | M06 | UC-M06-05 | Resolve Business/Legal Conflict | Manager, LCSP System | A3 |
-| M06 | UC-M06-06 | Perform Dual Confirmation | Manager, Developer, LCSP System | A3 |
+| M06 | UC-M06-06 | Post-MVP Delegated Technical Clarification | Manager, optional Developer, LCSP System | A3/Post-MVP |
 | M06 | UC-M06-07 | Create VerifiedProfile | LCSP System | A1/A3 |
 | M06 | UC-M06-08 | Review and Approve VerifiedProfile | Manager, LCSP System | A1/A3 |
 | M07 | UC-M07-01 | Retrieve Legal Rules/Citations | LCSP System, Legal Corpus | A2 |
@@ -597,6 +595,46 @@ flowchart LR
 | Failure / Exception | Không thay đổi role, policy hoặc ownership từ profile screen. |
 | Audit | `PROFILE_UPDATED` hoặc `PROFILE_UPDATE_REJECTED` được ghi. |
 
+# Use Case: `UC-M01-14 — Sign In with OAuth/OIDC`
+
+| Field | Content |
+| --- | --- |
+| Description | User đăng nhập LCSP bằng OAuth/OIDC provider được cấu hình. OAuth/OIDC xác thực identity vào LCSP, không kết nối GitHub repository và không cấp repository scan permission. |
+| Primary Roles | Manager/Developer; OAuth/OIDC Provider; LCSP System |
+| Pre-Conditions | OAuth/OIDC provider đã được cấu hình; redirect URI hợp lệ; user chưa bị khóa; LCSP session policy active. |
+| Trigger | User chọn Sign in with OAuth/OIDC trên login screen. |
+
+## Basic Flow
+
+| Step | Interaction |
+| --- | --- |
+| 1 | User chọn OAuth/OIDC provider. |
+| 2 | LCSP System tạo authorization request dùng authorization code flow with PKCE, `state` và `nonce`. |
+| 3 | LCSP System redirect user đến provider. |
+| 4 | Provider xác thực user và redirect callback về LCSP. |
+| 5 | LCSP System validate callback, redirect URI, `state`, `nonce`, issuer, audience và token expiry theo provider policy. |
+| 6 | LCSP System tìm hoặc tạo linked LCSP account theo account-linking policy, không link chỉ dựa trên email chưa verified. |
+| 7 | Nếu user có TOTP MFA enabled trong LCSP, LCSP System chuyển sang MFA challenge trước khi tạo session. |
+| 8 | LCSP System tạo LCSP session theo session/security policy và ghi audit event. |
+
+## Alternative / Exception Flow
+
+| Step | Interaction |
+| --- | --- |
+| 1A | Nếu provider chưa cấu hình, LCSP System không hiển thị hoặc reject login method. |
+| 4A | Nếu callback thiếu/sai `state`, `nonce`, issuer, audience hoặc token expiry, LCSP System reject và ghi `OAUTH_CALLBACK_VALIDATION_FAILED`. |
+| 5A | Nếu account linking không an toàn hoặc email chưa verified, LCSP System yêu cầu linking policy/verification thay vì auto-link. |
+| 6A | Nếu MFA enabled nhưng OTP invalid/expired, LCSP System không tạo session. |
+| 7A | OAuth/OIDC login không tự tạo GitHub App connection, không cấp `CONNECT_REPOSITORY` hoặc `RUN_REPOSITORY_SCAN`. |
+
+## Post-Conditions
+
+| Type | Content |
+| --- | --- |
+| Success | LCSP session được tạo sau khi identity, linking policy, session policy và MFA policy nếu có đều pass. |
+| Failure / Exception | Session không được tạo nếu callback invalid, account linking unsafe hoặc MFA fail. |
+| Audit | `OAUTH_LOGIN_SUCCESS`, `OAUTH_LOGIN_FAILED`, `OAUTH_ACCOUNT_LINKED` hoặc `OAUTH_CALLBACK_VALIDATION_FAILED` được ghi, không log raw provider token. |
+
 ## Module 2 — Organization & Role Management
 
 # Use Case: `UC-M02-01 — Create Organization`
@@ -744,7 +782,7 @@ flowchart LR
 
 | Step | Interaction |
 | --- | --- |
-| 1 | Manager chọn policies như connect repo, run scan, upload evidence, view findings, confirm findings hoặc attest technical claims. |
+| 1 | Manager chọn policies như connect repo, run repository scan, view findings, confirm findings hoặc attest technical claims. |
 | 2 | LCSP System kiểm tra policy hợp lệ và không cấp Manager permissions. |
 | 3 | LCSP System lưu DeveloperPolicy cho assessment member. |
 | 4 | LCSP System ghi `DEVELOPER_POLICY_ASSIGNED`. |
@@ -754,7 +792,7 @@ flowchart LR
 | Step | Interaction |
 | --- | --- |
 | 1A | Nếu policy không hợp lệ hoặc vượt MVP scope, LCSP System từ chối. |
-| 2A | Nếu policy liên quan attestation critical claim, LCSP System đánh dấu A3 dependency/dual confirmation guard. |
+| 2A | Nếu policy liên quan classification-relevant attestation, LCSP System đánh dấu A3 dependency và Manager final-review guard. |
 
 ## Post-Conditions
 
@@ -1038,7 +1076,7 @@ flowchart LR
 | --- | --- |
 | Description | Developer kết nối GitHub repository để LCSP chạy read-only scan theo default MVP evidence path. |
 | Primary Roles | Developer; GitHub; LCSP System |
-| Pre-Conditions | Developer có `CONNECT_REPOSITORY`/`RUN_SCAN` policy; assessment cần technical evidence. |
+| Pre-Conditions | Manager owns assessment hoặc Developer có delegated `CONNECT_REPOSITORY`/`RUN_REPOSITORY_SCAN` policy; assessment cần technical evidence. |
 | Trigger | Developer chọn GitHub evidence path. |
 
 ## Basic Flow
@@ -1047,31 +1085,35 @@ flowchart LR
 | --- | --- |
 | 1 | Developer chọn repo, branch và commit/scope cần scan. |
 | 2 | LCSP System yêu cầu GitHub App read-only selected repo access. |
-| 3 | LCSP System queue scan job và chỉ lưu metadata cần thiết. |
+| 3 | LCSP System lưu repository/branch/commit scope để Developer chạy Repository Scan. |
 | 4 | LCSP System ghi `GITHUB_REPOSITORY_CONNECTED`. |
 
 ## Alternative / Exception Flow
 
 | Step | Interaction |
 | --- | --- |
-| 1A | Nếu GitHub permission fail, Developer có thể chọn Local/CI upload. |
+| 1A | Nếu GitHub permission fail, LCSP System giữ classification locked và yêu cầu sửa kết nối repository. |
 | 2A | Nếu policy thiếu, LCSP System chặn connect action. |
 
 ## Post-Conditions
 
 | Type | Content |
 | --- | --- |
-| Success | Scan job được tạo bằng read-only path. |
+| Success | Repository được kết nối và sẵn sàng cho `Run Repository Scan`. |
 | Failure / Exception | Không queue scan nếu permission/policy invalid. |
 | Audit | `GITHUB_REPOSITORY_CONNECTED` được ghi. |
+
+## Deferred / Future Evidence Use Cases
+
+Các use case sau không thuộc MVP main workflow. Chúng được giữ lại để trace roadmap Future / Enterprise, không được dùng làm active MVP requirement hoặc main architecture path.
 
 # Use Case: `UC-M04-03 — Upload Local/CI Scanner Report`
 
 | Field | Content |
 | --- | --- |
-| Description | Developer upload report do Local/CI scanner tạo để giữ source trong môi trường enterprise. |
+| Description | Deferred/Future enterprise path: Developer upload report do Local/CI scanner tạo để giữ source trong môi trường enterprise. Không thuộc MVP main flow. |
 | Primary Roles | Developer; Local/CI Scanner Environment; LCSP System |
-| Pre-Conditions | Developer có `UPLOAD_EVIDENCE` policy; report đã được tạo theo contract. |
+| Pre-Conditions | Future/Enterprise scope được bật; Developer có `UPLOAD_EVIDENCE` policy; report đã được tạo theo contract. |
 | Trigger | Developer chọn upload Local/CI report. |
 
 ## Basic Flow
@@ -1094,7 +1136,7 @@ flowchart LR
 
 | Type | Content |
 | --- | --- |
-| Success | Evidence report received và chờ gate processing. |
+| Success | Deferred evidence report received và chờ gate processing nếu future path được bật. |
 | Failure / Exception | Report không được accepted nếu upload invalid. |
 | Audit | `EVIDENCE_REPORT_UPLOADED` được ghi. |
 
@@ -1102,9 +1144,9 @@ flowchart LR
 
 | Field | Content |
 | --- | --- |
-| Description | Developer upload manual technical evidence JSON có cấu trúc. Free text không được unlock classification. |
+| Description | Deferred/Future path: Developer upload manual technical evidence JSON có cấu trúc. Free text không được unlock classification. Không thuộc MVP main flow. |
 | Primary Roles | Developer; LCSP System |
-| Pre-Conditions | Developer có `UPLOAD_EVIDENCE` policy; manual JSON follows evidence schema. |
+| Pre-Conditions | Future/Enterprise scope được bật; Developer có `UPLOAD_EVIDENCE` policy; manual JSON follows evidence schema. |
 | Trigger | Developer chọn manual technical evidence JSON upload. |
 
 ## Basic Flow
@@ -1127,7 +1169,7 @@ flowchart LR
 
 | Type | Content |
 | --- | --- |
-| Success | Manual evidence được queued cho evidence gates. |
+| Success | Deferred manual evidence được queued cho evidence gates nếu future path được bật. |
 | Failure / Exception | Free text hoặc invalid JSON không được dùng để unlock classification. |
 | Audit | `MANUAL_EVIDENCE_UPLOADED` được ghi. |
 
@@ -1186,7 +1228,7 @@ flowchart LR
 
 | Step | Interaction |
 | --- | --- |
-| 1A | Nếu claim là material/critical, LCSP System yêu cầu dual confirmation. |
+| 1A | Nếu claim là classification-relevant, LCSP System yêu cầu Manager final review. |
 | 2A | Nếu Developer cố xác nhận business/legal meaning, LCSP System reject. |
 
 ## Post-Conditions
@@ -1212,7 +1254,7 @@ flowchart LR
 | --- | --- |
 | 1 | Developer nhập role-bound claim, reason, scope và timestamp. |
 | 2 | LCSP System validate schema, role và forbidden metadata replacement. |
-| 3 | LCSP System record attestation hoặc route dual confirmation nếu critical. |
+| 3 | LCSP System record attestation hoặc route Manager final review nếu classification-relevant. |
 | 4 | LCSP System ghi `HUMAN_ATTESTATION_SUBMITTED`. |
 
 ## Alternative / Exception Flow
@@ -1234,29 +1276,29 @@ flowchart LR
 
 | Field | Content |
 | --- | --- |
-| Description | Developer kích hoạt scanner để quét repository/branch/commit đã chọn nhằm tạo technical evidence report. |
-| Primary Roles | Developer; LCSP System |
-| Pre-Conditions | Developer đã được Manager gán policy `RUN_SCAN`; repository đã được kết nối hoặc evidence source đã được cấu hình; assessment đang ở trạng thái cần technical evidence. |
-| Trigger | Developer chọn Run Scan hoặc Re-scan trong Developer Workspace. |
+| Description | Manager hoặc optional delegated Developer kích hoạt scanner để quét repository/branch/commit đã chọn nhằm tạo technical evidence report. |
+| Primary Roles | Manager; optional delegated Developer; LCSP System |
+| Pre-Conditions | Manager owns assessment hoặc Developer đã được Manager gán policy `RUN_REPOSITORY_SCAN`; GitHub repository đã được kết nối; assessment đang ở trạng thái cần technical evidence. |
+| Trigger | Manager hoặc delegated Developer chọn Run Scan hoặc Re-scan. |
 
 ## Basic Flow
 
 | Step | Interaction |
 | --- | --- |
-| 1 | Developer chọn repository, branch và commit cần scan. |
-| 2 | Developer nhấn Run Scan hoặc Re-scan. |
-| 3 | LCSP System kiểm tra Developer có policy `RUN_SCAN`. |
+| 1 | Actor chọn repository, branch và commit cần scan. |
+| 2 | Actor nhấn Run Scan hoặc Re-scan. |
+| 3 | LCSP System kiểm tra actor là Manager owner hoặc delegated Developer có policy `RUN_REPOSITORY_SCAN`. |
 | 4 | LCSP System tạo scan job và chuyển evidence collection vào trạng thái in progress. |
 | 5 | Scanner chạy trong boundary bảo mật, không gửi raw source code cho LLM và không lưu raw source dài hạn. |
-| 6 | Scanner tạo Technical Evidence Report theo evidence report contract. |
+| 6 | Scanner tạo `TechnicalEvidenceReport` theo evidence report contract. |
 | 7 | LCSP System ghi `REPOSITORY_SCAN_STARTED` và `REPOSITORY_SCAN_COMPLETED` nếu scan thành công. |
 
 ## Alternative / Exception Flow
 
 | Step | Interaction |
 | --- | --- |
-| 1A | Nếu Developer thiếu policy `RUN_SCAN`, LCSP System chặn action và ghi `UNAUTHORIZED_ACTION_BLOCKED`. |
-| 2A | Nếu repository chưa kết nối, LCSP System yêu cầu connect repository hoặc chọn Local/CI/manual upload path. |
+| 1A | Nếu delegated Developer thiếu policy `RUN_REPOSITORY_SCAN`, LCSP System chặn action và ghi `UNAUTHORIZED_ACTION_BLOCKED`. |
+| 2A | Nếu repository chưa kết nối, LCSP System yêu cầu connect GitHub repository trước khi scan. |
 | 3A | Nếu branch/commit không hợp lệ, LCSP System reject scan request. |
 | 4A | Nếu scan thất bại, LCSP System giữ evidence status không ready và hiển thị failure reason. |
 | 5A | Nếu evidence report thiếu schema, LCSP System chuyển report sang schema gate rejection path. |
@@ -1266,7 +1308,7 @@ flowchart LR
 
 | Type | Content |
 | --- | --- |
-| Success | Scan job được tạo và Technical Evidence Report được generated nếu scan hoàn tất. |
+| Success | Scan job được tạo và `TechnicalEvidenceReport` được generated nếu scan hoàn tất. |
 | Failure / Exception | Evidence status không chuyển sang ready nếu scan/gate/privacy fail. |
 | Audit | `REPOSITORY_SCAN_STARTED`, `REPOSITORY_SCAN_COMPLETED`, `REPOSITORY_SCAN_FAILED` hoặc `SOURCE_PRIVACY_VIOLATION_DETECTED` được ghi. |
 
@@ -1278,8 +1320,8 @@ flowchart LR
 | --- | --- |
 | Description | LCSP validate evidence report contract để accept/reject ở schema completeness gate. |
 | Primary Roles | LCSP System |
-| Pre-Conditions | Evidence report đã received từ GitHub, Local/CI hoặc manual JSON. |
-| Trigger | Evidence report được submit/generated. |
+| Pre-Conditions | `TechnicalEvidenceReport` đã được scanner generated từ Repository Scan. |
+| Trigger | Repository scan completed và report được generated. |
 
 ## Basic Flow
 
@@ -1509,73 +1551,73 @@ flowchart LR
 
 | Field | Content |
 | --- | --- |
-| Description | LCSP route conflict đến đúng role theo ownership: Developer cho technical truth, Manager cho business/legal meaning. |
-| Primary Roles | LCSP System; Manager; Developer |
-| Pre-Conditions | Conflict exists và đã được typed/severity classified. |
+| Description | LCSP route mọi MVP conflict thành Manager conflict resolution task. Developer technical clarification chỉ là optional post-MVP/delegated input. |
+| Primary Roles | LCSP System; Manager; optional delegated Developer |
+| Pre-Conditions | Conflict exists. |
 | Trigger | Conflict cần resolution. |
 
 ## Basic Flow
 
 | Step | Interaction |
 | --- | --- |
-| 1 | LCSP System phân loại conflict owner. |
-| 2 | LCSP System tạo task cho Manager, Developer hoặc cả hai. |
-| 3 | LCSP System hiển thị đúng context theo role/policy. |
+| 1 | LCSP System tạo Manager conflict resolution task. |
+| 2 | LCSP System hiển thị WizardProfile, TechnicalProfile, AIUsageFlow, evidence refs và conflicting fields cho Manager. |
+| 3 | Nếu Manager cần technical clarification post-MVP, LCSP System có thể tạo optional delegated task cho Developer. |
 | 4 | LCSP System ghi `CONFLICT_ROUTED`. |
 
 ## Alternative / Exception Flow
 
 | Step | Interaction |
 | --- | --- |
-| 1A | Nếu chưa có Developer, LCSP System yêu cầu Manager invite/assign policy. |
-| 2A | Nếu material/critical conflict, LCSP System yêu cầu dual confirmation. |
+| 1A | Nếu chưa có Developer, workflow vẫn tiếp tục với Manager conflict resolution; không yêu cầu invite/assign policy. |
+| 2A | Nếu optional Developer clarification không có hoặc chậm, Manager vẫn có thể resolve dựa trên evidence hiện có hoặc yêu cầu re-scan/correction. |
 
 ## Post-Conditions
 
 | Type | Content |
 | --- | --- |
-| Success | Conflict được route đúng role và task được tạo. |
-| Failure / Exception | Conflict giữ blocked nếu thiếu role/policy cần thiết. |
+| Success | Manager conflict resolution task được tạo. |
+| Failure / Exception | Conflict giữ blocked cho tới khi Manager resolve; không blocked chỉ vì thiếu Developer. |
 | Audit | `CONFLICT_ROUTED` được ghi. |
 
 # Use Case: `UC-M06-04 — Resolve Technical Conflict`
 
 | Field | Content |
 | --- | --- |
-| Description | Developer xử lý phần technical truth của conflict trong assigned scope. |
-| Primary Roles | Developer; LCSP System |
-| Pre-Conditions | Technical conflict assigned; Developer có policy phù hợp. |
-| Trigger | Developer mở conflict resolution task. |
+| Description | Manager xử lý technical conflict trong MVP bằng cách review scanner findings, TechnicalProfile và AIUsageFlow. Optional delegated Developer có thể cung cấp clarification nhưng không finalize conflict. |
+| Primary Roles | Manager; optional delegated Developer; LCSP System |
+| Pre-Conditions | Technical conflict exists; Manager owns assessment. |
+| Trigger | Manager mở conflict resolution task. |
 
 ## Basic Flow
 
 | Step | Interaction |
 | --- | --- |
-| 1 | Developer review technical evidence/finding liên quan. |
-| 2 | Developer submit resolution kèm reason/scope. |
-| 3 | LCSP System validate role-bound technical claim. |
-| 4 | LCSP System ghi `TECHNICAL_CONFLICT_RESOLVED`. |
+| 1 | Manager review technical evidence/finding liên quan. |
+| 2 | Manager resolve, mark unknown, request re-scan/correction hoặc optionally delegate clarification. |
+| 3 | LCSP System validate resolution reason, evidence refs và Manager ownership. |
+| 4 | LCSP System ghi `TECHNICAL_CONFLICT_RESOLVED_BY_MANAGER`. |
 
 ## Alternative / Exception Flow
 
 | Step | Interaction |
 | --- | --- |
-| 1A | Nếu Developer chọn unknown/needs rescan, conflict vẫn unresolved. |
-| 2A | Nếu Developer cố sửa business/legal answer, LCSP System reject. |
+| 1A | Nếu Manager chọn unknown/needs rescan, conflict vẫn unresolved và classification locked. |
+| 2A | Nếu optional Developer cố finalize conflict, LCSP System reject vì Manager là final resolver. |
 
 ## Post-Conditions
 
 | Type | Content |
 | --- | --- |
-| Success | Technical side của conflict được resolved hoặc marked unknown. |
-| Failure / Exception | Conflict vẫn blocked nếu resolution invalid hoặc thiếu confirmation. |
-| Audit | `TECHNICAL_CONFLICT_RESOLVED` được ghi. |
+| Success | Technical conflict được Manager resolved hoặc marked unknown with next action. |
+| Failure / Exception | Conflict vẫn blocked nếu Manager resolution invalid hoặc evidence/correction chưa đủ. |
+| Audit | `TECHNICAL_CONFLICT_RESOLVED_BY_MANAGER` được ghi. |
 
 # Use Case: `UC-M06-05 — Resolve Business/Legal Conflict`
 
 | Field | Content |
 | --- | --- |
-| Description | Manager xử lý business/legal meaning của conflict. Manager không thay thế technical truth. |
+| Description | Manager xử lý business/legal meaning của conflict và là final resolver cho mọi MVP conflict. |
 | Primary Roles | Manager; LCSP System |
 | Pre-Conditions | Business/legal conflict assigned; Manager owns assessment. |
 | Trigger | Manager mở reconciliation review. |
@@ -1593,57 +1635,58 @@ flowchart LR
 
 | Step | Interaction |
 | --- | --- |
-| 1A | Nếu Manager cần technical input, LCSP System route task đến Developer. |
-| 2A | Nếu Manager cố xác nhận technical truth một mình, LCSP System reject. |
+| 1A | Nếu Manager cần technical input, LCSP System có thể tạo optional delegated clarification task cho Developer post-MVP. |
+| 2A | Nếu evidence chưa đủ, Manager yêu cầu re-scan/correction thay vì overclaiming technical certainty. |
 
 ## Post-Conditions
 
 | Type | Content |
 | --- | --- |
 | Success | Business/legal side được resolved hoặc marked unknown. |
-| Failure / Exception | Conflict vẫn blocked nếu resolution sai role hoặc thiếu dual confirmation. |
+| Failure / Exception | Conflict vẫn blocked nếu Manager resolution invalid hoặc evidence/correction chưa đủ. |
 | Audit | `BUSINESS_CONFLICT_RESOLVED` được ghi. |
 
-# Use Case: `UC-M06-06 — Perform Dual Confirmation`
+# Use Case: `UC-M06-06 — Post-MVP Delegated Technical Clarification`
 
 | Field | Content |
 | --- | --- |
-| Description | Manager và Developer cùng xác nhận material/critical conflict hoặc critical attestation claim. |
-| Primary Roles | Manager; Developer; LCSP System |
-| Pre-Conditions | Material/critical conflict hoặc critical claim exists; both confirmations required. |
-| Trigger | LCSP System xác định dual confirmation required. |
+| Description | Post-MVP optional flow cho Manager delegate technical clarification task cho Developer. Developer input không tự finalize conflict; Manager vẫn là final resolver. |
+| Primary Roles | Manager; optional Developer; LCSP System |
+| Pre-Conditions | Manager owns assessment; conflict hoặc technical clarification need exists; Developer được invite/delegated nếu dùng flow này. |
+| Trigger | Manager chọn delegate technical clarification. |
 
 ## Basic Flow
 
 | Step | Interaction |
 | --- | --- |
-| 1 | Developer xác nhận technical truth trong scope được cấp. |
-| 2 | Manager xác nhận business/legal meaning. |
-| 3 | LCSP System kiểm tra đủ hai confirmation và role-bound validity. |
-| 4 | LCSP System ghi `DUAL_CONFIRMATION_COMPLETED`. |
+| 1 | Manager chọn scope, question và evidence refs cần clarification. |
+| 2 | LCSP System tạo scoped Developer task nếu Developer được assign. |
+| 3 | Developer submit clarification/attestation trong scope được cấp. |
+| 4 | Manager review input và finalize conflict resolution nếu phù hợp. |
+| 5 | LCSP System ghi delegation và resolution audit events. |
 
 ## Alternative / Exception Flow
 
 | Step | Interaction |
 | --- | --- |
-| 1A | Nếu chỉ có một role confirm, conflict vẫn blocked. |
-| 2A | Nếu một confirmation bị reject, LCSP System giữ required confirmation state. |
+| 1A | Nếu chưa có Developer được delegated, Manager vẫn có thể tự resolve hoặc yêu cầu re-scan/correction. |
+| 2A | Nếu Developer clarification vượt scope hoặc cố finalize conflict, LCSP System reject và giữ Manager là final resolver. |
 
 ## Post-Conditions
 
 | Type | Content |
 | --- | --- |
-| Success | Material/critical conflict đủ điều kiện resolve. |
-| Failure / Exception | Workflow vẫn `BLOCKED_BY_CONFLICT` nếu thiếu/invalid confirmation. |
-| Audit | `DUAL_CONFIRMATION_COMPLETED` được ghi. |
+| Success | Developer clarification được ghi nhận và Manager có thể dùng làm input cho final resolution. |
+| Failure / Exception | Workflow vẫn blocked cho tới khi Manager resolve conflict hoặc chọn recovery action. |
+| Audit | `DEVELOPER_CLARIFICATION_REQUESTED`, `DEVELOPER_CLARIFICATION_SUBMITTED` và Manager resolution event được ghi. |
 
 # Use Case: `UC-M06-07 — Create VerifiedProfile`
 
 | Field | Content |
 | --- | --- |
-| Description | LCSP tạo VerifiedProfile từ WizardProfile, TechnicalProfile, conflict resolutions và confirmations. Risk Classification chỉ được chạy sau bước này. |
+| Description | LCSP tạo VerifiedProfile từ WizardProfile, TechnicalProfile, AIUsageFlow và Manager conflict resolutions. Risk Classification chỉ được chạy sau bước này. |
 | Primary Roles | LCSP System |
-| Pre-Conditions | Evidence ready; reconciliation complete; không còn unresolved material/critical conflict. |
+| Pre-Conditions | Evidence ready; AIUsageFlow ready; reconciliation complete; không còn unresolved conflict. |
 | Trigger | Reconciliation đủ điều kiện tạo VerifiedProfile. |
 
 ## Basic Flow
@@ -1651,7 +1694,7 @@ flowchart LR
 | Step | Interaction |
 | --- | --- |
 | 1 | LCSP System kiểm tra evidence gates và conflict status. |
-| 2 | LCSP System compose verified facts từ source profiles và confirmations. |
+| 2 | LCSP System compose verified facts từ source profiles, AIUsageFlow và Manager resolutions. |
 | 3 | LCSP System tạo VerifiedProfile và set `VERIFIED_PROFILE_READY`. |
 | 4 | LCSP System ghi `VERIFIED_PROFILE_CREATED`. |
 
@@ -1659,7 +1702,7 @@ flowchart LR
 
 | Step | Interaction |
 | --- | --- |
-| 1A | Nếu còn conflict material/critical unresolved, LCSP System không tạo VerifiedProfile. |
+| 1A | Nếu còn conflict unresolved, LCSP System không tạo VerifiedProfile. |
 | 2A | Nếu evidence bị superseded, LCSP System yêu cầu reconciliation lại. |
 
 ## Post-Conditions
@@ -1676,7 +1719,7 @@ flowchart LR
 | --- | --- |
 | Description | Manager review VerifiedProfile candidate sau reconciliation và approve khi business/legal meaning đã đúng, evidence đủ điều kiện và không còn material/critical conflict unresolved. |
 | Primary Roles | Manager; LCSP System |
-| Pre-Conditions | VerifiedProfile candidate exists; evidence gates passed; required Developer confirmations đã có nếu technical/material conflict cần xác nhận. |
+| Pre-Conditions | VerifiedProfile candidate exists; evidence gates passed; Manager conflict resolutions đã có nếu conflict từng tồn tại. |
 | Trigger | LCSP System hiển thị VerifiedProfile ready for Manager review. |
 
 ## Basic Flow
@@ -1696,7 +1739,7 @@ flowchart LR
 | --- | --- |
 | 1A | Nếu VerifiedProfile chưa sẵn sàng, LCSP System không cho approve. |
 | 2A | Nếu còn unresolved material/critical conflict, LCSP System block approval và route conflict lại. |
-| 3A | Nếu Developer confirmation còn thiếu cho technical truth, LCSP System giữ trạng thái `DEVELOPER_CONFIRMATION_REQUIRED`. |
+| 3A | Nếu Manager resolution còn thiếu cho technical/business conflict, LCSP System giữ trạng thái `CONFLICT_RESOLUTION_REQUIRED`. |
 | 4A | Nếu Manager reject, LCSP System yêu cầu sửa Wizard, bổ sung evidence hoặc reconciliation lại. |
 | 5A | Nếu Manager cố xác nhận technical truth một mình, LCSP System reject theo role-bound rule. |
 
@@ -2232,7 +2275,7 @@ flowchart LR
 
 | Step | Interaction |
 | --- | --- |
-| 1A | Nếu attestation chưa accepted hoặc thiếu dual confirmation, LCSP System block usage. |
+| 1A | Nếu attestation chưa accepted hoặc thiếu Manager final review, LCSP System block usage. |
 | 2A | Nếu attestation cố thay machine metadata, LCSP System reject usage. |
 
 ## Post-Conditions
@@ -2418,8 +2461,8 @@ flowchart LR
 | UC-M01-11 depends on UC-M01-01 | Verify Email starts after account registration or email change |
 | UC-M01-12 depends on authenticated session | Change Password requires session and re-authentication/current password |
 | UC-M03-05 depends on UC-M03-04 | Self-declared readiness requires submitted WizardProfile |
-| UC-M04-02/03/04/08 depend on UC-M02-05 | Developer evidence work requires assigned policy |
-| UC-M04-08 depends on UC-M04-02 | Repository scan requires connected repository or configured source |
+| UC-M04-02/08 depend on UC-M02-05 | MVP Developer evidence work requires assigned policy |
+| UC-M04-08 depends on UC-M04-02 | Repository scan requires connected GitHub repository |
 | UC-M05-03 depends on UC-M05-01 and UC-M05-02 | Evidence quality only runs after schema/privacy validation |
 | UC-M06-07 depends on UC-M05-05 and UC-M06-01..06 | VerifiedProfile candidate requires ready evidence and resolved conflicts |
 | UC-M06-08 depends on UC-M06-07 | Manager approval starts after VerifiedProfile candidate exists |
@@ -2432,10 +2475,10 @@ flowchart LR
 
 | Source A Use Case | Decision | Reason |
 | --- | --- | --- |
-| UC-LCSP-04 - Đăng nhập bằng SSO/OAuth | Deferred / Out of MVP | MVP auth can note enterprise identity path, but SSO/OAuth is not finalized as explicit scope. |
+| UC-LCSP-04 - Đăng nhập bằng enterprise identity legacy | Partially Active / Split | OAuth/OIDC user login is active MVP as `UC-M01-14`. Enterprise SSO/SAML/directory federation is tracked as future enterprise identity scope. |
 | UC-LCSP-13 - Cấu hình chính sách bảo mật tổ chức | Deferred / Out of MVP | MVP chỉ expose Manager và Developer; organization security admin policy is not an exposed role workflow. |
-| UC-LCSP-29 - Cài đặt & cấu hình CLI | Deferred / Out of MVP | CLI is future/enterprise path; MVP supports GitHub read-only and Local/CI/manual evidence upload. |
-| UC-LCSP-30 - Chạy đánh giá tuân thủ qua CLI | Deferred / Out of MVP | Local/CI scanner report upload covers enterprise-safe alternative without adding CLI workflow. |
+| UC-LCSP-29 - Cài đặt & cấu hình CLI | Deferred / Out of MVP | CLI is future/enterprise path; MVP active evidence path is GitHub Repository Scan only. |
+| UC-LCSP-30 - Chạy đánh giá tuân thủ qua CLI | Deferred / Out of MVP | CLI evidence submission is future/enterprise, not the MVP evidence path. |
 | UC-LCSP-31 - Cấu hình CI/CD compliance gate | Deferred / Out of MVP | CI/CD gate is future/enterprise automation, not current Manager-led MVP flow. |
 | UC-LCSP-32 - Kiểm tra tự động trên push/PR | Deferred / Out of MVP | Push/PR automation adds parallel state and notification complexity outside current MVP. |
 | UC-LCSP-33 - Nạp văn bản pháp luật vào corpus | Deferred / Out of MVP | Legal corpus operations are not exposed to Manager/Developer in MVP. |
@@ -2452,7 +2495,7 @@ flowchart LR
 - Wizard-only must never show HIGH/MEDIUM/LOW or provisional risk label.
 - Risk Classification must not run before VerifiedProfile.
 - Final report must not be generated while material/critical conflict remains unresolved.
-- Developer must only see assigned technical tasks and limited assessment context.
+- Developer only sees assigned technical tasks and limited assessment context; Developer is optional for MVP success path.
 - Human attestation cannot replace machine-generated metadata.
 - Raw source code must not be sent to LLM and must not be stored long-term.
 - Authenticator App MFA uses TOTP-compatible apps; SMS-based OTP is not MVP scope.
@@ -2464,7 +2507,7 @@ flowchart LR
 | Wizard design | Which exact Wizard questions are simple enough for Manager and complete enough for reconciliation? | A1 |
 | Legal corpus | What is the final rule/citation format and coverage for each scenario? | A2 |
 | MFA recovery | Who owns recovery/admin verification in MVP if no separate admin role is exposed? | Open Question |
-| Attestation | Which critical claims require mandatory dual confirmation beyond conflict cases? | A3 |
+| Attestation | Which claims require Manager final review, delegated clarification, or stricter blocking after A3? | A3 |
 
 ## Validation Dependencies A1-A3
 

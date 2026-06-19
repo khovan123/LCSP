@@ -33,6 +33,13 @@ Tài liệu này chuẩn hóa NFR cho LCSP theo ID tuần tự toàn cục `NFR-
 | NFR-023 | Evidence gate observability | Observability | M05 | A1 |
 | NFR-024 | Modular maintainability | Maintainability | All | None |
 | NFR-025 | Worker scalability path | Scalability | M05/M07/M08/M10 | None |
+| NFR-026 | AI usage-flow traceability | Traceability | M05/M06/M07 | A1/A2 |
+| NFR-027 | OAuth/OIDC callback security | Security | M01 | None |
+| NFR-028 | OAuth/GitHub boundary separation | Security | M01/M04 | None |
+| NFR-029 | Permission delegation auditability | Auditability | M02/M09 | A3/Post-MVP |
+| NFR-030 | Role/permission revocation behavior | Security | M02 | A3/Post-MVP |
+| NFR-031 | OAuth identity linking safety | Security | M01 | None |
+| NFR-032 | Manager super-role enforcement | Security | M02/M04/M06/M08 | None |
 
 ## Security Requirements
 
@@ -49,6 +56,10 @@ Tài liệu này chuẩn hóa NFR cho LCSP theo ID tuần tự toàn cục `NFR-
 | NFR-009 | Developer task policy isolation | Security | Developer access must be scoped to assigned assessment tasks/policies. | Prevent broad technical access. | Developer sees only assigned technical tasks and limited context. | Role/Permission Module | Unauthorized data access | M02/M04 | UC-M04-01 | FR-024 | BR-021 | A3 |
 | NFR-010 | Wizard usability | Usability | Manager-facing Wizard must use business language and be validated with A1 scenarios. | Wizard is highest-risk entry point. | A1 validation shows Manager understands critical questions without Developer. | Wizard Module | Wizard incompleteness/confusion | M03 | UC-M03-02 | FR-019, FR-021 | BR-026, BR-027 | A1 |
 | NFR-011 | Classification locked-state clarity | Usability | UI must clearly explain why classification/report is locked. | Prevent false confidence and support next action. | Locked state explains missing evidence, failed gate, conflict or citation issue. | State Model | User confusion/overclaim | M03/M07 | UC-M07-05 | FR-023, FR-047 | BR-030, BR-049 | A1 |
+| NFR-027 | OAuth/OIDC callback security | Security | OAuth/OIDC callback handling must validate redirect URI, state, nonce, issuer, audience, token expiry and PKCE policy. | Prevent login CSRF, token substitution and callback replay. | Invalid callback/state/nonce/issuer/audience/expiry is rejected and audited. | Authentication Architecture / Threat Model | Account takeover via OAuth callback | M01 | UC-M01-14 | FR-074, FR-075 | BR-086, BR-087 | None |
+| NFR-028 | OAuth/GitHub boundary separation | Security | OAuth/OIDC user login must remain separate from GitHub App repository authorization. | Avoid privilege confusion between identity login and source access. | OAuth login does not create repository connection or grant scan permission. | Role/Permission Module / Evidence Collection Architecture | Unauthorized repository access | M01/M04 | UC-M01-14, UC-M04-02 | FR-076, FR-025 | BR-088 | None |
+| NFR-031 | OAuth identity linking safety | Security | OAuth/OIDC linked identities must not create privilege escalation or account takeover through unsafe linking. | Protect existing accounts and organization membership. | Account linking rejects unverified email-only matches and logs linking decisions without raw tokens. | Threat Model | Account takeover / recovery bypass | M01 | UC-M01-14 | FR-075 | BR-087, BR-094 | None |
+| NFR-032 | Manager super-role enforcement | Security | Authorization checks must enforce Manager as the superset MVP role across assessment, evidence, conflict, classification, report and audit actions. | Ensure Manager can complete MVP while Developer remains optional. | Manager can run MVP flow without Developer; Developer cannot perform final Manager actions. | Role/Permission Module | Workflow deadlock / privilege escalation | M02/M04/M06/M08 | UC-M03-01, UC-M04-08, UC-M06-05, UC-M08-02 | FR-077 | BR-089, BR-091 | None |
 
 ## Privacy Requirements
 
@@ -64,11 +75,14 @@ Tài liệu này chuẩn hóa NFR cho LCSP theo ID tuần tự toàn cục `NFR-
 
 | NFR ID | NFR Name | Category | Requirement Statement | Rationale | Measurement / Acceptance Criteria | Related Architecture Section | Related Risk | Related Module | Related Use Case ID | Related FR ID | Related Business Rule ID | Validation Dependency |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| NFR-017 | Evidence report hashing | Traceability | Accepted evidence report must include `report_hash`. | Detect evidence tampering and support provenance. | Evidence cannot be `TECHNICAL_EVIDENCE_READY` without report_hash. | Evidence Report Contract | Evidence tampering | M05/M09 | UC-M09-04 | FR-056 | BR-069 | None |
+| NFR-017 | Evidence report hashing | Traceability | Accepted MVP repository scan evidence report must include `report_hash`. | Detect scanner result tampering and support provenance. | Scanner-generated `TechnicalEvidenceReport` cannot be `TECHNICAL_EVIDENCE_READY` without report_hash. | Evidence Report Contract | Repository scan result tampering | M05/M09 | UC-M09-04 | FR-056 | BR-069 | None |
 | NFR-018 | Audit event immutability expectation | Auditability | Audit trail must be append-oriented with controlled correction model. | Preserve compliance trace. | Material audit events are not silently edited/deleted. | Audit Trail Architecture | Audit log tampering | M09 | UC-M09-01 | FR-053 | BR-067 | A3 |
 | NFR-019 | Legal citation traceability | Traceability | Risk output must trace to legal rule_id, citation and version. | Prevent unsupported legal conclusions. | 100% critical classification outputs trace to rule_id. | Legal Corpus/RAG Architecture | Legal citation hallucination | M07 | UC-M07-03 | FR-045 | BR-050 | A2 |
 | NFR-020 | Rule-backed classification | Compliance | Classification must be based on retrieved legal rules/citations, not unsupported LLM reasoning. | Maintain legal defensibility. | Unsupported legal conclusion is rejected, degraded or blocked. | Risk Classification Agent Boundary | LLM legal overclaim | M07 | UC-M07-02 | FR-044, FR-046 | BR-049, BR-051 | A2 |
 | NFR-021 | Document overclaim prevention | Compliance | Generated documents and gap views must not overclaim risk, evidence or legal certainty. | Avoid misleading compliance output. | Final report blocked if evidence/citation/conflict prerequisites fail; gap view is not presented as final report. | Document Generation Architecture | Report overclaim | M08 | UC-M08-02, UC-M08-06 | FR-049, FR-068 | BR-063, BR-064, BR-079 | A2/A3 |
+| NFR-026 | AI usage-flow traceability | Traceability | AIUsageFlow claims must trace to repository scan findings/evidence refs and must mark unclear fields explicitly. | Prevent risk classification from relying only on model/provider presence. | AIUsageFlow records evidence_refs for purpose/input/output/downstream action/affected subject claims; unclear usage creates confirmation/conflict instead of unsupported classification. | Multi-Agent System Architecture / Evidence Report Contract | Legal overclaim from AI presence-only detection | M05/M06/M07 | UC-M05-04, UC-M06-01, UC-M07-01 | FR-069, FR-070, FR-071, FR-072, FR-073 | BR-080, BR-081, BR-082, BR-083, BR-084 | A1/A2 |
+| NFR-029 | Permission delegation auditability | Auditability | Post-MVP permission grants, revocations, delegated actions and denied actions must be auditable. | Preserve governance and explain access decisions. | Each grant/revoke/action stores actor, grantee, scope, permission_code, timestamp and status. | Audit Trail Architecture | Unauthorized Developer access | M02/M09 | UC-M02-05, UC-M02-06 | FR-016, FR-017, FR-078 | BR-090, BR-092 | A3/Post-MVP |
+| NFR-030 | Role/permission revocation behavior | Security | Revoked Developer permission grants must stop new delegated actions and be reflected in audit. | Prevent stale access. | Revoked grant cannot be used for new repository scan, findings view or clarification task. | Role/Permission Module | Unauthorized Developer access | M02 | UC-M02-06 | FR-017, FR-078 | BR-092, BR-094 | A3/Post-MVP |
 
 ## Reliability, Performance, Maintainability, Scalability, Observability
 
@@ -83,5 +97,24 @@ Tài liệu này chuẩn hóa NFR cho LCSP theo ID tuần tự toàn cục `NFR-
 
 - No NFR uses category-prefixed IDs.
 - MFA-related NFRs cover secret protection, OTP security, brute-force protection, session security, auditability and recovery/reset.
+- OAuth/OIDC NFRs cover callback validation, safe identity linking, token secrecy, session/MFA policy and separation from GitHub App repository access.
+- Manager super-role NFR ensures Manager can complete MVP flow without Developer assignment.
+- Post-MVP delegation NFRs require scoped, revocable and audited Developer permissions.
 - Source/privacy NFRs keep raw source out of LLM and long-term storage.
+- AI usage-flow traceability requires evidence refs and prevents model/provider-only risk classification.
 - A1-A3 dependent NFRs remain conditional until validation results exist.
+
+## Phase 3.2 NFR Quality Audit References
+
+The Phase 3.2 quality-audit pack maps the existing NFRs above to quality gates, control verification and evidence plans. It does not introduce new NFR IDs and does not change MVP scope or readiness status.
+
+| Phase 3.2 Document | Related NFR Focus |
+| --- | --- |
+| `docs/qa/nfr-quality-audit.md` | NFR-001..NFR-032 quality-attribute review and status classification |
+| `docs/qa/nfr-acceptance-gates.md` | NFR-GATE-01..NFR-GATE-15 go/no-go gates |
+| `docs/qa/security-privacy-control-verification.md` | NFR-001..NFR-009, NFR-012..NFR-016, NFR-027..NFR-032 |
+| `docs/qa/reliability-resilience-quality-design.md` | NFR-017..NFR-023, NFR-025, NFR-026 |
+| `docs/qa/performance-capacity-quality-design.md` | NFR-022, NFR-025 and performance/capacity threshold decisions |
+| `docs/qa/observability-operational-readiness-audit.md` | NFR-007, NFR-017, NFR-018, NFR-022, NFR-023, NFR-026 |
+| `docs/qa/accessibility-usability-nfr-review.md` | NFR-010, NFR-011, NFR-021, NFR-026, NFR-032 |
+| `docs/qa/nfr-measurement-and-evidence-plan.md` | Evidence collection and redaction plan for all NFR gates |

@@ -16,6 +16,8 @@ Defines LCSP source-code handling rules before implementation.
 | GitHub App least privilege | Read-only, selected repo/scope only |
 | Local/CI scanner alternative | Enterprise can keep source inside its environment and upload evidence report |
 | Authenticated access only | Source/evidence actions require authenticated session; MFA-enabled users must pass Authenticator App OTP before workspace access |
+| OAuth/OIDC boundary | OAuth/OIDC authenticates LCSP user identity only; GitHub App connection is still required for repository access |
+| Manager-owned evidence actions | Manager may connect repository and run Repository Scan for own assessment; delegated Developer requires scoped permission |
 | Developer policy isolation | Developer can access source/evidence tasks only within Manager-assigned policies |
 
 ## Temporary Workspace Handling
@@ -50,3 +52,5 @@ Not allowed:
 A3 validation may change how human attestation supplements insufficient evidence, but it cannot weaken this privacy policy.
 
 Authentication and Authenticator App MFA protect access to source/evidence workflows, but they do not weaken the core rules: no raw source to LLM, no long-term raw source storage, and no secrets in persisted evidence/audit artifacts.
+
+OAuth/OIDC login follows the same source-code privacy boundary. OAuth/OIDC session creation does not grant GitHub repository scan scope. GitHub App installation/connection remains the only active MVP repository authorization path.

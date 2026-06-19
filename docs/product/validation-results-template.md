@@ -164,12 +164,15 @@ A2 objective:
 - Risk output trace được về `rule_id`.
 - Không có final classification nếu thiếu citation/rule quan trọng.
 - LLM không tự suy luận luật ngoài retrieved rules.
+- Scanner + AIUsageFlow map đúng usage purpose sang legal rule/corpus.
 
 ### A2-S1 — Low-risk / Internal Assistant
 
 | Check | Result |
 | --- | --- |
 | Scenario description | Low-risk/internal assistant |
+| AIUsageFlow business_process / ai_purpose đúng không? | TBD |
+| Có bị map sai sang automated decision/high-impact rule chỉ vì provider/model không? | TBD |
 | Có legal rule source không? | TBD |
 | Có citation không? | TBD |
 | Có `rule_id` không? | TBD |
@@ -185,6 +188,8 @@ A2 objective:
 | Check | Result |
 | --- | --- |
 | Scenario description | AI-assisted decision |
+| AIUsageFlow có phát hiện decision_support/scoring/downstream action không? | TBD |
+| Legal rule matching có dùng AIUsageFlow không? | TBD |
 | Có legal rule source không? | TBD |
 | Có citation không? | TBD |
 | Có `rule_id` không? | TBD |
@@ -200,6 +205,8 @@ A2 objective:
 | Check | Result |
 | --- | --- |
 | Scenario description | High-impact or sensitive data scenario |
+| AIUsageFlow có phát hiện sensitive/high-impact domain/data/affected subjects không? | TBD |
+| Legal rule matching có chọn đúng high-impact/sensitive-data rule family không? | TBD |
 | Có legal rule source không? | TBD |
 | Có citation không? | TBD |
 | Có `rule_id` không? | TBD |
@@ -210,6 +217,72 @@ A2 objective:
 | Required PRD/Architecture/ADR update | TBD |
 | Status | NOT_RUN |
 
+### A2-b — Scanner + AI Usage Flow Mapping Accuracy
+
+Overall A2-b status:
+
+```text
+NOT_RUN
+```
+
+Objective:
+
+```text
+Scanner + AI Usage Flow Analysis có đủ chính xác để map usage purpose sang legal rule/corpus không?
+```
+
+#### A2-b-S1 — Internal Summarization / Internal Assistant Mapping
+
+| Check | Result |
+| --- | --- |
+| Expected AIUsageFlow | assistive/internal summarization or chatbot; no approve/reject/ranking action |
+| Actual AIUsageFlow | TBD |
+| Expected legal rule/corpus mapping | Internal/non-decision support rules |
+| Actual legal rule/corpus mapping | TBD |
+| Provider/model-only false positive? | TBD |
+| Evidence refs present for usage-purpose claim? | TBD |
+| Required PRD/Architecture/ADR update | TBD |
+| Status | NOT_RUN |
+
+#### A2-b-S2 — Loan Approval / Credit Scoring Mapping
+
+| Check | Result |
+| --- | --- |
+| Expected AIUsageFlow | scoring/decision_support; downstream approve/reject or risk score; customer affected; financial/personal data |
+| Actual AIUsageFlow | TBD |
+| Expected legal rule/corpus mapping | Automated/AI-assisted decision, financial service, affected-person and human oversight rules |
+| Actual legal rule/corpus mapping | TBD |
+| False negative / mapped as generic assistant? | TBD |
+| Evidence refs present for decision-flow claim? | TBD |
+| Required PRD/Architecture/ADR update | TBD |
+| Status | NOT_RUN |
+
+#### A2-b-S3 — HR Screening / Recruitment Ranking Mapping
+
+| Check | Result |
+| --- | --- |
+| Expected AIUsageFlow | ranking/classification; candidate affected; employment opportunity impact |
+| Actual AIUsageFlow | TBD |
+| Expected legal rule/corpus mapping | Employment/recruitment, high-impact, human oversight and discrimination-risk rules |
+| Actual legal rule/corpus mapping | TBD |
+| False negative / mapped as low-risk internal assistant? | TBD |
+| Evidence refs present for affected-subject/user-impact claim? | TBD |
+| Required PRD/Architecture/ADR update | TBD |
+| Status | NOT_RUN |
+
+#### A2-b-S4 — Customer-facing Chatbot Without Decision Mapping
+
+| Check | Result |
+| --- | --- |
+| Expected AIUsageFlow | customer-facing chatbot; no approve/reject/ranking action; escalation if present |
+| Actual AIUsageFlow | TBD |
+| Expected legal rule/corpus mapping | Customer communication/data handling rules, not automated decision rules unless downstream action exists |
+| Actual legal rule/corpus mapping | TBD |
+| Automated-decision false positive? | TBD |
+| Uncertainty handled correctly? | TBD |
+| Required PRD/Architecture/ADR update | TBD |
+| Status | NOT_RUN |
+
 ### A2 Result Matrix
 
 | Assumption | Test Case | Expected Result | Actual Result | Status | Evidence / Notes | Required Update | Owner |
@@ -217,6 +290,10 @@ A2 objective:
 | A2 | Low-risk/internal assistant | Rule source, citation, version and rule trace present | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner |
 | A2 | AI-assisted decision | Decision-impact output traces to rule_id and citation | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner |
 | A2 | High-impact or sensitive data scenario | High-impact/sensitive risk output traces to critical rules | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner |
+| A2-b | Internal summarization / internal assistant mapping | Maps to internal/non-decision support rules or marks uncertainty; no provider-only high-risk mapping | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner / AI Usage Flow Reviewer |
+| A2-b | Loan approval / credit scoring mapping | Maps to decision-impact/financial/affected-person rule family with evidence refs | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner / AI Usage Flow Reviewer |
+| A2-b | HR screening / recruitment ranking mapping | Maps to employment/high-impact/discrimination-risk rule family with evidence refs | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner / AI Usage Flow Reviewer |
+| A2-b | Customer-facing chatbot without decision mapping | Maps to chatbot/data-handling rules, not automated-decision rules unless downstream action exists | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner / AI Usage Flow Reviewer |
 
 ## A3 — Human Attestation Abuse Risk Results
 
@@ -318,6 +395,10 @@ A3 objective:
 | A2 | Low-risk/internal assistant | Rule/citation/version/rule_id trace present | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner |
 | A2 | AI-assisted decision | Decision impact traces to rule_id and citation | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner |
 | A2 | High-impact or sensitive data scenario | Critical risk output traces to legal source | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner |
+| A2-b | Internal summarization / internal assistant mapping | Correct usage-purpose to rule/corpus mapping or uncertainty block | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner / AI Usage Flow Reviewer |
+| A2-b | Loan approval / credit scoring mapping | Correct decision-impact rule/corpus mapping | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner / AI Usage Flow Reviewer |
+| A2-b | HR screening / recruitment ranking mapping | Correct employment/high-impact rule/corpus mapping | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner / AI Usage Flow Reviewer |
+| A2-b | Customer-facing chatbot without decision mapping | Correct non-decision chatbot/data-handling mapping | TBD | NOT_RUN | TBD | TBD | Product Manager / Legal Rule Owner / AI Usage Flow Reviewer |
 | A3 | Developer replaces `scanner_version` | Reject/block metadata replacement | TBD | NOT_RUN | TBD | TBD | Product Manager / Governance Reviewer |
 | A3 | Manager confirms technical truth alone | Reject/route to Developer | TBD | NOT_RUN | TBD | TBD | Product Manager / Governance Reviewer |
 | A3 | Developer denies `auto_decision` despite high conflict | Block pending dual confirmation | TBD | NOT_RUN | TBD | TBD | Product Manager / Governance Reviewer |
@@ -434,3 +515,62 @@ NEEDS_MORE_DATA
 Final note:
 
 This template is only for recording validation results. It does not unblock backlog by itself. Backlog remains blocked until A1-A3 have recorded validation results and every required PRD/Architecture/ADR update has been completed or explicitly scoped out.
+
+## Phase 4.1 Evidence Capture Reference
+
+For future validation execution, every recorded result should reference the common evidence model in:
+
+```text
+docs/validation/validation-evidence-capture-template.md
+```
+
+Decision outcomes should use the rubric in:
+
+```text
+docs/validation/validation-decision-rubric.md
+```
+
+Phase 4.1 preparation does not change the status of this template. Until real validation evidence is collected, reviewed and recorded:
+
+```text
+Overall A1 status = NOT_RUN
+Overall A2 status = NOT_RUN
+Overall A3 status = NOT_RUN
+Backlog status = BLOCKED
+```
+
+If A2-b is recorded separately from A2 during execution, A2 remains incomplete until both legal corpus reliability and scanner/AIUsageFlow mapping accuracy have reviewed outcomes.
+
+## Phase 4.1.1 Decision Log Reference
+
+Validation result recording must not begin until the affected stream is released by a readiness checkpoint. Proposed defaults in:
+
+```text
+docs/validation/validation-execution-decision-log.md
+```
+
+do not count as validation results and do not change this template from `NOT_RUN`.
+
+A2-b result recording must distinguish:
+
+| Stream | Result Boundary |
+| --- | --- |
+| A2-b1 | Pre-implementation mapping design validation result |
+| A2-b2 | Post-implementation empirical scanner acceptance result |
+
+A2-b2 remains unavailable until a real scanner implementation exists.
+
+## Phase 4.1.2 Approval Normalization Reference
+
+Phase 4.1.2 approval normalization does not record validation results and does not change any `NOT_RUN` result status.
+
+| Decision | Normalized Meaning for Future Result Recording |
+| --- | --- |
+| D-01/D-02 | A1 may be considered by the next Phase 4.2 readiness recheck using the approved owner/moderator, session design and thresholds |
+| D-03 | A2 formal legal reliability validation remains pending; any near-term A2 activity must be labeled `INTERNAL_LEGAL_RULE_REVIEW_ONLY` |
+| D-04 | A2-b1 is pre-implementation mapping-design validation only; A2-b2 remains post-implementation empirical scanner acceptance |
+| D-05 | A3 may be considered by the next Phase 4.2 readiness recheck using the approved governance/security reviewer model and thresholds |
+| D-06 | Evidence storage may be considered by the next Phase 4.2 readiness recheck using owner-attested GitHub private repository controls |
+| D-07 | A2-b1 result recording cannot begin until fixture release blockers are cleared and the readiness checkpoint allows evidence collection |
+
+Backlog remains blocked until real validation evidence is collected, reviewed, recorded and required document updates are complete.

@@ -13,13 +13,15 @@ ERD bao phủ authentication/MFA, organization, assessment, WizardProfile, techn
 | Entity | Purpose | Validation Dependency |
 | --- | --- | --- |
 | User | Người dùng hệ thống thuộc organization | None |
+| OAuthIdentity | Linked OAuth/OIDC identity của user | None |
 | UserMfaMethod | Authenticator App MFA method của user | Open Question for recovery |
 | Organization | Tenant boundary | None |
 | Assessment | Assessment owned by Manager | None |
 | AssessmentMember | User membership trong assessment với role Manager/Developer | None |
 | DeveloperPolicy | Policy/task scope Manager cấp cho Developer | A3 |
+| PermissionGrant | Post-MVP scoped delegated permission grant | A3/Post-MVP |
 | WizardProfile | Business/legal truth do Manager submit | A1 |
-| TechnicalEvidenceReport | Evidence report từ GitHub, Local/CI hoặc manual JSON | None |
+| TechnicalEvidenceReport | MVP evidence report do GitHub Repository Scan / Scanner tạo; Local/CI/manual source types là Deferred/Future | None |
 | EvidenceFinding | Finding kỹ thuật trong report | None |
 | EvidenceGateResult | Schema/privacy/quality gate result | A1 |
 | TechnicalProfile | Normalized technical truth | None |
@@ -41,11 +43,13 @@ ERD bao phủ authentication/MFA, organization, assessment, WizardProfile, techn
 ```mermaid
 erDiagram
   ORGANIZATION ||--o{ USER : contains
+  USER ||--o{ OAUTH_IDENTITY : links
   USER ||--o{ USER_MFA_METHOD : configures
   ORGANIZATION ||--o{ ASSESSMENT : owns
   USER ||--o{ ASSESSMENT_MEMBER : participates
   ASSESSMENT ||--o{ ASSESSMENT_MEMBER : has
   ASSESSMENT_MEMBER ||--o{ DEVELOPER_POLICY : receives
+  USER ||--o{ PERMISSION_GRANT : grants_or_receives
 
   ASSESSMENT ||--|| WIZARD_PROFILE : has
   ASSESSMENT ||--o{ TECHNICAL_EVIDENCE_REPORT : receives
@@ -76,13 +80,15 @@ erDiagram
 | Entity | Key Fields | Owner Module | Lifecycle | Important Constraints |
 | --- | --- | --- | --- | --- |
 | User | id, organization_id, email, display_name, role flags, mfa_enabled, mfa_enabled_at, last_mfa_verified_at, failed_mfa_attempts, locked_until | Authentication | Registered/invited -> active -> disabled | Password/MFA secrets not exposed; user belongs to organization |
+| OAuthIdentity | id, user_id, oauth_provider, provider_subject, provider_email, email_verified_at, linked_at, last_login_at, token_metadata_reference | Authentication | linked -> active -> unlinked | No raw provider access token; OAuth login does not grant GitHub repository access |
 | UserMfaMethod | id, user_id, method_type=`AUTHENTICATOR_APP`, secret_reference or mfa_secret_encrypted, enabled, enabled_at, last_verified_at | Authentication | setup_started -> enabled -> disabled/reset | Secret not stored plaintext; reset audited |
 | Organization | id, name, status | Organization | created -> active -> archived | Tenant boundary |
-| Assessment | id, organization_id, owner_manager_id, status, current_state | Assessment | created -> wizard -> evidence -> reconciliation -> classification/report | Manager owns assessment |
+| Assessment | id, organization_id, owner_manager_id, status, current_state | Assessment | created -> wizard -> evidence -> reconciliation -> classification/report | Manager owns assessment and can complete MVP flow without Developer |
 | AssessmentMember | id, assessment_id, user_id, role | Role/Permission | invited -> active -> revoked | MVP exposed roles: Manager, Developer |
 | DeveloperPolicy | id, assessment_member_id, policy_code, granted_by, granted_at, revoked_at | Role/Permission | granted -> active -> revoked | Developer only acts within policy |
+| PermissionGrant | id, granted_by_manager_id, grantee_user_id, scope_type, scope_id, permission_code, status, expires_at, revoked_at | Role/Permission | granted -> active -> revoked/expired | Delegation never removes Manager permissions; audited |
 | WizardProfile | id, assessment_id, purpose, sector, data_type, user_group, user_impact, decision_role, human_oversight, external_llm_usage, submitted_at | Wizard | draft -> submitted -> superseded | A1 validation may change fields/questions |
-| TechnicalEvidenceReport | id, assessment_id, source_type, system_identifier, provenance, scanner_version, ruleset_version, timestamp, scope, privacy_flags, report_hash | Evidence | received -> rejected/insufficient/ready | Required metadata cannot be replaced by attestation |
+| TechnicalEvidenceReport | id, assessment_id, source_type=`GITHUB_REPOSITORY_SCAN`, scan_job_id, repository_id, branch, commit_sha, scanner_version, ruleset_version, scan_started_at, scan_completed_at, scan_status, privacy_flags, report_hash | Evidence | repository scan completed -> rejected/insufficient/ready | Required metadata cannot be replaced by attestation; Local/CI/manual source types are Deferred/Future |
 | EvidenceFinding | id, report_id, finding_type, severity, confidence, evidence_ref, redaction_status | Evidence | generated/uploaded -> reviewed | No long raw source snippets |
 | EvidenceGateResult | id, report_id, gate_type, status, reason, evaluated_at | Evidence Gate | created per gate | Schema rejects; quality may mark insufficient |
 | TechnicalProfile | id, report_id, normalized_claims, generated_at | Evidence/Technical Profile | generated from accepted evidence | Input to reconciliation |
