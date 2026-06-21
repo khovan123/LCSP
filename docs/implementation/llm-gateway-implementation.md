@@ -10,9 +10,12 @@ The gateway centralizes model-provider configuration, input sanitization, prompt
 
 ## Dependencies / Source References
 
-- [Implementation Contract](../specs/implementation-contract.md)
-- [Source Code Privacy Policy](../security/source-code-privacy-policy.md)
-- [Threat Model](../security/threat-model.md)
+- `docs/architecture/architecture.md`
+- `docs/implementation/backend-implementation.md`
+- `docs/implementation/persistence-implementation.md`
+- `docs/implementation/queue-implementation.md`
+- `docs/specs/legal-classification-spec.md`
+- `docs/specs/document-generation-spec.md`
 
 ## Implementation Boundaries
 
@@ -22,6 +25,15 @@ The gateway centralizes model-provider configuration, input sanitization, prompt
 - LLM outputs cannot create legal conclusions without citation-backed downstream guardrails.
 
 ## Provider Adapter Pattern
+
+Controlled MVP default:
+
+```text
+LLM_PROVIDER_MVP:
+DETERMINISTIC_MOCK_LLM_GATEWAY_BY_DEFAULT
+```
+
+Model-backed calls are disabled by default. The gateway must implement a provider adapter boundary, but local controlled MVP execution uses deterministic mock responses unless `LLM_MODE=provider` is explicitly configured.
 
 | Layer | Responsibility |
 | --- | --- |
@@ -57,10 +69,20 @@ Raw repository source, full system prompts, secrets, raw provider tokens, full A
 
 ## Timeout / Retry / Rate Limit
 
-- Apply node-specific timeout and retry budgets.
+- Apply the controlled MVP default timeout and token budgets unless provider mode explicitly overrides them through configuration.
 - Fail closed on schema invalid output.
 - Degrade or block according to node guardrail policy when provider outage occurs.
 - Record timeout/rate-limit metrics without logging sensitive inputs.
+
+Controlled MVP defaults:
+
+| Setting | Value |
+| --- | --- |
+| `LLM_MODE` | `mock` by default; `provider` requires explicit configuration. |
+| `LLM_TIMEOUT_MS` | `15000` |
+| `LLM_MAX_OUTPUT_TOKENS` | `1200` |
+| Retry budget | 2 retries for transient provider errors in provider mode; mock mode should not retry except for internal schema validation failure. |
+| Provider config keys | `LLM_PROVIDER_NAME`, `LLM_MODEL_NAME`, `LLM_API_KEY_REF`, `LLM_TIMEOUT_MS`, `LLM_MAX_OUTPUT_TOKENS` |
 
 ## Prompt Injection Defense
 
@@ -90,10 +112,10 @@ Store prompt version refs and input references, not raw prompt/source/secret con
 
 Audit model run requested, rejected, timed out, schema invalid, completed, retried and failed, including provider/model/prompt version and output hash.
 
-## Decision Required
+## Locked Controlled MVP Provider Decision
 
-| Decision | Current Handling | Required Before |
-| --- | --- | --- |
-| LLM provider selection | Provider behind adapter boundary | Implementation configuration |
-| Token budget per node | Required policy, exact values deferred | Implementation |
-
+| Decision | Controlled MVP Value |
+| --- | --- |
+| Provider selection | Deterministic mock LLM gateway by default; real providers are configuration concerns behind the adapter boundary. |
+| Token budget | `LLM_MAX_OUTPUT_TOKENS=1200` default for controlled MVP unless a provider-specific environment configuration overrides it. |
+| Legal/compliance output | Mock output cannot create legal advice, compliance certification, formal legal reliability or production claims. |
