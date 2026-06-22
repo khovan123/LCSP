@@ -292,9 +292,9 @@ Reconciliation, not AIUsageFlow, creates `VerifiedProfile`.
 
 ```json
 {
-  "technicalProfileId": "tp_loan_001",
-  "assessmentId": "assess_001",
-  "technicalEvidenceReportId": "ter_001",
+  "technicalProfileId": "018f0000-0000-7000-8000-000000000221",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
+  "technicalEvidenceReportId": "018f0000-0000-7000-8000-000000000211",
   "source": "GITHUB_REPOSITORY_SCAN",
   "aiDetected": "confirmed",
   "providers": ["openai"],
@@ -309,9 +309,9 @@ Reconciliation, not AIUsageFlow, creates `VerifiedProfile`.
   "coverageLimitations": [],
   "confidence": 0.86,
   "evidenceRefs": [
-    {"evidenceRefId": "ev_invocation_001", "sourceType": "STATIC_SCAN"},
-    {"evidenceRefId": "ev_score_001", "sourceType": "STATIC_SCAN"},
-    {"evidenceRefId": "ev_branch_001", "sourceType": "STATIC_SCAN"}
+    {"evidenceRefId": "018f0000-0000-7000-8000-000000000241", "sourceType": "STATIC_SCAN"},
+    {"evidenceRefId": "018f0000-0000-7000-8000-000000000242", "sourceType": "STATIC_SCAN"},
+    {"evidenceRefId": "018f0000-0000-7000-8000-000000000243", "sourceType": "STATIC_SCAN"}
   ],
   "createdAt": "2026-06-21T00:00:00.000Z"
 }
@@ -339,9 +339,9 @@ If WizardProfile says "AI only assists staff" or "human review exists", AIUsageF
 
 ```json
 {
-  "aiUsageFlowId": "auf_001",
-  "assessmentId": "assess_001",
-  "technicalProfileId": "tp_loan_001",
+  "aiUsageFlowId": "018f0000-0000-7000-8000-000000000231",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
+  "technicalProfileId": "018f0000-0000-7000-8000-000000000221",
   "status": "CONFLICTED",
   "summary": {
     "aiDetected": "confirmed",

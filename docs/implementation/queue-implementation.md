@@ -80,6 +80,7 @@ Use per-job retry budgets and exponential backoff with jitter. Poison jobs move 
 
 - Duplicate scan request for same repo/commit/scanner/ruleset returns existing job/result when safe.
 - Classification duplicate for same VerifiedProfile/corpus version returns existing run/result.
+- GapAnalysis duplicate for the same `riskClassificationId` returns the existing `GapAnalysis` row. The physical idempotency constraint is `GapAnalysis.@@unique([riskClassificationId])`.
 - Document duplicate for same template/result versions returns existing artifact or creates new explicit regeneration version.
 
 ## Progress Reporting

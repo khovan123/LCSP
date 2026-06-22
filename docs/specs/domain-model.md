@@ -74,7 +74,7 @@ Organization
 | Purpose | Central work unit for evaluating one AI system or AI-enabled business process. |
 | Owner Service | Assessment / Backend API |
 | Lifecycle | Created by Manager and progresses through evidence, reconciliation, classification and reporting states. |
-| State Machine | `CREATED -> WIZARD_PROFILE_READY -> REPOSITORY_CONNECTED -> SNAPSHOT_CREATED -> SCAN_REQUESTED -> SCAN_RUNNING -> SCAN_COMPLETED -> TECHNICAL_PROFILE_READY -> AI_USAGE_FLOW_READY -> RECONCILIATION_REQUIRED or VERIFIED_PROFILE_READY -> LEGAL_MATCHING_READY -> CLASSIFICATION_READY or CLASSIFICATION_BLOCKED -> DOCUMENT_GENERATED or DOCUMENT_BLOCKED`. |
+| State Machine | `CREATED -> WIZARD_PROFILE_READY -> REPOSITORY_CONNECTED -> SNAPSHOT_CREATED -> SCAN_REQUESTED -> SCAN_RUNNING -> SCAN_COMPLETED -> TECHNICAL_PROFILE_READY -> AI_USAGE_FLOW_READY -> RECONCILIATION_REQUIRED or VERIFIED_PROFILE_READY -> LEGAL_MATCHING_READY -> CLASSIFICATION_READY or CLASSIFICATION_BLOCKED -> GAP_ANALYSIS_READY or GAP_ANALYSIS_BLOCKED -> DOCUMENT_GENERATED or DOCUMENT_BLOCKED`. |
 | Relationships | Owns WizardProfiles, RepositoryConnections, Snapshots, ScanJobs, profiles, conflicts, legal matches, classifications, documents and audit events. |
 | Business Rules | BR-018, BR-023..BR-025, BR-089, BR-093 |
 
@@ -338,7 +338,9 @@ Organization
 | legalCorpusVersionId | UUIDv7 | Yes | Corpus version. |
 | ruleId | string | Yes | Legal rule identifier. |
 | citationRefs | JSON | Yes | Citation references. |
-| matchRationale | JSON | Yes | Structured rationale. |
+| rationale | JSON | Yes | Structured rationale. |
+| confidence | number | Yes | Deterministic match confidence. |
+| coverage | JSON | Yes | Citation coverage and citation gaps. |
 | status | string | Yes | Match/citation status. |
 
 ### RiskClassification
@@ -348,8 +350,8 @@ Organization
 | Purpose | Risk classification result or blocked state. |
 | Owner Service | Classification Worker |
 | Lifecycle | REQUESTED, RUNNING, COMPLETED, BLOCKED, FAILED. |
-| State Machine | Can complete only after VerifiedProfile and LegalRuleMatch. |
-| Relationships | Belongs to Assessment and VerifiedProfile; may reference LegalRuleMatch; feeds GapAnalysis and GeneratedDocument. |
+| State Machine | Can complete only after VerifiedProfile and one or more applicable LegalRuleMatch records, or can block when required legal matches/citations are missing. |
+| Relationships | Belongs to Assessment and VerifiedProfile; references LegalRuleMatch records through `RiskClassificationLegalRuleMatch`; feeds GapAnalysis and GeneratedDocument. |
 | Business Rules | BR-049..BR-051, BR-082, BR-084 |
 
 | Field | Type | Required | Description |
@@ -357,7 +359,7 @@ Organization
 | riskClassificationId | UUIDv7 | Yes | Classification identity. |
 | assessmentId | UUIDv7 | Yes | Assessment scope. |
 | verifiedProfileId | UUIDv7 | Yes | Verified basis. |
-| legalRuleMatchId | UUIDv7 | No | Citation-backed legal match. |
+| legalRuleMatchIds | UUIDv7[] | Yes | Citation-backed legal matches used through `RiskClassificationLegalRuleMatch`. Empty only when classification is blocked before legal basis exists. |
 | status | ClassificationStatus | Yes | Classification state. |
 | riskLevel | string | No | Risk level when classification completes. |
 | blockingReasons | JSON | Yes | Reasons for blocked/degraded output. |

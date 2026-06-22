@@ -228,17 +228,17 @@ src/loan.ts
 ```json
 {
   "nodes": [
-    { "nodeId": "node:file:loan", "type": "FILE", "label": "src/loan.ts" },
-    { "nodeId": "node:provider:openai", "type": "AI_PROVIDER", "label": "OpenAI" },
-    { "nodeId": "node:call:openai-chat", "type": "CALL", "label": "chat.completions.create" },
-    { "nodeId": "node:decision:score-threshold", "type": "DECISION_POINT", "label": "score threshold" },
-    { "nodeId": "node:action:reject-loan", "type": "DOWNSTREAM_ACTION", "label": "rejectLoan" }
+    { "nodeId": "018f0000-0000-7000-8000-000000000701", "type": "SERVICE", "label": "src/loan.ts" },
+    { "nodeId": "018f0000-0000-7000-8000-000000000702", "type": "AI_PROVIDER", "label": "OpenAI" },
+    { "nodeId": "018f0000-0000-7000-8000-000000000703", "type": "AI_MODEL_INVOCATION", "label": "chat.completions.create" },
+    { "nodeId": "018f0000-0000-7000-8000-000000000704", "type": "DECISION_RULE", "label": "score threshold" },
+    { "nodeId": "018f0000-0000-7000-8000-000000000705", "type": "STATUS_UPDATE", "label": "rejectLoan" }
   ],
   "edges": [
-    { "type": "IMPORTS", "fromNodeId": "node:file:loan", "toNodeId": "node:provider:openai", "confidence": 0.8 },
-    { "type": "CALLS", "fromNodeId": "node:file:loan", "toNodeId": "node:call:openai-chat", "confidence": 0.9 },
-    { "type": "FEEDS", "fromNodeId": "node:call:openai-chat", "toNodeId": "node:decision:score-threshold", "confidence": 0.75 },
-    { "type": "TRIGGERS_ACTION", "fromNodeId": "node:decision:score-threshold", "toNodeId": "node:action:reject-loan", "confidence": 0.75 }
+    { "type": "IMPORTS", "fromNodeId": "018f0000-0000-7000-8000-000000000701", "toNodeId": "018f0000-0000-7000-8000-000000000702", "confidence": 0.8 },
+    { "type": "CALLS", "fromNodeId": "018f0000-0000-7000-8000-000000000701", "toNodeId": "018f0000-0000-7000-8000-000000000703", "confidence": 0.9 },
+    { "type": "FLOWS_TO", "fromNodeId": "018f0000-0000-7000-8000-000000000703", "toNodeId": "018f0000-0000-7000-8000-000000000704", "confidence": 0.75 },
+    { "type": "REJECTS", "fromNodeId": "018f0000-0000-7000-8000-000000000704", "toNodeId": "018f0000-0000-7000-8000-000000000705", "confidence": 0.75 }
   ]
 }
 ```
@@ -248,8 +248,8 @@ src/loan.ts
 ```json
 [
   {
-    "findingId": "tf_001",
-    "scanJobId": "scan_001",
+    "findingId": "018f0000-0000-7000-8000-000000000711",
+    "scanJobId": "018f0000-0000-7000-8000-000000000111",
     "findingType": "AI_MODEL_INVOCATION",
     "confidence": 0.9,
     "filePath": "src/loan.ts",
@@ -261,8 +261,8 @@ src/loan.ts
     "description": "OpenAI invocation detected through package import and chat completion call."
   },
   {
-    "findingId": "tf_002",
-    "scanJobId": "scan_001",
+    "findingId": "018f0000-0000-7000-8000-000000000712",
+    "scanJobId": "018f0000-0000-7000-8000-000000000111",
     "findingType": "AI_DECISION_FLOW_SIGNAL",
     "confidence": 0.75,
     "filePath": "src/loan.ts",

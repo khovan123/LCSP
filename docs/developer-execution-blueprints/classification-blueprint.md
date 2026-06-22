@@ -34,15 +34,16 @@ Worker consumes `command.classification.requested.v1` after `event.legal-matchin
 
 ```json
 {
-  "eventId": "evt_001",
-  "correlationId": "corr_assess_001",
-  "assessmentId": "assess_001",
+  "messageId": "018f0000-0000-7000-8000-000000000601",
+  "correlationId": "018f0000-0000-7000-8000-000000000101",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
   "inputType": "ClassificationRequestedPayload",
-  "repositorySnapshotId": "snap_001",
-  "technicalEvidenceReportId": "ter_001",
-  "technicalProfileId": "tp_001",
-  "aiUsageFlowId": "auf_001",
-  "verifiedProfileId": "vp_001"
+  "verifiedProfileId": "018f0000-0000-7000-8000-000000000411",
+  "legalCorpusVersionId": "018f0000-0000-7000-8000-000000000511",
+  "legalRuleMatchIds": [
+    "018f0000-0000-7000-8000-000000000521",
+    "018f0000-0000-7000-8000-000000000522"
+  ]
 }
 ```
 
@@ -50,10 +51,18 @@ Worker consumes `command.classification.requested.v1` after `event.legal-matchin
 
 ```json
 {
-  "assessmentId": "assess_001",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
   "outputType": "RiskClassification",
-  "status": "CREATED",
-  "evidenceRefs": ["ev_001", "ev_002"],
+  "riskClassificationId": "018f0000-0000-7000-8000-000000000611",
+  "status": "COMPLETED",
+  "riskLevel": "HIGH_IMPACT",
+  "legalRuleMatchIds": [
+    "018f0000-0000-7000-8000-000000000521",
+    "018f0000-0000-7000-8000-000000000522"
+  ],
+  "citationCoverage": "COMPLETE_CITATION",
+  "confidence": 0.86,
+  "blockingReasons": [],
   "nextEvent": "event.classification.completed.v1 or event.classification.blocked.v1"
 }
 ```
@@ -104,8 +113,8 @@ Classification blocks or degrades when citation is missing.
 
 | Operation | Models |
 |---|---|
-| Read | `Assessment`, predecessor object, `AuditEvent` context |
-| Create | `RiskClassification`, `AuditEvent`, `OutboxEvent` |
+| Read | `Assessment`, `VerifiedProfile`, `LegalRuleMatch[]`, `LegalCorpusVersion`, `AuditEvent` context |
+| Create | `RiskClassification`, `RiskClassificationLegalRuleMatch`, `AuditEvent`, `OutboxEvent` |
 | Update | `Assessment.state`, predecessor status if applicable |
 | Deny write | Raw source, full prompt, secrets, full AST bodies |
 
@@ -155,7 +164,7 @@ Implement `Risk Classification` as a deterministic object transformer. It receiv
 # Local Simulation
 
 1. Seed predecessor records for `ClassificationRequestedPayload`.
-2. Insert or publish `command.classification.requested.v1` with correlation id `corr_assess_001`.
+2. Insert or publish `command.classification.requested.v1` with correlation id `018f0000-0000-7000-8000-000000000101`.
 3. Run `ClassificationWorker.handleClassificationRequested()` locally against fixture `F-RAG-02 Missing citation case`.
 4. Verify `RiskClassification` row exists.
 5. Verify `AuditEvent` and `OutboxEvent` exist.

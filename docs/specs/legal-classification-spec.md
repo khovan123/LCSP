@@ -40,11 +40,11 @@ Document generation must use `GapAnalysis` as an input and must not run directly
 
 ```json
 {
-  "riskClassificationId": "risk_001",
-  "assessmentId": "assess_001",
-  "verifiedProfileId": "vp_001",
+  "riskClassificationId": "018f0000-0000-7000-8000-000000000611",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
+  "verifiedProfileId": "018f0000-0000-7000-8000-000000000411",
   "riskLevel": "BLOCKED_OR_CLASSIFIED",
-  "legalRuleMatches": ["rule_match_001"],
+  "legalRuleMatchIds": ["018f0000-0000-7000-8000-000000000521"],
   "citationCoverage": "COMPLETE | PARTIAL | MISSING",
   "blockingReasons": []
 }

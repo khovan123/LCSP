@@ -348,6 +348,30 @@ Rules:
 
 `LanguageMapper` does not read files. File enumeration supplies `SourceContentSample`.
 
+### ManifestConfigSignalExtractor
+
+`BASIC_SIGNAL_ONLY` languages are handled before parser adapter selection by `ManifestConfigSignalExtractor`.
+
+```ts
+export class ManifestConfigSignalExtractor {
+  extract(input: {
+    assessmentId: string
+    scanJobId: string
+    sourceFiles: SourceFileRef[]
+    repositoryManifests: ManifestMetadata[]
+    dependencyMetadata: DependencyMetadata[]
+  }): TechnicalFindingDraft[]
+}
+```
+
+Rules:
+
+- Runs before `ParserRegistry.getAdapter(...)`.
+- Reads only manifest/config/dependency metadata, file paths and optional import-like metadata from repository inventory.
+- May emit `AI_PROVIDER_USAGE`, `AI_FRAMEWORK_USAGE`, `DOMAIN_CONTEXT_SIGNAL` and `SCAN_COVERAGE_LIMITATION` findings.
+- Must not emit `AI_MODEL_INVOCATION`, `AI_DECISION_FLOW_SIGNAL` or `AUTOMATED_DECISION_SIGNAL` for BASIC_SIGNAL_ONLY files.
+- `UnsupportedParserAdapter` remains responsible only for unsupported parse results and file-level coverage limitations.
+
 ### UnsupportedParserAdapter
 
 ```ts

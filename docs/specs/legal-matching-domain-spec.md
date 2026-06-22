@@ -63,9 +63,9 @@ It is the domain behavior source of truth for `LegalMatchingWorker` and the lega
 | `verifiedProfileId` | Verified profile source. | Yes | VerifiedProfile. |
 | `legalCorpusVersionId` | Corpus version used. | Yes | Legal Corpus. |
 | `ruleId` | Matched rule identifier. | Yes | Legal Rule. |
-| `status` | `MATCHED`, `NOT_APPLICABLE`, `BLOCKED_UNKNOWN_FACT`, `BLOCKED_MISSING_CITATION`, or `FAILED`. | Yes | Applicability and citation evaluation. |
+| `status` | `MATCHED`, `NOT_APPLICABLE`, `BLOCKED_UNKNOWN_FACT`, `BLOCKED_MISSING_CITATION`, `DEGRADED`, or `FAILED`. | Yes | Applicability and citation evaluation. |
 | `citationRefs` | Citation references. | Yes | Citation retrieval. |
-| `matchRationale` | Structured fact-to-rule rationale. | Yes | Rule evaluation. |
+| `rationale` | Structured fact-to-rule rationale. | Yes | Rule evaluation. |
 | `confidence` | Deterministic match confidence, 0.0 to 1.0. | Yes | Confidence model. |
 | `coverage` | CitationCoverage object. | Yes | Coverage model. |
 | `createdAt` | Creation timestamp. | Yes | System generated. |
@@ -234,10 +234,10 @@ Classification must not consume `event.reconciliation.verified-profile-ready.v1`
 
 ```json
 {
-  "assessmentId": "assess_001",
-  "verifiedProfileId": "vp_001",
-  "legalRuleMatchIds": ["lrm_001"],
-  "legalCorpusVersionId": "lcsp_corpus_v0_1_0"
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
+  "verifiedProfileId": "018f0000-0000-7000-8000-000000000411",
+  "legalRuleMatchIds": ["018f0000-0000-7000-8000-000000000521"],
+  "legalCorpusVersionId": "018f0000-0000-7000-8000-000000000511"
 }
 ```
 
@@ -247,8 +247,8 @@ Classification must not consume `event.reconciliation.verified-profile-ready.v1`
 
 ```json
 {
-  "verifiedProfileId": "vp_loan_001",
-  "assessmentId": "assess_001",
+  "verifiedProfileId": "018f0000-0000-7000-8000-000000000411",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
   "mergedProfile": {
     "businessProcess": "loan_approval",
     "automationLevel": "FULLY_AUTOMATED",
@@ -278,23 +278,23 @@ Classification must not consume `event.reconciliation.verified-profile-ready.v1`
 
 ```json
 {
-  "legalRuleMatchId": "lrm_loan_001",
-  "assessmentId": "assess_001",
-  "verifiedProfileId": "vp_loan_001",
-  "legalCorpusVersionId": "lcsp_corpus_v0_1_0",
+  "legalRuleMatchId": "018f0000-0000-7000-8000-000000000521",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
+  "verifiedProfileId": "018f0000-0000-7000-8000-000000000411",
+  "legalCorpusVersionId": "018f0000-0000-7000-8000-000000000511",
   "ruleId": "AI-HIGH-IMPACT-FINANCIAL-AUTOMATED-DECISION",
   "status": "MATCHED",
   "citationRefs": [
     {
-      "citationId": "cit_001",
+      "citationId": "018f0000-0000-7000-8000-000000000531",
       "sourceTitle": "Pinned legal corpus source",
       "sourceIdentifier": "corpus-rule-ref",
       "locator": "article-or-rule-locator",
       "corpusVersion": "LCSP-LEGAL-CORPUS-v0.1.0",
-      "retrievalRef": "retrieval_001"
+      "retrievalRef": "018f0000-0000-7000-8000-000000000541"
     }
   ],
-  "matchRationale": {
+  "rationale": {
     "requiredFactsMatched": [
       "loan_approval",
       "FULLY_AUTOMATED",

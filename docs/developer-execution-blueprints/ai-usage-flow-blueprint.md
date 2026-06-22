@@ -34,15 +34,13 @@ Worker consumes `command.ai-usage-flow.requested.v1` after `event.technical-prof
 
 ```json
 {
-  "eventId": "evt_001",
-  "correlationId": "corr_assess_001",
-  "assessmentId": "assess_001",
+  "messageId": "018f0000-0000-7000-8000-000000000301",
+  "correlationId": "018f0000-0000-7000-8000-000000000101",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
   "inputType": "AIUsageFlowRequestedPayload",
-  "repositorySnapshotId": "snap_001",
-  "technicalEvidenceReportId": "ter_001",
-  "technicalProfileId": "tp_001",
-  "aiUsageFlowId": "auf_001",
-  "verifiedProfileId": "vp_001"
+  "wizardProfileId": "018f0000-0000-7000-8000-000000000011",
+  "technicalEvidenceReportId": "018f0000-0000-7000-8000-000000000211",
+  "technicalProfileId": "018f0000-0000-7000-8000-000000000221"
 }
 ```
 
@@ -50,10 +48,40 @@ Worker consumes `command.ai-usage-flow.requested.v1` after `event.technical-prof
 
 ```json
 {
-  "assessmentId": "assess_001",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
   "outputType": "AIUsageFlow",
-  "status": "CREATED",
-  "evidenceRefs": ["ev_001", "ev_002"],
+  "aiUsageFlowId": "018f0000-0000-7000-8000-000000000231",
+  "status": "READY",
+  "summary": {
+    "aiDetected": true,
+    "primaryBusinessProcess": "loan_approval",
+    "automationLevel": "FULLY_AUTOMATED",
+    "humanReview": "ABSENT_WITH_BOUNDED_PATH"
+  },
+  "claims": [
+    {
+      "claimId": "018f0000-0000-7000-8000-000000000232",
+      "claimCategory": "AUTOMATION",
+      "claimField": "automation_level",
+      "claimValue": "FULLY_AUTOMATED",
+      "lifecycleState": "VALIDATED",
+      "confidence": 0.88,
+      "evidenceRefs": [
+        "ev:018f0000-0000-7000-8000-000000000201:CALL:1",
+        "ev:018f0000-0000-7000-8000-000000000201:DECISION_POINT:3"
+      ],
+      "confidenceBreakdown": {
+        "base": 0.7,
+        "evidenceStrength": 0.2,
+        "supportPenalty": 0,
+        "conflictPenalty": 0,
+        "coveragePenalty": 0.02,
+        "final": 0.88
+      },
+      "uncertaintyReasons": [],
+      "conflictRefs": []
+    }
+  ],
   "nextEvent": "event.ai-usage-flow.completed.v1 or event.ai-usage-flow.failed.v1"
 }
 ```
@@ -103,8 +131,8 @@ Loan score feeds approve/reject, producing automated decision usage claims.
 
 | Operation | Models |
 |---|---|
-| Read | `Assessment`, predecessor object, `AuditEvent` context |
-| Create | `AIUsageFlow`, `AuditEvent`, `OutboxEvent` |
+| Read | `Assessment`, `WizardProfile`, `TechnicalProfile`, `TechnicalEvidenceReport`, `TechnicalFinding`, `EvidenceReference` |
+| Create | `AIUsageFlow`, `AIUsageFlowClaim`, `AIUsageFlowClaimEvidenceReference`, `AuditEvent`, `OutboxEvent` |
 | Update | `Assessment.state`, predecessor status if applicable |
 | Deny write | Raw source, full prompt, secrets, full AST bodies |
 
@@ -154,7 +182,7 @@ Implement `AI Usage Flow` as a deterministic object transformer. It receives one
 # Local Simulation
 
 1. Seed predecessor records for `TechnicalProfileReadyPayload`.
-2. Insert or publish `command.ai-usage-flow.requested.v1` with correlation id `corr_assess_001`.
+2. Insert or publish `command.ai-usage-flow.requested.v1` with correlation id `018f0000-0000-7000-8000-000000000101`.
 3. Run `AIUsageFlowWorker.handleAIUsageFlowRequested()` locally against fixture `F-SCAN-03 Loan approval / credit scoring`.
 4. Verify `AIUsageFlow` row exists.
 5. Verify `AuditEvent` and `OutboxEvent` exist.

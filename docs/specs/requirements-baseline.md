@@ -7,10 +7,11 @@ This document recovers the active requirements baseline from existing active doc
 ## Governance
 
 - This document is authoritative for the recovered UC inventory, FR crosswalk, and NFR crosswalk.
-- Canonical active FR namespace: `FR-E*` from `docs/product/prd.md`.
-- Canonical active NFR namespace: `NFR-1..NFR-14` from `docs/product/prd.md`.
-- Legacy `FR-###` and `NFR-###` IDs are traceability aliases recovered from archived requirement catalogs.
-- `NO_ACTIVE_PRD_EQUIVALENT` means the legacy ID is referenced by active business rules but no equivalent active PRD requirement currently exists. This is not a new requirement.
+- Canonical active FR namespace: `FR-001...` from `docs/specs/functional-requirements.md`.
+- Canonical active NFR namespace: `NFR-001...` from `docs/specs/non-functional-requirements.md`.
+- PRD `FR-E*` and `NFR-1..NFR-14` IDs are source aliases only. They are not active implementation requirement IDs after Phase 5.9 normalization.
+- Legacy IDs remain traceability aliases recovered from archived requirement catalogs.
+- `PLATFORM_BASELINE` means the active normalized requirement belongs to the platform baseline even when no one-to-one PRD source alias exists.
 - Archived requirement catalogs remain archived and are not active source-of-truth documents.
 
 ## Active Canonical Sources
@@ -28,7 +29,9 @@ These archived documents were used only to recover legacy IDs and traceability a
 - `docs/archive/redundant-artifacts/delete-candidates/design/non-functional-requirements.md`
 - `docs/archive/redundant-artifacts/delete-candidates/design/traceability-matrix.md`
 
-## Canonical Active FR Inventory
+## PRD FR Source Alias Inventory
+
+The following `FR-E*` identifiers are retained only as PRD/source aliases. Active implementation requirements use the `FR-001...` namespace in `docs/specs/functional-requirements.md`.
 
 | Canonical FR | Name | Source |
 | --- | --- | --- |
@@ -70,7 +73,18 @@ These archived documents were used only to recover legacy IDs and traceability a
 | FR-E8-4 | Audit human technical attestation | docs/product/prd.md |
 | FR-E8-5 | Audit classification and generated documents | docs/product/prd.md |
 
-## Canonical Active NFR Inventory
+### Deferred Evidence Source Aliases
+
+| PRD Alias | Active Canonical Requirement | MVP Scope Status | Meaning |
+| --- | --- | --- | --- |
+| FR-E3-2 | FR-050 | DEFERRED / NOT_ACTIVE_MVP_MAIN_FLOW | Local/CI scanner report upload is preserved as a future evidence path and must not be implemented as the controlled MVP default. |
+| FR-E3-3 | FR-051 | DEFERRED / NOT_ACTIVE_MVP_MAIN_FLOW | Manual technical evidence JSON upload is preserved as a future structured evidence path and must not be implemented as the controlled MVP default. |
+
+The active controlled MVP technical-evidence path is GitHub App repository connection, snapshot creation and Repository Scan.
+
+## PRD NFR Source Alias Inventory
+
+The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. Active implementation NFRs use the `NFR-001...` namespace in `docs/specs/non-functional-requirements.md`.
 
 | Canonical NFR | Statement | Source |
 | --- | --- | --- |
@@ -157,24 +171,24 @@ These archived documents were used only to recover legacy IDs and traceability a
 | UC-M10-04 | Enforce No Raw Source to LLM | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M10-05 | Enforce No Long-Term Raw Source Storage | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 
-## FR Namespace Crosswalk
+## Active FR to Source Alias Crosswalk
 
-| Legacy FR | Legacy Name | Canonical FR | Resolution | Source |
+| Active FR | Name | PRD / Source Alias | Resolution | Source |
 | --- | --- | --- | --- | --- |
-| FR-001 | Register account | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-002 | Login | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-003 | Enable Authenticator App MFA | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-004 | Generate MFA setup secret or QR code | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-005 | Verify MFA setup code | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-006 | Login with MFA | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-007 | Reject invalid or expired MFA code | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-008 | Disable MFA after re-authentication | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-009 | Reset MFA under recovery policy | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-010 | Manage session | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-011 | Reset password | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-012 | Create organization | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-013 | Manage organization members | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-014 | Assign Manager role | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
+| FR-001 | Register account | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-002 | Login | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-003 | Enable Authenticator App MFA | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-004 | Generate MFA setup secret or QR code | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-005 | Verify MFA setup code | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-006 | Login with MFA | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-007 | Reject invalid or expired MFA code | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-008 | Disable MFA after re-authentication | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-009 | Reset MFA under recovery policy | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-010 | Manage session | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-011 | Reset password | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-012 | Create organization | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-013 | Manage organization members | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-014 | Assign Manager role | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
 | FR-015 | Invite Developer | FR-E1-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-016 | Assign Developer policy | FR-E1-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-017 | Revoke Developer access | FR-E1-3, FR-E1-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
@@ -223,9 +237,9 @@ These archived documents were used only to recover legacy IDs and traceability a
 | FR-060 | Clean temporary workspace | FR-E3-1, FR-E8-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-061 | Enforce no raw source to LLM | FR-E3-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-062 | Enforce no long-term raw source storage | FR-E3-1, FR-E8-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-063 | Verify email | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-064 | Change password | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-065 | Manage personal profile | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
+| FR-063 | Verify email | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-064 | Change password | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-065 | Manage personal profile | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
 | FR-066 | Run repository scan | FR-E3-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-067 | Review and approve VerifiedProfile | FR-E6-1, FR-E6-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-068 | View gap analysis | FR-E7-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
@@ -234,22 +248,22 @@ These archived documents were used only to recover legacy IDs and traceability a
 | FR-071 | Mark unclear AI usage purpose | FR-E4-3, FR-E6-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-072 | Reconcile AIUsageFlow | FR-E5-1, FR-E5-6 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-073 | Match legal rules using AIUsageFlow | FR-E6-3, FR-E6-4, FR-E6-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-074 | Sign in with OAuth/OIDC | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-075 | Validate OAuth/OIDC callback and account linking | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
-| FR-076 | Separate OAuth/OIDC from GitHub repository access | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived functional-requirements.md; active PRD |
+| FR-074 | Sign in with OAuth/OIDC | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-075 | Validate OAuth/OIDC callback and account linking | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
+| FR-076 | Separate OAuth/OIDC from GitHub repository access | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
 | FR-077 | Manager superset MVP permissions | FR-E1-4, FR-E5-5, FR-E6-2, FR-E7-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-078 | Post-MVP delegated Developer permissions | FR-E1-3, FR-E1-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 
-## NFR Namespace Crosswalk
+## Active NFR to Source Alias Crosswalk
 
-| Legacy NFR | Legacy Name | Canonical NFR | Resolution | Source |
+| Active NFR | Name | PRD / Source Alias | Resolution | Source |
 | --- | --- | --- | --- | --- |
-| NFR-001 | Password security | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived non-functional-requirements.md; active PRD |
-| NFR-002 | MFA secret protection | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived non-functional-requirements.md; active PRD |
-| NFR-003 | OTP verification security | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived non-functional-requirements.md; active PRD |
-| NFR-004 | Session security | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived non-functional-requirements.md; active PRD |
-| NFR-005 | Brute-force protection | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived non-functional-requirements.md; active PRD |
-| NFR-006 | Secure MFA recovery/reset | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived non-functional-requirements.md; active PRD |
+| NFR-001 | Password security | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
+| NFR-002 | MFA secret protection | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
+| NFR-003 | OTP verification security | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
+| NFR-004 | Session security | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
+| NFR-005 | Brute-force protection | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
+| NFR-006 | Secure MFA recovery/reset | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
 | NFR-007 | Auth event auditability | NFR-7 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 | NFR-008 | Role-based access control | NFR-9, NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 | NFR-009 | Developer task policy isolation | NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
@@ -267,11 +281,11 @@ These archived documents were used only to recover legacy IDs and traceability a
 | NFR-021 | Document overclaim prevention | NFR-9 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 | NFR-022 | Async workload reliability | NFR-6, NFR-9 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 | NFR-023 | Evidence gate observability | NFR-12 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-027 | OAuth/OIDC callback security | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived non-functional-requirements.md; active PRD |
+| NFR-027 | OAuth/OIDC callback security | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
 | NFR-028 | OAuth/GitHub boundary separation | NFR-3 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 | NFR-029 | Permission delegation auditability | NFR-7, NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 | NFR-030 | Role/permission revocation behavior | NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-031 | OAuth identity linking safety | NO_ACTIVE_PRD_EQUIVALENT | ARCHIVED_ALIAS_ONLY | archived non-functional-requirements.md; active PRD |
+| NFR-031 | OAuth identity linking safety | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
 | NFR-032 | Manager super-role enforcement | NFR-9 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 
 ## Acceptance Criteria Inventory
@@ -303,5 +317,5 @@ These archived documents were used only to recover legacy IDs and traceability a
 | All active BR legacy NFR references listed | PASS | 29 unique legacy NFR refs recovered |
 | Unmapped legacy FR IDs | PASS | None |
 | Unmapped legacy NFR IDs | PASS | None |
-| Legacy FR IDs without active PRD equivalent | OPEN_BASELINE_GAP | FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-011, FR-012, FR-013, FR-014, FR-063, FR-064, FR-065, FR-074, FR-075, FR-076 |
-| Legacy NFR IDs without active PRD equivalent | OPEN_BASELINE_GAP | NFR-001, NFR-002, NFR-003, NFR-004, NFR-005, NFR-006, NFR-027, NFR-031 |
+| Platform-baseline FR IDs without one-to-one PRD source alias | RESOLVED_PLATFORM_BASELINE | FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-011, FR-012, FR-013, FR-014, FR-063, FR-064, FR-065, FR-074, FR-075, FR-076 |
+| Platform-baseline NFR IDs without one-to-one PRD source alias | RESOLVED_PLATFORM_BASELINE | NFR-001, NFR-002, NFR-003, NFR-004, NFR-005, NFR-006, NFR-027, NFR-031 |

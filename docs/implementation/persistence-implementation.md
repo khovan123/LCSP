@@ -305,9 +305,11 @@ enum FindingType { AI_PROVIDER_USAGE AI_FRAMEWORK_USAGE AI_MODEL_INVOCATION AI_I
 enum EvidenceSourceType { STATIC_SCAN WIZARD_DECLARATION MANAGER_RESOLUTION LEGAL_CORPUS SYSTEM_DERIVED }
 enum AnalysisSupportLevel { FULL_STATIC SYNTAX_ONLY BASIC_SIGNAL_ONLY UNSUPPORTED }
 enum AIUsageFlowStatus { DRAFT READY UNCLEAR CONFLICTED BLOCKED }
+enum AIUsageClaimLifecycleState { DETECTED VALIDATED CONFLICTED VERIFIED REJECTED ABSTAINED }
 enum HumanReviewState { PRESENT ABSENT_WITH_BOUNDED_PATH UNCLEAR NOT_APPLICABLE }
 enum AutomationLevel { ASSISTIVE SEMI_AUTOMATED FULLY_AUTOMATED UNKNOWN }
 enum ReconciliationStatus { NOT_REQUIRED CONFLICT_OPEN RESOLVED VERIFIED }
+enum LegalRuleMatchStatus { MATCHED NOT_APPLICABLE BLOCKED_MISSING_CITATION BLOCKED_UNKNOWN_FACT DEGRADED FAILED }
 enum ClassificationStatus { REQUESTED RUNNING COMPLETED BLOCKED FAILED }
 enum GapAnalysisStatus { REQUESTED RUNNING COMPLETED BLOCKED FAILED }
 enum DocumentStatus { REQUESTED GENERATED BLOCKED FAILED }
@@ -607,6 +609,7 @@ model AIUsageFlow {
   assessmentId       String @db.Uuid
   technicalProfileId String @db.Uuid
   status             AIUsageFlowStatus
+  summary            Json
   confidence         Float
   uncertaintyReasons Json
   coverageLimitations Json
@@ -623,14 +626,20 @@ model AIUsageFlow {
 model AIUsageFlowClaim {
   id              String @id @db.Uuid
   aiUsageFlowId   String @db.Uuid
+  claimCategory   String
   claimField      String
   claimValue      Json
+  lifecycleState  AIUsageClaimLifecycleState
   confidence      Float
   confidenceBreakdown Json
+  uncertaintyReasons Json
+  conflictRefs    Json
   createdAt       DateTime @default(now())
   aiUsageFlow     AIUsageFlow @relation(fields: [aiUsageFlowId], references: [id])
   evidenceRefs    AIUsageFlowClaimEvidenceReference[]
+  @@index([aiUsageFlowId, claimCategory])
   @@index([aiUsageFlowId, claimField])
+  @@index([aiUsageFlowId, lifecycleState])
 }
 
 model AIUsageFlowClaimEvidenceReference {
@@ -695,23 +704,25 @@ model LegalRuleMatch {
   verifiedProfileId     String @db.Uuid
   legalCorpusVersionId  String @db.Uuid
   ruleId                String
+  confidence            Float
+  coverage              Json
   citationRefs          Json
-  matchRationale        Json
-  status                String
+  rationale             Json
+  status                LegalRuleMatchStatus
   createdAt             DateTime @default(now())
   assessment            Assessment @relation(fields: [assessmentId], references: [id])
   verifiedProfile       VerifiedProfile @relation(fields: [verifiedProfileId], references: [id])
   legalCorpusVersion    LegalCorpusVersion @relation(fields: [legalCorpusVersionId], references: [id])
-  classifications       RiskClassification[]
+  classifications       RiskClassificationLegalRuleMatch[]
   @@index([assessmentId, ruleId])
   @@index([verifiedProfileId])
+  @@index([legalCorpusVersionId, status])
 }
 
 model RiskClassification {
   id                 String @id @db.Uuid
   assessmentId       String @db.Uuid
   verifiedProfileId  String @db.Uuid
-  legalRuleMatchId   String? @db.Uuid
   status             ClassificationStatus
   riskLevel          String?
   blockingReasons    Json
@@ -720,11 +731,23 @@ model RiskClassification {
   createdAt          DateTime @default(now())
   assessment         Assessment @relation(fields: [assessmentId], references: [id])
   verifiedProfile    VerifiedProfile @relation(fields: [verifiedProfileId], references: [id])
-  legalRuleMatch     LegalRuleMatch? @relation(fields: [legalRuleMatchId], references: [id])
+  legalRuleMatches   RiskClassificationLegalRuleMatch[]
   gapAnalyses        GapAnalysis[]
   documents          GeneratedDocument[]
   @@index([assessmentId, status])
   @@index([verifiedProfileId])
+}
+
+model RiskClassificationLegalRuleMatch {
+  id                   String @id @db.Uuid
+  riskClassificationId String @db.Uuid
+  legalRuleMatchId     String @db.Uuid
+  role                 String?
+  createdAt            DateTime @default(now())
+  riskClassification   RiskClassification @relation(fields: [riskClassificationId], references: [id])
+  legalRuleMatch       LegalRuleMatch @relation(fields: [legalRuleMatchId], references: [id])
+  @@unique([riskClassificationId, legalRuleMatchId])
+  @@index([legalRuleMatchId])
 }
 
 model GapAnalysis {
@@ -742,6 +765,7 @@ model GapAnalysis {
   documents             GeneratedDocument[]
   @@index([assessmentId, status])
   @@index([riskClassificationId])
+  @@unique([riskClassificationId])
 }
 
 model GeneratedDocument {
@@ -822,6 +846,6 @@ model AuditEvent {
 3. Repository and scan foundation: `RepositoryConnection`, `RepositorySnapshot`, `RepositoryScanJob`, `SourceFile`.
 4. Evidence graph and findings: `CodeGraphNode`, `CodeGraphEdge`, `EvidenceReference`, `TechnicalEvidenceReport`, `TechnicalFinding`.
 5. Lifecycle analysis: `TechnicalProfile`, `AIUsageFlow`, `AIUsageFlowClaim`, `AIUsageFlowClaimEvidenceReference`, `ReconciliationConflict`, `VerifiedProfile`.
-6. Legal and output: `LegalCorpusVersion`, `LegalRuleMatch`, `RiskClassification`, `GapAnalysis`, `GeneratedDocument`.
+6. Legal and output: `LegalCorpusVersion`, `LegalRuleMatch`, `RiskClassification`, `RiskClassificationLegalRuleMatch`, `GapAnalysis`, `GeneratedDocument`.
 7. Reliability and audit: `OutboxEvent`, `AuditEvent`.
 <!-- PHASE-5-5-CANONICAL-PRISMA-SCHEMA:END -->

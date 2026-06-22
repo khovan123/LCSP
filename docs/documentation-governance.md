@@ -12,6 +12,7 @@ docs/specs/
 docs/architecture/
 docs/developer-execution-blueprints/
 docs/implementation/
+docs/code-map/
 ```
 
 ## Target Structure
@@ -34,6 +35,7 @@ docs/
   developer-execution-blueprints/
     end-to-end-execution.md
     scanner-data-journey.md
+    technical-profile-blueprint.md
     ai-usage-flow-blueprint.md
     reconciliation-blueprint.md
     classification-blueprint.md
@@ -44,6 +46,11 @@ docs/
     persistence-implementation.md
     queue-implementation.md
     llm-gateway-implementation.md
+  code-map/
+    README.md
+    api-code-map.md
+    scanner-code-map.md
+    worker-code-map.md
   archive/
     decisions/
     redundant-artifacts/delete-candidates/
@@ -58,6 +65,7 @@ docs/
 | What components exist and why? | `architecture/` |
 | What happens at runtime? | `developer-execution-blueprints/` |
 | How is it built/run/operated? | `implementation/` |
+| What code modules own APIs, DTOs, tables and queues? | `code-map/` |
 
 ## Strict Rules
 

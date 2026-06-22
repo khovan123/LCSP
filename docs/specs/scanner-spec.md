@@ -635,17 +635,30 @@ rawConfidence =
 finding.confidence = roundToTwoDecimals(clamp(rawConfidence, 0.00, 1.00))
 ```
 
-Base values:
+Base values by canonical `FindingType`:
 
-| Finding group | Base |
+| FindingType | Base |
 |---|---:|
-| Provider/framework presence | 0.35 |
-| Direct model invocation | 0.70 |
-| Input/output signal | 0.55 |
-| Decision-flow or status-update signal | 0.65 |
-| Automated decision bounded path | 0.75 |
-| Human-review present path | 0.70 |
-| Coverage limitation | 1.00 |
+| `AI_PROVIDER_USAGE` | 0.35 |
+| `AI_FRAMEWORK_USAGE` | 0.35 |
+| `AI_MODEL_INVOCATION` | 0.70 |
+| `AI_INPUT_SIGNAL` | 0.55 |
+| `AI_OUTPUT_SIGNAL` | 0.55 |
+| `AI_DECISION_FLOW_SIGNAL` | 0.65 |
+| `AUTOMATED_DECISION_SIGNAL` | 0.75 |
+| `HUMAN_REVIEW_SIGNAL` | 0.70 |
+| `RANKING_SIGNAL` | 0.60 |
+| `RECOMMENDATION_SIGNAL` | 0.60 |
+| `STATUS_UPDATE_SIGNAL` | 0.65 |
+| `USER_IMPACT_SIGNAL` | 0.60 |
+| `SENSITIVE_DATA_SIGNAL` | 0.60 |
+| `DOMAIN_CONTEXT_SIGNAL` | 0.50 |
+| `SYSTEM_PROMPT_DETECTED` | 0.55 |
+| `DYNAMIC_SYSTEM_PROMPT_REFERENCE` | 0.45 |
+| `RAG_USAGE_SIGNAL` | 0.60 |
+| `MODEL_OUTPUT_PARSER_SIGNAL` | 0.60 |
+| `SCAN_COVERAGE_LIMITATION` | 1.00 |
+| `UNSUPPORTED_DYNAMIC_FLOW` | 1.00 |
 
 Adjustments:
 
@@ -653,6 +666,8 @@ Adjustments:
 - `corroborationBonus = +0.05` per independent supporting source, capped at `+0.15`.
 - `coveragePenalty = -0.15` per material limitation affecting the finding, capped at `-0.30`.
 - `ambiguityPenalty = -0.20` when callee, output path or human-review path is unresolved.
+- Duplicate facts with the same `evidenceRef` and same `FindingType` do not add corroboration.
+- Round half-up to two decimals after all caps and penalties.
 
 Provider/framework presence findings must remain below `0.60` unless an evidence-backed invocation is also present as a separate `AI_MODEL_INVOCATION` finding. If no linked invocation exists for the same source file/symbol path, cap the calculated value with `finding.confidence = min(calculatedConfidence, 0.59)` after rounding/clamping.
 
@@ -812,7 +827,8 @@ MVP scanner is static-analysis only:
 - ts-morph provides TS/JS semantic analysis through the controlled TypeScript-first Node.js scanner worker.
 - Python uses Tree-sitter syntax-only extraction and emits `PYTHON_SEMANTIC_ANALYSIS_DEFERRED`; Python semantic analysis is not active MVP behavior.
 - Java, Kotlin, Go, C# and Rust get basic signal detection only.
-- `BASIC_SIGNAL_ONLY` languages do not use a language-specific AST adapter in the controlled MVP. Basic signals come from manifest, dependency, configuration, file-path and optional import-like metadata produced by repository inventory and dependency analysis before parser adapter selection. `UnsupportedParserAdapter` emits the file-level coverage limitation; it does not create basic signal findings by itself.
+- `BASIC_SIGNAL_ONLY` languages do not use a language-specific AST adapter in the controlled MVP. Basic signals come from `ManifestConfigSignalExtractor`, which runs before parser adapter selection and reads repository manifests, dependency/config files, file paths and optional import-like metadata discovered by repository inventory. `UnsupportedParserAdapter` emits only the file-level coverage limitation; it does not create basic signal findings by itself.
+- `ManifestConfigSignalExtractor` owns BASIC_SIGNAL_ONLY findings for `.java`, `.kt`, `.go`, `.cs` and `.rs` files. It may create `AI_PROVIDER_USAGE`, `AI_FRAMEWORK_USAGE`, `DOMAIN_CONTEXT_SIGNAL` and `SCAN_COVERAGE_LIMITATION` findings from metadata only. It must not create `AI_MODEL_INVOCATION`, `AI_DECISION_FLOW_SIGNAL` or `AUTOMATED_DECISION_SIGNAL` without AST/semantic evidence.
 
 When dynamic import, reflection, runtime prompts, remote config, external proprietary AI service, queue breaks, generated/minified code, missing coverage or unresolved output paths are encountered, emit `UNSUPPORTED_DYNAMIC_FLOW` or `SCAN_COVERAGE_LIMITATION` and set related AIUsageFlow claim to `unknown`/`unclear`.
 

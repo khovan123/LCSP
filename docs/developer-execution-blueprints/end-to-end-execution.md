@@ -41,11 +41,11 @@ Manager opens assessment workspace and performs these UI actions:
 
 ```json
 {
-  "assessmentId": "assess_001",
-  "managerUserId": "user_manager_001",
-  "wizardProfileId": "wiz_001",
-  "repositoryConnectionId": "repo_conn_001",
-  "repositorySnapshotId": "snap_001",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
+  "managerUserId": "018f0000-0000-7000-8000-000000000002",
+  "wizardProfileId": "018f0000-0000-7000-8000-000000000011",
+  "repositoryConnectionId": "018f0000-0000-7000-8000-000000000021",
+  "repositorySnapshotId": "018f0000-0000-7000-8000-000000000031",
   "repositoryFullName": "acme/loan-platform",
   "branchName": "main",
   "commitSha": "9fceb02a6d..."
@@ -56,14 +56,14 @@ Manager opens assessment workspace and performs these UI actions:
 
 ```json
 {
-  "assessmentId": "assess_001",
-  "technicalEvidenceReportId": "ter_001",
-  "technicalProfileId": "tp_001",
-  "aiUsageFlowId": "auf_001",
-  "verifiedProfileId": "vp_001",
-  "riskClassificationId": "risk_001",
-  "gapAnalysisId": "gap_001",
-  "documentId": "doc_001",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
+  "technicalEvidenceReportId": "018f0000-0000-7000-8000-000000000211",
+  "technicalProfileId": "018f0000-0000-7000-8000-000000000221",
+  "aiUsageFlowId": "018f0000-0000-7000-8000-000000000231",
+  "verifiedProfileId": "018f0000-0000-7000-8000-000000000411",
+  "riskClassificationId": "018f0000-0000-7000-8000-000000000611",
+  "gapAnalysisId": "018f0000-0000-7000-8000-000000000711",
+  "documentId": "018f0000-0000-7000-8000-000000000811",
   "finalState": "DOCUMENT_GENERATED"
 }
 ```

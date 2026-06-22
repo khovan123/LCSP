@@ -8,7 +8,7 @@ Tài liệu này ghi lại các Architecture Decision Records ở mức **condit
 
 ## Input Documents
 
-- `docs/architecture/architecture-exploration.md`
+- `docs/architecture/architecture.md`
 - `docs/product/prd.md`
 - `docs/product/validation-plan.md`
 - `docs/product/product-brief.md`
@@ -26,7 +26,7 @@ Tài liệu này ghi lại các Architecture Decision Records ở mức **condit
 Architecture Exploration đề xuất hướng:
 
 ```text
-Option A - Monolith-first modular backend + separate Python scanner/agent worker
+Option A - Monolith-first modular backend + separate async worker runtime
 ```
 
 Đây là **Recommended conditional architecture direction**, không phải final architecture tuyệt đối.
@@ -37,7 +37,7 @@ Lý do:
 - Dễ demo end-to-end.
 - Giảm premature service boundaries.
 - Phù hợp technical specification hiện tại.
-- Multi-agent workflow được kiểm soát bởi Orchestrator trong Python worker, không dùng free-form autonomous agents.
+- Multi-agent workflow được kiểm soát bởi deterministic async workers and state machines, không dùng free-form autonomous agents.
 - Vẫn giữ đường nâng cấp sang service-oriented architecture sau này.
 - Tránh khóa thiết kế quá sớm khi A1-A3 còn cần validate.
 
@@ -89,17 +89,21 @@ Backend chính nên được tổ chức theo module domain rõ ràng: Assessmen
 - MVP cần enterprise isolation sớm hơn dự kiến.
 - Scanner/RAG/document workloads cần scale độc lập trước MVP.
 
-## ADR-002 - Separate Python worker for scanner and agent workloads
+## ADR-002 - Separate worker runtime for scanner and agent workloads
 
 **Status:** Conditionally Accepted
 
+### Phase 5.2H Supersession Note
+
+The Python-specific runtime/tooling wording in this ADR is `SUPERSEDED_BY_ADR_022`. The active controlled MVP runtime is TypeScript-first for scanner and workflow workers. Python/LangGraph remains historical architecture context only unless a future ADR reintroduces it.
+
 ### Context
 
-Technical specification hiện tại dùng NestJS API cho orchestration và Python LangGraph worker cho scanner + multi-agent pipeline. Scanner, RAG, classification/gap/document agent calls và evidence normalization có workload khác web request lifecycle.
+Technical specification history used NestJS API plus a Python LangGraph worker for scanner and multi-agent pipeline work. Controlled MVP implementation now uses NestJS API plus TypeScript-first async workers because scanner, evidence processing, classification, gap and document jobs still have workloads that differ from web request lifecycle.
 
 ### Decision
 
-Scanner, evidence normalization và agent pipeline nên chạy trong **Python worker/service tách khỏi NestJS API runtime**.
+Scanner, evidence normalization và agent pipeline chạy trong **async worker runtime tách khỏi synchronous NestJS API request handling**. Controlled MVP worker implementation is TypeScript-first as defined by ADR-022.
 
 ### Rationale
 
@@ -108,7 +112,7 @@ Scanner, evidence normalization và agent pipeline nên chạy trong **Python wo
 - Dễ cô lập source handling.
 - Dễ scale riêng sau này.
 - Giảm rủi ro raw source đi vào web backend.
-- Phù hợp Python ecosystem cho LangGraph, scanner integration, RAG tooling và document processing.
+- Preserves async isolation while using the controlled MVP TypeScript-first implementation stack.
 
 ### Alternatives Considered
 
@@ -435,11 +439,13 @@ Tài liệu `docs/architecture/multi-agent-system-architecture.md` so sánh patt
 
 LCSP dùng **Orchestrator-controlled, state-machine-driven multi-agent workflow** cho MVP architecture.
 
-Diễn giải implementation direction ở mức conditional:
+Historical implementation direction before ADR-022:
 
 ```text
 Python Worker + LangGraph StateGraph workflow
 ```
+
+This runtime/tooling direction is `SUPERSEDED_BY_ADR_022` for the controlled MVP. Active implementation keeps the orchestrator-controlled, state-machine-driven workflow decision, but implements it with TypeScript-first async workers, RabbitMQ, outbox and persisted state machines.
 
 Orchestrator gọi các agent/node như bounded subtasks, dùng RAG-grounded legal reasoning, deterministic gates, output guardrails và human-in-the-loop conflict resolution. LCSP không dùng free-form autonomous agents hoặc unrestricted handoffs trong compliance-critical path.
 
@@ -465,7 +471,7 @@ Orchestrator gọi các agent/node như bounded subtasks, dùng RAG-grounded leg
 - Cần LLM Gateway làm boundary duy nhất cho LLM provider.
 - Cần output guardrails deterministic trước khi ghi result hoặc chuyển node.
 - Cần audit hooks cho mọi node start/success/failure.
-- Python worker trở thành agent runtime/control plane, còn NestJS API giữ RBAC, job creation và UI-facing state.
+- Async workers form the runtime/control plane for long-running workflow steps, while NestJS API giữ RBAC, job creation and UI-facing state.
 
 ### Validation Dependency
 
@@ -782,10 +788,9 @@ Permission grants, revocations, delegated actions and denied actions must be aud
 
 - `docs/specs/domain-model.md`
 - `docs/implementation-readiness-certification.md`
-- `docs/specs/domain-model.md`
-- `docs/specs/data-model-draft.md`
+- `docs/implementation/persistence-implementation.md`
 - `docs/specs/requirements-traceability-matrix.md`
-- `docs/qa/acceptance-criteria.md`
+- `docs/specs/acceptance-criteria-catalog.md`
 
 ## ADR-014 - AI Usage Flow Analysis as Mandatory Bridge Before Legal Rule Matching
 
@@ -936,13 +941,17 @@ Alternative sandbox technology, enterprise local scanner and stricter source-pri
 
 **Status:** Conditionally Accepted
 
+### Phase 5.2H Supersession Note
+
+Runtime/tooling portions of this ADR that describe a Python Worker or Python LangGraph Orchestrator as the controlled MVP runtime are `SUPERSEDED_BY_ADR_022`. The active controlled MVP implementation uses the TypeScript-first npm workspace runtime defined by ADR-022 and the active queue/backend implementation documents. This ADR remains authoritative only for the decision that long-running compliance work is queue-driven and not executed inside synchronous web request handling.
+
 ### Context
 
 Repository scan, evidence normalization, AIUsageFlow, legal retrieval, classification, gap analysis and document generation are long-running or failure-prone operations that should not run inside synchronous web request handling.
 
 ### Decision
 
-NestJS API enqueues long-running jobs. Python Worker consumes jobs and runs LangGraph Orchestrator. Orchestrator controls workflow state transitions, node routing, blocking logic, retry/fail-safe behavior, human-in-the-loop pause/resume and audit events.
+NestJS API command handlers persist domain rows, `AuditEvent` rows and `OutboxEvent` rows in one transaction. The Outbox Publisher publishes canonical RabbitMQ commands/events after commit. TypeScript worker consumers handle long-running jobs and write downstream domain state through the same transaction/outbox rule. Workflow state transitions, blocking logic, retry/fail-safe behavior and audit events are controlled through canonical state machines, queue contracts and persisted domain state.
 
 ### Consequences
 
@@ -957,7 +966,7 @@ Queue payloads must carry refs/hashes, not raw source or secrets. Critical audit
 
 ### MVP Behavior
 
-Repository Scan, AIUsageFlow, classification, gap analysis and document generation are async jobs driven by Orchestrator.
+Repository Scan, TechnicalProfile, AIUsageFlow, Reconciliation, Legal Matching, Classification, Gap Analysis and Document Generation are async jobs driven by RabbitMQ commands/events and the outbox pattern. No controlled MVP runtime depends on a Python worker or Python LangGraph orchestrator.
 
 ### Future/Post-MVP Behavior
 
@@ -974,6 +983,7 @@ Queue topology, dead-letter handling, concurrency scaling and worker sharding ca
 - `docs/implementation/queue-implementation.md`
 - `docs/implementation/backend-implementation.md`
 - `docs/specs/domain-state-machines.md`
+- `docs/architecture/adr/adr-022-typescript-first-npm-only-controlled-prototype.md`
 
 ## ADR-018 - VerifiedProfile Required Before Classification and Document Generation
 
@@ -1024,27 +1034,32 @@ Future governance may add additional review roles, but must not remove the requi
 
 **Status:** Conditionally Accepted
 
+### Phase 5.2H Supersession Note
+
+Runtime/tooling portions of this ADR that mention Python Worker ownership, a TypeScript analyzer sidecar, Python `ast` semantic analysis or NetworkX are `SUPERSEDED_BY_ADR_022`. The active controlled MVP scanner runtime is TypeScript-first: Node.js worker, npm workspaces, Tree-sitter, ts-morph and graphology. Python is syntax-only in the controlled MVP.
+
 ### Context
 
 LCSP needs repository-derived technical evidence for AI usage without executing customer code or leaking source to LLM. Provider/framework detection alone is insufficient for legal risk classification. Scanner output must be rich enough to support TechnicalEvidenceReport, TechnicalProfile, AIUsageFlow and A2-b validation.
 
 ### Decision
 
-Use a static-analysis-only scanner subsystem inside the Python Worker:
+Use a static-analysis-only scanner subsystem inside the TypeScript-first scanner worker:
 
-- Tree-sitter for generic multi-language parsing and fallback structural analysis.
-- Isolated Node.js TypeScript Analyzer Sidecar using TypeScript Compiler API for TypeScript/JavaScript semantic analysis.
-- Python `ast` plus custom import/module resolver for Python semantic analysis.
-- Versioned YAML/JSON scanner rulesets for provider/framework/API invocation, decision, review, domain and data signals.
-- NetworkX for scan-local in-memory evidence graph assembly only.
+- Tree-sitter parser adapters for syntax parsing.
+- `ts-morph` for TypeScript/JavaScript semantic analysis; raw TypeScript Compiler API use is hidden behind `ts-morph`.
+- Tree-sitter Python grammar for Python syntax-only extraction; Python semantic import/type resolution is not active MVP behavior.
+- Versioned JSON scanner rulesets for provider/framework/API invocation, decision, review, domain and data signals.
+- `graphology` for scan-local in-memory evidence graph assembly only.
 - PostgreSQL for normalized graph metadata, evidence refs, hashes, paths and structured findings only.
 
 The scanner must not execute customer code, run package installs/builds/tests, run Docker/shell/CI workflows, probe APIs, persist raw source/full AST bodies/full prompts/secrets or send raw source/full prompts/secrets to LLM.
 
 ### Consequences
 
-- TS/JS and Python receive first-class semantic analysis in MVP.
-- Other languages are limited to basic signal detection or coverage limitations.
+- TS/JS receive first-class semantic analysis in MVP.
+- Python receives syntax-only extraction and an explicit coverage limitation for deferred semantic analysis.
+- Other languages are limited to manifest/config/basic signal detection or coverage limitations.
 - Scanner evidence is traceable and reproducible via commit SHA, scanner version and ruleset version.
 - Scanner does not produce legal conclusions; it produces technical findings and graph paths for downstream analysis.
 
@@ -1054,27 +1069,24 @@ Raw source exists only in an isolated temporary workspace. The scanner persists 
 
 ### MVP Behavior
 
-Manager requests Repository Scan. Python Worker shallow-clones the pinned commit, runs static analyzers, generates TechnicalFindings and TechnicalEvidenceReport, persists metadata only, redacts secrets and cleans up the workspace.
+Manager requests Repository Scan. The TypeScript scanner worker shallow-clones the pinned commit into a restricted temporary workspace, runs static analyzers, generates TechnicalFindings and TechnicalEvidenceReport, persists metadata only, redacts secrets and cleans up the workspace before publishing `event.scan.completed.v1`.
 
 ### Future/Post-MVP Behavior
 
 CodeQL may be evaluated later as an optional analysis input, but it is not an MVP runtime dependency. Additional language analyzers may be added if A2-b or customer validation shows need.
 
-### Open Questions
+### Resolved Implementation Decisions
 
-- Exact scanner sandbox technology.
-- TypeScript analyzer packaging as process or sidecar.
-- Final physical schema for graph metadata.
+- Scanner sandbox technology is the restricted temporary local filesystem workspace described in `docs/implementation/scanner-implementation.md`.
+- TypeScript/JavaScript semantic analysis runs in-process through `ts-morph`.
+- Physical graph metadata schema is defined in `docs/implementation/persistence-implementation.md`.
 
 ### Traceability References
 
 - `docs/specs/scanner-spec.md`
-- `docs/specs/scanner-spec.md`
-- `docs/specs/scanner-spec.md`
-- `docs/implementation/scanner-implementation.md`
-- `docs/specs/scanner-spec.md`
 - `docs/implementation/scanner-implementation.md`
 - `docs/code-map/module-ownership-map.md`
+- `docs/architecture/adr/adr-022-typescript-first-npm-only-controlled-prototype.md`
 
 ## ADR-020 - Claim-Level Evidence References for AIUsageFlow
 
@@ -1179,10 +1191,8 @@ Future enterprise modes may add richer analyzers, optional runtime traces or Cod
 ### Traceability References
 
 - `docs/specs/scanner-spec.md`
-- `docs/specs/scanner-spec.md`
 - `docs/specs/ai-usage-flow-domain-spec.md`
-- `docs/qa/test-strategy.md`
-- `docs/qa/acceptance-criteria.md`
+- `docs/specs/acceptance-criteria-catalog.md`
 
 ## Deferred Architecture Decisions
 
@@ -1239,7 +1249,7 @@ ADR phải được revisit khi:
 - A2 validation changes legal rule schema, citation contract or rule_id trace.
 - A3 validation rejects or restricts attestation unlock path.
 - PRD changes any non-negotiable product constraint.
-- Architecture Exploration changes preferred Option A direction.
+- Active architecture changes preferred controlled MVP direction.
 - Security review tightens source-code handling rules.
 - MVP scope changes GitHub App/Local-CI/manual evidence priorities.
 
@@ -1251,11 +1261,11 @@ Final architecture document có thể được tạo sau khi:
 - A1-A3 có validation result hoặc explicit unresolved caveat.
 - ADR status được review.
 - Deferred Architecture Decisions được giữ deferred hoặc có owner.
-- Open architecture questions từ `architecture-exploration.md` được phân loại blocker/non-blocker.
+- Open architecture questions từ `architecture.md` and accepted ADRs are classified blocker/non-blocker.
 
 Final architecture document phải dùng cùng lúc:
 
-- `docs/architecture/architecture-exploration.md`
+- `docs/architecture/architecture.md`
 - `docs/architecture/architecture-decision-records.md`
 - `docs/product/prd.md`
 - `docs/product/validation-plan.md`
@@ -1270,4 +1280,4 @@ Chưa được tạo implementation backlog nếu A1-A3 chưa có acceptance thr
 
 Nếu validation A1-A3 làm thay đổi PRD, các ADR liên quan phải được revisit.
 
-Architect Agent phải dùng `architecture-exploration.md`, `architecture-decision-records.md`, `prd.md` và `validation-plan.md` khi tạo final architecture document.
+Architect Agent phải dùng active architecture, accepted ADRs, PRD and validation plan when creating final architecture updates.

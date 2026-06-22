@@ -34,15 +34,13 @@ Worker consumes `command.reconciliation.requested.v1` after `event.ai-usage-flow
 
 ```json
 {
-  "eventId": "evt_001",
-  "correlationId": "corr_assess_001",
-  "assessmentId": "assess_001",
+  "messageId": "018f0000-0000-7000-8000-000000000401",
+  "correlationId": "018f0000-0000-7000-8000-000000000101",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
   "inputType": "ReconciliationRequestedPayload",
-  "repositorySnapshotId": "snap_001",
-  "technicalEvidenceReportId": "ter_001",
-  "technicalProfileId": "tp_001",
-  "aiUsageFlowId": "auf_001",
-  "verifiedProfileId": "vp_001"
+  "wizardProfileId": "018f0000-0000-7000-8000-000000000011",
+  "technicalProfileId": "018f0000-0000-7000-8000-000000000221",
+  "aiUsageFlowId": "018f0000-0000-7000-8000-000000000231"
 }
 ```
 
@@ -50,10 +48,18 @@ Worker consumes `command.reconciliation.requested.v1` after `event.ai-usage-flow
 
 ```json
 {
-  "assessmentId": "assess_001",
+  "assessmentId": "018f0000-0000-7000-8000-000000000001",
   "outputType": "VerifiedProfile or ReconciliationConflict",
-  "status": "CREATED",
-  "evidenceRefs": ["ev_001", "ev_002"],
+  "verifiedProfile": {
+    "verifiedProfileId": "018f0000-0000-7000-8000-000000000411",
+    "profileVersion": 1,
+    "status": "VERIFIED",
+    "evidenceRefs": [
+      "ev:018f0000-0000-7000-8000-000000000201:CALL:1",
+      "ev:018f0000-0000-7000-8000-000000000201:DECISION_POINT:3"
+    ]
+  },
+  "conflict": null,
   "nextEvent": "event.reconciliation.verified-profile-ready.v1 or event.reconciliation.conflict-detected.v1"
 }
 ```
@@ -103,7 +109,7 @@ Conflict task is created; scanner evidence remains immutable.
 
 | Operation | Models |
 |---|---|
-| Read | `Assessment`, predecessor object, `AuditEvent` context |
+| Read | `Assessment`, `WizardProfile`, `TechnicalProfile`, `AIUsageFlow`, `AIUsageFlowClaim`, `EvidenceReference` |
 | Create | `VerifiedProfile or ReconciliationConflict`, `AuditEvent`, `OutboxEvent` |
 | Update | `Assessment.state`, predecessor status if applicable |
 | Deny write | Raw source, full prompt, secrets, full AST bodies |
@@ -154,7 +160,7 @@ Implement `Reconciliation` as a deterministic object transformer. It receives on
 # Local Simulation
 
 1. Seed predecessor records for `AIUsageFlowReadyPayload`.
-2. Insert or publish `command.reconciliation.requested.v1` with correlation id `corr_assess_001`.
+2. Insert or publish `command.reconciliation.requested.v1` with correlation id `018f0000-0000-7000-8000-000000000101`.
 3. Run `ReconciliationWorker.handleReconciliationRequested()` locally against fixture `F-CONFLICT-01 Wizard says no decision but source has approve/reject`.
 4. Verify `VerifiedProfile` or `ReconciliationConflict` row exists.
 5. Verify `AuditEvent` and `OutboxEvent` exist.
