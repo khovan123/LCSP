@@ -137,7 +137,7 @@ The following implementation decisions are now integrated into active source-of-
 
 ## Certification Result
 
-READY_FOR_IMPLEMENTATION
+READY_FOR_CONTROLLED_MVP_PROTOTYPE_IMPLEMENTATION_NOT_PRODUCTION
 
 Implementation can start with Wave 1 foundations. The project is ready for controlled MVP prototype implementation, not production release.
 

@@ -214,9 +214,10 @@ src/loan.ts
 {
   "evidenceRefId": "018f0000-0000-7000-8000-000000000301",
   "evidenceRef": "ev:018f0000-0000-7000-8000-000000000201:CALL:1",
+  "sourceType": "STATIC_SCAN",
   "sourceFileId": "018f0000-0000-7000-8000-000000000201",
   "relativePath": "src/loan.ts",
-  "location": { "filePath": "src/loan.ts", "startLine": 1, "endLine": 1 },
+  "location": { "startLine": 1, "endLine": 1 },
   "evidenceHash": "sha256:normalized-metadata-only",
   "redactionStatus": "NO_SOURCE_STORED"
 }

@@ -629,10 +629,12 @@ Describe local setup expectations for future LCSP implementation work without pr
 
 Covers prerequisites, startup order, environment categories, local OAuth/GitHub strategy, scanner fixtures, legal corpus initialization, migration order, queue/object storage inspection, test accounts and troubleshooting.
 
-## Dependencies / Source References
+## Active References
 
-- [Configuration, Secrets and Environments](configuration-secrets-environments.md)
-- [Repository and Module Layout](repository-and-module-layout.md)
+- `docs/implementation/persistence-implementation.md`
+- `docs/implementation/queue-implementation.md`
+- `docs/implementation/llm-gateway-implementation.md`
+- `docs/code-map/module-ownership-map.md`
 
 ## Implementation Boundaries
 

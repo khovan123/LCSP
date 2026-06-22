@@ -11,7 +11,8 @@ This pass inspected the current repository active documentation and remediated v
 | Item | Value |
 |---|---|
 | Branch | `main` |
-| Commit SHA | `b41987bf9b78b2a2e1cc253c5ef752f474c6f71c` |
+| Baseline Commit SHA | `b41987bf9b78b2a2e1cc253c5ef752f474c6f71c` |
+| Follow-up remediation reviewed on | `4b2ad7f53e65344131d3cc13007a19b2b50fbd2a` |
 | Active layers | `product`, `specs`, `architecture`, `developer-execution-blueprints`, `implementation`, `code-map` |
 | Archive role | Historical decisions and delete candidates only; not implementation authority |
 | Governance source | `docs/documentation-governance.md` |
@@ -124,20 +125,28 @@ docs/reviews/member-feedback/phase-5-2f-feedback-register.md
 | Gap Analysis chain | PASS: active docs contain command/event/queue/schema/state/runtime/code-map coverage. |
 | Scanner cleanup gate | PASS: scanner spec, implementation and data journey state cleanup verification before completion event. |
 
-## Remaining Issues
+## Remaining Issues After Phase 5.2F
 
 | Issue | Severity | Disposition |
 |---|---|---|
 | `/mnt/data/anh.txt`, `/mnt/data/thuy.txt`, `/mnt/data/tu.txt` unavailable in sandbox. | Medium | Re-run member-specific extraction if files are supplied. |
+| Gap Analysis was added to runtime docs but was still missing as a first-class architecture component. | P0 | Remediated in Phase 5.2G. |
+| Domain state machine added Gap Analysis states but canonical Prisma `AssessmentState` omitted them. | P0 | Remediated in Phase 5.2G. |
+| TechnicalProfile guard did not require completed scan plus cleanup verification. | P0 | Remediated in Phase 5.2G. |
+| End-to-end walkthrough used non-canonical scanner finding names and wrong AUF rule IDs. | P0 | Remediated in Phase 5.2G. |
+| EvidenceRef and AIUsageFlowClaim evidence persistence remained inconsistent. | P0 | Remediated in Phase 5.2G. |
+| Repository-wide active reference integrity was not fully verified. | P0 | Remediated further in Phase 5.2G for active docs. |
+| Scanner and AIUsageFlow confidence definitions needed deterministic component/cap details. | P1 | Remediated in Phase 5.2G. |
+| `TechnicalEvidenceReport -> TechnicalProfile` lacked an active runtime blueprint. | P1 | Remediated in Phase 5.2G. |
 | `OrganizationMembership` grep matched legacy `OrganizationMember` pattern as substring. | Low | Not a defect; `OrganizationMembership` is the active Prisma model. |
 
 ## Final Decision
 
 ```text
-PHASE_5_2F_FEEDBACK_TRIAGE_COMPLETED
-CANONICAL_DECISIONS_RESOLVED
-ACTIVE_DOCUMENTATION_REMEDIATED
-REFERENCE_INTEGRITY_REPAIRED
-GAP_ANALYSIS_RUNTIME_CHAIN_LOCKED
+PHASE_5_2F_BASELINE_FINDINGS_TRIAGED
+MEMBER_SPECIFIC_FEEDBACK_EXTRACTION_INCOMPLETE
+DOCUMENTATION_REMEDIATION_PARTIALLY_COMPLETED
+MAJOR_RUNTIME_CHAIN_CORRECTIONS_APPLIED
+P0_AND_P1_CROSS_DOCUMENT_INCONSISTENCIES_REMAINED_AFTER_5_2F
 NO_APPLICATION_CODE_CREATED
 ```

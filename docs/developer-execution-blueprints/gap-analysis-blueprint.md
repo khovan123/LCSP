@@ -12,14 +12,14 @@ Worker consumes `command.gap-analysis.requested.v1` after `event.classification.
 
 ```json
 {
-  "eventId": "evt_gap_001",
-  "correlationId": "corr_assess_001",
-  "assessmentId": "assess_001",
+  "eventId": "018f2000-0000-7000-8000-000000000101",
+  "correlationId": "018f2000-0000-7000-8000-000000000102",
+  "assessmentId": "018f2000-0000-7000-8000-000000000201",
   "inputType": "GapAnalysisRequestedPayload",
-  "riskClassificationId": "risk_001",
-  "verifiedProfileId": "vp_001",
-  "legalRuleMatchIds": ["lrm_001"],
-  "legalCorpusVersionId": "corpus_001"
+  "riskClassificationId": "018f2000-0000-7000-8000-000000000301",
+  "verifiedProfileId": "018f2000-0000-7000-8000-000000000401",
+  "legalRuleMatchIds": ["018f2000-0000-7000-8000-000000000501"],
+  "legalCorpusVersionId": "018f2000-0000-7000-8000-000000000601"
 }
 ```
 
@@ -27,18 +27,18 @@ Worker consumes `command.gap-analysis.requested.v1` after `event.classification.
 
 ```json
 {
-  "assessmentId": "assess_001",
+  "assessmentId": "018f2000-0000-7000-8000-000000000201",
   "outputType": "GapAnalysis",
-  "gapAnalysisId": "gap_001",
+  "gapAnalysisId": "018f2000-0000-7000-8000-000000000701",
   "status": "COMPLETED",
   "gapItems": [
     {
-      "gapId": "gap_item_001",
+      "gapId": "018f2000-0000-7000-8000-000000000801",
       "category": "MISSING_EVIDENCE",
       "priority": "HIGH",
       "requiredAction": "Provide human-review process evidence",
-      "evidenceRefs": ["ev_001"],
-      "legalRuleMatchRefs": ["lrm_001"]
+      "evidenceRefs": ["018f2000-0000-7000-8000-000000000901"],
+      "legalRuleMatchRefs": ["018f2000-0000-7000-8000-000000000501"]
     }
   ],
   "nextEvent": "event.gap-analysis.completed.v1"
@@ -89,6 +89,38 @@ DocumentGeneration(input: RiskClassification + GapAnalysis + citations)
 | VerifiedProfile says human review unclear | Evidence gap rule | Gap item `HUMAN_REVIEW_EVIDENCE_REQUIRED`. |
 | Material AIUsageFlow claim lacks evidence refs | Evidence traceability rule | Gap item `MATERIAL_CLAIM_EVIDENCE_MISSING`. |
 
+# Deterministic Gap Rule Catalog
+
+| Rule ID | Condition | Priority Formula Input | Output |
+|---|---|---|---|
+| GAP-001 | `RiskClassification.status != COMPLETED` | terminal precondition | Block gap analysis and document generation. |
+| GAP-002 | Any required `LegalRuleMatch` has partial citation coverage | materiality high + citation incomplete | Gap item `MISSING_CITATION_METADATA`. |
+| GAP-003 | VerifiedProfile human review is `UNCLEAR` for an automated decision path | materiality high + evidence missing | Gap item `HUMAN_REVIEW_EVIDENCE_REQUIRED`. |
+| GAP-004 | Material AIUsageFlow claim has no evidence refs | materiality high + trace missing | Gap item `MATERIAL_CLAIM_EVIDENCE_MISSING`. |
+| GAP-005 | Classification has blocking reasons | materiality from blocking reason | Preserve blocking reason and prevent document command. |
+
+Priority is deterministic:
+
+```text
+score =
+  materialityWeight
+  + citationGapWeight
+  + evidenceGapWeight
+  + automationWeight
+
+priority =
+  HIGH if score >= 0.75
+  MEDIUM if score >= 0.40
+  LOW otherwise
+```
+
+Weights:
+
+- `materialityWeight`: `0.40` for classification-required fact, `0.20` for supporting fact.
+- `citationGapWeight`: `0.25` for missing/partial citation, `0.00` for complete citation.
+- `evidenceGapWeight`: `0.25` for missing material evidence ref, `0.10` for weak/partial evidence, `0.00` otherwise.
+- `automationWeight`: `0.10` when automation level is fully or semi-automated.
+
 # Queue Choreography
 
 | Producer | Exchange | Routing Key | Consumer |
@@ -120,20 +152,24 @@ DocumentGeneration(input: RiskClassification + GapAnalysis + citations)
 ```mermaid
 sequenceDiagram
   participant Class as ClassificationWorker
+  participant Outbox as OutboxPublisher
   participant MQ as RabbitMQ
   participant Gap as GapAnalysisWorker.handleGapAnalysisRequested()
   participant DB as PostgreSQL
   participant Audit as Audit Log
   participant Doc as Document Trigger
 
-  Class->>MQ: publish event.classification.completed.v1
-  MQ->>MQ: orchestration projection writes command.gap-analysis.requested.v1
+  Class->>DB: persist RiskClassification + OutboxEvent
+  Outbox->>MQ: publish event.classification.completed.v1
+  MQ->>DB: orchestration projection creates OutboxEvent command.gap-analysis.requested.v1
+  Outbox->>MQ: publish command.gap-analysis.requested.v1
   MQ->>Gap: consume command.gap-analysis.requested.v1
   Gap->>DB: read RiskClassification + LegalRuleMatch[]
   Gap->>DB: persist GapAnalysis + outbox
   Gap->>Audit: write audit event
-  Gap->>MQ: publish event.gap-analysis.completed.v1
-  MQ->>Doc: create command.document.requested.v1
+  Outbox->>MQ: publish event.gap-analysis.completed.v1
+  MQ->>DB: document trigger creates OutboxEvent command.document.requested.v1
+  Outbox->>MQ: publish command.document.requested.v1
 ```
 
 # Developer Mental Model

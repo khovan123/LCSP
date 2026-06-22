@@ -179,11 +179,11 @@ Architecture phải support **Manager-owned assessment** và **optional Develope
 
 ### Traceability References
 
-- `docs/specs/implementation-contract.md`
-- `docs/workflows/phase-0-checkpoint-rerun-report.md`
-- `docs/implementation/implementation-scope-and-invariants.md`
-- `docs/specs/reconciliation-policy.md`
-- `docs/design/traceability-matrix.md`
+- `docs/specs/domain-model.md`
+- `docs/archive/decisions/workflow-reports/phase-0-checkpoint-rerun-report.md`
+- `docs/implementation-readiness-certification.md`
+- `docs/specs/assessment-lifecycle-spec.md`
+- `docs/specs/requirements-traceability-matrix.md`
 
 ## ADR-004 - Evidence-first classification gate
 
@@ -371,11 +371,11 @@ Evidence Confidence Score, AI Intervention Score and optional Conflict Score are
 
 ### Traceability References
 
-- `docs/specs/implementation-contract.md`
-- `docs/specs/reconciliation-policy.md`
-- `docs/specs/scoring-model.md`
-- `docs/specs/state-machine.md`
-- `docs/implementation/implementation-scope-and-invariants.md`
+- `docs/specs/domain-model.md`
+- `docs/specs/assessment-lifecycle-spec.md`
+- `docs/specs/legal-classification-spec.md`
+- `docs/specs/domain-state-machines.md`
+- `docs/implementation-readiness-certification.md`
 
 ## ADR-008 - Controlled human technical attestation
 
@@ -571,12 +571,12 @@ Local/CI scanner reports, manual technical evidence JSON, CLI evidence submissio
 
 ### Traceability References
 
-- `docs/specs/implementation-contract.md`
-- `docs/implementation/implementation-scope-and-invariants.md`
-- `docs/implementation/system-runtime-and-component-contracts.md`
-- `docs/specs/evidence-report-contract.md`
-- `docs/design/use-case-specification.md`
-- `docs/design/traceability-matrix.md`
+- `docs/specs/domain-model.md`
+- `docs/implementation-readiness-certification.md`
+- `docs/implementation/backend-implementation.md`
+- `docs/specs/scanner-spec.md`
+- `docs/specs/use-cases.md`
+- `docs/specs/requirements-traceability-matrix.md`
 
 ## ADR-011 - OAuth/OIDC Login as an Active MVP Authentication Capability
 
@@ -636,12 +636,12 @@ Enterprise SSO/SAML/directory federation may be added later through explicit arc
 
 ### Traceability References
 
-- `docs/specs/implementation-contract.md`
-- `docs/implementation/implementation-scope-and-invariants.md`
-- `docs/implementation/system-runtime-and-component-contracts.md`
-- `docs/design/use-case-specification.md`
-- `docs/design/functional-requirements.md`
-- `docs/security/threat-model.md`
+- `docs/specs/domain-model.md`
+- `docs/implementation-readiness-certification.md`
+- `docs/implementation/backend-implementation.md`
+- `docs/specs/use-cases.md`
+- `docs/specs/functional-requirements.md`
+- `docs/specs/non-functional-requirements.md`
 
 ## ADR-012 - Manager as the MVP Super-Role and Final Conflict Resolver
 
@@ -704,12 +704,12 @@ Manager may delegate selected permissions such as `CONNECT_REPOSITORY`, `RUN_REP
 
 ### Traceability References
 
-- `docs/specs/implementation-contract.md`
-- `docs/workflows/phase-0-checkpoint-rerun-report.md`
-- `docs/implementation/implementation-scope-and-invariants.md`
-- `docs/specs/reconciliation-policy.md`
-- `docs/specs/state-machine.md`
-- `docs/design/traceability-matrix.md`
+- `docs/specs/domain-model.md`
+- `docs/archive/decisions/workflow-reports/phase-0-checkpoint-rerun-report.md`
+- `docs/implementation-readiness-certification.md`
+- `docs/specs/assessment-lifecycle-spec.md`
+- `docs/specs/domain-state-machines.md`
+- `docs/specs/requirements-traceability-matrix.md`
 
 ## ADR-013 - Post-MVP Scoped Developer Permission Delegation
 
@@ -780,11 +780,11 @@ Permission grants, revocations, delegated actions and denied actions must be aud
 
 ### Traceability References
 
-- `docs/specs/implementation-contract.md`
-- `docs/implementation/implementation-scope-and-invariants.md`
+- `docs/specs/domain-model.md`
+- `docs/implementation-readiness-certification.md`
 - `docs/specs/domain-model.md`
 - `docs/specs/data-model-draft.md`
-- `docs/design/traceability-matrix.md`
+- `docs/specs/requirements-traceability-matrix.md`
 - `docs/qa/acceptance-criteria.md`
 
 ## ADR-014 - AI Usage Flow Analysis as Mandatory Bridge Before Legal Rule Matching
@@ -839,11 +839,11 @@ Future scanner improvements may add richer call graph, data flow, dynamic prompt
 
 ### Traceability References
 
-- `docs/specs/ai-usage-flow-analysis-spec.md`
-- `docs/specs/scanner-signal-taxonomy.md`
-- `docs/specs/ai-usage-rule-mapping-spec.md`
-- `docs/implementation/implementation-scope-and-invariants.md`
-- `docs/implementation/system-runtime-and-component-contracts.md`
+- `docs/specs/ai-usage-flow-domain-spec.md`
+- `docs/specs/scanner-spec.md`
+- `docs/specs/assessment-lifecycle-spec.md`
+- `docs/implementation-readiness-certification.md`
+- `docs/implementation/backend-implementation.md`
 
 ## ADR-015 - LLM Gateway as the Only External Model Invocation Boundary
 
@@ -885,9 +885,9 @@ Provider failover, model policy, enterprise tenant isolation and provider-specif
 ### Traceability References
 
 - `docs/architecture/multi-agent-system-architecture.md`
-- `docs/implementation/system-runtime-and-component-contracts.md`
-- `docs/security/source-code-privacy-policy.md`
-- `docs/security/threat-model.md`
+- `docs/implementation/backend-implementation.md`
+- `docs/implementation/scanner-implementation.md`
+- `docs/specs/non-functional-requirements.md`
 
 ## ADR-016 - Temporary Isolated Scanner Workspace and No Raw Source Retention
 
@@ -927,10 +927,10 @@ Alternative sandbox technology, enterprise local scanner and stricter source-pri
 
 ### Traceability References
 
-- `docs/security/source-code-privacy-policy.md`
-- `docs/specs/evidence-report-contract.md`
-- `docs/specs/scanner-signal-taxonomy.md`
-- `docs/implementation/system-runtime-and-component-contracts.md`
+- `docs/implementation/scanner-implementation.md`
+- `docs/specs/scanner-spec.md`
+- `docs/specs/scanner-spec.md`
+- `docs/implementation/backend-implementation.md`
 
 ## ADR-017 - Queue-Based Orchestrator for Long-Running Compliance Workflows
 
@@ -963,18 +963,17 @@ Repository Scan, AIUsageFlow, classification, gap analysis and document generati
 
 Queue topology, dead-letter handling, concurrency scaling and worker sharding can be refined after architecture review.
 
-### Open Questions
+### Resolved Implementation Decisions
 
-- Final queue technology and deployment topology.
-- Orchestrator checkpoint/persistence strategy.
-- Retry/idempotency policy per job type.
+- Queue topology, outbox, retry, DLQ and checkpoint persistence are resolved in `docs/implementation/queue-implementation.md` for the controlled MVP.
+- Deployment topology remains a release-environment concern and is not required for controlled MVP implementation.
 
 ### Traceability References
 
 - `docs/architecture/multi-agent-system-architecture.md`
-- `docs/implementation/system-runtime-and-component-contracts.md`
-- `docs/implementation/repository-and-module-layout.md`
-- `docs/specs/state-machine.md`
+- `docs/implementation/queue-implementation.md`
+- `docs/implementation/backend-implementation.md`
+- `docs/specs/domain-state-machines.md`
 
 ## ADR-018 - VerifiedProfile Required Before Classification and Document Generation
 
@@ -1015,11 +1014,11 @@ Future governance may add additional review roles, but must not remove the requi
 
 ### Traceability References
 
-- `docs/specs/implementation-contract.md`
-- `docs/specs/reconciliation-policy.md`
-- `docs/specs/legal-rule-citation-contract.md`
-- `docs/implementation/implementation-scope-and-invariants.md`
-- `docs/implementation/system-runtime-and-component-contracts.md`
+- `docs/specs/domain-model.md`
+- `docs/specs/assessment-lifecycle-spec.md`
+- `docs/specs/legal-matching-domain-spec.md`
+- `docs/implementation-readiness-certification.md`
+- `docs/implementation/backend-implementation.md`
 
 ## ADR-019 - Static Analysis Scanner with Language-Specific Semantic Analyzers
 
@@ -1069,12 +1068,13 @@ CodeQL may be evaluated later as an optional analysis input, but it is not an MV
 
 ### Traceability References
 
-- `docs/specs/static-analysis-scanner-contract.md`
-- `docs/specs/scanner-signal-taxonomy.md`
-- `docs/specs/evidence-report-contract.md`
-- `docs/security/source-code-privacy-policy.md`
-- `docs/implementation/system-runtime-and-component-contracts.md`
-- `docs/implementation/repository-and-module-layout.md`
+- `docs/specs/scanner-spec.md`
+- `docs/specs/scanner-spec.md`
+- `docs/specs/scanner-spec.md`
+- `docs/implementation/scanner-implementation.md`
+- `docs/specs/scanner-spec.md`
+- `docs/implementation/scanner-implementation.md`
+- `docs/code-map/module-ownership-map.md`
 
 ## ADR-020 - Claim-Level Evidence References for AIUsageFlow
 
@@ -1124,11 +1124,11 @@ Future runtime traces or enterprise evidence paths may add additional evidence s
 
 ### Traceability References
 
-- `docs/specs/ai-usage-flow-analysis-spec.md`
-- `docs/specs/ai-usage-rule-mapping-spec.md`
-- `docs/specs/reconciliation-policy.md`
-- `docs/specs/static-analysis-scanner-contract.md`
-- `docs/design/traceability-matrix.md`
+- `docs/specs/ai-usage-flow-domain-spec.md`
+- `docs/specs/assessment-lifecycle-spec.md`
+- `docs/specs/assessment-lifecycle-spec.md`
+- `docs/specs/scanner-spec.md`
+- `docs/specs/requirements-traceability-matrix.md`
 
 ## ADR-021 - Controlled Multi-Level Data-Flow Analysis Instead of Whole-Repository Global Analysis
 
@@ -1178,9 +1178,9 @@ Future enterprise modes may add richer analyzers, optional runtime traces or Cod
 
 ### Traceability References
 
-- `docs/specs/static-analysis-scanner-contract.md`
-- `docs/specs/scanner-signal-taxonomy.md`
-- `docs/specs/ai-usage-flow-analysis-spec.md`
+- `docs/specs/scanner-spec.md`
+- `docs/specs/scanner-spec.md`
+- `docs/specs/ai-usage-flow-domain-spec.md`
 - `docs/qa/test-strategy.md`
 - `docs/qa/acceptance-criteria.md`
 

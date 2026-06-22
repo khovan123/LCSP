@@ -31,6 +31,7 @@ LCSP is a modular, evidence-first compliance platform. The system is intentional
 | Reconciliation | Compares Manager declarations and technical evidence; pauses for Manager resolution when needed. | Backend API, Persistence. |
 | Legal Matching / RAG | Retrieves citation-backed legal rules for verified claims. | Legal corpus, Classification. |
 | Classification | Classifies only from VerifiedProfile plus citation-backed legal matches. | Persistence, Gap Analysis. |
+| Gap Analysis Worker | Converts completed RiskClassification plus citation-backed legal matches into structured compliance gaps, evidence gaps, citation gaps and remediation priorities before document generation. Blocks document generation when classification/legal basis is unusable. | Queue boundary, Persistence, Document Generation. |
 | Document Generation | Generates output documents only after classification, gap analysis, and output guardrails. | Object storage, Persistence. |
 | Audit | Records state-changing and compliance-critical actions without raw source/secrets/full prompts. | All components. |
 

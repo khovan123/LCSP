@@ -122,18 +122,20 @@ Loan score feeds approve/reject, producing automated decision usage claims.
 ```mermaid
 sequenceDiagram
   participant Prev as Previous Step
+  participant Outbox as OutboxPublisher
   participant MQ as RabbitMQ
   participant Worker as AIUsageFlowWorker.handleAIUsageFlowRequested()
   participant DB as PostgreSQL
   participant Audit as Audit Log
   participant Next as Next Worker
 
-  Prev->>MQ: publish command.ai-usage-flow.requested.v1
+  Prev->>DB: create OutboxEvent command.ai-usage-flow.requested.v1
+  Outbox->>MQ: publish command.ai-usage-flow.requested.v1
   MQ->>Worker: consume command.ai-usage-flow.requested.v1
   Worker->>DB: read predecessor + assessment state
   Worker->>DB: persist AIUsageFlow + outbox
   Worker->>Audit: write audit event
-  Worker->>MQ: publish event.ai-usage-flow.completed.v1 or event.ai-usage-flow.failed.v1
+  Outbox->>MQ: publish event.ai-usage-flow.completed.v1 or event.ai-usage-flow.failed.v1
   MQ->>Next: deliver next event
 ```
 

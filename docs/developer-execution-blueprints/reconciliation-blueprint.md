@@ -122,18 +122,20 @@ Conflict task is created; scanner evidence remains immutable.
 ```mermaid
 sequenceDiagram
   participant Prev as Previous Step
+  participant Outbox as OutboxPublisher
   participant MQ as RabbitMQ
   participant Worker as ReconciliationWorker.handleReconciliationRequested()
   participant DB as PostgreSQL
   participant Audit as Audit Log
   participant Next as Next Worker
 
-  Prev->>MQ: publish command.reconciliation.requested.v1
+  Prev->>DB: create OutboxEvent command.reconciliation.requested.v1
+  Outbox->>MQ: publish command.reconciliation.requested.v1
   MQ->>Worker: consume command.reconciliation.requested.v1
   Worker->>DB: read predecessor + assessment state
   Worker->>DB: persist VerifiedProfile or ReconciliationConflict + outbox
   Worker->>Audit: write audit event
-  Worker->>MQ: publish event.reconciliation.verified-profile-ready.v1 or event.reconciliation.conflict-detected.v1
+  Outbox->>MQ: publish event.reconciliation.verified-profile-ready.v1 or event.reconciliation.conflict-detected.v1
   MQ->>Next: deliver next event
 ```
 

@@ -6,8 +6,8 @@ AUTHORITATIVE
 
 ## Merged From
 
-- Document output rules from `docs/specs/evidence-report-contract.md`
-- Citation requirements from `docs/specs/legal-rule-citation-contract.md`
+- Document output rules from `docs/specs/scanner-spec.md`
+- Citation requirements from `docs/specs/legal-matching-domain-spec.md`
 
 ## Purpose
 

@@ -138,10 +138,12 @@ Define configuration groups, secret handling and environment expectations for LC
 
 Applies to local, development, staging and production environments. This document does not provide real secret values or runnable configuration.
 
-## Dependencies / Source References
+## Active References
 
-- [Security and Privacy Implementation](security-privacy-implementation.md)
-- [Infrastructure Deployment Implementation](infrastructure-deployment-implementation.md)
+- `docs/implementation/backend-implementation.md`
+- `docs/implementation/queue-implementation.md`
+- `docs/implementation/llm-gateway-implementation.md`
+- `docs/implementation/scanner-implementation.md`
 
 ## Implementation Boundaries
 
@@ -221,10 +223,10 @@ Define expected detection, automatic response, operator action, user-visible res
 
 This is an operations design runbook, not executable automation.
 
-## Dependencies / Source References
+## Active References
 
-- [Audit and Observability Implementation](audit-observability-implementation.md)
-- [Queue Jobs, Retry and Idempotency](queue-jobs-retry-idempotency.md)
+- `docs/implementation/backend-implementation.md`
+- `docs/implementation/queue-implementation.md`
 
 ## Failure Matrix
 
@@ -290,6 +292,8 @@ enum AssessmentState {
   LEGAL_MATCHING_READY
   CLASSIFICATION_READY
   CLASSIFICATION_BLOCKED
+  GAP_ANALYSIS_READY
+  GAP_ANALYSIS_BLOCKED
   DOCUMENT_GENERATED
   DOCUMENT_BLOCKED
 }
@@ -432,6 +436,7 @@ model RepositoryScanJob {
   requestedBy           String @db.Uuid
   startedAt             DateTime?
   completedAt           DateTime?
+  cleanupVerifiedAt     DateTime?
   failureCode           String?
   failureMessage        String?
   createdAt             DateTime @default(now())
@@ -502,6 +507,7 @@ model CodeGraphEdge {
 
 model EvidenceReference {
   id            String @id @db.Uuid
+  evidenceRef   String @unique
   assessmentId  String @db.Uuid
   scanJobId     String? @db.Uuid
   sourceFileId  String? @db.Uuid
@@ -516,10 +522,15 @@ model EvidenceReference {
   createdAt     DateTime @default(now())
   sourceFile    SourceFile? @relation(fields: [sourceFileId], references: [id])
   findings      TechnicalFinding[]
-  claims        AIUsageFlowClaim[]
+  claimLinks    AIUsageFlowClaimEvidenceReference[]
   @@unique([evidenceHash])
   @@index([assessmentId, sourceType])
 }
+
+// EvidenceReference maps the canonical EvidenceRef DTO:
+// evidenceRefId -> id, evidenceRef -> evidenceRef, relativePath -> filePath,
+// location.startLine/endLine -> lineStart/lineEnd, location.symbolRef -> symbolRef.
+// Top-level filePath/symbolRef/lineStart/lineEnd DTO aliases are not active.
 
 model TechnicalFinding {
   id            String @id @db.Uuid
@@ -584,6 +595,13 @@ model TechnicalProfile {
   @@unique([technicalEvidenceReportId])
 }
 
+// TechnicalProfile creation guard:
+// - TechnicalEvidenceReport.status must be QUALITY_VALID.
+// - Linked RepositoryScanJob.status must be COMPLETED.
+// - RepositoryScanJob.cleanupVerifiedAt must be non-null.
+// This prevents downstream profile creation from a report staged before a
+// workspace cleanup failure.
+
 model AIUsageFlow {
   id                 String @id @db.Uuid
   assessmentId       String @db.Uuid
@@ -608,12 +626,23 @@ model AIUsageFlowClaim {
   claimField      String
   claimValue      Json
   confidence      Float
-  evidenceRefId   String @db.Uuid
   confidenceBreakdown Json
   createdAt       DateTime @default(now())
   aiUsageFlow     AIUsageFlow @relation(fields: [aiUsageFlowId], references: [id])
-  evidenceRef     EvidenceReference @relation(fields: [evidenceRefId], references: [id])
+  evidenceRefs    AIUsageFlowClaimEvidenceReference[]
   @@index([aiUsageFlowId, claimField])
+}
+
+model AIUsageFlowClaimEvidenceReference {
+  id            String @id @db.Uuid
+  claimId       String @db.Uuid
+  evidenceRefId String @db.Uuid
+  role          String?
+  sequence      Int?
+  createdAt     DateTime @default(now())
+  claim         AIUsageFlowClaim @relation(fields: [claimId], references: [id])
+  evidenceRef   EvidenceReference @relation(fields: [evidenceRefId], references: [id])
+  @@unique([claimId, evidenceRefId])
   @@index([evidenceRefId])
 }
 
@@ -792,7 +821,7 @@ model AuditEvent {
 2. Assessment and declarations: `Assessment`, `WizardProfile`.
 3. Repository and scan foundation: `RepositoryConnection`, `RepositorySnapshot`, `RepositoryScanJob`, `SourceFile`.
 4. Evidence graph and findings: `CodeGraphNode`, `CodeGraphEdge`, `EvidenceReference`, `TechnicalEvidenceReport`, `TechnicalFinding`.
-5. Lifecycle analysis: `TechnicalProfile`, `AIUsageFlow`, `AIUsageFlowClaim`, `ReconciliationConflict`, `VerifiedProfile`.
-6. Legal and output: `LegalCorpusVersion`, `LegalRuleMatch`, `RiskClassification`, `GeneratedDocument`.
+5. Lifecycle analysis: `TechnicalProfile`, `AIUsageFlow`, `AIUsageFlowClaim`, `AIUsageFlowClaimEvidenceReference`, `ReconciliationConflict`, `VerifiedProfile`.
+6. Legal and output: `LegalCorpusVersion`, `LegalRuleMatch`, `RiskClassification`, `GapAnalysis`, `GeneratedDocument`.
 7. Reliability and audit: `OutboxEvent`, `AuditEvent`.
 <!-- PHASE-5-5-CANONICAL-PRISMA-SCHEMA:END -->

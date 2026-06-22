@@ -32,8 +32,8 @@ It is domain behavior documentation only. It does not define physical schema, im
 | `REPOSITORY_CONNECTED` | `SNAPSHOT_CREATED` | Commit/branch snapshot metadata exists. | Persist RepositorySnapshot. | `SNAPSHOT_CREATED` |
 | `SNAPSHOT_CREATED` | `SCAN_REQUESTED` / `command.scan.requested.v1` | Idempotent ScanJob created. | Create ScanJob and outbox command. | `SCAN_REQUESTED` |
 | `SCAN_REQUESTED` | `SCAN_STARTED` | Scanner worker owns job. | Mark scan running. | `SCAN_RUNNING` |
-| `SCAN_RUNNING` | `event.scan.completed.v1` | TechnicalEvidenceReport persisted. | Mark scan completed. | `SCAN_COMPLETED` |
-| `SCAN_COMPLETED` | `event.technical-profile.completed.v1` | TechnicalProfile persisted. | Mark profile ready. | `TECHNICAL_PROFILE_READY` |
+| `SCAN_RUNNING` | `event.scan.completed.v1` | TechnicalEvidenceReport persisted, report gates passed, ScanJob `COMPLETED`, and workspace cleanup verified. | Mark scan completed. | `SCAN_COMPLETED` |
+| `SCAN_COMPLETED` | `event.technical-profile.completed.v1` | TechnicalProfile persisted from a `QUALITY_VALID` report whose ScanJob is `COMPLETED` and cleanup verified. | Mark profile ready. | `TECHNICAL_PROFILE_READY` |
 | `TECHNICAL_PROFILE_READY` | `event.ai-usage-flow.completed.v1` | AIUsageFlow persisted. | Mark usage flow ready or conflicted. | `AI_USAGE_FLOW_READY` |
 | `AI_USAGE_FLOW_READY` | `event.reconciliation.conflict-detected.v1` | One or more material conflicts exist. | Create conflict task. | `RECONCILIATION_REQUIRED` |
 | `AI_USAGE_FLOW_READY` | `event.reconciliation.verified-profile-ready.v1` | No unresolved conflict exists. | Persist VerifiedProfile. | `VERIFIED_PROFILE_READY` |
@@ -65,7 +65,7 @@ It is domain behavior documentation only. It does not define physical schema, im
 ### Recovery Transitions
 
 - Failed scan may create a new idempotent ScanJob from `SNAPSHOT_CREATED`.
-- Failed TechnicalProfile may rerun from the same accepted TechnicalEvidenceReport.
+- Failed TechnicalProfile may rerun from the same accepted TechnicalEvidenceReport only if the linked ScanJob remains `COMPLETED` and cleanup verified.
 - Failed AIUsageFlow may rerun from the same TechnicalProfile after defect/recovery.
 - `RECONCILIATION_REQUIRED` recovers only through Manager resolution and reconciliation rerun.
 
@@ -104,7 +104,7 @@ CREATED
 |---|---|---|---|---|
 | none | `SCAN_REQUESTED` | Snapshot exists and idempotency key is unique. | Create ScanJob. | `REQUESTED` |
 | `REQUESTED` | `command.scan.requested.v1` consumed | Worker lock acquired. | Write `SCAN_STARTED` audit. | `RUNNING` |
-| `RUNNING` | `event.scan.completed.v1` | TechnicalEvidenceReport persisted. | Mark completion metadata. | `COMPLETED` |
+| `RUNNING` | `event.scan.completed.v1` | TechnicalEvidenceReport persisted, report gates passed and workspace cleanup verified. | Mark completion metadata including cleanup verification. | `COMPLETED` |
 | `REQUESTED` or `RUNNING` | `event.scan.failed.v1` | Failure code exists. | Store redacted failure reason. | `FAILED` |
 | `REQUESTED` | Manager/system cancellation | Job not running. | Mark canceled and audit. | `CANCELED` |
 
@@ -116,7 +116,7 @@ CREATED
 
 ### Failure Transitions
 
-Parse failure, privacy guard failure, repository access failure or schema failure produce `FAILED` and `event.scan.failed.v1`.
+Parse failure, privacy guard failure, repository access failure, schema failure or workspace cleanup failure produce `FAILED` and `event.scan.failed.v1`. Cleanup failure uses failure code `SCANNER_WORKSPACE_CLEANUP_FAILED` and must not emit `event.scan.completed.v1`.
 
 ### Recovery Transitions
 
@@ -178,13 +178,14 @@ Feeds `event.scan.completed.v1` only when report is persisted; downstream profil
 
 | Current State | Trigger Event | Guard Condition | Action | Next State |
 |---|---|---|---|---|
-| `NOT_CREATED` | `command.technical-profile.requested.v1` | TechnicalEvidenceReport is `QUALITY_VALID`. | Aggregate technical profile dimensions. | `READY` |
+| `NOT_CREATED` | `command.technical-profile.requested.v1` | TechnicalEvidenceReport is `QUALITY_VALID`, linked RepositoryScanJob is `COMPLETED`, and cleanup verification exists. | Aggregate technical profile dimensions. | `READY` |
 | `NOT_CREATED` | `event.technical-profile.failed.v1` | Evidence report missing/invalid. | Store failure reason. | `BLOCKED` |
 | `READY` | New TechnicalEvidenceReport supersedes source. | New scan completed. | Preserve old profile; mark derived view stale. | `STALE` |
 
 ### Invalid Transitions
 
 - Build from `QUALITY_INSUFFICIENT` as if complete.
+- Build from a `QUALITY_VALID` report whose linked ScanJob is not `COMPLETED` or lacks cleanup verification.
 - Mark provider-package-only evidence as confirmed AI use.
 
 ### Failure Transitions

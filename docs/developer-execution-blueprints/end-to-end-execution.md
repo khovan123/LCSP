@@ -70,21 +70,21 @@ Manager opens assessment workspace and performs these UI actions:
 
 # Execution Trace
 
-| Step | User / System Action | API / Service | DB Read | DB Write | Queue / Event | Worker | Output |
-|---:|---|---|---|---|---|---|---|
-| 1 | Manager saves Wizard | `POST /api/v1/assessments/:assessmentId/wizard-profile` -> `WizardService.save()` | `Assessment`, `UserRole` | `WizardProfile`, `AuditEvent` | None | None | `WizardProfileDto` |
-| 2 | Manager connects repository | `POST /api/v1/assessments/:assessmentId/github/repository-connections` -> `RepositoryConnectionService.connect()` | `Assessment`, GitHub App installation metadata | `RepositoryConnection`, `AuditEvent` | None | None | `RepositoryConnectionDto` |
-| 3 | Manager creates repository snapshot | `POST /api/v1/assessments/:assessmentId/repository-snapshots` -> `RepositorySnapshotService.createSnapshot()` | `RepositoryConnection`, GitHub commit metadata | `RepositorySnapshot`, `AuditEvent` | None | None | `RepositorySnapshotDto` |
-| 4 | Manager starts scan | `POST /api/v1/assessments/:assessmentId/scans` -> `ScanJobService.startRepositoryScan()` | `Assessment`, `RepositorySnapshot` | `RepositoryScanJob`, `OutboxEvent`, `AuditEvent` | `command.scan.requested.v1` | None | `ScanJobDto` |
-| 5 | Scan command consumed | RabbitMQ `lcsp.commands.v1` / `lcsp.scan-worker.v1` | `ScanWorker.handleScanRequested()` | `RepositoryScanJob`, `RepositorySnapshot` | `SourceFile`, `CodeGraphNode`, `CodeGraphEdge`, `TechnicalFinding`, `TechnicalEvidenceReport`, `OutboxEvent` | `event.scan.completed.v1` or `event.scan.failed.v1` | Scanner Worker | `TechnicalEvidenceReport` or explicit failure |
-| 6 | Technical profile requested | Orchestrator / outbox projection | `TechnicalProfileTrigger.handleScanCompleted()` | `TechnicalEvidenceReport`, `TechnicalFinding[]` | `OutboxEvent` | `command.technical-profile.requested.v1` | None | TechnicalProfile command |
-| 7 | Technical profile built | RabbitMQ `lcsp.commands.v1` / `lcsp.technical-profile-worker.v1` | `TechnicalProfileWorker.handleTechnicalProfileRequested()` | `TechnicalEvidenceReport`, `TechnicalFinding[]` | `TechnicalProfile`, `AuditEvent`, `OutboxEvent` | `event.technical-profile.completed.v1` or `event.technical-profile.failed.v1` | Technical Profile Worker | `TechnicalProfile` |
-| 8 | AIUsageFlow built | RabbitMQ `lcsp.commands.v1` / `lcsp.ai-usage-flow-worker.v1` | `AIUsageFlowWorker.handleAIUsageFlowRequested()` | `WizardProfile`, `TechnicalProfile`, findings, evidence paths | `AIUsageFlow`, `AIUsageFlowClaim[]`, `AuditEvent`, `OutboxEvent` | `event.ai-usage-flow.completed.v1` or `event.ai-usage-flow.failed.v1` | AIUsageFlow Worker | `AIUsageFlow` |
-| 9 | Reconciliation runs | RabbitMQ or Manager conflict-resolution API | `ReconciliationService.evaluate()` | `WizardProfile`, `TechnicalProfile`, `AIUsageFlow` | `VerifiedProfile` or `ReconciliationConflict`, `AuditEvent`, `OutboxEvent` | `event.reconciliation.verified-profile-ready.v1` or `event.reconciliation.conflict-detected.v1` | Reconciliation Worker | `VerifiedProfile` or conflict |
-| 10 | Legal matching runs | RabbitMQ `lcsp.commands.v1` / `lcsp.legal-matching-worker.v1` | `LegalMatchingWorker.handleLegalMatchingRequested()` | `VerifiedProfile`, `LegalCorpusVersion` | `LegalRuleMatch[]`, `AuditEvent`, `OutboxEvent` | `event.legal-matching.completed.v1` or `event.legal-matching.failed.v1` | Legal Matching Worker | `LegalMatchingResult` |
-| 11 | Classification runs | RabbitMQ `lcsp.commands.v1` / `lcsp.classification-worker.v1` | `ClassificationWorker.handleClassificationRequested()` | `VerifiedProfile`, `LegalRuleMatch[]` | `RiskClassification`, `AuditEvent`, `OutboxEvent` | `event.classification.completed.v1` or `event.classification.blocked.v1` | Classification Worker | `RiskClassification` or blocked reason |
-| 12 | Gap analysis runs | RabbitMQ `lcsp.commands.v1` / `lcsp.gap-analysis-worker.v1` | `GapAnalysisWorker.handleGapAnalysisRequested()` | `RiskClassification`, `LegalRuleMatch[]`, obligations/citation refs | `GapAnalysis`, `AuditEvent`, `OutboxEvent` | `event.gap-analysis.completed.v1`, `event.gap-analysis.blocked.v1`, or `event.gap-analysis.failed.v1` | Gap Analysis Worker | `GapAnalysis` or blocked reason |
-| 13 | Document generated | RabbitMQ `lcsp.commands.v1` / `lcsp.document-worker.v1` | `DocumentWorker.handleDocumentRequested()` | `RiskClassification`, `GapAnalysis`, legal matches, citations, evidence appendix | `GeneratedDocument`, artifact metadata, `AuditEvent`, `OutboxEvent` | `event.document.generated.v1` or `event.document.blocked.v1` | Document Worker | `GeneratedDocument` or blocked reason |
+| Step | Action | Transport | Handler | DB Read | DB Write | Published/Consumed Message | Runtime Owner | Output |
+|---:|---|---|---|---|---|---|---|---|
+| 1 | Manager saves Wizard | `POST /api/v1/assessments/:assessmentId/wizard-profile` | `WizardService.save()` | `Assessment`, `UserRole` | `WizardProfile`, `AuditEvent` | None | Backend API | `WizardProfileDto` |
+| 2 | Manager connects repository | `POST /api/v1/assessments/:assessmentId/github/repository-connections` | `RepositoryConnectionService.connect()` | `Assessment`, GitHub App installation metadata | `RepositoryConnection`, `AuditEvent` | None | Backend API | `RepositoryConnectionDto` |
+| 3 | Manager creates repository snapshot | `POST /api/v1/assessments/:assessmentId/repository-snapshots` | `RepositorySnapshotService.createSnapshot()` | `RepositoryConnection`, GitHub commit metadata | `RepositorySnapshot`, `AuditEvent` | None | Backend API | `RepositorySnapshotDto` |
+| 4 | Manager starts scan | `POST /api/v1/assessments/:assessmentId/scans` | `ScanJobService.startRepositoryScan()` | `Assessment`, `RepositorySnapshot` | `RepositoryScanJob`, `OutboxEvent`, `AuditEvent` | stage `command.scan.requested.v1` | Backend API | `ScanJobDto` |
+| 5 | Scan command consumed | RabbitMQ `lcsp.commands.v1` / `lcsp.scan-worker.v1` | `ScanWorker.handleScanRequested()` | `RepositoryScanJob`, `RepositorySnapshot` | `SourceFile`, `CodeGraphNode`, `CodeGraphEdge`, `TechnicalFinding`, `TechnicalEvidenceReport`, `OutboxEvent` | consume `command.scan.requested.v1`; stage `event.scan.completed.v1` or `event.scan.failed.v1` after cleanup decision | Scanner Worker | `TechnicalEvidenceReport` or explicit failure |
+| 6 | Technical profile requested | Outbox projection | `TechnicalProfileTrigger.handleScanCompleted()` | `TechnicalEvidenceReport`, `RepositoryScanJob`, `TechnicalFinding[]` | `OutboxEvent` | stage `command.technical-profile.requested.v1` only when ScanJob completed and cleanup verified | Orchestration projection | TechnicalProfile command |
+| 7 | Technical profile built | RabbitMQ `lcsp.commands.v1` / `lcsp.technical-profile-worker.v1` | `TechnicalProfileWorker.handleTechnicalProfileRequested()` | `TechnicalEvidenceReport`, `RepositoryScanJob`, `TechnicalFinding[]` | `TechnicalProfile`, `AuditEvent`, `OutboxEvent` | consume `command.technical-profile.requested.v1`; stage `event.technical-profile.completed.v1` or `event.technical-profile.failed.v1` | TechnicalProfile Worker | `TechnicalProfile` |
+| 8 | AIUsageFlow built | RabbitMQ `lcsp.commands.v1` / `lcsp.ai-usage-flow-worker.v1` | `AIUsageFlowWorker.handleAIUsageFlowRequested()` | `WizardProfile`, `TechnicalProfile`, findings, evidence paths | `AIUsageFlow`, `AIUsageFlowClaim[]`, `AIUsageFlowClaimEvidenceReference[]`, `AuditEvent`, `OutboxEvent` | consume `command.ai-usage-flow.requested.v1`; stage `event.ai-usage-flow.completed.v1` or `event.ai-usage-flow.failed.v1` | AIUsageFlow Worker | `AIUsageFlow` |
+| 9 | Reconciliation runs | RabbitMQ or Manager conflict-resolution API | `ReconciliationService.evaluate()` | `WizardProfile`, `TechnicalProfile`, `AIUsageFlow` | `VerifiedProfile` or `ReconciliationConflict`, `AuditEvent`, `OutboxEvent` | stage `event.reconciliation.verified-profile-ready.v1` or `event.reconciliation.conflict-detected.v1` | Reconciliation Worker | `VerifiedProfile` or conflict |
+| 10 | Legal matching runs | RabbitMQ `lcsp.commands.v1` / `lcsp.legal-matching-worker.v1` | `LegalMatchingWorker.handleLegalMatchingRequested()` | `VerifiedProfile`, `LegalCorpusVersion` | `LegalRuleMatch[]`, `AuditEvent`, `OutboxEvent` | consume `command.legal-matching.requested.v1`; stage `event.legal-matching.completed.v1` or `event.legal-matching.failed.v1` | Legal Matching Worker | `LegalMatchingResult` |
+| 11 | Classification runs | RabbitMQ `lcsp.commands.v1` / `lcsp.classification-worker.v1` | `ClassificationWorker.handleClassificationRequested()` | `VerifiedProfile`, `LegalRuleMatch[]` | `RiskClassification`, `AuditEvent`, `OutboxEvent` | consume `command.classification.requested.v1`; stage `event.classification.completed.v1` or `event.classification.blocked.v1` | Classification Worker | `RiskClassification` or blocked reason |
+| 12 | Gap analysis runs | RabbitMQ `lcsp.commands.v1` / `lcsp.gap-analysis-worker.v1` | `GapAnalysisWorker.handleGapAnalysisRequested()` | `RiskClassification`, `LegalRuleMatch[]`, obligations/citation refs | `GapAnalysis`, `AuditEvent`, `OutboxEvent` | consume `command.gap-analysis.requested.v1`; stage `event.gap-analysis.completed.v1`, `event.gap-analysis.blocked.v1`, or `event.gap-analysis.failed.v1` | Gap Analysis Worker | `GapAnalysis` or blocked reason |
+| 13 | Document generated | RabbitMQ `lcsp.commands.v1` / `lcsp.document-worker.v1` | `DocumentWorker.handleDocumentRequested()` | `RiskClassification`, `GapAnalysis`, legal matches, citations, evidence appendix | `GeneratedDocument`, artifact metadata, `AuditEvent`, `OutboxEvent` | consume `command.document.requested.v1`; stage `event.document.generated.v1` or `event.document.blocked.v1` | Document Worker | `GeneratedDocument` or blocked reason |
 
 # Object Lifecycle
 
@@ -119,9 +119,9 @@ no human-review gate observed on bounded path
 Expected path:
 
 ```text
-TechnicalFinding(AI_PROVIDER_INVOCATION)
-TechnicalFinding(AI_OUTPUT_TO_DECISION)
-TechnicalFinding(AUTOMATED_DECISION_PATH)
+TechnicalFinding(AI_MODEL_INVOCATION)
+TechnicalFinding(AI_DECISION_FLOW_SIGNAL)
+TechnicalFinding(AUTOMATED_DECISION_SIGNAL)
 AIUsageFlow(loan_approval, automated_decision, human_review absent_on_bounded_path)
 VerifiedProfile
 LegalRuleMatch(financial decision / affected customer)
@@ -133,8 +133,8 @@ RiskClassification(blocked if citation missing, otherwise classified)
 | Input | Rule | Output |
 |---|---|---|
 | Provider invocation only | `AUF-002` | Technical AI usage claim only; no legal risk. |
-| AI output feeds reject action | `AUF-010`, `AUF-032` | `downstream_action=approve_reject`, `automation_level=AUTOMATED_DECISION`. |
-| Loan domain evidence | `AUF-014`, `AUF-015` | `business_process=loan_approval`, potential financial harm. |
+| AI output feeds reject action | `AUF-014`, `AUF-025` | `downstream_action=approve_reject`, `automation_level=AUTOMATED_DECISION`. |
+| Loan domain evidence | `AUF-020`, `AUF-028` | `business_process=loan_approval`, potential financial harm. |
 | No review gate on bounded path | `AUF-018` | `human_review=ABSENT_WITH_BOUNDED_PATH`. |
 | Material claim missing evidence | `AUF-042` | Claim blocked from legal matching. |
 
@@ -167,6 +167,7 @@ RiskClassification(blocked if citation missing, otherwise classified)
 | GitHub | `RepositoryConnection`, `RepositorySnapshot`, `AuditEvent` | `Assessment.state` | GitHub App installation metadata |
 | Scan start | `ScanJob`, `OutboxEvent`, `AuditEvent` | `Assessment.state` | `RepositorySnapshot` |
 | Scanner | `SourceFile`, `CodeGraphNode`, `CodeGraphEdge`, `TechnicalFinding`, `TechnicalEvidenceReport` | `ScanJob.status` | `ScanJob`, `RepositorySnapshot` |
+| TechnicalProfile | `TechnicalProfile`, `AuditEvent`, `OutboxEvent` | `Assessment.state` | `TechnicalEvidenceReport`, `RepositoryScanJob`, `TechnicalFinding[]` |
 | AIUsageFlow | `AIUsageFlow`, `AIUsageFlowClaim`, `AuditEvent` | `Assessment.state` | `WizardProfile`, `TechnicalProfile`, findings |
 | Reconciliation | `VerifiedProfile` or `ReconciliationConflict`, `AuditEvent`, `OutboxEvent` | `Assessment.state` | `WizardProfile`, `TechnicalProfile`, `AIUsageFlow` |
 | Legal Matching | `LegalRuleMatch`, `AuditEvent`, `OutboxEvent` | `Assessment.state` | `VerifiedProfile`, legal corpus |
@@ -192,6 +193,7 @@ sequenceDiagram
   participant Web as Next.js UI
   participant API as NestJS API
   participant DB as PostgreSQL
+  participant Outbox as OutboxPublisher
   participant MQ as RabbitMQ
   participant Scan as ScanWorker
   participant TP as TechnicalProfileWorker
@@ -205,30 +207,31 @@ sequenceDiagram
   Manager->>Web: Click Run Repository Scan
   Web->>API: POST /api/v1/assessments/:assessmentId/scans
   API->>DB: Create ScanJob + OutboxEvent + AuditEvent
-  API->>MQ: publish command.scan.requested.v1
+  Outbox->>MQ: publish command.scan.requested.v1
   MQ->>Scan: consume command.scan.requested.v1
-  Scan->>DB: persist TechnicalEvidenceReport + findings
-  Scan->>MQ: publish event.scan.completed.v1
+  Scan->>DB: persist TechnicalEvidenceReport + findings + cleanup-verified OutboxEvent
+  Outbox->>MQ: publish event.scan.completed.v1
   MQ->>TP: consume command.technical-profile.requested.v1
-  TP->>DB: persist TechnicalProfile
-  TP->>MQ: publish event.technical-profile.completed.v1
+  TP->>DB: persist TechnicalProfile + OutboxEvent
+  Outbox->>MQ: publish event.technical-profile.completed.v1
   MQ->>AUF: consume command.ai-usage-flow.requested.v1
-  AUF->>DB: persist AIUsageFlow + claims
-  AUF->>MQ: publish event.ai-usage-flow.completed.v1
+  AUF->>DB: persist AIUsageFlow + claims + OutboxEvent
+  Outbox->>MQ: publish event.ai-usage-flow.completed.v1
   MQ->>Rec: consume command.reconciliation.requested.v1
-  Rec->>DB: persist VerifiedProfile or conflict task
-  Rec->>MQ: publish event.reconciliation.verified-profile-ready.v1
+  Rec->>DB: persist VerifiedProfile or conflict task + OutboxEvent
+  Outbox->>MQ: publish event.reconciliation.verified-profile-ready.v1
   MQ->>Legal: consume command.legal-matching.requested.v1
-  Legal->>DB: persist LegalRuleMatch rows
-  Legal->>MQ: publish event.legal-matching.completed.v1
+  Legal->>DB: persist LegalRuleMatch rows + OutboxEvent
+  Outbox->>MQ: publish event.legal-matching.completed.v1
   MQ->>Class: consume command.classification.requested.v1
-  Class->>DB: persist RiskClassification
-  Class->>MQ: publish event.classification.completed.v1
+  Class->>DB: persist RiskClassification + OutboxEvent
+  Outbox->>MQ: publish event.classification.completed.v1
   MQ->>Gap: consume command.gap-analysis.requested.v1
-  Gap->>DB: persist GapAnalysis
-  Gap->>MQ: publish event.gap-analysis.completed.v1
+  Gap->>DB: persist GapAnalysis + OutboxEvent
+  Outbox->>MQ: publish event.gap-analysis.completed.v1
   MQ->>Doc: consume command.document.requested.v1
-  Doc->>DB: persist GeneratedDocument
+  Doc->>DB: persist GeneratedDocument + OutboxEvent
+  Outbox->>MQ: publish event.document.generated.v1
 ```
 
 # Developer Mental Model

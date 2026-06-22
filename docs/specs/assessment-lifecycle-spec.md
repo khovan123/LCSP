@@ -6,7 +6,7 @@ AUTHORITATIVE
 
 ## Purpose
 
-Single source of truth for the assessment lifecycle after Repository Scan evidence exists: TechnicalProfile, AIUsageFlow, Reconciliation, VerifiedProfile, and state transitions.
+Single source of truth for the evidence-to-output assessment lifecycle after Repository Scan evidence exists: TechnicalProfile, AIUsageFlow, Reconciliation, VerifiedProfile, Legal Matching, Risk Classification, Gap Analysis, Document Generation, and state handoffs.
 
 ## Lifecycle
 
@@ -19,6 +19,10 @@ Assessment
 -> AIUsageFlow
 -> Reconciliation
 -> VerifiedProfile
+-> Legal Matching
+-> Risk Classification
+-> Gap Analysis
+-> Document Generation
 ```
 
 ## Invariants
@@ -28,6 +32,8 @@ Assessment
 - Every material AIUsageFlow claim requires evidence refs.
 - Reconciliation compares WizardProfile, TechnicalProfile, and AIUsageFlow.
 - Unresolved conflict blocks VerifiedProfile and classification.
+- Legal matching is mandatory before classification.
+- Gap Analysis is mandatory between completed classification and document generation.
 - Manager is the MVP final resolver.
 - Developer absence must not block assessment lifecycle transitions.
 
@@ -90,10 +96,10 @@ export interface TechnicalProfile {
 export interface EvidenceRef {
   evidenceRefId: string
   evidenceRef: string
+  sourceType: 'STATIC_SCAN' | 'WIZARD_DECLARATION' | 'MANAGER_RESOLUTION' | 'LEGAL_CORPUS' | 'SYSTEM_DERIVED'
   sourceFileId?: string
   relativePath?: string
   location?: {
-    filePath: string
     startLine?: number
     startColumn?: number
     endLine?: number
@@ -102,12 +108,7 @@ export interface EvidenceRef {
   }
   evidenceHash: string
   redactionStatus: 'NO_SOURCE_STORED' | 'REDACTED_METADATA_ONLY'
-  sourceType: 'STATIC_SCAN' | 'WIZARD_DECLARATION' | 'MANAGER_RESOLUTION' | 'SYSTEM_DERIVED'
   findingId?: string
-  filePath?: string
-  symbolRef?: string
-  lineStart?: number
-  lineEnd?: number
 }
 
 export interface ConfidenceBreakdown {
@@ -138,6 +139,8 @@ export interface AIUsageFlowClaim {
   confidenceBreakdown: ConfidenceBreakdown
   uncertaintyReasons: string[]
 }
+
+Persistence rule: `AIUsageFlowClaim.evidenceRefs` is many-to-many. The canonical Prisma representation is `AIUsageFlowClaim` plus `AIUsageFlowClaimEvidenceReference`; material claims must not be collapsed to a single `evidenceRefId`.
 
 export interface RuleContext {
   input: AIUsageFlowInput
@@ -247,4 +250,14 @@ Aggregation:
 - Non-material provider-only claims do not raise flow confidence.
 - If no material claim is eligible, `AIUsageFlow.confidence = 0.00` and status is `UNCLEAR` or `BLOCKED`.
 - Rounding uses standard half-up rounding to two decimals.
+
+Component calculation:
+
+- `base` is `0.40` for a material claim, `0.25` for provider/framework-only claims, and `0.30` for coverage-limitation claims.
+- `evidenceStrength` is the sum of unique evidence contributions capped at `0.40`: direct model invocation `+0.20`, output signal `+0.10`, downstream action path `+0.20`, human-review path `+0.15`, domain/input/output corroboration `+0.05` each.
+- Duplicate evidence refs with the same `evidenceHash` count once.
+- `supportPenalty` is `0.10` for syntax-only support and `0.20` for basic-signal-only support.
+- `conflictPenalty` is `0.30` when any unresolved conflict touches the claim field; otherwise `0.00`.
+- `coveragePenalty` is the sum of applicable coverage limitations capped at `0.35`: dynamic flow `0.20`, unresolved callee `0.10`, unsupported language `0.15`, missing bounded path `0.25`.
+- Penalties are applied once per distinct reason code.
 <!-- PHASE-5-5-AIUSAGEFLOW-TECHNICALPROFILE:END -->

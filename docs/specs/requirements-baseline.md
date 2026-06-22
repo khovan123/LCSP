@@ -13,11 +13,16 @@ This document recovers the active requirements baseline from existing active doc
 - `NO_ACTIVE_PRD_EQUIVALENT` means the legacy ID is referenced by active business rules but no equivalent active PRD requirement currently exists. This is not a new requirement.
 - Archived requirement catalogs remain archived and are not active source-of-truth documents.
 
-## Source Documents
+## Active Canonical Sources
 
-- `docs/archive/decisions/requirements-baseline-audit-report.md`
 - `docs/product/prd.md`
 - `docs/product/business-rules.md`
+
+## Historical Recovery Inputs
+
+These archived documents were used only to recover legacy IDs and traceability aliases. They are not active implementation or requirements authority.
+
+- `docs/archive/decisions/requirements-baseline-audit-report.md`
 - `docs/archive/redundant-artifacts/delete-candidates/design/use-case-specification.md`
 - `docs/archive/redundant-artifacts/delete-candidates/design/functional-requirements.md`
 - `docs/archive/redundant-artifacts/delete-candidates/design/non-functional-requirements.md`

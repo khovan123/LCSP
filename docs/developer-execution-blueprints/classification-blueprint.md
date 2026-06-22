@@ -66,7 +66,7 @@ Worker consumes `command.classification.requested.v1` after `event.legal-matchin
 | 2 | Preconditions checked | `RiskClassificationService.classify()` | `Assessment`, actor/state, source object | None | None | Guard pass or blocked error |
 | 3 | Domain transform runs | `RiskClassificationService.classify()` | Evidence/source rows | Draft output object | None | `RiskClassification` draft |
 | 4 | Transaction commits | Repository layer | Existing object versions | `RiskClassification`, `AuditEvent`, `OutboxEvent` | staged `event.classification.completed.v1` or `event.classification.blocked.v1` | Persisted `RiskClassification` |
-| 5 | Event published | Outbox publisher | `OutboxEvent` | published marker | `event.classification.completed.v1` or `event.classification.blocked.v1` | Next worker trigger |
+| 5 | Event published | Outbox publisher | `OutboxEvent` | published marker | `event.classification.completed.v1` or `event.classification.blocked.v1` | Gap Analysis trigger or blocked projection |
 | 6 | Next worker consumes | downstream worker | `RiskClassification` | downstream object or blocked state | next event | Workflow advances |
 
 # Object Lifecycle
@@ -97,7 +97,8 @@ Classification blocks or degrades when citation is missing.
 | Producer | Exchange | Routing Key | Consumer |
 |---|---|---|---|
 | LegalMatching trigger | `lcsp.commands.v1` | `command.classification.requested.v1` | `ClassificationWorker.handleClassificationRequested()` |
-| `ClassificationWorker.handleClassificationRequested()` | `lcsp.events.v1` | `event.classification.completed.v1` or `event.classification.blocked.v1` | Document trigger or blocked projection |
+| `ClassificationWorker.handleClassificationRequested()` | `lcsp.events.v1` | `event.classification.completed.v1` | Gap Analysis trigger / projection |
+| `ClassificationWorker.handleClassificationRequested()` | `lcsp.events.v1` | `event.classification.blocked.v1` | Manager UI projection / audit |
 
 # Database Journey
 
@@ -122,18 +123,20 @@ Classification blocks or degrades when citation is missing.
 ```mermaid
 sequenceDiagram
   participant Prev as Previous Step
+  participant Outbox as OutboxPublisher
   participant MQ as RabbitMQ
   participant Worker as ClassificationWorker.handleClassificationRequested()
   participant DB as PostgreSQL
   participant Audit as Audit Log
   participant Next as Next Worker
 
-  Prev->>MQ: publish command.classification.requested.v1
+  Prev->>DB: create OutboxEvent command.classification.requested.v1
+  Outbox->>MQ: publish command.classification.requested.v1
   MQ->>Worker: consume command.classification.requested.v1
   Worker->>DB: read predecessor + assessment state
   Worker->>DB: persist RiskClassification + outbox
   Worker->>Audit: write audit event
-  Worker->>MQ: publish event.classification.completed.v1 or event.classification.blocked.v1
+  Outbox->>MQ: publish event.classification.completed.v1 or event.classification.blocked.v1
   MQ->>Next: deliver next event
 ```
 

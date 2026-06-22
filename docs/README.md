@@ -40,6 +40,7 @@ Do not start with:
 | Assessment lifecycle domain behavior | [specs/assessment-lifecycle-spec.md](./specs/assessment-lifecycle-spec.md) |
 | Scanner findings, evidence, signals and rules | [specs/scanner-spec.md](./specs/scanner-spec.md) |
 | Scanner object lifecycle and runtime flow | [developer-execution-blueprints/scanner-data-journey.md](./developer-execution-blueprints/scanner-data-journey.md) |
+| TechnicalProfile runtime flow | [developer-execution-blueprints/technical-profile-blueprint.md](./developer-execution-blueprints/technical-profile-blueprint.md) |
 | Scanner code structure and packages | [implementation/scanner-implementation.md](./implementation/scanner-implementation.md) |
 | Physical Prisma schema | [implementation/persistence-implementation.md](./implementation/persistence-implementation.md) |
 | RabbitMQ topology and outbox | [implementation/queue-implementation.md](./implementation/queue-implementation.md) |

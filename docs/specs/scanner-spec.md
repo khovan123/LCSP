@@ -493,7 +493,7 @@ A2-b metrics must include:
 Current implementation readiness:
 
 ```text
-READY_FOR_IMPLEMENTATION
+READY_FOR_CONTROLLED_MVP_PROTOTYPE_IMPLEMENTATION_NOT_PRODUCTION
 ```
 
 
@@ -654,7 +654,7 @@ Adjustments:
 - `coveragePenalty = -0.15` per material limitation affecting the finding, capped at `-0.30`.
 - `ambiguityPenalty = -0.20` when callee, output path or human-review path is unresolved.
 
-Provider/framework presence findings must remain below `0.60` unless an evidence-backed invocation is also present as a separate `AI_MODEL_INVOCATION` finding.
+Provider/framework presence findings must remain below `0.60` unless an evidence-backed invocation is also present as a separate `AI_MODEL_INVOCATION` finding. If no linked invocation exists for the same source file/symbol path, cap the calculated value with `finding.confidence = min(calculatedConfidence, 0.59)` after rounding/clamping.
 
 Relative evidence strength:
 
@@ -812,7 +812,7 @@ MVP scanner is static-analysis only:
 - ts-morph provides TS/JS semantic analysis through the controlled TypeScript-first Node.js scanner worker.
 - Python uses Tree-sitter syntax-only extraction and emits `PYTHON_SEMANTIC_ANALYSIS_DEFERRED`; Python semantic analysis is not active MVP behavior.
 - Java, Kotlin, Go, C# and Rust get basic signal detection only.
-- `BASIC_SIGNAL_ONLY` languages do not use a language-specific AST adapter in the controlled MVP. Basic signals come from manifest, dependency, configuration, file-path and optional import-like metadata; they must be emitted as coverage-limited findings through the unsupported adapter path.
+- `BASIC_SIGNAL_ONLY` languages do not use a language-specific AST adapter in the controlled MVP. Basic signals come from manifest, dependency, configuration, file-path and optional import-like metadata produced by repository inventory and dependency analysis before parser adapter selection. `UnsupportedParserAdapter` emits the file-level coverage limitation; it does not create basic signal findings by itself.
 
 When dynamic import, reflection, runtime prompts, remote config, external proprietary AI service, queue breaks, generated/minified code, missing coverage or unresolved output paths are encountered, emit `UNSUPPORTED_DYNAMIC_FLOW` or `SCAN_COVERAGE_LIMITATION` and set related AIUsageFlow claim to `unknown`/`unclear`.
 
@@ -1014,6 +1014,7 @@ export interface CoverageLimitation {
 export interface EvidenceRef {
   evidenceRefId: string
   evidenceRef: string
+  sourceType: 'STATIC_SCAN'
   sourceFileId: string
   relativePath: string
   location?: SourceLocation
