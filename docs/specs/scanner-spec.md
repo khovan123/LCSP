@@ -6,7 +6,7 @@ AUTHORITATIVE
 
 ## Purpose
 
-Single source of truth for Repository Scan and static-analysis scanner domain behavior. Scanner implementation guidance lives in `docs/implementation/scanner-implementation.md`; runtime flow lives in `docs/developer-execution-blueprints/02-repository-scan-blueprint.md`.
+Single source of truth for Repository Scan and static-analysis scanner domain behavior. Scanner implementation guidance lives in `docs/implementation/scanner-implementation.md`; runtime flow lives in `docs/developer-execution-blueprints/scanner-data-journey.md`.
 
 This document is the canonical scanner specification for LCSP. It defines how the MVP repository scanner collects traceable technical evidence for AI Usage Flow Analysis without executing customer code, creating legal conclusions, storing raw source long-term, or sending raw source/full prompts/secrets to LLM.
 
@@ -111,10 +111,17 @@ The scanner must not claim complete code understanding for any language.
 13. Call Graph and Evidence Graph Assembly
 14. TechnicalFinding Generation
 15. TechnicalEvidenceReport Generation
-16. Workspace Cleanup
-17. Evidence Normalization and Quality Gates
-18. TechnicalProfile
-19. AI Usage Flow Analysis
+16. Evidence Normalization and Quality Gates
+17. Workspace Cleanup Verification
+18. Scan Completion Event Emission
+
+Scanner pipeline boundary:
+
+- Scanner owns `SourceFile`, scanner facts, `CodeGraphNode`, `CodeGraphEdge`, `EvidenceReference`, `TechnicalFinding`, and `TechnicalEvidenceReport`.
+- Scanner does not build `TechnicalProfile`.
+- Scanner does not build `AIUsageFlow`.
+- Scanner writes `event.scan.completed.v1` only after the report passes gates and workspace cleanup is verified.
+- Cleanup failure must mark the scan failed with `SCANNER_WORKSPACE_CLEANUP_FAILED`, write a security-sensitive audit event, and block downstream processing.
 
 ## Controlled Analysis Levels
 
@@ -531,10 +538,9 @@ This document is the authoritative scanner design. Scanner findings are produced
 
 | Finding Type | Meaning |
 | --- | --- |
-| `AI_MODEL_USAGE` | Có gọi model/API/framework |
-| `AI_PROVIDER_USAGE` | Provider/model service được dùng |
-| `AI_FRAMEWORK_USAGE` | LangChain, TensorFlow, PyTorch, etc. |
-| `AI_MODEL_INVOCATION` | Cụ thể model/API/local inference invocation |
+| `AI_PROVIDER_USAGE` | Provider SDK, endpoint, dependency or config is present; possible AI capability only. |
+| `AI_FRAMEWORK_USAGE` | AI/ML framework is present, such as LangChain, TensorFlow or PyTorch; possible AI capability only. |
+| `AI_MODEL_INVOCATION` | Evidence-backed model/API/local inference invocation. |
 | `SYSTEM_PROMPT_DETECTED` | Có system prompt literal hoặc template |
 | `DYNAMIC_SYSTEM_PROMPT_REFERENCE` | Prompt lấy runtime từ DB/config/remote |
 | `AI_INPUT_SIGNAL` | Dữ liệu đưa vào model |
@@ -553,6 +559,14 @@ This document is the authoritative scanner design. Scanner findings are produced
 | `MODEL_OUTPUT_PARSER_SIGNAL` | Có parser/schema xử lý output model |
 | `SCAN_COVERAGE_LIMITATION` | Scanner không bao phủ được file/language/flow |
 | `UNSUPPORTED_DYNAMIC_FLOW` | Dynamic/unsupported boundary làm flow không trace được |
+
+Canonical semantic boundaries:
+
+- `AI_PROVIDER_USAGE` means provider/package/config presence. It never proves active model use.
+- `AI_FRAMEWORK_USAGE` means an AI/ML framework is present. It never proves active model use.
+- `AI_MODEL_INVOCATION` means static analysis found an evidence-backed model/API/local inference call.
+- `AI_MODEL_USAGE` is not an active controlled-MVP finding type. Use `AI_PROVIDER_USAGE`, `AI_FRAMEWORK_USAGE`, or `AI_MODEL_INVOCATION` according to the evidence.
+- `HARM_POTENTIAL_SIGNAL` is scanner-owned only as a technical/domain signal. AIUsageFlow owns the material harm-category claim after combining technical evidence, WizardProfile context and confidence rules.
 
 ## Required Fields per Finding
 
@@ -607,6 +621,40 @@ Security:
 | 0.00-0.39 | Unclear | dynamic runtime path unavailable |
 
 Confidence must not be inflated by provider/model presence alone. A provider finding can support AI usage existence, but not business purpose or downstream action.
+
+Controlled MVP deterministic scanner confidence formula:
+
+```text
+rawConfidence =
+  baseByFindingType
+  + directEvidenceBonus
+  + corroborationBonus
+  - coveragePenalty
+  - ambiguityPenalty
+
+finding.confidence = roundToTwoDecimals(clamp(rawConfidence, 0.00, 1.00))
+```
+
+Base values:
+
+| Finding group | Base |
+|---|---:|
+| Provider/framework presence | 0.35 |
+| Direct model invocation | 0.70 |
+| Input/output signal | 0.55 |
+| Decision-flow or status-update signal | 0.65 |
+| Automated decision bounded path | 0.75 |
+| Human-review present path | 0.70 |
+| Coverage limitation | 1.00 |
+
+Adjustments:
+
+- `directEvidenceBonus = +0.15` when a Tree-sitter or ts-morph fact directly identifies the symbol/call/path.
+- `corroborationBonus = +0.05` per independent supporting source, capped at `+0.15`.
+- `coveragePenalty = -0.15` per material limitation affecting the finding, capped at `-0.30`.
+- `ambiguityPenalty = -0.20` when callee, output path or human-review path is unresolved.
+
+Provider/framework presence findings must remain below `0.60` unless an evidence-backed invocation is also present as a separate `AI_MODEL_INVOCATION` finding.
 
 Relative evidence strength:
 
@@ -764,6 +812,7 @@ MVP scanner is static-analysis only:
 - ts-morph provides TS/JS semantic analysis through the controlled TypeScript-first Node.js scanner worker.
 - Python uses Tree-sitter syntax-only extraction and emits `PYTHON_SEMANTIC_ANALYSIS_DEFERRED`; Python semantic analysis is not active MVP behavior.
 - Java, Kotlin, Go, C# and Rust get basic signal detection only.
+- `BASIC_SIGNAL_ONLY` languages do not use a language-specific AST adapter in the controlled MVP. Basic signals come from manifest, dependency, configuration, file-path and optional import-like metadata; they must be emitted as coverage-limited findings through the unsupported adapter path.
 
 When dynamic import, reflection, runtime prompts, remote config, external proprietary AI service, queue breaks, generated/minified code, missing coverage or unresolved output paths are encountered, emit `UNSUPPORTED_DYNAMIC_FLOW` or `SCAN_COVERAGE_LIMITATION` and set related AIUsageFlow claim to `unknown`/`unclear`.
 
@@ -789,7 +838,7 @@ Sensitive data signal must not include actual values.
 Findings:
 
 ```text
-AI_MODEL_USAGE: OpenAI chat completion in CreditScoringService
+AI_MODEL_INVOCATION: OpenAI chat completion in CreditScoringService
 AI_INPUT_SIGNAL: customer_income, credit_history
 AI_OUTPUT_SIGNAL: risk_score
 AI_DECISION_FLOW_SIGNAL: risk_score threshold controls approve/reject
@@ -831,7 +880,7 @@ Findings:
 
 ```text
 DYNAMIC_SYSTEM_PROMPT_REFERENCE: prompt loaded from DB key=loan_scoring_prompt
-AI_MODEL_USAGE: model call present
+AI_MODEL_INVOCATION: model call present
 AI_INPUT_SIGNAL: application data
 AI_OUTPUT_SIGNAL: decision_label
 ```

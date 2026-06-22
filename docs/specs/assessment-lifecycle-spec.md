@@ -89,8 +89,21 @@ export interface TechnicalProfile {
 ```ts
 export interface EvidenceRef {
   evidenceRefId: string
-  findingId?: string
+  evidenceRef: string
+  sourceFileId?: string
+  relativePath?: string
+  location?: {
+    filePath: string
+    startLine?: number
+    startColumn?: number
+    endLine?: number
+    endColumn?: number
+    symbolRef?: string
+  }
+  evidenceHash: string
+  redactionStatus: 'NO_SOURCE_STORED' | 'REDACTED_METADATA_ONLY'
   sourceType: 'STATIC_SCAN' | 'WIZARD_DECLARATION' | 'MANAGER_RESOLUTION' | 'SYSTEM_DERIVED'
+  findingId?: string
   filePath?: string
   symbolRef?: string
   lineStart?: number
@@ -208,6 +221,30 @@ export interface AIUsageFlowRule {
 | AUF-033 Wizard conflict: human review claimed but absent | `AUTOMATED_DECISION_SIGNAL` | wizard human-review claim | `conflict` | -0.20 | none | create reconciliation conflict |
 | AUF-034 Wizard conflict: internal-only but customer-facing evidence | `USER_IMPACT_SIGNAL` | wizard internal-only claim | `conflict` | -0.15 | none | create reconciliation conflict |
 | AUF-035 Wizard conflict: content-only but scoring/ranking/decision found | `RANKING_SIGNAL` or `AUTOMATED_DECISION_SIGNAL` | wizard content-only claim | `conflict` | -0.20 | none | create reconciliation conflict |
+| AUF-036 Customer affected subject | `USER_IMPACT_SIGNAL` | customer/user route or response refs | `affected_subjects` | +0.15 | unknown if only generic UI evidence exists | conflicts with internal-only wizard claim |
+| AUF-037 Applicant or employee affected subject | `DOMAIN_CONTEXT_SIGNAL` | candidate/employee route, DTO or entity refs | `affected_subjects` | +0.15 | unknown if domain evidence is weak | conflicts with no affected-subject wizard claim |
+| AUF-038 Patient or student affected subject | `DOMAIN_CONTEXT_SIGNAL` or `SENSITIVE_DATA_SIGNAL` | patient/student field, route or entity refs | `affected_subjects` | +0.15 | unknown if domain evidence is weak | conflicts with no affected-subject wizard claim |
+| AUF-039 Internal staff only affected subject | `DOMAIN_CONTEXT_SIGNAL` | internal admin/staff-only route refs | `affected_subjects` | +0.05 | unknown if user-facing evidence also exists | conflicts with customer-facing evidence |
+| AUF-040 Health or education harm potential | health/education input + decision/recommendation path | domain refs | `potential_harm_categories` | +0.20 | block if evidence missing | none |
+| AUF-041 Material claim evidence eligibility | material claim field | one or more evidence refs | `coverage_limitation` | +0.00 | claim is not legal-matching eligible without evidence refs | none |
+| AUF-042 Material claim missing evidence blocks legal matching | material claim field without evidence refs | none | `coverage_limitation` | -0.35 | must block legal matching eligibility for that claim | create blocking reason if claim is needed for classification |
 
 Every material claim used for legal matching must carry at least one `EvidenceRef`. Provider/model/framework detection alone never makes a claim eligible for legal matching.
+
+### Confidence Calculation Rules
+
+`confidenceBreakdown.final` is the claim confidence. Implementations must calculate it deterministically as:
+
+```text
+raw = base + evidenceStrength - supportPenalty - conflictPenalty - coveragePenalty
+final = roundToTwoDecimals(clamp(raw, 0.00, 1.00))
+claim.confidence = confidenceBreakdown.final
+```
+
+Aggregation:
+
+- `AIUsageFlow.confidence` is the rounded average of material claim `confidenceBreakdown.final` values.
+- Non-material provider-only claims do not raise flow confidence.
+- If no material claim is eligible, `AIUsageFlow.confidence = 0.00` and status is `UNCLEAR` or `BLOCKED`.
+- Rounding uses standard half-up rounding to two decimals.
 <!-- PHASE-5-5-AIUSAGEFLOW-TECHNICALPROFILE:END -->

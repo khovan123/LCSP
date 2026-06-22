@@ -43,6 +43,7 @@ Do not start with:
 | Scanner code structure and packages | [implementation/scanner-implementation.md](./implementation/scanner-implementation.md) |
 | Physical Prisma schema | [implementation/persistence-implementation.md](./implementation/persistence-implementation.md) |
 | RabbitMQ topology and outbox | [implementation/queue-implementation.md](./implementation/queue-implementation.md) |
+| Gap Analysis runtime flow | [developer-execution-blueprints/gap-analysis-blueprint.md](./developer-execution-blueprints/gap-analysis-blueprint.md) |
 | Engineering module ownership | [code-map/README.md](./code-map/README.md) |
 
 ## Documentation Layers
@@ -121,6 +122,7 @@ Smoke scan fixture expected behavior:
 5. Run worker.
 6. Confirm `TechnicalEvidenceReport` is created.
 7. Confirm `OutboxEvent` routing key is `event.scan.completed.v1`.
-8. Confirm TechnicalProfile and AIUsageFlow commands are enqueued or blocked with explicit reason.
+8. Confirm `command.technical-profile.requested.v1` and `command.ai-usage-flow.requested.v1` are enqueued in order or blocked with explicit reason.
+9. For full MVP smoke, continue the chain through Reconciliation, Legal Matching, Classification, Gap Analysis and Document Generation using only canonical `command.*` and `event.*` routing keys.
 
 Canonical queue names use `command.*` for requested work and `event.*` for completed/failed facts. Unprefixed legacy scan routing keys are not valid active contracts.

@@ -84,7 +84,8 @@ src/loan.ts
 | Finding build | `TechnicalFindingBuilder.fromDetection()` | `DetectionResult` | `TechnicalFinding` | `TechnicalFinding` | None |
 | Report build | `TechnicalEvidenceReportBuilder.build()` | findings + limitations | `TechnicalEvidenceReport` | `TechnicalEvidenceReport` | None |
 | Gates | `EvidenceSchemaGate`, `EvidenceQualityGate` | report | pass/fail result | gate audit | Failure event only |
-| Completion | `ScanWorker.handleScanRequested()` followed by `ScanWorker.publishScanCompletedEvent()` | report | `ScanCompletedPayload` | `OutboxEvent` | `event.scan.completed.v1` |
+| Cleanup verification | `ScanWorker.verifyWorkspaceCleanup()` | workspace ref + report | cleanup pass/fail | `AuditEvent` on failure | `event.scan.failed.v1` on failure |
+| Completion | `ScanWorker.handleScanRequested()` followed by `ScanWorker.publishScanCompletedEvent()` | report + cleanup pass | `ScanCompletedPayload` | `OutboxEvent` | `event.scan.completed.v1` |
 
 ## Expected SourceFileRef Object
 
@@ -282,7 +283,9 @@ src/loan.ts
 3. Graph rows are written only after graph build completes.
 4. `TechnicalFinding` rows are written only after detector output is converted into redacted evidence-backed findings.
 5. `TechnicalEvidenceReport` row is written after report hash is generated.
-6. `event.scan.completed.v1` is written to outbox only after Schema Gate and Quality Gate pass.
+6. Workspace cleanup is verified after report gates.
+7. `event.scan.completed.v1` is written to outbox only after Schema Gate, Quality Gate and cleanup verification pass.
+8. Cleanup failure writes `event.scan.failed.v1` with `SCANNER_WORKSPACE_CLEANUP_FAILED` and blocks downstream processing.
 
 ## Developer Rule
 

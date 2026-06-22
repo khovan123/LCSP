@@ -104,7 +104,7 @@ Conflict task is created; scanner evidence remains immutable.
 | Operation | Models |
 |---|---|
 | Read | `Assessment`, predecessor object, `AuditEvent` context |
-| Create | `VerifiedProfile or ManagerConflictResolutionTask`, `AuditEvent`, `OutboxEvent` |
+| Create | `VerifiedProfile or ReconciliationConflict`, `AuditEvent`, `OutboxEvent` |
 | Update | `Assessment.state`, predecessor status if applicable |
 | Deny write | Raw source, full prompt, secrets, full AST bodies |
 

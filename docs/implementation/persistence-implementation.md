@@ -64,11 +64,9 @@ PostgreSQL is the authoritative store for LCSP domain state, workflow metadata, 
 | LegalDocumentVersion | Legal/RAG | document_id, version, source | approved version required | immutable version | legal metadata |
 | LegalRule | Legal/RAG | rule_id, corpus version | citation refs required | versioned | none expected |
 | LegalCitation | Legal/RAG | citation_id, rule_id, source refs | source version required | immutable | none expected |
-| ClassificationRun | Worker | run_id, profile_id, corpus version | VerifiedProfile required | immutable run | model metadata refs |
-| RiskClassificationResult | Worker | result_id, risk, citations | citation guardrail | immutable result | risk rationale |
-| GapAnalysisResult | Worker | gap_id, classification_id | valid classification required | immutable result | gap rationale |
-| ComplianceDocument | Worker/API | document_id, template version | final gate pass | versioned | report contents |
-| GeneratedDocumentFile | Worker/API | storage_ref, hash | object exists | retention policy | generated artifact |
+| RiskClassification | Worker | result_id, risk, citations | VerifiedProfile and legal matching required | immutable result | risk rationale |
+| GapAnalysis | Worker | gap_id, classification_id, status | completed classification required | immutable result | gap rationale |
+| GeneratedDocument | Worker/API | document_id, template version, storage_ref, hash | gap analysis and output guardrails required | versioned | generated artifact |
 | WorkflowRun | Worker/API | run_id, assessment_id, state | state machine constraints | retain workflow trace | state metadata |
 | ModelRunMetadata | LLM Gateway | node, provider, model, prompt_version | no raw prompt/source | retain metadata | provider/model refs |
 | AuditEvent | API/Worker | event_id, actor, action, correlation_id | append-oriented | retention/export policy | redacted context |
@@ -84,7 +82,7 @@ Every assessment-scoped entity must be queryable through organization/assessment
 
 ## Snapshot and Version Policy
 
-WizardProfile, TechnicalEvidenceReport, TechnicalProfile, AIUsageFlow, VerifiedProfile, ClassificationRun, GapAnalysisResult and ComplianceDocument are versioned or immutable snapshots. New evidence invalidates dependent downstream snapshots.
+WizardProfile, TechnicalEvidenceReport, TechnicalProfile, AIUsageFlow, VerifiedProfile, RiskClassification, GapAnalysis and GeneratedDocument are versioned or immutable snapshots. New evidence invalidates dependent downstream snapshots.
 
 ## Migration Ordering
 
@@ -307,9 +305,10 @@ enum HumanReviewState { PRESENT ABSENT_WITH_BOUNDED_PATH UNCLEAR NOT_APPLICABLE 
 enum AutomationLevel { ASSISTIVE SEMI_AUTOMATED FULLY_AUTOMATED UNKNOWN }
 enum ReconciliationStatus { NOT_REQUIRED CONFLICT_OPEN RESOLVED VERIFIED }
 enum ClassificationStatus { REQUESTED RUNNING COMPLETED BLOCKED FAILED }
+enum GapAnalysisStatus { REQUESTED RUNNING COMPLETED BLOCKED FAILED }
 enum DocumentStatus { REQUESTED GENERATED BLOCKED FAILED }
 enum OutboxStatus { PENDING LOCKED PUBLISHED FAILED }
-enum AuditEventType { AUTH_EVENT ASSESSMENT_CREATED WIZARD_PROFILE_SAVED REPOSITORY_CONNECTED SNAPSHOT_CREATED SCAN_REQUESTED SCAN_STARTED SCAN_COMPLETED SCAN_FAILED TECHNICAL_PROFILE_CREATED AI_USAGE_FLOW_CREATED RECONCILIATION_CONFLICT_DETECTED RECONCILIATION_RESOLVED VERIFIED_PROFILE_CREATED LEGAL_MATCHING_COMPLETED CLASSIFICATION_COMPLETED CLASSIFICATION_BLOCKED DOCUMENT_GENERATED DOCUMENT_BLOCKED OUTBOX_PUBLISH_FAILED SECURITY_EVENT }
+enum AuditEventType { AUTH_EVENT ASSESSMENT_CREATED WIZARD_PROFILE_SAVED REPOSITORY_CONNECTED SNAPSHOT_CREATED SCAN_REQUESTED SCAN_STARTED SCAN_COMPLETED SCAN_FAILED TECHNICAL_PROFILE_CREATED AI_USAGE_FLOW_CREATED RECONCILIATION_CONFLICT_DETECTED RECONCILIATION_RESOLVED VERIFIED_PROFILE_CREATED LEGAL_MATCHING_COMPLETED CLASSIFICATION_COMPLETED CLASSIFICATION_BLOCKED GAP_ANALYSIS_COMPLETED GAP_ANALYSIS_BLOCKED DOCUMENT_GENERATED DOCUMENT_BLOCKED OUTBOX_PUBLISH_FAILED SECURITY_EVENT }
 
 model Organization {
   id          String   @id @db.Uuid
@@ -366,6 +365,7 @@ model Assessment {
   verifiedProfiles VerifiedProfile[]
   legalRuleMatches LegalRuleMatch[]
   classifications RiskClassification[]
+  gapAnalyses GapAnalysis[]
   documents GeneratedDocument[]
   auditEvents AuditEvent[]
   @@index([organizationId, state])
@@ -692,15 +692,34 @@ model RiskClassification {
   assessment         Assessment @relation(fields: [assessmentId], references: [id])
   verifiedProfile    VerifiedProfile @relation(fields: [verifiedProfileId], references: [id])
   legalRuleMatch     LegalRuleMatch? @relation(fields: [legalRuleMatchId], references: [id])
+  gapAnalyses        GapAnalysis[]
   documents          GeneratedDocument[]
   @@index([assessmentId, status])
   @@index([verifiedProfileId])
+}
+
+model GapAnalysis {
+  id                   String @id @db.Uuid
+  assessmentId          String @db.Uuid
+  riskClassificationId  String @db.Uuid
+  status                GapAnalysisStatus
+  gapItems              Json
+  evidenceRefs          Json
+  legalRuleMatchRefs    Json
+  blockingReasons       Json
+  createdAt             DateTime @default(now())
+  assessment            Assessment @relation(fields: [assessmentId], references: [id])
+  riskClassification    RiskClassification @relation(fields: [riskClassificationId], references: [id])
+  documents             GeneratedDocument[]
+  @@index([assessmentId, status])
+  @@index([riskClassificationId])
 }
 
 model GeneratedDocument {
   id                    String @id @db.Uuid
   assessmentId           String @db.Uuid
   riskClassificationId   String @db.Uuid
+  gapAnalysisId          String @db.Uuid
   status                 DocumentStatus
   templateVersion        String
   storageRef             String?
@@ -709,7 +728,9 @@ model GeneratedDocument {
   createdAt              DateTime @default(now())
   assessment             Assessment @relation(fields: [assessmentId], references: [id])
   riskClassification     RiskClassification @relation(fields: [riskClassificationId], references: [id])
+  gapAnalysis            GapAnalysis @relation(fields: [gapAnalysisId], references: [id])
   @@index([assessmentId, status])
+  @@index([gapAnalysisId])
 }
 
 model OutboxEvent {

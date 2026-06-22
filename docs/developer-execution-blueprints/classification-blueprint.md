@@ -104,7 +104,7 @@ Classification blocks or degrades when citation is missing.
 | Operation | Models |
 |---|---|
 | Read | `Assessment`, predecessor object, `AuditEvent` context |
-| Create | `ClassificationResult`, `AuditEvent`, `OutboxEvent` |
+| Create | `RiskClassification`, `AuditEvent`, `OutboxEvent` |
 | Update | `Assessment.state`, predecessor status if applicable |
 | Deny write | Raw source, full prompt, secrets, full AST bodies |
 

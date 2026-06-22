@@ -247,10 +247,10 @@ This document is the canonical active use case catalog for LCSP. It recovers exi
 | Secondary Actors | Manager |
 | Preconditions | VerifiedProfile exists; legal matching completed. |
 | Trigger | `event.legal-matching.completed.v1` leads to `command.classification.requested.v1`. |
-| Main Flow | 1. Classification worker loads VerifiedProfile and LegalRuleMatch. 2. Worker verifies guardrails. 3. Worker determines risk output or blocked result. 4. Worker persists ClassificationResult. 5. Worker emits completed or blocked event. |
+| Main Flow | 1. Classification worker loads VerifiedProfile and LegalRuleMatch. 2. Worker verifies guardrails. 3. Worker determines risk output or blocked result. 4. Worker persists RiskClassification. 5. Worker emits completed or blocked event. |
 | Alternative Flows | Degraded classification may be visible when explicitly labeled and supported. |
 | Exception Flows | Missing citation, unresolved conflict, provider-only evidence or unknown critical usage blocks classification. |
-| Postconditions | ClassificationResult is completed or blocked. |
+| Postconditions | RiskClassification is completed or blocked. |
 | Business Rules | BR-049..BR-051, BR-082, BR-084 |
 | Referenced FRs | FR-044..FR-047, FR-073 |
 | Referenced ACs | AC-016, AC-017, AC-018 |
@@ -262,12 +262,12 @@ This document is the canonical active use case catalog for LCSP. It recovers exi
 | Goal | Produce gap analysis and compliance/readiness document under guardrails. |
 | Primary Actor | Manager / LCSP System |
 | Secondary Actors | Object Storage |
-| Preconditions | ClassificationResult exists for final report; readiness-only export may occur earlier without risk level. |
-| Trigger | Manager requests document or system starts document worker. |
-| Main Flow | 1. LCSP validates classification/gap/citation/conflict prerequisites. 2. Worker creates gap analysis when allowed. 3. Worker generates document metadata/artifact. 4. LCSP emits generated or blocked event. |
+| Preconditions | RiskClassification exists for final report; readiness-only export may occur earlier without risk level. |
+| Trigger | `event.classification.completed.v1` leads to `command.gap-analysis.requested.v1`; `event.gap-analysis.completed.v1` leads to `command.document.requested.v1`. |
+| Main Flow | 1. LCSP validates classification/citation/conflict prerequisites. 2. Gap Analysis Worker creates `GapAnalysis` when allowed. 3. Document Worker generates document metadata/artifact after GapAnalysis completes. 4. LCSP emits generated or blocked event. |
 | Alternative Flows | Readiness-only export shows missing evidence without risk level. |
 | Exception Flows | Missing citation, unresolved conflict or invalid classification blocks final report. |
-| Postconditions | GeneratedDocument exists or blocked reason is recorded. |
+| Postconditions | GapAnalysis and GeneratedDocument exist, or blocked reason is recorded. |
 | Business Rules | BR-062..BR-066, BR-079 |
 | Referenced FRs | FR-048..FR-052, FR-068 |
 | Referenced ACs | AC-003, AC-018, AC-019 |

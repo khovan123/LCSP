@@ -61,7 +61,7 @@ Manager opens assessment workspace and performs these UI actions:
   "technicalProfileId": "tp_001",
   "aiUsageFlowId": "auf_001",
   "verifiedProfileId": "vp_001",
-  "classificationResultId": "risk_001",
+  "riskClassificationId": "risk_001",
   "gapAnalysisId": "gap_001",
   "documentId": "doc_001",
   "finalState": "DOCUMENT_GENERATED"
@@ -83,7 +83,8 @@ Manager opens assessment workspace and performs these UI actions:
 | 9 | Reconciliation runs | RabbitMQ or Manager conflict-resolution API | `ReconciliationService.evaluate()` | `WizardProfile`, `TechnicalProfile`, `AIUsageFlow` | `VerifiedProfile` or `ReconciliationConflict`, `AuditEvent`, `OutboxEvent` | `event.reconciliation.verified-profile-ready.v1` or `event.reconciliation.conflict-detected.v1` | Reconciliation Worker | `VerifiedProfile` or conflict |
 | 10 | Legal matching runs | RabbitMQ `lcsp.commands.v1` / `lcsp.legal-matching-worker.v1` | `LegalMatchingWorker.handleLegalMatchingRequested()` | `VerifiedProfile`, `LegalCorpusVersion` | `LegalRuleMatch[]`, `AuditEvent`, `OutboxEvent` | `event.legal-matching.completed.v1` or `event.legal-matching.failed.v1` | Legal Matching Worker | `LegalMatchingResult` |
 | 11 | Classification runs | RabbitMQ `lcsp.commands.v1` / `lcsp.classification-worker.v1` | `ClassificationWorker.handleClassificationRequested()` | `VerifiedProfile`, `LegalRuleMatch[]` | `RiskClassification`, `AuditEvent`, `OutboxEvent` | `event.classification.completed.v1` or `event.classification.blocked.v1` | Classification Worker | `RiskClassification` or blocked reason |
-| 12 | Document generated | RabbitMQ `lcsp.commands.v1` / `lcsp.document-worker.v1` | `DocumentWorker.handleDocumentRequested()` | `RiskClassification`, legal matches, citations, evidence appendix | `GeneratedDocument`, artifact metadata, `AuditEvent`, `OutboxEvent` | `event.document.generated.v1` or `event.document.blocked.v1` | Document Worker | `GeneratedDocument` or blocked reason |
+| 12 | Gap analysis runs | RabbitMQ `lcsp.commands.v1` / `lcsp.gap-analysis-worker.v1` | `GapAnalysisWorker.handleGapAnalysisRequested()` | `RiskClassification`, `LegalRuleMatch[]`, obligations/citation refs | `GapAnalysis`, `AuditEvent`, `OutboxEvent` | `event.gap-analysis.completed.v1`, `event.gap-analysis.blocked.v1`, or `event.gap-analysis.failed.v1` | Gap Analysis Worker | `GapAnalysis` or blocked reason |
+| 13 | Document generated | RabbitMQ `lcsp.commands.v1` / `lcsp.document-worker.v1` | `DocumentWorker.handleDocumentRequested()` | `RiskClassification`, `GapAnalysis`, legal matches, citations, evidence appendix | `GeneratedDocument`, artifact metadata, `AuditEvent`, `OutboxEvent` | `event.document.generated.v1` or `event.document.blocked.v1` | Document Worker | `GeneratedDocument` or blocked reason |
 
 # Object Lifecycle
 
@@ -100,7 +101,7 @@ Assessment
   -> AIUsageFlow
   -> VerifiedProfile
   -> LegalRuleMatch[]
-  -> ClassificationResult
+  -> RiskClassification
   -> GapAnalysis
   -> GeneratedDocument
 ```
@@ -124,7 +125,7 @@ TechnicalFinding(AUTOMATED_DECISION_PATH)
 AIUsageFlow(loan_approval, automated_decision, human_review absent_on_bounded_path)
 VerifiedProfile
 LegalRuleMatch(financial decision / affected customer)
-ClassificationResult(blocked if citation missing, otherwise classified)
+RiskClassification(blocked if citation missing, otherwise classified)
 ```
 
 # Rule Execution Walkthrough
@@ -134,7 +135,7 @@ ClassificationResult(blocked if citation missing, otherwise classified)
 | Provider invocation only | `AUF-002` | Technical AI usage claim only; no legal risk. |
 | AI output feeds reject action | `AUF-010`, `AUF-032` | `downstream_action=approve_reject`, `automation_level=AUTOMATED_DECISION`. |
 | Loan domain evidence | `AUF-014`, `AUF-015` | `business_process=loan_approval`, potential financial harm. |
-| No review gate on bounded path | `AUF-019` | `human_review=ABSENT_ON_BOUNDED_PATH`. |
+| No review gate on bounded path | `AUF-018` | `human_review=ABSENT_WITH_BOUNDED_PATH`. |
 | Material claim missing evidence | `AUF-042` | Claim blocked from legal matching. |
 
 # Queue Choreography
@@ -152,7 +153,9 @@ ClassificationResult(blocked if citation missing, otherwise classified)
 | LegalMatching trigger | `lcsp.commands.v1` | `command.legal-matching.requested.v1` | `LegalMatchingWorker` |
 | LegalMatching Worker outbox | `lcsp.events.v1` | `event.legal-matching.completed.v1` | Classification trigger / projection |
 | Classification trigger | `lcsp.commands.v1` | `command.classification.requested.v1` | `ClassificationWorker` |
-| Classification Worker outbox | `lcsp.events.v1` | `event.classification.completed.v1` or `event.classification.blocked.v1` | Document trigger or blocked projection |
+| Classification Worker outbox | `lcsp.events.v1` | `event.classification.completed.v1` or `event.classification.blocked.v1` | Gap Analysis trigger or blocked projection |
+| Gap Analysis trigger | `lcsp.commands.v1` | `command.gap-analysis.requested.v1` | `GapAnalysisWorker` |
+| Gap Analysis Worker outbox | `lcsp.events.v1` | `event.gap-analysis.completed.v1`, `event.gap-analysis.blocked.v1`, or `event.gap-analysis.failed.v1` | Document trigger or blocked projection |
 | Document trigger | `lcsp.commands.v1` | `command.document.requested.v1` | `DocumentWorker` |
 | Document Worker outbox | `lcsp.events.v1` | `event.document.generated.v1` or `event.document.blocked.v1` | Manager UI projection / audit |
 
@@ -161,11 +164,15 @@ ClassificationResult(blocked if citation missing, otherwise classified)
 | Step | Rows Created | Rows Updated | Rows Read |
 |---|---|---|---|
 | Wizard | `WizardProfile`, `AuditEvent` | `Assessment.state` | `Assessment`, `UserRole` |
-| GitHub | `RepositoryConnection`, `RepositorySnapshot`, `AuditEvent` | `Assessment.state` | `GitHubInstallation` |
+| GitHub | `RepositoryConnection`, `RepositorySnapshot`, `AuditEvent` | `Assessment.state` | GitHub App installation metadata |
 | Scan start | `ScanJob`, `OutboxEvent`, `AuditEvent` | `Assessment.state` | `RepositorySnapshot` |
 | Scanner | `SourceFile`, `CodeGraphNode`, `CodeGraphEdge`, `TechnicalFinding`, `TechnicalEvidenceReport` | `ScanJob.status` | `ScanJob`, `RepositorySnapshot` |
 | AIUsageFlow | `AIUsageFlow`, `AIUsageFlowClaim`, `AuditEvent` | `Assessment.state` | `WizardProfile`, `TechnicalProfile`, findings |
-| Document | `GeneratedDocument`, `AuditEvent` | `Assessment.state` | `GapAnalysis`, `ClassificationResult`, citations |
+| Reconciliation | `VerifiedProfile` or `ReconciliationConflict`, `AuditEvent`, `OutboxEvent` | `Assessment.state` | `WizardProfile`, `TechnicalProfile`, `AIUsageFlow` |
+| Legal Matching | `LegalRuleMatch`, `AuditEvent`, `OutboxEvent` | `Assessment.state` | `VerifiedProfile`, legal corpus |
+| Classification | `RiskClassification`, `AuditEvent`, `OutboxEvent` | `Assessment.state` | `VerifiedProfile`, `LegalRuleMatch[]` |
+| Gap Analysis | `GapAnalysis`, `AuditEvent`, `OutboxEvent` | `Assessment.state` | `RiskClassification`, `LegalRuleMatch[]` |
+| Document | `GeneratedDocument`, `AuditEvent` | `Assessment.state` | `GapAnalysis`, `RiskClassification`, citations |
 
 # Failure Scenarios
 
@@ -173,7 +180,7 @@ ClassificationResult(blocked if citation missing, otherwise classified)
 |---|---|---|
 | `command.scan.requested.v1` | Repository snapshot unavailable | `RepositoryScanJob.FAILED_RETRYABLE`, retry message. |
 | `TechnicalEvidenceReport` | Schema Gate fails | `TECHNICAL_EVIDENCE_REJECTED`, no TechnicalProfile. |
-| `AIUsageFlow` | Conflict with WizardProfile | `ManagerConflictResolutionTask`, no classification. |
+| `AIUsageFlow` | Conflict with WizardProfile | `ReconciliationConflict`, no classification. |
 | `VerifiedProfile` | Missing citation | `ClassificationBlocked(MISSING_CITATION)`. |
 | `GapAnalysis` | Output guardrail fails | `DOCUMENT_GENERATION_BLOCKED`. |
 
@@ -192,6 +199,7 @@ sequenceDiagram
   participant Rec as ReconciliationWorker
   participant Class as ClassificationWorker
   participant Legal as LegalMatchingWorker
+  participant Gap as GapAnalysisWorker
   participant Doc as DocumentWorker
 
   Manager->>Web: Click Run Repository Scan
@@ -214,8 +222,11 @@ sequenceDiagram
   Legal->>DB: persist LegalRuleMatch rows
   Legal->>MQ: publish event.legal-matching.completed.v1
   MQ->>Class: consume command.classification.requested.v1
-  Class->>DB: persist ClassificationResult
+  Class->>DB: persist RiskClassification
   Class->>MQ: publish event.classification.completed.v1
+  MQ->>Gap: consume command.gap-analysis.requested.v1
+  Gap->>DB: persist GapAnalysis
+  Gap->>MQ: publish event.gap-analysis.completed.v1
   MQ->>Doc: consume command.document.requested.v1
   Doc->>DB: persist GeneratedDocument
 ```
@@ -245,5 +256,5 @@ Implement the system as a chain of explicit object handoffs. A service does not 
 | Input Fixture | Expected Output Fixture |
 |---|---|
 | `F-SCAN-03 Loan approval / credit scoring` | `TechnicalEvidenceReport` with AI invocation and decision-flow findings. |
-| `F-CONFLICT-01 Wizard says no decision but source has approve/reject` | `ManagerConflictResolutionTask`. |
-| `F-RAG-02 Missing citation case` | `ClassificationBlocked(MISSING_CITATION)` or degraded document output. |
+| `F-CONFLICT-01 Wizard says no decision but source has approve/reject` | `ReconciliationConflict`. |
+| `F-RAG-02 Missing citation case` | `ClassificationBlocked(MISSING_CITATION)` or `GapAnalysis`/document blocked with citation gap. |

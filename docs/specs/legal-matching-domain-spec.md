@@ -133,6 +133,19 @@ applicable =
 
 Provider/model/framework presence alone is never a required fact for legal rule applicability.
 
+## Technical Claim Eligibility Threshold
+
+Legal matching may only use an AIUsageFlow material claim when all conditions are true:
+
+- claim has at least one `EvidenceRef`;
+- claim lifecycle is `VALIDATED` or `VERIFIED`;
+- claim confidence is `>= 0.75` for material classification use;
+- claim is not provider/model/framework presence alone;
+- claim has no unresolved conflict reference;
+- claim is not blocked by coverage limitation for the rule-required fact.
+
+Claims with confidence `0.65..0.74` may be recorded as supporting context only and must not be the sole basis for a material legal match. Claims below `0.65`, claims without evidence refs, and claims with unresolved conflict are not legal-matching eligible.
+
 ## Citation Requirements
 
 | Status | Meaning | Classification effect |

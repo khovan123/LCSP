@@ -47,18 +47,18 @@ UC -> FR -> AC -> Domain Spec -> State Machine -> Implementation Area
 | UC-011 | FR-031 | AC-015 | `assessment-lifecycle-spec.md`, `domain-state-machines.md` | VerifiedProfile | Backend API / Reconciliation |
 | UC-012 | FR-032 | AC-016 | `legal-matching-domain-spec.md`, `legal-classification-spec.md` | LegalRuleMatch | Legal Matching Worker |
 | UC-012 | FR-033 | AC-016 | `legal-matching-domain-spec.md`, `ai-usage-flow-domain-spec.md` | LegalRuleMatch | Legal Matching Worker |
-| UC-012, UC-013 | FR-034 | AC-017 | `legal-matching-domain-spec.md`, `legal-classification-spec.md` | LegalRuleMatch, ClassificationResult | Legal Matching Worker |
-| UC-013 | FR-035 | AC-016, AC-018 | `legal-classification-spec.md` | ClassificationResult | Classification Worker |
-| UC-013 | FR-036 | AC-017, AC-018 | `legal-classification-spec.md`, `legal-matching-domain-spec.md` | ClassificationResult | Classification Worker |
-| UC-013 | FR-037 | AC-018 | `legal-classification-spec.md` | ClassificationResult | Backend API / Classification UI |
-| UC-014 | FR-038 | AC-018 | `document-generation-spec.md`, `legal-classification-spec.md` | ClassificationResult | Gap Analysis Worker |
+| UC-012, UC-013 | FR-034 | AC-017 | `legal-matching-domain-spec.md`, `legal-classification-spec.md` | LegalRuleMatch, RiskClassification | Legal Matching Worker |
+| UC-013 | FR-035 | AC-016, AC-018 | `legal-classification-spec.md` | RiskClassification | Classification Worker |
+| UC-013 | FR-036 | AC-017, AC-018 | `legal-classification-spec.md`, `legal-matching-domain-spec.md` | RiskClassification | Classification Worker |
+| UC-013 | FR-037 | AC-018 | `legal-classification-spec.md` | RiskClassification | Backend API / Classification UI |
+| UC-014 | FR-038 | AC-018 | `document-generation-spec.md`, `legal-classification-spec.md` | RiskClassification | Gap Analysis Worker |
 | UC-014 | FR-039 | AC-018, AC-019 | `document-generation-spec.md` | GeneratedDocument | Document Worker |
 | UC-004, UC-014 | FR-040 | AC-003 | `document-generation-spec.md`, `system-context.md` | GeneratedDocument / pre-classification states | Document Worker / Web UI |
 | UC-014 | FR-041 | AC-019 | `document-generation-spec.md` | GeneratedDocument | Backend API / Document |
 | UC-015, UC-017 | FR-042 | AC-020, AC-023 | `event-catalog.md`, `domain-model.md` | All state machines | Audit Service |
 | UC-015 | FR-043 | AC-020 | `domain-model.md`, `event-catalog.md` | AuditEvent | Backend API / Audit |
 | UC-015, UC-016 | FR-044 | AC-020 | `domain-model.md`, `event-catalog.md` | Evidence/Profile/Legal/Document state machines | Audit / Persistence |
-| UC-015, UC-018 | FR-045 | AC-013, AC-020 | `user-task-flows.md`, `document-generation-spec.md` | Conflict, ClassificationResult, GeneratedDocument | Audit / Document |
+| UC-015, UC-018 | FR-045 | AC-013, AC-020 | `user-task-flows.md`, `document-generation-spec.md` | Conflict, RiskClassification, GeneratedDocument | Audit / Document |
 | UC-018 | FR-046 | AC-013 | `user-task-flows.md`, `assessment-lifecycle-spec.md` | Conflict | Backend API / Attestation |
 | UC-018 | FR-047 | AC-025 | `user-task-flows.md` | Developer task state outside assessment state | Backend API / RBAC |
 | UC-007, UC-018 | FR-048 | AC-007, AC-022 | `scanner-spec.md`, `domain-model.md` | TechnicalEvidenceReport, TechnicalProfile | Backend API / Scanner UI |

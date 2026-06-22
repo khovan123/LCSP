@@ -13,3 +13,4 @@ Active runtime flow documentation. One domain has one blueprint. Examples that d
 | `ai-usage-flow-blueprint.md` | AIUsageFlow runtime transformation. |
 | `reconciliation-blueprint.md` | Conflict detection and Manager resolution. |
 | `classification-blueprint.md` | Legal matching and classification runtime path. |
+| `gap-analysis-blueprint.md` | Gap analysis runtime path between classification and document generation. |

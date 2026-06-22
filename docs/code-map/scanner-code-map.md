@@ -53,7 +53,7 @@ packages/scanner/src/
 | `detectors` | Convert graph/facts into AI technical signals. | parser/graph outputs. | `DetectionResult` | draft `TechnicalFinding` | None |
 | `evidence` | Create redacted evidence refs. | source locations, hashes. | `EvidenceRef` | evidence metadata | None |
 | `reports` | Build and gate TechnicalEvidenceReport. | findings/evidence. | `TechnicalEvidenceReport` | `TechnicalEvidenceReport`, `TechnicalFinding` | emits through worker |
-| `workers` | Consume scan jobs and orchestrate scanner stages. | RabbitMQ, persistence. | `ScanRequestedPayload`, `ScanCompletedPayload` | `RepositoryScanJob`, evidence tables | consumes `command.scan.requested.v1`, emits `event.scan.completed.v1` |
+| `workers` | Consume scan jobs and orchestrate scanner stages. | RabbitMQ, persistence. | `ScanRequestedPayload`, `ScanCompletedPayload`, `ScanFailedPayload` | `RepositoryScanJob`, evidence tables | consumes `command.scan.requested.v1`, emits `event.scan.completed.v1` or `event.scan.failed.v1` |
 
 ## Authoritative Split
 

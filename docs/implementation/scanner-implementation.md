@@ -8,7 +8,7 @@ AUTHORITATIVE BUILD DOCUMENT
 
 Single build source for implementing the controlled MVP static-analysis scanner.
 
-Domain behavior lives in `docs/specs/scanner-spec.md`. Runtime flow lives in `docs/developer-execution-blueprints/02-repository-scan-blueprint.md`. Physical persistence lives in `docs/implementation/persistence-implementation.md`. Queue topology lives in `docs/implementation/queue-implementation.md`.
+Domain behavior lives in `docs/specs/scanner-spec.md`. Runtime flow lives in `docs/developer-execution-blueprints/scanner-data-journey.md`. Physical persistence lives in `docs/implementation/persistence-implementation.md`. Queue topology lives in `docs/implementation/queue-implementation.md`.
 
 ## Build Boundary
 
@@ -31,8 +31,8 @@ The active scanner documentation covers the full controlled MVP scanner path, no
 7. AI provider, framework, invocation, output, decision-flow, prompt and data-field signal detection.
 8. Evidence reference generation from normalized metadata only.
 9. Metadata-only persistence of source files, graph nodes/edges, evidence references, findings and technical evidence reports.
-10. Outbox emission of `event.scan.completed.v1` or `event.scan.failed.v1`.
-11. Workspace cleanup and audit logging.
+10. Workspace cleanup verification and audit logging.
+11. Outbox emission of `event.scan.completed.v1` or `event.scan.failed.v1`.
 
 The parser foundation slice implements `ParserRegistry`, `LanguageMapper`, `UnsupportedParserAdapter`, `TreeSitterAstExtractor`, DTO/types and `EvidenceRefFactory`; that slice is a prerequisite for the full scanner MVP, not the scope of this document.
 
@@ -266,9 +266,20 @@ handleScanRequested(payload):
     save TechnicalFinding rows
     save TechnicalEvidenceReport
     write AuditEvent
-    write OutboxEvent event.scan.completed.v1
 
   cleanup workspace
+
+  if cleanup fails:
+    transaction:
+      mark ScanJob FAILED with SCANNER_WORKSPACE_CLEANUP_FAILED
+      write security-sensitive AuditEvent
+      write OutboxEvent event.scan.failed.v1
+    stop
+
+  transaction:
+    mark ScanJob COMPLETED
+    write AuditEvent
+    write OutboxEvent event.scan.completed.v1
 ```
 
 Failure behavior:

@@ -91,7 +91,7 @@ This document explains what users and system workers do in LCSP. It is domain-le
 | Preconditions | VerifiedProfile exists; legal matching has completed; no unresolved conflict remains. |
 | Happy path | 1. Manager requests classification or system triggers based on workflow. 2. System validates prerequisites. 3. Classification command is queued. |
 | System behavior | Blocks classification before VerifiedProfile or legal matching. |
-| Database changes | Creates/updates `ClassificationResult` request state; writes `AuditEvent`; writes `OutboxEvent`. |
+| Database changes | Creates/updates `RiskClassification` request state; writes `AuditEvent`; writes `OutboxEvent`. |
 | Events emitted | `command.classification.requested.v1`; later `event.classification.completed.v1` or `event.classification.blocked.v1`. |
 | Resulting state | `CLASSIFICATION_READY`, `CLASSIFICATION_BLOCKED`, or completed classification state. |
 | Failure path | Missing citation, missing legal match, unresolved conflict or unknown critical usage blocks/degrades classification. |
@@ -219,9 +219,9 @@ This document explains what users and system workers do in LCSP. It is domain-le
 |---|---|
 | Goal | Produce evidence-backed risk result or blocked state. |
 | Preconditions | VerifiedProfile exists; legal matching completed; citations available where required. |
-| Happy path | Legal Matching Worker creates LegalRuleMatch; Classification Worker creates ClassificationResult. |
+| Happy path | Legal Matching Worker creates LegalRuleMatch; Classification Worker creates RiskClassification. |
 | System behavior | Does not classify from provider/model/framework presence alone. |
-| Database changes | Creates `LegalRuleMatch`; creates `ClassificationResult`; writes audit/outbox. |
+| Database changes | Creates `LegalRuleMatch`; creates `RiskClassification`; writes audit/outbox. |
 | Events emitted | `event.legal-matching.completed.v1`, `command.classification.requested.v1`, `event.classification.completed.v1` or `event.classification.blocked.v1`. |
 | Resulting state | `CLASSIFICATION_READY` or `CLASSIFICATION_BLOCKED`. |
 | Failure path | Missing citation, policy-only source without binding basis, unresolved conflict or unknown critical usage blocks/degrades. |
@@ -232,11 +232,11 @@ This document explains what users and system workers do in LCSP. It is domain-le
 | Field | Content |
 |---|---|
 | Goal | Create gap analysis and document artifact under output guardrails. |
-| Preconditions | Classification result exists; final report requires valid classification/gap/legal trace and no unresolved conflict. |
-| Happy path | Document Worker uses classification, legal matches, evidence refs and template version to persist document metadata and artifact ref. |
+| Preconditions | RiskClassification exists; final report requires completed GapAnalysis, legal trace and no unresolved conflict. |
+| Happy path | Gap Analysis Worker creates `GapAnalysis`; Document Worker uses RiskClassification, GapAnalysis, legal matches, evidence refs and template version to persist document metadata and artifact ref. |
 | System behavior | Blocks or degrades output when legal citation or conflict prerequisites fail. |
 | Database changes | Creates `GapAnalysis` domain result and `GeneratedDocument`; writes audit/outbox. |
-| Events emitted | `command.document.requested.v1`, `event.document.generated.v1` or `event.document.blocked.v1`. |
+| Events emitted | `command.gap-analysis.requested.v1`, `event.gap-analysis.completed.v1`, `command.document.requested.v1`, `event.document.generated.v1` or `event.document.blocked.v1`. |
 | Resulting state | `DOCUMENT_GENERATED` or `DOCUMENT_BLOCKED`. |
 | Failure path | Missing citation, missing classification, unresolved conflict or output guardrail failure blocks final document. |
-| State transitions | `CLASSIFICATION_READY -> DOCUMENT_GENERATED` or `DOCUMENT_BLOCKED`. |
+| State transitions | `CLASSIFICATION_READY -> GAP_ANALYSIS_READY -> DOCUMENT_GENERATED` or blocked. |

@@ -41,6 +41,7 @@ Queue handles Repository Scan, workflow/orchestration work, classification/RAG s
 | `repository_scan` | Static scan selected repo/commit | repo + commit + scanner version + ruleset version |
 | `workflow_continue` | Resume orchestrator after node/result | workflow run + state version |
 | `classification_run` | Legal RAG + risk classification | VerifiedProfile version + corpus version |
+| `gap_analysis_run` | Generate compliance gap analysis after classification | classification result + legal-match versions |
 | `document_generation` | Generate document artifact | assessment + template + result versions |
 | `cleanup_verification` | Verify scanner workspace cleanup | scan id + workspace id |
 | `recovery_replay` | Reconcile stuck job/state | workflow run + checkpoint |
@@ -109,6 +110,7 @@ All worker retries use bounded exponential backoff with jitter: `30s`, `120s`, `
 | Reconciliation worker | `lcsp.reconciliation-worker.v1` | `lcsp.reconciliation-worker.dlq.v1` | 3 | Persist conflict/blocked state when possible; otherwise audit worker failure. |
 | LegalMatching worker | `lcsp.legal-matching-worker.v1` | `lcsp.legal-matching-worker.dlq.v1` | 3 | Publish `event.legal-matching.failed.v1`, block/degrade classification, audit. |
 | Classification worker | `lcsp.classification-worker.v1` | `lcsp.classification-worker.dlq.v1` | 3 | Publish `event.classification.blocked.v1` or failed audit record depending on failure type. |
+| GapAnalysis worker | `lcsp.gap-analysis-worker.v1` | `lcsp.gap-analysis-worker.dlq.v1` | 3 | Publish `event.gap-analysis.failed.v1` or `event.gap-analysis.blocked.v1`, block document generation, audit. |
 | Document worker | `lcsp.document-worker.v1` | `lcsp.document-worker.dlq.v1` | 3 | Publish `event.document.blocked.v1` or failed audit record depending on failure type. |
 
 ## Locked Orchestration Persistence for Controlled MVP
@@ -137,6 +139,7 @@ Checkpoint persistence uses existing domain state, job status rows, `OutboxEvent
 | `lcsp.reconciliation-worker.v1` | `lcsp.reconciliation-worker.dlq.v1` | Reconciliation worker |
 | `lcsp.legal-matching-worker.v1` | `lcsp.legal-matching-worker.dlq.v1` | Legal Matching worker |
 | `lcsp.classification-worker.v1` | `lcsp.classification-worker.dlq.v1` | Classification worker |
+| `lcsp.gap-analysis-worker.v1` | `lcsp.gap-analysis-worker.dlq.v1` | Gap Analysis worker |
 | `lcsp.document-worker.v1` | `lcsp.document-worker.dlq.v1` | Document worker |
 
 ### Routing Keys
@@ -149,6 +152,7 @@ Commands use `lcsp.commands.v1`:
 - `command.reconciliation.requested.v1`
 - `command.legal-matching.requested.v1`
 - `command.classification.requested.v1`
+- `command.gap-analysis.requested.v1`
 - `command.document.requested.v1`
 
 Events use `lcsp.events.v1`:
@@ -165,6 +169,9 @@ Events use `lcsp.events.v1`:
 - `event.legal-matching.failed.v1`
 - `event.classification.completed.v1`
 - `event.classification.blocked.v1`
+- `event.gap-analysis.completed.v1`
+- `event.gap-analysis.blocked.v1`
+- `event.gap-analysis.failed.v1`
 - `event.document.generated.v1`
 - `event.document.blocked.v1`
 
@@ -237,4 +244,18 @@ event.legal-matching.completed.v1 -> command.classification.requested.v1
 ```
 
 Classification must not consume `event.reconciliation.verified-profile-ready.v1` directly.
+
+Gap Analysis runs only after classification completes:
+
+```text
+event.classification.completed.v1 -> command.gap-analysis.requested.v1
+```
+
+Document generation runs only after gap analysis completes:
+
+```text
+event.gap-analysis.completed.v1 -> command.document.requested.v1
+```
+
+Document generation must not consume `event.classification.completed.v1` directly. `event.classification.blocked.v1`, `event.gap-analysis.blocked.v1`, and `event.gap-analysis.failed.v1` keep document generation blocked until a new valid upstream result exists.
 <!-- PHASE-5-5-RABBITMQ-OUTBOX:END -->

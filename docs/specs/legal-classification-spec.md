@@ -28,11 +28,19 @@ Classification may use VerifiedProfile, AIUsageFlow business usage and downstrea
 
 Classification must not use provider/model/framework presence alone, unverified Manager claims, unresolved conflict, or missing citation as if it were sufficient legal basis.
 
+## Gap Analysis
+
+Gap Analysis is a first-class runtime component between classification and document generation.
+
+Gap Analysis uses completed `RiskClassification`, `LegalRuleMatch[]`, citation coverage and evidence refs to produce `GapAnalysis` items. It identifies missing obligations, missing evidence, citation gaps, blocked/degraded output reasons and prioritized remediation items.
+
+Document generation must use `GapAnalysis` as an input and must not run directly from `event.classification.completed.v1`.
+
 ## Output
 
 ```json
 {
-  "classificationResultId": "risk_001",
+  "riskClassificationId": "risk_001",
   "assessmentId": "assess_001",
   "verifiedProfileId": "vp_001",
   "riskLevel": "BLOCKED_OR_CLASSIFIED",
@@ -61,4 +69,20 @@ event.legal-matching.completed.v1
 ```
 
 Classification must not consume `event.reconciliation.verified-profile-ready.v1` directly. The legal matching step is mandatory because classification requires `LegalRuleMatch[]` and citation traceability.
+
+Gap Analysis is triggered only after classification completes:
+
+```text
+event.classification.completed.v1
+-> command.gap-analysis.requested.v1
+```
+
+Document generation is triggered only after gap analysis completes:
+
+```text
+event.gap-analysis.completed.v1
+-> command.document.requested.v1
+```
+
+Document generation must not consume `event.classification.completed.v1` directly.
 <!-- PHASE-5-5-CLASSIFICATION-TRIGGER:END -->

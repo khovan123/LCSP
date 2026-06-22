@@ -37,6 +37,7 @@ docs/
     ai-usage-flow-blueprint.md
     reconciliation-blueprint.md
     classification-blueprint.md
+    gap-analysis-blueprint.md
   implementation/
     scanner-implementation.md
     backend-implementation.md

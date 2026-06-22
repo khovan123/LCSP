@@ -22,7 +22,7 @@ Organization
 -> Conflict
 -> VerifiedProfile
 -> LegalRuleMatch
--> ClassificationResult
+-> RiskClassification
 -> GapAnalysis
 -> GeneratedDocument
 -> AuditEvent
@@ -305,7 +305,7 @@ Organization
 | Owner Service | Reconciliation Worker |
 | Lifecycle | Created after no conflict or resolved conflict; versioned snapshot. |
 | State Machine | `VERIFIED_PROFILE_READY` enables legal matching. |
-| Relationships | Combines WizardProfile, TechnicalProfile, AIUsageFlow and Manager resolutions; feeds LegalRuleMatch and ClassificationResult. |
+| Relationships | Combines WizardProfile, TechnicalProfile, AIUsageFlow and Manager resolutions; feeds LegalRuleMatch and RiskClassification. |
 | Business Rules | BR-045, BR-078 |
 
 | Field | Type | Required | Description |
@@ -327,7 +327,7 @@ Organization
 | Owner Service | Legal Matching Worker |
 | Lifecycle | Created after VerifiedProfile; status reflects match and citation coverage. |
 | State Machine | Completed legal matching triggers classification command. |
-| Relationships | Belongs to Assessment, VerifiedProfile and LegalCorpusVersion; feeds ClassificationResult. |
+| Relationships | Belongs to Assessment, VerifiedProfile and LegalCorpusVersion; feeds RiskClassification. |
 | Business Rules | BR-050, BR-051, BR-084 |
 
 | Field | Type | Required | Description |
@@ -341,7 +341,7 @@ Organization
 | matchRationale | JSON | Yes | Structured rationale. |
 | status | string | Yes | Match/citation status. |
 
-### ClassificationResult
+### RiskClassification
 
 | Aspect | Value |
 |---|---|
@@ -354,7 +354,7 @@ Organization
 
 | Field | Type | Required | Description |
 |---|---|---:|---|
-| classificationResultId | UUIDv7 | Yes | Classification identity. |
+| riskClassificationId | UUIDv7 | Yes | Classification identity. |
 | assessmentId | UUIDv7 | Yes | Assessment scope. |
 | verifiedProfileId | UUIDv7 | Yes | Verified basis. |
 | legalRuleMatchId | UUIDv7 | No | Citation-backed legal match. |
@@ -370,18 +370,20 @@ Organization
 |---|---|
 | Purpose | Identifies compliance gaps based on classification and legal basis. |
 | Owner Service | Gap Analysis Worker |
-| Lifecycle | Created after valid or explicitly degraded classification. |
-| State Machine | No independent active state in current physical schema; it is a domain result before document generation. |
-| Relationships | Derived from ClassificationResult and LegalRuleMatch; feeds GeneratedDocument. |
+| Lifecycle | REQUESTED, RUNNING, COMPLETED, BLOCKED, FAILED. |
+| State Machine | GapAnalysis state machine in `domain-state-machines.md`; completed GapAnalysis enables document generation. |
+| Relationships | Derived from RiskClassification and LegalRuleMatch; feeds GeneratedDocument. |
 | Business Rules | BR-062, BR-079 |
 
 | Field | Type | Required | Description |
 |---|---|---:|---|
 | gapAnalysisId | UUIDv7 | Yes | Gap analysis identity. |
 | assessmentId | UUIDv7 | Yes | Assessment scope. |
-| classificationResultId | UUIDv7 | Yes | Classification source. |
+| riskClassificationId | UUIDv7 | Yes | Classification source. |
+| status | GapAnalysisStatus | Yes | Gap analysis lifecycle status. |
 | gapItems | JSON | Yes | Gap list, obligation refs and priority. |
 | evidenceRefs | JSON | Yes | Evidence and legal references. |
+| blockingReasons | JSON | Yes | Reasons when blocked or failed. |
 | createdAt | datetime | Yes | Creation timestamp. |
 
 ### GeneratedDocument
@@ -392,14 +394,15 @@ Organization
 | Owner Service | Document Worker |
 | Lifecycle | REQUESTED, GENERATED, BLOCKED, FAILED. |
 | State Machine | Final document generated only when output guardrails pass. |
-| Relationships | Belongs to Assessment and ClassificationResult; references storage artifact. |
+| Relationships | Belongs to Assessment, RiskClassification and GapAnalysis; references storage artifact. |
 | Business Rules | BR-063..BR-066, BR-079 |
 
 | Field | Type | Required | Description |
 |---|---|---:|---|
 | generatedDocumentId | UUIDv7 | Yes | Document identity. |
 | assessmentId | UUIDv7 | Yes | Assessment scope. |
-| classificationResultId | UUIDv7 | Yes for final report | Classification basis. |
+| riskClassificationId | UUIDv7 | Yes for final report | Classification basis. |
+| gapAnalysisId | UUIDv7 | Yes for final report | Gap analysis basis. |
 | status | DocumentStatus | Yes | Document lifecycle state. |
 | templateVersion | string | Yes | Template version. |
 | storageRef | string | No | Object storage reference when generated. |

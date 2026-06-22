@@ -20,7 +20,7 @@ It is domain behavior documentation only. It does not define physical schema, im
 
 ### States
 
-`CREATED`, `WIZARD_PROFILE_READY`, `REPOSITORY_CONNECTED`, `SNAPSHOT_CREATED`, `SCAN_REQUESTED`, `SCAN_RUNNING`, `SCAN_COMPLETED`, `TECHNICAL_PROFILE_READY`, `AI_USAGE_FLOW_READY`, `RECONCILIATION_REQUIRED`, `VERIFIED_PROFILE_READY`, `LEGAL_MATCHING_READY`, `CLASSIFICATION_READY`, `CLASSIFICATION_BLOCKED`, `DOCUMENT_GENERATED`, `DOCUMENT_BLOCKED`.
+`CREATED`, `WIZARD_PROFILE_READY`, `REPOSITORY_CONNECTED`, `SNAPSHOT_CREATED`, `SCAN_REQUESTED`, `SCAN_RUNNING`, `SCAN_COMPLETED`, `TECHNICAL_PROFILE_READY`, `AI_USAGE_FLOW_READY`, `RECONCILIATION_REQUIRED`, `VERIFIED_PROFILE_READY`, `LEGAL_MATCHING_READY`, `CLASSIFICATION_READY`, `CLASSIFICATION_BLOCKED`, `GAP_ANALYSIS_READY`, `GAP_ANALYSIS_BLOCKED`, `DOCUMENT_GENERATED`, `DOCUMENT_BLOCKED`.
 
 ### Transition Table
 
@@ -39,16 +39,19 @@ It is domain behavior documentation only. It does not define physical schema, im
 | `AI_USAGE_FLOW_READY` | `event.reconciliation.verified-profile-ready.v1` | No unresolved conflict exists. | Persist VerifiedProfile. | `VERIFIED_PROFILE_READY` |
 | `RECONCILIATION_REQUIRED` | `event.reconciliation.verified-profile-ready.v1` | All conflicts resolved by Manager. | Persist VerifiedProfile. | `VERIFIED_PROFILE_READY` |
 | `VERIFIED_PROFILE_READY` | `event.legal-matching.completed.v1` | LegalRuleMatch records persisted. | Mark legal basis ready. | `LEGAL_MATCHING_READY` |
-| `LEGAL_MATCHING_READY` | `event.classification.completed.v1` | ClassificationResult completed. | Mark classification ready. | `CLASSIFICATION_READY` |
+| `LEGAL_MATCHING_READY` | `event.classification.completed.v1` | RiskClassification completed. | Mark classification ready. | `CLASSIFICATION_READY` |
 | `LEGAL_MATCHING_READY` | `event.classification.blocked.v1` | Classification guardrail blocks output. | Preserve blocking reasons. | `CLASSIFICATION_BLOCKED` |
-| `CLASSIFICATION_READY` | `event.document.generated.v1` | Document artifact metadata persisted. | Mark document generated. | `DOCUMENT_GENERATED` |
-| `CLASSIFICATION_READY` or `CLASSIFICATION_BLOCKED` | `event.document.blocked.v1` | Document guardrail blocks final output. | Preserve blocking reasons. | `DOCUMENT_BLOCKED` |
+| `CLASSIFICATION_READY` | `event.gap-analysis.completed.v1` | GapAnalysis persisted. | Mark gap analysis ready. | `GAP_ANALYSIS_READY` |
+| `CLASSIFICATION_READY` | `event.gap-analysis.blocked.v1` or `event.gap-analysis.failed.v1` | GapAnalysis cannot complete. | Preserve blocking reasons. | `GAP_ANALYSIS_BLOCKED` |
+| `GAP_ANALYSIS_READY` | `event.document.generated.v1` | Document artifact metadata persisted. | Mark document generated. | `DOCUMENT_GENERATED` |
+| `GAP_ANALYSIS_READY`, `GAP_ANALYSIS_BLOCKED`, or `CLASSIFICATION_BLOCKED` | `event.document.blocked.v1` | Document guardrail blocks final output. | Preserve blocking reasons. | `DOCUMENT_BLOCKED` |
 
 ### Invalid Transitions
 
 - `CREATED -> SCAN_REQUESTED` without WizardProfile and repository snapshot.
 - `SCAN_COMPLETED -> CLASSIFICATION_READY` without TechnicalProfile, AIUsageFlow, VerifiedProfile and LegalRuleMatch.
 - `VERIFIED_PROFILE_READY -> CLASSIFICATION_READY` without `event.legal-matching.completed.v1`.
+- `CLASSIFICATION_READY -> DOCUMENT_GENERATED` without `event.gap-analysis.completed.v1`.
 - Any state with unresolved conflict -> `CLASSIFICATION_READY`.
 - Provider/model/framework evidence alone -> `CLASSIFICATION_READY`.
 
@@ -68,7 +71,7 @@ It is domain behavior documentation only. It does not define physical schema, im
 
 ### Event Mapping
 
-Uses all workflow events from `docs/specs/event-catalog.md`, especially `command.scan.requested.v1`, `event.scan.completed.v1`, `event.technical-profile.completed.v1`, `event.ai-usage-flow.completed.v1`, `event.reconciliation.conflict-detected.v1`, `event.reconciliation.verified-profile-ready.v1`, `event.legal-matching.completed.v1`, `event.classification.completed.v1`, `event.classification.blocked.v1`, `event.document.generated.v1`, and `event.document.blocked.v1`.
+Uses all workflow events from `docs/specs/event-catalog.md`, especially `command.scan.requested.v1`, `event.scan.completed.v1`, `event.technical-profile.completed.v1`, `event.ai-usage-flow.completed.v1`, `event.reconciliation.conflict-detected.v1`, `event.reconciliation.verified-profile-ready.v1`, `event.legal-matching.completed.v1`, `event.classification.completed.v1`, `event.classification.blocked.v1`, `event.gap-analysis.completed.v1`, `event.gap-analysis.blocked.v1`, `event.document.generated.v1`, and `event.document.blocked.v1`.
 
 ### Example Journey
 
@@ -85,6 +88,7 @@ CREATED
 -> VERIFIED_PROFILE_READY
 -> LEGAL_MATCHING_READY
 -> CLASSIFICATION_READY
+-> GAP_ANALYSIS_READY
 -> DOCUMENT_GENERATED
 ```
 
@@ -349,7 +353,7 @@ Fix corpus/citations or VerifiedProfile unknown facts, then rerun legal matching
 
 `REQUESTED -> MATCHED` for loan approval when required facts and complete citation exist.
 
-## ClassificationResult
+## RiskClassification
 
 ### States
 
@@ -388,6 +392,45 @@ Resolve blocking reasons, rerun legal matching if needed, then request new class
 
 `REQUESTED -> RUNNING -> COMPLETED`.
 
+## GapAnalysis
+
+### States
+
+`REQUESTED`, `RUNNING`, `COMPLETED`, `BLOCKED`, `FAILED`.
+
+### Transition Table
+
+| Current State | Trigger Event | Guard Condition | Action | Next State |
+|---|---|---|---|---|
+| none | `command.gap-analysis.requested.v1` | RiskClassification is `COMPLETED`. | Create gap-analysis run. | `REQUESTED` |
+| `REQUESTED` | Worker starts. | Lock acquired and classification basis exists. | Evaluate obligations, gaps and priorities. | `RUNNING` |
+| `RUNNING` | `event.gap-analysis.completed.v1` | Gap items and evidence/legal refs persisted. | Persist GapAnalysis result. | `COMPLETED` |
+| `RUNNING` | `event.gap-analysis.blocked.v1` | Classification is blocked, citation basis missing, or required legal basis is unavailable. | Persist blocking reasons. | `BLOCKED` |
+| `REQUESTED` or `RUNNING` | `event.gap-analysis.failed.v1` | Fatal worker or input failure. | Persist redacted failure. | `FAILED` |
+
+### Invalid Transitions
+
+- `REQUESTED` before `event.classification.completed.v1`.
+- `COMPLETED` without a completed classification basis.
+- `COMPLETED` without evidence/legal refs for gap items.
+- `COMPLETED -> DOCUMENT_GENERATED` without `event.gap-analysis.completed.v1` projection creating `command.document.requested.v1`.
+
+### Failure Transitions
+
+Worker error yields `FAILED`; guardrail/precondition failure yields `BLOCKED`.
+
+### Recovery Transitions
+
+Resolve missing citation, legal-match, or classification blockers and create a new gap-analysis request. Do not mutate a completed or failed GapAnalysis result.
+
+### Event Mapping
+
+`command.gap-analysis.requested.v1`, `event.gap-analysis.completed.v1`, `event.gap-analysis.blocked.v1`, `event.gap-analysis.failed.v1`, `GAP_ANALYSIS_COMPLETED`, `GAP_ANALYSIS_BLOCKED`.
+
+### Example Journey
+
+`REQUESTED -> RUNNING -> COMPLETED`.
+
 ## GeneratedDocument
 
 ### States
@@ -398,14 +441,14 @@ Resolve blocking reasons, rerun legal matching if needed, then request new class
 
 | Current State | Trigger Event | Guard Condition | Action | Next State |
 |---|---|---|---|---|
-| none | `command.document.requested.v1` | ClassificationResult exists. | Create document request. | `REQUESTED` |
+| none | `command.document.requested.v1` | GapAnalysis is `COMPLETED`. | Create document request. | `REQUESTED` |
 | `REQUESTED` | `event.document.generated.v1` | Citation/conflict/output guardrails pass. | Persist artifact metadata and hash. | `GENERATED` |
 | `REQUESTED` | `event.document.blocked.v1` | Missing citation, unresolved conflict, unsupported final output or blocked classification. | Persist blocking reasons. | `BLOCKED` |
 | `REQUESTED` | Worker fatal failure. | Redacted failure exists. | Persist failure. | `FAILED` |
 
 ### Invalid Transitions
 
-- `GENERATED` without ClassificationResult.
+- `GENERATED` without completed GapAnalysis.
 - `GENERATED` with unresolved conflict.
 - Final legal output without citation traceability.
 

@@ -25,6 +25,7 @@ apps/api/src/
     scans/
     reconciliation/
     classification/
+    gap-analysis/
     documents/
     audit/
 ```
@@ -33,13 +34,14 @@ apps/api/src/
 
 | Module Folder | Controllers | Services | Repositories | DTOs | Tables | Queues |
 |---|---|---|---|---|---|---|
-| `modules/auth` | `AuthController` | `AuthService`, `MfaService`, `SessionService` | `AuthRepository` | `OAuthCallbackDto`, `SessionDto` | `User`, `Session`, `OrganizationMember` | None |
+| `modules/auth` | `AuthController` | `AuthService`, `MfaService`, `SessionService` | `AuthRepository` | `OAuthCallbackDto`, `SessionDto` | `User`, `OrganizationMembership` | None |
 | `modules/assessments` | `AssessmentController` | `AssessmentService`, `AssessmentStateService` | `AssessmentRepository` | `CreateAssessmentDto`, `AssessmentDto` | `Assessment` | None |
 | `modules/wizard` | `WizardController` | `WizardProfileService` | `WizardRepository` | `SaveWizardProfileDto`, `WizardProfileDto` | `WizardProfile` | None |
-| `modules/github` | `GitHubController`, `GitHubWebhookController` | `GitHubAppJwtFactory`, `GitHubInstallationTokenService`, `RepositorySnapshotService` | `GitHubRepository` | `ConnectRepositoryDto`, `RepositorySnapshotDto` | `GitHubInstallation`, `RepositoryConnection`, `RepositorySnapshot` | optional snapshot event |
-| `modules/scans` | `ScanController` | `ScanJobService` | `ScanJobRepository` | `StartRepositoryScanDto`, `ScanJobDto` | `ScanJob`, `OutboxEvent` | writes `OutboxEvent` for `command.scan.requested.v1` |
-| `modules/reconciliation` | `ReconciliationController` | `ReconciliationService`, `VerifiedProfileService` | `ReconciliationRepository` | `ConflictResolutionDto`, `VerifiedProfileDto` | `ManagerConflictResolutionTask`, `VerifiedProfile` | writes `OutboxEvent` for `event.reconciliation.verified-profile-ready.v1` after Manager resolution |
-| `modules/classification` | `ClassificationController` | `ClassificationQueryService` | `ClassificationRepository` | `ClassificationResultDto` | `ClassificationResult`, `LegalRuleMatch` | None |
+| `modules/github` | `GitHubController`, `GitHubWebhookController` | `GitHubAppJwtFactory`, `GitHubInstallationTokenService`, `RepositorySnapshotService` | `GitHubRepository` | `ConnectRepositoryDto`, `RepositorySnapshotDto` | `RepositoryConnection`, `RepositorySnapshot` | optional snapshot event |
+| `modules/scans` | `ScanController` | `ScanJobService` | `ScanJobRepository` | `StartRepositoryScanDto`, `ScanJobDto` | `RepositoryScanJob`, `OutboxEvent` | writes `OutboxEvent` for `command.scan.requested.v1` |
+| `modules/reconciliation` | `ReconciliationController` | `ReconciliationService`, `VerifiedProfileService` | `ReconciliationRepository` | `ConflictResolutionDto`, `VerifiedProfileDto` | `ReconciliationConflict`, `VerifiedProfile` | writes `OutboxEvent` for `command.reconciliation.requested.v1` after Manager resolution |
+| `modules/classification` | `ClassificationController` | `ClassificationQueryService` | `ClassificationRepository` | `RiskClassificationDto` | `RiskClassification`, `LegalRuleMatch` | None |
+| `modules/gap-analysis` | `GapAnalysisController` | `GapAnalysisQueryService` | `GapAnalysisRepository` | `GapAnalysisDto`, `GapAnalysisBlockedDto` | `GapAnalysis` | None |
 | `modules/documents` | `DocumentController` | `DocumentRequestService`, `DocumentQueryService` | `DocumentRepository` | `DocumentRequestDto`, `GeneratedDocumentDto` | `GeneratedDocument`, `OutboxEvent` | writes `OutboxEvent` for `command.document.requested.v1` |
 | `modules/audit` | `AuditController` | `AuditQueryService`, `AuditWriter` | `AuditRepository` | `AuditEventDto` | `AuditEvent` | None |
 
@@ -65,5 +67,6 @@ Controllers validate HTTP shape and actor role. Services enforce state and domai
 | `POST` | `/api/v1/assessments/:assessmentId/reconciliation-conflicts/:conflictId/resolve` | `ReconciliationController.resolveConflict` |
 | `POST` | `/api/v1/assessments/:assessmentId/classifications` | `ClassificationController.requestClassification` |
 | `GET` | `/api/v1/assessments/:assessmentId/classifications/latest` | `ClassificationController.getLatest` |
+| `GET` | `/api/v1/assessments/:assessmentId/gap-analysis/latest` | `GapAnalysisController.getLatest` |
 | `POST` | `/api/v1/assessments/:assessmentId/documents` | `DocumentController.requestDocument` |
 | `GET` | `/api/v1/assessments/:assessmentId/documents/:documentId` | `DocumentController.getDocument` |

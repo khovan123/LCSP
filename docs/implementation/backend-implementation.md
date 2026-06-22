@@ -56,9 +56,9 @@ The NestJS API owns synchronous request handling, authentication, authorization,
 | AIUsageFlow | Usage flow review | AIUsageFlow endpoints | Read/uncertainty policy | AIUsageFlow, AIUsageFlowClaim |
 | Reconciliation | Conflict resolution | Conflict endpoints | Manager resolution policy | ConflictRecord, ConflictResolution |
 | VerifiedProfile | Profile review/approval | VerifiedProfile endpoints | Prerequisite validation | VerifiedProfile |
-| Classification | Classification request/result | Classification endpoints | Gate check + job enqueue | ClassificationRun, RiskClassificationResult |
-| Gap Analysis | Gap results | Gap endpoints | Result access policy | GapAnalysisResult |
-| Document | Document request/download | Document endpoints | Final report gate + storage refs | ComplianceDocument, GeneratedDocumentFile |
+| Classification | Classification request/result | Classification endpoints | Gate check + job enqueue | RiskClassification |
+| Gap Analysis | Gap results | Gap endpoints | Result access policy | GapAnalysis |
+| Document | Document request/download | Document endpoints | Final report gate + storage refs | GeneratedDocument, GeneratedDocument |
 | Audit | Audit view/export | Audit endpoints | Redacted query/export policy | AuditEvent |
 | Workflow / Job Status | Progress and blocking reasons | Status endpoints | State projection | WorkflowRun, job tables |
 | Future Permission Delegation | Post-MVP delegated technical permissions | Permission endpoints if enabled | Grant/revoke policy | PermissionGrant |
@@ -719,6 +719,7 @@ Local execution uses mock OIDC, deterministic mock LLM gateway, local JSONL lega
 | `POST` | `/api/v1/assessments/:assessmentId/reconciliation-conflicts/:conflictId/resolve` | `reconciliation` | Manager conflict resolution. |
 | `POST` | `/api/v1/assessments/:assessmentId/classifications` | `classification` | Request classification after legal matching prerequisites. |
 | `GET` | `/api/v1/assessments/:assessmentId/classifications/latest` | `classification` | Read latest classification or blocked state. |
+| `GET` | `/api/v1/assessments/:assessmentId/gap-analysis/latest` | `gap-analysis` | Read latest GapAnalysis or blocked state. |
 | `POST` | `/api/v1/assessments/:assessmentId/documents` | `documents` | Request document generation. |
 | `GET` | `/api/v1/assessments/:assessmentId/documents/:documentId` | `documents` | Read generated document metadata/status. |
 
@@ -751,7 +752,7 @@ No service may publish directly to RabbitMQ inside the same transaction.
 | `npm run dev:web` | Web app starts and can reach API health endpoint. |
 | `npm run test` | Unit and contract test suite passes. |
 | `npm run test:scanner` | Scanner parser/language/extractor tests pass. |
-| `npm run smoke:scan-fixture` | Synthetic scan fixture creates ScanJob, OutboxEvent, TechnicalEvidenceReport or explicit blocked reason. |
+| `npm run smoke:scan-fixture` | Synthetic scan fixture creates ScanJob, OutboxEvent, TechnicalEvidenceReport and verifies downstream command projection or explicit blocked reason. |
 
 ### Smoke Scan Fixture Expected Behavior
 
@@ -762,5 +763,6 @@ No service may publish directly to RabbitMQ inside the same transaction.
 5. Run worker.
 6. Confirm `TechnicalEvidenceReport` is created.
 7. Confirm `OutboxEvent` has routing key `event.scan.completed.v1`.
-8. Confirm TechnicalProfile and AIUsageFlow commands are enqueued or blocked with explicit reason.
+8. Confirm `command.technical-profile.requested.v1` and `command.ai-usage-flow.requested.v1` are enqueued in order or blocked with explicit reason.
+9. For full MVP smoke, continue the chain through Reconciliation, Legal Matching, Classification, Gap Analysis and Document Generation using only canonical `command.*` and `event.*` routing keys.
 <!-- PHASE-5-5-BACKEND-CONTRACT:END -->
