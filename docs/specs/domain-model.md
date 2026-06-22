@@ -363,7 +363,7 @@ Organization
 | status | ClassificationStatus | Yes | Classification state. |
 | riskLevel | string | No | Risk level when classification completes. |
 | blockingReasons | JSON | Yes | Reasons for blocked/degraded output. |
-| citationCoverage | string | Yes | COMPLETE, PARTIAL or MISSING. |
+| citationCoverage | string | Yes | `COMPLETE_CITATION`, `PARTIAL_CITATION`, or `NO_CITATION`. |
 | confidence | number | No | Classification confidence. |
 
 ### GapAnalysis

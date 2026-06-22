@@ -136,15 +136,13 @@ sequenceDiagram
   participant MQ as RabbitMQ
   participant Worker as ClassificationWorker.handleClassificationRequested()
   participant DB as PostgreSQL
-  participant Audit as Audit Log
   participant Next as Next Worker
 
   Prev->>DB: create OutboxEvent command.classification.requested.v1
   Outbox->>MQ: publish command.classification.requested.v1
   MQ->>Worker: consume command.classification.requested.v1
   Worker->>DB: read predecessor + assessment state
-  Worker->>DB: persist RiskClassification + outbox
-  Worker->>Audit: write audit event
+  Worker->>DB: persist RiskClassification + AuditEvent + OutboxEvent in one transaction
   Outbox->>MQ: publish event.classification.completed.v1 or event.classification.blocked.v1
   MQ->>Next: deliver next event
 ```

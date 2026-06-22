@@ -1194,21 +1194,29 @@ Future enterprise modes may add richer analyzers, optional runtime traces or Cod
 - `docs/specs/ai-usage-flow-domain-spec.md`
 - `docs/specs/acceptance-criteria-catalog.md`
 
-## Deferred Architecture Decisions
+## Controlled MVP Decision Status
 
-Các quyết định sau chưa được khóa và không được dùng làm cơ sở implementation backlog:
+The following decisions are locked for controlled MVP implementation and are no longer deferred:
 
-- Final service boundary.
-- Final database schema.
-- Final deployment topology.
-- Final scaling model.
-- Final queue technology.
-- Final scanner packaging.
-- Final legal rule engine implementation.
-- Final document generation implementation.
-- Final Orchestrator checkpoint/retry implementation.
-- Final LLM Gateway implementation.
-- Final enterprise/on-prem mode.
+- Controlled MVP service/module boundaries: `docs/architecture/architecture.md`, `docs/implementation/backend-implementation.md`.
+- Controlled MVP physical database schema: `docs/implementation/persistence-implementation.md`.
+- Controlled MVP queue technology, topology, retry and outbox: `docs/implementation/queue-implementation.md`.
+- Controlled MVP scanner runtime and packaging: `docs/specs/scanner-spec.md`, `docs/implementation/scanner-implementation.md`, ADR-022.
+- Controlled MVP legal matching/classification/domain behavior: `docs/specs/legal-matching-domain-spec.md`, `docs/specs/legal-classification-spec.md`, `docs/specs/domain-state-machines.md`.
+- Controlled MVP document-generation shell behavior: `docs/specs/document-generation-spec.md`.
+- Controlled MVP checkpoint/retry behavior: domain state, `OutboxEvent`, `AuditEvent` and RabbitMQ retry/DLQ contracts.
+- Controlled MVP LLM Gateway behavior: deterministic mock gateway by default, provider adapter boundary retained.
+
+## Deferred Production/Post-MVP Architecture Decisions
+
+The following decisions remain outside controlled MVP implementation authority and must not block controlled MVP coding:
+
+- Production deployment topology.
+- Production scaling model.
+- Enterprise/on-prem mode.
+- Production LLM provider selection and compliance posture.
+- Post-MVP scanner analyzer expansion beyond controlled MVP support levels.
+- Post-MVP document issuance workflow beyond controlled MVP generated artifact shell.
 
 ## Validation Dependencies
 
@@ -1253,14 +1261,16 @@ ADR phải được revisit khi:
 - Security review tightens source-code handling rules.
 - MVP scope changes GitHub App/Local-CI/manual evidence priorities.
 
-## Readiness for Final Architecture Document
+## Readiness for Controlled MVP Implementation
 
-Final architecture document có thể được tạo sau khi:
+Controlled MVP implementation may proceed using the active architecture, ADRs, specifications and implementation documents. Future validation or production decisions may require change control, but they do not block controlled MVP coding.
+
+Final production architecture updates may be created after:
 
 - Product/architecture review chấp nhận Option A là MVP baseline hoặc ghi rõ alternative.
 - A1-A3 có validation result hoặc explicit unresolved caveat.
 - ADR status được review.
-- Deferred Architecture Decisions được giữ deferred hoặc có owner.
+- Deferred production/post-MVP decisions are either kept deferred or assigned an owner.
 - Open architecture questions từ `architecture.md` and accepted ADRs are classified blocker/non-blocker.
 
 Final architecture document phải dùng cùng lúc:
@@ -1272,11 +1282,11 @@ Final architecture document phải dùng cùng lúc:
 
 ## Required Conclusion
 
-ADR này chỉ khóa hướng kiến trúc ở mức conditional.
+ADR này khóa controlled MVP implementation baseline ở mức prototype implementation authority, not production release authority.
 
-Có thể dùng ADR này để tạo final architecture document sau khi review.
+Có thể dùng ADR này để maintain active architecture updates and controlled MVP implementation work.
 
-Chưa được tạo implementation backlog nếu A1-A3 chưa có acceptance threshold và validation result rõ.
+Không được dùng ADR này để claim production readiness, legal validation, compliance certification, formal legal reliability, A2-b2 completion, or customer deployment authorization.
 
 Nếu validation A1-A3 làm thay đổi PRD, các ADR liên quan phải được revisit.
 

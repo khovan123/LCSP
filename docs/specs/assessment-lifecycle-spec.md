@@ -113,10 +113,11 @@ export interface EvidenceRef {
 
 export interface ConfidenceBreakdown {
   base: number
-  evidenceStrength: number
-  supportPenalty: number
-  conflictPenalty: number
+  requiredEvidenceBonus: number
+  optionalSupportBonus: number
   coveragePenalty: number
+  conflictPenalty: number
+  missingRequiredEvidencePenalty: number
   final: number
 }
 
@@ -236,28 +237,7 @@ Every material claim used for legal matching must carry at least one `EvidenceRe
 
 ### Confidence Calculation Rules
 
-`confidenceBreakdown.final` is the claim confidence. Implementations must calculate it deterministically as:
+`docs/specs/ai-usage-flow-domain-spec.md` is the sole authoritative source for AIUsageFlow claim confidence, flow confidence, thresholds, rounding, penalties and aggregation.
 
-```text
-raw = base + evidenceStrength - supportPenalty - conflictPenalty - coveragePenalty
-final = roundToTwoDecimals(clamp(raw, 0.00, 1.00))
-claim.confidence = confidenceBreakdown.final
-```
-
-Aggregation:
-
-- `AIUsageFlow.confidence` is the rounded average of material claim `confidenceBreakdown.final` values.
-- Non-material provider-only claims do not raise flow confidence.
-- If no material claim is eligible, `AIUsageFlow.confidence = 0.00` and status is `UNCLEAR` or `BLOCKED`.
-- Rounding uses standard half-up rounding to two decimals.
-
-Component calculation:
-
-- `base` is `0.40` for a material claim, `0.25` for provider/framework-only claims, and `0.30` for coverage-limitation claims.
-- `evidenceStrength` is the sum of unique evidence contributions capped at `0.40`: direct model invocation `+0.20`, output signal `+0.10`, downstream action path `+0.20`, human-review path `+0.15`, domain/input/output corroboration `+0.05` each.
-- Duplicate evidence refs with the same `evidenceHash` count once.
-- `supportPenalty` is `0.10` for syntax-only support and `0.20` for basic-signal-only support.
-- `conflictPenalty` is `0.30` when any unresolved conflict touches the claim field; otherwise `0.00`.
-- `coveragePenalty` is the sum of applicable coverage limitations capped at `0.35`: dynamic flow `0.20`, unresolved callee `0.10`, unsupported language `0.15`, missing bounded path `0.25`.
-- Penalties are applied once per distinct reason code.
+This assessment lifecycle catalog owns rule IDs, rule order, rule inputs and rule outputs only. Implementations must not implement a second confidence formula from this document. For each rule, `confidenceImpact` is metadata used by the domain-spec calculator as supporting context, not an independent scoring algorithm.
 <!-- PHASE-5-5-AIUSAGEFLOW-TECHNICALPROFILE:END -->

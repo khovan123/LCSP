@@ -98,7 +98,7 @@ AIUsageFlow must not:
 | `lifecycleState` | `DETECTED`, `VALIDATED`, `CONFLICTED`, `VERIFIED`, `REJECTED`, or `ABSTAINED`. | Yes | Claim lifecycle rules. |
 | `evidenceRefs` | One or more evidence refs for material claims. | Conditional | Required for material legal-matching claims. |
 | `confidence` | Claim confidence, 0.0 to 1.0. | Yes | Confidence model. |
-| `confidenceBreakdown` | Base, evidence, support, conflict and coverage components. | Yes | Confidence model. |
+| `confidenceBreakdown` | Base, required-evidence bonus, optional-support bonus, coverage penalty, conflict penalty, missing-required-evidence penalty and final score. | Yes | Confidence model. |
 | `uncertaintyReasons` | Claim-specific unknowns. | Yes | Rule outcomes. |
 | `conflictRefs` | Conflict identifiers or conflict descriptors when applicable. | No | Conflict rules. |
 

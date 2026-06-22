@@ -82,6 +82,46 @@ TechnicalEvidenceReport
 | `AI_DECISION_FLOW_SIGNAL` + `AUTOMATED_DECISION_SIGNAL` | Decision-flow aggregation | Add `approve_reject` to `decisionFlowSignals`. |
 | `SCAN_COVERAGE_LIMITATION` | Coverage aggregation | Preserve limitation in `coverageLimitations`; do not guess missing fields. |
 
+## Confidence Aggregation
+
+`TechnicalProfile.confidence` is deterministic and derived from persisted `TechnicalFinding.confidence` values plus coverage penalties.
+
+```text
+eligibleFindings =
+  findings excluding SCAN_COVERAGE_LIMITATION and UNSUPPORTED_DYNAMIC_FLOW
+
+weightedSignalScore =
+  sum(finding.confidence * weightByFindingType) / sum(weightByFindingType)
+
+coveragePenalty =
+  min(distinctMaterialCoverageLimitationCount * 0.10, 0.30)
+
+providerOnlyCap =
+  0.59 when no AI_MODEL_INVOCATION finding exists
+  otherwise 1.00
+
+TechnicalProfile.confidence =
+  roundToTwoDecimals(min(providerOnlyCap, clamp(weightedSignalScore - coveragePenalty, 0.00, 1.00)))
+```
+
+Weights:
+
+| Finding type group | Weight |
+|---|---:|
+| `AI_MODEL_INVOCATION` | 1.00 |
+| `AI_DECISION_FLOW_SIGNAL`, `AUTOMATED_DECISION_SIGNAL` | 0.90 |
+| `AI_INPUT_SIGNAL`, `AI_OUTPUT_SIGNAL`, `HUMAN_REVIEW_SIGNAL` | 0.75 |
+| `SENSITIVE_DATA_SIGNAL`, `DOMAIN_CONTEXT_SIGNAL`, `HARM_POTENTIAL_SIGNAL` | 0.60 |
+| `AI_PROVIDER_USAGE`, `AI_FRAMEWORK_USAGE` | 0.40 |
+| Other eligible signals | 0.50 |
+
+Rules:
+
+- Duplicate findings with the same `evidenceRefId` and `findingType` count once.
+- If there are no eligible findings, `TechnicalProfile.confidence = 0.00`.
+- Provider/framework-only evidence can set `aiDetected = possible`, but the profile confidence cap is `0.59`.
+- Rounding uses half-up rounding to two decimals.
+
 # Queue Choreography
 
 | Producer | Exchange | Routing Key | Consumer |

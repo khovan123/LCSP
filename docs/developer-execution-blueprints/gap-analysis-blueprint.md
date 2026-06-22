@@ -156,7 +156,6 @@ sequenceDiagram
   participant MQ as RabbitMQ
   participant Gap as GapAnalysisWorker.handleGapAnalysisRequested()
   participant DB as PostgreSQL
-  participant Audit as Audit Log
   participant Doc as Document Trigger
 
   Class->>DB: persist RiskClassification + OutboxEvent
@@ -165,8 +164,7 @@ sequenceDiagram
   Outbox->>MQ: publish command.gap-analysis.requested.v1
   MQ->>Gap: consume command.gap-analysis.requested.v1
   Gap->>DB: read RiskClassification + LegalRuleMatch[]
-  Gap->>DB: persist GapAnalysis + outbox
-  Gap->>Audit: write audit event
+  Gap->>DB: persist GapAnalysis + AuditEvent + OutboxEvent in one transaction
   Outbox->>MQ: publish event.gap-analysis.completed.v1
   MQ->>DB: document trigger creates OutboxEvent command.document.requested.v1
   Outbox->>MQ: publish command.document.requested.v1

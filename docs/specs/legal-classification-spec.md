@@ -45,7 +45,7 @@ Document generation must use `GapAnalysis` as an input and must not run directly
   "verifiedProfileId": "018f0000-0000-7000-8000-000000000411",
   "riskLevel": "BLOCKED_OR_CLASSIFIED",
   "legalRuleMatchIds": ["018f0000-0000-7000-8000-000000000521"],
-  "citationCoverage": "COMPLETE | PARTIAL | MISSING",
+  "citationCoverage": "COMPLETE_CITATION | PARTIAL_CITATION | NO_CITATION",
   "blockingReasons": []
 }
 ```

@@ -53,7 +53,6 @@ Worker consumes `command.reconciliation.requested.v1` after `event.ai-usage-flow
   "verifiedProfile": {
     "verifiedProfileId": "018f0000-0000-7000-8000-000000000411",
     "profileVersion": 1,
-    "status": "VERIFIED",
     "evidenceRefs": [
       "ev:018f0000-0000-7000-8000-000000000201:CALL:1",
       "ev:018f0000-0000-7000-8000-000000000201:DECISION_POINT:3"
@@ -132,15 +131,13 @@ sequenceDiagram
   participant MQ as RabbitMQ
   participant Worker as ReconciliationWorker.handleReconciliationRequested()
   participant DB as PostgreSQL
-  participant Audit as Audit Log
   participant Next as Next Worker
 
   Prev->>DB: create OutboxEvent command.reconciliation.requested.v1
   Outbox->>MQ: publish command.reconciliation.requested.v1
   MQ->>Worker: consume command.reconciliation.requested.v1
   Worker->>DB: read predecessor + assessment state
-  Worker->>DB: persist VerifiedProfile or ReconciliationConflict + outbox
-  Worker->>Audit: write audit event
+  Worker->>DB: persist VerifiedProfile or ReconciliationConflict + AuditEvent + OutboxEvent in one transaction
   Outbox->>MQ: publish event.reconciliation.verified-profile-ready.v1 or event.reconciliation.conflict-detected.v1
   MQ->>Next: deliver next event
 ```

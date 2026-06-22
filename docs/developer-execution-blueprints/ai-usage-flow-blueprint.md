@@ -53,15 +53,15 @@ Worker consumes `command.ai-usage-flow.requested.v1` after `event.technical-prof
   "aiUsageFlowId": "018f0000-0000-7000-8000-000000000231",
   "status": "READY",
   "summary": {
-    "aiDetected": true,
-    "primaryBusinessProcess": "loan_approval",
+    "aiDetected": "confirmed",
+    "businessProcess": "loan_approval",
     "automationLevel": "FULLY_AUTOMATED",
     "humanReview": "ABSENT_WITH_BOUNDED_PATH"
   },
   "claims": [
     {
       "claimId": "018f0000-0000-7000-8000-000000000232",
-      "claimCategory": "AUTOMATION",
+      "claimCategory": "AUTOMATED_DECISION",
       "claimField": "automation_level",
       "claimValue": "FULLY_AUTOMATED",
       "lifecycleState": "VALIDATED",
@@ -71,11 +71,12 @@ Worker consumes `command.ai-usage-flow.requested.v1` after `event.technical-prof
         "ev:018f0000-0000-7000-8000-000000000201:DECISION_POINT:3"
       ],
       "confidenceBreakdown": {
-        "base": 0.7,
-        "evidenceStrength": 0.2,
-        "supportPenalty": 0,
-        "conflictPenalty": 0,
+        "base": 0.8,
+        "requiredEvidenceBonus": 0.1,
+        "optionalSupportBonus": 0,
         "coveragePenalty": 0.02,
+        "conflictPenalty": 0,
+        "missingRequiredEvidencePenalty": 0,
         "final": 0.88
       },
       "uncertaintyReasons": [],
@@ -154,15 +155,13 @@ sequenceDiagram
   participant MQ as RabbitMQ
   participant Worker as AIUsageFlowWorker.handleAIUsageFlowRequested()
   participant DB as PostgreSQL
-  participant Audit as Audit Log
   participant Next as Next Worker
 
   Prev->>DB: create OutboxEvent command.ai-usage-flow.requested.v1
   Outbox->>MQ: publish command.ai-usage-flow.requested.v1
   MQ->>Worker: consume command.ai-usage-flow.requested.v1
   Worker->>DB: read predecessor + assessment state
-  Worker->>DB: persist AIUsageFlow + outbox
-  Worker->>Audit: write audit event
+  Worker->>DB: persist AIUsageFlow + AuditEvent + OutboxEvent in one transaction
   Outbox->>MQ: publish event.ai-usage-flow.completed.v1 or event.ai-usage-flow.failed.v1
   MQ->>Next: deliver next event
 ```

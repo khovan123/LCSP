@@ -179,7 +179,7 @@ RiskClassification(blocked if citation missing, otherwise classified)
 
 | Input | Failure Point | Output |
 |---|---|---|
-| `command.scan.requested.v1` | Repository snapshot unavailable | `RepositoryScanJob.FAILED_RETRYABLE`, retry message. |
+| `command.scan.requested.v1` | Repository snapshot unavailable | `RepositoryScanJob.status = FAILED`, redacted `failureCode`, retry handled by queue/outbox metadata. |
 | `TechnicalEvidenceReport` | Schema Gate fails | `TECHNICAL_EVIDENCE_REJECTED`, no TechnicalProfile. |
 | `AIUsageFlow` | Conflict with WizardProfile | `ReconciliationConflict`, no classification. |
 | `VerifiedProfile` | Missing citation | `ClassificationBlocked(MISSING_CITATION)`. |
