@@ -2,340 +2,263 @@
 
 ## Purpose
 
-This document is the canonical active use case catalog for LCSP. It recovers existing use cases from the active product/domain documents and archived requirement catalogs without creating new product scope.
+This document is the canonical active use-case catalog for LCSP. It defines user and system outcomes for the A-to-Z runnable MVP without creating implementation detail, backlog, stories, or new product scope.
 
 ## Governance
 
-- Use case IDs in this document are canonical for active traceability.
-- Legacy `UC-MXX-XX` IDs remain source aliases only.
-- Deferred/Future flows are recorded only when they already exist in source material.
-- Implementation details remain outside this document.
+- Canonical use-case IDs are `UC-001..UC-018`.
+- Legacy `UC-MXX-XX` identifiers are source aliases only and must not appear in active traceability columns.
+- Canonical functional requirement IDs are `FR-001..FR-056`.
+- `FR-050..FR-052` are Deferred and are never part of the active MVP golden path.
+- Optional Developer participation must not block Manager completion.
+- Structured technical attestation under `FR-046` is active optional MVP input; delegated technical clarification workflow under `FR-052` is Deferred.
+- Legal corpus ingestion and approval are internal operations, not Manager/Developer product UX in the MVP.
 
 ## Use Case Inventory
 
-| UC ID | Name | Primary Actor | Status | Source Aliases |
+| UC ID | Name | Primary Actor | Status | Canonical FRs |
 |---|---|---|---|---|
-| UC-001 | Authenticate and Manage Account | Manager / Developer | ACTIVE | UC-M01-01..UC-M01-14 |
-| UC-002 | Manage Organization and Roles | Manager | ACTIVE | UC-M02-01..UC-M02-06 |
-| UC-003 | Create Assessment | Manager | ACTIVE | UC-M03-01 |
-| UC-004 | Complete WizardProfile | Manager | ACTIVE | UC-M03-02..UC-M03-05 |
-| UC-005 | Connect Repository | Manager; delegated Developer | ACTIVE | UC-M04-02 |
-| UC-006 | Create Repository Snapshot | Manager / LCSP System | ACTIVE | UC-M04-02, UC-M04-08 |
-| UC-007 | Execute Repository Scan | Manager; delegated Developer; LCSP System | ACTIVE | UC-M04-08 |
-| UC-008 | Generate TechnicalProfile | LCSP System | ACTIVE | UC-M05-01..UC-M05-05 |
-| UC-009 | Generate AIUsageFlow | LCSP System | ACTIVE | UC-M05-04, UC-M06-01 |
-| UC-010 | Resolve Conflict | Manager | ACTIVE | UC-M06-01..UC-M06-05 |
-| UC-011 | Create and Approve VerifiedProfile | Manager / LCSP System | ACTIVE | UC-M06-07, UC-M06-08 |
-| UC-012 | Perform Legal Matching | LCSP System | ACTIVE | UC-M07-01, UC-M07-03, UC-M07-04 |
-| UC-013 | Run Risk Classification | LCSP System / Manager | ACTIVE | UC-M07-02 |
-| UC-014 | Generate Gap Analysis and Document | Manager / LCSP System | ACTIVE | UC-M08-01..UC-M08-06 |
-| UC-015 | Review and Export Audit Trail | Manager / LCSP System | ACTIVE | UC-M09-01, UC-M09-03..UC-M09-05 |
-| UC-016 | Re-run Assessment Evidence | Manager; delegated Developer | ACTIVE | UC-M04-08, UC-M06-04 |
-| UC-017 | Enforce Security and Privacy Controls | LCSP System | ACTIVE | UC-M10-01..UC-M10-05 |
-| UC-018 | Submit Optional Developer Attestation | Developer / Manager | ACTIVE | UC-M04-01, UC-M04-05..UC-M04-07 |
+| UC-001 | Authenticate and Manage Account | Manager / Developer | ACTIVE | FR-001..FR-006 |
+| UC-002 | Manage Organization and Roles | Manager | ACTIVE | FR-007..FR-012 |
+| UC-003 | Create Assessment | Manager | ACTIVE | FR-013 |
+| UC-004 | Complete WizardProfile and Readiness | Manager | ACTIVE | FR-014, FR-015, FR-040 |
+| UC-005 | Connect Repository | Manager; optional delegated Developer | ACTIVE | FR-006, FR-016 |
+| UC-006 | Create Repository Snapshot | Manager / LCSP System | ACTIVE | FR-017 |
+| UC-007 | Execute Repository Scan | Manager / LCSP System; optional delegated Developer | ACTIVE | FR-018..FR-020, FR-048 |
+| UC-008 | Generate TechnicalProfile | LCSP System | ACTIVE | FR-021..FR-023 |
+| UC-009 | Generate AIUsageFlow | LCSP System | ACTIVE | FR-023..FR-025 |
+| UC-010 | Resolve Conflict | Manager | ACTIVE | FR-026..FR-029 |
+| UC-011 | Create and Approve VerifiedProfile | Manager / LCSP System | ACTIVE | FR-030, FR-031 |
+| UC-012 | Operate Legal Corpus and Perform Legal Matching | Internal Legal Operator / LCSP System | ACTIVE | FR-032..FR-034, FR-053, FR-054, FR-056 |
+| UC-013 | Run Risk Classification | Manager / LCSP System | ACTIVE | FR-035..FR-037, FR-055 |
+| UC-014 | Generate Gap Analysis and Documents | Manager / LCSP System | ACTIVE | FR-038..FR-041 |
+| UC-015 | Review and Export Audit Trail | Manager / LCSP System | ACTIVE | FR-042..FR-045 |
+| UC-016 | Re-run Assessment Evidence | Manager; optional delegated Developer | ACTIVE | FR-049 |
+| UC-017 | Enforce Security and Privacy Controls | LCSP System | ACTIVE | FR-019, FR-042, FR-048 |
+| UC-018 | Submit Optional Developer Attestation | Developer / Manager | ACTIVE | FR-010..FR-012, FR-045..FR-047 |
 
 ## UC-001 Authenticate and Manage Account
 
 | Field | Content |
 |---|---|
-| Goal | Allow authorized users to access LCSP through password/MFA or OAuth/OIDC while keeping account and session controls auditable. |
-| Primary Actor | Manager / Developer |
-| Secondary Actors | OAuth/OIDC Provider, LCSP System |
-| Preconditions | User has valid invitation, organization membership or approved signup path. |
-| Trigger | User starts login, OAuth/OIDC sign-in, registration, MFA setup, session action or profile/security action. |
-| Main Flow | 1. User submits identity action. 2. LCSP validates credentials or OAuth/OIDC callback. 3. LCSP applies MFA/session policy. 4. LCSP creates or updates session/account state. 5. LCSP writes audit event without secrets. |
-| Alternative Flows | OAuth/OIDC login validates state/nonce/issuer/audience/expiry; password-auth flow may require MFA; email verification gates sensitive access when configured. |
-| Exception Flows | Invalid credential, invalid OTP, unsafe account linking, expired token, revoked session or rate limit blocks access and audits outcome. |
-| Postconditions | Authenticated session exists or action is blocked with reason. |
+| Goal | Allow authorized users to register, authenticate, configure MFA, and manage account/session state. |
+| Preconditions | User has a valid invitation, organization membership, or approved signup path. |
+| Main flow | Validate password or OAuth/OIDC callback, enforce MFA/session policy, create or update the session, and audit the outcome without secrets. |
+| Exceptions | Invalid credentials, OTP, callback, linking, expired session, or rate limit blocks access with a safe error. |
+| Postconditions | Authenticated session exists or access is denied with an auditable reason. |
 | Business Rules | BR-001..BR-013, BR-074..BR-076, BR-086..BR-088, BR-094 |
-| Referenced FRs | FR-001..FR-011, FR-063..FR-065, FR-074..FR-076 |
-| Referenced ACs | AC-021, AC-022, AC-023 |
+| Functional Requirements | FR-001..FR-006 |
+| Acceptance Criteria | AC-021, AC-023 |
 
 ## UC-002 Manage Organization and Roles
 
 | Field | Content |
 |---|---|
-| Goal | Maintain tenant boundary, Manager role and scoped Developer collaboration. |
-| Primary Actor | Manager |
-| Secondary Actors | Developer, LCSP System |
-| Preconditions | Manager is authenticated and belongs to organization. |
-| Trigger | Manager creates organization, manages members, assigns Manager, invites Developer, assigns or revokes Developer policy. |
-| Main Flow | 1. Manager selects organization/assessment. 2. LCSP validates Manager permission. 3. LCSP applies membership or permission change. 4. LCSP audits change. |
-| Alternative Flows | Developer receives scoped task only; Manager can revoke or override delegated action. |
-| Exception Flows | Cross-tenant membership, invalid member, revoked policy or Developer attempt at Manager action is blocked. |
-| Postconditions | Organization and role/policy state is updated or denied. |
+| Goal | Maintain tenant, Manager authority, and scoped Developer collaboration. |
+| Preconditions | Manager is authenticated and organization-scoped. |
+| Main flow | Create organization, manage members, assign Manager role, invite Developer, and assign or revoke scoped Developer policies. |
+| Exceptions | Cross-tenant action, revoked policy, or Developer attempt at Manager-only action is denied and audited. |
+| Postconditions | Membership and policy state is updated or denied. |
 | Business Rules | BR-014..BR-022, BR-089..BR-092 |
-| Referenced FRs | FR-012..FR-017, FR-077, FR-078 |
-| Referenced ACs | AC-024, AC-025, AC-026 |
+| Functional Requirements | FR-007..FR-012 |
+| Acceptance Criteria | AC-024..AC-026 |
 
 ## UC-003 Create Assessment
 
 | Field | Content |
 |---|---|
-| Goal | Start a Manager-owned evidence-based compliance assessment. |
-| Primary Actor | Manager |
-| Secondary Actors | LCSP System |
+| Goal | Start a Manager-owned compliance assessment. |
 | Preconditions | Manager is authenticated and organization-scoped. |
-| Trigger | Manager creates a new assessment. |
-| Main Flow | 1. Manager enters assessment identity. 2. LCSP creates Assessment. 3. LCSP records Manager as owner. 4. LCSP sets initial state. 5. LCSP writes audit event. |
-| Alternative Flows | Manager may proceed directly to Wizard after creation. |
-| Exception Flows | Missing organization or authorization blocks creation. |
-| Postconditions | Assessment exists in `CREATED` or Wizard-start state. |
-| Business Rules | BR-018, BR-023, BR-024, BR-089 |
-| Referenced FRs | FR-018, FR-077 |
-| Referenced ACs | AC-001, AC-024 |
+| Main flow | Create Assessment, record owner, set initial state, and write AuditEvent. |
+| Exceptions | Missing tenant or authorization blocks creation. |
+| Postconditions | Assessment exists in `CREATED`. |
+| Functional Requirements | FR-013 |
+| Acceptance Criteria | AC-001 |
 
-## UC-004 Complete WizardProfile
+## UC-004 Complete WizardProfile and Readiness
 
 | Field | Content |
 |---|---|
-| Goal | Capture Manager business/legal context without requiring code knowledge. |
-| Primary Actor | Manager |
-| Secondary Actors | LCSP System |
+| Goal | Capture business/legal context in plain language and show readiness without a risk label. |
 | Preconditions | Assessment exists and Manager owns it. |
-| Trigger | Manager fills, saves or submits Wizard. |
-| Main Flow | 1. Manager answers purpose, sector, data, affected user, decision role and oversight questions. 2. LCSP saves answers. 3. LCSP creates WizardProfile on submit. 4. LCSP shows readiness without risk level. |
-| Alternative Flows | Manager saves draft; readiness-only export may be generated later. |
-| Exception Flows | Missing critical fields are explicit readiness gaps; Wizard-only state never unlocks classification. |
-| Postconditions | WizardProfile exists and assessment can proceed to repository evidence. |
-| Business Rules | BR-026..BR-031 |
-| Referenced FRs | FR-019..FR-023 |
-| Referenced ACs | AC-002, AC-003 |
+| Main flow | Save and submit purpose, sector, data, affected people, decision role, oversight, and external LLM answers. |
+| Exceptions | Missing critical fields remain explicit readiness gaps; Wizard-only state never unlocks classification. |
+| Postconditions | WizardProfile exists; readiness or readiness-only export may be shown without HIGH/MEDIUM/LOW. |
+| Functional Requirements | FR-014, FR-015, FR-040 |
+| Acceptance Criteria | AC-002, AC-003 |
 
 ## UC-005 Connect Repository
 
 | Field | Content |
 |---|---|
-| Goal | Connect selected GitHub repository as the active MVP technical evidence path. |
-| Primary Actor | Manager |
-| Secondary Actors | Delegated Developer, GitHub, LCSP System |
-| Preconditions | Assessment exists; actor has repository connection permission. |
-| Trigger | Actor starts GitHub App repository connection. |
-| Main Flow | 1. Actor selects repository/branch. 2. LCSP verifies GitHub App authorization. 3. LCSP stores RepositoryConnection metadata. 4. LCSP writes audit event. |
-| Alternative Flows | Developer may connect only under delegated policy. |
-| Exception Flows | Missing GitHub authorization, wrong scope or OAuth/GitHub confusion blocks connection. |
+| Goal | Connect a selected GitHub repository as the active MVP technical-evidence path. |
+| Preconditions | Assessment exists and actor has repository permission. |
+| Main flow | Select repository/branch, verify GitHub App read-only authorization, persist RepositoryConnection, and audit. |
+| Exceptions | Missing GitHub authorization, wrong scope, or OAuth/GitHub confusion blocks connection. |
 | Postconditions | RepositoryConnection exists. |
-| Business Rules | BR-032, BR-077, BR-088 |
-| Referenced FRs | FR-025, FR-076, FR-077 |
-| Referenced ACs | AC-004, AC-023 |
+| Functional Requirements | FR-006, FR-016 |
+| Acceptance Criteria | AC-004, AC-023 |
 
 ## UC-006 Create Repository Snapshot
 
 | Field | Content |
 |---|---|
-| Goal | Pin repository evidence to branch/commit metadata before scanning. |
-| Primary Actor | Manager / LCSP System |
-| Secondary Actors | GitHub |
+| Goal | Pin evidence to immutable branch/commit metadata. |
 | Preconditions | RepositoryConnection exists. |
-| Trigger | Manager selects branch/commit or requests scan. |
-| Main Flow | 1. LCSP resolves selected branch/commit. 2. LCSP records RepositorySnapshot metadata. 3. LCSP audits snapshot creation. |
-| Alternative Flows | Existing snapshot can be reused for idempotent scan request. |
-| Exception Flows | Invalid repository scope or inaccessible commit blocks snapshot. |
+| Main flow | Resolve selected commit, create RepositorySnapshot metadata, and audit. |
+| Exceptions | Inaccessible repository or commit blocks snapshot creation. |
 | Postconditions | RepositorySnapshot exists. |
-| Business Rules | BR-032, BR-069, BR-077 |
-| Referenced FRs | FR-025, FR-056, FR-066 |
-| Referenced ACs | AC-004, AC-020 |
+| Functional Requirements | FR-017 |
+| Acceptance Criteria | AC-004, AC-020 |
 
 ## UC-007 Execute Repository Scan
 
 | Field | Content |
 |---|---|
-| Goal | Convert repository snapshot into static technical evidence. |
-| Primary Actor | Manager / LCSP System |
-| Secondary Actors | Delegated Developer |
-| Preconditions | RepositorySnapshot exists; actor has scan permission. |
-| Trigger | Actor requests repository scan. |
-| Main Flow | 1. LCSP creates ScanJob. 2. LCSP emits `command.scan.requested.v1`. 3. Scanner worker runs static analysis. 4. LCSP persists SourceFile, EvidenceReference, TechnicalFinding and TechnicalEvidenceReport. 5. LCSP emits `event.scan.completed.v1`. |
-| Alternative Flows | Scan may be re-run against same/new snapshot. |
-| Exception Flows | Unsupported language, parse failure or coverage limitation is recorded; fatal privacy/schema failure blocks downstream. |
-| Postconditions | TechnicalEvidenceReport exists or scan failure is recorded. |
-| Business Rules | BR-032, BR-036..BR-040, BR-057..BR-061, BR-077, BR-080 |
-| Referenced FRs | FR-031..FR-035, FR-058..FR-062, FR-066, FR-069 |
-| Referenced ACs | AC-004, AC-005, AC-006, AC-019 |
+| Goal | Convert a commit-pinned snapshot into static technical evidence. |
+| Preconditions | RepositorySnapshot exists and actor may request a scan. |
+| Main flow | Create ScanJob, publish `command.scan.requested.v1`, run Python Worker static analysis, persist redacted evidence metadata, and emit completed or failed event. |
+| Exceptions | Repository access, parser, privacy, schema, sandbox, or cleanup failures produce bounded coverage or fail-closed state. |
+| Postconditions | TechnicalEvidenceReport exists or failure is recorded. |
+| Functional Requirements | FR-018..FR-020, FR-048 |
+| Acceptance Criteria | AC-004, AC-005, AC-028..AC-032 |
 
 ## UC-008 Generate TechnicalProfile
 
 | Field | Content |
 |---|---|
-| Goal | Normalize accepted technical evidence into profile dimensions. |
-| Primary Actor | LCSP System |
-| Secondary Actors | None |
-| Preconditions | TechnicalEvidenceReport passed schema/privacy/quality gates. |
-| Trigger | `event.scan.completed.v1` leads to `command.technical-profile.requested.v1`. |
-| Main Flow | 1. Worker loads accepted report. 2. Worker aggregates provider, framework, invocation, input/output, decision-flow, human-review and domain signals. 3. Worker persists TechnicalProfile. 4. Worker emits `event.technical-profile.completed.v1`. |
-| Alternative Flows | Unknown fields are preserved as coverage limitations. |
-| Exception Flows | Invalid/insufficient report emits failure and blocks downstream. |
-| Postconditions | TechnicalProfile exists. |
-| Business Rules | BR-036..BR-040, BR-080 |
-| Referenced FRs | FR-031..FR-035, FR-069 |
-| Referenced ACs | AC-005, AC-006, AC-007 |
+| Goal | Normalize accepted evidence into technical dimensions. |
+| Preconditions | TechnicalEvidenceReport passed schema, privacy, and quality gates. |
+| Main flow | Aggregate provider, invocation, data, output, decision, human-review, and domain signals into TechnicalProfile. |
+| Exceptions | Invalid or insufficient evidence blocks the profile with an actionable reason. |
+| Postconditions | TechnicalProfile exists with evidence refs and explicit unknowns. |
+| Functional Requirements | FR-021..FR-023 |
+| Acceptance Criteria | AC-006, AC-007, AC-032 |
 
 ## UC-009 Generate AIUsageFlow
 
 | Field | Content |
 |---|---|
-| Goal | Transform WizardProfile, TechnicalProfile and findings into evidence-backed AI usage claims. |
-| Primary Actor | LCSP System |
-| Secondary Actors | None |
-| Preconditions | WizardProfile, TechnicalProfile and TechnicalEvidenceReport exist. |
-| Trigger | `event.technical-profile.completed.v1` leads to `command.ai-usage-flow.requested.v1`. |
-| Main Flow | 1. Worker loads inputs. 2. Worker runs AIUsageFlow rule catalog. 3. Worker creates claims, confidence, uncertainty and conflict candidates. 4. Worker persists AIUsageFlow. 5. Worker emits `event.ai-usage-flow.completed.v1`. |
-| Alternative Flows | Unknown critical usage creates `UNCLEAR` or blocked status. |
-| Exception Flows | Missing inputs or failed evidence report emits `event.ai-usage-flow.failed.v1`. |
-| Postconditions | AIUsageFlow exists or downstream remains blocked. |
-| Business Rules | BR-080..BR-085 |
-| Referenced FRs | FR-069..FR-073 |
-| Referenced ACs | AC-007, AC-008, AC-009 |
+| Goal | Produce evidence-backed business usage claims. |
+| Preconditions | WizardProfile, TechnicalProfile, and accepted evidence exist. |
+| Main flow | Generate claims, confidence, uncertainty, and conflict candidates with claim-level evidence refs. |
+| Exceptions | Unknown critical usage remains `UNCLEAR` and blocks unsupported downstream conclusions. |
+| Postconditions | AIUsageFlow exists or downstream is blocked. |
+| Functional Requirements | FR-023..FR-025 |
+| Acceptance Criteria | AC-008, AC-009, AC-031, AC-032 |
 
 ## UC-010 Resolve Conflict
 
 | Field | Content |
 |---|---|
-| Goal | Resolve mismatches between WizardProfile, TechnicalProfile and AIUsageFlow while preserving evidence integrity. |
-| Primary Actor | Manager |
-| Secondary Actors | LCSP System; optional delegated Developer |
-| Preconditions | Conflict exists and Manager owns assessment. |
-| Trigger | Reconciliation detects conflict or Manager opens conflict task. |
-| Main Flow | 1. LCSP creates conflict. 2. Manager reviews compared values and evidence refs. 3. Manager records resolution/rationale. 4. LCSP stores resolution separately from scanner evidence. 5. Reconciliation reruns. |
-| Alternative Flows | Manager requests rescan/correction; Developer clarification may be supplemental only. |
-| Exception Flows | Missing rationale or unresolved conflict keeps classification blocked. |
+| Goal | Resolve material mismatch while preserving machine evidence. |
+| Preconditions | Conflict exists and Manager owns the assessment. |
+| Main flow | Manager reviews compared values/evidence, records rationale, and reruns reconciliation. |
+| Optional input | Active MVP may use structured attestation under FR-046 as supplemental input. |
+| Deferred | Delegated technical clarification workflow under FR-052 is not part of active MVP UX. |
+| Exceptions | Missing rationale or unresolved conflict keeps classification blocked. |
 | Postconditions | Conflict is resolved or remains blocking. |
-| Business Rules | BR-041..BR-048, BR-083, BR-093 |
-| Referenced FRs | FR-036..FR-041, FR-072 |
-| Referenced ACs | AC-010, AC-011, AC-012, AC-013 |
+| Functional Requirements | FR-026..FR-029 |
+| Acceptance Criteria | AC-010..AC-012, AC-033 |
 
 ## UC-011 Create and Approve VerifiedProfile
 
 | Field | Content |
 |---|---|
-| Goal | Create reconciled profile required for legal matching and classification. |
-| Primary Actor | Manager / LCSP System |
-| Secondary Actors | None |
-| Preconditions | WizardProfile, TechnicalProfile, AIUsageFlow exist and conflicts are resolved or absent. |
-| Trigger | Reconciliation completes. |
-| Main Flow | 1. Worker verifies no unresolved conflict. 2. Worker creates VerifiedProfile. 3. Manager reviews/approves where required. 4. LCSP emits `event.reconciliation.verified-profile-ready.v1`. |
-| Alternative Flows | Manager resolution is included in merged profile with audit trail. |
-| Exception Flows | Unresolved conflict or missing evidence blocks VerifiedProfile. |
-| Postconditions | VerifiedProfile exists and legal matching can start. |
-| Business Rules | BR-045, BR-078, BR-093 |
-| Referenced FRs | FR-042, FR-067, FR-077 |
-| Referenced ACs | AC-014, AC-015 |
+| Goal | Create the reconciled basis for legal matching. |
+| Preconditions | WizardProfile, TechnicalProfile, AIUsageFlow exist and conflicts are absent or resolved. |
+| Main flow | Create VerifiedProfile and apply Manager review/approval where required. |
+| Exceptions | Any unresolved material conflict blocks creation or approval. |
+| Postconditions | VerifiedProfile exists and legal matching may start. |
+| Functional Requirements | FR-030, FR-031 |
+| Acceptance Criteria | AC-014, AC-015 |
 
-## UC-012 Perform Legal Matching
+## UC-012 Operate Legal Corpus and Perform Legal Matching
 
 | Field | Content |
 |---|---|
-| Goal | Match verified usage facts to citation-backed legal rules. |
-| Primary Actor | LCSP System |
-| Secondary Actors | Legal Corpus |
-| Preconditions | VerifiedProfile exists and legal corpus version is available. |
-| Trigger | `event.reconciliation.verified-profile-ready.v1` leads to `command.legal-matching.requested.v1`. |
-| Main Flow | 1. Worker loads VerifiedProfile. 2. Worker extracts legal facts. 3. Worker retrieves candidate rules and citations. 4. Worker evaluates applicability and coverage. 5. Worker persists LegalRuleMatch records. 6. Worker emits `event.legal-matching.completed.v1`. |
-| Alternative Flows | Missing non-critical citation creates degraded match. |
-| Exception Flows | Missing profile, missing material citation, obsolete corpus or unknown critical fact blocks/degrades classification. |
-| Postconditions | LegalRuleMatch records exist or legal matching failure is recorded. |
-| Business Rules | BR-050, BR-051, BR-082, BR-084 |
-| Referenced FRs | FR-043, FR-045, FR-046, FR-073 |
-| Referenced ACs | AC-016, AC-017 |
+| Goal | Maintain an approved immutable legal corpus and match verified usage to citation-backed rules. |
+| Primary Actors | Internal Legal Operator for ingestion/approval; LCSP System for retrieval/matching. |
+| UX Boundary | Corpus administration is internal operations/API/CLI for MVP and is excluded from Manager/Developer product UX. |
+| Preconditions | Approved source URLs and LegalCorpusVersion exist; VerifiedProfile exists for matching. |
+| Main flow | Ingest and hash official-source snapshots, review/approve corpus version, build FTS/vector index, retrieve candidates, evaluate citation coverage, and persist LegalRuleMatch. |
+| Exceptions | Unapproved/obsolete corpus, missing citation, unavailable source, or unknown critical fact blocks or degrades output. |
+| Postconditions | Approved corpus and LegalRuleMatch records exist, or an explicit blocked state is recorded. |
+| Functional Requirements | FR-032..FR-034, FR-053, FR-054, FR-056 |
+| Acceptance Criteria | AC-016, AC-017, AC-034..AC-036 |
 
 ## UC-013 Run Risk Classification
 
 | Field | Content |
 |---|---|
-| Goal | Produce evidence- and citation-backed risk classification or blocked state. |
-| Primary Actor | LCSP System |
-| Secondary Actors | Manager |
-| Preconditions | VerifiedProfile exists; legal matching completed. |
-| Trigger | `event.legal-matching.completed.v1` leads to `command.classification.requested.v1`. |
-| Main Flow | 1. Classification worker loads VerifiedProfile and LegalRuleMatch. 2. Worker verifies guardrails. 3. Worker determines risk output or blocked result. 4. Worker persists RiskClassification. 5. Worker emits completed or blocked event. |
-| Alternative Flows | Degraded classification may be visible when explicitly labeled and supported. |
-| Exception Flows | Missing citation, unresolved conflict, provider-only evidence or unknown critical usage blocks classification. |
-| Postconditions | RiskClassification is completed or blocked. |
-| Business Rules | BR-049..BR-051, BR-082, BR-084 |
-| Referenced FRs | FR-044..FR-047, FR-073 |
-| Referenced ACs | AC-016, AC-017, AC-018 |
+| Goal | Produce evidence- and citation-backed classification or blocked state. |
+| Preconditions | VerifiedProfile and LegalRuleMatch records exist; real LLM provider configuration is available for A-to-Z acceptance. |
+| Main flow | Validate guardrails, invoke the configured LLM Gateway where allowed, validate structured output, persist RiskClassification, and audit. |
+| Exceptions | Missing citation, provider outage, invalid schema, unknown critical usage, or provider-only evidence fails closed. |
+| Postconditions | Classification completes or is blocked with reasons. |
+| Functional Requirements | FR-035..FR-037, FR-055 |
+| Acceptance Criteria | AC-018, AC-034, AC-037, AC-038 |
 
-## UC-014 Generate Gap Analysis and Document
+## UC-014 Generate Gap Analysis and Documents
 
 | Field | Content |
 |---|---|
-| Goal | Produce gap analysis and compliance/readiness document under guardrails. |
-| Primary Actor | Manager / LCSP System |
-| Secondary Actors | Object Storage |
-| Preconditions | RiskClassification exists for final report; readiness-only export may occur earlier without risk level. |
-| Trigger | `event.classification.completed.v1` leads to `command.gap-analysis.requested.v1`; `event.gap-analysis.completed.v1` leads to `command.document.requested.v1`. |
-| Main Flow | 1. LCSP validates classification/citation/conflict prerequisites. 2. Gap Analysis Worker creates `GapAnalysis` when allowed. 3. Document Worker generates document metadata/artifact after GapAnalysis completes. 4. LCSP emits generated or blocked event. |
-| Alternative Flows | Readiness-only export shows missing evidence without risk level. |
-| Exception Flows | Missing citation, unresolved conflict or invalid classification blocks final report. |
+| Goal | Produce gap analysis, final compliance report, or readiness-only output under guardrails. |
+| Preconditions | Final report requires completed classification, gap analysis, legal trace, and no unresolved conflict. |
+| Main flow | Generate GapAnalysis, request document generation, store artifact in object storage, expose status/download, and audit. |
+| Alternative | Readiness-only export may be generated before evidence completion but contains no risk level. |
+| Exceptions | Missing citation, conflict, invalid classification, or generation guardrail failure blocks final output. |
 | Postconditions | GapAnalysis and GeneratedDocument exist, or blocked reason is recorded. |
-| Business Rules | BR-062..BR-066, BR-079 |
-| Referenced FRs | FR-048..FR-052, FR-068 |
-| Referenced ACs | AC-003, AC-018, AC-019 |
+| Functional Requirements | FR-038..FR-041 |
+| Acceptance Criteria | AC-003, AC-018, AC-019, AC-041 |
 
 ## UC-015 Review and Export Audit Trail
 
 | Field | Content |
 |---|---|
-| Goal | Let Manager trace material workflow, security, evidence, conflict, classification and document events. |
-| Primary Actor | Manager / LCSP System |
-| Secondary Actors | None |
+| Goal | Trace material workflow, evidence, conflict, legal, classification, attestation, and document events. |
 | Preconditions | Assessment exists. |
-| Trigger | State-changing event occurs or Manager opens/export audit trail. |
-| Main Flow | 1. LCSP writes audit event for material action. 2. Manager opens audit view. 3. LCSP shows redacted metadata, versions, evidence refs and decisions. 4. Manager exports allowed metadata when requested. |
-| Alternative Flows | Auth/delegation events are included without raw tokens/secrets. |
-| Exception Flows | Raw source, secret values, raw provider tokens and full prompts are excluded. |
-| Postconditions | Audit trail is viewable/exportable without sensitive payload leakage. |
-| Business Rules | BR-067..BR-070, BR-094 |
-| Referenced FRs | FR-053..FR-057 |
-| Referenced ACs | AC-020, AC-023, AC-026 |
+| Main flow | Record append-oriented redacted AuditEvents, display them to Manager, and export allowed metadata. |
+| Exceptions | Raw source, secrets, provider tokens, and full prompts are excluded. |
+| Postconditions | Audit trail is viewable/exportable without sensitive leakage. |
+| Functional Requirements | FR-042..FR-045 |
+| Acceptance Criteria | AC-020, AC-039, AC-040 |
 
 ## UC-016 Re-run Assessment Evidence
 
 | Field | Content |
 |---|---|
-| Goal | Recover from weak/failed evidence or changed repository state without mutating historical evidence. |
-| Primary Actor | Manager |
-| Secondary Actors | Delegated Developer, LCSP System |
-| Preconditions | Assessment has repository connection and prior scan/evidence state. |
-| Trigger | Manager requests rescan after failure, conflict, weak evidence or changed commit. |
-| Main Flow | 1. Manager selects snapshot. 2. LCSP creates a new ScanJob. 3. Scanner creates new evidence report. 4. Downstream profile/usage/reconciliation reruns. |
-| Alternative Flows | Same commit can be rescanned idempotently if policy allows; new commit creates new snapshot. |
-| Exception Flows | Unchanged failed condition remains blocked with actionable reason. |
+| Goal | Recover from failed/weak evidence or changed repository state without mutating history. |
+| Preconditions | Repository connection and prior evidence state exist. |
+| Main flow | Select same/new snapshot, create a new idempotent ScanJob, and rebuild downstream evidence chain. |
+| Deferred | Local/CI report upload (`FR-050`) and manual evidence JSON upload (`FR-051`) are not active MVP paths. |
 | Postconditions | New evidence chain exists; previous chain remains traceable. |
-| Business Rules | BR-040, BR-047, BR-069, BR-077 |
-| Referenced FRs | FR-035, FR-056, FR-066 |
-| Referenced ACs | AC-004, AC-020 |
+| Functional Requirements | FR-049 |
+| Acceptance Criteria | AC-004, AC-020, AC-028 |
 
 ## UC-017 Enforce Security and Privacy Controls
 
 | Field | Content |
 |---|---|
-| Goal | Ensure source, secrets, prompts, identity tokens and audit records stay within privacy/security guardrails. |
-| Primary Actor | LCSP System |
-| Secondary Actors | GitHub, OAuth/OIDC Provider, LLM Provider |
-| Preconditions | Any source/evidence/auth/LLM/audit workflow runs. |
-| Trigger | Scan, prompt creation, persistence, log, audit or external integration action occurs. |
-| Main Flow | 1. LCSP applies no-raw-source-to-LLM guard. 2. LCSP redacts secrets. 3. LCSP avoids long-term raw source storage. 4. LCSP cleans temp workspace. 5. LCSP audits control results. |
-| Alternative Flows | Evidence refs and hashes may persist without raw source. |
-| Exception Flows | Control failure blocks or fails closed. |
-| Postconditions | Sensitive content is excluded or action is blocked. |
-| Business Rules | BR-057..BR-061, BR-086..BR-088, BR-094 |
-| Referenced FRs | FR-058..FR-062, FR-074..FR-076 |
-| Referenced ACs | AC-021, AC-022, AC-023 |
+| Goal | Keep source, secrets, prompts, tokens, logs, and audit records within guardrails. |
+| Main flow | Enforce no-raw-source-to-LLM, redaction, metadata-only persistence, restricted workspace, cleanup, and auditable fail-closed behavior. |
+| Exceptions | Any control failure blocks or fails the affected operation. |
+| Functional Requirements | FR-019, FR-042, FR-048 |
+| Acceptance Criteria | AC-022, AC-023, AC-030, AC-041 |
 
 ## UC-018 Submit Optional Developer Attestation
 
 | Field | Content |
 |---|---|
-| Goal | Capture structured Developer clarification without bypassing evidence gates or Manager authority. |
-| Primary Actor | Developer |
-| Secondary Actors | Manager, LCSP System |
-| Preconditions | Developer has scoped task/policy. |
-| Trigger | Developer opens assigned task and submits attestation. |
-| Main Flow | 1. Developer submits role, claim, scope, reason and timestamp. 2. LCSP validates scope. 3. LCSP stores attestation as supplemental input. 4. Manager reviews when classification-relevant. |
-| Alternative Flows | Manager may ignore, request rescan or use attestation during conflict resolution. |
-| Exception Flows | Free text, missing role/scope or attempt to replace machine metadata is rejected. |
-| Postconditions | Attestation is recorded and auditable but does not unlock classification by itself. |
-| Business Rules | BR-052..BR-056 |
-| Referenced FRs | FR-024, FR-028..FR-030, FR-057 |
-| Referenced ACs | AC-012, AC-013, AC-019, AC-020 |
+| Goal | Capture scoped structured Developer attestation as optional supplemental input. |
+| Preconditions | Developer has invitation, accepted task, and active policy. |
+| Main flow | Submit role, claim, scope, reason, evidence refs, and timestamp; validate and store separately from scanner evidence; allow Manager review. |
+| Guardrails | Attestation cannot replace machine metadata, resolve conflict, approve VerifiedProfile, or unlock classification by itself. |
+| Deferred | Free-form/delegated technical clarification workflow under FR-052 is not active MVP UX. |
+| Postconditions | Attestation is recorded and auditable, or rejected with reason. |
+| Functional Requirements | FR-010..FR-012, FR-045..FR-047 |
+| Acceptance Criteria | AC-013, AC-025, AC-026 |
+
+## Legacy Alias Policy
+
+Legacy `UC-MXX-XX` identifiers remain only in historical recovery tables under `requirements-baseline.md`. Active product, UX, acceptance, traceability, story, and implementation artifacts must use `UC-001..UC-018`.
