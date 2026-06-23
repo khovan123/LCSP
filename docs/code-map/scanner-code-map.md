@@ -2,68 +2,148 @@
 
 ## Purpose
 
-Define planned Scanner package and worker code ownership before creating files.
+Define planned code ownership for the A-to-Z runnable scanner before implementation. Python Worker owns Repository Scan lifecycle. TypeScript/JavaScript analysis is a bounded Node.js subprocess adapter.
 
-## Folder Layout
+## Repository Layout
 
 ```text
-packages/scanner/src/
-  index.ts
-  parsers/
-    parser-registry.ts
-    language-mapper.ts
-    tree-sitter-ast-extractor.ts
-  semantic/
-    typescript-project-factory.ts
-    typescript-semantic-analyzer.ts
-  graph/
-    dependency-graph-builder.ts
-    graph-persistence.mapper.ts
-    node-key-factory.ts
-    edge-key-factory.ts
-  detectors/
-    detector.interface.ts
-    openai.detector.ts
-    anthropic.detector.ts
-    gemini.detector.ts
-    langchain.detector.ts
-    vercel-ai.detector.ts
-    custom-wrapper.detector.ts
-    ai-detector-engine.ts
-  evidence/
-    evidence-ref-factory.ts
-    secret-redactor.ts
-  reports/
-    technical-evidence-report-builder.ts
-    evidence-schema-gate.ts
-    evidence-quality-gate.ts
-  persistence/
-    scanner.repository.ts
-  workers/
-    scan.worker.ts
+lcsp-scanner-worker/
+  pyproject.toml
+  src/lcsp_scanner/
+    main.py
+    config.py
+    workspace/
+      workspace_manager.py
+      snapshot_materializer.py
+      cleanup_verifier.py
+    inventory/
+      file_enumerator.py
+      language_mapper.py
+      ignore_policy.py
+    parsers/
+      python_ast_extractor.py
+      python_cst_extractor.py
+      manifest_extractor.py
+      unsupported_adapter.py
+    analyzers/
+      python_import_resolver.py
+      ai_invocation_detector.py
+      input_output_flow_analyzer.py
+      human_review_detector.py
+      domain_signal_detector.py
+    ts_js_bridge/
+      subprocess_bridge.py
+      protocol.py
+    graph/
+      graph_builder.py
+      node_key_factory.py
+      edge_key_factory.py
+    evidence/
+      evidence_ref_factory.py
+      secret_redactor.py
+    reports/
+      report_builder.py
+      schema_gate.py
+      quality_gate.py
+    persistence/
+      scanner_repository.py
+      outbox_repository.py
+    queue/
+      consumer.py
+      retry_policy.py
+    audit/
+      audit_writer.py
+
+tools/ts-js-analyzer/
+  package.json
+  src/
+    cli.ts
+    project-loader.ts
+    semantic-analyzer.ts
+    detector-adapter.ts
+    output-schema.ts
 ```
 
-## Ownership
+## Python Worker Ownership
 
-| Component | Purpose | Dependencies | Owned DTOs | Owned Tables | Owned Queues |
+| Component | Purpose | Dependencies | Owned DTOs | Owned Tables | Queues |
 |---|---|---|---|---|---|
-| `parsers` | Convert source files into AST-backed facts. | Tree-sitter. | `ParsedFile`, `ImportFact`, `CallFact` | `SourceFile` metadata | None |
-| `semantic` | Resolve imports, symbols, calls for supported languages. | ts-morph for TS/JS later stage; Tree-sitter Python syntax-only support. | `SymbolFact`, enriched `CallFact` | normalized semantic metadata | None |
-| `graph` | Build dependency/evidence graph. | graphology, parsed/semantic facts. | `CodeGraphNode`, `CodeGraphEdge` | `CodeGraphNode`, `CodeGraphEdge` | None |
-| `detectors` | Convert graph/facts into AI technical signals. | parser/graph outputs. | `DetectionResult` | draft `TechnicalFinding` | None |
-| `evidence` | Create redacted evidence refs. | source locations, hashes. | `EvidenceRef` | evidence metadata | None |
-| `reports` | Build and gate TechnicalEvidenceReport. | findings/evidence. | `TechnicalEvidenceReport` | `TechnicalEvidenceReport`, `TechnicalFinding` | emits through worker |
-| `workers` | Consume scan jobs and orchestrate scanner stages. | RabbitMQ, persistence. | `ScanRequestedPayload`, `ScanCompletedPayload`, `ScanFailedPayload` | `RepositoryScanJob`, evidence tables | consumes `command.scan.requested.v1`, emits `event.scan.completed.v1` or `event.scan.failed.v1` |
+| `workspace` | Materialize commit-pinned snapshot inside restricted workspace and verify deletion. | GitHub snapshot metadata, filesystem policy. | `WorkspaceRef`, `CleanupResult` | `RepositoryScanJob`, `AuditEvent` | None |
+| `inventory` | Enumerate files, enforce bounds, classify language/support. | workspace. | `SourceFileRef`, `LanguageMappingResult` | `SourceFile` | None |
+| `parsers` | Extract Python AST/CST facts and basic manifest signals. | stdlib `ast`, `libcst`. | `ParsedFile`, `ImportFact`, `CallFact`, `ClassFact`, `FunctionFact` | metadata only | None |
+| `analyzers` | Resolve bounded Python imports/flows and detect AI/data/decision/review signals. | parsed facts, rulesets. | `DetectionResult`, `CoverageLimitation` | staged `TechnicalFinding` | None |
+| `ts_js_bridge` | Invoke Node analyzer and validate normalized JSON protocol. | Node.js, `ts-morph`. | `TsJsAnalyzerRequest`, `TsJsAnalyzerResult` | None directly | None |
+| `graph` | Build scan-local evidence/dependency graph. | normalized facts. | `CodeGraphNode`, `CodeGraphEdge` | graph metadata tables | None |
+| `evidence` | Create redacted evidence refs and hashes. | locations, hashes, redaction policy. | `EvidenceRef` | `EvidenceReference` | None |
+| `reports` | Build and gate TechnicalEvidenceReport. | findings, graph, limitations. | `TechnicalEvidenceReport` | `TechnicalEvidenceReport`, `TechnicalFinding` | stages terminal scan event |
+| `persistence` | Persist metadata and outbox events transactionally. | PostgreSQL. | persistence records | scanner tables, `OutboxEvent` | None |
+| `queue` | Consume scan commands and apply idempotent retry policy. | RabbitMQ. | `ScanRequestedPayload` | `RepositoryScanJob` | consumes `lcsp.scan-worker.v1` |
+| `audit` | Record state, security, and failure events. | persistence. | `AuditEventInput` | `AuditEvent` | None |
 
-## Authoritative Split
+## TS/JS Analyzer Ownership
+
+| Component | Purpose | Output |
+|---|---|---|
+| `cli.ts` | Accept workspace/path request from Python Worker and emit JSON to stdout. | protocol envelope |
+| `project-loader.ts` | Load TSConfig/project files without installing dependencies or executing repository code. | project metadata |
+| `semantic-analyzer.ts` | Resolve imports, symbols, calls, and bounded flow using `ts-morph`. | normalized facts |
+| `detector-adapter.ts` | Convert TS/JS facts to scanner finding candidates. | detection results |
+| `output-schema.ts` | Validate stable cross-runtime protocol. | schema-validated JSON |
+
+The analyzer does not consume RabbitMQ, update ScanJob state, persist findings directly, or publish events.
+
+## Runtime Flow
+
+```text
+command.scan.requested.v1
+-> Python queue consumer
+-> workspace materialization
+-> inventory/language mapping
+-> Python AST/CST analysis
+-> TS/JS subprocess analysis when needed
+-> normalized graph and findings
+-> report schema/quality/privacy gates
+-> workspace cleanup verification
+-> transactional ScanJob terminal state + OutboxEvent
+```
+
+## Persistence Boundary
+
+Persist only:
+
+- repository/snapshot/file metadata;
+- path, symbol, and line references;
+- content/evidence/report hashes;
+- normalized graph nodes/edges;
+- redacted findings and coverage limitations;
+- scanner/ruleset/schema versions;
+- cleanup verification and audit metadata.
+
+Never persist raw source body, full AST body, secrets, full prompts, repository archives, or subprocess stdout before validation/redaction.
+
+## Queue Ownership
+
+| Queue/Event | Owner |
+|---|---|
+| `command.scan.requested.v1` / `lcsp.scan-worker.v1` | Python Worker sole consumer |
+| `event.scan.completed.v1` | Python Worker outbox after report gates and cleanup verification |
+| `event.scan.failed.v1` | Python Worker outbox after terminal failure transaction |
+
+## Authoritative Sources
 
 | Concern | Source |
 |---|---|
-| Finding taxonomy and signal rules | `docs/specs/scanner-spec.md` |
-| Runtime object lifecycle | `docs/developer-execution-blueprints/scanner-data-journey.md` |
-| Package/file structure | `docs/implementation/scanner-implementation.md` and this Code Map |
+| Scanner behavior and taxonomy | `docs/specs/scanner-spec.md` |
+| Python analysis behavior | `docs/specs/python-scanner-spec.md` |
+| Runtime object journey | `docs/developer-execution-blueprints/scanner-data-journey.md` |
+| Build/package detail | `docs/implementation/scanner-implementation.md`, `docs/implementation/python-worker-implementation.md` |
+| Persistence | `docs/implementation/persistence-implementation.md` |
+| Queue topology | `docs/implementation/queue-implementation.md` |
 
+## Guardrails
 
-## Controlled MVP Scanner Foundation
-
-`ParserRegistry`, `LanguageMapper` and `TreeSitterAstExtractor` are implemented under `packages/scanner/src/parsers/` using the interfaces in `docs/specs/scanner-spec.md`. They are the parser foundation for the full controlled MVP scanner path. The scanner package uses Node.js/TypeScript, Tree-sitter, `ts-morph`, `graphology` and PostgreSQL metadata persistence. Python worker, NetworkX, and Python semantic import resolution are not active controlled MVP implementation behavior.
+- Python Worker is first-class active MVP behavior, not syntax-only support.
+- No Node.js scanner worker may consume the scan command.
+- No dependency install, build, test, Docker, CI, repository script, or customer code execution occurs during a scan.
+- Dynamic/unsupported flows produce uncertainty and coverage limitations, not invented certainty.
+- Cleanup failure is terminal and blocks downstream processing.
