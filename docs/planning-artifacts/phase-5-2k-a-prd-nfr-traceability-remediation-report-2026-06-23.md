@@ -4,6 +4,7 @@
 
 ```text
 PHASE_5_2K_A_CLOSURE_PASS_APPLIED
+SEMANTIC_TRACE_PASS_APPLIED
 DOCUMENTATION_AND_PLANNING_REMEDIATION_ONLY
 IMPLEMENTATION_NOT_AUTHORIZED
 SPRINT_EXECUTION_NOT_AUTHORIZED
@@ -25,8 +26,9 @@ This report records the closure pass for LCSP Post-Readiness Planning Remediatio
 
 | Document | Closure action |
 | --- | --- |
+| `docs/specs/functional-requirements.md` | Corrected NFR dependency semantics for auth/MFA/session, Wizard usability, repository scan, legal retrieval, attestation and LLM provider configuration; aligned `FR-046` and `FR-052` business-rule membership after attestation/delegated-clarification separation. |
 | `docs/specs/requirements-baseline.md` | Rebased active NFR crosswalk names on the canonical NFR catalog; added missing `NFR-024`, `NFR-025`, `NFR-026`; preserved `NFR-031`/`NFR-032` only as legacy mappings. |
-| `docs/product/business-rules.md` | Remapped active business-rule FR/NFR trace columns away from stale legacy IDs and stale NFR semantics; separated active structured attestation from deferred delegated clarification. |
+| `docs/product/business-rules.md` | Remapped active business-rule FR/NFR trace columns away from stale legacy IDs and stale NFR semantics; separated active structured attestation from deferred delegated clarification; corrected auth/MFA/session, final-report, cleanup and attestation metadata mappings. |
 | `docs/product/prd.md` | Clarified `FR-046` structured attestation versus deferred `FR-052` delegated technical clarification; removed duplicated wording. |
 | `docs/specs/requirements-traceability-matrix.md` | Replaced premature completion markers with pending cross-document remediation markers. |
 | `docs/specs/requirements-traceability-summary.md` | Removed duplicated wording. |
@@ -56,6 +58,8 @@ ACTIVE_NFR_COUNT_33_CONFIRMED
 NFR_BASELINE_SEMANTIC_DRIFT_REMEDIATED
 NFR_031_032_LEGACY_REMAPPING_CONFIRMED
 BUSINESS_RULE_FR_NFR_ID_DRIFT_REMEDIATED
+FUNCTIONAL_REQUIREMENT_NFR_DEPENDENCY_DRIFT_REMEDIATED
+BUSINESS_RULE_TO_FUNCTIONAL_REQUIREMENT_MEMBERSHIP_ALIGNED
 FR_046_ATTESTATION_SEPARATED_FROM_FR_052_DELEGATED_CLARIFICATION
 GOLDEN_REPOSITORY_SCAN_PATH_CONFIRMED
 DEVELOPER_AND_ATTESTATION_OPTIONAL_CONFIRMED
@@ -87,6 +91,8 @@ rg -n "FR-0(5[7-9]|6[0-9]|7[0-9]|8[0-9])|complete the complete|optional delegate
 rg -n "^\\| NFR-[0-9]{3} \\|" docs/specs/non-functional-requirements.md
 rg -n "^\\| NFR-[0-9]{3} \\|" docs/specs/requirements-baseline.md
 rg -n "Developer clarification|delegated technical clarification|FR-052|FR-046|structured attestation" docs/product/prd.md docs/product/business-rules.md
+awk -F'|' '/^\\| FR-[0-9][0-9][0-9] / {fr=$2; brs=$8; gsub(/^ +| +$/,"",fr); gsub(/^ +| +$/,"",brs); n=split(brs,a,/, */); for(i=1;i<=n;i++){b=a[i]; if(b ~ /^BR-[0-9][0-9][0-9]$/){m[b]=m[b] (m[b]?", ":"") fr} else if(b ~ /^BR-[0-9][0-9][0-9]\\.\\.BR-[0-9][0-9][0-9]$/){split(b,p,/\\.\\./); s=substr(p[1],4)+0; e=substr(p[2],4)+0; for(j=s;j<=e;j++){bb=sprintf("BR-%03d",j); m[bb]=m[bb] (m[bb]?", ":"") fr}}}} END{for(i=1;i<=94;i++){b=sprintf("BR-%03d",i); print b " => " (m[b]?m[b]:"None")}}' docs/specs/functional-requirements.md
+awk -F'|' '/^\\| BR-[0-9][0-9][0-9] / {br=$2; fr=$12; gsub(/^ +| +$/,"",br); gsub(/^ +| +$/,"",fr); print br " => " fr}' docs/product/business-rules.md
 ```
 
 ## Residual Match Classification
