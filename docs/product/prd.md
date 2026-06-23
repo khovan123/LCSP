@@ -149,7 +149,7 @@ Developer không được:
 
 ### MVP Conflict Resolution Rule
 
-Trong MVP, mọi conflict được route thành Manager conflict resolution task. Manager reviews WizardProfile, TechnicalProfile và AIUsageFlow evidence, sau đó resolve hoặc update thông tin liên quan. Developer có thể cung cấp technical clarification nếu tồn tại trong hệ thống, nhưng Developer clarification không phải điều kiện bắt buộc để resume workflow.
+Trong MVP, mọi conflict được route thành Manager conflict resolution task. Manager reviews WizardProfile, TechnicalProfile và AIUsageFlow evidence, sau đó resolve hoặc update thông tin liên quan. Developer có thể cung cấp structured attestation theo `FR-046` nếu được giao scoped task, nhưng attestation không phải điều kiện bắt buộc để resume workflow. Delegated technical clarification workflow thuộc `FR-052` và là Deferred/Future.
 
 Post-MVP, Manager may delegate selected technical clarification permissions to Developer, but delegation never removes Manager permissions and Developer technical input does not automatically finalize conflict resolution.
 
@@ -326,7 +326,7 @@ Manager can connect selected repository and run read-only scan for own assessmen
 - Raw source code must not be sent to LLM.
 - Raw source code must not be stored long term.
 - Evidence report must include provenance metadata.
-- Manager can complete the complete A-to-Z golden path without Developer participation.
+- Manager can complete the A-to-Z golden path without Developer participation.
 
 #### FR-E3-2: Deferred Local/CI evidence upload
 
@@ -423,11 +423,12 @@ System computes Conflict Score for each conflict.
 
 #### FR-E5-3: Route technical conflicts to Manager
 
-Technical conflicts such as dependency use, false positive/negative, repo/branch/commit or production scope are routed to Manager in MVP. Manager may request re-scan/correction or optional delegated Developer clarification, but Developer action is not required to resume the MVP workflow.
+Technical conflicts such as dependency use, false positive/negative, repo/branch/commit or production scope are routed to Manager in MVP. Manager may request re-scan/correction and may consider optional structured attestation submitted through `FR-046`; the delegated Developer clarification workflow in `FR-052` is Deferred/Future and not required to resume the MVP workflow.
 
 **Consequences:**
 - Manager is the final resolver for MVP technical conflicts.
-- Optional Developer clarification is input only and cannot unlock classification by itself.
+- Structured attestation is supplemental input only and cannot unlock classification by itself.
+- Delegated technical clarification workflow (`FR-052`) is Deferred/Future.
 - Resolution is audited.
 
 #### FR-E5-4: Route business/legal conflicts to Manager
@@ -453,7 +454,7 @@ Critical conflicts remain blocking until resolved.
 **Consequences:**
 - No final report is generated while critical conflict is unresolved.
 - Assessment state remains `RECONCILIATION_REQUIRED`, `CONFLICT_RESOLUTION_REQUIRED` or `MANAGER_CONFIRMATION_REQUIRED`.
-- `DEVELOPER_CONFIRMATION_REQUIRED` is not an MVP blocking state; delegated Developer clarification is optional/post-MVP and cannot unlock classification by itself.
+- `DEVELOPER_CONFIRMATION_REQUIRED` is not an MVP blocking state; delegated Developer clarification is Deferred/Future under `FR-052` and cannot unlock classification by itself.
 
 ### Epic 6 - Verified Profile & Risk Classification
 
@@ -770,10 +771,10 @@ Attestation cannot replace these machine-generated or external metadata:
 Examples:
 
 - Scanner detects dependency/package AI use: Manager resolves or requests re-scan/correction.
-- Scanner false positive/false negative: Manager resolves with evidence review; optional Developer clarification may be requested post-MVP.
+- Scanner false positive/false negative: Manager resolves with evidence review; optional structured attestation may supplement under `FR-046`; delegated Developer clarification remains Deferred/Future under `FR-052`.
 - Wizard business purpose is wrong: Manager resolves.
 - AI affects decision/workflow: Manager resolves using WizardProfile, TechnicalProfile and AIUsageFlow evidence.
-- Auto decision or human oversight conflict: Manager resolves; optional Developer clarification does not finalize the conflict.
+- Auto decision or human oversight conflict: Manager resolves; optional structured attestation does not finalize the conflict, and delegated Developer clarification remains Deferred/Future under `FR-052`.
 
 ## 13. Reporting Rules
 
@@ -797,7 +798,7 @@ LCSP audit trail must record:
 - Scope and privacy flags.
 - Evidence gate result and reason.
 - Conflict records, score and required resolver.
-- Manager conflict resolutions and any optional delegated technical clarification.
+- Manager conflict resolutions and any optional structured attestation that materially influences a decision.
 - Human technical attestation claims.
 - VerifiedProfile version.
 - Classification output and rule/citation trace.

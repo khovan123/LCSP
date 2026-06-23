@@ -239,33 +239,36 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 
 | Active NFR | Name | PRD / Source Alias | Resolution | Source |
 | --- | --- | --- | --- | --- |
-| NFR-001 | Password security | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
-| NFR-002 | MFA secret protection | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
-| NFR-003 | OTP verification security | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
-| NFR-004 | Session security | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
-| NFR-005 | Brute-force protection | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
-| NFR-006 | Secure MFA recovery/reset | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
-| NFR-007 | Auth event auditability | NFR-7 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-008 | Role-based access control | NFR-9, NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-009 | Developer task policy isolation | NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-010 | Wizard usability | NFR-10 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-011 | Classification locked-state clarity | NFR-12 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-012 | No raw source to LLM | NFR-1 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-013 | No long-term raw source storage | NFR-2 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-014 | Least privilege GitHub App | NFR-3 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-015 | Secret redaction | NFR-5 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-016 | Temporary workspace cleanup | NFR-2 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-017 | Evidence report hashing | NFR-7 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-018 | Audit event immutability expectation | NFR-7 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-019 | Legal citation traceability | NFR-7, NFR-8 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-020 | Rule-backed classification | NFR-8, NFR-9 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-021 | Document overclaim prevention | NFR-9 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-022 | Async workload reliability | NFR-6, NFR-9 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-023 | Evidence gate observability | NFR-12 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-027 | OAuth/OIDC callback security | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
-| NFR-028 | OAuth/GitHub boundary separation | NFR-3 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-029 | Permission delegation auditability | NFR-7, NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-030 | Role/permission revocation behavior | NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
+| NFR-001 | Password, OAuth/OIDC and session authentication controls | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md` |
+| NFR-002 | Session expiration, revocation and MFA/auth policy | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md` |
+| NFR-003 | MFA secrets and OTP verification security | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md` |
+| NFR-004 | Login, MFA and reset rate limiting | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md` |
+| NFR-005 | OAuth/OIDC callback handling and safe account linking | PLATFORM_BASELINE; legacy NFR-031 | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md` |
+| NFR-006 | OAuth/OIDC login separation from GitHub App authorization | NFR-3 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-007 | Read-only selected-repository GitHub App access | NFR-3 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-008 | Manager and Developer UI/API permission enforcement | NFR-9, NFR-11; legacy NFR-032 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-009 | Scoped and revocable Developer task/policy access | NFR-11 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-010 | Material workflow, auth, delegation, evidence, conflict, classification and document auditability | NFR-7 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-011 | Append-oriented audit trail with controlled correction model | NFR-7 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-012 | No raw source code to LLM provider | NFR-1 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-013 | No long-term raw source storage | NFR-2 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-014 | Redacted technical findings and minimal code exposure | NFR-3 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-015 | Secret redaction before logs, findings, reports, prompts or audit | NFR-5 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-016 | Accepted evidence provenance, version and integrity hash metadata | NFR-7 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-017 | Legal classification traceability to rule, citation and corpus version | NFR-7, NFR-8 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-018 | Fail-closed missing evidence, unresolved conflict, unknown critical usage or missing legal citation | NFR-8, NFR-9 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-019 | Evidence-backed VerifiedProfile and LegalRuleMatch classification basis | NFR-8, NFR-9 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-020 | Generated report overclaim prevention | NFR-9 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-021 | Async long-running workload reliability | NFR-6, NFR-9 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-022 | Actionable blocked/failed workflow states | NFR-12 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-023 | Bounded scan and worker operations | NFR-12 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-024 | API runtime and worker workload separation | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md` |
+| NFR-025 | Domain module ownership of DTOs, tables, queues and state transitions | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md` |
+| NFR-026 | Correlated evidence gate, queue, worker, classification and document failure observability | NFR-6 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-027 | Web form, status and document review accessibility | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md` |
+| NFR-028 | Manager-facing Wizard and locked-state usability | NFR-10, NFR-12 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-029 | AIUsageFlow evidence refs and uncertainty reasons | NFR-7, NFR-8 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
+| NFR-030 | Historical evidence/profile/classification chain preservation on re-runs | NFR-7 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
 | NFR-033 | LLM and embedding cost controls | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md`; ADR-024 |
 | NFR-034 | Legal corpus immutability and approval | NFR-7, NFR-8 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md`; ADR-025 |
 | NFR-035 | Python Worker sandbox isolation | NFR-1, NFR-2 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md`; ADR-023 |

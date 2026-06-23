@@ -90,7 +90,7 @@ The following are deferred and must not be treated as active MVP architecture, s
 
 ## Developer Collaboration and Attestation
 
-Developer collaboration remains an optional MVP path. Manager can complete the complete A-to-Z golden path without Developer participation.
+Developer collaboration remains an optional MVP path. Manager can complete the A-to-Z golden path without Developer participation.
 
 Structured attestation is optional supplemental input only:
 
