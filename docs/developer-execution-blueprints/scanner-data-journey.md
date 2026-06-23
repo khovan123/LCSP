@@ -2,292 +2,229 @@
 
 ## Purpose
 
-Show exactly how one repository file becomes a canonical `ParsedFile`, scanner facts, evidence references, downstream scanner outputs, database records, and canonical queue events.
+Show how a commit-pinned repository snapshot becomes canonical scanner metadata, evidence refs, findings, TechnicalEvidenceReport, terminal ScanJob state, and queue events under the Python Worker-owned runtime.
 
-## Concrete Input Example
+## Runtime Ownership
 
-Source file path:
+| Concern | Owner |
+|---|---|
+| Scan request API, RBAC, idempotent job creation | NestJS API |
+| `command.scan.requested.v1` consumption | Standalone Python Worker |
+| Python static analysis | Python Worker using `ast` + `libcst` |
+| TypeScript/JavaScript semantic analysis | Node.js `ts-morph` subprocess invoked by Python Worker |
+| Scan-local graph/report assembly | Python Worker |
+| Terminal status, audit, and outbox event | Python Worker transaction |
+
+No Node.js scanner worker owns the Repository Scan lifecycle.
+
+## Concrete Python Input Example
+
+Source file:
 
 ```text
-src/loan.ts
+app/loan_service.py
 ```
 
-Minimal source shape used for reasoning:
+Documentation-only shape:
 
-```ts
-const response = await openai.chat.completions.create({ model: 'gpt-4.1', messages })
-const score = Number(response.choices[0].message.content)
-if (score > 0.7) {
-  rejectLoan(application.id)
-}
+```python
+response = client.responses.create(model="gpt-4.1", input=messages)
+score = float(response.output_text)
+if score > 0.7:
+    reject_loan(application.id)
 ```
 
-This snippet is documentation input only. It is not repository source code for the product.
+The scanner reads this file only inside the ephemeral workspace. It does not execute the code, install dependencies, or persist the source body.
 
 ## Seven-Question Trace Summary
 
 | Question | Answer |
 |---|---|
-| User bấm nút gì? | Manager clicks `Run Repository Scan`. |
-| Request đi đâu? | `POST /api/v1/assessments/:assessmentId/scans`. |
-| Service nào xử lý? | API creates `RepositoryScanJob`; `ScanWorker.handleScanRequested()` performs scanner stages. |
-| DB đọc/ghi gì? | Reads `RepositorySnapshot`; writes `SourceFile`, `EvidenceReference`, `CodeGraphNode`, `CodeGraphEdge`, `TechnicalFinding`, `TechnicalEvidenceReport`. |
-| Queue nào được publish? | API outbox publishes `command.scan.requested.v1` to `lcsp.commands.v1`; worker outbox publishes `event.scan.completed.v1` or `event.scan.failed.v1` to `lcsp.events.v1`. |
-| Worker nào consume? | `lcsp.scan-worker.v1` consumed by `ScanWorker.handleScanRequested()`. |
-| Output cuối cùng là object gì? | `TechnicalEvidenceReport` with `TechnicalFinding[]` and evidence refs. |
+| User action | Manager selects a commit and clicks `Run Repository Scan`. |
+| Request | `POST /api/v1/assessments/:assessmentId/scans`. |
+| API behavior | Create idempotent `RepositoryScanJob`, `AuditEvent`, and `OutboxEvent(command.scan.requested.v1)`. |
+| Worker | Python Worker consumes `lcsp.scan-worker.v1`. |
+| DB reads/writes | Reads job/snapshot; writes SourceFile, graph metadata, EvidenceReference, TechnicalFinding, TechnicalEvidenceReport, audit, outbox. |
+| Terminal events | `event.scan.completed.v1` or `event.scan.failed.v1`. |
+| Final object | Accepted `TechnicalEvidenceReport` or explicit failure/coverage state. |
 
 ## Canonical Queue Choreography
 
-| Step | Exchange | Routing Key | Queue | DLQ |
+| Step | Exchange | Routing Key | Queue | Owner |
 |---|---|---|---|---|
-| Request scan | `lcsp.commands.v1` | `command.scan.requested.v1` | `lcsp.scan-worker.v1` | `lcsp.scan-worker.dlq.v1` |
-| Scan completed | `lcsp.events.v1` | `event.scan.completed.v1` | downstream bound queues | downstream DLQ |
-| Scan failed | `lcsp.events.v1` | `event.scan.failed.v1` | downstream bound queues | downstream DLQ |
+| Request scan | `lcsp.commands.v1` | `command.scan.requested.v1` | `lcsp.scan-worker.v1` | NestJS API outbox -> Python Worker |
+| Scan completed | `lcsp.events.v1` | `event.scan.completed.v1` | downstream bindings | Python Worker outbox |
+| Scan failed | `lcsp.events.v1` | `event.scan.failed.v1` | downstream/audit bindings | Python Worker outbox |
 
-## Data Journey Diagram
+## End-to-End Data Journey
 
 ```text
-src/loan.ts
-  -> SourceFileRef
-  -> SourceContentSample
-  -> DefaultLanguageMapper.map({ sourceFile, contentSample })
-  -> LanguageMappingResult
-  -> ParserRegistry.getAdapter(adapterKey)
-  -> ParserAdapter.parse({ sourceFile, content })
-  -> ParserAdapterParseResult
-  -> TreeSitterAstExtractor.extract(parseResult)
-  -> ParsedFile
-  -> ImportFact[] / CallFact[] / DecisionPointFact[] / PromptFact[] / DataFieldFact[]
-  -> TypeScript SemanticFacts (later stage)
-  -> CodeGraphNode[] / CodeGraphEdge[]
-  -> DetectionResult[]
-  -> EvidenceRef[]
-  -> TechnicalFinding[]
-  -> TechnicalEvidenceReport
-  -> PostgreSQL rows
-  -> event.scan.completed.v1
+RepositorySnapshot(commit SHA)
+-> restricted workspace
+-> SourceFileRef[]
+-> LanguageMappingResult[]
+-> Python AST/CST facts
+-> TS/JS subprocess facts (when present)
+-> normalized ParsedFile/fact model
+-> CodeGraphNode[] / CodeGraphEdge[]
+-> DetectionResult[]
+-> EvidenceReference[]
+-> TechnicalFinding[]
+-> TechnicalEvidenceReport DRAFT
+-> schema/privacy/quality gates
+-> workspace cleanup verification
+-> ScanJob COMPLETED + event.scan.completed.v1
+   or ScanJob FAILED + event.scan.failed.v1
 ```
 
 ## Object Transformation Table
 
-| Stage | Class / Method | Input Object | Output Object | DB Write | Event |
-|---|---|---|---|---|---|
-| File enumeration | `RepositoryFileEnumerator.enumerate()` | `RepositorySnapshot` | `SourceFileRef[]` + `SourceContentSample[]` | `SourceFile` metadata | None |
-| Language mapping | `DefaultLanguageMapper.map()` | `{ sourceFile, contentSample }` | `LanguageMappingResult` | None | None |
-| Parser lookup | `ParserRegistry.getAdapter()` / `ParserRegistry.getOrUnsupported()` | `LanguageMappingResult.adapterKey` | `ParserAdapter` | None | None |
-| AST parse | `ParserAdapter.parse()` | `{ sourceFile, content }` | `ParserAdapterParseResult` | None | None |
-| Fact extraction | `TreeSitterAstExtractor.extract()` | `ParserAdapterParseResult` | `ParsedFile` | None | None |
-| Semantic pass | `TypeScriptSemanticAnalyzer.analyze()` | `ParsedFile[]` | enriched semantic facts | None | None |
-| Graph build | `DependencyGraphBuilder.build()` | parsed + semantic facts | `CodeGraphBuildResult` | `CodeGraphNode`, `CodeGraphEdge` | None |
-| AI detection | `AIDetectorEngine.runAll()` | `DetectorInput` | `DetectionResult[]` | Draft findings in memory | None |
-| Evidence generation | `EvidenceRefFactory.createLocationRef()` / `createFileRef()` | source location/fact metadata | `EvidenceRef` | `EvidenceReference` metadata | None |
-| Finding build | `TechnicalFindingBuilder.fromDetection()` | `DetectionResult` | `TechnicalFinding` | `TechnicalFinding` | None |
-| Report build | `TechnicalEvidenceReportBuilder.build()` | findings + limitations | `TechnicalEvidenceReport` | `TechnicalEvidenceReport` | None |
-| Gates | `EvidenceSchemaGate`, `EvidenceQualityGate` | report | pass/fail result | gate audit | Failure event only |
-| Cleanup verification | `ScanWorker.verifyWorkspaceCleanup()` | workspace ref + report | cleanup pass/fail | `AuditEvent` on failure | `event.scan.failed.v1` on failure |
-| Completion | `ScanWorker.handleScanRequested()` followed by `ScanWorker.publishScanCompletedEvent()` | report + cleanup pass | `ScanCompletedPayload` | `OutboxEvent` | `event.scan.completed.v1` |
+| Stage | Python/Node Component | Input | Output | Persistent Write |
+|---|---|---|---|---|
+| Job lock | `queue.consumer.handle_scan_requested` | `ScanRequestedPayload` | locked ScanJob | ScanJob RUNNING + audit |
+| Workspace | `workspace.snapshot_materializer` | RepositorySnapshot | `WorkspaceRef` | none |
+| Inventory | `inventory.file_enumerator` | WorkspaceRef | `SourceFileRef[]` | SourceFile metadata |
+| Language mapping | `inventory.language_mapper` | SourceFileRef | `LanguageMappingResult` | support metadata |
+| Python parse | `parsers.python_ast_extractor` + `python_cst_extractor` | `.py` file | Python facts | none |
+| Python semantic pass | `analyzers.python_import_resolver`, bounded flow analyzers | Python facts | enriched facts/limitations | none |
+| TS/JS subprocess | `ts_js_bridge.subprocess_bridge` -> Node CLI | workspace/path request | validated JSON facts | none |
+| Manifest/basic signals | `parsers.manifest_extractor` | manifest/config | dependency/config facts | none |
+| Graph build | `graph.graph_builder` | normalized facts | graph nodes/edges | metadata-only graph rows |
+| Detection | detector/analyzer set | facts + graph | DetectionResult[] | staged findings |
+| Evidence refs | `evidence.evidence_ref_factory` | locations, symbols, hashes | EvidenceReference[] | EvidenceReference rows |
+| Report build | `reports.report_builder` | findings, graph, limitations | TechnicalEvidenceReport DRAFT | report/findings rows |
+| Gates | schema, privacy, quality gates | report | accepted/insufficient/failed | report status + audit |
+| Cleanup | `workspace.cleanup_verifier` | WorkspaceRef | CleanupResult | cleanup audit metadata |
+| Terminal transaction | scanner repository/outbox | accepted report + cleanup | terminal job/event | ScanJob, AuditEvent, OutboxEvent |
 
-## Expected SourceFileRef Object
-
-```json
-{
-  "sourceFileId": "018f0000-0000-7000-8000-000000000201",
-  "repositorySnapshotId": "018f0000-0000-7000-8000-000000000102",
-  "relativePath": "src/loan.ts",
-  "extension": ".ts",
-  "sizeBytes": 348,
-  "contentHash": "sha256:metadata-only-hash",
-  "generatedHint": false,
-  "minifiedHint": false
-}
-```
-
-## Expected LanguageMappingResult Object
+## Canonical SourceFile Metadata
 
 ```json
 {
-  "sourceFile": {
-    "sourceFileId": "018f0000-0000-7000-8000-000000000201",
-    "repositorySnapshotId": "018f0000-0000-7000-8000-000000000102",
-    "relativePath": "src/loan.ts",
-    "extension": ".ts",
-    "sizeBytes": 348,
-    "contentHash": "sha256:metadata-only-hash"
-  },
-  "language": "TYPESCRIPT",
+  "sourceFileId": "uuidv7",
+  "repositorySnapshotId": "uuidv7",
+  "relativePath": "app/loan_service.py",
+  "extension": ".py",
+  "language": "PYTHON",
   "supportLevel": "FULL_STATIC",
-  "adapterKey": "typescript",
-  "isIgnored": false,
-  "isGenerated": false,
-  "isMinified": false,
-  "isOversized": false,
-  "issues": [],
+  "sizeBytes": 348,
+  "contentHash": "sha256:...",
   "coverageLimitations": []
 }
 ```
 
-## Expected ParsedFile Object
+Raw source body is never part of the persistent object.
+
+## Canonical Python Facts
 
 ```json
 {
-  "sourceFile": {
-    "sourceFileId": "018f0000-0000-7000-8000-000000000201",
-    "repositorySnapshotId": "018f0000-0000-7000-8000-000000000102",
-    "relativePath": "src/loan.ts",
-    "extension": ".ts",
-    "sizeBytes": 348,
-    "contentHash": "sha256:metadata-only-hash"
-  },
-  "language": "TYPESCRIPT",
-  "supportLevel": "FULL_STATIC",
-  "imports": [
-    {
-      "factId": "fact_import_openai_001",
-      "sourceFileId": "018f0000-0000-7000-8000-000000000201",
-      "importedModule": "openai",
-      "importedNames": ["OpenAI"],
-      "defaultImport": "OpenAI",
-      "importKind": "ES_IMPORT",
-      "location": { "filePath": "src/loan.ts", "startLine": 1, "endLine": 1 },
-      "evidenceRef": "ev:018f0000-0000-7000-8000-000000000201:IMPORT:1"
-    }
-  ],
-  "exports": [],
-  "calls": [
-    {
-      "factId": "fact_call_openai_001",
-      "sourceFileId": "018f0000-0000-7000-8000-000000000201",
-      "calleeText": "openai.chat.completions.create",
-      "receiverText": "openai.chat.completions",
-      "callKind": "METHOD_CALL",
-      "argumentKinds": ["OBJECT_LITERAL"],
-      "awaited": true,
-      "location": { "filePath": "src/loan.ts", "startLine": 1, "endLine": 1 },
-      "evidenceRef": "ev:018f0000-0000-7000-8000-000000000201:CALL:1"
-    },
-    {
-      "factId": "fact_call_reject_loan_001",
-      "sourceFileId": "018f0000-0000-7000-8000-000000000201",
-      "calleeText": "rejectLoan",
-      "callKind": "CALL_EXPRESSION",
-      "argumentKinds": ["IDENTIFIER"],
-      "awaited": false,
-      "location": { "filePath": "src/loan.ts", "startLine": 4, "endLine": 4 },
-      "evidenceRef": "ev:018f0000-0000-7000-8000-000000000201:CALL:4"
-    }
-  ],
+  "language": "PYTHON",
+  "module": "app.loan_service",
+  "imports": [{"module": "openai", "evidenceRef": "ev:...:IMPORT:1"}],
+  "calls": [{"callee": "client.responses.create", "evidenceRef": "ev:...:CALL:1"}],
   "functions": [],
   "classes": [],
-  "decisionPoints": [
-    {
-      "factId": "fact_decision_score_threshold_001",
-      "sourceFileId": "018f0000-0000-7000-8000-000000000201",
-      "decisionKind": "THRESHOLD_BRANCH",
-      "conditionSummary": "AI_OUTPUT > NUMERIC_LITERAL",
-      "relatedCallEvidenceRefs": [
-        "ev:018f0000-0000-7000-8000-000000000201:CALL:1",
-        "ev:018f0000-0000-7000-8000-000000000201:CALL:4"
-      ],
-      "location": { "filePath": "src/loan.ts", "startLine": 3, "endLine": 5 },
-      "evidenceRef": "ev:018f0000-0000-7000-8000-000000000201:DECISION_POINT:3"
-    }
-  ],
-  "promptFacts": [],
-  "dataFieldFacts": [
-    {
-      "factId": "fact_data_loan_001",
-      "sourceFileId": "018f0000-0000-7000-8000-000000000201",
-      "fieldName": "loan",
-      "categoryHint": "FINANCIAL",
-      "location": { "filePath": "src/loan.ts", "startLine": 4, "endLine": 4 },
-      "evidenceRef": "ev:018f0000-0000-7000-8000-000000000201:DATA_FIELD:4"
-    }
-  ],
-  "parseIssues": [],
+  "decisionPoints": [{"kind": "THRESHOLD_BRANCH", "evidenceRef": "ev:...:DECISION:3"}],
+  "dataFields": [{"name": "application", "categoryHint": "FINANCIAL"}],
   "coverageLimitations": []
 }
 ```
 
-## Expected EvidenceRef Object
+## TS/JS Subprocess Protocol
+
+Python Worker invokes a fixed executable and argument list without shell interpolation:
+
+```text
+node dist/tools/ts-js-analyzer/cli.js --workspace <workspace> --request <request-json>
+```
+
+The subprocess returns a versioned JSON envelope on stdout:
 
 ```json
 {
-  "evidenceRefId": "018f0000-0000-7000-8000-000000000301",
-  "evidenceRef": "ev:018f0000-0000-7000-8000-000000000201:CALL:1",
+  "schemaVersion": "1.0",
+  "status": "COMPLETED",
+  "files": [],
+  "facts": [],
+  "coverageLimitations": []
+}
+```
+
+Rules:
+
+- stdout is schema-validated before use;
+- stderr is redacted and bounded;
+- timeout/exit-code failure yields `TS_JS_ANALYZER_FAILED` and affected-file coverage limitation;
+- subprocess cannot persist DB rows or publish events;
+- repository dependency installation and source execution are forbidden.
+
+## Evidence Reference
+
+```json
+{
+  "evidenceRefId": "uuidv7",
   "sourceType": "STATIC_SCAN",
-  "sourceFileId": "018f0000-0000-7000-8000-000000000201",
-  "relativePath": "src/loan.ts",
-  "location": { "startLine": 1, "endLine": 1 },
+  "sourceFileId": "uuidv7",
+  "relativePath": "app/loan_service.py",
+  "location": {"startLine": 1, "endLine": 4, "symbolRef": "evaluate_loan"},
   "evidenceHash": "sha256:normalized-metadata-only",
   "redactionStatus": "NO_SOURCE_STORED"
 }
 ```
 
-## Expected Graph Objects
-
-```json
-{
-  "nodes": [
-    { "nodeId": "018f0000-0000-7000-8000-000000000701", "type": "SERVICE", "label": "src/loan.ts" },
-    { "nodeId": "018f0000-0000-7000-8000-000000000702", "type": "AI_PROVIDER", "label": "OpenAI" },
-    { "nodeId": "018f0000-0000-7000-8000-000000000703", "type": "AI_MODEL_INVOCATION", "label": "chat.completions.create" },
-    { "nodeId": "018f0000-0000-7000-8000-000000000704", "type": "DECISION_RULE", "label": "score threshold" },
-    { "nodeId": "018f0000-0000-7000-8000-000000000705", "type": "STATUS_UPDATE", "label": "rejectLoan" }
-  ],
-  "edges": [
-    { "type": "IMPORTS", "fromNodeId": "018f0000-0000-7000-8000-000000000701", "toNodeId": "018f0000-0000-7000-8000-000000000702", "confidence": 0.8 },
-    { "type": "CALLS", "fromNodeId": "018f0000-0000-7000-8000-000000000701", "toNodeId": "018f0000-0000-7000-8000-000000000703", "confidence": 0.9 },
-    { "type": "FLOWS_TO", "fromNodeId": "018f0000-0000-7000-8000-000000000703", "toNodeId": "018f0000-0000-7000-8000-000000000704", "confidence": 0.75 },
-    { "type": "REJECTS", "fromNodeId": "018f0000-0000-7000-8000-000000000704", "toNodeId": "018f0000-0000-7000-8000-000000000705", "confidence": 0.75 }
-  ]
-}
-```
-
-## Expected TechnicalFinding Objects
+## Findings Example
 
 ```json
 [
   {
-    "findingId": "018f0000-0000-7000-8000-000000000711",
-    "scanJobId": "018f0000-0000-7000-8000-000000000111",
     "findingType": "AI_MODEL_INVOCATION",
     "confidence": 0.9,
-    "filePath": "src/loan.ts",
-    "evidenceRef": "ev:018f0000-0000-7000-8000-000000000201:CALL:1",
-    "evidenceRefs": [
-      "ev:018f0000-0000-7000-8000-000000000201:IMPORT:1",
-      "ev:018f0000-0000-7000-8000-000000000201:CALL:1"
-    ],
-    "description": "OpenAI invocation detected through package import and chat completion call."
+    "evidenceRefs": ["ev:...:IMPORT:1", "ev:...:CALL:1"],
+    "description": "Model invocation detected through import and call evidence."
   },
   {
-    "findingId": "018f0000-0000-7000-8000-000000000712",
-    "scanJobId": "018f0000-0000-7000-8000-000000000111",
     "findingType": "AI_DECISION_FLOW_SIGNAL",
     "confidence": 0.75,
-    "filePath": "src/loan.ts",
-    "evidenceRef": "ev:018f0000-0000-7000-8000-000000000201:DECISION_POINT:3",
-    "evidenceRefs": [
-      "ev:018f0000-0000-7000-8000-000000000201:CALL:1",
-      "ev:018f0000-0000-7000-8000-000000000201:DECISION_POINT:3",
-      "ev:018f0000-0000-7000-8000-000000000201:CALL:4"
-    ],
-    "description": "AI output appears to feed a threshold branch that triggers loan rejection."
+    "evidenceRefs": ["ev:...:CALL:1", "ev:...:DECISION:3", "ev:...:CALL:4"],
+    "description": "Model output feeds a threshold branch and status-changing action."
   }
 ]
 ```
 
+Descriptions are generated from normalized metadata and must not reproduce source text.
+
 ## Persistence Timing
 
-1. `SourceFile` rows are written after file enumeration.
-2. Evidence refs are created during extraction and persisted as metadata only.
-3. Graph rows are written only after graph build completes.
-4. `TechnicalFinding` rows are written only after detector output is converted into redacted evidence-backed findings.
-5. `TechnicalEvidenceReport` row is written after report hash is generated.
-6. Workspace cleanup is verified after report gates.
-7. `event.scan.completed.v1` is written to outbox only after Schema Gate, Quality Gate and cleanup verification pass.
-8. Cleanup failure writes `event.scan.failed.v1` with `SCANNER_WORKSPACE_CLEANUP_FAILED` and blocks downstream processing.
+1. Lock ScanJob and mark RUNNING idempotently.
+2. Create restricted workspace and materialize selected snapshot.
+3. Persist SourceFile metadata after inventory.
+4. Build facts, graph, evidence refs, findings, and report draft.
+5. Persist staged report/finding metadata and run gates.
+6. Attempt workspace deletion for every success or terminal failure path.
+7. Verify cleanup.
+8. On accepted report plus verified cleanup, transactionally mark COMPLETED and create completed OutboxEvent.
+9. On fatal failure or cleanup failure, transactionally mark FAILED, record safe reason, and create failed OutboxEvent.
+
+`event.scan.completed.v1` must never be staged before cleanup verification.
+
+## Failure and Coverage Behavior
+
+| Condition | Result |
+|---|---|
+| Repository unavailable | `REPOSITORY_ACCESS_FAILED`; terminal failed event |
+| Single-file syntax error | `SCANNER_PARSE_FAILED` limitation; bounded continuation |
+| Dynamic import/reflection/runtime-only path | `UNSUPPORTED_DYNAMIC_FLOW`; no inferred certainty |
+| TS/JS subprocess timeout/error | `TS_JS_ANALYZER_FAILED`; affected-file limitation |
+| Secret redaction or privacy gate failure | fail closed before accepted report |
+| Schema/quality gate failure | rejected/insufficient report; downstream blocked |
+| Workspace cleanup failure | `SCANNER_WORKSPACE_CLEANUP_FAILED`; security audit; terminal failure |
+| Duplicate command | idempotent no-op or resume according to job state |
+
+## Downstream Handoff
+
+Only a `QUALITY_VALID` report linked to a `COMPLETED` ScanJob with verified cleanup can trigger `command.technical-profile.requested.v1`.
 
 ## Developer Rule
 
-If a stage cannot produce the next object in this document, it must emit a coverage limitation or failure state. It must not invent a stronger finding.
+When a stage cannot produce the next canonical object, it must emit a coverage limitation or explicit failure. It must not invent a stronger finding or legal conclusion.
