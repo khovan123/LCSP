@@ -2,9 +2,9 @@
 
 ## Mục đích
 
-`docs-vn/` là bản tóm lược tiếng Việt theo chủ đề của toàn bộ hệ thống tài liệu trong `docs/`. Mục tiêu là giúp người mới, người phản biện và nhóm triển khai hiểu nhanh sản phẩm, yêu cầu, kiến trúc, luồng xử lý, bảo mật và trạng thái dự án.
+`docs-vn/` là bản tóm lược tiếng Việt theo chủ đề của hệ thống tài liệu trong `docs/`. Mục tiêu là giúp người mới, người phản biện và nhóm triển khai hiểu nhanh sản phẩm, yêu cầu, kiến trúc, luồng xử lý, bảo mật và trạng thái dự án.
 
-Đây **không phải** bản dịch từng tệp và **không thay thế** tài liệu gốc. Khi có khác biệt, tài liệu trong `docs/` và các ADR đang hiệu lực là nguồn chuẩn.
+Đây **không phải** bản dịch từng tệp và **không thay thế** tài liệu gốc. Khi có khác biệt, tài liệu trong `docs/`, change-control đã duyệt và các ADR đang hiệu lực là nguồn chuẩn.
 
 ## Đọc nhanh
 
@@ -18,19 +18,19 @@
 8. [08-ke-hoach-trien-khai.md](./08-ke-hoach-trien-khai.md)
 9. [09-quan-tri-tai-lieu-va-lich-su.md](./09-quan-tri-tai-lieu-va-lich-su.md)
 10. [10-doi-chieu-tai-lieu-goc.md](./10-doi-chieu-tai-lieu-goc.md)
+11. [11-phase-5-2l.md](./11-phase-5-2l.md)
 
 ## Trạng thái hiện tại
 
 ```text
-ACTIVE_DOCS_PRE_UX_SYNCHRONIZED
-CANONICAL_UX_PENDING
-STORY_TRACEABILITY_PENDING
-IMPLEMENTATION_READINESS_NOT_CERTIFIED
+PROJECT_OWNER_DIRECTIVE_RECORDED
+PHASE_5_2L_CORRECT_COURSE_REQUIRED
+ACTIVE_DOCS_NOT_YET_REMEDIATED_FOR_PHASE_5_2L
 IMPLEMENTATION_NOT_AUTHORIZED
 SPRINT_EXECUTION_NOT_AUTHORIZED
 ```
 
-Ý nghĩa: tài liệu nền đã được đồng bộ để chuyển sang thiết kế UX; chưa có UX chuẩn, epics/stories chuẩn hoặc chứng nhận sẵn sàng triển khai.
+Các tệp `01..10` tóm lược baseline trước Phase 5.2L. Tệp `11-phase-5-2l.md` trỏ tới chỉ thị mới của Project Owner. Không dùng các tệp tóm lược cũ để bỏ qua correct-course hoặc coi kiến trúc cũ là quyết định cuối cùng.
 
 ## Quy tắc sử dụng
 
