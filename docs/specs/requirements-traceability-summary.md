@@ -23,8 +23,9 @@ It does not create requirements, certify implementation readiness, or claim stor
 | Deferred FR total | 3 |
 | Active NFR total | 33 |
 | AC total | 41 |
+| UX specification status | CANONICAL_UX_PENDING |
 | Canonical epics/stories artifact | Missing |
-| Story coverage status | STORY_COVERAGE_NOT_ASSESSABLE |
+| Story coverage status | STORY_TRACEABILITY_PENDING |
 
 ## Functional Requirement Scope
 
@@ -68,6 +69,8 @@ attestationCanUnlockClassification = false
 managerFinalResolver = true
 
 STORY_COVERAGE_NOT_ASSESSABLE
+CANONICAL_UX_PENDING
+STORY_TRACEABILITY_PENDING
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
 ```
 
@@ -75,7 +78,17 @@ CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
 
 Requirement-to-domain and requirement-to-implementation-area coverage are tracked in `docs/specs/requirements-traceability-matrix.md`.
 
-Story-level traceability remains pending until `bmad-create-epics-and-stories` produces canonical user-value epics and stories. This document must not be read as implementation readiness certification.
+UX and story-level traceability remain pending until `bmad-ux` and `bmad-create-epics-and-stories` produce canonical UX and user-value epics/stories. This document must not be read as implementation readiness certification.
+
+## Story Dependency Carry-Forward
+
+When canonical stories are created, legal-source and retrieval stories must carry these explicit NFR dependencies:
+
+| FR | Story-layer NFR dependencies |
+|---|---|
+| `FR-053` | `NFR-017`, `NFR-034` |
+| `FR-054` | `NFR-017`, `NFR-034` |
+| `FR-056` | `NFR-017`, `NFR-033`, `NFR-034` |
 
 ## Deferred Evidence Paths
 

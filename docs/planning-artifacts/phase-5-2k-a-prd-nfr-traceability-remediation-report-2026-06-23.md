@@ -72,12 +72,13 @@ The matrix is normalized for canonical inventory and coverage boundaries, but it
 
 ```text
 REQUIREMENT_TRACEABILITY_CORE_MATRIX_NORMALIZED
-CROSS_DOCUMENT_REQUIREMENT_ID_REMEDIATION_PENDING
+CANONICAL_UX_PENDING
+STORY_TRACEABILITY_PENDING
 STORY_COVERAGE_NOT_ASSESSABLE
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
 ```
 
-`CROSS_DOCUMENT_REQUIREMENT_ID_REMEDIATION_PENDING` remains until the next planning steps create UX and canonical user-value epics/stories and the traceability layer is revalidated against those artifacts.
+UX and story traceability remain pending until the next planning steps create UX and canonical user-value epics/stories and the traceability layer is revalidated against those artifacts.
 
 ## Validation Commands
 

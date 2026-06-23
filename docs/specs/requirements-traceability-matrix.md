@@ -17,6 +17,7 @@ This document is the canonical enterprise requirements traceability matrix for L
 | Requirement-to-implementation-area coverage | Tracked in this matrix through Implementation Area column. |
 | Requirement-to-story coverage | STORY_COVERAGE_NOT_ASSESSABLE |
 | Story artifact status | CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING |
+| UX specification status | CANONICAL_UX_PENDING |
 
 `NFR-031` and `NFR-032` are legacy identifiers only. `NFR-031` maps to active `NFR-005`; `NFR-032` maps to active `NFR-008`. They are not active NFR catalog rows and must not be counted as active NFRs.
 
@@ -167,8 +168,8 @@ UC -> FR -> AC -> Domain Spec -> State Machine -> Implementation Area
 | NFR-028 | FR-014, FR-015, FR-021 | UC-004, UC-008 | Business language and status clarity. |
 | NFR-029 | FR-023..FR-025, FR-032, FR-033 | UC-009, UC-012 | Evidence refs on usage claims. |
 | NFR-030 | FR-044, FR-049 | UC-015, UC-016 | Historical evidence versioning. |
-| NFR-033 | FR-055 | UC-M07-02 | LLM cost control and token logging. |
-| NFR-034 | FR-032 | UC-M07-01 | Immutable LegalCorpusVersion and approval gate. |
+| NFR-033 | FR-055, FR-056 | UC-M07-01, UC-M07-02 | LLM/embedding cost control and token logging. |
+| NFR-034 | FR-032, FR-053, FR-054, FR-056 | UC-M07-01 | Immutable LegalCorpusVersion, official-source validation and approval gate. |
 | NFR-035 | FR-019 | UC-M10-03 | Standalone Python Worker sandbox directory restriction and cleanup. |
 
 ### Legacy NFR Alias Remapping
@@ -196,8 +197,10 @@ NO_ORPHAN_REQUIREMENTS
 
 NO_ORPHAN_ACCEPTANCE_CRITERIA
 
-CROSS_DOCUMENT_REQUIREMENT_ID_REMEDIATION_PENDING
+CANONICAL_UX_PENDING
 
 STORY_COVERAGE_NOT_ASSESSABLE
+
+STORY_TRACEABILITY_PENDING
 
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING

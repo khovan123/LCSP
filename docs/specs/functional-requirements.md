@@ -74,10 +74,10 @@ No active `FR-E*`, `FR-A*`, or legacy alias is authoritative after this document
 | FR-050 | Support deferred Local/CI scanner report upload | Preserve future Local/CI scanner evidence path as deferred, not active MVP main flow. | Deferred | N | UC-016 | BR-033 | AC-005 | NFR-016 | Platform |
 | FR-051 | Support deferred manual evidence JSON upload | Preserve future structured manual evidence path as deferred, not active MVP main flow. | Deferred | N | UC-016 | BR-034 | AC-005, AC-013 | NFR-016 | Platform |
 | FR-052 | Support deferred delegated technical clarification | Preserve future delegated technical clarification path while keeping Manager final authority. | Deferred | N | UC-010, UC-018 | BR-044 | AC-012, AC-013 | FR-011, FR-029 | Platform |
-| FR-053 | Ingest legal sources | Ingest legal source documents from approved URLs (vbpl.vn, vanban.chinhphu.vn), store PDF/HTML snapshots, compute content hashes, and index metadata. | Must | Y | UC-012 | BR-050, BR-084 | AC-016 | NFR-017 | Legal Ingestion |
-| FR-054 | Legal corpus review gate | Enforce formal review and approval gate to transition draft corpus items to an active, immutable LegalCorpusVersion. | Must | Y | UC-012 | BR-050 | AC-016 | NFR-017 | Legal Ingestion |
+| FR-053 | Ingest legal sources | Ingest legal source documents from approved URLs (vbpl.vn, vanban.chinhphu.vn), store PDF/HTML snapshots, compute content hashes, and index metadata. | Must | Y | UC-012 | BR-050, BR-084 | AC-016 | NFR-017, NFR-034 | Legal Ingestion |
+| FR-054 | Legal corpus review gate | Enforce formal review and approval gate to transition draft corpus items to an active, immutable LegalCorpusVersion. | Must | Y | UC-012 | BR-050 | AC-016 | NFR-017, NFR-034 | Legal Ingestion |
 | FR-055 | Configure LLM provider | Support configuration of credentials, endpoints, cost boundaries and timeout rules for a real LLM provider and embedding model. | Must | Y | UC-013 | BR-049 | AC-018 | NFR-012, NFR-033 | Platform |
-| FR-056 | Hybrid search | Retrieve citations via combined full-text keyword search and pgvector semantic cosine similarity search. | Must | Y | UC-012 | BR-050, BR-084 | AC-016 | NFR-017 | Legal Matching |
+| FR-056 | Hybrid search | Retrieve citations via combined full-text keyword search and pgvector semantic cosine similarity search. | Must | Y | UC-012 | BR-050, BR-084 | AC-016 | NFR-017, NFR-033, NFR-034 | Legal Matching |
 
 ## Legacy Requirements Resolution
 
