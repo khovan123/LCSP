@@ -26,14 +26,17 @@ The gateway centralizes model-provider configuration, input sanitization, prompt
 
 ## Provider Adapter Pattern
 
-Controlled MVP default:
+A-to-Z MVP LLM mode:
 
 ```text
-LLM_PROVIDER_MVP:
-DETERMINISTIC_MOCK_LLM_GATEWAY_BY_DEFAULT
+LLM_MODE:
+  provider   — real inference (required for A-to-Z acceptance run)
+  mock       — deterministic mock (unit tests, offline CI, credential-unavailable dev)
 ```
 
-Model-backed calls are disabled by default. The gateway must implement a provider adapter boundary, but local controlled MVP execution uses deterministic mock responses unless `LLM_MODE=provider` is explicitly configured.
+A real configured LLM provider is mandatory for the A-to-Z MVP acceptance run per ADR-024. Mock-backed runs do not qualify as the final A-to-Z MVP acceptance run. Mock mode is retained for unit tests and offline CI.
+
+> Phase 5.2J update: The previous Phase 5.2I decision `LLM_PROVIDER_MVP: DETERMINISTIC_MOCK_LLM_GATEWAY_BY_DEFAULT` as the controlled MVP happy path is superseded by ADR-024. Phase 5.2I (commit c33b137) is preserved as historical evidence.
 
 | Layer | Responsibility |
 | --- | --- |
@@ -112,10 +115,16 @@ Store prompt version refs and input references, not raw prompt/source/secret con
 
 Audit model run requested, rejected, timed out, schema invalid, completed, retried and failed, including provider/model/prompt version and output hash.
 
-## Locked Controlled MVP Provider Decision
+## Locked A-to-Z MVP LLM Provider Decisions
+
+> Phase 5.2J update. Previous section: 'Locked Controlled MVP Provider Decision'. Phase 5.2I decisions are preserved as historical evidence (commit c33b137).
 
 | Decision | Controlled MVP Value |
 | --- | --- |
-| Provider selection | Deterministic mock LLM gateway by default; real providers are configuration concerns behind the adapter boundary. |
+| Provider selection | Real configured LLM provider mandatory for A-to-Z acceptance run per ADR-024. `COST_OR_CREDENTIAL_DECISION_REQUIRED`. Candidates: OpenAI GPT-4o, Google Gemini 1.5 Pro/Flash, Anthropic Claude 3.x. |
+| Mock mode | Deterministic mock retained for unit tests, offline CI, and credential-unavailable dev. Mock run does not qualify as A-to-Z MVP acceptance. |
+| Embedding model | Separate embedding provider/model required for legal corpus retrieval. `TECHNICAL_DECISION_REQUIRED`. |
+| Credential management | `LLM_API_KEY_REF` resolved from secret manager. Not in source. Not in logs. |
+| Cost-control | Monthly budget cap required before acceptance run. Token usage logged per workflow run. |
 | Token budget | `LLM_MAX_OUTPUT_TOKENS=1200` default for controlled MVP unless a provider-specific environment configuration overrides it. |
 | Legal/compliance output | Mock output cannot create legal advice, compliance certification, formal legal reliability or production claims. |

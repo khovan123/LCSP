@@ -55,8 +55,18 @@ Worker consumes `command.ai-usage-flow.requested.v1` after `event.technical-prof
   "summary": {
     "aiDetected": "confirmed",
     "businessProcess": "loan_approval",
+    "aiPurpose": "credit_scoring_and_loan_decision_support",
+    "inputCategories": ["financial", "personal_data"],
+    "outputCategories": ["score", "decision_label"],
+    "downstreamAction": "approve_or_reject_loan_application",
+    "affectedSubjects": ["loan_applicant"],
+    "humanReview": "ABSENT_WITH_BOUNDED_PATH",
     "automationLevel": "FULLY_AUTOMATED",
-    "humanReview": "ABSENT_WITH_BOUNDED_PATH"
+    "potentialHarmCategories": ["financial_harm"],
+    "materialClaimRefs": [
+      "018f0000-0000-7000-8000-000000000232"
+    ],
+    "blockingReasons": []
   },
   "claims": [
     {

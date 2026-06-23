@@ -34,71 +34,72 @@ This document is the active lightweight traceability summary for LCSP requiremen
 
 ## UC to FR / BR / NFR / AC Summary
 
-| UC | Name | Status | Active FR / Source Alias | BR | Active NFR / Source Alias | AC |
-| --- | --- | --- | --- | --- | --- | --- |
-| UC-M01-01 | Register Account | ACTIVE | PLATFORM_BASELINE | BR-001, BR-002 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-02 | Login | ACTIVE | PLATFORM_BASELINE | BR-003 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-04 | Setup MFA Using Authenticator App | ACTIVE | PLATFORM_BASELINE | BR-006, BR-011 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-05 | Verify MFA Code | ACTIVE | PLATFORM_BASELINE | BR-007, BR-009 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-06 | Disable MFA | ACTIVE | PLATFORM_BASELINE | BR-010 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-07 | Reset MFA | ACTIVE | PLATFORM_BASELINE | BR-012, BR-013 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-08 | Manage Session | ACTIVE | PLATFORM_BASELINE | BR-005 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-09 | Reset Password | ACTIVE | PLATFORM_BASELINE | BR-004 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-10 | Login With MFA | ACTIVE | PLATFORM_BASELINE | BR-008 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-11 | Verify Email | ACTIVE | PLATFORM_BASELINE | BR-074 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-12 | Change Password | ACTIVE | PLATFORM_BASELINE | BR-075 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M01-13 | Manage Personal Profile | ACTIVE | PLATFORM_BASELINE | BR-076 | NFR-009, NFR-011 | NO_DIRECT_AC |
-| UC-M01-14 | Sign In with OAuth/OIDC | ACTIVE | PLATFORM_BASELINE | BR-086, BR-087, BR-088 | NFR-003 | NO_DIRECT_AC |
-| UC-M02-01 | Create Organization | ACTIVE | PLATFORM_BASELINE | BR-014 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M02-02 | Manage Organization Members | ACTIVE | PLATFORM_BASELINE | BR-015 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M02-03 | Assign Manager Role | ACTIVE | PLATFORM_BASELINE | BR-016 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M02-04 | Invite Developer | ACTIVE | FR-E1-2 | BR-017, BR-020 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M02-05 | Assign Developer Policy | ACTIVE | FR-E1-3, FR-E1-4 | BR-021, BR-090, BR-091 | NFR-007, NFR-009, NFR-011 | NO_DIRECT_AC |
-| UC-M02-06 | Revoke Developer Access | ACTIVE | FR-E1-3, FR-E1-4 | BR-022, BR-092 | NFR-007, NFR-011 | NO_DIRECT_AC |
-| UC-M03-01 | Create Assessment | ACTIVE | FR-E1-1, FR-E1-4, FR-E5-5, FR-E6-2, FR-E7-2 | BR-018, BR-023, BR-089 | NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
-| UC-M03-02 | Fill Web Wizard | ACTIVE | FR-E2-1, FR-E2-2 | BR-026, BR-027, BR-031 | NFR-010 | NO_DIRECT_AC |
-| UC-M03-03 | Save Wizard Progress | ACTIVE | FR-E2-1 | BR-028 | NFR-010 | NO_DIRECT_AC |
-| UC-M03-04 | Submit WizardProfile | ACTIVE | FR-E2-1 | BR-029 | NFR-010 | NO_DIRECT_AC |
-| UC-M03-05 | View Self-Declared Readiness | ACTIVE | FR-E2-3, FR-E2-4 | BR-030 | NFR-012 | AC-1 |
-| UC-M04-01 | Accept Developer Task | ACTIVE | FR-E1-2, FR-E1-3 | BR-019, BR-071 | NFR-009, NFR-011 | NO_DIRECT_AC |
-| UC-M04-02 | Connect GitHub Repository | ACTIVE | FR-E3-1 | BR-032 | NFR-003 | NO_DIRECT_AC |
-| UC-M04-03 | Upload Local/CI Scanner Report | OUT_OF_SCOPE | FR-E3-2 | BR-033 | NFR-007 | NO_DIRECT_AC |
-| UC-M04-04 | Upload Manual Technical Evidence JSON | OUT_OF_SCOPE | FR-E3-3 | BR-034 | PLATFORM_BASELINE | NO_DIRECT_AC |
-| UC-M04-05 | Review Technical Findings | ACTIVE | FR-E1-4, FR-E3-1, FR-E4-2, FR-E5-5, FR-E6-2, FR-E7-2 | BR-035 | NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
-| UC-M04-06 | Confirm Technical Truth | ACTIVE | FR-E1-3, FR-E1-4, FR-E5-3, FR-E5-5 | BR-046 | NFR-011 | AC-6 |
-| UC-M04-07 | Provide Structured Technical Attestation | ACTIVE | FR-E3-5, FR-E8-4 | BR-052, BR-053, BR-056 | NFR-007, NFR-009, NFR-011 | AC-9, AC-11, AC-12 |
-| UC-M04-08 | Run Repository Scan | ACTIVE | FR-E1-4, FR-E3-1, FR-E5-5, FR-E6-2, FR-E7-2 | BR-077 | NFR-003, NFR-006, NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
-| UC-M05-01 | Validate Evidence Schema | ACTIVE | FR-E4-1 | BR-036 | NFR-007 | AC-3 |
-| UC-M05-02 | Validate Privacy Flags | ACTIVE | FR-E3-4, FR-E4-1 | BR-037 | NFR-001, NFR-002 | AC-3 |
-| UC-M05-03 | Evaluate Evidence Quality | ACTIVE | FR-E4-3, FR-E4-4 | BR-038 | NFR-012 | AC-4 |
-| UC-M05-04 | Generate TechnicalProfile | ACTIVE | FR-E4-2, FR-E5-1 | BR-039, BR-080, BR-081 | NFR-007, NFR-008, NFR-009 | NO_DIRECT_AC |
-| UC-M05-05 | Mark Evidence as Rejected, Insufficient, or Ready | ACTIVE | FR-E4-3, FR-E4-4 | BR-040 | NFR-012 | AC-4 |
-| UC-M06-01 | Detect Conflict | ACTIVE | FR-E5-1, FR-E5-6 | BR-041, BR-083 | NFR-007 | AC-5, AC-8 |
-| UC-M06-02 | Calculate Conflict Score | ACTIVE | FR-E4-2, FR-E5-1, FR-E5-2 | BR-048, BR-085 | PLATFORM_BASELINE | AC-7, AC-8 |
-| UC-M06-03 | Route Conflict to Manager | ACTIVE | FR-E5-3 | BR-072 | PLATFORM_BASELINE | AC-6 |
-| UC-M06-04 | Resolve Technical Conflict | ACTIVE | FR-E1-4, FR-E5-3, FR-E5-5, FR-E6-2, FR-E7-2 | BR-042, BR-047 | NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
-| UC-M06-05 | Resolve Business/Legal Conflict | ACTIVE | FR-E1-4, FR-E5-3, FR-E5-4, FR-E5-5, FR-E6-2, FR-E7-2 | BR-043, BR-093 | NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
-| UC-M06-06 | Post-MVP Delegated Technical Clarification | OUT_OF_SCOPE | FR-E1-3, FR-E1-4, FR-E5-3, FR-E5-5 | BR-044, BR-054 | NFR-007, NFR-011 | AC-6, AC-9 |
-| UC-M06-07 | Create VerifiedProfile | ACTIVE | FR-E6-1 | BR-045 | PLATFORM_BASELINE | AC-2, AC-5 |
-| UC-M06-08 | Review and Approve VerifiedProfile | ACTIVE | FR-E1-4, FR-E5-5, FR-E6-1, FR-E6-2, FR-E7-2 | BR-078 | NFR-007, NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
-| UC-M07-01 | Retrieve Legal Rules/Citations | ACTIVE | FR-E4-3, FR-E6-3, FR-E6-4, FR-E6-5 | BR-082, BR-084 | NFR-007, NFR-008, NFR-009 | AC-4, AC-10 |
-| UC-M07-02 | Run Risk Classification Agent | ACTIVE | FR-E6-2, FR-E6-3 | BR-049 | NFR-008, NFR-009 | AC-2, AC-10 |
-| UC-M07-03 | Trace Classification to Legal Rule | ACTIVE | FR-E6-3, FR-E6-4, FR-E6-5 | BR-050 | NFR-007, NFR-008 | AC-10 |
-| UC-M07-04 | Block or Degrade Classification if Citation Missing | ACTIVE | FR-E6-4 | BR-051, BR-073 | NFR-008, NFR-009, NFR-012 | AC-10 |
-| UC-M08-01 | Run Gap Analysis Agent | ACTIVE | FR-E7-1 | BR-062 | NFR-008, NFR-009 | NO_DIRECT_AC |
-| UC-M08-02 | Generate Compliance Report | ACTIVE | FR-E7-2 | BR-025, BR-063, BR-064 | NFR-007, NFR-008, NFR-009 | AC-5, AC-10, AC-11 |
-| UC-M08-03 | Generate Readiness-Only Export | ACTIVE | FR-E7-3 | BR-065 | NFR-012 | AC-1 |
-| UC-M08-04 | View Document Status | ACTIVE | FR-E7-2 | BR-066 | NFR-006, NFR-009 | AC-5, AC-10 |
-| UC-M08-06 | View Gap Analysis | ACTIVE | FR-E7-1 | BR-079 | NFR-007, NFR-008, NFR-009 | NO_DIRECT_AC |
-| UC-M09-01 | Write Audit Event | ACTIVE | FR-E1-3, FR-E1-4, FR-E8-1, FR-E8-2, FR-E8-3, FR-E8-4, FR-E8-5 | BR-024, BR-067, BR-094 | NFR-007, NFR-011 | AC-9, AC-11, AC-12 |
-| UC-M09-03 | Export Audit Trail | ACTIVE | FR-E8-5 | BR-068 | NFR-001, NFR-007 | AC-12 |
-| UC-M09-04 | Track Evidence, Report, and Document Version | ACTIVE | FR-E8-2, FR-E8-5 | BR-069 | NFR-007, NFR-008 | AC-12 |
-| UC-M09-05 | Track Human Attestation Usage | ACTIVE | FR-E7-4, FR-E8-4 | BR-055, BR-070 | NFR-007 | AC-9, AC-11, AC-12 |
-| UC-M10-01 | Enforce Source Code Privacy Policy | ACTIVE | FR-E3-1, FR-E8-2 | BR-061 | NFR-002 | AC-12 |
-| UC-M10-02 | Redact Secrets | ACTIVE | FR-E3-4, FR-E8-2 | BR-059 | NFR-005 | AC-12 |
-| UC-M10-03 | Clean Temporary Workspace | ACTIVE | FR-E3-1, FR-E8-2 | BR-060 | NFR-002 | AC-12 |
-| UC-M10-04 | Enforce No Raw Source to LLM | ACTIVE | FR-E3-1, FR-E8-2 | BR-057 | NFR-001 | AC-12 |
-| UC-M10-05 | Enforce No Long-Term Raw Source Storage | ACTIVE | FR-E3-1, FR-E8-2 | BR-058 | NFR-002 | AC-12 |
+| UC | Name | Status | Active FR | Source FR Alias | BR | Active NFR | Source NFR Alias | AC |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| UC-M01-01 | Register Account | ACTIVE | FR-001 | PLATFORM_BASELINE | BR-001, BR-002 | NFR-001 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-02 | Login | ACTIVE | FR-002 | PLATFORM_BASELINE | BR-003 | NFR-005 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-04 | Setup MFA Using Authenticator App | ACTIVE | FR-003, FR-004 | PLATFORM_BASELINE | BR-006, BR-011 | NFR-002 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-05 | Verify MFA Code | ACTIVE | FR-005, FR-007 | PLATFORM_BASELINE | BR-007, BR-009 | NFR-003, NFR-005 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-06 | Disable MFA | ACTIVE | FR-008 | PLATFORM_BASELINE | BR-010 | NFR-006 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-07 | Reset MFA | ACTIVE | FR-009 | PLATFORM_BASELINE | BR-012, BR-013 | NFR-006 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-08 | Manage Session | ACTIVE | FR-010 | PLATFORM_BASELINE | BR-005 | NFR-004 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-09 | Reset Password | ACTIVE | FR-011 | PLATFORM_BASELINE | BR-004 | NFR-001 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-10 | Login With MFA | ACTIVE | FR-006 | PLATFORM_BASELINE | BR-008 | NFR-003 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-11 | Verify Email | ACTIVE | FR-004 | PLATFORM_BASELINE | BR-074 | NFR-001 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-12 | Change Password | ACTIVE | FR-004 | PLATFORM_BASELINE | BR-075 | NFR-001 | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M01-13 | Manage Personal Profile | ACTIVE | FR-004 | PLATFORM_BASELINE | BR-076 | NFR-008 | NFR-009, NFR-011 | NO_DIRECT_AC |
+| UC-M01-14 | Sign In with OAuth/OIDC | ACTIVE | FR-005, FR-006 | PLATFORM_BASELINE | BR-086, BR-087, BR-088 | NFR-027, NFR-028, NFR-031 | NFR-003 | NO_DIRECT_AC |
+| UC-M02-01 | Create Organization | ACTIVE | FR-012 | PLATFORM_BASELINE | BR-014 | PLATFORM_BASELINE | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M02-02 | Manage Organization Members | ACTIVE | FR-013 | PLATFORM_BASELINE | BR-015 | PLATFORM_BASELINE | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M02-03 | Assign Manager Role | ACTIVE | FR-014 | PLATFORM_BASELINE | BR-016 | PLATFORM_BASELINE | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M02-04 | Invite Developer | ACTIVE | FR-015 | FR-E1-2 | BR-017, BR-020 | PLATFORM_BASELINE | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M02-05 | Assign Developer Policy | ACTIVE | FR-011, FR-016, FR-052 | FR-E1-3, FR-E1-4 | BR-021, BR-090, BR-091 | NFR-008, NFR-009, NFR-029 | NFR-007, NFR-009, NFR-011 | NO_DIRECT_AC |
+| UC-M02-06 | Revoke Developer Access | ACTIVE | FR-011, FR-017, FR-052 | FR-E1-3, FR-E1-4 | BR-022, BR-092 | NFR-009, NFR-029, NFR-030 | NFR-007, NFR-011 | NO_DIRECT_AC |
+| UC-M03-01 | Create Assessment | ACTIVE | FR-012, FR-018, FR-049 | FR-E1-1, FR-E1-4, FR-E5-5, FR-E6-2, FR-E7-2 | BR-018, BR-023, BR-089 | NFR-008, NFR-032 | NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
+| UC-M03-02 | Fill Web Wizard | ACTIVE | FR-019, FR-021 | FR-E2-1, FR-E2-2 | BR-026, BR-027, BR-031 | NFR-010 | NFR-010 | NO_DIRECT_AC |
+| UC-M03-03 | Save Wizard Progress | ACTIVE | FR-020 | FR-E2-1 | BR-028 | NFR-010 | NFR-010 | NO_DIRECT_AC |
+| UC-M03-04 | Submit WizardProfile | ACTIVE | FR-021 | FR-E2-1 | BR-029 | NFR-010 | NFR-010 | NO_DIRECT_AC |
+| UC-M03-05 | View Self-Declared Readiness | ACTIVE | FR-022, FR-023 | FR-E2-3, FR-E2-4 | BR-030 | NFR-011 | NFR-012 | AC-1 |
+| UC-M04-01 | Accept Developer Task | ACTIVE | FR-024 | FR-E1-2, FR-E1-3 | BR-019, BR-071 | NFR-008, NFR-009 | NFR-009, NFR-011 | NO_DIRECT_AC |
+| UC-M04-02 | Connect GitHub Repository | ACTIVE | FR-025 | FR-E3-1 | BR-032 | NFR-014 | NFR-003 | NO_DIRECT_AC |
+| UC-M04-03 | Upload Local/CI Scanner Report | OUT_OF_SCOPE | FR-026 | FR-E3-2 | BR-033 | NFR-017 | NFR-007 | NO_DIRECT_AC |
+| UC-M04-04 | Upload Manual Technical Evidence JSON | OUT_OF_SCOPE | FR-027 | FR-E3-3 | BR-034 | PLATFORM_BASELINE | PLATFORM_BASELINE | NO_DIRECT_AC |
+| UC-M04-05 | Review Technical Findings | ACTIVE | FR-012, FR-028, FR-049 | FR-E1-4, FR-E3-1, FR-E4-2, FR-E5-5, FR-E6-2, FR-E7-2 | BR-035 | NFR-008, NFR-009 | NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
+| UC-M04-06 | Confirm Technical Truth | ACTIVE | FR-011, FR-029, FR-052 | FR-E1-3, FR-E1-4, FR-E5-3, FR-E5-5 | BR-046 | NFR-009 | NFR-011 | AC-6 |
+| UC-M04-07 | Provide Structured Technical Attestation | ACTIVE | FR-030 | FR-E3-5, FR-E8-4 | BR-052, BR-053, BR-056 | NFR-008, NFR-017 | NFR-007, NFR-009, NFR-011 | AC-9, AC-11, AC-12 |
+| UC-M04-08 | Run Repository Scan | ACTIVE | FR-012, FR-018, FR-049 | FR-E1-4, FR-E3-1, FR-E5-5, FR-E6-2, FR-E7-2 | BR-077 | NFR-008, NFR-009, NFR-014, NFR-022 | NFR-003, NFR-006, NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
+| UC-M05-01 | Validate Evidence Schema | ACTIVE | FR-031 | FR-E4-1 | BR-036 | NFR-017 | NFR-007 | AC-3 |
+| UC-M05-02 | Validate Privacy Flags | ACTIVE | FR-032 | FR-E3-4, FR-E4-1 | BR-037 | NFR-012, NFR-013 | NFR-001, NFR-002 | AC-3 |
+| UC-M05-03 | Evaluate Evidence Quality | ACTIVE | FR-033 | FR-E4-3, FR-E4-4 | BR-038 | NFR-023 | NFR-012 | AC-4 |
+| UC-M05-04 | Generate TechnicalProfile | ACTIVE | FR-023, FR-024, FR-034 | FR-E4-2, FR-E5-1 | BR-039, BR-080, BR-081 | NFR-019, NFR-020 | NFR-007, NFR-008, NFR-009 | NO_DIRECT_AC |
+| UC-M05-05 | Mark Evidence as Rejected, Insufficient, or Ready | ACTIVE | FR-035 | FR-E4-3, FR-E4-4 | BR-040 | NFR-023 | NFR-012 | AC-4 |
+| UC-M06-01 | Detect Conflict | ACTIVE | FR-026, FR-036 | FR-E5-1, FR-E5-6 | BR-041, BR-083 | NFR-018 | NFR-007 | AC-5, AC-8 |
+| UC-M06-02 | Calculate Conflict Score | ACTIVE | FR-024, FR-037 | FR-E4-2, FR-E5-1, FR-E5-2 | BR-048, BR-085 | PLATFORM_BASELINE | PLATFORM_BASELINE | AC-7, AC-8 |
+| UC-M06-03 | Route Conflict to Manager | ACTIVE | FR-038 | FR-E5-3 | BR-072 | PLATFORM_BASELINE | PLATFORM_BASELINE | AC-6 |
+| UC-M06-04 | Resolve Technical Conflict | ACTIVE | FR-012, FR-038, FR-039, FR-049 | FR-E1-4, FR-E5-3, FR-E5-5, FR-E6-2, FR-E7-2 | BR-042, BR-047 | NFR-008, NFR-021 | NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
+| UC-M06-05 | Resolve Business/Legal Conflict | ACTIVE | FR-012, FR-038, FR-039, FR-040, FR-049 | FR-E1-4, FR-E5-3, FR-E5-4, FR-E5-5, FR-E6-2, FR-E7-2 | BR-043, BR-093 | NFR-008, NFR-021 | NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
+| UC-M06-06 | Post-MVP Delegated Technical Clarification | OUT_OF_SCOPE | FR-011, FR-041, FR-052 | FR-E1-3, FR-E1-4, FR-E5-3, FR-E5-5 | BR-044, BR-054 | NFR-009, NFR-018, NFR-029 | NFR-007, NFR-011 | AC-6, AC-9 |
+| UC-M06-07 | Create VerifiedProfile | ACTIVE | FR-042 | FR-E6-1 | BR-045 | PLATFORM_BASELINE | PLATFORM_BASELINE | AC-2, AC-5 |
+| UC-M06-08 | Review and Approve VerifiedProfile | ACTIVE | FR-012, FR-030, FR-031, FR-049 | FR-E1-4, FR-E5-5, FR-E6-1, FR-E6-2, FR-E7-2 | BR-078 | NFR-008, NFR-018 | NFR-007, NFR-009, NFR-011 | AC-2, AC-5, AC-6, AC-10 |
+| UC-M07-01 | Retrieve Legal Rules/Citations | ACTIVE | FR-032, FR-033, FR-034 | FR-E4-3, FR-E6-3, FR-E6-4, FR-E6-5 | BR-082, BR-084 | NFR-019, NFR-020 | NFR-007, NFR-008, NFR-009 | AC-4, AC-10 |
+| UC-M07-02 | Run Risk Classification Agent | ACTIVE | FR-044, FR-047 | FR-E6-2, FR-E6-3 | BR-049 | NFR-020 | NFR-008, NFR-009 | AC-2, AC-10 |
+| UC-M07-03 | Trace Classification to Legal Rule | ACTIVE | FR-043, FR-045 | FR-E6-3, FR-E6-4, FR-E6-5 | BR-050 | NFR-019 | NFR-007, NFR-008 | AC-10 |
+| UC-M07-04 | Block or Degrade Classification if Citation Missing | ACTIVE | FR-046 | FR-E6-4 | BR-051, BR-073 | NFR-011, NFR-020 | NFR-008, NFR-009, NFR-012 | AC-10 |
+| UC-M08-01 | Run Gap Analysis Agent | ACTIVE | FR-048 | FR-E7-1 | BR-062 | NFR-020 | NFR-008, NFR-009 | NO_DIRECT_AC |
+| UC-M08-02 | Generate Compliance Report | ACTIVE | FR-049 | FR-E7-2 | BR-025, BR-063, BR-064 | NFR-019, NFR-021 | NFR-007, NFR-008, NFR-009 | AC-5, AC-10, AC-11 |
+| UC-M08-03 | Generate Readiness-Only Export | ACTIVE | FR-050 | FR-E7-3 | BR-065 | NFR-011 | NFR-012 | AC-1 |
+| UC-M08-04 | View Document Status | ACTIVE | FR-051, FR-052 | FR-E7-2 | BR-066 | NFR-022 | NFR-006, NFR-009 | AC-5, AC-10 |
+| UC-M08-06 | View Gap Analysis | ACTIVE | FR-038 | FR-E7-1 | BR-079 | NFR-019, NFR-021 | NFR-007, NFR-008, NFR-009 | NO_DIRECT_AC |
+| UC-M09-01 | Write Audit Event | ACTIVE | FR-005, FR-011, FR-042, FR-052 | FR-E1-3, FR-E1-4, FR-E8-1, FR-E8-2, FR-E8-3, FR-E8-4, FR-E8-5 | BR-024, BR-067, BR-094 | NFR-007, NFR-018, NFR-030, NFR-031 | NFR-007, NFR-011 | AC-9, AC-11, AC-12 |
+| UC-M09-03 | Export Audit Trail | ACTIVE | FR-043 | FR-E8-5 | BR-068 | NFR-012, NFR-018 | NFR-001, NFR-007 | AC-12 |
+| UC-M09-04 | Track Evidence, Report, and Document Version | ACTIVE | FR-044 | FR-E8-2, FR-E8-5 | BR-069 | NFR-017, NFR-019 | NFR-007, NFR-008 | AC-12 |
+| UC-M09-05 | Track Human Attestation Usage | ACTIVE | FR-045 | FR-E7-4, FR-E8-4 | BR-055, BR-070 | NFR-018 | NFR-007 | AC-9, AC-11, AC-12 |
+| UC-M10-01 | Enforce Source Code Privacy Policy | ACTIVE | FR-019 | FR-E3-1, FR-E8-2 | BR-061 | NFR-013 | NFR-002 | AC-12 |
+| UC-M10-02 | Redact Secrets | ACTIVE | FR-019 | FR-E3-4, FR-E8-2 | BR-059 | NFR-015 | NFR-005 | AC-12 |
+| UC-M10-03 | Clean Temporary Workspace | ACTIVE | FR-019 | FR-E3-1, FR-E8-2 | BR-060 | NFR-016 | NFR-002 | AC-12 |
+| UC-M10-04 | Enforce No Raw Source to LLM | ACTIVE | FR-019 | FR-E3-1, FR-E8-2 | BR-057 | NFR-012 | NFR-001 | AC-12 |
+| UC-M10-05 | Enforce No Long-Term Raw Source Storage | ACTIVE | FR-019 | FR-E3-1, FR-E8-2 | BR-058 | NFR-013 | NFR-002 | AC-12 |
+
 
 ## BR Trace Resolution
 

@@ -66,7 +66,9 @@ Forbidden:
 
 ## MVP Technology Decisions
 
-Controlled MVP prototype scanner runtime is TypeScript-first.
+> Phase 5.2J update: A-to-Z runnable MVP scanner runtime is Python Worker-first for scan lifecycle, with TypeScript-first NestJS API for job creation, RBAC, and downstream coordination. Previous Phase 5.2I decisions (TypeScript-first scanner worker) are preserved as historical evidence at commit c33b137. See ADR-023 and ADR-024.
+
+A-to-Z runnable MVP scanner runtime is Python Worker-first for scan lifecycle.
 
 | Concern | Canonical Controlled MVP Technology | Role |
 | --- | --- | --- |
@@ -88,7 +90,7 @@ Not active in the controlled MVP scanner implementation: Python worker runtime, 
 | Support Level | Languages | Required Behavior |
 | --- | --- | --- |
 | First-class semantic analysis | TypeScript, JavaScript | AST + imports + symbols + AI invocation + local/cross-module flow |
-| Syntax-only coverage | Python | Tree-sitter imports, function definitions, class definitions and simple calls only |
+| First-class semantic analysis | Python | AST + imports + packages + modules + functions + classes + AI invocation + input/output tracking + cross-module flow (L2-L3 bounded) + human-review paths (Python Worker, ADR-023) |
 | Basic signal detection only | Java, Kotlin, Go, C#, Rust | Dependency/config/import detection, no claim of complete semantic flow |
 | Unsupported / binary / minified | All | Skip safely and emit coverage limitation finding |
 
@@ -186,6 +188,7 @@ Scanner findings must standardize at least:
 - `USER_IMPACT_SIGNAL`
 - `SENSITIVE_DATA_SIGNAL`
 - `DOMAIN_CONTEXT_SIGNAL`
+- `HARM_POTENTIAL_SIGNAL`
 - `SYSTEM_PROMPT_DETECTED`
 - `DYNAMIC_SYSTEM_PROMPT_REFERENCE`
 - `RAG_USAGE_SIGNAL`
@@ -461,18 +464,20 @@ A2-b metrics must include:
 - AIUsageFlow claim evidence completeness.
 - Legal-rule mapping eligibility completeness.
 
-## Locked Controlled MVP Scanner Decisions
+## Locked A-to-Z MVP Scanner Decisions
+
+> Phase 5.2J update. Previous title: 'Locked Controlled MVP Scanner Decisions'. Phase 5.2I decisions superseded for the Python scanner runtime. Phase 5.2I (commit c33b137) is preserved as historical evidence.
 
 | Decision | Final Controlled MVP Value |
 | --- | --- |
 | Scanner sandbox | Restricted temporary local filesystem workspace at `${LCSP_SCANNER_WORKSPACE_ROOT:-.lcsp/tmp/scanner-workspaces}`. |
 | Sandbox cleanup | Delete workspace immediately after scan completion or terminal scan failure; cleanup failure emits security-sensitive audit and blocks downstream. |
-| Analyzer process packaging | TypeScript-first Node.js worker in npm workspaces. |
+| Analyzer process packaging | Python Worker (`lcsp-scanner-worker`, Python 3.11+) owns Repository Scan lifecycle per ADR-023. SUPERSEDED from TypeScript-first Node.js worker. |
 | Parser stack | Tree-sitter parser adapters with ts-morph for TS/JS semantic analysis. |
 | Graph runtime | graphology in memory during scan. |
 | Graph persistence | Metadata-only PostgreSQL persistence using `CodeGraphNode`, `CodeGraphEdge`, `EvidenceReference`, `TechnicalFinding`, and `TechnicalEvidenceReport`. |
 | Evidence path persistence | No separate `ScannerEvidencePath` table in the controlled MVP. Evidence paths are stored as structured JSON in `TechnicalFinding.metadata.evidencePath`. |
-| Python scanner behavior | Tree-sitter Python syntax-only coverage; no Python worker and no Python semantic analysis. |
+| Python scanner behavior | Python is FIRST-CLASS. Full static analysis via Python Worker (ADR-023): imports, packages, modules, functions, classes, AI invocation, input/output tracking, cross-module flow (L2-L3 bounded), human-review paths. SUPERSEDED from syntax-only. See docs/specs/python-scanner-spec.md. |
 | Unsupported/generated/minified/oversized files | Emit issue and coverage limitation; do not persist raw body or full AST. |
 | Source execution | Prohibited. Scanner must not run npm install/build/test, Docker, CI, package scripts, API probing, or customer code. |
 | CodeQL evaluation | Not part of controlled MVP scanner execution. |
@@ -490,11 +495,19 @@ A2-b metrics must include:
 
 ## Readiness
 
-Current implementation readiness:
+Phase 5.2I readiness (commit c33b137, preserved as historical evidence):
 
 ```text
 READY_FOR_CONTROLLED_MVP_PROTOTYPE_IMPLEMENTATION_NOT_PRODUCTION
 ```
+
+Phase 5.2J readiness (A-to-Z Runnable MVP):
+
+```text
+DOCUMENT_REMEDIATION_WAVE_0_IN_PROGRESS
+```
+
+Python Worker, Python scanner, real LLM, legal corpus, A-to-Z acceptance: `PAUSED_PENDING_APPROVAL`. Approval granted 2026-06-23. Wave 0 Document Remediation in progress.
 
 
 ---

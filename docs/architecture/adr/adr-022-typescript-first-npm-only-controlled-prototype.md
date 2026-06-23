@@ -2,7 +2,28 @@
 
 ## Status
 
-Accepted for controlled MVP prototype.
+PARTIALLY_SUPERSEDED_BY_ADR_023 — scanner worker runtime superseded. NestJS API, Next.js web, and non-scanner npm workspace packages remain TypeScript-first per this ADR.
+
+## Phase 5.2J Supersession Note
+
+```text
+PARTIALLY_SUPERSEDED_BY_ADR_023_PYTHON_WORKER_SCANNER_RUNTIME
+```
+
+The scanner worker runtime decision in this ADR is superseded by ADR-023 (2026-06-23). Python Worker now owns the Repository Scan lifecycle, replacing the Node.js worker scanner described here.
+
+Retained parts of this ADR:
+- NestJS API (`apps/api`): TypeScript-first, npm workspaces. RETAINED.
+- Next.js web (`apps/web`): TypeScript-first, npm workspaces. RETAINED.
+- Non-scanner shared packages: RETAINED.
+- AI usage flow, reconciliation, legal RAG base packages: RETAINED.
+
+Superseded parts of this ADR:
+- `apps/worker/src/handlers/scan/`: Python Worker (ADR-023) is the scan consumer.
+- `packages/scanner/`: Python Worker owns the scanner stack.
+- The prohibition 'Do not use: Python runtime worker' is superseded by ADR-023.
+
+Phase 5.2I baseline (commit c33b137) is preserved as historical evidence.
 
 ## Decision
 

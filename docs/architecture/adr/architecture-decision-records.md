@@ -95,7 +95,7 @@ Backend chính nên được tổ chức theo module domain rõ ràng: Assessmen
 
 ### Phase 5.2H Supersession Note
 
-The Python-specific runtime/tooling wording in this ADR is `SUPERSEDED_BY_ADR_022`. The active controlled MVP runtime is TypeScript-first for scanner and workflow workers. Python/LangGraph remains historical architecture context only unless a future ADR reintroduces it.
+The Python-specific runtime/tooling wording in this ADR was `SUPERSEDED_BY_ADR_022`. The TypeScript-first scanner worker from ADR-022 has since been superseded by ADR-023 (Python Worker). The Python Worker now owns the Repository Scan lifecycle per ADR-023 (Phase 5.2J). NestJS API, Next.js web, and non-scanner packages remain TypeScript-first per ADR-022. Phase 5.2I (commit c33b137) is preserved as historical evidence.
 
 ### Context
 
@@ -445,7 +445,7 @@ Historical implementation direction before ADR-022:
 Python Worker + LangGraph StateGraph workflow
 ```
 
-This runtime/tooling direction is `SUPERSEDED_BY_ADR_022` for the controlled MVP. Active implementation keeps the orchestrator-controlled, state-machine-driven workflow decision, but implements it with TypeScript-first async workers, RabbitMQ, outbox and persisted state machines.
+The original Python Worker + LangGraph direction was `SUPERSEDED_BY_ADR_022` for Phase 5.2I. Under Phase 5.2J (ADR-023), a Python Worker is reintroduced as the scanner runtime owner. This Python Worker is NOT a LangGraph autonomous agent — it is a deterministic queue consumer implementing the controlled scan lifecycle. The orchestrator-controlled, state-machine-driven workflow decision remains active, implemented with Python Worker (scan lifecycle) + TypeScript async workers (downstream workflow nodes) + RabbitMQ + outbox + persisted state machines.
 
 Orchestrator gọi các agent/node như bounded subtasks, dùng RAG-grounded legal reasoning, deterministic gates, output guardrails và human-in-the-loop conflict resolution. LCSP không dùng free-form autonomous agents hoặc unrestricted handoffs trong compliance-critical path.
 
@@ -1291,3 +1291,47 @@ Không được dùng ADR này để claim production readiness, legal validatio
 Nếu validation A1-A3 làm thay đổi PRD, các ADR liên quan phải được revisit.
 
 Architect Agent phải dùng active architecture, accepted ADRs, PRD and validation plan when creating final architecture updates.
+
+## ADR-023 - Python Worker as Scanner Runtime Owner
+
+**Status:** Accepted for A-to-Z Runnable MVP (Phase 5.2J)
+
+See `docs/architecture/adr/adr-023-python-worker-scanner-runtime.md`.
+
+**Summary:** Python Worker owns the Repository Scan lifecycle, replacing the Node.js scanner worker from ADR-022. Python is first-class in the MVP scanner. NestJS API and non-scanner TypeScript packages are retained per ADR-022.
+
+**Supersedes:** ADR-022 scanner worker runtime decision.
+
+**Supersession date:** 2026-06-23 (SPRINT-CHANGE-PROPOSAL-5.2J)
+
+## ADR-024 - Real LLM Provider as Mandatory A-to-Z MVP Requirement
+
+**Status:** Accepted for A-to-Z Runnable MVP (Phase 5.2J)
+
+See `docs/architecture/adr/adr-024-real-llm-provider-mvp-requirement.md`.
+
+**Summary:** Real configured LLM provider is mandatory for A-to-Z acceptance. Mock LLM is retained for unit tests and offline CI only. ADR-006 and ADR-015 invariants are retained unchanged.
+
+**Supersedes:** `LLM_PROVIDER_MVP: DETERMINISTIC_MOCK_LLM_GATEWAY_BY_DEFAULT` as MVP happy path.
+
+**Supersession date:** 2026-06-23 (SPRINT-CHANGE-PROPOSAL-5.2J)
+
+## ADR-025 - Legal Corpus Source Architecture
+
+**Status:** Accepted for A-to-Z Runnable MVP (Phase 5.2J)
+
+See `docs/architecture/adr/adr-025-legal-corpus-source-architecture.md`.
+
+**Summary:** Legal corpus derived from provenance-validated sources (vbpl.vn, vanban.chinhphu.vn — SOURCE_VALIDATION_REQUIRED). Ingestion, immutable versioning, corpus review/approval, and fail-closed behavior for unavailable sources are required.
+
+**Supersession date:** 2026-06-23 (SPRINT-CHANGE-PROPOSAL-5.2J)
+
+## ADR-026 - Hybrid Legal Retriever
+
+**Status:** Accepted for A-to-Z Runnable MVP (Phase 5.2J)
+
+See `docs/architecture/adr/adr-026-hybrid-legal-retriever.md`.
+
+**Summary:** Legal matching uses hybrid retriever: PostgreSQL FTS + pgvector cosine similarity + metadata filters + effective-date filters + corpus-version pinning. Fail-closed on missing or incomplete citations.
+
+**Supersession date:** 2026-06-23 (SPRINT-CHANGE-PROPOSAL-5.2J)
