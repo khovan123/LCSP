@@ -2,162 +2,132 @@
 
 ## Purpose
 
-This document is the domain-level source of truth for LCSP business, domain and integration events. It uses the canonical `command.*` and `event.*` names from the active queue contract. No alternate queue or event names are allowed.
+Canonical command and event names for the A-to-Z runnable MVP.
 
-## Event Naming Rules
+## Rules
 
-- Commands request work and use `command.<domain>.<action>.v1`.
-- Events are persisted facts and use `event.<domain>.<fact>.v1`.
-- Commands publish through `lcsp.commands.v1`.
-- Events publish through `lcsp.events.v1`.
-- Poison or exhausted messages route through `lcsp.deadletter.v1` and the matching DLQ.
-- Payloads contain references only: UUIDv7 IDs, versions, status and metadata refs. Payloads must not contain raw source, tokens, secrets, full prompts or full AST bodies.
+- Commands use `command.<domain>.<action>.v1` on `lcsp.commands.v1`.
+- Events use `event.<domain>.<fact>.v1` on `lcsp.events.v1`.
+- Payloads contain IDs, versions, statuses, hashes, and metadata references only.
+- Every message includes message ID, schema version, correlation ID, causation ID, aggregate reference, timestamp, and idempotency key.
+- Exhausted messages route to the matching DLQ.
 
-## Business Events
+## Commands and Queues
 
-Business events describe user-visible domain progress.
+| Command | Queue | Producer | Consumer |
+|---|---|---|---|
+| `command.scan.requested.v1` | `lcsp.scan-worker.v1` | Backend API outbox | Python Scanner Worker |
+| `command.technical-profile.requested.v1` | `lcsp.technical-profile-worker.v1` | scan projection | Technical Profile Worker |
+| `command.ai-usage-flow.requested.v1` | `lcsp.ai-usage-flow-worker.v1` | profile projection | AI Usage Flow Worker |
+| `command.reconciliation.requested.v1` | `lcsp.reconciliation-worker.v1` | flow/resolution projection | Reconciliation Worker |
+| `command.legal-source.ingest.requested.v1` | `lcsp.legal-source-ingest.v1` | Internal Legal Operations API | Legal Ingestion Worker |
+| `command.embedding-build.requested.v1` | `lcsp.embedding-build.v1` | corpus approval outbox | Embedding Index Worker |
+| `command.legal-matching.requested.v1` | `lcsp.legal-matching-worker.v1` | verified-profile projection | Legal Matching Worker |
+| `command.classification.requested.v1` | `lcsp.classification-worker.v1` | legal-matching projection | Classification Worker |
+| `command.gap-analysis.requested.v1` | `lcsp.gap-analysis-worker.v1` | classification projection | Gap Analysis Worker |
+| `command.document.requested.v1` | `lcsp.document-worker.v1` | gap/document request projection | Document Worker |
 
-| Event Name | Producer | Consumer | Trigger | Payload | Idempotency Key | Failure Handling |
-|---|---|---|---|---|---|---|
-| `event.scan.completed.v1` | Scanner Worker | Technical Profile Worker / orchestrator | Repository scan completes only after `TechnicalEvidenceReport` is persisted, report schema/quality gates pass, `RepositoryScanJob.status` is `COMPLETED`, and workspace cleanup is verified. | `assessmentId`, `scanJobId`, `technicalEvidenceReportId`, `reportHash`, `cleanupVerifiedAt` | `scanJobId + reportHash` | If consumer fails, retry via queue; source report remains immutable. If cleanup is not verified, publish `event.scan.failed.v1` instead and do not unlock downstream. |
-| `event.scan.failed.v1` | Scanner Worker | Assessment/orchestration projection | Scan fails or is blocked. | `assessmentId`, `scanJobId`, `failureCode`, `failureReasonRef` | `scanJobId + failureCode` | Mark scan failed, audit redacted reason, do not unlock downstream. |
-| `event.technical-profile.completed.v1` | Technical Profile Worker | AIUsageFlow Worker / orchestrator | TechnicalProfile is persisted. | `assessmentId`, `technicalProfileId`, `technicalEvidenceReportId` | `technicalProfileId` | Retry consumer; if invalid profile, fail closed and audit. |
-| `event.technical-profile.failed.v1` | Technical Profile Worker | Assessment/orchestration projection | TechnicalProfile cannot be built from evidence. | `assessmentId`, `technicalEvidenceReportId`, `failureCode` | `technicalEvidenceReportId + failureCode` | Block downstream and surface actionable reason. |
-| `event.ai-usage-flow.completed.v1` | AIUsageFlow Worker | Reconciliation Worker / orchestrator | AIUsageFlow claims are persisted. | `assessmentId`, `aiUsageFlowId`, `technicalProfileId`, `status` | `aiUsageFlowId` | Retry consumer; unresolved uncertainty remains explicit. |
-| `event.ai-usage-flow.failed.v1` | AIUsageFlow Worker | Assessment/orchestration projection | AIUsageFlow generation fails. | `assessmentId`, `technicalProfileId`, `failureCode` | `technicalProfileId + failureCode` | Block downstream and audit. |
-| `event.reconciliation.conflict-detected.v1` | Reconciliation Worker | Backend API projection / Manager task view | Conflict is persisted. | `assessmentId`, `conflictId`, `aiUsageFlowId`, `conflictType` | `conflictId` | Keep assessment blocked until Manager resolution. |
-| `event.reconciliation.verified-profile-ready.v1` | Reconciliation Worker | Legal Matching Worker / orchestrator | VerifiedProfile is created with no unresolved conflict. | `assessmentId`, `verifiedProfileId`, `profileVersion` | `verifiedProfileId + profileVersion` | Legal matching may retry; classification must not consume this event directly. |
-| `event.legal-source.ingest.completed.v1` | Legal Source Ingestion Worker | Corpus review projection / operator task view | Official legal source is fetched, snapshotted, normalized and staged in `LegalCorpusVersion.status = DRAFT`. | `legalSourceId`, `legalDocumentId`, `corpusVersionId`, `contentHash`, `status=DRAFT` | `legalSourceId + contentHash` | If projection fails, retry; corpus remains blocked from retrieval until approval. |
-| `event.legal-source.ingest.failed.v1` | Legal Source Ingestion Worker | Corpus review projection / Audit | Source fetch, snapshot, identity extraction or normalization fails. | `legalSourceId`, `sourceUrlRef`, `failureCode`, `failureReasonRef` | `legalSourceId + failureCode + sourceVersionRef` | Audit redacted reason; do not create approved corpus version; legal matching requiring the source remains blocked. |
-| `event.embedding-build.completed.v1` | Embedding Index Worker | Legal Matching Worker / corpus readiness projection | Embeddings and FTS index metadata are built for an approved corpus version. | `corpusVersionId`, `embeddingModelRef`, `indexVersion`, `chunkCount`, `status=APPROVED` | `corpusVersionId + embeddingModelRef + indexVersion` | Retry projection; legal matching remains blocked until indexing completion gate is recorded. |
-| `event.embedding-build.failed.v1` | Embedding Index Worker | Corpus review projection / Audit | Embedding or index build fails after retries or fatal configuration error. | `corpusVersionId`, `failureCode`, `failureReasonRef` | `corpusVersionId + failureCode` | Block retrieval for that corpus version; audit redacted reason; require rebuild command after correction. |
-| `event.legal-matching.completed.v1` | Legal Matching Worker | Classification Worker / orchestrator | LegalRuleMatch records are persisted. | `assessmentId`, `verifiedProfileId`, `legalRuleMatchIds`, `legalCorpusVersionId` | `verifiedProfileId + legalCorpusVersionId` | Retry classification command; missing citations block/degrade later output. |
-| `event.legal-matching.failed.v1` | Legal Matching Worker | Assessment/orchestration projection | Legal matching fails or has missing required citation basis. | `assessmentId`, `verifiedProfileId`, `failureCode` | `verifiedProfileId + failureCode` | Block/degrade classification and audit. |
-| `event.classification.completed.v1` | Classification Worker | Gap Analysis Worker / reporting projection | RiskClassification is persisted as completed. | `assessmentId`, `riskClassificationId`, `verifiedProfileId`, `citationCoverage` | `riskClassificationId` | Retry downstream gap-analysis command. |
-| `event.classification.blocked.v1` | Classification Worker | Manager UI projection / Document guardrail | Classification cannot complete. | `assessmentId`, `riskClassificationId`, `blockingReasons` | `assessmentId + verifiedProfileId + blockingReasonHash` | Keep report blocked; show reason. |
-| `event.gap-analysis.completed.v1` | Gap Analysis Worker | Document Worker / reporting projection | GapAnalysis is persisted as completed. | `assessmentId`, `gapAnalysisId`, `riskClassificationId` | `gapAnalysisId` | Retry downstream document command. |
-| `event.gap-analysis.blocked.v1` | Gap Analysis Worker | Manager UI projection / Document guardrail | Gap analysis cannot complete. | `assessmentId`, `riskClassificationId`, `blockingReasons` | `assessmentId + riskClassificationId + blockingReasonHash` | Keep document blocked; show reason. |
-| `event.gap-analysis.failed.v1` | Gap Analysis Worker | Assessment/orchestration projection | Gap analysis worker fails after retries or fatal input failure. | `assessmentId`, `riskClassificationId`, `failureCode` | `riskClassificationId + failureCode` | Block document generation and audit. |
-| `event.document.generated.v1` | Document Worker | Manager UI projection / Audit | GeneratedDocument metadata and artifact refs are persisted. | `assessmentId`, `documentId`, `documentHash`, `storageRef` | `documentId + documentHash` | Retry projection/audit; do not regenerate silently. |
-| `event.document.blocked.v1` | Document Worker | Manager UI projection / Audit | Document output guardrail blocks generation. | `assessmentId`, `documentId`, `blockingReasons` | `assessmentId + blockingReasonHash` | Keep final output unavailable and audit. |
+## Completion and Failure Events
+
+| Domain | Success/Fact Event | Failure/Blocked Event |
+|---|---|---|
+| Scan | `event.scan.completed.v1` | `event.scan.failed.v1` |
+| Technical Profile | `event.technical-profile.completed.v1` | `event.technical-profile.failed.v1` |
+| AI Usage Flow | `event.ai-usage-flow.completed.v1` | `event.ai-usage-flow.failed.v1` |
+| Reconciliation | `event.reconciliation.verified-profile-ready.v1` | `event.reconciliation.conflict-detected.v1` |
+| Legal Source | `event.legal-source.ingest.completed.v1` | `event.legal-source.ingest.failed.v1` |
+| Embedding Index | `event.embedding-build.completed.v1` | `event.embedding-build.failed.v1` |
+| Legal Matching | `event.legal-matching.completed.v1` | `event.legal-matching.failed.v1` |
+| Classification | `event.classification.completed.v1` | `event.classification.blocked.v1` |
+| Gap Analysis | `event.gap-analysis.completed.v1` | `event.gap-analysis.blocked.v1`, `event.gap-analysis.failed.v1` |
+| Document | `event.document.generated.v1` | `event.document.blocked.v1` |
+
+## Event Guards
+
+| Event | Required Guard |
+|---|---|
+| `event.scan.completed.v1` | quality-valid report persisted, ScanJob completed, workspace cleanup verified |
+| `event.reconciliation.verified-profile-ready.v1` | no unresolved material conflict |
+| `event.legal-source.ingest.completed.v1` | source validated, snapshot/hash persisted, document staged in DRAFT corpus |
+| `event.embedding-build.completed.v1` | corpus approved and FTS/vector metadata verified |
+| `event.legal-matching.completed.v1` | LegalRuleMatch records and retrieval audit persisted |
+| `event.classification.completed.v1` | VerifiedProfile and citation-backed legal basis exist |
+| `event.gap-analysis.completed.v1` | valid classification and legal basis exist |
+| `event.document.generated.v1` | gap/classification/citation/output guards pass and artifact metadata exists |
 
 ## Domain Events
 
-Domain events are persisted state facts. Some are also published as integration events.
+- `ASSESSMENT_CREATED`
+- `WIZARD_PROFILE_SAVED`
+- `REPOSITORY_CONNECTED`
+- `SNAPSHOT_CREATED`
+- `SCAN_REQUESTED`
+- `SCAN_STARTED`
+- `TECHNICAL_PROFILE_CREATED`
+- `AI_USAGE_FLOW_CREATED`
+- `RECONCILIATION_CONFLICT_DETECTED`
+- `RECONCILIATION_RESOLVED`
+- `VERIFIED_PROFILE_CREATED`
+- `STRUCTURED_ATTESTATION_SUBMITTED`
+- `STRUCTURED_ATTESTATION_REJECTED`
+- `LEGAL_SOURCE_VALIDATED`
+- `LEGAL_SOURCE_INGESTED`
+- `LEGAL_SOURCE_INGEST_FAILED`
+- `LEGAL_CORPUS_APPROVED`
+- `LEGAL_CORPUS_REJECTED`
+- `LEGAL_CORPUS_SUPERSEDED`
+- `EMBEDDING_INDEX_BUILT`
+- `EMBEDDING_INDEX_FAILED`
+- `LEGAL_MATCHING_COMPLETED`
+- `CLASSIFICATION_COMPLETED`
+- `CLASSIFICATION_BLOCKED`
+- `GAP_ANALYSIS_COMPLETED`
+- `GAP_ANALYSIS_BLOCKED`
+- `DOCUMENT_GENERATED`
+- `DOCUMENT_BLOCKED`
+- `AUDIT_EXPORT_GENERATED`
+- `SECURITY_EVENT`
 
-| Domain Event | Producer | Consumer | Trigger | Payload | Idempotency Key | Failure Handling |
-|---|---|---|---|---|---|---|
-| `ASSESSMENT_CREATED` | Backend API | Audit / Assessment projection | Manager creates assessment. | `assessmentId`, `organizationId`, `ownerManagerId` | `assessmentId` | Transaction rollback if audit/outbox write fails. |
-| `WIZARD_PROFILE_SAVED` | Backend API | Audit / Assessment projection | Manager saves/submits WizardProfile. | `assessmentId`, `wizardProfileId`, `version` | `wizardProfileId + version` | Keep previous version if write fails. |
-| `REPOSITORY_CONNECTED` | Backend API | Audit / Assessment projection | GitHub repository connection is recorded. | `assessmentId`, `repositoryConnectionId`, `repositoryId` | `repositoryConnectionId` | Do not create scan without connection. |
-| `SNAPSHOT_CREATED` | Backend API / Repository Integration | Audit / Scan API | Commit-pinned snapshot metadata is recorded. | `assessmentId`, `repositorySnapshotId`, `commitSha` | `repositoryConnectionId + commitSha` | Do not scan without snapshot. |
-| `SCAN_REQUESTED` | Backend API | Outbox publisher / Scanner Worker | Manager requests scan. | `assessmentId`, `scanJobId`, `repositorySnapshotId` | `scanJobId` | Retry outbox publish; job remains requested. |
-| `SCAN_STARTED` | Scanner Worker | Audit / scan status projection | Scanner begins processing. | `assessmentId`, `scanJobId` | `scanJobId + startedAt` | Retry status update if transient. |
-| `TECHNICAL_PROFILE_CREATED` | Technical Profile Worker | Audit / orchestration | TechnicalProfile is persisted. | `assessmentId`, `technicalProfileId` | `technicalProfileId` | Block AIUsageFlow if creation fails. |
-| `AI_USAGE_FLOW_CREATED` | AIUsageFlow Worker | Audit / orchestration | AIUsageFlow is persisted. | `assessmentId`, `aiUsageFlowId` | `aiUsageFlowId` | Block reconciliation if creation fails. |
-| `RECONCILIATION_CONFLICT_DETECTED` | Reconciliation Worker | Audit / Manager UI | Conflict is created. | `assessmentId`, `conflictId`, `conflictType` | `conflictId` | Keep assessment in conflict state. |
-| `RECONCILIATION_RESOLVED` | Backend API | Reconciliation Worker / Audit | Manager resolves conflict. | `assessmentId`, `conflictId`, `resolutionId` | `conflictId + resolvedAt` | Do not overwrite scanner evidence; retry resume command. |
-| `VERIFIED_PROFILE_CREATED` | Reconciliation Worker | Legal Matching Worker / Audit | VerifiedProfile is persisted. | `assessmentId`, `verifiedProfileId`, `profileVersion` | `verifiedProfileId + profileVersion` | Retry legal matching command. |
-| `LEGAL_SOURCE_INGESTED` | Legal Source Ingestion Worker | Audit / Corpus review projection | Legal source is staged after snapshot and normalization. | `legalSourceId`, `legalDocumentId`, `corpusVersionId`, `contentHash`, `status=DRAFT` | `legalSourceId + contentHash` | Keep corpus blocked until approval. |
-| `LEGAL_SOURCE_INGEST_FAILED` | Legal Source Ingestion Worker | Audit / Corpus review projection | Legal source cannot be fetched, snapshotted, identified or normalized. | `legalSourceId`, `failureCode`, `failureReasonRef` | `legalSourceId + failureCode` | Do not use partial document; require operator correction or source retry. |
-| `LEGAL_CORPUS_APPROVED` | Backend API / Corpus Review | Audit / Embedding Index Worker | Legal Approver approves a `DRAFT` corpus version. | `corpusVersionId`, `approvalRecordId`, `approvedBy`, `status=APPROVED` | `corpusVersionId + approvalRecordId` | Write approval and embedding-build command in one transaction; retrieval remains blocked until index completion. |
-| `LEGAL_CORPUS_SUPERSEDED` | Backend API / Corpus Review | Audit / Corpus projection | Approved corpus version is replaced by a newer approved version. | `corpusVersionId`, `supersededByCorpusVersionId`, `status=SUPERSEDED` | `corpusVersionId + supersededByCorpusVersionId` | Existing assessments retain pinned version; new assessments cannot pin superseded version. |
-| `EMBEDDING_INDEX_BUILT` | Embedding Index Worker | Audit / Legal Matching Worker | Embeddings and FTS index metadata are ready for approved corpus version. | `corpusVersionId`, `embeddingModelRef`, `indexVersion`, `chunkCount` | `corpusVersionId + indexVersion` | Legal matching may use this corpus version only after this gate. |
-| `EMBEDDING_INDEX_FAILED` | Embedding Index Worker | Audit / Corpus review projection | Embedding/FTS index build fails. | `corpusVersionId`, `failureCode`, `failureReasonRef` | `corpusVersionId + failureCode` | Block legal matching for that version until rebuild succeeds. |
-| `LEGAL_MATCHING_COMPLETED` | Legal Matching Worker | Classification Worker / Audit | LegalRuleMatch records are persisted. | `assessmentId`, `legalRuleMatchIds`, `corpusVersionId` | `verifiedProfileId + corpusVersionId` | Block/degrade if citations missing. |
-| `CLASSIFICATION_COMPLETED` | Classification Worker | Gap Analysis Worker / Audit | RiskClassification completes. | `assessmentId`, `riskClassificationId` | `riskClassificationId` | Retry gap-analysis command if needed. |
-| `CLASSIFICATION_BLOCKED` | Classification Worker | Manager UI / Audit | Classification cannot complete. | `assessmentId`, `riskClassificationId`, `blockingReasons` | `riskClassificationId + blockingReasonHash` | Surface blocking reason. |
-| `GAP_ANALYSIS_COMPLETED` | Gap Analysis Worker | Document Worker / Audit | GapAnalysis completes. | `assessmentId`, `gapAnalysisId`, `riskClassificationId` | `gapAnalysisId` | Retry document command if needed. |
-| `GAP_ANALYSIS_BLOCKED` | Gap Analysis Worker | Manager UI / Audit | GapAnalysis cannot complete. | `assessmentId`, `riskClassificationId`, `blockingReasons` | `riskClassificationId + blockingReasonHash` | Surface blocking reason and keep document unavailable. |
-| `DOCUMENT_GENERATED` | Document Worker | Manager UI / Audit | GeneratedDocument is available. | `assessmentId`, `documentId`, `documentHash` | `documentId + documentHash` | Keep artifact immutable; retry projection. |
-| `DOCUMENT_BLOCKED` | Document Worker | Manager UI / Audit | Document generation blocked. | `assessmentId`, `documentId`, `blockingReasons` | `documentId + blockingReasonHash` | Keep blocked state. |
-| `SECURITY_EVENT` | Any service | Audit / Security review | Security-sensitive denial or guardrail event occurs. | `assessmentId?`, `actorUserId?`, `eventCode`, `redactedMetadata` | `correlationId + eventCode` | Never include secret/source in event. |
+Internal Legal Operator produces source-validation and corpus approval/rejection/supersession events through internal API/CLI. These are not Manager/Developer customer tasks.
 
-## Integration Events and Commands
-
-| Command / Event | Exchange | Queue | DLQ | Producer | Consumer |
-|---|---|---|---|---|---|
-| `command.scan.requested.v1` | `lcsp.commands.v1` | `lcsp.scan-worker.v1` | `lcsp.scan-worker.dlq.v1` | Backend API / Outbox publisher | Scanner Worker |
-| `command.legal-source.ingest.requested.v1` | `lcsp.commands.v1` | `lcsp.legal-source-ingest.v1` | `lcsp.legal-source-ingest.dlq.v1` | Backend API / Outbox publisher | Legal Source Ingestion Worker |
-| `command.embedding-build.requested.v1` | `lcsp.commands.v1` | `lcsp.embedding-build.v1` | `lcsp.embedding-build.dlq.v1` | Corpus Review / Outbox publisher | Embedding Index Worker |
-| `command.technical-profile.requested.v1` | `lcsp.commands.v1` | `lcsp.technical-profile-worker.v1` | `lcsp.technical-profile-worker.dlq.v1` | Orchestrator / Outbox publisher | Technical Profile Worker |
-| `command.ai-usage-flow.requested.v1` | `lcsp.commands.v1` | `lcsp.ai-usage-flow-worker.v1` | `lcsp.ai-usage-flow-worker.dlq.v1` | Orchestrator / Outbox publisher | AIUsageFlow Worker |
-| `command.reconciliation.requested.v1` | `lcsp.commands.v1` | `lcsp.reconciliation-worker.v1` | `lcsp.reconciliation-worker.dlq.v1` | Orchestrator / Outbox publisher | Reconciliation Worker |
-| `command.legal-matching.requested.v1` | `lcsp.commands.v1` | `lcsp.legal-matching-worker.v1` | `lcsp.legal-matching-worker.dlq.v1` | Orchestrator / Outbox publisher | Legal Matching Worker |
-| `command.classification.requested.v1` | `lcsp.commands.v1` | `lcsp.classification-worker.v1` | `lcsp.classification-worker.dlq.v1` | Orchestrator / Outbox publisher | Classification Worker |
-| `command.gap-analysis.requested.v1` | `lcsp.commands.v1` | `lcsp.gap-analysis-worker.v1` | `lcsp.gap-analysis-worker.dlq.v1` | Orchestrator / Outbox publisher | Gap Analysis Worker |
-| `command.document.requested.v1` | `lcsp.commands.v1` | `lcsp.document-worker.v1` | `lcsp.document-worker.dlq.v1` | Backend API / Orchestrator / Outbox publisher | Document Worker |
-| `event.scan.completed.v1` | `lcsp.events.v1` | projection / orchestration binding | `lcsp.scan-worker.dlq.v1` | Scanner Worker | Orchestrator / Technical Profile trigger |
-| `event.legal-source.ingest.completed.v1` | `lcsp.events.v1` | projection / corpus review binding | `lcsp.legal-source-ingest.dlq.v1` | Legal Source Ingestion Worker | Corpus review projection |
-| `event.legal-source.ingest.failed.v1` | `lcsp.events.v1` | projection / corpus review binding | `lcsp.legal-source-ingest.dlq.v1` | Legal Source Ingestion Worker | Corpus review projection / Audit |
-| `event.embedding-build.completed.v1` | `lcsp.events.v1` | projection / legal matching readiness binding | `lcsp.embedding-build.dlq.v1` | Embedding Index Worker | Legal Matching readiness projection |
-| `event.embedding-build.failed.v1` | `lcsp.events.v1` | projection / corpus review binding | `lcsp.embedding-build.dlq.v1` | Embedding Index Worker | Corpus review projection / Audit |
-| `event.reconciliation.verified-profile-ready.v1` | `lcsp.events.v1` | projection / orchestration binding | `lcsp.reconciliation-worker.dlq.v1` | Reconciliation Worker | Legal Matching trigger |
-| `event.legal-matching.completed.v1` | `lcsp.events.v1` | projection / orchestration binding | `lcsp.legal-matching-worker.dlq.v1` | Legal Matching Worker | Classification trigger |
-| `event.classification.completed.v1` | `lcsp.events.v1` | projection / orchestration binding | `lcsp.classification-worker.dlq.v1` | Classification Worker | Gap Analysis trigger |
-| `event.gap-analysis.completed.v1` | `lcsp.events.v1` | projection / orchestration binding | `lcsp.gap-analysis-worker.dlq.v1` | Gap Analysis Worker | Document trigger |
-
-## Canonical Workflow Choreography
+## Orchestration
 
 ```text
-POST /api/v1/assessments/:assessmentId/scans
--> command.scan.requested.v1
--> event.scan.completed.v1
+event.scan.completed.v1
 -> command.technical-profile.requested.v1
 -> event.technical-profile.completed.v1
 -> command.ai-usage-flow.requested.v1
 -> event.ai-usage-flow.completed.v1
 -> command.reconciliation.requested.v1
--> event.reconciliation.conflict-detected.v1
-   OR event.reconciliation.verified-profile-ready.v1
+-> event.reconciliation.verified-profile-ready.v1
 -> command.legal-matching.requested.v1
 -> event.legal-matching.completed.v1
 -> command.classification.requested.v1
--> event.classification.completed.v1 OR event.classification.blocked.v1
+-> event.classification.completed.v1
 -> command.gap-analysis.requested.v1
--> event.gap-analysis.completed.v1 OR event.gap-analysis.blocked.v1
+-> event.gap-analysis.completed.v1
 -> command.document.requested.v1
--> event.document.generated.v1 OR event.document.blocked.v1
 ```
 
-## Legal Corpus Choreography
+Internal legal preparation:
 
 ```text
-POST /api/v1/internal/legal-sources/ingest
--> command.legal-source.ingest.requested.v1
--> event.legal-source.ingest.completed.v1 OR event.legal-source.ingest.failed.v1
--> internal Legal Approver review
--> LEGAL_CORPUS_APPROVED domain event
+command.legal-source.ingest.requested.v1
+-> event.legal-source.ingest.completed.v1
+-> internal approval
 -> command.embedding-build.requested.v1
--> event.embedding-build.completed.v1 OR event.embedding-build.failed.v1
--> approved + indexed corpus version becomes eligible for legal matching
+-> event.embedding-build.completed.v1
 ```
 
-Approval and indexing gates:
+## Idempotency and Failure
 
-- Legal matching may only query `LegalCorpusVersion.status = APPROVED`.
-- The corpus version must also have a successful embedding/FTS index completion record.
-- Queue payload status values must use the canonical corpus lifecycle vocabulary: `DRAFT`, `APPROVED`, `SUPERSEDED`.
-- Replaced corpus versions are marked `SUPERSEDED`; existing assessments keep their pinned corpus version, while new assessments must pin the latest eligible approved/indexed version.
+- Duplicate delivery is a no-op or safe resume from persisted state.
+- Retryable failures use bounded backoff and DLQ.
+- Domain guard failures persist blocked/failed state without unnecessary retries.
+- Completed artifacts are immutable and are not silently overwritten.
 
-## Payload Envelope
-
-All integration messages use this envelope:
-
-```json
-{
-  "messageId": "uuidv7",
-  "eventType": "command.scan.requested.v1",
-  "schemaVersion": 1,
-  "correlationId": "uuidv7",
-  "causationId": "uuidv7",
-  "aggregateType": "Assessment",
-  "aggregateId": "uuidv7",
-  "occurredAt": "2026-06-21T00:00:00.000Z",
-  "payload": {
-    "assessmentId": "uuidv7",
-    "scanJobId": "uuidv7",
-    "repositorySnapshotId": "uuidv7"
-  }
-}
+```text
+CANONICAL_EVENT_NAMES_NORMALIZED
+PYTHON_SCANNER_EVENT_OWNERSHIP_ALIGNED
+INTERNAL_LEGAL_OPERATOR_EVENT_BOUNDARY_LOCKED
 ```
