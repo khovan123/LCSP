@@ -1,77 +1,53 @@
 # LCSP Acceptance Criteria Catalog
 
-## Purpose
+Canonical catalog: `AC-001..AC-041`. Deferred `FR-050..FR-052` have no active AC. Canonical UCs are `UC-001..UC-018`.
 
-This document is the canonical acceptance criteria inventory for LCSP. Active traceability uses only canonical `UC-001..UC-018`, `FR-001..FR-056`, and active `NFR-001..NFR-030`, `NFR-033..NFR-035` identifiers.
-
-## Acceptance Criteria
-
-| AC | Given | When | Then | Use Case | FR | NFR |
-|---|---|---|---|---|---|---|
-| AC-001 | Manager belongs to an organization | Manager creates an assessment | Assessment is created, Manager is recorded as owner, and the action is audited | UC-003 | FR-013 | NFR-008, NFR-010 |
-| AC-002 | Assessment exists | Manager submits Wizard answers | WizardProfile is created with required business/legal fields | UC-004 | FR-014 | NFR-028 |
-| AC-003 | Only WizardProfile or incomplete evidence exists | Manager views readiness or requests readiness-only export | System shows no HIGH/MEDIUM/LOW risk label and explains missing evidence | UC-004, UC-014 | FR-015, FR-040 | NFR-018, NFR-020, NFR-022, NFR-028 |
-| AC-004 | Repository connection/snapshot/scan is requested | Actor has Manager or delegated permission | RepositoryConnection, RepositorySnapshot, and ScanJob are created only within authorized scope and preserve history on rerun | UC-005, UC-006, UC-007, UC-016 | FR-016, FR-017, FR-018, FR-049 | NFR-006, NFR-007, NFR-008, NFR-009, NFR-016, NFR-030 |
-| AC-005 | TechnicalEvidenceReport is created | Schema and privacy gates run | Invalid schema or privacy flags reject evidence before TechnicalProfile generation | UC-007, UC-008 | FR-020 | NFR-012, NFR-013, NFR-014, NFR-015, NFR-016 |
-| AC-006 | Evidence passes schema validation | Quality gate runs | Evidence becomes ready, insufficient, or rejected with actionable reason and correlation context | UC-008 | FR-021 | NFR-018, NFR-022, NFR-026 |
-| AC-007 | Evidence is accepted | TechnicalProfile worker runs | TechnicalProfile includes AI/data/decision/human-review dimensions or explicit unknowns and redacted evidence refs | UC-008 | FR-022, FR-023, FR-048 | NFR-014, NFR-016, NFR-029 |
-| AC-008 | WizardProfile and TechnicalProfile exist | AIUsageFlow worker runs | AIUsageFlow claims are generated with evidence refs, confidence, and uncertainty | UC-009 | FR-024 | NFR-029 |
-| AC-009 | Critical AI usage is unclear | AIUsageFlow evaluates rules | Field remains UNKNOWN/UNCLEAR and unsupported classification is blocked | UC-009 | FR-025 | NFR-018, NFR-019, NFR-022 |
-| AC-010 | WizardProfile conflicts with technical evidence | Reconciliation runs | Conflict is created and classification remains locked | UC-010 | FR-026 | NFR-018 |
-| AC-011 | Conflict exists | Conflict score is calculated | Score explains materiality but does not create an alternative route or decision | UC-010 | FR-027 | NFR-028 |
-| AC-012 | Conflict exists | Manager records resolution | Resolution is stored separately from scanner evidence, audited, and reconciliation reruns | UC-010 | FR-028, FR-029 | NFR-008, NFR-010, NFR-011, NFR-018 |
-| AC-013 | Developer submits structured attestation | Attestation lacks role/scope/evidence or attempts to replace metadata | System rejects it or stores it only as supplemental input; it does not unlock classification | UC-018 | FR-045, FR-046 | NFR-008, NFR-009, NFR-010, NFR-018 |
-| AC-014 | No unresolved conflict exists | Reconciliation completes | VerifiedProfile is created from WizardProfile, TechnicalProfile, AIUsageFlow, and Manager resolutions | UC-011 | FR-030 | NFR-016, NFR-018 |
-| AC-015 | Unresolved conflict exists | Manager or system attempts VerifiedProfile approval | Approval is blocked with an actionable reason | UC-011 | FR-030, FR-031 | NFR-008, NFR-010, NFR-018, NFR-022 |
-| AC-016 | Approved corpus and VerifiedProfile exist | Legal ingestion/retrieval/matching runs | Official-source snapshots are pinned, approved corpus is immutable, hybrid retrieval returns citations, and LegalRuleMatch records are created | UC-012 | FR-032, FR-033, FR-053, FR-054, FR-056 | NFR-017, NFR-029, NFR-033, NFR-034 |
-| AC-017 | Required legal citation or approved corpus basis is missing | Legal matching or classification evaluates result | Classification is blocked or explicitly degraded; unsupported legal conclusion is not produced | UC-012, UC-013 | FR-034, FR-036 | NFR-017, NFR-018, NFR-020, NFR-022, NFR-034 |
-| AC-018 | VerifiedProfile, legal matches, and provider configuration exist | Classification runs | RiskClassification completes or is blocked with reasons; provider-only evidence cannot classify risk | UC-013, UC-014 | FR-035, FR-036, FR-037, FR-038, FR-055 | NFR-017, NFR-018, NFR-019, NFR-021, NFR-022, NFR-033 |
-| AC-019 | Final document is requested | Classification, gap, citation, conflict, or output guardrail prerequisites fail | Final report is blocked; readiness-only output contains no risk label or legal certainty overclaim | UC-014 | FR-039, FR-040, FR-041 | NFR-018, NFR-020, NFR-021, NFR-022 |
-| AC-020 | Material event or rerun occurs | Workflow changes state or artifact version | Audit trail records actor/action/object/time/version refs without sensitive payloads and prior history remains immutable | UC-006, UC-015, UC-016 | FR-017, FR-042, FR-043, FR-044, FR-045, FR-049 | NFR-010, NFR-011, NFR-016, NFR-030 |
-| AC-021 | User submits auth action | Credentials, OAuth, session, or MFA data is invalid | Access is denied without sensitive leakage and the outcome is audited | UC-001 | FR-001..FR-005 | NFR-001..NFR-005 |
-| AC-022 | Source, secret, or prompt-sensitive value reaches a processing boundary | Scanner, worker, audit, log, report, or UI attempts to persist/send it | Raw or secret value is redacted or blocked; only permitted metadata/evidence refs remain | UC-007, UC-017 | FR-019, FR-043, FR-048 | NFR-012, NFR-013, NFR-014, NFR-015 |
-| AC-023 | OAuth/OIDC login succeeds | User attempts repository access without GitHub App connection and LCSP permission | Repository access and scan remain denied | UC-001, UC-005, UC-017 | FR-005, FR-006, FR-016 | NFR-005, NFR-006, NFR-007 |
-| AC-024 | Organization or role action is requested | Actor lacks required tenant or Manager scope | Action is denied and a security/audit event is recorded where relevant | UC-002, UC-003 | FR-007..FR-013 | NFR-008, NFR-009, NFR-010 |
-| AC-025 | Developer has a scoped task | Developer attempts Manager-only action | Action is denied and cannot alter workflow truth | UC-002, UC-018 | FR-010, FR-011, FR-012, FR-047 | NFR-008, NFR-009, NFR-010 |
-| AC-026 | Developer policy is revoked | Developer attempts a new delegated action | Action is denied and revocation/action is auditable | UC-002, UC-018 | FR-011, FR-012 | NFR-009, NFR-010 |
-| AC-027 | Real PostgreSQL, RabbitMQ, S3-compatible storage, real LLM, approved corpus, and golden repository snapshot exist | Manager executes the canonical A-to-Z workflow | Login through audit export succeeds and produces a citation-backed document on real infrastructure | UC-001, UC-003..UC-015, UC-017 | FR-001..FR-049, FR-053..FR-056 | NFR-010, NFR-012, NFR-017..NFR-026, NFR-029, NFR-030, NFR-033..NFR-035 |
-| AC-028 | Repository snapshot cannot be retrieved | Python Worker executes ScanJob | Job becomes FAILED with `REPOSITORY_ACCESS_FAILED`, failed event is staged, and downstream is blocked | UC-007, UC-016 | FR-018, FR-049 | NFR-022, NFR-023, NFR-026, NFR-035 |
-| AC-029 | One source file has a parser error | Scan runs | File is skipped with coverage limitation while bounded scan continues | UC-007 | FR-018, FR-019 | NFR-018, NFR-023, NFR-026 |
-| AC-030 | Scan analysis completes but workspace deletion cannot be verified | Cleanup runs | `SCANNER_WORKSPACE_CLEANUP_FAILED` is audited, scan fails, and downstream is blocked | UC-007, UC-017 | FR-019 | NFR-013, NFR-016, NFR-018, NFR-026, NFR-035 |
-| AC-031 | Python code contains dynamic import, reflection, or runtime-only flow | Python analyzer runs | `UNSUPPORTED_DYNAMIC_FLOW` and coverage limitation are recorded; no false inference is produced | UC-007, UC-008, UC-009 | FR-023, FR-025 | NFR-018, NFR-023, NFR-026, NFR-035 |
-| AC-032 | Scan detects AI library import without invocation evidence | TechnicalProfile/AIUsageFlow generation runs | `AI_PROVIDER_USAGE` remains possible-use evidence and no active model/decision claim is created | UC-008, UC-009 | FR-023, FR-025 | NFR-018, NFR-019, NFR-029 |
-| AC-033 | Wizard and technical evidence materially conflict | Reconciliation runs | Conflict is created, Manager task is shown, and classification remains blocked | UC-010 | FR-026, FR-028, FR-029 | NFR-010, NFR-011, NFR-018, NFR-022 |
-| AC-034 | A matched rule lacks citation backing | Legal matching or classification runs | Match is blocked/degraded and no unsupported legal conclusion is emitted | UC-012, UC-013 | FR-034, FR-036 | NFR-017, NFR-018, NFR-020, NFR-034 |
-| AC-035 | Corpus version is not approved or is superseded for new assessments | Hybrid retriever runs | Retrieval and dependent classification are blocked with corpus status reason | UC-012 | FR-032, FR-054, FR-056 | NFR-017, NFR-018, NFR-022, NFR-034 |
-| AC-036 | Hybrid retriever returns zero citation candidates | Legal matching runs | No applicable legal match is claimed; classification is blocked/degraded and audit is written | UC-012 | FR-032, FR-033, FR-034, FR-056 | NFR-017, NFR-018, NFR-029, NFR-034 |
-| AC-037 | LLM provider times out or is unavailable | Classification runs | Gateway applies bounded retry, then fails closed with `CLASSIFICATION_LLM_UNAVAILABLE` and actionable status | UC-013 | FR-035, FR-055 | NFR-021, NFR-022, NFR-026, NFR-033 |
-| AC-038 | LLM output fails schema validation | Classification runs | Gateway retries within policy, then fails closed and records redacted validation failure | UC-013 | FR-035, FR-055 | NFR-018, NFR-021, NFR-022, NFR-026 |
-| AC-039 | Queue message is delivered more than once | Worker handles it | Idempotency key prevents duplicate state change and prior artifact chain remains intact | UC-015, UC-016 | FR-042, FR-044, FR-049 | NFR-010, NFR-024, NFR-026, NFR-030 |
-| AC-040 | Broker publication fails transiently | Outbox publisher runs | Event remains pending and is retried with bounded backoff until acknowledgement or terminal failure | UC-015 | FR-042, FR-044 | NFR-010, NFR-021, NFR-024, NFR-026 |
-| AC-041 | Generated document violates safety, citation, or overclaim guardrails | Document worker runs | Generation is blocked, reason is recorded, and no artifact is published | UC-014, UC-017 | FR-039, FR-041 | NFR-018, NFR-020, NFR-021, NFR-022, NFR-026 |
-
-## Legacy AC Resolution
-
-| Legacy AC | Resolution | Canonical AC |
-|---|---|---|
-| AC-1 | ACTIVE | AC-003 |
-| AC-2 | ACTIVE | AC-014, AC-016, AC-018 |
-| AC-3 | ACTIVE | AC-005 |
-| AC-4 | ACTIVE | AC-006 |
-| AC-5 | ACTIVE | AC-010, AC-012, AC-019 |
-| AC-6 | ACTIVE | AC-012 |
-| AC-7 | ACTIVE | AC-011 |
-| AC-8 | ACTIVE | AC-011 |
-| AC-9 | ACTIVE | AC-013 |
-| AC-10 | ACTIVE | AC-017, AC-019 |
-| AC-11 | ACTIVE | AC-013, AC-020 |
-| AC-12 | ACTIVE | AC-020 |
-| AC-13..AC-16 | SUPERSEDED | Replaced by active artifact checks and report markers. |
-
-## Validation Markers
+| AC | Acceptance outcome | UC | FR | NFR |
+|---|---|---|---|---|
+| AC-001 | Authorized Manager creates an owned, audited Assessment. | UC-003 | FR-013 | NFR-008,010 |
+| AC-002 | Submitted Wizard answers create a structured WizardProfile. | UC-004 | FR-014 | NFR-028 |
+| AC-003 | Wizard/incomplete-evidence readiness shows no risk level. | UC-004,014 | FR-015,040 | NFR-018,020,022,028 |
+| AC-004 | Authorized repository, snapshot, scan, and rerun stay in scope and preserve history. | UC-005,006,007,016 | FR-016,017,018,049 | NFR-006..009,016,030 |
+| AC-005 | Invalid evidence schema/privacy flags reject the report before profile generation. | UC-007,008 | FR-020 | NFR-012..016 |
+| AC-006 | Evidence quality yields ready/insufficient/rejected with actionable reason. | UC-008 | FR-021 | NFR-018,022,026 |
+| AC-007 | Accepted evidence creates a redacted, evidence-backed TechnicalProfile or explicit unknowns. | UC-008 | FR-022,023,048 | NFR-014,016,029 |
+| AC-008 | AIUsageFlow claims include evidence refs, confidence, and uncertainty. | UC-009 | FR-024 | NFR-029 |
+| AC-009 | Unclear critical usage remains unclear and blocks unsupported classification. | UC-009 | FR-025 | NFR-018,019,022 |
+| AC-010 | Material declaration/evidence mismatch creates a blocking conflict. | UC-010 | FR-026 | NFR-018 |
+| AC-011 | Conflict Score explains materiality but creates no alternative route. | UC-010 | FR-027 | NFR-028 |
+| AC-012 | Manager resolution is separate from scanner evidence, audited, and reruns reconciliation. | UC-010 | FR-028,029 | NFR-008,010,011,018 |
+| AC-013 | Invalid or bypassing attestation is rejected/supplemental-only and never unlocks classification. | UC-018 | FR-045,046 | NFR-008,009,010,018 |
+| AC-014 | No unresolved conflict permits VerifiedProfile creation. | UC-011 | FR-030 | NFR-016,018 |
+| AC-015 | Unresolved conflict blocks VerifiedProfile approval. | UC-011 | FR-030,031 | NFR-008,010,018,022 |
+| AC-016 | Approved immutable corpus plus VerifiedProfile yields citation-backed LegalRuleMatch records. | UC-012 | FR-032,033,053,054,056 | NFR-017,029,033,034 |
+| AC-017 | Missing required corpus/citation blocks or explicitly degrades legal output. | UC-012,013 | FR-034,036 | NFR-017,018,020,022,034 |
+| AC-018 | Valid verified/legal/provider basis yields classification or explicit blocked status. | UC-013,014 | FR-035..038,055 | NFR-017..019,021,022,033 |
+| AC-019 | Missing final-output prerequisite blocks report; readiness-only output has no risk level. | UC-014 | FR-039..041 | NFR-018,020..022 |
+| AC-020 | Material state/version changes create redacted immutable audit history. | UC-006,015,016 | FR-017,042..045,049 | NFR-010,011,016,030 |
+| AC-021 | Invalid auth/MFA/session action is denied safely and audited. | UC-001 | FR-001..005 | NFR-001..005 |
+| AC-022 | Sensitive source/value is redacted or blocked at persistence/send/display boundaries. | UC-007,017 | FR-019,043,048 | NFR-012..015 |
+| AC-023 | OAuth login alone cannot authorize repository access. | UC-001,005,017 | FR-005,006,016 | NFR-005..007 |
+| AC-024 | Unauthorized organization/role action is denied and audited. | UC-002,003 | FR-007..013 | NFR-008..010 |
+| AC-025 | Developer cannot perform Manager-only actions. | UC-002,018 | FR-010..012,047 | NFR-008..010 |
+| AC-026 | Revoked Developer policy blocks new actions and is auditable. | UC-002,018 | FR-011,012 | NFR-009,010 |
+| AC-027 | On real DB/broker/storage/providers and approved corpus, Manager completes login-to-audit-export and obtains a cited document; Developer is optional. | UC-001,003..015,017 | FR-002,005,006,012..044,048,053..056 | NFR-010,012,017..026,029,030,033..035 |
+| AC-028 | Snapshot retrieval failure produces `REPOSITORY_ACCESS_FAILED` and blocks downstream. | UC-007,016 | FR-018,049 | NFR-022,023,026,035 |
+| AC-029 | Single-file parser failure records limitation and bounded scan continues. | UC-007 | FR-018,019 | NFR-018,023,026 |
+| AC-030 | Unverified cleanup fails scan, audits security event, and blocks downstream. | UC-007,017 | FR-019 | NFR-013,016,018,026,035 |
+| AC-031 | Dynamic Python flow records `UNSUPPORTED_DYNAMIC_FLOW` without false inference. | UC-007,008,009 | FR-023,025 | NFR-018,023,026,035 |
+| AC-032 | AI import without invocation remains possible-use evidence only. | UC-008,009 | FR-023,025 | NFR-018,019,029 |
+| AC-033 | Wizard/evidence conflict creates Manager task and blocks classification. | UC-010 | FR-026,028,029 | NFR-010,011,018,022 |
+| AC-034 | Missing citation blocks/degrades match and prevents unsupported conclusion. | UC-012,013 | FR-034,036 | NFR-017,018,020,034 |
+| AC-035 | Unapproved/superseded corpus blocks retrieval for new assessment. | UC-012 | FR-032,054,056 | NFR-017,018,022,034 |
+| AC-036 | Zero citation candidates create no applicability claim and block/degrade classification. | UC-012 | FR-032..034,056 | NFR-017,018,029,034 |
+| AC-037 | LLM outage exhausts bounded retry then fails closed with actionable status. | UC-013 | FR-035,055 | NFR-021,022,026,033 |
+| AC-038 | Invalid LLM schema exhausts bounded retry then fails closed. | UC-013 | FR-035,055 | NFR-018,021,022,026 |
+| AC-039 | Duplicate message causes no duplicate state or artifact. | UC-015,016 | FR-042,044,049 | NFR-010,024,026,030 |
+| AC-040 | Transient broker failure keeps outbox pending and retries to ack/terminal failure. | UC-015 | FR-042,044 | NFR-010,021,024,026 |
+| AC-041 | Document guard violation blocks generation and publishes no artifact. | UC-014,017 | FR-039,041 | NFR-018,020,021,022,026 |
 
 ```text
 CANONICAL_ACCEPTANCE_CRITERIA_NORMALIZED
-CANONICAL_UC_IDS_ONLY_IN_ACTIVE_AC_ROWS
-DEFERRED_FR_052_REMOVED_FROM_ACTIVE_ATTESTATION_ACCEPTANCE
+DEFERRED_FR_REMOVED_FROM_ACTIVE_ACCEPTANCE
+GOLDEN_PATH_EXCLUDES_OPTIONAL_DEVELOPER_DEPENDENCY
 ```
