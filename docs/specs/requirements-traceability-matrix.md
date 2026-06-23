@@ -4,6 +4,22 @@
 
 This document is the canonical enterprise requirements traceability matrix for LCSP.
 
+## Canonical Inventory and Coverage Status
+
+| Item | Count / Status |
+|---|---|
+| Canonical FR total | 56 |
+| Active MVP FR total | 53 (`FR-001..FR-049`, `FR-053..FR-056`) |
+| Deferred FR total | 3 (`FR-050..FR-052`) |
+| Active NFR total | 33 (`NFR-001..NFR-030`, `NFR-033..NFR-035`) |
+| AC total | 41 |
+| Requirement-to-domain/architecture coverage | Tracked in this matrix through Domain Spec and State Machine columns. |
+| Requirement-to-implementation-area coverage | Tracked in this matrix through Implementation Area column. |
+| Requirement-to-story coverage | STORY_COVERAGE_NOT_ASSESSABLE |
+| Story artifact status | CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING |
+
+`NFR-031` and `NFR-032` are legacy identifiers only. `NFR-031` maps to active `NFR-005`; `NFR-032` maps to active `NFR-008`. They are not active NFR catalog rows and must not be counted as active NFRs.
+
 Trace path:
 
 ```text
@@ -151,11 +167,16 @@ UC -> FR -> AC -> Domain Spec -> State Machine -> Implementation Area
 | NFR-028 | FR-014, FR-015, FR-021 | UC-004, UC-008 | Business language and status clarity. |
 | NFR-029 | FR-023..FR-025, FR-032, FR-033 | UC-009, UC-012 | Evidence refs on usage claims. |
 | NFR-030 | FR-044, FR-049 | UC-015, UC-016 | Historical evidence versioning. |
-| NFR-031 | FR-005 | UC-M01-14 | OAuth identity linking safety. |
-| NFR-032 | FR-012 | UC-M02-03 | Manager super-role enforcement. |
 | NFR-033 | FR-055 | UC-M07-02 | LLM cost control and token logging. |
 | NFR-034 | FR-032 | UC-M07-01 | Immutable LegalCorpusVersion and approval gate. |
 | NFR-035 | FR-019 | UC-M10-03 | Standalone Python Worker sandbox directory restriction and cleanup. |
+
+### Legacy NFR Alias Remapping
+
+| Legacy Identifier | Active NFR | Meaning |
+|---|---|---|
+| NFR-031 | NFR-005 | OAuth identity-linking safety. |
+| NFR-032 | NFR-008 | Manager super-role enforcement. |
 
 ## Orphan Check
 
@@ -163,8 +184,9 @@ UC -> FR -> AC -> Domain Spec -> State Machine -> Implementation Area
 |---|---|
 | FR | 56 of 56 appear in Functional Traceability Matrix. |
 | AC | 41 of 41 appear in Acceptance Criteria Coverage. |
-| NFR | 35 of 35 appear in NFR Coverage. |
+| NFR | 33 of 33 active NFRs appear in NFR Coverage. Legacy NFR-031 and NFR-032 are remapped aliases, not active rows. |
 | UC | 18 of 18 appear in Functional Traceability Matrix or NFR Coverage. |
+| Story coverage | Not assessable until canonical epics/stories artifact exists. |
 
 ## Final Traceability Decision
 
@@ -175,3 +197,7 @@ NO_ORPHAN_REQUIREMENTS
 NO_ORPHAN_ACCEPTANCE_CRITERIA
 
 NO_UNRESOLVED_REQUIREMENT_IDS
+
+STORY_COVERAGE_NOT_ASSESSABLE
+
+CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING

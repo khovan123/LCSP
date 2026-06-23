@@ -38,7 +38,7 @@ Ngoài scope:
 |---|---|---|---|---|---|---|
 | A1 - Wizard simplicity vs completeness | Wizard quá đơn giản thì thiếu business/legal truth; quá chi tiết thì Manager không hoàn tất hoặc cần Developer hỗ trợ | Product Manager, phối hợp UX/Domain Reviewer | Wizard question review, WizardProfile mapping, scenario walkthrough, user testing với Manager persona | Manager hiểu câu hỏi không cần Developer; Wizard capture đủ critical fields; mỗi câu hỏi quan trọng map được về WizardProfile | Manager không hiểu câu hỏi; thiếu critical field; câu hỏi dùng thuật ngữ code; câu hỏi không map được field | Sửa Wizard scope, wording, progressive disclosure, field model hoặc readiness behavior trong PRD |
 | A2 - Legal corpus / rule reliability | Classification yếu nếu legal rules không versioned/cited/traceable; LLM suy luận luật không có căn cứ; scanner + AI Usage Flow có thể map sai usage purpose sang legal corpus/rule | Product Manager, phối hợp Legal/Domain Rule Owner và AI Usage Flow Reviewer | Rule inventory review, rule-to-source trace test, scenario classification trace test, citation audit, AIUsageFlow-to-rule mapping test | 100% critical classification rules có legal source, citation, version/effective date nếu có, rule_id; 100% risk output trace được rule_id; A2-b usage-purpose mapping đạt acceptance threshold | Rule thiếu citation/version/source; risk output thiếu rule trace; LLM tạo conclusion không có retrieved rule/citation; usage purpose map sai rule/corpus hoặc confidence/uncertainty không được ghi | Sửa classification requirements, legal corpus scope, rule schema, AIUsageFlow contract, degraded/blocked behavior trong PRD |
-| A3 - Human attestation abuse risk | Manager/Developer dùng attestation hoặc delegated clarification để hợp thức hóa evidence yếu hoặc bypass scanner/evidence | Product Manager, phối hợp Compliance/Governance Reviewer | Attestation schema review, Manager final-resolution review, delegated permission review, abuse-case testing, audit trail inspection | 100% attestation có role/claim/reason/scope/timestamp/assessment id/audit log; 100% MVP conflict resolution có Manager final resolution; 0 attestation thay machine-generated metadata | Free-text attestation unlocks classification; role claim sai; Developer clarification tự finalize conflict; metadata khách quan bị thay bằng attestation | Sửa attestation requirements, permission model, reporting disclosure, blocking rules hoặc audit requirements trong PRD |
+| A3 - Human attestation abuse risk | Manager/Developer dùng attestation hoặc delegated clarification để hợp thức hóa evidence yếu hoặc bypass scanner/evidence | Product Manager, phối hợp Compliance/Governance Reviewer | Attestation schema review, Manager final-resolution review, delegated permission review, abuse-case testing, audit trail inspection | 100% attestation có role/claim/reason/scope/timestamp/assessment id/audit log; 100% MVP conflict resolution có Manager final resolution; 0 attestation thay machine-generated metadata | Free-text attestation bypasses classification gates; role claim sai; Developer clarification tự finalize conflict; metadata khách quan bị thay bằng attestation | Sửa attestation requirements, permission model, reporting disclosure, blocking rules hoặc audit requirements trong PRD |
 
 ## A1 - Wizard Simplicity vs Completeness
 
@@ -288,7 +288,7 @@ Structured human technical attestation giúp LCSP xử lý trường hợp scann
 - Review role-bound claims:
   - Manager chỉ confirm business/legal meaning.
   - Developer chỉ confirm technical truth.
-- Review critical claims cần Manager final review và không được để Developer clarification tự unlock classification.
+- Review critical claims cần Manager final review và không được để Developer clarification tự bypass evidence/reconciliation/classification gates.
 - Test abuse cases:
   - Developer viết "bỏ qua scanner" dạng free text.
   - Manager cố confirm technical truth.
@@ -355,7 +355,7 @@ Các claim cần Manager final review trong MVP; post-MVP có thể dùng option
 - timestamp;
 - supporting evidence refs nếu có;
 - related conflict id nếu có;
-- report disclosure flag nếu dùng để unlock classification.
+- report disclosure flag nếu ảnh hưởng materially đến classification-relevant Manager decision.
 
 ### Acceptance Threshold
 
@@ -367,15 +367,15 @@ Pass khi tất cả điều kiện sau đạt:
 - 0 trường hợp attestation thay machine-generated metadata.
 - 0 trường hợp Manager confirm technical truth.
 - 0 trường hợp Developer confirm business/legal meaning.
-- Nếu attestation unlock classification, final report và audit trail ghi rõ điều đó.
+- Nếu attestation ảnh hưởng materially đến classification-relevant Manager decision, final report và audit trail ghi rõ điều đó.
 
 ### Failure Condition
 
 Fail nếu một trong các điều kiện sau xảy ra:
 
-- Free-text attestation unlocks classification.
+- Free-text attestation bypasses classification gates.
 - Attestation thiếu role, claim, reason, scope, timestamp hoặc assessment_id.
-- Critical claim hoặc delegated clarification tự unlock classification mà không có Manager final review.
+- Critical claim hoặc delegated clarification tự bypass evidence/reconciliation/classification gates mà không có Manager final review.
 - Attestation thay report hash, scanner version, ruleset version, scan timestamp, repo/commit metadata, legal corpus version, evidence report integrity hoặc machine-generated privacy flags.
 - Report không disclose khi classification dùng attestation.
 
@@ -385,7 +385,7 @@ Fail nếu một trong các điều kiện sau xảy ra:
 - Sửa permission model nếu role-bound claims chưa đủ rõ.
 - Bổ sung blocking rule cho attestation abuse.
 - Bổ sung report disclosure requirements.
-- Nếu không kiểm soát được abuse, loại attestation khỏi unlock path trong MVP.
+- Nếu không kiểm soát được abuse, loại attestation khỏi mọi classification-relevant decision path trong MVP.
 
 ## Acceptance Threshold Summary
 
@@ -404,7 +404,7 @@ PRD phải được cập nhật nếu xảy ra bất kỳ điều kiện nào:
 - A2 fail vì rule/citation/version/rule_id thiếu cho critical classification rule.
 - A2 fail vì classification có thể final khi thiếu legal citation.
 - A2 fail vì LLM có thể tạo legal conclusion thiếu retrieved legal rule/citation.
-- A3 fail vì attestation có thể unlock classification bằng free text hoặc sai role.
+- A3 fail vì attestation có thể bypass classification gates bằng free text hoặc sai role.
 - A3 fail vì attestation thay machine-generated metadata.
 - A3 fail vì final report không disclose attestation-assisted classification.
 
@@ -415,7 +415,7 @@ PRD update có thể bao gồm:
 - Sửa functional requirements.
 - Sửa acceptance criteria.
 - Sửa report/disclosure rules.
-- Loại hoặc hạn chế attestation khỏi unlock path.
+- Loại hoặc hạn chế attestation khỏi classification-relevant decision path.
 
 ## Readiness Gate Before Architecture
 

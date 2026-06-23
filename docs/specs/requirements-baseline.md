@@ -11,6 +11,9 @@ This document recovers the active requirements baseline from existing active doc
 - Canonical active NFR namespace: `NFR-001...` from `docs/specs/non-functional-requirements.md`.
 - PRD `FR-E*` and `NFR-1..NFR-14` IDs are source aliases only. They are not active implementation requirement IDs after Phase 5.9 normalization.
 - Legacy IDs remain traceability aliases recovered from archived requirement catalogs.
+- Canonical FR inventory contains 56 total FRs: 53 active MVP FRs (`FR-001..FR-049`, `FR-053..FR-056`) and 3 deferred FRs (`FR-050..FR-052`).
+- Canonical active NFR inventory contains 33 active NFRs: `NFR-001..NFR-030` and `NFR-033..NFR-035`.
+- `NFR-031` and `NFR-032` are legacy identifiers only, not active NFR catalog rows.
 - `PLATFORM_BASELINE` means the active normalized requirement belongs to the platform baseline even when no one-to-one PRD source alias exists.
 - Archived requirement catalogs remain archived and are not active source-of-truth documents.
 
@@ -33,7 +36,7 @@ These archived documents were used only to recover legacy IDs and traceability a
 
 The following `FR-E*` identifiers are retained only as PRD/source aliases. Active implementation requirements use the `FR-001...` namespace in `docs/specs/functional-requirements.md`.
 
-| Canonical FR | Name | Source |
+| PRD Source Alias | Name | Source |
 | --- | --- | --- |
 | FR-E1-1 | Create assessment | docs/product/prd.md |
 | FR-E1-2 | Invite Developer | docs/product/prd.md |
@@ -263,11 +266,18 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | NFR-028 | OAuth/GitHub boundary separation | NFR-3 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 | NFR-029 | Permission delegation auditability | NFR-7, NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 | NFR-030 | Role/permission revocation behavior | NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
-| NFR-031 | OAuth identity linking safety | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
-| NFR-032 | Manager super-role enforcement | NFR-9 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 | NFR-033 | LLM and embedding cost controls | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md`; ADR-024 |
 | NFR-034 | Legal corpus immutability and approval | NFR-7, NFR-8 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md`; ADR-025 |
 | NFR-035 | Python Worker sandbox isolation | NFR-1, NFR-2 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md`; ADR-023 |
+
+## Legacy NFR Alias Mapping
+
+These identifiers are retained only for traceability drift cleanup. They are not active NFR inventory rows.
+
+| Legacy Identifier | Active NFR | Meaning | Source |
+| --- | --- | --- | --- |
+| NFR-031 | NFR-005 | OAuth identity linking safety | archived non-functional-requirements.md; active PRD |
+| NFR-032 | NFR-008 | Manager super-role enforcement | archived non-functional-requirements.md; active PRD |
 
 ## Acceptance Criteria Inventory
 
@@ -299,4 +309,16 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | Unmapped legacy FR IDs | PASS | None |
 | Unmapped legacy NFR IDs | PASS | None |
 | Platform-baseline FR IDs without one-to-one PRD source alias | RESOLVED_PLATFORM_BASELINE | FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009 |
-| Platform-baseline NFR IDs without one-to-one PRD source alias | RESOLVED_PLATFORM_BASELINE | NFR-001, NFR-002, NFR-003, NFR-004, NFR-005, NFR-006, NFR-027, NFR-031, NFR-033 |
+| Platform-baseline NFR IDs without one-to-one PRD source alias | RESOLVED_PLATFORM_BASELINE | NFR-001, NFR-002, NFR-003, NFR-004, NFR-005, NFR-006, NFR-027, NFR-033 |
+
+## Canonical Count Assertions
+
+| Assertion | Value |
+| --- | --- |
+| Total canonical FRs | 56 |
+| Active MVP FRs | 53 |
+| Deferred FRs | 3 |
+| Active NFRs | 33 |
+| Legacy-only NFR identifiers | NFR-031, NFR-032 |
+
+`FR-E*` values are source aliases only. `NFR-031` and `NFR-032` may appear only as legacy aliases/mappings and must not be counted as active NFR inventory.

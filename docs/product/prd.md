@@ -22,12 +22,21 @@ LCSP là nền tảng hỗ trợ tuân thủ pháp lý cho doanh nghiệp sử d
 
 PRD này không tạo architecture document, backlog, implementation plan hoặc code. Các quyết định kỹ thuật sâu hơn phải được xử lý ở artifact downstream sau khi PRD được review.
 
+### Requirement Governance
+
+Canonical implementation requirement identifiers live in `docs/specs/functional-requirements.md`.
+
+- `FR-001..FR-056` are the canonical functional requirement identifiers for implementation, acceptance, traceability and future story work.
+- PRD `FR-E*` headings below are product narrative/source aliases only.
+- PRD `FR-E*` aliases must not be used as canonical story, implementation, acceptance or traceability identifiers.
+- When this PRD and a canonical requirements catalog disagree on identifier status, the canonical catalog wins for implementation planning.
+
 ## 2. Goals & Success Metrics
 
 ### Product Goals
 
 - Giúp Manager hoàn tất assessment bằng ngôn ngữ nghiệp vụ/pháp lý, không cần hiểu scanner, GitHub Actions hoặc source code.
-- Thu thập technical evidence từ Developer theo workflow được Manager dẫn dắt.
+- Thu thập technical evidence qua GitHub App read-only Repository Scan trong workflow do Manager dẫn dắt; Developer có thể hỗ trợ như optional collaborator.
 - Ngăn hệ thống tạo risk level khi chỉ có self-report từ Wizard.
 - Đối chiếu WizardProfile và TechnicalProfile để tạo VerifiedProfile trước classification.
 - Đảm bảo final report có audit trail: wizard answers, evidence metadata, conflict resolution, attestation, classification output, legal citation và document version.
@@ -66,7 +75,7 @@ Manager owns business/legal truth:
 
 Developer là technical task participant. Trong MVP, Developer bao gồm developer, tech lead, DevOps, security engineer hoặc người hiểu source code/deployment/evidence.
 
-Developer là optional collaborator trong MVP. Developer không phải điều kiện bắt buộc để hoàn tất assessment, unlock classification hoặc generate final report.
+Developer là optional collaborator trong MVP. Developer không phải điều kiện bắt buộc để Manager hoàn tất complete A-to-Z golden path, unlock classification hoặc generate final report.
 
 Developer owns technical truth:
 
@@ -311,28 +320,32 @@ risk_level = not_available
 
 #### FR-E3-1: GitHub App read-only evidence path
 
-Manager can connect selected repository and run read-only scan for own assessment. Developer may do the same only when delegated `CONNECT_REPOSITORY` and `RUN_REPOSITORY_SCAN`.
+Manager can connect selected repository and run read-only scan for own assessment. This GitHub App read-only Repository Scan is the MVP golden technical-evidence path. Developer may do the same only when delegated `CONNECT_REPOSITORY` and `RUN_REPOSITORY_SCAN`.
 
 **Consequences:**
 - Raw source code must not be sent to LLM.
 - Raw source code must not be stored long term.
 - Evidence report must include provenance metadata.
+- Manager can complete the complete A-to-Z golden path without Developer participation.
 
-#### FR-E3-2: Local/CI evidence upload
+#### FR-E3-2: Deferred Local/CI evidence upload
 
-Developer with `UPLOAD_EVIDENCE` can upload Local/CI scanner report.
-
-**Consequences:**
-- Uploaded report must go through schema completeness gate.
-- Uploaded report must include source type and provenance.
-
-#### FR-E3-3: Manual technical evidence JSON upload
-
-Developer with `UPLOAD_EVIDENCE` can upload manual technical evidence JSON when scanner runs outside LCSP or dynamic/wrapper logic is not detected automatically.
+Local/CI scanner report upload is Deferred/Future and maps to canonical `FR-050`. It is not part of the active MVP main flow and must not be represented as an MVP evidence path unless reopened through change control.
 
 **Consequences:**
-- Manual evidence must be structured.
-- Free-text comment cannot unlock classification.
+- Active MVP evidence collection uses GitHub App read-only Repository Scan.
+- Future Local/CI reports must go through schema completeness, privacy, provenance and quality gates.
+- Future Local/CI reports must include source type and provenance.
+- Local/CI upload cannot independently unlock MVP classification.
+
+#### FR-E3-3: Deferred manual technical evidence JSON upload
+
+Manual technical evidence JSON upload is Deferred/Future and maps to canonical `FR-051`. It is not part of the active MVP main flow and must not be represented as an MVP evidence path unless reopened through change control.
+
+**Consequences:**
+- Future manual evidence must be structured and provenance-bound.
+- Free-text comment cannot bypass gates.
+- Manual evidence JSON cannot independently unlock MVP classification.
 
 #### FR-E3-4: Privacy flags validation
 
@@ -341,13 +354,17 @@ System validates privacy flags for every technical evidence report.
 **Consequences:**
 - Evidence is rejected if privacy flags indicate raw source uploaded/stored improperly, full AST uploaded when disallowed, raw source sent to LLM, or secrets not redacted where required.
 
-#### FR-E3-5: Human technical attestation as supplement
+#### FR-E3-5: Optional human technical attestation as supplement
 
-Developer can provide structured human technical attestation only as controlled evidence supplement.
+Developer can provide structured human technical attestation only as optional controlled supplemental input through a scoped Developer task. This maps to canonical `FR-045` and `FR-046`; `FR-045` disclosure/audit applies whenever attestation influences a material decision.
 
 **Consequences:**
+- Attestation is not required for the MVP golden path.
 - Attestation requires role-bound claims, scope, reason, supporting evidence refs where available and signed timestamp.
 - Attestation cannot replace machine-generated metadata listed in A3.
+- Attestation cannot independently unlock classification.
+- Attestation cannot finalize conflict resolution; Manager remains final resolver.
+- Free text cannot bypass evidence gates.
 
 ### Epic 4 - Evidence Quality Gate
 
@@ -665,13 +682,22 @@ AND conflict ảnh hưởng đến risk classification hoặc nghĩa vụ pháp 
 
 ### Minimum Evidence Sources
 
-Accepted evidence sources for MVP/near-MVP:
+Accepted evidence sources:
 
-- GitHub App read-only scan.
-- Local/CI scanner report.
-- Manual technical evidence JSON.
-- API probe result, if available.
-- Structured human technical attestation as supplement.
+**Active MVP golden evidence path**
+
+- GitHub App read-only Repository Scan.
+
+**Optional MVP supplemental input**
+
+- Structured human technical attestation, only through scoped Developer task, only as supplemental input and never as an independent classification unlock.
+
+**Deferred/Future evidence paths**
+
+- Local/CI scanner report upload (`FR-050`).
+- Manual technical evidence JSON upload (`FR-051`).
+- Delegated technical clarification (`FR-052`).
+- API probe evidence, unless separately approved through change control.
 
 ### Minimum Evidence Schema Groups
 
@@ -703,7 +729,7 @@ Each dimension may be `DETECTED`, `NOT_DETECTED` or `UNKNOWN`, but the field mus
 
 ### Attestation Guardrails
 
-Human technical attestation can supplement low-quality scanner evidence only if:
+Human technical attestation is optional supplemental input and can be considered only if:
 
 - source type is structured as human technical attestation;
 - attester is authorized Developer;
@@ -713,6 +739,8 @@ Human technical attestation can supplement low-quality scanner evidence only if:
 - supporting evidence refs are included where available;
 - signed timestamp is recorded;
 - audit trail records who, what, when, why and based on which evidence.
+
+Attestation is not required for the golden path and cannot independently unlock classification or finalize conflict resolution.
 
 Attestation cannot replace these machine-generated or external metadata:
 
@@ -860,7 +888,7 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - Define attestation claim schema.
 - Define allowed Developer claims and Manager confirmations.
 - Test abuse cases: "bỏ qua scanner", unsupported claim, missing provenance, manager-only technical override.
-- Require product review before attestation can unlock classification in critical contexts.
+- Require product review before attestation can influence any classification-relevant Manager decision in critical contexts. Attestation must not independently unlock classification.
 
 ## 16. Open Questions
 
@@ -882,12 +910,12 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - GitHub App read-only acceptance by target MVP users needs validation.
 - Scope coverage for monorepos needs definition.
 - Stale evidence behavior when commit/branch changes needs decision.
-- API probe evidence trust model needs decision.
+- Local/CI report upload (`FR-050`), manual evidence JSON (`FR-051`), delegated technical clarification (`FR-052`) and API probe evidence are Deferred/Future unless reopened by change control.
 
 ### Attestation
 
-- Exact list of Developer-attestable claims needs confirmation.
-- Confidence impact of attestation needs decision.
+- Exact list of optional Developer-attestable claims needs confirmation.
+- Confidence impact of attestation needs decision, with the constraint that attestation cannot bypass gates or independently unlock classification.
 - Policy for excessive attestation use needs decision.
 
 ### Reporting

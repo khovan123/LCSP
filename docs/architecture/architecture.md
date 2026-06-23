@@ -60,12 +60,17 @@ Each major stage persists its output before the next stage runs. Hidden synchron
 
 - Manager can complete the active MVP flow without Developer assignment.
 - OAuth/OIDC login is separate from GitHub App repository authorization.
-- Repository Scan is the active MVP technical evidence path.
+- GitHub App read-only Repository Scan is the MVP golden technical-evidence path.
+- `FR-050` Local/CI scanner report upload, `FR-051` manual technical evidence JSON upload and `FR-052` delegated technical clarification are Deferred/Future paths, not active MVP architecture paths.
+- Developer collaboration is optional; Manager can complete the complete A-to-Z golden path without Developer participation.
+- Structured attestation is optional supplemental input only. It cannot replace scanner metadata, independently unlock classification or finalize conflict resolution.
 - Scanner is static-analysis only.
 - Raw source, full prompts, secrets, and full AST bodies must not enter LLM, ordinary audit logs, or long-term persistence.
 - Classification requires VerifiedProfile.
 - Missing citation, unresolved conflict, insufficient evidence, or unknown critical usage blocks or degrades output.
 - Provider/model/framework detection alone does not determine legal risk.
+- Real LLM and embedding integration requires explicit provider/model configuration, credentials, token/cost controls and privacy boundaries.
+- Legal-source use requires official-source validation, immutable snapshot, content hash, approval gate and approved `LegalCorpusVersion`.
 
 ## Detail Ownership
 

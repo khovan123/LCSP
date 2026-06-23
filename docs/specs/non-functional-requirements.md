@@ -6,6 +6,15 @@ This document is the canonical active non-functional requirements catalog for LC
 
 ## NFR Catalog
 
+Active NFR inventory contains exactly `NFR-001..NFR-030` and `NFR-033..NFR-035`.
+
+`NFR-031` and `NFR-032` are legacy identifiers only. They are not active catalog rows and must not be counted as active NFRs. Their recovered meanings are preserved in the legacy mapping:
+
+- Legacy `NFR-031` maps to active `NFR-005` for OAuth identity-linking safety.
+- Legacy `NFR-032` maps to active `NFR-008` for Manager super-role enforcement.
+
+Do not renumber active NFRs in this remediation.
+
 | ID | Category | Statement | Measurement | Verification Method | Applies To | Priority |
 |---|---|---|---|---|---|---|
 | NFR-001 | Security | Password, OAuth/OIDC and session authentication controls must prevent unauthorized workspace access. | Invalid credential/callback/session is rejected and audited. | Auth integration and contract tests. | Identity, Authentication, Session Management | Must |
@@ -69,5 +78,5 @@ This document is the canonical active non-functional requirements catalog for LC
 | NFR-027 | PLATFORM_BASELINE | NFR-005 |
 | NFR-028 | ACTIVE | NFR-006 |
 | NFR-029..NFR-030 | ACTIVE | NFR-009, NFR-010 |
-| NFR-031 | PLATFORM_BASELINE | NFR-005 |
-| NFR-032 | ACTIVE | NFR-008 |
+| NFR-031 | LEGACY_ALIAS | NFR-005 |
+| NFR-032 | LEGACY_ALIAS | NFR-008 |
