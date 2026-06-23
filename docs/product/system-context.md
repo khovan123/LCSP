@@ -2,25 +2,17 @@
 
 ## Purpose
 
-This document answers the business-domain question: what is LCSP, who uses it, and how an assessment moves from Manager intent to evidence-backed classification and report.
-
-It is a domain-level source of truth. It does not create new requirements, stories, backlog items, architecture, implementation guidance, or validation material.
+This document defines what LCSP is, who uses it, and how an assessment moves from Manager intent to evidence-backed classification, reporting, and audit. It is a domain-level source of truth, not backlog, story, implementation, or validation material.
 
 ## Problem Statement
 
-Vietnamese businesses using AI need a way to understand and document their compliance posture without relying only on self-declared checklists or free-form legal chatbot answers. LCSP addresses this by combining Manager-provided business context, repository-derived technical evidence, reconciliation, citation-backed legal matching, classification, gap analysis, document generation, and audit trail.
-
-The core problem is trust: a risk result is not useful unless it can be traced to verified business usage, technical evidence, legal citations, and recorded human decisions.
+Vietnamese businesses using AI need a traceable way to understand and document compliance posture without relying only on self-declared checklists or free-form legal chatbot answers. LCSP combines Manager-provided business context, repository-derived technical evidence, reconciliation, citation-backed legal matching, classification, gap analysis, document generation, and audit trail.
 
 ## Product Vision
 
-LCSP is an evidence-based compliance support platform for businesses using AI in Vietnam. It helps a Manager complete an assessment, collect repository evidence, resolve mismatches, classify risk only after verified prerequisites, identify compliance gaps, and generate traceable reports.
-
-LCSP supports compliance work. It does not replace professional legal advice, certify compliance, or create final legal conclusions without citation traceability.
+LCSP is an evidence-based compliance support platform for businesses using AI in Vietnam. It supports compliance work but does not replace professional legal advice, certify compliance, or create unsupported legal conclusions.
 
 ## Product Scope
-
-LCSP owns the workflow from assessment creation to generated compliance document:
 
 ```text
 Manager intent
@@ -32,7 +24,7 @@ Manager intent
 -> Reconciliation
 -> VerifiedProfile
 -> LegalRuleMatch
--> ClassificationResult
+-> RiskClassification
 -> GapAnalysis
 -> GeneratedDocument
 -> AuditEvent
@@ -41,104 +33,113 @@ Manager intent
 ## In Scope
 
 - Manager-led assessment lifecycle.
-- OAuth/OIDC user login separated from GitHub App authorization.
+- OAuth/OIDC login separated from GitHub App repository authorization.
 - Optional Developer collaboration through scoped tasks.
+- Optional structured Developer attestation under `FR-046` as supplemental input only.
 - Read-only GitHub repository connection and commit-pinned Repository Scan.
-- Static-analysis technical evidence.
-- Evidence gates, TechnicalProfile, AIUsageFlow, and reconciliation.
-- Manager-only conflict resolution for MVP completion.
-- VerifiedProfile creation after gates and conflict resolution.
-- Citation-backed legal matching.
+- Python Worker-owned static analysis with first-class bounded Python support and TS/JS subprocess analysis.
+- Evidence gates, TechnicalProfile, AIUsageFlow, reconciliation, and Manager-only conflict resolution.
+- Provenance-preserving legal corpus ingestion from approved official-source URLs.
+- Internal corpus review/approval and immutable LegalCorpusVersion management.
+- Hybrid PostgreSQL FTS + pgvector retrieval with citation and effective-date filters.
+- Real configured LLM provider for A-to-Z acceptance; deterministic mock only for tests/offline development.
 - Risk classification only after VerifiedProfile and legal matching.
-- Gap analysis and document generation under output guardrails.
-- Audit trail for material actions and generated artifacts.
+- Gap analysis, final report, readiness-only export, artifact download, and audit export.
 
-## Out Of Scope
+## Out of Scope
 
-- Production compliance certification.
-- Formal legal opinion.
-- Direct submission to regulator portals.
-- Public auditor/regulator portal.
-- Enterprise SSO/SAML/SCIM and advanced organization identity.
-- Local/CI scanner upload and manual evidence JSON as active MVP main paths.
+- Production compliance certification or formal legal opinion.
+- Direct regulator submission or public auditor/regulator portal.
+- Enterprise SSO/SAML/SCIM and advanced identity administration.
+- Local/CI scanner upload and manual evidence JSON as active MVP paths (`FR-050`, `FR-051` are Deferred).
+- Delegated free-form technical clarification workflow (`FR-052` is Deferred).
+- Customer-facing legal corpus administration.
 - Runtime scanner accuracy claims before post-implementation empirical acceptance.
-- Risk level based only on Wizard answers, provider package presence, model name, or framework detection.
-- Final report when critical conflict, insufficient evidence, or missing citation remains unresolved.
+- Risk level based only on Wizard answers, provider package, model name, or framework detection.
+- Final report when critical conflict, insufficient evidence, missing approved corpus, or missing citation remains unresolved.
 
-## Primary Actors
+## Primary Product Actors
 
-| Actor | Domain Responsibility | Key Tasks |
+| Actor | Responsibility | Key Tasks |
 |---|---|---|
-| Manager | Owns assessment, business/legal truth, final MVP conflict resolution, VerifiedProfile approval, classification request, report generation and audit review. | Create assessment, complete Wizard, connect repo, start scan, review evidence, resolve conflicts, request classification, generate report. |
-| Developer | Optional technical collaborator with scoped delegated tasks. Developer input can support technical clarification but does not replace Manager final authority. | Accept task, review technical findings, provide technical clarification, submit structured attestation when allowed. |
-| LCSP System | Enforces workflow gates, evidence handling, state transitions, queue choreography, audit, classification prerequisites and output guardrails. | Persist domain objects, publish commands/events, execute workers, block unsafe output. |
+| Manager | Owns assessment, business/legal truth, final MVP conflict resolution, VerifiedProfile approval where required, classification request, report generation, and audit review. | Create assessment, complete Wizard, connect repository, start scan, review evidence, resolve conflicts, request classification, generate/download report, export audit. |
+| Developer | Optional scoped technical collaborator. | Accept task, review redacted findings, submit structured technical attestation when allowed. |
+| LCSP System | Enforces workflow gates, state transitions, evidence handling, queue choreography, retrieval, audit, and output guardrails. | Execute workers, persist domain objects, publish commands/events, block unsafe output. |
 
-## Secondary Actors
+Manager can complete the active MVP golden path without Developer participation. Developer absence is never a workflow blocker.
 
-| Actor / System | Relationship to LCSP |
-|---|---|
-| GitHub | External repository provider used through GitHub App read-only repository authorization. |
-| OAuth/OIDC Provider | User identity provider for LCSP login only; it does not grant repository access. |
-| Legal Corpus | Versioned source for legal rules and citations used by Legal Matching. |
-| LLM Provider | May be used behind guardrails with normalized evidence/legal context only; raw source, secrets, full prompts and full AST bodies are excluded. |
-| Object Storage | Stores generated document artifacts and allowed non-source artifacts. |
+## Internal Operations Actor
+
+| Actor | Responsibility | UX Boundary |
+|---|---|---|
+| Internal Legal Operator | Validates official-source URLs, reviews normalized legal documents, approves or rejects corpus versions, and audits corpus changes. | Internal operations/API/CLI only for MVP. No Manager/Developer product screen is required by `bmad-ux`. |
+
+This boundary is locked for the MVP. A future dedicated Legal Operator web console would require a separate scope decision and stories.
 
 ## External Systems
 
 | System | Used For | Boundary |
 |---|---|---|
-| OAuth/OIDC Provider | User login and identity verification. | Separate from repository authorization. |
-| GitHub App | Read-only selected repository access and commit snapshot. | Does not authenticate LCSP user identity. |
-| Legal Corpus / RAG Store | Versioned legal retrieval and citation traceability. | Legal matching requires citation coverage. |
-| LLM Provider | Assisted classification/generation under structured guardrails. | Receives no raw source, full prompt, secret, or full AST body. |
-| Object Storage | Generated document artifact storage. | Stores generated output only, not raw source. |
+| OAuth/OIDC Provider | User login and identity verification. | Does not grant repository access. |
+| GitHub App | Read-only selected repository access and commit snapshot. | Separate from user login. |
+| Official Legal Sources | Legal document ingestion and provenance. | Source candidates require validation before ingestion is accepted. |
+| Legal Corpus / Hybrid Retriever | Versioned legal retrieval and citation traceability. | Approved immutable corpus only. |
+| LLM Provider | Structured assisted classification/generation. | No raw source, secrets, full prompts, or full AST bodies. |
+| Object Storage | Legal source snapshots and generated document artifacts. | Real S3-compatible storage for A-to-Z acceptance. |
 
-## High-Level User Journey
-
-1. Manager creates an assessment.
-2. Manager completes the WizardProfile using business/legal language.
-3. Manager connects a GitHub repository and selects branch/commit scope.
-4. Manager starts Repository Scan.
-5. LCSP creates technical evidence and profile objects.
-6. LCSP builds AIUsageFlow claims from evidence and declarations.
-7. LCSP reconciles WizardProfile, TechnicalProfile and AIUsageFlow.
-8. If conflict exists, Manager resolves it.
-9. LCSP creates VerifiedProfile.
-10. LCSP performs legal matching and risk classification.
-11. LCSP generates gap analysis and document output only when guardrails pass.
-12. LCSP records audit trail throughout.
-
-## Manager Journey
+## High-Level Manager Journey
 
 ```text
 Login
 -> Create Assessment
 -> Complete WizardProfile
 -> Connect Repository
--> Start Scan
--> Review Findings / AIUsageFlow
+-> Select Commit
+-> Run Repository Scan
+-> Review Findings and AIUsageFlow
 -> Resolve Conflict if present
--> Approve or rely on VerifiedProfile readiness
--> Request Classification
--> Generate Report
--> Review Audit Trail
+-> Verify Profile readiness
+-> Run Legal Matching and Classification
+-> Review Gap Analysis
+-> Generate and Download Report
+-> Review and Export Audit Trail
 ```
 
-Manager can complete every active MVP workflow without Developer assignment. State gates may block final output, but Developer absence does not.
-
-## Developer Journey
+## Optional Developer Journey
 
 ```text
-Receive invitation or task
+Receive invitation/task
 -> Accept scoped task
--> Review assigned technical findings
--> Provide clarification or structured attestation
+-> Review redacted technical findings
+-> Submit structured attestation
 -> Stop at delegated scope
 ```
 
-Developer cannot finalize conflicts, approve VerifiedProfile, run final classification, generate final report, change Manager decisions or block Manager-only completion.
+The active Developer path does not include a free-form clarification workflow. Structured attestation:
 
-## Assessment Journey
+- is stored separately from scanner evidence;
+- cannot replace machine-generated metadata;
+- cannot resolve a conflict;
+- cannot approve VerifiedProfile;
+- cannot unlock classification by itself;
+- must disclose role, scope, claim, reason, evidence refs, and timestamp.
+
+## Internal Legal Operations Journey
+
+```text
+Validate source URL
+-> Ingest PDF/HTML snapshot
+-> Compute hash and extract metadata
+-> Normalize legal hierarchy
+-> Review document and relationships
+-> Approve LegalCorpusVersion
+-> Build FTS and vector index
+-> Make approved version available to retrieval
+```
+
+This journey is not part of the Manager/Developer product UX deliverable.
+
+## Assessment Lifecycle
 
 ```text
 CREATED
@@ -153,64 +154,35 @@ CREATED
 -> RECONCILIATION_REQUIRED or VERIFIED_PROFILE_READY
 -> LEGAL_MATCHING_READY
 -> CLASSIFICATION_READY or CLASSIFICATION_BLOCKED
+-> GAP_ANALYSIS_READY or GAP_ANALYSIS_BLOCKED
 -> DOCUMENT_GENERATED or DOCUMENT_BLOCKED
 ```
 
-## Classification Journey
+## Classification Gates
 
-```text
-VerifiedProfile
--> LegalRuleMatch[]
--> ClassificationResult
-```
+Classification is blocked or explicitly degraded when:
 
-Classification is blocked or degraded when:
+- VerifiedProfile does not exist;
+- any material conflict remains unresolved;
+- critical AI usage is unknown or unsupported;
+- approved legal corpus is unavailable;
+- required legal citation coverage is missing;
+- provider/model/framework presence is the only evidence;
+- configured real LLM provider is unavailable for the acceptance run.
 
-- VerifiedProfile does not exist.
-- Any material conflict remains unresolved.
-- AIUsageFlow critical usage is unknown or unsupported.
-- Legal citation coverage is missing for required conclusions.
-- Provider/model/framework presence is the only evidence.
+## Reporting Gates
 
-## Report Journey
+A final report requires classification, gap analysis, evidence trace, legal citation trace, approved corpus version, and no unresolved conflict. Readiness-only output may exist earlier but must not contain a risk level or compliance-certification wording.
 
-```text
-ClassificationResult
--> GapAnalysis
--> GeneratedDocument
--> AuditEvent
-```
+## Key Outcomes
 
-A final report requires classification, gap analysis, evidence trace, legal citation trace, and no unresolved conflict. Readiness-only output may exist earlier, but it must not contain a risk level.
-
-## Assessment Lifecycle Summary
-
-| Stage | Business Meaning | Output |
-|---|---|---|
-| Wizard | Manager states intended business use and oversight. | `WizardProfile` |
-| Repository Scan | LCSP gathers static technical evidence from selected repository snapshot. | `TechnicalEvidenceReport`, `TechnicalFinding[]` |
-| Technical Profile | LCSP normalizes technical evidence into dimensions. | `TechnicalProfile` |
-| AI Usage Flow | LCSP turns evidence into business usage claims with evidence refs and uncertainty. | `AIUsageFlow`, `AIUsageFlowClaim[]` |
-| Reconciliation | LCSP compares Manager declaration and technical evidence. | `Conflict[]` or `VerifiedProfile` |
-| Legal Matching | LCSP retrieves citation-backed legal rules. | `LegalRuleMatch[]` |
-| Classification | LCSP determines risk only from verified and cited basis. | `ClassificationResult` |
-| Reporting | LCSP generates gap analysis and document output under guardrails. | `GapAnalysis`, `GeneratedDocument` |
-
-## Key Business Outcomes
-
-- Manager understands what evidence is required before risk classification.
+- Manager understands what is needed before classification.
 - Technical evidence is traceable to repository snapshot metadata and evidence refs.
-- Business declarations and technical findings are reconciled before classification.
+- Business declarations and technical findings are reconciled before legal matching.
 - Legal conclusions are citation-backed or blocked/degraded.
-- Generated documents are traceable to evidence, legal basis and Manager decisions.
-- Audit trail records material workflow actions.
+- Generated documents trace to evidence, legal basis, corpus version, and Manager decisions.
+- Material workflow and security actions are auditable.
 
-## Success Metrics
+## UX Handoff Boundary
 
-| Metric | Meaning |
-|---|---|
-| Manager completion quality | Manager can complete Wizard and MVP workflow without Developer dependency. |
-| Evidence-gated classification | Risk classification runs only after evidence gates, reconciliation and VerifiedProfile. |
-| No Wizard-only risk level | Self-declared readiness never shows HIGH/MEDIUM/LOW. |
-| Conflict accountability | Material conflicts have Manager resolution and audit trail. |
-| Report traceability | Final report traces to evidence, legal rule/citation and decisions. |
+`bmad-ux` must design Manager and optional Developer product flows only. It must represent blocked, failed, loading, retry, empty, and permission-denied states. Internal Legal Operator corpus administration remains outside the customer-facing UX scope for MVP.
