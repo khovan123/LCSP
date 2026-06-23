@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Define asynchronous worker ownership for the A-to-Z runnable MVP before creating files.
+Define asynchronous worker ownership for the A-to-Z runnable MVP.
 
 ## Runtime Layout
 
 ```text
-lcsp-scanner-worker/                 # Python runtime; sole scan consumer
+lcsp-scanner-worker/                 # Python scanner runtime
   src/lcsp_scanner/
     main.py
     queue/
@@ -20,12 +20,7 @@ lcsp-scanner-worker/                 # Python runtime; sole scan consumer
     persistence/
     audit/
 
-apps/worker/src/                    # Node.js/TypeScript downstream workers
-  main.ts
-  messaging/
-    consumer-registry.ts
-    retry-policy.ts
-    message-envelope.ts
+apps/worker/src/                    # Node.js downstream workers
   workers/
     technical-profile.worker.ts
     ai-usage-flow.worker.ts
@@ -38,53 +33,41 @@ apps/worker/src/                    # Node.js/TypeScript downstream workers
     document.worker.ts
 ```
 
-There is no active `apps/worker/src/workers/scanner.worker.ts`. Repository Scan lifecycle belongs to the standalone Python Worker.
+There is no active Node.js scanner lifecycle worker. The standalone Python Worker is the sole consumer of the scan command.
 
 ## Worker Ownership
 
 | Worker | Runtime | Consumes | Produces | Reads | Writes |
 |---|---|---|---|---|---|
-| Python Scanner Worker | Python | `command.scan.requested.v1` | `event.scan.completed.v1` or `event.scan.failed.v1` | `RepositoryScanJob`, `RepositorySnapshot` | `SourceFile`, `CodeGraphNode`, `CodeGraphEdge`, `EvidenceReference`, `TechnicalFinding`, `TechnicalEvidenceReport`, `AuditEvent`, `OutboxEvent` |
-| Technical Profile Worker | Node/TS | `command.technical-profile.requested.v1` | completed/failed technical-profile event | accepted report/findings | `TechnicalProfile`, audit/outbox |
-| AI Usage Flow Worker | Node/TS | `command.ai-usage-flow.requested.v1` | completed/failed AIUsageFlow event | WizardProfile, TechnicalProfile, findings | `AIUsageFlow`, claims, evidence links, audit/outbox |
-| Reconciliation Worker | Node/TS | `command.reconciliation.requested.v1` | verified-profile-ready or conflict-detected event | WizardProfile, TechnicalProfile, AIUsageFlow | `ReconciliationConflict` or `VerifiedProfile`, audit/outbox |
-| Legal Ingestion Worker | Node/TS | `command.legal-source.ingest-requested.v1` | ingestion completed/failed event | approved source request | `LegalSource`, `LegalDocument`, `LegalCorpusItem`, audit/outbox |
-| Embedding Index Worker | Node/TS | `command.legal-corpus.index-requested.v1` | index completed/failed event | approved corpus chunks | `LegalDocumentChunk.embedding`, `ModelRunMetadata`, audit/outbox |
-| Legal Matching Worker | Node/TS | `command.legal-matching.requested.v1` | completed/failed legal-matching event | VerifiedProfile, approved corpus/index | `LegalRuleMatch`, `RetrievalAuditLog`, audit/outbox |
-| Classification Worker | Node/TS | `command.classification.requested.v1` | completed/blocked event | VerifiedProfile, LegalRuleMatch[] | `RiskClassification`, `ModelRunMetadata`, audit/outbox |
-| Gap Analysis Worker | Node/TS | `command.gap-analysis.requested.v1` | completed/blocked/failed event | RiskClassification, LegalRuleMatch[] | `GapAnalysis`, audit/outbox |
-| Document Worker | Node/TS | `command.document.requested.v1` | generated/blocked event | classification, gap analysis, citations | `GeneratedDocument`, `ModelRunMetadata`, audit/outbox |
+| Python Scanner Worker | Python | `command.scan.requested.v1` | `event.scan.completed.v1`, `event.scan.failed.v1` | scan job and snapshot | scanner evidence, audit, outbox |
+| Technical Profile Worker | Node/TS | `command.technical-profile.requested.v1` | technical-profile completed/failed events | accepted report and findings | TechnicalProfile, audit, outbox |
+| AI Usage Flow Worker | Node/TS | `command.ai-usage-flow.requested.v1` | AIUsageFlow completed/failed events | WizardProfile, TechnicalProfile, findings | flow, claims, audit, outbox |
+| Reconciliation Worker | Node/TS | `command.reconciliation.requested.v1` | verified-profile-ready or conflict-detected event | WizardProfile, TechnicalProfile, AIUsageFlow | conflict or VerifiedProfile, audit, outbox |
+| Legal Ingestion Worker | Node/TS | `command.legal-source.ingest.requested.v1` | `event.legal-source.ingest.completed.v1`, `event.legal-source.ingest.failed.v1` | validated source request | legal source/document/items, audit, outbox |
+| Embedding Index Worker | Node/TS | `command.embedding-build.requested.v1` | `event.embedding-build.completed.v1`, `event.embedding-build.failed.v1` | approved corpus chunks | FTS/vector data, model metadata, audit, outbox |
+| Legal Matching Worker | Node/TS | `command.legal-matching.requested.v1` | legal-matching completed/failed events | VerifiedProfile and approved index | LegalRuleMatch, retrieval audit, audit, outbox |
+| Classification Worker | Node/TS | `command.classification.requested.v1` | classification completed/blocked events | VerifiedProfile and legal matches | RiskClassification, model metadata, audit, outbox |
+| Gap Analysis Worker | Node/TS | `command.gap-analysis.requested.v1` | gap-analysis completed/blocked/failed events | classification and legal matches | GapAnalysis, audit, outbox |
+| Document Worker | Node/TS | `command.document.requested.v1` | document generated/blocked events | classification, gaps, citations | GeneratedDocument, model metadata, audit, outbox |
 
-## Choreography
-
-```text
-scan completed
--> technical profile
--> AI usage flow
--> reconciliation
--> legal matching
--> classification
--> gap analysis
--> document generation
-```
-
-Internal legal operations use a separate precondition chain:
+## Canonical Legal Operations Chain
 
 ```text
-legal source ingest
--> internal review/approval
--> immutable corpus version
--> embedding/FTS index build
+command.legal-source.ingest.requested.v1
+-> event.legal-source.ingest.completed.v1
+-> internal review and approval
+-> command.embedding-build.requested.v1
+-> event.embedding-build.completed.v1
 -> corpus available to legal matching
 ```
 
-## Worker Rules
+## Rules
 
-- Every worker is idempotent by canonical idempotency key.
-- State-changing writes and `OutboxEvent` creation occur in one database transaction.
-- Workers consume commands only; projection/orchestrator handlers consume events and stage the next command.
-- Reference-only queue payloads are mandatory; no raw source, full prompt, secret, document bytes, or full AST body enters RabbitMQ.
-- Python Scanner Worker publishes scan success only after report gates and workspace cleanup verification.
-- Legal matching uses only approved immutable corpus versions.
+- Workers are idempotent by canonical key.
+- State changes and OutboxEvent creation occur in one database transaction.
+- Workers consume commands; projections consume events and stage the next command.
+- Queue payloads contain references and redacted metadata only.
+- Scan success requires report gates and verified workspace cleanup.
+- Legal matching uses only approved immutable corpus versions with completed indexes.
 - External model calls go through LLM Gateway.
-- Internal Legal Operator approval is an internal API/CLI operation for MVP, not a customer-facing worker/UI flow.
+- Internal Legal Operator approval remains an internal API/CLI operation for MVP.
