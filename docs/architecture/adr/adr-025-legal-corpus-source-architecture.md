@@ -101,10 +101,12 @@ LegalCorpusVersion:
   approved_at: timestamp
   approved_by: authority identifier
   approval_record_id: UUID
-  status: PENDING_REVIEW | APPROVED | RETIRED
+  status: DRAFT | APPROVED | SUPERSEDED
 ```
 
 Once approved, a `LegalCorpusVersion` is immutable. Classification must pin to approved corpus version at assessment start.
+
+Canonical corpus lifecycle vocabulary for Phase 5.2J is `DRAFT -> APPROVED -> SUPERSEDED`. Older labels such as `PENDING_REVIEW` and `RETIRED` are superseded for active implementation docs. A corpus version under review is `DRAFT`; a replaced version is `SUPERSEDED`.
 
 ## New PostgreSQL Tables Required
 

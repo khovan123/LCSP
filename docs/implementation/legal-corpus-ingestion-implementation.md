@@ -55,8 +55,14 @@ DRAFT (after ingestion) → APPROVED (after review) → SUPERSEDED (on replaceme
 ```
 
 ### Approval Event Flow
-1. Admin uses API endpoint `POST /api/v1/admin/legal-corpus/approve` providing `corpusVersionId`.
+1. Internal Legal Approver or designated system operator uses API endpoint `POST /api/v1/internal/legal-corpus/approve` providing `corpusVersionId`. This is an internal control permission, not a customer-facing `Admin` product role.
 2. System writes a `CorpusApprovalRecord` detailing the reviewer, approval timestamp, and comments.
 3. System updates the status of `LegalCorpusVersion` to `APPROVED`.
 4. System triggers index building by publishing `command.embedding-build.requested.v1`.
 5. Only `APPROVED` corpus versions are queried by the hybrid retriever during assessments.
+
+The same lifecycle vocabulary must be used in database status fields, queue payloads and approval API responses:
+
+```text
+DRAFT -> APPROVED -> SUPERSEDED
+```

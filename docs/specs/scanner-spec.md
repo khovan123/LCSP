@@ -72,18 +72,18 @@ A-to-Z runnable MVP scanner runtime is Python Worker-first for scan lifecycle.
 
 | Concern | Canonical Controlled MVP Technology | Role |
 | --- | --- | --- |
-| Scan worker runtime | Node.js / TypeScript worker in npm workspaces | Consumes scan commands and controls scanner lifecycle |
-| Generic syntax parsing | Tree-sitter | Syntax parsing and structural extraction without executing source |
-| TypeScript / JavaScript semantic analysis | `ts-morph` over TypeScript compiler services | Project loading, import resolution, symbol resolution and type hints; raw TypeScript Compiler API direct implementation is not used except behind `ts-morph` |
-| Python coverage | Tree-sitter Python grammar, syntax-only | Parse/import/call hints only in controlled TypeScript-first prototype |
-| Graph assembly | `graphology` in-memory graph | Scan-local dependency/evidence graph |
+| Scan worker runtime | Standalone Python Worker (`lcsp-scanner-worker`, Python 3.11+) | Consumes scan commands and controls Repository Scan lifecycle per ADR-023 |
+| Generic syntax parsing | Python `ast`, `libcst`, Tree-sitter adapters | Syntax/CST/AST parsing and structural extraction without executing source |
+| TypeScript / JavaScript semantic analysis | Node.js subprocess adapter using `ts-morph` over TypeScript compiler services | Project loading, import resolution, symbol resolution and type hints; raw TypeScript Compiler API direct implementation is not used except behind `ts-morph` |
+| Python coverage | First-class Python semantic static analysis in Python Worker | Imports, packages, modules, functions, classes, AI invocation, input/output tracking, bounded cross-module flow and human-review paths |
+| Graph assembly | Worker-local in-memory evidence graph | Scan-local dependency/evidence graph assembled by Python Worker and normalized into metadata-only persistence |
 | Graph persistence | PostgreSQL metadata tables | Persist normalized metadata, refs, hashes and paths only |
 | Detection rules | Versioned JSON/YAML rulesets | Provider/framework/API invocation, decision patterns, review patterns and domain/data signals |
 | Secret redaction | Deterministic redaction before persistence | Remove credentials, tokens, keys and confidential values |
 | Scanner workspace | Ephemeral restricted temporary workspace | Read source only during scan; cleanup after scan |
 | LLM usage | LLM Gateway only, sanitized metadata only | Raw source, full prompts, secrets and full AST bodies never enter LLM |
 
-Not active in the controlled MVP scanner implementation: Python worker runtime, NetworkX, unrestricted raw TypeScript Compiler API usage, source execution, dependency install, build, test, Docker or CI execution. CodeQL is not an MVP runtime dependency.
+Not active in the controlled MVP scanner implementation: TypeScript-first scanner lifecycle ownership, NetworkX as a runtime dependency, unrestricted raw TypeScript Compiler API usage, source execution, dependency install, build, test, Docker or CI execution. CodeQL is not an MVP runtime dependency.
 
 ## Language Support Policy
 

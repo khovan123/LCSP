@@ -175,88 +175,62 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 
 | Active FR | Name | PRD / Source Alias | Resolution | Source |
 | --- | --- | --- | --- | --- |
-| FR-001 | Register account | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-002 | Login | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-003 | Enable Authenticator App MFA | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-004 | Generate MFA setup secret or QR code | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-005 | Verify MFA setup code | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-006 | Login with MFA | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-007 | Reject invalid or expired MFA code | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-008 | Disable MFA after re-authentication | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-009 | Reset MFA under recovery policy | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-010 | Manage session | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-011 | Reset password | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-012 | Create organization | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-013 | Manage organization members | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-014 | Assign Manager role | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-015 | Invite Developer | FR-E1-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-016 | Assign Developer policy | FR-E1-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-017 | Revoke Developer access | FR-E1-3, FR-E1-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-018 | Create assessment | FR-E1-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-019 | Fill Web Wizard | FR-E2-1, FR-E2-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-020 | Save Wizard progress | FR-E2-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-021 | Submit WizardProfile | FR-E2-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-022 | Show Self-Declared Readiness only | FR-E2-3, FR-E2-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-023 | Show preliminary indicators only | FR-E2-3, FR-E2-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-024 | Accept Developer task | FR-E1-2, FR-E1-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-025 | Connect GitHub repository | FR-E3-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-026 | Upload Local/CI scanner report | FR-E3-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-027 | Upload manual technical evidence JSON | FR-E3-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-028 | Review technical findings | FR-E3-1, FR-E4-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-029 | Respond to technical clarification | FR-E5-3, FR-E5-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-030 | Provide structured technical attestation | FR-E3-5, FR-E8-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-031 | Validate evidence schema | FR-E4-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-032 | Validate privacy flags | FR-E3-4, FR-E4-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-033 | Evaluate evidence quality | FR-E4-3, FR-E4-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-034 | Generate TechnicalProfile | FR-E4-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-035 | Mark evidence status | FR-E4-3, FR-E4-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-036 | Detect conflict | FR-E5-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-037 | Calculate Conflict Score | FR-E5-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-038 | Route conflict to Manager | FR-E5-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-039 | Resolve technical conflict by Manager | FR-E5-3, FR-E5-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-040 | Resolve business/legal conflict | FR-E5-4, FR-E5-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-041 | Optional delegated technical clarification | FR-E5-3, FR-E5-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-042 | Create VerifiedProfile | FR-E6-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-043 | Retrieve legal rules/citations | FR-E6-3, FR-E6-4, FR-E6-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-044 | Run Risk Classification Agent | FR-E6-2, FR-E6-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-045 | Trace classification to legal rule | FR-E6-3, FR-E6-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-046 | Block/degrade classification without citation | FR-E6-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-047 | View classification result | FR-E6-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-048 | Run gap analysis | FR-E7-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-049 | Generate compliance report | FR-E7-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-050 | Generate readiness-only export | FR-E7-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-051 | View document status | FR-E7-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-052 | Download generated document | FR-E7-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-053 | Write audit event | FR-E8-1, FR-E8-2, FR-E8-3, FR-E8-4, FR-E8-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-054 | View audit trail | FR-E8-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-055 | Export audit trail | FR-E8-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-056 | Track artifact versions | FR-E8-2, FR-E8-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-057 | Track attestation usage | FR-E7-4, FR-E8-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-058 | Enforce source code privacy policy | FR-E3-1, FR-E8-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-059 | Redact secrets | FR-E3-4, FR-E8-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-060 | Clean temporary workspace | FR-E3-1, FR-E8-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-061 | Enforce no raw source to LLM | FR-E3-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-062 | Enforce no long-term raw source storage | FR-E3-1, FR-E8-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-063 | Verify email | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-064 | Change password | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-065 | Manage personal profile | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-066 | Run repository scan via standalone Python Worker | FR-E3-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-067 | Review and approve VerifiedProfile | FR-E6-1, FR-E6-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-068 | View gap analysis | FR-E7-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-069 | Detect AI usage flow signals | FR-E4-2, FR-E5-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-070 | Generate AIUsageFlow | FR-E4-2, FR-E5-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-071 | Mark unclear AI usage purpose | FR-E4-3, FR-E6-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-072 | Reconcile AIUsageFlow | FR-E5-1, FR-E5-6 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-073 | Match legal rules using AIUsageFlow | FR-E6-3, FR-E6-4, FR-E6-5 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-074 | Sign in with OAuth/OIDC | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-075 | Validate OAuth/OIDC callback and account linking | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-076 | Separate OAuth/OIDC from GitHub repository access | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-077 | Manager superset MVP permissions | FR-E1-4, FR-E5-5, FR-E6-2, FR-E7-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-078 | Post-MVP delegated Developer permissions | FR-E1-3, FR-E1-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-079 | Ingest legal sources | FR-E6-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-080 | Legal corpus review gate | FR-E6-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-081 | Configure LLM provider | FR-E6-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
-| FR-082 | Hybrid search | FR-E6-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
+| FR-001 | Register account | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/functional-requirements.md` |
+| FR-002 | Login | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/functional-requirements.md` |
+| FR-003 | Configure MFA | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/functional-requirements.md` |
+| FR-004 | Manage session and profile | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/functional-requirements.md` |
+| FR-005 | OAuth/OIDC login | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/functional-requirements.md` |
+| FR-006 | Separate OAuth and GitHub access | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/functional-requirements.md` |
+| FR-007 | Create organization | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/functional-requirements.md` |
+| FR-008 | Manage organization members | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/functional-requirements.md` |
+| FR-009 | Assign Manager role | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/functional-requirements.md` |
+| FR-010 | Invite Developer | FR-E1-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-011 | Assign and revoke Developer policy | FR-E1-3, FR-E1-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-012 | Enforce Manager-only actions | FR-E1-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-013 | Create assessment | FR-E1-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-014 | Complete WizardProfile | FR-E2-1, FR-E2-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-015 | Show readiness without risk level | FR-E2-3, FR-E2-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-016 | Connect GitHub repository | FR-E3-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-017 | Create repository snapshot | FR-E3-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-018 | Run repository scan | FR-E3-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-019 | Enforce scanner privacy | FR-E3-1, FR-E3-4, FR-E8-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-020 | Validate evidence schema and privacy flags | FR-E3-4, FR-E4-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-021 | Evaluate evidence quality | FR-E4-3, FR-E4-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-022 | Generate TechnicalProfile | FR-E4-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-023 | Detect AI usage signals | FR-E4-2, FR-E5-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-024 | Generate AIUsageFlow | FR-E4-2, FR-E5-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-025 | Mark unclear AI usage | FR-E4-3, FR-E6-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-026 | Compare profiles and detect conflict | FR-E5-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-027 | Calculate conflict score | FR-E5-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-028 | Route conflicts to Manager | FR-E5-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-029 | Resolve conflicts by Manager | FR-E5-3, FR-E5-4, FR-E5-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-030 | Create VerifiedProfile | FR-E6-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-031 | Approve VerifiedProfile | FR-E6-1, FR-E6-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-032 | Retrieve legal rules and citations | FR-E6-3, FR-E6-4, FR-E6-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-033 | Match legal rules by usage flow | FR-E6-3, FR-E6-4, FR-E6-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-034 | Block/degrade legal matching without citation | FR-E6-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-035 | Run risk classification | FR-E6-2, FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-036 | Produce evidence-based classification result | FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-037 | View classification result | FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-038 | Generate gap analysis | FR-E7-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-039 | Generate compliance report | FR-E7-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-040 | Generate readiness-only export | FR-E7-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-041 | View and download document status/artifact | FR-E7-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-042 | Write audit events | FR-E8-1, FR-E8-2, FR-E8-3, FR-E8-4, FR-E8-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-043 | View and export audit trail | FR-E8-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-044 | Track artifact versions | FR-E8-2, FR-E8-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-045 | Track attestation usage | FR-E7-4, FR-E8-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-046 | Submit structured technical attestation | FR-E3-5, FR-E8-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-047 | Accept Developer task | FR-E1-2, FR-E1-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-048 | Review technical findings | FR-E3-1, FR-E4-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-049 | Re-run repository scan | FR-E3-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-050 | Support deferred Local/CI scanner report upload | FR-E3-2 | DEFERRED | `docs/specs/functional-requirements.md` |
+| FR-051 | Support deferred manual evidence JSON upload | FR-E3-3 | DEFERRED | `docs/specs/functional-requirements.md` |
+| FR-052 | Support deferred delegated technical clarification | FR-E5-3, FR-E5-5 | DEFERRED | `docs/specs/functional-requirements.md` |
+| FR-053 | Ingest legal sources | FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-054 | Legal corpus review gate | FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-055 | Configure LLM provider | FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-056 | Hybrid search | FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 
 ## Active NFR to Source Alias Crosswalk
 
@@ -291,6 +265,9 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | NFR-030 | Role/permission revocation behavior | NFR-11 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
 | NFR-031 | OAuth identity linking safety | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived non-functional-requirements.md; active PRD |
 | NFR-032 | Manager super-role enforcement | NFR-9 | CANONICAL_MAPPING | archived non-functional-requirements.md; active PRD |
+| NFR-033 | LLM and embedding cost controls | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md`; ADR-024 |
+| NFR-034 | Legal corpus immutability and approval | NFR-7, NFR-8 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md`; ADR-025 |
+| NFR-035 | Python Worker sandbox isolation | NFR-1, NFR-2 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md`; ADR-023 |
 
 ## Acceptance Criteria Inventory
 
@@ -317,9 +294,9 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| All active BR legacy FR references listed | PASS | 78 unique legacy FR refs recovered |
+| Active canonical FR crosswalk matches `docs/specs/functional-requirements.md` | PASS | `FR-001..FR-056`; no active `FR-057..FR-082` rows remain in this crosswalk. |
 | All active BR legacy NFR references listed | PASS | 29 unique legacy NFR refs recovered |
 | Unmapped legacy FR IDs | PASS | None |
 | Unmapped legacy NFR IDs | PASS | None |
-| Platform-baseline FR IDs without one-to-one PRD source alias | RESOLVED_PLATFORM_BASELINE | FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-011, FR-012, FR-013, FR-014, FR-063, FR-064, FR-065, FR-074, FR-075, FR-076 |
-| Platform-baseline NFR IDs without one-to-one PRD source alias | RESOLVED_PLATFORM_BASELINE | NFR-001, NFR-002, NFR-003, NFR-004, NFR-005, NFR-006, NFR-027, NFR-031 |
+| Platform-baseline FR IDs without one-to-one PRD source alias | RESOLVED_PLATFORM_BASELINE | FR-001, FR-002, FR-003, FR-004, FR-005, FR-006, FR-007, FR-008, FR-009 |
+| Platform-baseline NFR IDs without one-to-one PRD source alias | RESOLVED_PLATFORM_BASELINE | NFR-001, NFR-002, NFR-003, NFR-004, NFR-005, NFR-006, NFR-027, NFR-031, NFR-033 |

@@ -2,7 +2,9 @@
 
 ## Purpose
 
-This document is the final implementation gate for the controlled MVP prototype. It answers whether engineering can start implementation, in what condition, and with which limitations.
+This document records the latest implementation readiness certification state for the controlled MVP prototype.
+
+Phase 5.2J Wave 0 remediation changed the active scope after the previous certification. This document is not a valid authorization for story execution until `bmad-check-implementation-readiness` runs again against the remediated document set.
 
 It does not create new requirements, architecture, stories, backlog, validation material, implementation specs, code or tests.
 
@@ -20,9 +22,9 @@ It does not create new requirements, architecture, stories, backlog, validation 
 | Area | Documents Reviewed | Result |
 |---|---|---|
 | Use cases | `docs/specs/use-cases.md` | 18 canonical use cases recovered. |
-| Functional requirements | `docs/specs/functional-requirements.md` | `FR-001..FR-052` normalized. |
-| Non-functional requirements | `docs/specs/non-functional-requirements.md` | `NFR-001..NFR-030` normalized. |
-| Acceptance criteria | `docs/specs/acceptance-criteria-catalog.md` | `AC-001..AC-026` normalized. |
+| Functional requirements | `docs/specs/functional-requirements.md` | `FR-001..FR-056` active after Phase 5.2J. |
+| Non-functional requirements | `docs/specs/non-functional-requirements.md` | `NFR-001..NFR-030` plus `NFR-033..NFR-035`; numbering gap is retained from active catalog history. |
+| Acceptance criteria | `docs/specs/acceptance-criteria-catalog.md` | `AC-001..AC-041` active after Phase 5.2J. |
 | Traceability | `docs/specs/requirements-traceability-matrix.md` | UC -> FR -> AC -> domain spec -> state machine -> implementation area complete. |
 
 ### Domain
@@ -64,22 +66,22 @@ It does not create new requirements, architecture, stories, backlog, validation 
 | Product | Actors defined | READY | Manager, Developer, LCSP System and external systems are defined. |
 | Product | Business goals defined | READY | System outcomes and success metrics are defined. |
 | Requirements | UC coverage | READY | `UC-001..UC-018` complete. |
-| Requirements | FR coverage | READY | `FR-001..FR-052` complete. |
-| Requirements | NFR coverage | READY | `NFR-001..NFR-030` complete. |
-| Requirements | AC coverage | READY | `AC-001..AC-026` complete. |
+| Requirements | FR coverage | PENDING_RECERTIFICATION | Active set is `FR-001..FR-056`; must be rechecked by `bmad-check-implementation-readiness`. |
+| Requirements | NFR coverage | PENDING_RECERTIFICATION | Active set includes `NFR-033..NFR-035`; must be rechecked by `bmad-check-implementation-readiness`. |
+| Requirements | AC coverage | PENDING_RECERTIFICATION | Active set is `AC-001..AC-041`; must be rechecked by `bmad-check-implementation-readiness`. |
 | Domain | Entities | READY | Domain model defines required business entities. |
 | Domain | Workflows | READY | User task flows and end-to-end lifecycle defined. |
-| Domain | Events | READY | Canonical command/event catalog defined. |
+| Domain | Events | PENDING_RECERTIFICATION | Event catalog now includes legal ingestion and embedding build commands/events; closure must be rechecked. |
 | Domain | State machines | READY | Required state machines defined. |
-| Architecture | Services | READY | Core components and worker responsibilities defined. |
-| Architecture | Boundaries | READY | API/worker/persistence/legal/LLM boundaries defined. |
+| Architecture | Services | PENDING_RECERTIFICATION | Architecture now includes Python Scanner Worker, legal ingestion, corpus approval, corpus store, embedding/index builder, hybrid retriever, citation guardrail and LLM Gateway. |
+| Architecture | Boundaries | PENDING_RECERTIFICATION | API/worker/persistence/legal/LLM boundaries changed under Phase 5.2J and need formal recertification. |
 | Architecture | Ownership | READY | Capability and module ownership defined. |
 | Architecture | Integration | READY | GitHub, OAuth/OIDC, RabbitMQ, Postgres, object storage and LLM gateway boundaries defined. |
 | Implementation | APIs | READY | Backend implementation defines route/API boundaries and error contract. |
-| Implementation | Queues | READY | RabbitMQ names, outbox, retry and worker queues defined. |
+| Implementation | Queues | PENDING_RECERTIFICATION | RabbitMQ names, outbox, retry and worker queues now include legal ingestion and embedding build. |
 | Implementation | Database | READY | Canonical Prisma schema and migration order defined. |
 | Implementation | Contracts | READY | DTO/event/domain contracts defined across specs/implementation docs. |
-| Implementation | Workers | READY | Scanner, profile, AIUsageFlow, reconciliation, legal matching, classification and document worker sequence defined. |
+| Implementation | Workers | PENDING_RECERTIFICATION | Worker set now includes Python scanner, legal ingestion and embedding/index build. |
 | Traceability | UC -> FR | READY | Requirements matrix complete. |
 | Traceability | FR -> AC | READY | Requirements matrix complete. |
 | Traceability | AC -> implementation | READY | Requirements matrix maps ACs to implementation areas. |
@@ -88,7 +90,9 @@ It does not create new requirements, architecture, stories, backlog, validation 
 
 ### Critical
 
-None for Wave 1 implementation start.
+| Question | Why It Matters | Owner | Required Before |
+|---|---|---|---|
+| Formal Phase 5.2J readiness recertification | Previous certification reviewed stale FR/NFR/AC counts and pre-Phase 5.2J architecture/event scope. | Product / Architecture | Sprint Planning and story execution |
 
 ### High
 
@@ -137,9 +141,13 @@ The following implementation decisions are now integrated into active source-of-
 
 ## Certification Result
 
-READY_FOR_CONTROLLED_MVP_PROTOTYPE_IMPLEMENTATION_NOT_PRODUCTION
+IMPLEMENTATION_READINESS_NOT_VALIDLY_RECERTIFIED
 
-Implementation can start with Wave 1 foundations. The project is ready for controlled MVP prototype implementation, not production release.
+FORMAL_STORY_EXECUTION_REMAINS_PAUSED
+
+WAVE_0_CROSS_DOCUMENT_CLOSURE_REMEDIATION_APPLIED_PENDING_IR
+
+Implementation must not start from this certification alone. Run `bmad-check-implementation-readiness` in a fresh context after Phase 5.2J Wave 0 remediation is complete.
 
 ## Explicit Non-Claims
 

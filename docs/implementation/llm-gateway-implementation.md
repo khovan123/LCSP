@@ -77,11 +77,20 @@ Raw repository source, full system prompts, secrets, raw provider tokens, full A
 - Degrade or block according to node guardrail policy when provider outage occurs.
 - Record timeout/rate-limit metrics without logging sensitive inputs.
 
-Controlled MVP defaults:
+Environment mode contract:
+
+| Environment | Required `LLM_MODE` | Qualification |
+| --- | --- |
+| A-to-Z acceptance | `provider` | Mandatory. A run without a real configured provider is not the A-to-Z MVP acceptance run. |
+| Local integrated A-to-Z smoke path | `provider` | Required unless the run is explicitly labeled offline/non-acceptance. |
+| Unit tests / offline CI | `mock` | Allowed for deterministic tests and credential-unavailable CI only. |
+| Credential-unavailable local development | `mock` | Allowed only for component development; must not be reported as MVP readiness evidence. |
+
+Controlled MVP settings:
 
 | Setting | Value |
 | --- | --- |
-| `LLM_MODE` | `mock` by default; `provider` requires explicit configuration. |
+| `LLM_MODE` | No MVP default of `mock`. Acceptance and integrated A-to-Z runs must set `provider`; mock mode is test/offline-only. |
 | `LLM_TIMEOUT_MS` | `15000` |
 | `LLM_MAX_OUTPUT_TOKENS` | `1200` |
 | Retry budget | 2 retries for transient provider errors in provider mode; mock mode should not retry except for internal schema validation failure. |

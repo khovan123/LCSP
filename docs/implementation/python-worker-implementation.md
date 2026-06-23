@@ -46,14 +46,15 @@ poetry run python -m lcsp_scanner_worker.main
 1. **Initialize:** Load environment configuration; verify PostgreSQL and RabbitMQ connections.
 2. **Listen:** Bind and consume from `lcsp.scan-worker.v1` queue.
 3. **Execute Job:** For each `command.scan.requested.v1` payload:
-   - Mark `RepositoryScanJob` status as `PROCESSING`.
+   - Mark `RepositoryScanJob` status as `RUNNING`.
    - Setup a temporary restricted directory workspace.
    - Materialize the commit-pinned snapshot from GitHub.
    - Run Python static analysis (AST/CST parsers).
    - Spawn the TS/JS analyzer subprocess (Option A).
    - Combine results into a single `TechnicalEvidenceReport` metadata structure.
-   - Persist findings to PostgreSQL and clean up the workspace.
-   - Publish `event.scan.completed.v1` or `event.scan.failed.v1` to the broker via PostgreSQL outbox.
+   - Persist findings to PostgreSQL as staged scan results.
+   - Clean up the workspace and verify deletion.
+   - Publish `event.scan.completed.v1` only after cleanup is verified, or publish `event.scan.failed.v1` when cleanup or any fatal stage fails.
 4. **Shutdown:** Intercept SIGTERM/SIGINT, complete active jobs, verify workspace cleanup, and close connection pools.
 
 ---
@@ -73,17 +74,23 @@ To support repository scans containing TS/JS code (e.g. multi-language AI reposi
 The Python Worker writes directly to PostgreSQL using `prisma-client-py` matching the shared NestJS API schema:
 
 - **Tables Updated:** `RepositoryScanJob`, `TechnicalEvidenceReport`, `TechnicalFinding`, `EvidenceReference`, `CodeGraphNode`, `CodeGraphEdge`.
-- **Outbox Write:** Scan results must be saved, and outbox event published, within a single database transaction:
+- **Completion Ordering:** Scan results must be persisted before cleanup, but `RepositoryScanJob.status = COMPLETED` and `event.scan.completed.v1` must be written only after workspace cleanup is verified. Cleanup failure is a terminal scan failure even if analysis and report staging succeeded.
+- **Success Outbox Write:** After cleanup verification, mark the job complete and publish the completed event within a single database transaction:
   ```python
+  await cleanup_workspace(workspace_path)
   async with db.tx() as tx:
-      await tx.technicalevidencereport.create(...)
       await tx.repositoryscanjob.update(where={"id": job_id}, data={"status": "COMPLETED"})
       await tx.outboxevent.create(data={
           "id": uuid7(),
           "eventType": "event.scan.completed.v1",
-          "payload": {"scanJobId": job_id}
+          "payload": {
+              "scanJobId": job_id,
+              "technicalEvidenceReportId": report_id,
+              "cleanupVerifiedAt": cleanup_verified_at
+          }
       })
   ```
+- **Cleanup Failure Outbox Write:** If cleanup cannot be verified, leave the staged report unavailable for downstream workflow, mark the job failed, write the security audit event, and publish `event.scan.failed.v1` with `SCANNER_WORKSPACE_CLEANUP_FAILED`.
 
 ---
 

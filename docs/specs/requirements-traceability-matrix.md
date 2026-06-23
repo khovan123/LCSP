@@ -145,7 +145,7 @@ UC -> FR -> AC -> Domain Spec -> State Machine -> Implementation Area
 | NFR-022 | FR-021, FR-037, FR-041 | UC-008, UC-013, UC-014 | Actionable blocked state. |
 | NFR-023 | FR-018 | UC-007 | Scanner bounds. |
 | NFR-024 | FR-018, FR-035, FR-039 | UC-007, UC-013, UC-014 | Worker separation. |
-| NFR-025 | FR-001..FR-052 | UC-001..UC-018 | Module ownership traceability. |
+| NFR-025 | FR-001..FR-056 | UC-001..UC-018 | Module ownership traceability. |
 | NFR-026 | FR-021, FR-042 | UC-008, UC-015 | Correlation/failure observability. |
 | NFR-027 | FR-014, FR-037, FR-041 | UC-004, UC-013, UC-014 | UI accessibility. |
 | NFR-028 | FR-014, FR-015, FR-021 | UC-004, UC-008 | Business language and status clarity. |

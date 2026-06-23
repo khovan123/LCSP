@@ -711,7 +711,7 @@ model LegalDocument {
   issueDate          DateTime
   effectiveStartDate DateTime
   effectiveEndDate   DateTime?
-  status             String   // ACTIVE, AMENDED, SUPERSEDED, EXPIRED
+  status             String   // DRAFT, APPROVED, SUPERSEDED
   snapshotUrl        String   // Immutable snapshot copy in S3
   contentHash        String
   createdAt          DateTime @default(now())
@@ -759,7 +759,7 @@ model CorpusApprovalRecord {
   corpusVersionId  String             @db.Uuid
   approvedBy       String
   approvalDate     DateTime
-  status           String             // APPROVED, REJECTED
+  status           String             // DRAFT, APPROVED, SUPERSEDED
   comments         String?
   createdAt        DateTime           @default(now())
   corpusVersion    LegalCorpusVersion @relation(fields: [corpusVersionId], references: [id])

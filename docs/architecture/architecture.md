@@ -26,10 +26,17 @@ LCSP is a modular, evidence-first compliance platform. The system is intentional
 | Web Frontend | Manager workspace for assessment, repository connection, scan progress, conflict resolution, classification and documents. | Backend API. |
 | Backend API | Auth, Manager authorization, assessment state, synchronous user actions, async work creation. | Web Frontend, Persistence, Queue boundary, GitHub App. |
 | Repository Integration | Authorizes read-only repository access separately from OAuth/OIDC login. | Backend API, GitHub. |
-| Scanner / Evidence Worker | Produces static-analysis technical evidence from commit-pinned repository snapshots. | Queue boundary, Persistence. |
+| Python Scanner Worker | Owns Repository Scan lifecycle and produces static-analysis technical evidence from commit-pinned repository snapshots. Python is first-class; TS/JS analysis is delegated to a Node.js subprocess adapter. | Queue boundary, Persistence, Repository Integration, TS/JS analyzer subprocess. |
 | AIUsageFlow Worker | Converts technical evidence and WizardProfile into business usage claims. | Persistence, Reconciliation. |
 | Reconciliation | Compares Manager declarations and technical evidence; pauses for Manager resolution when needed. | Backend API, Persistence. |
-| Legal Matching / RAG | Retrieves citation-backed legal rules for verified claims. | Legal corpus, Classification. |
+| Legal Source Ingestion Worker | Fetches official legal sources, snapshots raw PDF/HTML into S3-compatible storage, normalizes legal structure, and stages corpus versions for review. | Queue boundary, Object Storage, Persistence. |
+| Corpus Review / Approval | Formal Legal Team or designated operator gate that approves corpus versions before retrieval or classification can use them. This is an internal control function, not a new customer-facing product role. | Backend API, Persistence, Audit, Embedding/Index Builder. |
+| Legal Corpus Store | Versioned, provenance-preserving legal corpus metadata, document chunks, source snapshots, approval records and corpus version pins. | Persistence, Object Storage, Hybrid Legal Retriever. |
+| Embedding / Index Builder | Builds pgvector embeddings and full-text indexes for approved corpus versions only. | Queue boundary, Persistence, LLM/Embedding Provider. |
+| Hybrid Legal Retriever | Retrieves citation-backed legal rules using pinned approved corpus version, PostgreSQL FTS and pgvector semantic search. | Legal Corpus Store, Legal Matching, Retrieval Audit. |
+| Citation Guardrail | Blocks or degrades legal matching, classification and documents when required citation/rule basis is missing or corpus version is not approved. | Legal Matching, Classification, Document Generation, Audit. |
+| LLM Gateway | Central model boundary for real provider calls, prompt/template versions, schema validation, retries, model metadata and privacy enforcement. Mock mode is unit/offline-only and is not acceptance evidence. | AIUsageFlow, Classification, Document Generation, Embedding/Index Builder, Persistence. |
+| Legal Matching / RAG | Retrieves citation-backed legal rules for verified claims through the Hybrid Legal Retriever and citation guardrails. | Hybrid Legal Retriever, Legal Corpus Store, Classification. |
 | Classification | Classifies only from VerifiedProfile plus citation-backed legal matches. | Persistence, Gap Analysis. |
 | Gap Analysis Worker | Converts completed RiskClassification plus citation-backed legal matches into structured compliance gaps, evidence gaps, citation gaps and remediation priorities before document generation. Blocks document generation when classification/legal basis is unusable. | Queue boundary, Persistence, Document Generation. |
 | Document Generation | Generates output documents only after classification, gap analysis, and output guardrails. | Object storage, Persistence. |

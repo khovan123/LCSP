@@ -86,7 +86,7 @@ Rules:
 | 5. Relationship mapping | Identity + registry | Amendment relationships | Best-effort; flag unmapped |
 | 6. Normalization | Raw document | Chapter/article/clause/point structure | `LEGAL_NORMALIZATION_FAILED`; manual review |
 | 7. Chunking | Normalized structure | `LegalDocumentChunk` rows | Required for embedding |
-| 8. Review submission | Normalized document | `CorpusApprovalRecord` (PENDING_REVIEW) | Blocked until approved |
+| 8. Review submission | Normalized document | `CorpusApprovalRecord` attached to `LegalCorpusVersion.status = DRAFT` | Blocked until approved |
 | 9. Approval | Review | `CorpusApprovalRecord` (APPROVED) + `LegalCorpusVersion` | Blocked if not approved |
 
 ## Corpus Approval Process
@@ -97,7 +97,7 @@ Rules:
 | Review scope | Document identity, effective dates, normalization accuracy, amendment relationships |
 | Approval record | `authority`, `date`, `scope_description`, `status`, `corpus_version_id` |
 | Approval gate | `LegalCorpusVersion.status = APPROVED` before production retrieval |
-| Rejection | `status = REJECTED`; document blocked from corpus version |
+| Rejection | Approval is not recorded as approved; the corpus version remains `DRAFT` and is blocked from retrieval until corrected or abandoned. |
 | Re-approval trigger | Content hash change, effective date change, or supersession event |
 
 ## LegalCorpusVersion Management
@@ -106,8 +106,16 @@ Rules:
 |---|---|
 | Creation | Only after all included documents are approved |
 | Immutability | Once approved, cannot be modified |
-| Retirement | Superseded versions are `RETIRED`; existing assessments retain pinned version |
+| Supersession | Replaced versions are `SUPERSEDED`; existing assessments retain pinned version |
 | Corpus pinning | Each assessment pins to approved corpus version at start |
+
+Canonical lifecycle vocabulary for legal corpus versions, legal documents within a corpus version, approval gate state, queue payload status fields and approval API responses is:
+
+```text
+DRAFT -> APPROVED -> SUPERSEDED
+```
+
+Do not use `PENDING_REVIEW`, `RETIRED` or `OBSOLETE` as active corpus lifecycle statuses in Phase 5.2J contracts.
 
 ## Refresh Policy
 
