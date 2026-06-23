@@ -122,24 +122,23 @@ Exit Criteria:
 - GitHub repository connection metadata can be recorded separately from OAuth/OIDC login.
 - Assessment state transitions are audited.
 
-### Wave 3: Scanner Foundation
+### Wave 3: Python Worker & Scanner Foundation
 
 Includes:
 
-- Snapshot.
-- ScanJob.
-- ParserRegistry.
-- LanguageMapper.
-- AST extraction.
-- TechnicalEvidenceReport.
+- Standalone Python Worker process (`lcsp-scanner-worker`).
+- Python AST/CST analysis stack (`ast`, `libcst`).
+- TypeScript/JavaScript analyzer subprocess adapter.
+- Ephemeral restricted repository workspaces.
+- TechnicalEvidenceReport and scanner evidence metadata persistence.
 
 Exit Criteria:
 
-- RepositorySnapshot metadata is persisted.
-- ScanJob can be requested idempotently.
-- ParserRegistry, LanguageMapper and TreeSitterAstExtractor pass scanner foundation tests.
-- TechnicalEvidenceReport is created with evidence refs and no raw source persistence.
-- `event.scan.completed.v1` or `event.scan.failed.v1` is emitted through outbox.
+- Standalone Python Worker consumes `command.scan.requested.v1` and cleans up workspaces successfully.
+- First-class Python AST extractor resolves imports, packages, functions, AI usage, and I/O tracking.
+- TS/JS files analyzed via node subprocess and results normalized.
+- TechnicalEvidenceReport generated with evidence refs and zero long-term raw source code persistence.
+- `event.scan.completed.v1` or `event.scan.failed.v1` published via worker outbox.
 
 ### Wave 4: Intelligence Layer
 
@@ -158,50 +157,69 @@ Exit Criteria:
 - Unresolved conflict blocks classification.
 - Manager resolution is separate from scanner evidence and audited.
 
-### Wave 5: Legal Layer
+### Wave 5: Legal Ingestion & RAG Layer
 
 Includes:
 
-- Legal Matching.
-- Classification.
+- Legal Source Ingestion Worker (fetch, hash, snapshot).
+- Corpus Review/Approval Gate workflow.
+- pgvector + FTS index building.
+- Hybrid Legal Retriever (keyword + semantic similarity).
+- LegalMatchingWorker (VerifiedProfile matching).
 
 Exit Criteria:
 
-- Legal matching consumes VerifiedProfile only.
-- LegalRuleMatch records include citation coverage.
-- Classification consumes legal matching completed event, not verified-profile-ready directly.
-- Missing citation, provider-only evidence, unknown critical usage or unresolved conflict blocks/degrades classification.
+- Legal sources ingested from approved government URLs, snapshot as PDF/HTML in object storage, and hashed.
+- Corpus items approved and locked into an immutable `LegalCorpusVersion`.
+- Hybrid retrieval returns citation-backed matches filtering by effective date and corpus version.
+- LegalMatchingWorker persists `LegalRuleMatch` records with citation coverage.
 
-### Wave 6: Reporting Layer
+### Wave 6: Real LLM Gateway & Classification Layer
+
+Includes:
+
+- Real LLM Provider Integration (Gemini, Claude, or GPT).
+- Timeout, token, and cost budget controls.
+- Structured output (Zod schema) validation.
+- Citation Guardrail enforcement.
+- Risk Classification Worker.
+
+Exit Criteria:
+
+- Real LLM calls execute successfully via the LLM Gateway.
+- System prompt templates versioned; input payloads contain redacted metadata only (ADR-006).
+- Invalid LLM schema output triggers retry and then fails closed.
+- RiskClassification result persists citation basis; missing citations fail closed.
+
+### Wave 7: Reporting Layer & Hardening
 
 Includes:
 
 - Gap Analysis.
-- Document Generation.
+- Document Generation Worker.
+- Real S3-compatible object storage integration.
+- NFR verification (security, cleanup, redaction).
+- Queue DLQ and retry behavior validation.
 
 Exit Criteria:
 
-- Gap analysis is generated only from valid/degraded classification basis.
-- Final document generation blocks on missing citation or unresolved conflict.
-- GeneratedDocument metadata includes artifact ref/hash when generated.
-- Readiness-only output contains no risk level.
+- Gap analysis generated from valid classification basis.
+- Final document generated using real LLM and saved to real object storage.
+- Storage URLs generated with secure temp permissions.
+- All NFRs (NFR-001..NFR-030) verified.
 
-### Wave 7: Hardening
+### Wave 8: A-to-Z Acceptance Run
 
 Includes:
 
-- NFR verification.
-- Observability.
-- Security review.
-- Audit review.
+- Golden-path repository and legal corpus fixtures.
+- 18-step happy-path verification.
+- 14 negative-path scenarios validation.
 
 Exit Criteria:
 
-- NFR-001..NFR-030 have implementation evidence or explicit release blockers.
-- Queue DLQ/retry behavior is verified.
-- Secret/source/prompt redaction is verified.
-- Audit export is redacted and traceable.
-- End-to-end smoke path passes from assessment creation to document blocked/generated state.
+- Real Manager executes all 18 happy-path steps on real database, queue, storage, and LLM infrastructure.
+- All 14 required negative-path scenarios pass and log expected failure codes.
 
 ## Dependency Graph
 
@@ -272,17 +290,21 @@ These are build-order tasks, not backlog stories or sprint tickets.
 | TASK-014 Implement GitHub repository connection metadata | Record selected repository connection. | TASK-011, TASK-008 | Assessment Team | RepositoryConnection persistence. |
 | TASK-015 Implement RepositorySnapshot metadata | Pin branch/commit metadata. | TASK-014 | Scanner Team | RepositorySnapshot record. |
 | TASK-016 Implement ScanJob request API | Create idempotent ScanJob and outbox command. | TASK-015, TASK-005 | Scanner Team | `command.scan.requested.v1` outbox event. |
-| TASK-017 Implement ParserRegistry | Register scanner parser adapters. | None | Scanner Team | ParserRegistry unit tests pass. |
-| TASK-018 Implement LanguageMapper | Map file metadata to language/support level. | None | Scanner Team | LanguageMapper unit tests pass. |
-| TASK-019 Implement TreeSitterAstExtractor | Extract parsed facts without raw source persistence. | TASK-017, TASK-018 | Scanner Team | AST extractor unit tests pass. |
-| TASK-020 Implement scanner evidence ref factory | Create metadata-only evidence refs. | TASK-019 | Scanner Team | Evidence refs generated from parsed facts. |
-| TASK-021 Implement scan worker handler | Consume scan command and orchestrate scan. | TASK-016, TASK-017..TASK-020 | Scanner Team | Scan worker creates report or failed event. |
-| TASK-022 Implement TechnicalEvidenceReport persistence | Persist report, findings and coverage. | TASK-021 | Scanner Team | TechnicalEvidenceReport stored. |
-| TASK-023 Implement TechnicalProfile worker | Aggregate accepted evidence into profile. | TASK-022 | Intelligence Team | `event.technical-profile.completed.v1`. |
-| TASK-024 Implement AIUsageFlow worker | Generate evidence-backed usage claims. | TASK-023 | Intelligence Team | AIUsageFlow + claims persisted. |
-| TASK-025 Implement Reconciliation worker | Create conflict or VerifiedProfile. | TASK-024 | Intelligence Team | Conflict or VerifiedProfile output. |
-| TASK-026 Implement Manager conflict resolution API | Resolve open conflicts with audit trail. | TASK-025, TASK-008 | Intelligence Team | Conflict resolution and reconciliation resume. |
-| TASK-027 Implement Legal Matching worker | Match VerifiedProfile to citation-backed rules. | TASK-025 | Legal Team | LegalRuleMatch records and completed/failed event. |
-| TASK-028 Implement Classification worker | Produce completed or blocked classification. | TASK-027 | Legal Team | ClassificationResult persisted. |
-| TASK-029 Implement Gap Analysis worker | Generate gap result from classification basis. | TASK-028 | Reporting Team | GapAnalysis output. |
-| TASK-030 Implement Document Generation worker | Generate or block final/readiness document. | TASK-028, TASK-029 | Reporting Team | GeneratedDocument metadata and event. |
+| TASK-017 Implement Python AST/CST Extractor | Extract imports, package, functions, and AI patterns from Python code. | None | Scanner Team | AST extractor unit tests pass. |
+| TASK-018 Implement Node.js TS/JS Subprocess Adapter | Spawn TS/JS analyzer as subprocess in Python Worker. | None | Scanner Team | Subprocess communication tests pass. |
+| TASK-019 Implement Python Worker scan handler | Consume scan command, manage ephemeral workspace, run extractors, handle cleanup. | TASK-016, TASK-017, TASK-018 | Scanner Team | Python Worker processes scan job. |
+| TASK-020 Implement TechnicalEvidenceReport persistence | Persist report, findings, and coverage. | TASK-019 | Scanner Team | TechnicalEvidenceReport stored. |
+| TASK-021 Implement TechnicalProfile worker | Aggregate accepted evidence into profile. | TASK-020 | Intelligence Team | `event.technical-profile.completed.v1`. |
+| TASK-022 Implement AIUsageFlow worker | Generate evidence-backed usage claims. | TASK-021 | Intelligence Team | AIUsageFlow + claims persisted. |
+| TASK-023 Implement Reconciliation & Conflict resolution | Create conflict or VerifiedProfile; provide resolution APIs. | TASK-022, TASK-008 | Intelligence Team | Conflict or VerifiedProfile output. |
+| TASK-024 Implement Legal Source Ingestion Worker | Ingest legal PDF/HTML snapshot, content hash, and URLs from sources. | None | Legal Team | LegalSource & LegalDocument records saved. |
+| TASK-025 Implement Corpus Approval Gate | Review and lock corpus items into immutable version. | TASK-024 | Legal Team | Approved LegalCorpusVersion created. |
+| TASK-026 Implement pgvector + FTS indexing | Generate vector embeddings and full-text index for approved corpus items. | TASK-025 | Legal Team | Embeddings generated and indexed in DB. |
+| TASK-027 Implement Hybrid Legal Retriever | FTS + pgvector hybrid query API with effective-date and version filters. | TASK-026 | Legal Team | Retrieval returns citation-backed matches. |
+| TASK-028 Implement Legal Matching worker | Match VerifiedProfile against Retriever citations. | TASK-023, TASK-027 | Legal Team | LegalRuleMatch records persisted. |
+| TASK-029 Implement Real LLM Gateway Integration | Integrate Gemini/Claude/GPT; timeout, token, cost controls, output validation. | TASK-003 | Platform Team | Real provider calls succeed. |
+| TASK-030 Implement Risk Classification worker | Classification via real LLM with citation guardrails. | TASK-028, TASK-029 | Legal Team | ClassificationResult persisted. |
+| TASK-031 Implement Gap Analysis worker | Generate gap analysis results from classification. | TASK-030 | Reporting Team | GapAnalysis output. |
+| TASK-032 Implement Document Generation worker | Generate document using real LLM and store in real S3 storage. | TASK-030, TASK-031 | Reporting Team | GeneratedDocument saved in S3. |
+| TASK-033 Run A-to-Z Happy Path Acceptance | Validate 18-step happy path using real infrastructure and golden fixtures. | TASK-011..TASK-032 | Platform/QA | Successful end-to-end run audit record. |
+| TASK-034 Run Negative-Path Acceptance Tests | Validate all 14 negative-path scenarios and verify fail-closed behaviors. | TASK-033 | Platform/QA | Bounded failure and fallback behavior verified. |

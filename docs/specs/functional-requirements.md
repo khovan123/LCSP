@@ -39,7 +39,7 @@ No active `FR-E*`, `FR-A*`, or legacy alias is authoritative after this document
 | FR-015 | Show readiness without risk level | Show readiness checklist/preliminary indicators only before technical evidence and verified basis exist. | Must | Y | UC-004, UC-014 | BR-030, BR-065 | AC-003 | NFR-011, NFR-018 | Assessment |
 | FR-016 | Connect GitHub repository | Allow Manager, or delegated Developer, to connect selected read-only GitHub repository. | Must | Y | UC-005 | BR-032, BR-077, BR-088 | AC-004 | NFR-007, NFR-013 | Repository |
 | FR-017 | Create repository snapshot | Create commit-pinned RepositorySnapshot metadata before scan. | Must | Y | UC-006 | BR-032, BR-069, BR-077 | AC-004, AC-020 | FR-016 | Repository |
-| FR-018 | Run repository scan | Create ScanJob and run static repository scan for selected snapshot. | Must | Y | UC-007, UC-016 | BR-032, BR-077 | AC-004 | FR-017, NFR-013, NFR-014 | Scanner |
+| FR-018 | Run repository scan | Create ScanJob and run static repository scan via standalone Python Worker. | Must | Y | UC-007, UC-016 | BR-032, BR-077 | AC-004 | FR-017, NFR-013, NFR-014 | Scanner |
 | FR-019 | Enforce scanner privacy | Ensure scan path does not send raw source to LLM, store raw source long term or persist secrets. | Must | Y | UC-007, UC-017 | BR-057..BR-061 | AC-019, AC-022 | NFR-013, NFR-014, NFR-015 | Scanner |
 | FR-020 | Validate evidence schema and privacy flags | Validate TechnicalEvidenceReport required schema groups and privacy flags. | Must | Y | UC-007, UC-008 | BR-036, BR-037 | AC-005 | FR-018, NFR-016 | Scanner |
 | FR-021 | Evaluate evidence quality | Evaluate evidence quality and mark rejected, insufficient or ready with actionable reason. | Must | Y | UC-008 | BR-038, BR-040 | AC-006 | FR-020, NFR-018 | Technical Profile |
@@ -53,7 +53,7 @@ No active `FR-E*`, `FR-A*`, or legacy alias is authoritative after this document
 | FR-029 | Resolve conflicts by Manager | Allow Manager to resolve technical and business/legal conflicts while preserving scanner evidence. | Must | Y | UC-010 | BR-042, BR-043, BR-047, BR-093 | AC-012, AC-013 | FR-028 | Reconciliation |
 | FR-030 | Create VerifiedProfile | Create VerifiedProfile only after evidence is ready and conflicts are resolved or absent. | Must | Y | UC-011 | BR-045, BR-078 | AC-014, AC-015 | FR-026, FR-029 | Reconciliation |
 | FR-031 | Approve VerifiedProfile | Require Manager review/approval where active workflow requires it, and block approval if conflict remains. | Must | Y | UC-011 | BR-078 | AC-015 | FR-030, NFR-010 | Reconciliation |
-| FR-032 | Retrieve legal rules and citations | Retrieve candidate rules/citations from pinned legal corpus using VerifiedProfile and AIUsageFlow fields. | Must | Y | UC-012 | BR-050, BR-084 | AC-016 | FR-030, NFR-017 | Legal Matching |
+| FR-032 | Retrieve legal rules and citations | Retrieve candidate rules and citations from pinned legal corpus using PostgreSQL FTS + pgvector hybrid retrieval. | Must | Y | UC-012 | BR-050, BR-084 | AC-016 | FR-030, NFR-017 | Legal Matching |
 | FR-033 | Match legal rules by usage flow | Match legal rules using business process, purpose, automation level, subjects, data types, human review and harm categories. | Must | Y | UC-012 | BR-082, BR-084 | AC-016 | FR-024, FR-032 | Legal Matching |
 | FR-034 | Block/degrade legal matching without citation | Block or degrade material legal match when required citation/rule is missing. | Must | Y | UC-012, UC-013 | BR-050, BR-051, BR-073 | AC-017 | FR-032, NFR-017, NFR-018 | Legal Matching |
 | FR-035 | Run risk classification | Run risk classification only after VerifiedProfile and LegalRuleMatch exist. | Must | Y | UC-013 | BR-049, BR-082, BR-084 | AC-016, AC-018 | FR-030, FR-032, FR-033 | Classification |
@@ -74,6 +74,10 @@ No active `FR-E*`, `FR-A*`, or legacy alias is authoritative after this document
 | FR-050 | Support deferred Local/CI scanner report upload | Preserve future Local/CI scanner evidence path as deferred, not active MVP main flow. | Deferred | N | UC-016 | BR-033 | AC-005 | NFR-016 | Platform |
 | FR-051 | Support deferred manual evidence JSON upload | Preserve future structured manual evidence path as deferred, not active MVP main flow. | Deferred | N | UC-016 | BR-034 | AC-005, AC-013 | NFR-016 | Platform |
 | FR-052 | Support deferred delegated technical clarification | Preserve future delegated technical clarification path while keeping Manager final authority. | Deferred | N | UC-010, UC-018 | BR-044, BR-054 | AC-012, AC-013 | FR-011, FR-029 | Platform |
+| FR-053 | Ingest legal sources | Ingest legal source documents from approved URLs (vbpl.vn, vanban.chinhphu.vn), store PDF/HTML snapshots, compute content hashes, and index metadata. | Must | Y | UC-012 | BR-050, BR-084 | AC-016 | NFR-017 | Legal Ingestion |
+| FR-054 | Legal corpus review gate | Enforce formal review and approval gate to transition draft corpus items to an active, immutable LegalCorpusVersion. | Must | Y | UC-012 | BR-050 | AC-016 | NFR-017 | Legal Ingestion |
+| FR-055 | Configure LLM provider | Support configuration of credentials, endpoints, cost boundaries and timeout rules for a real LLM provider and embedding model. | Must | Y | UC-013 | BR-049 | AC-018 | NFR-001 | Platform |
+| FR-056 | Hybrid search | Retrieve citations via combined full-text keyword search and pgvector semantic cosine similarity search. | Must | Y | UC-012 | BR-050, BR-084 | AC-016 | NFR-017 | Legal Matching |
 
 ## Legacy Requirements Resolution
 

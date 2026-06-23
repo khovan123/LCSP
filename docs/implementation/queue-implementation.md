@@ -104,8 +104,10 @@ Audit job queued, started, checkpointed, retried, dead-lettered, canceled, compl
 All worker retries use bounded exponential backoff with jitter: `30s`, `120s`, `600s`, then DLQ after max attempts. Jitter is plus/minus 20 percent. Non-retryable domain guard failures persist blocked/failed state and do not consume retry budget.
 
 | Worker | Queue | DLQ | Max Attempts | Terminal Failure Behavior |
-| --- | --- | --- | ---: | --- |
-| Scan worker | `lcsp.scan-worker.v1` | `lcsp.scan-worker.dlq.v1` | 3 | Persist `event.scan.failed.v1`, mark ScanJob `FAILED`, audit redacted failure. |
+|---|---|---|---:|---|
+| Scan worker (Python) | `lcsp.scan-worker.v1` | `lcsp.scan-worker.dlq.v1` | 3 | Persist `event.scan.failed.v1`, mark ScanJob `FAILED`, audit redacted failure. |
+| Legal Source Ingest worker | `lcsp.legal-source-ingest.v1` | `lcsp.legal-source-ingest.dlq.v1` | 3 | Publish `event.legal-source.ingest.failed.v1`, block corpus building, audit. |
+| Embedding Build worker | `lcsp.embedding-build.v1` | `lcsp.embedding-build.dlq.v1` | 3 | Publish `event.embedding-build.failed.v1`, block hybrid retriever, audit. |
 | TechnicalProfile worker | `lcsp.technical-profile-worker.v1` | `lcsp.technical-profile-worker.dlq.v1` | 3 | Publish `event.technical-profile.failed.v1`, block downstream, audit. |
 | AIUsageFlow worker | `lcsp.ai-usage-flow-worker.v1` | `lcsp.ai-usage-flow-worker.dlq.v1` | 3 | Publish `event.ai-usage-flow.failed.v1`, block reconciliation, audit. |
 | Reconciliation worker | `lcsp.reconciliation-worker.v1` | `lcsp.reconciliation-worker.dlq.v1` | 3 | Persist conflict/blocked state when possible; otherwise audit worker failure. |
@@ -134,7 +136,9 @@ Checkpoint persistence uses existing domain state, job status rows, `OutboxEvent
 
 | Queue | DLQ | Consumer |
 | --- | --- | --- |
-| `lcsp.scan-worker.v1` | `lcsp.scan-worker.dlq.v1` | Scanner worker |
+| `lcsp.scan-worker.v1` | `lcsp.scan-worker.dlq.v1` | Python Worker |
+| `lcsp.legal-source-ingest.v1` | `lcsp.legal-source-ingest.dlq.v1` | Legal Source Ingestion worker |
+| `lcsp.embedding-build.v1` | `lcsp.embedding-build.dlq.v1` | Embedding Index worker |
 | `lcsp.technical-profile-worker.v1` | `lcsp.technical-profile-worker.dlq.v1` | TechnicalProfile worker |
 | `lcsp.ai-usage-flow-worker.v1` | `lcsp.ai-usage-flow-worker.dlq.v1` | AIUsageFlow worker |
 | `lcsp.reconciliation-worker.v1` | `lcsp.reconciliation-worker.dlq.v1` | Reconciliation worker |
@@ -148,6 +152,8 @@ Checkpoint persistence uses existing domain state, job status rows, `OutboxEvent
 Commands use `lcsp.commands.v1`:
 
 - `command.scan.requested.v1`
+- `command.legal-source.ingest.requested.v1`
+- `command.embedding-build.requested.v1`
 - `command.technical-profile.requested.v1`
 - `command.ai-usage-flow.requested.v1`
 - `command.reconciliation.requested.v1`
@@ -160,6 +166,10 @@ Events use `lcsp.events.v1`:
 
 - `event.scan.completed.v1`
 - `event.scan.failed.v1`
+- `event.legal-source.ingest.completed.v1`
+- `event.legal-source.ingest.failed.v1`
+- `event.embedding-build.completed.v1`
+- `event.embedding-build.failed.v1`
 - `event.technical-profile.completed.v1`
 - `event.technical-profile.failed.v1`
 - `event.ai-usage-flow.completed.v1`

@@ -187,7 +187,14 @@ Nếu chưa thể cung cấp technical evidence, Manager có thể xuất readin
 - Manager-led assessment flow.
 - OAuth/OIDC user login as active MVP authentication capability.
 - Web Wizard cho Manager.
-- Manager-owned GitHub repository connection and Repository Scan.
+- Standalone Python Worker (`lcsp-scanner-worker`) thực thi Repository Scan độc lập.
+- First-class Python static AST/CST analysis (imports, packages, functions, AI usage, I/O patterns).
+- TypeScript/JavaScript analysis qua node subprocess adapter tích hợp.
+- Kết nối GitHub repository (read-only) và Repository Scan tự động.
+- Tích hợp nhà cung cấp LLM thật (Gemini, Claude, hoặc GPT) cho happy-path risk classification và document generation.
+- Legal corpus bảo toàn provenance từ nguồn chính phủ chính thức, tổ chức thành các phiên bản `LegalCorpusVersion` bất biến.
+- Hybrid retriever kết hợp pgvector (semantic search) và full-text search (FTS) trên PostgreSQL để truy xuất cơ sở pháp lý.
+- Lưu trữ tài liệu kết quả bằng real S3-compatible object storage.
 - Developer invitation và task/policy assignment as optional collaboration.
 - Developer Workspace cho optional technical evidence/clarification tasks.
 - Evidence schema completeness gate.
@@ -198,7 +205,7 @@ Nếu chưa thể cung cấp technical evidence, Manager có thể xuất readin
 - Risk classification chỉ sau VerifiedProfile.
 - Gap analysis dựa trên risk result.
 - Compliance report/document generation với gating.
-- Audit trail cho toàn bộ decision path.
+- Audit trail cho toàn bộ decision path (bao gồm retrieval audit và model run audit).
 
 ### Out of Scope for MVP
 
@@ -213,6 +220,9 @@ Nếu chưa thể cung cấp technical evidence, Manager có thể xuất readin
 - Enterprise SSO/SAML/directory federation, domain-restricted login, SCIM provisioning hoặc advanced organization identity policy.
 - Local/CI scanner report upload hoặc manual technical evidence JSON trong MVP main flow.
 - Risk level khi chỉ có Wizard/self-report.
+- Deterministic mock LLM gateway làm mặc định cho happy-path classification (chỉ dùng cho tests, offline CI, dev không cấu hình key).
+- Local JSONL legal corpus seed làm nguồn dữ liệu chính thức (chỉ dùng làm test fixture).
+- Local filesystem artifact storage làm kho lưu trữ chính thức (chỉ dùng cho local development).
 
 ## 7. Functional Requirements
 

@@ -240,7 +240,7 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | FR-063 | Verify email | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
 | FR-064 | Change password | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
 | FR-065 | Manage personal profile | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
-| FR-066 | Run repository scan | FR-E3-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
+| FR-066 | Run repository scan via standalone Python Worker | FR-E3-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-067 | Review and approve VerifiedProfile | FR-E6-1, FR-E6-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-068 | View gap analysis | FR-E7-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-069 | Detect AI usage flow signals | FR-E4-2, FR-E5-1 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
@@ -253,6 +253,10 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | FR-076 | Separate OAuth/OIDC from GitHub repository access | PLATFORM_BASELINE | ACTIVE_CANONICAL | archived functional-requirements.md; active PRD |
 | FR-077 | Manager superset MVP permissions | FR-E1-4, FR-E5-5, FR-E6-2, FR-E7-2 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 | FR-078 | Post-MVP delegated Developer permissions | FR-E1-3, FR-E1-4 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
+| FR-079 | Ingest legal sources | FR-E6-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
+| FR-080 | Legal corpus review gate | FR-E6-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
+| FR-081 | Configure LLM provider | FR-E6-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
+| FR-082 | Hybrid search | FR-E6-3 | CANONICAL_MAPPING | archived functional-requirements.md; active PRD |
 
 ## Active NFR to Source Alias Crosswalk
 

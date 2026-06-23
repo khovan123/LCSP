@@ -204,10 +204,10 @@ Audit configuration-sensitive changes where LCSP supports admin operations, incl
 | OAuth/OIDC provider | Local mock OIDC with provider-agnostic interface. |
 | Required OIDC keys | `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET_REF`, `OIDC_CALLBACK_URL`, `OIDC_MOCK_ENABLED`, `SESSION_SECRET_REF`. |
 | Secret manager/KMS tooling | Secret values are represented by secret references in local MVP; concrete production secret manager is a release-environment concern, not a controlled MVP coding prerequisite. |
-| Object storage | Local filesystem artifact store with S3-compatible adapter boundary. |
+| Object storage | Real S3-compatible object storage with adapter. Local filesystem mock for local development only. |
 | Artifact root | `${LCSP_ARTIFACT_STORE_ROOT:-.lcsp/artifacts}`. |
-| LLM provider | Deterministic mock LLM gateway by default with provider adapter interface. |
-| Legal corpus seed | Local JSONL seed with required citation fields. |
+| LLM provider | Real configured LLM provider mandatory for A-to-Z acceptance. Mock mode for unit tests and offline CI only. |
+| Legal corpus | Provenance-preserving legal corpus from approved sources, versioned as immutable snapshots with pgvector+FTS retrieval index. |
 
 
 
@@ -374,6 +374,8 @@ model Assessment {
   gapAnalyses GapAnalysis[]
   documents GeneratedDocument[]
   auditEvents AuditEvent[]
+  modelRunMetadata ModelRunMetadata[]
+  retrievalAuditLogs RetrievalAuditLog[]
   @@index([organizationId, state])
   @@index([ownerManagerId])
 }
@@ -432,6 +434,7 @@ model RepositoryScanJob {
   assessmentId          String @db.Uuid
   repositorySnapshotId  String @db.Uuid
   status                ScanJobStatus @default(REQUESTED)
+  workerRuntime         String         // PYTHON or TYPESCRIPT
   idempotencyKey        String @unique
   scannerVersion        String
   rulesetVersion        String
@@ -689,14 +692,109 @@ model VerifiedProfile {
   @@index([assessmentId, createdAt])
 }
 
-model LegalCorpusVersion {
-  id          String @id @db.Uuid
-  version     String @unique
-  sourceRefs  Json
-  status      String
+model LegalSource {
+  id          String   @id @db.Uuid
+  name        String
+  url         String
   createdAt   DateTime @default(now())
-  ruleMatches LegalRuleMatch[]
+  updatedAt   DateTime @updatedAt
+  documents   LegalDocument[]
 }
+
+model LegalDocument {
+  id                 String   @id @db.Uuid
+  sourceId           String   @db.Uuid
+  documentNumber     String   // decree/circular/decision number
+  documentType       String
+  issuingAuthority   String
+  title              String
+  issueDate          DateTime
+  effectiveStartDate DateTime
+  effectiveEndDate   DateTime?
+  status             String   // ACTIVE, AMENDED, SUPERSEDED, EXPIRED
+  snapshotUrl        String   // Immutable snapshot copy in S3
+  contentHash        String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  source             LegalSource @relation(fields: [sourceId], references: [id])
+  corpusItems        LegalCorpusItem[]
+}
+
+model LegalCorpusVersion {
+  id               String                 @id @db.Uuid
+  version          String                 @unique
+  sourceRefs       Json
+  status           String                 // DRAFT, APPROVED, SUPERSEDED
+  createdAt        DateTime               @default(now())
+  ruleMatches      LegalRuleMatch[]
+  corpusItems      LegalCorpusItem[]
+  approvalRecords  CorpusApprovalRecord[]
+  modelRunMetadata ModelRunMetadata[]
+}
+
+model LegalCorpusItem {
+  id               String             @id @db.Uuid
+  corpusVersionId  String             @db.Uuid
+  documentId       String             @db.Uuid
+  sectionIdentifier String             // Chapter/Article/Clause/Point path
+  content          String
+  createdAt        DateTime           @default(now())
+  corpusVersion    LegalCorpusVersion @relation(fields: [corpusVersionId], references: [id])
+  document         LegalDocument      @relation(fields: [documentId], references: [id])
+  chunks           LegalDocumentChunk[]
+}
+
+model LegalDocumentChunk {
+  id           String          @id @db.Uuid
+  corpusItemId String          @db.Uuid
+  chunkIndex   Int
+  content      String
+  embedding    Unsupported("vector(1536)")? // pgvector column type
+  createdAt    DateTime        @default(now())
+  corpusItem   LegalCorpusItem @relation(fields: [corpusItemId], references: [id])
+}
+
+model CorpusApprovalRecord {
+  id               String             @id @db.Uuid
+  corpusVersionId  String             @db.Uuid
+  approvedBy       String
+  approvalDate     DateTime
+  status           String             // APPROVED, REJECTED
+  comments         String?
+  createdAt        DateTime           @default(now())
+  corpusVersion    LegalCorpusVersion @relation(fields: [corpusVersionId], references: [id])
+}
+
+model RetrievalAuditLog {
+  id             String     @id @db.Uuid
+  assessmentId   String     @db.Uuid
+  queryText      String
+  filtersApplied Json
+  resultCount    Int
+  results        Json
+  createdAt      DateTime   @default(now())
+  assessment     Assessment @relation(fields: [assessmentId], references: [id])
+}
+
+model ModelRunMetadata {
+  id               String              @id @db.Uuid
+  assessmentId     String              @db.Uuid
+  workflowRunId    String              @db.Uuid
+  nodeName         String
+  provider         String
+  model            String
+  promptVersion    String
+  inputReference   String
+  outputHash       String
+  status           String              // SUCCESS, FAILED, RETRIED, DEGRADED
+  corpusVersionId  String?             @db.Uuid
+  embeddingModel   String?
+  retrievalScores  Json?
+  createdAt        DateTime            @default(now())
+  assessment       Assessment          @relation(fields: [assessmentId], references: [id])
+  corpusVersion    LegalCorpusVersion? @relation(fields: [corpusVersionId], references: [id])
+}
+
 
 model LegalRuleMatch {
   id                   String @id @db.Uuid

@@ -112,15 +112,15 @@ The following implementation decisions are now integrated into active source-of-
 | Area | Final Controlled MVP Decision |
 |---|---|
 | Scanner sandbox | Restricted temporary local filesystem workspace. |
-| Scanner runtime | TypeScript-first Node.js worker in npm workspaces with Tree-sitter, ts-morph and graphology. |
+| Scanner runtime | Python Worker (`lcsp-scanner-worker`) owning Repository Scan lifecycle with first-class Python AST/static-analysis; TypeScript analyzer integrated via subprocess. |
 | Graph persistence | Metadata-only PostgreSQL graph using `CodeGraphNode`, `CodeGraphEdge`, `EvidenceReference`, `TechnicalFinding` and `TechnicalEvidenceReport`; evidence paths embedded in `TechnicalFinding.metadata.evidencePath`. |
 | Queue retry/DLQ | 3 attempts per worker with 30s, 120s and 600s exponential backoff plus jitter, then matching DLQ. |
 | Retention | No raw source long-term persistence; evidence metadata retained 12 months; outbox retained 30 days after publish or 90 days when failed. |
-| Local development | npm workspace command contract with scan fixture smoke path. |
+| Local development | Standalone Python Worker + NestJS API workspace command contracts. |
 | OAuth/OIDC | Local mock OIDC with provider-agnostic interface. |
-| LLM | Deterministic mock LLM gateway by default; provider mode requires explicit configuration. |
-| Legal corpus | Local JSONL seed with citation-required fields. |
-| Object storage | Local filesystem artifact store with S3-compatible adapter boundary. |
+| LLM | Real configured LLM provider mandatory for happy path. Mock mode restricted to unit tests and offline CI. |
+| Legal corpus | Provenance-preserving legal corpus derived from approved government source URLs, indexed via pgvector + FTS for hybrid retrieval. |
+| Object storage | Real S3-compatible object storage. Local filesystem adapter for local development only. |
 
 ## Risk Register
 

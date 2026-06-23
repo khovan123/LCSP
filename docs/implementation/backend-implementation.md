@@ -698,7 +698,11 @@ Local runs should still emit redacted audit events so developers can verify trac
 
 ## Locked Local Integration Defaults for Controlled MVP
 
-Local execution uses mock OIDC, deterministic mock LLM gateway, local JSONL legal corpus seed and local filesystem artifact store by default. Real provider integrations require explicit environment configuration and do not change controlled MVP coding contracts.
+Local development execution may utilize local mocks for OIDC, the local filesystem for object storage, and deterministic mock LLM modes for offline unit/CI tests. However, the authoritative controlled MVP happy path requires:
+1. Standalone Python Worker (`lcsp-scanner-worker`) executing repository scans.
+2. A real configured LLM provider mandatory for the A-to-Z happy path (mock LLM is restricted to test/offline only).
+3. A provenance-preserving legal corpus derived from approved legal source URLs (with metadata, hashes, and approval records) built into a pgvector hybrid retrieval index.
+4. Real S3-compatible object storage for document artifact storage (with local filesystem adapter restricted to local dev only).
 
 <!-- PHASE-5-5-BACKEND-CONTRACT:START -->
 
@@ -747,14 +751,16 @@ No service may publish directly to RabbitMQ inside the same transaction.
 | Command | Expected Output |
 | --- | --- |
 | `npm install` | npm workspace dependencies installed from lockfile. |
+| `poetry install` | Python Worker dependencies and virtual environment initialized. |
 | `npm run db:generate` | Prisma client generated successfully. |
-| `npm run db:migrate` | Local PostgreSQL schema migrated. |
+| `npm run db:migrate` | Local PostgreSQL schema migrated with pgvector extension. |
 | `npm run dev:api` | API starts and reports ready state without logging secrets. |
-| `npm run dev:worker` | Worker starts, initializes queue bindings and logs `worker.ready`. |
+| `npm run dev:worker` | NestJS background orchestration workers start and initialize queue bindings. |
+| `poetry run python -m lcsp_scanner_worker` | Standalone Python Worker starts, connects to RabbitMQ and PostgreSQL, and logs ready status. |
 | `npm run dev:web` | Web app starts and can reach API health endpoint. |
 | `npm run test` | Unit and contract test suite passes. |
-| `npm run test:scanner` | Scanner parser/language/extractor tests pass. |
-| `npm run smoke:scan-fixture` | Synthetic scan fixture creates ScanJob, OutboxEvent, TechnicalEvidenceReport and verifies downstream command projection or explicit blocked reason. |
+| `npm run test:scanner` | Python AST/static-analysis stack and extraction parser tests pass. |
+| `npm run smoke:scan-fixture` | Synthetic scan fixture triggers scan job through Python Worker, creates TechnicalEvidenceReport, and verifies downstream command projection or explicit blocked reason. |
 
 ### Smoke Scan Fixture Expected Behavior
 

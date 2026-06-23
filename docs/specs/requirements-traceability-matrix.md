@@ -31,7 +31,7 @@ UC -> FR -> AC -> Domain Spec -> State Machine -> Implementation Area
 | UC-004, UC-014 | FR-015 | AC-003 | `system-context.md`, `document-generation-spec.md` | Assessment: pre-evidence locked states | Web UI / Assessment / Document shell |
 | UC-005 | FR-016 | AC-004, AC-023 | `user-task-flows.md` | Assessment: `WIZARD_PROFILE_READY -> REPOSITORY_CONNECTED` | Backend API / Repository Integration |
 | UC-006 | FR-017 | AC-004, AC-020 | `domain-model.md`, `event-catalog.md` | Assessment: `REPOSITORY_CONNECTED -> SNAPSHOT_CREATED` | Backend API / Repository Integration |
-| UC-007, UC-016 | FR-018 | AC-004 | `scanner-spec.md`, `event-catalog.md` | ScanJob, Assessment scan states | Scanner Worker |
+| UC-007, UC-016 | FR-018 | AC-004 | `scanner-spec.md`, `event-catalog.md` | ScanJob, Assessment scan states | Python Worker |
 | UC-007, UC-017 | FR-019 | AC-019, AC-022 | `scanner-spec.md` | ScanJob failure/coverage states | Scanner Worker / Security |
 | UC-007, UC-008 | FR-020 | AC-005 | `scanner-spec.md` | TechnicalEvidenceReport | Scanner Worker / Evidence Gate |
 | UC-008 | FR-021 | AC-006 | `scanner-spec.md`, `domain-state-machines.md` | TechnicalEvidenceReport | Evidence Gate / Technical Profile Worker |
@@ -45,7 +45,7 @@ UC -> FR -> AC -> Domain Spec -> State Machine -> Implementation Area
 | UC-010 | FR-029 | AC-012, AC-013 | `assessment-lifecycle-spec.md`, `domain-state-machines.md` | Conflict, VerifiedProfile | Backend API / Reconciliation |
 | UC-011 | FR-030 | AC-014, AC-015 | `assessment-lifecycle-spec.md`, `domain-state-machines.md` | VerifiedProfile, Assessment | Reconciliation Worker |
 | UC-011 | FR-031 | AC-015 | `assessment-lifecycle-spec.md`, `domain-state-machines.md` | VerifiedProfile | Backend API / Reconciliation |
-| UC-012 | FR-032 | AC-016 | `legal-matching-domain-spec.md`, `legal-classification-spec.md` | LegalRuleMatch | Legal Matching Worker |
+| UC-012 | FR-032 | AC-016 | `legal-matching-domain-spec.md`, `legal-classification-spec.md` | LegalRuleMatch | Legal Matching Worker / Hybrid Retriever |
 | UC-012 | FR-033 | AC-016 | `legal-matching-domain-spec.md`, `ai-usage-flow-domain-spec.md` | LegalRuleMatch | Legal Matching Worker |
 | UC-012, UC-013 | FR-034 | AC-017 | `legal-matching-domain-spec.md`, `legal-classification-spec.md` | LegalRuleMatch, RiskClassification | Legal Matching Worker |
 | UC-013 | FR-035 | AC-016, AC-018 | `legal-classification-spec.md` | RiskClassification | Classification Worker |
@@ -66,6 +66,10 @@ UC -> FR -> AC -> Domain Spec -> State Machine -> Implementation Area
 | UC-016 | FR-050 | AC-005 | `scanner-spec.md` | Deferred evidence path | Deferred / Future Evidence API |
 | UC-016 | FR-051 | AC-005, AC-013 | `scanner-spec.md` | Deferred evidence path | Deferred / Future Evidence API |
 | UC-010, UC-018 | FR-052 | AC-012, AC-013 | `assessment-lifecycle-spec.md` | Conflict | Deferred / Future Clarification |
+| UC-M07-01 | FR-053 | AC-016 | `legal-corpus-source-spec.md` | LegalCorpusVersion | Legal Ingestion Worker |
+| UC-M07-01 | FR-054 | AC-016 | `legal-corpus-source-spec.md` | LegalCorpusVersion | Legal Ingestion Worker / Approval Gate |
+| UC-M07-02 | FR-055 | AC-018 | `domain-model.md` | Assessment | Backend API / Platform |
+| UC-M07-01 | FR-056 | AC-016 | `legal-matching-domain-spec.md` | LegalRuleMatch | Legal Matching Worker / Hybrid Retriever |
 
 ## Acceptance Criteria Coverage
 
@@ -97,6 +101,21 @@ UC -> FR -> AC -> Domain Spec -> State Machine -> Implementation Area
 | AC-024 | FR-007..FR-009, FR-013 | UC-002, UC-003 |
 | AC-025 | FR-010..FR-012, FR-047 | UC-002, UC-018 |
 | AC-026 | FR-011, FR-012 | UC-002 |
+| AC-027 | FR-039 | UC-M08-02 |
+| AC-028 | FR-018 | UC-M04-08 |
+| AC-029 | FR-018 | UC-M04-08 |
+| AC-030 | FR-019 | UC-M10-03 |
+| AC-031 | FR-023 | UC-M04-08 |
+| AC-032 | FR-023 | UC-M04-08 |
+| AC-033 | FR-028 | UC-M06-03 |
+| AC-034 | FR-034 | UC-M07-04 |
+| AC-035 | FR-032 | UC-M07-01 |
+| AC-036 | FR-032 | UC-M07-01 |
+| AC-037 | FR-035 | UC-M07-02 |
+| AC-038 | FR-035 | UC-M07-02 |
+| AC-039 | FR-044 | UC-M09-04 |
+| AC-040 | FR-042 | UC-M09-01 |
+| AC-041 | FR-039 | UC-M08-02 |
 
 ## NFR Coverage
 
@@ -132,14 +151,19 @@ UC -> FR -> AC -> Domain Spec -> State Machine -> Implementation Area
 | NFR-028 | FR-014, FR-015, FR-021 | UC-004, UC-008 | Business language and status clarity. |
 | NFR-029 | FR-023..FR-025, FR-032, FR-033 | UC-009, UC-012 | Evidence refs on usage claims. |
 | NFR-030 | FR-044, FR-049 | UC-015, UC-016 | Historical evidence versioning. |
+| NFR-031 | FR-005 | UC-M01-14 | OAuth identity linking safety. |
+| NFR-032 | FR-012 | UC-M02-03 | Manager super-role enforcement. |
+| NFR-033 | FR-055 | UC-M07-02 | LLM cost control and token logging. |
+| NFR-034 | FR-032 | UC-M07-01 | Immutable LegalCorpusVersion and approval gate. |
+| NFR-035 | FR-019 | UC-M10-03 | Standalone Python Worker sandbox directory restriction and cleanup. |
 
 ## Orphan Check
 
 | Item Type | Result |
 |---|---|
-| FR | 52 of 52 appear in Functional Traceability Matrix. |
-| AC | 26 of 26 appear in Acceptance Criteria Coverage. |
-| NFR | 30 of 30 appear in NFR Coverage. |
+| FR | 56 of 56 appear in Functional Traceability Matrix. |
+| AC | 41 of 41 appear in Acceptance Criteria Coverage. |
+| NFR | 35 of 35 appear in NFR Coverage. |
 | UC | 18 of 18 appear in Functional Traceability Matrix or NFR Coverage. |
 
 ## Final Traceability Decision

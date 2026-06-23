@@ -38,6 +38,9 @@ This document is the canonical active non-functional requirements catalog for LC
 | NFR-028 | Usability | Manager-facing Wizard and locked states must use business language and avoid unexplained implementation terms. | A1-style review confirms meaning of blocked/readiness states. | UX review/manual validation. | Wizard, Assessment UI | Should |
 | NFR-029 | Traceability | AIUsageFlow claims must carry evidence refs and uncertainty reasons for material fields. | Material claim without evidence ref is not legal-matching eligible. | AIUsageFlow rule tests. | AIUsageFlow, Legal Matching | Must |
 | NFR-030 | Reliability | Re-runs must preserve historical evidence/profile/classification chain rather than mutating prior records. | New run creates new versioned objects; prior chain remains traceable. | Persistence and audit tests. | Scanner, Technical Profile, AIUsageFlow, Legal Matching | Must |
+| NFR-033 | Security/Control | LLM and embedding API calls must be protected by monthly cost budget boundaries and token usage caps. | Token usage per workflow run logged; monthly budget cap enforced. | API/gateway configuration review. | LLM Gateway | Must |
+| NFR-034 | Compliance Support | Pinned legal corpus snapshots (`LegalCorpusVersion`) must remain immutable, with updates governed by a formal review and approval process. | Approved corpus versions only are usable for classification. | Integration and retriever test suite. | Legal Matching, Classification | Must |
+| NFR-035 | Security | Standalone Python Worker process must operate in an isolated sandbox with the same directory restriction and ephemeral workspace cleanup guarantees as TS worker. | Ephemeral workspace deleted immediately after scan; cleanup failure blocks downstream. | Workspace lifecycle integration tests. | Scanner | Must |
 
 ## Platform Baseline Requirements
 

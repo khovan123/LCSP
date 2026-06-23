@@ -1001,11 +1001,23 @@ Phase 5.2I completion represented the documentation baseline for the previous MV
 
 | File | Action |
 |---|---|
+| `docs/product/prd.md` | MVP scope, in-scope, and out-of-scope sections updated for Python Worker, real LLM, and RAG |
 | `docs/architecture/adr/adr-022-typescript-first-npm-only-controlled-prototype.md` | Status + Phase 5.2J Supersession Note added |
-| `docs/architecture/adr/architecture-decision-records.md` | ADR-002/ADR-009 notes updated; ADR-023/024/025/026 entries appended |
+| `docs/architecture/adr/architecture-decision-records.md` | ADR-002/ADR-009/ADR-019 notes updated; ADR-023/024/025/026 entries appended |
 | `docs/implementation/llm-gateway-implementation.md` | LLM mode defaults, locked decisions, and provider table updated per ADR-024 |
 | `docs/implementation/scanner-implementation.md` | Fully rewritten as A-to-Z MVP authoritative build document |
+| `docs/implementation/persistence-implementation.md` | Updated integration decisions and added Prisma models for Legal Source, Document, Chunk, Ingestion, and ModelRunMetadata |
+| `docs/implementation/queue-implementation.md` | Added Legal Source Ingestion and Embedding Build queues, and mapped scanner queue to Python Worker |
+| `docs/implementation/backend-implementation.md` | Updated local integration defaults and command contracts for Python Worker and real LLM |
+| `docs/implementation-readiness-certification.md` | Updated integration decisions (scanner runtime, LLM, legal corpus, storage) for Phase 5.2J |
+| `docs/implementation-delivery-plan.md` | Updated Waves 3, 5, 6, 7 and added Wave 8 (A-to-Z Acceptance), with tasks mapped up to TASK-034 |
 | `docs/specs/scanner-spec.md` | 6 targeted updates: Python first-class, Python Worker runtime, locked decisions, readiness |
+| `docs/specs/legal-matching-domain-spec.md` | Appended Legal Corpus Ingestion, Approval Gate, and Hybrid pgvector Retriever specs |
+| `docs/specs/functional-requirements.md` | Updated FR-018 and FR-032; appended FR-053 through FR-056 |
+| `docs/specs/requirements-baseline.md` | Updated FR-066 mapping and appended mappings for FR-079 through FR-082 |
+| `docs/specs/acceptance-criteria-catalog.md` | Appended AC-027 through AC-041 (happy path and 14 negative-path scenarios) |
+| `docs/specs/non-functional-requirements.md` | Appended NFR-033, NFR-034, and NFR-035 |
+| `docs/specs/requirements-traceability-matrix.md` | Updated FR mappings and AC/NFR coverage tables; updated Orphan Check counts |
 
 ### Files Created
 
@@ -1017,6 +1029,9 @@ Phase 5.2I completion represented the documentation baseline for the previous MV
 | `docs/architecture/adr/adr-026-hybrid-legal-retriever.md` | New ADR: Hybrid pgvector + FTS legal retriever |
 | `docs/specs/python-scanner-spec.md` | New spec: Python FULL_STATIC scanner capability requirements |
 | `docs/specs/legal-corpus-source-spec.md` | New spec: Legal corpus ingestion schema, approval process, corpus management |
+| `docs/implementation/python-worker-implementation.md` | New implementation spec: Python Worker processes, dependencies, AST parsers, and node subprocess |
+| `docs/implementation/legal-corpus-ingestion-implementation.md` | New implementation spec: Ingestion pipeline from source URLs and S3 snapshots |
+| `docs/implementation/hybrid-retriever-implementation.md` | New implementation spec: Cosine similarity search, pgvector indexing, FTS configuration, and RRF |
 
 ### Next Step
 

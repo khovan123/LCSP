@@ -318,3 +318,51 @@ Classification must not consume `event.reconciliation.verified-profile-ready.v1`
   }
 }
 ```
+
+---
+
+## Legal Corpus Ingestion, Approval and Retrieval (Phase 5.2J Update)
+
+### Legal Source Hierarchy
+
+1. **PRIMARY SOURCES** (Legally authoritative Vietnamese government decrees, circulars, and decisions):
+   - Officially sourced from databases like `vbpl.vn` or `vanban.chinhphu.vn` (subject to source validation).
+   - Serves as the sole foundation for mandatory compliance obligations.
+2. **SUPPLEMENTARY SOURCES** (Contextual non-authoritative regulatory guidance):
+   - Government FAQs, training material, or administrative guidance.
+   - May clarify rule interpretations but cannot define new legal rules alone.
+
+### Legal Source Ingestion Requirements
+
+The `Legal Source Ingestion Worker` manages the lifecycle of legal source ingestion:
+
+- **Source Provenance:** Capture and store retrieval metadata: URL, HTTP headers, retrieve timestamp, and redirect history.
+- **Immutable Snapshot:** Store the original document (PDF/HTML) in S3 object storage; record its SHA-256 content hash.
+- **Normalization:** Parse hierarchical structure into standard legal units: Chapter, Section, Article, Clause, and Point.
+- **Metadata Fields:** Track type, number, issuing authority, issue date, effective start date, and effective end date.
+
+```text
+If a source URL or document is unavailable:
+  → Ingest job fails with LEGAL_SOURCE_UNAVAILABLE
+  → Audit trail records failure
+  → Downstream classification tasks are blocked (fail-closed)
+```
+
+### Legal Corpus Review & Approval Gate
+
+1. **Draft State:** Newly ingested legal documents exist in a DRAFT state.
+2. **Review Work:** Authorized legal personnel review the parsed items for correctness and mapping accuracy.
+3. **Approval Event:** On approval, an immutable `LegalCorpusVersion` is created. Unapproved versions are blocked from classification.
+
+### Hybrid Legal Retriever (pgvector + FTS)
+
+Matches verified facts against legal rules using a two-way retrieval pipeline in PostgreSQL:
+
+- **Full-Text Search (FTS):** Keyword index search for precise article and document matches.
+- **Semantic Vector Search:** `pgvector` cosine similarity search on chunk embeddings (e.g. 1536-dimensional vectors).
+- **Metadata & Version Filtering:**
+  - **Pin Version:** Query must only retrieve from the approved `LegalCorpusVersion` pinned at assessment initialization.
+  - **Effective Date:** Pinned legal documents must be in legal effect on the assessment date.
+- **Fail-Closed Citations:** If retrieval returns no results or missing required citations, the classification is marked `BLOCKED_MISSING_CITATION` and document generation is blocked.
+
+```
