@@ -2,241 +2,263 @@
 
 ## Purpose
 
-This document explains what users and system workers do in LCSP. It is domain-level workflow documentation, not implementation guidance, backlog, story creation, validation planning, or architecture rewrite.
+This document defines canonical user-facing and system task flows for the A-to-Z runnable MVP. It is domain-level workflow input for UX and stories, not implementation guidance.
 
 ## Flow Conventions
 
-- API route names use active controlled MVP route names.
-- Queue names use canonical `command.*` and `event.*` names.
-- Database changes list domain objects, not physical schema details.
-- Events emitted means persisted domain event or outbox event, depending on whether async work follows.
+- Canonical IDs are `UC-001..UC-018`, `FR-001..FR-056`, and `AC-001..AC-041`.
+- Manager can complete the active MVP without Developer participation.
+- Developer collaboration is optional and scoped.
+- Structured attestation under `FR-046` is active optional MVP input.
+- Delegated technical clarification under `FR-052` is Deferred and must not appear as an active screen or task.
+- Legal corpus administration is an internal operations/API/CLI flow, not Manager/Developer product UX.
+- UI states must use plain business language and expose actionable blocked/failed outcomes.
 
-## Manager Flows
+## Manager Product Flows
 
-### Create Assessment
-
-| Field | Content |
-|---|---|
-| Goal | Start an assessment owned by Manager. |
-| Preconditions | Manager is authenticated and belongs to an organization. |
-| Happy path | 1. Manager opens assessment workspace. 2. Manager creates assessment. 3. System records owner and state. |
-| System behavior | Validates Manager role and organization scope. |
-| Database changes | Creates `Assessment`; writes `AuditEvent`. |
-| Events emitted | `ASSESSMENT_CREATED`; no async queue required. |
-| Resulting state | `CREATED` or first Wizard-ready state depending on UI flow. |
-| Failure path | Unauthorized or missing organization scope blocks creation and writes security/audit event where applicable. |
-| State transitions | None -> `CREATED`. |
-
-### Connect Repository
+### 1. Authenticate and Enter Workspace
 
 | Field | Content |
 |---|---|
-| Goal | Authorize selected repository for evidence collection. |
-| Preconditions | Assessment exists; Manager has `CONNECT_REPOSITORY`; OAuth/OIDC login boundary is already separate from GitHub App. |
-| Happy path | 1. Manager starts GitHub App connection. 2. Manager selects repository/branch. 3. System stores selected repository authorization metadata. |
-| System behavior | Verifies repository access and assessment ownership. |
-| Database changes | Creates `RepositoryConnection`; writes `AuditEvent`. |
-| Events emitted | `REPOSITORY_CONNECTED`. |
-| Resulting state | `REPOSITORY_CONNECTED`. |
-| Failure path | Missing GitHub authorization, wrong repository scope or user authorization failure blocks connection. |
-| State transitions | `WIZARD_PROFILE_READY` or active assessment state -> `REPOSITORY_CONNECTED`. |
+| Goal | Access the correct organization workspace safely. |
+| Preconditions | User has an approved account/invitation. |
+| Happy path | Register or sign in, complete MFA if required, select organization, enter dashboard. |
+| Failure states | Invalid credentials, callback, OTP, expired session, missing membership, or rate limit. |
+| UX requirements | Do not expose secrets or provider internals; show recovery action. |
+| Traceability | UC-001, UC-002; FR-001..FR-012; AC-021..AC-026 |
 
-### Start Scan
+### 2. Create Assessment
 
 | Field | Content |
 |---|---|
-| Goal | Request static repository scan for selected snapshot. |
-| Preconditions | RepositoryConnection exists; RepositorySnapshot exists or can be created; Manager has `RUN_REPOSITORY_SCAN`. |
-| Happy path | 1. Manager selects commit/branch. 2. System creates `RepositorySnapshot`. 3. Manager starts scan. 4. System creates `ScanJob` and outbox command. |
-| System behavior | Validates repo/commit scope and idempotency. |
-| Database changes | Creates/uses `RepositorySnapshot`; creates `ScanJob`; writes `AuditEvent`; writes `OutboxEvent`. |
-| Events emitted | `SNAPSHOT_CREATED`, `SCAN_REQUESTED`, `command.scan.requested.v1`. |
-| Resulting state | `SNAPSHOT_CREATED` then `SCAN_REQUESTED`. |
-| Failure path | Invalid snapshot or unauthorized actor blocks scan. |
-| State transitions | `REPOSITORY_CONNECTED -> SNAPSHOT_CREATED -> SCAN_REQUESTED`. |
+| Goal | Start a Manager-owned assessment. |
+| Preconditions | Authenticated Manager belongs to organization. |
+| Happy path | Open assessment list, create assessment, enter name/context, save. |
+| Failure states | Missing tenant scope, duplicate/invalid input, unauthorized action. |
+| Result | Assessment state `CREATED`; AuditEvent written. |
+| Traceability | UC-003; FR-013; AC-001 |
 
-### Review Findings
+### 3. Complete WizardProfile
 
 | Field | Content |
 |---|---|
-| Goal | Understand technical evidence and AI usage signals before reconciliation/classification. |
-| Preconditions | Scan completed and TechnicalEvidenceReport/TechnicalProfile are available. |
-| Happy path | 1. Manager opens findings/progress view. 2. System shows normalized findings, evidence refs, confidence and coverage limitations. |
-| System behavior | Never shows raw source body, full prompt, secret value or full AST body. |
-| Database changes | Optional `AuditEvent` for findings review. |
-| Events emitted | `TECHNICAL_FINDINGS_REVIEWED` audit event if tracked. |
-| Resulting state | No state change by review alone. |
-| Failure path | Missing report or insufficient evidence shows blocked/actionable state. |
-| State transitions | None. |
+| Goal | Capture business/legal context without requiring code knowledge. |
+| Preconditions | Assessment exists and Manager owns it. |
+| Happy path | Answer purpose, sector, data, affected people, user impact, decision role, oversight, and external LLM questions; save draft; submit. |
+| Locked behavior | Wizard-only state shows readiness/gaps, never a risk level. |
+| Failure states | Required field missing, stale draft, validation error. |
+| Result | WizardProfile version saved; assessment becomes `WIZARD_PROFILE_READY`. |
+| Traceability | UC-004; FR-014, FR-015, FR-040; AC-002, AC-003 |
 
-### Resolve Conflict
+### 4. Connect GitHub Repository
 
 | Field | Content |
 |---|---|
-| Goal | Resolve mismatch between WizardProfile, TechnicalProfile and AIUsageFlow. |
-| Preconditions | Conflict exists; Manager owns assessment. |
-| Happy path | 1. Manager opens conflict. 2. Manager reviews compared values and evidence refs. 3. Manager records resolution. 4. System stores resolution separately from scanner evidence. 5. Reconciliation resumes. |
-| System behavior | Does not overwrite scanner evidence; validates Manager authority. |
-| Database changes | Updates `Conflict`; writes `AuditEvent`; writes `OutboxEvent` for reconciliation resume if needed. |
-| Events emitted | `RECONCILIATION_RESOLVED`, `command.reconciliation.requested.v1`. |
-| Resulting state | Conflict resolved; may become `VERIFIED_PROFILE_READY` after reconciliation. |
-| Failure path | Missing resolution rationale, unresolved required conflict or unauthorized actor keeps classification blocked. |
-| State transitions | `RECONCILIATION_REQUIRED -> VERIFIED_PROFILE_READY` only after all blocking conflicts resolve. |
+| Goal | Authorize a selected repository for evidence collection. |
+| Preconditions | Assessment exists; actor has repository permission. |
+| Happy path | Start GitHub App connection, select authorized repository and branch, confirm read-only scope. |
+| Locked behavior | OAuth/OIDC login never grants repository access. |
+| Failure states | App not installed, repository not selected, insufficient scope, revoked installation. |
+| Result | RepositoryConnection exists; assessment becomes `REPOSITORY_CONNECTED`. |
+| Traceability | UC-005; FR-006, FR-016; AC-004, AC-023 |
 
-### Approve Classification
+### 5. Select Commit and Create Snapshot
 
 | Field | Content |
 |---|---|
-| Goal | Request classification once VerifiedProfile and legal matching prerequisites are satisfied. |
-| Preconditions | VerifiedProfile exists; legal matching has completed; no unresolved conflict remains. |
-| Happy path | 1. Manager requests classification or system triggers based on workflow. 2. System validates prerequisites. 3. Classification command is queued. |
-| System behavior | Blocks classification before VerifiedProfile or legal matching. |
-| Database changes | Creates/updates `RiskClassification` request state; writes `AuditEvent`; writes `OutboxEvent`. |
-| Events emitted | `command.classification.requested.v1`; later `event.classification.completed.v1` or `event.classification.blocked.v1`. |
-| Resulting state | `CLASSIFICATION_READY`, `CLASSIFICATION_BLOCKED`, or completed classification state. |
-| Failure path | Missing citation, missing legal match, unresolved conflict or unknown critical usage blocks/degrades classification. |
-| State transitions | `LEGAL_MATCHING_READY -> CLASSIFICATION_READY` or `CLASSIFICATION_BLOCKED`. |
+| Goal | Pin the evidence source before scanning. |
+| Preconditions | RepositoryConnection exists. |
+| Happy path | Select branch/commit, review commit metadata, create snapshot. |
+| Failure states | Commit unavailable, repository scope changed, provider error. |
+| Result | Immutable RepositorySnapshot exists; assessment becomes `SNAPSHOT_CREATED`. |
+| Traceability | UC-006; FR-017; AC-004, AC-020 |
 
-### Generate Report
+### 6. Run Repository Scan
 
 | Field | Content |
 |---|---|
-| Goal | Generate final compliance document or blocked/readiness output. |
-| Preconditions | Valid classification and gap basis exist for final report; readiness-only output can exist without risk level. |
-| Happy path | 1. Manager requests document. 2. System validates citation, conflict and classification guardrails. 3. Document command is queued. 4. Document metadata/artifact is persisted. |
-| System behavior | Blocks final output when citation or conflict prerequisites fail. |
-| Database changes | Creates `GeneratedDocument`; writes `AuditEvent`; writes `OutboxEvent`. |
-| Events emitted | `command.document.requested.v1`; later `event.document.generated.v1` or `event.document.blocked.v1`. |
-| Resulting state | `DOCUMENT_GENERATED` or `DOCUMENT_BLOCKED`. |
-| Failure path | Missing citation, unresolved conflict or unsupported classification basis blocks document. |
-| State transitions | `CLASSIFICATION_READY -> DOCUMENT_GENERATED` or `DOCUMENT_BLOCKED`. |
+| Goal | Request static analysis and monitor progress. |
+| Preconditions | Snapshot exists; actor has scan permission. |
+| Happy path | Click Run Scan, receive job status, monitor queued/running/completed state. |
+| System behavior | Python Worker owns lifecycle; no customer code execution; workspace is deleted before success event. |
+| Failure states | Repository access failure, bounded parser limitation, privacy/schema failure, TS/JS analyzer failure, workspace cleanup failure. |
+| UX requirements | Show status, safe reason code, retry/rescan action, and coverage limitations without raw source. |
+| Result | TechnicalEvidenceReport exists or explicit failed state. |
+| Traceability | UC-007, UC-016, UC-017; FR-018..FR-020, FR-049; AC-004, AC-005, AC-028..AC-032 |
 
-## Developer Flows
-
-### Accept Task
+### 7. Review Evidence and AIUsageFlow
 
 | Field | Content |
 |---|---|
-| Goal | Developer accepts scoped delegated technical task. |
-| Preconditions | Manager invited Developer and assigned scoped policy/task. |
-| Happy path | Developer opens task, accepts, and receives only assigned context. |
-| System behavior | Enforces Developer policy scope and records audit. |
-| Database changes | Updates task/policy status; writes `AuditEvent`. |
-| Events emitted | `DEVELOPER_TASK_CREATED` / task status audit event. |
-| Resulting state | No Manager workflow dependency; task is active. |
-| Failure path | Revoked/expired policy blocks access. |
-| State transitions | None for assessment lifecycle. |
+| Goal | Understand what the system found and what remains uncertain. |
+| Preconditions | Scan completed; TechnicalProfile/AIUsageFlow available or blocked. |
+| Happy path | Review detected AI usage, inputs, outputs, downstream actions, human-review signals, confidence, evidence refs, and limitations. |
+| Privacy | Show redacted metadata, file path/symbol/line refs, and hashes only; no raw source, secret, full prompt, or full AST. |
+| Failure states | Evidence insufficient, profile blocked, claims unclear, worker failed. |
+| Result | No state change by review alone. |
+| Traceability | UC-008, UC-009; FR-021..FR-025, FR-048; AC-006..AC-009, AC-031, AC-032 |
 
-### Review Technical Findings
+### 8. Resolve Reconciliation Conflict
 
 | Field | Content |
 |---|---|
-| Goal | Developer reviews assigned technical findings when delegated. |
-| Preconditions | Developer has `VIEW_TECHNICAL_FINDINGS` or equivalent scoped task. |
-| Happy path | Developer views redacted findings and may prepare clarification. |
-| System behavior | Shows limited context and excludes raw source/secrets/full prompts/full AST. |
-| Database changes | Optional `AuditEvent`. |
-| Events emitted | Findings review audit event if tracked. |
-| Resulting state | No state change by review alone. |
-| Failure path | Missing permission or revoked delegation blocks access. |
-| State transitions | None. |
+| Goal | Resolve mismatch between WizardProfile and evidence-derived facts. |
+| Preconditions | ReconciliationConflict exists. |
+| Happy path | Open conflict, compare declared and detected values, inspect evidence refs, select resolution, enter rationale, submit. |
+| Optional input | A structured Developer attestation may be reviewed as supplemental evidence. |
+| Locked behavior | Manager is final resolver; scanner evidence is immutable; attestation cannot resolve or unlock classification by itself. |
+| Deferred exclusion | No free-form delegated clarification task or screen under `FR-052`. |
+| Failure states | Missing rationale, stale conflict, unauthorized actor, unresolved blocking field. |
+| Result | Reconciliation reruns; conflict remains open or VerifiedProfile becomes ready. |
+| Traceability | UC-010, UC-011; FR-026..FR-031; AC-010..AC-015, AC-033 |
 
-### Submit Attestation
+### 9. Review VerifiedProfile Readiness
 
 | Field | Content |
 |---|---|
-| Goal | Developer submits structured technical attestation as supplemental input. |
-| Preconditions | Developer has scoped attestation task; attestation cannot replace machine-generated metadata. |
-| Happy path | Developer submits role, claim, scope, reason, supporting evidence refs and timestamp. |
-| System behavior | Validates structure and stores as supplemental evidence only. |
-| Database changes | Creates attestation-related record or metadata; writes `AuditEvent`. |
-| Events emitted | `HUMAN_ATTESTATION_SUBMITTED` / attestation audit event. |
-| Resulting state | May support Manager review or reconciliation, but does not unlock classification by itself. |
-| Failure path | Free text, missing scope, missing role or attempt to bypass evidence gates is rejected. |
-| State transitions | None unless Manager later uses it in conflict resolution. |
+| Goal | Confirm that the reconciled basis is ready for legal matching. |
+| Preconditions | No unresolved material conflict. |
+| Happy path | Review merged facts, evidence provenance, Manager resolutions, and version; approve where workflow requires. |
+| Failure states | Conflict reopened, evidence stale, missing required claim. |
+| Result | `VERIFIED_PROFILE_READY`. |
+| Traceability | UC-011; FR-030, FR-031; AC-014, AC-015 |
+
+### 10. Run and Review Classification
+
+| Field | Content |
+|---|---|
+| Goal | Obtain a citation-backed classification or an explicit blocked state. |
+| Preconditions | VerifiedProfile exists; approved legal corpus and legal matches are available; real provider configured for acceptance run. |
+| Happy path | Request classification or observe automatic trigger, monitor status, review risk level/confidence/triggered rules/citations. |
+| Failure states | Missing citation, unapproved corpus, zero candidate match, provider outage, invalid model output, unknown critical usage. |
+| UX requirements | Never display unsupported legal certainty; show blocked/degraded reason and next action. |
+| Result | `CLASSIFICATION_READY` or `CLASSIFICATION_BLOCKED`. |
+| Traceability | UC-012, UC-013; FR-032..FR-037, FR-053..FR-056; AC-016..AC-018, AC-034..AC-038 |
+
+### 11. Review Gap Analysis
+
+| Field | Content |
+|---|---|
+| Goal | Understand compliance gaps and required actions. |
+| Preconditions | Classification completed or explicitly eligible for degraded gap analysis. |
+| Happy path | Review gap items, priority, obligation/citation refs, and evidence basis. |
+| Failure states | Classification blocked, citation incomplete, worker failure. |
+| Result | `GAP_ANALYSIS_READY` or `GAP_ANALYSIS_BLOCKED`. |
+| Traceability | UC-014; FR-038; AC-018, AC-019 |
+
+### 12. Generate, Download, and Review Document
+
+| Field | Content |
+|---|---|
+| Goal | Produce final compliance-support report or readiness-only export. |
+| Preconditions | Final report requires valid classification, gap analysis, legal citations, and no conflict. |
+| Happy path | Request generation, monitor status, preview metadata, download artifact. |
+| Alternative | Readiness-only export may be generated earlier and must contain no risk level. |
+| Failure states | Guardrail violation, missing citation, object-storage error, provider failure, generation blocked. |
+| Result | `DOCUMENT_GENERATED` or `DOCUMENT_BLOCKED`. |
+| Traceability | UC-014; FR-038..FR-041; AC-003, AC-018, AC-019, AC-041 |
+
+### 13. Review and Export Audit Trail
+
+| Field | Content |
+|---|---|
+| Goal | Trace decisions, versions, events, and blocked states. |
+| Preconditions | Assessment exists. |
+| Happy path | Filter events, inspect actor/action/object/version/correlation/evidence refs, export allowed metadata. |
+| Privacy | No raw source, secrets, raw provider tokens, or full prompts. |
+| Failure states | Export denied, unavailable event page, redaction failure. |
+| Result | Auditable assessment record and export. |
+| Traceability | UC-015; FR-042..FR-045; AC-020, AC-039, AC-040 |
+
+## Optional Developer Product Flows
+
+### 14. Accept Scoped Task
+
+| Field | Content |
+|---|---|
+| Goal | Enter a limited collaboration scope. |
+| Preconditions | Manager invited Developer and assigned active policy/task. |
+| Happy path | Open invitation/task, review scope, accept. |
+| Failure states | Expired/revoked invitation, wrong organization, policy removed. |
+| Result | Task becomes active; Manager flow remains independent. |
+| Traceability | UC-002, UC-018; FR-010, FR-011, FR-047; AC-025, AC-026 |
+
+### 15. Review Redacted Technical Findings
+
+| Field | Content |
+|---|---|
+| Goal | Review assigned technical evidence without unnecessary business/source exposure. |
+| Preconditions | Developer has active scoped permission. |
+| Happy path | View only assigned findings, evidence refs, confidence, and limitations. |
+| Failure states | Permission revoked, task expired, assessment outside scope. |
+| Result | No assessment lifecycle state change. |
+| Traceability | UC-018; FR-048; AC-007, AC-022, AC-025 |
+
+### 16. Submit Structured Technical Attestation
+
+| Field | Content |
+|---|---|
+| Goal | Provide optional supplemental technical input. |
+| Preconditions | Developer has active attestation policy/task. |
+| Required fields | Role, claim, scope, reason, supporting evidence refs, timestamp. |
+| Happy path | Submit structured form; system validates, stores separately, audits, and exposes to Manager review. |
+| Guardrails | Cannot replace scanner metadata, alter evidence, resolve conflict, approve profile, or unlock classification. |
+| Failure states | Free-form-only content, missing scope/role/evidence, revoked policy, bypass attempt. |
+| Result | Attestation recorded or rejected; no automatic lifecycle transition. |
+| Traceability | UC-018; FR-045, FR-046; AC-013 |
 
 ## System Flows
 
-### Run Repository Scan
+### Repository Scan Orchestration
 
-| Field | Content |
-|---|---|
-| Goal | Convert repository snapshot into static technical evidence. |
-| Preconditions | `command.scan.requested.v1` exists; RepositorySnapshot and ScanJob exist. |
-| Happy path | 1. Scanner Worker consumes command. 2. Marks scan running. 3. Inventories files. 4. Performs static analysis. 5. Creates findings, evidence refs, report and audit. 6. Emits scan completed. |
-| System behavior | Never executes customer code, installs dependencies, runs scripts, sends raw source to LLM or persists raw source long-term. |
-| Database changes | Updates `ScanJob`; creates `SourceFile`, `TechnicalFinding`, `TechnicalEvidenceReport`, evidence refs and graph metadata. |
-| Events emitted | `event.scan.completed.v1` or `event.scan.failed.v1`. |
-| Resulting state | `SCAN_COMPLETED` or failed scan state. |
-| Failure path | Parse failure, unsupported language or coverage limits are recorded; invalid schema or privacy failure blocks downstream. |
-| State transitions | `SCAN_REQUESTED -> SCAN_RUNNING -> SCAN_COMPLETED` or failed. |
+```text
+command.scan.requested.v1
+-> Python Worker RUNNING
+-> snapshot materialization
+-> Python AST/CST analysis
+-> TS/JS subprocess analysis
+-> evidence/report gates
+-> workspace cleanup verification
+-> event.scan.completed.v1 or event.scan.failed.v1
+```
 
-### Build Technical Profile
+### Evidence-to-Profile Orchestration
 
-| Field | Content |
-|---|---|
-| Goal | Normalize accepted technical evidence into profile dimensions. |
-| Preconditions | TechnicalEvidenceReport exists and passes schema/quality gates. |
-| Happy path | Technical Profile Worker reads findings and creates TechnicalProfile. |
-| System behavior | Provider package only means possible AI use; model invocation confirms AI detection. |
-| Database changes | Creates `TechnicalProfile`; writes `AuditEvent`; writes downstream outbox command. |
-| Events emitted | `event.technical-profile.completed.v1`, `command.ai-usage-flow.requested.v1`. |
-| Resulting state | `TECHNICAL_PROFILE_READY`. |
-| Failure path | Insufficient or invalid evidence blocks profile or marks explicit reason. |
-| State transitions | `SCAN_COMPLETED -> TECHNICAL_PROFILE_READY`. |
+```text
+TechnicalEvidenceReport QUALITY_VALID
+-> TechnicalProfile
+-> AIUsageFlow
+-> ReconciliationConflict or VerifiedProfile
+```
 
-### Reconcile Profiles
+### Legal-to-Document Orchestration
 
-| Field | Content |
-|---|---|
-| Goal | Compare Manager declaration, technical profile and AI usage claims. |
-| Preconditions | WizardProfile, TechnicalProfile and AIUsageFlow exist. |
-| Happy path | Reconciliation Worker compares critical fields. If no conflict, VerifiedProfile can be created. |
-| System behavior | Creates conflict instead of guessing when material mismatch exists. |
-| Database changes | Creates/updates `Conflict` or creates `VerifiedProfile`; writes audit/outbox. |
-| Events emitted | `event.reconciliation.conflict-detected.v1` or `event.reconciliation.verified-profile-ready.v1`. |
-| Resulting state | `RECONCILIATION_REQUIRED` or `VERIFIED_PROFILE_READY`. |
-| Failure path | Missing profile, unclear critical usage or unresolved conflict blocks classification. |
-| State transitions | `AI_USAGE_FLOW_READY -> RECONCILIATION_REQUIRED` or `VERIFIED_PROFILE_READY`. |
+```text
+VerifiedProfile
+-> Hybrid Retrieval / LegalRuleMatch
+-> RiskClassification
+-> GapAnalysis
+-> GeneratedDocument
+```
 
-### Generate Verified Profile
+Every async state shows loading, timeout, failed, blocked, retry/re-run, and audit-reference behavior in UX.
 
-| Field | Content |
-|---|---|
-| Goal | Create reconciled source for legal matching. |
-| Preconditions | Evidence is ready; AIUsageFlow exists; all conflicts resolved or no conflict exists. |
-| Happy path | System merges WizardProfile, TechnicalProfile, AIUsageFlow and Manager resolutions into VerifiedProfile. |
-| System behavior | Preserves scanner evidence immutably and stores Manager resolution separately. |
-| Database changes | Creates `VerifiedProfile`; writes `AuditEvent`; writes legal matching command. |
-| Events emitted | `event.reconciliation.verified-profile-ready.v1`, `command.legal-matching.requested.v1`. |
-| Resulting state | `VERIFIED_PROFILE_READY`, then legal matching begins. |
-| Failure path | Any unresolved material conflict blocks creation. |
-| State transitions | `RECONCILIATION_REQUIRED -> VERIFIED_PROFILE_READY` only after resolution. |
+## Internal Legal Operations Flow
 
-### Execute Classification
+The following is required system functionality but excluded from Manager/Developer UX scope:
 
-| Field | Content |
-|---|---|
-| Goal | Produce evidence-backed risk result or blocked state. |
-| Preconditions | VerifiedProfile exists; legal matching completed; citations available where required. |
-| Happy path | Legal Matching Worker creates LegalRuleMatch; Classification Worker creates RiskClassification. |
-| System behavior | Does not classify from provider/model/framework presence alone. |
-| Database changes | Creates `LegalRuleMatch`; creates `RiskClassification`; writes audit/outbox. |
-| Events emitted | `event.legal-matching.completed.v1`, `command.classification.requested.v1`, `event.classification.completed.v1` or `event.classification.blocked.v1`. |
-| Resulting state | `CLASSIFICATION_READY` or `CLASSIFICATION_BLOCKED`. |
-| Failure path | Missing citation, policy-only source without binding basis, unresolved conflict or unknown critical usage blocks/degrades. |
-| State transitions | `VERIFIED_PROFILE_READY -> LEGAL_MATCHING_READY -> CLASSIFICATION_READY` or blocked. |
+```text
+approved source URL
+-> ingest snapshot
+-> hash and normalize
+-> internal legal review
+-> approve immutable LegalCorpusVersion
+-> build FTS/vector index
+-> expose approved version to retrieval
+```
 
-### Generate Documents
+The MVP interface for this actor is internal API/CLI and operational audit records. A customer-facing corpus administration console is Post-MVP.
 
-| Field | Content |
-|---|---|
-| Goal | Create gap analysis and document artifact under output guardrails. |
-| Preconditions | RiskClassification exists; final report requires completed GapAnalysis, legal trace and no unresolved conflict. |
-| Happy path | Gap Analysis Worker creates `GapAnalysis`; Document Worker uses RiskClassification, GapAnalysis, legal matches, evidence refs and template version to persist document metadata and artifact ref. |
-| System behavior | Blocks or degrades output when legal citation or conflict prerequisites fail. |
-| Database changes | Creates `GapAnalysis` domain result and `GeneratedDocument`; writes audit/outbox. |
-| Events emitted | `command.gap-analysis.requested.v1`, `event.gap-analysis.completed.v1`, `command.document.requested.v1`, `event.document.generated.v1` or `event.document.blocked.v1`. |
-| Resulting state | `DOCUMENT_GENERATED` or `DOCUMENT_BLOCKED`. |
-| Failure path | Missing citation, missing classification, unresolved conflict or output guardrail failure blocks final document. |
-| State transitions | `CLASSIFICATION_READY -> GAP_ANALYSIS_READY -> DOCUMENT_GENERATED` or blocked. |
+## UX Deliverable Boundary
+
+`bmad-ux` must produce canonical Manager and optional Developer experiences for flows 1-16, including responsive layouts, accessibility, empty/loading/error/blocked/degraded states, status language, evidence/citation disclosure, and safe recovery actions. It must not create active screens for `FR-050`, `FR-051`, `FR-052`, or customer-facing corpus administration.

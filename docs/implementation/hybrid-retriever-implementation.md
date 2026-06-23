@@ -2,87 +2,175 @@
 
 ## Status
 
-AUTHORITATIVE — A-to-Z Runnable MVP (Phase 5.2J)
-
-New document per SPRINT-CHANGE-PROPOSAL-5.2J (2026-06-23). Defines pgvector + FTS hybrid search implementation details per ADR-026.
+AUTHORITATIVE — A-to-Z Runnable MVP
 
 ## Purpose
 
-Defines the PostgreSQL indexing strategy, hybrid ranking execution, and audit logging for legal matching.
+Define PostgreSQL FTS + pgvector indexing, hybrid ranking, effective-date/corpus filters, citation reconstruction, privacy, and retrieval auditing for legal matching.
 
 ## Active References
 
 - `docs/architecture/adr/adr-026-hybrid-legal-retriever.md`
 - `docs/specs/legal-matching-domain-spec.md`
+- `docs/specs/legal-corpus-source-spec.md`
 - `docs/implementation/persistence-implementation.md`
 - `docs/implementation/queue-implementation.md`
 
----
+## Locked MVP Retrieval Profile
 
-## Indexing Strategy
+| Concern | Value |
+|---|---|
+| Vector column | `vector(1536)` |
+| Similarity | cosine distance (`<=>`) |
+| Vector index | HNSW, `m=16`, `ef_construction=64` |
+| FTS configuration | PostgreSQL `simple` dictionary over normalized Vietnamese text |
+| Diacritic support | `unaccent` applied to indexed and query text |
+| Hybrid weights | FTS `0.4`, vector similarity `0.6` |
+| Candidate limit | configurable, default 20 before citation/metadata rerank |
+| Final result limit | configurable, default 8 |
+| Corpus | approved immutable version pinned to assessment |
+| Embedding generation | batch build only; never on demand in legal matching |
 
-### 1. Vector Indexing (pgvector)
-- **Column Definition:** `embedding Unsupported("vector(1536)")?` in `LegalDocumentChunk` table.
-- **Index Type:** HNSW (Hierarchical Navigable Small World) for fast cosine similarity search.
-- **SQL Migration:**
-  ```sql
-  CREATE EXTENSION IF NOT EXISTS vector;
-  CREATE INDEX IF NOT EXISTS legal_chunk_hnsw_idx ON "LegalDocumentChunk" 
-  USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
-  ```
+The configured embedding model for the MVP acceptance environment must emit 1536-dimensional vectors. Provider/model name and credential reference are environment configuration and are recorded in `ModelRunMetadata`.
 
-### 2. Full-Text Search (FTS) Indexing
-- **Index Type:** GIN index on text elements of legal clauses.
-- **SQL Migration:**
-  ```sql
-  CREATE INDEX IF NOT EXISTS legal_chunk_fts_idx ON "LegalDocumentChunk" 
-  USING gin (to_tsvector('english', content));
-  ```
-  *(Note: Standard 'english' dictionary is used as a baseline parser for controlled MVP keyword matching).*
+## PostgreSQL Extensions and Indexes
 
----
-
-## Hybrid Query Execution & Ranking
-
-The retriever combines FTS and Vector search scores to identify the most relevant legal articles.
-
-### Linear Weighted Score Formula
-The system combines the normalized scores linearly:
-```text
-Score = (Weight_FTS * FTS_Rank) + (Weight_Vector * (1 - Cosine_Distance))
-```
-- Default weights: `Weight_FTS = 0.4`, `Weight_Vector = 0.6`.
-- FTS Rank is computed using `ts_rank_cd`.
-- Cosine Distance is computed using `<=>` operator in pgvector.
-
-### Pinned Filters
-Every search query must apply strict relational filters:
-1. **Corpus Version Pinning:** Matches `corpusVersionId` recorded at assessment start.
-2. **Effective Date Restriction:** Matches `effectiveStartDate <= assessment_date` and `(effectiveEndDate IS NULL OR effectiveEndDate >= assessment_date)`.
-
-### Raw SQL Query Example
 ```sql
-SELECT 
-  c.id, 
-  c.content,
-  (0.4 * ts_rank_cd(to_tsvector('english', c.content), plainto_tsquery('english', :query))) +
-  (0.6 * (1 - (c.embedding <=> :embedding::vector))) as hybrid_score
-FROM "LegalDocumentChunk" c
-JOIN "LegalCorpusItem" item ON c."corpusItemId" = item.id
-JOIN "LegalDocument" doc ON item."documentId" = doc.id
-WHERE item."corpusVersionId" = :corpusVersionId
-  AND doc."effectiveStartDate" <= :assessmentDate
-  AND (doc."effectiveEndDate" IS NULL OR doc."effectiveEndDate" >= :assessmentDate)
-ORDER BY hybrid_score DESC
-LIMIT :limit;
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS unaccent;
+
+ALTER TABLE "LegalDocumentChunk"
+ADD COLUMN IF NOT EXISTS "searchVector" tsvector;
+
+UPDATE "LegalDocumentChunk"
+SET "searchVector" = to_tsvector('simple', unaccent(coalesce(content, '')));
+
+CREATE INDEX IF NOT EXISTS legal_chunk_fts_idx
+ON "LegalDocumentChunk"
+USING gin ("searchVector");
+
+CREATE INDEX IF NOT EXISTS legal_chunk_hnsw_idx
+ON "LegalDocumentChunk"
+USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
 ```
 
----
+Do not use the PostgreSQL `english` dictionary for Vietnamese legal content. Embeddings are written only for chunks in an approved LegalCorpusVersion, with content hash and embedding model/version metadata.
 
-## Retrieval Auditing
+## Hybrid Ranking
 
-To maintain compliance audit integrity (NFR-010):
+```text
+hybridScore =
+  0.4 * normalizedFtsRank
+  + 0.6 * vectorSimilarity
+```
 
-- Every retrieval execution must log to the `RetrievalAuditLog` table.
-- Logged fields: `id` (UUID), `assessmentId`, `queryText` (raw text), `filtersApplied` (JSON representing pinned version and dates), `resultCount`, and `results` (JSON array of matched chunk IDs, scores, and parent legal locators).
-- No query payloads may contain raw system secrets or repository code (NFR-015).
+Vector similarity is `1 - cosine_distance`. Scores are normalized to `[0,1]` before combination.
+
+Every query applies:
+
+1. approved corpus version pinned to the assessment;
+2. effective-date interval at assessment date;
+3. validated source status;
+4. optional document type, issuing authority, and source-tier filters;
+5. supersession relationships inside the pinned corpus;
+6. citation reconstruction completeness.
+
+Example shape:
+
+```sql
+WITH candidates AS (
+  SELECT
+    c.id,
+    item."corpusVersionId",
+    doc.id AS "documentId",
+    ts_rank_cd(
+      c."searchVector",
+      plainto_tsquery('simple', unaccent(:queryText))
+    ) AS fts_rank,
+    1 - (c.embedding <=> :queryEmbedding::vector) AS vector_similarity
+  FROM "LegalDocumentChunk" c
+  JOIN "LegalCorpusItem" item ON c."corpusItemId" = item.id
+  JOIN "LegalDocument" doc ON item."documentId" = doc.id
+  JOIN "LegalCorpusVersion" corpus ON item."corpusVersionId" = corpus.id
+  JOIN "LegalSource" source ON doc."sourceId" = source.id
+  WHERE item."corpusVersionId" = :corpusVersionId
+    AND corpus.status = 'APPROVED'
+    AND source."validationStatus" = 'VALIDATED'
+    AND doc."effectiveStartDate" <= :assessmentDate
+    AND (doc."effectiveEndDate" IS NULL OR doc."effectiveEndDate" >= :assessmentDate)
+)
+SELECT *,
+  (0.4 * fts_rank) + (0.6 * vector_similarity) AS hybrid_score
+FROM candidates
+ORDER BY hybrid_score DESC
+LIMIT :candidateLimit;
+```
+
+## Citation Reconstruction
+
+Each material result reconstructs:
+
+- legal document ID, type, number, title, and issuer;
+- article, clause, point, and appendix path where applicable;
+- source URL and authority;
+- retrieved-at timestamp and content hash;
+- corpus version ID;
+- effective date interval;
+- chunk ID and normalized content hash;
+- FTS rank, vector similarity, hybrid score;
+- retrieval audit ID.
+
+A candidate without reconstructable citation fields is ineligible for a material LegalRuleMatch.
+
+## Retrieval Privacy
+
+Retriever queries are derived from structured VerifiedProfile/AIUsageFlow labels and exclude raw repository source, credentials, full prompts, unnecessary personal free text, and unredacted logs.
+
+`RetrievalAuditLog` stores sanitized query terms/facets, query hash, corpus/date/metadata filters, matched IDs, scores, result count, correlation ID, and timestamp. It does not store arbitrary raw query text that may contain customer-sensitive content.
+
+## Canonical Index Build Workflow
+
+```text
+LegalCorpusVersion APPROVED
+-> command.embedding-build.requested.v1
+-> load approved chunks
+-> normalize and unaccent text
+-> compute FTS vectors
+-> batch embedding through configured gateway/provider
+-> verify dimension, content hash, and model metadata
+-> write index data and ModelRunMetadata
+-> event.embedding-build.completed.v1
+```
+
+Failure publishes `event.embedding-build.failed.v1`, leaves the corpus unavailable for legal matching, and exposes an actionable audited state.
+
+## Failure Behavior
+
+| Condition | Behavior |
+|---|---|
+| Corpus not approved | block retrieval |
+| Source not validated | exclude source and block if required basis is unavailable |
+| Embedding missing or dimension mismatch | fail index build; do not silently run vector query |
+| pgvector/HNSW unavailable | block required hybrid retrieval |
+| FTS unavailable | block required hybrid retrieval |
+| Zero candidates | do not claim applicability; block/degrade classification by rule criticality |
+| Citation cannot be reconstructed | reject candidate |
+| Effective date mismatch | exclude candidate |
+| Budget or credential failure during index build | fail explicitly; keep approved corpus but mark index unavailable |
+
+## Audit and Cost Controls
+
+- Record embedding provider/model, vector dimension, usage/cost metadata, corpus version, and content hashes.
+- Enforce monthly embedding budget and per-run caps under `NFR-033`.
+- Record only sanitized query metadata and result references.
+- Reproduce retrieval from corpus version, index profile, query hash, filters, and model version.
+
+## Acceptance
+
+- Vietnamese search uses `simple` + `unaccent`, not English stemming.
+- Hybrid retrieval uses approved corpus, date, source, and metadata filters.
+- Results reconstruct article/clause/point-level citations.
+- Raw source and sensitive customer text are absent from retrieval/audit payloads.
+- Missing index or citation fails closed.
+- `FR-053`, `FR-054`, and `FR-056` retain canonical `NFR-017`, `NFR-033`, and `NFR-034` dependencies.

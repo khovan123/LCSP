@@ -2,123 +2,76 @@
 
 ## Purpose
 
-This document summarizes the active canonical requirements traceability state for LCSP after Phase 5.2K-A planning remediation.
-
-It does not create requirements, certify implementation readiness, or claim story-level coverage.
-
-## Identifier Governance
-
-- Canonical functional requirements are `FR-001..FR-056` in `docs/specs/functional-requirements.md`.
-- PRD `FR-E*` values are product narrative/source aliases only.
-- Canonical active NFRs are `NFR-001..NFR-030` and `NFR-033..NFR-035` in `docs/specs/non-functional-requirements.md`.
-- `NFR-031` and `NFR-032` are legacy identifiers only, not active catalog rows.
-- Historical or archived documents do not override active canonical documents.
+Summarize canonical requirement and planning traceability after Phase 5.2K pre-UX active-document closure. This document does not certify implementation readiness or story coverage.
 
 ## Canonical Inventory
 
-| Inventory Item | Count / Status |
+| Item | Count / Status |
 |---|---|
 | Canonical FR total | 56 |
-| Active MVP FR total | 53 |
-| Deferred FR total | 3 |
-| Active NFR total | 33 |
+| Active MVP FR total | 53 (`FR-001..FR-049`, `FR-053..FR-056`) |
+| Deferred FR total | 3 (`FR-050..FR-052`) |
+| Active NFR total | 33 (`NFR-001..NFR-030`, `NFR-033..NFR-035`) |
 | AC total | 41 |
-| UX specification status | CANONICAL_UX_PENDING |
-| Canonical epics/stories artifact | Missing |
-| Story coverage status | STORY_TRACEABILITY_PENDING |
+| Canonical use cases | `UC-001..UC-018` |
+| Canonical UX | authorized and pending creation |
+| Canonical epics/stories | missing |
+| Story traceability | pending / not assessable |
 
-## Functional Requirement Scope
+`NFR-031` and `NFR-032` are legacy aliases of active `NFR-005` and `NFR-008`. PRD `FR-E*` values and legacy `UC-MXX-XX` values are source aliases only.
 
-| FR Range | Status | Meaning |
-|---|---|---|
-| `FR-001..FR-049` | Active MVP | Core platform, assessment, evidence, reconciliation, classification, reporting, audit and repository-scan behavior. |
-| `FR-050` | Deferred | Local/CI scanner report upload. |
-| `FR-051` | Deferred | Manual technical evidence JSON upload. |
-| `FR-052` | Deferred | Delegated technical clarification. |
-| `FR-053..FR-056` | Active MVP | Legal-source ingestion, corpus approval, LLM provider configuration and hybrid search. |
+## Active Scope
 
-## Non-Functional Requirement Scope
+- GitHub App read-only Repository Scan is the golden technical-evidence path.
+- Python Worker owns Repository Scan lifecycle.
+- Python analysis is first-class and bounded; TS/JS uses a Node subprocess.
+- Real LLM and embedding providers are required for A-to-Z acceptance.
+- Legal corpus uses validated official-source snapshots, internal approval, immutable versioning, and hybrid FTS/pgvector retrieval.
+- Manager can complete the golden path without Developer participation.
+- Structured attestation is optional supplemental input under `FR-046`.
+- Local/CI upload (`FR-050`), manual evidence JSON (`FR-051`), and delegated free-form clarification (`FR-052`) are Deferred.
 
-| NFR Range | Status |
-|---|---|
-| `NFR-001..NFR-030` | Active |
-| `NFR-031` | Legacy alias of active `NFR-005` for OAuth identity-linking safety |
-| `NFR-032` | Legacy alias of active `NFR-008` for Manager super-role enforcement |
-| `NFR-033..NFR-035` | Active |
+## UX Boundary
 
-## Active Traceability Assertions
+`bmad-ux` is authorized to design:
 
-```text
-canonicalFrTotal = 56
-activeMvpFrTotal = 53
-deferredFrTotal = 3
+- Manager authentication, organization, assessment, Wizard, repository, scan, evidence, reconciliation, classification, gap, document, and audit experiences;
+- optional Developer invitation/task, redacted findings, and structured attestation experiences;
+- all loading, empty, permission-denied, insufficient, blocked, failed, retry, rerun, degraded, and audit-reference states.
 
-activeNfrTotal = 33
+It must not design active customer-facing flows for:
 
-FR-050 = DEFERRED
-FR-051 = DEFERRED
-FR-052 = DEFERRED
+- `FR-050..FR-052`;
+- corpus source ingestion, review, approval, or index administration;
+- production administration outside active MVP scope.
 
-NFR-031 = LEGACY_ALIAS_OF_NFR-005
-NFR-032 = LEGACY_ALIAS_OF_NFR-008
-
-goldenEvidencePath = GITHUB_APP_REPOSITORY_SCAN
-developerParticipation = OPTIONAL
-attestation = OPTIONAL_SUPPLEMENTAL
-attestationCanUnlockClassification = false
-managerFinalResolver = true
-
-STORY_COVERAGE_NOT_ASSESSABLE
-CANONICAL_UX_PENDING
-STORY_TRACEABILITY_PENDING
-CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
-```
-
-## Coverage Boundaries
-
-Requirement-to-domain and requirement-to-implementation-area coverage are tracked in `docs/specs/requirements-traceability-matrix.md`.
-
-UX and story-level traceability remain pending until `bmad-ux` and `bmad-create-epics-and-stories` produce canonical UX and user-value epics/stories. This document must not be read as implementation readiness certification.
+Internal Legal Operator corpus administration remains API/CLI-only for MVP. Manager UX may display assessment-relevant corpus version and citation provenance only.
 
 ## Story Dependency Carry-Forward
 
-When canonical stories are created, legal-source and retrieval stories must carry these explicit NFR dependencies:
-
-| FR | Story-layer NFR dependencies |
+| FR | Required story-layer NFR dependencies |
 |---|---|
-| `FR-053` | `NFR-017`, `NFR-034` |
-| `FR-054` | `NFR-017`, `NFR-034` |
-| `FR-056` | `NFR-017`, `NFR-033`, `NFR-034` |
+| FR-053 | NFR-017, NFR-034 |
+| FR-054 | NFR-017, NFR-034 |
+| FR-055 | NFR-012, NFR-033 |
+| FR-056 | NFR-017, NFR-033, NFR-034 |
 
-## Deferred Evidence Paths
+Every story must trace to canonical UC, FR, AC, relevant NFRs, UX flow/state, domain state, implementation area, and failure/recovery behavior.
 
-The MVP golden technical-evidence path is GitHub App read-only Repository Scan.
-
-The following are deferred and must not be treated as active MVP architecture, story or implementation paths:
-
-- `FR-050`: Local/CI scanner report upload.
-- `FR-051`: Manual technical evidence JSON upload.
-- `FR-052`: Delegated technical clarification.
-- API probe evidence unless separately approved through change control.
-
-## Developer Collaboration and Attestation
-
-Developer collaboration remains an optional MVP path. Manager can complete the A-to-Z golden path without Developer participation.
-
-Structured attestation is optional supplemental input only:
-
-- it is not required for the golden path;
-- it requires a scoped Developer task;
-- it cannot replace scanner metadata;
-- it cannot independently unlock classification;
-- it cannot finalize conflict resolution;
-- Manager remains final resolver;
-- `FR-045` disclosure/audit applies whenever attestation influences a material decision;
-- `FR-046` submission must not be represented without `FR-045` disclosure/audit.
-
-## Readiness Status
+## Status
 
 ```text
+ACTIVE_DOCS_PRE_UX_SYNCHRONIZED
+CANONICAL_USE_CASES_NORMALIZED
+CANONICAL_ACCEPTANCE_CRITERIA_NORMALIZED
+LEGAL_CORPUS_UX_BOUNDARY_LOCKED
+PYTHON_WORKER_CODE_MAPS_ALIGNED
+SCANNER_RUNTIME_BLUEPRINT_ALIGNED
+CANONICAL_UX_AUTHORIZED
+CANONICAL_UX_PENDING
+STORY_TRACEABILITY_PENDING
+STORY_COVERAGE_NOT_ASSESSABLE
+CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
 IMPLEMENTATION_READINESS_NOT_CERTIFIED
-STORY_LEVEL_TRACEABILITY_PENDING
+IMPLEMENTATION_NOT_AUTHORIZED
 ```

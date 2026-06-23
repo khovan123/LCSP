@@ -2,25 +2,23 @@
 
 ## Purpose
 
-This document is the domain-level source of truth for LCSP business entities, object lifecycles, relationships and service ownership. Physical Prisma schema remains owned by `docs/implementation/persistence-implementation.md`.
+This document is the domain-level source of truth for LCSP entities, ownership, relationships, and lifecycle semantics. Physical Prisma definitions remain owned by `docs/implementation/persistence-implementation.md`.
 
 ## Domain Object Flow
 
 ```text
 Organization
--> User
+-> User / OrganizationMembership
 -> Assessment
 -> WizardProfile
 -> RepositoryConnection
 -> RepositorySnapshot
--> ScanJob
--> SourceFile
--> TechnicalFinding
--> TechnicalEvidenceReport
+-> RepositoryScanJob
+-> SourceFile / EvidenceReference / CodeGraph
+-> TechnicalFinding / TechnicalEvidenceReport
 -> TechnicalProfile
--> AIUsageFlow
--> Conflict
--> VerifiedProfile
+-> AIUsageFlow / AIUsageFlowClaim
+-> ReconciliationConflict or VerifiedProfile
 -> LegalRuleMatch
 -> RiskClassification
 -> GapAnalysis
@@ -28,410 +26,339 @@ Organization
 -> AuditEvent
 ```
 
-## Entity Catalog
+Legal corpus preparation is a parallel internal operations flow:
+
+```text
+LegalSource
+-> LegalDocument
+-> LegalCorpusItem
+-> CorpusApprovalRecord
+-> LegalCorpusVersion APPROVED
+-> LegalDocumentChunk / FTS / embedding
+-> RetrievalAuditLog
+-> LegalRuleMatch
+```
+
+## Ownership Principles
+
+- Manager owns assessment business truth and final conflict resolution.
+- Developer is optional and may submit only scoped structured attestation.
+- Python Worker owns Repository Scan lifecycle and scanner evidence entities.
+- Internal Legal Operator owns corpus review/approval actions through internal API/CLI for MVP.
+- Approved LegalCorpusVersion is immutable.
+- All material transitions create AuditEvent and asynchronous transitions use OutboxEvent.
+- Raw source, secrets, full prompts, and full AST bodies are not persistent domain data.
+
+## Identity and Administration
 
 ### Organization
 
-| Aspect | Value |
-|---|---|
-| Purpose | Tenant boundary for users, assessments and repository connections. |
-| Owner Service | Organization / Backend API |
-| Lifecycle | Created, active, archived by operating policy. |
-| State Machine | No active domain state beyond lifecycle policy. |
-| Relationships | Has Users through membership; owns Assessments, RepositoryConnections and AuditEvents. |
-| Business Rules | BR-014, BR-015 |
-
-| Field | Type | Required | Description |
+| Field | Type | Required | Meaning |
 |---|---|---:|---|
-| organizationId | UUIDv7 | Yes | Organization identity. |
-| name | string | Yes | Organization display name. |
-| createdAt | datetime | Yes | Creation timestamp. |
-| updatedAt | datetime | Yes | Last update timestamp. |
+| organizationId | UUIDv7 | Yes | Tenant identity |
+| name | string | Yes | Display name |
+| createdAt / updatedAt | datetime | Yes | Lifecycle timestamps |
+
+Relationships: has memberships, users, assessments, repository connections, and audit events.
 
 ### User
 
-| Aspect | Value |
-|---|---|
-| Purpose | Human account that can act as Manager or Developer. |
-| Owner Service | Identity & Access / Backend API |
-| Lifecycle | Created, authenticated, active, disabled by policy. |
-| State Machine | Auth/session state is separate from assessment state. |
-| Relationships | Belongs to OrganizationMembership; may own Assessments; may create AuditEvents. |
-| Business Rules | BR-001..BR-013, BR-086..BR-088, BR-094 |
-
-| Field | Type | Required | Description |
+| Field | Type | Required | Meaning |
 |---|---|---:|---|
-| userId | UUIDv7 | Yes | User identity. |
-| email | string | Yes | Unique login/contact identity. |
-| displayName | string | No | Human-readable name. |
-| createdAt | datetime | Yes | Creation timestamp. |
-| updatedAt | datetime | Yes | Last update timestamp. |
+| userId | UUIDv7 | Yes | User identity |
+| email | string | Yes | Login/contact identity |
+| displayName | string | No | Human-readable name |
+| status | enum | Yes | active/disabled lifecycle |
+
+### OrganizationMembership
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| membershipId | UUIDv7 | Yes | Membership identity |
+| organizationId / userId | UUIDv7 | Yes | Tenant/user link |
+| role | enum | Yes | Manager or Developer |
+| policyScope | JSON | No | Delegated permissions/tasks |
+| status | enum | Yes | invited/active/revoked |
+
+## Assessment and Repository
 
 ### Assessment
 
-| Aspect | Value |
-|---|---|
-| Purpose | Central work unit for evaluating one AI system or AI-enabled business process. |
-| Owner Service | Assessment / Backend API |
-| Lifecycle | Created by Manager and progresses through evidence, reconciliation, classification and reporting states. |
-| State Machine | `CREATED -> WIZARD_PROFILE_READY -> REPOSITORY_CONNECTED -> SNAPSHOT_CREATED -> SCAN_REQUESTED -> SCAN_RUNNING -> SCAN_COMPLETED -> TECHNICAL_PROFILE_READY -> AI_USAGE_FLOW_READY -> RECONCILIATION_REQUIRED or VERIFIED_PROFILE_READY -> LEGAL_MATCHING_READY -> CLASSIFICATION_READY or CLASSIFICATION_BLOCKED -> GAP_ANALYSIS_READY or GAP_ANALYSIS_BLOCKED -> DOCUMENT_GENERATED or DOCUMENT_BLOCKED`. |
-| Relationships | Owns WizardProfiles, RepositoryConnections, Snapshots, ScanJobs, profiles, conflicts, legal matches, classifications, documents and audit events. |
-| Business Rules | BR-018, BR-023..BR-025, BR-089, BR-093 |
-
-| Field | Type | Required | Description |
+| Field | Type | Required | Meaning |
 |---|---|---:|---|
-| assessmentId | UUIDv7 | Yes | Assessment identity. |
-| organizationId | UUIDv7 | Yes | Tenant boundary. |
-| ownerManagerId | UUIDv7 | Yes | Manager owner. |
-| title | string | Yes | Assessment label. |
-| state | AssessmentState | Yes | Current lifecycle state. |
-| createdAt | datetime | Yes | Creation timestamp. |
-| updatedAt | datetime | Yes | Last state/content update. |
+| assessmentId | UUIDv7 | Yes | Assessment identity |
+| organizationId | UUIDv7 | Yes | Tenant boundary |
+| ownerManagerId | UUIDv7 | Yes | Final accountable actor |
+| title | string | Yes | Assessment label |
+| state | AssessmentState | Yes | Canonical lifecycle state |
+| createdAt / updatedAt | datetime | Yes | Timestamps |
 
-### RepositoryConnection
+Lifecycle:
 
-| Aspect | Value |
-|---|---|
-| Purpose | Records selected GitHub repository authorization for an assessment. |
-| Owner Service | Repository Integration / Backend API |
-| Lifecycle | Created after GitHub App authorization; used to create snapshots; revocable by policy. |
-| State Machine | Connected or unavailable by external authorization state. |
-| Relationships | Belongs to Organization and Assessment; creates RepositorySnapshots. |
-| Business Rules | BR-032, BR-077, BR-088 |
-
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| repositoryConnectionId | UUIDv7 | Yes | Connection identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| provider | string | Yes | Repository provider, currently GitHub. |
-| installationId | string | Yes | GitHub App installation reference. |
-| repositoryOwner | string | Yes | Repository owner/org. |
-| repositoryName | string | Yes | Repository name. |
-| repositoryId | string | Yes | Provider repository identity. |
-| selectedBranch | string | No | Default branch selected for scan. |
-
-### ScanJob
-
-| Aspect | Value |
-|---|---|
-| Purpose | Tracks request and execution status for repository scan. |
-| Owner Service | Scan API + Scanner Worker |
-| Lifecycle | REQUESTED, RUNNING, COMPLETED, FAILED, CANCELED. |
-| State Machine | `REQUESTED -> RUNNING -> COMPLETED` or `FAILED/CANCELED`. |
-| Relationships | Belongs to Assessment and RepositorySnapshot; produces TechnicalEvidenceReport and graph metadata. |
-| Business Rules | BR-077 |
-
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| scanJobId | UUIDv7 | Yes | Scan job identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| repositorySnapshotId | UUIDv7 | Yes | Commit-pinned snapshot. |
-| status | ScanJobStatus | Yes | Job status. |
-| idempotencyKey | string | Yes | Duplicate scan prevention. |
-| scannerVersion | string | Yes | Scanner version. |
-| rulesetVersion | string | Yes | Detection ruleset version. |
-| requestedBy | UUIDv7 | Yes | Actor who requested scan. |
-| failureCode | string | No | Failure code if failed. |
-| failureMessage | string | No | Redacted failure reason. |
-
-### RepositorySnapshot
-
-| Aspect | Value |
-|---|---|
-| Purpose | Commit-pinned repository state used as evidence source. |
-| Owner Service | Repository Integration / Scanner Worker |
-| Lifecycle | Created once per selected repository/commit; immutable for traceability. |
-| State Machine | Snapshot created; downstream scan may run or fail. |
-| Relationships | Belongs to RepositoryConnection and Assessment; owns SourceFiles and ScanJobs. |
-| Business Rules | BR-032, BR-077 |
-
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| repositorySnapshotId | UUIDv7 | Yes | Snapshot identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| repositoryConnectionId | UUIDv7 | Yes | Source connection. |
-| branch | string | Yes | Branch name. |
-| commitSha | string | Yes | Pinned commit. |
-| fileCount | number | Yes | Source inventory count. |
-| totalBytes | number | Yes | Total bytes inventoried. |
-| metadata | JSON | Yes | Redacted snapshot metadata. |
-
-### SourceFile
-
-| Aspect | Value |
-|---|---|
-| Purpose | Metadata record for a file in a repository snapshot. |
-| Owner Service | Scanner Worker |
-| Lifecycle | Created during repository inventory; immutable for the snapshot. |
-| State Machine | Classified as supported, syntax-only, basic-signal-only, ignored or unsupported. |
-| Relationships | Belongs to RepositorySnapshot; may have EvidenceReferences. |
-| Business Rules | BR-057..BR-061 |
-
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| sourceFileId | UUIDv7 | Yes | Source file metadata identity. |
-| repositorySnapshotId | UUIDv7 | Yes | Snapshot scope. |
-| relativePath | string | Yes | Repository-relative path, not source body. |
-| extension | string | Yes | File extension. |
-| language | string | Yes | Detected language. |
-| supportLevel | AnalysisSupportLevel | Yes | Analysis support level. |
-| sizeBytes | number | Yes | File size. |
-| contentHash | string | Yes | Hash for integrity/ref only. |
-| ignored | boolean | Yes | Whether scanner skipped file. |
-| coverageLimitations | JSON | No | Skip/coverage reasons. |
-
-### TechnicalFinding
-
-| Aspect | Value |
-|---|---|
-| Purpose | Atomic technical evidence item produced by static analysis. |
-| Owner Service | Scanner Worker |
-| Lifecycle | Created with TechnicalEvidenceReport; immutable. |
-| State Machine | No independent state. |
-| Relationships | Belongs to TechnicalEvidenceReport and EvidenceReference. |
-| Business Rules | BR-035, BR-080 |
-
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| findingId | UUIDv7 | Yes | Finding identity. |
-| reportId | UUIDv7 | Yes | Evidence report owner. |
-| evidenceRefId | UUIDv7 | Yes | Evidence reference. |
-| findingType | FindingType | Yes | Signal category. |
-| confidence | number | Yes | 0.0 to 1.0 confidence. |
-| severity | string | Yes | Redacted severity/category label. |
-| metadata | JSON | Yes | No raw source, secrets, full prompts or full AST. |
-
-### TechnicalEvidenceReport
-
-| Aspect | Value |
-|---|---|
-| Purpose | Versioned scan report containing evidence metadata and findings. |
-| Owner Service | Scanner Worker |
-| Lifecycle | DRAFT, SCHEMA_VALID, QUALITY_VALID, QUALITY_INSUFFICIENT, FAILED. |
-| State Machine | Created after scan; gates determine validity and downstream eligibility. |
-| Relationships | Belongs to Assessment and ScanJob; owns TechnicalFindings; feeds TechnicalProfile. |
-| Business Rules | BR-036..BR-040, BR-056, BR-069 |
-
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| technicalEvidenceReportId | UUIDv7 | Yes | Report identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| scanJobId | UUIDv7 | Yes | Scan job source. |
-| status | EvidenceReportStatus | Yes | Report lifecycle state. |
-| qualityStatus | EvidenceQualityStatus | Yes | Evidence gate result. |
-| reportHash | string | Yes | Integrity hash. |
-| scannerVersion | string | Yes | Scanner version. |
-| rulesetVersion | string | Yes | Ruleset version. |
-| schemaVersion | string | Yes | Report schema version. |
-| coverageSummary | JSON | Yes | Coverage and limitation summary. |
-| privacyFlags | JSON | Yes | Source/privacy controls. |
-
-### TechnicalProfile
-
-| Aspect | Value |
-|---|---|
-| Purpose | Normalized technical summary derived from accepted technical evidence. |
-| Owner Service | Technical Profile Worker |
-| Lifecycle | Created after evidence gates pass; immutable snapshot per evidence report. |
-| State Machine | Ready when evidence is accepted and profile dimensions are generated. |
-| Relationships | Belongs to Assessment and TechnicalEvidenceReport; feeds AIUsageFlow and VerifiedProfile. |
-| Business Rules | BR-039, BR-080, BR-081 |
-
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| technicalProfileId | UUIDv7 | Yes | Profile identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| technicalEvidenceReportId | UUIDv7 | Yes | Evidence source. |
-| source | enum/string | Yes | `GITHUB_REPOSITORY_SCAN`. |
-| aiDetected | enum/string | Yes | none, possible or confirmed. |
-| providers | JSON | Yes | Detected providers. |
-| frameworks | JSON | Yes | Detected frameworks. |
-| modelInvocationCount | number | Yes | Evidence-backed invocation count. |
-| inputCategories | JSON | Yes | Input signal categories. |
-| outputCategories | JSON | Yes | Output signal categories. |
-| decisionFlowSignals | JSON | Yes | Decision-flow evidence. |
-| humanReviewSignals | JSON | Yes | Human review evidence. |
-| confidence | number | Yes | Profile confidence. |
-| evidenceRefs | JSON | Yes | Evidence references. |
+```text
+CREATED -> WIZARD_PROFILE_READY -> REPOSITORY_CONNECTED -> SNAPSHOT_CREATED
+-> SCAN_REQUESTED -> SCAN_RUNNING -> SCAN_COMPLETED
+-> TECHNICAL_PROFILE_READY -> AI_USAGE_FLOW_READY
+-> RECONCILIATION_REQUIRED or VERIFIED_PROFILE_READY
+-> LEGAL_MATCHING_READY -> CLASSIFICATION_READY/BLOCKED
+-> GAP_ANALYSIS_READY/BLOCKED -> DOCUMENT_GENERATED/BLOCKED
+```
 
 ### WizardProfile
 
-| Aspect | Value |
-|---|---|
-| Purpose | Manager-declared business/legal context for the assessment. |
-| Owner Service | Wizard / Backend API |
-| Lifecycle | Drafted, submitted, versioned on changes. |
-| State Machine | Wizard submission moves assessment to readiness/evidence-required state. |
-| Relationships | Belongs to Assessment; reconciled with TechnicalProfile and AIUsageFlow. |
-| Business Rules | BR-026..BR-031 |
-
-| Field | Type | Required | Description |
+| Field | Type | Required | Meaning |
 |---|---|---:|---|
-| wizardProfileId | UUIDv7 | Yes | Wizard profile identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| version | number | Yes | Version number. |
-| answers | JSON | Yes | Structured Manager answers. |
-| submittedBy | UUIDv7 | Yes | Manager actor. |
-| createdAt | datetime | Yes | Submission timestamp. |
+| wizardProfileId | UUIDv7 | Yes | Profile identity |
+| assessmentId | UUIDv7 | Yes | Owner assessment |
+| version | integer | Yes | Immutable version |
+| answers | JSON | Yes | Structured Manager answers |
+| submittedBy | UUIDv7 | Yes | Manager actor |
+| createdAt | datetime | Yes | Submission time |
 
-### Conflict
+### RepositoryConnection
 
-| Aspect | Value |
-|---|---|
-| Purpose | Records mismatch between WizardProfile, TechnicalProfile and AIUsageFlow. |
-| Owner Service | Reconciliation Worker + Backend API |
-| Lifecycle | CONFLICT_OPEN, RESOLVED, VERIFIED. |
-| State Machine | Open conflict blocks classification; Manager resolution can close it. |
-| Relationships | Belongs to Assessment and AIUsageFlow; may be resolved by Manager. |
-| Business Rules | BR-041..BR-048, BR-083, BR-093 |
-
-| Field | Type | Required | Description |
+| Field | Type | Required | Meaning |
 |---|---|---:|---|
-| conflictId | UUIDv7 | Yes | Conflict identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| aiUsageFlowId | UUIDv7 | Yes | Related usage flow. |
-| conflictType | string | Yes | Field/type of disagreement. |
-| status | ReconciliationStatus | Yes | Conflict status. |
-| evidenceRefs | JSON | Yes | Evidence references. |
-| managerResolution | JSON | No | Manager decision, stored separately from scanner evidence. |
-| resolvedBy | UUIDv7 | No | Manager actor. |
-| resolvedAt | datetime | No | Resolution time. |
+| repositoryConnectionId | UUIDv7 | Yes | Connection identity |
+| assessmentId | UUIDv7 | Yes | Assessment scope |
+| installationId | string | Yes | GitHub App installation ref |
+| repositoryOwner / repositoryName / repositoryId | string | Yes | Selected repository identity |
+| selectedBranch | string | No | Default branch |
+| status | enum | Yes | connected/revoked/unavailable |
+
+### RepositorySnapshot
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| repositorySnapshotId | UUIDv7 | Yes | Snapshot identity |
+| assessmentId / repositoryConnectionId | UUIDv7 | Yes | Scope/source |
+| branch / commitSha | string | Yes | Pinned source |
+| fileCount / totalBytes | integer | Yes | Inventory summary |
+| metadata | JSON | Yes | Redacted provider metadata |
+| createdAt | datetime | Yes | Snapshot time |
+
+Snapshot is immutable and historical reruns create new ScanJob/evidence versions.
+
+## Scanner Evidence
+
+### RepositoryScanJob
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| scanJobId | UUIDv7 | Yes | Job identity |
+| assessmentId / repositorySnapshotId | UUIDv7 | Yes | Scope |
+| status | ScanJobStatus | Yes | REQUESTED/RUNNING/COMPLETED/FAILED/CANCELED |
+| workerRuntime | enum | Yes | `PYTHON` for active MVP |
+| idempotencyKey | string | Yes | Duplicate protection |
+| scannerVersion / rulesetVersion | string | Yes | Reproducibility |
+| cleanupVerifiedAt | datetime | No | Required for COMPLETED |
+| failureCode / failureMessage | string | No | Redacted failure |
+
+### SourceFile
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| sourceFileId / repositorySnapshotId | UUIDv7 | Yes | Identity/scope |
+| relativePath / extension / language | string | Yes | Metadata only |
+| supportLevel | AnalysisSupportLevel | Yes | FULL_STATIC/BASIC_SIGNAL_ONLY/UNSUPPORTED |
+| sizeBytes | integer | Yes | File size |
+| contentHash | string | Yes | Integrity reference |
+| ignored | boolean | Yes | Skip state |
+| coverageLimitations | JSON | No | Bounded analysis gaps |
+
+### EvidenceReference
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| evidenceRefId | UUIDv7 | Yes | Reference identity |
+| sourceType | enum | Yes | STATIC_SCAN/WIZARD/MANAGER_RESOLUTION/LEGAL_CORPUS/SYSTEM_DERIVED |
+| sourceFileId | UUIDv7 | No | File source |
+| relativePath / symbolRef | string | No | Redacted location |
+| lineRange | JSON | No | Location only |
+| evidenceHash | string | Yes | Integrity hash |
+| redactionStatus | enum | Yes | No source stored/redacted metadata |
+
+### CodeGraphNode / CodeGraphEdge
+
+Metadata-only scan graph. Nodes/edges contain identifiers, types, file/symbol refs, evidence hashes, confidence, scanner/ruleset versions, and no source bodies.
+
+### TechnicalFinding
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| findingId | UUIDv7 | Yes | Finding identity |
+| technicalEvidenceReportId | UUIDv7 | Yes | Report owner |
+| findingType | FindingType | Yes | Canonical signal type |
+| confidence | number | Yes | 0.0-1.0 |
+| evidenceRefs | relation/JSON refs | Yes | One or more references where required |
+| metadata | JSON | Yes | Redacted normalized metadata |
+
+### TechnicalEvidenceReport
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| technicalEvidenceReportId | UUIDv7 | Yes | Report identity |
+| assessmentId / scanJobId | UUIDv7 | Yes | Scope/source |
+| status | EvidenceReportStatus | Yes | DRAFT/SCHEMA_VALID/QUALITY_VALID/QUALITY_INSUFFICIENT/FAILED |
+| reportHash | string | Yes | Integrity |
+| scannerVersion / rulesetVersion / schemaVersion | string | Yes | Reproducibility |
+| coverageSummary / privacyFlags | JSON | Yes | Gates and limitations |
+
+Only `QUALITY_VALID` report linked to COMPLETED ScanJob with verified cleanup is downstream eligible.
+
+## Intelligence and Reconciliation
+
+### TechnicalProfile
+
+Immutable summary derived from accepted evidence. Core fields: identity/scope, source report, AI detection state, providers/frameworks, invocation count, input/output categories, decision/human-review/domain signals, coverage limitations, confidence, and evidence refs.
+
+### AIUsageFlow / AIUsageFlowClaim
+
+AIUsageFlow groups claim-level records for business process, AI purpose, inputs, outputs, downstream action, affected subjects, human review, automation level, harms, uncertainty, and conflict candidates. Every material claim used for legal matching has evidence refs.
+
+### StructuredTechnicalAttestation
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| attestationId | UUIDv7 | Yes | Identity |
+| assessmentId / developerUserId | UUIDv7 | Yes | Scope/actor |
+| role / claim / scope / reason | structured fields | Yes | Required attestation content |
+| evidenceRefs | JSON/relation | Yes | Supporting refs |
+| submittedAt | datetime | Yes | Timestamp |
+| status | enum | Yes | accepted/rejected/withdrawn |
+
+Attestation is supplemental only, stored separately from scanner evidence, and cannot resolve conflict or unlock classification.
+
+### ReconciliationConflict
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| conflictId / assessmentId / aiUsageFlowId | UUIDv7 | Yes | Identity/scope |
+| conflictType | string | Yes | Material mismatch |
+| status | enum | Yes | CONFLICT_OPEN/RESOLVED/VERIFIED |
+| evidenceRefs | JSON/relation | Yes | Compared evidence |
+| managerResolution / rationale | JSON | No | Separate final decision |
+| resolvedBy / resolvedAt | UUIDv7/datetime | No | Manager resolution audit |
 
 ### VerifiedProfile
 
-| Aspect | Value |
-|---|---|
-| Purpose | Reconciled profile used as prerequisite for legal matching and classification. |
-| Owner Service | Reconciliation Worker |
-| Lifecycle | Created after no conflict or resolved conflict; versioned snapshot. |
-| State Machine | `VERIFIED_PROFILE_READY` enables legal matching. |
-| Relationships | Combines WizardProfile, TechnicalProfile, AIUsageFlow and Manager resolutions; feeds LegalRuleMatch and RiskClassification. |
-| Business Rules | BR-045, BR-078 |
+Immutable reconciled profile combining WizardProfile, TechnicalProfile, AIUsageFlow, and Manager resolutions. It is required before legal matching.
 
-| Field | Type | Required | Description |
+## Legal Corpus and Retrieval
+
+### LegalSource
+
+| Field | Type | Required | Meaning |
 |---|---|---:|---|
-| verifiedProfileId | UUIDv7 | Yes | Verified profile identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| technicalProfileId | UUIDv7 | Yes | Technical profile source. |
-| aiUsageFlowId | UUIDv7 | Yes | Usage-flow source. |
-| profileVersion | number | Yes | Version. |
-| mergedProfile | JSON | Yes | Reconciled facts. |
-| evidenceRefs | JSON | Yes | Evidence references. |
-| createdAt | datetime | Yes | Creation timestamp. |
+| legalSourceId | UUIDv7 | Yes | Source identity |
+| name / authority | string | Yes | Source label/authority |
+| baseUrl | string | Yes | Approved source boundary |
+| sourceTier | enum | Yes | PRIMARY/SUPPLEMENTARY |
+| validationStatus | enum | Yes | pending/validated/rejected |
+| validatedBy / validatedAt | string/datetime | No | Internal validation record |
+
+### LegalDocument
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| legalDocumentId / legalSourceId | UUIDv7 | Yes | Identity/source |
+| documentNumber / documentType / issuingAuthority / title | string | Yes | Official identity |
+| issueDate / effectiveStartDate / effectiveEndDate | date | Yes/No | Legal effect |
+| sourceUrl / snapshotRef | string | Yes | Provenance and immutable object storage ref |
+| retrievedAt / contentHash | datetime/string | Yes | Capture provenance |
+| status | enum | Yes | DRAFT/APPROVED/SUPERSEDED |
+| supersedes / supersededBy / amends | JSON | No | Legal relationships |
+
+### LegalCorpusItem
+
+Represents a normalized legal hierarchy unit tied to a document and corpus version. Required fields: corpusItemId, legalDocumentId, corpusVersionId, sectionIdentifier, article/clause/point metadata, normalized content, contentHash.
+
+### LegalDocumentChunk
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| chunkId / corpusItemId | UUIDv7 | Yes | Identity/owner |
+| chunkIndex | integer | Yes | Stable order |
+| content | text | Yes | Approved normalized legal text |
+| tsvector | database index | Yes after indexing | Vietnamese FTS representation |
+| embedding | vector | No until built | Provider/model-specific embedding |
+| embeddingModel / embeddingVersion | string | No | Reproducibility |
+
+### LegalCorpusVersion
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| legalCorpusVersionId | UUIDv7 | Yes | Version identity |
+| version | string | Yes | Human/system version |
+| status | enum | Yes | DRAFT/APPROVED/SUPERSEDED |
+| sourceRefs | JSON | Yes | Included source/document/hash refs |
+| createdAt / approvedAt | datetime | Yes/No | Lifecycle timestamps |
+
+Approved versions are immutable. New changes create a new version; existing assessments retain pinned versions.
+
+### CorpusApprovalRecord
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| approvalRecordId / corpusVersionId | UUIDv7 | Yes | Identity/version |
+| approvedBy | string/actor ref | Yes | Internal Legal Operator |
+| status | enum | Yes | APPROVED/REJECTED |
+| scopeDescription / comments | string | Yes/No | Review scope/notes |
+| approvalDate | datetime | Yes | Decision time |
+
+### RetrievalAuditLog
+
+Records assessment/query reference, corpus version, effective-date filters, FTS/vector scores, result refs, result count, correlation ID, and timestamp. It must not persist sensitive raw assessment content beyond approved normalized query metadata.
+
+### ModelRunMetadata
+
+Records provider, model, prompt version, sanitized input reference, output hash, status, token/cost metadata, optional corpus version, embedding model, retrieval score refs, and correlation ID. Secrets and raw source are excluded.
 
 ### LegalRuleMatch
 
-| Aspect | Value |
-|---|---|
-| Purpose | Citation-backed match between VerifiedProfile facts and legal corpus rules. |
-| Owner Service | Legal Matching Worker |
-| Lifecycle | Created after VerifiedProfile; status reflects match and citation coverage. |
-| State Machine | Completed legal matching triggers classification command. |
-| Relationships | Belongs to Assessment, VerifiedProfile and LegalCorpusVersion; feeds RiskClassification. |
-| Business Rules | BR-050, BR-051, BR-084 |
-
-| Field | Type | Required | Description |
+| Field | Type | Required | Meaning |
 |---|---|---:|---|
-| legalRuleMatchId | UUIDv7 | Yes | Rule match identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| verifiedProfileId | UUIDv7 | Yes | Verified profile source. |
-| legalCorpusVersionId | UUIDv7 | Yes | Corpus version. |
-| ruleId | string | Yes | Legal rule identifier. |
-| citationRefs | JSON | Yes | Citation references. |
-| rationale | JSON | Yes | Structured rationale. |
-| confidence | number | Yes | Deterministic match confidence. |
-| coverage | JSON | Yes | Citation coverage and citation gaps. |
-| status | string | Yes | Match/citation status. |
+| legalRuleMatchId | UUIDv7 | Yes | Identity |
+| assessmentId / verifiedProfileId / legalCorpusVersionId | UUIDv7 | Yes | Scope/basis |
+| ruleId | string | Yes | Rule identity |
+| citationRefs | JSON/relation | Yes | Document/article/clause/point/source/hash/version refs |
+| rationale / coverage | JSON | Yes | Structured applicability/citation coverage |
+| confidence | number | Yes | Deterministic support score |
+| status | enum | Yes | applicable/not-applicable/blocked/degraded |
+
+## Classification and Reporting
 
 ### RiskClassification
 
-| Aspect | Value |
-|---|---|
-| Purpose | Risk classification result or blocked state. |
-| Owner Service | Classification Worker |
-| Lifecycle | REQUESTED, RUNNING, COMPLETED, BLOCKED, FAILED. |
-| State Machine | Can complete only after VerifiedProfile and one or more applicable LegalRuleMatch records, or can block when required legal matches/citations are missing. |
-| Relationships | Belongs to Assessment and VerifiedProfile; references LegalRuleMatch records through `RiskClassificationLegalRuleMatch`; feeds GapAnalysis and GeneratedDocument. |
-| Business Rules | BR-049..BR-051, BR-082, BR-084 |
-
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| riskClassificationId | UUIDv7 | Yes | Classification identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| verifiedProfileId | UUIDv7 | Yes | Verified basis. |
-| legalRuleMatchIds | UUIDv7[] | Yes | Citation-backed legal matches used through `RiskClassificationLegalRuleMatch`. Empty only when classification is blocked before legal basis exists. |
-| status | ClassificationStatus | Yes | Classification state. |
-| riskLevel | string | No | Risk level when classification completes. |
-| blockingReasons | JSON | Yes | Reasons for blocked/degraded output. |
-| citationCoverage | string | Yes | `COMPLETE_CITATION`, `PARTIAL_CITATION`, or `NO_CITATION`. |
-| confidence | number | No | Classification confidence. |
+Requires VerifiedProfile and applicable LegalRuleMatch basis. Core fields: identity/scope, status, riskLevel when completed, blockingReasons, citationCoverage, confidence, legal match links, model run metadata reference.
 
 ### GapAnalysis
 
-| Aspect | Value |
-|---|---|
-| Purpose | Identifies compliance gaps based on classification and legal basis. |
-| Owner Service | Gap Analysis Worker |
-| Lifecycle | REQUESTED, RUNNING, COMPLETED, BLOCKED, FAILED. |
-| State Machine | GapAnalysis state machine in `domain-state-machines.md`; completed GapAnalysis enables document generation. |
-| Relationships | Derived from RiskClassification and LegalRuleMatch; feeds GeneratedDocument. |
-| Business Rules | BR-062, BR-079 |
-
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| gapAnalysisId | UUIDv7 | Yes | Gap analysis identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| riskClassificationId | UUIDv7 | Yes | Classification source. |
-| status | GapAnalysisStatus | Yes | Gap analysis lifecycle status. |
-| gapItems | JSON | Yes | Gap list, obligation refs and priority. |
-| evidenceRefs | JSON | Yes | Evidence and legal references. |
-| blockingReasons | JSON | Yes | Reasons when blocked or failed. |
-| createdAt | datetime | Yes | Creation timestamp. |
+Derived from completed/eligible classification and legal basis. Core fields: identity/scope, status, gap items, obligation refs, evidence refs, priorities, blocking reasons, timestamps.
 
 ### GeneratedDocument
 
-| Aspect | Value |
-|---|---|
-| Purpose | Generated report or readiness output artifact metadata. |
-| Owner Service | Document Worker |
-| Lifecycle | REQUESTED, GENERATED, BLOCKED, FAILED. |
-| State Machine | Final document generated only when output guardrails pass. |
-| Relationships | Belongs to Assessment, RiskClassification and GapAnalysis; references storage artifact. |
-| Business Rules | BR-063..BR-066, BR-079 |
+Core fields: identity/scope, optional classification/gap basis for readiness-only vs final output, document type, status, template version, storage ref, document hash, blocking reasons, model run metadata ref.
 
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| generatedDocumentId | UUIDv7 | Yes | Document identity. |
-| assessmentId | UUIDv7 | Yes | Assessment scope. |
-| riskClassificationId | UUIDv7 | Yes for final report | Classification basis. |
-| gapAnalysisId | UUIDv7 | Yes for final report | Gap analysis basis. |
-| status | DocumentStatus | Yes | Document lifecycle state. |
-| templateVersion | string | Yes | Template version. |
-| storageRef | string | No | Object storage reference when generated. |
-| documentHash | string | No | Artifact hash. |
-| blockingReasons | JSON | Yes | Reasons if blocked. |
+## Governance and Messaging
 
 ### AuditEvent
 
-| Aspect | Value |
-|---|---|
-| Purpose | Append-oriented record of material workflow, security, evidence and output actions. |
-| Owner Service | Audit domain; written by all state-changing services. |
-| Lifecycle | Created once; append-oriented and not silently overwritten. |
-| State Machine | No state transitions. |
-| Relationships | May belong to Organization, Assessment and actor User. |
-| Business Rules | BR-067..BR-070, BR-094 |
+Append-oriented record with organization/assessment/actor, event type, correlation/causation, before/after state where safe, redacted metadata, and timestamp.
 
-| Field | Type | Required | Description |
-|---|---|---:|---|
-| auditEventId | UUIDv7 | Yes | Audit event identity. |
-| organizationId | UUIDv7 | No | Organization scope. |
-| assessmentId | UUIDv7 | No | Assessment scope. |
-| actorUserId | UUIDv7 | No | User actor, if applicable. |
-| eventType | AuditEventType | Yes | Canonical audit event type. |
-| correlationId | UUIDv7 | Yes | Cross-service trace. |
-| causationId | UUIDv7 | No | Causing event/action. |
-| beforeState | JSON | No | Redacted prior state. |
-| afterState | JSON | No | Redacted resulting state. |
-| metadata | JSON | Yes | Redacted metadata. |
-| createdAt | datetime | Yes | Event timestamp. |
+### OutboxEvent
+
+Transactional message record with event/command type, schema version, aggregate reference, reference-only payload, correlation/idempotency keys, status, attempts, next-attempt timestamp, and published timestamp.
+
+## UX Boundary
+
+Manager/Developer UX may expose assessment, evidence, conflict, profile, classification, gap, document, and audit entities. LegalSource, LegalDocument, LegalCorpusItem, LegalDocumentChunk, CorpusApprovalRecord, and corpus administration are internal operations/API/CLI entities for MVP. Manager UX may display only the pinned corpus version and citation provenance relevant to an assessment.
+
+## Canonical Status
+
+```text
+DOMAIN_MODEL_ALIGNED_WITH_A_TO_Z_MVP
+LEGAL_CORPUS_DOMAIN_OBJECTS_INCLUDED
+INTERNAL_LEGAL_OPERATOR_UX_BOUNDARY_LOCKED
+PYTHON_WORKER_SCANNER_OWNERSHIP_ALIGNED
+```

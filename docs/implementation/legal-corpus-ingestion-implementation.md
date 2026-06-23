@@ -2,13 +2,11 @@
 
 ## Status
 
-AUTHORITATIVE — A-to-Z Runnable MVP (Phase 5.2J)
-
-New document per SPRINT-CHANGE-PROPOSAL-5.2J (2026-06-23). Defines the ingestion worker and approval gate implementation per ADR-025.
+AUTHORITATIVE — A-to-Z RUNNABLE MVP
 
 ## Purpose
 
-Defines the implementation details for the `Legal Source Ingestion Worker` and the corpus approval gate database mappings.
+Define official-source validation, legal document ingestion, immutable snapshot/hash provenance, normalization, internal review/approval, and index-build handoff.
 
 ## Active References
 
@@ -17,52 +15,169 @@ Defines the implementation details for the `Legal Source Ingestion Worker` and t
 - `docs/specs/legal-matching-domain-spec.md`
 - `docs/implementation/persistence-implementation.md`
 - `docs/implementation/queue-implementation.md`
+- `docs/implementation/hybrid-retriever-implementation.md`
 
----
+## UX and Actor Boundary
 
-## Ingestion Pipeline Workflow
+Legal corpus administration is performed by an **Internal Legal Operator** through internal API/CLI for MVP. It is not part of Manager or Developer customer-facing UX. Corpus approval does not create a third customer role and does not constitute legal certification.
 
-The Ingestion Worker is a NestJS worker consuming `command.legal-source.ingest.requested.v1` events.
+## Source Validation
+
+Before ingestion, the internal operator validates:
+
+- source hostname against the approved official-source allowlist;
+- HTTPS URL and redirect destination;
+- source authority and tier;
+- document identity expectations;
+- retrieval policy and availability;
+- absence of user-supplied arbitrary fetch targets.
+
+Only a `LegalSource` with `validationStatus = VALIDATED` may be submitted for ingestion. Requests must prevent SSRF through host allowlisting, DNS/IP validation, redirect revalidation, response size limits, timeout, and content-type restrictions.
+
+## Canonical Ingestion Command
 
 ```text
-[Ingest Request]
-  → 1. Fetch official legal URL
-  → 2. Save PDF/HTML snapshot to S3 Object Storage
-  → 3. Generate content hash (SHA-256)
-  → 4. Parse content structure (Chapters, Articles, Clauses, Points)
-  → 5. Persist LegalSource, LegalDocument, & LegalCorpusItem (Status: DRAFT)
+command.legal-source.ingest.requested.v1
 ```
 
-### Ingestion Details
-1. **HTTP Ingestion:** Fetch source using a robust HTTP client (e.g. Axios with custom User-Agent and retry logic). Record request headers, HTTP status, and timestamp.
-2. **S3 Object Storage Adapter:** Upload the original raw file directly to S3. Structure path: `/snapshots/legal/{documentType}/{documentNumber}-{contentHash}.pdf`.
-3. **Parsing Engine:** Use regex and hierarchical text parsers to segment the document by standard legal indicators:
-   - *Chapter:* `Chương [I-V|X]+: ...`
-   - *Article:* `Điều \d+: ...`
-   - *Clause:* `\d+\. ...`
-   - *Point:* `[a-z]\) ...`
-4. **Failure Recovery:** If the fetch fails or formatting parsing breaks, abort the transaction, log the failure as `LEGAL_SOURCE_UNAVAILABLE`, and block downstream matching tasks.
+Queue:
 
----
-
-## Legal Corpus Review & Approval Gate
-
-No ingested document can be used for compliance matching until it is reviewed and approved.
-
-### DB Status Progression
 ```text
-DRAFT (after ingestion) → APPROVED (after review) → SUPERSEDED (on replacement)
+lcsp.legal-source-ingest.v1
 ```
 
-### Approval Event Flow
-1. Internal Legal Approver or designated system operator uses API endpoint `POST /api/v1/internal/legal-corpus/approve` providing `corpusVersionId`. This is an internal control permission, not a customer-facing `Admin` product role.
-2. System writes a `CorpusApprovalRecord` detailing the reviewer, approval timestamp, and comments.
-3. System updates the status of `LegalCorpusVersion` to `APPROVED`.
-4. System triggers index building by publishing `command.embedding-build.requested.v1`.
-5. Only `APPROVED` corpus versions are queried by the hybrid retriever during assessments.
+The command contains references only: LegalSource ID, source URL reference, requested document identity, target draft corpus version, correlation/idempotency keys, and actor reference.
 
-The same lifecycle vocabulary must be used in database status fields, queue payloads and approval API responses:
+## Ingestion Pipeline
+
+```text
+validated LegalSource
+-> fetch official URL
+-> validate response and final URL
+-> store immutable PDF/HTML snapshot in S3-compatible storage
+-> compute SHA-256 content hash
+-> extract document identity/effective dates/relationships
+-> normalize chapter/article/clause/point hierarchy
+-> create LegalDocument and LegalCorpusItem records in DRAFT corpus
+-> audit provenance
+-> event.legal-source.ingest.completed.v1
+```
+
+Failure publishes `event.legal-source.ingest.failed.v1` and leaves the document/corpus unavailable for retrieval.
+
+## Snapshot Object Contract
+
+Object key:
+
+```text
+legal-source-snapshots/{sourceId}/{documentId}/{contentHash}/{originalFileName}
+```
+
+Stored metadata includes source URL, final URL, retrieval timestamp, HTTP content type, content length, SHA-256 hash, source authority, document identity, and correlation ID. The object is immutable; a changed hash creates a new snapshot/version.
+
+## Normalization
+
+The parser preserves legal hierarchy:
+
+```text
+Document
+-> Chapter (optional)
+-> Article
+-> Clause (optional)
+-> Point (optional)
+-> Appendix (optional)
+```
+
+Normalization rules:
+
+- remove transport/formatting artifacts without changing legal meaning;
+- preserve Vietnamese diacritics;
+- retain official numbering and titles;
+- store article/clause/point path on every corpus item/chunk;
+- record source locator and content hash;
+- flag uncertain identity, date, relationship, or hierarchy for manual review;
+- never auto-approve extracted content.
+
+Regex may support extraction but must not be the only validation mechanism. Parsed hierarchy, dates, document identity, and amendment/supersession relationships require review before approval.
+
+## Failure Codes
+
+| Failure | Behavior |
+|---|---|
+| Source not validated | `LEGAL_SOURCE_NOT_VALIDATED`; reject command |
+| URL unavailable | `LEGAL_SOURCE_UNAVAILABLE`; bounded retry then failure |
+| Redirect leaves allowlist | `LEGAL_SOURCE_REDIRECT_REJECTED`; fail closed |
+| Response too large/type unsupported | `LEGAL_SOURCE_RESPONSE_REJECTED`; fail closed |
+| Snapshot/hash failure | `LEGAL_SNAPSHOT_FAILED`; no normalization |
+| Identity extraction failure | `LEGAL_IDENTITY_EXTRACTION_FAILED`; manual correction required |
+| Normalization failure | `LEGAL_NORMALIZATION_FAILED`; no approval |
+| Content hash changed | create new document/snapshot staging version; do not mutate approved version |
+
+## Review and Approval
+
+Lifecycle:
 
 ```text
 DRAFT -> APPROVED -> SUPERSEDED
 ```
+
+Internal route contract:
+
+```text
+GET  /internal/v1/legal-corpus/versions/:versionId
+POST /internal/v1/legal-corpus/versions/:versionId/approve
+POST /internal/v1/legal-corpus/versions/:versionId/reject
+```
+
+Approval validates:
+
+- every source is validated;
+- document number/type/title/issuer are correct;
+- issue/effective dates are present or explicitly reviewed;
+- article/clause/point normalization is accurate;
+- amendment/supersession relationships are reviewed;
+- snapshot and normalized content hashes are recorded;
+- review scope and operator identity are recorded.
+
+Approval transaction:
+
+```text
+create CorpusApprovalRecord
+-> set LegalCorpusVersion APPROVED
+-> write AuditEvent
+-> create OutboxEvent(command.embedding-build.requested.v1)
+```
+
+Rejection creates a decision record and keeps the version unavailable. Approved content is immutable. Any content/date/relationship correction requires a new DRAFT version and reapproval.
+
+## Index Build Handoff
+
+Canonical command/event names:
+
+```text
+command.embedding-build.requested.v1
+event.embedding-build.completed.v1
+event.embedding-build.failed.v1
+```
+
+Retrieval remains blocked until the approved version has a successful FTS/vector index completion record.
+
+## Audit Requirements
+
+Audit source validation, ingestion request/start/completion/failure, snapshot/hash creation, normalization warnings, review decision, corpus approval/rejection/supersession, and index-build request. Audit metadata is redacted and reference-only.
+
+## Acceptance
+
+- Arbitrary URLs cannot be fetched.
+- Official-source snapshot, final URL, retrieval time, and content hash are recorded.
+- Legal hierarchy and citation locators survive normalization.
+- No DRAFT/rejected/unindexed corpus is available to legal matching.
+- Approval is attributable to an Internal Legal Operator and immutable.
+- Manager/Developer UI contains no corpus administration screens.
+
+## Non-Claims
+
+- Source validation does not guarantee permanent source availability.
+- Corpus approval is not legal certification.
+- This specification does not authorize broad web crawling.
+- This document is not implementation-readiness certification.

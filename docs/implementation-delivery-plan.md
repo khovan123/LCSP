@@ -2,309 +2,236 @@
 
 ## Purpose
 
-This document provides the engineering execution sequence for the controlled MVP prototype.
+Define engineering build order, team ownership, dependencies, and exit criteria for the A-to-Z runnable MVP. This is not the canonical backlog, sprint plan, or story artifact.
 
-It is not backlog, sprint planning, story creation, task tracking, architecture creation or implementation specification. It defines build order, team ownership, dependencies and expected outputs.
+## Planning Gate
+
+```text
+CANONICAL_UX_PENDING
+CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
+IMPLEMENTATION_NOT_AUTHORIZED
+```
+
+This plan becomes executable only after UX, canonical epics/stories, story traceability, and a successful implementation-readiness reassessment.
 
 ## Delivery Principles
 
-### Build Vertical Slices
-
-Each wave should produce a runnable system slice with persisted state, audit events and contract checks before expanding breadth.
-
-### Minimize Rework
-
-Start with shared foundations: Prisma schema, outbox, audit, RBAC and queue contracts. Later teams build on stable contracts instead of inventing local variants.
-
-### Preserve Traceability
-
-Every implemented behavior must trace back to UC, FR, AC, domain spec and state machine references in `docs/specs/requirements-traceability-matrix.md`.
-
-### Validate Contracts Early
-
-DTO, queue, Prisma and state-machine contracts should be compiled and smoke-tested before complex AI/legal/document behavior is implemented.
+- Build vertical slices with persisted state, audit, and contract checks.
+- Preserve canonical flow: assessment -> evidence -> reconciliation -> legal matching -> classification -> gap -> document -> audit.
+- Use real infrastructure for integrated acceptance.
+- Keep Manager completion independent of Developer participation.
+- Keep internal legal corpus operations outside customer-facing UX.
+- Fail closed on missing evidence, approved corpus, citation, conflict resolution, or output guardrails.
 
 ## Team Model
 
-### Platform Team
-
-Responsible for:
-
-- auth;
-- organization;
-- RBAC;
-- audit;
-- PostgreSQL/Prisma;
-- RabbitMQ/outbox;
-- local runtime and shared contracts.
-
-### Assessment Team
-
-Responsible for:
-
-- assessment lifecycle;
-- WizardProfile;
-- Manager workspace state;
-- repository connection API boundary.
-
-### Scanner Team
-
-Responsible for:
-
-- repository snapshot;
-- scan job;
-- ParserRegistry;
-- LanguageMapper;
-- AST extraction;
-- TechnicalEvidenceReport and scanner evidence.
-
-### Intelligence Team
-
-Responsible for:
-
-- TechnicalProfile;
-- AIUsageFlow;
-- reconciliation;
-- VerifiedProfile.
-
-### Legal Team
-
-Responsible for:
-
-- legal corpus ingestion boundary;
-- legal matching;
-- citation coverage;
-- classification guardrails and results.
-
-### Reporting Team
-
-Responsible for:
-
-- gap analysis;
-- document generation;
-- document status;
-- output guardrails and artifact metadata.
+| Team | Ownership |
+|---|---|
+| Platform | auth, organization, RBAC, audit, PostgreSQL/Prisma, RabbitMQ/outbox, environment/secret/provider configuration |
+| Assessment | assessment lifecycle, WizardProfile, Manager workspace, repository connection/snapshot API |
+| Scanner | Python Worker, Python analysis, TS/JS subprocess, evidence graph/report, workspace security |
+| Intelligence | TechnicalProfile, AIUsageFlow, reconciliation, VerifiedProfile |
+| Legal | source ingestion, internal corpus approval, embedding/FTS index, hybrid retrieval, LegalRuleMatch, classification guardrails |
+| Reporting | gap analysis, document generation, object storage, artifact status/download |
+| UX/QA | canonical UX, accessibility/status language, happy/negative path verification |
 
 ## Build Waves
 
-### Wave 1: Foundations
+### Wave 0 — Planning Closure
 
-Includes:
+Includes canonical UX, epics/stories, story traceability, implementation-readiness reassessment, and sprint planning.
 
-- PostgreSQL.
-- Prisma.
-- RabbitMQ.
-- Outbox.
-- Audit.
-- RBAC.
+Exit:
 
-Exit Criteria:
+- `CANONICAL_UX_COMPLETE`;
+- canonical epics/stories cover active `FR-001..FR-049`, `FR-053..FR-056`;
+- deferred `FR-050..FR-052` excluded from active stories;
+- readiness status is READY or CONDITIONAL_READY with explicit owner decisions.
 
-- Prisma baseline schema compiles and migrates locally.
-- OutboxEvent can be written and published to RabbitMQ using canonical exchange/routing key.
-- AuditEvent can be written for a state-changing action.
-- Manager/Developer permission guard can deny a Developer Manager-only action.
-- Local API/worker can start with no application secrets in logs.
+### Wave 1 — Foundations
 
-### Wave 2: Assessment Core
+Includes PostgreSQL/Prisma/pgvector/unaccent, RabbitMQ, outbox, audit, RBAC, configuration, and secret references.
 
-Includes:
+Exit:
 
-- Assessment.
-- Wizard.
-- Repository Connection.
+- migrations compile and apply;
+- outbox publish/retry works;
+- AuditEvent records state changes without secrets;
+- Manager/Developer guards deny unauthorized actions;
+- API and Node worker start;
+- Python Worker environment can connect to DB/broker;
+- provider credentials are referenced, not stored in source/logs.
 
-Exit Criteria:
+### Wave 2 — Assessment Core
 
-- Manager can create Assessment.
-- Manager can submit WizardProfile.
-- System can show readiness without risk level.
-- GitHub repository connection metadata can be recorded separately from OAuth/OIDC login.
-- Assessment state transitions are audited.
+Includes auth/session, organization, assessment, WizardProfile, readiness-only state, GitHub App connection, and commit snapshot.
 
-### Wave 3: Python Worker & Scanner Foundation
+Exit:
 
-Includes:
+- Manager can authenticate, create assessment, complete Wizard, connect selected read-only repository, and pin commit;
+- readiness-only view has no risk level;
+- OAuth login and GitHub authorization remain separate;
+- all transitions are audited.
 
-- Standalone Python Worker process (`lcsp-scanner-worker`).
-- Python AST/CST analysis stack (`ast`, `libcst`).
-- TypeScript/JavaScript analyzer subprocess adapter.
-- Ephemeral restricted repository workspaces.
-- TechnicalEvidenceReport and scanner evidence metadata persistence.
+### Wave 3 — Python Worker and Scanner
 
-Exit Criteria:
+Includes standalone Python Worker, `ast` + `libcst`, Python-native graph, Node `ts-morph` subprocess, restricted workspace, evidence/report gates, and scan events.
 
-- Standalone Python Worker consumes `command.scan.requested.v1` and cleans up workspaces successfully.
-- First-class Python AST extractor resolves imports, packages, functions, AI usage, and I/O tracking.
-- TS/JS files analyzed via node subprocess and results normalized.
-- TechnicalEvidenceReport generated with evidence refs and zero long-term raw source code persistence.
-- `event.scan.completed.v1` or `event.scan.failed.v1` published via worker outbox.
+Exit:
 
-### Wave 4: Intelligence Layer
+- Python Worker is sole scan consumer;
+- Python first-class bounded analysis works on golden fixtures;
+- TS/JS subprocess emits validated normalized facts;
+- no source execution or long-term raw source persistence;
+- cleanup verified before completed event;
+- fatal/privacy/cleanup failures block downstream;
+- `NFR-012..NFR-016`, `NFR-023`, `NFR-026`, `NFR-035` scanner checks pass.
 
-Includes:
+### Wave 4 — Intelligence and Reconciliation
 
-- TechnicalProfile.
-- AIUsageFlow.
-- Reconciliation.
-- VerifiedProfile.
+Includes TechnicalProfile, AIUsageFlow, conflict detection/scoring, Manager resolution, optional structured attestation, and VerifiedProfile.
 
-Exit Criteria:
+Exit:
 
-- TechnicalProfile is derived from accepted TechnicalEvidenceReport.
-- AIUsageFlow claims include evidence refs, confidence and uncertainty.
-- Reconciliation creates conflict or VerifiedProfile.
-- Unresolved conflict blocks classification.
-- Manager resolution is separate from scanner evidence and audited.
+- claims carry evidence refs/confidence/uncertainty;
+- provider-only evidence abstains;
+- unresolved conflict blocks classification;
+- attestation is supplemental and cannot unlock classification;
+- Manager completes without Developer;
+- previous evidence remains immutable.
 
-### Wave 5: Legal Ingestion & RAG Layer
+### Wave 5 — Legal Corpus and Hybrid Retrieval
 
-Includes:
+Includes official-source validation, ingestion snapshots/hashes, normalization, internal review/approval, immutable corpus version, Vietnamese FTS, 1536-dimension embeddings, HNSW, effective-date filters, and retrieval audit.
 
-- Legal Source Ingestion Worker (fetch, hash, snapshot).
-- Corpus Review/Approval Gate workflow.
-- pgvector + FTS index building.
-- Hybrid Legal Retriever (keyword + semantic similarity).
-- LegalMatchingWorker (VerifiedProfile matching).
+Exit:
 
-Exit Criteria:
+- approved source URL snapshots exist in S3-compatible storage with hashes/provenance;
+- Internal Legal Operator approval is auditable;
+- approved corpus is immutable;
+- `simple` + `unaccent` FTS and pgvector HNSW index build succeeds;
+- retrieval uses approved/pinned corpus, source/date/metadata filters;
+- citations reconstruct document/article/clause/point/source/hash/version;
+- retrieval audit contains sanitized query facets/hash, not sensitive raw text;
+- `NFR-017`, `NFR-029`, `NFR-033`, `NFR-034` checks pass.
 
-- Legal sources ingested from approved government URLs, snapshot as PDF/HTML in object storage, and hashed.
-- Corpus items approved and locked into an immutable `LegalCorpusVersion`.
-- Hybrid retrieval returns citation-backed matches filtering by effective date and corpus version.
-- LegalMatchingWorker persists `LegalRuleMatch` records with citation coverage.
+### Wave 6 — Real LLM and Classification
 
-### Wave 6: Real LLM Gateway & Classification Layer
+Includes real provider integration, structured output validation, timeout/retry, token/cost controls, model-run metadata, citation guardrail, and RiskClassification.
 
-Includes:
+Exit:
 
-- Real LLM Provider Integration (Gemini, Claude, or GPT).
-- Timeout, token, and cost budget controls.
-- Structured output (Zod schema) validation.
-- Citation Guardrail enforcement.
-- Risk Classification Worker.
+- real provider call succeeds through LLM Gateway;
+- raw source/full prompt/secret exclusion is verified;
+- invalid schema/provider outage fails closed;
+- token/cost usage is recorded and capped;
+- classification requires VerifiedProfile and citation-backed LegalRuleMatch;
+- mock-backed run is not accepted as A-to-Z evidence.
 
-Exit Criteria:
+### Wave 7 — Reporting and Hardening
 
-- Real LLM calls execute successfully via the LLM Gateway.
-- System prompt templates versioned; input payloads contain redacted metadata only (ADR-006).
-- Invalid LLM schema output triggers retry and then fails closed.
-- RiskClassification result persists citation basis; missing citations fail closed.
+Includes GapAnalysis, document generation, S3 artifact storage, status/download, audit export, DLQ/retry validation, accessibility, observability, privacy, and recovery UX.
 
-### Wave 7: Reporting Layer & Hardening
+Exit:
 
-Includes:
+- gap analysis traces to classification/legal basis;
+- final document traces to evidence/citations/corpus/model/template and avoids overclaim;
+- readiness-only export contains no risk level;
+- generated artifact stored/downloaded securely;
+- audit can be viewed/exported;
+- all 33 active NFRs (`NFR-001..NFR-030`, `NFR-033..NFR-035`) are verified or have explicit accepted evidence plans.
 
-- Gap Analysis.
-- Document Generation Worker.
-- Real S3-compatible object storage integration.
-- NFR verification (security, cleanup, redaction).
-- Queue DLQ and retry behavior validation.
+### Wave 8 — A-to-Z Acceptance
 
-Exit Criteria:
+Includes canonical Manager happy path, optional Developer path, and 14 negative-path scenarios on real infrastructure.
 
-- Gap analysis generated from valid classification basis.
-- Final document generated using real LLM and saved to real object storage.
-- Storage URLs generated with secure temp permissions.
-- All NFRs (NFR-001..NFR-030) verified.
+Exit:
 
-### Wave 8: A-to-Z Acceptance Run
-
-Includes:
-
-- Golden-path repository and legal corpus fixtures.
-- 18-step happy-path verification.
-- 14 negative-path scenarios validation.
-
-Exit Criteria:
-
-- Real Manager executes all 18 happy-path steps on real database, queue, storage, and LLM infrastructure.
-- All 14 required negative-path scenarios pass and log expected failure codes.
+- Manager completes login -> assessment -> Wizard -> repository -> snapshot -> Python scan -> evidence/profile/AIUsageFlow -> conflict resolution if needed -> VerifiedProfile -> legal matching -> classification -> gap -> document download -> audit export;
+- approved legal corpus and real LLM/embedding providers are used;
+- all required negative paths produce expected fail-closed/actionable states;
+- acceptance audit record identifies versions, hashes, provider/model, corpus, and artifacts.
 
 ## Dependency Graph
 
 ```text
-Assessment
--> Repository
--> Scanner
+Foundations
+-> Assessment/Wizard/Repository
+-> Python Scanner
 -> TechnicalProfile
 -> AIUsageFlow
--> Reconciliation
--> VerifiedProfile
--> LegalMatching
+-> Reconciliation/VerifiedProfile
+-> Legal Matching
 -> Classification
--> DocumentGeneration
+-> Gap Analysis
+-> Document
+-> Audit Export
 ```
 
-No alternative active MVP path bypasses this chain.
+Parallel internal prerequisite:
 
-## Parallelization Opportunities
+```text
+Legal Source Ingestion
+-> Internal Approval
+-> FTS/Embedding Index
+-> Legal Matching readiness
+```
 
-### Can Build in Parallel
+## Dependency Constraints
 
-| Workstream | Parallel With | Constraint |
-|---|---|---|
-| Auth/RBAC foundation | Prisma schema and audit foundation | Must share User/Organization/Role contracts. |
-| RabbitMQ/outbox foundation | Prisma schema foundation | OutboxEvent schema must be stable. |
-| Wizard UI/API | Repository connection API | Assessment model and Manager guard must exist. |
-| Scanner parser foundation | Assessment core | Scanner can use local fixture inputs before GitHub integration. |
-| Legal corpus ingestion boundary | Intelligence layer | Must wait for VerifiedProfile contract for full integration. |
-| Document template shell | Classification worker | Must wait for classification/document guardrails for final output. |
+- Outbox, audit, RBAC, and state guards precede worker chaining.
+- RepositorySnapshot precedes ScanJob.
+- Quality-valid report plus cleanup verification precedes TechnicalProfile.
+- Reconciliation/VerifiedProfile precedes Legal Matching.
+- Approved indexed corpus precedes Legal Matching.
+- Legal Matching precedes Classification.
+- Classification precedes GapAnalysis.
+- GapAnalysis precedes final document generation.
+- UX and stories precede implementation authorization.
 
-### Cannot Build in Parallel
+## Engineering Task Candidates
 
-| Workstream | Blocked By | Reason |
-|---|---|---|
-| TechnicalProfile integration | Scanner evidence output | Requires TechnicalEvidenceReport and findings. |
-| AIUsageFlow integration | TechnicalProfile | Requires profile and evidence refs. |
-| VerifiedProfile | Reconciliation | Requires conflict/no-conflict outcome. |
-| Classification | LegalMatching | Must not consume verified-profile-ready directly. |
-| Final document generation | Classification and gap basis | Final output requires citations and no unresolved conflict. |
+These are build-order candidates, not stories or sprint tickets.
 
-### Dependency Constraints
+| Task | Purpose | Dependency | Owner |
+|---|---|---|---|
+| TASK-001 | Prisma/PostgreSQL baseline plus pgvector/unaccent | none | Platform |
+| TASK-002 | Config/secret loader and provider refs | none | Platform |
+| TASK-003 | AuditEvent writer | TASK-001 | Platform |
+| TASK-004 | Outbox writer/publisher/retry/DLQ | TASK-001 | Platform |
+| TASK-005 | Manager/Developer RBAC | TASK-001 | Platform |
+| TASK-006 | Auth/session/OAuth/MFA baseline | TASK-002, TASK-005 | Platform |
+| TASK-007 | Organization and assessment APIs | TASK-001, TASK-005 | Assessment |
+| TASK-008 | WizardProfile/readiness APIs | TASK-007 | Assessment |
+| TASK-009 | GitHub App connection/snapshot | TASK-007 | Assessment |
+| TASK-010 | Scan request/status API | TASK-004, TASK-009 | Scanner |
+| TASK-011 | Python Worker bootstrap/queue/idempotency | TASK-001, TASK-004 | Scanner |
+| TASK-012 | Workspace/snapshot/cleanup security | TASK-011 | Scanner |
+| TASK-013 | Python AST/CST and import analysis | TASK-011 | Scanner |
+| TASK-014 | TS/JS subprocess analyzer/protocol | TASK-011 | Scanner |
+| TASK-015 | Graph/findings/report/gates | TASK-012..TASK-014 | Scanner |
+| TASK-016 | TechnicalProfile worker | TASK-015 | Intelligence |
+| TASK-017 | AIUsageFlow worker | TASK-016 | Intelligence |
+| TASK-018 | Reconciliation/conflict/VerifiedProfile | TASK-017 | Intelligence |
+| TASK-019 | Developer task/structured attestation | TASK-005, TASK-018 | Assessment/Intelligence |
+| TASK-020 | Legal source validation/ingestion | TASK-001, object storage | Legal |
+| TASK-021 | Internal corpus review/approval | TASK-020 | Legal |
+| TASK-022 | Vietnamese FTS and embedding index build | TASK-021, provider config | Legal |
+| TASK-023 | Hybrid retriever/retrieval audit | TASK-022 | Legal |
+| TASK-024 | Legal Matching worker | TASK-018, TASK-023 | Legal |
+| TASK-025 | Real LLM Gateway | TASK-002 | Platform |
+| TASK-026 | Risk Classification worker | TASK-024, TASK-025 | Legal |
+| TASK-027 | Gap Analysis worker | TASK-026 | Reporting |
+| TASK-028 | Document generation/S3/status/download | TASK-025..TASK-027 | Reporting |
+| TASK-029 | Audit query/export | TASK-003 | Platform |
+| TASK-030 | Manager web happy path | canonical UX/stories + relevant APIs | UX/Assessment |
+| TASK-031 | Optional Developer web path | canonical UX/stories + TASK-019 | UX/Assessment |
+| TASK-032 | Accessibility/blocked/recovery states | canonical UX + integrated APIs | UX/QA |
+| TASK-033 | A-to-Z happy path acceptance | TASK-001..TASK-032 | QA/All |
+| TASK-034 | Negative-path acceptance | TASK-033 | QA/All |
 
-- Outbox and audit must exist before worker transitions are implemented.
-- State-machine guards must be enforced before async worker chaining is enabled.
-- Legal Matching must be implemented before Classification.
-- Document Generation final output must wait for Classification and citation guardrails.
+## Non-Claims
 
-## First 30 Engineering Tasks
-
-These are build-order tasks, not backlog stories or sprint tickets.
-
-| Task | Purpose | Dependency | Owner Team | Expected Output |
-|---|---|---|---|---|
-| TASK-001 Create Prisma baseline schema | Establish physical persistence foundation. | None | Platform Team | Initial migration compiles. |
-| TASK-002 Add Prisma client generation | Enable typed DB access. | TASK-001 | Platform Team | `db:generate` works locally. |
-| TASK-003 Implement environment config loader | Centralize DB/queue/auth config. | None | Platform Team | Config module with redacted logging. |
-| TASK-004 Implement AuditEvent writer | Persist audit events consistently. | TASK-001 | Platform Team | Audit writer service. |
-| TASK-005 Implement OutboxEvent writer | Persist reference-only queue handoff. | TASK-001 | Platform Team | Outbox writer service. |
-| TASK-006 Implement outbox publisher | Publish canonical messages to RabbitMQ. | TASK-005 | Platform Team | Publisher with lock/retry/published status. |
-| TASK-007 Create RabbitMQ topology bootstrap | Declare exchanges, queues and DLQs. | TASK-006 | Platform Team | Local topology creation command/module. |
-| TASK-008 Implement Manager/Developer RBAC guard | Enforce role boundaries. | TASK-001 | Platform Team | Guard denies Developer Manager-only actions. |
-| TASK-009 Implement auth/session baseline | Support local authenticated actor context. | TASK-003, TASK-008 | Platform Team | Session/auth guard usable by API. |
-| TASK-010 Implement Organization model/service | Create tenant boundary. | TASK-001, TASK-008 | Platform Team | Organization CRUD baseline. |
-| TASK-011 Implement Assessment create API | Create Manager-owned assessment. | TASK-008, TASK-010 | Assessment Team | `POST /api/v1/assessments`. |
-| TASK-012 Implement WizardProfile submit API | Persist WizardProfile. | TASK-011 | Assessment Team | WizardProfile submission and audit. |
-| TASK-013 Implement readiness state projection | Show no-risk readiness status. | TASK-012 | Assessment Team | Readiness response without risk level. |
-| TASK-014 Implement GitHub repository connection metadata | Record selected repository connection. | TASK-011, TASK-008 | Assessment Team | RepositoryConnection persistence. |
-| TASK-015 Implement RepositorySnapshot metadata | Pin branch/commit metadata. | TASK-014 | Scanner Team | RepositorySnapshot record. |
-| TASK-016 Implement ScanJob request API | Create idempotent ScanJob and outbox command. | TASK-015, TASK-005 | Scanner Team | `command.scan.requested.v1` outbox event. |
-| TASK-017 Implement Python AST/CST Extractor | Extract imports, package, functions, and AI patterns from Python code. | None | Scanner Team | AST extractor unit tests pass. |
-| TASK-018 Implement Node.js TS/JS Subprocess Adapter | Spawn TS/JS analyzer as subprocess in Python Worker. | None | Scanner Team | Subprocess communication tests pass. |
-| TASK-019 Implement Python Worker scan handler | Consume scan command, manage ephemeral workspace, run extractors, handle cleanup. | TASK-016, TASK-017, TASK-018 | Scanner Team | Python Worker processes scan job. |
-| TASK-020 Implement TechnicalEvidenceReport persistence | Persist report, findings, and coverage. | TASK-019 | Scanner Team | TechnicalEvidenceReport stored. |
-| TASK-021 Implement TechnicalProfile worker | Aggregate accepted evidence into profile. | TASK-020 | Intelligence Team | `event.technical-profile.completed.v1`. |
-| TASK-022 Implement AIUsageFlow worker | Generate evidence-backed usage claims. | TASK-021 | Intelligence Team | AIUsageFlow + claims persisted. |
-| TASK-023 Implement Reconciliation & Conflict resolution | Create conflict or VerifiedProfile; provide resolution APIs. | TASK-022, TASK-008 | Intelligence Team | Conflict or VerifiedProfile output. |
-| TASK-024 Implement Legal Source Ingestion Worker | Ingest legal PDF/HTML snapshot, content hash, and URLs from sources. | None | Legal Team | LegalSource & LegalDocument records saved. |
-| TASK-025 Implement Corpus Approval Gate | Review and lock corpus items into immutable version. | TASK-024 | Legal Team | Approved LegalCorpusVersion created. |
-| TASK-026 Implement pgvector + FTS indexing | Generate vector embeddings and full-text index for approved corpus items. | TASK-025 | Legal Team | Embeddings generated and indexed in DB. |
-| TASK-027 Implement Hybrid Legal Retriever | FTS + pgvector hybrid query API with effective-date and version filters. | TASK-026 | Legal Team | Retrieval returns citation-backed matches. |
-| TASK-028 Implement Legal Matching worker | Match VerifiedProfile against Retriever citations. | TASK-023, TASK-027 | Legal Team | LegalRuleMatch records persisted. |
-| TASK-029 Implement Real LLM Gateway Integration | Integrate Gemini/Claude/GPT; timeout, token, cost controls, output validation. | TASK-003 | Platform Team | Real provider calls succeed. |
-| TASK-030 Implement Risk Classification worker | Classification via real LLM with citation guardrails. | TASK-028, TASK-029 | Legal Team | ClassificationResult persisted. |
-| TASK-031 Implement Gap Analysis worker | Generate gap analysis results from classification. | TASK-030 | Reporting Team | GapAnalysis output. |
-| TASK-032 Implement Document Generation worker | Generate document using real LLM and store in real S3 storage. | TASK-030, TASK-031 | Reporting Team | GeneratedDocument saved in S3. |
-| TASK-033 Run A-to-Z Happy Path Acceptance | Validate 18-step happy path using real infrastructure and golden fixtures. | TASK-011..TASK-032 | Platform/QA | Successful end-to-end run audit record. |
-| TASK-034 Run Negative-Path Acceptance Tests | Validate all 14 negative-path scenarios and verify fail-closed behaviors. | TASK-033 | Platform/QA | Bounded failure and fallback behavior verified. |
+- This plan is not a sprint commitment.
+- It does not authorize code before readiness certification.
+- Internal task numbers must be replaced or linked by canonical stories after story creation.
