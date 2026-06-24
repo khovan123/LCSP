@@ -110,7 +110,7 @@ These routes are not part of Manager/Developer product UX and require internal o
 | GET | `/internal/v1/legal-corpus/versions/:versionId` | review staged corpus version |
 | POST | `/internal/v1/legal-corpus/versions/:versionId/approve` | approve immutable version |
 | POST | `/internal/v1/legal-corpus/versions/:versionId/reject` | reject staged version |
-| POST | `/internal/v1/legal-corpus/versions/:versionId/indexes` | request FTS/vector build |
+| POST | `/internal/v1/legal-corpus/versions/:versionId/indexes` | request ChromaDB vectorless legal index build |
 
 ## API Rules
 

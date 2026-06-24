@@ -8,8 +8,9 @@ SPRINT_CHANGE_PROPOSAL_CREATED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 PHASE_5_2L_P0_CLOSURE_COMPLETED
 READY_FOR_CANONICAL_UX
-CANONICAL_UX_PENDING
-RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ```
 
 ## Các quyết định mới
@@ -38,13 +39,13 @@ RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
 - `validation-plan.md` đã đổi A3 thành PBAC and trusted-trigger abuse risk; structured attestation chỉ còn marker `SUPERSEDED_FOR_ACTIVE_MVP`.
 - Business rules đã chuyển active role semantics sang PBAC subject/policy semantics và đưa attestation vào superseded register.
 - Requirements baseline đã tách `UC-M09-05` khỏi active coverage và cập nhật AC-9/11/12 theo PBAC/trigger/evidence.
-- Readiness/index/traceability docs đã dùng `READY_FOR_CANONICAL_UX` và vẫn giữ `CANONICAL_UX_PENDING`.
-- Điều kiện approval RAG `chorma database (vector less)` đã được phân loại là technical decision backend, không đổi baseline pgvector/FTS cho UX.
+- Readiness/index/traceability docs đã dùng `READY_FOR_CANONICAL_UX` và hiện giữ `CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL`.
+- Điều kiện approval RAG đã được chuẩn hóa thành ChromaDB structure-first vectorless legal RAG; PostgreSQL pgvector legal retrieval bị superseded.
 
 ## Phần carry forward trước stories/readiness
 
 - Chưa có dedicated Phase 5.2L ADRs cho PBAC, automatic trigger, Python Worker Platform và expanded scanner toolchain.
-- PBAC engine/topology, trigger retry/DLQ/idempotency, tool failure severity và quyết định Chroma/vectorless/pgvector vẫn là technical decisions mở trước stories/readiness.
+- PBAC engine/topology, trigger retry/DLQ/idempotency và tool failure severity vẫn là technical decisions mở trước stories/readiness.
 
 ## Kiến trúc mục tiêu
 

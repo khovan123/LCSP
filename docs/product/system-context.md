@@ -50,7 +50,7 @@ Manager intent
 - Evidence gates, TechnicalProfile, AIUsageFlow, reconciliation, and Manager-only conflict resolution.
 - Provenance-preserving legal corpus ingestion from approved official-source URLs.
 - Internal corpus review/approval and immutable LegalCorpusVersion management.
-- Hybrid PostgreSQL FTS + pgvector retrieval with citation and effective-date filters.
+- ChromaDB structure-first vectorless legal retrieval with stable legal hierarchy IDs, metadata/full-text lookup, xref expansion, parent-context assembly, citation allowlist validation and effective-date filters.
 - Real configured LLM provider for A-to-Z acceptance; deterministic mock only for tests/offline development.
 - Risk classification only after VerifiedProfile and legal matching.
 - Gap analysis, final report, readiness-only export, artifact download, and audit export.

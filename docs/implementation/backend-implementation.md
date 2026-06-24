@@ -704,7 +704,7 @@ Local runs should still emit redacted audit events so developers can verify trac
 Local development execution may utilize local mocks for OIDC, the local filesystem for object storage, and deterministic mock LLM modes for offline unit/CI tests. However, the authoritative controlled MVP happy path requires:
 1. Standalone Python Worker (`lcsp-scanner-worker`) executing repository scans.
 2. A real configured LLM provider mandatory for the A-to-Z happy path (mock LLM is restricted to test/offline only).
-3. A provenance-preserving legal corpus derived from approved legal source URLs (with metadata, hashes, and approval records) built into a pgvector hybrid retrieval index.
+3. A provenance-preserving legal corpus derived from approved legal source URLs (with metadata, hashes, hierarchy, xref edges and approval records) built into a ChromaDB vectorless legal retrieval index.
 4. Real S3-compatible object storage for document artifact storage (with local filesystem adapter restricted to local dev only).
 
 <!-- PHASE-5-5-BACKEND-CONTRACT:START -->
@@ -756,7 +756,7 @@ No service may publish directly to RabbitMQ inside the same transaction.
 | `npm install` | npm workspace dependencies installed from lockfile. |
 | `poetry install` | Python Worker dependencies and virtual environment initialized. |
 | `npm run db:generate` | Prisma client generated successfully. |
-| `npm run db:migrate` | Local PostgreSQL schema migrated with pgvector extension. |
+| `npm run db:migrate` | Local PostgreSQL schema migrated for relational metadata without pgvector requirement. |
 | `npm run dev:api` | API starts and reports ready state without logging secrets. |
 | `npm run dev:worker` | NestJS background orchestration workers start and initialize queue bindings. |
 | `poetry run python -m lcsp_scanner_worker` | Standalone Python Worker starts, connects to RabbitMQ and PostgreSQL, and logs ready status. |

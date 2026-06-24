@@ -15,7 +15,7 @@ lcsp-python-workers/                 # Python Worker Platform
     ai_usage_flow/
     reconciliation/
     legal_ingestion/
-    embedding_index/
+    legal_index/
     legal_matching/
     classification/
     gap_analysis/
@@ -52,7 +52,7 @@ There is no active Node.js scanner lifecycle worker or downstream domain worker.
 | AI Usage Flow Worker | Python | `command.ai-usage-flow.requested.v1` | AIUsageFlow completed/failed events | WizardProfile, TechnicalProfile, findings | flow, claims, audit, outbox |
 | Reconciliation Worker | Python | `command.reconciliation.requested.v1` | verified-profile-ready or conflict-detected event | WizardProfile, TechnicalProfile, AIUsageFlow | conflict or VerifiedProfile, audit, outbox |
 | Legal Ingestion Worker | Python | `command.legal-source.ingest.requested.v1` | `event.legal-source.ingest.completed.v1`, `event.legal-source.ingest.failed.v1` | validated source request | legal source/document/items, audit, outbox |
-| Embedding Index Worker | Python | `command.embedding-build.requested.v1` | `event.embedding-build.completed.v1`, `event.embedding-build.failed.v1` | approved corpus chunks | FTS/vector data, model metadata, audit, outbox |
+| ChromaDB Legal Index Worker | Python | `command.legal-index-build.requested.v1` | `event.legal-index-build.completed.v1`, `event.legal-index-build.failed.v1` | approved legal hierarchy and chunks | ChromaDB records, metadata/xref index, audit, outbox |
 | Legal Matching Worker | Python | `command.legal-matching.requested.v1` | legal-matching completed/failed events | VerifiedProfile and approved index | LegalRuleMatch, retrieval audit, audit, outbox |
 | Classification Worker | Python | `command.classification.requested.v1` | classification completed/blocked events | VerifiedProfile and legal matches | RiskClassification, model metadata, audit, outbox |
 | Gap Analysis Worker | Python | `command.gap-analysis.requested.v1` | gap-analysis completed/blocked/failed events | classification and legal matches | GapAnalysis, audit, outbox |
@@ -64,8 +64,8 @@ There is no active Node.js scanner lifecycle worker or downstream domain worker.
 command.legal-source.ingest.requested.v1
 -> event.legal-source.ingest.completed.v1
 -> internal review and approval
--> command.embedding-build.requested.v1
--> event.embedding-build.completed.v1
+-> command.legal-index-build.requested.v1
+-> event.legal-index-build.completed.v1
 -> corpus available to legal matching
 ```
 

@@ -10,10 +10,11 @@ This document is the active ADR authority index for the A-to-Z runnable MVP. Det
 Modular NestJS API synchronous control plane
 + Python Worker Platform for all asynchronous domain workloads
 + bounded Node.js TS/JS analyzer CLI only
-+ PostgreSQL/Prisma/pgvector
++ PostgreSQL/Prisma for primary persistence
++ ChromaDB structure-first vectorless legal retrieval
 + RabbitMQ/outbox
 + S3-compatible object storage
-+ real LLM/embedding providers for A-to-Z acceptance
++ real LLM provider for A-to-Z acceptance; embeddings are not required for legal retrieval MVP
 ```
 
 The system uses deterministic orchestration, state machines, evidence gates, and bounded workers. It does not use free-form autonomous agents to bypass domain rules.
@@ -34,7 +35,7 @@ The system uses deterministic orchestration, state machines, evidence gates, and
 2. ADR-023 overrides TypeScript-first scanner lifecycle ownership in ADR-002/ADR-022.
 3. ADR-024 overrides mock-LLM-as-default happy-path wording.
 4. ADR-025 overrides local JSONL corpus seed as the legal source architecture.
-5. ADR-026 overrides non-hybrid/unspecified legal retrieval for MVP.
+5. ADR-026 overrides pgvector, embedding-index, hybrid-vector and unspecified legal retrieval wording for MVP.
 6. Product scope and canonical requirements remain governed by PRD, FR/NFR catalogs, and approved change-control records.
 7. Phase 5.2L supersedes older wording: PBAC replaces RBAC, structured attestation is removed from active MVP, `FR-050` is Automatic Trusted Scan Initiation, `FR-051` is removed from product scope, and Node.js downstream workers are superseded.
 
@@ -57,7 +58,7 @@ The system uses deterministic orchestration, state machines, evidence gates, and
 | ADR-023 | Python Worker owns Repository Scan; Poetry, `ast` + `libcst`, Node subprocess for TS/JS | Accepted — Superseded in part by expanded Phase 5.2L scanner toolchain |
 | ADR-024 | Real configured LLM provider mandatory for A-to-Z acceptance; mock test/offline only | Accepted — Superseding |
 | ADR-025 | Provenance-preserving official-source legal corpus with internal approval and immutable versioning | Accepted — Superseding |
-| ADR-026 | PostgreSQL `simple` + `unaccent` FTS and pgvector HNSW hybrid retrieval with fail-closed citations | Accepted |
+| ADR-026 | ChromaDB structure-first vectorless legal retrieval with legal hierarchy, xref expansion and citation allowlist validation | Accepted — Superseding |
 
 ## Clarified ADR-002 Runtime Boundary
 
@@ -129,11 +130,15 @@ schema validation + timeout/retry + audit + budget controls
 ```text
 validated official-source snapshots
 approved immutable LegalCorpusVersion
-PostgreSQL simple + unaccent FTS
-pgvector vector(1536) HNSW cosine index
-0.4 FTS + 0.6 vector score
+ChromaDB structure-first vectorless legal index
+Clause-level base retrieval unit
+metadata and full-text candidate retrieval
+direct chunk/article lookup
+one-hop cross-reference expansion
+parent-context assembly
 corpus/effective-date/source/metadata filters
 citation reconstruction and retrieval audit
+retrieved citation allowlist validation
 ```
 
 ## Non-Claims

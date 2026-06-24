@@ -5,12 +5,13 @@
 ```text
 Web UI
 -> NestJS API synchronous control plane
--> PostgreSQL / Prisma / pgvector
+-> PostgreSQL / Prisma
+-> ChromaDB legal index
 -> RabbitMQ + Outbox
 -> Python Worker Platform
 -> bounded Node.js TS/JS analyzer CLI
 -> S3-compatible object storage
--> LLM / Embedding Gateway
+-> LLM Gateway
 ```
 
 ## Thành phần chính
@@ -68,7 +69,7 @@ Lưu immutable legal source snapshots và generated document artifacts. Database
 - Python Scanner Worker thay thế TypeScript-first scanner lifecycle.
 - Real LLM provider thay thế mock happy path.
 - Official-source legal corpus thay thế local JSONL seed.
-- Hybrid FTS + pgvector là retriever chuẩn.
+- ChromaDB structure-first vectorless legal retriever là retriever chuẩn.
 
 ## Quy tắc module
 

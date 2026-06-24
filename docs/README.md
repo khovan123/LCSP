@@ -10,8 +10,9 @@ This is the starting point for developers, reviewers, UX, and story planning. Ac
 PHASE_5_2L_ACTIVE_DOCS_SYNCHRONIZED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 READY_FOR_CANONICAL_UX
-CANONICAL_UX_PENDING
-RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
@@ -28,8 +29,10 @@ IMPLEMENTATION_NOT_AUTHORIZED
 8. [specs/scanner-spec.md](./specs/scanner-spec.md)
 9. [implementation/README.md](./implementation/README.md)
 10. [code-map/README.md](./code-map/README.md)
+11. [planning-artifacts/ux-designs/ux-LCSP-2026-06-24/DESIGN.md](./planning-artifacts/ux-designs/ux-LCSP-2026-06-24/DESIGN.md)
+12. [planning-artifacts/ux-designs/ux-LCSP-2026-06-24/EXPERIENCE.md](./planning-artifacts/ux-designs/ux-LCSP-2026-06-24/EXPERIENCE.md)
 
-UX work should focus on items 1-4 plus requirements/acceptance catalogs. Engineering work additionally reads items 5-10 after implementation readiness is certified.
+UX review should focus on items 1-4 plus requirements/acceptance catalogs and items 11-12. Engineering work additionally reads items 5-10 after implementation readiness is certified.
 
 ## Single Sources of Truth
 
@@ -73,10 +76,10 @@ apps/api                 NestJS API synchronous control plane
 apps/web                 Manager and optional Developer web UX
 lcsp-python-workers      bounded Python Worker Platform for all async domain workloads
 tools/ts-js-analyzer     bounded Node.js CLI used only by Python Scanner Worker
-PostgreSQL + pgvector
+PostgreSQL + ChromaDB legal index
 RabbitMQ
 S3-compatible object storage
-real LLM and embedding providers for A-to-Z acceptance
+real LLM provider for A-to-Z acceptance
 ```
 
 Node.js downstream domain workers are `SUPERSEDED_FOR_ACTIVE_MVP`. Node.js remains valid for the NestJS API, web/tooling, and the bounded `ts-morph` analyzer CLI only.
@@ -146,8 +149,8 @@ An A-to-Z acceptance run additionally requires:
 - real PostgreSQL/RabbitMQ;
 - real S3-compatible object storage;
 - validated official legal source snapshots and approved corpus version;
-- completed FTS/pgvector index;
-- configured real LLM and embedding provider/model;
+- completed ChromaDB vectorless legal index;
+- configured real LLM provider/model;
 - golden repository fixture;
 - audit/export verification.
 

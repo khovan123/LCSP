@@ -7,7 +7,7 @@ Define engineering build order, team ownership, dependencies, and exit criteria 
 ## Planning Gate
 
 ```text
-CANONICAL_UX_PENDING
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
@@ -31,7 +31,7 @@ This plan becomes executable only after Phase 5.2L documentation remediation, UX
 | Assessment | assessment lifecycle, WizardProfile, Manager workspace, repository connection/snapshot API |
 | Scanner | Python Scanner Worker, Syft, Knip, deptry, Python analysis, TS/JS subprocess, Semgrep, tree-sitter/custom parser, evidence graph/report, workspace security |
 | Intelligence | Python TechnicalProfile, AIUsageFlow, reconciliation, VerifiedProfile workers |
-| Legal | Python source ingestion, internal corpus approval, embedding/FTS index, hybrid retrieval, LegalRuleMatch, classification guardrails |
+| Legal | Python source ingestion, internal corpus approval, ChromaDB vectorless legal index, LegalRuleMatch, classification guardrails |
 | Reporting | Python gap analysis, document generation, object storage, artifact status/download |
 | UX/QA | canonical UX, accessibility/status language, happy/negative path verification |
 
@@ -52,7 +52,7 @@ Exit:
 
 ### Wave 1 — Foundations
 
-Includes PostgreSQL/Prisma/pgvector/unaccent, RabbitMQ, outbox, audit, PBAC, configuration, and secret references.
+Includes PostgreSQL/Prisma metadata, ChromaDB legal index configuration, RabbitMQ, outbox, audit, PBAC, configuration, and secret references.
 
 Exit:
 
@@ -102,16 +102,16 @@ Exit:
 - Manager completes without Developer;
 - previous evidence remains immutable.
 
-### Wave 5 — Legal Corpus and Hybrid Retrieval
+### Wave 5 — Legal Corpus and ChromaDB Vectorless Retrieval
 
-Includes official-source validation, ingestion snapshots/hashes, normalization, internal review/approval, immutable corpus version, Vietnamese FTS, 1536-dimension embeddings, HNSW, effective-date filters, and retrieval audit.
+Includes official-source validation, ingestion snapshots/hashes, normalization, internal review/approval, immutable corpus version, ChromaDB records, stable hierarchy IDs, cross-reference extraction, effective-date filters, citation allowlist validation, and retrieval audit.
 
 Exit:
 
 - approved source URL snapshots exist in S3-compatible storage with hashes/provenance;
 - Internal Legal Operator approval is auditable;
 - approved corpus is immutable;
-- `simple` + `unaccent` FTS and pgvector HNSW index build succeeds;
+- ChromaDB vectorless legal index build succeeds with hierarchy/xref metadata;
 - retrieval uses approved/pinned corpus, source/date/metadata filters;
 - citations reconstruct document/article/clause/point/source/hash/version;
 - retrieval audit contains sanitized query facets/hash, not sensitive raw text;
@@ -150,7 +150,7 @@ Includes canonical Manager happy path, optional Developer path, and 14 negative-
 Exit:
 
 - Manager completes login -> assessment -> Wizard -> repository -> snapshot -> Python scan -> evidence/profile/AIUsageFlow -> conflict resolution if needed -> VerifiedProfile -> legal matching -> classification -> gap -> document download -> audit export;
-- approved legal corpus and real LLM/embedding providers are used;
+- approved legal corpus, ChromaDB legal index and real LLM provider are used;
 - all required negative paths produce expected fail-closed/actionable states;
 - acceptance audit record identifies versions, hashes, provider/model, corpus, and artifacts.
 
@@ -175,7 +175,7 @@ Parallel internal prerequisite:
 ```text
 Legal Source Ingestion
 -> Internal Approval
--> FTS/Embedding Index
+-> ChromaDB Legal Index
 -> Legal Matching readiness
 ```
 
@@ -197,7 +197,7 @@ These are build-order candidates, not stories or sprint tickets.
 
 | Task | Purpose | Dependency | Owner |
 |---|---|---|---|
-| TASK-001 | Prisma/PostgreSQL baseline plus pgvector/unaccent | none | Platform |
+| TASK-001 | Prisma/PostgreSQL baseline plus ChromaDB legal index configuration | none | Platform |
 | TASK-002 | Config/secret loader and provider refs | none | Platform |
 | TASK-003 | AuditEvent writer | TASK-001 | Platform |
 | TASK-004 | Outbox writer/publisher/retry/DLQ | TASK-001 | Platform |
@@ -218,8 +218,8 @@ These are build-order candidates, not stories or sprint tickets.
 | TASK-019 | Optional Developer scoped task without attestation | TASK-005, TASK-018 | Assessment/Intelligence |
 | TASK-020 | Python legal source validation/ingestion | TASK-001, object storage | Legal |
 | TASK-021 | Internal corpus review/approval | TASK-020 | Legal |
-| TASK-022 | Python Vietnamese FTS and embedding index build | TASK-021, provider config | Legal |
-| TASK-023 | Hybrid retriever/retrieval audit | TASK-022 | Legal |
+| TASK-022 | Python ChromaDB vectorless legal index build | TASK-021, ChromaDB config | Legal |
+| TASK-023 | ChromaDB vectorless retriever/retrieval audit | TASK-022 | Legal |
 | TASK-024 | Python Legal Matching worker | TASK-018, TASK-023 | Legal |
 | TASK-025 | Real LLM Gateway | TASK-002 | Platform |
 | TASK-026 | Python Risk Classification worker | TASK-024, TASK-025 | Legal |

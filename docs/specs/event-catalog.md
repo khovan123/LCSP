@@ -24,7 +24,7 @@ Canonical command and event names for the A-to-Z runnable MVP.
 | `command.ai-usage-flow.requested.v1` | `lcsp.ai-usage-flow-worker.v1` | profile projection | Python AI Usage Flow Worker |
 | `command.reconciliation.requested.v1` | `lcsp.reconciliation-worker.v1` | flow/resolution projection | Python Reconciliation Worker |
 | `command.legal-source.ingest.requested.v1` | `lcsp.legal-source-ingest.v1` | Internal Legal Operations API | Python Legal Ingestion Worker |
-| `command.embedding-build.requested.v1` | `lcsp.embedding-build.v1` | corpus approval outbox | Python Corpus Index Worker |
+| `command.legal-index-build.requested.v1` | `lcsp.legal-index-build.v1` | corpus approval outbox | Python ChromaDB Legal Index Worker |
 | `command.legal-matching.requested.v1` | `lcsp.legal-matching-worker.v1` | verified-profile projection | Python Legal Matching Worker |
 | `command.classification.requested.v1` | `lcsp.classification-worker.v1` | legal-matching projection | Python Classification Worker |
 | `command.gap-analysis.requested.v1` | `lcsp.gap-analysis-worker.v1` | classification projection | Python Gap Analysis Worker |
@@ -40,7 +40,7 @@ Canonical command and event names for the A-to-Z runnable MVP.
 | AI Usage Flow | `event.ai-usage-flow.completed.v1` | `event.ai-usage-flow.failed.v1` |
 | Reconciliation | `event.reconciliation.verified-profile-ready.v1` | `event.reconciliation.conflict-detected.v1` |
 | Legal Source | `event.legal-source.ingest.completed.v1` | `event.legal-source.ingest.failed.v1` |
-| Embedding Index | `event.embedding-build.completed.v1` | `event.embedding-build.failed.v1` |
+| Legal Index | `event.legal-index-build.completed.v1` | `event.legal-index-build.failed.v1` |
 | Legal Matching | `event.legal-matching.completed.v1` | `event.legal-matching.failed.v1` |
 | Classification | `event.classification.completed.v1` | `event.classification.blocked.v1` |
 | Gap Analysis | `event.gap-analysis.completed.v1` | `event.gap-analysis.blocked.v1`, `event.gap-analysis.failed.v1` |
@@ -54,7 +54,7 @@ Canonical command and event names for the A-to-Z runnable MVP.
 | `event.scan-trigger.ready.v1` | trusted source verified, PBAC allowed, unique tenant/repository/assessment/branch/commit mapping exists |
 | `event.reconciliation.verified-profile-ready.v1` | no unresolved material conflict |
 | `event.legal-source.ingest.completed.v1` | source validated, snapshot/hash persisted, document staged in DRAFT corpus |
-| `event.embedding-build.completed.v1` | corpus approved and FTS/vector metadata verified |
+| `event.legal-index-build.completed.v1` | corpus approved, ChromaDB records written, legal hierarchy/xref metadata verified and citation allowlist-ready |
 | `event.legal-matching.completed.v1` | LegalRuleMatch records and retrieval audit persisted |
 | `event.classification.completed.v1` | VerifiedProfile and citation-backed legal basis exist |
 | `event.gap-analysis.completed.v1` | valid classification and legal basis exist |
@@ -135,8 +135,8 @@ Internal legal preparation:
 command.legal-source.ingest.requested.v1
 -> event.legal-source.ingest.completed.v1
 -> internal approval
--> command.embedding-build.requested.v1
--> event.embedding-build.completed.v1
+-> command.legal-index-build.requested.v1
+-> event.legal-index-build.completed.v1
 ```
 
 ## Idempotency and Failure

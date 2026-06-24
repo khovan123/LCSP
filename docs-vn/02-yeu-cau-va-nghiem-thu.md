@@ -33,7 +33,7 @@ Hệ thống tạo TechnicalProfile, AIUsageFlow, phát hiện conflict, cho Man
 
 ### Legal matching và classification
 
-Hệ thống chỉ dùng LegalCorpusVersion đã duyệt và đã có chỉ mục. Hybrid retrieval phải trả về citation đầy đủ; classification chỉ chạy sau VerifiedProfile và LegalRuleMatch.
+Hệ thống chỉ dùng LegalCorpusVersion đã duyệt và đã có ChromaDB vectorless legal index. Retrieval phải trả về citation đầy đủ, phân biệt primary/parent/referenced context và chỉ cho phép citation trong retrieved allowlist; classification chỉ chạy sau VerifiedProfile và LegalRuleMatch.
 
 ### Reporting và audit
 
@@ -48,7 +48,7 @@ GapAnalysis và final report yêu cầu đủ classification, legal basis, citat
 - Fail-closed khi thiếu evidence, citation hoặc corpus.
 - RabbitMQ/outbox có idempotency, retry và DLQ.
 - Trạng thái UI rõ ràng: loading, empty, insufficient, blocked, failed, retry, rerun.
-- Kiểm soát chi phí LLM/embedding.
+- Kiểm soát chi phí LLM. Embedding không bắt buộc cho legal retrieval MVP.
 - Legal corpus đã duyệt phải bất biến.
 - Python Worker phải chạy trong workspace hạn chế và xác minh cleanup.
 
@@ -59,11 +59,11 @@ Bài nghiệm thu chuẩn sử dụng hạ tầng thật:
 - PostgreSQL và RabbitMQ thật;
 - S3-compatible object storage thật;
 - repository fixture thật theo commit;
-- approved legal corpus và chỉ mục FTS/vector thật;
-- LLM và embedding provider thật;
+- approved legal corpus và ChromaDB vectorless legal index thật;
+- LLM provider thật;
 - document artifact và audit export thật.
 
-Manager phải hoàn thành từ đăng nhập đến xuất audit mà không phụ thuộc Developer. Mock LLM hoặc mock embedding không đủ điều kiện cho nghiệm thu A-to-Z.
+Manager phải hoàn thành từ đăng nhập đến xuất audit mà không phụ thuộc Developer. Mock LLM không đủ điều kiện cho nghiệm thu A-to-Z.
 
 ## Negative paths bắt buộc
 
@@ -77,4 +77,4 @@ Mỗi story tương lai phải liên kết tối thiểu:
 UC -> FR -> AC -> NFR -> UX state -> domain state -> implementation area -> recovery behavior
 ```
 
-Hiện chưa có canonical UX và canonical epics/stories, vì vậy story coverage chưa thể đánh giá và implementation chưa được phép bắt đầu.
+Hiện đã có canonical UX draft nhưng chưa được review/approved; canonical epics/stories vẫn chưa có, vì vậy story coverage chưa thể đánh giá và implementation chưa được phép bắt đầu.

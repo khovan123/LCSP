@@ -36,7 +36,7 @@ LegalSource
 -> LegalCorpusItem
 -> CorpusApprovalRecord
 -> LegalCorpusVersion APPROVED
--> LegalDocumentChunk / FTS / embedding
+-> LegalDocumentChunk / ChromaDB legal index records
 -> RetrievalAuditLog
 -> LegalRuleMatch
 ```
@@ -335,9 +335,11 @@ Represents a normalized legal hierarchy unit tied to a document and corpus versi
 | chunkId / corpusItemId | UUIDv7 | Yes | Identity/owner |
 | chunkIndex | integer | Yes | Stable order |
 | content | text | Yes | Approved normalized legal text |
-| tsvector | database index | Yes after indexing | Vietnamese FTS representation |
-| embedding | vector | No until built | Provider/model-specific embedding |
-| embeddingModel / embeddingVersion | string | No | Reproducibility |
+| hierarchicalPath | string | Yes | Stable document/article/clause/point path |
+| contextRole | enum | Yes | PRIMARY_MATCH/PARENT_CONTEXT/REFERENCED_CONTEXT at retrieval time |
+| outgoingRefIds / incomingRefIds | JSON | No | Cross-reference graph edges |
+| chromaCollectionId / chromaRecordId | string | Yes after indexing | ChromaDB collection/record identity |
+| supersedesChunkId | string | No | Versioned legal text history |
 
 ### LegalCorpusVersion
 
@@ -363,11 +365,11 @@ Approved versions are immutable. New changes create a new version; existing asse
 
 ### RetrievalAuditLog
 
-Records assessment/query reference, corpus version, effective-date filters, FTS/vector scores, result refs, result count, correlation ID, and timestamp. It must not persist sensitive raw assessment content beyond approved normalized query metadata.
+Records assessment/query reference, corpus version, effective-date filters, ChromaDB collection/version, result refs, context roles, citation allowlist refs, result count, correlation ID, and timestamp. It must not persist sensitive raw assessment content beyond approved normalized query metadata.
 
 ### ModelRunMetadata
 
-Records provider, model, prompt version, sanitized input reference, output hash, status, token/cost metadata, optional corpus version, embedding model, retrieval score refs, and correlation ID. Secrets and raw source are excluded.
+Records provider, model, prompt version, sanitized input reference, output hash, status, token/cost metadata, optional corpus version, retrieval audit refs, and correlation ID. Secrets and raw source are excluded. Embedding model metadata is future-only unless a later semantic/reranker path is approved.
 
 ### LegalRuleMatch
 

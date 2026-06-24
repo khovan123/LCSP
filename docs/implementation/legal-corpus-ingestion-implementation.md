@@ -145,7 +145,7 @@ Approval transaction:
 create CorpusApprovalRecord
 -> set LegalCorpusVersion APPROVED
 -> write AuditEvent
--> create OutboxEvent(command.embedding-build.requested.v1)
+-> create OutboxEvent(command.legal-index-build.requested.v1)
 ```
 
 Rejection creates a decision record and keeps the version unavailable. Approved content is immutable. Any content/date/relationship correction requires a new DRAFT version and reapproval.
@@ -155,12 +155,12 @@ Rejection creates a decision record and keeps the version unavailable. Approved 
 Canonical command/event names:
 
 ```text
-command.embedding-build.requested.v1
-event.embedding-build.completed.v1
-event.embedding-build.failed.v1
+command.legal-index-build.requested.v1
+event.legal-index-build.completed.v1
+event.legal-index-build.failed.v1
 ```
 
-Retrieval remains blocked until the approved version has a successful FTS/vector index completion record.
+Retrieval remains blocked until the approved version has a successful ChromaDB legal index completion record with hierarchy, xref and citation allowlist metadata verified.
 
 ## Audit Requirements
 

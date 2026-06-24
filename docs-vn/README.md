@@ -27,15 +27,16 @@
 PHASE_5_2L_P0_CLOSURE_COMPLETED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 READY_FOR_CANONICAL_UX
-CANONICAL_UX_PENDING
-RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 CANONICAL_EPICS_AND_STORIES_MISSING
 IMPLEMENTATION_READINESS_NOT_CERTIFIED
 IMPLEMENTATION_NOT_AUTHORIZED
 SPRINT_EXECUTION_NOT_AUTHORIZED
 ```
 
-PR #2 đã đồng bộ target Phase 5.2L: PBAC, Automatic Trusted Scan Initiation, Python Worker Platform và scanner toolchain mở rộng. Closure pass sau review đã ghi nhận approval cho documentation/planning remediation, đổi A3 trong validation plan sang PBAC/trusted-trigger abuse risk, tách structured attestation khỏi active coverage và sửa marker readiness/traceability trước UX. Điều kiện RAG `chorma database (vector less)` được phân loại là technical decision backend, không chặn UX flow nhưng phải đóng trước stories/readiness.
+PR #2 đã đồng bộ target Phase 5.2L: PBAC, Automatic Trusted Scan Initiation, Python Worker Platform và scanner toolchain mở rộng. Closure pass sau review đã ghi nhận approval cho documentation/planning remediation, đổi A3 trong validation plan sang PBAC/trusted-trigger abuse risk, tách structured attestation khỏi active coverage và sửa marker readiness/traceability trước UX. Điều kiện RAG đã được chuẩn hóa thành ChromaDB structure-first vectorless legal RAG; pgvector legal retrieval bị superseded.
 
 Báo cáo và checklist closure nằm tại `12-review-truoc-ux-phase-5-2l.md`.
 
@@ -44,5 +45,5 @@ Báo cáo và checklist closure nằm tại `12-review-truoc-ux-phase-5-2l.md`.
 - Dùng `docs-vn/` để đọc nhanh và onboarding.
 - Dùng `docs/` khi thiết kế, review hoặc triển khai chi tiết.
 - Không dùng `docs/archive/` làm nguồn thẩm quyền hiện tại.
-- Có thể bắt đầu `bmad-ux` sau closure này; chưa được tạo epics/stories hoặc implementation readiness claim cho đến khi UX artifact được review/approved.
+- UX draft đã được tạo tại `docs/planning-artifacts/ux-designs/ux-LCSP-2026-06-24/`; chưa được tạo epics/stories hoặc implementation readiness claim cho đến khi UX artifact được review/approved.
 - Không suy diễn rằng tài liệu đã đồng nghĩa với mã nguồn, kiểm thử hoặc hạ tầng đã tồn tại.

@@ -114,7 +114,7 @@ Canonical corpus lifecycle vocabulary for Phase 5.2J is `DRAFT -> APPROVED -> SU
 |---|---|
 | `LegalSource` | Registry of official source URLs and metadata |
 | `LegalDocument` | Individual legal documents with identity, dates, relationships |
-| `LegalDocumentChunk` | Chunked document text for embedding; includes pgvector embedding column |
+| `LegalDocumentChunk` | Structured legal text chunk with stable hierarchy metadata, xref metadata and ChromaDB record reference |
 | `LegalCorpusVersion` | Immutable approved corpus snapshots |
 | `LegalCorpusItem` | Which documents belong to which corpus version |
 | `CorpusApprovalRecord` | Approval authority, date, scope, status |

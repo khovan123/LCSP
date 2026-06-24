@@ -7,14 +7,14 @@ HISTORICAL_ONLY
 SUPERSEDED_IN_PART_BY_PHASE_5_2L
 ```
 
-This report remains historical evidence for Phase 5.2K. Phase 5.2L supersedes any active authority in this file that preserves RBAC as authorization source of truth, structured attestation, old `FR-050`/`FR-051` semantics, or Node.js downstream domain worker ownership.
+This report remains historical evidence for Phase 5.2K. Phase 5.2L supersedes any active authority in this file that preserves RBAC as authorization source of truth, structured attestation, old `FR-050`/`FR-051` semantics, Node.js downstream domain worker ownership, or PostgreSQL pgvector/embedding-based legal retrieval as the MVP legal RAG path.
 
 ## Status
 
 ```text
 ACTIVE_DOCS_PRE_UX_SYNCHRONIZED
 SUPERSEDED_CANONICAL_UX_AUTHORIZATION_PHASE_5_2K
-CANONICAL_UX_PENDING
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
@@ -44,7 +44,7 @@ Documentation/planning remediation only. Archive content was not changed. No app
 - Deferred FRs have no active MVP acceptance criteria, UX screens, or implementation stories.
 - Acceptance criteria remain `AC-001..AC-041` and now use canonical UCs and semantic NFR dependencies.
 - A-to-Z acceptance excludes optional Developer participation as a prerequisite.
-- Traceability retains `CANONICAL_UX_PENDING` and `STORY_TRACEABILITY_PENDING` without claiming implementation readiness.
+- Traceability retains `CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL` and `STORY_TRACEABILITY_PENDING` without claiming implementation readiness.
 
 ### Product and UX Boundary
 
@@ -121,12 +121,11 @@ No code/test suite was run because the change set contains no application code o
 
 ```text
 1. Merge this documentation closure after review.
-2. Run bmad-ux in a fresh context window.
-3. Review and approve canonical UX.
-4. Run bmad-create-epics-and-stories.
-5. Rebuild story-level traceability.
-6. Run bmad-check-implementation-readiness.
-7. Start sprint planning and coding only after readiness approval.
+2. Review and approve the canonical UX draft.
+3. Run bmad-create-epics-and-stories.
+4. Rebuild story-level traceability.
+5. Run bmad-check-implementation-readiness.
+6. Start sprint planning and coding only after readiness approval.
 ```
 
 ## Final Markers
@@ -141,7 +140,7 @@ PYTHON_WORKER_CODE_MAPS_ALIGNED
 SCANNER_RUNTIME_BLUEPRINT_ALIGNED
 LEGAL_RETRIEVAL_PROFILE_LOCKED
 SUPERSEDED_CANONICAL_UX_AUTHORIZATION_PHASE_5_2K
-CANONICAL_UX_PENDING
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_READINESS_NOT_CERTIFIED
 IMPLEMENTATION_NOT_AUTHORIZED

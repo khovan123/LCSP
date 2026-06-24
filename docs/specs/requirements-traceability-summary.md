@@ -15,7 +15,7 @@ Summarize canonical requirement and planning traceability after Phase 5.2L activ
 | Active NFR total | 33 (`NFR-001..NFR-030`, `NFR-033..NFR-035`) |
 | AC total | `AC-001..AC-041` plus `AC-050A..AC-050F` |
 | Canonical use cases | `UC-001..UC-017`; `UC-018` structured attestation superseded |
-| Canonical UX | authorized and pending creation |
+| Canonical UX | draft created; pending review/approval |
 | Canonical epics/stories | missing |
 | Story traceability | pending / not assessable |
 
@@ -28,8 +28,8 @@ Summarize canonical requirement and planning traceability after Phase 5.2L activ
 - `FR-050` automatically creates or resumes scan workflows from trusted integration context.
 - Python Worker Platform owns all asynchronous domain workloads.
 - Scanner analysis uses Syft, Knip, deptry, Python `ast`/`libcst`, Semgrep custom rules, tree-sitter/custom parser, and bounded `ts-morph`.
-- Real LLM and embedding providers are required for A-to-Z acceptance.
-- Legal corpus uses validated official-source snapshots, internal approval, immutable versioning, and hybrid FTS/pgvector retrieval.
+- Real LLM provider configuration is required for A-to-Z acceptance; dense embedding providers are not required for legal retrieval MVP.
+- Legal corpus uses validated official-source snapshots, internal approval, immutable versioning, and ChromaDB structure-first vectorless retrieval with legal hierarchy, xref expansion and citation allowlist validation.
 - Manager can complete the golden path without Developer participation.
 - Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP`.
 - Local/CI scanner report upload is superseded by `FR-050`.
@@ -38,7 +38,7 @@ Summarize canonical requirement and planning traceability after Phase 5.2L activ
 
 ## UX Boundary
 
-`bmad-ux` is authorized to design:
+The canonical UX draft at `docs/planning-artifacts/ux-designs/ux-LCSP-2026-06-24/` covers:
 
 - Manager authentication, organization, assessment, Wizard, repository, scan, evidence, reconciliation, classification, gap, document, and audit experiences;
 - optional Developer invitation/task and redacted findings experiences without structured attestation;
@@ -78,8 +78,9 @@ FR_051_REMOVED_FROM_PRODUCT
 STRUCTURED_ATTESTATION_SUPERSEDED_FOR_ACTIVE_MVP
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 READY_FOR_CANONICAL_UX
-CANONICAL_UX_PENDING
-RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 STORY_TRACEABILITY_PENDING
 STORY_COVERAGE_NOT_ASSESSABLE
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING

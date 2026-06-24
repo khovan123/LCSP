@@ -6,7 +6,7 @@ AUTHORITATIVE IMPLEMENTATION DOCUMENT — A-TO-Z RUNNABLE MVP
 
 ## Purpose
 
-Define PostgreSQL/Prisma ownership, physical model requirements, pgvector/FTS indexes, object-storage metadata, transactions, retention, configuration, and recovery. This is a build specification, not implemented schema code.
+Define PostgreSQL/Prisma ownership, physical model requirements, ChromaDB legal index references, object-storage metadata, transactions, retention, configuration, and recovery. This is a build specification, not implemented schema code.
 
 ## Active References
 
@@ -23,6 +23,7 @@ Define PostgreSQL/Prisma ownership, physical model requirements, pgvector/FTS in
 
 - PostgreSQL is authoritative for domain/workflow/evidence/legal/result/audit metadata.
 - S3-compatible object storage holds legal source snapshots and generated document artifacts.
+- ChromaDB holds the structure-first vectorless legal retrieval index for approved corpus versions.
 - Raw repository source, full AST bodies, secrets, raw provider tokens, and full prompts are never persistent records.
 - Queue payloads and audit metadata are reference-only/redacted.
 - Approved LegalCorpusVersion and historical assessment artifacts are immutable.
@@ -30,10 +31,7 @@ Define PostgreSQL/Prisma ownership, physical model requirements, pgvector/FTS in
 
 ## Required PostgreSQL Extensions
 
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS unaccent;
-```
+No PostgreSQL pgvector extension is required for legal retrieval in Phase 5.2L. PostgreSQL remains authoritative for relational metadata, audit, outbox and corpus approval state. ChromaDB owns legal retrieval records and metadata index.
 
 ## Model Groups
 
@@ -183,25 +181,18 @@ normalizedContent, contentHash, createdAt
 ```text
 id, corpusItemId, chunkIndex,
 content, contentHash,
-searchVector tsvector,
-embedding vector(1536),
-embeddingModel, embeddingVersion,
+hierarchicalPath,
+docId, articleId, clauseId, pointId,
+articleNumber, clauseNumber, pointCode,
+effectiveFrom, effectiveTo, legalStatus,
+sourceChecksum, chunkChecksum,
+outgoingRefIds, incomingRefIds,
+supersedesChunkId,
+chromaCollectionId, chromaRecordId,
 createdAt
 ```
 
-Indexes:
-
-```sql
-CREATE INDEX legal_chunk_fts_idx
-ON "LegalDocumentChunk" USING gin ("searchVector");
-
-CREATE INDEX legal_chunk_hnsw_idx
-ON "LegalDocumentChunk"
-USING hnsw (embedding vector_cosine_ops)
-WITH (m = 16, ef_construction = 64);
-```
-
-`searchVector` uses `to_tsvector('simple', unaccent(normalized content))`. Do not use the `english` dictionary for Vietnamese legal text.
+Legal retrieval index records are written to ChromaDB after corpus approval. PostgreSQL stores stable IDs, hierarchy metadata, checksums, cross-reference IDs and ChromaDB record references for reproducibility.
 
 #### CorpusApprovalRecord
 
@@ -245,8 +236,7 @@ id, assessmentId, workflowRunId, nodeName,
 provider, model, promptVersion,
 inputReference, outputHash, status,
 inputTokens, outputTokens, estimatedCost,
-corpusVersionId, embeddingModel,
-embeddingDimension, retrievalScoreRefs,
+corpusVersionId, retrievalAuditRefs,
 correlationId, createdAt
 ```
 
@@ -301,7 +291,7 @@ validate Internal Legal Operator
    create CorpusApprovalRecord
    mark corpus APPROVED
    write AuditEvent
-   write command.embedding-build.requested.v1 OutboxEvent
+   write command.legal-index-build.requested.v1 OutboxEvent
 ```
 
 Approved corpus content is immutable after commit.
@@ -318,7 +308,7 @@ Artifact upload and metadata registration must avoid orphaned states. Use staged
 4. evidence refs/findings/report/graph;
 5. TechnicalProfile/AIUsageFlow/reconciliation/VerifiedProfile;
 6. legal source/document/corpus/approval/chunks;
-7. pgvector/unaccent/search-vector indexes;
+7. ChromaDB legal index references and retrieval audit metadata;
 8. retrieval audit/LegalRuleMatch;
 9. model metadata/classification/gap/document;
 10. outbox/audit indexes and retention jobs.
@@ -334,7 +324,7 @@ Artifact upload and metadata registration must avoid orphaned states. Use staged
 - VerifiedProfile version;
 - corpus status/version and document effective dates;
 - source validation status;
-- chunk FTS GIN and embedding HNSW;
+- ChromaDB legal index version and chunk record references;
 - classification/gap/document status;
 - audit correlation/time;
 - outbox status/nextAttemptAt/lock;
@@ -361,11 +351,11 @@ Artifact upload and metadata registration must avoid orphaned states. Use staged
 | Database/RabbitMQ/S3 | secret references, startup validation, redacted logs |
 | OAuth/OIDC/MFA/GitHub App | callback/scope validation, no plaintext secret/token |
 | Scanner | workspace root, file/size/time bounds, ruleset version, fixed analyzer executable |
-| LLM/embedding | provider/model, credential ref, timeout/token/monthly budget, vector dimension |
-| Legal corpus | source validation list, active approved corpus version, index version |
+| LLM | provider/model, credential ref, timeout/token/monthly budget |
+| Legal corpus | source validation list, active approved corpus version, ChromaDB collection/index version |
 | Observability | correlation IDs and redacted failure codes |
 
-A-to-Z acceptance requires real PostgreSQL, RabbitMQ, S3-compatible storage, real LLM provider, and real embedding provider/model. Mock adapters are component-test/offline-only.
+A-to-Z acceptance requires real PostgreSQL, RabbitMQ, S3-compatible storage, ChromaDB legal index, and real LLM provider. Dense embedding provider/model is not required for legal retrieval MVP. Mock adapters are component-test/offline-only.
 
 ## Recovery Rules
 
@@ -377,7 +367,7 @@ A-to-Z acceptance requires real PostgreSQL, RabbitMQ, S3-compatible storage, rea
 | cleanup failure | security remediation then new ScanJob; never promote staged report |
 | corpus ingestion failure | correct source/normalization and create new staging attempt |
 | corpus approval rejection | remain DRAFT/rejected; correct and resubmit; no retrieval |
-| embedding/index failure | rebuild same approved immutable content with recorded new index attempt/version |
+| legal index failure | rebuild same approved immutable content with recorded new index attempt/version |
 | classification/document failure | retry only transient errors; domain guard failures remain blocked until upstream changes |
 | artifact upload orphan | audited cleanup/reconciliation job |
 

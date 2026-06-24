@@ -584,23 +584,21 @@ Approval authorizes only documentation and planning remediation. It does not aut
 
 ### Approval Condition Classification
 
-The raw approval condition `Update rag: chorma database (vector less)` is ambiguous and is not treated as an active architecture change.
+The raw approval condition `Update rag: chorma database (vector less)` is standardized as `ChromaDB structure-first vectorless legal RAG`.
 
-Current authoritative retrieval baseline remains PostgreSQL FTS + pgvector as defined in `docs/architecture/adr/adr-026-hybrid-legal-retriever.md`, `docs/architecture/architecture.md`, and `docs/specs/legal-matching-domain-spec.md`.
+Current authoritative retrieval baseline is ChromaDB vectorless legal retrieval as defined in `docs/architecture/adr/adr-026-hybrid-legal-retriever.md`, `docs/architecture/architecture.md`, and `docs/specs/legal-matching-domain-spec.md`.
 
 The condition is classified as:
 
 ```text
-RAG_RETRIEVAL_APPROVAL_CONDITION_AMBIGUOUS
-TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES_OR_IMPLEMENTATION_READINESS
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
+LEGAL_STRUCTURE_PRESERVATION_REQUIRED
+CROSS_REFERENCE_EXPANSION_REQUIRED
+RETRIEVED_CITATION_ALLOWLIST_REQUIRED
 NOT_BLOCKING_CANONICAL_UX_FLOW_DESIGN
 ```
 
-Before epics/stories are marked ready or implementation readiness is re-certified, the Project Owner and technical owner must decide whether the intended condition means:
-
-- typo only;
-- ChromaDB replaces PostgreSQL pgvector;
-- vectorless retrieval replaces semantic vector retrieval;
-- or no MVP architecture change.
+This does not change high-level UX flow, but UX must carry citation display requirements: document/article/clause/point citation, primary vs referenced context, version/effective-date visibility, expired/superseded warning states, and no citation outside the retrieved allowlist.
 
 CHANGE_PROPOSAL_APPROVED_FOR_DOCUMENTATION_AND_PLANNING_REMEDIATION_ONLY

@@ -12,7 +12,7 @@ Canonical traceability from use cases to requirements, acceptance criteria, doma
 | Functional requirements | 56 total; Phase 5.2L: `FR-050` active Automatic Trusted Scan Initiation; `FR-051` removed; `FR-052` deferred; `FR-045/FR-046` superseded |
 | Active NFRs | 33 |
 | Acceptance criteria | AC-001..AC-041 plus AC-050A..AC-050F |
-| UX | READY_FOR_CANONICAL_UX / CANONICAL_UX_PENDING |
+| UX | READY_FOR_CANONICAL_UX / CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL |
 | Stories | missing; story coverage not assessable |
 
 Legacy `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, and `NFR-032` are aliases/history only. Active rows below use canonical identifiers.
@@ -52,7 +52,7 @@ Legacy `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, and `NFR-032` are alia
 | FR-029 | UC-010 | AC-012, AC-033 | conflict/VerifiedProfile state | Reconciliation API |
 | FR-030 | UC-011 | AC-014, AC-015 | VerifiedProfile | Reconciliation Worker |
 | FR-031 | UC-011 | AC-015 | VerifiedProfile guard | Reconciliation API |
-| FR-032 | UC-012 | AC-016, AC-035, AC-036 | legal matching + corpus state | Hybrid Retriever |
+| FR-032 | UC-012 | AC-016, AC-035, AC-036 | legal matching + corpus state | ChromaDB Legal Retriever |
 | FR-033 | UC-012 | AC-016, AC-036 | legal matching spec | Legal Matching Worker |
 | FR-034 | UC-012, UC-013 | AC-017, AC-034, AC-036 | legal match/classification state | Legal Matching Worker |
 | FR-035 | UC-013 | AC-016, AC-018, AC-037, AC-038 | classification state | Classification Worker |
@@ -76,7 +76,7 @@ Legacy `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, and `NFR-032` are alia
 | FR-053 | UC-012 | AC-016 | LegalSource/LegalDocument ingestion state | Legal Ingestion Worker |
 | FR-054 | UC-012 | AC-016, AC-035 | LegalCorpusVersion state | Internal Approval Gate |
 | FR-055 | UC-013 | AC-018, AC-037, AC-038 | LLM Gateway configuration | Platform / LLM Gateway |
-| FR-056 | UC-012 | AC-016, AC-035, AC-036 | legal matching/index state | Hybrid Retriever |
+| FR-056 | UC-012 | AC-016, AC-035, AC-036 | legal matching/index state | ChromaDB Legal Retriever |
 
 ## NFR Coverage
 
@@ -93,13 +93,13 @@ Legacy `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, and `NFR-032` are alia
 | NFR-027, NFR-028 | user-facing FRs | accessibility and business-language UX |
 | NFR-029 | FR-023..FR-025, FR-032, FR-033, FR-056 | claim evidence refs |
 | NFR-030 | FR-017, FR-044, FR-049 | immutable rerun history |
-| NFR-033 | FR-055, FR-056 | LLM/embedding budgets |
+| NFR-033 | FR-055 | LLM budget controls; embeddings future-only unless separately approved |
 | NFR-034 | FR-032, FR-053, FR-054, FR-056 | immutable approved corpus |
 | NFR-035 | FR-018, FR-019 | Python Worker sandbox/cleanup |
 
 ## UX and Story Boundary
 
-Canonical UX is ready to start but not yet created. Story coverage remains not assessable until canonical epics/stories exist. Stories must trace to UC, FR, AC, relevant NFRs, UX states, domain states, implementation area, and recovery behavior.
+Canonical UX draft exists at `docs/planning-artifacts/ux-designs/ux-LCSP-2026-06-24/` and is pending review/approval. Story coverage remains not assessable until canonical epics/stories exist. Stories must trace to UC, FR, AC, relevant NFRs, UX states, domain states, implementation area, and recovery behavior.
 
 ```text
 REQUIREMENT_TRACEABILITY_CORE_MATRIX_NORMALIZED
@@ -111,8 +111,9 @@ ACTIVE_REQUIREMENTS_TRACE_RECHECKED
 ACCEPTANCE_CRITERIA_TRACE_RECHECKED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 READY_FOR_CANONICAL_UX
-CANONICAL_UX_PENDING
-RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 STORY_TRACEABILITY_PENDING
 STORY_COVERAGE_NOT_ASSESSABLE
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING

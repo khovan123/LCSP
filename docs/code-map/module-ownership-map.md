@@ -18,7 +18,7 @@ Define top-level engineering ownership for the A-to-Z runnable MVP. This map is 
 | `gap-analysis` | Gap result access. | classification, legal matches. | Gap DTOs | `GapAnalysis` | None | gap-analysis routes | `specs/document-generation-spec.md` |
 | `documents` | Document request/status/download. | gap analysis, object storage, audit. | Document DTOs | `GeneratedDocument`, `OutboxEvent`, `AuditEvent` | produces `command.document.requested.v1` | document routes | `specs/document-generation-spec.md` |
 | `audit` | Immutable audit query/export. | all modules. | Audit DTOs | `AuditEvent` | None | audit routes | `implementation/backend-implementation.md` |
-| `platform-config` | LLM/embedding configuration references and budget policy. | secret manager, LLM Gateway. | Provider config DTOs | `ModelRunMetadata` | None | internal/admin configuration boundary | `implementation/llm-gateway-implementation.md` |
+| `platform-config` | LLM provider configuration references and budget policy. | secret manager, LLM Gateway. | Provider config DTOs | `ModelRunMetadata` | None | internal/admin configuration boundary | `implementation/llm-gateway-implementation.md` |
 
 ## Shared Packages
 
@@ -47,7 +47,7 @@ Define top-level engineering ownership for the A-to-Z runnable MVP. This map is 
 | `ai-usage-flow-worker` | Python | Build AIUsageFlow. | `AIUsageFlow`, `AIUsageFlowClaim` | `lcsp.ai-usage-flow-worker.v1` | `specs/ai-usage-flow-domain-spec.md` |
 | `reconciliation-worker` | Python | Create conflicts or VerifiedProfile. | `ReconciliationConflict`, `VerifiedProfile` | `lcsp.reconciliation-worker.v1` | `developer-execution-blueprints/reconciliation-blueprint.md` |
 | `legal-ingestion-worker` | Python | Fetch, hash, normalize, and stage legal sources. | `LegalSource`, `LegalDocument`, `LegalCorpusItem` | `lcsp.legal-source-ingest.v1` | `implementation/legal-corpus-ingestion-implementation.md` |
-| `embedding-index-worker` | Python | Build pgvector embeddings and FTS indexes for approved corpus. | `LegalDocumentChunk`, `ModelRunMetadata` | `lcsp.embedding-build.v1` | `implementation/hybrid-retriever-implementation.md` |
+| `legal-index-worker` | Python | Build ChromaDB structure-first vectorless legal index for approved corpus. | `LegalDocumentChunk`, `RetrievalAuditLog` metadata | `lcsp.legal-index-build.v1` | `implementation/hybrid-retriever-implementation.md` |
 | `legal-matching-worker` | Python | Retrieve and persist LegalRuleMatch. | `LegalRuleMatch`, `RetrievalAuditLog` | `lcsp.legal-matching-worker.v1` | `implementation/hybrid-retriever-implementation.md` |
 | `classification-worker` | Python | Citation-gated classification. | `RiskClassification`, `ModelRunMetadata` | `lcsp.classification-worker.v1` | `specs/legal-classification-spec.md` |
 | `gap-analysis-worker` | Python | Generate gap analysis. | `GapAnalysis` | `lcsp.gap-analysis-worker.v1` | `specs/document-generation-spec.md` |

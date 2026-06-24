@@ -38,8 +38,8 @@ Là vai trò vận hành nội bộ, dùng API/CLI để xác minh nguồn văn 
 - scanner toolchain đa công cụ và TechnicalEvidenceReport;
 - TechnicalProfile, AIUsageFlow, reconciliation và VerifiedProfile;
 - legal corpus có provenance, immutable version và internal approval;
-- hybrid retrieval bằng PostgreSQL FTS + pgvector;
-- real LLM/embedding provider cho bài nghiệm thu A-to-Z;
+- ChromaDB structure-first vectorless legal retrieval;
+- real LLM provider cho bài nghiệm thu A-to-Z;
 - RiskClassification, GapAnalysis, GeneratedDocument và AuditEvent.
 
 ## Phân loại phần không active

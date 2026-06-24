@@ -269,7 +269,7 @@ approved source URL
 -> hash and normalize
 -> internal legal review
 -> approve immutable LegalCorpusVersion
--> build FTS/vector index
+-> build ChromaDB vectorless legal index
 -> expose approved version to retrieval
 ```
 

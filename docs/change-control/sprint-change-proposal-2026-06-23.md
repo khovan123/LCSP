@@ -19,7 +19,7 @@ SUPERSEDED_IN_PART_BY_PHASE_5_2L
 ```
 
 Phase 5.2I (commit `c33b137`) is correct and complete for the **previous** controlled MVP definition. It is preserved as historical evidence and must not be deleted or rewritten.
-Phase 5.2L supersedes any active authority in this file that preserves RBAC as authorization source of truth, structured attestation, Local/CI scanner report upload under `FR-050`, manual evidence JSON upload under `FR-051`, or Node.js downstream domain worker ownership.
+Phase 5.2L supersedes any active authority in this file that preserves RBAC as authorization source of truth, structured attestation, Local/CI scanner report upload under `FR-050`, manual evidence JSON upload under `FR-051`, Node.js downstream domain worker ownership, or PostgreSQL pgvector/embedding-based legal retrieval as the MVP legal RAG path. ChromaDB structure-first vectorless legal retrieval is the later active decision.
 
 This proposal creates a new canonical baseline. Implementation and story execution for affected areas **must pause** until:
 1. This Change Proposal is approved by the Project Owner.

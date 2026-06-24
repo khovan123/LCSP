@@ -1,4 +1,4 @@
-# Hybrid Retriever Implementation Specification
+# ChromaDB Vectorless Legal Retriever Implementation Specification
 
 ## Status
 
@@ -6,7 +6,7 @@ AUTHORITATIVE — A-to-Z Runnable MVP
 
 ## Purpose
 
-Define PostgreSQL FTS + pgvector indexing, hybrid ranking, effective-date/corpus filters, citation reconstruction, privacy, and retrieval auditing for legal matching.
+Define ChromaDB structure-first vectorless legal retrieval, stable legal hierarchy IDs, metadata filtering, full-text candidate matching, direct ID lookup, one-hop cross-reference expansion, parent-context assembly, citation allowlist validation, privacy, and retrieval auditing for legal matching.
 
 ## Active References
 
@@ -20,130 +20,110 @@ Define PostgreSQL FTS + pgvector indexing, hybrid ranking, effective-date/corpus
 
 | Concern | Value |
 |---|---|
-| Vector column | `vector(1536)` |
-| Similarity | cosine distance (`<=>`) |
-| Vector index | HNSW, `m=16`, `ef_construction=64` |
-| FTS configuration | PostgreSQL `simple` dictionary over normalized Vietnamese text |
-| Diacritic support | `unaccent` applied to indexed and query text |
-| Hybrid weights | FTS `0.4`, vector similarity `0.6` |
-| Candidate limit | configurable, default 20 before citation/metadata rerank |
-| Final result limit | configurable, default 8 |
-| Corpus | approved immutable version pinned to assessment |
-| Embedding generation | batch build only; never on demand in legal matching |
+| Retrieval store | ChromaDB |
+| Dense embeddings | Not required for legal retrieval MVP |
+| Primary retrieval method | Full-text/metadata candidate retrieval plus direct ID lookup |
+| Base retrieval unit | Clause (`Khoản`) |
+| Point handling | Assemble with parent Clause and Article context |
+| Cross-reference handling | One-hop expansion with `context_role=REFERENCED_CONTEXT` |
+| Citation safety | Allowlist built from retrieved primary and referenced-context chunks |
+| Corpus | Approved immutable version pinned to assessment |
 
-The configured embedding model for the MVP acceptance environment must emit 1536-dimensional vectors. Provider/model name and credential reference are environment configuration and are recorded in `ModelRunMetadata`.
-
-## PostgreSQL Extensions and Indexes
-
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS unaccent;
-
-ALTER TABLE "LegalDocumentChunk"
-ADD COLUMN IF NOT EXISTS "searchVector" tsvector;
-
-UPDATE "LegalDocumentChunk"
-SET "searchVector" = to_tsvector('simple', unaccent(coalesce(content, '')));
-
-CREATE INDEX IF NOT EXISTS legal_chunk_fts_idx
-ON "LegalDocumentChunk"
-USING gin ("searchVector");
-
-CREATE INDEX IF NOT EXISTS legal_chunk_hnsw_idx
-ON "LegalDocumentChunk"
-USING hnsw (embedding vector_cosine_ops)
-WITH (m = 16, ef_construction = 64);
-```
-
-Do not use the PostgreSQL `english` dictionary for Vietnamese legal content. Embeddings are written only for chunks in an approved LegalCorpusVersion, with content hash and embedding model/version metadata.
-
-## Hybrid Ranking
+## Stable IDs
 
 ```text
-hybridScore =
-  0.4 * normalizedFtsRank
-  + 0.6 * vectorSimilarity
+{document_id}::art-{article_no}
+{document_id}::art-{article_no}::cl-{clause_no}
+{document_id}::art-{article_no}::cl-{clause_no}::pt-{point_code}
 ```
 
-Vector similarity is `1 - cosine_distance`. Scores are normalized to `[0,1]` before combination.
+IDs are stable inside a LegalCorpusVersion. Amended content creates a new chunk and links to the previous chunk with `supersedes_chunk_id`.
+
+## Minimum Chroma Metadata
+
+```text
+corpus_version_id
+doc_id
+document_number
+document_title
+document_type
+issuing_authority
+article_id
+article_number
+article_title
+clause_id
+clause_number
+point_id
+point_code
+hierarchical_path
+effective_from
+effective_to
+legal_status
+source_url
+source_checksum
+chunk_checksum
+outgoing_ref_ids
+incoming_ref_ids
+supersedes_chunk_id
+```
+
+## Candidate Retrieval
 
 Every query applies:
 
 1. approved corpus version pinned to the assessment;
 2. effective-date interval at assessment date;
 3. validated source status;
-4. optional document type, issuing authority, and source-tier filters;
+4. optional document type, issuing authority, article, clause, point and source-tier filters;
 5. supersession relationships inside the pinned corpus;
 6. citation reconstruction completeness.
 
-Example shape:
+Candidate retrieval may use full-text matching, metadata filters, known legal IDs, or a combination of those. It must not require dense embedding generation or vector similarity to select legal clauses.
 
-```sql
-WITH candidates AS (
-  SELECT
-    c.id,
-    item."corpusVersionId",
-    doc.id AS "documentId",
-    ts_rank_cd(
-      c."searchVector",
-      plainto_tsquery('simple', unaccent(:queryText))
-    ) AS fts_rank,
-    1 - (c.embedding <=> :queryEmbedding::vector) AS vector_similarity
-  FROM "LegalDocumentChunk" c
-  JOIN "LegalCorpusItem" item ON c."corpusItemId" = item.id
-  JOIN "LegalDocument" doc ON item."documentId" = doc.id
-  JOIN "LegalCorpusVersion" corpus ON item."corpusVersionId" = corpus.id
-  JOIN "LegalSource" source ON doc."sourceId" = source.id
-  WHERE item."corpusVersionId" = :corpusVersionId
-    AND corpus.status = 'APPROVED'
-    AND source."validationStatus" = 'VALIDATED'
-    AND doc."effectiveStartDate" <= :assessmentDate
-    AND (doc."effectiveEndDate" IS NULL OR doc."effectiveEndDate" >= :assessmentDate)
-)
-SELECT *,
-  (0.4 * fts_rank) + (0.6 * vector_similarity) AS hybrid_score
-FROM candidates
-ORDER BY hybrid_score DESC
-LIMIT :candidateLimit;
+## Context Assembly
+
+Every retrieval payload distinguishes:
+
+```text
+PRIMARY_MATCH
+PARENT_CONTEXT
+REFERENCED_CONTEXT
 ```
 
-## Citation Reconstruction
+If the primary match is a Point, include its parent Clause and Article context. If the primary match is a Clause, include Article title/number and document title. If the primary match references another provision, fetch the referenced provision one hop and mark it as `REFERENCED_CONTEXT` with reason metadata.
 
-Each material result reconstructs:
+Referenced context must not be presented as the primary hit.
 
-- legal document ID, type, number, title, and issuer;
-- article, clause, point, and appendix path where applicable;
-- source URL and authority;
-- retrieved-at timestamp and content hash;
-- corpus version ID;
-- effective date interval;
-- chunk ID and normalized content hash;
-- FTS rank, vector similarity, hybrid score;
-- retrieval audit ID.
+## Citation Allowlist
 
-A candidate without reconstructable citation fields is ineligible for a material LegalRuleMatch.
+`LegalRuleMatch` and downstream LLM prompts receive a citation allowlist built from:
+
+- `retrieved_chunks`;
+- `referenced_context_chunks`;
+- parent context required to interpret the primary legal unit.
+
+Any `legal_ref` outside the allowlist is rejected. The system never synthesizes legal citations.
 
 ## Retrieval Privacy
 
 Retriever queries are derived from structured VerifiedProfile/AIUsageFlow labels and exclude raw repository source, credentials, full prompts, unnecessary personal free text, and unredacted logs.
 
-`RetrievalAuditLog` stores sanitized query terms/facets, query hash, corpus/date/metadata filters, matched IDs, scores, result count, correlation ID, and timestamp. It does not store arbitrary raw query text that may contain customer-sensitive content.
+`RetrievalAuditLog` stores sanitized query terms/facets, query hash, corpus/date/metadata filters, matched IDs, context roles, result count, correlation ID, and timestamp. It does not store arbitrary raw query text that may contain customer-sensitive content.
 
 ## Canonical Index Build Workflow
 
 ```text
 LegalCorpusVersion APPROVED
--> command.embedding-build.requested.v1
--> load approved chunks
--> normalize and unaccent text
--> compute FTS vectors
--> batch embedding through configured gateway/provider
--> verify dimension, content hash, and model metadata
--> write index data and ModelRunMetadata
--> event.embedding-build.completed.v1
+-> command.legal-index-build.requested.v1
+-> load approved legal hierarchy
+-> verify stable IDs and checksums
+-> extract cross-reference edges
+-> write ChromaDB records and metadata
+-> validate direct lookup, metadata filters and full-text candidate retrieval
+-> event.legal-index-build.completed.v1
 ```
 
-Failure publishes `event.embedding-build.failed.v1`, leaves the corpus unavailable for legal matching, and exposes an actionable audited state.
+Failure publishes `event.legal-index-build.failed.v1`, leaves the corpus unavailable for legal matching, and exposes an actionable audited state.
 
 ## Failure Behavior
 
@@ -151,26 +131,26 @@ Failure publishes `event.embedding-build.failed.v1`, leaves the corpus unavailab
 |---|---|
 | Corpus not approved | block retrieval |
 | Source not validated | exclude source and block if required basis is unavailable |
-| Embedding missing or dimension mismatch | fail index build; do not silently run vector query |
-| pgvector/HNSW unavailable | block required hybrid retrieval |
-| FTS unavailable | block required hybrid retrieval |
+| ChromaDB unavailable | block required legal retrieval |
+| Missing legal structure metadata | fail index build |
+| Missing cross-reference target | index with coverage limitation or block when referenced context is mandatory |
 | Zero candidates | do not claim applicability; block/degrade classification by rule criticality |
 | Citation cannot be reconstructed | reject candidate |
+| Citation outside allowlist | reject output and block/degrade according to rule criticality |
 | Effective date mismatch | exclude candidate |
-| Budget or credential failure during index build | fail explicitly; keep approved corpus but mark index unavailable |
 
 ## Audit and Cost Controls
 
-- Record embedding provider/model, vector dimension, usage/cost metadata, corpus version, and content hashes.
-- Enforce monthly embedding budget and per-run caps under `NFR-033`.
+- Record corpus version, source/chunk checksums, context roles, candidate IDs and result counts.
+- Enforce LLM monthly token/cost caps under `NFR-033`; legal retrieval itself does not require embedding cost controls.
 - Record only sanitized query metadata and result references.
-- Reproduce retrieval from corpus version, index profile, query hash, filters, and model version.
+- Reproduce retrieval from corpus version, index profile, query hash, filters, legal IDs and ChromaDB collection version.
 
 ## Acceptance
 
-- Vietnamese search uses `simple` + `unaccent`, not English stemming.
-- Hybrid retrieval uses approved corpus, date, source, and metadata filters.
+- Retrieval uses approved corpus, date, source and metadata filters.
 - Results reconstruct article/clause/point-level citations.
+- Primary, parent and referenced context are distinguishable.
 - Raw source and sensitive customer text are absent from retrieval/audit payloads.
-- Missing index or citation fails closed.
-- `FR-053`, `FR-054`, and `FR-056` retain canonical `NFR-017`, `NFR-033`, and `NFR-034` dependencies.
+- Missing index, missing citation or out-of-allowlist citation fails closed.
+- `FR-053`, `FR-054`, and `FR-056` retain canonical `NFR-017` and `NFR-034` dependencies.

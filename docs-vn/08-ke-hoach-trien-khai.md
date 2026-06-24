@@ -18,7 +18,7 @@ Tạo UX, epics/stories, traceability và chạy lại readiness check.
 
 ### Wave 1 — Nền tảng
 
-PostgreSQL/Prisma/pgvector/unaccent, RabbitMQ/outbox, audit, PBAC, configuration và secret references.
+PostgreSQL/Prisma metadata, ChromaDB legal index configuration, RabbitMQ/outbox, audit, PBAC, configuration và secret references.
 
 ### Wave 2 — Assessment core
 
@@ -34,7 +34,7 @@ Python TechnicalProfile worker, Python AIUsageFlow worker, conflict, Manager res
 
 ### Wave 5 — Legal corpus và retrieval
 
-Python source validation/ingestion, snapshot/hash, normalization, internal approval, immutable corpus, FTS, embedding index và citation reconstruction.
+Python source validation/ingestion, snapshot/hash, normalization, internal approval, immutable corpus, ChromaDB vectorless legal index, xref expansion và citation allowlist validation.
 
 ### Wave 6 — Real LLM và classification
 
@@ -70,7 +70,7 @@ Legal corpus là prerequisite song song:
 ```text
 Source Ingestion
 -> Internal Approval
--> FTS/Embedding Index
+-> ChromaDB Legal Index
 -> Legal Matching readiness
 ```
 
@@ -81,7 +81,7 @@ Source Ingestion
 - Claims có evidence refs và uncertainty.
 - Conflict khóa classification cho đến khi Manager giải quyết.
 - Corpus approved bất biến và retrieval có citation.
-- Real LLM/embedding provider được dùng cho acceptance.
+- Real LLM provider được dùng cho acceptance. Embedding không bắt buộc cho legal retrieval MVP.
 - Document được lưu/tải thật và không overclaim.
 - Audit xuất được đầy đủ version/hash/correlation refs.
 - Tất cả 33 active NFR có bằng chứng kiểm tra hoặc kế hoạch kiểm tra được duyệt.

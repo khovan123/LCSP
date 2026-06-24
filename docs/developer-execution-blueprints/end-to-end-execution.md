@@ -17,7 +17,7 @@ Show how the canonical Manager journey becomes an evidence-backed assessment, ci
 - Raw source, secrets, full prompts, and full AST bodies do not enter LLM, queue payloads, ordinary logs, or long-term persistence.
 - Classification requires VerifiedProfile and citation-backed LegalRuleMatch.
 - Approved indexed LegalCorpusVersion is required for legal matching.
-- Real configured LLM/embedding providers are required for A-to-Z acceptance.
+- Real configured LLM provider is required for A-to-Z acceptance; embedding provider is not required for legal retrieval MVP.
 - Structured Developer attestation is `SUPERSEDED_FOR_ACTIVE_MVP`.
 - Internal legal corpus operations are not Manager/Developer product UX.
 
@@ -31,7 +31,7 @@ validated official source URL
 -> normalized legal hierarchy
 -> Internal Legal Operator review/approval
 -> immutable LegalCorpusVersion APPROVED
--> Vietnamese FTS + pgvector index build
+-> ChromaDB vectorless legal index build
 -> corpus available to Legal Matching
 ```
 
@@ -53,7 +53,7 @@ This is an operational prerequisite, not a customer navigation flow.
 | 10 | Reconciliation compares declared and detected facts | Conflict or VerifiedProfile-ready path |
 | 11 | Manager resolves conflict when present | Audited resolution and reconciliation rerun |
 | 12 | System creates/Manager reviews VerifiedProfile | VerifiedProfile |
-| 13 | Legal Matching performs hybrid retrieval | Citation-backed LegalRuleMatch records |
+| 13 | Legal Matching performs ChromaDB vectorless retrieval | Citation-backed LegalRuleMatch records |
 | 14 | Classification runs through guarded real LLM path | RiskClassification or blocked state |
 | 15 | Gap Analysis derives obligations/gaps | GapAnalysis |
 | 16 | Manager requests final document | Document job status |
@@ -192,13 +192,13 @@ Every asynchronous stage has:
 
 ## Completion Condition
 
-A successful acceptance record includes assessment, repository commit, scanner/ruleset/report versions, verified profile, corpus version, retrieval audit, LLM/embedding provider/model metadata, classification, gap analysis, document hash/storage ref, and audit export.
+A successful acceptance record includes assessment, repository commit, scanner/ruleset/report versions, verified profile, corpus version, ChromaDB legal index version, retrieval audit, LLM provider/model metadata, classification, gap analysis, document hash/storage ref, and audit export.
 
 ## Planning Status
 
 ```text
 ACTIVE_DOCS_PRE_UX_SYNCHRONIZED
-CANONICAL_UX_PENDING
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```

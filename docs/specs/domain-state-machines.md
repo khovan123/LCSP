@@ -177,13 +177,13 @@ States: `NOT_REQUESTED`, `REQUESTED`, `RUNNING`, `READY`, `FAILED`.
 
 ```text
 LegalCorpusVersion APPROVED
--> command.embedding-build.requested.v1
+-> command.legal-index-build.requested.v1
 -> REQUESTED -> RUNNING
--> event.embedding-build.completed.v1 -> READY
-or event.embedding-build.failed.v1 -> FAILED
+-> event.legal-index-build.completed.v1 -> READY
+or event.legal-index-build.failed.v1 -> FAILED
 ```
 
-Only READY indexes are available to hybrid retrieval.
+Only READY ChromaDB legal indexes are available to vectorless legal retrieval.
 
 ## Legal Matching
 

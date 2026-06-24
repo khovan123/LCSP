@@ -354,15 +354,21 @@ If a source URL or document is unavailable:
 2. **Review Work:** Authorized legal personnel review the parsed items for correctness and mapping accuracy.
 3. **Approval Event:** On approval, an immutable `LegalCorpusVersion` is created. Unapproved versions are blocked from classification.
 
-### Hybrid Legal Retriever (pgvector + FTS)
+### ChromaDB Structure-First Vectorless Legal Retriever
 
-Matches verified facts against legal rules using a two-way retrieval pipeline in PostgreSQL:
+Matches verified facts against legal rules using a structure-first vectorless retrieval pipeline in ChromaDB:
 
-- **Full-Text Search (FTS):** Keyword index search for precise article and document matches.
-- **Semantic Vector Search:** `pgvector` cosine similarity search on chunk embeddings (e.g. 1536-dimensional vectors).
+- **Stable legal records:** document, article, clause and point chunks use stable hierarchical IDs.
+- **Full-text and metadata retrieval:** ChromaDB stores legal records and supports text/metadata candidate lookup without mandatory embeddings.
+- **Direct lookup:** known `chunk_id`, `article_id`, `clause_id` or `point_id` can retrieve exact records.
+- **Parent-context assembly:** Point matches include parent Clause and Article context; Clause matches include parent Article and document context.
+- **Cross-reference expansion:** one-hop referenced chunks are fetched and marked `context_role=REFERENCED_CONTEXT`.
 - **Metadata & Version Filtering:**
   - **Pin Version:** Query must only retrieve from the approved `LegalCorpusVersion` pinned at assessment initialization.
   - **Effective Date:** Pinned legal documents must be in legal effect on the assessment date.
+- **Citation allowlist:** Legal refs are valid only when they point to `retrieved_chunks` or `referenced_context_chunks`.
 - **Fail-Closed Citations:** If retrieval returns no results or missing required citations, the classification is marked `BLOCKED_MISSING_CITATION` and document generation is blocked.
+
+The base retrieval unit is Clause (`Khoản`). Chunks must not split between sentences or clauses solely to satisfy token size. BGE-M3 or another embedding model is optional future work only; it is not required for MVP legal retrieval.
 
 ```

@@ -214,7 +214,7 @@ Nếu chưa thể cung cấp technical evidence, Manager có thể xuất readin
 - Kết nối GitHub repository (read-only) và Automatic Trusted Scan Initiation.
 - Tích hợp nhà cung cấp LLM thật (Gemini, Claude, hoặc GPT) cho happy-path risk classification và document generation.
 - Legal corpus bảo toàn provenance từ nguồn chính phủ chính thức, tổ chức thành các phiên bản `LegalCorpusVersion` bất biến.
-- Hybrid retriever kết hợp pgvector (semantic search) và full-text search (FTS) trên PostgreSQL để truy xuất cơ sở pháp lý.
+- ChromaDB structure-first vectorless legal retriever dùng stable legal hierarchy IDs, metadata/full-text lookup, direct ID lookup, one-hop xref expansion, parent-context assembly và citation allowlist validation để truy xuất cơ sở pháp lý.
 - Lưu trữ tài liệu kết quả bằng real S3-compatible object storage.
 - Developer invitation và task/policy assignment as optional collaboration.
 - Developer Workspace cho optional scoped technical tasks có giá trị độc lập.

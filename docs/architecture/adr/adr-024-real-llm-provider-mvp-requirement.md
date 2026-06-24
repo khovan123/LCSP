@@ -35,7 +35,7 @@ mock      → deterministic mock (unit tests, offline CI, credential-unavailable
 
 Candidates: OpenAI GPT-4o, Google Gemini 1.5 Pro/Flash, Anthropic Claude 3.x.
 
-Embedding model: `TECHNICAL_DECISION_REQUIRED` — candidates: `text-embedding-3-small` (OpenAI), `text-embedding-004` (Google).
+Legal corpus retrieval does not require an embedding provider for MVP. ADR-026 supersedes pgvector/embedding-based legal retrieval with ChromaDB structure-first vectorless legal retrieval.
 
 ## Required Decisions
 
@@ -43,7 +43,7 @@ Embedding model: `TECHNICAL_DECISION_REQUIRED` — candidates: `text-embedding-3
 |---|---|
 | Provider selection | `COST_OR_CREDENTIAL_DECISION_REQUIRED` |
 | Model configuration | `TECHNICAL_DECISION_REQUIRED` |
-| Embedding provider/model | `TECHNICAL_DECISION_REQUIRED` |
+| Legal retrieval embedding provider/model | `NOT_REQUIRED_FOR_MVP`; future semantic retrieval or reranking only |
 | Credential configuration | `COST_OR_CREDENTIAL_DECISION_REQUIRED` |
 | Timeout and token limits | `TECHNICAL_DECISION_REQUIRED` |
 | Structured output validation | `TECHNICAL_DECISION_REQUIRED` |

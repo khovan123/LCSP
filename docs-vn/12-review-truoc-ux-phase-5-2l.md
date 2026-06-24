@@ -14,8 +14,9 @@
 READY_FOR_CANONICAL_UX
 PHASE_5_2L_P0_CLOSURE_COMPLETED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
-CANONICAL_UX_PENDING
-RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ```
 
 Review ban đầu xác định baseline chưa đạt cross-document closure. Closure pass sau đó đã xử lý các blocker P0 trước UX: approval record, A3 validation plan, business rules, requirements baseline và readiness/traceability markers.
@@ -29,8 +30,9 @@ BUSINESS_RULES_PBAC_SEMANTICS_ALIGNED
 REQUIREMENTS_BASELINE_ATTESTATION_RESIDUE_REMOVED_FROM_ACTIVE_ROWS
 READINESS_AND_TRACEABILITY_MARKERS_CORRECTED
 READY_FOR_CANONICAL_UX
-CANONICAL_UX_PENDING
-RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ```
 
 ## Những phần đã đồng bộ tốt
@@ -73,7 +75,7 @@ Yêu cầu đóng:
 
 - Requirements baseline đã chuyển `UC-M09-05` sang `SUPERSEDED_FOR_ACTIVE_MVP`.
 - AC-9/11/12 đã đổi sang PBAC/trigger/evidence/audit semantics.
-- Requirements traceability matrix vẫn giữ `CANONICAL_UX_PENDING` và `STORY_TRACEABILITY_PENDING`.
+- Requirements traceability matrix hiện giữ `CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL` và `STORY_TRACEABILITY_PENDING`.
 
 Yêu cầu đóng:
 
@@ -81,7 +83,7 @@ Yêu cầu đóng:
 
 ### P0-5 — Readiness and authority markers closed
 
-`docs/README.md`, `implementation-readiness-certification.md`, traceability summary và traceability matrix hiện dùng `READY_FOR_CANONICAL_UX` cùng `CANONICAL_UX_PENDING`; implementation readiness vẫn không được chứng nhận. Điều kiện RAG `chorma database (vector less)` được phân loại là technical decision backend trước stories/readiness.
+`docs/README.md`, `implementation-readiness-certification.md`, traceability summary và traceability matrix hiện dùng `READY_FOR_CANONICAL_UX` cùng `CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL`; implementation readiness vẫn không được chứng nhận. Điều kiện RAG đã được chuẩn hóa thành ChromaDB vectorless; pgvector legal retrieval bị superseded.
 
 Yêu cầu đóng:
 
@@ -127,7 +129,7 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 2. Run a short documentation closure pass for the P0 findings.
 3. Revalidate all active non-archive documents and traceability.
 4. Set READY_FOR_CANONICAL_UX.
-5. Run bmad-ux.
+5. Review and approve the UX draft.
 6. Run bmad-create-epics-and-stories.
 7. Resolve technical decisions and rebuild story traceability.
 8. Re-run bmad-check-implementation-readiness.
@@ -137,5 +139,5 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 
 ```text
 READY_FOR_CANONICAL_UX
-CANONICAL_UX_PENDING
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
 ```

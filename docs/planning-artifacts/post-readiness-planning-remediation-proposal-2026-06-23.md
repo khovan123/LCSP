@@ -304,7 +304,7 @@ Approved next sequence:
 
 ```text
 1. Update PRD and NFR traceability
-2. Run bmad-ux
+2. Review and approve the canonical UX draft
 3. Run bmad-create-epics-and-stories
 4. Update implementation-delivery-plan from approved stories
 5. Run bmad-check-implementation-readiness

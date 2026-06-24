@@ -9,9 +9,10 @@ selected_documents:
     - docs/architecture/architecture.md
     - docs/architecture/multi-agent-system-architecture.md
   epics_and_stories: []
-  ux: []
+  ux:
+    - docs/planning-artifacts/ux-designs/ux-LCSP-2026-06-24/DESIGN.md
+    - docs/planning-artifacts/ux-designs/ux-LCSP-2026-06-24/EXPERIENCE.md
 missing_documents:
-  - active canonical UX document
   - active canonical epics/stories document
 ---
 
@@ -226,14 +227,14 @@ UX is required. The PRD and task-flow specifications define Manager-facing and o
 
 ### Alignment Issues
 
-- `CANONICAL_UX_PENDING`: no active UX spec defines Manager-visible wording, layout, screen state behavior or recovery actions for Phase 5.2L automatic scan trigger states.
-- `UX_TRACEABILITY_PENDING`: UX states are not traced to PRD FR aliases, canonical FR IDs, AC IDs, domain states or implementation areas.
-- `ACCESSIBILITY_VALIDATION_PENDING`: PRD NFR-14 requires accessibility expectations, but no UX artifact defines concrete acceptance for forms, status messages or document review.
-- `LOCALIZATION_VALIDATION_PENDING`: PRD NFR-13 requires Vietnamese primary language support, but no canonical UX content/copy source exists.
+- `CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL`: UX draft exists and must be human-reviewed/approved before story generation.
+- `UX_TRACEABILITY_PENDING`: UX states are not yet traced into canonical epics/stories, PRD FR aliases, canonical FR IDs, AC IDs, domain states or implementation areas.
+- `ACCESSIBILITY_VALIDATION_PENDING`: UX draft defines the accessibility floor, but acceptance must still be traced into stories/tests.
+- `LOCALIZATION_VALIDATION_PENDING`: UX draft assumes Vietnamese primary UI copy; final language policy still requires approval.
 
 ### Warnings
 
-This is a readiness blocker for implementation certification. The product is user-facing and cannot be considered implementation-ready without canonical UX for the active Manager and optional Developer experiences.
+This remains a readiness blocker for implementation certification until the UX draft is approved and traced into canonical epics/stories.
 
 ## Step 5: Epic Quality Review
 
@@ -273,7 +274,7 @@ The Phase 5.2L documentation remediation is substantially synchronized across ac
 ### Critical Issues Requiring Immediate Action
 
 1. `CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING`: no active epics/stories artifact exists for Phase 5.2L.
-2. `CANONICAL_UX_PENDING`: no active UX artifact exists for Manager and optional Developer experiences.
+2. `CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL`: UX draft exists for Manager and optional Developer experiences but is not yet approved or story-traced.
 3. `FR_COVERAGE_ZERO`: 0 of 37 PRD FR aliases are covered by active epics/stories.
 4. `STORY_TRACEABILITY_PENDING`: no story-level trace exists from PRD/canonical FRs to AC/NFR/UX/domain state/implementation area.
 5. `PBAC_TECHNICAL_DECISION_REQUIRED`: PBAC engine, policy storage, cache, invalidation, topology and failure behavior remain unresolved.

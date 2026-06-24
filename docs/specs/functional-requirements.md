@@ -70,8 +70,8 @@ PBAC is the authorization source of truth for every active requirement. Role lab
 | FR-052 | Delegated free-form clarification. | N | UC-010 | BR-044 | — | `DEFERRED_POST_MVP`; FR-011, FR-029 |
 | FR-053 | Ingest validated legal source snapshots. | Y | UC-012 | BR-050, BR-084 | AC-016 | NFR-017, NFR-034 |
 | FR-054 | Approve immutable LegalCorpusVersion. | Y | UC-012 | BR-050 | AC-016, AC-035 | NFR-017, NFR-034 |
-| FR-055 | Configure real LLM/embedding providers and budgets. | Y | UC-013 | BR-049 | AC-018, AC-037, AC-038 | NFR-012, NFR-033 |
-| FR-056 | Run Vietnamese FTS + pgvector hybrid search. | Y | UC-012 | BR-050, BR-084 | AC-016, AC-035, AC-036 | NFR-017, NFR-033, NFR-034 |
+| FR-055 | Configure real LLM provider and budget controls. | Y | UC-013 | BR-049 | AC-018, AC-037, AC-038 | NFR-012, NFR-033 |
+| FR-056 | Run ChromaDB structure-first vectorless legal retrieval with xref expansion and citation allowlist validation. | Y | UC-012 | BR-050, BR-084 | AC-016, AC-035, AC-036 | NFR-017, NFR-034 |
 
 Historical alias resolution remains in `requirements-baseline.md`.
 

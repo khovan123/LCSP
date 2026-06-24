@@ -14,7 +14,7 @@ Record the current planning state after the Phase 5.2L scope/runtime correction.
 | Acceptance criteria | AC-001..AC-041 plus AC-050A..AC-050F |
 | Use cases | UC-001..UC-017 active; UC-018 superseded for active MVP |
 | Domain and implementation-area traceability | normalized |
-| Canonical UX | pending |
+| Canonical UX | draft created; pending review/approval |
 | Canonical epics/stories | missing |
 | Story traceability | not assessable |
 
@@ -25,10 +25,10 @@ Record the current planning state after the Phase 5.2L scope/runtime correction.
 - Python Scanner Worker solely owns Repository Scan lifecycle.
 - Scanner uses Syft, Knip, deptry, Poetry, stdlib `ast`, `libcst`, Semgrep custom rules and tree-sitter/custom parser.
 - TS/JS analysis uses a fixed Node.js `ts-morph` subprocess with versioned JSON stdio.
-- Real configured LLM and embedding providers are required for integrated A-to-Z acceptance; mock mode is test/offline-only.
+- Real configured LLM provider is required for integrated A-to-Z acceptance; mock mode is test/offline-only.
 - Legal corpus uses validated official-source snapshots, internal approval, immutable versions, and S3-compatible storage.
-- Retrieval uses PostgreSQL `simple` plus `unaccent` FTS and pgvector `vector(1536)` HNSW cosine search.
-- The Project Owner RAG condition `chorma database (vector less)` is classified as an ambiguous backend technical decision; it does not block canonical UX flow design but must be resolved before stories/readiness.
+- Retrieval uses ChromaDB structure-first vectorless legal index with metadata/full-text retrieval, direct lookup, xref expansion, parent-context assembly and citation allowlist validation.
+- PostgreSQL pgvector legal retrieval is `SUPERSEDED_FOR_ACTIVE_MVP`.
 - Internal corpus operations are API/CLI-only for MVP and outside Manager/Developer product UX.
 - Manager can complete the golden path without Developer participation.
 - Structured Developer attestation is `SUPERSEDED_FOR_ACTIVE_MVP`; delegated free-form clarification is Deferred/Post-MVP.
@@ -48,19 +48,18 @@ Record the current planning state after the Phase 5.2L scope/runtime correction.
 | Scanner runtime documents | PHASE_5_2L_REMEDIATED_FOR_RECHECK |
 | Legal ingestion and retrieval documents | NORMALIZED |
 | Documentation indexes | NORMALIZED |
-| Canonical UX | PENDING |
+| Canonical UX | DRAFT_CREATED_PENDING_APPROVAL |
 | Epics/stories | MISSING |
 | Story traceability | NOT_ASSESSABLE |
 
 ## Authorized Next Sequence
 
 ```text
-1. Run bmad-ux in a fresh context.
-2. Review and approve the canonical UX artifact.
-3. Run bmad-create-epics-and-stories.
-4. Rebuild story-level FR/NFR/AC/UX traceability.
-5. Run bmad-check-implementation-readiness in a fresh context.
-6. Start sprint planning and coding only after readiness approval.
+1. Review and approve the canonical UX draft artifact.
+2. Run bmad-create-epics-and-stories after UX approval.
+3. Rebuild story-level FR/NFR/AC/UX traceability.
+4. Run bmad-check-implementation-readiness in a fresh context.
+5. Start sprint planning and coding only after readiness approval.
 ```
 
 ## Result
@@ -69,8 +68,9 @@ Record the current planning state after the Phase 5.2L scope/runtime correction.
 PHASE_5_2L_ACTIVE_DOCS_SYNCHRONIZED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 READY_FOR_CANONICAL_UX
-CANONICAL_UX_PENDING
-RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
+CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 STORY_TRACEABILITY_PENDING
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
 IMPLEMENTATION_READINESS_NOT_CERTIFIED

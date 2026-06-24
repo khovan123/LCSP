@@ -1,148 +1,169 @@
-# ADR-026 — Hybrid Legal Retriever
+# ADR-026 — ChromaDB Structure-First Vectorless Legal Retriever
 
 ## Status
 
-Accepted baseline for pre-UX planning; Phase 5.2L approval condition requires technical clarification before epics/stories are marked ready or implementation readiness is certified.
+Accepted — Superseding
 
 ## Decision Context
 
 ```text
 PROJECT_OWNER_LOCKED
-HYBRID_RETRIEVER_REQUIRED_FOR_A_TO_Z_MVP
-RETRIEVAL_PROFILE_BASELINE_FOR_UX
-RAG_RETRIEVAL_APPROVAL_CONDITION_AMBIGUOUS
-TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES_OR_IMPLEMENTATION_READINESS
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
+LEGAL_STRUCTURE_PRESERVATION_REQUIRED
+CROSS_REFERENCE_EXPANSION_REQUIRED
+RETRIEVED_CITATION_ALLOWLIST_REQUIRED
 ```
 
 ## Decision
 
-LCSP uses PostgreSQL Full-Text Search plus pgvector semantic similarity, constrained by approved corpus version, source validation, effective dates, metadata filters, citation reconstruction, and fail-closed behavior.
+LCSP MVP uses ChromaDB as the legal retrieval index for a structure-first, vectorless legal RAG pipeline.
+
+The active MVP legal retrieval path does not use PostgreSQL pgvector, dense embedding indexes, or semantic nearest-neighbor retrieval as the primary source of legal clause selection.
+
+ChromaDB is used for:
+
+- document/chunk storage;
+- stable hierarchical IDs;
+- metadata filtering;
+- full-text matching;
+- direct record lookup by chunk/article ID;
+- retrieval of referenced legal context by stored cross-reference graph metadata.
+
+## Supersession
 
 ```text
-PGVECTOR_PLUS_POSTGRESQL_FTS
-VIETNAMESE_SIMPLE_PLUS_UNACCENT
-HNSW_COSINE_VECTOR_INDEX
-FTS_WEIGHT_0_4
-VECTOR_WEIGHT_0_6
-FAIL_CLOSED_ON_MISSING_CITATIONS
+PGVECTOR_PLUS_POSTGRESQL_FTS_SUPERSEDED
+EMBEDDING_INDEX_NOT_REQUIRED_FOR_LEGAL_RETRIEVAL_MVP
+SEMANTIC_NEAREST_NEIGHBOR_NOT_PRIMARY_LEGAL_CLAUSE_SELECTION
 ```
 
-The Project Owner approval condition `Update rag: chorma database (vector less)` is ambiguous. This ADR does not adopt ChromaDB or vectorless retrieval. Until the condition is clarified by Project Owner and technical owner decision, PostgreSQL FTS + pgvector remains the active baseline for UX and documentation planning only.
+Any previous active wording that requires PostgreSQL `vector(1536)`, pgvector HNSW, embedding generation, vector similarity scores, or `0.4 FTS + 0.6 vector` hybrid ranking for legal corpus retrieval is superseded.
+
+BGE-M3 or any other embedding model may be considered later as an optional reranker or semantic retrieval model. It is not an MVP legal retrieval dependency.
 
 ## Architecture
 
 ```text
-VerifiedProfile
--> LegalMatchingWorker
--> HybridLegalRetriever
-   -> sanitized structured query facets
-   -> PostgreSQL FTS (`simple` + `unaccent`)
-   -> pgvector cosine similarity
-   -> approved corpus filter
-   -> validated source filter
-   -> effective-date filter
-   -> metadata filter
-   -> weighted ranking
-   -> citation reconstruction
-   -> RetrievalAuditLog
+Official legal source
+-> immutable source snapshot
+-> checksum
+-> legal structure parser
+-> document/article/clause/point hierarchy
+-> cross-reference extraction
+-> effective-date/version resolution
+-> approved LegalCorpusVersion
+-> ChromaDB document + metadata index
+-> full-text/metadata candidate retrieval
+-> direct chunk/article lookup when applicable
+-> one-hop reference expansion
+-> parent-context assembly
+-> retrieved citation allowlist validation
 -> LegalRuleMatch
--> Citation Guardrail
--> Classification
 ```
 
-## Locked Retrieval Profile
+## Legal Structure Rules
 
-| Concern | MVP Value |
+| Concern | Canonical Rule |
 |---|---|
-| Vector type | `vector(1536)` |
-| Similarity | cosine |
-| Index | HNSW, `m=16`, `ef_construction=64` |
-| FTS dictionary | PostgreSQL `simple` |
-| Vietnamese normalization | `unaccent` over normalized legal text |
-| Score | `0.4 * normalizedFtsRank + 0.6 * vectorSimilarity` |
-| Candidate limit | configurable, default 20 |
-| Final result limit | configurable, default 8 |
-| Embedding timing | batch index build after corpus approval |
-| Corpus status | `APPROVED` only |
-| Source status | validated only |
+| Base retrieval unit | Clause (`Khoản`). Do not split inside a sentence or clause only to satisfy token size. |
+| Point context | Point (`Điểm`) content is assembled with parent Clause and Article context. |
+| Article context | Every retrieved unit carries document title, article number/title and clause number where applicable. |
+| Cross-reference | Ingestion creates xref edges. When X is retrieved, referenced Y is included one hop as `context_role=REFERENCED_CONTEXT`. |
+| Stable identity | Chunks use stable hierarchical IDs and metadata: `doc_id`, `article_id`, `clause_id`, `point_id`. |
+| Effective law | New assessments do not retrieve expired/superseded text unless the pinned corpus/effective date requires historical context. |
+| Citation safety | `legal_ref` is valid only when it points to a chunk in `retrieved_chunks` or `referenced_context_chunks`. |
 
-The acceptance environment must configure an embedding model that emits 1536-dimensional vectors. Provider/model and credential references are deployment configuration and must be recorded in ModelRunMetadata; mock embeddings do not qualify for the A-to-Z acceptance run.
+## Stable ID Pattern
 
-## Required Filters
+```text
+{document_id}::art-{article_no}
+{document_id}::art-{article_no}::cl-{clause_no}
+{document_id}::art-{article_no}::cl-{clause_no}::pt-{point_code}
+```
 
-Every query applies:
+Example:
 
-- corpus version pinned to the assessment;
-- `LegalCorpusVersion.status = APPROVED`;
-- source validation status;
-- effective start/end date at assessment date;
-- document type/issuing authority/source tier when supplied;
-- supersession relationships within the pinned corpus;
-- citation-field completeness.
+```text
+LAW-2025-001::art-12::cl-3::pt-b
+```
 
-## Citation Contract
+IDs are stable inside a legal corpus version. Amended content creates new versioned chunks and links to prior chunks through `supersedes_chunk_id`; history is not overwritten.
 
-Every material result reconstructs:
+## Minimum Metadata
 
-- rule ID;
-- document ID, number, title, type, issuer;
-- article, clause, point, appendix path where applicable;
-- source URL and authority;
-- retrieved-at timestamp and content hash;
-- corpus version ID;
-- effective date interval;
-- chunk ID/content hash;
-- FTS rank, vector score, hybrid score;
-- retrieval audit ID.
+```text
+corpus_version_id
+doc_id
+document_number
+document_title
+document_type
+issuing_authority
+article_id
+article_number
+article_title
+clause_id
+clause_number
+point_id
+point_code
+hierarchical_path
+effective_from
+effective_to
+legal_status
+source_url
+source_checksum
+chunk_checksum
+outgoing_ref_ids
+incoming_ref_ids
+supersedes_chunk_id
+```
 
-A result without reconstructable citation fields cannot support a material LegalRuleMatch.
+## Assembly Contract
 
-## Privacy Decision
+Every retrieval payload distinguishes:
 
-The retriever receives structured, sanitized legal-query facets derived from VerifiedProfile/AIUsageFlow. It must not receive or log raw repository source, secrets, full prompts, arbitrary customer free text, or unredacted logs.
+```text
+PRIMARY_MATCH
+PARENT_CONTEXT
+REFERENCED_CONTEXT
+```
 
-RetrievalAuditLog stores sanitized terms/facets, query hash, filters, result refs/scores, corpus version, correlation ID, and timestamp. It does not store arbitrary raw query text.
+Referenced context must not be presented as the primary hit. It keeps its own provenance, effective-date metadata and reason, such as `referenced by Clause 3 Article 12`.
+
+## Citation Allowlist
+
+Legal matching and LLM calls receive a citation allowlist built from:
+
+- `retrieved_chunks`;
+- `referenced_context_chunks`;
+- parent context required to interpret a point/clause.
+
+Any `legal_ref` outside that allowlist is rejected. The system never synthesizes a legal citation.
 
 ## Fail-Closed Behavior
 
 Classification is blocked or explicitly degraded according to rule criticality when:
 
-- required corpus is not approved;
+- required corpus version is not approved;
 - required source is unvalidated/unavailable;
-- FTS or vector index is unavailable;
-- embedding dimension/model metadata is invalid;
+- ChromaDB index is unavailable;
 - no candidate can support a required rule;
 - required citation fields cannot be reconstructed;
-- effective-date/corpus-version filters exclude the basis.
-
-The system never synthesizes a citation.
-
-## Index Build
-
-```text
-approved corpus
--> normalize Vietnamese text
--> build `simple` + `unaccent` FTS vector/GIN index
--> batch-generate 1536-dimension embeddings
--> verify model/version/content hash
--> build HNSW index
--> publish index-completed event
-```
-
-Embedding/index failures leave the corpus version approved but unavailable for retrieval until the index build succeeds.
+- effective-date/corpus-version filters exclude the legal basis;
+- an LLM or rule output cites a chunk outside the retrieved allowlist.
 
 ## Consequences
 
-- PostgreSQL requires `vector` and `unaccent` extensions.
-- LegalDocumentChunk stores FTS and vector index data plus model/content metadata.
-- Embedding cost/token usage is governed by `NFR-033`.
-- Corpus immutability and approval are governed by `NFR-034`.
-- Legal citation/version traceability is governed by `NFR-017`.
-- Retrieval parameter changes require a new recorded index profile and rebuild; they must not silently alter historical assessment reproducibility.
+- PostgreSQL remains the primary relational persistence store, but PostgreSQL pgvector is not required for legal retrieval.
+- ChromaDB stores legal retrieval documents/chunks with hierarchical IDs and metadata.
+- Legal source ingestion must preserve document/article/clause/point structure and cross-reference edges.
+- `NFR-017` governs legal citation/version traceability.
+- `NFR-034` governs immutable approved corpus versions.
+- `NFR-033` governs LLM token/cost controls; embedding cost controls are future-only unless a later approved semantic/reranker path is added.
 
 ## Non-Claims
 
 - Retrieval does not make legal conclusions.
 - Corpus approval is not legal certification.
-- The locked MVP profile is a bounded acceptance profile, not a claim of optimal production ranking.
-- Production-scale benchmarking and adaptive weighting remain Post-MVP.
+- ChromaDB/vectorless retrieval does not remove citation, effective-date, source validation, corpus-version or fail-closed requirements.
+- Optional future embeddings, rerankers, or semantic retrieval require a separate approved decision.
