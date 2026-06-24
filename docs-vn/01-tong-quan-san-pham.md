@@ -2,54 +2,64 @@
 
 ## LCSP là gì
 
-LCSP là nền tảng hỗ trợ doanh nghiệp sử dụng AI tại Việt Nam đánh giá mức độ sẵn sàng tuân thủ dựa trên bằng chứng. Hệ thống kết hợp thông tin do Manager khai báo, bằng chứng kỹ thuật từ kho mã, đối chiếu xung đột, tra cứu pháp lý có trích dẫn, phân loại rủi ro, phân tích khoảng trống, tạo tài liệu và nhật ký kiểm toán.
+LCSP là nền tảng hỗ trợ doanh nghiệp sử dụng AI tại Việt Nam đánh giá và lập hồ sơ tuân thủ dựa trên bằng chứng. Hệ thống kết hợp thông tin do Manager khai báo, bằng chứng kỹ thuật từ kho mã, reconciliation, legal matching có citation, risk classification, gap analysis, document generation và audit trail.
 
-LCSP không thay thế luật sư, không cấp chứng nhận tuân thủ và không được đưa ra kết luận pháp lý khi thiếu bằng chứng hoặc trích dẫn.
+LCSP chỉ tạo kết quả hỗ trợ quyết định nội bộ dựa trên evidence và citation. Các khái niệm chứng nhận tuân thủ, ý kiến pháp lý chính thức và nộp hồ sơ trực tiếp cho cơ quan quản lý đã bị loại khỏi định hướng sản phẩm Phase 5.2L; chúng không được giữ như feature tương lai.
 
-## Người dùng và trách nhiệm
+## Actor mục tiêu Phase 5.2L
 
 ### Manager
 
-Là chủ thể chính của assessment. Manager có thể hoàn thành toàn bộ luồng MVP mà không cần Developer: tạo assessment, khai báo WizardProfile, kết nối repository, chạy scan, xử lý xung đột, duyệt hồ sơ đã xác minh, xem kết quả pháp lý, phân loại, gap analysis, tải báo cáo và xuất audit.
+Manager sở hữu assessment và có thể hoàn thành toàn bộ golden path: tạo assessment, hoàn thành WizardProfile, kết nối repository, khởi tạo hoặc theo dõi scan, xử lý conflict, xem VerifiedProfile, legal matches, classification, gaps, document và audit export.
 
 ### Developer
 
-Là cộng tác viên tùy chọn, chỉ hoạt động trong phạm vi được giao. Developer có thể xem bằng chứng kỹ thuật đã làm sạch và gửi structured attestation. Attestation không được thay thế bằng chứng máy, tự giải quyết xung đột, duyệt VerifiedProfile hoặc mở khóa classification.
+Developer chỉ tồn tại khi có giá trị độc lập như hỗ trợ repository/integration hoặc xem finding trong phạm vi policy. Structured attestation không còn thuộc MVP và không được xuất hiện trong reconciliation, evidence hoặc UX.
 
 ### Internal Legal Operator
 
-Là vai trò vận hành nội bộ, dùng API/CLI để xác minh nguồn văn bản, kiểm tra dữ liệu đã chuẩn hóa, duyệt LegalCorpusVersion và khởi tạo chỉ mục. Vai trò này không thuộc UX dành cho Manager/Developer trong MVP.
+Vai trò vận hành nội bộ dùng API/CLI để xác minh nguồn pháp lý, review corpus, duyệt LegalCorpusVersion và khởi tạo index. Vai trò này không thuộc customer-facing UX.
 
-## Phạm vi MVP
+### LCSP service identities
 
-MVP bao gồm:
+Các Python workers và service nội bộ hành động bằng service identity được PBAC đánh giá theo organization, resource, action, context và policy version.
 
-- đăng nhập, MFA/OAuth và phân quyền theo tổ chức;
-- assessment và WizardProfile;
-- GitHub App chỉ đọc, repository snapshot theo commit;
-- Python Worker quét tĩnh mã nguồn;
+## Phạm vi MVP mục tiêu
+
+- authentication, MFA/OAuth và PBAC deny-by-default;
+- organization, assessment và WizardProfile;
+- GitHub App chỉ đọc và RepositorySnapshot theo commit;
+- automatic trusted scan initiation, không upload report thủ công;
+- Python Worker Platform cho toàn bộ asynchronous domain workloads;
+- scanner toolchain gồm Syft, Knip, deptry, Semgrep, tree-sitter/custom parser, `ast`, `libcst` và `ts-morph`;
 - TechnicalEvidenceReport, TechnicalProfile và AIUsageFlow;
 - reconciliation, conflict resolution và VerifiedProfile;
-- legal corpus có nguồn gốc, phiên bản bất biến và phê duyệt;
+- legal corpus có provenance, approval và immutable version;
 - hybrid retrieval bằng PostgreSQL FTS + pgvector;
-- real LLM/embedding provider cho bài nghiệm thu A-to-Z;
+- real LLM/embedding provider cho A-to-Z acceptance;
 - RiskClassification, GapAnalysis, GeneratedDocument và AuditEvent.
 
-## Ngoài phạm vi hiện tại
+## Loại khỏi sản phẩm
 
-- chứng nhận tuân thủ hoặc ý kiến pháp lý chính thức;
-- nộp hồ sơ trực tiếp cho cơ quan quản lý;
-- enterprise SSO/SAML/SCIM;
-- upload scanner report từ Local/CI (`FR-050`);
-- upload evidence JSON thủ công (`FR-051`);
-- quy trình technical clarification tự do được giao cho Developer (`FR-052`);
-- giao diện quản trị legal corpus cho khách hàng;
-- cam kết scanner hiểu hoàn hảo mã động.
+```text
+REMOVED_FROM_PRODUCT
+- compliance certification
+- formal legal opinion
+- direct regulator submission
+- manual technical evidence JSON upload (FR-051 cũ)
+- structured attestation trong MVP
+- manual Local/CI scanner report upload
+```
 
 ## Nguyên tắc sản phẩm
 
-1. Evidence-first: không phân loại dựa trên Wizard hoặc package/model name đơn lẻ.
-2. Fail-closed: thiếu bằng chứng, conflict, corpus hoặc citation thì chặn hoặc hạ cấp rõ ràng.
-3. Manager-controlled: Manager là người chịu trách nhiệm cuối cùng trong MVP.
-4. Traceable: mọi kết quả quan trọng phải liên kết tới evidence, legal citation, phiên bản và audit.
-5. Privacy-by-design: không gửi raw source, secret hoặc full prompt sang LLM.
+1. Evidence-first: không phân loại dựa trên Wizard, dependency hoặc model name đơn lẻ.
+2. Fail-closed: thiếu evidence, conflict, corpus, citation hoặc policy decision thì chặn rõ ràng.
+3. PBAC-controlled: role chỉ là attribute/template, không phải nguồn quyết định cuối cùng.
+4. Python-worker-first: mọi async domain workload chạy trên Python Worker Platform.
+5. Traceable: kết quả liên kết tới repository snapshot, tool versions, evidence, legal citation, policy version và audit.
+6. Privacy-by-design: không gửi raw source, secret hoặc full prompt sang external model.
+
+## Authority note
+
+Đây là target direction Phase 5.2L. Tài liệu active trên `main` vẫn chưa được remediation đầy đủ, vì vậy chưa được dùng làm UX handoff baseline.
