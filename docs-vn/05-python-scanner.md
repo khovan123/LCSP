@@ -1,101 +1,80 @@
-# 05 — Python Scanner
+# 05 — Python Scanner và toolchain
 
 ## Vai trò
 
-Scanner thu thập bằng chứng kỹ thuật có thể truy vết; scanner không đưa ra kết luận pháp lý hoặc risk level.
+Python Scanner Worker thu thập bằng chứng kỹ thuật có provenance; scanner không đưa ra kết luận pháp lý hoặc risk level.
 
-Python Worker là chủ sở hữu duy nhất của Repository Scan lifecycle và consumer duy nhất của:
+## Toolchain mục tiêu
 
-```text
-command.scan.requested.v1
-```
+| Tool | Mục đích |
+|---|---|
+| Syft | SBOM, package và dependency inventory |
+| Knip | unused JS/TS dependencies, exports và files khi an toàn |
+| deptry | unused, missing và transitive Python dependencies |
+| Semgrep custom rules | AI provider/framework/invocation, data, decision, review và risky patterns |
+| tree-sitter/custom parser | structural facts, import graph, call graph và ngôn ngữ bổ sung |
+| `ast` + `libcst` | first-class bounded Python semantic analysis |
+| `ts-morph` | first-class bounded TS/JS semantic analysis qua Node CLI |
 
-## Công nghệ đã khóa
-
-- Python 3.11+.
-- Poetry và `pyproject.toml`.
-- stdlib `ast` + `libcst` cho Python.
-- Python-native scan-local graph.
-- Node.js `ts-morph` CLI subprocess cho TypeScript/JavaScript.
-- PostgreSQL metadata-only persistence.
-- Ephemeral restricted workspace và cleanup verification.
-
-`astroid` và HTTP analyzer service không phải dependency bắt buộc của MVP.
-
-## Pipeline
+## Pipeline mục tiêu
 
 ```text
-lock ScanJob
--> tạo workspace
--> materialize commit snapshot
--> inventory và giới hạn file
--> Python AST/CST analysis
--> TS/JS subprocess analysis
--> normalized facts và graph
--> EvidenceReference + TechnicalFinding
--> TechnicalEvidenceReport
--> schema/privacy/quality gates
--> xóa và xác minh workspace
+ScanJob lock
+-> restricted workspace
+-> commit-pinned snapshot
+-> file inventory và bounds
+-> Syft SBOM/dependencies
+-> Knip và deptry dependency usage
+-> ast/libcst và ts-morph semantic facts
+-> tree-sitter/custom parser augmentation
+-> Semgrep custom AI rules
+-> import/call/data-flow graph fusion
+-> normalized evidence, findings và coverage limitations
+-> TechnicalEvidenceReport gates
+-> cleanup verification
 -> terminal state + AuditEvent + OutboxEvent
 ```
 
-## Khả năng Python
+## Common contracts
 
-Scanner hỗ trợ có giới hạn nhưng là first-class:
+Tool output phải được normalize thành các nhóm object như:
 
-- package, module, import và alias;
-- function, class, method, decorator, async call;
-- FastAPI, Flask, Django, Celery, Pydantic khi ruleset nhận diện;
-- OpenAI, Gemini, Anthropic, Hugging Face, LangChain, LlamaIndex và các pattern ML phổ biến;
-- input/output của model;
-- branch, threshold, ranking, recommendation, approve/reject, status update;
-- human-review step;
-- luồng trong function, module và bounded cross-module.
+- `SBOMComponent`;
+- `PackageDependency`;
+- `DependencyUsageFact`;
+- `ImportGraphNode/Edge`;
+- `CallGraphNode/Edge`;
+- `EvidenceReference`;
+- `TechnicalFinding`;
+- `CoverageLimitation`;
+- `TechnicalEvidenceReport`.
 
-Dynamic import, reflection, runtime-only config, external service boundary hoặc queue break phải tạo uncertainty/coverage limitation; không được đoán.
+Dependency status phải phân biệt `declared`, `discovered`, `used/reachable`, `unused`, `missing`, `transitive` và `uncertain`.
 
-## Phân tích TS/JS
+## Provenance và guardrails
 
-Python Worker gọi executable cố định bằng `asyncio.create_subprocess_exec`, không qua shell. Request/response dùng versioned JSON schema. stdout được giới hạn và validate; stderr được làm sạch. Subprocess không được cài dependency của repository, chạy customer code, truy cập RabbitMQ hoặc tự ghi scanner tables.
+Mỗi tool result phải ghi tool name/version, config hoặc ruleset hash, repository snapshot, file/package reference, evidence/content hash, confidence và correlation ID.
 
-Lỗi subprocess tạo `TS_JS_ANALYZER_FAILED` và coverage limitation cho file liên quan.
+Các tool:
 
-## Bằng chứng và finding
+- chạy trong restricted workspace;
+- không cài repository dependencies;
+- không chạy customer application code;
+- có CPU, memory, timeout, file và output limits;
+- validate và redact stdout/stderr;
+- không gửi raw source hoặc secret sang external model;
+- failure tạo coverage limitation hoặc terminal failure theo severity policy.
 
-Finding chuẩn bao gồm type, path, symbol, line range, evidence refs, evidence hash, confidence, version và metadata đã làm sạch.
+Không một tool nào tự đủ để chứng minh active AI use, automated decision hoặc legal classification.
 
-Một số finding quan trọng:
+## Python và TS/JS
 
-- `AI_PROVIDER_USAGE`;
-- `AI_FRAMEWORK_USAGE`;
-- `AI_MODEL_INVOCATION`;
-- `AI_INPUT_SIGNAL`;
-- `AI_OUTPUT_SIGNAL`;
-- `AI_DECISION_FLOW_SIGNAL`;
-- `AUTOMATED_DECISION_SIGNAL`;
-- `HUMAN_REVIEW_SIGNAL`;
-- `SENSITIVE_DATA_SIGNAL`;
-- `DOMAIN_CONTEXT_SIGNAL`;
-- `SCAN_COVERAGE_LIMITATION`;
-- `UNSUPPORTED_DYNAMIC_FLOW`.
+Python dùng `ast` + `libcst` cho import, function, class, call, model I/O, bounded cross-module path, downstream action và human review. TS/JS dùng `ts-morph` CLI do Python Worker gọi bằng executable/arguments cố định, JSON schema versioned và không qua shell.
 
-Chỉ import package không đủ để xác nhận model invocation.
+## Điều kiện hoàn tất scan
 
-## Bảo mật workspace
+`event.scan.completed.v1` chỉ được tạo khi report đạt quality gate, tool coverage được ghi rõ, ScanJob ở trạng thái hợp lệ và workspace cleanup đã được xác minh.
 
-- Chỉ checkout commit đã chọn.
-- Không chạy build, test, Docker, CI, script hoặc source code của khách hàng.
-- Có giới hạn số file, kích thước, độ sâu và timeout.
-- Hạn chế network sau khi lấy snapshot.
-- Không lưu raw source, full AST, secret hoặc full prompt.
-- Cleanup phải chạy ở cả success và terminal failure.
-- Cleanup thất bại tạo `SCANNER_WORKSPACE_CLEANUP_FAILED` và chặn downstream.
+## Gap hiện tại
 
-## Điều kiện hoàn tất
-
-`event.scan.completed.v1` chỉ được tạo khi:
-
-1. report đạt `QUALITY_VALID`;
-2. ScanJob chuyển `COMPLETED`;
-3. workspace cleanup đã được xác minh;
-4. AuditEvent và OutboxEvent được ghi trong transaction terminal.
+Active scanner specs trên `main` mới khóa `ast`/`libcst` và `ts-morph`; chưa định nghĩa Syft, Knip, deptry, Semgrep hoặc tree-sitter/custom parser. Do đó scanner baseline chưa sẵn sàng làm đầu vào UX/story Phase 5.2L.
