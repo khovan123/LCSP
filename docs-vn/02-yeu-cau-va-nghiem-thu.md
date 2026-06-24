@@ -1,78 +1,52 @@
 # 02 — Yêu cầu và nghiệm thu
 
-## Bộ định danh chuẩn
+## Trạng thái
 
-- Use case: `UC-001..UC-018`.
-- Functional requirement: `FR-001..FR-056`.
-- Active MVP: `FR-001..FR-049`, `FR-053..FR-056`.
-- Deferred: `FR-050..FR-052`.
-- Acceptance criteria: `AC-001..AC-041`.
-- Active NFR: `NFR-001..NFR-030`, `NFR-033..NFR-035`.
+Baseline trên `main` vẫn dùng bộ UC/FR/AC/NFR của Phase 5.2K. Phase 5.2L thay đổi authorization, collaboration, scan initiation và worker runtime, nên canonical counts/crosswalk phải được tạo lại trước UX.
 
-Các ID cũ như `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, `NFR-032` chỉ còn ý nghĩa lịch sử hoặc alias; không được dùng làm traceability mới.
+## Thay đổi bắt buộc
 
-## Nhóm yêu cầu chức năng
+### PBAC
 
-### Danh tính và quản trị
+Authorization phải đánh giá subject, organization, resource, action, context và policy version. Role chỉ là attribute hoặc policy template. Mọi quyết định phải tenant-scoped, deny-by-default và có audit.
 
-Đăng ký, đăng nhập, MFA, session, OAuth/OIDC, organization, membership, role và scoped Developer policy. OAuth login và GitHub repository permission là hai quyền độc lập.
+### Loại attestation
 
-### Assessment và repository
+Structured attestation không còn thuộc MVP. Use case, FR, AC, route, entity, event, reconciliation dependency, UX và story liên quan phải được loại khỏi active baseline.
 
-Manager tạo assessment, hoàn thành WizardProfile, kết nối GitHub App chỉ đọc, chọn branch/commit và tạo RepositorySnapshot bất biến.
+### Scan initiation
 
-### Scanner và evidence
+- `FR-050` cũ về Local/CI upload được thay bằng automatic trusted scan initiation.
+- `FR-051` manual evidence JSON upload bị loại khỏi sản phẩm.
+- Không có manual report/file upload UI hoặc API.
+- Trigger phải PBAC-authorized, idempotent, auditable và an toàn khi mapping thiếu hoặc mơ hồ.
 
-Python Worker chạy static analysis, tạo SourceFile metadata, graph, EvidenceReference, TechnicalFinding và TechnicalEvidenceReport. Chỉ report đạt schema, privacy và quality gate mới được dùng tiếp.
+### Python Worker Platform
 
-### Intelligence và reconciliation
+Acceptance phải chứng minh mọi asynchronous domain workload chạy trên Python workers, gồm scan, profile, AIUsageFlow, reconciliation, legal pipeline, classification, gap analysis, document và async export.
 
-Hệ thống tạo TechnicalProfile, AIUsageFlow, phát hiện conflict, cho Manager giải quyết và tạo VerifiedProfile. Critical unknown hoặc conflict chưa giải quyết sẽ khóa bước sau.
+### Scanner toolchain
 
-### Legal matching và classification
+Acceptance phải bao phủ Syft, Knip, deptry, Semgrep custom rules, tree-sitter/custom parser, `ast`/`libcst` và `ts-morph`, cùng version/config provenance, timeout, resource limit, normalized output và partial coverage behavior.
 
-Hệ thống chỉ dùng LegalCorpusVersion đã duyệt và đã có chỉ mục. Hybrid retrieval phải trả về citation đầy đủ; classification chỉ chạy sau VerifiedProfile và LegalRuleMatch.
+## Nghiệm thu mục tiêu
 
-### Reporting và audit
+- PBAC deny-by-default và policy-decision audit.
+- Trusted trigger tạo hoặc resume pending scan; duplicate không tạo scan trùng.
+- Mapping thiếu hoặc mơ hồ tạo safe pending/blocked state.
+- Tool failure tạo coverage limitation hoặc terminal failure theo severity.
+- Golden path không phụ thuộc Developer hoặc attestation.
+- A-to-Z dùng PostgreSQL, RabbitMQ, S3-compatible storage, approved corpus và real LLM/embedding provider.
 
-GapAnalysis và final report yêu cầu đủ classification, legal basis, citation và không có conflict. Readiness-only export được phép sớm hơn nhưng không có risk level. Mọi sự kiện quan trọng được audit và có thể xuất bản ghi đã làm sạch.
-
-## Yêu cầu phi chức năng trọng yếu
-
-- Xác thực, session, MFA, rate limit và OAuth an toàn.
-- Tenant isolation và RBAC phía server.
-- Không raw source sang LLM hoặc lưu trữ dài hạn.
-- Evidence provenance, hash, version và immutable history.
-- Fail-closed khi thiếu evidence, citation hoặc corpus.
-- RabbitMQ/outbox có idempotency, retry và DLQ.
-- Trạng thái UI rõ ràng: loading, empty, insufficient, blocked, failed, retry, rerun.
-- Kiểm soát chi phí LLM/embedding.
-- Legal corpus đã duyệt phải bất biến.
-- Python Worker phải chạy trong workspace hạn chế và xác minh cleanup.
-
-## Nghiệm thu A-to-Z
-
-Bài nghiệm thu chuẩn sử dụng hạ tầng thật:
-
-- PostgreSQL và RabbitMQ thật;
-- S3-compatible object storage thật;
-- repository fixture thật theo commit;
-- approved legal corpus và chỉ mục FTS/vector thật;
-- LLM và embedding provider thật;
-- document artifact và audit export thật.
-
-Manager phải hoàn thành từ đăng nhập đến xuất audit mà không phụ thuộc Developer. Mock LLM hoặc mock embedding không đủ điều kiện cho nghiệm thu A-to-Z.
-
-## Negative paths bắt buộc
-
-Các tình huống cần có hành vi rõ ràng gồm repository không truy cập được, parser lỗi từng file, dynamic Python flow, cleanup thất bại, conflict chưa giải quyết, corpus chưa duyệt, zero citation candidate, provider timeout, model output sai schema, duplicate message, outbox publish lỗi và document guardrail vi phạm.
-
-## Quy tắc traceability
-
-Mỗi story tương lai phải liên kết tối thiểu:
+## Traceability cần tái tạo
 
 ```text
-UC -> FR -> AC -> NFR -> UX state -> domain state -> implementation area -> recovery behavior
+UC -> FR -> AC -> NFR -> PBAC policy -> UX state -> domain state
+-> Python worker/module -> queue/event -> failure/recovery behavior
 ```
 
-Hiện chưa có canonical UX và canonical epics/stories, vì vậy story coverage chưa thể đánh giá và implementation chưa được phép bắt đầu.
+```text
+CURRENT_CANONICAL_COUNTS_REQUIRE_REBASE_AFTER_PHASE_5_2L
+UX_REQUIREMENTS_BASELINE_NOT_READY
+STORY_COVERAGE_NOT_ASSESSABLE
+```
