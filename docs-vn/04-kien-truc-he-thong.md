@@ -24,13 +24,13 @@ Giao diện cho Manager và Developer tùy chọn. UX phải thể hiện đầy
 
 NestJS API chịu trách nhiệm HTTP, authentication, PBAC enforcement boundary, tenant scope, tạo trusted trigger/job, kiểm tra state guard, query result, download và audit export. API không trực tiếp thực hiện repository scan hoặc tác vụ dài.
 
-### `lcsp-scanner-worker`
+### `lcsp-python-workers/scanner`
 
 Python Scanner Worker là consumer duy nhất của scan command và sở hữu toàn bộ scan lifecycle. Worker chạy Syft, Knip, deptry, Python `ast`/`libcst`, bounded Node `ts-morph`, tree-sitter/custom parser và Semgrep custom rules.
 
 ### Python Worker Platform
 
-Python Worker Platform xử lý toàn bộ asynchronous domain workloads: scan trigger, Repository Scan, TechnicalProfile, AIUsageFlow, reconciliation, legal ingestion/index, legal matching, classification, gap analysis, document generation và async export khi có. Đây là nhiều bounded consumers/modules, không phải một Python monolith.
+Python Worker Platform xử lý toàn bộ asynchronous domain workloads: scan trigger, Repository Scan, TechnicalProfile, AIUsageFlow, reconciliation, legal ingestion/index, legal matching, classification, gap analysis và document generation. Audit export là synchronous Backend API operation trong MVP. Đây là nhiều bounded consumers/modules, không phải một Python monolith.
 
 ### `tools/ts-js-analyzer`
 

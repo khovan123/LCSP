@@ -31,12 +31,12 @@ This file is not the scanner runtime specification.
 | Classification Worker | `lcsp.classification-worker.v1` | `command.classification.requested.v1` | `RiskClassification` |
 | Gap Analysis Worker | `lcsp.gap-analysis-worker.v1` | `command.gap-analysis.requested.v1` | `GapAnalysis` |
 | Document Worker | `lcsp.document-worker.v1` | `command.document.requested.v1` | `GeneratedDocument` |
-| Audit Export Worker | `lcsp.audit-export-worker.v1` | audit export command when activated | redacted audit export artifact |
+| Audit Export | synchronous Backend API operation | none | redacted audit export artifact |
 
 ## Platform Package Shape
 
 ```text
-python-workers/
+lcsp-python-workers/
   pyproject.toml
   src/lcsp_workers/
     platform/
@@ -62,10 +62,9 @@ python-workers/
     classification/
     gap_analysis/
     document/
-    audit_export/
 ```
 
-Workers may be packaged as one monorepo package or independently deployable Python packages, but they must use the shared platform contracts above.
+Canonical MVP package topology is the `lcsp-python-workers` monorepo. Separating workers into independently deployable Python packages is a post-MVP packaging decision and must not be presented as concurrent canonical structure.
 
 ## Runtime Contract
 
@@ -100,7 +99,7 @@ Workers do not publish RabbitMQ events directly inside domain transactions. An o
 | `WORKER_RETRY_PROFILE` | No | all workers |
 | `LLM_PROVIDER_CONFIG_REF` | Yes | AIUsageFlow, Classification, Document |
 | `CHROMADB_URL` | Yes | Legal Index, Legal Matching |
-| `OBJECT_STORAGE_*` | Yes | Scanner, Legal Ingestion, Document, Audit Export |
+| `OBJECT_STORAGE_*` | Yes | Scanner, Legal Ingestion, Document |
 
 Domain-specific configuration belongs in the domain implementation file.
 
@@ -134,7 +133,8 @@ Raw source, secrets, full prompts, provider tokens, and unredacted tool output m
 
 ## Acceptance
 
-- Each listed active worker has a queue binding, command schema, idempotency behavior, terminal states, audit events, and outbox behavior.
+- Each listed active asynchronous worker has a queue binding, command schema, idempotency behavior, terminal states, audit events, and outbox behavior.
+- Audit export is a synchronous Backend API operation for MVP; adding an Audit Export Worker requires a separate command, queue, event and retry contract.
 - Scanner-specific runtime details are owned by `scanner-worker-implementation.md`, not this platform file.
 - Legal retrieval-specific ChromaDB behavior is owned by `chromadb-vectorless-legal-retriever-implementation.md`.
 - Duplicate command delivery does not duplicate domain artifacts.
@@ -146,4 +146,3 @@ Raw source, secrets, full prompts, provider tokens, and unredacted tool output m
 - Not deployment authorization.
 - Not a scanner behavior specification.
 - Not implementation readiness certification.
-

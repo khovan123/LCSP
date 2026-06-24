@@ -100,6 +100,8 @@ Canonical command and event names for the A-to-Z runnable MVP.
 
 Internal Legal Operator produces source-validation and corpus approval/rejection/supersession events through internal API/CLI. These are not Manager/Developer customer tasks.
 
+`AUDIT_EXPORT_GENERATED` is a synchronous Backend API audit/export domain fact for MVP. There is no active `command.audit-export.requested.v1`, audit export queue, or Audit Export Worker. Introducing an asynchronous audit export worker requires a separate command/event/retry contract.
+
 ## Orchestration
 
 ```text

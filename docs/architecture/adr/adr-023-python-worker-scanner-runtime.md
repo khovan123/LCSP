@@ -43,7 +43,7 @@ Phase 5.2L expands scanner requirements beyond the original ADR-023 baseline. Sy
 
 | Concern | Decision |
 |---|---|
-| Package | `lcsp-scanner-worker` |
+| Package | `lcsp-python-workers` monorepo, scanner module `lcsp_workers.scanner` |
 | Runtime | Python 3.11+ |
 | Packaging/dependencies | `pyproject.toml` managed by Poetry |
 | Queue consumer | `command.scan.requested.v1` / `lcsp.scan-worker.v1` |

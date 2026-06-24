@@ -2,11 +2,13 @@
 
 ## Status
 
-AUTHORITATIVE BUILD DOCUMENT — A-TO-Z RUNNABLE MVP
+AUTHORITATIVE CROSS-RUNTIME BUILD BOUNDARY — A-TO-Z RUNNABLE MVP
 
 ## Purpose
 
-Define the build boundary for Repository Scan. Python Worker owns the lifecycle per ADR-023. NestJS API owns job creation/query and downstream orchestration projections.
+Define the cross-runtime build boundary for Repository Scan: NestJS API job creation/query, Python Scanner Worker ownership, TS/JS analyzer bridge, persistence handoff, queue choreography, and privacy guardrails.
+
+Python scanner process runtime, package layout, run command, tool invocation, workspace lifecycle, retry behavior, and acceptance criteria are owned by `docs/implementation/scanner-worker-implementation.md`.
 
 ## Active References
 
@@ -28,14 +30,12 @@ Define the build boundary for Repository Scan. Python Worker owns the lifecycle 
 - TS/JS analysis runs through a fixed Node.js CLI subprocess under Python Worker control.
 - Syft, Knip, deptry, Semgrep custom rules and tree-sitter/custom parser are part of the active scanner toolchain.
 
-## Locked Runtime Decisions
+## Boundary Decisions
 
 | Concern | MVP Decision |
 |---|---|
 | Service | Python Scanner Worker |
-| Package | `lcsp-scanner-worker` |
-| Runtime | Python 3.11+ |
-| Dependency manager | Poetry / `pyproject.toml` |
+| Canonical package topology | `lcsp-python-workers` monorepo; scanner module `lcsp_workers.scanner` |
 | Queue consumer | `command.scan.requested.v1` sole consumer |
 | SBOM/dependency inventory | Syft |
 | JS/TS dependency usage | Knip |
@@ -50,98 +50,6 @@ Define the build boundary for Repository Scan. Python Worker owns the lifecycle 
 | Optional `astroid` | Post-MVP evaluation only |
 | HTTP analyzer service | Post-MVP scaling alternative only |
 
-## Repository Layout
-
-```text
-lcsp-scanner-worker/
-  pyproject.toml
-  src/lcsp_scanner/
-    main.py
-    config.py
-    queue/
-      consumer.py
-      retry_policy.py
-    workspace/
-      snapshot_materializer.py
-      workspace_manager.py
-      cleanup_verifier.py
-    inventory/
-      file_enumerator.py
-      language_mapper.py
-      ignore_policy.py
-    tools/
-      syft_runner.py
-      knip_runner.py
-      deptry_runner.py
-      semgrep_runner.py
-      tree_sitter_runner.py
-    parsers/
-      python_ast_extractor.py
-      python_cst_extractor.py
-      manifest_extractor.py
-      unsupported_adapter.py
-    analyzers/
-      python_import_resolver.py
-      ai_invocation_detector.py
-      input_output_flow_analyzer.py
-      human_review_detector.py
-      domain_signal_detector.py
-      dependency_fact_normalizer.py
-    ts_js_bridge/
-      subprocess_bridge.py
-      protocol.py
-    graph/
-      graph_builder.py
-      node_key_factory.py
-      edge_key_factory.py
-    evidence/
-      evidence_ref_factory.py
-      secret_redactor.py
-    reports/
-      report_builder.py
-      schema_gate.py
-      quality_gate.py
-    persistence/
-      scanner_repository.py
-      outbox_repository.py
-    audit/
-      audit_writer.py
-
-tools/ts-js-analyzer/
-  package.json
-  src/
-    cli.ts
-    project-loader.ts
-    semantic-analyzer.ts
-    detector-adapter.ts
-    output-schema.ts
-```
-
-## Configuration
-
-| Key | Secret | Purpose |
-|---|---:|---|
-| `DATABASE_URL` | Yes | PostgreSQL |
-| `RABBITMQ_URL` | Yes | RabbitMQ |
-| `LCSP_ENV` | No | Environment label |
-| `LCSP_LOG_LEVEL` | No | Structured log level |
-| `LCSP_SCANNER_WORKSPACE_ROOT` | No | Restricted workspace root |
-| `SCANNER_MAX_FILES` | No | File-count bound |
-| `SCANNER_MAX_FILE_BYTES` | No | Per-file bound |
-| `SCANNER_TIMEOUT_SECONDS` | No | Job analysis bound |
-| `SCANNER_RULESET_VERSION` | No | Detection ruleset version |
-| `SCANNER_TOOLCHAIN_VERSION` | No | Combined scanner toolchain contract version |
-| `SCANNER_CONFIG_HASH` | No | Scanner configuration hash |
-| `SYFT_EXECUTABLE` | No | Fixed Syft executable |
-| `KNIP_EXECUTABLE` | No | Fixed Knip executable |
-| `DEPTRY_EXECUTABLE` | No | Fixed deptry executable |
-| `SEMGREP_EXECUTABLE` | No | Fixed Semgrep executable |
-| `TREE_SITTER_CONFIG_REF` | No | Parser/config reference |
-| `TS_ANALYZER_EXECUTABLE` | No | Fixed Node CLI path |
-| `TS_ANALYZER_TIMEOUT_SECONDS` | No | Subprocess timeout |
-
-No active `TS_ANALYZER_MODE=http` switch is required for MVP.
-
 ## Queue Contract
 
 | Exchange | Queue | Routing Key | Producer | Consumer |
@@ -152,57 +60,7 @@ No active `TS_ANALYZER_MODE=http` switch is required for MVP.
 
 The worker writes OutboxEvent in the same transaction as terminal ScanJob state. It does not publish RabbitMQ messages directly inside the domain transaction.
 
-## Core Algorithm
-
-```text
-handle_scan_requested(payload):
-  acquire idempotent job lock
-  mark job RUNNING and audit
-  materialize selected snapshot in restricted workspace
-  enumerate bounded source files
-  run Syft SBOM/dependency inventory
-  run Knip/deptry dependency usage analysis
-
-  for each file:
-    map language/support level
-    Python -> ast/libcst extractors + bounded analyzers
-    TS/JS -> fixed node subprocess + schema validation
-    structural gaps -> tree-sitter/custom parser augmentation
-    AI patterns -> Semgrep custom rules
-    other supported -> manifest/basic signal extractor
-    unsupported -> coverage limitation
-
-  normalize facts
-  normalize dependency facts
-  build scan-local graph
-  run deterministic detectors
-  create redacted evidence refs
-  build findings and TechnicalEvidenceReport
-  persist staged metadata
-  run schema/privacy/quality gates
-
-  delete workspace and verify cleanup
-
-  if fatal failure or cleanup failure:
-    transactionally mark FAILED, audit, and stage event.scan.failed.v1
-  else:
-    transactionally mark COMPLETED, audit, and stage event.scan.completed.v1
-```
-
-## Python Analysis
-
-Required capabilities:
-
-- packages, modules, imports, aliases, decorators;
-- functions, classes, methods, async calls;
-- common AI/ML libraries and API invocation patterns;
-- FastAPI/Flask/Django/Celery/Pydantic patterns where rules cover them;
-- model input/output and local/same-module/bounded cross-module paths;
-- branch, ranking, recommendation, status update, approval/rejection signals;
-- human-review queue/approval paths;
-- explicit limitations for dynamic import, reflection, runtime config, external calls, or incomplete paths.
-
-## TS/JS Subprocess
+## TS/JS Analyzer Boundary
 
 Command shape:
 
@@ -210,7 +68,7 @@ Command shape:
 node dist/tools/ts-js-analyzer/cli.js --workspace <workspace> --request <request-json>
 ```
 
-Requirements:
+Cross-runtime requirements:
 
 - use `asyncio.create_subprocess_exec`, never shell interpolation;
 - cap runtime, stdout, and stderr;
@@ -219,6 +77,7 @@ Requirements:
 - do not install repository dependencies or execute repository code;
 - on failure, record `TS_JS_ANALYZER_FAILED` and affected-file coverage limitations;
 - analyzer does not access RabbitMQ or persist scanner rows directly.
+- detailed Python worker subprocess handling is owned by `scanner-worker-implementation.md`.
 
 ## Graph and Evidence
 
@@ -228,7 +87,7 @@ Persisted evidence includes path/symbol/line refs, hashes, versions, confidence,
 
 Dependency/SBOM facts persist as normalized metadata: `PackageDependency`, `SBOMComponent`, and `DependencyUsageFact`. States distinguish declared, discovered, used/reachable, unused, missing, transitive, and uncertain.
 
-## Workspace
+## Workspace Boundary
 
 | Item | Decision |
 |---|---|
@@ -278,10 +137,10 @@ Dependency/SBOM facts persist as normalized metadata: `PackageDependency`, `SBOM
 ## Verification Commands
 
 ```text
-cd lcsp-scanner-worker
+cd lcsp-python-workers
 poetry install
 poetry run pytest
-poetry run python -m lcsp_scanner.smoke_scan --fixture golden-path-python
+poetry run python -m lcsp_workers.scanner.smoke_scan --fixture golden-path-python
 
 cd ../tools/ts-js-analyzer
 npm install

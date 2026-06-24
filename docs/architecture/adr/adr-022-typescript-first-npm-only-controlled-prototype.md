@@ -11,7 +11,7 @@ NODE_DOWNSTREAM_DOMAIN_WORKERS_SUPERSEDED_FOR_ACTIVE_MVP
 PYTHON_WORKER_PLATFORM_REQUIRED
 ```
 
-Phase 5.2L supersedes this ADR wherever it assigns asynchronous domain workloads to Node.js. TechnicalProfile, AIUsageFlow, reconciliation, legal ingestion/index, legal matching, classification, gap analysis, document generation and async export belong to bounded Python Worker Platform consumers/modules. Node.js remains valid for NestJS API, web/tooling and the bounded TS/JS analyzer CLI only.
+Phase 5.2L supersedes this ADR wherever it assigns asynchronous domain workloads to Node.js. TechnicalProfile, AIUsageFlow, reconciliation, legal ingestion/index, legal matching, classification, gap analysis and document generation belong to bounded Python Worker Platform consumers/modules. Audit export is a synchronous Backend API operation for MVP. Node.js remains valid for NestJS API, web/tooling and the bounded TS/JS analyzer CLI only.
 
 ## Phase 5.2J Supersession Note
 

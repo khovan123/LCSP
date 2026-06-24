@@ -20,27 +20,15 @@ lcsp-python-workers/                 # Python Worker Platform
     classification/
     gap_analysis/
     document/
-    audit_export/
 
 tools/ts-js-analyzer/                # bounded Node.js CLI only
-
-lcsp-scanner-worker/                 # historical scanner package name; superseded by platform layout if separated
-  src/lcsp_scanner/
-    main.py
-    queue/
-    workspace/
-    parsers/
-    analyzers/
-    graph/
-    evidence/
-    reports/
-    persistence/
-    audit/
 
 apps/worker/src/                    # SUPERSEDED_FOR_ACTIVE_MVP for downstream domain workers
 ```
 
 There is no active Node.js scanner lifecycle worker or downstream domain worker. Python Worker Platform owns all asynchronous domain workloads. Node.js remains only for NestJS API, web/tooling and bounded TS/JS analyzer CLI.
+
+Canonical MVP topology is one Python worker monorepo: `lcsp-python-workers/`. The historical standalone scanner package name is superseded for active planning.
 
 ## Worker Ownership
 

@@ -11,10 +11,10 @@
 ## Kết luận
 
 ```text
-UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
+UX_DRAFT_REBASE_PENDING
 PHASE_5_2L_P0_CLOSURE_COMPLETED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
-UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION
+UX_DRAFT_CREATED
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ```
@@ -30,8 +30,7 @@ BUSINESS_RULES_PBAC_SEMANTICS_ALIGNED
 REQUIREMENTS_BASELINE_ATTESTATION_RESIDUE_REMOVED_FROM_ACTIVE_ROWS
 READINESS_AND_TRACEABILITY_MARKERS_CORRECTED
 UX_DRAFT_CREATED
-UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION
-UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
+UX_DRAFT_REBASE_PENDING
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ```
@@ -76,7 +75,7 @@ Yêu cầu đóng:
 
 - Requirements baseline đã chuyển `UC-M09-05` sang `SUPERSEDED_FOR_ACTIVE_MVP`.
 - AC-9/11/12 đã đổi sang PBAC/trigger/evidence/audit semantics.
-- Requirements traceability matrix hiện giữ `UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION` và `STORY_TRACEABILITY_PENDING`.
+- Requirements traceability matrix hiện giữ `UX_DRAFT_CREATED` và `STORY_TRACEABILITY_PENDING`.
 
 Yêu cầu đóng:
 
@@ -118,13 +117,13 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 [x] historical UC-018/FR-045/FR-046/AC-013 separated from active coverage
 [x] docs/README and readiness markers corrected for pre-UX closure
 [x] UX draft created
-[ ] scanner authority consolidation completed
-[ ] ChromaDB vectorless domain sync completed
+[x] scanner authority consolidation completed
+[x] ChromaDB vectorless domain sync completed
 [ ] UX draft rebased after consolidation
 [ ] dedicated ADRs added or explicit pre-story decision records created
 [ ] backend/delivery/ADR residual wording closed
 [x] repository-wide active-doc search returns no P0 structured-attestation validation residue
-[x] consolidation review states UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
+[x] consolidation review states UX_DRAFT_REBASE_PENDING
 ```
 
 ## Trình tự hợp lệ
@@ -133,19 +132,16 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 1. Project Owner approves or revises Phase 5.2L proposal.
 2. Run a short documentation closure pass for the P0 findings.
 3. Revalidate all active non-archive documents and traceability.
-4. Complete scanner authority consolidation.
-5. Complete ChromaDB vectorless cross-document sync.
-6. Rebase UX draft.
-7. Review and approve the UX draft.
-8. Run bmad-create-epics-and-stories.
-9. Resolve technical decisions and rebuild story traceability.
-10. Re-run bmad-check-implementation-readiness.
+4. Rebase UX draft.
+5. Review and approve the UX draft.
+6. Run bmad-create-epics-and-stories.
+7. Resolve technical decisions and rebuild story traceability.
+8. Re-run bmad-check-implementation-readiness.
 ```
 
 ## Final marker
 
 ```text
 UX_DRAFT_CREATED
-UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION
-UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
+UX_DRAFT_REBASE_PENDING
 ```
