@@ -2,14 +2,16 @@
 
 ## Status
 
-Accepted and technically closed for A-to-Z Runnable MVP
+Accepted baseline for pre-UX planning; Phase 5.2L approval condition requires technical clarification before epics/stories are marked ready or implementation readiness is certified.
 
 ## Decision Context
 
 ```text
 PROJECT_OWNER_LOCKED
 HYBRID_RETRIEVER_REQUIRED_FOR_A_TO_Z_MVP
-RETRIEVAL_PROFILE_CLOSED_FOR_MVP
+RETRIEVAL_PROFILE_BASELINE_FOR_UX
+RAG_RETRIEVAL_APPROVAL_CONDITION_AMBIGUOUS
+TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES_OR_IMPLEMENTATION_READINESS
 ```
 
 ## Decision
@@ -24,6 +26,8 @@ FTS_WEIGHT_0_4
 VECTOR_WEIGHT_0_6
 FAIL_CLOSED_ON_MISSING_CITATIONS
 ```
+
+The Project Owner approval condition `Update rag: chorma database (vector less)` is ambiguous. This ADR does not adopt ChromaDB or vectorless retrieval. Until the condition is clarified by Project Owner and technical owner decision, PostgreSQL FTS + pgvector remains the active baseline for UX and documentation planning only.
 
 ## Architecture
 

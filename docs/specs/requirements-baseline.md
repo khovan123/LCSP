@@ -140,7 +140,7 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | UC-M04-04 | Upload Manual Technical Evidence JSON | Developer, LCSP System | OUT_OF_SCOPE | active business-rules.md; archived traceability-matrix.md |
 | UC-M04-05 | Review Technical Findings | Manager; optional delegated Developer; LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M04-06 | Confirm Technical Truth | Developer, LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
-| UC-M04-07 | Provide Structured Technical Attestation | Developer, LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
+| UC-M04-07 | Provide Structured Technical Attestation | Developer, LCSP System | SUPERSEDED_FOR_ACTIVE_MVP | historical/change-control only |
 | UC-M04-08 | Run Repository Scan | Manager; optional delegated Developer; LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M05-01 | Validate Evidence Schema | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M05-02 | Validate Privacy Flags | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |

@@ -9,6 +9,7 @@ PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 PHASE_5_2L_P0_CLOSURE_COMPLETED
 READY_FOR_CANONICAL_UX
 CANONICAL_UX_PENDING
+RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
 ```
 
 ## Các quyết định mới
@@ -38,11 +39,12 @@ CANONICAL_UX_PENDING
 - Business rules đã chuyển active role semantics sang PBAC subject/policy semantics và đưa attestation vào superseded register.
 - Requirements baseline đã tách `UC-M09-05` khỏi active coverage và cập nhật AC-9/11/12 theo PBAC/trigger/evidence.
 - Readiness/index/traceability docs đã dùng `READY_FOR_CANONICAL_UX` và vẫn giữ `CANONICAL_UX_PENDING`.
+- Điều kiện approval RAG `chorma database (vector less)` đã được phân loại là technical decision backend, không đổi baseline pgvector/FTS cho UX.
 
 ## Phần carry forward trước stories/readiness
 
 - Chưa có dedicated Phase 5.2L ADRs cho PBAC, automatic trigger, Python Worker Platform và expanded scanner toolchain.
-- PBAC engine/topology, trigger retry/DLQ/idempotency và tool failure severity vẫn là technical decisions mở.
+- PBAC engine/topology, trigger retry/DLQ/idempotency, tool failure severity và quyết định Chroma/vectorless/pgvector vẫn là technical decisions mở trước stories/readiness.
 
 ## Kiến trúc mục tiêu
 

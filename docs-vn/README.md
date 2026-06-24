@@ -24,18 +24,18 @@
 ## Trạng thái review hiện tại
 
 ```text
-PHASE_5_2L_REMEDIATION_SUBSTANTIAL_BUT_NOT_CLOSED
-PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 PHASE_5_2L_P0_CLOSURE_COMPLETED
+PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 READY_FOR_CANONICAL_UX
 CANONICAL_UX_PENDING
+RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
 CANONICAL_EPICS_AND_STORIES_MISSING
 IMPLEMENTATION_READINESS_NOT_CERTIFIED
 IMPLEMENTATION_NOT_AUTHORIZED
 SPRINT_EXECUTION_NOT_AUTHORIZED
 ```
 
-PR #2 đã đồng bộ target Phase 5.2L: PBAC, Automatic Trusted Scan Initiation, Python Worker Platform và scanner toolchain mở rộng. Closure pass sau review đã ghi nhận approval cho documentation/planning remediation, đổi A3 trong validation plan sang PBAC/trusted-trigger abuse risk, tách structured attestation khỏi active coverage và sửa marker readiness/traceability trước UX.
+PR #2 đã đồng bộ target Phase 5.2L: PBAC, Automatic Trusted Scan Initiation, Python Worker Platform và scanner toolchain mở rộng. Closure pass sau review đã ghi nhận approval cho documentation/planning remediation, đổi A3 trong validation plan sang PBAC/trusted-trigger abuse risk, tách structured attestation khỏi active coverage và sửa marker readiness/traceability trước UX. Điều kiện RAG `chorma database (vector less)` được phân loại là technical decision backend, không chặn UX flow nhưng phải đóng trước stories/readiness.
 
 Báo cáo và checklist closure nằm tại `12-review-truoc-ux-phase-5-2l.md`.
 

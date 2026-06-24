@@ -57,18 +57,18 @@ DEFERRED_POST_MVP
 ## Trạng thái planning hiện tại
 
 ```text
-PHASE_5_2L_REMEDIATION_SUBSTANTIAL_BUT_NOT_CLOSED
-PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 PHASE_5_2L_P0_CLOSURE_COMPLETED
+PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 READY_FOR_CANONICAL_UX
 CANONICAL_UX_PENDING
+RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_READINESS_NOT_CERTIFIED
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
 
-Các technical decisions về PBAC engine/topology, scan-trigger retry/DLQ/idempotency và scanner tool failure severity có thể được carry forward qua UX dưới dạng constraint, nhưng phải được giải quyết hoặc gắn dependency rõ trước khi story/readiness được duyệt.
+Các technical decisions về PBAC engine/topology, scan-trigger retry/DLQ/idempotency, scanner tool failure severity và điều kiện RAG `chorma database (vector less)` có thể được carry forward qua UX dưới dạng constraint, nhưng phải được giải quyết hoặc gắn dependency rõ trước khi story/readiness được duyệt.
 
 ## Vai trò của docs-vn
 

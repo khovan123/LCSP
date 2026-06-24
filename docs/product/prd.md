@@ -267,11 +267,12 @@ Manager can invite a Developer to an assessment after or during Wizard completio
 
 #### FR-E1-3: Assign Developer policies
 
-Manager can assign one or more Developer policies: connect repository, run scan, upload evidence, view findings, confirm findings, attest technical claims, resolve technical conflicts, view limited context.
+Manager can assign one or more Developer policies: connect repository, run scan from trusted repository context, view findings, provide scoped technical correction input, and view limited context.
 
 **Consequences:**
 - Developer cannot access actions outside assigned policy.
 - Policy assignment is logged in audit trail.
+- Developer policy must not authorize Local/CI scanner report upload, manual technical evidence JSON upload, structured attestation, final conflict resolution, VerifiedProfile approval, final classification, or final report generation.
 
 #### FR-E1-4: Restrict Manager-only actions
 
@@ -370,14 +371,6 @@ Structured human technical attestation maps to historical `FR-045` and `FR-046` 
 - It must not support active reconciliation.
 - It must not appear as optional evidence, Manager review input, classification dependency, or Developer workflow retained solely for attestation.
 - Reintroduction requires separate Project Owner approval.
-
-**Consequences:**
-- Attestation is not required for the MVP golden path.
-- Attestation requires role-bound claims, scope, reason, supporting evidence refs where available and signed timestamp.
-- Attestation cannot replace machine-generated metadata listed in A3.
-- Attestation cannot independently unlock classification.
-- Attestation cannot finalize conflict resolution; Manager remains final resolver.
-- Free text cannot bypass evidence gates.
 
 ### Epic 4 - Evidence Quality Gate
 

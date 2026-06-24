@@ -28,6 +28,7 @@ Record the current planning state after the Phase 5.2L scope/runtime correction.
 - Real configured LLM and embedding providers are required for integrated A-to-Z acceptance; mock mode is test/offline-only.
 - Legal corpus uses validated official-source snapshots, internal approval, immutable versions, and S3-compatible storage.
 - Retrieval uses PostgreSQL `simple` plus `unaccent` FTS and pgvector `vector(1536)` HNSW cosine search.
+- The Project Owner RAG condition `chorma database (vector less)` is classified as an ambiguous backend technical decision; it does not block canonical UX flow design but must be resolved before stories/readiness.
 - Internal corpus operations are API/CLI-only for MVP and outside Manager/Developer product UX.
 - Manager can complete the golden path without Developer participation.
 - Structured Developer attestation is `SUPERSEDED_FOR_ACTIVE_MVP`; delegated free-form clarification is Deferred/Post-MVP.
@@ -69,6 +70,7 @@ PHASE_5_2L_ACTIVE_DOCS_SYNCHRONIZED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 READY_FOR_CANONICAL_UX
 CANONICAL_UX_PENDING
+RAG_RETRIEVAL_CONDITION_TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES
 STORY_TRACEABILITY_PENDING
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
 IMPLEMENTATION_READINESS_NOT_CERTIFIED

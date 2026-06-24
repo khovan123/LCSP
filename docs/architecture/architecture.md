@@ -43,6 +43,16 @@ LCSP is a modular, evidence-first compliance platform. The system is intentional
 | Python Document Worker | Generates output documents only after classification, gap analysis, and output guardrails. | Object storage, Persistence. |
 | Audit | Records state-changing and compliance-critical actions without raw source/secrets/full prompts. | All components. |
 
+### Phase 5.2L RAG Condition Note
+
+The Project Owner approval condition `Update rag: chorma database (vector less)` is ambiguous. It does not replace the active PostgreSQL FTS + pgvector retriever baseline for UX planning. It is a backend technical decision that must be clarified before stories are marked ready or implementation readiness is certified.
+
+```text
+RAG_RETRIEVAL_APPROVAL_CONDITION_AMBIGUOUS
+TECHNICAL_DECISION_REQUIRED_BEFORE_STORIES_OR_IMPLEMENTATION_READINESS
+NOT_BLOCKING_CANONICAL_UX_FLOW_DESIGN
+```
+
 ## Communication Model
 
 ```text
