@@ -4,19 +4,42 @@
 
 ```text
 PROJECT_OWNER_DIRECTIVE_RECORDED
-CORRECT_COURSE_REQUIRED
-ACTIVE_DOCS_NOT_YET_REMEDIATED
+SPRINT_CHANGE_PROPOSAL_CREATED
+DOCUMENT_REMEDIATION_SUBSTANTIAL_BUT_INCOMPLETE
+PROJECT_OWNER_APPROVAL_PENDING
+CANONICAL_UX_NOT_READY_TO_START
 ```
 
 ## Các quyết định mới
 
 - PBAC thay RBAC làm nguồn quyết định quyền truy cập.
 - Structured attestation bị loại khỏi MVP.
-- Không giữ trong định hướng sản phẩm các khả năng chứng nhận tuân thủ, nộp hồ sơ trực tiếp cho cơ quan quản lý và upload evidence JSON thủ công.
-- FR-050 không còn là upload Local/CI report; thay bằng auto-start hoặc resume pending scan từ trusted account, organization, repository, assessment, branch, commit, webhook hoặc backend trigger.
+- Compliance certification, formal legal opinion, direct regulator submission và manual evidence JSON bị loại khỏi product direction.
+- `FR-050` không còn là upload Local/CI report; thay bằng Automatic Trusted Scan Initiation.
 - Tất cả asynchronous domain workloads chuyển sang Python Worker Platform.
-- Node.js chỉ còn cho NestJS/Web và TS/JS analyzer CLI.
+- Node.js chỉ còn cho NestJS/Web và bounded TS/JS analyzer CLI.
 - Scanner bổ sung Syft, Knip, deptry, Semgrep custom rules và tree-sitter/custom parser bên cạnh `ast`, `libcst` và `ts-morph`.
+
+## Phần đã được propagate rộng
+
+- system context và architecture target;
+- canonical FR/NFR direction;
+- automatic trigger states, commands và events;
+- Python worker ownership trong code maps và queue docs;
+- scanner toolchain trong scanner specs/implementation;
+- delivery plan và readiness report;
+- phần lớn tài liệu tóm lược tiếng Việt.
+
+## Phần chưa closure
+
+- Sprint Change Proposal chưa có Project Owner approval record.
+- `validation-plan.md` vẫn giữ A3 Human Attestation Abuse Risk và schema/claims/disclosure cũ.
+- PRD còn block hậu quả attestation cũ sau marker supersession.
+- Business rules còn category/dependency/role wording cũ.
+- Use-case/AC/traceability còn tham chiếu historical FR/UC trong active rows.
+- Readiness/index/traceability docs tuyên bố synchronized/UX authorized quá sớm.
+- Chưa có dedicated Phase 5.2L ADRs cho PBAC, automatic trigger, Python Worker Platform và expanded scanner toolchain.
+- PBAC engine/topology, trigger retry/DLQ/idempotency và tool failure severity vẫn là technical decisions mở.
 
 ## Kiến trúc mục tiêu
 
@@ -27,26 +50,30 @@ Python Worker Platform = all asynchronous domain workloads
 Node.js CLI = bounded TS/JS analyzer adapter
 ```
 
-Python Worker Platform gồm nhiều consumer/module độc lập cho scan, profile, AIUsageFlow, reconciliation, legal pipeline, classification, gap analysis, document và async export. Không thiết kế một tiến trình Python monolith.
+Python Worker Platform gồm nhiều consumer/module độc lập cho trigger resolution, scan, profile, AIUsageFlow, reconciliation, legal pipeline, classification, gap analysis, document và async export.
 
 ## Scanner toolchain mục tiêu
 
 ```text
 snapshot
 -> Syft SBOM/dependency inventory
--> Knip và deptry dependency usage checks
+-> Knip và deptry dependency usage
 -> ast/libcst và ts-morph semantic analysis
--> tree-sitter/custom parser structural augmentation
+-> tree-sitter/custom parser augmentation
 -> Semgrep custom AI rules
--> import/call/data-flow graph fusion
--> normalized evidence/findings
+-> graph/evidence fusion
 -> TechnicalEvidenceReport gates
 ```
 
-Tool version, config/ruleset hash, timeout, resource limits, output schema, redaction và failure behavior phải được ghi rõ. Không cài dependency của repository hoặc chạy application code của khách hàng.
+## Bước closure trước UX
 
-## Nguồn chi tiết
+```text
+Project Owner approval
+-> sửa P0 cross-document contradictions
+-> cập nhật ADR/traceability/readiness markers
+-> validation pass không còn active residue
+-> READY_FOR_CANONICAL_UX
+-> bmad-ux
+```
 
-Xem `docs/planning-artifacts/phase-5-2l-project-owner-scope-runtime-correction.md`.
-
-Tài liệu active hiện tại chưa được coi là đã đồng bộ theo Phase 5.2L cho đến khi hoàn tất `bmad-correct-course`, Project Owner approval và document remediation.
+Chi tiết finding nằm trong `12-review-truoc-ux-phase-5-2l.md`.
