@@ -10,14 +10,22 @@ Vietnamese businesses using AI need a traceable way to understand and document c
 
 ## Product Vision
 
-LCSP is an evidence-based compliance support platform for businesses using AI in Vietnam. It supports compliance work but does not replace professional legal advice, certify compliance, or create unsupported legal conclusions.
+LCSP is an evidence-based compliance support platform for businesses using AI in Vietnam. It supports compliance work and must not preserve product concepts for compliance certification, formal legal opinion, direct regulator submission, or unsupported legal conclusions.
+
+## Phase 5.2L Product Corrections
+
+- PBAC replaces RBAC as authorization source of truth. Roles are attributes/templates only.
+- Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP` and removed from active product scope.
+- Compliance certification, formal legal opinion, direct regulator submission, and manual technical evidence JSON upload (`FR-051`) are `REMOVED_FROM_PRODUCT`.
+- `FR-050` is `AUTOMATIC_TRUSTED_SCAN_INITIATION`, not Local/CI scanner report upload.
+- All asynchronous domain workloads use the Python Worker Platform. Node.js is valid only for NestJS API, web/tooling, and the bounded TS/JS analyzer CLI.
 
 ## Product Scope
 
 ```text
 Manager intent
 -> WizardProfile
--> Repository Scan
+-> Automatic Trusted Scan Initiation / Repository Scan
 -> TechnicalEvidenceReport
 -> TechnicalProfile
 -> AIUsageFlow
@@ -35,9 +43,10 @@ Manager intent
 - Manager-led assessment lifecycle.
 - OAuth/OIDC login separated from GitHub App repository authorization.
 - Optional Developer collaboration through scoped tasks.
-- Optional structured Developer attestation under `FR-046` as supplemental input only.
+- Optional Developer collaboration through scoped tasks with independent product value.
 - Read-only GitHub repository connection and commit-pinned Repository Scan.
-- Python Worker-owned static analysis with first-class bounded Python support and TS/JS subprocess analysis.
+- Python Worker Platform-owned asynchronous domain work.
+- Python Scanner Worker static analysis with Syft, Knip, deptry, Python `ast`/`libcst`, bounded `ts-morph`, tree-sitter/custom parser, and Semgrep custom rules.
 - Evidence gates, TechnicalProfile, AIUsageFlow, reconciliation, and Manager-only conflict resolution.
 - Provenance-preserving legal corpus ingestion from approved official-source URLs.
 - Internal corpus review/approval and immutable LegalCorpusVersion management.
@@ -48,10 +57,10 @@ Manager intent
 
 ## Out of Scope
 
-- Production compliance certification or formal legal opinion.
-- Direct regulator submission or public auditor/regulator portal.
 - Enterprise SSO/SAML/SCIM and advanced identity administration.
-- Local/CI scanner upload and manual evidence JSON as active MVP paths (`FR-050`, `FR-051` are Deferred).
+- Structured attestation must not appear as active MVP input.
+- Local/CI scanner report upload as active or future product path; it is superseded by `FR-050` automatic trusted scan initiation.
+- Manual technical evidence JSON upload (`FR-051`) must not appear in active scope, roadmap, future scope, APIs, entities, UX, or delivery plans; it is `REMOVED_FROM_PRODUCT`.
 - Delegated free-form technical clarification workflow (`FR-052` is Deferred).
 - Customer-facing legal corpus administration.
 - Runtime scanner accuracy claims before post-implementation empirical acceptance.
@@ -63,7 +72,7 @@ Manager intent
 | Actor | Responsibility | Key Tasks |
 |---|---|---|
 | Manager | Owns assessment, business/legal truth, final MVP conflict resolution, VerifiedProfile approval where required, classification request, report generation, and audit review. | Create assessment, complete Wizard, connect repository, start scan, review evidence, resolve conflicts, request classification, generate/download report, export audit. |
-| Developer | Optional scoped technical collaborator. | Accept task, review redacted findings, submit structured technical attestation when allowed. |
+| Developer | Optional scoped technical collaborator. | Accept task, review redacted findings, support repository/evidence correction within PBAC policy scope. |
 | LCSP System | Enforces workflow gates, state transitions, evidence handling, queue choreography, retrieval, audit, and output guardrails. | Execute workers, persist domain objects, publish commands/events, block unsafe output. |
 
 Manager can complete the active MVP golden path without Developer participation. Developer absence is never a workflow blocker.
@@ -95,7 +104,7 @@ Login
 -> Complete WizardProfile
 -> Connect Repository
 -> Select Commit
--> Run Repository Scan
+-> Automatic trusted scan starts or resumes Repository Scan
 -> Review Findings and AIUsageFlow
 -> Resolve Conflict if present
 -> Verify Profile readiness
@@ -111,18 +120,10 @@ Login
 Receive invitation/task
 -> Accept scoped task
 -> Review redacted technical findings
--> Submit structured attestation
 -> Stop at delegated scope
 ```
 
-The active Developer path does not include a free-form clarification workflow. Structured attestation:
-
-- is stored separately from scanner evidence;
-- cannot replace machine-generated metadata;
-- cannot resolve a conflict;
-- cannot approve VerifiedProfile;
-- cannot unlock classification by itself;
-- must disclose role, scope, claim, reason, evidence refs, and timestamp.
+The active Developer path does not include a free-form clarification workflow or structured attestation. Any Developer collaboration must have independent product value and must not exist solely to preserve attestation.
 
 ## Internal Legal Operations Journey
 
@@ -145,7 +146,8 @@ This journey is not part of the Manager/Developer product UX deliverable.
 CREATED
 -> WIZARD_PROFILE_READY
 -> REPOSITORY_CONNECTED
--> SNAPSHOT_CREATED
+-> TRUSTED_SCAN_TRIGGERED
+-> SNAPSHOT_CREATED or PENDING_MAPPING/BLOCKED_MAPPING/WAITING_FOR_CONTEXT
 -> SCAN_REQUESTED
 -> SCAN_RUNNING
 -> SCAN_COMPLETED

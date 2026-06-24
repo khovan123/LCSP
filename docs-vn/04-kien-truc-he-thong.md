@@ -4,11 +4,11 @@
 
 ```text
 Web UI
--> NestJS API
+-> NestJS API synchronous control plane
 -> PostgreSQL / Prisma / pgvector
 -> RabbitMQ + Outbox
--> Python Scanner Worker
--> Node.js downstream workers
+-> Python Worker Platform
+-> bounded Node.js TS/JS analyzer CLI
 -> S3-compatible object storage
 -> LLM / Embedding Gateway
 ```
@@ -21,19 +21,19 @@ Giao diện cho Manager và Developer tùy chọn. UX phải thể hiện đầy
 
 ### `apps/api`
 
-NestJS API chịu trách nhiệm HTTP, authentication, RBAC, tenant scope, tạo job, kiểm tra state guard, query result, download và audit export. API không trực tiếp thực hiện repository scan hoặc tác vụ dài.
+NestJS API chịu trách nhiệm HTTP, authentication, PBAC enforcement boundary, tenant scope, tạo trusted trigger/job, kiểm tra state guard, query result, download và audit export. API không trực tiếp thực hiện repository scan hoặc tác vụ dài.
 
 ### `lcsp-scanner-worker`
 
-Python Worker là consumer duy nhất của scan command và sở hữu toàn bộ scan lifecycle. Worker phân tích Python trực tiếp và gọi Node subprocess cho TS/JS.
+Python Scanner Worker là consumer duy nhất của scan command và sở hữu toàn bộ scan lifecycle. Worker chạy Syft, Knip, deptry, Python `ast`/`libcst`, bounded Node `ts-morph`, tree-sitter/custom parser và Semgrep custom rules.
 
-### `apps/worker`
+### Python Worker Platform
 
-Node.js workers xử lý TechnicalProfile, AIUsageFlow, reconciliation, legal ingestion/index, legal matching, classification, gap analysis và document generation.
+Python Worker Platform xử lý toàn bộ asynchronous domain workloads: scan trigger, Repository Scan, TechnicalProfile, AIUsageFlow, reconciliation, legal ingestion/index, legal matching, classification, gap analysis, document generation và async export khi có. Đây là nhiều bounded consumers/modules, không phải một Python monolith.
 
 ### `tools/ts-js-analyzer`
 
-Node CLI dùng `ts-morph`, nhận request JSON từ Python Worker và trả normalized facts qua stdout. Công cụ này không đọc queue, không tự ghi DB và không phát event.
+Node CLI dùng `ts-morph`, nhận request JSON từ Python Scanner Worker và trả normalized facts qua stdout. Công cụ này không đọc queue, không tự ghi DB và không phát event.
 
 ### PostgreSQL
 
@@ -49,8 +49,8 @@ Lưu immutable legal source snapshots và generated document artifacts. Database
 
 ## Phân tách trách nhiệm
 
-- API: quyền, validation, state transition, tạo/query job.
-- Worker: tác vụ bất đồng bộ và tạo artifact.
+- API: PBAC boundary, validation, state transition, tạo/query trigger/job.
+- Python Worker Platform: tác vụ bất đồng bộ và tạo artifact.
 - Domain spec: hành vi đúng phải có.
 - Implementation spec: cách xây dựng.
 - Code map: module nào sở hữu API, bảng, DTO và queue.
@@ -64,7 +64,8 @@ Lưu immutable legal source snapshots và generated document artifacts. Database
 - GitHub App là đường evidence chính của MVP.
 - Không raw source sang LLM hoặc lưu dài hạn.
 - Deterministic orchestration thay vì autonomous multi-agent control.
-- Python Worker thay thế TypeScript-first scanner lifecycle.
+- Python Worker Platform thay thế Node.js downstream domain workers.
+- Python Scanner Worker thay thế TypeScript-first scanner lifecycle.
 - Real LLM provider thay thế mock happy path.
 - Official-source legal corpus thay thế local JSONL seed.
 - Hybrid FTS + pgvector là retriever chuẩn.

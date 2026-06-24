@@ -7,9 +7,9 @@ This document is the active ADR authority index for the A-to-Z runnable MVP. Det
 ## Current Architecture Direction
 
 ```text
-Modular NestJS API
-+ standalone Python Scanner Worker
-+ Node.js downstream workers
+Modular NestJS API synchronous control plane
++ Python Worker Platform for all asynchronous domain workloads
++ bounded Node.js TS/JS analyzer CLI only
 + PostgreSQL/Prisma/pgvector
 + RabbitMQ/outbox
 + S3-compatible object storage
@@ -36,7 +36,7 @@ The system uses deterministic orchestration, state machines, evidence gates, and
 4. ADR-025 overrides local JSONL corpus seed as the legal source architecture.
 5. ADR-026 overrides non-hybrid/unspecified legal retrieval for MVP.
 6. Product scope and canonical requirements remain governed by PRD, FR/NFR catalogs, and approved change-control records.
-7. `FR-050..FR-052` remain Deferred even if older ADR text describes those paths.
+7. Phase 5.2L supersedes older wording: PBAC replaces RBAC, structured attestation is removed from active MVP, `FR-050` is Automatic Trusted Scan Initiation, `FR-051` is removed from product scope, and Node.js downstream workers are superseded.
 
 ## Active Decision Summary
 
@@ -46,15 +46,15 @@ The system uses deterministic orchestration, state machines, evidence gates, and
 | ADR-002 | Async worker workloads remain outside synchronous API lifecycle | Partially Superseded: scanner runtime wording replaced by ADR-023; downstream async separation retained |
 | ADR-003 | Manager-led workflow; Developer optional and scoped | Accepted |
 | ADR-004 | Evidence-first classification gate | Accepted |
-| ADR-005 | GitHub App Repository Scan is the only active MVP evidence path; Local/CI/manual uploads deferred | Accepted |
+| ADR-005 | GitHub App Repository Scan is the only active MVP evidence path; Local/CI/manual uploads deferred | Superseded by Phase 5.2L for `FR-050`/`FR-051` semantics |
 | ADR-006 | No raw source to LLM and no long-term raw source persistence | Accepted |
 | ADR-007 | Binary unresolved-conflict routing; scores are explanatory only | Accepted |
-| ADR-008 | Structured technical attestation is supplemental only and cannot unlock classification | Accepted with FR-046 boundary; free-form delegated clarification remains Deferred under FR-052 |
+| ADR-008 | Structured technical attestation is supplemental only and cannot unlock classification | `SUPERSEDED_FOR_ACTIVE_MVP` |
 | ADR-009 | Deterministic orchestration and state-machine-controlled worker chaining | Accepted |
 | ADR-010 | GitHub App read-only repository evidence path | Accepted |
 | ADR-011..ADR-021 | Existing active technical/security/queue/evidence decisions | Retained unless explicitly superseded below |
-| ADR-022 | TypeScript-first non-scanner stack and prototype boundaries | Partially Superseded: scanner lifecycle portion replaced by ADR-023 |
-| ADR-023 | Python Worker owns Repository Scan; Poetry, `ast` + `libcst`, Node subprocess for TS/JS | Accepted — Superseding |
+| ADR-022 | TypeScript-first non-scanner stack and prototype boundaries | Superseded for downstream domain workers by Phase 5.2L |
+| ADR-023 | Python Worker owns Repository Scan; Poetry, `ast` + `libcst`, Node subprocess for TS/JS | Accepted — Superseded in part by expanded Phase 5.2L scanner toolchain |
 | ADR-024 | Real configured LLM provider mandatory for A-to-Z acceptance; mock test/offline only | Accepted — Superseding |
 | ADR-025 | Provenance-preserving official-source legal corpus with internal approval and immutable versioning | Accepted — Superseding |
 | ADR-026 | PostgreSQL `simple` + `unaccent` FTS and pgvector HNSW hybrid retrieval with fail-closed citations | Accepted |
@@ -64,10 +64,10 @@ The system uses deterministic orchestration, state machines, evidence gates, and
 The active decision is:
 
 ```text
-NestJS API handles synchronous HTTP, RBAC, job creation, and query surfaces.
-Python Worker solely owns Repository Scan lifecycle.
-Node.js worker runtime owns downstream TechnicalProfile, AIUsageFlow,
-Reconciliation, legal, classification, gap, and document jobs.
+NestJS API handles synchronous HTTP, PBAC enforcement boundary, job/trigger creation, and query surfaces.
+Python Worker Platform owns all asynchronous domain workloads.
+Python Scanner Worker owns Repository Scan lifecycle.
+Bounded Node.js CLI owns only TS/JS `ts-morph` analyzer adaptation invoked by Python Scanner Worker.
 ```
 
 Any older statement that the controlled MVP scanner worker is TypeScript-first is historical and superseded.
@@ -76,9 +76,8 @@ Any older statement that the controlled MVP scanner worker is TypeScript-first i
 
 - Manager is required and sufficient for the active MVP golden path.
 - Developer is optional and limited by task/policy.
-- Active Developer input is structured attestation under `FR-046`.
-- Attestation is stored separately, is auditable, and may support Manager review.
-- Attestation cannot replace scanner metadata, resolve conflict, approve VerifiedProfile, or unlock classification by itself.
+- Structured attestation under `FR-045/FR-046` is `SUPERSEDED_FOR_ACTIVE_MVP`.
+- Developer collaboration may remain only where it has independent product value.
 - Delegated free-form technical clarification under `FR-052` is Deferred and must not become an active UX route.
 
 ## Legal Operations UX Boundary
@@ -93,10 +92,27 @@ ADR-025 corpus source validation, review, approval, and index-build actions are 
 Python 3.11+
 Poetry / pyproject.toml
 ast + libcst
+Syft SBOM/dependency inventory
+Knip JS/TS dependency usage
+deptry Python dependency usage
+Semgrep custom AI rules
+tree-sitter/custom parser structural augmentation
 Python-native scan-local graph
 Node ts-morph subprocess with JSON stdio
 metadata-only PostgreSQL persistence
 cleanup-verified terminal event
+```
+
+### Authorization
+
+```text
+PBAC source of truth
+roles as subject attributes/templates only
+deny-by-default
+tenant-scoped
+server-side enforced
+versioned/auditable decisions
+engine/storage/cache/invalidation/topology/failure behavior: TECHNICAL_DECISION_REQUIRED
 ```
 
 ### LLM

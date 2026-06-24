@@ -11,7 +11,7 @@ This document recovers the active requirements baseline from existing active doc
 - Canonical active NFR namespace: `NFR-001...` from `docs/specs/non-functional-requirements.md`.
 - PRD `FR-E*` and `NFR-1..NFR-14` IDs are source aliases only. They are not active implementation requirement IDs after Phase 5.9 normalization.
 - Legacy IDs remain traceability aliases recovered from archived requirement catalogs.
-- Canonical FR inventory contains 56 total FRs: 53 active MVP FRs (`FR-001..FR-049`, `FR-053..FR-056`) and 3 deferred FRs (`FR-050..FR-052`).
+- Canonical FR inventory contains 56 total FRs. Phase 5.2L active MVP FRs are `FR-001..FR-044`, `FR-047..FR-050`, and `FR-053..FR-056`; `FR-045/FR-046` are `SUPERSEDED_FOR_ACTIVE_MVP`, `FR-051` is `REMOVED_FROM_PRODUCT`, and `FR-052` is `DEFERRED_POST_MVP`.
 - Canonical active NFR inventory contains 33 active NFRs: `NFR-001..NFR-030` and `NFR-033..NFR-035`.
 - `NFR-031` and `NFR-032` are legacy identifiers only, not active NFR catalog rows.
 - `PLATFORM_BASELINE` means the active normalized requirement belongs to the platform baseline even when no one-to-one PRD source alias exists.
@@ -80,8 +80,8 @@ The following `FR-E*` identifiers are retained only as PRD/source aliases. Activ
 
 | PRD Alias | Active Canonical Requirement | MVP Scope Status | Meaning |
 | --- | --- | --- | --- |
-| FR-E3-2 | FR-050 | DEFERRED / NOT_ACTIVE_MVP_MAIN_FLOW | Local/CI scanner report upload is preserved as a future evidence path and must not be implemented as the controlled MVP default. |
-| FR-E3-3 | FR-051 | DEFERRED / NOT_ACTIVE_MVP_MAIN_FLOW | Manual technical evidence JSON upload is preserved as a future structured evidence path and must not be implemented as the controlled MVP default. |
+| FR-E3-2 | FR-050 | SUPERSEDED_FOR_ACTIVE_MVP | Local/CI scanner report upload is superseded. `FR-050` now means Automatic Trusted Scan Initiation. |
+| FR-E3-3 | FR-051 | REMOVED_FROM_PRODUCT | Manual technical evidence JSON upload is removed from active scope, roadmap, future scope, UX, APIs, entities, stories and delivery plans. |
 
 The active controlled MVP technical-evidence path is GitHub App repository connection, snapshot creation and Repository Scan.
 
@@ -222,13 +222,13 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | FR-042 | Write audit events | FR-E8-1, FR-E8-2, FR-E8-3, FR-E8-4, FR-E8-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-043 | View and export audit trail | FR-E8-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-044 | Track artifact versions | FR-E8-2, FR-E8-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
-| FR-045 | Track attestation usage | FR-E7-4, FR-E8-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
-| FR-046 | Submit structured technical attestation | FR-E3-5, FR-E8-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-045 | Historical attestation usage | FR-E7-4, FR-E8-4 | SUPERSEDED_FOR_ACTIVE_MVP | `docs/specs/functional-requirements.md` |
+| FR-046 | Historical structured technical attestation | FR-E3-5, FR-E8-4 | SUPERSEDED_FOR_ACTIVE_MVP | `docs/specs/functional-requirements.md` |
 | FR-047 | Accept Developer task | FR-E1-2, FR-E1-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-048 | Review technical findings | FR-E3-1, FR-E4-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-049 | Re-run repository scan | FR-E3-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
-| FR-050 | Support deferred Local/CI scanner report upload | FR-E3-2 | DEFERRED | `docs/specs/functional-requirements.md` |
-| FR-051 | Support deferred manual evidence JSON upload | FR-E3-3 | DEFERRED | `docs/specs/functional-requirements.md` |
+| FR-050 | Automatic Trusted Scan Initiation | FR-E3-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-051 | Manual evidence JSON upload | FR-E3-3 | REMOVED_FROM_PRODUCT | `docs/specs/functional-requirements.md` |
 | FR-052 | Support deferred delegated technical clarification | FR-E5-3, FR-E5-5 | DEFERRED | `docs/specs/functional-requirements.md` |
 | FR-053 | Ingest legal sources | FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-054 | Legal corpus review gate | FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |

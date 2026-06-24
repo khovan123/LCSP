@@ -1,5 +1,14 @@
 # Phase 5.2K-A PRD and NFR Traceability Remediation Report
 
+## Phase 5.2L Supersession Notice
+
+```text
+HISTORICAL_ONLY
+SUPERSEDED_IN_PART_BY_PHASE_5_2L
+```
+
+This report remains historical evidence for Phase 5.2K-A. Phase 5.2L supersedes any active authority in this file that preserves old `FR-050`/`FR-051` semantics, structured attestation, RBAC as authorization source of truth, or Node.js downstream domain worker ownership.
+
 ## Status
 
 ```text

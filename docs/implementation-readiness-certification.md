@@ -2,17 +2,17 @@
 
 ## Purpose
 
-Record the current planning state after the A-to-Z MVP scope remediation and pre-UX active-document closure. This document does not authorize coding, sprint execution, deployment, or customer onboarding.
+Record the current planning state after the Phase 5.2L scope/runtime correction. This document does not authorize coding, sprint execution, deployment, or customer onboarding.
 
 ## Canonical Inventory
 
 | Artifact | State |
 |---|---|
 | Product scope | normalized |
-| Functional requirements | 56 total; 53 active; FR-050..FR-052 Deferred |
+| Functional requirements | 56 total; Phase 5.2L changed `FR-050` to active Automatic Trusted Scan Initiation, removed `FR-051`, deferred `FR-052`, and superseded `FR-045/FR-046` attestation |
 | Non-functional requirements | 33 active |
-| Acceptance criteria | 41 canonical rows |
-| Use cases | UC-001..UC-018 canonical |
+| Acceptance criteria | AC-001..AC-041 plus AC-050A..AC-050F |
+| Use cases | UC-001..UC-017 active; UC-018 superseded for active MVP |
 | Domain and implementation-area traceability | normalized |
 | Canonical UX | pending |
 | Canonical epics/stories | missing |
@@ -20,28 +20,31 @@ Record the current planning state after the A-to-Z MVP scope remediation and pre
 
 ## Active Decisions
 
-- Python Worker solely owns Repository Scan lifecycle.
-- Python uses Poetry, stdlib `ast`, and `libcst`.
+- PBAC is the authorization source of truth; RBAC/roles are attributes/templates only.
+- Python Worker Platform owns all asynchronous domain workloads.
+- Python Scanner Worker solely owns Repository Scan lifecycle.
+- Scanner uses Syft, Knip, deptry, Poetry, stdlib `ast`, `libcst`, Semgrep custom rules and tree-sitter/custom parser.
 - TS/JS analysis uses a fixed Node.js `ts-morph` subprocess with versioned JSON stdio.
 - Real configured LLM and embedding providers are required for integrated A-to-Z acceptance; mock mode is test/offline-only.
 - Legal corpus uses validated official-source snapshots, internal approval, immutable versions, and S3-compatible storage.
 - Retrieval uses PostgreSQL `simple` plus `unaccent` FTS and pgvector `vector(1536)` HNSW cosine search.
 - Internal corpus operations are API/CLI-only for MVP and outside Manager/Developer product UX.
 - Manager can complete the golden path without Developer participation.
-- Structured Developer attestation is optional supplemental input; delegated free-form clarification is Deferred.
+- Structured Developer attestation is `SUPERSEDED_FOR_ACTIVE_MVP`; delegated free-form clarification is Deferred/Post-MVP.
+- `FR-050` is Automatic Trusted Scan Initiation; `FR-051` manual evidence JSON is `REMOVED_FROM_PRODUCT`.
 
 ## Pre-UX Closure Assessment
 
 | Area | Status |
 |---|---|
-| Product scope and actors | READY_FOR_UX |
+| Product scope and actors | PHASE_5_2L_REMEDIATED_FOR_RECHECK |
 | Canonical use cases | READY_FOR_UX |
 | User task flows | READY_FOR_UX |
 | FR/NFR semantics | NORMALIZED |
 | Acceptance criteria | NORMALIZED |
 | Domain model | NORMALIZED |
-| Architecture and ADRs | NORMALIZED |
-| Scanner runtime documents | NORMALIZED |
+| Architecture and ADRs | PHASE_5_2L_REMEDIATED_FOR_RECHECK |
+| Scanner runtime documents | PHASE_5_2L_REMEDIATED_FOR_RECHECK |
 | Legal ingestion and retrieval documents | NORMALIZED |
 | Documentation indexes | NORMALIZED |
 | Canonical UX | PENDING |
@@ -62,7 +65,7 @@ Record the current planning state after the A-to-Z MVP scope remediation and pre
 ## Result
 
 ```text
-ACTIVE_DOCS_PRE_UX_SYNCHRONIZED
+PHASE_5_2L_ACTIVE_DOCS_SYNCHRONIZED
 CANONICAL_UX_AUTHORIZED
 CANONICAL_UX_PENDING
 STORY_TRACEABILITY_PENDING

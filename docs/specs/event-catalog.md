@@ -11,26 +11,30 @@ Canonical command and event names for the A-to-Z runnable MVP.
 - Payloads contain IDs, versions, statuses, hashes, and metadata references only.
 - Every message includes message ID, schema version, correlation ID, causation ID, aggregate reference, timestamp, and idempotency key.
 - Exhausted messages route to the matching DLQ.
+- PBAC decisions are audited with actor/service identity, organization, resource, action, policy ID/version, decision, safe context refs and correlation ID.
+- Structured attestation events are `SUPERSEDED_FOR_ACTIVE_MVP` and must not appear in active command/event choreography.
 
 ## Commands and Queues
 
 | Command | Queue | Producer | Consumer |
 |---|---|---|---|
+| `command.scan-trigger.resolve-context.v1` | `lcsp.scan-trigger-worker.v1` | Backend API / webhook handler / scheduler outbox | Python Scan Trigger Worker |
 | `command.scan.requested.v1` | `lcsp.scan-worker.v1` | Backend API outbox | Python Scanner Worker |
-| `command.technical-profile.requested.v1` | `lcsp.technical-profile-worker.v1` | scan projection | Technical Profile Worker |
-| `command.ai-usage-flow.requested.v1` | `lcsp.ai-usage-flow-worker.v1` | profile projection | AI Usage Flow Worker |
-| `command.reconciliation.requested.v1` | `lcsp.reconciliation-worker.v1` | flow/resolution projection | Reconciliation Worker |
-| `command.legal-source.ingest.requested.v1` | `lcsp.legal-source-ingest.v1` | Internal Legal Operations API | Legal Ingestion Worker |
-| `command.embedding-build.requested.v1` | `lcsp.embedding-build.v1` | corpus approval outbox | Embedding Index Worker |
-| `command.legal-matching.requested.v1` | `lcsp.legal-matching-worker.v1` | verified-profile projection | Legal Matching Worker |
-| `command.classification.requested.v1` | `lcsp.classification-worker.v1` | legal-matching projection | Classification Worker |
-| `command.gap-analysis.requested.v1` | `lcsp.gap-analysis-worker.v1` | classification projection | Gap Analysis Worker |
-| `command.document.requested.v1` | `lcsp.document-worker.v1` | gap/document request projection | Document Worker |
+| `command.technical-profile.requested.v1` | `lcsp.technical-profile-worker.v1` | scan projection | Python Technical Profile Worker |
+| `command.ai-usage-flow.requested.v1` | `lcsp.ai-usage-flow-worker.v1` | profile projection | Python AI Usage Flow Worker |
+| `command.reconciliation.requested.v1` | `lcsp.reconciliation-worker.v1` | flow/resolution projection | Python Reconciliation Worker |
+| `command.legal-source.ingest.requested.v1` | `lcsp.legal-source-ingest.v1` | Internal Legal Operations API | Python Legal Ingestion Worker |
+| `command.embedding-build.requested.v1` | `lcsp.embedding-build.v1` | corpus approval outbox | Python Corpus Index Worker |
+| `command.legal-matching.requested.v1` | `lcsp.legal-matching-worker.v1` | verified-profile projection | Python Legal Matching Worker |
+| `command.classification.requested.v1` | `lcsp.classification-worker.v1` | legal-matching projection | Python Classification Worker |
+| `command.gap-analysis.requested.v1` | `lcsp.gap-analysis-worker.v1` | classification projection | Python Gap Analysis Worker |
+| `command.document.requested.v1` | `lcsp.document-worker.v1` | gap/document request projection | Python Document Worker |
 
 ## Completion and Failure Events
 
 | Domain | Success/Fact Event | Failure/Blocked Event |
 |---|---|---|
+| Scan Trigger | `event.scan-trigger.ready.v1` | `event.scan-trigger.pending-mapping.v1`, `event.scan-trigger.blocked-mapping.v1`, `event.scan-trigger.waiting-for-context.v1`, `event.scan-trigger.rejected.v1` |
 | Scan | `event.scan.completed.v1` | `event.scan.failed.v1` |
 | Technical Profile | `event.technical-profile.completed.v1` | `event.technical-profile.failed.v1` |
 | AI Usage Flow | `event.ai-usage-flow.completed.v1` | `event.ai-usage-flow.failed.v1` |
@@ -47,6 +51,7 @@ Canonical command and event names for the A-to-Z runnable MVP.
 | Event | Required Guard |
 |---|---|
 | `event.scan.completed.v1` | quality-valid report persisted, ScanJob completed, workspace cleanup verified |
+| `event.scan-trigger.ready.v1` | trusted source verified, PBAC allowed, unique tenant/repository/assessment/branch/commit mapping exists |
 | `event.reconciliation.verified-profile-ready.v1` | no unresolved material conflict |
 | `event.legal-source.ingest.completed.v1` | source validated, snapshot/hash persisted, document staged in DRAFT corpus |
 | `event.embedding-build.completed.v1` | corpus approved and FTS/vector metadata verified |
@@ -68,8 +73,13 @@ Canonical command and event names for the A-to-Z runnable MVP.
 - `RECONCILIATION_CONFLICT_DETECTED`
 - `RECONCILIATION_RESOLVED`
 - `VERIFIED_PROFILE_CREATED`
-- `STRUCTURED_ATTESTATION_SUBMITTED`
-- `STRUCTURED_ATTESTATION_REJECTED`
+- `SCAN_TRIGGER_RECEIVED`
+- `SCAN_TRIGGER_READY`
+- `SCAN_TRIGGER_PENDING_MAPPING`
+- `SCAN_TRIGGER_BLOCKED_MAPPING`
+- `SCAN_TRIGGER_WAITING_FOR_CONTEXT`
+- `SCAN_TRIGGER_REJECTED`
+- `PBAC_DECISION_RECORDED`
 - `LEGAL_SOURCE_VALIDATED`
 - `LEGAL_SOURCE_INGESTED`
 - `LEGAL_SOURCE_INGEST_FAILED`
@@ -91,6 +101,16 @@ Canonical command and event names for the A-to-Z runnable MVP.
 Internal Legal Operator produces source-validation and corpus approval/rejection/supersession events through internal API/CLI. These are not Manager/Developer customer tasks.
 
 ## Orchestration
+
+```text
+command.scan-trigger.resolve-context.v1
+-> event.scan-trigger.ready.v1
+or event.scan-trigger.pending-mapping.v1
+or event.scan-trigger.blocked-mapping.v1
+or event.scan-trigger.waiting-for-context.v1
+or event.scan-trigger.rejected.v1
+-> command.scan.requested.v1 when ready
+```
 
 ```text
 event.scan.completed.v1
@@ -129,5 +149,8 @@ command.legal-source.ingest.requested.v1
 ```text
 CANONICAL_EVENT_NAMES_NORMALIZED
 PYTHON_SCANNER_EVENT_OWNERSHIP_ALIGNED
+PYTHON_WORKER_PLATFORM_EVENT_OWNERSHIP_ALIGNED
+STRUCTURED_ATTESTATION_EVENTS_SUPERSEDED_FOR_ACTIVE_MVP
+AUTOMATIC_TRUSTED_SCAN_TRIGGER_EVENTS_ADDED
 INTERNAL_LEGAL_OPERATOR_EVENT_BOUNDARY_LOCKED
 ```

@@ -12,7 +12,7 @@ CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
 
-This plan becomes executable only after UX, canonical epics/stories, story traceability, and a successful implementation-readiness reassessment.
+This plan becomes executable only after Phase 5.2L documentation remediation, UX, canonical epics/stories, story traceability, and a successful implementation-readiness reassessment.
 
 ## Delivery Principles
 
@@ -27,12 +27,12 @@ This plan becomes executable only after UX, canonical epics/stories, story trace
 
 | Team | Ownership |
 |---|---|
-| Platform | auth, organization, RBAC, audit, PostgreSQL/Prisma, RabbitMQ/outbox, environment/secret/provider configuration |
+| Platform | auth, organization, PBAC, audit, PostgreSQL/Prisma, RabbitMQ/outbox, environment/secret/provider configuration |
 | Assessment | assessment lifecycle, WizardProfile, Manager workspace, repository connection/snapshot API |
-| Scanner | Python Worker, Python analysis, TS/JS subprocess, evidence graph/report, workspace security |
-| Intelligence | TechnicalProfile, AIUsageFlow, reconciliation, VerifiedProfile |
-| Legal | source ingestion, internal corpus approval, embedding/FTS index, hybrid retrieval, LegalRuleMatch, classification guardrails |
-| Reporting | gap analysis, document generation, object storage, artifact status/download |
+| Scanner | Python Scanner Worker, Syft, Knip, deptry, Python analysis, TS/JS subprocess, Semgrep, tree-sitter/custom parser, evidence graph/report, workspace security |
+| Intelligence | Python TechnicalProfile, AIUsageFlow, reconciliation, VerifiedProfile workers |
+| Legal | Python source ingestion, internal corpus approval, embedding/FTS index, hybrid retrieval, LegalRuleMatch, classification guardrails |
+| Reporting | Python gap analysis, document generation, object storage, artifact status/download |
 | UX/QA | canonical UX, accessibility/status language, happy/negative path verification |
 
 ## Build Waves
@@ -45,12 +45,14 @@ Exit:
 
 - `CANONICAL_UX_COMPLETE`;
 - canonical epics/stories cover active `FR-001..FR-049`, `FR-053..FR-056`;
-- deferred `FR-050..FR-052` excluded from active stories;
+- `FR-050` represented as Automatic Trusted Scan Initiation;
+- `FR-051` removed from product scope;
+- `FR-052` excluded from active stories;
 - readiness status is READY or CONDITIONAL_READY with explicit owner decisions.
 
 ### Wave 1 — Foundations
 
-Includes PostgreSQL/Prisma/pgvector/unaccent, RabbitMQ, outbox, audit, RBAC, configuration, and secret references.
+Includes PostgreSQL/Prisma/pgvector/unaccent, RabbitMQ, outbox, audit, PBAC, configuration, and secret references.
 
 Exit:
 
@@ -58,7 +60,7 @@ Exit:
 - outbox publish/retry works;
 - AuditEvent records state changes without secrets;
 - Manager/Developer guards deny unauthorized actions;
-- API and Node worker start;
+- API and Python Worker Platform service identities/startup contracts are defined;
 - Python Worker environment can connect to DB/broker;
 - provider credentials are referenced, not stored in source/logs.
 
@@ -75,7 +77,7 @@ Exit:
 
 ### Wave 3 — Python Worker and Scanner
 
-Includes standalone Python Worker, `ast` + `libcst`, Python-native graph, Node `ts-morph` subprocess, restricted workspace, evidence/report gates, and scan events.
+Includes Python Scanner Worker, Syft, Knip, deptry, `ast` + `libcst`, Python-native graph, Node `ts-morph` subprocess, tree-sitter/custom parser, Semgrep custom rules, restricted workspace, evidence/report gates, and scan events.
 
 Exit:
 
@@ -87,16 +89,16 @@ Exit:
 - fatal/privacy/cleanup failures block downstream;
 - `NFR-012..NFR-016`, `NFR-023`, `NFR-026`, `NFR-035` scanner checks pass.
 
-### Wave 4 — Intelligence and Reconciliation
+### Wave 4 — Python Intelligence and Reconciliation
 
-Includes TechnicalProfile, AIUsageFlow, conflict detection/scoring, Manager resolution, optional structured attestation, and VerifiedProfile.
+Includes Python TechnicalProfile, AIUsageFlow, conflict detection/scoring, Manager resolution, and VerifiedProfile.
 
 Exit:
 
 - claims carry evidence refs/confidence/uncertainty;
 - provider-only evidence abstains;
 - unresolved conflict blocks classification;
-- attestation is supplemental and cannot unlock classification;
+- structured attestation is absent from active MVP;
 - Manager completes without Developer;
 - previous evidence remains immutable.
 
@@ -179,7 +181,7 @@ Legal Source Ingestion
 
 ## Dependency Constraints
 
-- Outbox, audit, RBAC, and state guards precede worker chaining.
+- Outbox, audit, PBAC, and state guards precede worker chaining.
 - RepositorySnapshot precedes ScanJob.
 - Quality-valid report plus cleanup verification precedes TechnicalProfile.
 - Reconciliation/VerifiedProfile precedes Legal Matching.
@@ -199,7 +201,7 @@ These are build-order candidates, not stories or sprint tickets.
 | TASK-002 | Config/secret loader and provider refs | none | Platform |
 | TASK-003 | AuditEvent writer | TASK-001 | Platform |
 | TASK-004 | Outbox writer/publisher/retry/DLQ | TASK-001 | Platform |
-| TASK-005 | Manager/Developer RBAC | TASK-001 | Platform |
+| TASK-005 | PBAC policy model/evaluator integration | TASK-001 | Platform |
 | TASK-006 | Auth/session/OAuth/MFA baseline | TASK-002, TASK-005 | Platform |
 | TASK-007 | Organization and assessment APIs | TASK-001, TASK-005 | Assessment |
 | TASK-008 | WizardProfile/readiness APIs | TASK-007 | Assessment |
@@ -207,22 +209,22 @@ These are build-order candidates, not stories or sprint tickets.
 | TASK-010 | Scan request/status API | TASK-004, TASK-009 | Scanner |
 | TASK-011 | Python Worker bootstrap/queue/idempotency | TASK-001, TASK-004 | Scanner |
 | TASK-012 | Workspace/snapshot/cleanup security | TASK-011 | Scanner |
-| TASK-013 | Python AST/CST and import analysis | TASK-011 | Scanner |
+| TASK-013 | Scanner toolchain: Syft/Knip/deptry/Semgrep/tree-sitter plus Python AST/CST | TASK-011 | Scanner |
 | TASK-014 | TS/JS subprocess analyzer/protocol | TASK-011 | Scanner |
-| TASK-015 | Graph/findings/report/gates | TASK-012..TASK-014 | Scanner |
-| TASK-016 | TechnicalProfile worker | TASK-015 | Intelligence |
-| TASK-017 | AIUsageFlow worker | TASK-016 | Intelligence |
-| TASK-018 | Reconciliation/conflict/VerifiedProfile | TASK-017 | Intelligence |
-| TASK-019 | Developer task/structured attestation | TASK-005, TASK-018 | Assessment/Intelligence |
-| TASK-020 | Legal source validation/ingestion | TASK-001, object storage | Legal |
+| TASK-015 | Dependency facts/graph/findings/report/gates | TASK-012..TASK-014 | Scanner |
+| TASK-016 | Python TechnicalProfile worker | TASK-015 | Intelligence |
+| TASK-017 | Python AIUsageFlow worker | TASK-016 | Intelligence |
+| TASK-018 | Python Reconciliation/conflict/VerifiedProfile | TASK-017 | Intelligence |
+| TASK-019 | Optional Developer scoped task without attestation | TASK-005, TASK-018 | Assessment/Intelligence |
+| TASK-020 | Python legal source validation/ingestion | TASK-001, object storage | Legal |
 | TASK-021 | Internal corpus review/approval | TASK-020 | Legal |
-| TASK-022 | Vietnamese FTS and embedding index build | TASK-021, provider config | Legal |
+| TASK-022 | Python Vietnamese FTS and embedding index build | TASK-021, provider config | Legal |
 | TASK-023 | Hybrid retriever/retrieval audit | TASK-022 | Legal |
-| TASK-024 | Legal Matching worker | TASK-018, TASK-023 | Legal |
+| TASK-024 | Python Legal Matching worker | TASK-018, TASK-023 | Legal |
 | TASK-025 | Real LLM Gateway | TASK-002 | Platform |
-| TASK-026 | Risk Classification worker | TASK-024, TASK-025 | Legal |
-| TASK-027 | Gap Analysis worker | TASK-026 | Reporting |
-| TASK-028 | Document generation/S3/status/download | TASK-025..TASK-027 | Reporting |
+| TASK-026 | Python Risk Classification worker | TASK-024, TASK-025 | Legal |
+| TASK-027 | Python Gap Analysis worker | TASK-026 | Reporting |
+| TASK-028 | Python Document generation/S3/status/download | TASK-025..TASK-027 | Reporting |
 | TASK-029 | Audit query/export | TASK-003 | Platform |
 | TASK-030 | Manager web happy path | canonical UX/stories + relevant APIs | UX/Assessment |
 | TASK-031 | Optional Developer web path | canonical UX/stories + TASK-019 | UX/Assessment |

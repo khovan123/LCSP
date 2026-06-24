@@ -2,18 +2,19 @@
 
 ## Purpose
 
-Summarize canonical requirement and planning traceability after Phase 5.2K pre-UX active-document closure. This document does not certify implementation readiness or story coverage.
+Summarize canonical requirement and planning traceability after Phase 5.2L active-document correction. This document does not certify implementation readiness or story coverage.
 
 ## Canonical Inventory
 
 | Item | Count / Status |
 |---|---|
 | Canonical FR total | 56 |
-| Active MVP FR total | 53 (`FR-001..FR-049`, `FR-053..FR-056`) |
-| Deferred FR total | 3 (`FR-050..FR-052`) |
+| Active MVP FR total | Phase 5.2L active set includes `FR-050` Automatic Trusted Scan Initiation and excludes superseded/removed attestation/manual JSON requirements |
+| Removed / superseded FRs | `FR-045`, `FR-046` structured attestation superseded; `FR-051` removed |
+| Deferred FR total | `FR-052` delegated clarification remains deferred |
 | Active NFR total | 33 (`NFR-001..NFR-030`, `NFR-033..NFR-035`) |
-| AC total | 41 |
-| Canonical use cases | `UC-001..UC-018` |
+| AC total | `AC-001..AC-041` plus `AC-050A..AC-050F` |
+| Canonical use cases | `UC-001..UC-017`; `UC-018` structured attestation superseded |
 | Canonical UX | authorized and pending creation |
 | Canonical epics/stories | missing |
 | Story traceability | pending / not assessable |
@@ -22,26 +23,30 @@ Summarize canonical requirement and planning traceability after Phase 5.2K pre-U
 
 ## Active Scope
 
+- PBAC is the authorization source of truth; roles are attributes/templates only.
 - GitHub App read-only Repository Scan is the golden technical-evidence path.
-- Python Worker owns Repository Scan lifecycle.
-- Python analysis is first-class and bounded; TS/JS uses a Node subprocess.
+- `FR-050` automatically creates or resumes scan workflows from trusted integration context.
+- Python Worker Platform owns all asynchronous domain workloads.
+- Scanner analysis uses Syft, Knip, deptry, Python `ast`/`libcst`, Semgrep custom rules, tree-sitter/custom parser, and bounded `ts-morph`.
 - Real LLM and embedding providers are required for A-to-Z acceptance.
 - Legal corpus uses validated official-source snapshots, internal approval, immutable versioning, and hybrid FTS/pgvector retrieval.
 - Manager can complete the golden path without Developer participation.
-- Structured attestation is optional supplemental input under `FR-046`.
-- Local/CI upload (`FR-050`), manual evidence JSON (`FR-051`), and delegated free-form clarification (`FR-052`) are Deferred.
+- Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP`.
+- Local/CI scanner report upload is superseded by `FR-050`.
+- Manual evidence JSON (`FR-051`) is `REMOVED_FROM_PRODUCT`.
+- Delegated free-form clarification (`FR-052`) is Deferred/Post-MVP.
 
 ## UX Boundary
 
 `bmad-ux` is authorized to design:
 
 - Manager authentication, organization, assessment, Wizard, repository, scan, evidence, reconciliation, classification, gap, document, and audit experiences;
-- optional Developer invitation/task, redacted findings, and structured attestation experiences;
+- optional Developer invitation/task and redacted findings experiences without structured attestation;
 - all loading, empty, permission-denied, insufficient, blocked, failed, retry, rerun, degraded, and audit-reference states.
 
 It must not design active customer-facing flows for:
 
-- `FR-050..FR-052`;
+- manual scanner report upload, `FR-051`, `FR-052`, and structured attestation;
 - corpus source ingestion, review, approval, or index administration;
 - production administration outside active MVP scope.
 
@@ -61,12 +66,16 @@ Every story must trace to canonical UC, FR, AC, relevant NFRs, UX flow/state, do
 ## Status
 
 ```text
-ACTIVE_DOCS_PRE_UX_SYNCHRONIZED
+PHASE_5_2L_ACTIVE_DOCS_SYNCHRONIZED
 CANONICAL_USE_CASES_NORMALIZED
 CANONICAL_ACCEPTANCE_CRITERIA_NORMALIZED
 LEGAL_CORPUS_UX_BOUNDARY_LOCKED
 PYTHON_WORKER_CODE_MAPS_ALIGNED
 SCANNER_RUNTIME_BLUEPRINT_ALIGNED
+PBAC_AUTHORIZATION_MODEL_ALIGNED
+FR_050_AUTOMATIC_TRUSTED_SCAN_INITIATION_TRACED
+FR_051_REMOVED_FROM_PRODUCT
+STRUCTURED_ATTESTATION_SUPERSEDED_FOR_ACTIVE_MVP
 CANONICAL_UX_AUTHORIZED
 CANONICAL_UX_PENDING
 STORY_TRACEABILITY_PENDING

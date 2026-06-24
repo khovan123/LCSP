@@ -14,9 +14,14 @@ command.scan.requested.v1
 
 - Python 3.11+.
 - Poetry và `pyproject.toml`.
+- Syft cho SBOM/dependency inventory.
+- Knip cho JS/TS dependency usage.
+- deptry cho Python dependency usage.
 - stdlib `ast` + `libcst` cho Python.
 - Python-native scan-local graph.
 - Node.js `ts-morph` CLI subprocess cho TypeScript/JavaScript.
+- tree-sitter/custom parser cho structural augmentation.
+- Semgrep custom rules cho AI pattern detection.
 - PostgreSQL metadata-only persistence.
 - Ephemeral restricted workspace và cleanup verification.
 
@@ -29,9 +34,14 @@ lock ScanJob
 -> tạo workspace
 -> materialize commit snapshot
 -> inventory và giới hạn file
+-> Syft SBOM/dependency inventory
+-> Knip và deptry dependency usage analysis
 -> Python AST/CST analysis
 -> TS/JS subprocess analysis
+-> tree-sitter/custom parser structural augmentation
+-> Semgrep custom AI rules
 -> normalized facts và graph
+-> normalized dependency facts
 -> EvidenceReference + TechnicalFinding
 -> TechnicalEvidenceReport
 -> schema/privacy/quality gates
@@ -60,6 +70,18 @@ Python Worker gọi executable cố định bằng `asyncio.create_subprocess_ex
 
 Lỗi subprocess tạo `TS_JS_ANALYZER_FAILED` và coverage limitation cho file liên quan.
 
+## Dependency và SBOM facts
+
+Scanner normalize output thành:
+
+- `PackageDependency`;
+- `SBOMComponent`;
+- `DependencyUsageFact`.
+
+Trạng thái dependency phải phân biệt declared, discovered, used/reachable, unused, missing, transitive và uncertain.
+
+Không tool result nào được tự biến thành legal truth, classification truth, proof of active AI use hoặc proof of automated decision-making.
+
 ## Bằng chứng và finding
 
 Finding chuẩn bao gồm type, path, symbol, line range, evidence refs, evidence hash, confidence, version và metadata đã làm sạch.
@@ -86,8 +108,10 @@ Chỉ import package không đủ để xác nhận model invocation.
 - Chỉ checkout commit đã chọn.
 - Không chạy build, test, Docker, CI, script hoặc source code của khách hàng.
 - Có giới hạn số file, kích thước, độ sâu và timeout.
+- Có giới hạn CPU, memory, time và output cho từng tool.
 - Hạn chế network sau khi lấy snapshot.
 - Không lưu raw source, full AST, secret hoặc full prompt.
+- Tool version, config hash, ruleset version và provenance phải được ghi lại.
 - Cleanup phải chạy ở cả success và terminal failure.
 - Cleanup thất bại tạo `SCANNER_WORKSPACE_CLEANUP_FAILED` và chặn downstream.
 

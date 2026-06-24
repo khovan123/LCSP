@@ -7,6 +7,7 @@ Active BUILD layer for the A-to-Z runnable MVP. These documents describe how the
 ## Current Authority Boundary
 
 ```text
+PHASE_5_2L_ACTIVE_DOCS_SYNCHRONIZED
 CANONICAL_UX_PENDING
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
@@ -18,11 +19,11 @@ Implementation documents are build specifications, not evidence that application
 
 | File | Purpose |
 |---|---|
-| `backend-implementation.md` | NestJS API, auth, RBAC, GitHub App, orchestration, audit, and local backend behavior |
+| `backend-implementation.md` | NestJS API, auth, PBAC, GitHub App, automatic trusted scan initiation, orchestration, audit, and local backend behavior |
 | `persistence-implementation.md` | PostgreSQL/Prisma/pgvector models, object metadata, retention, and migration order |
 | `queue-implementation.md` | RabbitMQ topology, outbox, retry, idempotency, and worker choreography |
 | `scanner-implementation.md` | Cross-runtime scanner build boundary and package structure |
-| `python-worker-implementation.md` | Standalone Python Worker process, AST/CST stack, scan lifecycle, and TS/JS subprocess integration |
+| `python-worker-implementation.md` | Python Worker Platform, scanner toolchain, scan lifecycle, and TS/JS subprocess integration |
 | `legal-corpus-ingestion-implementation.md` | Official-source ingestion, snapshot/hash provenance, normalization, and approval handoff |
 | `hybrid-retriever-implementation.md` | Vietnamese FTS + pgvector indexing, hybrid ranking, filters, citation reconstruction, privacy, and retrieval audit |
 | `llm-gateway-implementation.md` | Real provider boundary, privacy, schema validation, retries, budget controls, and model-run metadata |
@@ -60,7 +61,8 @@ Implementation documents are build specifications, not evidence that application
 ## Locked MVP Runtime Decisions
 
 - Python Worker is the sole Repository Scan lifecycle owner.
-- Python uses `ast` + `libcst` and Poetry.
+- Python Worker Platform owns all asynchronous domain workloads.
+- Scanner uses Syft, Knip, deptry, `ast` + `libcst`, Semgrep custom rules, tree-sitter/custom parser and Poetry.
 - TS/JS analysis uses a fixed Node subprocess with JSON stdio.
 - Real configured LLM and embedding providers are mandatory for A-to-Z acceptance.
 - Mock LLM is tests/offline development only.

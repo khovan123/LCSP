@@ -1,5 +1,14 @@
 # Phase 5.2K-B — Pre-UX Active Document Closure Report
 
+## Phase 5.2L Supersession Notice
+
+```text
+HISTORICAL_ONLY
+SUPERSEDED_IN_PART_BY_PHASE_5_2L
+```
+
+This report remains historical evidence for Phase 5.2K. Phase 5.2L supersedes any active authority in this file that preserves RBAC as authorization source of truth, structured attestation, old `FR-050`/`FR-051` semantics, or Node.js downstream domain worker ownership.
+
 ## Status
 
 ```text

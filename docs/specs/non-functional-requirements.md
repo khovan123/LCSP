@@ -2,7 +2,14 @@
 
 ## Purpose
 
-This document is the canonical active non-functional requirements catalog for LCSP. It normalizes active and recovered legacy NFRs into a single `NFR-001` sequence and removes unresolved auth/account/security gaps by classifying them as platform baseline requirements.
+This document is the canonical active non-functional requirements catalog for LCSP after Phase 5.2L. It normalizes active and recovered legacy NFRs into a single `NFR-001` sequence and removes unresolved auth/account/security gaps by classifying them as platform baseline requirements.
+
+Phase 5.2L authorization rule:
+
+- PBAC is the authorization source of truth.
+- Roles may remain only as subject attributes, grouping labels, or policy templates.
+- Roles/RBAC must not be the final authorization authority.
+- Every authorization decision must be tenant-scoped, deny-by-default, server-side enforced, versioned, auditable, and traceable to policy ID/version plus correlation ID.
 
 ## NFR Catalog
 
@@ -24,23 +31,23 @@ Do not renumber active NFRs in this remediation.
 | NFR-005 | Security | OAuth/OIDC callback handling must validate redirect URI, state, nonce, issuer, audience, expiry and safe account linking. | Invalid callback or unsafe linking rejected and audited. | OAuth contract tests. | Identity, Authentication | Must |
 | NFR-006 | Security | OAuth/OIDC login must remain separate from GitHub App repository authorization. | OAuth login creates no RepositoryConnection and grants no scan permission. | Integration tests. | Identity, Repository | Must |
 | NFR-007 | Security | GitHub App access must be read-only and limited to selected repositories for MVP. | Repository token scope and selected repository metadata recorded. | Configuration review and integration test. | Repository | Must |
-| NFR-008 | Security | UI/API must enforce Manager and Developer permissions. | Developer cannot perform Manager-only actions. | RBAC tests. | Administration, Assessment, Reconciliation, Document | Must |
-| NFR-009 | Security | Developer access must be scoped to assigned tasks/policies and revocable. | Revoked policy blocks new delegated actions. | Authorization tests. | Administration, Repository, Scanner | Must |
-| NFR-010 | Auditability | Material workflow, auth, delegation, evidence, conflict, classification and document events must be audited. | AuditEvent exists with actor/action/object/time/outcome and no secrets. | Audit integration tests. | All domains | Must |
+| NFR-008 | Security | PBAC must enforce organization-scoped authorization for customer APIs, internal APIs, worker identities, repository access, scan triggers, assessment transitions, legal operations, document downloads, audit exports and administrative operations. | Unauthorized subject/service/action/context is denied by policy evaluation and audited with policy ID/version. | PBAC authorization and contract tests. | Administration, Assessment, Repository, Scanner, Workers, Legal, Document, Audit | Must |
+| NFR-009 | Security | Developer access must be scoped to assigned PBAC policy scope and revocable. | Revoked policy blocks new delegated actions. | PBAC policy tests. | Administration, Repository, Scanner | Must |
+| NFR-010 | Auditability | Material workflow, auth, PBAC decisions, delegation, evidence, scan trigger, conflict, classification and document events must be audited. | AuditEvent exists with actor/service, organization, resource, action, policy ID/version where applicable, decision/outcome, safe refs, correlation ID and no secrets. | Audit integration tests. | All domains | Must |
 | NFR-011 | Auditability | Audit trail must be append-oriented with controlled correction model. | Existing material audit record is not silently edited/deleted. | Repository/service tests. | Audit | Must |
 | NFR-012 | Privacy | Raw source code must never be sent to an LLM provider. | LLM input contains only normalized evidence/legal context. | Guardrail tests and prompt payload inspection. | Scanner, AIUsageFlow, Classification, Document | Must |
 | NFR-013 | Privacy | Raw source code must not be stored long term in persistent stores. | DB/object storage contains metadata, refs and hashes only. | Persistence tests and storage inspection. | Scanner, Persistence | Must |
 | NFR-014 | Privacy | Technical findings must avoid unnecessary source/code exposure. | UI/API returns redacted findings and evidence refs only. | API/UI verification. | Scanner, Technical Profile | Must |
 | NFR-015 | Privacy | Secrets must be redacted before logs, findings, reports, prompts or audit records. | No secret value in persisted artifacts/logs. | Secret fixture tests. | Scanner, Audit, Document | Must |
-| NFR-016 | Traceability | Accepted evidence reports must include provenance, version and integrity hash metadata. | TechnicalEvidenceReport cannot become ready without report hash/version/provenance. | Scanner/evidence tests. | Scanner, Technical Profile, Audit | Must |
+| NFR-016 | Traceability | Accepted evidence reports and scanner tool outputs must include provenance, version, config/ruleset hash and integrity metadata. | TechnicalEvidenceReport cannot become ready without report hash, scanner/tool versions, ruleset/config hashes, and provenance. | Scanner/evidence tests. | Scanner, Technical Profile, Audit | Must |
 | NFR-017 | Traceability | Legal classification outputs must trace to legal rule, citation and corpus version. | 100% critical conclusions include rule/citation/version refs. | Legal matching/classification contract tests. | Legal Matching, Classification | Must |
 | NFR-018 | Compliance Support | System must fail closed for missing critical evidence, unresolved conflict, unknown critical usage or missing legal citation. | Classification/report blocked or degraded with reason. | State-machine and worker tests. | AIUsageFlow, Reconciliation, Legal Matching, Classification, Document | Must |
 | NFR-019 | Compliance Support | Classification must use evidence-backed VerifiedProfile and LegalRuleMatch, not provider/model/framework presence alone. | Provider-only fixture never yields final risk classification. | Rule tests. | AIUsageFlow, Legal Matching, Classification | Must |
 | NFR-020 | Compliance Support | Generated reports must not overclaim evidence, legal certainty, validation, certification or production readiness. | Final report blocked/degraded when prerequisites fail; no compliance certification wording. | Document generation tests/review. | Document Generation | Must |
 | NFR-021 | Reliability | Long-running scan, legal matching, classification and document work must not depend on web request lifecycle. | Job status and failure reason persist after request completion. | Queue/job tests. | Scanner, Legal Matching, Classification, Document | Must |
 | NFR-022 | Availability | User-facing workflow must expose blocked/failed states with actionable next step. | Blocked state includes reason and next action. | UI/API verification. | Assessment, Evidence, Classification, Document | Should |
-| NFR-023 | Performance | MVP scan and worker operations must be bounded by file-size, timeout and retry policies. | Oversized/unsupported inputs produce coverage limitations or failed job reason. | Scanner fixture tests. | Scanner | Should |
-| NFR-024 | Scalability | API runtime and worker workloads must remain separable. | Scan/classification/document work executed asynchronously. | Architecture/code review and worker tests. | Backend, Workers | Should |
+| NFR-023 | Performance | MVP scan and worker operations must be bounded by file-size, timeout, CPU, memory, output and retry policies. | Oversized/unsupported inputs produce coverage limitations or failed job reason according to severity table. | Scanner fixture tests. | Scanner | Should |
+| NFR-024 | Scalability | API runtime and Python Worker Platform workloads must remain separable. | Scan/profile/AIUsageFlow/reconciliation/legal/classification/gap/document/export work executes asynchronously in bounded Python consumers/modules. | Architecture/code review and worker tests. | Backend, Python Workers | Should |
 | NFR-025 | Maintainability | Domain modules must have clear ownership of DTOs, tables, queues and state transitions. | Code map/implementation docs remain aligned with requirements. | Documentation and code review. | All domains | Should |
 | NFR-026 | Observability | Evidence gate, queue, worker, classification and document failures must be visible with correlation ID. | Logs/audit events carry correlation ID and redacted failure code. | Observability tests/log inspection. | All workers | Must |
 | NFR-027 | Accessibility | Web forms, status messages and document review screens should meet common accessibility expectations. | Keyboard navigation, labels and status messages verified. | UI accessibility checks. | Web UI | Should |
@@ -49,7 +56,7 @@ Do not renumber active NFRs in this remediation.
 | NFR-030 | Reliability | Re-runs must preserve historical evidence/profile/classification chain rather than mutating prior records. | New run creates new versioned objects; prior chain remains traceable. | Persistence and audit tests. | Scanner, Technical Profile, AIUsageFlow, Legal Matching | Must |
 | NFR-033 | Security/Control | LLM and embedding API calls must be protected by monthly cost budget boundaries and token usage caps. | Token usage per workflow run logged; monthly budget cap enforced. | API/gateway configuration review. | LLM Gateway | Must |
 | NFR-034 | Compliance Support | Pinned legal corpus snapshots (`LegalCorpusVersion`) must remain immutable, with updates governed by a formal review and approval process. | Approved corpus versions only are usable for classification. | Integration and retriever test suite. | Legal Matching, Classification | Must |
-| NFR-035 | Security | Standalone Python Worker process must operate in an isolated sandbox with the same directory restriction and ephemeral workspace cleanup guarantees as TS worker. | Ephemeral workspace deleted immediately after scan; cleanup failure blocks downstream. | Workspace lifecycle integration tests. | Scanner | Must |
+| NFR-035 | Security | Python Scanner Worker must operate in a restricted scanner workspace with pinned scanner tools, bounded resources, no repository dependency installation, no customer application execution, validated/redacted tool output and verified cleanup. | Ephemeral workspace deleted immediately after scan; cleanup failure blocks downstream; tool version/config/ruleset provenance is recorded. | Workspace lifecycle and scanner toolchain integration tests. | Scanner | Must |
 
 ## Platform Baseline Requirements
 
@@ -57,7 +64,7 @@ Do not renumber active NFRs in this remediation.
 |---|---|---|
 | Identity | User identity must be verified through approved password/invite/OAuth path before workspace access. | NFR-001, NFR-005 |
 | Authentication | Password/MFA/OAuth flows must reject invalid credentials, invalid callbacks and unsafe linking. | NFR-001..NFR-005 |
-| Authorization | Manager/Developer permissions must be enforced at UI/API/worker command boundary. | NFR-008, NFR-009 |
+| Authorization | PBAC must be enforced at UI/API/internal API/worker command boundary. Roles are attributes/templates only. | NFR-008, NFR-009 |
 | Session Management | Sessions must expire, be revocable and reflect MFA/auth policy. | NFR-002 |
 | Audit Logging | Auth, delegation, assessment, evidence, conflict, legal matching, classification, document and security events must be auditable. | NFR-010, NFR-011 |
 | Secrets Management | MFA secrets, provider tokens, repository tokens, source secrets and prompt-sensitive values must not leak to logs, audit, reports or LLM prompts. | NFR-003, NFR-012, NFR-015 |

@@ -4,8 +4,10 @@
 
 ```text
 Identity và Organization
+Policy / PolicyVersion / AuthorizationDecision
 Assessment và WizardProfile
 RepositoryConnection và RepositorySnapshot
+TrustedScanTrigger và ScanMappingResolution
 RepositoryScanJob và scanner evidence
 TechnicalProfile và AIUsageFlow
 Conflict và VerifiedProfile
@@ -35,7 +37,7 @@ Không lưu dài hạn:
 Mọi thay đổi trạng thái có tác vụ bất đồng bộ phải dùng transaction:
 
 ```text
-validate actor và state guard
+validate actor/service, PBAC và state guard
 -> ghi domain object
 -> ghi AuditEvent
 -> ghi OutboxEvent
@@ -48,6 +50,7 @@ Outbox publisher phát message sau transaction. Cách này tránh trạng thái 
 
 Các queue chính:
 
+- `lcsp.scan-trigger-worker.v1`;
 - `lcsp.scan-worker.v1`;
 - `lcsp.technical-profile-worker.v1`;
 - `lcsp.ai-usage-flow-worker.v1`;
@@ -63,13 +66,13 @@ Message payload chỉ chứa ID, version, status, hash và reference đã làm s
 
 ## Audit
 
-AuditEvent ghi actor, action, object, outcome, thời gian, correlation/causation, version refs và metadata an toàn. Audit không chứa raw source, secret, full prompt hoặc token.
+AuditEvent ghi actor/service identity, organization, resource/action, policy ID/version khi áp dụng, decision/outcome, thời gian, correlation/causation, version refs và metadata an toàn. Audit không chứa raw source, secret, full prompt hoặc token.
 
-Các sự kiện phải audit gồm authentication, permission denial, assessment transition, scan, cleanup failure, conflict resolution, attestation, corpus approval, legal matching, classification, document generation và audit export.
+Các sự kiện phải audit gồm authentication, PBAC denial/allow for material actions, assessment transition, trusted scan trigger, mapping decision, scan, cleanup failure, conflict resolution, corpus approval, legal matching, classification, document generation và audit export. Structured attestation là `SUPERSEDED_FOR_ACTIVE_MVP`.
 
 ## Bảo mật và riêng tư
 
-- Tenant scope và RBAC được kiểm tra phía server.
+- Tenant scope và PBAC được kiểm tra phía server.
 - Developer chỉ thấy dữ liệu trong task/policy được cấp.
 - OAuth/OIDC login không cấp GitHub repository access.
 - GitHub App chỉ đọc repository đã chọn.
@@ -78,6 +81,7 @@ Các sự kiện phải audit gồm authentication, permission denial, assessmen
 - Evidence hiển thị dưới dạng path/symbol/line/hash thay vì source body.
 - External model chỉ nhận structured sanitized metadata.
 - Thiếu redaction hoặc cleanup phải fail closed.
+- Missing/ambiguous scan mapping tạo `PENDING_MAPPING`, `BLOCKED_MAPPING` hoặc `WAITING_FOR_CONTEXT`, không scan best-effort.
 
 ## Recovery
 

@@ -16,16 +16,15 @@ The Code Map is the engineering source of truth for planned module ownership bef
 
 ```text
 apps/
-  api/                         NestJS API, auth, RBAC, query surfaces
+  api/                         NestJS API, auth, PBAC, query surfaces
   web/                         Manager and optional Developer product UX
-  worker/                      Node.js downstream workers
 
-lcsp-scanner-worker/           Standalone Python Scanner Worker
+lcsp-python-workers/           Python Worker Platform for async domain workloads
   pyproject.toml
-  src/lcsp_scanner/
+  src/lcsp_workers/
 
 tools/
-  ts-js-analyzer/              Node.js subprocess used by Python Worker
+  ts-js-analyzer/              bounded Node.js CLI used by Python Scanner Worker
 
 packages/
   contracts/
@@ -40,10 +39,10 @@ prisma/
 | Concern | Owner |
 |---|---|
 | Scan job creation and query | NestJS API `scans` module |
-| Repository Scan lifecycle | `lcsp-scanner-worker` (Python) |
-| TypeScript/JavaScript semantic analysis | `tools/ts-js-analyzer` subprocess |
-| TechnicalProfile through document workers | `apps/worker` Node.js runtime |
-| Legal ingestion/index build | dedicated downstream workers plus internal operations API/CLI |
+| Repository Scan lifecycle | Python Scanner Worker |
+| TypeScript/JavaScript semantic analysis | `tools/ts-js-analyzer` CLI subprocess |
+| TechnicalProfile through document workers | Python Worker Platform |
+| Legal ingestion/index build | Python legal/corpus workers plus internal operations API/CLI |
 | Customer product UI | `apps/web` |
 
 ## Ownership Columns
@@ -60,8 +59,8 @@ Every module entry must declare:
 
 ## Guardrails
 
-- Python Worker is the sole consumer of `command.scan.requested.v1`.
-- `apps/worker` must not contain an active Node.js scanner lifecycle worker.
+- Python Scanner Worker is the sole consumer of `command.scan.requested.v1`.
+- Node.js downstream domain workers are `SUPERSEDED_FOR_ACTIVE_MVP`; Node.js remains only for NestJS API, web/tooling and bounded TS/JS analyzer CLI.
 - Internal legal corpus administration is not part of Manager/Developer product UX for MVP.
 - A module not listed in the Code Map must not be created until this map is updated.
 - Code Map alignment is required by `NFR-025`.

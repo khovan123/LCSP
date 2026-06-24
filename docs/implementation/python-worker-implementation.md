@@ -6,7 +6,7 @@ AUTHORITATIVE — A-to-Z RUNNABLE MVP
 
 ## Purpose
 
-Define the standalone `lcsp-scanner-worker` build and runtime contract. Python Worker replaces the Node.js scanner lifecycle worker and is the sole consumer of `command.scan.requested.v1`.
+Define the Python Worker Platform build and runtime contract. Python Worker Platform owns all asynchronous domain workloads. The `lcsp-scanner-worker` replaces the Node.js scanner lifecycle worker and is the sole consumer of `command.scan.requested.v1`.
 
 ## Active References
 
@@ -25,7 +25,12 @@ Define the standalone `lcsp-scanner-worker` build and runtime contract. Python W
 | Runtime | Python 3.11+ | Worker process |
 | Packaging | Poetry with `pyproject.toml` | Locked dependencies and environment |
 | Queue | `aio-pika` | RabbitMQ command consumption |
+| SBOM/dependency inventory | Syft | Package/dependency provenance |
+| JS/TS dependency usage | Knip | Unused/used JS/TS dependency facts |
+| Python dependency usage | deptry | Missing/unused/transitive Python dependency facts |
 | Python parsing | stdlib `ast` + `libcst` | AST/CST extraction |
+| AI rules | Semgrep custom rules | AI pattern signals |
+| Structural parser | tree-sitter/custom parser | Cross-language structural augmentation |
 | Database boundary | repository abstraction over PostgreSQL matching the canonical schema | state, evidence, audit, outbox persistence |
 | Subprocess | `asyncio.create_subprocess_exec` | fixed Node TS/JS analyzer invocation |
 | Graph | Python-native scan-local node/edge structures | evidence/dependency graph assembly |
@@ -43,10 +48,12 @@ lcsp-scanner-worker/
     queue/
     workspace/
     inventory/
+    tools/
     parsers/
     analyzers/
     ts_js_bridge/
     graph/
+    dependencies/
     evidence/
     reports/
     persistence/
@@ -71,13 +78,15 @@ Startup validates required environment, PostgreSQL connectivity, RabbitMQ connec
 4. Acquire idempotent job lock and mark RUNNING with AuditEvent.
 5. Create restricted workspace and materialize selected snapshot.
 6. Inventory files and enforce file/size/time bounds.
-7. Run Python AST/CST and bounded semantic analysis.
-8. Invoke TS/JS analyzer subprocess for supported files.
-9. Normalize facts, graph, evidence refs, findings, and report.
-10. Persist staged metadata and run schema/privacy/quality gates.
-11. Delete workspace and verify cleanup.
-12. In one terminal transaction, mark COMPLETED or FAILED and create matching AuditEvent and OutboxEvent.
-13. On shutdown, stop accepting jobs, finish/cancel safely, and verify active workspace cleanup.
+7. Run Syft, Knip and deptry where applicable.
+8. Run Python AST/CST and bounded semantic analysis.
+9. Invoke TS/JS analyzer subprocess for supported files.
+10. Run tree-sitter/custom parser augmentation and Semgrep custom rules.
+11. Normalize dependency facts, graph, evidence refs, findings, and report.
+12. Persist staged metadata and run schema/privacy/quality gates.
+13. Delete workspace and verify cleanup.
+14. In one terminal transaction, mark COMPLETED or FAILED and create matching AuditEvent and OutboxEvent.
+15. On shutdown, stop accepting jobs, finish/cancel safely, and verify active workspace cleanup.
 
 The worker creates an OutboxEvent; an outbox publisher later publishes to RabbitMQ. The scanner does not publish directly inside its state transaction.
 
@@ -154,6 +163,7 @@ Do not persist source bodies, repository archives, full ASTs, credentials, or su
 | Single-file parser failure | no job retry | coverage limitation and continue when safe |
 | Dynamic/reflection boundary | no | `UNSUPPORTED_DYNAMIC_FLOW`; do not infer |
 | TS/JS analyzer failure | no job retry by default | affected-file coverage limitation; continue when safe |
+| Syft/Knip/deptry/Semgrep/tree-sitter failure | severity dependent | coverage limitation or terminal failure according to approved severity table |
 | Privacy/redaction/schema failure | no | fail closed |
 | Worker crash or broker interruption | bounded redelivery | idempotent resume/no-op according to ScanJob state |
 | Workspace cleanup failure | no | terminal security failure |
@@ -163,12 +173,14 @@ Retryable job failures use the canonical 30s, 120s, and 600s backoff budget befo
 ## Acceptance
 
 - Process starts through `poetry run python -m lcsp_scanner.main`.
-- Python analysis produces bounded evidence for imports, calls, model I/O, decision and review paths.
+- Python analysis and scanner toolchain produce bounded evidence for dependencies, imports, calls, model I/O, decision and review paths.
 - TS/JS analyzer protocol is validated and normalized.
+- Syft/Knip/deptry/Semgrep/tree-sitter outputs are pinned, bounded, redacted, normalized and provenance-recorded.
 - Duplicate command does not duplicate artifacts.
 - Raw source is absent from persistent stores, queues, logs, audit, and LLM input.
 - Completed event requires quality-valid report and verified cleanup.
 - Failure contains correlation ID, safe code, and actionable recovery without sensitive content.
+- Tool failure severity table is `TECHNICAL_DECISION_REQUIRED`.
 
 ## Non-Claims
 

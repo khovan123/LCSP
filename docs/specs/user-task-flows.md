@@ -6,11 +6,14 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 
 ## Flow Conventions
 
-- Canonical IDs are `UC-001..UC-018`, `FR-001..FR-056`, and `AC-001..AC-041`.
+- Canonical IDs are `UC-001..UC-017`, `FR-001..FR-056`, and `AC-001..AC-041` plus Phase 5.2L `AC-050A..AC-050F`.
 - Manager can complete the active MVP without Developer participation.
 - Developer collaboration is optional and scoped.
-- Structured attestation under `FR-046` is active optional MVP input.
+- Structured attestation under historical `FR-045/FR-046` is `SUPERSEDED_FOR_ACTIVE_MVP` and has no active task flow.
 - Delegated technical clarification under `FR-052` is Deferred and must not appear as an active screen or task.
+- `FR-050` is `AUTOMATIC_TRUSTED_SCAN_INITIATION`; there is no manual scanner report upload UI/API.
+- `FR-051` manual technical evidence JSON upload is `REMOVED_FROM_PRODUCT`.
+- PBAC is the final server-side authorization source of truth.
 - Legal corpus administration is an internal operations/API/CLI flow, not Manager/Developer product UX.
 - UI states must use plain business language and expose actionable blocked/failed outcomes.
 
@@ -78,11 +81,11 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 | Field | Content |
 |---|---|
 | Goal | Request static analysis and monitor progress. |
-| Preconditions | Snapshot exists; actor has scan permission. |
-| Happy path | Click Run Scan, receive job status, monitor queued/running/completed state. |
-| System behavior | Python Worker owns lifecycle; no customer code execution; workspace is deleted before success event. |
-| Failure states | Repository access failure, bounded parser limitation, privacy/schema failure, TS/JS analyzer failure, workspace cleanup failure. |
-| UX requirements | Show status, safe reason code, retry/rescan action, and coverage limitations without raw source. |
+| Preconditions | Trusted integration context exists or Manager action creates trusted context. |
+| Happy path | Verified trigger creates or resumes a pending scan; Manager monitors queued/running/completed state. |
+| System behavior | Python Scanner Worker owns lifecycle; toolchain includes Syft, Knip, deptry, `ast`/`libcst`, `ts-morph`, tree-sitter/custom parser, and Semgrep custom rules; no customer code execution; workspace is deleted before success event. |
+| Failure states | Repository access failure, missing mapping, ambiguous assessment mapping, out-of-order trigger waiting, bounded parser/tool limitation, privacy/schema failure, TS/JS analyzer failure, workspace cleanup failure. |
+| UX requirements | Show status, safe reason code, retry/rescan or mapping recovery action, and coverage limitations without raw source. |
 | Result | TechnicalEvidenceReport exists or explicit failed state. |
 | Traceability | UC-007, UC-016, UC-017; FR-018..FR-020, FR-049; AC-004, AC-005, AC-028..AC-032 |
 
@@ -105,8 +108,8 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 | Goal | Resolve mismatch between WizardProfile and evidence-derived facts. |
 | Preconditions | ReconciliationConflict exists. |
 | Happy path | Open conflict, compare declared and detected values, inspect evidence refs, select resolution, enter rationale, submit. |
-| Optional input | A structured Developer attestation may be reviewed as supplemental evidence. |
-| Locked behavior | Manager is final resolver; scanner evidence is immutable; attestation cannot resolve or unlock classification by itself. |
+| Optional input | None from structured attestation. Developer collaboration may remain only for independently valuable scoped technical assistance. |
+| Locked behavior | Manager is final resolver; scanner evidence is immutable; structured attestation is not an active MVP input. |
 | Deferred exclusion | No free-form delegated clarification task or screen under `FR-052`. |
 | Failure states | Missing rationale, stale conflict, unauthorized actor, unresolved blocking field. |
 | Result | Reconciliation reruns; conflict remains open or VerifiedProfile becomes ready. |
@@ -168,7 +171,7 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 | Privacy | No raw source, secrets, raw provider tokens, or full prompts. |
 | Failure states | Export denied, unavailable event page, redaction failure. |
 | Result | Auditable assessment record and export. |
-| Traceability | UC-015; FR-042..FR-045; AC-020, AC-039, AC-040 |
+| Traceability | UC-015; FR-042..FR-044; AC-020, AC-039, AC-040 |
 
 ## Optional Developer Product Flows
 
@@ -181,7 +184,7 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 | Happy path | Open invitation/task, review scope, accept. |
 | Failure states | Expired/revoked invitation, wrong organization, policy removed. |
 | Result | Task becomes active; Manager flow remains independent. |
-| Traceability | UC-002, UC-018; FR-010, FR-011, FR-047; AC-025, AC-026 |
+| Traceability | UC-002; FR-010, FR-011, FR-047; AC-025, AC-026 |
 
 ### 15. Review Redacted Technical Findings
 
@@ -192,20 +195,16 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 | Happy path | View only assigned findings, evidence refs, confidence, and limitations. |
 | Failure states | Permission revoked, task expired, assessment outside scope. |
 | Result | No assessment lifecycle state change. |
-| Traceability | UC-018; FR-048; AC-007, AC-022, AC-025 |
+| Traceability | UC-007; FR-048; AC-007, AC-022, AC-025 |
 
-### 16. Submit Structured Technical Attestation
+### 16. Removed Structured Technical Attestation
 
 | Field | Content |
 |---|---|
-| Goal | Provide optional supplemental technical input. |
-| Preconditions | Developer has active attestation policy/task. |
-| Required fields | Role, claim, scope, reason, supporting evidence refs, timestamp. |
-| Happy path | Submit structured form; system validates, stores separately, audits, and exposes to Manager review. |
-| Guardrails | Cannot replace scanner metadata, alter evidence, resolve conflict, approve profile, or unlock classification. |
-| Failure states | Free-form-only content, missing scope/role/evidence, revoked policy, bypass attempt. |
-| Result | Attestation recorded or rejected; no automatic lifecycle transition. |
-| Traceability | UC-018; FR-045, FR-046; AC-013 |
+| Status | `SUPERSEDED_FOR_ACTIVE_MVP`. |
+| Required behavior | No Manager or Developer active screen, route, form, DTO, command, event, entity, audit dependency, report dependency, acceptance criterion, epic, story, or delivery task may preserve structured attestation as an MVP feature. |
+| Historical rule | Prior records may remain in change-control/history only. Reintroduction requires separate Project Owner approval. |
+| Traceability | Historical `FR-045/FR-046`, `UC-018`, and `AC-013` only. |
 
 ## System Flows
 
@@ -215,12 +214,29 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 command.scan.requested.v1
 -> Python Worker RUNNING
 -> snapshot materialization
+-> Syft SBOM/dependency inventory
+-> Knip/deptry dependency usage analysis
 -> Python AST/CST analysis
 -> TS/JS subprocess analysis
+-> tree-sitter/custom parser structural augmentation
+-> Semgrep custom AI rules
 -> evidence/report gates
 -> workspace cleanup verification
 -> event.scan.completed.v1 or event.scan.failed.v1
 ```
+
+### Automatic Trusted Scan Initiation
+
+```text
+trusted trigger received
+-> context validation
+-> PENDING_MAPPING | BLOCKED_MAPPING | WAITING_FOR_CONTEXT | READY_TO_SNAPSHOT
+-> snapshot pending
+-> scan pending/running
+-> completed or failed
+```
+
+Triggers include verified GitHub webhooks, scheduled integration triggers, backend-issued triggers, and authorized Manager actions that create trusted context. Duplicate and out-of-order events must not scan the wrong repository or assessment.
 
 ### Evidence-to-Profile Orchestration
 
@@ -261,4 +277,4 @@ The MVP interface for this actor is internal API/CLI and operational audit recor
 
 ## UX Deliverable Boundary
 
-`bmad-ux` must produce canonical Manager and optional Developer experiences for flows 1-16, including responsive layouts, accessibility, empty/loading/error/blocked/degraded states, status language, evidence/citation disclosure, and safe recovery actions. It must not create active screens for `FR-050`, `FR-051`, `FR-052`, or customer-facing corpus administration.
+`bmad-ux` must produce canonical Manager and optional Developer experiences for active flows, including responsive layouts, accessibility, empty/loading/error/blocked/degraded states, automatic trigger mapping states, status language, evidence/citation disclosure, and safe recovery actions. It must not create active screens for manual scanner report upload, `FR-051`, `FR-052`, structured attestation, or customer-facing corpus administration.

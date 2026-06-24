@@ -1,5 +1,12 @@
 # Post-Readiness Planning Remediation Proposal: Canonical FR/NFR Scope Alignment
 
+```text
+HISTORICAL_ONLY
+SUPERSEDED_IN_PART_BY_PHASE_5_2L
+```
+
+This approved planning-remediation proposal remains historical evidence. Phase 5.2L supersedes its active authority for optional structured attestation, old `FR-050`/`FR-051` semantics, RBAC as authorization source of truth, and Node.js downstream domain worker assumptions.
+
 **Project:** LCSP - Legal Compliance Support Platform  
 **Date:** 2026-06-23  
 **Mode:** Batch, revised after Project Owner feedback  

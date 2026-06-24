@@ -8,10 +8,15 @@ Show how a commit-pinned repository snapshot becomes canonical scanner metadata,
 
 | Concern | Owner |
 |---|---|
-| Scan request API, RBAC, idempotent job creation | NestJS API |
+| Trusted scan trigger/API, PBAC, idempotent job creation | NestJS API |
 | `command.scan.requested.v1` consumption | Standalone Python Worker |
+| SBOM/dependency inventory | Python Worker invoking Syft |
+| JS/TS dependency usage | Python Worker invoking Knip |
+| Python dependency usage | Python Worker invoking deptry |
 | Python static analysis | Python Worker using `ast` + `libcst` |
 | TypeScript/JavaScript semantic analysis | Node.js `ts-morph` subprocess invoked by Python Worker |
+| Structural augmentation | tree-sitter/custom parser |
+| AI custom rules | Semgrep custom rules |
 | Scan-local graph/report assembly | Python Worker |
 | Terminal status, audit, and outbox event | Python Worker transaction |
 
@@ -40,9 +45,9 @@ The scanner reads this file only inside the ephemeral workspace. It does not exe
 
 | Question | Answer |
 |---|---|
-| User action | Manager selects a commit and clicks `Run Repository Scan`. |
-| Request | `POST /api/v1/assessments/:assessmentId/scans`. |
-| API behavior | Create idempotent `RepositoryScanJob`, `AuditEvent`, and `OutboxEvent(command.scan.requested.v1)`. |
+| Trigger | Verified webhook, scheduled trigger, backend trigger, or authorized Manager action creates trusted context. |
+| Request | Trigger/API creates `command.scan-trigger.resolve-context.v1`; ready mapping creates `command.scan.requested.v1`. |
+| API behavior | Create idempotent `TrustedScanTrigger`, mapping state, `RepositoryScanJob` when ready, `AuditEvent`, and OutboxEvent. |
 | Worker | Python Worker consumes `lcsp.scan-worker.v1`. |
 | DB reads/writes | Reads job/snapshot; writes SourceFile, graph metadata, EvidenceReference, TechnicalFinding, TechnicalEvidenceReport, audit, outbox. |
 | Terminal events | `event.scan.completed.v1` or `event.scan.failed.v1`. |
@@ -52,6 +57,7 @@ The scanner reads this file only inside the ephemeral workspace. It does not exe
 
 | Step | Exchange | Routing Key | Queue | Owner |
 |---|---|---|---|---|
+| Resolve trigger | `lcsp.commands.v1` | `command.scan-trigger.resolve-context.v1` | `lcsp.scan-trigger-worker.v1` | NestJS API/webhook/scheduler outbox -> Python Scan Trigger Worker |
 | Request scan | `lcsp.commands.v1` | `command.scan.requested.v1` | `lcsp.scan-worker.v1` | NestJS API outbox -> Python Worker |
 | Scan completed | `lcsp.events.v1` | `event.scan.completed.v1` | downstream bindings | Python Worker outbox |
 | Scan failed | `lcsp.events.v1` | `event.scan.failed.v1` | downstream/audit bindings | Python Worker outbox |
@@ -59,12 +65,18 @@ The scanner reads this file only inside the ephemeral workspace. It does not exe
 ## End-to-End Data Journey
 
 ```text
-RepositorySnapshot(commit SHA)
+TrustedScanTrigger
+-> ScanMappingResolution READY
+-> RepositorySnapshot(commit SHA)
 -> restricted workspace
 -> SourceFileRef[]
 -> LanguageMappingResult[]
+-> Syft SBOM/dependency facts
+-> Knip/deptry dependency usage facts
 -> Python AST/CST facts
 -> TS/JS subprocess facts (when present)
+-> tree-sitter/custom parser facts
+-> Semgrep custom AI rule facts
 -> normalized ParsedFile/fact model
 -> CodeGraphNode[] / CodeGraphEdge[]
 -> DetectionResult[]
@@ -84,10 +96,14 @@ RepositorySnapshot(commit SHA)
 | Job lock | `queue.consumer.handle_scan_requested` | `ScanRequestedPayload` | locked ScanJob | ScanJob RUNNING + audit |
 | Workspace | `workspace.snapshot_materializer` | RepositorySnapshot | `WorkspaceRef` | none |
 | Inventory | `inventory.file_enumerator` | WorkspaceRef | `SourceFileRef[]` | SourceFile metadata |
+| Syft | `tools.syft_runner` | WorkspaceRef/manifests | SBOMComponent[] | staged dependency metadata |
+| Knip/deptry | `tools.knip_runner`, `tools.deptry_runner` | WorkspaceRef/manifests/imports | DependencyUsageFact[] | staged dependency metadata |
 | Language mapping | `inventory.language_mapper` | SourceFileRef | `LanguageMappingResult` | support metadata |
 | Python parse | `parsers.python_ast_extractor` + `python_cst_extractor` | `.py` file | Python facts | none |
 | Python semantic pass | `analyzers.python_import_resolver`, bounded flow analyzers | Python facts | enriched facts/limitations | none |
 | TS/JS subprocess | `ts_js_bridge.subprocess_bridge` -> Node CLI | workspace/path request | validated JSON facts | none |
+| tree-sitter/custom parser | `tools.tree_sitter_runner` | supported files | structural facts/limitations | none |
+| Semgrep custom rules | `tools.semgrep_runner` | bounded source metadata | AI pattern facts/limitations | none |
 | Manifest/basic signals | `parsers.manifest_extractor` | manifest/config | dependency/config facts | none |
 | Graph build | `graph.graph_builder` | normalized facts | graph nodes/edges | metadata-only graph rows |
 | Detection | detector/analyzer set | facts + graph | DetectionResult[] | staged findings |

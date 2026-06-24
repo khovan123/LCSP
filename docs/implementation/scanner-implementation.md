@@ -25,7 +25,8 @@ Define the build boundary for Repository Scan. Python Worker owns the lifecycle 
 - No scanner-initiated package install, build, test, Docker, CI, shell, or endpoint probing.
 - No raw source, full prompt, secret, provider token, repository credential, archive, or full AST in long-term persistence, queues, audit, or LLM input.
 - Python receives first-class bounded analysis.
-- TS/JS analysis runs through a fixed Node.js subprocess under Python Worker control.
+- TS/JS analysis runs through a fixed Node.js CLI subprocess under Python Worker control.
+- Syft, Knip, deptry, Semgrep custom rules and tree-sitter/custom parser are part of the active scanner toolchain.
 
 ## Locked Runtime Decisions
 
@@ -36,8 +37,13 @@ Define the build boundary for Repository Scan. Python Worker owns the lifecycle 
 | Runtime | Python 3.11+ |
 | Dependency manager | Poetry / `pyproject.toml` |
 | Queue consumer | `command.scan.requested.v1` sole consumer |
+| SBOM/dependency inventory | Syft |
+| JS/TS dependency usage | Knip |
+| Python dependency usage | deptry |
 | Python parser stack | stdlib `ast` + `libcst` |
 | TS/JS analyzer | Node.js CLI subprocess, versioned JSON stdio protocol |
+| AI custom rules | Semgrep custom rules |
+| Structural augmentation | tree-sitter/custom parser |
 | Graph runtime | Python-native scan-local adjacency/node-edge model |
 | Persistence | PostgreSQL metadata only |
 | Workspace | restricted ephemeral workspace |
@@ -63,6 +69,12 @@ lcsp-scanner-worker/
       file_enumerator.py
       language_mapper.py
       ignore_policy.py
+    tools/
+      syft_runner.py
+      knip_runner.py
+      deptry_runner.py
+      semgrep_runner.py
+      tree_sitter_runner.py
     parsers/
       python_ast_extractor.py
       python_cst_extractor.py
@@ -74,6 +86,7 @@ lcsp-scanner-worker/
       input_output_flow_analyzer.py
       human_review_detector.py
       domain_signal_detector.py
+      dependency_fact_normalizer.py
     ts_js_bridge/
       subprocess_bridge.py
       protocol.py
@@ -117,6 +130,13 @@ tools/ts-js-analyzer/
 | `SCANNER_MAX_FILE_BYTES` | No | Per-file bound |
 | `SCANNER_TIMEOUT_SECONDS` | No | Job analysis bound |
 | `SCANNER_RULESET_VERSION` | No | Detection ruleset version |
+| `SCANNER_TOOLCHAIN_VERSION` | No | Combined scanner toolchain contract version |
+| `SCANNER_CONFIG_HASH` | No | Scanner configuration hash |
+| `SYFT_EXECUTABLE` | No | Fixed Syft executable |
+| `KNIP_EXECUTABLE` | No | Fixed Knip executable |
+| `DEPTRY_EXECUTABLE` | No | Fixed deptry executable |
+| `SEMGREP_EXECUTABLE` | No | Fixed Semgrep executable |
+| `TREE_SITTER_CONFIG_REF` | No | Parser/config reference |
 | `TS_ANALYZER_EXECUTABLE` | No | Fixed Node CLI path |
 | `TS_ANALYZER_TIMEOUT_SECONDS` | No | Subprocess timeout |
 
@@ -140,15 +160,20 @@ handle_scan_requested(payload):
   mark job RUNNING and audit
   materialize selected snapshot in restricted workspace
   enumerate bounded source files
+  run Syft SBOM/dependency inventory
+  run Knip/deptry dependency usage analysis
 
   for each file:
     map language/support level
     Python -> ast/libcst extractors + bounded analyzers
     TS/JS -> fixed node subprocess + schema validation
+    structural gaps -> tree-sitter/custom parser augmentation
+    AI patterns -> Semgrep custom rules
     other supported -> manifest/basic signal extractor
     unsupported -> coverage limitation
 
   normalize facts
+  normalize dependency facts
   build scan-local graph
   run deterministic detectors
   create redacted evidence refs
@@ -201,6 +226,8 @@ Python Worker creates a scan-local graph using Python-native node/edge structure
 
 Persisted evidence includes path/symbol/line refs, hashes, versions, confidence, and redacted metadata. Source bodies and full ASTs are excluded.
 
+Dependency/SBOM facts persist as normalized metadata: `PackageDependency`, `SBOMComponent`, and `DependencyUsageFact`. States distinguish declared, discovered, used/reachable, unused, missing, transitive, and uncertain.
+
 ## Workspace
 
 | Item | Decision |
@@ -231,6 +258,7 @@ Persisted evidence includes path/symbol/line refs, hashes, versions, confidence,
 | Repository access | retryable `REPOSITORY_ACCESS_FAILED`; terminal failed event after budget |
 | Single-file parser | coverage limitation and continue when safe |
 | Dynamic flow | `UNSUPPORTED_DYNAMIC_FLOW`; no inference |
+| Syft/Knip/deptry/Semgrep/tree-sitter failure | coverage limitation or terminal failure according to approved severity table |
 | TS/JS analyzer | `TS_JS_ANALYZER_FAILED`; bounded continuation |
 | Redaction/privacy/schema | fail closed |
 | Cleanup | terminal `SCANNER_WORKSPACE_CLEANUP_FAILED` |
@@ -243,6 +271,7 @@ Persisted evidence includes path/symbol/line refs, hashes, versions, confidence,
 - Dynamic Python paths emit uncertainty.
 - TS/JS repository is analyzed through subprocess and normalized into the same finding schema.
 - No raw source is stored long term or sent to LLM.
+- Tool output never independently becomes legal truth, classification truth, proof of active AI use, or proof of automated decision-making.
 - Completed event is staged only after quality-valid report and cleanup verification.
 - Failure states expose redacted code, correlation ID, and actionable recovery.
 

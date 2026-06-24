@@ -28,7 +28,7 @@ apps/api/src/
     technical-profile/
     ai-usage-flow/
     developer-tasks/
-    attestations/
+    policy/
     reconciliation/
     legal-matching/
     classification/
@@ -43,16 +43,16 @@ apps/api/src/
 
 | Module | Controllers/Services | Tables | Queue Role |
 |---|---|---|---|
-| `auth` | Auth, MFA, session, OAuth callback | `User`, `OrganizationMembership`, `AuditEvent` | none |
-| `organizations` | organization/member/role management | `Organization`, `OrganizationMembership`, `AuditEvent` | none |
+| `auth` | Auth, MFA, session, OAuth callback, PBAC subject context | `User`, `OrganizationMembership`, `AuthorizationDecision`, `AuditEvent` | none |
+| `organizations` | organization/member/subject-label management | `Organization`, `OrganizationMembership`, `AuditEvent` | none |
 | `assessments` | assessment create/query/state projection | `Assessment`, `AuditEvent` | consumes/project events as needed |
 | `wizard` | WizardProfile save/submit/readiness | `WizardProfile`, `Assessment`, `AuditEvent` | none |
 | `github` | GitHub App connection and snapshot metadata | `RepositoryConnection`, `RepositorySnapshot`, `AuditEvent` | none |
-| `scans` | request scan and query job/report summary | `RepositoryScanJob`, `OutboxEvent`, `AuditEvent` | produces `command.scan.requested.v1` |
+| `scans` | request/receive trusted scan trigger and query job/report summary | `TrustedScanTrigger`, `ScanMappingResolution`, `RepositoryScanJob`, `OutboxEvent`, `AuditEvent` | produces `command.scan-trigger.resolve-context.v1`, `command.scan.requested.v1` |
 | `technical-profile` | query latest profile | `TechnicalProfile` | none |
 | `ai-usage-flow` | query latest flow/claims | `AIUsageFlow`, `AIUsageFlowClaim` | none |
 | `developer-tasks` | invite/accept/revoke scoped Developer work | membership/task/policy tables, audit | none |
-| `attestations` | submit/query structured attestation | `StructuredTechnicalAttestation`, `AuditEvent` | may trigger reconciliation only through explicit Manager action/policy |
+| `policy` | PBAC policy refs/decisions where exposed internally | `Policy`, `PolicyVersion`, `AuthorizationDecision`, `AuditEvent` | none |
 | `reconciliation` | list conflicts, Manager resolution, profile query | `ReconciliationConflict`, `VerifiedProfile`, `OutboxEvent`, `AuditEvent` | produces reconciliation command after valid resolution |
 | `legal-matching` | query legal matches and citations | `LegalRuleMatch`, `RetrievalAuditLog` | none |
 | `classification` | request/query classification | `RiskClassification`, `OutboxEvent`, `AuditEvent` | produces classification command when explicit API trigger is used |
@@ -79,6 +79,7 @@ apps/api/src/
 | POST | `/api/v1/assessments/:assessmentId/wizard-profile` | wizard |
 | POST | `/api/v1/assessments/:assessmentId/github/repository-connections` | github |
 | POST | `/api/v1/assessments/:assessmentId/repository-snapshots` | github |
+| POST | `/api/v1/assessments/:assessmentId/scan-triggers` | scans |
 | POST | `/api/v1/assessments/:assessmentId/scans` | scans |
 | GET | `/api/v1/assessments/:assessmentId/scans/:scanJobId` | scans |
 | GET | `/api/v1/assessments/:assessmentId/technical-profile` | technical-profile |
@@ -97,7 +98,6 @@ apps/api/src/
 | POST | `/api/v1/assessments/:assessmentId/audit/exports` | audit |
 | POST | `/api/v1/assessments/:assessmentId/developer-tasks` | developer-tasks |
 | POST | `/api/v1/developer-tasks/:taskId/accept` | developer-tasks |
-| POST | `/api/v1/assessments/:assessmentId/attestations` | attestations |
 
 ## Internal Legal Operations Routes
 
@@ -114,12 +114,13 @@ These routes are not part of Manager/Developer product UX and require internal o
 
 ## API Rules
 
-- Controllers validate HTTP shape and actor scope.
+- Controllers validate HTTP shape and actor/service scope.
 - Services enforce domain/state preconditions.
+- Services enforce PBAC server-side. Roles are subject attributes/templates only.
 - Repositories own Prisma access.
 - State change and OutboxEvent write occur in one transaction.
 - Customer APIs never expose raw source, secret, full prompt, full AST, provider credential, or internal corpus content beyond approved citation excerpts/metadata.
 - Developer APIs cannot perform Manager-only actions.
-- Structured attestation is supplemental only.
-- Deferred `FR-050..FR-052` routes must not be created in the active MVP.
+- Structured attestation routes must not be created in the active MVP.
+- Manual scanner report upload and `FR-051` routes must not be created. `FR-050` routes mean Automatic Trusted Scan Initiation only.
 - Internal legal operations routes are not included in customer navigation or `bmad-ux` deliverables.

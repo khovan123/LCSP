@@ -7,7 +7,7 @@ Kế hoạch hiện mới là build order. Coding chỉ được bắt đầu sa
 1. canonical UX;
 2. canonical epics/stories;
 3. story-level traceability;
-4. implementation-readiness recheck đạt yêu cầu;
+4. Phase 5.2L docs remediation và implementation-readiness recheck đạt yêu cầu;
 5. sprint planning được phê duyệt.
 
 ## Các wave chính
@@ -18,31 +18,31 @@ Tạo UX, epics/stories, traceability và chạy lại readiness check.
 
 ### Wave 1 — Nền tảng
 
-PostgreSQL/Prisma/pgvector/unaccent, RabbitMQ/outbox, audit, RBAC, configuration và secret references.
+PostgreSQL/Prisma/pgvector/unaccent, RabbitMQ/outbox, audit, PBAC, configuration và secret references.
 
 ### Wave 2 — Assessment core
 
-Authentication, organization, assessment, WizardProfile, readiness-only state, GitHub App connection và RepositorySnapshot.
+Authentication, organization, assessment, WizardProfile, readiness-only state, GitHub App connection, Automatic Trusted Scan Initiation và RepositorySnapshot.
 
 ### Wave 3 — Python Scanner
 
-Python Worker, `ast` + `libcst`, workspace security, TS/JS subprocess, graph/evidence/report và scan events.
+Python Scanner Worker, Syft, Knip, deptry, `ast` + `libcst`, workspace security, TS/JS subprocess, tree-sitter/custom parser, Semgrep custom rules, graph/evidence/report và scan events.
 
 ### Wave 4 — Intelligence và reconciliation
 
-TechnicalProfile, AIUsageFlow, conflict, Manager resolution, optional structured attestation và VerifiedProfile.
+Python TechnicalProfile worker, Python AIUsageFlow worker, conflict, Manager resolution và VerifiedProfile. Structured attestation không thuộc active MVP.
 
 ### Wave 5 — Legal corpus và retrieval
 
-Source validation, snapshot/hash, normalization, internal approval, immutable corpus, FTS, embedding index và citation reconstruction.
+Python source validation/ingestion, snapshot/hash, normalization, internal approval, immutable corpus, FTS, embedding index và citation reconstruction.
 
 ### Wave 6 — Real LLM và classification
 
-Provider integration, timeout/retry, structured output, budget, ModelRunMetadata, citation guardrail và RiskClassification.
+Provider integration, timeout/retry, structured output, budget, ModelRunMetadata, citation guardrail và Python RiskClassification worker.
 
 ### Wave 7 — Reporting và hardening
 
-GapAnalysis, document generation, object storage, status/download, audit export, accessibility, observability, retry/DLQ và privacy checks.
+Python GapAnalysis, Python document generation, object storage, status/download, audit export, accessibility, observability, retry/DLQ và privacy checks.
 
 ### Wave 8 — A-to-Z acceptance
 
@@ -53,6 +53,7 @@ Chạy golden path và negative paths trên hạ tầng thật.
 ```text
 Foundations
 -> Assessment/Wizard/Repository
+-> Automatic Trusted Scan Initiation
 -> Python Scanner
 -> TechnicalProfile
 -> AIUsageFlow
@@ -75,7 +76,7 @@ Source Ingestion
 
 ## Tiêu chí hoàn tất quan trọng
 
-- API/worker start và migration chạy được.
+- API/Python Worker Platform startup contract và migration chạy được.
 - Scan không chạy source, không lưu raw source và cleanup được xác minh.
 - Claims có evidence refs và uncertainty.
 - Conflict khóa classification cho đến khi Manager giải quyết.
@@ -92,13 +93,12 @@ npm install
 npm run db:generate
 npm run db:migrate
 npm run dev:api
-npm run dev:worker
 npm run dev:web
 
-cd lcsp-scanner-worker
+cd lcsp-python-workers
 poetry install
 poetry run pytest
-poetry run python -m lcsp_scanner.main
+poetry run python -m lcsp_workers.scanner.main
 
 cd ../tools/ts-js-analyzer
 npm install

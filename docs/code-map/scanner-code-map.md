@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define planned code ownership for the A-to-Z runnable scanner before implementation. Python Worker owns Repository Scan lifecycle. TypeScript/JavaScript analysis is a bounded Node.js subprocess adapter.
+Define planned code ownership for the A-to-Z runnable scanner before implementation. Python Scanner Worker owns Repository Scan lifecycle and the full scanner toolchain. TypeScript/JavaScript semantic analysis is a bounded Node.js CLI adapter.
 
 ## Repository Layout
 
@@ -20,6 +20,14 @@ lcsp-scanner-worker/
       file_enumerator.py
       language_mapper.py
       ignore_policy.py
+    tools/
+      syft_runner.py
+      knip_runner.py
+      deptry_runner.py
+      semgrep_runner.py
+      tree_sitter_runner.py
+    dependencies/
+      dependency_fact_normalizer.py
     parsers/
       python_ast_extractor.py
       python_cst_extractor.py
@@ -70,6 +78,8 @@ tools/ts-js-analyzer/
 |---|---|---|---|---|---|
 | `workspace` | Materialize commit-pinned snapshot inside restricted workspace and verify deletion. | GitHub snapshot metadata, filesystem policy. | `WorkspaceRef`, `CleanupResult` | `RepositoryScanJob`, `AuditEvent` | None |
 | `inventory` | Enumerate files, enforce bounds, classify language/support. | workspace. | `SourceFileRef`, `LanguageMappingResult` | `SourceFile` | None |
+| `tools` | Invoke Syft, Knip, deptry, Semgrep custom rules and tree-sitter/custom parser with pinned versions, limits and redaction. | workspace, manifests, rulesets. | `ToolRunResult`, `CoverageLimitation` | staged tool provenance | None |
+| `dependencies` | Normalize SBOM/dependency output and usage states. | tool outputs, manifests, imports. | `PackageDependency`, `SBOMComponent`, `DependencyUsageFact` | dependency metadata tables | None |
 | `parsers` | Extract Python AST/CST facts and basic manifest signals. | stdlib `ast`, `libcst`. | `ParsedFile`, `ImportFact`, `CallFact`, `ClassFact`, `FunctionFact` | metadata only | None |
 | `analyzers` | Resolve bounded Python imports/flows and detect AI/data/decision/review signals. | parsed facts, rulesets. | `DetectionResult`, `CoverageLimitation` | staged `TechnicalFinding` | None |
 | `ts_js_bridge` | Invoke Node analyzer and validate normalized JSON protocol. | Node.js, `ts-morph`. | `TsJsAnalyzerRequest`, `TsJsAnalyzerResult` | None directly | None |
@@ -99,8 +109,12 @@ command.scan.requested.v1
 -> Python queue consumer
 -> workspace materialization
 -> inventory/language mapping
+-> Syft SBOM/dependency inventory
+-> Knip/deptry dependency usage analysis
 -> Python AST/CST analysis
 -> TS/JS subprocess analysis when needed
+-> tree-sitter/custom parser structural augmentation
+-> Semgrep custom AI rules
 -> normalized graph and findings
 -> report schema/quality/privacy gates
 -> workspace cleanup verification
@@ -116,7 +130,7 @@ Persist only:
 - content/evidence/report hashes;
 - normalized graph nodes/edges;
 - redacted findings and coverage limitations;
-- scanner/ruleset/schema versions;
+- scanner/tool/ruleset/config/schema versions;
 - cleanup verification and audit metadata.
 
 Never persist raw source body, full AST body, secrets, full prompts, repository archives, or subprocess stdout before validation/redaction.

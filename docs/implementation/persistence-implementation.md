@@ -26,7 +26,7 @@ Define PostgreSQL/Prisma ownership, physical model requirements, pgvector/FTS in
 - Raw repository source, full AST bodies, secrets, raw provider tokens, and full prompts are never persistent records.
 - Queue payloads and audit metadata are reference-only/redacted.
 - Approved LegalCorpusVersion and historical assessment artifacts are immutable.
-- Every assessment-scoped query enforces tenant and actor scope server-side.
+- Every assessment-scoped query enforces tenant scope and PBAC server-side.
 
 ## Required PostgreSQL Extensions
 
@@ -45,6 +45,9 @@ CREATE EXTENSION IF NOT EXISTS unaccent;
 - `Session`
 - `Organization`
 - `OrganizationMembership`
+- `Policy`
+- `PolicyVersion`
+- `AuthorizationDecision`
 - scoped Developer task/policy records
 
 Required constraints:
@@ -52,23 +55,26 @@ Required constraints:
 - unique normalized user identity;
 - unique OAuth provider+subject;
 - no plaintext MFA secret or session token;
-- organization membership and role scope;
+- organization membership, subject labels, policy scope and policy version;
 - revocation and audit timestamps.
+- authorization decisions record actor/service identity, organization, resource, action, policy ID/version, decision, safe context refs and correlation ID.
 
 ### Assessment and Repository
 
 - `Assessment`
 - `WizardProfile`
 - `RepositoryConnection`
+- `TrustedScanTrigger`
+- `ScanMappingResolution`
 - `RepositorySnapshot`
 - `RepositoryScanJob`
 
 `RepositoryScanJob` includes:
 
 ```text
-id, assessmentId, repositorySnapshotId, status,
+id, assessmentId, repositorySnapshotId, trustedScanTriggerId, status,
 workerRuntime=PYTHON, idempotencyKey,
-scannerVersion, rulesetVersion,
+scannerVersion, scannerToolchainVersion, scannerConfigHash, rulesetVersion,
 requestedBy, startedAt, completedAt,
 cleanupVerifiedAt, failureCode, failureMessage,
 createdAt, updatedAt
@@ -76,7 +82,7 @@ createdAt, updatedAt
 
 Constraints:
 
-- idempotency key unique for repository+commit+scanner+ruleset policy;
+- idempotency key unique for repository+commit+scanner/toolchain/config/ruleset and trusted trigger policy;
 - `COMPLETED` requires `cleanupVerifiedAt` and accepted report;
 - failed/completed jobs are not mutated into a new run;
 - rerun creates a new job and artifact chain.
@@ -100,14 +106,14 @@ Persist only path/symbol/line/hash/version/confidence/coverage metadata. Evidenc
 - `AIUsageFlow`
 - `AIUsageFlowClaim`
 - `AIUsageFlowClaimEvidenceReference`
-- `StructuredTechnicalAttestation`
+- `StructuredTechnicalAttestation` (`SUPERSEDED_FOR_ACTIVE_MVP`; no active table/migration unless preserving historical data)
 - `ReconciliationConflict`
 - `VerifiedProfile`
 
 Rules:
 
 - material AIUsageFlow claims use many-to-many evidence references;
-- attestation is stored separately from scanner evidence;
+- structured attestation is not an active MVP persistence dependency;
 - Manager resolution is stored separately and audited;
 - open conflict blocks VerifiedProfile/classification;
 - versions are immutable snapshots.
@@ -307,7 +313,7 @@ Artifact upload and metadata registration must avoid orphaned states. Use staged
 ## Migration Order
 
 1. identity/session/organization;
-2. assessment/Wizard/developer policy/attestation;
+2. assessment/Wizard/developer policy/PBAC scope;
 3. repository connection/snapshot/scan job;
 4. evidence refs/findings/report/graph;
 5. TechnicalProfile/AIUsageFlow/reconciliation/VerifiedProfile;

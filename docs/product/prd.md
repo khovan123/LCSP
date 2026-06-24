@@ -22,6 +22,19 @@ LCSP là nền tảng hỗ trợ tuân thủ pháp lý cho doanh nghiệp sử d
 
 PRD này không tạo architecture document, backlog, implementation plan hoặc code. Các quyết định kỹ thuật sâu hơn phải được xử lý ở artifact downstream sau khi PRD được review.
 
+### Phase 5.2L Active Scope Correction
+
+Phase 5.2L là authority hiện hành cho các điểm sau:
+
+- PBAC thay RBAC làm nguồn quyết định authorization. Role chỉ còn là subject attribute, grouping label hoặc policy template.
+- Structured attestation bị loại khỏi active MVP: `FR-045`, `FR-046`, `UC-018`, `AC-013` và các route/entity/event/audit/report dependency tương ứng là `SUPERSEDED_FOR_ACTIVE_MVP`.
+- Compliance certification, formal legal opinion, direct regulator submission và manual technical evidence JSON upload (`FR-051`) là `REMOVED_FROM_PRODUCT`.
+- `FR-050` không còn là Local/CI scanner report upload. `FR-050` là `AUTOMATIC_TRUSTED_SCAN_INITIATION`.
+- Asynchronous domain workloads thuộc Python Worker Platform. Node.js chỉ còn hợp lệ cho NestJS API, web/tooling và bounded `ts-morph` analyzer CLI.
+- Scanner toolchain bao gồm Syft, Knip, deptry, Semgrep custom rules, tree-sitter/custom parser, Python `ast` + `libcst`, và bounded `ts-morph`.
+
+Mọi đoạn PRD cũ bên dưới nhắc attestation, Local/CI upload, manual JSON upload, RBAC, Node.js downstream worker hoặc removed product concepts phải được đọc theo marker Phase 5.2L ở trên.
+
 ### Requirement Governance
 
 Canonical implementation requirement identifiers live in `docs/specs/functional-requirements.md`.
@@ -39,8 +52,8 @@ Canonical implementation requirement identifiers live in `docs/specs/functional-
 - Thu thập technical evidence qua GitHub App read-only Repository Scan trong workflow do Manager dẫn dắt; Developer có thể hỗ trợ như optional collaborator.
 - Ngăn hệ thống tạo risk level khi chỉ có self-report từ Wizard.
 - Đối chiếu WizardProfile và TechnicalProfile để tạo VerifiedProfile trước classification.
-- Đảm bảo final report có audit trail: wizard answers, evidence metadata, conflict resolution, attestation, classification output, legal citation và document version.
-- Giữ ranh giới rõ: LCSP hỗ trợ tuân thủ, không thay thế tư vấn pháp lý ràng buộc.
+- Đảm bảo final report có audit trail: wizard answers, evidence metadata, conflict resolution, classification output, legal citation, PBAC decision trace và document version.
+- Giữ ranh giới rõ: LCSP hỗ trợ tuân thủ, không phải compliance certification, formal legal opinion hoặc direct regulator submission product.
 
 ### Success Metrics
 
@@ -48,12 +61,12 @@ Canonical implementation requirement identifiers live in `docs/specs/functional-
 - **SM-2: Evidence-gated classification.** 100% risk classification chỉ chạy khi technical evidence pass schema gate, quality gate, reconciliation tạo VerifiedProfile và không còn material/critical conflict unresolved. Validates FR-E4-1 đến FR-E6-4.
 - **SM-3: No Wizard-only risk level.** 0 màn hình hoặc report hiển thị HIGH/MEDIUM/LOW khi assessment chỉ ở `SELF_DECLARED_READINESS` hoặc `EVIDENCE_PENDING`. Validates FR-E2-3, FR-E2-4.
 - **SM-4: Conflict accountability.** 100% material conflicts có đúng role confirmation và audit trail. Validates FR-E5-3 đến FR-E5-6.
-- **SM-5: Report traceability.** Final report trace được risk result về evidence, rule/citation và conflict/attestation nếu có. Validates FR-E6-5, FR-E7-2, FR-E8-5.
+- **SM-5: Report traceability.** Final report trace được risk result về evidence, rule/citation, conflict resolution, PBAC decision trace và document version. Validates FR-E6-5, FR-E7-2, FR-E8-5.
 
 ### Counter-Metrics
 
 - **SM-C1: Avoid shallow completion.** Không tối ưu completion rate bằng cách bỏ critical Wizard fields.
-- **SM-C2: Avoid scanner bypass.** Không tối ưu unlock classification bằng cách cho attestation thay thế metadata khách quan.
+- **SM-C2: Avoid scanner bypass.** Không tối ưu unlock classification bằng human assertion, role label hoặc untrusted upload thay thế metadata khách quan.
 - **SM-C3: Avoid false certainty.** Không dùng ngôn ngữ khiến readiness/preliminary indicators bị hiểu là risk classification.
 
 ## 3. Target Users
@@ -84,22 +97,23 @@ Developer owns technical truth:
 - dependency/package có dùng thật không;
 - logic có chạy production không;
 - technical_profile cần correction gì;
-- technical attestation có cấu trúc khi scanner không đủ.
+- technical correction input trong phạm vi được giao khi có giá trị độc lập; structured attestation không thuộc active MVP.
 
 ### Non-Users for MVP
 
 - External legal counsel như một role riêng trong sản phẩm.
 - Organization Admin/IAM administrator như một role riêng.
-- Auditor/regulator portal user.
 - Multi-country compliance operator.
 
-## 4. Role & Permission Model
+## 4. PBAC Policy Model
 
-MVP chỉ expose hai role user-facing: `Manager` và `Developer`.
+MVP chỉ expose hai user-facing labels: `Manager` và `Developer`. PBAC là authorization source of truth. Các label này chỉ là subject attributes, grouping labels hoặc policy templates; chúng không phải final authorization authority.
 
-### Manager Permissions
+Authorization evaluation must include subject, organization, resource, action, request/runtime context, policy and policy version. Enforcement is deny-by-default, tenant-scoped, server-side, versioned and auditable.
 
-Manager mặc định có toàn quyền trong assessment:
+### Manager Policy Template
+
+Manager policy template grants the assessment owner actions needed to complete an assessment:
 
 - `CREATE_ASSESSMENT`
 - `EDIT_WIZARD`
@@ -118,18 +132,16 @@ Manager mặc định có toàn quyền trong assessment:
 - `GENERATE_REPORT`
 - `EXPORT_AUDIT_TRAIL`
 
-Manager is the required and sufficient role for completing an MVP assessment. Manager can perform every active MVP action that Developer may later receive through delegation.
+Manager is the required and sufficient subject profile for completing an MVP assessment, subject to PBAC evaluation and state gates.
 
-### Developer Policies
+### Developer Policy Scope
 
-Developer chỉ làm được task/policy được Manager cấp:
+Developer chỉ làm được task/policy scope được Manager cấp và PBAC cho phép:
 
 - `CONNECT_REPOSITORY`
 - `RUN_REPOSITORY_SCAN`
 - `VIEW_TECHNICAL_FINDINGS`
 - `VIEW_ASSIGNED_REPOSITORY`
-- `RESPOND_TO_TECHNICAL_CLARIFICATION`
-- `ATTEST_TECHNICAL_CLAIMS`
 - `VIEW_ASSIGNED_CONFLICT`
 - `VIEW_LIMITED_ASSESSMENT_CONTEXT`
 
@@ -149,7 +161,7 @@ Developer không được:
 
 ### MVP Conflict Resolution Rule
 
-Trong MVP, mọi conflict được route thành Manager conflict resolution task. Manager reviews WizardProfile, TechnicalProfile và AIUsageFlow evidence, sau đó resolve hoặc update thông tin liên quan. Developer có thể cung cấp structured attestation theo `FR-046` nếu được giao scoped task, nhưng attestation không phải điều kiện bắt buộc để resume workflow. Delegated technical clarification workflow thuộc `FR-052` và là Deferred/Future.
+Trong MVP, mọi conflict được route thành Manager conflict resolution task. Manager reviews WizardProfile, TechnicalProfile và AIUsageFlow evidence, sau đó resolve hoặc update thông tin liên quan. Structured attestation không phải active MVP input. Delegated technical clarification workflow thuộc `FR-052` và là `DEFERRED_POST_MVP`.
 
 Post-MVP, Manager may delegate selected technical clarification permissions to Developer, but delegation never removes Manager permissions and Developer technical input does not automatically finalize conflict resolution.
 
@@ -163,7 +175,7 @@ OAuth/OIDC user login is an active MVP authentication capability. OAuth/OIDC log
 | GitHub App Connection | Cấp quyền read-only để LCSP scan repository |
 | Repository Scan | Tạo TechnicalEvidenceReport từ repository đã kết nối |
 
-OAuth/OIDC login không tự kết nối GitHub repository, không cấp repository scan permission và không thay thế LCSP authorization/RBAC.
+OAuth/OIDC login không tự kết nối GitHub repository, không cấp repository scan permission và không thay thế LCSP PBAC authorization.
 
 Enterprise SSO/SAML/directory federation remains Deferred/Future unless explicitly activated later.
 
@@ -196,16 +208,16 @@ Nếu chưa thể cung cấp technical evidence, Manager có thể xuất readin
 - Manager-led assessment flow.
 - OAuth/OIDC user login as active MVP authentication capability.
 - Web Wizard cho Manager.
-- Standalone Python Worker (`lcsp-scanner-worker`) thực thi Repository Scan độc lập.
-- First-class Python static AST/CST analysis (imports, packages, functions, AI usage, I/O patterns).
-- TypeScript/JavaScript analysis qua node subprocess adapter tích hợp.
-- Kết nối GitHub repository (read-only) và Repository Scan tự động.
+- Python Worker Platform cho tất cả asynchronous domain workloads.
+- Python Scanner Worker thực thi Repository Scan độc lập.
+- Scanner toolchain gồm Syft, Knip, deptry, Python `ast` + `libcst`, TypeScript/JavaScript `ts-morph` CLI, tree-sitter/custom parser và Semgrep custom rules.
+- Kết nối GitHub repository (read-only) và Automatic Trusted Scan Initiation.
 - Tích hợp nhà cung cấp LLM thật (Gemini, Claude, hoặc GPT) cho happy-path risk classification và document generation.
 - Legal corpus bảo toàn provenance từ nguồn chính phủ chính thức, tổ chức thành các phiên bản `LegalCorpusVersion` bất biến.
 - Hybrid retriever kết hợp pgvector (semantic search) và full-text search (FTS) trên PostgreSQL để truy xuất cơ sở pháp lý.
 - Lưu trữ tài liệu kết quả bằng real S3-compatible object storage.
 - Developer invitation và task/policy assignment as optional collaboration.
-- Developer Workspace cho optional technical evidence/clarification tasks.
+- Developer Workspace cho optional scoped technical tasks có giá trị độc lập.
 - Evidence schema completeness gate.
 - Context-aware quality threshold gate ở mức MVP.
 - Reconciliation giữa WizardProfile, TechnicalProfile và AIUsageFlow.
@@ -213,21 +225,19 @@ Nếu chưa thể cung cấp technical evidence, Manager có thể xuất readin
 - VerifiedProfile creation sau reconciliation.
 - Risk classification chỉ sau VerifiedProfile.
 - Gap analysis dựa trên risk result.
-- Compliance report/document generation với gating.
+- Guarded report/document generation với gating.
 - Audit trail cho toàn bộ decision path (bao gồm retrieval audit và model run audit).
 
 ### Out of Scope for MVP
 
-- Nộp hồ sơ trực tiếp lên cổng MoST.
-- Tư vấn pháp lý ràng buộc thay luật sư.
 - Multi-country compliance frameworks.
 - Full enterprise IAM hoặc nhiều role riêng ngoài Manager/Developer.
-- CI/CD production-grade GitHub Action như default MVP path.
-- Public auditor/regulator portal.
+- Structured attestation must not appear as an active MVP feature.
+- CI/CD production-grade GitHub Action or Local/CI scanner report upload must not appear as a product evidence path.
 - Direct editing of raw legal corpus/rules by end users.
 - Final report khi còn material/critical conflict unresolved.
 - Enterprise SSO/SAML/directory federation, domain-restricted login, SCIM provisioning hoặc advanced organization identity policy.
-- Local/CI scanner report upload hoặc manual technical evidence JSON trong MVP main flow.
+- Manual technical evidence JSON upload (`FR-051`) must not appear in active scope, roadmap, future scope, UX, APIs, entities, or delivery plans.
 - Risk level khi chỉ có Wizard/self-report.
 - Deterministic mock LLM gateway làm mặc định cho happy-path classification (chỉ dùng cho tests, offline CI, dev không cấu hình key).
 - Local JSONL legal corpus seed làm nguồn dữ liệu chính thức (chỉ dùng làm test fixture).
@@ -328,24 +338,22 @@ Manager can connect selected repository and run read-only scan for own assessmen
 - Evidence report must include provenance metadata.
 - Manager can complete the A-to-Z golden path without Developer participation.
 
-#### FR-E3-2: Deferred Local/CI evidence upload
+#### FR-E3-2: Superseded Local/CI evidence upload
 
-Local/CI scanner report upload is Deferred/Future and maps to canonical `FR-050`. It is not part of the active MVP main flow and must not be represented as an MVP evidence path unless reopened through change control.
-
-**Consequences:**
-- Active MVP evidence collection uses GitHub App read-only Repository Scan.
-- Future Local/CI reports must go through schema completeness, privacy, provenance and quality gates.
-- Future Local/CI reports must include source type and provenance.
-- Local/CI upload cannot independently unlock MVP classification.
-
-#### FR-E3-3: Deferred manual technical evidence JSON upload
-
-Manual technical evidence JSON upload is Deferred/Future and maps to canonical `FR-051`. It is not part of the active MVP main flow and must not be represented as an MVP evidence path unless reopened through change control.
+Local/CI scanner report upload is `SUPERSEDED_FOR_ACTIVE_MVP`. Canonical `FR-050` now means `AUTOMATIC_TRUSTED_SCAN_INITIATION`, not report upload.
 
 **Consequences:**
-- Future manual evidence must be structured and provenance-bound.
-- Free-text comment cannot bypass gates.
-- Manual evidence JSON cannot independently unlock MVP classification.
+- There is no manual scanner report upload UI/API.
+- Trusted triggers create or resume pending scan workflows from integration context.
+- Missing or ambiguous mapping creates safe pending/blocked/waiting states instead of scanning the wrong repository or assessment.
+
+#### FR-E3-3: Removed manual technical evidence JSON upload
+
+Manual technical evidence JSON upload maps to canonical `FR-051` and is `REMOVED_FROM_PRODUCT`.
+
+**Consequences:**
+- It must not appear in active scope, roadmap, future scope, requirements, UX, APIs, entities, stories or delivery plans.
+- Historical/change-control records may retain evidence that it was previously considered.
 
 #### FR-E3-4: Privacy flags validation
 
@@ -354,9 +362,14 @@ System validates privacy flags for every technical evidence report.
 **Consequences:**
 - Evidence is rejected if privacy flags indicate raw source uploaded/stored improperly, full AST uploaded when disallowed, raw source sent to LLM, or secrets not redacted where required.
 
-#### FR-E3-5: Optional human technical attestation as supplement
+#### FR-E3-5: Superseded human technical attestation
 
-Developer can provide structured human technical attestation only as optional controlled supplemental input through a scoped Developer task. This maps to canonical `FR-045` and `FR-046`; `FR-045` disclosure/audit applies whenever attestation influences a material decision.
+Structured human technical attestation maps to historical `FR-045` and `FR-046` and is `SUPERSEDED_FOR_ACTIVE_MVP`.
+
+**Consequences:**
+- It must not support active reconciliation.
+- It must not appear as optional evidence, Manager review input, classification dependency, or Developer workflow retained solely for attestation.
+- Reintroduction requires separate Project Owner approval.
 
 **Consequences:**
 - Attestation is not required for the MVP golden path.
@@ -423,12 +436,12 @@ System computes Conflict Score for each conflict.
 
 #### FR-E5-3: Route technical conflicts to Manager
 
-Technical conflicts such as dependency use, false positive/negative, repo/branch/commit or production scope are routed to Manager in MVP. Manager may request re-scan/correction and may consider optional structured attestation submitted through `FR-046`; the delegated Developer clarification workflow in `FR-052` is Deferred/Future and not required to resume the MVP workflow.
+Technical conflicts such as dependency use, false positive/negative, repo/branch/commit or production scope are routed to Manager in MVP. Manager may request re-scan/correction and may consider scanner evidence, coverage limitations, and scoped technical correction input. Structured attestation under `FR-046` is `SUPERSEDED_FOR_ACTIVE_MVP`; the delegated Developer clarification workflow in `FR-052` is `DEFERRED_POST_MVP`.
 
 **Consequences:**
 - Manager is the final resolver for MVP technical conflicts.
-- Structured attestation is supplemental input only and cannot unlock classification by itself.
-- Delegated technical clarification workflow (`FR-052`) is Deferred/Future.
+- Structured attestation is not active MVP input and cannot unlock classification.
+- Delegated technical clarification workflow (`FR-052`) is `DEFERRED_POST_MVP`.
 - Resolution is audited.
 
 #### FR-E5-4: Route business/legal conflicts to Manager
@@ -530,12 +543,13 @@ Manager may export readiness-only output when technical evidence is unavailable.
 - Readiness-only output contains missing evidence checklist and preliminary indicators.
 - Readiness-only output does not contain HIGH/MEDIUM/LOW.
 
-#### FR-E7-4: Disclose attestation use
+#### FR-E7-4: Superseded attestation disclosure
 
-If classification used human technical attestation because automated scanner evidence was insufficient, report must disclose that.
+Attestation disclosure is `SUPERSEDED_FOR_ACTIVE_MVP` because structured attestation is removed from the active MVP.
 
 **Consequences:**
-- Disclosure includes who attested, what was attested, when, based on which evidence and which conflict was resolved.
+- Active reports must not depend on attestation use.
+- Historical/change-control records may preserve previous attestation disclosure discussions.
 
 ### Epic 8 - Audit Trail
 
@@ -562,14 +576,15 @@ System records evidence source type, provenance, scanner/report version, ruleset
 System records conflict score, conflict type, resolver role, decision, rationale and timestamps.
 
 **Consequences:**
-- Conflict resolution shows Manager final resolution and any optional delegated clarification used as input.
+- Conflict resolution shows Manager final resolution and safe evidence/context references used as input.
 
-#### FR-E8-4: Audit human technical attestation
+#### FR-E8-4: Superseded human technical attestation audit
 
-System records attestation claims, role, scope, reasons, supporting evidence refs and signed timestamp.
+Human technical attestation audit is `SUPERSEDED_FOR_ACTIVE_MVP` because structured attestation is removed from active MVP.
 
 **Consequences:**
-- Attestation cannot be a free-text bypass.
+- Active audit requirements cover PBAC decisions, trigger decisions, evidence, conflict, classification and document events.
+- Historical records must not be silently deleted.
 
 #### FR-E8-5: Audit classification and generated documents
 
@@ -687,17 +702,14 @@ Accepted evidence sources:
 
 **Active MVP golden evidence path**
 
-- GitHub App read-only Repository Scan.
+- GitHub App read-only Repository Scan created or resumed through `FR-050` Automatic Trusted Scan Initiation.
 
-**Optional MVP supplemental input**
+**Removed or inactive paths**
 
-- Structured human technical attestation, only through scoped Developer task, only as supplemental input and never as an independent classification unlock.
-
-**Deferred/Future evidence paths**
-
-- Local/CI scanner report upload (`FR-050`).
-- Manual technical evidence JSON upload (`FR-051`).
-- Delegated technical clarification (`FR-052`).
+- Structured human technical attestation is `SUPERSEDED_FOR_ACTIVE_MVP`.
+- Local/CI scanner report upload is `SUPERSEDED_FOR_ACTIVE_MVP` by `FR-050`.
+- Manual technical evidence JSON upload (`FR-051`) is `REMOVED_FROM_PRODUCT`.
+- Delegated technical clarification (`FR-052`) is `DEFERRED_POST_MVP`.
 - API probe evidence, unless separately approved through change control.
 
 ### Minimum Evidence Schema Groups
@@ -728,22 +740,11 @@ Technical evidence report must include:
 
 Each dimension may be `DETECTED`, `NOT_DETECTED` or `UNKNOWN`, but the field must exist.
 
-### Attestation Guardrails
+### Superseded Attestation Guardrails
 
-Human technical attestation is optional supplemental input and can be considered only if:
+Human technical attestation is `SUPERSEDED_FOR_ACTIVE_MVP`. Prior guardrail discussion remains historical only and must not create active UX, API, entity, event, audit, report, epic, story or delivery work.
 
-- source type is structured as human technical attestation;
-- attester is authorized Developer;
-- claims are role-bound and structured;
-- claim scope includes relevant system/repo/branch/commit/environment where applicable;
-- reason is provided per claim;
-- supporting evidence refs are included where available;
-- signed timestamp is recorded;
-- audit trail records who, what, when, why and based on which evidence.
-
-Attestation is not required for the golden path and cannot independently unlock classification or finalize conflict resolution.
-
-Attestation cannot replace these machine-generated or external metadata:
+No human assertion can replace these machine-generated or external metadata:
 
 - report hash;
 - scanner version;
@@ -763,7 +764,7 @@ Attestation cannot replace these machine-generated or external metadata:
 - Any MVP conflict pauses workflow and creates a Manager conflict-resolution task.
 - Manager reviews WizardProfile, TechnicalProfile and AIUsageFlow evidence, then resolves or updates relevant information.
 - Manager remains final resolver for technical, business/legal and cross-boundary MVP conflicts.
-- Developer may provide technical clarification if assigned, but Developer is not required to resume MVP workflow.
+- Developer may provide scoped technical correction input if assigned and independently valuable, but Developer is not required to resume MVP workflow.
 - LCSP coordinates and records the process but does not act as the human authority.
 - VerifiedProfile cannot be created while any conflict remains unresolved.
 - Every conflict resolution must be auditable.
@@ -771,10 +772,10 @@ Attestation cannot replace these machine-generated or external metadata:
 Examples:
 
 - Scanner detects dependency/package AI use: Manager resolves or requests re-scan/correction.
-- Scanner false positive/false negative: Manager resolves with evidence review; optional structured attestation may supplement under `FR-046`; delegated Developer clarification remains Deferred/Future under `FR-052`.
+- Scanner false positive/false negative: Manager resolves with evidence review, re-scan/correction, and safe context references; structured attestation under `FR-046` is `SUPERSEDED_FOR_ACTIVE_MVP`.
 - Wizard business purpose is wrong: Manager resolves.
 - AI affects decision/workflow: Manager resolves using WizardProfile, TechnicalProfile and AIUsageFlow evidence.
-- Auto decision or human oversight conflict: Manager resolves; optional structured attestation does not finalize the conflict, and delegated Developer clarification remains Deferred/Future under `FR-052`.
+- Auto decision or human oversight conflict: Manager resolves; structured attestation does not participate in active MVP conflict completion, and delegated Developer clarification remains `DEFERRED_POST_MVP` under `FR-052`.
 
 ## 13. Reporting Rules
 
@@ -783,7 +784,6 @@ Examples:
 - Readiness-only export is allowed without technical evidence but must not include HIGH/MEDIUM/LOW.
 - Classification output must include legal citation/rule trace.
 - If required legal rule/citation is missing, classification must be degraded or blocked, not finalized.
-- If classification uses human technical attestation, report must disclose that.
 - Report must include enough audit summary to trace major decisions.
 
 ## 14. Audit Trail Expectations
@@ -798,8 +798,9 @@ LCSP audit trail must record:
 - Scope and privacy flags.
 - Evidence gate result and reason.
 - Conflict records, score and required resolver.
-- Manager conflict resolutions and any optional structured attestation that materially influences a decision.
-- Human technical attestation claims.
+- Manager conflict resolutions and safe context references that materially influence a decision.
+- PBAC policy ID/version and decision trace for material authorization decisions.
+- Automatic scan trigger source, delivery/correlation refs, and mapping decision.
 - VerifiedProfile version.
 - Classification output and rule/citation trace.
 - Gap analysis output.
@@ -860,36 +861,25 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - Create scenario/evaluation fixtures with expected risk, rules and citations.
 - Validate citation accuracy before final PRD signoff for classification scope.
 
-### A3. Human attestation abuse risk
+### A3. PBAC and trusted-trigger abuse risk
 
-**Risk:** Developer/Manager could use attestation to legitimize weak evidence.
+**Risk:** A subject, service identity, role label, or integration trigger could be misused to bypass PBAC or start a scan for the wrong tenant, repository, or assessment.
 
 **PRD Requirements:**
 
-- Attestation must have schema.
-- Attestation claims must be role-bound.
-- Manager can confirm only business/legal meaning.
-- Manager is the final reviewer for classification-relevant attestation in MVP.
-- Developer can provide technical clarification only when delegated, and that clarification does not finalize conflict resolution.
-- Attestation must include provenance, scope, reason and timestamp.
-- Attestation cannot replace machine-generated or external metadata:
-  - report hash;
-  - scanner version;
-  - ruleset version;
-  - scan timestamp;
-  - repo/commit metadata;
-  - legal corpus version;
-  - evidence report integrity;
-  - machine-generated privacy flags.
-- Report must disclose if classification used human technical attestation.
-- Audit trail must store the full attestation record.
+- PBAC must evaluate subject, organization, resource, action, request/runtime context, policy and policy version.
+- Authorization must be deny-by-default, tenant-scoped, server-side enforced, versioned and auditable.
+- Trusted scan triggers must validate source identity, organization, repository connection, assessment mapping, configured branch and commit SHA.
+- Missing or ambiguous mapping must produce `PENDING_MAPPING`, `BLOCKED_MAPPING` or `WAITING_FOR_CONTEXT` instead of scanning.
+- Every authorization and trigger decision must include safe context refs and correlation ID.
+- Structured attestation remains removed from active MVP and cannot be used to legitimize weak evidence.
 
 **Validation Plan:**
 
-- Define attestation claim schema.
-- Define allowed Developer claims and Manager confirmations.
-- Test abuse cases: "bỏ qua scanner", unsupported claim, missing provenance, manager-only technical override.
-- Require product review before attestation can influence any classification-relevant Manager decision in critical contexts. Attestation must not independently unlock classification.
+- Define PBAC policy model and engine decision before implementation.
+- Test abuse cases: wrong tenant, ambiguous assessment mapping, revoked repository connection, duplicate trigger, out-of-order trigger, policy unavailable, service identity overreach.
+- Verify no role label alone grants final authority.
+- Verify no trigger can scan the wrong repository or assessment.
 
 ## 16. Open Questions
 
@@ -911,18 +901,20 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - GitHub App read-only acceptance by target MVP users needs validation.
 - Scope coverage for monorepos needs definition.
 - Stale evidence behavior when commit/branch changes needs decision.
-- Local/CI report upload (`FR-050`), manual evidence JSON (`FR-051`), delegated technical clarification (`FR-052`) and API probe evidence are Deferred/Future unless reopened by change control.
+- `FR-050` Automatic Trusted Scan Initiation technical behavior is `TECHNICAL_DECISION_REQUIRED` for final idempotency, retry/DLQ and replay details.
+- Manual evidence JSON (`FR-051`) is `REMOVED_FROM_PRODUCT`.
+- Delegated technical clarification (`FR-052`) and API probe evidence are inactive unless reopened by change control.
 
 ### Attestation
 
 - Exact list of optional Developer-attestable claims needs confirmation.
-- Confidence impact of attestation needs decision, with the constraint that attestation cannot bypass gates or independently unlock classification.
-- Policy for excessive attestation use needs decision.
+- PBAC engine/storage/cache/invalidation/topology/failure behavior is `TECHNICAL_DECISION_REQUIRED`.
+- Scanner tool failure severity table is `TECHNICAL_DECISION_REQUIRED`.
 
 ### Reporting
 
 - Exact contents of readiness-only export need definition.
-- Exact disclosure text for attestation-assisted classification needs review.
+- Manager-visible wording for automatic trigger mapping states needs UX design after documentation remediation.
 
 ## 17. Acceptance Criteria
 
@@ -936,10 +928,10 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - AC-6: Manager conflict resolution is required and sufficient for MVP conflict completion when evidence gates pass.
 - AC-7: Evidence Confidence Score and AI Intervention Score never block workflow alone.
 - AC-8: Conflict handling uses binary MVP routing: conflict exists or not. Conflict Score may explain seriousness but does not create multiple routes.
-- AC-9: Human technical attestation cannot replace machine-generated metadata listed in A3.
+- AC-9: Human assertion, role label, or untrusted upload cannot replace machine-generated metadata listed in A3.
 - AC-10: Final report includes legal citation/rule trace or is not final.
-- AC-11: Final report discloses human technical attestation when used for classification.
-- AC-12: Audit trail records wizard, evidence, conflict, attestation, classification and document generation events.
+- AC-11: Final report has no attestation dependency and discloses evidence, legal basis, PBAC/trigger trace and limitations.
+- AC-12: Audit trail records wizard, evidence, conflict, PBAC/trigger decisions, classification and document generation events.
 
 ### PRD Acceptance Criteria
 
@@ -956,7 +948,7 @@ Architecture may proceed to explore system boundaries and feasibility only if it
 
 - no risk level without technical evidence;
 - no Risk Classification before VerifiedProfile;
-- no human attestation bypass for machine-generated metadata;
+- no human assertion, role label or untrusted upload bypass for machine-generated metadata;
 - any unresolved conflict blocks classification/report until Manager resolution is complete;
 - Wizard-only remains readiness/preliminary indicators only.
 
@@ -964,7 +956,7 @@ Before final architecture signoff, product must validate or carry forward these 
 
 1. Wizard question model can collect enough business/legal truth without technical wording.
 2. Legal corpus/rule reliability can support cited, traceable classification.
-3. Human attestation guardrails prevent evidence bypass.
+3. PBAC and trusted-trigger guardrails prevent authorization and scan-initiation bypass.
 
 Recommended next step:
 

@@ -2,11 +2,13 @@
 
 ## Bộ định danh chuẩn
 
-- Use case: `UC-001..UC-018`.
+- Use case active: `UC-001..UC-017`; `UC-018` là lịch sử và `SUPERSEDED_FOR_ACTIVE_MVP`.
 - Functional requirement: `FR-001..FR-056`.
-- Active MVP: `FR-001..FR-049`, `FR-053..FR-056`.
-- Deferred: `FR-050..FR-052`.
-- Acceptance criteria: `AC-001..AC-041`.
+- Phase 5.2L: `FR-050` active dưới nghĩa Automatic Trusted Scan Initiation.
+- `FR-045/FR-046` structured attestation là `SUPERSEDED_FOR_ACTIVE_MVP`.
+- `FR-051` manual evidence JSON là `REMOVED_FROM_PRODUCT`.
+- Deferred: `FR-052`.
+- Acceptance criteria: `AC-001..AC-041` và `AC-050A..AC-050F`.
 - Active NFR: `NFR-001..NFR-030`, `NFR-033..NFR-035`.
 
 Các ID cũ như `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, `NFR-032` chỉ còn ý nghĩa lịch sử hoặc alias; không được dùng làm traceability mới.
@@ -15,15 +17,15 @@ Các ID cũ như `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, `NFR-032` ch
 
 ### Danh tính và quản trị
 
-Đăng ký, đăng nhập, MFA, session, OAuth/OIDC, organization, membership, role và scoped Developer policy. OAuth login và GitHub repository permission là hai quyền độc lập.
+Đăng ký, đăng nhập, MFA, session, OAuth/OIDC, organization, membership, PBAC policy và scoped Developer policy. OAuth login và GitHub repository permission là hai quyền độc lập.
 
 ### Assessment và repository
 
-Manager tạo assessment, hoàn thành WizardProfile, kết nối GitHub App chỉ đọc, chọn branch/commit và tạo RepositorySnapshot bất biến.
+Manager tạo assessment, hoàn thành WizardProfile, kết nối GitHub App chỉ đọc. Trusted trigger từ webhook, scheduler, backend hoặc Manager action tạo/resume scan workflow an toàn theo organization, repository, assessment, branch và commit.
 
 ### Scanner và evidence
 
-Python Worker chạy static analysis, tạo SourceFile metadata, graph, EvidenceReference, TechnicalFinding và TechnicalEvidenceReport. Chỉ report đạt schema, privacy và quality gate mới được dùng tiếp.
+Python Scanner Worker chạy Syft, Knip, deptry, `ast`/`libcst`, bounded `ts-morph`, tree-sitter/custom parser và Semgrep custom rules để tạo dependency facts, SourceFile metadata, graph, EvidenceReference, TechnicalFinding và TechnicalEvidenceReport. Chỉ report đạt schema, privacy và quality gate mới được dùng tiếp.
 
 ### Intelligence và reconciliation
 
@@ -40,7 +42,7 @@ GapAnalysis và final report yêu cầu đủ classification, legal basis, citat
 ## Yêu cầu phi chức năng trọng yếu
 
 - Xác thực, session, MFA, rate limit và OAuth an toàn.
-- Tenant isolation và RBAC phía server.
+- Tenant isolation và PBAC phía server.
 - Không raw source sang LLM hoặc lưu trữ dài hạn.
 - Evidence provenance, hash, version và immutable history.
 - Fail-closed khi thiếu evidence, citation hoặc corpus.
@@ -65,7 +67,7 @@ Manager phải hoàn thành từ đăng nhập đến xuất audit mà không ph
 
 ## Negative paths bắt buộc
 
-Các tình huống cần có hành vi rõ ràng gồm repository không truy cập được, parser lỗi từng file, dynamic Python flow, cleanup thất bại, conflict chưa giải quyết, corpus chưa duyệt, zero citation candidate, provider timeout, model output sai schema, duplicate message, outbox publish lỗi và document guardrail vi phạm.
+Các tình huống cần có hành vi rõ ràng gồm invalid webhook signature, untrusted trigger source, PBAC denied, thiếu/ambiguous mapping, repository không truy cập được, parser/tool lỗi từng file, dynamic Python flow, cleanup thất bại, conflict chưa giải quyết, corpus chưa duyệt, zero citation candidate, provider timeout, model output sai schema, duplicate message, outbox publish lỗi và document guardrail vi phạm.
 
 ## Quy tắc traceability
 

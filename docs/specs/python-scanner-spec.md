@@ -8,7 +8,7 @@ New document per SPRINT-CHANGE-PROPOSAL-5.2J (2026-06-23). Python is first-class
 
 ## Purpose
 
-Defines Python-language scanner capability requirements for the A-to-Z runnable MVP. This is a design/spec contract, not source code.
+Defines Python-language scanner capability requirements for the A-to-Z runnable MVP. Phase 5.2L expands the scanner from Python/TS semantic analysis into a full toolchain including Syft, Knip, deptry, Semgrep custom rules, and tree-sitter/custom parser. This is a design/spec contract, not source code.
 
 ## Python Language Support Level
 
@@ -17,6 +17,20 @@ PYTHON_SCANNER_SUPPORT_LEVEL: FULL_STATIC
 ```
 
 Supersedes Phase 5.2I classification of `SYNTAX_ONLY` / `DEFERRED_FROM_CONTROLLED_MVP_PROTOTYPE`.
+
+## Phase 5.2L Toolchain Boundary
+
+Python Scanner Worker orchestrates:
+
+- Syft for SBOM/dependency inventory;
+- Knip for JavaScript/TypeScript dependency usage;
+- deptry for Python dependency usage;
+- Python `ast` + `libcst` for Python semantic analysis;
+- bounded Node `ts-morph` CLI for TypeScript/JavaScript semantic analysis;
+- tree-sitter/custom parser for structural augmentation;
+- Semgrep custom rules for AI provider/framework/model invocation/prompt/data-flow/downstream decision/ranking/recommendation/human-review/risky-use signals.
+
+All tools must have pinned versions, config/ruleset hashes, resource limits, redacted output, normalized structured contracts, and failure/coverage provenance. The failure severity table is `TECHNICAL_DECISION_REQUIRED`.
 
 ## Authoritative Principle
 
@@ -112,6 +126,17 @@ Forbidden in evidence refs:
 - Full AST body
 - Secret values, tokens, or credentials
 - Full prompt text
+
+## Normalized Dependency Facts
+
+The Python scanner platform must preserve package and dependency facts separately from AI usage claims:
+
+- `PackageDependency`;
+- `SBOMComponent`;
+- `DependencyUsageFact`;
+- dependency states: declared, discovered, used/reachable, unused, missing, transitive, uncertain.
+
+Dependency/tool facts can support evidence and coverage analysis, but cannot independently prove active AI use, legal truth, classification truth, or automated decision-making.
 
 ## Confidence Rules (Python)
 

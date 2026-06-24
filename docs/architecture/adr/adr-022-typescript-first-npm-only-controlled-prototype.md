@@ -2,7 +2,16 @@
 
 ## Status
 
-PARTIALLY_SUPERSEDED_BY_ADR_023 — scanner worker runtime superseded. NestJS API, Next.js web, and non-scanner npm workspace packages remain TypeScript-first per this ADR.
+SUPERSEDED_IN_PART_BY_PHASE_5_2L — scanner worker runtime and downstream domain worker ownership are superseded. NestJS API, Next.js web, tooling, and non-runtime shared contracts may remain TypeScript-first per this ADR.
+
+## Phase 5.2L Supersession Note
+
+```text
+NODE_DOWNSTREAM_DOMAIN_WORKERS_SUPERSEDED_FOR_ACTIVE_MVP
+PYTHON_WORKER_PLATFORM_REQUIRED
+```
+
+Phase 5.2L supersedes this ADR wherever it assigns asynchronous domain workloads to Node.js. TechnicalProfile, AIUsageFlow, reconciliation, legal ingestion/index, legal matching, classification, gap analysis, document generation and async export belong to bounded Python Worker Platform consumers/modules. Node.js remains valid for NestJS API, web/tooling and the bounded TS/JS analyzer CLI only.
 
 ## Phase 5.2J Supersession Note
 
