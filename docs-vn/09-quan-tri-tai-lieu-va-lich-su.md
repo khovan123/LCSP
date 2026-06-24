@@ -3,82 +3,72 @@
 ## Các lớp tài liệu
 
 ```text
-docs/product/                       mục tiêu, phạm vi, actor, business rules
-docs/specs/                         yêu cầu và hành vi domain chuẩn
-docs/architecture/                  kiến trúc và ADR
-docs/developer-execution-blueprints/ luồng dữ liệu/runtime
-docs/implementation/                hợp đồng build và cấu hình
-docs/code-map/                      ownership của module/API/table/queue
-docs/planning-artifacts/             báo cáo readiness/remediation
-docs/change-control/                 thay đổi phạm vi đã phê duyệt
-docs/reviews/                        phản biện và quyết định xử lý
-docs/archive/                        lịch sử, artifact bị thay thế hoặc delete candidate
+docs/product/                        product scope và business rules
+docs/specs/                          UC, FR, NFR, AC, domain và state
+docs/architecture/                   architecture và ADR
+docs/developer-execution-blueprints/ runtime/data journeys
+docs/implementation/                 build/configuration contracts
+docs/code-map/                       module/table/queue ownership
+docs/planning-artifacts/             proposal, readiness và remediation reports
+docs/change-control/                 thay đổi phạm vi đã được phê duyệt
+docs/reviews/                        feedback và remediation evidence
+docs/archive/                        historical evidence
 ```
 
-## Thứ tự ưu tiên khi có xung đột
+## Thứ tự authority
 
-1. Change-control đã được Project Owner phê duyệt.
-2. Product scope và canonical FR/NFR/AC.
-3. ADR đang hiệu lực và có ghi rõ supersession.
+1. Project Owner decision và change-control đã được phê duyệt.
+2. Product scope và canonical UC/FR/NFR/AC.
+3. ADR đang hiệu lực và supersession register.
 4. Domain specs và state machines.
 5. Implementation specs và code maps.
 6. Planning/review reports.
 7. Archive chỉ dùng để hiểu lịch sử.
 
-Tài liệu mới hơn không tự động thắng; phải có authority và quan hệ supersession rõ ràng.
+Proposal chưa có Project Owner approval không được dùng để tuyên bố remediation đã hoàn tất.
 
-## Các thay đổi lịch sử chính
+## Lịch sử chính
 
-### Baseline cũ
+### Phase 5.2J
 
-Dự án từng dùng phạm vi controlled MVP với scanner thiên về TypeScript, Python syntax-only, mock LLM làm mặc định và legal corpus seed đơn giản.
-
-### Scope pivot Phase 5.2J
-
-Project Owner chuyển mục tiêu sang A-to-Z runnable MVP:
-
-- Python Worker sở hữu scan lifecycle;
-- Python analysis trở thành first-class bounded capability;
-- real LLM/embedding provider là happy path bắt buộc;
-- legal corpus có nguồn chính thức, provenance, review và immutable version;
-- hybrid legal retrieval thực sự;
-- workflow phải chạy từ login đến audit export.
-
-Phase 5.2I vẫn là lịch sử hợp lệ cho phạm vi cũ nhưng không còn authority triển khai.
+Chuyển mục tiêu sang A-to-Z runnable MVP: Python-owned scanner lifecycle, first-class Python analysis, real providers, official-source legal corpus và hybrid retrieval.
 
 ### Phase 5.2K
 
-Các tài liệu active được chuẩn hóa lại về canonical UC/FR/AC/NFR, scanner ownership, legal corpus/retrieval, UX boundary và trạng thái readiness.
+Chuẩn hóa canonical UC/FR/AC/NFR, scanner ownership, legal corpus/retrieval và pre-UX planning state.
+
+### Phase 5.2L
+
+Project Owner yêu cầu PBAC, loại structured attestation, thay Local/CI upload bằng Automatic Trusted Scan Initiation, loại manual evidence JSON khỏi product, chuyển mọi async workload sang Python Worker Platform và mở rộng scanner toolchain.
+
+PR #2 đã cập nhật phần lớn tài liệu active theo direction này. Tuy nhiên proposal approval còn trống và một số tài liệu vẫn giữ nội dung cũ, nên closure chưa đạt.
 
 ## Archive
 
-`docs/archive/` chứa:
-
-- quyết định cũ và báo cáo từng phase;
-- kiến trúc gốc hoặc phương án đã bị supersede;
-- artifact trùng lặp, delete candidate và story shell cũ;
-- checklist/validation pack lịch sử;
-- báo cáo consolidation và recovery.
-
-Archive không được dùng để tạo UX, story hoặc code mới trừ khi tài liệu active dẫn chiếu rõ ràng.
-
-## Reviews và feedback
-
-Các register trong `docs/reviews/` lưu member feedback, quyết định canonical, triage và remediation evidence. Nội dung đã được chấp nhận phải phản ánh trong tài liệu active; review file không tự thay thế spec.
-
-## Trạng thái planning
-
-Tài liệu hiện cho phép bước UX tiếp theo nhưng không cho phép coding:
+Không sửa `docs/archive/` để làm baseline mới có vẻ nhất quán. Tài liệu active phải phân loại nội dung cũ bằng marker rõ ràng:
 
 ```text
-CANONICAL_UX_AUTHORIZED
-CANONICAL_UX_PENDING
+HISTORICAL_ONLY
+SUPERSEDED_FOR_ACTIVE_MVP
+REMOVED_FROM_PRODUCT
+DEFERRED_POST_MVP
+```
+
+## Trạng thái planning hiện tại
+
+```text
+PHASE_5_2L_REMEDIATION_SUBSTANTIAL_BUT_NOT_CLOSED
+PROJECT_OWNER_APPROVAL_PENDING
+ACTIVE_DOCUMENT_CLOSURE_REQUIRED
+CANONICAL_UX_NOT_READY_TO_START
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_READINESS_NOT_CERTIFIED
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
 
+Các technical decisions về PBAC engine/topology, scan-trigger retry/DLQ/idempotency và scanner tool failure severity có thể được carry forward qua UX dưới dạng constraint, nhưng phải được giải quyết hoặc gắn dependency rõ trước khi story/readiness được duyệt.
+
 ## Vai trò của docs-vn
 
-`docs-vn/` giúp đọc nhanh toàn bộ hệ thống tài liệu bằng tiếng Việt. Nó không tạo yêu cầu mới, không thay đổi authority và không được dùng thay cho source doc khi review chi tiết.
+`docs-vn/` giúp đọc nhanh target direction và trạng thái closure. Nó không tạo requirement mới, không thay đổi authority và không thay thế source doc khi review chi tiết.
