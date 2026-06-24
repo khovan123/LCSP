@@ -1,80 +1,89 @@
 # 07 — Dữ liệu, sự kiện và bảo mật
 
-## Nhóm dữ liệu mục tiêu
+## Nhóm dữ liệu chính
 
 ```text
-Identity, Organization và Policy
+Identity và Organization
 Assessment và WizardProfile
-RepositoryConnection, RepositorySnapshot và ScanTrigger
+RepositoryConnection và RepositorySnapshot
 RepositoryScanJob và scanner evidence
 TechnicalProfile và AIUsageFlow
 Conflict và VerifiedProfile
 Legal corpus và LegalRuleMatch
 RiskClassification và GapAnalysis
 GeneratedDocument
-PolicyDecision, AuditEvent và OutboxEvent
+AuditEvent và OutboxEvent
 ```
 
-Structured attestation entity không còn thuộc active MVP.
+Các artifact quan trọng được version hóa và giữ lịch sử bất biến. Rerun tạo chuỗi artifact mới thay vì ghi đè kết quả cũ.
 
-## PBAC data model
+## Quy tắc persistence
 
-Authorization cần các reference tối thiểu:
+PostgreSQL là nguồn chuẩn cho trạng thái nghiệp vụ và metadata. Object storage lưu legal source snapshots và document artifacts. Database lưu storage reference, hash, version và trạng thái.
 
-- subject hoặc service identity;
-- organization/tenant;
-- resource type và resource ID;
-- action;
-- context attributes;
-- policy ID/version;
-- decision và reason code;
-- correlation/causation ID;
-- timestamp.
+Không lưu dài hạn:
 
-Role có thể được lưu như subject attribute hoặc policy template nhưng không quyết định quyền trực tiếp. Policy engine unavailable hoặc context không đủ phải deny/fail closed.
-
-## Persistence
-
-PostgreSQL là nguồn chuẩn cho domain state và metadata. Object storage lưu legal source snapshots và document artifacts. Không lưu dài hạn raw repository source, repository archive, full AST, secret, provider token, full prompt hoặc tool output chưa validate.
-
-Scanner bổ sung metadata cho tool/version/config hash, SBOM components, dependency usage facts, graph evidence và coverage limitations.
+- raw repository source;
+- repository archive;
+- full AST;
+- secret, credential hoặc provider token;
+- full customer prompt;
+- raw subprocess output chưa validate.
 
 ## Transaction và Outbox
 
+Mọi thay đổi trạng thái có tác vụ bất đồng bộ phải dùng transaction:
+
 ```text
-validate identity/context
--> PBAC decision
--> validate domain state
+validate actor và state guard
 -> ghi domain object
--> ghi PolicyDecision/AuditEvent
--> ghi OutboxEvent khi cần
+-> ghi AuditEvent
+-> ghi OutboxEvent
 -> commit
 ```
 
-Outbox publisher phát message sau transaction. Consumer idempotent và dùng retry/DLQ có giới hạn.
+Outbox publisher phát message sau transaction. Cách này tránh trạng thái đã lưu nhưng message bị mất hoặc message đã phát khi transaction chưa thành công.
 
-## Python Worker Platform queues
+## Queue chuẩn
 
-Queue names có thể giữ theo domain nhưng consumer runtime chuyển sang Python. Từng workload phải có queue ownership, service identity, resource limit và failure policy riêng cho scan, profile, AIUsageFlow, reconciliation, legal ingestion/index, legal matching, classification, gap, document và async export.
+Các queue chính:
 
-## Automatic scan trigger audit
+- `lcsp.scan-worker.v1`;
+- `lcsp.technical-profile-worker.v1`;
+- `lcsp.ai-usage-flow-worker.v1`;
+- `lcsp.reconciliation-worker.v1`;
+- `lcsp.legal-source-ingest.v1`;
+- `lcsp.embedding-build.v1`;
+- `lcsp.legal-matching-worker.v1`;
+- `lcsp.classification-worker.v1`;
+- `lcsp.gap-analysis-worker.v1`;
+- `lcsp.document-worker.v1`.
 
-Mỗi trigger phải ghi source, organization/account, repository, assessment, branch/commit khi có, policy decision, idempotency key, mapping outcome và correlation ID. Duplicate hoặc out-of-order event không được tạo artifact trùng. Mapping mơ hồ phải dừng ở pending/blocked state.
+Message payload chỉ chứa ID, version, status, hash và reference đã làm sạch. Consumer phải idempotent, retry có giới hạn và đưa message hết retry vào DLQ.
 
-## Bảo mật scanner tools
+## Audit
 
-Syft, Knip, deptry, Semgrep, tree-sitter/custom parser, `ast`/`libcst` và `ts-morph` phải chạy trong restricted workspace, không cài dependency và không chạy customer code. stdout/stderr phải bounded, validated và redacted.
+AuditEvent ghi actor, action, object, outcome, thời gian, correlation/causation, version refs và metadata an toàn. Audit không chứa raw source, secret, full prompt hoặc token.
+
+Các sự kiện phải audit gồm authentication, permission denial, assessment transition, scan, cleanup failure, conflict resolution, attestation, corpus approval, legal matching, classification, document generation và audit export.
+
+## Bảo mật và riêng tư
+
+- Tenant scope và RBAC được kiểm tra phía server.
+- Developer chỉ thấy dữ liệu trong task/policy được cấp.
+- OAuth/OIDC login không cấp GitHub repository access.
+- GitHub App chỉ đọc repository đã chọn.
+- Scanner không chạy mã khách hàng.
+- Workspace bị giới hạn quyền, kích thước, thời gian và network.
+- Evidence hiển thị dưới dạng path/symbol/line/hash thay vì source body.
+- External model chỉ nhận structured sanitized metadata.
+- Thiếu redaction hoặc cleanup phải fail closed.
 
 ## Recovery
 
-- Duplicate trigger/command: no-op hoặc resume an toàn.
-- Policy engine/context failure: deny và audit.
-- Mapping thiếu: pending/blocked, không scan.
-- Tool failure: coverage limitation hoặc terminal failure theo severity.
-- Failed scan: tạo job mới hoặc resume theo idempotency contract, giữ lịch sử.
-- Stuck outbox: retry/backoff và operator replay có audit.
-- Provider/corpus/index failure: giữ blocked state đến khi upstream được sửa.
-
-## Gap hiện tại
-
-Active NFR, event catalog, domain model, persistence và worker code maps trên `main` vẫn mô tả RBAC, attestation và Node.js downstream workers. Chúng chưa đồng bộ với target Phase 5.2L.
+- Duplicate command: no-op hoặc resume an toàn theo trạng thái đã lưu.
+- Failed scan: tạo ScanJob mới, giữ lịch sử lỗi.
+- Stuck outbox: retry/backoff hoặc operator replay sau khi sửa nguyên nhân.
+- Corpus/index lỗi: sửa nguồn hoặc rebuild index với attempt/version mới.
+- Provider lỗi: chỉ retry lỗi transient; domain guard vẫn blocked cho đến khi upstream thay đổi.
+- Artifact upload dở dang: cleanup/reconciliation job có audit.
