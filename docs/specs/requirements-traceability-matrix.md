@@ -12,7 +12,7 @@ Canonical traceability from use cases to requirements, acceptance criteria, doma
 | Functional requirements | 56 total; Phase 5.2L: `FR-050` active Automatic Trusted Scan Initiation; `FR-051` removed; `FR-052` deferred; `FR-045/FR-046` superseded |
 | Active NFRs | 33 |
 | Acceptance criteria | AC-001..AC-041 plus AC-050A..AC-050F |
-| UX | CANONICAL_UX_PENDING / AUTHORIZED |
+| UX | READY_FOR_CANONICAL_UX / CANONICAL_UX_PENDING |
 | Stories | missing; story coverage not assessable |
 
 Legacy `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, and `NFR-032` are aliases/history only. Active rows below use canonical identifiers.
@@ -99,7 +99,7 @@ Legacy `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, and `NFR-032` are alia
 
 ## UX and Story Boundary
 
-Canonical UX is authorized but not yet created. Story coverage remains not assessable until canonical epics/stories exist. Stories must trace to UC, FR, AC, relevant NFRs, UX states, domain states, implementation area, and recovery behavior.
+Canonical UX is ready to start but not yet created. Story coverage remains not assessable until canonical epics/stories exist. Stories must trace to UC, FR, AC, relevant NFRs, UX states, domain states, implementation area, and recovery behavior.
 
 ```text
 REQUIREMENT_TRACEABILITY_CORE_MATRIX_NORMALIZED
@@ -107,9 +107,10 @@ CANONICAL_UC_IDS_ONLY
 FR_050_AUTOMATIC_TRUSTED_SCAN_INITIATION_TRACED
 FR_051_REMOVED_FROM_PRODUCT
 STRUCTURED_ATTESTATION_SUPERSEDED_FOR_ACTIVE_MVP
-NO_ORPHAN_ACTIVE_REQUIREMENTS
-NO_ORPHAN_ACCEPTANCE_CRITERIA
-CANONICAL_UX_AUTHORIZED
+ACTIVE_REQUIREMENTS_TRACE_RECHECKED
+ACCEPTANCE_CRITERIA_TRACE_RECHECKED
+PROJECT_OWNER_DOC_REMEDIATION_APPROVED
+READY_FOR_CANONICAL_UX
 CANONICAL_UX_PENDING
 STORY_TRACEABILITY_PENDING
 STORY_COVERAGE_NOT_ASSESSABLE

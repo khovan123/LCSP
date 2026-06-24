@@ -9,12 +9,12 @@ Mục tiêu không phải tạo architecture, backlog hay code. Mục tiêu là 
 Nguồn chính:
 
 - `docs/product/prd.md`
-- `docs/product/product-brief.md`
-- `docs/brainstorming/brainstorming-summary.md`
-- `docs/brainstorming/open-questions.md`
-- `docs/brainstorming/decision-candidates.md`
-- `docs/brainstorming/next-step-recommendation.md`
-- `LCSP_Technical_Specification.html`
+- `docs/product/system-context.md`
+- `docs/product/business-rules.md`
+- `docs/planning-artifacts/sprint-change-proposal-2026-06-24-phase-5-2l.md`
+- `docs/specs/functional-requirements.md`
+- `docs/specs/acceptance-criteria-catalog.md`
+- `docs/specs/requirements-traceability-matrix.md`
 
 ## Validation Scope
 
@@ -22,7 +22,7 @@ Validation scope chỉ bao gồm ba assumption:
 
 - **A1 - Wizard simplicity vs completeness**
 - **A2 - Legal corpus / rule reliability**
-- **A3 - Human attestation abuse risk**
+- **A3 - PBAC and trusted-trigger abuse risk**
 
 Ngoài scope:
 
@@ -38,7 +38,7 @@ Ngoài scope:
 |---|---|---|---|---|---|---|
 | A1 - Wizard simplicity vs completeness | Wizard quá đơn giản thì thiếu business/legal truth; quá chi tiết thì Manager không hoàn tất hoặc cần Developer hỗ trợ | Product Manager, phối hợp UX/Domain Reviewer | Wizard question review, WizardProfile mapping, scenario walkthrough, user testing với Manager persona | Manager hiểu câu hỏi không cần Developer; Wizard capture đủ critical fields; mỗi câu hỏi quan trọng map được về WizardProfile | Manager không hiểu câu hỏi; thiếu critical field; câu hỏi dùng thuật ngữ code; câu hỏi không map được field | Sửa Wizard scope, wording, progressive disclosure, field model hoặc readiness behavior trong PRD |
 | A2 - Legal corpus / rule reliability | Classification yếu nếu legal rules không versioned/cited/traceable; LLM suy luận luật không có căn cứ; scanner + AI Usage Flow có thể map sai usage purpose sang legal corpus/rule | Product Manager, phối hợp Legal/Domain Rule Owner và AI Usage Flow Reviewer | Rule inventory review, rule-to-source trace test, scenario classification trace test, citation audit, AIUsageFlow-to-rule mapping test | 100% critical classification rules có legal source, citation, version/effective date nếu có, rule_id; 100% risk output trace được rule_id; A2-b usage-purpose mapping đạt acceptance threshold | Rule thiếu citation/version/source; risk output thiếu rule trace; LLM tạo conclusion không có retrieved rule/citation; usage purpose map sai rule/corpus hoặc confidence/uncertainty không được ghi | Sửa classification requirements, legal corpus scope, rule schema, AIUsageFlow contract, degraded/blocked behavior trong PRD |
-| A3 - Human attestation abuse risk | Manager/Developer dùng attestation hoặc delegated clarification để hợp thức hóa evidence yếu hoặc bypass scanner/evidence | Product Manager, phối hợp Compliance/Governance Reviewer | Attestation schema review, Manager final-resolution review, delegated permission review, abuse-case testing, audit trail inspection | 100% attestation có role/claim/reason/scope/timestamp/assessment id/audit log; 100% MVP conflict resolution có Manager final resolution; 0 attestation thay machine-generated metadata | Free-text attestation bypasses classification gates; role claim sai; Developer clarification tự finalize conflict; metadata khách quan bị thay bằng attestation | Sửa attestation requirements, permission model, reporting disclosure, blocking rules hoặc audit requirements trong PRD |
+| A3 - PBAC and trusted-trigger abuse risk | PBAC policy, delegated scope, service identity hoặc automatic trusted scan trigger bị dùng để bypass tenant boundary, scan sai repository/assessment, hoặc hợp thức hóa evidence yếu | Product Manager, phối hợp Compliance/Governance Reviewer, Architect/Platform Reviewer và Scanner Owner | PBAC policy review, subject/resource/action/context trace review, trusted-trigger mapping test, duplicate/out-of-order trigger abuse-case testing, audit trail inspection | 100% material actions có PBAC decision trace; 100% trusted triggers resolve tenant/repository/assessment/branch/commit safely or block/wait; 0 scan starts on missing/ambiguous mapping; 0 role label/delegation/service identity bypasses evidence/classification gates | Role label được coi là authority; Developer/service identity vượt policy scope; trigger thiếu/ambiguous mapping vẫn scan; duplicate/out-of-order trigger tạo artifact sai; audit thiếu policy/version/correlation trace | Sửa PBAC requirements, automatic trigger lifecycle, scanner evidence gates, blocking rules, audit requirements hoặc PRD scope |
 
 ## A1 - Wizard Simplicity vs Completeness
 
@@ -260,132 +260,82 @@ Fail nếu một trong các điều kiện sau xảy ra:
 - Sửa AIUsageFlow contract, scanner finding requirements hoặc rule matching inputs.
 - Thu hẹp MVP classification scope nếu legal rules chưa đủ.
 
-## A3 - Human Attestation Abuse Risk
+## A3 - PBAC and Trusted-Trigger Abuse Risk
 
 ### Why This Is High Risk
 
-Structured human technical attestation giúp LCSP xử lý trường hợp scanner không bắt được dynamic/wrapper/runtime logic. Nhưng nếu không kiểm soát, attestation sẽ biến thành nút bypass scanner/evidence, làm hỏng định vị evidence-based.
+Phase 5.2L removes structured attestation from active MVP and makes PBAC plus automatic trusted scan initiation the critical abuse surface. If policy scope, service identity or trigger mapping is weak, LCSP can scan the wrong tenant/repository/assessment, allow delegated actors to perform Manager-only actions, or produce classification/report artifacts from unsafe evidence context.
+
+Structured attestation remains `SUPERSEDED_FOR_ACTIVE_MVP`. It is not validated here as an active feature, schema, claim workflow, Manager review input, report disclosure input or audit dependency.
 
 ### Data to Validate
 
-- Attestation schema.
-- Role-claim matrix.
-- Danh sách allowed claims.
-- Danh sách forbidden claims.
-- Danh sách claims cần Manager final review hoặc optional delegated clarification.
-- Audit log fields.
-- Report disclosure behavior.
+- PBAC subject attributes, resource types, action catalog and request/runtime context.
+- Policy IDs, policy versions, assignment lifecycle and denial behavior.
+- Service identities for API, scheduler, GitHub webhook handling and Python Worker Platform consumers.
+- Trusted trigger context: organization, account, GitHub App installation, repository connection, repository, assessment, branch, commit SHA, trigger source and correlation ID.
+- Mapping outcomes: `PENDING_MAPPING`, `BLOCKED_MAPPING`, `WAITING_FOR_CONTEXT`, ready-to-snapshot and safe no-op.
+- Idempotency key fields and duplicate/out-of-order trigger behavior.
+- Audit fields for material PBAC and trigger decisions.
 - Abuse-case test results.
 
 ### Owner
 
 - **Primary owner:** Product Manager.
-- **Supporting reviewers:** Compliance/governance reviewer, technical reviewer, audit/reporting reviewer.
+- **Supporting reviewers:** Compliance/governance reviewer, Architect/platform reviewer, scanner owner, audit/reporting reviewer.
 
 ### Validation Method
 
-- Review attestation schema có đủ role, claim, reason, scope, timestamp, assessment_id và audit log.
-- Review role-bound claims:
-  - Manager chỉ confirm business/legal meaning.
-  - Developer chỉ confirm technical truth.
-- Review critical claims cần Manager final review và không được để Developer clarification tự bypass evidence/reconciliation/classification gates.
-- Test abuse cases:
-  - Developer viết "bỏ qua scanner" dạng free text.
-  - Manager cố confirm technical truth.
-  - Developer cố confirm legal/business meaning.
-  - Attestation thiếu scope hoặc timestamp.
-  - Attestation cố thay report hash/scanner version/repo commit.
-- Kiểm tra final report disclosure khi classification dùng attestation.
+- Review PBAC policy model for subject, organization, resource, action, request/runtime context, policy and policy version.
+- Review deny-by-default behavior for user actors and service identities.
+- Test Manager, Developer, scheduler, GitHub webhook handler and Python worker identities against allowed and denied actions.
+- Review automatic trigger mapping for tenant, repository, assessment, branch and commit.
+- Test duplicate delivery, out-of-order delivery, revoked repository connection, missing mapping and ambiguous assessment mapping.
+- Verify no trigger starts a scan when tenant/repository/account/assessment mapping is missing or ambiguous.
+- Verify every material PBAC and trigger decision writes audit fields with actor/service identity, organization, resource, action, policy ID, policy version, decision, safe context refs and correlation ID.
 
-### Allowed Claims
+### Required Guardrails
 
-Developer có thể attest technical truth như:
-
-- AI usage detected/not detected when scanner missed dynamic/wrapper logic.
-- Model call is production logic.
-- Decision flow exists in code.
-- Scanner false positive/false negative.
-- Technical profile correction.
-- Deployment/production scope, nếu có supporting context.
-
-Manager có thể confirm business/legal meaning như:
-
-- Business purpose.
-- User impact.
-- Human review process.
-- Decision owner.
-- Legal/compliance meaning of evidence.
-
-### Forbidden Claims
-
-Attestation không được thay các metadata khách quan:
-
-- report hash;
-- scanner version;
-- ruleset version;
-- scan timestamp;
-- repo/commit metadata;
-- legal corpus version;
-- evidence report integrity;
-- machine-generated privacy flags.
-
-### Dual-Confirmation Claims
-
-Các claim cần Manager final review trong MVP; post-MVP có thể dùng optional Developer clarification:
-
-- auto decision;
-- AI-assisted decision;
-- human oversight;
-- sensitive data usage;
-- user-facing external LLM;
-- biometric/high-impact use case;
-- any conflict that can change risk level.
-
-### Audit Requirements
-
-100% attestation phải lưu:
-
-- assessment_id;
-- attested_by;
-- role;
-- claim field;
-- claim value;
-- reason;
-- scope;
-- timestamp;
-- supporting evidence refs nếu có;
-- related conflict id nếu có;
-- report disclosure flag nếu ảnh hưởng materially đến classification-relevant Manager decision.
+- Roles are subject attributes, grouping labels or policy templates only; role names are not authorization authority.
+- Developer scope must be expressed as PBAC policy, not implicit role capability.
+- Service identities must be evaluated by PBAC for material internal actions.
+- Automatic scan triggers must use trusted integration context; no manual scanner report upload path is allowed.
+- Missing or ambiguous mapping must wait or block; it must not select a best-effort assessment.
+- Duplicate and out-of-order triggers must not create duplicate artifacts or mutate completed history.
+- Scanner evidence remains evidence only and cannot become legal truth or classification truth without downstream gates.
 
 ### Acceptance Threshold
 
 Pass khi tất cả điều kiện sau đạt:
 
-- 100% attestation có role, claim, reason, scope, timestamp và assessment_id.
-- 100% attestation được ghi audit log.
-- 100% classification-relevant attestation có Manager final review.
-- 0 trường hợp attestation thay machine-generated metadata.
-- 0 trường hợp Manager confirm technical truth.
-- 0 trường hợp Developer confirm business/legal meaning.
-- Nếu attestation ảnh hưởng materially đến classification-relevant Manager decision, final report và audit trail ghi rõ điều đó.
+- 100% material user and service actions have PBAC decision trace with policy ID/version and correlation ID.
+- 100% Developer actions are denied unless an explicit scoped policy permits the action on that assessment/resource.
+- 100% Manager-only actions reject Developer and service identities without explicit approved policy.
+- 100% trusted triggers resolve to the correct tenant, repository, assessment, branch and commit or enter `PENDING_MAPPING`, `BLOCKED_MAPPING` or `WAITING_FOR_CONTEXT`.
+- 0 scan starts when repository/account/assessment mapping is missing, ambiguous, revoked or cross-tenant.
+- Duplicate delivery with the same idempotency context returns/resumes the existing workflow without duplicate artifacts.
+- Out-of-order trigger events wait, no-op safely or block with auditable reason.
+- Audit trail records actor/service identity, organization, resource, action, policy ID, policy version, decision, safe context refs and correlation ID for material PBAC/trigger decisions.
 
 ### Failure Condition
 
 Fail nếu một trong các điều kiện sau xảy ra:
 
-- Free-text attestation bypasses classification gates.
-- Attestation thiếu role, claim, reason, scope, timestamp hoặc assessment_id.
-- Critical claim hoặc delegated clarification tự bypass evidence/reconciliation/classification gates mà không có Manager final review.
-- Attestation thay report hash, scanner version, ruleset version, scan timestamp, repo/commit metadata, legal corpus version, evidence report integrity hoặc machine-generated privacy flags.
-- Report không disclose khi classification dùng attestation.
+- Role label or UI state is treated as final authorization authority.
+- Developer performs Manager-only action without explicit scoped policy.
+- Service identity starts scan, classification, document generation or audit export outside approved policy scope.
+- Trigger with missing, ambiguous, revoked or cross-tenant mapping starts a scan.
+- Duplicate or out-of-order trigger creates duplicate artifacts, mutates completed history or scans stale context.
+- PBAC denial, trigger block/wait or mapping ambiguity lacks audit trace.
+- Scanner/evidence artifact can unlock classification/report despite failed evidence, mapping, PBAC or citation gate.
 
 ### If Failed, What PRD Must Change
 
-- Sửa Epic 3, Epic 5, Epic 6, Epic 7 hoặc Epic 8 để siết attestation.
-- Sửa permission model nếu role-bound claims chưa đủ rõ.
-- Bổ sung blocking rule cho attestation abuse.
-- Bổ sung report disclosure requirements.
-- Nếu không kiểm soát được abuse, loại attestation khỏi mọi classification-relevant decision path trong MVP.
+- Sửa PBAC requirements, subject/resource/action model hoặc policy assignment lifecycle.
+- Sửa automatic trusted trigger lifecycle, mapping states, idempotency and recovery behavior.
+- Sửa scanner/evidence gate requirements để fail closed khi trigger context không an toàn.
+- Sửa audit requirements để bắt buộc policy/trigger trace.
+- Thu hẹp Developer collaboration hoặc service-trigger scope nếu không thể validate policy safety.
 
 ## Acceptance Threshold Summary
 
@@ -393,7 +343,7 @@ Fail nếu một trong các điều kiện sau xảy ra:
 |---|---|
 | A1 - Wizard simplicity vs completeness | Manager hiểu Wizard không cần Developer; Wizard capture đủ critical fields; 100% câu hỏi quan trọng map về WizardProfile; unknown critical fields không trở thành final input |
 | A2 - Legal corpus / rule reliability | 100% critical rules có source/citation/version/rule_id; 100% risk output trace về rule_id; A2-b usage-purpose mapping đúng legal corpus/rule family hoặc blocked/uncertain; no final classification without required legal citation; LLM không tạo legal conclusion thiếu retrieved rule/citation |
-| A3 - Human attestation abuse risk | 100% attestation có role/claim/reason/scope/timestamp/assessment_id/audit; 100% classification-relevant attestation có Manager final review; 0 Developer clarification tự finalize conflict; 0 attestation thay machine-generated metadata; report disclose khi dùng attestation |
+| A3 - PBAC and trusted-trigger abuse risk | 100% material actions có PBAC decision trace; 100% trusted triggers resolve correct tenant/repository/assessment/branch/commit or block/wait; 0 scan starts on missing/ambiguous/revoked/cross-tenant mapping; duplicate/out-of-order triggers do not create duplicate or stale artifacts |
 
 ## PRD Update Triggers
 
@@ -404,9 +354,10 @@ PRD phải được cập nhật nếu xảy ra bất kỳ điều kiện nào:
 - A2 fail vì rule/citation/version/rule_id thiếu cho critical classification rule.
 - A2 fail vì classification có thể final khi thiếu legal citation.
 - A2 fail vì LLM có thể tạo legal conclusion thiếu retrieved legal rule/citation.
-- A3 fail vì attestation có thể bypass classification gates bằng free text hoặc sai role.
-- A3 fail vì attestation thay machine-generated metadata.
-- A3 fail vì final report không disclose attestation-assisted classification.
+- A3 fail vì role label, delegated scope hoặc service identity bypass PBAC.
+- A3 fail vì trusted trigger thiếu/ambiguous/revoked/cross-tenant mapping vẫn start scan.
+- A3 fail vì duplicate/out-of-order trigger tạo duplicate artifact, stale artifact hoặc mutate completed history.
+- A3 fail vì PBAC/trigger decision thiếu policy/version/correlation audit trace.
 
 PRD update có thể bao gồm:
 
@@ -414,8 +365,9 @@ PRD update có thể bao gồm:
 - Sửa WizardProfile fields.
 - Sửa functional requirements.
 - Sửa acceptance criteria.
-- Sửa report/disclosure rules.
-- Loại hoặc hạn chế attestation khỏi classification-relevant decision path.
+- Sửa automatic trigger mapping/recovery rules.
+- Sửa audit trace requirements.
+- Thu hẹp Developer collaboration hoặc service-trigger scope nếu policy safety không validate được.
 
 ## Readiness Gate Before Architecture
 
@@ -431,7 +383,7 @@ Architecture Exploration phải giữ các caveat:
 
 - Wizard field model có thể còn thay đổi sau A1.
 - Classification/rule boundary có thể còn thay đổi sau A2.
-- Attestation unlock path có thể bị siết hoặc loại khỏi MVP sau A3.
+- PBAC policy model, trusted-trigger lifecycle hoặc Developer/service-identity scope có thể còn thay đổi sau A3.
 
 ## Readiness Gate Before Backlog
 

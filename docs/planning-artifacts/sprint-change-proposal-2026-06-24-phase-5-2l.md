@@ -582,4 +582,4 @@ CONDITIONS: Update rag: chorma database (vector less)
 
 Approval authorizes only documentation and planning remediation. It does not authorize implementation, sprint execution, code, tests, CI/CD, Docker, deployment, UX, epics, stories, sprint status changes, or archive/history rewrite.
 
-CHANGE_PROPOSAL_READY_FOR_PROJECT_OWNER_APPROVAL
+CHANGE_PROPOSAL_APPROVED_FOR_DOCUMENTATION_AND_PLANNING_REMEDIATION_ONLY

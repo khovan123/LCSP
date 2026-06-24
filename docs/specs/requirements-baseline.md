@@ -50,7 +50,7 @@ The following `FR-E*` identifiers are retained only as PRD/source aliases. Activ
 | FR-E3-2 | Local/CI evidence upload | docs/product/prd.md |
 | FR-E3-3 | Manual technical evidence JSON upload | docs/product/prd.md |
 | FR-E3-4 | Privacy flags validation | docs/product/prd.md |
-| FR-E3-5 | Human technical attestation as supplement | docs/product/prd.md |
+| FR-E3-5 | Superseded human technical attestation supplement | docs/product/prd.md |
 | FR-E4-1 | Schema completeness gate | docs/product/prd.md |
 | FR-E4-2 | Technical profile dimensions | docs/product/prd.md |
 | FR-E4-3 | Quality threshold gate | docs/product/prd.md |
@@ -69,11 +69,11 @@ The following `FR-E*` identifiers are retained only as PRD/source aliases. Activ
 | FR-E7-1 | Generate gap analysis after risk result | docs/product/prd.md |
 | FR-E7-2 | Generate compliance document/report | docs/product/prd.md |
 | FR-E7-3 | Support readiness-only export | docs/product/prd.md |
-| FR-E7-4 | Disclose attestation use | docs/product/prd.md |
+| FR-E7-4 | Superseded attestation disclosure | docs/product/prd.md |
 | FR-E8-1 | Audit Wizard answers | docs/product/prd.md |
 | FR-E8-2 | Audit technical evidence metadata | docs/product/prd.md |
 | FR-E8-3 | Audit conflict resolution | docs/product/prd.md |
-| FR-E8-4 | Audit human technical attestation | docs/product/prd.md |
+| FR-E8-4 | Superseded human technical attestation audit | docs/product/prd.md |
 | FR-E8-5 | Audit classification and generated documents | docs/product/prd.md |
 
 ### Deferred Evidence Source Aliases
@@ -167,7 +167,7 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | UC-M09-01 | Write Audit Event | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M09-03 | Export Audit Trail | Manager, LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M09-04 | Track Evidence, Report, and Document Version | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
-| UC-M09-05 | Track Human Attestation Usage | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
+| UC-M09-05 | Track Human Attestation Usage | LCSP System | SUPERSEDED_FOR_ACTIVE_MVP | historical/change-control only |
 | UC-M10-01 | Enforce Source Code Privacy Policy | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M10-02 | Redact Secrets | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M10-03 | Clean Temporary Workspace | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
@@ -294,10 +294,10 @@ These identifiers are retained only for traceability drift cleanup. They are not
 | AC-6 | Manager conflict resolution is required and sufficient for MVP conflict completion when evidence gates pass. | docs/product/prd.md |
 | AC-7 | Evidence Confidence Score and AI Intervention Score never block workflow alone. | docs/product/prd.md |
 | AC-8 | Conflict handling uses binary MVP routing: conflict exists or not. Conflict Score may explain seriousness but does not create multiple routes. | docs/product/prd.md |
-| AC-9 | Human technical attestation cannot replace machine-generated metadata listed in A3. | docs/product/prd.md |
+| AC-9 | Human assertion, role label, delegated scope or untrusted upload cannot replace machine-generated metadata listed in A3. | docs/product/prd.md |
 | AC-10 | Final report includes legal citation/rule trace or is not final. | docs/product/prd.md |
-| AC-11 | Final report discloses human technical attestation when used for classification. | docs/product/prd.md |
-| AC-12 | Audit trail records wizard, evidence, conflict, attestation, classification and document generation events. | docs/product/prd.md |
+| AC-11 | Final report has no attestation dependency and discloses evidence, legal basis, PBAC/trigger trace and limitations. | docs/product/prd.md |
+| AC-12 | Audit trail records wizard, evidence, conflict, PBAC/trigger, classification and document generation events. | docs/product/prd.md |
 | AC-13 | PRD preserves all mandatory product decisions from Product Brief. | docs/product/prd.md |
 | AC-14 | PRD contains section for high-risk assumptions and validation requirements. | docs/product/prd.md |
 | AC-15 | PRD does not define architecture, backlog or code. | docs/product/prd.md |

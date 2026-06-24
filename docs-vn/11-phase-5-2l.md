@@ -5,9 +5,10 @@
 ```text
 PROJECT_OWNER_DIRECTIVE_RECORDED
 SPRINT_CHANGE_PROPOSAL_CREATED
-DOCUMENT_REMEDIATION_SUBSTANTIAL_BUT_INCOMPLETE
-PROJECT_OWNER_APPROVAL_PENDING
-CANONICAL_UX_NOT_READY_TO_START
+PROJECT_OWNER_DOC_REMEDIATION_APPROVED
+PHASE_5_2L_P0_CLOSURE_COMPLETED
+READY_FOR_CANONICAL_UX
+CANONICAL_UX_PENDING
 ```
 
 ## Các quyết định mới
@@ -30,14 +31,16 @@ CANONICAL_UX_NOT_READY_TO_START
 - delivery plan và readiness report;
 - phần lớn tài liệu tóm lược tiếng Việt.
 
-## Phần chưa closure
+## Phần đã closure trước UX
 
-- Sprint Change Proposal chưa có Project Owner approval record.
-- `validation-plan.md` vẫn giữ A3 Human Attestation Abuse Risk và schema/claims/disclosure cũ.
-- PRD còn block hậu quả attestation cũ sau marker supersession.
-- Business rules còn category/dependency/role wording cũ.
-- Use-case/AC/traceability còn tham chiếu historical FR/UC trong active rows.
-- Readiness/index/traceability docs tuyên bố synchronized/UX authorized quá sớm.
+- Sprint Change Proposal đã ghi approval cho documentation/planning remediation only.
+- `validation-plan.md` đã đổi A3 thành PBAC and trusted-trigger abuse risk; structured attestation chỉ còn marker `SUPERSEDED_FOR_ACTIVE_MVP`.
+- Business rules đã chuyển active role semantics sang PBAC subject/policy semantics và đưa attestation vào superseded register.
+- Requirements baseline đã tách `UC-M09-05` khỏi active coverage và cập nhật AC-9/11/12 theo PBAC/trigger/evidence.
+- Readiness/index/traceability docs đã dùng `READY_FOR_CANONICAL_UX` và vẫn giữ `CANONICAL_UX_PENDING`.
+
+## Phần carry forward trước stories/readiness
+
 - Chưa có dedicated Phase 5.2L ADRs cho PBAC, automatic trigger, Python Worker Platform và expanded scanner toolchain.
 - PBAC engine/topology, trigger retry/DLQ/idempotency và tool failure severity vẫn là technical decisions mở.
 

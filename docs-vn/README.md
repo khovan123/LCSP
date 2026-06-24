@@ -25,16 +25,17 @@
 
 ```text
 PHASE_5_2L_REMEDIATION_SUBSTANTIAL_BUT_NOT_CLOSED
-PROJECT_OWNER_APPROVAL_PENDING
-ACTIVE_DOCUMENT_CONTRADICTIONS_REMAIN
-CANONICAL_UX_NOT_READY_TO_START
+PROJECT_OWNER_DOC_REMEDIATION_APPROVED
+PHASE_5_2L_P0_CLOSURE_COMPLETED
+READY_FOR_CANONICAL_UX
+CANONICAL_UX_PENDING
 CANONICAL_EPICS_AND_STORIES_MISSING
 IMPLEMENTATION_READINESS_NOT_CERTIFIED
 IMPLEMENTATION_NOT_AUTHORIZED
 SPRINT_EXECUTION_NOT_AUTHORIZED
 ```
 
-PR #2 đã đồng bộ phần lớn target Phase 5.2L: PBAC, Automatic Trusted Scan Initiation, Python Worker Platform và scanner toolchain mở rộng. Tuy nhiên chưa thể chuyển sang canonical UX vì proposal chưa có Project Owner approval và một số tài liệu active vẫn giữ nội dung attestation/RBAC/traceability cũ hoặc tuyên bố synchronized quá sớm.
+PR #2 đã đồng bộ target Phase 5.2L: PBAC, Automatic Trusted Scan Initiation, Python Worker Platform và scanner toolchain mở rộng. Closure pass sau review đã ghi nhận approval cho documentation/planning remediation, đổi A3 trong validation plan sang PBAC/trusted-trigger abuse risk, tách structured attestation khỏi active coverage và sửa marker readiness/traceability trước UX.
 
 Báo cáo và checklist closure nằm tại `12-review-truoc-ux-phase-5-2l.md`.
 
@@ -43,5 +44,5 @@ Báo cáo và checklist closure nằm tại `12-review-truoc-ux-phase-5-2l.md`.
 - Dùng `docs-vn/` để đọc nhanh và onboarding.
 - Dùng `docs/` khi thiết kế, review hoặc triển khai chi tiết.
 - Không dùng `docs/archive/` làm nguồn thẩm quyền hiện tại.
-- Không bắt đầu `bmad-ux` cho đến khi các blocker P0 trong tài liệu review được đóng và Project Owner phê duyệt proposal.
+- Có thể bắt đầu `bmad-ux` sau closure này; chưa được tạo epics/stories hoặc implementation readiness claim cho đến khi UX artifact được review/approved.
 - Không suy diễn rằng tài liệu đã đồng nghĩa với mã nguồn, kiểm thử hoặc hạ tầng đã tồn tại.

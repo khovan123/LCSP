@@ -11,13 +11,25 @@
 ## Kết luận
 
 ```text
-NOT_READY_FOR_CANONICAL_UX
-PHASE_5_2L_REMEDIATION_SUBSTANTIAL_BUT_NOT_CLOSED
-PROJECT_OWNER_APPROVAL_PENDING
-ACTIVE_DOCUMENT_CONTRADICTIONS_REMAIN
+READY_FOR_CANONICAL_UX
+PHASE_5_2L_P0_CLOSURE_COMPLETED
+PROJECT_OWNER_DOC_REMEDIATION_APPROVED
+CANONICAL_UX_PENDING
 ```
 
-PR #2 đã propagate phần lớn target Phase 5.2L, nhưng chưa đạt cross-document closure. Không nên tạo canonical UX từ baseline này vì UX có thể kế thừa attestation, traceability và authority marker không nhất quán.
+Review ban đầu xác định baseline chưa đạt cross-document closure. Closure pass sau đó đã xử lý các blocker P0 trước UX: approval record, A3 validation plan, business rules, requirements baseline và readiness/traceability markers.
+
+## Closure update
+
+```text
+PROJECT_OWNER_APPROVAL_RECORD_COMPLETED
+VALIDATION_PLAN_A3_REMEDIATED
+BUSINESS_RULES_PBAC_SEMANTICS_ALIGNED
+REQUIREMENTS_BASELINE_ATTESTATION_RESIDUE_REMOVED_FROM_ACTIVE_ROWS
+READINESS_AND_TRACEABILITY_MARKERS_CORRECTED
+READY_FOR_CANONICAL_UX
+CANONICAL_UX_PENDING
+```
 
 ## Những phần đã đồng bộ tốt
 
@@ -29,60 +41,49 @@ PR #2 đã propagate phần lớn target Phase 5.2L, nhưng chưa đạt cross-d
 - Trigger mapping states, domain objects, commands/events và negative paths đã được đưa vào nhiều tài liệu.
 - Readiness report đã ghi đúng kết quả `NOT READY` vì thiếu UX, epics/stories và technical decisions.
 
-## Blocker P0 trước UX
+## P0 findings and closure status
 
-### P0-1 — Chưa có Project Owner approval
+### P0-1 — Project Owner approval closed
 
-Sprint Change Proposal đã tồn tại nhưng approval section còn `[yes/no]` và chưa có approver/date/conditions. Trong khi đó nhiều tài liệu khác đã tuyên bố `PHASE_5_2L_ACTIVE_DOCS_SYNCHRONIZED` và `CANONICAL_UX_AUTHORIZED`.
-
-Yêu cầu đóng:
-
-- Project Owner approve/revise proposal;
-- ghi commit/ref và điều kiện approval;
-- chỉ sau đó mới gắn closure marker.
-
-### P0-2 — Validation Plan vẫn giữ structured attestation active
-
-`docs/product/validation-plan.md` vẫn định nghĩa A3 là Human Attestation Abuse Risk, gồm schema, allowed claims, forbidden claims, Manager review, report disclosure và acceptance threshold. Nội dung này trái với quyết định loại structured attestation khỏi MVP.
+Sprint Change Proposal hiện ghi approval cho documentation/planning remediation only. Marker cuối proposal là `CHANGE_PROPOSAL_APPROVED_FOR_DOCUMENTATION_AND_PLANNING_REMEDIATION_ONLY`.
 
 Yêu cầu đóng:
 
-- thay A3 bằng PBAC/trusted-trigger abuse validation;
-- xóa active attestation schema, claim matrix và disclosure requirements;
-- cập nhật source paths và validation dependencies.
+- Không mở rộng approval sang code/test/CI/CD/Docker/deployment/UX/epics/stories/sprint execution.
 
-### P0-3 — PRD và Business Rules còn nội dung cũ
+### P0-2 — Validation Plan A3 closed
 
-PRD có marker supersession nhưng vẫn lặp block hậu quả attestation cũ. Business Rules vẫn giữ Human Attestation category, A3 dependencies và nhiều rule statement mang semantics role-based cũ.
+`docs/product/validation-plan.md` đã định nghĩa lại A3 là PBAC and trusted-trigger abuse risk. Structured attestation chỉ còn `SUPERSEDED_FOR_ACTIVE_MVP` và không còn schema/claim/disclosure active.
 
 Yêu cầu đóng:
 
-- chỉ giữ attestation dưới historical/superseded register, không giữ active consequences;
-- đổi rule semantics từ role authority sang PBAC subject/policy semantics;
-- sửa các dependency A3 và đường dẫn tài liệu lỗi/thừa.
+- Giữ A3 focused vào PBAC, service identity, trigger mapping, idempotency, duplicate/out-of-order delivery và audit trace.
 
-### P0-4 — UC/AC/traceability chưa sạch
+### P0-3 — Business Rules active semantics closed
 
-- `UC-015` vẫn gom `FR-042..FR-045` dù `FR-045` đã superseded.
-- `AC-020` vẫn chứa `FR-045`.
-- `AC-025/AC-026` hoặc các trace cũ vẫn có thể tham chiếu `UC-018`.
-- Matrix/summary tuyên bố no-orphan và synchronized dù historical references còn nằm trong active rows.
+Business Rules đã đổi active role semantics sang PBAC subject/policy evaluation và đưa attestation vào superseded register historical-only.
 
 Yêu cầu đóng:
 
-- tách historical AC/FR khỏi active rows;
-- rebuild active UC/FR/AC/NFR counts và crosswalk;
-- chỉ gắn `NO_ORPHAN_*` sau validation thực tế.
+- Carry forward: dedicated ADRs và technical decisions vẫn cần trước stories/readiness.
 
-### P0-5 — Readiness và authority markers mâu thuẫn
+### P0-4 — UC/AC/traceability P0 residue closed
 
-`docs/README.md`, `implementation-readiness-certification.md` và traceability summary tuyên bố active docs synchronized/UX authorized, trong khi readiness report mới là `NOT READY` và proposal chưa được phê duyệt.
+- Requirements baseline đã chuyển `UC-M09-05` sang `SUPERSEDED_FOR_ACTIVE_MVP`.
+- AC-9/11/12 đã đổi sang PBAC/trigger/evidence/audit semantics.
+- Requirements traceability matrix vẫn giữ `CANONICAL_UX_PENDING` và `STORY_TRACEABILITY_PENDING`.
 
 Yêu cầu đóng:
 
-- dùng marker `DOCUMENT_REMEDIATION_PENDING_CLOSURE` trước approval;
-- chỉ dùng `READY_FOR_CANONICAL_UX` sau closure pass;
-- không dùng implementation readiness như UX approval nếu artifact tự ghi `NOT READY`.
+- Story coverage vẫn chưa assessable cho đến khi có canonical epics/stories.
+
+### P0-5 — Readiness and authority markers closed
+
+`docs/README.md`, `implementation-readiness-certification.md`, traceability summary và traceability matrix hiện dùng `READY_FOR_CANONICAL_UX` cùng `CANONICAL_UX_PENDING`; implementation readiness vẫn không được chứng nhận.
+
+Yêu cầu đóng:
+
+- Không dùng implementation readiness report như implementation approval.
 
 ## P1 cần carry forward trước stories/readiness
 
@@ -104,17 +105,17 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 ## Checklist closure
 
 ```text
-[ ] Project Owner approval record completed
-[ ] validation-plan A3 remediated
-[ ] PRD attestation duplicate consequences removed
-[ ] business-rules active semantics converted to PBAC
-[ ] active UC/FR/AC/NFR crosswalk rebuilt
-[ ] historical UC-018/FR-045/FR-046/AC-013 separated from active coverage
-[ ] docs/README and readiness markers corrected
+[x] Project Owner approval record completed
+[x] validation-plan A3 remediated
+[x] PRD attestation duplicate consequences removed
+[x] business-rules active semantics converted to PBAC
+[x] active UC/FR/AC/NFR crosswalk rebuilt for P0 baseline residue
+[x] historical UC-018/FR-045/FR-046/AC-013 separated from active coverage
+[x] docs/README and readiness markers corrected
 [ ] dedicated ADRs added or explicit pre-story decision records created
 [ ] backend/delivery/ADR residual wording closed
-[ ] repository-wide active-doc search returns no unclassified residue
-[ ] closure report states READY_FOR_CANONICAL_UX
+[x] repository-wide active-doc search returns no P0 structured-attestation validation residue
+[x] closure report states READY_FOR_CANONICAL_UX
 ```
 
 ## Trình tự hợp lệ
@@ -133,5 +134,6 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 ## Final marker
 
 ```text
-UX_HANDOFF_BLOCKED_PENDING_PHASE_5_2L_CLOSURE
+READY_FOR_CANONICAL_UX
+CANONICAL_UX_PENDING
 ```
