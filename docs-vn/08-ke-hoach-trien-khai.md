@@ -1,72 +1,109 @@
 # 08 — Kế hoạch triển khai
 
-## Trạng thái hiện tại
+## Điều kiện bắt đầu
 
-Implementation readiness vẫn là `NOT READY`. Không được chuyển thẳng sang UX khi active docs chưa phản ánh Phase 5.2L.
+Kế hoạch hiện mới là build order. Coding chỉ được bắt đầu sau khi có:
 
-## Trình tự đúng
+1. canonical UX;
+2. canonical epics/stories;
+3. story-level traceability;
+4. implementation-readiness recheck đạt yêu cầu;
+5. sprint planning được phê duyệt.
 
-```text
-1. Project Owner review/approve Sprint Change Proposal Phase 5.2L
-2. Remediate toàn bộ active non-archive docs
-3. Chạy closure review và cross-document validation
-4. Tạo canonical UX
-5. Tạo canonical epics/stories
-6. Rebuild story traceability
-7. Chạy lại bmad-check-implementation-readiness
-8. Chỉ sau READY mới sprint planning và coding
-```
+## Các wave chính
 
-## Documentation remediation waves
+### Wave 0 — Hoàn tất planning
 
-### Wave D1 — Product và requirements
+Tạo UX, epics/stories, traceability và chạy lại readiness check.
 
-PBAC, loại attestation, loại các feature bị bỏ khỏi sản phẩm, thay FR-050 bằng auto-start scan và rebase UC/FR/AC/NFR.
+### Wave 1 — Nền tảng
 
-### Wave D2 — Domain và architecture
+PostgreSQL/Prisma/pgvector/unaccent, RabbitMQ/outbox, audit, RBAC, configuration và secret references.
 
-PolicyDecision, ScanTrigger/pending mapping, Python Worker Platform, worker/service identities, state machines, event catalog và ADR supersession.
+### Wave 2 — Assessment core
 
-### Wave D3 — Scanner toolchain
+Authentication, organization, assessment, WizardProfile, readiness-only state, GitHub App connection và RepositorySnapshot.
 
-Syft, Knip, deptry, Semgrep, tree-sitter/custom parser, `ast`/`libcst`, `ts-morph`, common contracts, persistence, failure severity và acceptance fixtures.
+### Wave 3 — Python Scanner
 
-### Wave D4 — Implementation/code maps
+Python Worker, `ast` + `libcst`, workspace security, TS/JS subprocess, graph/evidence/report và scan events.
 
-Backend PBAC integration, Python worker packages/queues, persistence, outbox, deployment boundaries, legal/classification/reporting ownership và local commands.
+### Wave 4 — Intelligence và reconciliation
 
-### Wave D5 — UX inputs và readiness
+TechnicalProfile, AIUsageFlow, conflict, Manager resolution, optional structured attestation và VerifiedProfile.
 
-User task flows, statuses, error/recovery behavior, traceability, docs indexes, delivery plan, `docs-vn/` và readiness report.
+### Wave 5 — Legal corpus và retrieval
 
-## Technical decisions còn mở
+Source validation, snapshot/hash, normalization, internal approval, immutable corpus, FTS, embedding index và citation reconstruction.
 
-- PBAC engine, policy store, cache, invalidation và service-to-service evaluation.
-- Automatic scan trigger catalog, mapping/resume lifecycle, idempotency và retry/DLQ.
-- Python Worker Platform package/process/deployment boundaries.
-- Scanner tool versions, adapters, schemas, timeout/resource limits và severity policy.
+### Wave 6 — Real LLM và classification
 
-Các quyết định này phải được chốt hoặc được đưa thành explicit pre-story dependencies trước khi UX/story baseline được phê duyệt.
+Provider integration, timeout/retry, structured output, budget, ModelRunMetadata, citation guardrail và RiskClassification.
 
-## Build waves sau readiness
+### Wave 7 — Reporting và hardening
 
-Sau khi planning closure đạt READY, build order dự kiến là:
+GapAnalysis, document generation, object storage, status/download, audit export, accessibility, observability, retry/DLQ và privacy checks.
+
+### Wave 8 — A-to-Z acceptance
+
+Chạy golden path và negative paths trên hạ tầng thật.
+
+## Thứ tự phụ thuộc
 
 ```text
-PBAC/platform foundations
--> assessment/repository/automatic triggers
--> Python scanner toolchain
--> Python profile/AIUsageFlow/reconciliation
--> Python legal ingestion/index/matching
--> Python classification/gap/document/export
--> A-to-Z acceptance
+Foundations
+-> Assessment/Wizard/Repository
+-> Python Scanner
+-> TechnicalProfile
+-> AIUsageFlow
+-> Reconciliation/VerifiedProfile
+-> Legal Matching
+-> Classification
+-> GapAnalysis
+-> Document
+-> Audit Export
 ```
 
-## Gate
+Legal corpus là prerequisite song song:
 
 ```text
-PHASE_5_2L_DOCUMENT_REMEDIATION_PENDING
-UX_HANDOFF_BLOCKED
-IMPLEMENTATION_NOT_AUTHORIZED
-SPRINT_EXECUTION_NOT_AUTHORIZED
+Source Ingestion
+-> Internal Approval
+-> FTS/Embedding Index
+-> Legal Matching readiness
 ```
+
+## Tiêu chí hoàn tất quan trọng
+
+- API/worker start và migration chạy được.
+- Scan không chạy source, không lưu raw source và cleanup được xác minh.
+- Claims có evidence refs và uncertainty.
+- Conflict khóa classification cho đến khi Manager giải quyết.
+- Corpus approved bất biến và retrieval có citation.
+- Real LLM/embedding provider được dùng cho acceptance.
+- Document được lưu/tải thật và không overclaim.
+- Audit xuất được đầy đủ version/hash/correlation refs.
+- Tất cả 33 active NFR có bằng chứng kiểm tra hoặc kế hoạch kiểm tra được duyệt.
+
+## Local development contract dự kiến
+
+```text
+npm install
+npm run db:generate
+npm run db:migrate
+npm run dev:api
+npm run dev:worker
+npm run dev:web
+
+cd lcsp-scanner-worker
+poetry install
+poetry run pytest
+poetry run python -m lcsp_scanner.main
+
+cd ../tools/ts-js-analyzer
+npm install
+npm run build
+npm test
+```
+
+Các lệnh này là hợp đồng thiết kế; chưa phải bằng chứng repository hiện đã có mã chạy được.
