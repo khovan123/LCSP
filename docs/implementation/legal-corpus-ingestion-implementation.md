@@ -15,7 +15,7 @@ Define official-source validation, legal document ingestion, immutable snapshot/
 - `docs/specs/legal-matching-domain-spec.md`
 - `docs/implementation/persistence-implementation.md`
 - `docs/implementation/queue-implementation.md`
-- `docs/implementation/hybrid-retriever-implementation.md`
+- `docs/implementation/chromadb-vectorless-legal-retriever-implementation.md`
 
 ## UX and Actor Boundary
 

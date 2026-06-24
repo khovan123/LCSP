@@ -122,7 +122,7 @@ TrustedScanTrigger
   "relativePath": "app/loan_service.py",
   "extension": ".py",
   "language": "PYTHON",
-  "supportLevel": "FULL_STATIC",
+  "supportLevel": "BOUNDED_STATIC_L0_L3",
   "sizeBytes": 348,
   "contentHash": "sha256:...",
   "coverageLimitations": []

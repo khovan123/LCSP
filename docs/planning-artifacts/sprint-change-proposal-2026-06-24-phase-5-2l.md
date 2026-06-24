@@ -349,7 +349,7 @@ Active documents that currently state or imply Node.js downstream ownership incl
 - `docs/implementation/queue-implementation.md`;
 - `docs/implementation/persistence-implementation.md`;
 - `docs/implementation/legal-corpus-ingestion-implementation.md`;
-- `docs/implementation/hybrid-retriever-implementation.md`;
+- `docs/implementation/chromadb-vectorless-legal-retriever-implementation.md`;
 - `docs/code-map/module-ownership-map.md`;
 - `docs/code-map/worker-code-map.md`;
 - `docs/code-map/README.md`;
@@ -483,7 +483,7 @@ Tool failure classification:
 | `docs/specs/domain-model.md`                                                                                                          | Remove `StructuredTechnicalAttestation`; add PBAC policy/audit concepts and automatic trigger/pending mapping objects.                                                                  |
 | `docs/specs/domain-state-machines.md`                                                                                                 | Add trigger/pending mapping states; remove attestation state machine; update worker runtime language.                                                                                   |
 | `docs/specs/event-catalog.md`                                                                                                         | Remove attestation events; add trigger commands/events; update Python consumer ownership.                                                                                               |
-| `docs/specs/scanner-spec.md` and `python-scanner-spec.md`                                                                             | Add expanded toolchain, dependency/SBOM contracts, guardrails, failure severity.                                                                                                        |
+| `docs/specs/scanner-spec.md`                                                                                                          | Consolidate scanner authority; own expanded toolchain, dependency/SBOM contracts, Python/TS/JS analysis profiles, guardrails, failure severity. `python-scanner-spec.md` becomes a non-authoritative redirect/appendix. |
 | `docs/specs/ai-usage-flow-domain-spec.md`                                                                                             | Ensure tool outputs are evidence only, not truth; remove attestation dependencies.                                                                                                      |
 | `docs/specs/legal-*`, classification, matching, document generation specs                                                             | Remove attestation as evidence/disclosure dependency; ensure Python worker ownership where async.                                                                                       |
 | `docs/architecture/architecture.md`                                                                                                   | Replace async runtime architecture and PBAC authorization model; add automatic trigger lifecycle.                                                                                       |
@@ -492,8 +492,8 @@ Tool failure classification:
 | `docs/implementation/backend-implementation.md`                                                                                       | Replace RBAC implementation with PBAC requirements; replace Manager-triggered scan-only contract with trusted trigger creation/resume; no code tasks yet.                               |
 | `docs/implementation/persistence-implementation.md`                                                                                   | Remove attestation entity; add policy/version/audit and trigger mapping persistence requirements; update Python worker ownership assumptions.                                           |
 | `docs/implementation/queue-implementation.md`                                                                                         | Update consumers to Python Worker Platform; add trigger events, retry/DLQ decisions.                                                                                                    |
-| `docs/implementation/scanner-implementation.md` and `python-worker-implementation.md`                                                 | Expand toolchain and platform scope.                                                                                                                                                    |
-| `docs/implementation/legal-corpus-ingestion-implementation.md`, `hybrid-retriever-implementation.md`, `llm-gateway-implementation.md` | Update runtime ownership to Python workers where async; preserve gateway boundaries.                                                                                                    |
+| `docs/implementation/scanner-implementation.md` and `scanner-worker-implementation.md`                                                 | Expand toolchain and platform scope.                                                                                                                                                    |
+| `docs/implementation/legal-corpus-ingestion-implementation.md`, `chromadb-vectorless-legal-retriever-implementation.md`, `llm-gateway-implementation.md` | Update runtime ownership to Python workers where async; preserve gateway boundaries.                                                                                                    |
 | `docs/developer-execution-blueprints/*`                                                                                               | Update runtime traces, remove attestation flow, add automatic scan trigger journey.                                                                                                     |
 | `docs/code-map/*`                                                                                                                     | Replace `apps/worker` downstream Node ownership with bounded Python modules; retain Node CLI only for TS/JS analyzer.                                                                   |
 | `docs/implementation-delivery-plan.md`                                                                                                | Remove attestation task; replace RBAC and Node worker tasks; add remediation-only note before any implementation tasks.                                                                 |
@@ -586,7 +586,7 @@ Approval authorizes only documentation and planning remediation. It does not aut
 
 The raw approval condition `Update rag: chorma database (vector less)` is standardized as `ChromaDB structure-first vectorless legal RAG`.
 
-Current authoritative retrieval baseline is ChromaDB vectorless legal retrieval as defined in `docs/architecture/adr/adr-026-hybrid-legal-retriever.md`, `docs/architecture/architecture.md`, and `docs/specs/legal-matching-domain-spec.md`.
+Current authoritative retrieval baseline is ChromaDB vectorless legal retrieval as defined in `docs/architecture/adr/adr-026-chromadb-vectorless-legal-retriever.md`, `docs/architecture/architecture.md`, and `docs/specs/legal-matching-domain-spec.md`.
 
 The condition is classified as:
 

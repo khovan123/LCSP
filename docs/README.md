@@ -7,10 +7,13 @@ This is the starting point for developers, reviewers, UX, and story planning. Ac
 ## Current Planning Status
 
 ```text
-PHASE_5_2L_ACTIVE_DOCS_SYNCHRONIZED
+PHASE_5_2L_ACTIVE_DOC_REMEDIATION_IN_PROGRESS
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
-READY_FOR_CANONICAL_UX
-CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+SCANNER_SPEC_CONSOLIDATION_REQUIRED
+CHROMADB_VECTORLESS_CROSS_DOCUMENT_SYNC_REQUIRED
+UX_DRAFT_CREATED
+UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION
+UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 STORY_TRACEABILITY_PENDING
@@ -46,7 +49,7 @@ UX review should focus on items 1-4 plus requirements/acceptance catalogs and it
 | System components | `architecture/architecture.md`, active ADRs |
 | End-to-end runtime | `developer-execution-blueprints/end-to-end-execution.md` |
 | Assessment lifecycle | `specs/assessment-lifecycle-spec.md` |
-| Scanner behavior | `specs/scanner-spec.md`, `specs/python-scanner-spec.md` |
+| Scanner behavior | `specs/scanner-spec.md` |
 | Scanner runtime journey | `developer-execution-blueprints/scanner-data-journey.md` |
 | Build details | `implementation/` |
 | Code ownership | `code-map/` |

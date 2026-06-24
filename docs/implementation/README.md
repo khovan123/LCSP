@@ -7,8 +7,10 @@ Active BUILD layer for the A-to-Z runnable MVP. These documents describe how the
 ## Current Authority Boundary
 
 ```text
-PHASE_5_2L_ACTIVE_DOCS_SYNCHRONIZED
-CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+PHASE_5_2L_ACTIVE_DOC_REMEDIATION_IN_PROGRESS
+SCANNER_SPEC_CONSOLIDATION_REQUIRED
+CHROMADB_VECTORLESS_CROSS_DOCUMENT_SYNC_REQUIRED
+UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
@@ -23,9 +25,10 @@ Implementation documents are build specifications, not evidence that application
 | `persistence-implementation.md` | PostgreSQL/Prisma metadata, ChromaDB legal index references, object metadata, retention, and migration order |
 | `queue-implementation.md` | RabbitMQ topology, outbox, retry, idempotency, and worker choreography |
 | `scanner-implementation.md` | Cross-runtime scanner build boundary and package structure |
-| `python-worker-implementation.md` | Python Worker Platform, scanner toolchain, scan lifecycle, and TS/JS subprocess integration |
+| `python-worker-platform-implementation.md` | Shared Python Worker Platform runtime, queue, idempotency, audit, lifecycle and observability contracts |
+| `scanner-worker-implementation.md` | Scanner worker toolchain, scan lifecycle, and TS/JS subprocess integration |
 | `legal-corpus-ingestion-implementation.md` | Official-source ingestion, snapshot/hash provenance, normalization, and approval handoff |
-| `hybrid-retriever-implementation.md` | ChromaDB vectorless legal retrieval, hierarchy/xref assembly, citation allowlist, privacy, and retrieval audit |
+| `chromadb-vectorless-legal-retriever-implementation.md` | ChromaDB vectorless legal retrieval, hierarchy/xref assembly, citation allowlist, privacy, and retrieval audit |
 | `llm-gateway-implementation.md` | Real provider boundary, privacy, schema validation, retries, budget controls, and model-run metadata |
 
 ## Read Order by Workstream
@@ -33,10 +36,10 @@ Implementation documents are build specifications, not evidence that application
 ### Scanner
 
 1. `../specs/scanner-spec.md`
-2. `../specs/python-scanner-spec.md`
-3. `../developer-execution-blueprints/scanner-data-journey.md`
-4. `scanner-implementation.md`
-5. `python-worker-implementation.md`
+2. `../developer-execution-blueprints/scanner-data-journey.md`
+3. `scanner-implementation.md`
+4. `scanner-worker-implementation.md`
+5. `python-worker-platform-implementation.md`
 6. `persistence-implementation.md`
 7. `queue-implementation.md`
 
@@ -45,7 +48,7 @@ Implementation documents are build specifications, not evidence that application
 1. `../specs/legal-corpus-source-spec.md`
 2. `../specs/legal-matching-domain-spec.md`
 3. `legal-corpus-ingestion-implementation.md`
-4. `hybrid-retriever-implementation.md`
+4. `chromadb-vectorless-legal-retriever-implementation.md`
 5. `persistence-implementation.md`
 6. `queue-implementation.md`
 

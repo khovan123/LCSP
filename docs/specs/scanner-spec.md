@@ -6,7 +6,7 @@ AUTHORITATIVE — A-TO-Z RUNNABLE MVP
 
 ## Purpose
 
-This is the canonical domain specification for Repository Scan and static-analysis evidence behavior. Python Worker owns the scan lifecycle. Implementation guidance lives in `docs/implementation/scanner-implementation.md` and `docs/implementation/python-worker-implementation.md`; runtime object flow lives in `docs/developer-execution-blueprints/scanner-data-journey.md`.
+This is the sole canonical domain specification for Repository Scan and static-analysis evidence behavior. Python Scanner Worker owns the scan lifecycle. Implementation guidance lives in `docs/implementation/scanner-implementation.md` and `docs/implementation/scanner-worker-implementation.md`; runtime object flow lives in `docs/developer-execution-blueprints/scanner-data-journey.md`.
 
 This document is a design contract, not source code, backlog, story, sprint plan, or test implementation.
 
@@ -325,17 +325,37 @@ Relevant claims remain unknown/unclear with an uncertainty reason.
 
 ## Python-Specific Requirements
 
-Python first-class analysis includes:
+Python first-class bounded analysis includes:
 
 - package/module/import resolution within the snapshot;
-- functions, classes, methods, decorators, async calls;
+- functions, classes, methods, decorators, async calls, aliases and route handlers;
 - FastAPI/Flask/Django/Celery/Pydantic patterns where covered by rules;
 - OpenAI/Gemini/Anthropic/Hugging Face/LangChain/LlamaIndex and common ML invocation patterns;
 - bounded function/module/cross-module flow;
 - model input/output, branch/action, and human-review paths;
 - explicit dynamic-flow limitations.
 
-See `docs/specs/python-scanner-spec.md` for detailed Python contracts.
+Python support is not complete whole-program static analysis. It is bounded L0-L3 analysis with L4 dynamic/unsupported boundaries.
+
+Python detection examples include:
+
+- `openai.OpenAI()`, `client.chat.completions.create`, `AsyncOpenAI`;
+- `anthropic.Anthropic`, `client.messages.create`, `AsyncAnthropic`;
+- `genai.GenerativeModel`, `model.generate_content`;
+- Hugging Face `pipeline(...)`, `AutoModel.from_pretrained`, sequence-classification models;
+- LangChain `LLMChain`, `ChatOpenAI`, `AgentExecutor`, LCEL `prompt | llm`, `chain.invoke`;
+- LlamaIndex `VectorStoreIndex`, `QueryEngine`, `LLMPredictor`;
+- PyTorch/TensorFlow/Keras/sklearn inference patterns such as `model.forward`, `model.predict`, `Pipeline.predict`;
+- local HTTP inference endpoints such as `/predict`, `/infer`, `/generate`, `/classify`, `/score`.
+
+Python human-review evidence examples include:
+
+- `PENDING_REVIEW`, `MANAGER_REVIEW`, `HUMAN_APPROVAL`, `MANUAL_REVIEW` states;
+- `@requires_review`, `@needs_approval` decorators;
+- `assign_reviewer(...)`, `require_approval(...)`, `send_to_review(...)` calls;
+- state-machine transitions to review state before final action.
+
+Generic function names such as `review()` are insufficient without surrounding path evidence.
 
 ## TS/JS Subprocess Requirements
 
@@ -398,10 +418,11 @@ Metrics include invocation precision, business-purpose mapping, input/output det
 
 | Concern | Document |
 |---|---|
-| Python behavior | `docs/specs/python-scanner-spec.md` |
+| Scanner behavior, taxonomy and Python/TS/JS analysis profiles | `docs/specs/scanner-spec.md` |
 | Runtime object lifecycle | `docs/developer-execution-blueprints/scanner-data-journey.md` |
 | Build/package structure | `docs/implementation/scanner-implementation.md` |
-| Python process | `docs/implementation/python-worker-implementation.md` |
+| Scanner worker process | `docs/implementation/scanner-worker-implementation.md` |
+| Python Worker Platform | `docs/implementation/python-worker-platform-implementation.md` |
 | Persistence | `docs/implementation/persistence-implementation.md` |
 | Queue | `docs/implementation/queue-implementation.md`, `docs/specs/event-catalog.md` |
 | AIUsageFlow | `docs/specs/ai-usage-flow-domain-spec.md` |
@@ -410,12 +431,12 @@ Metrics include invocation precision, business-purpose mapping, input/output det
 ## Current Planning Status
 
 ```text
-PHASE_5_2J_DOCUMENT_REMEDIATION_COMPLETE
-PHASE_5_2K_A_REQUIREMENTS_AND_TRACEABILITY_REMEDIATION_COMPLETE
-ACTIVE_DOCS_PRE_UX_SYNCHRONIZED
-CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+PHASE_5_2L_ACTIVE_DOC_REMEDIATION_IN_PROGRESS
+SCANNER_SPEC_CONSOLIDATION_REQUIRED
+UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION
+UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
 
-This status authorizes UX planning only. It does not certify implementation readiness or authorize story execution.
+This status freezes the UX draft for rebase after document consolidation. It does not certify implementation readiness or authorize story execution.

@@ -227,7 +227,7 @@ UX is required. The PRD and task-flow specifications define Manager-facing and o
 
 ### Alignment Issues
 
-- `CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL`: UX draft exists and must be human-reviewed/approved before story generation.
+- `UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION`: UX draft exists but is frozen pending scanner/legal/domain consolidation and rebase before review.
 - `UX_TRACEABILITY_PENDING`: UX states are not yet traced into canonical epics/stories, PRD FR aliases, canonical FR IDs, AC IDs, domain states or implementation areas.
 - `ACCESSIBILITY_VALIDATION_PENDING`: UX draft defines the accessibility floor, but acceptance must still be traced into stories/tests.
 - `LOCALIZATION_VALIDATION_PENDING`: UX draft assumes Vietnamese primary UI copy; final language policy still requires approval.
@@ -274,7 +274,7 @@ The Phase 5.2L documentation remediation is substantially synchronized across ac
 ### Critical Issues Requiring Immediate Action
 
 1. `CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING`: no active epics/stories artifact exists for Phase 5.2L.
-2. `CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL`: UX draft exists for Manager and optional Developer experiences but is not yet approved or story-traced.
+2. `UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION`: UX draft exists for Manager and optional Developer experiences but is frozen pending document consolidation, rebase, approval and story traceability.
 3. `FR_COVERAGE_ZERO`: 0 of 37 PRD FR aliases are covered by active epics/stories.
 4. `STORY_TRACEABILITY_PENDING`: no story-level trace exists from PRD/canonical FRs to AC/NFR/UX/domain state/implementation area.
 5. `PBAC_TECHNICAL_DECISION_REQUIRED`: PBAC engine, policy storage, cache, invalidation, topology and failure behavior remain unresolved.

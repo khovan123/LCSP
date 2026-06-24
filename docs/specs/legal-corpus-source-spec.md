@@ -2,9 +2,9 @@
 
 ## Status
 
-AUTHORITATIVE — A-to-Z Runnable MVP (Phase 5.2J)
+AUTHORITATIVE — A-to-Z Runnable MVP (Phase 5.2L)
 
-New document per SPRINT-CHANGE-PROPOSAL-5.2J (2026-06-23) and ADR-025.
+Originally introduced by SPRINT-CHANGE-PROPOSAL-5.2J (2026-06-23) and ADR-025; updated by Phase 5.2L ChromaDB vectorless legal RAG decision.
 
 ## Purpose
 
@@ -96,7 +96,7 @@ Rules:
 
 | Step | Requirement |
 |---|---|
-| Review authority | Legal Team or designated approver |
+| Review authority | Internal Legal Operator |
 | Review scope | Document identity, effective dates, normalization accuracy, amendment relationships |
 | Approval record | `authority`, `date`, `scope_description`, `status`, `corpus_version_id` |
 | Approval gate | `LegalCorpusVersion.status = APPROVED` before production retrieval |
@@ -118,7 +118,7 @@ Canonical lifecycle vocabulary for legal corpus versions, legal documents within
 DRAFT -> APPROVED -> SUPERSEDED
 ```
 
-Do not use `PENDING_REVIEW`, `RETIRED` or `OBSOLETE` as active corpus lifecycle statuses in Phase 5.2J contracts.
+Do not use `PENDING_REVIEW`, `RETIRED` or `OBSOLETE` as active corpus lifecycle statuses in Phase 5.2L contracts.
 
 ## Refresh Policy
 

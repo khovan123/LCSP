@@ -11,10 +11,10 @@
 ## Kết luận
 
 ```text
-READY_FOR_CANONICAL_UX
+UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
 PHASE_5_2L_P0_CLOSURE_COMPLETED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
-CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ```
@@ -29,8 +29,9 @@ VALIDATION_PLAN_A3_REMEDIATED
 BUSINESS_RULES_PBAC_SEMANTICS_ALIGNED
 REQUIREMENTS_BASELINE_ATTESTATION_RESIDUE_REMOVED_FROM_ACTIVE_ROWS
 READINESS_AND_TRACEABILITY_MARKERS_CORRECTED
-READY_FOR_CANONICAL_UX
-CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+UX_DRAFT_CREATED
+UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION
+UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ```
@@ -75,15 +76,15 @@ Yêu cầu đóng:
 
 - Requirements baseline đã chuyển `UC-M09-05` sang `SUPERSEDED_FOR_ACTIVE_MVP`.
 - AC-9/11/12 đã đổi sang PBAC/trigger/evidence/audit semantics.
-- Requirements traceability matrix hiện giữ `CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL` và `STORY_TRACEABILITY_PENDING`.
+- Requirements traceability matrix hiện giữ `UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION` và `STORY_TRACEABILITY_PENDING`.
 
 Yêu cầu đóng:
 
 - Story coverage vẫn chưa assessable cho đến khi có canonical epics/stories.
 
-### P0-5 — Readiness and authority markers closed
+### P0-5 — Readiness and authority markers revised after consolidation review
 
-`docs/README.md`, `implementation-readiness-certification.md`, traceability summary và traceability matrix hiện dùng `READY_FOR_CANONICAL_UX` cùng `CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL`; implementation readiness vẫn không được chứng nhận. Điều kiện RAG đã được chuẩn hóa thành ChromaDB vectorless; pgvector legal retrieval bị superseded.
+`docs/README.md`, `implementation-readiness-certification.md`, traceability summary và traceability matrix hiện phải dùng remediation/in-progress markers thay vì synchronized/ready markers. UX draft đã tồn tại nhưng đang frozen chờ scanner/legal/domain consolidation và rebase. Implementation readiness vẫn không được chứng nhận.
 
 Yêu cầu đóng:
 
@@ -115,11 +116,15 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 [x] business-rules active semantics converted to PBAC
 [x] active UC/FR/AC/NFR crosswalk rebuilt for P0 baseline residue
 [x] historical UC-018/FR-045/FR-046/AC-013 separated from active coverage
-[x] docs/README and readiness markers corrected
+[x] docs/README and readiness markers corrected for pre-UX closure
+[x] UX draft created
+[ ] scanner authority consolidation completed
+[ ] ChromaDB vectorless domain sync completed
+[ ] UX draft rebased after consolidation
 [ ] dedicated ADRs added or explicit pre-story decision records created
 [ ] backend/delivery/ADR residual wording closed
 [x] repository-wide active-doc search returns no P0 structured-attestation validation residue
-[x] closure report states READY_FOR_CANONICAL_UX
+[x] consolidation review states UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
 ```
 
 ## Trình tự hợp lệ
@@ -128,16 +133,19 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 1. Project Owner approves or revises Phase 5.2L proposal.
 2. Run a short documentation closure pass for the P0 findings.
 3. Revalidate all active non-archive documents and traceability.
-4. Set READY_FOR_CANONICAL_UX.
-5. Review and approve the UX draft.
-6. Run bmad-create-epics-and-stories.
-7. Resolve technical decisions and rebuild story traceability.
-8. Re-run bmad-check-implementation-readiness.
+4. Complete scanner authority consolidation.
+5. Complete ChromaDB vectorless cross-document sync.
+6. Rebase UX draft.
+7. Review and approve the UX draft.
+8. Run bmad-create-epics-and-stories.
+9. Resolve technical decisions and rebuild story traceability.
+10. Re-run bmad-check-implementation-readiness.
 ```
 
 ## Final marker
 
 ```text
-READY_FOR_CANONICAL_UX
-CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+UX_DRAFT_CREATED
+UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION
+UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
 ```

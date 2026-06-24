@@ -148,9 +148,9 @@ Never persist raw source body, full AST body, secrets, full prompts, repository 
 | Concern | Source |
 |---|---|
 | Scanner behavior and taxonomy | `docs/specs/scanner-spec.md` |
-| Python analysis behavior | `docs/specs/python-scanner-spec.md` |
+| Python/TS/JS analysis behavior | `docs/specs/scanner-spec.md` |
 | Runtime object journey | `docs/developer-execution-blueprints/scanner-data-journey.md` |
-| Build/package detail | `docs/implementation/scanner-implementation.md`, `docs/implementation/python-worker-implementation.md` |
+| Build/package detail | `docs/implementation/scanner-implementation.md`, `docs/implementation/scanner-worker-implementation.md`, `docs/implementation/python-worker-platform-implementation.md` |
 | Persistence | `docs/implementation/persistence-implementation.md` |
 | Queue topology | `docs/implementation/queue-implementation.md` |
 

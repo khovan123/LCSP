@@ -16,7 +16,7 @@ Define PostgreSQL/Prisma ownership, physical model requirements, ChromaDB legal 
 - `docs/implementation/queue-implementation.md`
 - `docs/implementation/scanner-implementation.md`
 - `docs/implementation/legal-corpus-ingestion-implementation.md`
-- `docs/implementation/hybrid-retriever-implementation.md`
+- `docs/implementation/chromadb-vectorless-legal-retriever-implementation.md`
 - `docs/implementation/llm-gateway-implementation.md`
 
 ## Boundaries

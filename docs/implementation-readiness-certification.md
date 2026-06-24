@@ -13,8 +13,8 @@ Record the current planning state after the Phase 5.2L scope/runtime correction.
 | Non-functional requirements | 33 active |
 | Acceptance criteria | AC-001..AC-041 plus AC-050A..AC-050F |
 | Use cases | UC-001..UC-017 active; UC-018 superseded for active MVP |
-| Domain and implementation-area traceability | normalized |
-| Canonical UX | draft created; pending review/approval |
+| Domain and implementation-area traceability | remediation in progress |
+| Canonical UX | draft created; frozen pending document consolidation and rebase |
 | Canonical epics/stories | missing |
 | Story traceability | not assessable |
 
@@ -44,31 +44,37 @@ Record the current planning state after the Phase 5.2L scope/runtime correction.
 | FR/NFR semantics | NORMALIZED |
 | Acceptance criteria | NORMALIZED |
 | Domain model | NORMALIZED |
-| Architecture and ADRs | PHASE_5_2L_REMEDIATED_FOR_RECHECK |
-| Scanner runtime documents | PHASE_5_2L_REMEDIATED_FOR_RECHECK |
-| Legal ingestion and retrieval documents | NORMALIZED |
-| Documentation indexes | NORMALIZED |
-| Canonical UX | DRAFT_CREATED_PENDING_APPROVAL |
+| Architecture and ADRs | CHROMADB_VECTORLESS_RENAME_AND_SYNC_IN_PROGRESS |
+| Scanner runtime documents | SCANNER_SPEC_CONSOLIDATION_REQUIRED |
+| Legal ingestion and retrieval documents | CHROMADB_VECTORLESS_CROSS_DOCUMENT_SYNC_REQUIRED |
+| Documentation indexes | REMEDIATION_IN_PROGRESS |
+| Canonical UX | DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION |
 | Epics/stories | MISSING |
 | Story traceability | NOT_ASSESSABLE |
 
 ## Authorized Next Sequence
 
 ```text
-1. Review and approve the canonical UX draft artifact.
-2. Run bmad-create-epics-and-stories after UX approval.
-3. Rebuild story-level FR/NFR/AC/UX traceability.
-4. Run bmad-check-implementation-readiness in a fresh context.
-5. Start sprint planning and coding only after readiness approval.
+1. Complete scanner authority consolidation.
+2. Complete ChromaDB vectorless cross-document synchronization.
+3. Rebase the UX draft against consolidated scanner/legal/domain authority.
+4. Review and approve the canonical UX draft artifact.
+5. Run bmad-create-epics-and-stories after UX approval.
+6. Rebuild story-level FR/NFR/AC/UX traceability.
+7. Run bmad-check-implementation-readiness in a fresh context.
+8. Start sprint planning and coding only after readiness approval.
 ```
 
 ## Result
 
 ```text
-PHASE_5_2L_ACTIVE_DOCS_SYNCHRONIZED
+PHASE_5_2L_ACTIVE_DOC_REMEDIATION_IN_PROGRESS
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
-READY_FOR_CANONICAL_UX
-CANONICAL_UX_DRAFT_CREATED_PENDING_APPROVAL
+SCANNER_SPEC_CONSOLIDATION_REQUIRED
+CHROMADB_VECTORLESS_CROSS_DOCUMENT_SYNC_REQUIRED
+UX_DRAFT_CREATED
+UX_DRAFT_FROZEN_PENDING_DOC_CONSOLIDATION
+UX_DRAFT_REBASE_AND_REVIEW_REQUIRED
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 STORY_TRACEABILITY_PENDING

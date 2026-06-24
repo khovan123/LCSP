@@ -12,9 +12,9 @@ Define the build boundary for Repository Scan. Python Worker owns the lifecycle 
 
 - `docs/architecture/adr/adr-023-python-worker-scanner-runtime.md`
 - `docs/specs/scanner-spec.md`
-- `docs/specs/python-scanner-spec.md`
 - `docs/developer-execution-blueprints/scanner-data-journey.md`
-- `docs/implementation/python-worker-implementation.md`
+- `docs/implementation/scanner-worker-implementation.md`
+- `docs/implementation/python-worker-platform-implementation.md`
 - `docs/implementation/persistence-implementation.md`
 - `docs/implementation/queue-implementation.md`
 

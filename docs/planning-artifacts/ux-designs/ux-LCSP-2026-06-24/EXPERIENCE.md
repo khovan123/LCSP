@@ -7,7 +7,7 @@ sources:
   - docs/specs/functional-requirements.md
   - docs/specs/non-functional-requirements.md
   - docs/specs/requirements-traceability-summary.md
-  - docs/architecture/adr/adr-026-hybrid-legal-retriever.md
+  - docs/architecture/adr/adr-026-chromadb-vectorless-legal-retriever.md
 updated: 2026-06-24
 ---
 

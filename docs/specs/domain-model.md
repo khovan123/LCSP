@@ -224,7 +224,7 @@ Missing or ambiguous mapping must not create RepositorySnapshot or RepositorySca
 |---|---|---:|---|
 | sourceFileId / repositorySnapshotId | UUIDv7 | Yes | Identity/scope |
 | relativePath / extension / language | string | Yes | Metadata only |
-| supportLevel | AnalysisSupportLevel | Yes | FULL_STATIC/BASIC_SIGNAL_ONLY/UNSUPPORTED |
+| supportLevel | AnalysisSupportLevel | Yes | BOUNDED_STATIC_L0_L3/BASIC_SIGNAL_ONLY/UNSUPPORTED |
 | sizeBytes | integer | Yes | File size |
 | contentHash | string | Yes | Integrity reference |
 | ignored | boolean | Yes | Skip state |

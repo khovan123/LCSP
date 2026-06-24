@@ -36,7 +36,7 @@ SUPPLEMENTARY SOURCES (contextual, not legally authoritative)
   → Official FAQs and implementation guidance
 ```
 
-> **Source Validation Required:** Legal Team must validate technical accessibility of vbpl.vn and vanban.chinhphu.vn before ingestion implementation. Do not claim confirmed accessibility.
+> **Source Validation Required:** Internal Legal Operator must validate technical accessibility of vbpl.vn and vanban.chinhphu.vn before ingestion implementation. Do not claim confirmed accessibility.
 
 ## Required Corpus Metadata Per Document
 
@@ -86,7 +86,7 @@ Fail-closed behavior is `PROJECT_OWNER_LOCKED`.
 
 | Step | Requirement |
 |---|---|
-| Review authority | Legal Team or designated approver |
+| Review authority | Internal Legal Operator |
 | Approval record | `CorpusApprovalRecord` with authority, date, scope, status |
 | LegalCorpusVersion creation | Only after approval; immutable after creation |
 | Corpus use gate | Classification blocked if corpus version not approved |
@@ -123,7 +123,7 @@ Canonical corpus lifecycle vocabulary for Phase 5.2J is `DRAFT -> APPROVED -> SU
 ## Consequences
 
 - Legal corpus ingestion is on the critical path for A-to-Z acceptance.
-- Legal Team must own source validation, corpus review, and approval process.
+- Internal Legal Operator must own source validation, corpus review, and approval process.
 - Classification is blocked if corpus version is not approved or source is unavailable.
 - A golden-path legal corpus fixture must be prepared for acceptance testing.
 
