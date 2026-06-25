@@ -1,6 +1,6 @@
 # LCSP Acceptance Criteria Catalog
 
-Canonical catalog: `AC-001..AC-041`. Deferred `FR-050..FR-052` have no active AC. Canonical UCs are `UC-001..UC-018`.
+Canonical catalog: `AC-001..AC-041` plus Phase 5.2L `AC-050A..AC-050F`. `FR-050` is active as `AUTOMATIC_TRUSTED_SCAN_INITIATION`. `FR-051` is `REMOVED_FROM_PRODUCT`. `FR-052` is `DEFERRED_POST_MVP`. Canonical active UCs are `UC-001..UC-017`; historical `UC-018` structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP`.
 
 | AC | Acceptance outcome | UC | FR | NFR |
 |---|---|---|---|---|
@@ -16,7 +16,7 @@ Canonical catalog: `AC-001..AC-041`. Deferred `FR-050..FR-052` have no active AC
 | AC-010 | Material declaration/evidence mismatch creates a blocking conflict. | UC-010 | FR-026 | NFR-018 |
 | AC-011 | Conflict Score explains materiality but creates no alternative route. | UC-010 | FR-027 | NFR-028 |
 | AC-012 | Manager resolution is separate from scanner evidence, audited, and reruns reconciliation. | UC-010 | FR-028,029 | NFR-008,010,011,018 |
-| AC-013 | Invalid or bypassing attestation is rejected/supplemental-only and never unlocks classification. | UC-018 | FR-045,046 | NFR-008,009,010,018 |
+| AC-013 | Historical structured-attestation guard. No active MVP feature may use attestation to unlock classification, resolve conflict, approve VerifiedProfile, support reconciliation, or create report/audit dependency. | — | FR-045,046 | `SUPERSEDED_FOR_ACTIVE_MVP` |
 | AC-014 | No unresolved conflict permits VerifiedProfile creation. | UC-011 | FR-030 | NFR-016,018 |
 | AC-015 | Unresolved conflict blocks VerifiedProfile approval. | UC-011 | FR-030,031 | NFR-008,010,018,022 |
 | AC-016 | Approved immutable corpus plus VerifiedProfile yields citation-backed LegalRuleMatch records. | UC-012 | FR-032,033,053,054,056 | NFR-017,029,033,034 |
@@ -45,9 +45,17 @@ Canonical catalog: `AC-001..AC-041`. Deferred `FR-050..FR-052` have no active AC
 | AC-039 | Duplicate message causes no duplicate state or artifact. | UC-015,016 | FR-042,044,049 | NFR-010,024,026,030 |
 | AC-040 | Transient broker failure keeps outbox pending and retries to ack/terminal failure. | UC-015 | FR-042,044 | NFR-010,021,024,026 |
 | AC-041 | Document guard violation blocks generation and publishes no artifact. | UC-014,017 | FR-039,041 | NFR-018,020,021,022,026 |
+| AC-050A | Trusted trigger with complete mapping creates or resumes exactly one scan workflow for the correct tenant, repository, assessment, branch, and commit. | UC-016 | FR-050 | NFR-008,010,016,024,026,030 |
+| AC-050B | Duplicate trigger delivery with the same idempotency key returns or resumes the existing job and creates no duplicate artifact. | UC-016 | FR-050 | NFR-010,024,026,030 |
+| AC-050C | Out-of-order trigger events wait, no-op, or block safely without mutating completed history. | UC-016 | FR-050 | NFR-018,026,030 |
+| AC-050D | Missing repository/account/assessment mapping creates `PENDING_MAPPING`, `BLOCKED_MAPPING`, or `WAITING_FOR_CONTEXT`; no scan starts. | UC-016 | FR-050 | NFR-008,018,022,026 |
+| AC-050E | Ambiguous assessment mapping blocks with Manager-visible recovery state and never best-effort scans. | UC-016 | FR-050 | NFR-008,018,022,026 |
+| AC-050F | Every scan-trigger authorization decision records actor/service identity, organization, resource, action, policy ID, policy version, decision, safe context refs, and correlation ID. | UC-016,017 | FR-050 | NFR-008,010,011,026 |
 
 ```text
 CANONICAL_ACCEPTANCE_CRITERIA_NORMALIZED
-DEFERRED_FR_REMOVED_FROM_ACTIVE_ACCEPTANCE
+FR_050_ACCEPTANCE_CRITERIA_ADDED
+FR_051_REMOVED_FROM_PRODUCT
+STRUCTURED_ATTESTATION_SUPERSEDED_FOR_ACTIVE_MVP
 GOLDEN_PATH_EXCLUDES_OPTIONAL_DEVELOPER_DEPENDENCY
 ```

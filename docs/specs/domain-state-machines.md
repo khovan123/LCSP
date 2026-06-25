@@ -12,6 +12,8 @@ Canonical state transitions for the A-to-Z runnable MVP. Physical enums remain o
 - Classification requires VerifiedProfile and completed legal matching.
 - Final document requires classification, GapAnalysis, citations, and no unresolved conflict.
 - Manager completion never depends on Developer participation.
+- PBAC is the authorization source of truth for all user and service transitions.
+- Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP` and has no active state machine.
 
 ## Assessment
 
@@ -19,6 +21,8 @@ Canonical state transitions for the A-to-Z runnable MVP. Physical enums remain o
 CREATED
 -> WIZARD_PROFILE_READY
 -> REPOSITORY_CONNECTED
+-> TRUSTED_SCAN_TRIGGERED
+-> PENDING_MAPPING or BLOCKED_MAPPING or WAITING_FOR_CONTEXT or SNAPSHOT_CREATED
 -> SNAPSHOT_CREATED
 -> SCAN_REQUESTED
 -> SCAN_RUNNING
@@ -37,7 +41,13 @@ CREATED
 | none | assessment created | Manager authorized | CREATED |
 | CREATED | Wizard saved | required fields valid | WIZARD_PROFILE_READY |
 | WIZARD_PROFILE_READY | repository connected | GitHub App scope valid | REPOSITORY_CONNECTED |
-| REPOSITORY_CONNECTED | snapshot created | commit metadata exists | SNAPSHOT_CREATED |
+| REPOSITORY_CONNECTED | trusted trigger received | verified source and PBAC allow | TRUSTED_SCAN_TRIGGERED |
+| TRUSTED_SCAN_TRIGGERED | mapping pending | required repository/account/assessment mapping missing | PENDING_MAPPING |
+| TRUSTED_SCAN_TRIGGERED | mapping blocked | ambiguous mapping or unsafe context | BLOCKED_MAPPING |
+| TRUSTED_SCAN_TRIGGERED | waiting | out-of-order event or incomplete context can safely wait | WAITING_FOR_CONTEXT |
+| TRUSTED_SCAN_TRIGGERED | snapshot created | complete tenant/repository/assessment/branch/commit context exists | SNAPSHOT_CREATED |
+| PENDING_MAPPING or WAITING_FOR_CONTEXT | context completed | mapping is unique and PBAC allows | SNAPSHOT_CREATED |
+| BLOCKED_MAPPING | Manager/system correction | mapping is resolved and audited | SNAPSHOT_CREATED |
 | SNAPSHOT_CREATED | scan requested | idempotent job/outbox exists | SCAN_REQUESTED |
 | SCAN_REQUESTED | scan started | Python Worker lock acquired | SCAN_RUNNING |
 | SCAN_RUNNING | scan completed event | quality-valid report and cleanup verification | SCAN_COMPLETED |
@@ -63,6 +73,28 @@ States: `REQUESTED`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELED`.
 - COMPLETED requires accepted report and verified workspace cleanup.
 - Any terminal scan failure moves REQUESTED/RUNNING to FAILED.
 - Rerun creates a new job; COMPLETED or FAILED never returns to RUNNING.
+
+## TrustedScanTrigger and ScanMappingResolution
+
+Trigger states: `RECEIVED`, `CONTEXT_VALIDATING`, `READY_TO_SNAPSHOT`, `PENDING_MAPPING`, `BLOCKED_MAPPING`, `WAITING_FOR_CONTEXT`, `REJECTED`.
+
+```text
+RECEIVED
+-> CONTEXT_VALIDATING
+-> READY_TO_SNAPSHOT
+or PENDING_MAPPING
+or BLOCKED_MAPPING
+or WAITING_FOR_CONTEXT
+or REJECTED
+```
+
+- Invalid signature or untrusted source moves to REJECTED and creates no scan.
+- PBAC denial moves to REJECTED and is audited.
+- Missing mapping moves to PENDING_MAPPING or WAITING_FOR_CONTEXT.
+- Ambiguous mapping moves to BLOCKED_MAPPING.
+- READY_TO_SNAPSHOT may create immutable RepositorySnapshot and RepositoryScanJob.
+- Duplicate delivery is idempotent and must not duplicate artifacts.
+- Idempotency key, retry/DLQ and replay behavior are `TECHNICAL_DECISION_REQUIRED`.
 
 ## TechnicalEvidenceReport
 
@@ -104,15 +136,15 @@ CONFLICT_OPEN
 
 VerifiedProfile states: `NOT_CREATED`, `READY`, `STALE`. Open conflict prevents creation. New upstream evidence leaves the prior immutable version STALE.
 
-Structured Developer attestation may support Manager review but cannot transition Conflict, VerifiedProfile, or Classification by itself.
+Structured Developer attestation is `SUPERSEDED_FOR_ACTIVE_MVP` and cannot transition Conflict, VerifiedProfile, or Classification.
 
-## Developer Task and Attestation
+## Developer Task and Removed Attestation
 
 Developer task states: `INVITED`, `ACTIVE`, `REVOKED`, `EXPIRED`, `COMPLETED`.
 
-Attestation states: `SUBMITTED`, `ACCEPTED_AS_SUPPLEMENTAL`, `REJECTED`, `WITHDRAWN`.
+Attestation states are historical only: `SUBMITTED`, `ACCEPTED_AS_SUPPLEMENTAL`, `REJECTED`, `WITHDRAWN`.
 
-`FR-052` delegated free-form clarification has no active MVP state machine.
+`FR-045/FR-046` structured attestation and `FR-052` delegated free-form clarification have no active MVP state machine.
 
 ## Legal Source Ingestion
 
@@ -145,13 +177,13 @@ States: `NOT_REQUESTED`, `REQUESTED`, `RUNNING`, `READY`, `FAILED`.
 
 ```text
 LegalCorpusVersion APPROVED
--> command.embedding-build.requested.v1
+-> command.legal-index-build.requested.v1
 -> REQUESTED -> RUNNING
--> event.embedding-build.completed.v1 -> READY
-or event.embedding-build.failed.v1 -> FAILED
+-> event.legal-index-build.completed.v1 -> READY
+or event.legal-index-build.failed.v1 -> FAILED
 ```
 
-Only READY indexes are available to hybrid retrieval.
+Only READY ChromaDB legal indexes are available to vectorless legal retrieval.
 
 ## Legal Matching
 
@@ -187,5 +219,7 @@ Export contains redacted event and version references only.
 DOMAIN_STATE_MACHINES_ALIGNED
 LEGAL_CORPUS_AND_INDEX_LIFECYCLES_INCLUDED
 STRUCTURED_ATTESTATION_NON_UNLOCKING
+STRUCTURED_ATTESTATION_SUPERSEDED_FOR_ACTIVE_MVP
+TRUSTED_SCAN_TRIGGER_STATE_MACHINE_ADDED
 PYTHON_SCANNER_COMPLETION_GATE_ALIGNED
 ```

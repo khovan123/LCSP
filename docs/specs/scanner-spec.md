@@ -6,7 +6,7 @@ AUTHORITATIVE — A-TO-Z RUNNABLE MVP
 
 ## Purpose
 
-This is the canonical domain specification for Repository Scan and static-analysis evidence behavior. Python Worker owns the scan lifecycle. Implementation guidance lives in `docs/implementation/scanner-implementation.md` and `docs/implementation/python-worker-implementation.md`; runtime object flow lives in `docs/developer-execution-blueprints/scanner-data-journey.md`.
+This is the sole canonical domain specification for Repository Scan and static-analysis evidence behavior. Python Scanner Worker owns the scan lifecycle. Implementation guidance lives in `docs/implementation/scanner-implementation.md` and `docs/implementation/scanner-worker-implementation.md`; runtime states and events live in `docs/specs/domain-state-machines.md` and `docs/specs/event-catalog.md`.
 
 This document is a design contract, not source code, backlog, story, sprint plan, or test implementation.
 
@@ -48,12 +48,17 @@ Forbidden:
 
 | Concern | Canonical MVP Decision |
 |---|---|
-| Scan lifecycle runtime | Standalone Python Worker, Python 3.11+ |
+| Scan lifecycle runtime | Python Scanner Worker within Python Worker Platform, Python 3.11+ |
 | Queue ownership | Python Worker is sole consumer of `command.scan.requested.v1` |
+| SBOM/dependency inventory | Syft |
+| JS/TS dependency usage | Knip |
+| Python dependency usage | deptry |
 | Python parsing | stdlib `ast` + `libcst` |
 | Python analysis | first-class bounded semantic static analysis |
 | TS/JS analysis | Node.js `ts-morph` subprocess invoked by Python Worker |
-| Other languages | basic manifest/import/config signals only |
+| AI/custom pattern rules | Semgrep custom rules |
+| Other/cross-language structure | tree-sitter/custom parser augmentation |
+| Other languages | basic manifest/import/config/structural signals with explicit coverage limits |
 | Graph assembly | scan-local normalized graph in Python Worker |
 | Persistence | PostgreSQL metadata only |
 | Workspace | restricted ephemeral directory with verified cleanup |
@@ -64,6 +69,7 @@ Superseded active behavior:
 - TypeScript-first scanner lifecycle ownership;
 - Python syntax-only support;
 - Node scanner worker consuming the scan command.
+- Scanner pipeline limited to `ast`, `libcst`, and `ts-morph`.
 
 Historical Phase 5.2I evidence remains in git history and archived decision records.
 
@@ -85,19 +91,23 @@ The scanner must never claim complete understanding of arbitrary dynamic code.
 3. Materialize selected repository snapshot.
 4. Inventory files and enforce bounds.
 5. Parse manifests and configuration.
-6. Classify language/support level.
-7. Analyze Python via AST/CST.
-8. Analyze TS/JS via subprocess when present.
-9. Detect AI invocation and provider/framework signals.
-10. Trace bounded model input/output and downstream actions.
-11. Detect human-review and automation evidence.
-12. Fuse domain/data/user-impact signals.
-13. Build normalized graph metadata.
-14. Generate TechnicalFinding records.
-15. Build TechnicalEvidenceReport.
-16. Run schema/privacy/quality gates.
-17. Delete and verify workspace cleanup.
-18. Transactionally mark terminal state and stage completed/failed event.
+6. Run Syft SBOM/dependency inventory.
+7. Run Knip and deptry dependency usage analysis.
+8. Classify language/support level.
+9. Analyze Python via AST/CST.
+10. Analyze TS/JS via subprocess when present.
+11. Run tree-sitter/custom parser structural augmentation.
+12. Run Semgrep custom AI rules.
+13. Detect AI invocation and provider/framework signals.
+14. Trace bounded model input/output and downstream actions.
+15. Detect human-review and automation evidence.
+16. Fuse import/call/data-flow/dependency/domain signals.
+17. Build normalized graph metadata.
+18. Generate TechnicalFinding records.
+19. Build TechnicalEvidenceReport.
+20. Run schema/privacy/quality gates.
+21. Delete and verify workspace cleanup.
+22. Transactionally mark terminal state and stage completed/failed event.
 
 `event.scan.completed.v1` is allowed only when the report is `QUALITY_VALID`, the ScanJob is `COMPLETED`, and cleanup verification exists.
 
@@ -112,6 +122,34 @@ The scanner must never claim complete understanding of arbitrary dynamic code.
 | L4 | unsupported/dynamic boundary | emit uncertainty/coverage limitation; do not guess |
 
 Only start L2/L3 tracing after an AI invocation candidate is found. Dynamic imports, reflection, remote/runtime configuration, queue breaks, generated code, or unresolved external services terminate the bounded path with explicit uncertainty.
+
+## Toolchain Contracts
+
+All scanner tools must have pinned versions, configuration hashes, ruleset versions, bounded CPU/memory/time/file/output limits, validated and redacted stdout/stderr, normalized structured output, and tool/version/config provenance in the TechnicalEvidenceReport.
+
+Tools must run inside the restricted scanner workspace. They must not install repository dependencies, run customer application code, run package scripts, run tests, run Docker/CI workflows, or probe customer endpoints.
+
+Tool failure becomes either an explicit `CoverageLimitation` or terminal scan failure according to a severity table. The severity table for Syft, Knip, deptry, Semgrep, tree-sitter/custom parser, `ast/libcst`, and `ts-morph` is `TECHNICAL_DECISION_REQUIRED`.
+
+## Dependency and SBOM Contracts
+
+Normalize dependency output into:
+
+- `PackageDependency`;
+- `SBOMComponent`;
+- `DependencyUsageFact`.
+
+Dependency states must distinguish:
+
+- declared;
+- discovered;
+- used or reachable;
+- unused;
+- missing;
+- transitive;
+- uncertain.
+
+No tool result may independently become legal truth, classification truth, proof of active AI use, or proof of automated decision-making.
 
 ## Canonical Finding Types
 
@@ -287,17 +325,37 @@ Relevant claims remain unknown/unclear with an uncertainty reason.
 
 ## Python-Specific Requirements
 
-Python first-class analysis includes:
+Python first-class bounded analysis includes:
 
 - package/module/import resolution within the snapshot;
-- functions, classes, methods, decorators, async calls;
+- functions, classes, methods, decorators, async calls, aliases and route handlers;
 - FastAPI/Flask/Django/Celery/Pydantic patterns where covered by rules;
 - OpenAI/Gemini/Anthropic/Hugging Face/LangChain/LlamaIndex and common ML invocation patterns;
 - bounded function/module/cross-module flow;
 - model input/output, branch/action, and human-review paths;
 - explicit dynamic-flow limitations.
 
-See `docs/specs/python-scanner-spec.md` for detailed Python contracts.
+Python support is not complete whole-program static analysis. It is bounded L0-L3 analysis with L4 dynamic/unsupported boundaries.
+
+Python detection examples include:
+
+- `openai.OpenAI()`, `client.chat.completions.create`, `AsyncOpenAI`;
+- `anthropic.Anthropic`, `client.messages.create`, `AsyncAnthropic`;
+- `genai.GenerativeModel`, `model.generate_content`;
+- Hugging Face `pipeline(...)`, `AutoModel.from_pretrained`, sequence-classification models;
+- LangChain `LLMChain`, `ChatOpenAI`, `AgentExecutor`, LCEL `prompt | llm`, `chain.invoke`;
+- LlamaIndex `VectorStoreIndex`, `QueryEngine`, `LLMPredictor`;
+- PyTorch/TensorFlow/Keras/sklearn inference patterns such as `model.forward`, `model.predict`, `Pipeline.predict`;
+- local HTTP inference endpoints such as `/predict`, `/infer`, `/generate`, `/classify`, `/score`.
+
+Python human-review evidence examples include:
+
+- `PENDING_REVIEW`, `MANAGER_REVIEW`, `HUMAN_APPROVAL`, `MANUAL_REVIEW` states;
+- `@requires_review`, `@needs_approval` decorators;
+- `assign_reviewer(...)`, `require_approval(...)`, `send_to_review(...)` calls;
+- state-machine transitions to review state before final action.
+
+Generic function names such as `review()` are insufficient without surrounding path evidence.
 
 ## TS/JS Subprocess Requirements
 
@@ -360,10 +418,11 @@ Metrics include invocation precision, business-purpose mapping, input/output det
 
 | Concern | Document |
 |---|---|
-| Python behavior | `docs/specs/python-scanner-spec.md` |
-| Runtime object lifecycle | `docs/developer-execution-blueprints/scanner-data-journey.md` |
+| Scanner behavior, taxonomy and Python/TS/JS analysis profiles | `docs/specs/scanner-spec.md` |
+| Runtime object lifecycle | `docs/specs/domain-state-machines.md`, `docs/specs/event-catalog.md`, `docs/implementation/scanner-worker-implementation.md` |
 | Build/package structure | `docs/implementation/scanner-implementation.md` |
-| Python process | `docs/implementation/python-worker-implementation.md` |
+| Scanner worker process | `docs/implementation/scanner-worker-implementation.md` |
+| Python Worker Platform | `docs/implementation/python-worker-platform-implementation.md` |
 | Persistence | `docs/implementation/persistence-implementation.md` |
 | Queue | `docs/implementation/queue-implementation.md`, `docs/specs/event-catalog.md` |
 | AIUsageFlow | `docs/specs/ai-usage-flow-domain-spec.md` |
@@ -372,12 +431,12 @@ Metrics include invocation precision, business-purpose mapping, input/output det
 ## Current Planning Status
 
 ```text
-PHASE_5_2J_DOCUMENT_REMEDIATION_COMPLETE
-PHASE_5_2K_A_REQUIREMENTS_AND_TRACEABILITY_REMEDIATION_COMPLETE
-ACTIVE_DOCS_PRE_UX_SYNCHRONIZED
-CANONICAL_UX_PENDING
+CONSOLIDATION_PASS_APPLIED
+SCANNER_BEHAVIOR_AUTHORITY_CONSOLIDATED
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
 
-This status authorizes UX planning only. It does not certify implementation readiness or authorize story execution.
+This status requires UX rebase or regeneration after documentation pruning. It does not certify implementation readiness or authorize story execution.

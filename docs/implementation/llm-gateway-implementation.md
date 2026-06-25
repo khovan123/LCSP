@@ -132,7 +132,7 @@ Audit model run requested, rejected, timed out, schema invalid, completed, retri
 | --- | --- |
 | Provider selection | Real configured LLM provider mandatory for A-to-Z acceptance run per ADR-024. `COST_OR_CREDENTIAL_DECISION_REQUIRED`. Candidates: OpenAI GPT-4o, Google Gemini 1.5 Pro/Flash, Anthropic Claude 3.x. |
 | Mock mode | Deterministic mock retained for unit tests, offline CI, and credential-unavailable dev. Mock run does not qualify as A-to-Z MVP acceptance. |
-| Embedding model | Separate embedding provider/model required for legal corpus retrieval. `TECHNICAL_DECISION_REQUIRED`. |
+| Embedding model | Not required for legal corpus retrieval MVP. Optional future reranker/semantic retrieval requires separate approval. |
 | Credential management | `LLM_API_KEY_REF` resolved from secret manager. Not in source. Not in logs. |
 | Cost-control | Monthly budget cap required before acceptance run. Token usage logged per workflow run. |
 | Token budget | `LLM_MAX_OUTPUT_TOKENS=1200` default for controlled MVP unless a provider-specific environment configuration overrides it. |

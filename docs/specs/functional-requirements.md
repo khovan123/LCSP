@@ -2,7 +2,15 @@
 
 ## Governance
 
-Canonical IDs are `FR-001..FR-056`. Active MVP requirements are `FR-001..FR-049` and `FR-053..FR-056`. `FR-050..FR-052` are Deferred and have no active MVP acceptance criteria, UX screens, or stories. Legacy `FR-E*` and `FR-057..FR-082` values are source aliases only.
+Canonical IDs are `FR-001..FR-056`. Phase 5.2L supersedes the previous active/deferred split:
+
+- `FR-045` and `FR-046` structured attestation semantics are `SUPERSEDED_FOR_ACTIVE_MVP`.
+- `FR-050` is redefined as `AUTOMATIC_TRUSTED_SCAN_INITIATION`.
+- `FR-051` manual technical evidence JSON upload is `REMOVED_FROM_PRODUCT`.
+- `FR-052` delegated free-form clarification remains inactive and is `DEFERRED_POST_MVP` unless separately approved.
+- Legacy `FR-E*` and `FR-057..FR-082` values are source aliases only.
+
+PBAC is the authorization source of truth for every active requirement. Role labels may appear only as subject attributes, grouping labels, or policy templates.
 
 ## Catalog
 
@@ -16,10 +24,10 @@ Canonical IDs are `FR-001..FR-056`. Active MVP requirements are `FR-001..FR-049`
 | FR-006 | Separate OAuth identity from GitHub authorization. | Y | UC-001, UC-005 | BR-088 | AC-023 | NFR-006, NFR-007 |
 | FR-007 | Create organization. | Y | UC-002 | BR-014 | AC-024 | NFR-008 |
 | FR-008 | Manage organization members. | Y | UC-002 | BR-015 | AC-024 | NFR-008, NFR-009 |
-| FR-009 | Assign Manager role. | Y | UC-002 | BR-016 | AC-024 | NFR-008, NFR-009 |
-| FR-010 | Invite optional Developer. | Y | UC-002, UC-018 | BR-017, BR-020 | AC-025 | NFR-008, NFR-009 |
-| FR-011 | Assign/revoke Developer policy. | Y | UC-002, UC-018 | BR-021, BR-022, BR-090..BR-092 | AC-025, AC-026 | NFR-008..NFR-010 |
-| FR-012 | Enforce Manager-only actions. | Y | UC-002, UC-010, UC-011, UC-013, UC-014, UC-018 | BR-018, BR-019, BR-089, BR-091 | AC-025, AC-026 | NFR-008, NFR-009 |
+| FR-009 | Assign Manager subject attributes and policy templates. | Y | UC-002 | BR-016 | AC-024 | NFR-008, NFR-009 |
+| FR-010 | Invite optional Developer collaborator. | Y | UC-002 | BR-017, BR-020 | AC-025 | NFR-008, NFR-009 |
+| FR-011 | Assign/revoke Developer PBAC policy scope. | Y | UC-002 | BR-021, BR-022, BR-090..BR-092 | AC-025, AC-026 | NFR-008..NFR-010 |
+| FR-012 | Enforce PBAC-protected Manager-only actions. | Y | UC-002, UC-010, UC-011, UC-013, UC-014 | BR-018, BR-019, BR-089, BR-091 | AC-025, AC-026 | NFR-008, NFR-009 |
 | FR-013 | Create Manager-owned assessment. | Y | UC-003 | BR-018, BR-023, BR-024, BR-089 | AC-001 | NFR-008, NFR-010 |
 | FR-014 | Complete WizardProfile. | Y | UC-004 | BR-026..BR-029, BR-031 | AC-002 | NFR-028 |
 | FR-015 | Show readiness without risk level. | Y | UC-004, UC-014 | BR-030, BR-065 | AC-003 | NFR-018, NFR-020, NFR-022, NFR-028 |
@@ -52,22 +60,25 @@ Canonical IDs are `FR-001..FR-056`. Active MVP requirements are `FR-001..FR-049`
 | FR-042 | Write material audit events. | Y | UC-015, UC-017 | BR-024, BR-067, BR-094 | AC-020, AC-039, AC-040 | NFR-010, NFR-011, NFR-024, NFR-026 |
 | FR-043 | View/export redacted audit trail. | Y | UC-015 | BR-068 | AC-020, AC-022 | FR-042, NFR-010, NFR-015 |
 | FR-044 | Track immutable artifact versions. | Y | UC-015, UC-016 | BR-069 | AC-020, AC-039, AC-040 | NFR-016, NFR-030 |
-| FR-045 | Record/disclose attestation usage. | Y | UC-015, UC-018 | BR-055, BR-070 | AC-013, AC-020 | FR-046, NFR-010, NFR-018 |
-| FR-046 | Accept structured supplemental attestation. | Y | UC-018 | BR-046, BR-052..BR-056 | AC-013 | FR-011, FR-012, NFR-008..NFR-010, NFR-018 |
-| FR-047 | Accept scoped Developer task. | Y | UC-018 | BR-019, BR-021, BR-071 | AC-025, AC-026 | FR-010, FR-011, NFR-009 |
-| FR-048 | View redacted technical findings. | Y | UC-007, UC-018 | BR-035 | AC-007, AC-022, AC-025 | FR-018, NFR-014, NFR-015 |
+| FR-045 | Historical structured-attestation disclosure requirement. | N | — | — | — | `SUPERSEDED_FOR_ACTIVE_MVP` |
+| FR-046 | Historical structured supplemental attestation. | N | — | — | — | `SUPERSEDED_FOR_ACTIVE_MVP` |
+| FR-047 | Accept scoped Developer task with independent product value. | Y | UC-002 | BR-019, BR-021, BR-071 | AC-025, AC-026 | FR-010, FR-011, NFR-009 |
+| FR-048 | View redacted technical findings. | Y | UC-007 | BR-035 | AC-007, AC-022, AC-025 | FR-018, NFR-014, NFR-015 |
 | FR-049 | Re-run scan without mutating history. | Y | UC-016 | BR-040, BR-047, BR-069, BR-077 | AC-004, AC-020, AC-028, AC-039 | FR-017, FR-018, NFR-030 |
-| FR-050 | Future Local/CI scanner upload. | N | UC-016 | BR-033 | — | NFR-016 |
-| FR-051 | Future manual evidence JSON upload. | N | UC-016 | BR-034 | — | NFR-016 |
-| FR-052 | Future delegated free-form clarification. | N | UC-010, UC-018 | BR-044 | — | FR-011, FR-029 |
+| FR-050 | Automatic trusted scan initiation. | Y | UC-016 | BR-033 | AC-050A..AC-050F | NFR-008, NFR-010, NFR-016, NFR-024, NFR-026, NFR-030 |
+| FR-051 | Manual technical evidence JSON upload. | N | — | — | — | `REMOVED_FROM_PRODUCT` |
+| FR-052 | Delegated free-form clarification. | N | UC-010 | BR-044 | — | `DEFERRED_POST_MVP`; FR-011, FR-029 |
 | FR-053 | Ingest validated legal source snapshots. | Y | UC-012 | BR-050, BR-084 | AC-016 | NFR-017, NFR-034 |
 | FR-054 | Approve immutable LegalCorpusVersion. | Y | UC-012 | BR-050 | AC-016, AC-035 | NFR-017, NFR-034 |
-| FR-055 | Configure real LLM/embedding providers and budgets. | Y | UC-013 | BR-049 | AC-018, AC-037, AC-038 | NFR-012, NFR-033 |
-| FR-056 | Run Vietnamese FTS + pgvector hybrid search. | Y | UC-012 | BR-050, BR-084 | AC-016, AC-035, AC-036 | NFR-017, NFR-033, NFR-034 |
+| FR-055 | Configure real LLM provider and budget controls. | Y | UC-013 | BR-049 | AC-018, AC-037, AC-038 | NFR-012, NFR-033 |
+| FR-056 | Run ChromaDB structure-first vectorless legal retrieval with xref expansion and citation allowlist validation. | Y | UC-012 | BR-050, BR-084 | AC-016, AC-035, AC-036 | NFR-017, NFR-034 |
 
 Historical alias resolution remains in `requirements-baseline.md`.
 
 ```text
 CANONICAL_FR_CATALOG_NORMALIZED
-DEFERRED_FR_HAVE_NO_ACTIVE_ACCEPTANCE_CRITERIA
+PHASE_5_2L_FR_CATALOG_SYNCHRONIZED
+FR_050_AUTOMATIC_TRUSTED_SCAN_INITIATION
+FR_051_REMOVED_FROM_PRODUCT
+STRUCTURED_ATTESTATION_SUPERSEDED_FOR_ACTIVE_MVP
 ```

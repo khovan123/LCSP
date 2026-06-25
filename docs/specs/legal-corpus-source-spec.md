@@ -2,9 +2,9 @@
 
 ## Status
 
-AUTHORITATIVE — A-to-Z Runnable MVP (Phase 5.2J)
+AUTHORITATIVE — A-to-Z Runnable MVP (Phase 5.2L)
 
-New document per SPRINT-CHANGE-PROPOSAL-5.2J (2026-06-23) and ADR-025.
+Originally introduced by SPRINT-CHANGE-PROPOSAL-5.2J (2026-06-23) and ADR-025; updated by Phase 5.2L ChromaDB vectorless legal RAG decision.
 
 ## Purpose
 
@@ -72,7 +72,10 @@ Normalized document structure (chapter/article/clause/point hierarchy):
 
 Rules:
 - Normalized text must not include raw HTML/PDF formatting artifacts.
-- Each article/clause/point stored as separate `LegalDocumentChunk` for embedding.
+- Each article/clause/point is stored as a structured `LegalDocumentChunk` with stable hierarchical ID and metadata.
+- Base retrieval unit is Clause (`Khoản`). Do not split inside a sentence or clause only to satisfy token size.
+- Point (`Điểm`) chunks retain parent Clause and Article context for assembly.
+- Cross-reference edges are extracted so referenced context can be retrieved one hop when a primary match cites another provision.
 - Chunk boundaries align with legal hierarchy to preserve citation fidelity.
 
 ## Ingestion Pipeline
@@ -85,7 +88,7 @@ Rules:
 | 4. Date extraction | Raw document | Effective dates | Best-effort; flag missing dates |
 | 5. Relationship mapping | Identity + registry | Amendment relationships | Best-effort; flag unmapped |
 | 6. Normalization | Raw document | Chapter/article/clause/point structure | `LEGAL_NORMALIZATION_FAILED`; manual review |
-| 7. Chunking | Normalized structure | `LegalDocumentChunk` rows | Required for embedding |
+| 7. Structure-first chunking | Normalized structure | `LegalDocumentChunk` rows with stable hierarchical IDs and xref metadata | Required for ChromaDB vectorless retrieval |
 | 8. Review submission | Normalized document | `CorpusApprovalRecord` attached to `LegalCorpusVersion.status = DRAFT` | Blocked until approved |
 | 9. Approval | Review | `CorpusApprovalRecord` (APPROVED) + `LegalCorpusVersion` | Blocked if not approved |
 
@@ -93,7 +96,7 @@ Rules:
 
 | Step | Requirement |
 |---|---|
-| Review authority | Legal Team or designated approver |
+| Review authority | Internal Legal Operator |
 | Review scope | Document identity, effective dates, normalization accuracy, amendment relationships |
 | Approval record | `authority`, `date`, `scope_description`, `status`, `corpus_version_id` |
 | Approval gate | `LegalCorpusVersion.status = APPROVED` before production retrieval |
@@ -115,7 +118,7 @@ Canonical lifecycle vocabulary for legal corpus versions, legal documents within
 DRAFT -> APPROVED -> SUPERSEDED
 ```
 
-Do not use `PENDING_REVIEW`, `RETIRED` or `OBSOLETE` as active corpus lifecycle statuses in Phase 5.2J contracts.
+Do not use `PENDING_REVIEW`, `RETIRED` or `OBSOLETE` as active corpus lifecycle statuses in Phase 5.2L contracts.
 
 ## Refresh Policy
 
@@ -148,7 +151,7 @@ Required for A-to-Z acceptance testing:
 |---|---|
 | Minimum documents | Key decrees/circulars relevant to Vietnamese AI regulation acceptance scenario |
 | Approval status | Must be approved before acceptance run |
-| Embeddings | Pre-built; included in acceptance environment setup |
+| ChromaDB vectorless index | Pre-built approved legal records, metadata filters, full-text records and direct lookup IDs included in acceptance environment setup |
 | Citation fidelity | Citations must reconstruct to `article`, `clause`, `point` level |
 
 ## Non-Claims

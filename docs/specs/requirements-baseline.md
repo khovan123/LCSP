@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document recovers the active requirements baseline from existing active documents and archived delete-candidate requirements. It does not create new requirements.
+This document defines the active requirements baseline from existing active documents and historical traceability aliases. It does not create new requirements.
 
 ## Governance
 
@@ -10,12 +10,12 @@ This document recovers the active requirements baseline from existing active doc
 - Canonical active FR namespace: `FR-001...` from `docs/specs/functional-requirements.md`.
 - Canonical active NFR namespace: `NFR-001...` from `docs/specs/non-functional-requirements.md`.
 - PRD `FR-E*` and `NFR-1..NFR-14` IDs are source aliases only. They are not active implementation requirement IDs after Phase 5.9 normalization.
-- Legacy IDs remain traceability aliases recovered from archived requirement catalogs.
-- Canonical FR inventory contains 56 total FRs: 53 active MVP FRs (`FR-001..FR-049`, `FR-053..FR-056`) and 3 deferred FRs (`FR-050..FR-052`).
+- Legacy IDs remain traceability aliases recovered from historical requirement catalogs.
+- Canonical FR inventory contains 56 total FRs. Phase 5.2L active MVP FRs are `FR-001..FR-044`, `FR-047..FR-050`, and `FR-053..FR-056`; `FR-045/FR-046` are `SUPERSEDED_FOR_ACTIVE_MVP`, `FR-051` is `REMOVED_FROM_PRODUCT`, and `FR-052` is `DEFERRED_POST_MVP`.
 - Canonical active NFR inventory contains 33 active NFRs: `NFR-001..NFR-030` and `NFR-033..NFR-035`.
 - `NFR-031` and `NFR-032` are legacy identifiers only, not active NFR catalog rows.
 - `PLATFORM_BASELINE` means the active normalized requirement belongs to the platform baseline even when no one-to-one PRD source alias exists.
-- Archived requirement catalogs remain archived and are not active source-of-truth documents.
+- Historical requirement catalogs remain non-authoritative and are not active source-of-truth documents.
 
 ## Active Canonical Sources
 
@@ -24,13 +24,7 @@ This document recovers the active requirements baseline from existing active doc
 
 ## Historical Recovery Inputs
 
-These archived documents were used only to recover legacy IDs and traceability aliases. They are not active implementation or requirements authority.
-
-- `docs/archive/decisions/requirements-baseline-audit-report.md`
-- `docs/archive/redundant-artifacts/delete-candidates/design/use-case-specification.md`
-- `docs/archive/redundant-artifacts/delete-candidates/design/functional-requirements.md`
-- `docs/archive/redundant-artifacts/delete-candidates/design/non-functional-requirements.md`
-- `docs/archive/redundant-artifacts/delete-candidates/design/traceability-matrix.md`
+Historical documents were used only to recover legacy IDs and traceability aliases. They remain available through git history and are not active implementation or requirements authority.
 
 ## PRD FR Source Alias Inventory
 
@@ -50,7 +44,7 @@ The following `FR-E*` identifiers are retained only as PRD/source aliases. Activ
 | FR-E3-2 | Local/CI evidence upload | docs/product/prd.md |
 | FR-E3-3 | Manual technical evidence JSON upload | docs/product/prd.md |
 | FR-E3-4 | Privacy flags validation | docs/product/prd.md |
-| FR-E3-5 | Human technical attestation as supplement | docs/product/prd.md |
+| FR-E3-5 | Superseded human technical attestation supplement | docs/product/prd.md |
 | FR-E4-1 | Schema completeness gate | docs/product/prd.md |
 | FR-E4-2 | Technical profile dimensions | docs/product/prd.md |
 | FR-E4-3 | Quality threshold gate | docs/product/prd.md |
@@ -69,19 +63,19 @@ The following `FR-E*` identifiers are retained only as PRD/source aliases. Activ
 | FR-E7-1 | Generate gap analysis after risk result | docs/product/prd.md |
 | FR-E7-2 | Generate compliance document/report | docs/product/prd.md |
 | FR-E7-3 | Support readiness-only export | docs/product/prd.md |
-| FR-E7-4 | Disclose attestation use | docs/product/prd.md |
+| FR-E7-4 | Superseded attestation disclosure | docs/product/prd.md |
 | FR-E8-1 | Audit Wizard answers | docs/product/prd.md |
 | FR-E8-2 | Audit technical evidence metadata | docs/product/prd.md |
 | FR-E8-3 | Audit conflict resolution | docs/product/prd.md |
-| FR-E8-4 | Audit human technical attestation | docs/product/prd.md |
+| FR-E8-4 | Superseded human technical attestation audit | docs/product/prd.md |
 | FR-E8-5 | Audit classification and generated documents | docs/product/prd.md |
 
 ### Deferred Evidence Source Aliases
 
 | PRD Alias | Active Canonical Requirement | MVP Scope Status | Meaning |
 | --- | --- | --- | --- |
-| FR-E3-2 | FR-050 | DEFERRED / NOT_ACTIVE_MVP_MAIN_FLOW | Local/CI scanner report upload is preserved as a future evidence path and must not be implemented as the controlled MVP default. |
-| FR-E3-3 | FR-051 | DEFERRED / NOT_ACTIVE_MVP_MAIN_FLOW | Manual technical evidence JSON upload is preserved as a future structured evidence path and must not be implemented as the controlled MVP default. |
+| FR-E3-2 | FR-050 | SUPERSEDED_FOR_ACTIVE_MVP | Local/CI scanner report upload is superseded. `FR-050` now means Automatic Trusted Scan Initiation. |
+| FR-E3-3 | FR-051 | REMOVED_FROM_PRODUCT | Manual technical evidence JSON upload is removed from active scope, roadmap, future scope, UX, APIs, entities, stories and delivery plans. |
 
 The active controlled MVP technical-evidence path is GitHub App repository connection, snapshot creation and Repository Scan.
 
@@ -140,7 +134,7 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | UC-M04-04 | Upload Manual Technical Evidence JSON | Developer, LCSP System | OUT_OF_SCOPE | active business-rules.md; archived traceability-matrix.md |
 | UC-M04-05 | Review Technical Findings | Manager; optional delegated Developer; LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M04-06 | Confirm Technical Truth | Developer, LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
-| UC-M04-07 | Provide Structured Technical Attestation | Developer, LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
+| UC-M04-07 | Provide Structured Technical Attestation | Developer, LCSP System | SUPERSEDED_FOR_ACTIVE_MVP | historical decision record only |
 | UC-M04-08 | Run Repository Scan | Manager; optional delegated Developer; LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M05-01 | Validate Evidence Schema | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M05-02 | Validate Privacy Flags | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
@@ -167,7 +161,7 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | UC-M09-01 | Write Audit Event | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M09-03 | Export Audit Trail | Manager, LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M09-04 | Track Evidence, Report, and Document Version | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
-| UC-M09-05 | Track Human Attestation Usage | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
+| UC-M09-05 | Track Human Attestation Usage | LCSP System | SUPERSEDED_FOR_ACTIVE_MVP | historical decision record only |
 | UC-M10-01 | Enforce Source Code Privacy Policy | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M10-02 | Redact Secrets | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M10-03 | Clean Temporary Workspace | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
@@ -222,13 +216,13 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | FR-042 | Write audit events | FR-E8-1, FR-E8-2, FR-E8-3, FR-E8-4, FR-E8-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-043 | View and export audit trail | FR-E8-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-044 | Track artifact versions | FR-E8-2, FR-E8-5 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
-| FR-045 | Track attestation usage | FR-E7-4, FR-E8-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
-| FR-046 | Submit structured technical attestation | FR-E3-5, FR-E8-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-045 | Historical attestation usage | FR-E7-4, FR-E8-4 | SUPERSEDED_FOR_ACTIVE_MVP | `docs/specs/functional-requirements.md` |
+| FR-046 | Historical structured technical attestation | FR-E3-5, FR-E8-4 | SUPERSEDED_FOR_ACTIVE_MVP | `docs/specs/functional-requirements.md` |
 | FR-047 | Accept Developer task | FR-E1-2, FR-E1-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-048 | Review technical findings | FR-E3-1, FR-E4-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-049 | Re-run repository scan | FR-E3-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
-| FR-050 | Support deferred Local/CI scanner report upload | FR-E3-2 | DEFERRED | `docs/specs/functional-requirements.md` |
-| FR-051 | Support deferred manual evidence JSON upload | FR-E3-3 | DEFERRED | `docs/specs/functional-requirements.md` |
+| FR-050 | Automatic Trusted Scan Initiation | FR-E3-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-051 | Manual evidence JSON upload | FR-E3-3 | REMOVED_FROM_PRODUCT | `docs/specs/functional-requirements.md` |
 | FR-052 | Support deferred delegated technical clarification | FR-E5-3, FR-E5-5 | DEFERRED | `docs/specs/functional-requirements.md` |
 | FR-053 | Ingest legal sources | FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-054 | Legal corpus review gate | FR-E6-3 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
@@ -269,7 +263,7 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | NFR-028 | Manager-facing Wizard and locked-state usability | NFR-10, NFR-12 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
 | NFR-029 | AIUsageFlow evidence refs and uncertainty reasons | NFR-7, NFR-8 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
 | NFR-030 | Historical evidence/profile/classification chain preservation on re-runs | NFR-7 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md` |
-| NFR-033 | LLM and embedding cost controls | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md`; ADR-024 |
+| NFR-033 | LLM API cost controls | PLATFORM_BASELINE | ACTIVE_CANONICAL | `docs/specs/non-functional-requirements.md`; ADR-024 |
 | NFR-034 | Legal corpus immutability and approval | NFR-7, NFR-8 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md`; ADR-025 |
 | NFR-035 | Python Worker sandbox isolation | NFR-1, NFR-2 | CANONICAL_MAPPING | `docs/specs/non-functional-requirements.md`; ADR-023 |
 
@@ -294,10 +288,10 @@ These identifiers are retained only for traceability drift cleanup. They are not
 | AC-6 | Manager conflict resolution is required and sufficient for MVP conflict completion when evidence gates pass. | docs/product/prd.md |
 | AC-7 | Evidence Confidence Score and AI Intervention Score never block workflow alone. | docs/product/prd.md |
 | AC-8 | Conflict handling uses binary MVP routing: conflict exists or not. Conflict Score may explain seriousness but does not create multiple routes. | docs/product/prd.md |
-| AC-9 | Human technical attestation cannot replace machine-generated metadata listed in A3. | docs/product/prd.md |
+| AC-9 | Human assertion, role label, delegated scope or untrusted upload cannot replace machine-generated metadata listed in A3. | docs/product/prd.md |
 | AC-10 | Final report includes legal citation/rule trace or is not final. | docs/product/prd.md |
-| AC-11 | Final report discloses human technical attestation when used for classification. | docs/product/prd.md |
-| AC-12 | Audit trail records wizard, evidence, conflict, attestation, classification and document generation events. | docs/product/prd.md |
+| AC-11 | Final report has no attestation dependency and discloses evidence, legal basis, PBAC/trigger trace and limitations. | docs/product/prd.md |
+| AC-12 | Audit trail records wizard, evidence, conflict, PBAC/trigger, classification and document generation events. | docs/product/prd.md |
 | AC-13 | PRD preserves all mandatory product decisions from Product Brief. | docs/product/prd.md |
 | AC-14 | PRD contains section for high-risk assumptions and validation requirements. | docs/product/prd.md |
 | AC-15 | PRD does not define architecture, backlog or code. | docs/product/prd.md |
