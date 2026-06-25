@@ -203,7 +203,7 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 |---|---|
 | Status | `SUPERSEDED_FOR_ACTIVE_MVP`. |
 | Required behavior | No Manager or Developer active screen, route, form, DTO, command, event, entity, audit dependency, report dependency, acceptance criterion, epic, story, or delivery task may preserve structured attestation as an MVP feature. |
-| Historical rule | Prior records may remain in change-control/history only. Reintroduction requires separate Project Owner approval. |
+| Historical rule | Prior records may remain in git history only. Reintroduction requires separate Project Owner approval. |
 | Traceability | Historical `FR-045/FR-046`, `UC-018`, and `AC-013` only. |
 
 ## System Flows

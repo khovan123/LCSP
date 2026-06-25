@@ -10,7 +10,7 @@ Active BUILD layer for the A-to-Z runnable MVP. These documents describe how the
 CONSOLIDATION_PASS_APPLIED
 SCANNER_BEHAVIOR_AUTHORITY_CONSOLIDATED
 CHROMADB_VECTORLESS_DOMAIN_CONTRACT_ALIGNED
-UX_DRAFT_CREATED
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
@@ -36,12 +36,13 @@ Implementation documents are build specifications, not evidence that application
 ### Scanner
 
 1. `../specs/scanner-spec.md`
-2. `../developer-execution-blueprints/scanner-data-journey.md`
-3. `scanner-implementation.md`
-4. `scanner-worker-implementation.md`
-5. `python-worker-platform-implementation.md`
-6. `persistence-implementation.md`
-7. `queue-implementation.md`
+2. `../specs/domain-state-machines.md`
+3. `../specs/event-catalog.md`
+4. `scanner-implementation.md`
+5. `scanner-worker-implementation.md`
+6. `python-worker-platform-implementation.md`
+7. `persistence-implementation.md`
+8. `queue-implementation.md`
 
 ### Legal Corpus and Retrieval
 

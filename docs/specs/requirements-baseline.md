@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document recovers the active requirements baseline from existing active documents and archived delete-candidate requirements. It does not create new requirements.
+This document defines the active requirements baseline from existing active documents and historical traceability aliases. It does not create new requirements.
 
 ## Governance
 
@@ -10,12 +10,12 @@ This document recovers the active requirements baseline from existing active doc
 - Canonical active FR namespace: `FR-001...` from `docs/specs/functional-requirements.md`.
 - Canonical active NFR namespace: `NFR-001...` from `docs/specs/non-functional-requirements.md`.
 - PRD `FR-E*` and `NFR-1..NFR-14` IDs are source aliases only. They are not active implementation requirement IDs after Phase 5.9 normalization.
-- Legacy IDs remain traceability aliases recovered from archived requirement catalogs.
+- Legacy IDs remain traceability aliases recovered from historical requirement catalogs.
 - Canonical FR inventory contains 56 total FRs. Phase 5.2L active MVP FRs are `FR-001..FR-044`, `FR-047..FR-050`, and `FR-053..FR-056`; `FR-045/FR-046` are `SUPERSEDED_FOR_ACTIVE_MVP`, `FR-051` is `REMOVED_FROM_PRODUCT`, and `FR-052` is `DEFERRED_POST_MVP`.
 - Canonical active NFR inventory contains 33 active NFRs: `NFR-001..NFR-030` and `NFR-033..NFR-035`.
 - `NFR-031` and `NFR-032` are legacy identifiers only, not active NFR catalog rows.
 - `PLATFORM_BASELINE` means the active normalized requirement belongs to the platform baseline even when no one-to-one PRD source alias exists.
-- Archived requirement catalogs remain archived and are not active source-of-truth documents.
+- Historical requirement catalogs remain non-authoritative and are not active source-of-truth documents.
 
 ## Active Canonical Sources
 
@@ -24,13 +24,7 @@ This document recovers the active requirements baseline from existing active doc
 
 ## Historical Recovery Inputs
 
-These archived documents were used only to recover legacy IDs and traceability aliases. They are not active implementation or requirements authority.
-
-- `docs/archive/decisions/requirements-baseline-audit-report.md`
-- `docs/archive/redundant-artifacts/delete-candidates/design/use-case-specification.md`
-- `docs/archive/redundant-artifacts/delete-candidates/design/functional-requirements.md`
-- `docs/archive/redundant-artifacts/delete-candidates/design/non-functional-requirements.md`
-- `docs/archive/redundant-artifacts/delete-candidates/design/traceability-matrix.md`
+Historical documents were used only to recover legacy IDs and traceability aliases. They remain available through git history and are not active implementation or requirements authority.
 
 ## PRD FR Source Alias Inventory
 
@@ -140,7 +134,7 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | UC-M04-04 | Upload Manual Technical Evidence JSON | Developer, LCSP System | OUT_OF_SCOPE | active business-rules.md; archived traceability-matrix.md |
 | UC-M04-05 | Review Technical Findings | Manager; optional delegated Developer; LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M04-06 | Confirm Technical Truth | Developer, LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
-| UC-M04-07 | Provide Structured Technical Attestation | Developer, LCSP System | SUPERSEDED_FOR_ACTIVE_MVP | historical/change-control only |
+| UC-M04-07 | Provide Structured Technical Attestation | Developer, LCSP System | SUPERSEDED_FOR_ACTIVE_MVP | historical decision record only |
 | UC-M04-08 | Run Repository Scan | Manager; optional delegated Developer; LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M05-01 | Validate Evidence Schema | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M05-02 | Validate Privacy Flags | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
@@ -167,7 +161,7 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | UC-M09-01 | Write Audit Event | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M09-03 | Export Audit Trail | Manager, LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M09-04 | Track Evidence, Report, and Document Version | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
-| UC-M09-05 | Track Human Attestation Usage | LCSP System | SUPERSEDED_FOR_ACTIVE_MVP | historical/change-control only |
+| UC-M09-05 | Track Human Attestation Usage | LCSP System | SUPERSEDED_FOR_ACTIVE_MVP | historical decision record only |
 | UC-M10-01 | Enforce Source Code Privacy Policy | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M10-02 | Redact Secrets | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |
 | UC-M10-03 | Clean Temporary Workspace | LCSP System | ACTIVE | active business-rules.md; archived use-case-specification.md |

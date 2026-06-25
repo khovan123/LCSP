@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document is the active ADR authority index for the A-to-Z runnable MVP. Detailed decisions live in individual ADR files. Historical reasoning remains in git history and `docs/archive/`, but archived material is not active implementation or UX authority.
+This document is the active ADR authority index for the A-to-Z runnable MVP. Detailed decisions live in individual ADR files. Historical reasoning remains in git history, not active implementation or UX authority.
 
 ## Current Architecture Direction
 
@@ -36,7 +36,7 @@ The system uses deterministic orchestration, state machines, evidence gates, and
 3. ADR-024 overrides mock-LLM-as-default happy-path wording.
 4. ADR-025 overrides local JSONL corpus seed as the legal source architecture.
 5. ADR-026 overrides pgvector, embedding-index, hybrid-vector and unspecified legal retrieval wording for MVP.
-6. Product scope and canonical requirements remain governed by PRD, FR/NFR catalogs, and approved change-control records.
+6. Product scope and canonical requirements remain governed by PRD, FR/NFR catalogs, and Project Owner decisions propagated into active docs.
 7. Phase 5.2L supersedes older wording: PBAC replaces RBAC, structured attestation is removed from active MVP, `FR-050` is Automatic Trusted Scan Initiation, `FR-051` is removed from product scope, and Node.js downstream workers are superseded.
 
 ## Active Decision Summary

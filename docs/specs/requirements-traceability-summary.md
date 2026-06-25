@@ -15,7 +15,7 @@ Summarize canonical requirement and planning traceability after Phase 5.2L activ
 | Active NFR total | 33 (`NFR-001..NFR-030`, `NFR-033..NFR-035`) |
 | AC total | `AC-001..AC-041` plus `AC-050A..AC-050F` |
 | Canonical use cases | `UC-001..UC-017`; `UC-018` structured attestation superseded |
-| Canonical UX | draft created; pending review/approval |
+| Canonical UX | not active after documentation pruning; rebase/regeneration required |
 | Canonical epics/stories | missing |
 | Story traceability | pending / not assessable |
 
@@ -38,7 +38,7 @@ Summarize canonical requirement and planning traceability after Phase 5.2L activ
 
 ## UX Boundary
 
-The canonical UX draft at `docs/planning-artifacts/ux-designs/ux-LCSP-2026-06-24/` covers:
+UX must be rebased or regenerated from the pruned active authority set. The next UX artifact must cover:
 
 - Manager authentication, organization, assessment, Wizard, repository, scan, evidence, reconciliation, classification, gap, document, and audit experiences;
 - optional Developer invitation/task and redacted findings experiences without structured attestation;
@@ -77,10 +77,10 @@ FR_050_AUTOMATIC_TRUSTED_SCAN_INITIATION_TRACED
 FR_051_REMOVED_FROM_PRODUCT
 STRUCTURED_ATTESTATION_SUPERSEDED_FOR_ACTIVE_MVP
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
-UX_DRAFT_CREATED
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
 PYTHON_WORKER_PACKAGE_TOPOLOGY_LOCKED
 AUDIT_EXPORT_SYNC_API_BOUNDARY_LOCKED
-UX_DRAFT_REBASE_PENDING
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
 CHROMADB_VECTORLESS_DOMAIN_CONTRACT_ALIGNED
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED

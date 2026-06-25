@@ -6,26 +6,20 @@
 docs/product/                        product scope và business rules
 docs/specs/                          UC, FR, NFR, AC, domain và state
 docs/architecture/                   architecture và ADR
-docs/developer-execution-blueprints/ runtime/data journeys
 docs/implementation/                 build/configuration contracts
-docs/code-map/                       module/table/queue ownership
-docs/planning-artifacts/             proposal, readiness và remediation reports
-docs/change-control/                 thay đổi phạm vi đã được phê duyệt
-docs/reviews/                        feedback và remediation evidence
-docs/archive/                        historical evidence
+docs-vn/                             tóm lược tiếng Việt và review notes
 ```
 
 ## Thứ tự authority
 
-1. Project Owner decision và change-control đã được phê duyệt.
+1. Project Owner decision đã được propagate vào tài liệu active.
 2. Product scope và canonical UC/FR/NFR/AC.
 3. ADR đang hiệu lực và supersession register.
 4. Domain specs và state machines.
-5. Implementation specs và code maps.
-6. Planning/review reports.
-7. Archive chỉ dùng để hiểu lịch sử.
+5. Implementation specs.
+6. `docs-vn/` chỉ dùng để đọc nhanh và review context.
 
-Proposal chưa có Project Owner approval không được dùng để tuyên bố remediation đã hoàn tất.
+Nội dung lịch sử/planning đã lược bỏ khỏi active docs chỉ còn dùng qua git history khi cần kiểm tra nguồn gốc.
 
 ## Lịch sử chính
 
@@ -41,11 +35,11 @@ Chuẩn hóa canonical UC/FR/AC/NFR, scanner ownership, legal corpus/retrieval v
 
 Project Owner yêu cầu PBAC, loại structured attestation, thay Local/CI upload bằng Automatic Trusted Scan Initiation, loại manual evidence JSON khỏi product, chuyển mọi async workload sang Python Worker Platform và mở rộng scanner toolchain.
 
-PR #2 đã cập nhật phần lớn tài liệu active theo direction này. Tuy nhiên proposal approval còn trống và một số tài liệu vẫn giữ nội dung cũ, nên closure chưa đạt.
+PR #2 đã cập nhật tài liệu active theo direction này. Pass rút gọn tài liệu hiện chỉ giữ các nhóm authority đã được Project Owner yêu cầu.
 
-## Archive
+## Lịch sử
 
-Không sửa `docs/archive/` để làm baseline mới có vẻ nhất quán. Tài liệu active phải phân loại nội dung cũ bằng marker rõ ràng:
+Không giữ archive/planning/code-map/blueprint cũ trong active docs. Khi cần kiểm tra lịch sử, dùng git history. Tài liệu active phải phân loại nội dung cũ bằng marker rõ ràng:
 
 ```text
 HISTORICAL_ONLY
@@ -59,8 +53,8 @@ DEFERRED_POST_MVP
 ```text
 PHASE_5_2L_P0_CLOSURE_COMPLETED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
-UX_DRAFT_CREATED
-UX_DRAFT_REBASE_PENDING
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING

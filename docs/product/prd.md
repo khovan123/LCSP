@@ -354,7 +354,7 @@ Manual technical evidence JSON upload maps to canonical `FR-051` and is `REMOVED
 
 **Consequences:**
 - It must not appear in active scope, roadmap, future scope, requirements, UX, APIs, entities, stories or delivery plans.
-- Historical/change-control records may retain evidence that it was previously considered.
+- Historical decision records may retain evidence that it was previously considered.
 
 #### FR-E3-4: Privacy flags validation
 
@@ -542,7 +542,7 @@ Attestation disclosure is `SUPERSEDED_FOR_ACTIVE_MVP` because structured attesta
 
 **Consequences:**
 - Active reports must not depend on attestation use.
-- Historical/change-control records may preserve previous attestation disclosure discussions.
+- Historical decision records may preserve previous attestation disclosure discussions.
 
 ### Epic 8 - Audit Trail
 

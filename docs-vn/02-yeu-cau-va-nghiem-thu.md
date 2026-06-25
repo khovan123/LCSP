@@ -77,4 +77,4 @@ Mỗi story tương lai phải liên kết tối thiểu:
 UC -> FR -> AC -> NFR -> UX state -> domain state -> implementation area -> recovery behavior
 ```
 
-Hiện đã có canonical UX draft nhưng chưa được review/approved; canonical epics/stories vẫn chưa có, vì vậy story coverage chưa thể đánh giá và implementation chưa được phép bắt đầu.
+UX cần được rebase hoặc tạo lại từ bộ tài liệu active đã rút gọn; canonical epics/stories vẫn chưa có, vì vậy story coverage chưa thể đánh giá và implementation chưa được phép bắt đầu.

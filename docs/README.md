@@ -11,10 +11,10 @@ CONSOLIDATION_PASS_APPLIED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 SCANNER_BEHAVIOR_AUTHORITY_CONSOLIDATED
 CHROMADB_VECTORLESS_DOMAIN_CONTRACT_ALIGNED
-UX_DRAFT_CREATED
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
 PYTHON_WORKER_PACKAGE_TOPOLOGY_LOCKED
 AUDIT_EXPORT_SYNC_API_BOUNDARY_LOCKED
-UX_DRAFT_REBASE_PENDING
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 STORY_TRACEABILITY_PENDING
@@ -24,36 +24,36 @@ IMPLEMENTATION_NOT_AUTHORIZED
 ## Required Reading Order
 
 1. [product/system-context.md](./product/system-context.md)
-2. [product/prd.md](./product/prd.md)
-3. [specs/use-cases.md](./specs/use-cases.md)
-4. [specs/user-task-flows.md](./specs/user-task-flows.md)
-5. [architecture/architecture.md](./architecture/architecture.md)
-6. [developer-execution-blueprints/end-to-end-execution.md](./developer-execution-blueprints/end-to-end-execution.md)
-7. [specs/assessment-lifecycle-spec.md](./specs/assessment-lifecycle-spec.md)
-8. [specs/scanner-spec.md](./specs/scanner-spec.md)
-9. [implementation/README.md](./implementation/README.md)
-10. [code-map/README.md](./code-map/README.md)
-11. [planning-artifacts/ux-designs/ux-LCSP-2026-06-24/DESIGN.md](./planning-artifacts/ux-designs/ux-LCSP-2026-06-24/DESIGN.md)
-12. [planning-artifacts/ux-designs/ux-LCSP-2026-06-24/EXPERIENCE.md](./planning-artifacts/ux-designs/ux-LCSP-2026-06-24/EXPERIENCE.md)
+2. [product/product-brief.md](./product/product-brief.md)
+3. [product/prd.md](./product/prd.md)
+4. [product/business-rules.md](./product/business-rules.md)
+5. [specs/use-cases.md](./specs/use-cases.md)
+6. [specs/functional-requirements.md](./specs/functional-requirements.md)
+7. [specs/non-functional-requirements.md](./specs/non-functional-requirements.md)
+8. [specs/acceptance-criteria-catalog.md](./specs/acceptance-criteria-catalog.md)
+9. [architecture/architecture.md](./architecture/architecture.md)
+10. [architecture/adr/architecture-decision-records.md](./architecture/adr/architecture-decision-records.md)
+11. [implementation/README.md](./implementation/README.md)
+12. [docs-vn/README.md](../docs-vn/README.md)
 
-UX review should focus on items 1-4 plus requirements/acceptance catalogs and items 11-12. Engineering work additionally reads items 5-10 after implementation readiness is certified.
+UX review should focus on product, use cases, FR/NFR, acceptance criteria, domain specs and ADR constraints. Engineering work additionally reads architecture and implementation docs after implementation readiness is certified.
 
 ## Single Sources of Truth
 
 | Concern | Authoritative Document |
 |---|---|
-| Product scope and actors | `product/system-context.md`, `product/prd.md`, `planning-artifacts/sprint-change-proposal-2026-06-24-phase-5-2l.md` |
+| Product scope and actors | `product/system-context.md`, `product/product-brief.md`, `product/prd.md` |
+| Business rules | `product/business-rules.md` |
 | Canonical requirements | `specs/functional-requirements.md`, `specs/non-functional-requirements.md` |
 | Use cases and user flows | `specs/use-cases.md`, `specs/user-task-flows.md` |
 | Acceptance criteria | `specs/acceptance-criteria-catalog.md` |
-| Traceability | `specs/requirements-traceability-matrix.md` |
+| Traceability | `specs/requirements-traceability-summary.md`, `specs/requirements-traceability-matrix.md` |
 | System components | `architecture/architecture.md`, active ADRs |
-| End-to-end runtime | `developer-execution-blueprints/end-to-end-execution.md` |
+| End-to-end runtime | `specs/domain-state-machines.md`, `specs/event-catalog.md`, `implementation/` |
 | Assessment lifecycle | `specs/assessment-lifecycle-spec.md` |
 | Scanner behavior | `specs/scanner-spec.md` |
-| Scanner runtime journey | `developer-execution-blueprints/scanner-data-journey.md` |
+| Scanner runtime | `implementation/scanner-implementation.md`, `implementation/scanner-worker-implementation.md` |
 | Build details | `implementation/` |
-| Code ownership | `code-map/` |
 | Physical persistence | `implementation/persistence-implementation.md` |
 | Queues/outbox | `implementation/queue-implementation.md` |
 
@@ -63,15 +63,11 @@ UX review should focus on items 1-4 plus requirements/acceptance catalogs and it
 product/                        product purpose, actors, business rules
 specs/                          canonical behavior and requirements
 architecture/                   components and decisions
-planning-artifacts/             change/readiness/remediation reports
-developer-execution-blueprints/ runtime data journeys
 implementation/                 build/configuration specifications
-code-map/                       planned module ownership
-change-control/                 approved scope changes
-archive/                        historical evidence only
+docs-vn/                        Vietnamese summary and review notes
 ```
 
-Do not use `docs/archive/` as implementation or UX authority.
+Historical material remains available through git history, not as active documentation authority.
 
 ## Active MVP Runtime Shape
 
@@ -111,8 +107,8 @@ Node.js downstream domain workers are `SUPERSEDED_FOR_ACTIVE_MVP`. Node.js remai
 | Cross-language structural augmentation | Python Scanner Worker using tree-sitter/custom parser |
 | TS/JS semantic analysis | Node CLI subprocess controlled by Python Scanner Worker |
 | Findings/taxonomy | `specs/scanner-spec.md` |
-| Runtime object journey | `developer-execution-blueprints/scanner-data-journey.md` |
-| Persistence/queues | implementation docs and code maps |
+| Runtime object journey | `specs/domain-state-machines.md`, `implementation/scanner-worker-implementation.md` |
+| Persistence/queues | implementation docs |
 
 ## Legal Corpus UX Boundary
 

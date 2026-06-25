@@ -14,7 +14,8 @@ Python scanner process runtime, package layout, run command, tool invocation, wo
 
 - `docs/architecture/adr/adr-023-python-worker-scanner-runtime.md`
 - `docs/specs/scanner-spec.md`
-- `docs/developer-execution-blueprints/scanner-data-journey.md`
+- `docs/specs/domain-state-machines.md`
+- `docs/specs/event-catalog.md`
 - `docs/implementation/scanner-worker-implementation.md`
 - `docs/implementation/python-worker-platform-implementation.md`
 - `docs/implementation/persistence-implementation.md`

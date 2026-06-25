@@ -6,7 +6,7 @@ AUTHORITATIVE — A-TO-Z RUNNABLE MVP
 
 ## Purpose
 
-This is the sole canonical domain specification for Repository Scan and static-analysis evidence behavior. Python Scanner Worker owns the scan lifecycle. Implementation guidance lives in `docs/implementation/scanner-implementation.md` and `docs/implementation/scanner-worker-implementation.md`; runtime object flow lives in `docs/developer-execution-blueprints/scanner-data-journey.md`.
+This is the sole canonical domain specification for Repository Scan and static-analysis evidence behavior. Python Scanner Worker owns the scan lifecycle. Implementation guidance lives in `docs/implementation/scanner-implementation.md` and `docs/implementation/scanner-worker-implementation.md`; runtime states and events live in `docs/specs/domain-state-machines.md` and `docs/specs/event-catalog.md`.
 
 This document is a design contract, not source code, backlog, story, sprint plan, or test implementation.
 
@@ -419,7 +419,7 @@ Metrics include invocation precision, business-purpose mapping, input/output det
 | Concern | Document |
 |---|---|
 | Scanner behavior, taxonomy and Python/TS/JS analysis profiles | `docs/specs/scanner-spec.md` |
-| Runtime object lifecycle | `docs/developer-execution-blueprints/scanner-data-journey.md` |
+| Runtime object lifecycle | `docs/specs/domain-state-machines.md`, `docs/specs/event-catalog.md`, `docs/implementation/scanner-worker-implementation.md` |
 | Build/package structure | `docs/implementation/scanner-implementation.md` |
 | Scanner worker process | `docs/implementation/scanner-worker-implementation.md` |
 | Python Worker Platform | `docs/implementation/python-worker-platform-implementation.md` |
@@ -433,10 +433,10 @@ Metrics include invocation precision, business-purpose mapping, input/output det
 ```text
 CONSOLIDATION_PASS_APPLIED
 SCANNER_BEHAVIOR_AUTHORITY_CONSOLIDATED
-UX_DRAFT_CREATED
-UX_DRAFT_REBASE_PENDING
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
 
-This status freezes the UX draft for rebase after document consolidation. It does not certify implementation readiness or authorize story execution.
+This status requires UX rebase or regeneration after documentation pruning. It does not certify implementation readiness or authorize story execution.

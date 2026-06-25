@@ -637,7 +637,8 @@ Covers prerequisites, startup order, environment categories, local OAuth/GitHub 
 - `docs/implementation/persistence-implementation.md`
 - `docs/implementation/queue-implementation.md`
 - `docs/implementation/llm-gateway-implementation.md`
-- `docs/code-map/module-ownership-map.md`
+- `docs/architecture/architecture.md`
+- `docs/specs/event-catalog.md`
 
 ## Implementation Boundaries
 

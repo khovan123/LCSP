@@ -7,8 +7,8 @@ PROJECT_OWNER_DIRECTIVE_RECORDED
 SPRINT_CHANGE_PROPOSAL_CREATED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 PHASE_5_2L_P0_CLOSURE_COMPLETED
-UX_DRAFT_CREATED
-UX_DRAFT_REBASE_PENDING
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ```
@@ -39,12 +39,12 @@ POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 - `validation-plan.md` đã đổi A3 thành PBAC and trusted-trigger abuse risk; structured attestation chỉ còn marker `SUPERSEDED_FOR_ACTIVE_MVP`.
 - Business rules đã chuyển active role semantics sang PBAC subject/policy semantics và đưa attestation vào superseded register.
 - Requirements baseline đã tách `UC-M09-05` khỏi active coverage và cập nhật AC-9/11/12 theo PBAC/trigger/evidence.
-- Readiness/index/traceability docs hiện hạ trạng thái xuống remediation in progress, ghi `UX_DRAFT_CREATED` và yêu cầu rebase UX trước approval.
+- Readiness/index/traceability docs hiện hạ trạng thái xuống remediation in progress, ghi `UX_REBASE_PENDING_AFTER_DOC_PRUNING` và yêu cầu rebase hoặc tạo lại UX trước approval.
 - Điều kiện approval RAG đã được chuẩn hóa thành ChromaDB structure-first vectorless legal RAG; PostgreSQL pgvector legal retrieval bị superseded.
 
 ## Phần carry forward trước stories/readiness
 
-- Scanner authority consolidation, Python Worker Platform implementation split, ChromaDB vectorless cross-document sync và UX draft rebase vẫn cần hoàn tất trước stories/readiness.
+- UX rebase/regeneration vẫn cần hoàn tất trước stories/readiness.
 - Chưa có dedicated Phase 5.2L ADRs cho PBAC, automatic trigger, Python Worker Platform và expanded scanner toolchain.
 - PBAC engine/topology, trigger retry/DLQ/idempotency và tool failure severity vẫn là technical decisions mở trước stories/readiness.
 
@@ -79,7 +79,7 @@ Project Owner approval
 -> sửa P0 cross-document contradictions
 -> cập nhật ADR/traceability/readiness markers
 -> validation pass không còn active residue
--> UX_DRAFT_REBASE_PENDING
+-> UX_REBASE_PENDING_AFTER_DOC_PRUNING
 -> bmad-ux
 ```
 

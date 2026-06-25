@@ -92,7 +92,7 @@ This boundary is locked for the MVP. A future dedicated Legal Operator web conso
 | OAuth/OIDC Provider | User login and identity verification. | Does not grant repository access. |
 | GitHub App | Read-only selected repository access and commit snapshot. | Separate from user login. |
 | Official Legal Sources | Legal document ingestion and provenance. | Source candidates require validation before ingestion is accepted. |
-| Legal Corpus / Hybrid Retriever | Versioned legal retrieval and citation traceability. | Approved immutable corpus only. |
+| Legal Corpus / ChromaDB Vectorless Retriever | Versioned legal retrieval and citation traceability. | Approved immutable corpus only; retrieval uses legal structure, metadata/full-text lookup, xref expansion and citation allowlists. |
 | LLM Provider | Structured assisted classification/generation. | No raw source, secrets, full prompts, or full AST bodies. |
 | Object Storage | Legal source snapshots and generated document artifacts. | Real S3-compatible storage for A-to-Z acceptance. |
 
@@ -134,7 +134,7 @@ Validate source URL
 -> Normalize legal hierarchy
 -> Review document and relationships
 -> Approve LegalCorpusVersion
--> Build FTS and vector index
+-> Build ChromaDB structure-first vectorless legal index
 -> Make approved version available to retrieval
 ```
 

@@ -282,7 +282,7 @@ AIUsageFlow groups claim-level records for business process, AI purpose, inputs,
 
 ### StructuredTechnicalAttestation
 
-`SUPERSEDED_FOR_ACTIVE_MVP`. This entity must not be created for active MVP UX, API, persistence, events, reports, epics, stories or delivery tasks. Historical/change-control records may retain prior discussion.
+`SUPERSEDED_FOR_ACTIVE_MVP`. This entity must not be created for active MVP UX, API, persistence, events, reports, epics, stories or delivery tasks. Historical decision records may retain prior discussion.
 
 ### ReconciliationConflict
 

@@ -99,9 +99,9 @@ Each major stage persists its output before the next stage runs. Hidden synchron
 | Detail | Canonical Location |
 |---|---|
 | Domain behavior | `docs/specs/` |
-| Runtime traces | `docs/developer-execution-blueprints/` |
+| Runtime traces | `docs/specs/domain-state-machines.md`, `docs/specs/event-catalog.md`, `docs/implementation/` |
 | Technology/library/build details | `docs/implementation/` |
-| Historical decisions | `docs/archive/decisions/` |
+| Historical decisions | git history |
 
 ## Open Technical Decisions
 

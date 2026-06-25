@@ -14,7 +14,8 @@ Python Worker Platform-wide behavior lives in `docs/implementation/python-worker
 
 - `docs/architecture/adr/adr-023-python-worker-scanner-runtime.md`
 - `docs/specs/scanner-spec.md`
-- `docs/developer-execution-blueprints/scanner-data-journey.md`
+- `docs/specs/domain-state-machines.md`
+- `docs/specs/event-catalog.md`
 - `docs/implementation/scanner-implementation.md`
 - `docs/implementation/python-worker-platform-implementation.md`
 - `docs/implementation/persistence-implementation.md`

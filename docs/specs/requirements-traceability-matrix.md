@@ -12,7 +12,7 @@ Canonical traceability from use cases to requirements, acceptance criteria, doma
 | Functional requirements | 56 total; Phase 5.2L: `FR-050` active Automatic Trusted Scan Initiation; `FR-051` removed; `FR-052` deferred; `FR-045/FR-046` superseded |
 | Active NFRs | 33 |
 | Acceptance criteria | AC-001..AC-041 plus AC-050A..AC-050F |
-| UX | UX_DRAFT_CREATED / UX_DRAFT_REBASE_PENDING |
+| UX | UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET / UX_REBASE_PENDING_AFTER_DOC_PRUNING |
 | Stories | missing; story coverage not assessable |
 
 Legacy `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, and `NFR-032` are aliases/history only. Active rows below use canonical identifiers.
@@ -99,7 +99,7 @@ Legacy `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, and `NFR-032` are alia
 
 ## UX and Story Boundary
 
-Canonical UX draft exists at `docs/planning-artifacts/ux-designs/ux-LCSP-2026-06-24/` and is pending review/approval. Story coverage remains not assessable until canonical epics/stories exist. Stories must trace to UC, FR, AC, relevant NFRs, UX states, domain states, implementation area, and recovery behavior.
+UX must be rebased or regenerated from the pruned active authority set and then reviewed/approved. Story coverage remains not assessable until canonical epics/stories exist. Stories must trace to UC, FR, AC, relevant NFRs, UX states, domain states, implementation area, and recovery behavior.
 
 ```text
 REQUIREMENT_TRACEABILITY_CORE_MATRIX_NORMALIZED
@@ -112,10 +112,10 @@ ACCEPTANCE_CRITERIA_TRACE_RECHECKED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
 SCANNER_BEHAVIOR_AUTHORITY_CONSOLIDATED
 CHROMADB_VECTORLESS_DOMAIN_CONTRACT_ALIGNED
-UX_DRAFT_CREATED
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
 PYTHON_WORKER_PACKAGE_TOPOLOGY_LOCKED
 AUDIT_EXPORT_SYNC_API_BOUNDARY_LOCKED
-UX_DRAFT_REBASE_PENDING
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 STORY_TRACEABILITY_PENDING

@@ -6,15 +6,16 @@
 - Base `main`: `73f47560a075fe7991ba2611a87f52abbe2e0496`.
 - Branch review trước khi cập nhật tệp này: `docs/add-vietnamese-condensed-guide` tại `aa641ef1489a5659721dd166d9d18deb7074089d`.
 - Review toàn bộ inventory thay đổi của PR #2 và các active source-of-truth liên quan.
-- Loại trừ `docs/archive/` khỏi authority review.
+- Sau pass rút gọn, archive/planning/code-map/blueprint không còn thuộc active documentation inventory.
 
 ## Kết luận
 
 ```text
-UX_DRAFT_REBASE_PENDING
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
 PHASE_5_2L_P0_CLOSURE_COMPLETED
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
-UX_DRAFT_CREATED
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
+DOC_INVENTORY_PRUNED_TO_AUTHORITY_SET
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ```
@@ -29,8 +30,8 @@ VALIDATION_PLAN_A3_REMEDIATED
 BUSINESS_RULES_PBAC_SEMANTICS_ALIGNED
 REQUIREMENTS_BASELINE_ATTESTATION_RESIDUE_REMOVED_FROM_ACTIVE_ROWS
 READINESS_AND_TRACEABILITY_MARKERS_CORRECTED
-UX_DRAFT_CREATED
-UX_DRAFT_REBASE_PENDING
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 ```
@@ -57,7 +58,7 @@ Yêu cầu đóng:
 
 ### P0-2 — Validation Plan A3 closed
 
-`docs/product/validation-plan.md` đã định nghĩa lại A3 là PBAC and trusted-trigger abuse risk. Structured attestation chỉ còn `SUPERSEDED_FOR_ACTIVE_MVP` và không còn schema/claim/disclosure active.
+Nội dung validation A3 đã được merge vào active scope như PBAC and trusted-trigger abuse risk. Structured attestation chỉ còn `SUPERSEDED_FOR_ACTIVE_MVP` và không còn schema/claim/disclosure active.
 
 Yêu cầu đóng:
 
@@ -75,7 +76,7 @@ Yêu cầu đóng:
 
 - Requirements baseline đã chuyển `UC-M09-05` sang `SUPERSEDED_FOR_ACTIVE_MVP`.
 - AC-9/11/12 đã đổi sang PBAC/trigger/evidence/audit semantics.
-- Requirements traceability matrix hiện giữ `UX_DRAFT_CREATED` và `STORY_TRACEABILITY_PENDING`.
+- Requirements traceability matrix hiện giữ `UX_REBASE_PENDING_AFTER_DOC_PRUNING` và `STORY_TRACEABILITY_PENDING`.
 
 Yêu cầu đóng:
 
@@ -83,7 +84,7 @@ Yêu cầu đóng:
 
 ### P0-5 — Readiness and authority markers revised after consolidation review
 
-`docs/README.md`, `implementation-readiness-certification.md`, traceability summary và traceability matrix hiện phải dùng remediation/in-progress markers thay vì synchronized/ready markers. UX draft đã tồn tại nhưng đang frozen chờ scanner/legal/domain consolidation và rebase. Implementation readiness vẫn không được chứng nhận.
+`docs/README.md`, traceability summary và traceability matrix hiện phải dùng remediation/in-progress markers thay vì synchronized/ready markers. UX cần được rebase hoặc tạo lại trên bộ tài liệu active đã rút gọn. Implementation readiness vẫn không được chứng nhận.
 
 Yêu cầu đóng:
 
@@ -116,14 +117,14 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 [x] active UC/FR/AC/NFR crosswalk rebuilt for P0 baseline residue
 [x] historical UC-018/FR-045/FR-046/AC-013 separated from active coverage
 [x] docs/README and readiness markers corrected for pre-UX closure
-[x] UX draft created
+[x] prior UX artifact removed from active documentation set
 [x] scanner authority consolidation completed
 [x] ChromaDB vectorless domain sync completed
-[ ] UX draft rebased after consolidation
+[ ] UX rebased after authority-set pruning
 [ ] dedicated ADRs added or explicit pre-story decision records created
 [ ] backend/delivery/ADR residual wording closed
 [x] repository-wide active-doc search returns no P0 structured-attestation validation residue
-[x] consolidation review states UX_DRAFT_REBASE_PENDING
+[x] consolidation review states UX_REBASE_PENDING_AFTER_DOC_PRUNING
 ```
 
 ## Trình tự hợp lệ
@@ -131,9 +132,9 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 ```text
 1. Project Owner approves or revises Phase 5.2L proposal.
 2. Run a short documentation closure pass for the P0 findings.
-3. Revalidate all active non-archive documents and traceability.
-4. Rebase UX draft.
-5. Review and approve the UX draft.
+3. Revalidate all active documents and traceability.
+4. Rebase or regenerate UX from the pruned active authority set.
+5. Review and approve the rebased UX artifact.
 6. Run bmad-create-epics-and-stories.
 7. Resolve technical decisions and rebuild story traceability.
 8. Re-run bmad-check-implementation-readiness.
@@ -142,6 +143,6 @@ Backend, delivery plan và ADR relationship tables còn một số wording như 
 ## Final marker
 
 ```text
-UX_DRAFT_CREATED
-UX_DRAFT_REBASE_PENDING
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
 ```
