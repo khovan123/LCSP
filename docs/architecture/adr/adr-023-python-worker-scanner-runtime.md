@@ -35,13 +35,15 @@ A standalone Python Worker is the sole consumer of `command.scan.requested.v1` a
 8. workspace deletion and cleanup verification;
 9. terminal ScanJob transaction and completed/failed OutboxEvent.
 
-NestJS API retains authentication, RBAC, ScanJob creation/query, and downstream orchestration projections.
+NestJS API retains authentication, PBAC enforcement boundary, trusted scan trigger / ScanJob creation/query, and downstream orchestration projections.
+
+Phase 5.2L expands scanner requirements beyond the original ADR-023 baseline. Syft, Knip, deptry, Semgrep custom rules, and tree-sitter/custom parser are now required scanner toolchain components. ADR-023 remains historical authority for Python scanner lifecycle ownership, but its narrower `ast/libcst` + `ts-morph` toolchain is superseded in part by Phase 5.2L.
 
 ## Process Boundary
 
 | Concern | Decision |
 |---|---|
-| Package | `lcsp-scanner-worker` |
+| Package | `lcsp-python-workers` monorepo, scanner module `lcsp_workers.scanner` |
 | Runtime | Python 3.11+ |
 | Packaging/dependencies | `pyproject.toml` managed by Poetry |
 | Queue consumer | `command.scan.requested.v1` / `lcsp.scan-worker.v1` |

@@ -17,7 +17,7 @@ Define queue job types, job envelope, retry policy, idempotency and failure hand
 
 ## Scope
 
-Queue handles Repository Scan, workflow/orchestration work, classification/RAG steps, document generation and recovery jobs. API remains responsive and does not execute long-running work synchronously.
+Queue handles trusted scan trigger resolution, Repository Scan, workflow/orchestration work, classification/RAG steps, document generation and recovery jobs. API remains responsive and does not execute long-running work synchronously. All asynchronous domain consumers belong to the Python Worker Platform.
 
 ## Active Implementation References
 
@@ -38,7 +38,8 @@ Queue handles Repository Scan, workflow/orchestration work, classification/RAG s
 
 | Job Type | Purpose | Idempotency Basis |
 | --- | --- | --- |
-| `repository_scan` | Static scan selected repo/commit | repo + commit + scanner version + ruleset version |
+| `scan_trigger_resolution` | Resolve trusted scan trigger context and mapping | org + repository connection + assessment/pending mapping + branch + commit + trigger source/delivery |
+| `repository_scan` | Static scan selected repo/commit | repo + commit + scanner/toolchain version + config/ruleset version |
 | `workflow_continue` | Resume orchestrator after node/result | workflow run + state version |
 | `classification_run` | Legal RAG + risk classification | VerifiedProfile version + corpus version |
 | `gap_analysis_run` | Generate compliance gap analysis after classification | classification result + legal-match versions |
@@ -105,16 +106,17 @@ All worker retries use bounded exponential backoff with jitter: `30s`, `120s`, `
 
 | Worker | Queue | DLQ | Max Attempts | Terminal Failure Behavior |
 |---|---|---|---:|---|
+| Scan Trigger worker (Python) | `lcsp.scan-trigger-worker.v1` | `lcsp.scan-trigger-worker.dlq.v1` | TBD | Persist safe mapping state or rejected trigger, audit PBAC/trigger decision. `TECHNICAL_DECISION_REQUIRED` for final retry/DLQ/replay behavior. |
 | Scan worker (Python) | `lcsp.scan-worker.v1` | `lcsp.scan-worker.dlq.v1` | 3 | Persist `event.scan.failed.v1`, mark ScanJob `FAILED`, audit redacted failure. |
-| Legal Source Ingest worker | `lcsp.legal-source-ingest.v1` | `lcsp.legal-source-ingest.dlq.v1` | 3 | Publish `event.legal-source.ingest.failed.v1`, block corpus building, audit. |
-| Embedding Build worker | `lcsp.embedding-build.v1` | `lcsp.embedding-build.dlq.v1` | 3 | Publish `event.embedding-build.failed.v1`, block hybrid retriever, audit. |
-| TechnicalProfile worker | `lcsp.technical-profile-worker.v1` | `lcsp.technical-profile-worker.dlq.v1` | 3 | Publish `event.technical-profile.failed.v1`, block downstream, audit. |
-| AIUsageFlow worker | `lcsp.ai-usage-flow-worker.v1` | `lcsp.ai-usage-flow-worker.dlq.v1` | 3 | Publish `event.ai-usage-flow.failed.v1`, block reconciliation, audit. |
-| Reconciliation worker | `lcsp.reconciliation-worker.v1` | `lcsp.reconciliation-worker.dlq.v1` | 3 | Persist conflict/blocked state when possible; otherwise audit worker failure. |
-| LegalMatching worker | `lcsp.legal-matching-worker.v1` | `lcsp.legal-matching-worker.dlq.v1` | 3 | Publish `event.legal-matching.failed.v1`, block/degrade classification, audit. |
-| Classification worker | `lcsp.classification-worker.v1` | `lcsp.classification-worker.dlq.v1` | 3 | Publish `event.classification.blocked.v1` or failed audit record depending on failure type. |
-| GapAnalysis worker | `lcsp.gap-analysis-worker.v1` | `lcsp.gap-analysis-worker.dlq.v1` | 3 | Publish `event.gap-analysis.failed.v1` or `event.gap-analysis.blocked.v1`, block document generation, audit. |
-| Document worker | `lcsp.document-worker.v1` | `lcsp.document-worker.dlq.v1` | 3 | Publish `event.document.blocked.v1` or failed audit record depending on failure type. |
+| Legal Source Ingest worker (Python) | `lcsp.legal-source-ingest.v1` | `lcsp.legal-source-ingest.dlq.v1` | 3 | Publish `event.legal-source.ingest.failed.v1`, block corpus building, audit. |
+| Legal Index Build worker (Python) | `lcsp.legal-index-build.v1` | `lcsp.legal-index-build.dlq.v1` | 3 | Publish `event.legal-index-build.failed.v1`, block ChromaDB legal retriever, audit. |
+| TechnicalProfile worker (Python) | `lcsp.technical-profile-worker.v1` | `lcsp.technical-profile-worker.dlq.v1` | 3 | Publish `event.technical-profile.failed.v1`, block downstream, audit. |
+| AIUsageFlow worker (Python) | `lcsp.ai-usage-flow-worker.v1` | `lcsp.ai-usage-flow-worker.dlq.v1` | 3 | Publish `event.ai-usage-flow.failed.v1`, block reconciliation, audit. |
+| Reconciliation worker (Python) | `lcsp.reconciliation-worker.v1` | `lcsp.reconciliation-worker.dlq.v1` | 3 | Persist conflict/blocked state when possible; otherwise audit worker failure. |
+| LegalMatching worker (Python) | `lcsp.legal-matching-worker.v1` | `lcsp.legal-matching-worker.dlq.v1` | 3 | Publish `event.legal-matching.failed.v1`, block/degrade classification, audit. |
+| Classification worker (Python) | `lcsp.classification-worker.v1` | `lcsp.classification-worker.dlq.v1` | 3 | Publish `event.classification.blocked.v1` or failed audit record depending on failure type. |
+| GapAnalysis worker (Python) | `lcsp.gap-analysis-worker.v1` | `lcsp.gap-analysis-worker.dlq.v1` | 3 | Publish `event.gap-analysis.failed.v1` or `event.gap-analysis.blocked.v1`, block document generation, audit. |
+| Document worker (Python) | `lcsp.document-worker.v1` | `lcsp.document-worker.dlq.v1` | 3 | Publish `event.document.blocked.v1` or failed audit record depending on failure type. |
 
 ## Locked Orchestration Persistence for Controlled MVP
 
@@ -136,24 +138,26 @@ Checkpoint persistence uses existing domain state, job status rows, `OutboxEvent
 
 | Queue | DLQ | Consumer |
 | --- | --- | --- |
+| `lcsp.scan-trigger-worker.v1` | `lcsp.scan-trigger-worker.dlq.v1` | Python Scan Trigger Worker |
 | `lcsp.scan-worker.v1` | `lcsp.scan-worker.dlq.v1` | Python Worker |
-| `lcsp.legal-source-ingest.v1` | `lcsp.legal-source-ingest.dlq.v1` | Legal Source Ingestion worker |
-| `lcsp.embedding-build.v1` | `lcsp.embedding-build.dlq.v1` | Embedding Index worker |
-| `lcsp.technical-profile-worker.v1` | `lcsp.technical-profile-worker.dlq.v1` | TechnicalProfile worker |
-| `lcsp.ai-usage-flow-worker.v1` | `lcsp.ai-usage-flow-worker.dlq.v1` | AIUsageFlow worker |
-| `lcsp.reconciliation-worker.v1` | `lcsp.reconciliation-worker.dlq.v1` | Reconciliation worker |
-| `lcsp.legal-matching-worker.v1` | `lcsp.legal-matching-worker.dlq.v1` | Legal Matching worker |
-| `lcsp.classification-worker.v1` | `lcsp.classification-worker.dlq.v1` | Classification worker |
-| `lcsp.gap-analysis-worker.v1` | `lcsp.gap-analysis-worker.dlq.v1` | Gap Analysis worker |
-| `lcsp.document-worker.v1` | `lcsp.document-worker.dlq.v1` | Document worker |
+| `lcsp.legal-source-ingest.v1` | `lcsp.legal-source-ingest.dlq.v1` | Python Legal Source Ingestion worker |
+| `lcsp.legal-index-build.v1` | `lcsp.legal-index-build.dlq.v1` | Python ChromaDB Legal Index worker |
+| `lcsp.technical-profile-worker.v1` | `lcsp.technical-profile-worker.dlq.v1` | Python TechnicalProfile worker |
+| `lcsp.ai-usage-flow-worker.v1` | `lcsp.ai-usage-flow-worker.dlq.v1` | Python AIUsageFlow worker |
+| `lcsp.reconciliation-worker.v1` | `lcsp.reconciliation-worker.dlq.v1` | Python Reconciliation worker |
+| `lcsp.legal-matching-worker.v1` | `lcsp.legal-matching-worker.dlq.v1` | Python Legal Matching worker |
+| `lcsp.classification-worker.v1` | `lcsp.classification-worker.dlq.v1` | Python Classification worker |
+| `lcsp.gap-analysis-worker.v1` | `lcsp.gap-analysis-worker.dlq.v1` | Python Gap Analysis worker |
+| `lcsp.document-worker.v1` | `lcsp.document-worker.dlq.v1` | Python Document worker |
 
 ### Routing Keys
 
 Commands use `lcsp.commands.v1`:
 
 - `command.scan.requested.v1`
+- `command.scan-trigger.resolve-context.v1`
 - `command.legal-source.ingest.requested.v1`
-- `command.embedding-build.requested.v1`
+- `command.legal-index-build.requested.v1`
 - `command.technical-profile.requested.v1`
 - `command.ai-usage-flow.requested.v1`
 - `command.reconciliation.requested.v1`
@@ -166,10 +170,15 @@ Events use `lcsp.events.v1`:
 
 - `event.scan.completed.v1`
 - `event.scan.failed.v1`
+- `event.scan-trigger.ready.v1`
+- `event.scan-trigger.pending-mapping.v1`
+- `event.scan-trigger.blocked-mapping.v1`
+- `event.scan-trigger.waiting-for-context.v1`
+- `event.scan-trigger.rejected.v1`
 - `event.legal-source.ingest.completed.v1`
 - `event.legal-source.ingest.failed.v1`
-- `event.embedding-build.completed.v1`
-- `event.embedding-build.failed.v1`
+- `event.legal-index-build.completed.v1`
+- `event.legal-index-build.failed.v1`
 - `event.technical-profile.completed.v1`
 - `event.technical-profile.failed.v1`
 - `event.ai-usage-flow.completed.v1`

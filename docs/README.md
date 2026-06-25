@@ -2,13 +2,21 @@
 
 ## Purpose
 
-This is the starting point for developers, reviewers, UX, and story planning. Active documents describe the A-to-Z runnable MVP, not production deployment, customer onboarding, legal certification, or completed implementation readiness.
+This is the starting point for developers, reviewers, UX, and story planning. Active documents describe the A-to-Z runnable MVP after Phase 5.2L correction, not production deployment, customer onboarding, legal certification, formal legal opinion, regulator submission, or completed implementation readiness.
 
 ## Current Planning Status
 
 ```text
-ACTIVE_DOCS_PRE_UX_SYNCHRONIZED
-CANONICAL_UX_PENDING
+CONSOLIDATION_PASS_APPLIED
+PROJECT_OWNER_DOC_REMEDIATION_APPROVED
+SCANNER_BEHAVIOR_AUTHORITY_CONSOLIDATED
+CHROMADB_VECTORLESS_DOMAIN_CONTRACT_ALIGNED
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
+PYTHON_WORKER_PACKAGE_TOPOLOGY_LOCKED
+AUDIT_EXPORT_SYNC_API_BOUNDARY_LOCKED
+UX_REBASE_PENDING_AFTER_DOC_PRUNING
+CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
+POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
@@ -16,34 +24,36 @@ IMPLEMENTATION_NOT_AUTHORIZED
 ## Required Reading Order
 
 1. [product/system-context.md](./product/system-context.md)
-2. [product/prd.md](./product/prd.md)
-3. [specs/use-cases.md](./specs/use-cases.md)
-4. [specs/user-task-flows.md](./specs/user-task-flows.md)
-5. [architecture/architecture.md](./architecture/architecture.md)
-6. [developer-execution-blueprints/end-to-end-execution.md](./developer-execution-blueprints/end-to-end-execution.md)
-7. [specs/assessment-lifecycle-spec.md](./specs/assessment-lifecycle-spec.md)
-8. [specs/scanner-spec.md](./specs/scanner-spec.md)
-9. [implementation/README.md](./implementation/README.md)
-10. [code-map/README.md](./code-map/README.md)
+2. [product/product-brief.md](./product/product-brief.md)
+3. [product/prd.md](./product/prd.md)
+4. [product/business-rules.md](./product/business-rules.md)
+5. [specs/use-cases.md](./specs/use-cases.md)
+6. [specs/functional-requirements.md](./specs/functional-requirements.md)
+7. [specs/non-functional-requirements.md](./specs/non-functional-requirements.md)
+8. [specs/acceptance-criteria-catalog.md](./specs/acceptance-criteria-catalog.md)
+9. [architecture/architecture.md](./architecture/architecture.md)
+10. [architecture/adr/architecture-decision-records.md](./architecture/adr/architecture-decision-records.md)
+11. [implementation/README.md](./implementation/README.md)
+12. [docs-vn/README.md](../docs-vn/README.md)
 
-UX work should focus on items 1-4 plus requirements/acceptance catalogs. Engineering work additionally reads items 5-10 after implementation readiness is certified.
+UX review should focus on product, use cases, FR/NFR, acceptance criteria, domain specs and ADR constraints. Engineering work additionally reads architecture and implementation docs after implementation readiness is certified.
 
 ## Single Sources of Truth
 
 | Concern | Authoritative Document |
 |---|---|
-| Product scope and actors | `product/system-context.md`, `product/prd.md` |
+| Product scope and actors | `product/system-context.md`, `product/product-brief.md`, `product/prd.md` |
+| Business rules | `product/business-rules.md` |
 | Canonical requirements | `specs/functional-requirements.md`, `specs/non-functional-requirements.md` |
 | Use cases and user flows | `specs/use-cases.md`, `specs/user-task-flows.md` |
 | Acceptance criteria | `specs/acceptance-criteria-catalog.md` |
-| Traceability | `specs/requirements-traceability-matrix.md` |
+| Traceability | `specs/requirements-traceability-summary.md`, `specs/requirements-traceability-matrix.md` |
 | System components | `architecture/architecture.md`, active ADRs |
-| End-to-end runtime | `developer-execution-blueprints/end-to-end-execution.md` |
+| End-to-end runtime | `specs/domain-state-machines.md`, `specs/event-catalog.md`, `implementation/` |
 | Assessment lifecycle | `specs/assessment-lifecycle-spec.md` |
-| Scanner behavior | `specs/scanner-spec.md`, `specs/python-scanner-spec.md` |
-| Scanner runtime journey | `developer-execution-blueprints/scanner-data-journey.md` |
+| Scanner behavior | `specs/scanner-spec.md` |
+| Scanner runtime | `implementation/scanner-implementation.md`, `implementation/scanner-worker-implementation.md` |
 | Build details | `implementation/` |
-| Code ownership | `code-map/` |
 | Physical persistence | `implementation/persistence-implementation.md` |
 | Queues/outbox | `implementation/queue-implementation.md` |
 
@@ -53,41 +63,52 @@ UX work should focus on items 1-4 plus requirements/acceptance catalogs. Enginee
 product/                        product purpose, actors, business rules
 specs/                          canonical behavior and requirements
 architecture/                   components and decisions
-planning-artifacts/             change/readiness/remediation reports
-developer-execution-blueprints/ runtime data journeys
 implementation/                 build/configuration specifications
-code-map/                       planned module ownership
-change-control/                 approved scope changes
-archive/                        historical evidence only
+docs-vn/                        Vietnamese summary and review notes
 ```
 
-Do not use `docs/archive/` as implementation or UX authority.
+Historical material remains available through git history, not as active documentation authority.
 
 ## Active MVP Runtime Shape
 
 ```text
-apps/api                 NestJS API
+apps/api                 NestJS API synchronous control plane
 apps/web                 Manager and optional Developer web UX
-apps/worker              Node.js downstream workers
-lcsp-scanner-worker      standalone Python Scanner Worker
-tools/ts-js-analyzer     Node.js subprocess used by Python Worker
-PostgreSQL + pgvector
+lcsp-python-workers      bounded Python Worker Platform for all async domain workloads
+tools/ts-js-analyzer     bounded Node.js CLI used only by Python Scanner Worker
+PostgreSQL + ChromaDB legal index
 RabbitMQ
 S3-compatible object storage
-real LLM and embedding providers for A-to-Z acceptance
+real LLM provider for A-to-Z acceptance
 ```
+
+Node.js downstream domain workers are `SUPERSEDED_FOR_ACTIVE_MVP`. Node.js remains valid for the NestJS API, web/tooling, and the bounded `ts-morph` analyzer CLI only.
+
+## Phase 5.2L Locked Corrections
+
+- PBAC is the authorization source of truth. Roles may remain only as subject attributes, grouping labels, or policy templates; roles are not the final authorization authority.
+- Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP` and removed from active MVP use cases, requirements, UX, entities, events, audit/report dependencies, and delivery tasks.
+- Compliance certification, formal legal opinion, direct regulator submission, and `FR-051` manual technical evidence JSON upload are `REMOVED_FROM_PRODUCT`.
+- `FR-050` no longer means Local/CI scanner report upload. It is redefined as `AUTOMATIC_TRUSTED_SCAN_INITIATION`.
+- All asynchronous domain workloads belong to the Python Worker Platform.
+- Scanner toolchain includes Syft, Knip, deptry, Semgrep custom rules, tree-sitter/custom parser, Python `ast` + `libcst`, and bounded `ts-morph`.
 
 ## Scanner Ownership
 
 | Concern | Owner |
 |---|---|
-| Scan request/job query | NestJS API |
-| Scan lifecycle | Python Worker |
-| Python AST/CST | Python Worker |
-| TS/JS semantic analysis | Node subprocess controlled by Python Worker |
+| Trusted scan trigger/job query | NestJS API synchronous control plane |
+| Scan lifecycle | Python Scanner Worker |
+| Python AST/CST | Python Scanner Worker |
+| SBOM/dependency inventory | Python Scanner Worker invoking Syft |
+| JS/TS dependency usage | Python Scanner Worker invoking Knip |
+| Python dependency usage | Python Scanner Worker invoking deptry |
+| AI pattern rules | Python Scanner Worker invoking Semgrep custom rules |
+| Cross-language structural augmentation | Python Scanner Worker using tree-sitter/custom parser |
+| TS/JS semantic analysis | Node CLI subprocess controlled by Python Scanner Worker |
 | Findings/taxonomy | `specs/scanner-spec.md` |
-| Runtime object journey | `developer-execution-blueprints/scanner-data-journey.md` |
-| Persistence/queues | implementation docs and code maps |
+| Runtime object journey | `specs/domain-state-machines.md`, `implementation/scanner-worker-implementation.md` |
+| Persistence/queues | implementation docs |
 
 ## Legal Corpus UX Boundary
 
@@ -103,14 +124,13 @@ npm install
 npm run db:generate
 npm run db:migrate
 npm run dev:api
-npm run dev:worker
 npm run dev:web
 
-# Python scanner
-cd lcsp-scanner-worker
+# Python Worker Platform
+cd lcsp-python-workers
 poetry install
 poetry run pytest
-poetry run python -m lcsp_scanner.main
+poetry run python -m lcsp_workers.scanner.main
 
 # TS/JS analyzer
 cd ../tools/ts-js-analyzer
@@ -128,8 +148,8 @@ An A-to-Z acceptance run additionally requires:
 - real PostgreSQL/RabbitMQ;
 - real S3-compatible object storage;
 - validated official legal source snapshots and approved corpus version;
-- completed FTS/pgvector index;
-- configured real LLM and embedding provider/model;
+- completed ChromaDB vectorless legal index;
+- configured real LLM provider/model;
 - golden repository fixture;
 - audit/export verification.
 

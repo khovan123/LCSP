@@ -7,7 +7,10 @@ Active BUILD layer for the A-to-Z runnable MVP. These documents describe how the
 ## Current Authority Boundary
 
 ```text
-CANONICAL_UX_PENDING
+CONSOLIDATION_PASS_APPLIED
+SCANNER_BEHAVIOR_AUTHORITY_CONSOLIDATED
+CHROMADB_VECTORLESS_DOMAIN_CONTRACT_ALIGNED
+UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
 STORY_TRACEABILITY_PENDING
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
@@ -18,13 +21,14 @@ Implementation documents are build specifications, not evidence that application
 
 | File | Purpose |
 |---|---|
-| `backend-implementation.md` | NestJS API, auth, RBAC, GitHub App, orchestration, audit, and local backend behavior |
-| `persistence-implementation.md` | PostgreSQL/Prisma/pgvector models, object metadata, retention, and migration order |
+| `backend-implementation.md` | NestJS API, auth, PBAC, GitHub App, automatic trusted scan initiation, orchestration, audit, and local backend behavior |
+| `persistence-implementation.md` | PostgreSQL/Prisma metadata, ChromaDB legal index references, object metadata, retention, and migration order |
 | `queue-implementation.md` | RabbitMQ topology, outbox, retry, idempotency, and worker choreography |
 | `scanner-implementation.md` | Cross-runtime scanner build boundary and package structure |
-| `python-worker-implementation.md` | Standalone Python Worker process, AST/CST stack, scan lifecycle, and TS/JS subprocess integration |
+| `python-worker-platform-implementation.md` | Shared Python Worker Platform runtime, queue, idempotency, audit, lifecycle and observability contracts |
+| `scanner-worker-implementation.md` | Scanner worker toolchain, scan lifecycle, and TS/JS subprocess integration |
 | `legal-corpus-ingestion-implementation.md` | Official-source ingestion, snapshot/hash provenance, normalization, and approval handoff |
-| `hybrid-retriever-implementation.md` | Vietnamese FTS + pgvector indexing, hybrid ranking, filters, citation reconstruction, privacy, and retrieval audit |
+| `chromadb-vectorless-legal-retriever-implementation.md` | ChromaDB vectorless legal retrieval, hierarchy/xref assembly, citation allowlist, privacy, and retrieval audit |
 | `llm-gateway-implementation.md` | Real provider boundary, privacy, schema validation, retries, budget controls, and model-run metadata |
 
 ## Read Order by Workstream
@@ -32,19 +36,20 @@ Implementation documents are build specifications, not evidence that application
 ### Scanner
 
 1. `../specs/scanner-spec.md`
-2. `../specs/python-scanner-spec.md`
-3. `../developer-execution-blueprints/scanner-data-journey.md`
+2. `../specs/domain-state-machines.md`
+3. `../specs/event-catalog.md`
 4. `scanner-implementation.md`
-5. `python-worker-implementation.md`
-6. `persistence-implementation.md`
-7. `queue-implementation.md`
+5. `scanner-worker-implementation.md`
+6. `python-worker-platform-implementation.md`
+7. `persistence-implementation.md`
+8. `queue-implementation.md`
 
 ### Legal Corpus and Retrieval
 
 1. `../specs/legal-corpus-source-spec.md`
 2. `../specs/legal-matching-domain-spec.md`
 3. `legal-corpus-ingestion-implementation.md`
-4. `hybrid-retriever-implementation.md`
+4. `chromadb-vectorless-legal-retriever-implementation.md`
 5. `persistence-implementation.md`
 6. `queue-implementation.md`
 
@@ -60,12 +65,12 @@ Implementation documents are build specifications, not evidence that application
 ## Locked MVP Runtime Decisions
 
 - Python Worker is the sole Repository Scan lifecycle owner.
-- Python uses `ast` + `libcst` and Poetry.
+- Python Worker Platform owns all asynchronous domain workloads.
+- Scanner uses Syft, Knip, deptry, `ast` + `libcst`, Semgrep custom rules, tree-sitter/custom parser and Poetry.
 - TS/JS analysis uses a fixed Node subprocess with JSON stdio.
-- Real configured LLM and embedding providers are mandatory for A-to-Z acceptance.
+- Real configured LLM provider is mandatory for A-to-Z acceptance; embedding provider is not required for legal retrieval MVP.
 - Mock LLM is tests/offline development only.
-- Legal corpus uses validated official-source snapshots, approval gate, immutable versioning, PostgreSQL FTS + pgvector, and citation reconstruction.
-- Vietnamese FTS uses `simple` + `unaccent`, not the English dictionary.
+- Legal corpus uses validated official-source snapshots, approval gate, immutable versioning, ChromaDB vectorless retrieval, legal hierarchy/xref assembly, and citation allowlist validation.
 - Real S3-compatible object storage is required for A-to-Z acceptance.
 
 ## Internal Operations Boundary

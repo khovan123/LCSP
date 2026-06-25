@@ -9,9 +9,11 @@ This document is the domain-level source of truth for LCSP entities, ownership, 
 ```text
 Organization
 -> User / OrganizationMembership
+-> Policy / PolicyVersion / AuthorizationDecision
 -> Assessment
 -> WizardProfile
 -> RepositoryConnection
+-> TrustedScanTrigger / ScanMappingResolution
 -> RepositorySnapshot
 -> RepositoryScanJob
 -> SourceFile / EvidenceReference / CodeGraph
@@ -34,7 +36,7 @@ LegalSource
 -> LegalCorpusItem
 -> CorpusApprovalRecord
 -> LegalCorpusVersion APPROVED
--> LegalDocumentChunk / FTS / embedding
+-> LegalDocumentChunk / ChromaDB legal index records
 -> RetrievalAuditLog
 -> LegalRuleMatch
 ```
@@ -42,8 +44,10 @@ LegalSource
 ## Ownership Principles
 
 - Manager owns assessment business truth and final conflict resolution.
-- Developer is optional and may submit only scoped structured attestation.
-- Python Worker owns Repository Scan lifecycle and scanner evidence entities.
+- Developer is optional and may perform scoped tasks with independent product value. Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP`.
+- PBAC is the authorization source of truth. Roles are subject attributes/templates only.
+- Python Worker Platform owns all asynchronous domain workloads.
+- Python Scanner Worker owns Repository Scan lifecycle and scanner evidence entities.
 - Internal Legal Operator owns corpus review/approval actions through internal API/CLI for MVP.
 - Approved LegalCorpusVersion is immutable.
 - All material transitions create AuditEvent and asynchronous transitions use OutboxEvent.
@@ -76,9 +80,38 @@ Relationships: has memberships, users, assessments, repository connections, and 
 |---|---|---:|---|
 | membershipId | UUIDv7 | Yes | Membership identity |
 | organizationId / userId | UUIDv7 | Yes | Tenant/user link |
-| role | enum | Yes | Manager or Developer |
-| policyScope | JSON | No | Delegated permissions/tasks |
+| role | enum | Yes | Manager or Developer subject label only |
+| policyScope | JSON | No | PBAC policy scope references for delegated tasks |
 | status | enum | Yes | invited/active/revoked |
+
+### Policy / PolicyVersion
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| policyId | UUIDv7/string | Yes | Policy identity |
+| version | integer/string | Yes | Immutable policy version |
+| organizationId | UUIDv7 | Yes | Tenant boundary |
+| subjectSelector | JSON | Yes | Subject attributes/service identity selector |
+| resourceSelector | JSON | Yes | Resource scope |
+| actions | JSON | Yes | Allowed/denied action set |
+| status | enum | Yes | active/superseded/revoked |
+
+Concrete PBAC engine, storage, cache, invalidation, evaluation topology and failure behavior are `TECHNICAL_DECISION_REQUIRED`.
+
+### AuthorizationDecision
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| authorizationDecisionId | UUIDv7 | Yes | Decision identity |
+| actorOrServiceIdentity | string/UUID | Yes | Subject/service evaluated |
+| organizationId | UUIDv7 | Yes | Tenant boundary |
+| resourceRef | JSON | Yes | Safe resource reference |
+| action | string | Yes | Requested action |
+| policyId / policyVersion | string | Yes | Policy basis |
+| decision | enum | Yes | ALLOW/DENY |
+| contextRefs | JSON | Yes | Safe request/runtime context refs |
+| correlationId | UUIDv7/string | Yes | Trace correlation |
+| createdAt | datetime | Yes | Decision time |
 
 ## Assessment and Repository
 
@@ -96,7 +129,9 @@ Relationships: has memberships, users, assessments, repository connections, and 
 Lifecycle:
 
 ```text
-CREATED -> WIZARD_PROFILE_READY -> REPOSITORY_CONNECTED -> SNAPSHOT_CREATED
+CREATED -> WIZARD_PROFILE_READY -> REPOSITORY_CONNECTED
+-> TRUSTED_SCAN_TRIGGERED or PENDING_MAPPING/BLOCKED_MAPPING/WAITING_FOR_CONTEXT
+-> SNAPSHOT_CREATED
 -> SCAN_REQUESTED -> SCAN_RUNNING -> SCAN_COMPLETED
 -> TECHNICAL_PROFILE_READY -> AI_USAGE_FLOW_READY
 -> RECONCILIATION_REQUIRED or VERIFIED_PROFILE_READY
@@ -139,6 +174,35 @@ CREATED -> WIZARD_PROFILE_READY -> REPOSITORY_CONNECTED -> SNAPSHOT_CREATED
 
 Snapshot is immutable and historical reruns create new ScanJob/evidence versions.
 
+### TrustedScanTrigger
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| trustedScanTriggerId | UUIDv7 | Yes | Trigger identity |
+| organizationId | UUIDv7 | Yes | Tenant boundary |
+| sourceType | enum | Yes | GITHUB_WEBHOOK/SCHEDULED_TRIGGER/BACKEND_TRIGGER/MANAGER_ACTION |
+| sourceIdentity | string | Yes | Verified source/service/actor identity |
+| sourceDeliveryId | string | No | External delivery id where available |
+| repositoryConnectionId / repositoryId | UUID/string | No | Repository mapping context |
+| assessmentId | UUIDv7 | No | Assessment mapping if known |
+| branch / commitSha | string | No | Trusted ref context |
+| status | enum | Yes | RECEIVED/CONTEXT_VALIDATING/READY_TO_SNAPSHOT/PENDING_MAPPING/BLOCKED_MAPPING/WAITING_FOR_CONTEXT/REJECTED |
+| idempotencyKey | string | Yes | Duplicate handling |
+| correlationId / causationId | string | Yes | Trace refs |
+
+### ScanMappingResolution
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| mappingResolutionId | UUIDv7 | Yes | Mapping decision identity |
+| trustedScanTriggerId | UUIDv7 | Yes | Source trigger |
+| status | enum | Yes | READY/PENDING_MAPPING/BLOCKED_MAPPING/WAITING_FOR_CONTEXT |
+| reasonCode | string | Yes | Safe reason |
+| resolvedRefs | JSON | No | Safe org/repo/assessment refs |
+| managerVisible | boolean | Yes | Whether UI recovery is required |
+
+Missing or ambiguous mapping must not create RepositorySnapshot or RepositoryScanJob.
+
 ## Scanner Evidence
 
 ### RepositoryScanJob
@@ -160,7 +224,7 @@ Snapshot is immutable and historical reruns create new ScanJob/evidence versions
 |---|---|---:|---|
 | sourceFileId / repositorySnapshotId | UUIDv7 | Yes | Identity/scope |
 | relativePath / extension / language | string | Yes | Metadata only |
-| supportLevel | AnalysisSupportLevel | Yes | FULL_STATIC/BASIC_SIGNAL_ONLY/UNSUPPORTED |
+| supportLevel | AnalysisSupportLevel | Yes | BOUNDED_STATIC_L0_L3/BASIC_SIGNAL_ONLY/UNSUPPORTED |
 | sizeBytes | integer | Yes | File size |
 | contentHash | string | Yes | Integrity reference |
 | ignored | boolean | Yes | Skip state |
@@ -218,16 +282,7 @@ AIUsageFlow groups claim-level records for business process, AI purpose, inputs,
 
 ### StructuredTechnicalAttestation
 
-| Field | Type | Required | Meaning |
-|---|---|---:|---|
-| attestationId | UUIDv7 | Yes | Identity |
-| assessmentId / developerUserId | UUIDv7 | Yes | Scope/actor |
-| role / claim / scope / reason | structured fields | Yes | Required attestation content |
-| evidenceRefs | JSON/relation | Yes | Supporting refs |
-| submittedAt | datetime | Yes | Timestamp |
-| status | enum | Yes | accepted/rejected/withdrawn |
-
-Attestation is supplemental only, stored separately from scanner evidence, and cannot resolve conflict or unlock classification.
+`SUPERSEDED_FOR_ACTIVE_MVP`. This entity must not be created for active MVP UX, API, persistence, events, reports, epics, stories or delivery tasks. Historical decision records may retain prior discussion.
 
 ### ReconciliationConflict
 
@@ -280,9 +335,11 @@ Represents a normalized legal hierarchy unit tied to a document and corpus versi
 | chunkId / corpusItemId | UUIDv7 | Yes | Identity/owner |
 | chunkIndex | integer | Yes | Stable order |
 | content | text | Yes | Approved normalized legal text |
-| tsvector | database index | Yes after indexing | Vietnamese FTS representation |
-| embedding | vector | No until built | Provider/model-specific embedding |
-| embeddingModel / embeddingVersion | string | No | Reproducibility |
+| hierarchicalPath | string | Yes | Stable document/article/clause/point path |
+| contextRole | enum | Yes | PRIMARY_MATCH/PARENT_CONTEXT/REFERENCED_CONTEXT at retrieval time |
+| outgoingRefIds / incomingRefIds | JSON | No | Cross-reference graph edges |
+| chromaCollectionId / chromaRecordId | string | Yes after indexing | ChromaDB collection/record identity |
+| supersedesChunkId | string | No | Versioned legal text history |
 
 ### LegalCorpusVersion
 
@@ -308,11 +365,11 @@ Approved versions are immutable. New changes create a new version; existing asse
 
 ### RetrievalAuditLog
 
-Records assessment/query reference, corpus version, effective-date filters, FTS/vector scores, result refs, result count, correlation ID, and timestamp. It must not persist sensitive raw assessment content beyond approved normalized query metadata.
+Records assessment/query reference, corpus version, effective-date filters, ChromaDB collection/version, result refs, context roles, citation allowlist refs, result count, correlation ID, and timestamp. It must not persist sensitive raw assessment content beyond approved normalized query metadata.
 
 ### ModelRunMetadata
 
-Records provider, model, prompt version, sanitized input reference, output hash, status, token/cost metadata, optional corpus version, embedding model, retrieval score refs, and correlation ID. Secrets and raw source are excluded.
+Records provider, model, prompt version, sanitized input reference, output hash, status, token/cost metadata, optional corpus version, retrieval audit refs, and correlation ID. Secrets and raw source are excluded. Embedding model metadata is future-only unless a later semantic/reranker path is approved.
 
 ### LegalRuleMatch
 

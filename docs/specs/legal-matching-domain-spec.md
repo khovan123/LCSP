@@ -52,6 +52,28 @@ It is the domain behavior source of truth for `LegalMatchingWorker` and the lega
 | `retrievalRef` | Retrieval/chunk/reference identity. | Yes | Citation cannot be audited; block/degrade. |
 | `effectiveDateMetadata` | Effective/publication date when available. | Conditional | If unavailable, mark limitation, do not fabricate. |
 
+### ChromaDB Vectorless Retrieval Payload
+
+Legal matching consumes ChromaDB structure-first vectorless retrieval results. Retrieval is not a generic search box and must preserve legal hierarchy and citation provenance.
+
+| Input | Meaning | Required | Missing behavior |
+|---|---|---:|---|
+| `retrievedChunks` | Primary chunks selected by full-text/metadata/direct ID lookup. | Yes | Legal matching is blocked for material rules. |
+| `referencedContextChunks` | One-hop cross-reference expansions. | Conditional | Referenced context unavailable is a citation limitation. |
+| `parentContextChunks` | Parent document/article/clause context required to interpret the primary hit. | Conditional | Point/clause interpretation blocks or degrades. |
+| `citationAllowlist` | Legal refs that downstream rule/LLM output may cite. | Yes | Legal matching is blocked. |
+| `retrievalAuditId` | Retrieval audit record for candidate selection and assembly. | Yes | Legal matching is blocked. |
+
+Every chunk carries stable hierarchical identity:
+
+```text
+{document_id}::art-{article_no}
+{document_id}::art-{article_no}::cl-{clause_no}
+{document_id}::art-{article_no}::cl-{clause_no}::pt-{point_code}
+```
+
+The base retrieval unit is Clause (`Khoản`). Point (`Điểm`) content is assembled with its parent Clause and Article context.
+
 ## Outputs
 
 ### LegalRuleMatch
@@ -68,6 +90,8 @@ It is the domain behavior source of truth for `LegalMatchingWorker` and the lega
 | `rationale` | Structured fact-to-rule rationale. | Yes | Rule evaluation. |
 | `confidence` | Deterministic match confidence, 0.0 to 1.0. | Yes | Confidence model. |
 | `coverage` | CitationCoverage object. | Yes | Coverage model. |
+| `retrievalAuditId` | ChromaDB retrieval/assembly audit identity. | Yes | Retrieval audit. |
+| `contextRoles` | Context roles used by citations: `PRIMARY_MATCH`, `PARENT_CONTEXT`, `REFERENCED_CONTEXT`. | Yes | Retrieval assembly. |
 | `createdAt` | Creation timestamp. | Yes | System generated. |
 
 ### CitationCoverage
@@ -104,14 +128,17 @@ It is the domain behavior source of truth for `LegalMatchingWorker` and the lega
 3. Load active `LegalCorpusVersion`.
 4. Extract legal facts from `VerifiedProfile.mergedProfile`.
 5. Reject facts without evidence refs when they are material.
-6. Retrieve candidate rules by evidence-backed AIUsageFlow fields: business process, AI purpose, automation level, affected subjects, input/output data types, human review and harm categories.
-7. Retrieve citations for each candidate rule from the pinned corpus version.
-8. Evaluate rule applicability against required, optional, blocking and unknown facts.
-9. Build `LegalRuleMatch` objects.
-10. Calculate citation coverage per match and aggregate coverage.
-11. Persist `LegalRuleMatch[]`.
-12. Emit `event.legal-matching.completed.v1` if classification can evaluate the result.
-13. Emit `event.legal-matching.failed.v1` if missing profile, obsolete corpus or fatal citation failure prevents evaluation.
+6. Use the ChromaDB vectorless retriever to retrieve primary legal chunks by evidence-backed AIUsageFlow fields: business process, AI purpose, automation level, affected subjects, input/output data types, human review and harm categories.
+7. Assemble parent context for every primary match.
+8. Expand one-hop legal cross-references and mark them `REFERENCED_CONTEXT`.
+9. Build retrieved citation allowlist from primary, parent and referenced chunks.
+10. Reject any rule, LLM or retrieval output that cites a legal ref outside the allowlist.
+11. Evaluate rule applicability against required, optional, blocking and unknown facts.
+12. Build `LegalRuleMatch` objects with retrieval audit IDs, context roles and citation coverage.
+13. Calculate citation coverage per match and aggregate coverage.
+14. Persist `LegalRuleMatch[]`.
+15. Emit `event.legal-matching.completed.v1` if classification can evaluate the result.
+16. Emit `event.legal-matching.failed.v1` if missing profile, obsolete corpus or fatal citation/retrieval failure prevents evaluation.
 
 ## Rule Applicability Model
 
@@ -152,9 +179,17 @@ Claims with confidence `0.65..0.74` may be recorded as supporting context only a
 |---|---|---|
 | `NO_CITATION` | No citation ref exists for the material rule. | Blocks material legal conclusion and final classification when critical. |
 | `PARTIAL_CITATION` | Citation exists but lacks required locator/version/source metadata. | Degrades or blocks depending on materiality; must be explicit. |
-| `COMPLETE_CITATION` | Citation has source title, identifier, locator, corpus version and retrieval ref; effective date metadata included when available. | May support classification. |
+| `COMPLETE_CITATION` | Citation has source title, identifier, locator, corpus version, stable chunk ID, retrieval ref, context role and effective date metadata when available. | May support classification. |
 
 No citation may be fabricated. Policy-only sources cannot be treated as standalone mandatory obligations unless the active legal classification spec identifies them as binding.
+
+Citation refs must point to one of:
+
+- `retrievedChunks`;
+- `parentContextChunks`;
+- `referencedContextChunks`.
+
+Any `legal_ref` outside the retrieved citation allowlist is rejected and produces `BLOCKED_MISSING_CITATION` or failed legal matching according to materiality. Referenced context must not be presented as the primary legal basis; it must retain `contextRole = REFERENCED_CONTEXT` and an xref reason.
 
 ## Match Confidence Model
 
@@ -213,6 +248,8 @@ Missing coverage means a legal fact, rule or citation required for classificatio
 |---|---|---|
 | Missing profile | VerifiedProfile cannot be loaded. | `event.legal-matching.failed.v1`; no classification command. |
 | Missing citation | Material rule lacks citation. | Match status `BLOCKED_MISSING_CITATION`; classification blocked/degraded. |
+| Out-of-allowlist citation | Rule/LLM output cites a chunk outside the retrieved allowlist. | Reject cited output; block material match. |
+| Missing retrieval audit | Retrieval cannot prove primary/parent/referenced assembly. | `event.legal-matching.failed.v1`; no classification command. |
 | Ambiguous rule | Multiple candidate rules apply with contradictory conditions. | Match status `BLOCKED_UNKNOWN_FACT` or degraded rationale; no unsupported conclusion. |
 | Contradicting citations | Retrieved citations conflict or point to incompatible versions. | Block/degrade and require corpus/rule review. |
 | Obsolete corpus version | Corpus status is obsolete/unapproved. | `event.legal-matching.failed.v1`; no classification command. |
@@ -321,7 +358,7 @@ Classification must not consume `event.reconciliation.verified-profile-ready.v1`
 
 ---
 
-## Legal Corpus Ingestion, Approval and Retrieval (Phase 5.2J Update)
+## Legal Corpus Ingestion, Approval and Retrieval (Phase 5.2L Update)
 
 ### Legal Source Hierarchy
 
@@ -354,15 +391,21 @@ If a source URL or document is unavailable:
 2. **Review Work:** Authorized legal personnel review the parsed items for correctness and mapping accuracy.
 3. **Approval Event:** On approval, an immutable `LegalCorpusVersion` is created. Unapproved versions are blocked from classification.
 
-### Hybrid Legal Retriever (pgvector + FTS)
+### ChromaDB Structure-First Vectorless Legal Retriever
 
-Matches verified facts against legal rules using a two-way retrieval pipeline in PostgreSQL:
+Matches verified facts against legal rules using a structure-first vectorless retrieval pipeline in ChromaDB:
 
-- **Full-Text Search (FTS):** Keyword index search for precise article and document matches.
-- **Semantic Vector Search:** `pgvector` cosine similarity search on chunk embeddings (e.g. 1536-dimensional vectors).
+- **Stable legal records:** document, article, clause and point chunks use stable hierarchical IDs.
+- **Full-text and metadata retrieval:** ChromaDB stores legal records and supports text/metadata candidate lookup without mandatory embeddings.
+- **Direct lookup:** known `chunk_id`, `article_id`, `clause_id` or `point_id` can retrieve exact records.
+- **Parent-context assembly:** Point matches include parent Clause and Article context; Clause matches include parent Article and document context.
+- **Cross-reference expansion:** one-hop referenced chunks are fetched and marked `context_role=REFERENCED_CONTEXT`.
 - **Metadata & Version Filtering:**
   - **Pin Version:** Query must only retrieve from the approved `LegalCorpusVersion` pinned at assessment initialization.
   - **Effective Date:** Pinned legal documents must be in legal effect on the assessment date.
+- **Citation allowlist:** Legal refs are valid only when they point to `retrieved_chunks` or `referenced_context_chunks`.
 - **Fail-Closed Citations:** If retrieval returns no results or missing required citations, the classification is marked `BLOCKED_MISSING_CITATION` and document generation is blocked.
+
+The base retrieval unit is Clause (`Khoản`). Chunks must not split between sentences or clauses solely to satisfy token size. BGE-M3 or another embedding model is optional future work only; it is not required for MVP legal retrieval.
 
 ```

@@ -25,4 +25,4 @@ Single source of truth for document-generation domain behavior and output guardr
 
 ## Runtime Source
 
-See `docs/developer-execution-blueprints/end-to-end-execution.md`.
+Runtime behavior is governed by `docs/specs/domain-state-machines.md`, `docs/specs/event-catalog.md`, `docs/specs/assessment-lifecycle-spec.md`, and the implementation specs in `docs/implementation/`.
