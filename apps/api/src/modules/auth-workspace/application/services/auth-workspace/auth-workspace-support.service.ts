@@ -1,0 +1,289 @@
+import {
+  AUTH_ERROR_CODES,
+  createProblemResult,
+  type AuthErrorCode,
+} from "@lcsp/contracts/auth";
+
+import type {
+  AuditEvent,
+  AuthorizationDecision,
+  Invitation,
+  Membership,
+  MfaEnrollment,
+  Organization,
+  Policy,
+  Session,
+  User,
+} from "../../../domain/models/auth-workspace.models.ts";
+import { Session as SessionEntity } from "../../../domain/models/auth-workspace.models.ts";
+import { WorkspaceAuthorizationDomainService } from "../../../domain/services/workspace-authorization.domain-service.ts";
+import {
+  createCorrelationId,
+  fingerprintToken,
+  hashSecret,
+  issueOpaqueToken,
+} from "../../../infrastructure/security/security.utils.ts";
+import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
+import type {
+  AuthProblemResult,
+  SafeUserProjection,
+} from "../../contracts/auth-workspace/common.contract.ts";
+import type { RegisterPayload } from "../../contracts/auth-workspace/register-approved-path.contract.ts";
+import type { CredentialPayload } from "../../contracts/auth-workspace/sign-in.contract.ts";
+import type { WorkspaceAuthorization } from "../../contracts/auth-workspace/workspace.contract.ts";
+
+const FAILED_LOGIN_LIMIT = 3;
+const LOCK_WINDOW_MS = 15 * 60_000;
+const SESSION_TTL_MS = 8 * 60 * 60_000;
+
+export class AuthWorkspaceSupportService {
+  private readonly workspaceAuthorization: WorkspaceAuthorizationDomainService;
+
+  constructor() {
+    this.workspaceAuthorization = new WorkspaceAuthorizationDomainService();
+  }
+
+  createCorrelationId(): string {
+    return createCorrelationId();
+  }
+
+  now(): number {
+    return Date.now();
+  }
+
+  get failedLoginLimit(): number {
+    return FAILED_LOGIN_LIMIT;
+  }
+
+  get lockWindowMs(): number {
+    return LOCK_WINDOW_MS;
+  }
+
+  safeUserProjection(
+    user: User,
+    organizationId: string,
+    membership: Membership,
+  ): SafeUserProjection {
+    return {
+      user_id: user.id,
+      email: user.email.toString(),
+      organization_id: organizationId,
+      membership_status: membership.status,
+      // Only the role label is client-safe; other subject attributes are
+      // internal PBAC policy-evaluation inputs and must not leak to the client.
+      subject_attributes: membership.hasRole()
+        ? { role: membership.role() as string }
+        : {},
+    };
+  }
+
+  isMfaRequired(
+    user: User,
+    organization: Organization | null,
+    mfaEnrollment: MfaEnrollment | null,
+  ): boolean {
+    return (
+      mfaEnrollment !== null ||
+      user.mfaRequired ||
+      (organization?.mfaRequired ?? false)
+    );
+  }
+
+  recordAudit(
+    repositories: AuthWorkspaceRepositories,
+    event: AuditEvent,
+  ): Promise<void> {
+    return repositories.auditEvents.append(event);
+  }
+
+  recordDecision(
+    repositories: AuthWorkspaceRepositories,
+    decision: AuthorizationDecision,
+  ): Promise<void> {
+    return repositories.authorizationDecisions.append(decision);
+  }
+
+  findMembership(
+    repositories: AuthWorkspaceRepositories,
+    userId: string,
+    organizationId: string,
+  ): Promise<Membership | null> {
+    return repositories.memberships.findByUserAndOrganization(
+      userId,
+      organizationId,
+    );
+  }
+
+  resolveUserById(
+    repositories: AuthWorkspaceRepositories,
+    userId: string,
+  ): Promise<User | null> {
+    return repositories.users.findById(userId);
+  }
+
+  resolveOrganizationById(
+    repositories: AuthWorkspaceRepositories,
+    organizationId: string,
+  ): Promise<Organization | null> {
+    return repositories.organizations.findById(organizationId);
+  }
+
+  findPolicy(
+    repositories: AuthWorkspaceRepositories,
+    membership: Membership,
+  ): Promise<Policy | null> {
+    return repositories.policies.findByIdAndVersion(
+      membership.policyId,
+      membership.policyVersion,
+    );
+  }
+
+  normalizeInvitationEmail(invitation: Invitation): string {
+    return invitation.email.toString();
+  }
+
+  validateCredentialPayload(
+    payload: CredentialPayload,
+    correlationId: string,
+  ): AuthProblemResult | null {
+    if (
+      !this.requireString(payload?.email) ||
+      !this.requireString(payload?.password) ||
+      !this.requireString(payload?.organization_id)
+    ) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.validationFailed,
+        correlationId,
+      );
+    }
+
+    return null;
+  }
+
+  validateRegisterPayload(
+    payload: RegisterPayload,
+    correlationId: string,
+  ): AuthProblemResult | null {
+    if (
+      !this.requireString(payload?.invite_id) ||
+      !this.requireString(payload?.password)
+    ) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.validationFailed,
+        correlationId,
+      );
+    }
+
+    return null;
+  }
+
+  async createSession(
+    repositories: AuthWorkspaceRepositories,
+    user: User,
+    organizationId: string,
+    correlationId: string,
+  ): Promise<{ token: string; session: Session }> {
+    const token = issueOpaqueToken();
+    const fingerprint = fingerprintToken(token);
+    const session = new SessionEntity({
+      id: repositories.sessions.nextId(),
+      userId: user.id,
+      organizationId,
+      tokenHash: hashSecret(token),
+      expiresAt: this.now() + SESSION_TTL_MS,
+      revokedAt: null,
+    });
+    await repositories.sessions.save(session, fingerprint);
+    await this.recordAudit(repositories, {
+      event_type: "auth.session.created",
+      actor_id: user.id,
+      organization_id: organizationId,
+      decision: "allow",
+      correlation_id: correlationId,
+      session_id: session.id,
+      policy_id: null,
+      policy_version: null,
+    });
+    return { token, session };
+  }
+
+  async findValidSession(
+    repositories: AuthWorkspaceRepositories,
+    token: string,
+  ): Promise<Session | null> {
+    const session = await repositories.sessions.findByFingerprint(
+      fingerprintToken(token),
+    );
+
+    if (!session) {
+      return null;
+    }
+
+    if (!session.isActive(this.now())) {
+      return null;
+    }
+
+    return session;
+  }
+
+  findMfaEnrollment(
+    repositories: AuthWorkspaceRepositories,
+    userId: string,
+  ): Promise<MfaEnrollment | null> {
+    return repositories.mfaEnrollments.findByUserId(userId);
+  }
+
+  async authorizeWorkspace(
+    repositories: AuthWorkspaceRepositories,
+    membership: Membership | null | undefined,
+    correlationId: string,
+    organizationId: string,
+    resourceId = "workspace-home",
+  ): Promise<WorkspaceAuthorization> {
+    const policy = membership
+      ? await this.findPolicy(repositories, membership)
+      : undefined;
+    const domainDecision = this.workspaceAuthorization.authorize(
+      membership ?? undefined,
+      policy ?? undefined,
+      organizationId,
+    );
+
+    if (!domainDecision.allowed) {
+      const denied = createProblemResult(
+        domainDecision.code as AuthErrorCode,
+        correlationId,
+      );
+      await this.recordDecision(repositories, {
+        organization_id: membership?.organizationId ?? null,
+        resource_type: "Workspace",
+        resource_id: resourceId,
+        action: "workspace:read",
+        decision: "deny",
+        reason_code: domainDecision.code,
+        policy_id: membership?.policyId ?? null,
+        policy_version: membership?.policyVersion ?? null,
+        correlation_id: correlationId,
+      });
+      return denied;
+    }
+
+    const allowed: AuthorizationDecision = {
+      organization_id: organizationId,
+      resource_type: "Workspace",
+      resource_id: resourceId,
+      action: "workspace:read",
+      decision: "allow",
+      reason_code: "AUTHORIZED",
+      policy_id: membership?.policyId ?? null,
+      policy_version: membership?.policyVersion ?? null,
+      correlation_id: correlationId,
+    };
+    await this.recordDecision(repositories, allowed);
+    return { ok: true, decision: allowed };
+  }
+
+  private requireString(value: unknown): value is string {
+    return typeof value === "string" && value.trim().length > 0;
+  }
+}

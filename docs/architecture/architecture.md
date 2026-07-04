@@ -23,8 +23,8 @@ LCSP is a modular, evidence-first compliance platform. The system is intentional
 
 | Component | Why It Exists | Communicates With |
 |---|---|---|
-| Web Frontend | Manager workspace for assessment, repository connection, scan progress, conflict resolution, classification and documents. | Backend API. |
-| Backend API | Auth, PBAC enforcement boundary, assessment state, synchronous user actions, trusted trigger creation, async work creation. | Web Frontend, Persistence, Queue boundary, GitHub App. |
+| Web Frontend | Manager workspace for assessment, repository connection, scan progress, conflict resolution, classification and documents; renders customer-facing auth and blocked-state copy from approved stable keys. | Backend API, shared contracts/i18n packages. |
+| Backend API | Auth, PBAC enforcement boundary, assessment state, synchronous user actions, trusted trigger creation, async work creation; emits safe auth/workspace error contracts with stable keys instead of relying on hardcoded user-facing prose. | Web Frontend, shared contracts packages, Persistence, Queue boundary, GitHub App. |
 | Repository Integration | Authorizes read-only repository access separately from OAuth/OIDC login. | Backend API, GitHub. |
 | Python Worker Platform | Owns all asynchronous domain workloads through bounded consumers/modules, not a monolithic Python process. | Queue boundary, Persistence, Object Storage, LLM Gateway, Repository Integration. |
 | Python Scanner Worker | Owns Repository Scan lifecycle and produces static-analysis technical evidence from commit-pinned repository snapshots using Syft, Knip, deptry, `ast`/`libcst`, bounded `ts-morph`, tree-sitter/custom parser, and Semgrep custom rules. | Queue boundary, Persistence, Repository Integration, TS/JS analyzer CLI. |
@@ -93,6 +93,8 @@ Each major stage persists its output before the next stage runs. Hidden synchron
 - Provider/model/framework detection alone does not determine legal risk.
 - Real LLM integration requires explicit provider/model configuration, credentials, token/cost controls and privacy boundaries. Dense embedding provider/model configuration is not required for legal corpus retrieval in the vectorless MVP.
 - Legal-source use requires official-source validation, immutable snapshot, content hash, approval gate and approved `LegalCorpusVersion`.
+- Shared app/package imports must use approved public exports; direct workspace source-path imports, disallowed relative workspace imports, and self-import patterns that bypass public exports are forbidden.
+- Auth and blocked-state shared contracts must remain type-checked across Web/API boundaries.
 
 ## Detail Ownership
 
@@ -105,6 +107,6 @@ Each major stage persists its output before the next stage runs. Hidden synchron
 
 ## Open Technical Decisions
 
-- PBAC engine, policy storage, cache, invalidation, evaluation topology and failure behavior: `TECHNICAL_DECISION_REQUIRED`.
-- Automatic trusted scan trigger idempotency, retry/DLQ, replay authority and operator recovery: `TECHNICAL_DECISION_REQUIRED`.
-- Scanner toolchain failure severity table and tool version/config/ruleset hash policy: `TECHNICAL_DECISION_REQUIRED`.
+- PBAC engine, policy storage, cache, invalidation, evaluation topology and failure behavior: resolved for implementation planning by `docs/implementation/decisions/pbac-runtime-decision.md`.
+- Automatic trusted scan trigger idempotency, retry/DLQ, replay authority and operator recovery: resolved for implementation planning by `docs/implementation/decisions/trusted-scan-trigger-retry-dlq-replay-decision.md`.
+- Scanner toolchain failure severity table and tool version/config/ruleset hash policy: resolved for implementation planning by `docs/implementation/decisions/scanner-severity-tool-provenance-decision.md`.

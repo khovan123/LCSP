@@ -1,0 +1,17 @@
+{
+  "name": "@lcsp/contracts",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth": "./src/auth/index.ts",
+    "./auth/actions": "./src/auth/actions.ts",
+    "./auth/codes": "./src/auth/codes.ts",
+    "./auth/problems": "./src/auth/problems.ts",
+    "./auth/redact": "./src/auth/redact.ts",
+    "./auth/safe": "./src/auth/safe.ts",
+    "./shared": "./src/shared/index.ts",
+    "./shared/locale": "./src/shared/locale.ts",
+    "./shared/result": "./src/shared/result.ts"
+  }
+}

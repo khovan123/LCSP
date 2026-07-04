@@ -1,0 +1,6 @@
+Sprint,Theme,Start,End,Epics,Stories,Tasks,P0 Tasks,P1 Tasks,Main Flow Tasks,Total Issues
+LCSP Sprint 1,"Foundation, auth, assessment, wizard entry",2026-07-04T22:45:00+07:00,2026-07-18T23:59:59+07:00,0,12,40,35,5,13,52
+LCSP Sprint 2,"Repository connection, scan orchestration, technical evidence",2026-07-19T00:00:00+07:00,2026-08-02T23:59:59+07:00,0,6,26,24,2,8,32
+LCSP Sprint 3,AI usage analysis and reconciliation,2026-08-03T00:00:00+07:00,2026-08-17T23:59:59+07:00,0,6,10,10,0,2,16
+LCSP Sprint 4,Legal matching and classification,2026-08-18T00:00:00+07:00,2026-09-01T23:59:59+07:00,0,5,7,4,3,3,12
+LCSP Sprint 5,"Reporting, audit export, final hardening",2026-09-02T00:00:00+07:00,2026-09-16T23:59:59+07:00,0,4,7,0,7,0,11

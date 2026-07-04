@@ -57,7 +57,7 @@ Forbidden:
 | Python analysis | first-class bounded semantic static analysis |
 | TS/JS analysis | Node.js `ts-morph` subprocess invoked by Python Worker |
 | AI/custom pattern rules | Semgrep custom rules |
-| Other/cross-language structure | tree-sitter/custom parser augmentation |
+| Other/cross-language structure | tree-sitter/custom parser augmentation, widened to cover class hierarchy, call sites, decorators/annotations for Basic-signal-detection languages; additive only, does not replace `ast`/`libcst` or `ts-morph` semantic resolution |
 | Other languages | basic manifest/import/config/structural signals with explicit coverage limits |
 | Graph assembly | scan-local normalized graph in Python Worker |
 | Persistence | PostgreSQL metadata only |
@@ -79,7 +79,7 @@ Historical Phase 5.2I evidence remains in git history and archived decision reco
 |---|---|---|
 | First-class bounded semantic analysis | Python | imports, packages, modules, functions, classes, AI invocation, inputs/outputs, bounded L2-L3 cross-module flow, decision and human-review paths |
 | First-class bounded semantic analysis | TypeScript, JavaScript | AST/import/symbol/call analysis and bounded flow through `ts-morph` subprocess |
-| Basic signal detection | Java, Kotlin, Go, C#, Rust | dependencies, imports, config, endpoint hints; no complete semantic-flow claim |
+| Basic signal detection | Java, Kotlin, Go, C#, Rust | dependencies, imports, config, endpoint hints, plus tree-sitter structural facts (class hierarchy, call sites, decorators/annotations); no complete semantic-flow claim since tree-sitter has no symbol/type resolution |
 | Unsupported | binary, minified, generated, oversized, unknown | skip safely and emit coverage limitation |
 
 The scanner must never claim complete understanding of arbitrary dynamic code.
@@ -118,7 +118,7 @@ The scanner must never claim complete understanding of arbitrary dynamic code.
 | L0 | repository inventory | languages, manifests, frameworks, routes, schemas, configs |
 | L1 | single function/method | model input -> invocation -> output -> local branch/action |
 | L2 | same module/package | bounded nearby call tracing |
-| L3 | controlled cross-module | route/controller -> service -> invocation -> repository/status/review action |
+| L3 | controlled cross-module | route/controller -> service -> invocation -> repository/status/review action, bounded static call-chain up to a configured max hop depth (default 5), stopping at the first dynamic/unresolvable edge |
 | L4 | unsupported/dynamic boundary | emit uncertainty/coverage limitation; do not guess |
 
 Only start L2/L3 tracing after an AI invocation candidate is found. Dynamic imports, reflection, remote/runtime configuration, queue breaks, generated code, or unresolved external services terminate the bounded path with explicit uncertainty.
@@ -129,7 +129,7 @@ All scanner tools must have pinned versions, configuration hashes, ruleset versi
 
 Tools must run inside the restricted scanner workspace. They must not install repository dependencies, run customer application code, run package scripts, run tests, run Docker/CI workflows, or probe customer endpoints.
 
-Tool failure becomes either an explicit `CoverageLimitation` or terminal scan failure according to a severity table. The severity table for Syft, Knip, deptry, Semgrep, tree-sitter/custom parser, `ast/libcst`, and `ts-morph` is `TECHNICAL_DECISION_REQUIRED`.
+Tool failure becomes either an explicit `CoverageLimitation` or terminal scan failure according to the severity table in `docs/implementation/decisions/scanner-severity-tool-provenance-decision.md`.
 
 ## Dependency and SBOM Contracts
 
@@ -434,9 +434,9 @@ Metrics include invocation precision, business-purpose mapping, input/output det
 CONSOLIDATION_PASS_APPLIED
 SCANNER_BEHAVIOR_AUTHORITY_CONSOLIDATED
 UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
-UX_REBASE_PENDING_AFTER_DOC_PRUNING
-STORY_TRACEABILITY_PENDING
+UX_REBASE_COMPLETE_AFTER_DOC_PRUNING
+STORY_TRACEABILITY_CREATED
 IMPLEMENTATION_NOT_AUTHORIZED
 ```
 
-This status requires UX rebase or regeneration after documentation pruning. It does not certify implementation readiness or authorize story execution.
+This status keeps scanner behavior as authority while implementation authorization remains controlled by sprint planning and task-level approval.

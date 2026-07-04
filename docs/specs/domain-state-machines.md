@@ -19,7 +19,7 @@ Canonical state transitions for the A-to-Z runnable MVP. Physical enums remain o
 
 ```text
 CREATED
--> WIZARD_PROFILE_READY
+-> WIZARD_PROFILE_READY (optional; may be reached any time before or after REPOSITORY_CONNECTED)
 -> REPOSITORY_CONNECTED
 -> TRUSTED_SCAN_TRIGGERED
 -> PENDING_MAPPING or BLOCKED_MAPPING or WAITING_FOR_CONTEXT or SNAPSHOT_CREATED
@@ -40,7 +40,9 @@ CREATED
 |---|---|---|---|
 | none | assessment created | Manager authorized | CREATED |
 | CREATED | Wizard saved | required fields valid | WIZARD_PROFILE_READY |
+| CREATED | repository connected (Wizard not yet saved) | GitHub App scope valid | REPOSITORY_CONNECTED |
 | WIZARD_PROFILE_READY | repository connected | GitHub App scope valid | REPOSITORY_CONNECTED |
+| REPOSITORY_CONNECTED | Wizard saved | required fields valid | REPOSITORY_CONNECTED (WizardProfile attached; state unchanged, only linkage added) |
 | REPOSITORY_CONNECTED | trusted trigger received | verified source and PBAC allow | TRUSTED_SCAN_TRIGGERED |
 | TRUSTED_SCAN_TRIGGERED | mapping pending | required repository/account/assessment mapping missing | PENDING_MAPPING |
 | TRUSTED_SCAN_TRIGGERED | mapping blocked | ambiguous mapping or unsafe context | BLOCKED_MAPPING |
@@ -53,8 +55,8 @@ CREATED
 | SCAN_RUNNING | scan completed event | quality-valid report and cleanup verification | SCAN_COMPLETED |
 | SCAN_COMPLETED | technical-profile completed | profile persisted | TECHNICAL_PROFILE_READY |
 | TECHNICAL_PROFILE_READY | AIUsageFlow completed | flow persisted | AI_USAGE_FLOW_READY |
-| AI_USAGE_FLOW_READY | conflict detected | material conflict exists | RECONCILIATION_REQUIRED |
-| AI_USAGE_FLOW_READY | verified profile ready | no material conflict | VERIFIED_PROFILE_READY |
+| AI_USAGE_FLOW_READY | conflict detected | material conflict exists (only possible when WizardProfile is linked) | RECONCILIATION_REQUIRED |
+| AI_USAGE_FLOW_READY | verified profile ready | no material conflict, or no WizardProfile linked (`verificationSource: TECHNICAL_ONLY`) | VERIFIED_PROFILE_READY |
 | RECONCILIATION_REQUIRED | verified profile ready | Manager resolved all conflicts | VERIFIED_PROFILE_READY |
 | VERIFIED_PROFILE_READY | legal matching completed | citation-backed matches persisted | LEGAL_MATCHING_READY |
 | LEGAL_MATCHING_READY | classification completed | result persisted | CLASSIFICATION_READY |
@@ -94,7 +96,7 @@ or REJECTED
 - Ambiguous mapping moves to BLOCKED_MAPPING.
 - READY_TO_SNAPSHOT may create immutable RepositorySnapshot and RepositoryScanJob.
 - Duplicate delivery is idempotent and must not duplicate artifacts.
-- Idempotency key, retry/DLQ and replay behavior are `TECHNICAL_DECISION_REQUIRED`.
+- Idempotency key, retry/DLQ and replay behavior are governed by `docs/implementation/decisions/trusted-scan-trigger-retry-dlq-replay-decision.md`.
 
 ## TechnicalEvidenceReport
 
@@ -222,4 +224,5 @@ STRUCTURED_ATTESTATION_NON_UNLOCKING
 STRUCTURED_ATTESTATION_SUPERSEDED_FOR_ACTIVE_MVP
 TRUSTED_SCAN_TRIGGER_STATE_MACHINE_ADDED
 PYTHON_SCANNER_COMPLETION_GATE_ALIGNED
+STATE_TRANSITION_AUTHORITY_EXTENDED_IN_IMPLEMENTATION_READINESS
 ```

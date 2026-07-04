@@ -21,6 +21,7 @@ Single source of truth for Legal Matching and Risk Classification.
 - Every material legal conclusion requires citation coverage.
 - Missing citation blocks or degrades classification/output.
 - Policy-only documents cannot be treated as standalone mandatory legal obligations unless the spec identifies them as binding.
+- The rule catalog itself (`LegalRule` entity, authoring, versioning, approval) is governed by `docs/specs/legal-rule-catalog-spec.md`, a separate artifact from the legal corpus (`docs/specs/legal-corpus-source-spec.md`). Rules are hand-authored and citation-validated against the corpus, never auto-derived from it.
 
 ## Risk Classification
 

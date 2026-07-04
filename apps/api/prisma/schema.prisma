@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthMembershipStatus {
+  invited
+  active
+  revoked
+}
+
+enum AuthInvitationState {
+  approved
+  pending
+  consumed
+}
+
+enum AuthDecision {
+  allow
+  deny
+}
+
+enum AuthStateGate {
+  membership_active
+}
+
+model AuthOrganization {
+  id            String           @id
+  slug          String           @unique
+  name          String
+  mfaRequired   Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  memberships   AuthMembership[]
+  invitations   AuthInvitation[]
+  sessions      AuthSession[]
+  policies      AuthPolicy[]
+  auditEvents   AuthAuditEvent[]
+  decisions     AuthDecisionLog[]
+}
+
+model AuthUser {
+  id               String           @id
+  email            String           @unique
+  passwordHash     String
+  emailVerified    Boolean
+  failedLoginCount Int
+  lockUntil        DateTime?
+  displayName      String?
+  recoveryEmail    String?
+  mfaRequired      Boolean          @default(false)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  memberships      AuthMembership[]
+  sessions         AuthSession[]
+  mfaEnrollment    AuthUserMfa?
+  mfaRateLimit     AuthMfaRateLimit?
+  recoveryRequests AuthRecoveryRequest[]
+}
+
+model AuthPolicy {
+  id            String
+  version       String
+  actions       String[]
+  subjectRole   String
+  stateGate     AuthStateGate
+  organizationId String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  organization  AuthOrganization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memberships   AuthMembership[]
+  invitations   AuthInvitation[]
+
+  @@id([id, version])
+  @@index([organizationId])
+}
+
+model AuthMembership {
+  id               String               @id
+  userId           String
+  organizationId   String
+  status           AuthMembershipStatus
+  subjectAttributes Json
+  policyId         String
+  policyVersion    String
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  user             AuthUser             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization     AuthOrganization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  policy           AuthPolicy           @relation(fields: [policyId, policyVersion], references: [id, version], onDelete: Restrict)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
+
+model AuthInvitation {
+  id                String               @id
+  email             String
+  organizationId    String
+  state             AuthInvitationState
+  emailVerified     Boolean
+  membershipStatus  AuthMembershipStatus
+  subjectAttributes Json
+  policyId          String
+  policyVersion     String
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  organization      AuthOrganization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  policy            AuthPolicy           @relation(fields: [policyId, policyVersion], references: [id, version], onDelete: Restrict)
+
+  @@index([organizationId])
+}
+
+model AuthSession {
+  id               String           @id
+  userId           String
+  organizationId   String
+  tokenHash        String
+  tokenFingerprint String           @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  mfaVerifiedAt    DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  user             AuthUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization     AuthOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model AuthUserMfa {
+  userId          String    @id
+  encryptedSecret String
+  enrolledAt      DateTime  @default(now())
+  user            AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthMfaOtpUsed {
+  userId  String
+  otpCode String
+  usedAt  DateTime @default(now())
+
+  @@id([userId, otpCode])
+  @@index([userId, usedAt])
+}
+
+model AuthMfaRateLimit {
+  userId       String    @id
+  failedCount  Int       @default(0)
+  lockedUntil  DateTime?
+  updatedAt    DateTime  @updatedAt
+  user         AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthRecoveryRequest {
+  id               String    @id
+  userId           String
+  tokenHash        String
+  tokenFingerprint String    @unique
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  user             AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model AuthAuditEvent {
+  id             String           @id
+  eventType      String
+  actorId        String?
+  organizationId String?
+  decision       AuthDecision?
+  reasonCode     String?
+  correlationId  String
+  sessionId      String?
+  policyId       String?
+  policyVersion  String?
+  payload        Json
+  createdAt      DateTime         @default(now())
+  organization   AuthOrganization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([correlationId])
+}
+
+model AuthDecisionLog {
+  id             String           @id
+  organizationId String?
+  resourceType   String
+  resourceId     String
+  action         String
+  decision       AuthDecision
+  reasonCode     String
+  policyId       String?
+  policyVersion  String?
+  correlationId  String
+  payload        Json
+  createdAt      DateTime         @default(now())
+  organization   AuthOrganization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([correlationId])
+}

@@ -51,6 +51,7 @@ Official legal source
 -> legal structure parser
 -> document/article/clause/point hierarchy
 -> cross-reference extraction
+-> cross-document locator-level repeal resolution
 -> effective-date/version resolution
 -> approved LegalCorpusVersion
 -> ChromaDB document + metadata index
@@ -72,6 +73,7 @@ Official legal source
 | Cross-reference | Ingestion creates xref edges. When X is retrieved, referenced Y is included one hop as `context_role=REFERENCED_CONTEXT`. |
 | Stable identity | Chunks use stable hierarchical IDs and metadata: `doc_id`, `article_id`, `clause_id`, `point_id`. |
 | Effective law | New assessments do not retrieve expired/superseded text unless the pinned corpus/effective date requires historical context. |
+| Cross-document repeal | A chunk's `legal_status` can be set to `REPEALED` by a locator-level repeal clause in a *different* document (e.g. a later law's "điều khoản thi hành" bãi bỏ specific khoản/điểm/chapter of an earlier law). This is distinct from `supersedes_chunk_id` (same-document version lineage) — repealed chunks carry `repealed_by_ref` pointing to the repealing document/locator instead. Repeal is locator-scoped: the rest of the target document remains `ACTIVE` and retrievable. |
 | Citation safety | `legal_ref` is valid only when it points to a chunk in `retrieved_chunks` or `referenced_context_chunks`. |
 
 ## Stable ID Pattern
@@ -116,7 +118,10 @@ chunk_checksum
 outgoing_ref_ids
 incoming_ref_ids
 supersedes_chunk_id
+repealed_by_ref
 ```
+
+`legal_status` values: `ACTIVE | AMENDED | REPEALED`. `repealed_by_ref` (`{document_id, locator}`) is populated only when `legal_status = REPEALED` via a cross-document locator-level repeal (see `legal-corpus-source-spec.md` Document Relationship Schema); it is null for same-document amendment lineage, which uses `supersedes_chunk_id` instead.
 
 ## Assembly Contract
 

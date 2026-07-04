@@ -1,0 +1,137 @@
+import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+
+import { MfaRateLimit } from "../../../domain/entities/mfa-rate-limit.entity.ts";
+import {
+  decryptMfaSecret,
+  verifyTotpOtp,
+} from "../../../infrastructure/security/security.utils.ts";
+import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
+import type { VerifyMfaOtpSuccess } from "../../contracts/auth-workspace/mfa.contract.ts";
+import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
+import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
+import { VerifyMfaOtpCommand } from "./verify-mfa-otp.command.ts";
+
+const MFA_RATE_LIMIT = 5;
+const MFA_LOCK_WINDOW_MS = 15 * 60_000;
+// ±1 TOTP step (30s) plus clock-skew slack; anything older can never be replayed.
+const OTP_USED_RETENTION_MS = 5 * 60_000;
+
+export class VerifyMfaOtpHandler {
+  constructor(
+    private readonly support: AuthWorkspaceSupportService,
+    private readonly repositories: AuthWorkspaceRepositories,
+  ) {}
+
+  async execute(
+    command: VerifyMfaOtpCommand,
+  ): Promise<AuthProblemResult | VerifyMfaOtpSuccess> {
+    const { sessionToken, otp, requestMeta } = command;
+    const correlationId =
+      requestMeta.correlation_id ?? this.support.createCorrelationId();
+
+    const session = await this.support.findValidSession(
+      this.repositories,
+      sessionToken,
+    );
+    if (!session) {
+      return createProblemResult(AUTH_ERROR_CODES.sessionInvalid, correlationId);
+    }
+
+    const enrollment = await this.repositories.mfaEnrollments.findByUserId(
+      session.userId,
+    );
+    if (!enrollment) {
+      return createProblemResult(AUTH_ERROR_CODES.mfaInvalid, correlationId);
+    }
+
+    const now = this.support.now();
+
+    const rateLimit = await this.repositories.mfaRateLimits.findByUserId(
+      session.userId,
+    );
+    if (rateLimit?.isLocked(now)) {
+      await this.support.recordAudit(this.repositories, {
+        event_type: "auth.mfa.rate_limited",
+        actor_id: session.userId,
+        organization_id: session.organizationId,
+        decision: "deny",
+        reason_code: AUTH_ERROR_CODES.mfaRateLimited,
+        correlation_id: correlationId,
+      });
+      return createProblemResult(AUTH_ERROR_CODES.mfaRateLimited, correlationId);
+    }
+
+    const alreadyUsed = await this.repositories.mfaOtpUsed.isUsed(
+      session.userId,
+      otp,
+    );
+    if (alreadyUsed) {
+      await this.recordFailedAttempt(session.userId, session.organizationId, now, correlationId, "replayed");
+      return createProblemResult(AUTH_ERROR_CODES.mfaInvalid, correlationId);
+    }
+
+    let plaintextSecret: string;
+    try {
+      plaintextSecret = decryptMfaSecret(enrollment.encryptedSecret);
+    } catch {
+      await this.recordFailedAttempt(session.userId, session.organizationId, now, correlationId, "decrypt_error");
+      return createProblemResult(AUTH_ERROR_CODES.mfaInvalid, correlationId);
+    }
+
+    const valid = verifyTotpOtp(plaintextSecret, otp, now);
+    if (!valid) {
+      await this.recordFailedAttempt(session.userId, session.organizationId, now, correlationId, "invalid");
+      return createProblemResult(AUTH_ERROR_CODES.mfaInvalid, correlationId);
+    }
+
+    const claimed = await this.repositories.mfaOtpUsed.tryMarkUsed(session.userId, otp);
+    if (!claimed) {
+      // Lost a concurrent race to consume this exact code — treat as replay.
+      await this.recordFailedAttempt(session.userId, session.organizationId, now, correlationId, "replayed");
+      return createProblemResult(AUTH_ERROR_CODES.mfaInvalid, correlationId);
+    }
+    await this.repositories.mfaOtpUsed.pruneOlderThan(now - OTP_USED_RETENTION_MS);
+
+    session.markMfaVerified(now);
+    await this.repositories.sessions.save(session);
+
+    const existingRateLimit = rateLimit ?? new MfaRateLimit({ userId: session.userId });
+    existingRateLimit.clearOnSuccess();
+    await this.repositories.mfaRateLimits.save(existingRateLimit);
+
+    await this.support.recordAudit(this.repositories, {
+      event_type: "auth.mfa.verified",
+      actor_id: session.userId,
+      organization_id: session.organizationId,
+      decision: "allow",
+      correlation_id: correlationId,
+    });
+
+    return { ok: true, correlation_id: correlationId };
+  }
+
+  private async recordFailedAttempt(
+    userId: string,
+    organizationId: string,
+    now: number,
+    correlationId: string,
+    reason: string,
+  ): Promise<void> {
+    await this.repositories.mfaRateLimits.recordFailedAttempt(
+      userId,
+      now,
+      MFA_RATE_LIMIT,
+      MFA_LOCK_WINDOW_MS,
+    );
+
+    await this.support.recordAudit(this.repositories, {
+      event_type: "auth.mfa.failed",
+      actor_id: userId,
+      organization_id: organizationId,
+      decision: "deny",
+      reason_code: AUTH_ERROR_CODES.mfaInvalid,
+      otp_failure_reason: reason,
+      correlation_id: correlationId,
+    });
+  }
+}

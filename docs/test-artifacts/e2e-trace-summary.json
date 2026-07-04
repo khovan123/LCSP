@@ -1,0 +1,272 @@
+{
+  "schema_version": "0.1.0",
+  "snapshot_at": "2026-06-25T00:00:00.000+07:00",
+  "repo": "LCSP — Legal Compliance Support Platform",
+  "collection_mode": "create",
+  "collection_status": "COLLECTED",
+  "inventory_basis": "acceptance_criteria",
+  "gate_basis": "priority_thresholds",
+  "source_sha": "",
+  "target": {
+    "type": "project",
+    "id": "LCSP",
+    "label": "LCSP active acceptance criteria trace"
+  },
+  "decision_mode": "deterministic_priority_threshold",
+  "evaluator": "lcsp-team",
+  "confidence": "medium",
+  "oracle": {
+    "resolution_mode": "formal_requirements",
+    "confidence": "medium",
+    "sources": [
+      "docs/planning-artifacts/epics.md",
+      "docs/product/prd.md",
+      "docs/specs/functional-requirements.md",
+      "docs/specs/non-functional-requirements.md",
+      "docs/specs/acceptance-criteria-catalog.md",
+      "docs/specs/requirements-traceability-matrix.md",
+      "docs/specs/requirements-traceability-summary.md",
+      "docs/specs/user-task-flows.md"
+    ],
+    "external_pointer_status": "not_used",
+    "synthetic": false
+  },
+  "coverage": {
+    "inventory": {
+      "covered": 0,
+      "total": 47,
+      "pct": 0
+    },
+    "priority_breakdown": {
+      "P0": {
+        "total": 44,
+        "covered": 0,
+        "pct": 0
+      },
+      "P1": {
+        "total": 3,
+        "covered": 0,
+        "pct": 0
+      },
+      "P2": {
+        "total": 0,
+        "covered": 0,
+        "pct": 0
+      },
+      "P3": {
+        "total": 0,
+        "covered": 0,
+        "pct": 0
+      }
+    },
+    "by_level": {
+      "e2e": {
+        "tests": 0,
+        "criteria_covered": 0
+      },
+      "api": {
+        "tests": 0,
+        "criteria_covered": 0
+      },
+      "component": {
+        "tests": 0,
+        "criteria_covered": 0
+      },
+      "unit": {
+        "tests": 0,
+        "criteria_covered": 0
+      },
+      "other": {
+        "tests": 0,
+        "criteria_covered": 0
+      }
+    }
+  },
+  "tests": {
+    "files": 0,
+    "cases": 0,
+    "skipped_cases": 0,
+    "fixme_cases": 0,
+    "pending_cases": 0
+  },
+  "risk_summary": {
+    "critical_open": 44,
+    "high_open": 3,
+    "medium_open": 0,
+    "low_open": 0
+  },
+  "heuristics": {
+    "endpoint_gaps": 16,
+    "auth_negative_path_status": "none",
+    "error_path_status": "none",
+    "ui_journey_status": "not_applicable",
+    "ui_state_status": "not_applicable"
+  },
+  "blockers": [],
+  "recommendations": [
+    {
+      "priority": "URGENT",
+      "action": "Run /bmad:tea:atdd for 44 P0 acceptance criteria",
+      "requirements": [
+        "AC-001",
+        "AC-003",
+        "AC-004",
+        "AC-005",
+        "AC-006",
+        "AC-007",
+        "AC-008",
+        "AC-009",
+        "AC-010",
+        "AC-012",
+        "AC-013",
+        "AC-014",
+        "AC-015",
+        "AC-016",
+        "AC-017",
+        "AC-018",
+        "AC-019",
+        "AC-020",
+        "AC-021",
+        "AC-022",
+        "AC-023",
+        "AC-024",
+        "AC-025",
+        "AC-026",
+        "AC-027",
+        "AC-028",
+        "AC-030",
+        "AC-031",
+        "AC-032",
+        "AC-033",
+        "AC-034",
+        "AC-035",
+        "AC-036",
+        "AC-037",
+        "AC-038",
+        "AC-039",
+        "AC-040",
+        "AC-041",
+        "AC-050A",
+        "AC-050B",
+        "AC-050C",
+        "AC-050D",
+        "AC-050E",
+        "AC-050F"
+      ]
+    },
+    {
+      "priority": "HIGH",
+      "action": "Run /bmad:tea:automate to expand coverage for 3 P1 acceptance criteria",
+      "requirements": [
+        "AC-002",
+        "AC-011",
+        "AC-029"
+      ]
+    },
+    {
+      "priority": "HIGH",
+      "action": "Add API tests for 16 uncovered endpoint contracts",
+      "requirements": [
+        "POST /api/v1/assessments",
+        "GET /api/v1/assessments/:assessmentId",
+        "POST /api/v1/assessments/:assessmentId/wizard-profile",
+        "POST /api/v1/assessments/:assessmentId/github/repository-connections",
+        "POST /api/v1/assessments/:assessmentId/repository-snapshots",
+        "POST /api/v1/assessments/:assessmentId/scans",
+        "GET /api/v1/assessments/:assessmentId/scans/:scanJobId",
+        "GET /api/v1/assessments/:assessmentId/technical-profile",
+        "GET /api/v1/assessments/:assessmentId/ai-usage-flow",
+        "GET /api/v1/assessments/:assessmentId/reconciliation-conflicts",
+        "POST /api/v1/assessments/:assessmentId/reconciliation-conflicts/:conflictId/resolve",
+        "POST /api/v1/assessments/:assessmentId/classifications",
+        "GET /api/v1/assessments/:assessmentId/classifications/latest",
+        "GET /api/v1/assessments/:assessmentId/gap-analysis/latest",
+        "POST /api/v1/assessments/:assessmentId/documents",
+        "GET /api/v1/assessments/:assessmentId/documents/:documentId"
+      ]
+    },
+    {
+      "priority": "HIGH",
+      "action": "Add negative-path auth/authz tests for 7 requirement areas",
+      "requirements": [
+        "invalid_login_or_session",
+        "invalid_mfa_or_replayed_otp",
+        "unsafe_oauth_callback",
+        "oauth_without_github_authorization",
+        "pbac_denied_manager_only_action",
+        "revoked_developer_scope",
+        "worker_service_identity_denied"
+      ]
+    },
+    {
+      "priority": "MEDIUM",
+      "action": "Add error/edge scenario tests for 13 uncovered failure areas",
+      "requirements": [
+        "validation_failure",
+        "timeout",
+        "transient_broker_failure",
+        "duplicate_message",
+        "out_of_order_message",
+        "repository_access_failure",
+        "scanner_parser_failure",
+        "scanner_cleanup_failure",
+        "legal_corpus_unapproved_or_superseded",
+        "zero_citation_candidates",
+        "out_of_allowlist_citation",
+        "llm_timeout_or_invalid_schema",
+        "document_guard_violation"
+      ]
+    },
+    {
+      "priority": "HIGH",
+      "action": "Add E2E or component coverage for 8 UX journeys",
+      "requirements": [
+        "login_mfa_oauth",
+        "organization_and_pbac_scope",
+        "assessment_wizard_readiness",
+        "repository_connection_and_scan_status",
+        "technical_profile_and_ai_usage_flow_review",
+        "conflict_resolution_and_verified_profile",
+        "legal_matching_and_classification_status",
+        "gap_analysis_document_and_audit_export"
+      ]
+    },
+    {
+      "priority": "MEDIUM",
+      "action": "Add loading/empty/error/permission/blocked/degraded UI state coverage",
+      "requirements": [
+        "loading",
+        "empty",
+        "validation_error",
+        "permission_denied",
+        "blocked",
+        "degraded",
+        "failed_with_actionable_recovery"
+      ]
+    },
+    {
+      "priority": "LOW",
+      "action": "Run /bmad:tea:test-review after executable tests exist",
+      "requirements": []
+    }
+  ],
+  "links": {
+    "trace_report_path": "docs/test-artifacts/traceability-matrix.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  },
+  "gate_status": "FAIL",
+  "gate_criteria": {
+    "p0_coverage_required": "100%",
+    "p0_coverage_actual": "0%",
+    "p0_status": "NOT_MET",
+    "p1_coverage_target": "90%",
+    "p1_coverage_minimum": "80%",
+    "p1_coverage_actual": "0%",
+    "p1_status": "NOT_MET",
+    "overall_coverage_minimum": "80%",
+    "overall_coverage_actual": "0%",
+    "overall_status": "NOT_MET"
+  }
+}

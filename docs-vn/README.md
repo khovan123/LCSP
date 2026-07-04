@@ -40,6 +40,8 @@ PR #2 đã đồng bộ target Phase 5.2L: PBAC, Automatic Trusted Scan Initiati
 
 Báo cáo và checklist closure nằm tại `12-review-truoc-ux-phase-5-2l.md`.
 
+Kế hoạch điều phối tiếp theo nằm trong `docs/implementation/phase-5-2l-ux-to-readiness-execution-plan.md`, `docs/implementation/phase-5-2l-ux-to-readiness-task-list.md` và `docs/implementation/phase-5-2l-ux-to-readiness-implementation-guide.md`.
+
 ## Quy tắc sử dụng
 
 - Dùng `docs-vn/` để đọc nhanh và onboarding.

@@ -22,3 +22,13 @@ _bmad/
 .agent/
 .code-review-graph/
 .github/agents
+**/dist/
+**/node_modules/
+**/.next/
+**/next-env.d.ts
+**/out/
+**/coverage/
+**/build/
+**.log
+**/*.tsbuildinfo
+.claude/

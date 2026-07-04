@@ -1,0 +1,24 @@
+{
+  "schema_version": "0.1.0",
+  "evaluated_at": "2026-06-25T00:00:00.000+07:00",
+  "repo": "LCSP — Legal Compliance Support Platform",
+  "target": {
+    "type": "project",
+    "id": "LCSP",
+    "label": "LCSP active acceptance criteria trace"
+  },
+  "collection_status": "COLLECTED",
+  "gate_basis": "priority_thresholds",
+  "gate_status": "FAIL",
+  "rationale": "P0 coverage is 0% (required: 100%). 44 critical requirements uncovered.",
+  "p0_status": "NOT_MET",
+  "p1_status": "NOT_MET",
+  "overall_status": "NOT_MET",
+  "critical_open": 44,
+  "links": {
+    "trace_report_path": "docs/test-artifacts/traceability-matrix.md",
+    "trace_report_url": "",
+    "artifact_url": "",
+    "journey_evidence_url": ""
+  }
+}
