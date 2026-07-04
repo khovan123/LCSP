@@ -34,7 +34,10 @@ IMPLEMENTATION_NOT_AUTHORIZED
 9. [architecture/architecture.md](./architecture/architecture.md)
 10. [architecture/adr/architecture-decision-records.md](./architecture/adr/architecture-decision-records.md)
 11. [implementation/README.md](./implementation/README.md)
-12. [docs-vn/README.md](../docs-vn/README.md)
+12. [implementation/phase-5-2l-ux-to-readiness-execution-plan.md](./implementation/phase-5-2l-ux-to-readiness-execution-plan.md)
+13. [implementation/phase-5-2l-ux-to-readiness-task-list.md](./implementation/phase-5-2l-ux-to-readiness-task-list.md)
+14. [implementation/phase-5-2l-ux-to-readiness-implementation-guide.md](./implementation/phase-5-2l-ux-to-readiness-implementation-guide.md)
+15. [docs-vn/README.md](../docs-vn/README.md)
 
 UX review should focus on product, use cases, FR/NFR, acceptance criteria, domain specs and ADR constraints. Engineering work additionally reads architecture and implementation docs after implementation readiness is certified.
 
@@ -54,6 +57,7 @@ UX review should focus on product, use cases, FR/NFR, acceptance criteria, domai
 | Scanner behavior | `specs/scanner-spec.md` |
 | Scanner runtime | `implementation/scanner-implementation.md`, `implementation/scanner-worker-implementation.md` |
 | Build details | `implementation/` |
+| UX-to-readiness coordination | `implementation/phase-5-2l-ux-to-readiness-execution-plan.md`, `implementation/phase-5-2l-ux-to-readiness-task-list.md`, `implementation/phase-5-2l-ux-to-readiness-implementation-guide.md` |
 | Physical persistence | `implementation/persistence-implementation.md` |
 | Queues/outbox | `implementation/queue-implementation.md` |
 

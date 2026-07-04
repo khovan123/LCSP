@@ -39,6 +39,11 @@ NestJS API retains authentication, PBAC enforcement boundary, trusted scan trigg
 
 Phase 5.2L expands scanner requirements beyond the original ADR-023 baseline. Syft, Knip, deptry, Semgrep custom rules, and tree-sitter/custom parser are now required scanner toolchain components. ADR-023 remains historical authority for Python scanner lifecycle ownership, but its narrower `ast/libcst` + `ts-morph` toolchain is superseded in part by Phase 5.2L.
 
+Phase 5.2M widens the scanner's role toward primary technical evidence source (see `docs/specs/ai-usage-flow-domain-spec.md` TECHNICAL_ONLY path). Two clarifications apply:
+
+1. **Cross-module tracing depth**: L3 controlled cross-module flow moves from a fixed one-hop bound to a **bounded static call-chain, up to a configured maximum hop depth (default 5)**, following only statically resolvable imports/calls within the commit-pinned snapshot. This is an engineering depth increase, not a boundary removal — the scanner still terminates at the first dynamic import, reflection, runtime-resolved configuration, or external-service boundary and still emits `UNSUPPORTED_DYNAMIC_FLOW` there. Deeper static resolution was previously capped at one hop for conservatism, not because five hops are unsafe; the L4 abstention boundary itself does not move.
+2. **Tree-sitter scope stays additive, not a replacement for `ast`/`libcst`/`ts-morph`**: ADR-022 already tried tree-sitter-only coverage for Python and it was superseded by this ADR precisely because tree-sitter has no symbol table or import resolver — it is a syntax-tree pattern matcher, not a semantic engine. Widening tree-sitter's scope (more languages, more structural facts such as class hierarchy, call sites, decorators/annotations) is approved for Basic-signal-detection languages (Java, Kotlin, Go, C#, Rust), but it does not upgrade those languages to first-class bounded semantic analysis, and it does not replace `ast`/`libcst` (Python) or `ts-morph` (TS/JS), which remain the only components with real symbol/type resolution. Re-adopting tree-sitter-only parsing for Python or TS/JS would regress capability below the current MVP, not extend it.
+
 ## Process Boundary
 
 | Concern | Decision |
@@ -82,7 +87,7 @@ A separate HTTP analyzer service is Post-MVP unless operational evidence require
 | Functions, classes, methods, decorators | L1-L2 |
 | AI provider/model invocation detection | L1-L2 |
 | Input/output tracking | L1-L2 |
-| Controlled cross-module flow | L2-L3 bounded |
+| Controlled cross-module flow | L2-L3 bounded, up to configured max static hop depth (default 5, see Phase 5.2M note above) |
 | Human-review and downstream action paths | L1-L3 bounded |
 | Dynamic/reflection/runtime-only boundaries | L4 -> explicit uncertainty |
 | Evidence references | metadata-only for all supported levels |

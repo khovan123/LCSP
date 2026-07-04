@@ -176,6 +176,7 @@ OAuth/OIDC user login is an active MVP authentication capability. OAuth/OIDC log
 | Repository Scan | Tạo TechnicalEvidenceReport từ repository đã kết nối |
 
 OAuth/OIDC login không tự kết nối GitHub repository, không cấp repository scan permission và không thay thế LCSP PBAC authorization.
+Authentication and blocked-state responses for Web/API must use stable shared keys for title, detail, and next action so Web can render approved user-facing copy without depending on backend hardcoded prose.
 
 Enterprise SSO/SAML/directory federation remains Deferred/Future unless explicitly activated later.
 
@@ -207,6 +208,8 @@ Nếu chưa thể cung cấp technical evidence, Manager có thể xuất readin
 
 - Manager-led assessment flow.
 - OAuth/OIDC user login as active MVP authentication capability.
+- Authentication, blocked-state, and safe failure responses for Web/API using stable shared error-contract keys so Web can render approved user-facing copy without relying on backend hardcoded prose.
+- Shared customer-facing auth/workspace contracts implemented through TypeScript shared packages, provided public export boundaries are preserved.
 - Web Wizard cho Manager.
 - Python Worker Platform cho tất cả asynchronous domain workloads.
 - Python Scanner Worker thực thi Repository Scan độc lập.
@@ -410,14 +413,15 @@ Evidence requirement changes by scenario criticality. Internal chatbot, public c
 
 ### Epic 5 - Reconciliation
 
-**Description:** LCSP compares WizardProfile and TechnicalProfile to create conflicts, route confirmations and produce VerifiedProfile only after required resolution.
+**Description:** When WizardProfile is linked, LCSP compares WizardProfile and TechnicalProfile to create conflicts, route confirmations and produce VerifiedProfile only after required resolution. When WizardProfile is absent, there is nothing to compare — VerifiedProfile is produced directly from TechnicalProfile/AIUsageFlow as `verificationSource: TECHNICAL_ONLY`.
 
-#### FR-E5-1: Compare WizardProfile and TechnicalProfile
+#### FR-E5-1: Compare WizardProfile and TechnicalProfile (when WizardProfile is linked)
 
 System compares business/legal answers with technical evidence across critical fields such as AI usage, data types, decision flow, human oversight, external LLM, biometric/high-impact use and production scope.
 
 **Consequences:**
 - Conflict records include field, Wizard value, technical evidence value, evidence refs, score and required resolver.
+- When no WizardProfile is linked, this comparison is skipped and no conflict records are produced.
 
 #### FR-E5-2: Generate Conflict Score
 
@@ -476,11 +480,12 @@ System creates VerifiedProfile from WizardProfile, TechnicalProfile and resolved
 
 #### FR-E6-2: Lock classification until conditions pass
 
-Risk Classification Agent remains locked until WizardProfile submitted, technical evidence received, schema gate passed, quality gate passed, VerifiedProfile exists and no material/critical conflict remains unresolved.
+Risk Classification Agent remains locked until technical evidence received, schema gate passed, quality gate passed, VerifiedProfile exists and no material/critical conflict remains unresolved. WizardProfile submission is optional: when submitted, VerifiedProfile carries `verificationSource: TECHNICAL_PLUS_WIZARD`; when absent, VerifiedProfile is still created from technical evidence alone (`verificationSource: TECHNICAL_ONLY`) once its confidence clears the required bar.
 
 **Consequences:**
-- Wizard-only assessments never trigger Risk Classification Agent.
+- Wizard-only assessments (no technical evidence yet) never trigger Risk Classification Agent.
 - Evidence-pending assessments never show risk level.
+- Technical-only assessments (no WizardProfile) may trigger Risk Classification Agent once VerifiedProfile exists, always flagged `verificationSource: TECHNICAL_ONLY`.
 
 #### FR-E6-3: Produce evidence-based risk output
 

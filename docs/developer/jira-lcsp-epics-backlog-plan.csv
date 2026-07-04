@@ -1,0 +1,25 @@
+Target,Jira Key,Issue Type,Module,Summary,Status,Current Sprint,Reason,URL
+Backlog,LCSP-1,Epic,ai-usage-flow,Module: ai-usage-flow,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-1
+Backlog,LCSP-3,Epic,assessment,Module: assessment,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-3
+Backlog,LCSP-4,Epic,audit,Module: audit,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-4
+Backlog,LCSP-5,Epic,auth-workspace,Module: auth-workspace,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-5
+Backlog,LCSP-6,Epic,classification,Module: classification,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-6
+Backlog,LCSP-7,Epic,document,Module: document,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-7
+Backlog,LCSP-8,Epic,evidence,Module: evidence,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-8
+Backlog,LCSP-9,Epic,github-integration,Module: github-integration,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-9
+Backlog,LCSP-10,Epic,platform/audit-writer,Module: platform/audit-writer,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-10
+Backlog,LCSP-11,Epic,platform/config,Module: platform/config,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-11
+Backlog,LCSP-12,Epic,platform/outbox,Module: platform/outbox,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-12
+Backlog,LCSP-13,Epic,platform/pbac,Module: platform/pbac,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-13
+Backlog,LCSP-14,Epic,python-workers/classification,Module: python-workers/classification,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-14
+Backlog,LCSP-15,Epic,python-workers/intelligence,Module: python-workers/intelligence,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-15
+Backlog,LCSP-16,Epic,python-workers/legal,Module: python-workers/legal,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-16
+Backlog,LCSP-17,Epic,python-workers/llm,Module: python-workers/llm,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-17
+Backlog,LCSP-18,Epic,python-workers/platform,Module: python-workers/platform,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-18
+Backlog,LCSP-19,Epic,python-workers/reporting,Module: python-workers/reporting,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-19
+Backlog,LCSP-20,Epic,python-workers/scanner,Module: python-workers/scanner,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-20
+Backlog,LCSP-21,Epic,qa,Module: qa,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-21
+Backlog,LCSP-22,Epic,reconciliation,Module: reconciliation,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-22
+Backlog,LCSP-23,Epic,scan,Module: scan,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-23
+Backlog,LCSP-24,Epic,web,Module: web,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-24
+Backlog,LCSP-25,Epic,wizard,Module: wizard,Backlog,,Epic is a portfolio container and must not be assigned to execution sprints.,https://minhpnq1807.atlassian.net/browse/LCSP-25

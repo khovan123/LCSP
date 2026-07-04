@@ -185,7 +185,7 @@ Retryable job failures use the canonical 30s, 120s, and 600s backoff budget befo
 - Raw source is absent from persistent stores, queues, logs, audit, and LLM input.
 - Completed event requires quality-valid report and verified cleanup.
 - Failure contains correlation ID, safe code, and actionable recovery without sensitive content.
-- Tool failure severity table is `TECHNICAL_DECISION_REQUIRED`.
+- Tool failure severity table is governed by `docs/implementation/decisions/scanner-severity-tool-provenance-decision.md`.
 
 ## Non-Claims
 

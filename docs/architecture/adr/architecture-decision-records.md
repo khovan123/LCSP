@@ -113,7 +113,7 @@ deny-by-default
 tenant-scoped
 server-side enforced
 versioned/auditable decisions
-engine/storage/cache/invalidation/topology/failure behavior: TECHNICAL_DECISION_REQUIRED
+engine/storage/cache/invalidation/topology/failure behavior: resolved by docs/implementation/decisions/pbac-runtime-decision.md
 ```
 
 ### LLM

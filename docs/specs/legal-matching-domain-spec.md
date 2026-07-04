@@ -31,9 +31,12 @@ It is the domain behavior source of truth for `LegalMatchingWorker` and the lega
 
 ### Legal Rule
 
+`LegalRule` entity, authoring, versioning and approval are defined in `docs/specs/legal-rule-catalog-spec.md`. A `LegalRule` is hand-authored by an Internal Legal Operator and is never auto-derived from the legal corpus text; it is only citation-validated against an approved `LegalCorpusVersion` at authoring time.
+
 | Input | Meaning | Required | Missing behavior |
 |---|---|---:|---|
 | `ruleId` | Stable legal rule identifier. | Yes | Match cannot be created. |
+| `legalRuleCatalogVersionId` | Approved rule catalog version pinned for this match run. | Yes | Legal matching is blocked. |
 | `ruleFamily` | Classification family such as AI use, data, oversight, documentation. | Yes | Candidate ranking is degraded. |
 | `requiredFacts` | VerifiedProfile facts that must be present. | Yes | If absent, rule is not applicable or blocked. |
 | `optionalFacts` | Facts that strengthen confidence. | No | Confidence may be lower. |
@@ -84,6 +87,7 @@ The base retrieval unit is Clause (`Khoản`). Point (`Điểm`) content is asse
 | `assessmentId` | Assessment scope. | Yes | VerifiedProfile. |
 | `verifiedProfileId` | Verified profile source. | Yes | VerifiedProfile. |
 | `legalCorpusVersionId` | Corpus version used. | Yes | Legal Corpus. |
+| `legalRuleCatalogVersionId` | Rule catalog version used. | Yes | Legal Rule. |
 | `ruleId` | Matched rule identifier. | Yes | Legal Rule. |
 | `status` | `MATCHED`, `NOT_APPLICABLE`, `BLOCKED_UNKNOWN_FACT`, `BLOCKED_MISSING_CITATION`, `DEGRADED`, or `FAILED`. | Yes | Applicability and citation evaluation. |
 | `citationRefs` | Citation references. | Yes | Citation retrieval. |

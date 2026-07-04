@@ -1,0 +1,12 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.hero {
+  display: grid;
+  gap: 1rem;
+  max-width: 42rem;
+}

@@ -20,6 +20,10 @@ AIUsageFlow must answer:
 - whether human review is present, absent or unclear;
 - whether the use is assistive, semi-automated, fully automated or unknown;
 - what harm categories may be relevant;
+- whether a human oversight/intervention control (kill-switch, pause, manual override) exists for the running system, distinct from per-decision human review;
+- whether the system discloses AI interaction to end users, for direct human-facing interaction surfaces;
+- whether synthetic-media output is labeled/watermarked;
+- whether incident detection/handling exists around the AI invocation path;
 - what evidence refs support each material claim;
 - what uncertainty or coverage limitations remain.
 
@@ -29,7 +33,8 @@ AIUsageFlow must not:
 - use raw source, full prompts, secrets or full AST bodies;
 - silently accept Manager declarations that conflict with technical evidence;
 - produce legal conclusions;
-- bypass reconciliation.
+- bypass reconciliation;
+- infer data-collection lawfulness, conformity-assessment completeness, or any other off-code process compliance from source code evidence alone — these must resolve to an explicit `NOT_DETERMINABLE_FROM_CODE` signal, never a presence/absence guess.
 
 ## Inputs
 
@@ -52,7 +57,7 @@ AIUsageFlow must not:
 
 | Field / Aspect | What it contributes | Why it matters | Missing behavior |
 |---|---|---|---|
-| `wizardProfileId` | Manager declaration identity. | Links Manager-stated business context to reconciliation. | AIUsageFlow generation is `BLOCKED`; classification cannot proceed. |
+| `wizardProfileId` | Manager declaration identity, optional. | Links Manager-stated business context to reconciliation when present. | AIUsageFlow generation proceeds in `TECHNICAL_ONLY` mode using TechnicalProfile/TechnicalEvidenceReport alone; `verificationSource` is set to `TECHNICAL_ONLY`, Wizard-dependent fields (business purpose framing, affected-subject declaration) fall back to technical-evidence-only inference with a confidence penalty and are more likely to resolve `UNKNOWN`. Classification is not blocked solely for a missing WizardProfile. |
 | `answers.businessProcess` | Manager-declared business process. | Helps interpret technical signals. | Business process is inferred only if evidence-backed; otherwise `UNKNOWN`. |
 | `answers.aiPurpose` | Declared AI purpose. | Supports purpose claim and conflict detection. | Purpose claim depends on technical evidence only. |
 | `answers.humanReview` | Declared oversight. | Compared against bounded technical path. | Human review conflict cannot be evaluated; mark uncertainty. |
@@ -79,6 +84,7 @@ AIUsageFlow must not:
 | `assessmentId` | Assessment scope. | Yes | Input objects. |
 | `technicalProfileId` | TechnicalProfile source. | Yes | TechnicalProfile. |
 | `status` | `DRAFT`, `READY`, `UNCLEAR`, `CONFLICTED`, or `BLOCKED`. | Yes | Rule outcomes and conflict/abstention status. |
+| `verificationSource` | `TECHNICAL_ONLY` or `TECHNICAL_PLUS_WIZARD`. | Yes | Presence of a linked WizardProfile at generation time. |
 | `summary` | AIUsageFlowSummary object. | Yes | Aggregated claims. |
 | `claims` | AIUsageFlowClaim array. | Yes | Rule engine. |
 | `confidence` | Overall deterministic confidence, 0.0 to 1.0. | Yes | Confidence model. |
@@ -116,6 +122,12 @@ AIUsageFlow must not:
 | `humanReview` | `PRESENT`, `ABSENT_WITH_BOUNDED_PATH`, `UNCLEAR`, or `NOT_APPLICABLE`. | Yes | Human review rules. |
 | `automationLevel` | `ASSISTIVE`, `SEMI_AUTOMATED`, `FULLY_AUTOMATED`, or `UNKNOWN`. | Yes | Automation rules. |
 | `potentialHarmCategories` | Harm category list. | Yes | Harm rules. |
+| `contentLabelingStatus` | `PRESENT`, `ABSENT`, `NOT_APPLICABLE`, or `UNCLEAR`. | Yes | Content labeling rules — whether a synthetic-media output path (audio/image/video generation) has an accompanying labeling/watermark/disclosure call. `NOT_APPLICABLE` when no synthetic-media output claim exists. |
+| `riskDocumentationEvidence` | `PRESENT`, `ABSENT`, or `NOT_DETERMINABLE_FROM_CODE`. | Yes | Risk-documentation rules — whether repository evidence of a conformity/risk-assessment artifact exists. Defaults to `NOT_DETERMINABLE_FROM_CODE`; this is a process artifact outside source-code scope and must not be inferred as `ABSENT` by default. |
+| `trainingDataLawfulnessSignal` | Always `NOT_DETERMINABLE_FROM_CODE`. | Yes | Fixed value — source-code evidence alone never establishes lawfulness of training/input data collection; downstream legal matching must not treat this as a compliance conclusion. |
+| `interventionControlPresent` | `PRESENT`, `ABSENT`, `UNCLEAR`, or `NOT_APPLICABLE`. | Yes | Human oversight control rules — whether a kill-switch/pause/manual-override/circuit-breaker path exists for the running AI system, checked independently of per-decision `humanReview`. `NOT_APPLICABLE` when no automated-decision or high-impact claim exists. |
+| `aiInteractionDisclosurePresent` | `PRESENT`, `ABSENT`, `UNCLEAR`, or `NOT_APPLICABLE`. | Yes | AI interaction disclosure rules — whether a direct human-facing interaction surface (chat, voice, assistant UI) carries a disclosure that the user is interacting with an AI system. `NOT_APPLICABLE` when no direct-interaction surface claim exists. |
+| `incidentHandlingPresent` | `PRESENT`, `ABSENT`, or `UNCLEAR`. | Yes | Incident handling rules — whether error-handling/monitoring/alerting evidence exists on the bounded path around a model invocation. |
 | `materialClaimRefs` | Claim IDs eligible for legal matching. | Yes | Claims with evidence refs and sufficient confidence. |
 | `blockingReasons` | Reasons that block reconciliation/legal matching/classification. | Yes | Abstention, coverage and conflict rules. |
 
@@ -134,6 +146,10 @@ AIUsageFlow must not:
 | `TRAINING_ACTIVITY` | Code indicates model training/fine-tuning activity. | Affects lifecycle and data governance. | Training API/job/config evidence refs. |
 | `RAG_USAGE` | Retrieval-augmented generation uses external corpus/vector retrieval. | Affects data/citation/knowledge-source handling. | Retrieval call/vector store/citation evidence refs. |
 | `DOCUMENT_GENERATION` | AI is used to generate document/report text. | Affects output guardrails and citation requirements. | Generation call/output/template evidence refs. |
+| `CONTENT_LABELING` | Synthetic-media output path (audio/image/video generation) includes or lacks a labeling/watermark/disclosure call. | Drives `contentLabelingStatus`; absence is a material compliance-gap signal, not a neutral unknown. | Labeling/watermark/disclosure call evidence ref, or an explicit absence-of-labeling-call assertion on the same bounded output path used for the `AI_GENERATED_OUTPUT` claim. |
+| `HUMAN_OVERSIGHT_CONTROL` | A kill-switch, pause, manual-override or circuit-breaker path exists (or is absent) for the running AI system, independent of per-decision review. | Drives `interventionControlPresent`; distinct from `HUMAN_REVIEW`, which covers per-decision review rather than system-level intervention capability. | Override/pause/circuit-breaker call, admin-disable config, or feature-flag kill-switch evidence ref bound to the same invocation path as the `MODEL_INVOCATION`/`AUTOMATED_DECISION` claim. |
+| `AI_INTERACTION_DISCLOSURE` | A direct human-facing interaction surface (chat, voice, assistant UI) includes or lacks an "you are interacting with AI" disclosure. | Drives `aiInteractionDisclosurePresent`; only material when a direct-interaction surface claim exists. | Disclosure banner/message/config evidence ref on the same route/handler as the interaction surface, or an explicit absence assertion. |
+| `INCIDENT_HANDLING` | Error-handling/monitoring/alerting evidence exists (or is absent) on the bounded path around a model invocation. | Drives `incidentHandlingPresent`; absence on a high-impact automated-decision path is a material compliance-gap signal. | Exception handler, monitoring hook, or alerting call evidence ref bound to the same invocation path as the `MODEL_INVOCATION` claim. |
 
 ## Claim Lifecycle
 
@@ -162,7 +178,7 @@ Transition rules:
 | `MODEL_PROVIDER_USAGE` | Provider imports, dependencies, provider config. | `AI_PROVIDER_USAGE` or `AI_FRAMEWORK_USAGE`. | Provider name, package version. | Emit possible provider claim only; no material usage claim. | None unless Wizard says no AI and invocation also exists. |
 | `MODEL_INVOCATION` | Call facts and invocation findings. | `AI_MODEL_INVOCATION`. | Provider import, output variable. | Abstain from confirmed AI usage. | Conflict if Wizard says no AI. |
 | `AI_GENERATED_OUTPUT` | Output variable/parser/return findings. | `AI_OUTPUT_SIGNAL`. | Output category hints. | Output type `UNKNOWN`. | Conflict if Wizard says no generated output and evidence is strong. |
-| `DOWNSTREAM_ACTION` | Branch, status update, approve/reject, display path. | `AI_DECISION_FLOW_SIGNAL`, `STATUS_UPDATE_SIGNAL`, `AUTOMATED_DECISION_SIGNAL`, or `USER_IMPACT_SIGNAL`. | Route/controller names. | Downstream action `UNKNOWN`; classification may block. | Conflict if Wizard says content-only but action evidence exists. |
+| `DOWNSTREAM_ACTION` | Branch, status update, approve/reject, display path. | `AI_DECISION_FLOW_SIGNAL`, `STATUS_UPDATE_SIGNAL`, `AUTOMATED_DECISION_SIGNAL`, `USER_IMPACT_SIGNAL`, or `DISPLAY_ONLY_SIGNAL`. | Route/controller names. | `DISPLAY_ONLY_SIGNAL` present and path resolved → `downstreamAction = DISPLAY_ONLY` (positive, non-blocking). No signal at all and path unresolved/dynamic → `downstreamAction = UNKNOWN`; classification may block. | Conflict if Wizard says content-only but decisive action evidence (`STATUS_UPDATE_SIGNAL`/`USER_IMPACT_SIGNAL`/`AUTOMATED_DECISION_SIGNAL`) exists. |
 | `AUTOMATED_DECISION` | Invocation + output + action path + no review evidence. | `AUTOMATED_DECISION_SIGNAL` and bounded output/action path. | Domain context, persistence action. | Abstain unless bounded path exists. | Conflict if Wizard claims human review or assistive-only use. |
 | `HUMAN_REVIEW` | Review queue, approval status, moderation/manager approval workflow. | `HUMAN_REVIEW_SIGNAL` or bounded path absence. | Wizard review declaration. | `UNCLEAR`. | Conflict if Wizard claims review but bounded path shows absent. |
 | `PROMPT_STORAGE` | System prompt findings or dynamic prompt references. | `SYSTEM_PROMPT_DETECTED` or `DYNAMIC_SYSTEM_PROMPT_REFERENCE`. | Template/config path. | Preserve coverage limitation; no raw prompt. | Conflict if prompt use is denied and evidence exists. |
@@ -170,6 +186,10 @@ Transition rules:
 | `TRAINING_ACTIVITY` | Training API/job/config evidence. | Training/fine-tune finding if present in TechnicalFinding metadata. | Dataset/config refs. | No training claim. | Conflict if Wizard declares no training and evidence exists. |
 | `RAG_USAGE` | Retrieval/vector/corpus call findings. | `RAG_USAGE_SIGNAL`. | Citation or vector collection refs. | No RAG claim or `UNKNOWN` if dynamic. | Conflict if Wizard declares no external knowledge source. |
 | `DOCUMENT_GENERATION` | Document generation call/output/template evidence. | AI output used for document/report generation. | Template version, citation path. | No document-generation claim. | Conflict if Wizard says no generated document output. |
+| `CONTENT_LABELING` | Bounded output path of a synthetic-media (`AI_GENERATED_OUTPUT`) claim, checked for a labeling/watermark/disclosure call. | `AI_GENERATED_OUTPUT` claim on audio/image/video category. | Labeling config/metadata evidence ref. | `contentLabelingStatus = ABSENT` when no synthetic-media claim exists on the bounded path but the path is otherwise fully resolved; `NOT_APPLICABLE` when no synthetic-media output claim exists at all; `UNCLEAR` when the output path itself is unresolved/dynamic. | Conflict if Wizard declares labeling is implemented but no labeling call evidence exists on the bounded path. |
+| `HUMAN_OVERSIGHT_CONTROL` | Bounded invocation path of an `AUTOMATED_DECISION` or high-impact `MODEL_INVOCATION` claim, checked for an override/pause/circuit-breaker call. | `AUTOMATED_DECISION` claim or `MODEL_INVOCATION` claim with `downstreamAction != NONE`. | Admin config, feature-flag kill-switch evidence ref. | `interventionControlPresent = ABSENT` when the invocation path is fully resolved and no override control is found; `NOT_APPLICABLE` when no automated-decision/high-impact claim exists; `UNCLEAR` when the path is unresolved/dynamic. | Conflict if Wizard declares an override mechanism exists but no evidence is found on the bounded path. |
+| `AI_INTERACTION_DISCLOSURE` | Route/handler of a direct human-facing interaction surface, checked for an AI-disclosure banner/message/config. | Direct-interaction surface finding (chat/voice/assistant route). | Disclosure copy/config evidence ref. | `aiInteractionDisclosurePresent = ABSENT` when the surface is resolved and no disclosure evidence is found; `NOT_APPLICABLE` when no direct-interaction surface claim exists; `UNCLEAR` when the surface is unresolved/dynamic. | Conflict if Wizard declares disclosure exists but no evidence is found on the resolved surface. |
+| `INCIDENT_HANDLING` | Bounded invocation path of a `MODEL_INVOCATION` claim, checked for exception-handling/monitoring/alerting evidence. | `MODEL_INVOCATION` claim. | Monitoring/alerting config evidence ref. | `incidentHandlingPresent = ABSENT` when the invocation path is fully resolved and no handling evidence is found; `UNCLEAR` when the path is unresolved/dynamic. | Conflict if Wizard declares incident handling exists but no evidence is found on the bounded path. |
 
 ## Confidence Model
 
@@ -200,6 +220,10 @@ Base scores:
 | `TRAINING_ACTIVITY` | 0.60 |
 | `RAG_USAGE` | 0.65 |
 | `DOCUMENT_GENERATION` | 0.65 |
+| `CONTENT_LABELING` | 0.60 |
+| `HUMAN_OVERSIGHT_CONTROL` | 0.65 |
+| `AI_INTERACTION_DISCLOSURE` | 0.60 |
+| `INCIDENT_HANDLING` | 0.55 |
 
 Adjustments:
 
@@ -227,7 +251,7 @@ Claim generation must abstain when:
 - human review is declared but no review process evidence or bounded path evidence exists;
 - source coverage is unsupported, generated/minified, dynamic or incomplete for the material claim;
 - evidence refs are missing for a material claim;
-- WizardProfile is missing;
+- a field requires a human business declaration (e.g. affected subjects, business process framing) and technical evidence alone is too weak to self-support it, and WizardProfile is missing — the field resolves `UNKNOWN`, not the whole flow;
 - TechnicalProfile or TechnicalEvidenceReport is missing or failed.
 
 The system must return `UNKNOWN` when:
@@ -279,10 +303,12 @@ one or more conflict candidates
 => event.ai-usage-flow.completed.v1 with status CONFLICTED
 => command.reconciliation.requested.v1
 
-missing critical input or failed evidence report
+missing critical input (TechnicalProfile or TechnicalEvidenceReport) or failed evidence report
 => event.ai-usage-flow.failed.v1 or completed status BLOCKED
 => no VerifiedProfile until recovery
 ```
+
+A missing WizardProfile alone is not a "missing critical input" — AIUsageFlow completes in `TECHNICAL_ONLY` mode instead of `BLOCKED`.
 
 Reconciliation, not AIUsageFlow, creates `VerifiedProfile`.
 

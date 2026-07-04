@@ -45,6 +45,34 @@ Defines legal corpus source requirements, ingestion schema, approval process, an
 | `superseded_by` | Document identifier that replaces this document |
 | `amends` | List of documents this document partially modifies |
 
+Document-level `amends`/`supersedes` alone is not sufficient. A single amending act commonly repeals or amends only specific clauses/points or one chapter of a target document while the rest of that document remains in force — a whole-document flag would either wrongly keep repealed clauses retrievable or wrongly exclude the entire (still-active) target document. Locator-level granularity is required:
+
+| Field | Description |
+|---|---|
+| `repealed_locators` | List of target-document locators (`art-N`, `art-N::cl-M`, `art-N::cl-M::pt-X`, or a chapter range `art-N..art-M`) that this document's amending clause repeals in the target document |
+| `amending_locator` | Locator inside this document (the amending act) that performs the repeal/amendment, e.g. `art-33` |
+| `target_document_id` | Document identifier whose locators are repealed/amended |
+
+Example — real fixture pair (`LAW-134-2025-QH15` Điều 33 repealing parts of `LAW-71-2025-QH15`):
+
+```json
+{
+  "document_id": "LAW-134-2025-QH15",
+  "amends": ["LAW-71-2025-QH15"],
+  "amending_locator": "art-33",
+  "target_document_id": "LAW-71-2025-QH15",
+  "repealed_locators": [
+    "art-3::cl-9",
+    "art-4::cl-7",
+    "art-12::cl-6",
+    "art-34::cl-2::pt-đ",
+    "art-41..art-45"
+  ]
+}
+```
+
+At ingestion, each locator in `repealed_locators` must resolve to a stable `LegalDocumentChunk` ID in `target_document_id` and set that chunk's `legal_status = REPEALED` with `repealed_by_ref` pointing to `{target_document_id: this document_id, locator: amending_locator}` (see chunk metadata in `adr-026-chromadb-vectorless-legal-retriever.md`). This is distinct from `supersedes_chunk_id`, which links a chunk to a prior version of the *same* provision inside the *same* document's amendment lineage — do not conflate a cross-document repeal with a same-document version supersession, since the replacement text may use a different rule structure entirely (e.g. a repealed risk-classification chapter is not textually equivalent to the new law's replacement chapter, only topically related).
+
 ## Document Structure Schema
 
 Normalized document structure (chapter/article/clause/point hierarchy):
@@ -86,7 +114,7 @@ Rules:
 | 2. Snapshot | Raw document | Immutable snapshot + SHA-256 hash | Fail; do not proceed without snapshot |
 | 3. Identity extraction | Raw document | Structured identity fields | `LEGAL_IDENTITY_EXTRACTION_FAILED`; manual review |
 | 4. Date extraction | Raw document | Effective dates | Best-effort; flag missing dates |
-| 5. Relationship mapping | Identity + registry | Amendment relationships | Best-effort; flag unmapped |
+| 5. Relationship mapping | Identity + registry | Document-level amendment relationships plus locator-level `repealed_locators` resolved to target chunk IDs (see Document Relationship Schema) | Best-effort; flag unmapped document relationships; fail closed on unresolved locator-level repeal targets (do not silently keep a repealed chunk `ACTIVE`) |
 | 6. Normalization | Raw document | Chapter/article/clause/point structure | `LEGAL_NORMALIZATION_FAILED`; manual review |
 | 7. Structure-first chunking | Normalized structure | `LegalDocumentChunk` rows with stable hierarchical IDs and xref metadata | Required for ChromaDB vectorless retrieval |
 | 8. Review submission | Normalized document | `CorpusApprovalRecord` attached to `LegalCorpusVersion.status = DRAFT` | Blocked until approved |
@@ -153,6 +181,8 @@ Required for A-to-Z acceptance testing:
 | Approval status | Must be approved before acceptance run |
 | ChromaDB vectorless index | Pre-built approved legal records, metadata filters, full-text records and direct lookup IDs included in acceptance environment setup |
 | Citation fidelity | Citations must reconstruct to `article`, `clause`, `point` level |
+
+**Available candidate fixture pair:** `LAW-134-2025-QH15` (Luật Trí tuệ nhân tạo, 35 điều, hiệu lực 2026-03-01, with a sector-differentiated Điều 35 transitional schedule) and `LAW-71-2025-QH15` (Luật Công nghiệp công nghệ số, 51 điều, hiệu lực 2026-01-01 except Điều 11/28/29 from 2025-07-01). This pair exercises, with real content rather than a synthetic case: (1) locator-level cross-document repeal — Điều 33 of `LAW-134-2025-QH15` repeals khoản 9 Điều 3, khoản 7 Điều 4, khoản 6 Điều 12, điểm đ khoản 2 Điều 34, and all of Chương IV (Điều 41-45) of `LAW-71-2025-QH15`, while the rest of `LAW-71-2025-QH15` remains active; (2) relative cross-reference resolution ("Điều này", "khoản này") within both documents; (3) sector/time-differentiated transitional effective dates within a single document (Điều 35 of `LAW-134-2025-QH15`). Use this pair to validate the ingestion pipeline handles locator-level repeal correctly before treating it as a passing fixture.
 
 ## Non-Claims
 

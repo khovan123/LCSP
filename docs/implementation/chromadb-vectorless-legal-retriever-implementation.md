@@ -65,7 +65,10 @@ chunk_checksum
 outgoing_ref_ids
 incoming_ref_ids
 supersedes_chunk_id
+repealed_by_ref
 ```
+
+`legal_status` values: `ACTIVE | AMENDED | REPEALED`. A chunk is `REPEALED` either by a new version of the same provision (`supersedes_chunk_id`, same document lineage) or by a locator-level repeal clause in a different document (`repealed_by_ref = {document_id, locator}`, cross-document — see `legal-corpus-source-spec.md`). Candidate retrieval excludes `REPEALED` chunks unless the query explicitly requests historical context.
 
 ## Candidate Retrieval
 
@@ -75,7 +78,7 @@ Every query applies:
 2. effective-date interval at assessment date;
 3. validated source status;
 4. optional document type, issuing authority, article, clause, point and source-tier filters;
-5. supersession relationships inside the pinned corpus;
+5. supersession relationships inside the pinned corpus, including cross-document locator-level repeal (`legal_status != REPEALED` unless historical context is explicitly requested);
 6. citation reconstruction completeness.
 
 Candidate retrieval may use full-text matching, metadata filters, known legal IDs, or a combination of those. It must not require dense embedding generation or vector similarity to select legal clauses.
@@ -134,6 +137,7 @@ Failure publishes `event.legal-index-build.failed.v1`, leaves the corpus unavail
 | ChromaDB unavailable | block required legal retrieval |
 | Missing legal structure metadata | fail index build |
 | Missing cross-reference target | index with coverage limitation or block when referenced context is mandatory |
+| Unresolved locator in a repeal clause (`repealed_locators` entry does not map to a chunk in the target document) | fail index build for that relationship; do not mark target chunk `REPEALED` on a guess |
 | Zero candidates | do not claim applicability; block/degrade classification by rule criticality |
 | Citation cannot be reconstructed | reject candidate |
 | Citation outside allowlist | reject output and block/degrade according to rule criticality |

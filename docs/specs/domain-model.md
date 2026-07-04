@@ -11,7 +11,6 @@ Organization
 -> User / OrganizationMembership
 -> Policy / PolicyVersion / AuthorizationDecision
 -> Assessment
--> WizardProfile
 -> RepositoryConnection
 -> TrustedScanTrigger / ScanMappingResolution
 -> RepositorySnapshot
@@ -28,6 +27,8 @@ Organization
 -> AuditEvent
 ```
 
+`WizardProfile` is an optional parallel branch off `Assessment` that feeds into `AIUsageFlow` and `ReconciliationConflict` when linked (`verificationSource: TECHNICAL_PLUS_WIZARD`). It is no longer on the mandatory mainline: `TechnicalProfile` + `TechnicalEvidenceReport` alone are sufficient for `AIUsageFlow`/`VerifiedProfile` to proceed (`verificationSource: TECHNICAL_ONLY`), at lower confidence for business-declaration-dependent fields. See `docs/specs/ai-usage-flow-domain-spec.md`.
+
 Legal corpus preparation is a parallel internal operations flow:
 
 ```text
@@ -41,6 +42,18 @@ LegalSource
 -> LegalRuleMatch
 ```
 
+Legal rule catalog authoring is a second, separate internal operations flow. It is not derived automatically from the legal corpus text — a `LegalRule` is hand-authored by an Internal Legal Operator who reads approved `LegalDocumentChunk` text and writes `requiredFacts`/`blockingFacts` plus a `citationLocatorRef` pointing at the exact chunk. The corpus supplies citation targets to validate against; it does not generate rules:
+
+```text
+LegalRuleDraft
+-> RuleApprovalRecord
+-> LegalRuleCatalogVersion APPROVED
+-> LegalRule (citationLocatorRefs must resolve inside an APPROVED LegalCorpusVersion)
+-> LegalRuleMatch
+```
+
+See `docs/specs/legal-rule-catalog-spec.md`.
+
 ## Ownership Principles
 
 - Manager owns assessment business truth and final conflict resolution.
@@ -49,7 +62,9 @@ LegalSource
 - Python Worker Platform owns all asynchronous domain workloads.
 - Python Scanner Worker owns Repository Scan lifecycle and scanner evidence entities.
 - Internal Legal Operator owns corpus review/approval actions through internal API/CLI for MVP.
+- Internal Legal Operator also owns legal rule catalog authoring/approval; a `LegalRule` is never auto-derived from corpus text.
 - Approved LegalCorpusVersion is immutable.
+- Approved LegalRuleCatalogVersion is immutable.
 - All material transitions create AuditEvent and asynchronous transitions use OutboxEvent.
 - Raw source, secrets, full prompts, and full AST bodies are not persistent domain data.
 
@@ -96,7 +111,7 @@ Relationships: has memberships, users, assessments, repository connections, and 
 | actions | JSON | Yes | Allowed/denied action set |
 | status | enum | Yes | active/superseded/revoked |
 
-Concrete PBAC engine, storage, cache, invalidation, evaluation topology and failure behavior are `TECHNICAL_DECISION_REQUIRED`.
+Concrete PBAC engine, storage, cache, invalidation, evaluation topology and failure behavior are governed by `docs/implementation/decisions/pbac-runtime-decision.md`.
 
 ### AuthorizationDecision
 
@@ -297,7 +312,7 @@ AIUsageFlow groups claim-level records for business process, AI purpose, inputs,
 
 ### VerifiedProfile
 
-Immutable reconciled profile combining WizardProfile, TechnicalProfile, AIUsageFlow, and Manager resolutions. It is required before legal matching.
+Immutable reconciled profile combining TechnicalProfile, AIUsageFlow, and (when linked) WizardProfile and Manager resolutions. Carries `verificationSource: TECHNICAL_ONLY | TECHNICAL_PLUS_WIZARD`. It is required before legal matching regardless of `verificationSource`.
 
 ## Legal Corpus and Retrieval
 
@@ -371,13 +386,52 @@ Records assessment/query reference, corpus version, effective-date filters, Chro
 
 Records provider, model, prompt version, sanitized input reference, output hash, status, token/cost metadata, optional corpus version, retrieval audit refs, and correlation ID. Secrets and raw source are excluded. Embedding model metadata is future-only unless a later semantic/reranker path is approved.
 
+### LegalRuleCatalogVersion
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| legalRuleCatalogVersionId | UUIDv7 | Yes | Version identity |
+| version | string | Yes | Human/system version |
+| status | enum | Yes | DRAFT/APPROVED/SUPERSEDED |
+| ruleRefs | JSON | Yes | Included `LegalRule` identifiers at this version |
+| createdAt / approvedAt | datetime | Yes/No | Lifecycle timestamps |
+
+Approved versions are immutable, mirroring `LegalCorpusVersion`. New rule changes create a new version; existing assessments retain the pinned version used at legal-matching time.
+
+### RuleApprovalRecord
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| ruleApprovalRecordId / legalRuleCatalogVersionId | UUIDv7 | Yes | Identity/version |
+| approvedBy | string/actor ref | Yes | Internal Legal Operator |
+| status | enum | Yes | APPROVED/REJECTED |
+| scopeDescription / comments | string | Yes/No | Review scope/notes |
+| approvalDate | datetime | Yes | Decision time |
+
+Mirrors `CorpusApprovalRecord`. Rejection leaves the catalog version `DRAFT`, blocked from legal-matching use until corrected or abandoned.
+
+### LegalRule
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| legalRuleId | string | Yes | Rule identity (`ruleId` referenced by `LegalRuleMatch`) |
+| legalRuleCatalogVersionId | UUIDv7 | Yes | Owning catalog version; immutable once approved |
+| ruleFamily | string | Yes | Classification family such as AI use, data, oversight, documentation |
+| requiredFacts / optionalFacts / blockingFacts | JSON | Yes/No/No | Applicability conditions evaluated against `VerifiedProfile.mergedProfile` |
+| unknownFactPolicy | enum | Yes | Default blocked/degraded, never guessed |
+| citationLocatorRefs | JSON | Yes | One or more `{legalCorpusVersionId, document_id, locator}` refs; each must resolve to a chunk in an APPROVED `LegalCorpusVersion` at authoring time or the rule is rejected at approval |
+| status | enum | Yes | DRAFT/APPROVED/DEPRECATED |
+| authoredBy | string/actor ref | Yes | Internal Legal Operator |
+
+A `LegalRule` is hand-authored, never auto-extracted from `LegalDocumentChunk` text by an LLM or rule-mining process. The legal corpus only supplies citation targets that `citationLocatorRefs` are validated against.
+
 ### LegalRuleMatch
 
 | Field | Type | Required | Meaning |
 |---|---|---:|---|
 | legalRuleMatchId | UUIDv7 | Yes | Identity |
-| assessmentId / verifiedProfileId / legalCorpusVersionId | UUIDv7 | Yes | Scope/basis |
-| ruleId | string | Yes | Rule identity |
+| assessmentId / verifiedProfileId / legalCorpusVersionId / legalRuleCatalogVersionId | UUIDv7 | Yes | Scope/basis — both the corpus version and the rule catalog version used are pinned for reproducibility |
+| ruleId | string | Yes | Rule identity (`LegalRule.legalRuleId`) |
 | citationRefs | JSON/relation | Yes | Document/article/clause/point/source/hash/version refs |
 | rationale / coverage | JSON | Yes | Structured applicability/citation coverage |
 | confidence | number | Yes | Deterministic support score |
@@ -409,7 +463,7 @@ Transactional message record with event/command type, schema version, aggregate 
 
 ## UX Boundary
 
-Manager/Developer UX may expose assessment, evidence, conflict, profile, classification, gap, document, and audit entities. LegalSource, LegalDocument, LegalCorpusItem, LegalDocumentChunk, CorpusApprovalRecord, and corpus administration are internal operations/API/CLI entities for MVP. Manager UX may display only the pinned corpus version and citation provenance relevant to an assessment.
+Manager/Developer UX may expose assessment, evidence, conflict, profile, classification, gap, document, and audit entities. LegalSource, LegalDocument, LegalCorpusItem, LegalDocumentChunk, CorpusApprovalRecord, LegalRule, LegalRuleCatalogVersion, RuleApprovalRecord, and corpus/rule-catalog administration are internal operations/API/CLI entities for MVP. Manager UX may display only the pinned corpus version, pinned rule catalog version, and citation provenance relevant to an assessment.
 
 ## Canonical Status
 

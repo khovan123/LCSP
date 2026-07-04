@@ -235,6 +235,8 @@ export interface AIUsageFlowRule {
 
 Every material claim used for legal matching must carry at least one `EvidenceRef`. Provider/model/framework detection alone never makes a claim eligible for legal matching.
 
+**Wizard-conflict precondition**: The "Conflict Behavior" column for AUF-032 through AUF-039 (and any other rule whose conflict behavior references a wizard declaration, e.g. "conflicts with no-AI wizard declaration", "conflicts with internal-only wizard claim") only applies when a `WizardProfile` is linked to the assessment. When `WizardProfile` is absent, these rules still compute their base output claim field (`business_process`, `human_review`, `affected_subjects`, etc.) from technical evidence alone at the confidence impact listed, but they never generate a conflict candidate — there is no Wizard declaration to conflict with. See `docs/specs/ai-usage-flow-domain-spec.md` `verificationSource: TECHNICAL_ONLY` behavior.
+
 ### Confidence Calculation Rules
 
 `docs/specs/ai-usage-flow-domain-spec.md` is the sole authoritative source for AIUsageFlow claim confidence, flow confidence, thresholds, rounding, penalties and aggregation.

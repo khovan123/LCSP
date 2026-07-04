@@ -1,0 +1,87 @@
+import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+
+import { RecoveryRequest } from "../../../domain/models/auth-workspace.models.ts";
+import {
+  fingerprintToken,
+  hashSecret,
+  issueOpaqueToken,
+} from "../../../infrastructure/security/security.utils.ts";
+import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
+import type { RequestRecoverySuccess } from "../../contracts/auth-workspace/recovery.contract.ts";
+import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
+import type { RecoveryNotifier } from "../../ports/notification/recovery-notifier.ts";
+import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
+import { RequestPasswordRecoveryCommand } from "./request-password-recovery.command.ts";
+
+const RECOVERY_TOKEN_TTL_MS = 30 * 60_000;
+
+export class RequestPasswordRecoveryHandler {
+  constructor(
+    private readonly support: AuthWorkspaceSupportService,
+    private readonly repositories: AuthWorkspaceRepositories,
+    private readonly notifier: RecoveryNotifier,
+  ) {}
+
+  async execute(
+    command: RequestPasswordRecoveryCommand,
+  ): Promise<AuthProblemResult | RequestRecoverySuccess> {
+    const { payload, requestMeta } = command;
+    const { repositories } = this;
+    const correlationId =
+      requestMeta.correlation_id ?? this.support.createCorrelationId();
+
+    if (
+      typeof payload.email !== "string" ||
+      payload.email.trim().length === 0
+    ) {
+      return createProblemResult(AUTH_ERROR_CODES.validationFailed, correlationId);
+    }
+
+    const email = payload.email.trim().toLowerCase();
+    const user = await repositories.users.findByEmail(email);
+
+    if (!user) {
+      // Do the same shape of work as the found-user path so response
+      // latency doesn't reveal whether the email is registered.
+      hashSecret("decoy-recovery-lookup-for-constant-time-compare");
+      await this.support.recordAudit(repositories, {
+        event_type: "auth.recovery.requested",
+        actor_id: null,
+        organization_id: null,
+        decision: "allow",
+        correlation_id: correlationId,
+      });
+      return { ok: true, correlation_id: correlationId };
+    }
+
+    const now = this.support.now();
+    const token = issueOpaqueToken();
+    const recoveryRequest = new RecoveryRequest({
+      id: repositories.recoveryRequests.nextId(),
+      userId: user.id,
+      tokenHash: hashSecret(token),
+      expiresAt: now + RECOVERY_TOKEN_TTL_MS,
+    });
+    await repositories.recoveryRequests.save(
+      recoveryRequest,
+      fingerprintToken(token),
+    );
+
+    await this.notifier.notify({
+      userId: user.id,
+      email: user.email.toString(),
+      token,
+      correlationId,
+    });
+
+    await this.support.recordAudit(repositories, {
+      event_type: "auth.recovery.requested",
+      actor_id: user.id,
+      organization_id: null,
+      decision: "allow",
+      correlation_id: correlationId,
+    });
+
+    return { ok: true, correlation_id: correlationId };
+  }
+}

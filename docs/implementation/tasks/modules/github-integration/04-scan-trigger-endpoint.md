@@ -1,0 +1,119 @@
+---
+task_id: MW-gh-004
+module: github-integration
+runtime: nestjs-api
+priority: P0
+status: READY_FOR_DEV
+epic_story: 3.3
+depends_on:
+  - github-integration/03-pin-commit-snapshot-endpoint.md
+  - platform/outbox/02-outbox-publisher.md
+  - platform/pbac/03-nestjs-guard.md
+---
+
+# Scan Trigger Endpoint
+
+## Outcome
+
+Create or resume a `RepositoryScanJob` for a pinned snapshot. Idempotent: duplicate trigger returns existing job state. Assessment state gates prevent triggering from invalid states. Trusted trigger and manual trigger both handled.
+
+## Module Files
+
+| File | Action | Notes |
+|---|---|---|
+| `apps/api/src/modules/github-integration/presentation/http/github-integration.controller.ts` | Modify | Add `POST /assessments/:assessmentId/scan-jobs` |
+| `apps/api/src/modules/github-integration/application/commands/trigger-scan/trigger-scan.command.ts` | Create | Command shape |
+| `apps/api/src/modules/github-integration/application/commands/trigger-scan/trigger-scan.handler.ts` | Create | Idempotency + job creation |
+| `apps/api/src/modules/github-integration/domain/entities/repository-scan-job.entity.ts` | Create | `RepositoryScanJob` domain entity |
+| `apps/api/prisma/schema.prisma` | Modify | Add `RepositoryScanJob` model |
+
+## Prisma Model
+
+```prisma
+model RepositoryScanJob {
+  id              String   @id @default(uuid())
+  assessmentId    String
+  snapshotId      String
+  organizationId  String
+  idempotencyKey  String   @unique
+  triggerSource   String                         // 'trusted' | 'manual'
+  status          String   @default("QUEUED")   // QUEUED | RUNNING | COMPLETED | FAILED | BLOCKED
+  attemptCount    Int      @default(0)
+  correlationId   String
+  blockedReason   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([assessmentId])
+  @@index([snapshotId])
+}
+```
+
+## API Contract
+
+**Endpoint:** `POST /assessments/:assessmentId/scan-jobs`
+**Auth required:** Yes — `@RequireAction('scan:trigger')` for manual; trusted triggers use `X-Worker-Api-Key`
+
+**Request body:**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `snapshot_id` | string | Yes | `RepositorySnapshot.id` |
+| `trigger_source` | string | No | `manual` (default) or `trusted` |
+| `idempotency_key` | string | Yes | Client-provided unique key for dedup |
+
+**Success response (201 or 200):**
+
+| Field | Type | Notes |
+|---|---|---|
+| `scan_job_id` | string | |
+| `status` | string | `QUEUED` or existing state if idempotent return |
+| `is_new` | boolean | `true` if created, `false` if existing job returned |
+| `correlation_id` | string | |
+
+**Error responses:**
+
+| HTTP | `error_code` | Meaning |
+|---|---|---|
+| 403 | `PBAC_DENIED` | Actor lacks `scan:trigger` |
+| 404 | `SNAPSHOT_NOT_FOUND` | Snapshot not found or not in org |
+| 409 | `ASSESSMENT_STATE_INVALID` | Assessment state does not allow scan |
+| 400 | `SCAN_BLOCKED_MAPPING` | Assessment context incomplete |
+
+## Business Rules
+
+1. PBAC guard: `action = scan:trigger` for manual triggers. Trusted triggers use `X-Worker-Api-Key`.
+2. Validate `snapshot.assessmentId = pathParam.assessmentId` and org-scoped.
+3. Validate `Assessment.status` permits scan trigger (e.g., `WIZARD_SUBMITTED` state).
+4. Idempotency: look up `RepositoryScanJob` by `idempotencyKey`. If found → return existing job (200, `is_new = false`).
+5. If not found: create `RepositoryScanJob` with `status = QUEUED`.
+6. Create outbox message `scan.triggered` for Python scanner worker.
+7. Audit event `SCAN_JOB_TRIGGERED`.
+8. Re-run must NOT mutate prior accepted `TechnicalEvidenceReport` or `TechnicalProfile` versions — new job creates new artifact chain.
+
+## Commands / Events
+
+| Name | Type | Safe payload |
+|---|---|---|
+| `TriggerScanCommand` | App command | `{ assessmentId, snapshotId, triggerSource, idempotencyKey, correlationId? }` |
+| `event.scan.triggered` | Outbox | `{ scanJobId, assessmentId, snapshotId, triggerSource, correlationId }` |
+| `SCAN_JOB_TRIGGERED` | `AuthAuditEvent` | `{ scanJobId, assessmentId, snapshotId, triggerSource, correlationId }` |
+
+## Test Cases
+
+| ID | Scenario | Expected |
+|---|---|---|
+| T01 | Valid snapshot + valid assessment state | 201 scan job created |
+| T02 | Same `idempotency_key` sent twice | 200 existing job returned, `is_new = false` |
+| T03 | Assessment state invalid for scan | 409 `ASSESSMENT_STATE_INVALID` |
+| T04 | Snapshot not in org | 404 `SNAPSHOT_NOT_FOUND` |
+| T05 | Actor lacks `scan:trigger` | 403 `PBAC_DENIED` |
+| T06 | Outbox message created | `event.scan.triggered` in `OutboxMessage` |
+| T07 | Re-run does not mutate prior `TechnicalEvidenceReport` | Prior artifacts untouched |
+
+## Definition of Done
+
+- Idempotent: same `idempotency_key` returns existing job.
+- Assessment state gate prevents invalid trigger.
+- Outbox message `scan.triggered` created for Python scanner.
+- Re-run does not mutate prior accepted evidence chain.

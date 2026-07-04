@@ -1,0 +1,135 @@
+# Story 6.4 Developer Packet
+
+Status: ready-for-dev
+
+## Story
+
+Build ChromaDB Structure-First Vectorless Legal Index
+
+## Acceptance Criteria
+
+1. **Given** an approved LegalCorpusVersion exists
+   **When** legal index build is requested
+   **Then** LCSP writes legal records to ChromaDB with stable IDs, document/chunk text, metadata filters, full-text searchable fields, direct lookup identifiers, and cross-reference metadata
+   **And** does not require PostgreSQL pgvector, dense embedding generation, or semantic nearest-neighbor retrieval for the MVP legal retrieval path.
+
+2. **Given** index build succeeds
+   **When** LCSP records the outcome
+   **Then** it emits or stores `LEGAL_INDEX_BUILD_COMPLETED` with corpus version, index reference, checksum, count summary, and audit metadata.
+
+3. **Given** index build fails or produces invalid counts/checksums
+   **When** LCSP records the outcome
+   **Then** it emits or stores `LEGAL_INDEX_BUILD_FAILED`
+   **And** the failed index is not used for LegalRuleMatch generation.
+
+## Dev Notes
+
+- Packet type: `planning-derived-developer-packet`
+- Story key: `6-4-build-chromadb-structure-first-vectorless-legal-index`
+- Official execution artifact: `docs/implementation-artifacts/6-4-build-chromadb-structure-first-vectorless-legal-index.md`
+- Epic: `Epic 6 - Legal Corpus Retrieval and LegalRuleMatch Evidence`
+- Runtime ownership: `apps/api`, `lcsp-python-workers`, `packages/*`, `ChromaDB`
+
+### Current State and Scope Guardrails
+
+- Epic 6 thiết lập legal evidence chain. Nếu corpus/version/citation roles lẫn lộn, toàn bộ legal matching và classification mất khả năng audit.
+- Story trong epic này phải xem legal corpus là internal operational asset, không phải customer-facing management surface.
+- VerifiedProfile đã approved là input bắt buộc; legal flow không được kéo raw AIUsageFlow claims trực tiếp làm authority.
+
+- Previous story context: `docs/developer/story-handbook/6-3-approve-legalcorpusversion.md`
+- Next story dependency seam: `docs/developer/story-handbook/6-5-retrieve-primary-parent-and-referenced-context.md`
+- Artifact chain for this epic: legal source snapshot -> parsed hierarchy/stable IDs -> approved LegalCorpusVersion -> ChromaDB vectorless retrieval -> LegalRuleMatch evidence.
+- Workflow/state focus: VERIFIED_PROFILE_APPROVED -> LEGAL_MATCHING_REQUESTED -> LEGAL_MATCHING_READY / LEGAL_MATCHING_BLOCKED, plus corpus approval/index readiness gates.
+
+### Story-Specific Implementation Tasks
+
+- Write approved corpus records into ChromaDB with stable IDs, metadata filters, full-text fields and xref metadata.
+- Record successful build with counts/checksum/index reference.
+- Block use of failed/invalid index for legal matching.
+
+### Task to Acceptance Criteria Traceability
+
+- `AC1`: Write approved corpus records into ChromaDB with stable IDs, metadata filters, full-text fields and xref metadata.
+- `AC2`: Record successful build with counts/checksum/index reference.
+- `AC3`: Block use of failed/invalid index for legal matching.
+
+### Dependencies and Prerequisites
+
+- Story 6.3 approved LegalCorpusVersion.
+- ADR-026 structure-first vectorless retrieval path.
+
+### Explicit Non-Goals
+
+- No pgvector or mandatory dense embedding retrieval path.
+- No use of failed index for matching.
+- No silent mismatch between corpus version and index metadata.
+
+### Story-Specific Risks and Edge Cases
+
+- Index built without stable IDs or xref metadata.
+- Invalid counts/checksums still marked successful.
+- Team reintroduces semantic nearest-neighbor dependency.
+
+### Architecture Compliance
+
+- Legal source ingestion, parsing, indexing và retrieval thuộc Python Worker Platform cùng ChromaDB structure-first/vectorless retrieval path.
+- API chỉ nên điều phối internal approval/status/query surfaces cần thiết, không tự làm retrieval hay corpus mutation trực tiếp trong request path dài.
+- Citation allowlist, parent context và referenced context là contract bắt buộc cho downstream match/classification.
+
+### Functional and Domain Requirements
+
+- Story này phải được triển khai đúng theo acceptance criteria của riêng nó; không kéo behavior của story sau vào cùng slice nếu không có seam thật sự cần thiết.
+- Domain chain liên quan của Epic 6: legal source snapshot -> parsed hierarchy/stable IDs -> approved LegalCorpusVersion -> ChromaDB vectorless retrieval -> LegalRuleMatch evidence.
+- Khi story chạm workflow gate, blocked/degraded path là một phần của yêu cầu chứ không phải edge-case tuỳ chọn.
+
+
+### Data and Persistence Requirements
+
+- Các story Epic 6 thường chạm `LegalSourceSnapshot`, `LegalCorpusVersion`, stable hierarchical IDs, retrieval audit, `LegalMatchingResult`, `LegalRuleMatch` và citation coverage metadata.
+- Base retrieval unit là Clause; Point content phải được assemble với parent Clause và Article context.
+- Corpus/version/index artifacts phải immutable; approval status, checksum và effective-date metadata là bắt buộc.
+
+### State and Audit Requirements
+
+- Corpus validation/approval failures phải block formal legal use thay vì degrade âm thầm.
+- Legal matching chỉ được complete khi retrieval audit, citation allowlist và corpus version đều hợp lệ.
+- Out-of-allowlist citation, missing retrieval audit hoặc obsolete corpus phải block/degrade rõ ràng và audited.
+
+### File Structure Notes
+
+- `lcsp-python-workers` cho source ingestion, parsing, indexing, retrieval, legal matching worker.
+- `packages/*` cho legal chunk IDs, citation refs, retrieval audit contracts, match result schemas.
+- `apps/api` cho internal operator approval/status surfaces hoặc read models nếu project mở chúng sau này.
+
+### Implementation Guidance for the Dev Agent
+
+- Không quay lại dense embedding/pgvector legal path cho MVP nếu authority chưa thay đổi.
+- Giữ tách biệt `PRIMARY_MATCH`, `PARENT_CONTEXT`, `REFERENCED_CONTEXT` trong data, audit và UX; không hợp nhất để “đỡ phức tạp”.
+- Citation refs phải trỏ đúng allowlist của retrieval run hiện tại; không fabricate citation hoặc reuse chunk ngoài run.
+
+### Testing Requirements
+
+- Corpus snapshot/validation/approval tests và stable hierarchy ID coverage.
+- ChromaDB vectorless retrieval tests cho primary/parent/referenced context assembly.
+- LegalRuleMatch citation coverage, allowlist rejection và retrieval-audit assertions.
+
+### References
+
+- [Source: docs/project-context.md]
+- [Source: docs/planning-artifacts/epics.md]
+- [Source: docs/product/prd.md]
+- [Source: docs/specs/functional-requirements.md]
+- [Source: docs/specs/non-functional-requirements.md]
+- [Source: docs/specs/use-cases.md]
+- [Source: docs/specs/domain-model.md]
+- [Source: docs/specs/domain-state-machines.md]
+- [Source: docs/specs/event-catalog.md]
+- [Source: docs/architecture/architecture.md]
+- [Source: docs/implementation/dev-compendium.md]
+- [Source: docs/specs/legal-corpus-source-spec.md]
+- [Source: docs/specs/legal-matching-domain-spec.md]
+- [Source: docs/implementation/legal-corpus-ingestion-implementation.md]
+- [Source: docs/implementation/chromadb-vectorless-legal-retriever-implementation.md]
+- [Source: docs/architecture/adr/adr-025-legal-corpus-source-architecture.md]
+- [Source: docs/architecture/adr/adr-026-chromadb-vectorless-legal-retriever.md]
+- [Source: docs/implementation/readiness/state-transition-authority.md]

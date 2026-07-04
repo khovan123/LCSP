@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Summarize canonical requirement and planning traceability after Phase 5.2L active-document correction. This document does not certify implementation readiness or story coverage.
+Summarize canonical requirement and planning traceability after Phase 5.2L active-document correction and readiness remediation. This document supports sprint planning review but does not authorize implementation by itself.
 
 ## Canonical Inventory
 
@@ -15,9 +15,9 @@ Summarize canonical requirement and planning traceability after Phase 5.2L activ
 | Active NFR total | 33 (`NFR-001..NFR-030`, `NFR-033..NFR-035`) |
 | AC total | `AC-001..AC-041` plus `AC-050A..AC-050F` |
 | Canonical use cases | `UC-001..UC-017`; `UC-018` structured attestation superseded |
-| Canonical UX | not active after documentation pruning; rebase/regeneration required |
-| Canonical epics/stories | missing |
-| Story traceability | pending / not assessable |
+| Canonical UX | active rebased UX in `docs/planning-artifacts/ux-designs/ux-LCSP-2026-06-24/` plus canonical UX review |
+| Canonical epics/stories | `docs/planning-artifacts/epics.md` |
+| Story traceability | created / assessable via `docs/test-artifacts/traceability/implementation-readiness-traceability-2026-06-25.md` |
 
 `NFR-031` and `NFR-032` are legacy aliases of active `NFR-005` and `NFR-008`. PRD `FR-E*` values and legacy `UC-MXX-XX` values are source aliases only.
 
@@ -77,16 +77,16 @@ FR_050_AUTOMATIC_TRUSTED_SCAN_INITIATION_TRACED
 FR_051_REMOVED_FROM_PRODUCT
 STRUCTURED_ATTESTATION_SUPERSEDED_FOR_ACTIVE_MVP
 PROJECT_OWNER_DOC_REMEDIATION_APPROVED
-UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
+UX_REBASED_ACTIVE_DOC_SET
 PYTHON_WORKER_PACKAGE_TOPOLOGY_LOCKED
 AUDIT_EXPORT_SYNC_API_BOUNDARY_LOCKED
-UX_REBASE_PENDING_AFTER_DOC_PRUNING
+UX_REBASE_COMPLETE_AFTER_DOC_PRUNING
 CHROMADB_VECTORLESS_DOMAIN_CONTRACT_ALIGNED
 CHROMADB_STRUCTURE_FIRST_VECTORLESS_LEGAL_RAG_APPROVED
 POSTGRESQL_PGVECTOR_LEGAL_RETRIEVAL_SUPERSEDED
-STORY_TRACEABILITY_PENDING
-STORY_COVERAGE_NOT_ASSESSABLE
-CANONICAL_EPICS_AND_STORIES_ARTIFACT_MISSING
-IMPLEMENTATION_READINESS_NOT_CERTIFIED
+STORY_TRACEABILITY_CREATED
+STORY_COVERAGE_ASSESSABLE
+CANONICAL_EPICS_AND_STORIES_ARTIFACT_PRESENT
+IMPLEMENTATION_READINESS_READY_FOR_SPRINT_PLANNING_REVIEW
 IMPLEMENTATION_NOT_AUTHORIZED
 ```

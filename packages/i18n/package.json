@@ -1,0 +1,17 @@
+{
+  "name": "@lcsp/i18n",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./resolver": "./src/resolver.ts",
+    "./schema": "./src/schema.ts",
+    "./types": "./src/types.ts",
+    "./locales/en": "./src/locales/en/index.ts",
+    "./locales/en/auth": "./src/locales/en/auth.ts",
+    "./locales/en/common": "./src/locales/en/common.ts",
+    "./locales/vi": "./src/locales/vi/index.ts",
+    "./locales/vi/auth": "./src/locales/vi/auth.ts",
+    "./locales/vi/common": "./src/locales/vi/common.ts"
+  }
+}

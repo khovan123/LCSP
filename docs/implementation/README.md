@@ -11,8 +11,9 @@ CONSOLIDATION_PASS_APPLIED
 SCANNER_BEHAVIOR_AUTHORITY_CONSOLIDATED
 CHROMADB_VECTORLESS_DOMAIN_CONTRACT_ALIGNED
 UX_ARTIFACT_REMOVED_FROM_ACTIVE_DOC_SET
-STORY_TRACEABILITY_PENDING
-IMPLEMENTATION_NOT_AUTHORIZED
+STORY_TRACEABILITY_CREATED
+IMPLEMENTATION_READINESS_READY_FOR_SPRINT_PLANNING_REVIEW
+IMPLEMENTATION_NOT_AUTHORIZED_BY_READINESS_ALONE
 ```
 
 Implementation documents are build specifications, not evidence that application code exists.
@@ -30,8 +31,44 @@ Implementation documents are build specifications, not evidence that application
 | `legal-corpus-ingestion-implementation.md` | Official-source ingestion, snapshot/hash provenance, normalization, and approval handoff |
 | `chromadb-vectorless-legal-retriever-implementation.md` | ChromaDB vectorless legal retrieval, hierarchy/xref assembly, citation allowlist, privacy, and retrieval audit |
 | `llm-gateway-implementation.md` | Real provider boundary, privacy, schema validation, retries, budget controls, and model-run metadata |
+| `dev-compendium.md` | Developer-facing consolidated guide across implementation specs, task catalog, sprint artifacts, and project context |
+| `phase-5-2l-ux-to-readiness-execution-plan.md` | Coordination plan from pruned authority set to UX, epics/stories, readiness, and sprint planning |
+| `phase-5-2l-ux-to-readiness-task-list.md` | Actionable pre-implementation task board for UX rebase, story creation, readiness, and sprint planning gates |
+| `phase-5-2l-ux-to-readiness-implementation-guide.md` | Fresh-context handoff guide for BMAD planning sessions before implementation is authorized |
+| `decisions/` | PBAC, trusted trigger, scanner severity/provenance decision artifacts |
+| `readiness/` | Implementation-readiness assessment and state-transition authority for planning and sprint-review handoff |
+| `templates/` | Reusable implementation task, engineering handoff, and operational runbook templates |
+| `tasks/` | Stable implementation task catalog plus detailed task briefs |
+| `handoffs/` | Domain and wave handoff packets for implementation planning |
+| `runbooks/` | Operational runbook drafts for runtime failure and recovery behavior |
+
+## Read Order for BMAD Planning
+
+1. `../README.md`
+2. `../product/system-context.md`
+3. `../product/product-brief.md`
+4. `../specs/requirements-traceability-summary.md`
+5. `dev-compendium.md`
+6. `phase-5-2l-ux-to-readiness-execution-plan.md`
+7. `phase-5-2l-ux-to-readiness-task-list.md`
+8. `phase-5-2l-ux-to-readiness-implementation-guide.md`
 
 ## Read Order by Workstream
+
+### Implementation Planning Tasks and Handoffs
+
+1. `../implementation-delivery-plan.md`
+2. `../planning-artifacts/research/technical-implementation-task-and-engineering-handoff-templates-for-lcsp-research-2026-06-25.md`
+3. `templates/implementation-task-template.md`
+4. `templates/engineering-handoff-template.md`
+5. `templates/operational-runbook-template.md`
+6. `tasks/README.md`
+7. `handoffs/README.md`
+8. `decisions/pbac-runtime-decision.md`
+9. `decisions/trusted-scan-trigger-retry-dlq-replay-decision.md`
+10. `decisions/scanner-severity-tool-provenance-decision.md`
+11. `readiness/implementation-readiness-report-2026-06-25.md`
+12. `readiness/state-transition-authority.md`
 
 ### Scanner
 
@@ -43,6 +80,25 @@ Implementation documents are build specifications, not evidence that application
 6. `python-worker-platform-implementation.md`
 7. `persistence-implementation.md`
 8. `queue-implementation.md`
+9. `tasks/MW-scan-001-scan-request-status-api.md`
+10. `tasks/MW-pyp-001-python-worker-bootstrap-queue-idempotency.md`
+11. `tasks/MW-scan-py-001-scanner-workspace-snapshot-cleanup-security.md`
+12. `tasks/MW-scan-py-004-technical-evidence-report-gates.md`
+13. `tasks/MW-intel-001-python-technical-profile-worker.md`
+14. `handoffs/HANDOFF-scanner-evidence-to-technical-profile.md`
+
+### TechnicalProfile, AIUsageFlow, and Reconciliation
+
+1. `../planning-artifacts/epics.md`
+2. `../specs/ai-usage-flow-domain-spec.md`
+3. `../specs/domain-state-machines.md`
+4. `python-worker-platform-implementation.md`
+5. `persistence-implementation.md`
+6. `queue-implementation.md`
+7. `tasks/MW-intel-001-python-technical-profile-worker.md`
+8. `tasks/MW-intel-002-python-ai-usage-flow-worker.md`
+9. `tasks/MW-intel-004-python-reconciliation-verified-profile-worker.md`
+10. `handoffs/HANDOFF-ai-usage-flow-and-reconciliation.md`
 
 ### Legal Corpus and Retrieval
 

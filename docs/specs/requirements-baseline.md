@@ -185,7 +185,7 @@ The following PRD `NFR-*` identifiers are retained only as PRD/source aliases. A
 | FR-011 | Assign and revoke Developer policy | FR-E1-3, FR-E1-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-012 | Enforce Manager-only actions | FR-E1-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-013 | Create assessment | FR-E1-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
-| FR-014 | Complete WizardProfile | FR-E2-1, FR-E2-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
+| FR-014 | Complete WizardProfile (recommended, not mandatory — AIUsageFlow/VerifiedProfile proceed as `TECHNICAL_ONLY` when skipped) | FR-E2-1, FR-E2-2 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-015 | Show readiness without risk level | FR-E2-3, FR-E2-4 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-016 | Connect GitHub repository | FR-E3-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
 | FR-017 | Create repository snapshot | FR-E3-1 | CANONICAL_MAPPING | `docs/specs/functional-requirements.md` |
@@ -280,7 +280,7 @@ These identifiers are retained only for traceability drift cleanup. They are not
 
 | AC | Statement | Source |
 | --- | --- | --- |
-| AC-1 | A Wizard-only assessment never displays HIGH/MEDIUM/LOW. | docs/product/prd.md |
+| AC-1 | A Wizard-only assessment never displays HIGH/MEDIUM/LOW. A `TECHNICAL_ONLY` assessment (no linked WizardProfile) may display a classification once VerifiedProfile confidence clears the required bar, always flagged `verificationSource: TECHNICAL_ONLY`. | docs/product/prd.md |
 | AC-2 | Risk Classification Agent cannot run before VerifiedProfile exists. | docs/product/prd.md |
 | AC-3 | Technical evidence must pass schema completeness gate before reconciliation. | docs/product/prd.md |
 | AC-4 | Technical evidence must pass quality threshold gate before classification unlock. | docs/product/prd.md |
