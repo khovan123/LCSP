@@ -32,19 +32,13 @@ jobs:
             const issueKeyPattern = new RegExp(`\\b${projectKey}-\\d+\\b`, 'gi');
             const pr = context.payload.pull_request;
 
-            const searchText = [
-              pr.title,
-              pr.body || '',
-              pr.head.ref,
-            ].join('\n');
-
             const issueKeys = [...new Set(
-              (searchText.match(issueKeyPattern) || []).map((key) => key.toUpperCase()),
+              (pr.title.match(issueKeyPattern) || []).map((key) => key.toUpperCase()),
             )];
 
             if (issueKeys.length === 0) {
               core.setFailed(
-                `Missing Jira issue key. Add a ${projectKey}-123 style key to the PR title, body, or branch name.`,
+                `Missing Jira issue key in PR title. Add a ${projectKey}-123 style key to the PR title.`,
               );
               return;
             }
