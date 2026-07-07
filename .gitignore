@@ -32,3 +32,4 @@ _bmad/
 **.log
 **/*.tsbuildinfo
 .claude/
+**/.cache/
