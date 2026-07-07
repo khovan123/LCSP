@@ -4,10 +4,10 @@ Generated from Jira project LCSP via logged-in Chrome session.
 
 ## Counts
 
-- Total issues: 147
-- Epics: 24
+- Total issues: 149
+- Epics: 25
 - Stories: 33
-- Tasks: 90
+- Tasks: 91
 - Tasks without parent: 0
 
 ## Artifacts
