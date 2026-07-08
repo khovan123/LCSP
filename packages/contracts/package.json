@@ -10,6 +10,8 @@
     "./auth/problems": "./src/auth/problems.ts",
     "./auth/redact": "./src/auth/redact.ts",
     "./auth/safe": "./src/auth/safe.ts",
+    "./outbox": "./src/outbox/index.ts",
+    "./outbox/outbox-message.types": "./src/outbox/outbox-message.types.ts",
     "./shared": "./src/shared/index.ts",
     "./shared/locale": "./src/shared/locale.ts",
     "./shared/result": "./src/shared/result.ts"
