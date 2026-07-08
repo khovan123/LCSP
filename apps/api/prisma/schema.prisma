@@ -206,3 +206,20 @@ model AuthDecisionLog {
   @@index([organizationId])
   @@index([correlationId])
 }
+
+model OutboxMessage {
+  id            String    @id
+  aggregateType String
+  aggregateId   String
+  eventType     String
+  payload       Json
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  lastAttemptAt DateTime?
+  publishedAt   DateTime?
+  errorMessage  String?
+  createdAt     DateTime  @default(now())
+
+  @@index([status, createdAt])
+  @@index([aggregateType, aggregateId])
+}
