@@ -5,6 +5,7 @@ import { config, configValidationSchema } from "./config/config.js";
 import { AppFeatureModule } from "./modules/app/app.module.js";
 import { AuthWorkspaceModule } from "./modules/auth-workspace/auth-workspace.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
+import { OutboxModule } from "./platform/outbox/outbox.module.js";
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { UsersModule } from "./modules/users/users.module.js";
       validationSchema: configValidationSchema,
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
+    OutboxModule,
     AppFeatureModule,
     AuthWorkspaceModule,
     UsersModule,

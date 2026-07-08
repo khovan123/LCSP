@@ -11,6 +11,9 @@ const VALID_ENV = {
   OAUTH_ALLOWED_REDIRECT_URIS: "http://localhost:3000/callback",
   RABBITMQ_URL: "amqp://guest:guest@localhost:5672",
   RABBITMQ_EXCHANGE: "lcsp.events",
+  OUTBOX_POLL_INTERVAL_MS: "1000",
+  OUTBOX_BATCH_SIZE: "50",
+  OUTBOX_MAX_ATTEMPTS: "5",
   MFA_SECRET_ENCRYPTION_KEY: "0123456789abcdef".repeat(4),
   PYTHON_WORKER_BASE_URL: "http://localhost:8000",
 };
@@ -119,6 +122,11 @@ describe("config()", () => {
       rabbitmq: {
         url: VALID_ENV.RABBITMQ_URL,
         exchange: VALID_ENV.RABBITMQ_EXCHANGE,
+      },
+      outbox: {
+        pollIntervalMs: 1000,
+        batchSize: 50,
+        maxAttempts: 5,
       },
       crypto: { mfaSecretEncryptionKey: VALID_ENV.MFA_SECRET_ENCRYPTION_KEY },
       pythonWorker: { baseUrl: VALID_ENV.PYTHON_WORKER_BASE_URL },
