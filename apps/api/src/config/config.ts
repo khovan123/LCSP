@@ -15,6 +15,9 @@ export const configValidationSchema = Joi.object({
   OAUTH_ALLOWED_REDIRECT_URIS: Joi.string().required(),
   RABBITMQ_URL: Joi.string().required(),
   RABBITMQ_EXCHANGE: Joi.string().default("lcsp.events"),
+  OUTBOX_POLL_INTERVAL_MS: Joi.number().integer().positive().default(1000),
+  OUTBOX_BATCH_SIZE: Joi.number().integer().positive().default(50),
+  OUTBOX_MAX_ATTEMPTS: Joi.number().integer().positive().default(5),
   MFA_SECRET_ENCRYPTION_KEY: Joi.string()
     .pattern(/^[0-9a-fA-F]{64}$/)
     .required()
@@ -55,6 +58,11 @@ export function config(): AppConfig {
     rabbitmq: {
       url: env.RABBITMQ_URL ?? "",
       exchange: env.RABBITMQ_EXCHANGE ?? "lcsp.events",
+    },
+    outbox: {
+      pollIntervalMs: Number(env.OUTBOX_POLL_INTERVAL_MS ?? 1000),
+      batchSize: Number(env.OUTBOX_BATCH_SIZE ?? 50),
+      maxAttempts: Number(env.OUTBOX_MAX_ATTEMPTS ?? 5),
     },
     crypto: {
       mfaSecretEncryptionKey: env.MFA_SECRET_ENCRYPTION_KEY ?? "",

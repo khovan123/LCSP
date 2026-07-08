@@ -19,6 +19,12 @@ export interface RabbitMqConfig {
   exchange: string;
 }
 
+export interface OutboxConfig {
+  pollIntervalMs: number;
+  batchSize: number;
+  maxAttempts: number;
+}
+
 export interface CryptoConfig {
   mfaSecretEncryptionKey: string;
 }
@@ -35,6 +41,7 @@ export interface AppConfig {
   auth: AuthConfig;
   oauth: OAuthConfig;
   rabbitmq: RabbitMqConfig;
+  outbox: OutboxConfig;
   crypto: CryptoConfig;
   pythonWorker: PythonWorkerConfig;
 }
