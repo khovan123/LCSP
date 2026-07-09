@@ -19,13 +19,18 @@ jobs:
     name: Require Jira issue key
     runs-on: ubuntu-latest
     steps:
-      - name: Validate Jira issue key, link Jira issues, and close comment
+      - uses: actions/checkout@v4
+
+      - name: Validate Jira issue key, link Jira issues, prefill Summary/Test plan, and close comment
         uses: actions/github-script@v7
         env:
           JIRA_BASE_URL: ${{ vars.JIRA_BASE_URL || 'https://minhpnq1807.atlassian.net' }}
           JIRA_PROJECT_KEY: LCSP
         with:
           script: |
+            const fs = require('fs');
+            const path = require('path');
+
             const marker = '<!-- lcsp-jira-close-comment -->';
             const bodyMarkerStart = '<!-- lcsp-jira-links:start -->';
             const bodyMarkerEnd = '<!-- lcsp-jira-links:end -->';
@@ -47,6 +52,202 @@ jobs:
 
             core.notice(`Detected Jira issue keys: ${issueKeys.join(', ')}`);
 
+            // --- Task doc lookup: PR title Jira key -> docs/developer/jira-lcsp-push-result.csv -> docs/implementation/tasks ---
+
+            function parseCsv(text) {
+              const rows = [];
+              let row = [];
+              let field = '';
+              let inQuotes = false;
+              for (let i = 0; i < text.length; i++) {
+                const c = text[i];
+                if (inQuotes) {
+                  if (c === '"') {
+                    if (text[i + 1] === '"') {
+                      field += '"';
+                      i++;
+                    } else {
+                      inQuotes = false;
+                    }
+                  } else {
+                    field += c;
+                  }
+                } else if (c === '"') {
+                  inQuotes = true;
+                } else if (c === ',') {
+                  row.push(field);
+                  field = '';
+                } else if (c === '\n') {
+                  row.push(field);
+                  rows.push(row);
+                  row = [];
+                  field = '';
+                } else if (c === '\r') {
+                  // skip
+                } else {
+                  field += c;
+                }
+              }
+              if (field.length > 0 || row.length > 0) {
+                row.push(field);
+                rows.push(row);
+              }
+              const header = rows.shift() || [];
+              return rows
+                .filter((r) => r.length > 1)
+                .map((r) => Object.fromEntries(header.map((h, idx) => [h, r[idx] ?? ''])));
+            }
+
+            function findTaskDocByTaskId(taskId) {
+              const root = path.join(process.cwd(), 'docs', 'implementation', 'tasks', 'modules');
+              const stack = [root];
+              while (stack.length > 0) {
+                const dir = stack.pop();
+                let entries;
+                try {
+                  entries = fs.readdirSync(dir, { withFileTypes: true });
+                } catch {
+                  continue;
+                }
+                for (const entry of entries) {
+                  const full = path.join(dir, entry.name);
+                  if (entry.isDirectory()) {
+                    stack.push(full);
+                    continue;
+                  }
+                  if (!entry.name.endsWith('.md')) continue;
+                  const content = fs.readFileSync(full, 'utf8');
+                  const match = content.match(/^task_id:\s*(\S+)/m);
+                  if (match && match[1] === taskId) {
+                    return { filePath: full, content };
+                  }
+                }
+              }
+              return null;
+            }
+
+            function parseFrontmatter(content) {
+              const match = content.match(/^---\n([\s\S]*?)\n---/);
+              const fm = {};
+              if (match) {
+                for (const line of match[1].split('\n')) {
+                  const m = line.match(/^(\w+):\s*(.*)$/);
+                  if (m) fm[m[1]] = m[2].trim();
+                }
+              }
+              return fm;
+            }
+
+            function parseSection(content, heading) {
+              const re = new RegExp(`## ${heading}\\n([\\s\\S]*?)(?=\\n## |$)`);
+              const m = content.match(re);
+              return m ? m[1].trim() : '';
+            }
+
+            function parseTable(section) {
+              const lines = section.split('\n').filter((l) => l.trim().startsWith('|'));
+              return lines
+                .slice(2)
+                .map((line) =>
+                  line
+                    .split('|')
+                    .map((c) => c.trim())
+                    .filter((c) => c.length > 0),
+                )
+                .filter((cells) => cells.length > 0);
+            }
+
+            let csvRows = [];
+            try {
+              const csvPath = path.join(process.cwd(), 'docs', 'developer', 'jira-lcsp-push-result.csv');
+              csvRows = parseCsv(fs.readFileSync(csvPath, 'utf8'));
+            } catch (error) {
+              core.warning(`Could not read docs/developer/jira-lcsp-push-result.csv: ${error.message}`);
+            }
+            const csvByKey = Object.fromEntries(csvRows.map((row) => [row.Key, row]));
+
+            const taskMatches = issueKeys.map((key) => {
+              const csvRow = csvByKey[key];
+              if (!csvRow || csvRow['Issue Type'] !== 'Task') {
+                return { key, taskId: null, doc: null };
+              }
+              const summary = csvRow.Summary || '';
+              const sepIndex = summary.indexOf(':');
+              const taskId = sepIndex === -1 ? '' : summary.slice(0, sepIndex).trim();
+              if (!taskId) {
+                return { key, taskId: null, doc: null };
+              }
+              const found = findTaskDocByTaskId(taskId);
+              if (!found) {
+                return { key, taskId, doc: null };
+              }
+              const fm = parseFrontmatter(found.content);
+              const titleMatch = found.content.match(/^# (.+)$/m);
+              const title = titleMatch ? titleMatch[1].trim() : summary.slice(sepIndex + 1).trim();
+              const outcome = parseSection(found.content, 'Outcome');
+              const moduleFiles = parseTable(parseSection(found.content, 'Module Files'));
+              const testCases = parseTable(parseSection(found.content, 'Test Cases'));
+              return {
+                key,
+                taskId,
+                title,
+                module: fm.module || '',
+                outcome,
+                moduleFiles,
+                testCases,
+                docPath: path.relative(process.cwd(), found.filePath),
+              };
+            });
+
+            const primary = taskMatches.find((m) => m.docPath);
+
+            let currentBody = pr.body || '';
+
+            if (primary && !/^## Summary/m.test(currentBody)) {
+              const summaryLines = [
+                `Implements **${primary.taskId}: ${primary.title}**${primary.module ? ` (\`${primary.module}\`)` : ''}.`,
+              ];
+              if (primary.outcome) {
+                summaryLines.push('', primary.outcome);
+              }
+              if (primary.moduleFiles.length > 0) {
+                summaryLines.push('', 'Module files:');
+                for (const [file, action, notes] of primary.moduleFiles) {
+                  summaryLines.push(`- ${file} (${action}${notes ? ` — ${notes}` : ''})`);
+                }
+              }
+
+              const testPlanLines = primary.testCases.length > 0
+                ? primary.testCases.map(([id, scenario, expected]) => `- [ ] ${id}: ${scenario} — ${expected}`)
+                : [`- [ ] Manually verify against \`${primary.docPath}\``];
+
+              const closesLine = `Closes ${issueKeys.join(', ')} (${primary.taskId}: ${primary.title}).`;
+
+              const generatedSection = [
+                '## Summary',
+                '',
+                summaryLines.join('\n'),
+                '',
+                '## Test plan',
+                '',
+                testPlanLines.join('\n'),
+                '',
+                closesLine,
+              ].join('\n');
+
+              core.notice(
+                `Prefilled Summary/Test plan from ${primary.docPath} (${primary.taskId}). Fill in real Test plan results before merge.`,
+              );
+
+              currentBody = currentBody.trim().length > 0
+                ? `${generatedSection}\n\n${currentBody.trim()}`
+                : generatedSection;
+            } else if (!primary) {
+              core.notice(
+                'No matching task doc found under docs/implementation/tasks for the detected Jira key(s) — skipping Summary/Test plan prefill.',
+              );
+            }
+
             const issueLinks = issueKeys
               .map((key) => `- [${key}](${jiraBaseUrl}/browse/${key})`)
               .join('\n');
@@ -57,7 +258,6 @@ jobs:
             ${issueLinks}
             ${bodyMarkerEnd}`.replace(/^ {12}/gm, '').trim();
 
-            const currentBody = pr.body || '';
             const markerPattern = new RegExp(
               `${bodyMarkerStart}[\\s\\S]*?${bodyMarkerEnd}`,
             );
@@ -65,7 +265,7 @@ jobs:
               ? currentBody.replace(markerPattern, jiraLinksSection)
               : `${currentBody.trim()}\n\n${jiraLinksSection}`.trim();
 
-            if (nextBody !== currentBody) {
+            if (nextBody !== (pr.body || '')) {
               await github.rest.pulls.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,

@@ -7,6 +7,7 @@ import { AuthWorkspaceModule } from "./modules/auth-workspace/auth-workspace.mod
 import { UsersModule } from "./modules/users/users.module.js";
 import { OutboxModule } from "./platform/outbox/outbox.module.js";
 import { PbacModule } from "./platform/pbac/pbac.module.js";
+import { AuditModule } from "./platform/audit/audit.module.ts";
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PbacModule } from "./platform/pbac/pbac.module.js";
       validationSchema: configValidationSchema,
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
+    AuditModule,
     OutboxModule,
     PbacModule,
     AppFeatureModule,
