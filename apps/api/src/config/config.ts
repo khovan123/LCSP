@@ -26,6 +26,7 @@ export const configValidationSchema = Joi.object({
         '"MFA_SECRET_ENCRYPTION_KEY" must be exactly 64 hex characters (32 bytes)',
     }),
   PYTHON_WORKER_BASE_URL: Joi.string().required(),
+  WORKER_API_KEY: Joi.string().min(32).required(),
 }).unknown(true);
 
 function parseRedirectUris(value: string): string[] {
@@ -69,6 +70,9 @@ export function config(): AppConfig {
     },
     pythonWorker: {
       baseUrl: env.PYTHON_WORKER_BASE_URL ?? "",
+    },
+    worker: {
+      apiKey: env.WORKER_API_KEY ?? "",
     },
   };
 }
