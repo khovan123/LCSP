@@ -35,7 +35,7 @@ jobs:
         uses: prisma/compute-deploy@main
         with:
           api-token: ${{ secrets.PRISMA_API_TOKEN }}
-          compute-service-id: cps_nwpkmiuffmqo1g5pbuj5g8x7
+          compute-service-id: cmrcdwclv0gm41cgjdnyds1e7
           artifact-path: apps/api/dist
           entrypoint: src/main.js
           bun-install: "false"
