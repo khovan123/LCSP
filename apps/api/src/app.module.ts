@@ -6,6 +6,7 @@ import { AppFeatureModule } from "./modules/app/app.module.js";
 import { AuthWorkspaceModule } from "./modules/auth-workspace/auth-workspace.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
 import { OutboxModule } from "./platform/outbox/outbox.module.js";
+import { PbacModule } from "./platform/pbac/pbac.module.js";
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { OutboxModule } from "./platform/outbox/outbox.module.js";
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
     OutboxModule,
+    PbacModule,
     AppFeatureModule,
     AuthWorkspaceModule,
     UsersModule,

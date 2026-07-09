@@ -3,7 +3,7 @@ task_id: MW-pbac-002
 module: platform/pbac
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 1.6
 depends_on:
   - platform/pbac/01-policy-model.md
