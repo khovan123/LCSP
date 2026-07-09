@@ -3,7 +3,7 @@ task_id: MW-audit-001
 module: platform/audit-writer
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 1.8
 depends_on:
   - platform/config/01-config-loader.md

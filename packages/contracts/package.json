@@ -4,6 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./audit": "./src/audit/index.ts",
+    "./audit/audit-event.types": "./src/audit/audit-event.types.ts",
     "./auth": "./src/auth/index.ts",
     "./auth/actions": "./src/auth/actions.ts",
     "./auth/codes": "./src/auth/codes.ts",
