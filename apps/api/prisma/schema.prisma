@@ -164,8 +164,10 @@ model AuthAuditEvent {
   createdAt      DateTime          @default(now())
   organization   AuthOrganization? @relation(fields: [organizationId], references: [id])
 
-  @@index([organizationId])
   @@index([correlationId])
+  @@index([organizationId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([eventType, createdAt])
 }
 
 model AuthDecisionLog {
