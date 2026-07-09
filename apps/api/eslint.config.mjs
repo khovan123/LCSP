@@ -19,7 +19,9 @@ export default tseslint.config(
       },
       sourceType: "module",
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ["prisma.config.ts", "jest.config.ts"],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },

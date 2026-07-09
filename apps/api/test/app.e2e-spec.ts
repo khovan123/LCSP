@@ -1,4 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { AppController } from "../src/modules/app/presentation/http/app.controller.js";
 import { UsersController } from "../src/modules/users/presentation/http/users.controller.js";
@@ -18,7 +19,7 @@ describe("AppController (e2e)", () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
     pushPrismaSchema();
     prisma = new PrismaClient({
-      datasources: { db: { url: TEST_DATABASE_URL } },
+      adapter: new PrismaPg(TEST_DATABASE_URL),
     });
     await prisma.$connect();
   });

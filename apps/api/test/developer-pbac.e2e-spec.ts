@@ -6,6 +6,7 @@
 
 import * as assert from "node:assert/strict";
 
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -33,7 +34,7 @@ describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-02
     pushPrismaSchema();
 
     prisma = new PrismaClient({
-      datasources: { db: { url: TEST_DATABASE_URL } },
+      adapter: new PrismaPg(TEST_DATABASE_URL),
     });
     await prisma.$connect();
 
