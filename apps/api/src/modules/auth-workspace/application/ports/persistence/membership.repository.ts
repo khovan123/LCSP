@@ -11,4 +11,6 @@ export interface MembershipRepository {
     userId: string,
     organizationId: string,
   ): Promise<Membership | null>;
+  /** Used where the caller has no organization context of its own (e.g. OAuth callback) to resolve the single workspace an account belongs to. */
+  findActiveByUserId(userId: string): Promise<Membership[]>;
 }

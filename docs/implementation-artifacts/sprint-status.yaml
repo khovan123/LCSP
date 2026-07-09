@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: '2026-06-26T10:24:37+07:00'
-last_updated: '2026-07-04T00:00:00+07:00'
+last_updated: '2026-07-10T00:00:00+07:00'
 project: 'LCSP — Legal Compliance Support Platform'
 project_key: 'NOKEY'
 tracking_system: 'file-system'
@@ -45,7 +45,7 @@ development_status:
   epic-1: in-progress
   1-1-approved-account-entry-and-workspace-access: done
   1-2-mfa-session-recovery-and-profile-safety: done
-  1-3-oauth-oidc-login-without-repository-authorization: ready-for-dev
+  1-3-oauth-oidc-login-without-repository-authorization: review
   1-4-organization-membership-and-manager-policy-scope: ready-for-dev
   1-5-optional-developer-invitation-and-scoped-task-acceptance: ready-for-dev
   1-6-manager-only-action-enforcement: ready-for-dev

@@ -9,6 +9,10 @@ import {
 } from "@nestjs/common";
 
 import type { RequestMeta } from "../../application/contracts/auth-workspace/common.contract.ts";
+import type {
+  OAuthCallbackPayload,
+  OAuthStartPayload,
+} from "../../application/contracts/auth-workspace/oauth.contract.ts";
 import type { RegisterPayload } from "../../application/contracts/auth-workspace/register-approved-path.contract.ts";
 import type {
   ConfirmRecoveryPayload,
@@ -120,6 +124,36 @@ export class AuthWorkspaceController {
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     return this.authWorkspaceFacade.confirmPasswordRecovery(
+      payload,
+      requestMeta(correlationId),
+    );
+  }
+
+  @Get("auth/oauth/start")
+  oauthStart(
+    @Query("provider") provider?: string,
+    @Query("redirect_uri") redirectUri?: string,
+    @Headers("x-correlation-id") correlationId?: string,
+  ) {
+    const payload: OAuthStartPayload = {
+      provider,
+      redirect_uri: redirectUri,
+    };
+    return this.authWorkspaceFacade.oauthStart(
+      payload,
+      requestMeta(correlationId),
+    );
+  }
+
+  @Get("auth/oauth/callback")
+  oauthCallback(
+    @Query("code") code?: string,
+    @Query("state") state?: string,
+    @Query("provider") provider?: string,
+    @Headers("x-correlation-id") correlationId?: string,
+  ) {
+    const payload: OAuthCallbackPayload = { code, state, provider };
+    return this.authWorkspaceFacade.oauthCallback(
       payload,
       requestMeta(correlationId),
     );

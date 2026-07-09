@@ -1,0 +1,265 @@
+import { describe, it, expect, beforeEach } from "@jest/globals";
+
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+
+import {
+  Membership,
+  OAuthIdentity,
+  OAuthState,
+  User,
+} from "../../../domain/models/auth-workspace.models.ts";
+import type {
+  OAuthCallbackClaims,
+  OAuthProvider,
+} from "../../../infrastructure/oauth/oauth-provider.interface.ts";
+import type { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provider.registry.ts";
+import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
+import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
+import { OAuthCallbackCommand } from "./oauth-callback.command.ts";
+import { OAuthCallbackHandler } from "./oauth-callback.handler.ts";
+
+const EXPECTED_ISSUER = "https://issuer.example";
+const EXPECTED_AUDIENCE = "expected-audience";
+const CORRECT_NONCE = "correct-nonce";
+
+// A hypothetical real OIDC provider (unlike GitHub's classic OAuth2, which
+// has no ID token) — used only to exercise the shared nonce/issuer/audience/
+// expiry validation branch that GitHub's own claims (all-null) can never
+// reach. See ADR discussion in the OAuth story: GitHub's provider self-
+// reports fixed issuer/audience constants and null nonce/expiresAt, so this
+// stub is the only way to prove the generic validation logic is correct.
+class StubOidcProvider implements OAuthProvider {
+  readonly name = "stub-oidc";
+  expectedIssuer: string | null = EXPECTED_ISSUER;
+  expectedAudience: string | null = EXPECTED_AUDIENCE;
+  claims: OAuthCallbackClaims = {
+    providerAccountId: "acct-1",
+    nonce: CORRECT_NONCE,
+    issuer: EXPECTED_ISSUER,
+    audience: EXPECTED_AUDIENCE,
+    expiresAt: Date.now() + 60_000,
+  };
+
+  buildAuthorizationUrl(): string {
+    return "https://issuer.example/authorize";
+  }
+
+  handleCallback(): Promise<OAuthCallbackClaims> {
+    return Promise.resolve(this.claims);
+  }
+}
+
+function buildRepositories(input: {
+  oauthState: OAuthState | null;
+  identity: OAuthIdentity | null;
+  user: User | null;
+  activeMemberships: Membership[];
+}): AuthWorkspaceRepositories {
+  const auditEvents: Record<string, unknown>[] = [];
+  let consumed = false;
+
+  const repositories: AuthWorkspaceRepositories = {
+    organizations: {
+      findById: () => Promise.resolve(null),
+      save: () => Promise.resolve(),
+    },
+    users: {
+      nextId: () => "unused",
+      save: () => Promise.resolve(),
+      findById: (id: string) =>
+        Promise.resolve(input.user && input.user.id === id ? input.user : null),
+      findByEmail: () => Promise.resolve(null),
+    },
+    memberships: {
+      nextId: () => "unused",
+      save: () => Promise.resolve(),
+      findByUserAndOrganization: () => Promise.resolve(null),
+      findActiveByUserId: () => Promise.resolve(input.activeMemberships),
+    },
+    invitations: {
+      save: () => Promise.resolve(),
+      findById: () => Promise.resolve(null),
+      tryConsume: () => Promise.resolve(false),
+    },
+    sessions: {
+      nextId: () => "session-1",
+      save: () => Promise.resolve(),
+      findByFingerprint: () => Promise.resolve(null),
+      revokeAllForUser: () => Promise.resolve(),
+    },
+    policies: {
+      findByIdAndVersion: () => Promise.resolve(null),
+    },
+    auditEvents: {
+      append: (event) => {
+        auditEvents.push(event);
+        return Promise.resolve();
+      },
+    },
+    authorizationDecisions: {
+      append: () => Promise.resolve(),
+    },
+    mfaEnrollments: {
+      findByUserId: () => Promise.resolve(null),
+      save: () => Promise.resolve(),
+      deleteByUserId: () => Promise.resolve(),
+    },
+    mfaRateLimits: {
+      findByUserId: () => Promise.resolve(null),
+      save: () => Promise.resolve(),
+      recordFailedAttempt: () => {
+        throw new Error("not used in this test");
+      },
+    },
+    mfaOtpUsed: {
+      isUsed: () => Promise.resolve(false),
+      tryMarkUsed: () => Promise.resolve(true),
+      pruneOlderThan: () => Promise.resolve(),
+    },
+    recoveryRequests: {
+      nextId: () => "unused",
+      save: () => Promise.resolve(),
+      findByFingerprint: () => Promise.resolve(null),
+    },
+    oauthStates: {
+      nextId: () => "unused",
+      save: () => Promise.resolve(),
+      consumeByState: () => {
+        if (consumed || !input.oauthState) {
+          return Promise.resolve(null);
+        }
+        consumed = true;
+        return Promise.resolve(input.oauthState);
+      },
+    },
+    oauthIdentities: {
+      findByProviderAccount: () => Promise.resolve(input.identity),
+    },
+  };
+
+  return repositories;
+}
+
+describe("OAuthCallbackHandler generic OIDC claim validation", () => {
+  let support: AuthWorkspaceSupportService;
+  let registry: OAuthProviderRegistry;
+  let provider: StubOidcProvider;
+  let oauthState: OAuthState;
+  let user: User;
+  let membership: Membership;
+  let identity: OAuthIdentity;
+
+  beforeEach(() => {
+    support = new AuthWorkspaceSupportService();
+    provider = new StubOidcProvider();
+    registry = {
+      resolve: (name: string) => (name === provider.name ? provider : null),
+    } as unknown as OAuthProviderRegistry;
+
+    oauthState = new OAuthState({
+      id: "state-1",
+      state: "state-value",
+      nonce: CORRECT_NONCE,
+      provider: provider.name,
+      redirectUri: "https://app.example/callback",
+      expiresAt: Date.now() + 60_000,
+    });
+
+    user = new User({
+      id: "user-1",
+      email: "oidc-user@acme.test",
+      passwordHash: "unused",
+      emailVerified: true,
+    });
+
+    membership = new Membership({
+      id: "membership-1",
+      userId: user.id,
+      organizationId: "org-1",
+      status: "active",
+      subjectAttributes: { role: "Manager" },
+      policyId: "policy-1",
+      policyVersion: "v1",
+    });
+
+    identity = new OAuthIdentity({
+      id: "identity-1",
+      userId: user.id,
+      provider: provider.name,
+      providerAccountId: "acct-1",
+      createdAt: Date.now(),
+    });
+  });
+
+  function execute() {
+    const repositories = buildRepositories({
+      oauthState,
+      identity,
+      user,
+      activeMemberships: [membership],
+    });
+    const handler = new OAuthCallbackHandler(support, repositories, registry);
+    return handler.execute(
+      new OAuthCallbackCommand({
+        code: "good-code",
+        state: oauthState.state,
+        provider: provider.name,
+      }),
+    );
+  }
+
+  it("succeeds when nonce, issuer, audience and expiry all match", async () => {
+    const result = await execute();
+    expect("ok" in result && result.ok).toBe(true);
+  });
+
+  it("rejects a nonce that does not match the one issued at start", async () => {
+    provider.claims = { ...provider.claims, nonce: "wrong-nonce" };
+    const result = await execute();
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthCallbackInvalid,
+    );
+  });
+
+  it("rejects an issuer that does not match the provider's expected issuer", async () => {
+    provider.claims = {
+      ...provider.claims,
+      issuer: "https://attacker.example",
+    };
+    const result = await execute();
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthCallbackInvalid,
+    );
+  });
+
+  it("rejects an audience that does not match the provider's expected audience", async () => {
+    provider.claims = { ...provider.claims, audience: "wrong-audience" };
+    const result = await execute();
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthCallbackInvalid,
+    );
+  });
+
+  it("rejects an expired ID token claim", async () => {
+    provider.claims = { ...provider.claims, expiresAt: Date.now() - 1000 };
+    const result = await execute();
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthCallbackInvalid,
+    );
+  });
+
+  it("skips the nonce/issuer/audience/expiry checks when a provider reports them as null (e.g. GitHub)", async () => {
+    provider.claims = {
+      providerAccountId: "acct-1",
+      nonce: null,
+      issuer: null,
+      audience: null,
+      expiresAt: null,
+    };
+    provider.expectedIssuer = null;
+    provider.expectedAudience = null;
+
+    const result = await execute();
+    expect("ok" in result && result.ok).toBe(true);
+  });
+});

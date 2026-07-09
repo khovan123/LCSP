@@ -18,6 +18,11 @@ export type AuthMessages = {
     mfaRateLimited: { title: string; detail: string };
     recoveryInvalid: { title: string; detail: string };
     pbacDenied: { title: string; detail: string };
+    unsupportedProvider: { title: string; detail: string };
+    invalidRedirectUri: { title: string; detail: string };
+    oauthStateInvalid: { title: string; detail: string };
+    oauthCallbackInvalid: { title: string; detail: string };
+    accountNotFound: { title: string; detail: string };
   };
 };
 

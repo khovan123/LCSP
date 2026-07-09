@@ -40,7 +40,17 @@ export type ProblemKey =
   | "auth.errors.recoveryInvalid.title"
   | "auth.errors.recoveryInvalid.detail"
   | "auth.errors.pbacDenied.title"
-  | "auth.errors.pbacDenied.detail";
+  | "auth.errors.pbacDenied.detail"
+  | "auth.errors.unsupportedProvider.title"
+  | "auth.errors.unsupportedProvider.detail"
+  | "auth.errors.invalidRedirectUri.title"
+  | "auth.errors.invalidRedirectUri.detail"
+  | "auth.errors.oauthStateInvalid.title"
+  | "auth.errors.oauthStateInvalid.detail"
+  | "auth.errors.oauthCallbackInvalid.title"
+  | "auth.errors.oauthCallbackInvalid.detail"
+  | "auth.errors.accountNotFound.title"
+  | "auth.errors.accountNotFound.detail";
 
 export type AppProblem<TCode extends string = AuthErrorCode> = {
   type: string;

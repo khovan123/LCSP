@@ -1,6 +1,10 @@
+---
+baseline_commit: 4983bf26f6c2853575034990d5d1a2505d4e94b6
+---
+
 # Story 1.3: OAuth/OIDC Login Without Repository Authorization
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -24,9 +28,9 @@ As a user, I want OAuth/OIDC login to authenticate only my LCSP identity, so tha
 
 ## Tasks / Subtasks
 
-- [ ] Implement OAuth/OIDC callback validation for redirect URI, state, nonce, issuer, audience and expiry. (AC: 1)
-- [ ] Create LCSP identity/session only after safe account linking. (AC: 2)
-- [ ] Harden audit and blocked state handling so login never creates repository authorization. (AC: 2)
+- [x] Implement OAuth/OIDC callback validation for redirect URI, state, nonce, issuer, audience and expiry. (AC: 1)
+- [x] Create LCSP identity/session only after safe account linking. (AC: 2)
+- [x] Harden audit and blocked state handling so login never creates repository authorization. (AC: 2)
 
 ## Dev Notes
 
@@ -150,13 +154,61 @@ GPT-5 Codex
 - Batch `bmad-create-story` run on 2026-07-02T22:01:26+07:00.
 - Source packet: `docs/developer/story-handbook/1-3-oauth-oidc-login-without-repository-authorization.md`.
 - Canonical title/source alignment: `docs/planning-artifacts/epics.md`.
+- `bmad-dev-story` implementation run on 2026-07-10, reconciled against the concrete task-doc track (`docs/implementation/tasks/modules/auth-workspace/08-oauth-oidc-start-endpoint.md` = MW-auth-008, `09-oauth-oidc-callback-endpoint.md` = MW-auth-009), which is this session's authoritative source for API contracts, Prisma models and test tables.
+- `tsc -b --force`: 0 new errors (19 pre-existing baseline errors, all in unrelated e2e specs for not-yet-implemented modules, unchanged before/after).
+- Unit suite (`pnpm test`): 106/106 passing (16 suites), including the 6 new `oauth-callback.handler.spec.ts` cases.
+- E2E suite (`pnpm test:e2e`): 96/96 previously-passing tests still pass; 26 pre-existing failures unchanged in scope (assessment/scan/legal-corpus/evidence-gates/classification-guard/reconciliation/audit-trail/smoke health-check/developer-pbac assessment routes, and `oauth-separation.e2e-spec.ts`'s GitHub-App-installation assertions — a different, unimplemented `github-integration` module). New `oauth-login.e2e-spec.ts`: 14/14 passing.
+- Fixed a pre-existing test-isolation bug in `test/support/auth-workspace-test-helpers.ts`'s `resetAuthWorkspaceDatabase` (never truncated the generic `User` table), which caused `app.e2e-spec.ts` to flake across repeated local e2e runs — unrelated to OAuth but discovered and fixed while verifying this story.
 
 ### Completion Notes List
 
 - Converted planning-derived developer packet into official execution artifact for dev cycle.
 - Status set to `ready-for-dev` in `docs/implementation-artifacts/sprint-status.yaml`.
 - Story retains planning authority references and scope guardrails for downstream `dev-story` work.
+- Implemented `GET /auth/oauth/start` and `GET /auth/oauth/callback` end-to-end: new `AuthOAuthState`/`AuthOAuthIdentity` Prisma models (migration `20260709192021_add_oauth_state_and_identity`), an OIDC-generic `OAuthProvider` interface with a `GitHubOAuthProvider` implementation, `OAuthStartHandler`/`OAuthCallbackHandler` command handlers wired through the existing `AuthWorkspaceFacade`/`auth-workspace.module.ts` DI pattern, and 5 new `AUTH_ERROR_CODES` (`UNSUPPORTED_PROVIDER`, `INVALID_REDIRECT_URI`, `OAUTH_STATE_INVALID`, `OAUTH_CALLBACK_INVALID`, `ACCOUNT_NOT_FOUND`) with EN/VI i18n messages.
+- **Design decision (GitHub vs. literal OIDC), confirmed with the user**: GitHub's classic OAuth2 has no signed ID token, so it cannot supply nonce/issuer/audience/expiry the way a real OIDC provider would. The `OAuthProvider` interface stays honestly OIDC-shaped (`expectedIssuer`/`expectedAudience` readonly on the provider, `nonce`/`issuer`/`audience`/`expiresAt` nullable on returned claims) so a future real OIDC provider can plug in without an interface change. `GitHubOAuthProvider` reports fixed, self-controlled issuer/audience constants (never attacker-influenced) and `nonce: null`/`expiresAt: null`; `OAuthCallbackHandler`'s shared validation skips a check whenever its claim is `null`. The generic nonce/issuer/audience/expiry mismatch branches (task doc T04–T07) are proven via a dedicated unit spec (`oauth-callback.handler.spec.ts`) using a stub OIDC-shaped provider, since GitHub's own flow can never reach those branches.
+- **Design decision (no `organization_id` on the callback), documented for follow-up**: the callback endpoint has no organization context, so account resolution requires the account's active-membership set to be exactly 1 (`MembershipRepository.findActiveByUserId`, new port method). 0 or >1 active memberships fails closed as `MEMBERSHIP_MISSING`, per this codebase's stated deny-by-default philosophy (`docs/project-context.md`). Multi-membership OAuth users cannot log in via this story's endpoint alone — a real gap to revisit in a later story (e.g. an org-selection step), not silently handled.
+- **HTTP status convention followed, not the task docs' literal tables**: matching every other `auth-workspace` endpoint in this codebase (confirmed via `auth-workspace.e2e-spec.ts`'s own `.expect(201)` on a failed sign-in), both new GET endpoints always return NestJS's default status (200) with `{ok: false, problem: {...}}` in the body on logical failure, rather than mapping `problem.status` (400/403/404 per the task docs) to the actual HTTP response code.
+- Per the task docs' explicit business rules, `AuthOAuthIdentity` rows are read-only in this story (`findByProviderAccount` only, no `save`) — account linking/creation is out of scope; a not-found provider account always fails closed as `ACCOUNT_NOT_FOUND`, never auto-creates.
+- No `RepositoryConnection`/GitHub-App-installation code exists anywhere in the new OAuth login path — those models don't exist in this codebase yet and belong to a separate, unimplemented `github-integration` module (also the reason 2 of `oauth-separation.e2e-spec.ts`'s pre-existing assertions still fail — unrelated to this story).
 
 ### File List
 
 - docs/implementation-artifacts/1-3-oauth-oidc-login-without-repository-authorization.md
+- apps/api/prisma/schema.prisma
+- apps/api/prisma/migrations/20260709192021_add_oauth_state_and_identity/migration.sql
+- apps/api/src/modules/auth-workspace/domain/entities/oauth-state.entity.ts
+- apps/api/src/modules/auth-workspace/domain/entities/oauth-identity.entity.ts
+- apps/api/src/modules/auth-workspace/domain/models/auth-workspace.models.ts
+- apps/api/src/modules/auth-workspace/application/ports/persistence/oauth-state.repository.ts
+- apps/api/src/modules/auth-workspace/application/ports/persistence/oauth-identity.repository.ts
+- apps/api/src/modules/auth-workspace/application/ports/persistence/membership.repository.ts
+- apps/api/src/modules/auth-workspace/application/ports/persistence/auth-workspace-repositories.ts
+- apps/api/src/modules/auth-workspace/application/contracts/auth-workspace/oauth.contract.ts
+- apps/api/src/modules/auth-workspace/application/commands/oauth-start/oauth-start.command.ts
+- apps/api/src/modules/auth-workspace/application/commands/oauth-start/oauth-start.handler.ts
+- apps/api/src/modules/auth-workspace/application/commands/oauth-callback/oauth-callback.command.ts
+- apps/api/src/modules/auth-workspace/application/commands/oauth-callback/oauth-callback.handler.ts
+- apps/api/src/modules/auth-workspace/application/commands/oauth-callback/oauth-callback.handler.spec.ts
+- apps/api/src/modules/auth-workspace/application/services/auth-workspace/auth-workspace.facade.ts
+- apps/api/src/modules/auth-workspace/infrastructure/oauth/oauth-provider.interface.ts
+- apps/api/src/modules/auth-workspace/infrastructure/oauth/github-oauth.provider.ts
+- apps/api/src/modules/auth-workspace/infrastructure/oauth/oauth-provider.registry.ts
+- apps/api/src/modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.mappers.ts
+- apps/api/src/modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.repositories.ts
+- apps/api/src/modules/auth-workspace/infrastructure/security/security.utils.ts
+- apps/api/src/modules/auth-workspace/presentation/http/auth-workspace.controller.ts
+- apps/api/src/modules/auth-workspace/auth-workspace.module.ts
+- apps/api/test/oauth-login.e2e-spec.ts
+- apps/api/test/support/auth-workspace-test-helpers.ts
+- packages/contracts/src/auth/codes.ts
+- packages/contracts/src/auth/problems.ts
+- packages/contracts/src/auth/safe.ts
+- packages/i18n/src/types.ts
+- packages/i18n/src/locales/en/auth.ts
+- packages/i18n/src/locales/vi/auth.ts
+- docs/implementation-artifacts/sprint-status.yaml
+
+## Change Log
+
+- 2026-07-10: Implemented OAuth/OIDC login (start + callback) via `bmad-dev-story`, reconciled with `MW-auth-008`/`MW-auth-009` task docs. All 3 story tasks complete; all 2 ACs satisfied. Status moved `ready-for-dev` → `in-progress` → `review`.

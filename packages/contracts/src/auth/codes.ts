@@ -16,7 +16,12 @@ export const AUTH_ERROR_CODES = {
   mfaInvalid: "MFA_INVALID",
   mfaRateLimited: "MFA_RATE_LIMITED",
   recoveryInvalid: "RECOVERY_INVALID",
-  pbacDenied: "PBAC_DENIED"
+  pbacDenied: "PBAC_DENIED",
+  unsupportedProvider: "UNSUPPORTED_PROVIDER",
+  invalidRedirectUri: "INVALID_REDIRECT_URI",
+  oauthStateInvalid: "OAUTH_STATE_INVALID",
+  oauthCallbackInvalid: "OAUTH_CALLBACK_INVALID",
+  accountNotFound: "ACCOUNT_NOT_FOUND"
 } as const;
 
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[keyof typeof AUTH_ERROR_CODES];

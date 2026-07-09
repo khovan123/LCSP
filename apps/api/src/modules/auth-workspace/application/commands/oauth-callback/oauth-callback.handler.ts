@@ -1,0 +1,230 @@
+import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+
+import type { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provider.registry.ts";
+import type { OAuthCallbackClaims } from "../../../infrastructure/oauth/oauth-provider.interface.ts";
+import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
+import type { OAuthCallbackSuccess } from "../../contracts/auth-workspace/oauth.contract.ts";
+import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
+import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
+import { OAuthCallbackCommand } from "./oauth-callback.command.ts";
+
+export class OAuthCallbackHandler {
+  constructor(
+    private readonly support: AuthWorkspaceSupportService,
+    private readonly repositories: AuthWorkspaceRepositories,
+    private readonly providerRegistry: OAuthProviderRegistry,
+  ) {}
+
+  async execute(
+    command: OAuthCallbackCommand,
+  ): Promise<AuthProblemResult | OAuthCallbackSuccess> {
+    const { payload, requestMeta } = command;
+    const { repositories } = this;
+    const correlationId =
+      requestMeta.correlation_id ?? this.support.createCorrelationId();
+
+    const code = asNonEmptyString(payload?.code);
+    const stateValue = asNonEmptyString(payload?.state);
+    const providerParam = asNonEmptyString(payload?.provider);
+
+    if (!code || !stateValue || !providerParam) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.validationFailed,
+        correlationId,
+      );
+    }
+
+    // Atomic delete-and-return: a state value can only ever be consumed once,
+    // closing the replay window even under concurrent callback requests.
+    const oauthState =
+      await repositories.oauthStates.consumeByState(stateValue);
+
+    if (
+      !oauthState ||
+      oauthState.isExpired(this.support.now()) ||
+      oauthState.provider !== providerParam
+    ) {
+      await this.recordFailure(
+        repositories,
+        correlationId,
+        AUTH_ERROR_CODES.oauthStateInvalid,
+        null,
+      );
+      return createProblemResult(
+        AUTH_ERROR_CODES.oauthStateInvalid,
+        correlationId,
+      );
+    }
+
+    const provider = this.providerRegistry.resolve(oauthState.provider);
+    if (!provider) {
+      await this.recordFailure(
+        repositories,
+        correlationId,
+        AUTH_ERROR_CODES.unsupportedProvider,
+        null,
+      );
+      return createProblemResult(
+        AUTH_ERROR_CODES.unsupportedProvider,
+        correlationId,
+      );
+    }
+
+    let claims: OAuthCallbackClaims;
+    try {
+      claims = await provider.handleCallback({
+        code,
+        redirectUri: oauthState.redirectUri,
+        expectedNonce: oauthState.nonce,
+      });
+    } catch {
+      // Never leak provider-specific error detail (token exchange failure
+      // reason, network error, etc.) to the caller or the audit trail.
+      await this.recordFailure(
+        repositories,
+        correlationId,
+        AUTH_ERROR_CODES.oauthCallbackInvalid,
+        null,
+      );
+      return createProblemResult(
+        AUTH_ERROR_CODES.oauthCallbackInvalid,
+        correlationId,
+      );
+    }
+
+    const claimsValid =
+      Boolean(claims.providerAccountId) &&
+      (provider.expectedIssuer === null ||
+        claims.issuer === provider.expectedIssuer) &&
+      (provider.expectedAudience === null ||
+        claims.audience === provider.expectedAudience) &&
+      (claims.nonce === null || claims.nonce === oauthState.nonce) &&
+      (claims.expiresAt === null || claims.expiresAt >= this.support.now());
+
+    if (!claimsValid) {
+      await this.recordFailure(
+        repositories,
+        correlationId,
+        AUTH_ERROR_CODES.oauthCallbackInvalid,
+        null,
+      );
+      return createProblemResult(
+        AUTH_ERROR_CODES.oauthCallbackInvalid,
+        correlationId,
+      );
+    }
+
+    const identity = await repositories.oauthIdentities.findByProviderAccount(
+      oauthState.provider,
+      claims.providerAccountId,
+    );
+    if (!identity) {
+      await this.recordFailure(
+        repositories,
+        correlationId,
+        AUTH_ERROR_CODES.accountNotFound,
+        null,
+      );
+      return createProblemResult(
+        AUTH_ERROR_CODES.accountNotFound,
+        correlationId,
+      );
+    }
+
+    const user = await repositories.users.findById(identity.userId);
+    if (!user || !user.emailVerified) {
+      await this.recordFailure(
+        repositories,
+        correlationId,
+        AUTH_ERROR_CODES.accountNotFound,
+        identity.userId,
+      );
+      return createProblemResult(
+        AUTH_ERROR_CODES.accountNotFound,
+        correlationId,
+      );
+    }
+
+    // No organization is supplied by the callback itself, so the account's
+    // active membership set must resolve to exactly one workspace. Zero or
+    // multiple active memberships is ambiguous and fails closed rather than
+    // guessing which workspace to sign the user into.
+    const activeMemberships = await repositories.memberships.findActiveByUserId(
+      user.id,
+    );
+    if (activeMemberships.length !== 1) {
+      await this.recordFailure(
+        repositories,
+        correlationId,
+        AUTH_ERROR_CODES.membershipMissing,
+        user.id,
+      );
+      return createProblemResult(
+        AUTH_ERROR_CODES.membershipMissing,
+        correlationId,
+      );
+    }
+
+    const organizationId = activeMemberships[0].organizationId;
+    const sessionState = await this.support.createSession(
+      repositories,
+      user,
+      organizationId,
+      correlationId,
+    );
+
+    await this.support.recordAudit(repositories, {
+      event_type: "auth.oauth.login.succeeded",
+      actor_id: user.id,
+      organization_id: organizationId,
+      decision: "allow",
+      correlation_id: correlationId,
+      provider: oauthState.provider,
+    });
+
+    const mfaEnrollment = await this.support.findMfaEnrollment(
+      repositories,
+      user.id,
+    );
+    const organization = await this.support.resolveOrganizationById(
+      repositories,
+      organizationId,
+    );
+    const mfaRequired = this.support.isMfaRequired(
+      user,
+      organization,
+      mfaEnrollment,
+    );
+
+    return {
+      ok: true,
+      correlation_id: correlationId,
+      session_token: sessionState.token,
+      expires_at: sessionState.session.expiresAt,
+      mfa_required: mfaRequired,
+      organization_id: organizationId,
+    };
+  }
+
+  private async recordFailure(
+    repositories: AuthWorkspaceRepositories,
+    correlationId: string,
+    reasonCode: string,
+    actorId: string | null,
+  ): Promise<void> {
+    await this.support.recordAudit(repositories, {
+      event_type: "auth.oauth.login.failed",
+      actor_id: actorId,
+      organization_id: null,
+      decision: "deny",
+      reason_code: reasonCode,
+      correlation_id: correlationId,
+    });
+  }
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}

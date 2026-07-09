@@ -3,8 +3,9 @@ import type {
   AuthDecisionLog,
   AuthInvitation,
   AuthMembership,
-  AuthMfaOtpUsed,
   AuthMfaRateLimit,
+  AuthOAuthIdentity,
+  AuthOAuthState,
   AuthOrganization,
   AuthPolicy,
   AuthRecoveryRequest,
@@ -19,6 +20,8 @@ import {
   MfaEnrollment,
   MfaRateLimit,
   Membership,
+  OAuthIdentity,
+  OAuthState,
   Organization,
   Policy,
   RecoveryRequest,
@@ -129,6 +132,29 @@ export function mapPolicyRecord(record: AuthPolicy): Policy {
   });
 }
 
+export function mapOAuthStateRecord(record: AuthOAuthState): OAuthState {
+  return new OAuthState({
+    id: record.id,
+    state: record.state,
+    nonce: record.nonce,
+    provider: record.provider,
+    redirectUri: record.redirectUri,
+    expiresAt: record.expiresAt.getTime(),
+  });
+}
+
+export function mapOAuthIdentityRecord(
+  record: AuthOAuthIdentity,
+): OAuthIdentity {
+  return new OAuthIdentity({
+    id: record.id,
+    userId: record.userId,
+    provider: record.provider,
+    providerAccountId: record.providerAccountId,
+    createdAt: record.createdAt.getTime(),
+  });
+}
+
 export function mapAuditEventRecord(record: AuthAuditEvent): AuditEvent {
   return jsonToAuditEvent(record.payload);
 }
@@ -142,7 +168,7 @@ export function mapAuthorizationDecisionRecord(
 export function subjectAttributesToJson(
   value: SubjectAttributes,
 ): Prisma.InputJsonValue {
-  return value as Prisma.InputJsonValue;
+  return value;
 }
 
 export function dateFromEpochMs(value: number | null): Date | null {
@@ -168,7 +194,7 @@ function jsonToAuditEvent(value: Prisma.JsonValue): AuditEvent {
     return {};
   }
 
-  return value as AuditEvent;
+  return value;
 }
 
 function jsonToAuthorizationDecision(

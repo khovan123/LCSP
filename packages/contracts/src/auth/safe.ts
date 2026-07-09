@@ -20,7 +20,12 @@ export const PROBLEM_REQUIRED_ACTIONS: Record<AuthErrorCode, RequiredAction> = {
   [AUTH_ERROR_CODES.mfaInvalid]: REQUIRED_ACTIONS.verifyMfa,
   [AUTH_ERROR_CODES.mfaRateLimited]: REQUIRED_ACTIONS.waitAndRetry,
   [AUTH_ERROR_CODES.recoveryInvalid]: REQUIRED_ACTIONS.retryRecovery,
-  [AUTH_ERROR_CODES.pbacDenied]: REQUIRED_ACTIONS.contactOwner
+  [AUTH_ERROR_CODES.pbacDenied]: REQUIRED_ACTIONS.contactOwner,
+  [AUTH_ERROR_CODES.unsupportedProvider]: REQUIRED_ACTIONS.none,
+  [AUTH_ERROR_CODES.invalidRedirectUri]: REQUIRED_ACTIONS.none,
+  [AUTH_ERROR_CODES.oauthStateInvalid]: REQUIRED_ACTIONS.signIn,
+  [AUTH_ERROR_CODES.oauthCallbackInvalid]: REQUIRED_ACTIONS.signIn,
+  [AUTH_ERROR_CODES.accountNotFound]: REQUIRED_ACTIONS.contactOwner
 };
 
 type ProblemDefaults = {
@@ -138,6 +143,36 @@ export const PROBLEM_DEFAULTS: Record<AuthErrorCode, ProblemDefaults> = {
     status: 403,
     titleKey: "auth.errors.pbacDenied.title",
     detailKey: "auth.errors.pbacDenied.detail"
+  },
+  [AUTH_ERROR_CODES.unsupportedProvider]: {
+    type: "auth/oauth-unsupported-provider",
+    status: 400,
+    titleKey: "auth.errors.unsupportedProvider.title",
+    detailKey: "auth.errors.unsupportedProvider.detail"
+  },
+  [AUTH_ERROR_CODES.invalidRedirectUri]: {
+    type: "auth/oauth-invalid-redirect-uri",
+    status: 400,
+    titleKey: "auth.errors.invalidRedirectUri.title",
+    detailKey: "auth.errors.invalidRedirectUri.detail"
+  },
+  [AUTH_ERROR_CODES.oauthStateInvalid]: {
+    type: "auth/oauth-state-invalid",
+    status: 400,
+    titleKey: "auth.errors.oauthStateInvalid.title",
+    detailKey: "auth.errors.oauthStateInvalid.detail"
+  },
+  [AUTH_ERROR_CODES.oauthCallbackInvalid]: {
+    type: "auth/oauth-callback-invalid",
+    status: 400,
+    titleKey: "auth.errors.oauthCallbackInvalid.title",
+    detailKey: "auth.errors.oauthCallbackInvalid.detail"
+  },
+  [AUTH_ERROR_CODES.accountNotFound]: {
+    type: "auth/oauth-account-not-found",
+    status: 404,
+    titleKey: "auth.errors.accountNotFound.title",
+    detailKey: "auth.errors.accountNotFound.detail"
   }
 };
 

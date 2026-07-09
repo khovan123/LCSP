@@ -14,6 +14,8 @@ import type {
   MfaOtpUsedRepository,
   MfaRateLimitRepository,
 } from "../../application/ports/persistence/mfa.repository.ts";
+import type { OAuthIdentityRepository } from "../../application/ports/persistence/oauth-identity.repository.ts";
+import type { OAuthStateRepository } from "../../application/ports/persistence/oauth-state.repository.ts";
 import type { OrganizationRepository } from "../../application/ports/persistence/organization.repository.ts";
 import type { PolicyRepository } from "../../application/ports/persistence/policy.repository.ts";
 import type { RecoveryRequestRepository } from "../../application/ports/persistence/recovery-request.repository.ts";
@@ -26,6 +28,8 @@ import type {
   Membership,
   MfaEnrollment,
   MfaRateLimit,
+  OAuthIdentity,
+  OAuthState,
   Organization,
   Policy,
   RecoveryRequest,
@@ -39,6 +43,8 @@ import {
   mapMembershipRecord,
   mapMfaEnrollmentRecord,
   mapMfaRateLimitRecord,
+  mapOAuthIdentityRecord,
+  mapOAuthStateRecord,
   mapOrganizationRecord,
   mapPolicyRecord,
   mapRecoveryRequestRecord,
@@ -181,6 +187,14 @@ export class PrismaMembershipRepository implements MembershipRepository {
     });
 
     return record ? mapMembershipRecord(record) : null;
+  }
+
+  async findActiveByUserId(userId: string): Promise<Membership[]> {
+    const records = await this.prisma.authMembership.findMany({
+      where: { userId, status: "active" },
+    });
+
+    return records.map(mapMembershipRecord);
   }
 }
 
@@ -351,7 +365,7 @@ export class PrismaAuthorizationDecisionRepository implements AuthorizationDecis
         policyId: decision.policy_id,
         policyVersion: decision.policy_version,
         correlationId: decision.correlation_id,
-        payload: decision as Prisma.InputJsonValue,
+        payload: decision,
       },
     });
   }
@@ -536,12 +550,73 @@ export class PrismaRecoveryRequestRepository implements RecoveryRequestRepositor
   }
 }
 
+@Injectable()
+export class PrismaOAuthStateRepository implements OAuthStateRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
+  nextId(): string {
+    return crypto.randomUUID();
+  }
+
+  async save(state: OAuthState): Promise<void> {
+    await this.prisma.authOAuthState.create({
+      data: {
+        id: state.id,
+        state: state.state,
+        nonce: state.nonce,
+        provider: state.provider,
+        redirectUri: state.redirectUri,
+        expiresAt: dateFromEpochMsRequired(state.expiresAt),
+      },
+    });
+  }
+
+  async consumeByState(state: string): Promise<OAuthState | null> {
+    try {
+      const record = await this.prisma.authOAuthState.delete({
+        where: { state },
+      });
+      return mapOAuthStateRecord(record);
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+}
+
+@Injectable()
+export class PrismaOAuthIdentityRepository implements OAuthIdentityRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async findByProviderAccount(
+    provider: string,
+    providerAccountId: string,
+  ): Promise<OAuthIdentity | null> {
+    const record = await this.prisma.authOAuthIdentity.findUnique({
+      where: { provider_providerAccountId: { provider, providerAccountId } },
+    });
+
+    return record ? mapOAuthIdentityRecord(record) : null;
+  }
+}
+
 function isUniqueConstraintViolation(error: unknown): boolean {
   return (
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
     (error as { code?: unknown }).code === "P2002"
+  );
+}
+
+function isRecordNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "P2025"
   );
 }
 

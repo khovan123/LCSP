@@ -7,6 +7,8 @@ import type {
   MfaOtpUsedRepository,
   MfaRateLimitRepository,
 } from "./mfa.repository.ts";
+import type { OAuthIdentityRepository } from "./oauth-identity.repository.ts";
+import type { OAuthStateRepository } from "./oauth-state.repository.ts";
 import type { OrganizationRepository } from "./organization.repository.ts";
 import type { PolicyRepository } from "./policy.repository.ts";
 import type { RecoveryRequestRepository } from "./recovery-request.repository.ts";
@@ -26,4 +28,6 @@ export type AuthWorkspaceRepositories = {
   mfaRateLimits: MfaRateLimitRepository;
   mfaOtpUsed: MfaOtpUsedRepository;
   recoveryRequests: RecoveryRequestRepository;
+  oauthStates: OAuthStateRepository;
+  oauthIdentities: OAuthIdentityRepository;
 };

@@ -1,4 +1,8 @@
 import type { RequestMeta } from "../../contracts/auth-workspace/common.contract.ts";
+import type {
+  OAuthCallbackPayload,
+  OAuthStartPayload,
+} from "../../contracts/auth-workspace/oauth.contract.ts";
 import type { RegisterPayload } from "../../contracts/auth-workspace/register-approved-path.contract.ts";
 import type {
   ConfirmRecoveryPayload,
@@ -11,6 +15,10 @@ import { ConfirmPasswordRecoveryCommand } from "../../commands/confirm-password-
 import { ConfirmPasswordRecoveryHandler } from "../../commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
 import { EnrollMfaCommand } from "../../commands/enroll-mfa/enroll-mfa.command.ts";
 import { EnrollMfaHandler } from "../../commands/enroll-mfa/enroll-mfa.handler.ts";
+import { OAuthCallbackCommand } from "../../commands/oauth-callback/oauth-callback.command.ts";
+import { OAuthCallbackHandler } from "../../commands/oauth-callback/oauth-callback.handler.ts";
+import { OAuthStartCommand } from "../../commands/oauth-start/oauth-start.command.ts";
+import { OAuthStartHandler } from "../../commands/oauth-start/oauth-start.handler.ts";
 import { RegisterApprovedPathCommand } from "../../commands/register-approved-path/register-approved-path.command.ts";
 import { RegisterApprovedPathHandler } from "../../commands/register-approved-path/register-approved-path.handler.ts";
 import { RequestPasswordRecoveryCommand } from "../../commands/request-password-recovery/request-password-recovery.command.ts";
@@ -37,6 +45,8 @@ export class AuthWorkspaceFacade {
     private readonly updateProfileHandler: UpdateProfileHandler,
     private readonly requestPasswordRecoveryHandler: RequestPasswordRecoveryHandler,
     private readonly confirmPasswordRecoveryHandler: ConfirmPasswordRecoveryHandler,
+    private readonly oauthStartHandler: OAuthStartHandler,
+    private readonly oauthCallbackHandler: OAuthCallbackHandler,
   ) {}
 
   registerApprovedPath(
@@ -106,6 +116,18 @@ export class AuthWorkspaceFacade {
   ) {
     return this.confirmPasswordRecoveryHandler.execute(
       new ConfirmPasswordRecoveryCommand(payload, requestMeta),
+    );
+  }
+
+  oauthStart(payload: OAuthStartPayload, requestMeta: RequestMeta = {}) {
+    return this.oauthStartHandler.execute(
+      new OAuthStartCommand(payload, requestMeta),
+    );
+  }
+
+  oauthCallback(payload: OAuthCallbackPayload, requestMeta: RequestMeta = {}) {
+    return this.oauthCallbackHandler.execute(
+      new OAuthCallbackCommand(payload, requestMeta),
     );
   }
 }
