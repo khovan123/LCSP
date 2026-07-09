@@ -1,14 +1,23 @@
 import { Global, Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
 
 import { AuthWorkspaceModule } from "../../modules/auth-workspace/auth-workspace.module.js";
 import { PbacContextLoader } from "./pbac-context.loader.js";
 import { PbacEvaluatorService } from "./pbac-evaluator.service.js";
+import { PbacPreflightController } from "./pbac-preflight.controller.js";
+import { PbacPreflightService } from "./pbac-preflight.service.js";
 import { PbacGuard } from "./pbac.guard.js";
 
 @Global()
 @Module({
-  imports: [AuthWorkspaceModule],
-  providers: [PbacEvaluatorService, PbacContextLoader, PbacGuard],
+  imports: [AuthWorkspaceModule, ConfigModule],
+  controllers: [PbacPreflightController],
+  providers: [
+    PbacEvaluatorService,
+    PbacContextLoader,
+    PbacGuard,
+    PbacPreflightService,
+  ],
   exports: [PbacEvaluatorService, PbacGuard],
 })
 export class PbacModule {}

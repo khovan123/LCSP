@@ -33,6 +33,10 @@ export interface PythonWorkerConfig {
   baseUrl: string;
 }
 
+export interface WorkerConfig {
+  apiKey: string;
+}
+
 export type NodeEnv = "development" | "production" | "test";
 
 export interface AppConfig {
@@ -44,4 +48,5 @@ export interface AppConfig {
   outbox: OutboxConfig;
   crypto: CryptoConfig;
   pythonWorker: PythonWorkerConfig;
+  worker: WorkerConfig;
 }

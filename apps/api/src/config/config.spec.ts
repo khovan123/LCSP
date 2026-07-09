@@ -16,6 +16,7 @@ const VALID_ENV = {
   OUTBOX_MAX_ATTEMPTS: "5",
   MFA_SECRET_ENCRYPTION_KEY: "0123456789abcdef".repeat(4),
   PYTHON_WORKER_BASE_URL: "http://localhost:8000",
+  WORKER_API_KEY: "w".repeat(32),
 };
 
 function validate(env: Record<string, string | undefined>) {
@@ -130,6 +131,13 @@ describe("config()", () => {
       },
       crypto: { mfaSecretEncryptionKey: VALID_ENV.MFA_SECRET_ENCRYPTION_KEY },
       pythonWorker: { baseUrl: VALID_ENV.PYTHON_WORKER_BASE_URL },
+      worker: { apiKey: VALID_ENV.WORKER_API_KEY },
     });
+  });
+
+  it("T07: fails when WORKER_API_KEY is missing", () => {
+    const { error } = validate(withoutKeys(VALID_ENV, ["WORKER_API_KEY"]));
+
+    expect(error?.message).toContain("WORKER_API_KEY");
   });
 });
