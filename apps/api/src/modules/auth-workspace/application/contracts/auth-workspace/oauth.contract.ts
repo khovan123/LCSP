@@ -1,0 +1,25 @@
+export type OAuthStartPayload = {
+  provider?: unknown;
+  redirect_uri?: unknown;
+};
+
+export type OAuthStartSuccess = {
+  ok: true;
+  correlation_id: string;
+  authorization_url: string;
+};
+
+export type OAuthCallbackPayload = {
+  code?: unknown;
+  state?: unknown;
+  provider?: unknown;
+};
+
+export type OAuthCallbackSuccess = {
+  ok: true;
+  correlation_id: string;
+  session_token: string;
+  expires_at: number;
+  mfa_required: boolean;
+  organization_id: string;
+};

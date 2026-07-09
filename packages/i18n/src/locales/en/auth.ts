@@ -73,6 +73,26 @@ export const enAuth = {
     pbacDenied: {
       title: "Action not permitted",
       detail: "You do not have permission to perform this action."
+    },
+    unsupportedProvider: {
+      title: "Sign-in provider unavailable",
+      detail: "This sign-in provider is not supported."
+    },
+    invalidRedirectUri: {
+      title: "Sign-in unavailable",
+      detail: "The sign-in request is invalid."
+    },
+    oauthStateInvalid: {
+      title: "Sign-in expired",
+      detail: "The sign-in attempt is invalid or has expired. Please try again."
+    },
+    oauthCallbackInvalid: {
+      title: "Sign-in unavailable",
+      detail: "We could not complete the sign-in attempt. Please try again."
+    },
+    accountNotFound: {
+      title: "Account not linked",
+      detail: "No account is linked to this sign-in method."
     }
   }
 } as const satisfies AuthMessages;

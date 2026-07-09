@@ -9,6 +9,8 @@ export { Policy } from "../entities/policy.entity.ts";
 export { MfaEnrollment } from "../entities/mfa-enrollment.entity.ts";
 export { MfaRateLimit } from "../entities/mfa-rate-limit.entity.ts";
 export { RecoveryRequest } from "../entities/recovery-request.entity.ts";
+export { OAuthState } from "../entities/oauth-state.entity.ts";
+export { OAuthIdentity } from "../entities/oauth-identity.entity.ts";
 export type { SubjectAttributesRecord as SubjectAttributes } from "../value-objects/subject-attributes.value-object.ts";
 
 export type AuthorizationDecision = {

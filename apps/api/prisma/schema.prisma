@@ -38,6 +38,7 @@ model AuthUser {
   recoveryRequests AuthRecoveryRequest[]
   sessions         AuthSession[]
   mfaEnrollment    AuthUserMfa?
+  oauthIdentities  AuthOAuthIdentity[]
 }
 
 model AuthPolicy {
@@ -146,6 +147,28 @@ model AuthRecoveryRequest {
   createdAt        DateTime  @default(now())
   user             AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+}
+
+model AuthOAuthState {
+  id          String   @id
+  state       String   @unique
+  nonce       String
+  provider    String
+  redirectUri String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+}
+
+model AuthOAuthIdentity {
+  id                String   @id
+  userId            String
+  provider          String
+  providerAccountId String
+  createdAt         DateTime @default(now())
+  user              AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
   @@index([userId])
 }
 

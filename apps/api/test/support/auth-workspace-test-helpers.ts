@@ -79,12 +79,15 @@ export async function resetAuthWorkspaceDatabase(
   await prisma.authMfaOtpUsed.deleteMany();
   await prisma.authMfaRateLimit.deleteMany();
   await prisma.authUserMfa.deleteMany();
+  await prisma.authOAuthState.deleteMany();
+  await prisma.authOAuthIdentity.deleteMany();
   await prisma.authSession.deleteMany();
   await prisma.authInvitation.deleteMany();
   await prisma.authMembership.deleteMany();
   await prisma.authPolicy.deleteMany();
   await prisma.authUser.deleteMany();
   await prisma.authOrganization.deleteMany();
+  await prisma.user.deleteMany();
 }
 
 export async function seedMfaEnrollment(

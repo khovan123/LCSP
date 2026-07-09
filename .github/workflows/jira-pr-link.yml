@@ -126,6 +126,44 @@ jobs:
               return null;
             }
 
+            // A Story-type Jira issue (e.g. "LCSP-28: Story 1.3: ...") has no single task_id of
+            // its own — it spans every Task doc marked with a matching `epic_story:` frontmatter
+            // field (the CSV's `Parent` column only tracks Epic parentage, not Story, so it can't
+            // be used for this lookup). Returns all matches, sorted by task_id for determinism.
+            function findTaskDocsByEpicStory(storyNumber) {
+              const root = path.join(process.cwd(), 'docs', 'implementation', 'tasks', 'modules');
+              const stack = [root];
+              const matches = [];
+              while (stack.length > 0) {
+                const dir = stack.pop();
+                let entries;
+                try {
+                  entries = fs.readdirSync(dir, { withFileTypes: true });
+                } catch {
+                  continue;
+                }
+                for (const entry of entries) {
+                  const full = path.join(dir, entry.name);
+                  if (entry.isDirectory()) {
+                    stack.push(full);
+                    continue;
+                  }
+                  if (!entry.name.endsWith('.md')) continue;
+                  const content = fs.readFileSync(full, 'utf8');
+                  const match = content.match(/^epic_story:\s*(\S+)/m);
+                  if (match && match[1] === storyNumber) {
+                    matches.push({ filePath: full, content });
+                  }
+                }
+              }
+              matches.sort((a, b) => {
+                const idA = (a.content.match(/^task_id:\s*(\S+)/m) || [])[1] || '';
+                const idB = (b.content.match(/^task_id:\s*(\S+)/m) || [])[1] || '';
+                return idA.localeCompare(idB);
+              });
+              return matches;
+            }
+
             function parseFrontmatter(content) {
               const match = content.match(/^---\n([\s\S]*?)\n---/);
               const fm = {};
@@ -166,24 +204,10 @@ jobs:
             }
             const csvByKey = Object.fromEntries(csvRows.map((row) => [row.Key, row]));
 
-            const taskMatches = issueKeys.map((key) => {
-              const csvRow = csvByKey[key];
-              if (!csvRow || csvRow['Issue Type'] !== 'Task') {
-                return { key, taskId: null, doc: null };
-              }
-              const summary = csvRow.Summary || '';
-              const sepIndex = summary.indexOf(':');
-              const taskId = sepIndex === -1 ? '' : summary.slice(0, sepIndex).trim();
-              if (!taskId) {
-                return { key, taskId: null, doc: null };
-              }
-              const found = findTaskDocByTaskId(taskId);
-              if (!found) {
-                return { key, taskId, doc: null };
-              }
+            function buildDocEntry(key, taskId, titleFallback, found) {
               const fm = parseFrontmatter(found.content);
               const titleMatch = found.content.match(/^# (.+)$/m);
-              const title = titleMatch ? titleMatch[1].trim() : summary.slice(sepIndex + 1).trim();
+              const title = titleMatch ? titleMatch[1].trim() : titleFallback;
               const outcome = parseSection(found.content, 'Outcome');
               const moduleFiles = parseTable(parseSection(found.content, 'Module Files'));
               const testCases = parseTable(parseSection(found.content, 'Test Cases'));
@@ -197,9 +221,38 @@ jobs:
                 testCases,
                 docPath: path.relative(process.cwd(), found.filePath),
               };
-            });
+            }
 
-            const primary = taskMatches.find((m) => m.docPath);
+            // Every matched task doc across all detected Jira keys, in encounter order. A
+            // Task-type key contributes at most one doc; a Story-type key can contribute several
+            // (every task doc under that story), since a Story-level PR (this repo's `dev-story`
+            // convention: one PR per story) implements multiple Jira Tasks at once.
+            const allDocs = [];
+            for (const key of issueKeys) {
+              const csvRow = csvByKey[key];
+              if (!csvRow) continue;
+              const summary = csvRow.Summary || '';
+
+              if (csvRow['Issue Type'] === 'Task') {
+                const sepIndex = summary.indexOf(':');
+                const taskId = sepIndex === -1 ? '' : summary.slice(0, sepIndex).trim();
+                if (!taskId) continue;
+                const found = findTaskDocByTaskId(taskId);
+                if (!found) continue;
+                allDocs.push(buildDocEntry(key, taskId, summary.slice(sepIndex + 1).trim(), found));
+                continue;
+              }
+
+              if (csvRow['Issue Type'] === 'Story') {
+                const storyMatch = summary.match(/^Story\s+(\d+(?:\.\d+)*)\s*:/i);
+                if (!storyMatch) continue;
+                const found = findTaskDocsByEpicStory(storyMatch[1]);
+                for (const doc of found) {
+                  const taskIdMatch = doc.content.match(/^task_id:\s*(\S+)/m);
+                  allDocs.push(buildDocEntry(key, taskIdMatch ? taskIdMatch[1] : '', '', doc));
+                }
+              }
+            }
 
             // Normalize CRLF: GitHub's PR template / web editor can hand back \r\n, which
             // breaks the `\n`-anchored section regexes below if left as-is.
@@ -239,25 +292,44 @@ jobs:
               return { body: body.slice(0, m.index) + replacement + body.slice(m.index + m[0].length), found: true, replaced: true };
             }
 
-            if (primary) {
-              const summaryLines = [
-                `Implements **${primary.taskId}: ${primary.title}**${primary.module ? ` (\`${primary.module}\`)` : ''}.`,
-              ];
-              if (primary.outcome) {
-                summaryLines.push('', primary.outcome);
-              }
-              if (primary.moduleFiles.length > 0) {
-                summaryLines.push('', 'Module files:');
-                for (const [file, action, notes] of primary.moduleFiles) {
-                  summaryLines.push(`- ${file} (${action}${notes ? ` — ${notes}` : ''})`);
+            if (allDocs.length > 0) {
+              const summaryLines = [];
+              if (allDocs.length === 1) {
+                const d = allDocs[0];
+                summaryLines.push(`Implements **${d.taskId}: ${d.title}**${d.module ? ` (\`${d.module}\`)` : ''}.`);
+                if (d.outcome) {
+                  summaryLines.push('', d.outcome);
+                }
+                if (d.moduleFiles.length > 0) {
+                  summaryLines.push('', 'Module files:');
+                  for (const [file, action, notes] of d.moduleFiles) {
+                    summaryLines.push(`- ${file} (${action}${notes ? ` — ${notes}` : ''})`);
+                  }
+                }
+              } else {
+                summaryLines.push(`Implements ${allDocs.length} tasks:`);
+                for (const d of allDocs) {
+                  summaryLines.push(
+                    `- **${d.taskId}: ${d.title}**${d.module ? ` (\`${d.module}\`)` : ''}${d.outcome ? ` — ${d.outcome}` : ''}`,
+                  );
+                }
+                const filesLines = allDocs.flatMap((d) =>
+                  d.moduleFiles.map(([file, action, notes]) => `- ${file} (${action}${notes ? ` — ${notes}` : ''}) [${d.taskId}]`),
+                );
+                if (filesLines.length > 0) {
+                  summaryLines.push('', 'Module files:', ...filesLines);
                 }
               }
 
-              const checklistLines = primary.testCases.length > 0
-                ? primary.testCases.map(([id, scenario, expected]) => `- [ ] ${id}: ${scenario} — ${expected}`)
-                : [`- [ ] Manually verify against \`${primary.docPath}\``];
-              const closesLine = `Closes ${issueKeys.join(', ')} (${primary.taskId}: ${primary.title}).`;
+              const checklistLines = allDocs.flatMap((d) =>
+                d.testCases.length > 0
+                  ? d.testCases.map(([id, scenario, expected]) => `- [ ] ${id}: ${scenario} — ${expected}`)
+                  : [`- [ ] Manually verify against \`${d.docPath}\``],
+              );
+              const taskSummary = allDocs.map((d) => `${d.taskId}: ${d.title}`).join('; ');
+              const closesLine = `Closes ${issueKeys.join(', ')} (${taskSummary}).`;
               const verificationContent = `${checklistLines.join('\n')}\n\n${closesLine}`;
+              const docPaths = [...new Set(allDocs.map((d) => d.docPath))];
 
               const summaryResult = fillSectionIfBlank(currentBody, 'Summary', summaryLines.join('\n'));
               currentBody = summaryResult.body;
@@ -272,7 +344,7 @@ jobs:
 
               if (summaryResult.replaced || verificationResult.replaced) {
                 core.notice(
-                  `Prefilled Summary/Verification from ${primary.docPath} (${primary.taskId}). Fill in real verification results before merge.`,
+                  `Prefilled Summary/Verification from ${docPaths.join(', ')}. Fill in real verification results before merge.`,
                 );
               } else if (!summaryResult.found && !verificationResult.found) {
                 // Body doesn't follow the template at all (no Summary/Verification headings) —
@@ -287,7 +359,7 @@ jobs:
                   verificationContent,
                 ].join('\n');
                 core.notice(
-                  `No Summary/Verification headings found in PR body — prepending a full block from ${primary.docPath} (${primary.taskId}).`,
+                  `No Summary/Verification headings found in PR body — prepending a full block from ${docPaths.join(', ')}.`,
                 );
                 currentBody = currentBody.trim().length > 0
                   ? `${generatedSection}\n\n${currentBody.trim()}`

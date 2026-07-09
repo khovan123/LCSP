@@ -1,8 +1,11 @@
 import { Module } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 
 import { PrismaModule } from "../../infrastructure/prisma/prisma.module.js";
 import { ConfirmPasswordRecoveryHandler } from "./application/commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
 import { EnrollMfaHandler } from "./application/commands/enroll-mfa/enroll-mfa.handler.ts";
+import { OAuthCallbackHandler } from "./application/commands/oauth-callback/oauth-callback.handler.ts";
+import { OAuthStartHandler } from "./application/commands/oauth-start/oauth-start.handler.ts";
 import { RegisterApprovedPathHandler } from "./application/commands/register-approved-path/register-approved-path.handler.ts";
 import { RequestPasswordRecoveryHandler } from "./application/commands/request-password-recovery/request-password-recovery.handler.ts";
 import { RevokeSessionHandler } from "./application/commands/revoke-session/revoke-session.handler.ts";
@@ -18,6 +21,8 @@ import type { AuthWorkspaceRepositories } from "./application/ports/persistence/
 import { AuthWorkspaceSupportService } from "./application/services/auth-workspace/auth-workspace-support.service.ts";
 import { AuthWorkspaceFacade } from "./application/services/auth-workspace/auth-workspace.facade.ts";
 import { NoopRecoveryNotifierService } from "./infrastructure/notification/noop-recovery-notifier.service.ts";
+import { GitHubOAuthProvider } from "./infrastructure/oauth/github-oauth.provider.ts";
+import { OAuthProviderRegistry } from "./infrastructure/oauth/oauth-provider.registry.ts";
 import {
   PrismaAuditEventRepository,
   PrismaAuthorizationDecisionRepository,
@@ -26,6 +31,8 @@ import {
   PrismaMfaEnrollmentRepository,
   PrismaMfaOtpUsedRepository,
   PrismaMfaRateLimitRepository,
+  PrismaOAuthIdentityRepository,
+  PrismaOAuthStateRepository,
   PrismaOrganizationRepository,
   PrismaPolicyRepository,
   PrismaRecoveryRequestRepository,
@@ -47,6 +54,8 @@ const REPOSITORY_PROVIDERS = [
   PrismaMfaRateLimitRepository,
   PrismaMfaOtpUsedRepository,
   PrismaRecoveryRequestRepository,
+  PrismaOAuthStateRepository,
+  PrismaOAuthIdentityRepository,
 ];
 
 const AUTH_WORKSPACE_REPOSITORIES_BAG = "AUTH_WORKSPACE_REPOSITORIES_BAG";
@@ -89,6 +98,8 @@ function handlerProvider<T>(
         mfaRateLimits: PrismaMfaRateLimitRepository,
         mfaOtpUsed: PrismaMfaOtpUsedRepository,
         recoveryRequests: PrismaRecoveryRequestRepository,
+        oauthStates: PrismaOAuthStateRepository,
+        oauthIdentities: PrismaOAuthIdentityRepository,
       ): AuthWorkspaceRepositories => ({
         organizations,
         users,
@@ -102,6 +113,8 @@ function handlerProvider<T>(
         mfaRateLimits,
         mfaOtpUsed,
         recoveryRequests,
+        oauthStates,
+        oauthIdentities,
       }),
     },
     {
@@ -112,6 +125,8 @@ function handlerProvider<T>(
       provide: AUTH_WORKSPACE_RECOVERY_NOTIFIER,
       useClass: NoopRecoveryNotifierService,
     },
+    GitHubOAuthProvider,
+    OAuthProviderRegistry,
     handlerProvider(RegisterApprovedPathHandler),
     handlerProvider(SignInHandler),
     handlerProvider(RevokeSessionHandler),
@@ -134,6 +149,40 @@ function handlerProvider<T>(
     },
     handlerProvider(ConfirmPasswordRecoveryHandler),
     {
+      provide: OAuthStartHandler,
+      inject: [
+        AuthWorkspaceSupportService,
+        AUTH_WORKSPACE_REPOSITORIES_BAG,
+        OAuthProviderRegistry,
+        ConfigService,
+      ],
+      useFactory: (
+        support: AuthWorkspaceSupportService,
+        repositories: AuthWorkspaceRepositories,
+        providerRegistry: OAuthProviderRegistry,
+        configService: ConfigService,
+      ) =>
+        new OAuthStartHandler(
+          support,
+          repositories,
+          providerRegistry,
+          configService,
+        ),
+    },
+    {
+      provide: OAuthCallbackHandler,
+      inject: [
+        AuthWorkspaceSupportService,
+        AUTH_WORKSPACE_REPOSITORIES_BAG,
+        OAuthProviderRegistry,
+      ],
+      useFactory: (
+        support: AuthWorkspaceSupportService,
+        repositories: AuthWorkspaceRepositories,
+        providerRegistry: OAuthProviderRegistry,
+      ) => new OAuthCallbackHandler(support, repositories, providerRegistry),
+    },
+    {
       provide: AuthWorkspaceFacade,
       inject: [
         RegisterApprovedPathHandler,
@@ -145,6 +194,8 @@ function handlerProvider<T>(
         UpdateProfileHandler,
         RequestPasswordRecoveryHandler,
         ConfirmPasswordRecoveryHandler,
+        OAuthStartHandler,
+        OAuthCallbackHandler,
       ],
       useFactory: (
         registerApprovedPathHandler: RegisterApprovedPathHandler,
@@ -156,6 +207,8 @@ function handlerProvider<T>(
         updateProfileHandler: UpdateProfileHandler,
         requestPasswordRecoveryHandler: RequestPasswordRecoveryHandler,
         confirmPasswordRecoveryHandler: ConfirmPasswordRecoveryHandler,
+        oauthStartHandler: OAuthStartHandler,
+        oauthCallbackHandler: OAuthCallbackHandler,
       ) =>
         new AuthWorkspaceFacade(
           registerApprovedPathHandler,
@@ -167,6 +220,8 @@ function handlerProvider<T>(
           updateProfileHandler,
           requestPasswordRecoveryHandler,
           confirmPasswordRecoveryHandler,
+          oauthStartHandler,
+          oauthCallbackHandler,
         ),
     },
   ],

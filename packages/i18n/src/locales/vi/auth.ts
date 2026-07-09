@@ -73,6 +73,26 @@ export const viAuth = {
     pbacDenied: {
       title: "Không có quyền thực hiện",
       detail: "Bạn không có quyền thực hiện hành động này."
+    },
+    unsupportedProvider: {
+      title: "Nhà cung cấp đăng nhập chưa hỗ trợ",
+      detail: "Phương thức đăng nhập này chưa được hỗ trợ."
+    },
+    invalidRedirectUri: {
+      title: "Không thể đăng nhập",
+      detail: "Yêu cầu đăng nhập không hợp lệ."
+    },
+    oauthStateInvalid: {
+      title: "Phiên đăng nhập đã hết hạn",
+      detail: "Lượt đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng thử lại."
+    },
+    oauthCallbackInvalid: {
+      title: "Không thể đăng nhập",
+      detail: "Không thể hoàn tất đăng nhập. Vui lòng thử lại."
+    },
+    accountNotFound: {
+      title: "Tài khoản chưa được liên kết",
+      detail: "Không có tài khoản nào được liên kết với phương thức đăng nhập này."
     }
   }
 } as const satisfies AuthMessages;
