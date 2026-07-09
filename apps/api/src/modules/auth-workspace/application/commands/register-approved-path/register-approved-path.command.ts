@@ -5,10 +5,7 @@ export class RegisterApprovedPathCommand {
   readonly payload: RegisterPayload;
   readonly requestMeta: RequestMeta;
 
-  constructor(
-    payload: RegisterPayload,
-    requestMeta: RequestMeta = {},
-  ) {
+  constructor(payload: RegisterPayload, requestMeta: RequestMeta = {}) {
     this.payload = payload;
     this.requestMeta = requestMeta;
   }

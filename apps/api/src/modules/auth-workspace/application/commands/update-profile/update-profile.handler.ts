@@ -35,24 +35,36 @@ export class UpdateProfileHandler {
       sessionToken,
     );
     if (!session) {
-      return createProblemResult(AUTH_ERROR_CODES.sessionInvalid, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
     }
 
     if (!this.hasUpdateField(payload)) {
-      return createProblemResult(AUTH_ERROR_CODES.validationFailed, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.validationFailed,
+        correlationId,
+      );
     }
 
     if (
       typeof payload.display_name === "string" &&
       payload.display_name.trim().length > MAX_DISPLAY_NAME_LENGTH
     ) {
-      return createProblemResult(AUTH_ERROR_CODES.validationFailed, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.validationFailed,
+        correlationId,
+      );
     }
 
     if (typeof payload.recovery_email === "string") {
       const trimmed = payload.recovery_email.trim();
       if (trimmed.length > 0 && !EmailAddress.isValid(trimmed)) {
-        return createProblemResult(AUTH_ERROR_CODES.validationFailed, correlationId);
+        return createProblemResult(
+          AUTH_ERROR_CODES.validationFailed,
+          correlationId,
+        );
       }
     }
 
@@ -61,7 +73,10 @@ export class UpdateProfileHandler {
       session.userId,
     );
     if (!user) {
-      return createProblemResult(AUTH_ERROR_CODES.sessionInvalid, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
     }
 
     const mfaEnrollment = await this.support.findMfaEnrollment(
@@ -72,7 +87,11 @@ export class UpdateProfileHandler {
       this.repositories,
       session.organizationId,
     );
-    const mfaRequired = this.support.isMfaRequired(user, organization, mfaEnrollment);
+    const mfaRequired = this.support.isMfaRequired(
+      user,
+      organization,
+      mfaEnrollment,
+    );
     if (mfaRequired && !session.isMfaVerified()) {
       return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
@@ -100,7 +119,11 @@ export class UpdateProfileHandler {
       correlation_id: correlationId,
     });
 
-    return { ok: true, correlation_id: correlationId, updated_fields: updatedFields };
+    return {
+      ok: true,
+      correlation_id: correlationId,
+      updated_fields: updatedFields,
+    };
   }
 
   private hasUpdateField(payload: UpdateProfilePayload): boolean {

@@ -34,7 +34,10 @@ export class RequestPasswordRecoveryHandler {
       typeof payload.email !== "string" ||
       payload.email.trim().length === 0
     ) {
-      return createProblemResult(AUTH_ERROR_CODES.validationFailed, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.validationFailed,
+        correlationId,
+      );
     }
 
     const email = payload.email.trim().toLowerCase();

@@ -206,6 +206,13 @@ model OutboxMessage {
   @@index([aggregateType, aggregateId])
 }
 
+model User {
+  id          String   @id
+  email       String   @unique
+  displayName String
+  createdAt   DateTime @default(now())
+}
+
 enum AuthMembershipStatus {
   invited
   active

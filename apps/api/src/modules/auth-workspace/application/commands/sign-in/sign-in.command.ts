@@ -5,10 +5,7 @@ export class SignInCommand {
   readonly payload: CredentialPayload;
   readonly requestMeta: RequestMeta;
 
-  constructor(
-    payload: CredentialPayload,
-    requestMeta: RequestMeta = {},
-  ) {
+  constructor(payload: CredentialPayload, requestMeta: RequestMeta = {}) {
     this.payload = payload;
     this.requestMeta = requestMeta;
   }

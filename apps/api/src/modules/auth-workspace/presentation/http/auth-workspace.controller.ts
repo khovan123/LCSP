@@ -98,7 +98,7 @@ export class AuthWorkspaceController {
     const { session_token, ...payload } = body;
     return this.authWorkspaceFacade.updateProfile(
       session_token ?? "",
-      payload as UpdateProfilePayload,
+      payload,
       requestMeta(correlationId),
     );
   }

@@ -150,13 +150,17 @@ export class PrismaMembershipRepository implements MembershipRepository {
         userId: membership.userId,
         organizationId: membership.organizationId,
         status: membership.status,
-        subjectAttributes: subjectAttributesToJson(membership.subjectAttributes),
+        subjectAttributes: subjectAttributesToJson(
+          membership.subjectAttributes,
+        ),
         policyId: membership.policyId,
         policyVersion: membership.policyVersion,
       },
       update: {
         status: membership.status,
-        subjectAttributes: subjectAttributesToJson(membership.subjectAttributes),
+        subjectAttributes: subjectAttributesToJson(
+          membership.subjectAttributes,
+        ),
         policyId: membership.policyId,
         policyVersion: membership.policyVersion,
       },
@@ -194,7 +198,9 @@ export class PrismaInvitationRepository implements InvitationRepository {
         state: invitation.state,
         emailVerified: invitation.emailVerified,
         membershipStatus: invitation.membershipStatus,
-        subjectAttributes: subjectAttributesToJson(invitation.subjectAttributes),
+        subjectAttributes: subjectAttributesToJson(
+          invitation.subjectAttributes,
+        ),
         policyId: invitation.policyId,
         policyVersion: invitation.policyVersion,
       },
@@ -203,7 +209,9 @@ export class PrismaInvitationRepository implements InvitationRepository {
         state: invitation.state,
         emailVerified: invitation.emailVerified,
         membershipStatus: invitation.membershipStatus,
-        subjectAttributes: subjectAttributesToJson(invitation.subjectAttributes),
+        subjectAttributes: subjectAttributesToJson(
+          invitation.subjectAttributes,
+        ),
         policyId: invitation.policyId,
         policyVersion: invitation.policyVersion,
       },
@@ -236,7 +244,8 @@ export class PrismaSessionRepository implements SessionRepository {
   }
 
   async save(session: Session, fingerprint?: string): Promise<void> {
-    const tokenFingerprint = fingerprint ?? (await this.resolveFingerprint(session));
+    const tokenFingerprint =
+      fingerprint ?? (await this.resolveFingerprint(session));
     await this.prisma.authSession.upsert({
       where: { id: session.id },
       create: {
@@ -296,7 +305,10 @@ export class PrismaSessionRepository implements SessionRepository {
 export class PrismaPolicyRepository implements PolicyRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findByIdAndVersion(id: string, version: string): Promise<Policy | null> {
+  async findByIdAndVersion(
+    id: string,
+    version: string,
+  ): Promise<Policy | null> {
     const record = await this.prisma.authPolicy.findUnique({
       where: {
         id_version: {
@@ -323,9 +335,7 @@ export class PrismaAuditEventRepository implements AuditEventRepository {
 }
 
 @Injectable()
-export class PrismaAuthorizationDecisionRepository
-  implements AuthorizationDecisionRepository
-{
+export class PrismaAuthorizationDecisionRepository implements AuthorizationDecisionRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async append(decision: AuthorizationDecision): Promise<void> {
@@ -348,13 +358,13 @@ export class PrismaAuthorizationDecisionRepository
 }
 
 @Injectable()
-export class PrismaMfaEnrollmentRepository
-  implements MfaEnrollmentRepository
-{
+export class PrismaMfaEnrollmentRepository implements MfaEnrollmentRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findByUserId(userId: string): Promise<MfaEnrollment | null> {
-    const record = await this.prisma.authUserMfa.findUnique({ where: { userId } });
+    const record = await this.prisma.authUserMfa.findUnique({
+      where: { userId },
+    });
     return record ? mapMfaEnrollmentRecord(record) : null;
   }
 
@@ -472,9 +482,7 @@ export class PrismaMfaOtpUsedRepository implements MfaOtpUsedRepository {
 }
 
 @Injectable()
-export class PrismaRecoveryRequestRepository
-  implements RecoveryRequestRepository
-{
+export class PrismaRecoveryRequestRepository implements RecoveryRequestRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   nextId(): string {
@@ -565,10 +573,7 @@ function readString(event: AuditEvent, key: string): string {
   return value;
 }
 
-function readNullableString(
-  event: AuditEvent,
-  key: string,
-): string | null {
+function readNullableString(event: AuditEvent, key: string): string | null {
   const value = event[key];
   return typeof value === "string" ? value : null;
 }

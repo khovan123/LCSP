@@ -30,13 +30,17 @@ export class ConfirmPasswordRecoveryHandler {
       typeof payload.new_password !== "string" ||
       payload.new_password.length === 0
     ) {
-      return createProblemResult(AUTH_ERROR_CODES.validationFailed, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.validationFailed,
+        correlationId,
+      );
     }
 
     const now = this.support.now();
-    const recoveryRequest = await repositories.recoveryRequests.findByFingerprint(
-      fingerprintToken(payload.token),
-    );
+    const recoveryRequest =
+      await repositories.recoveryRequests.findByFingerprint(
+        fingerprintToken(payload.token),
+      );
     if (!recoveryRequest || !recoveryRequest.isValid(now)) {
       await this.support.recordAudit(repositories, {
         event_type: "auth.recovery.confirm_failed",
@@ -46,12 +50,18 @@ export class ConfirmPasswordRecoveryHandler {
         reason_code: AUTH_ERROR_CODES.recoveryInvalid,
         correlation_id: correlationId,
       });
-      return createProblemResult(AUTH_ERROR_CODES.recoveryInvalid, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.recoveryInvalid,
+        correlationId,
+      );
     }
 
     const user = await repositories.users.findById(recoveryRequest.userId);
     if (!user) {
-      return createProblemResult(AUTH_ERROR_CODES.recoveryInvalid, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.recoveryInvalid,
+        correlationId,
+      );
     }
 
     user.passwordHash = hashSecret(payload.new_password);

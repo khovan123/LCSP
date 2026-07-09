@@ -34,7 +34,10 @@ export class VerifyMfaOtpHandler {
       sessionToken,
     );
     if (!session) {
-      return createProblemResult(AUTH_ERROR_CODES.sessionInvalid, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
     }
 
     const enrollment = await this.repositories.mfaEnrollments.findByUserId(
@@ -58,7 +61,10 @@ export class VerifyMfaOtpHandler {
         reason_code: AUTH_ERROR_CODES.mfaRateLimited,
         correlation_id: correlationId,
       });
-      return createProblemResult(AUTH_ERROR_CODES.mfaRateLimited, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.mfaRateLimited,
+        correlationId,
+      );
     }
 
     const alreadyUsed = await this.repositories.mfaOtpUsed.isUsed(
@@ -66,7 +72,13 @@ export class VerifyMfaOtpHandler {
       otp,
     );
     if (alreadyUsed) {
-      await this.recordFailedAttempt(session.userId, session.organizationId, now, correlationId, "replayed");
+      await this.recordFailedAttempt(
+        session.userId,
+        session.organizationId,
+        now,
+        correlationId,
+        "replayed",
+      );
       return createProblemResult(AUTH_ERROR_CODES.mfaInvalid, correlationId);
     }
 
@@ -74,28 +86,52 @@ export class VerifyMfaOtpHandler {
     try {
       plaintextSecret = decryptMfaSecret(enrollment.encryptedSecret);
     } catch {
-      await this.recordFailedAttempt(session.userId, session.organizationId, now, correlationId, "decrypt_error");
+      await this.recordFailedAttempt(
+        session.userId,
+        session.organizationId,
+        now,
+        correlationId,
+        "decrypt_error",
+      );
       return createProblemResult(AUTH_ERROR_CODES.mfaInvalid, correlationId);
     }
 
     const valid = verifyTotpOtp(plaintextSecret, otp, now);
     if (!valid) {
-      await this.recordFailedAttempt(session.userId, session.organizationId, now, correlationId, "invalid");
+      await this.recordFailedAttempt(
+        session.userId,
+        session.organizationId,
+        now,
+        correlationId,
+        "invalid",
+      );
       return createProblemResult(AUTH_ERROR_CODES.mfaInvalid, correlationId);
     }
 
-    const claimed = await this.repositories.mfaOtpUsed.tryMarkUsed(session.userId, otp);
+    const claimed = await this.repositories.mfaOtpUsed.tryMarkUsed(
+      session.userId,
+      otp,
+    );
     if (!claimed) {
       // Lost a concurrent race to consume this exact code — treat as replay.
-      await this.recordFailedAttempt(session.userId, session.organizationId, now, correlationId, "replayed");
+      await this.recordFailedAttempt(
+        session.userId,
+        session.organizationId,
+        now,
+        correlationId,
+        "replayed",
+      );
       return createProblemResult(AUTH_ERROR_CODES.mfaInvalid, correlationId);
     }
-    await this.repositories.mfaOtpUsed.pruneOlderThan(now - OTP_USED_RETENTION_MS);
+    await this.repositories.mfaOtpUsed.pruneOlderThan(
+      now - OTP_USED_RETENTION_MS,
+    );
 
     session.markMfaVerified(now);
     await this.repositories.sessions.save(session);
 
-    const existingRateLimit = rateLimit ?? new MfaRateLimit({ userId: session.userId });
+    const existingRateLimit =
+      rateLimit ?? new MfaRateLimit({ userId: session.userId });
     existingRateLimit.clearOnSuccess();
     await this.repositories.mfaRateLimits.save(existingRateLimit);
 

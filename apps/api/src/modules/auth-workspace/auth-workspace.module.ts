@@ -170,6 +170,17 @@ function handlerProvider<T>(
         ),
     },
   ],
-  exports: [AuthWorkspaceFacade],
+  exports: [
+    AuthWorkspaceFacade,
+    // Exposed for platform/pbac's PbacGuard, which needs read access to
+    // sessions/memberships/policies/MFA enrollment and write access to the
+    // decision log — reusing these rather than duplicating the same Prisma
+    // queries in a second, potentially-diverging implementation.
+    PrismaSessionRepository,
+    PrismaMembershipRepository,
+    PrismaPolicyRepository,
+    PrismaMfaEnrollmentRepository,
+    PrismaAuthorizationDecisionRepository,
+  ],
 })
 export class AuthWorkspaceModule {}

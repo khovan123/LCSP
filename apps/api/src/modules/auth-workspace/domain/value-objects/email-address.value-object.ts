@@ -10,7 +10,9 @@ export class EmailAddress {
 
   static isValid(value: string): boolean {
     const normalized = value.trim().toLowerCase();
-    return normalized.length <= MAX_EMAIL_LENGTH && EMAIL_PATTERN.test(normalized);
+    return (
+      normalized.length <= MAX_EMAIL_LENGTH && EMAIL_PATTERN.test(normalized)
+    );
   }
 
   static create(value: string): EmailAddress {
