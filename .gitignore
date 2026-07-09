@@ -33,3 +33,6 @@ _bmad/
 **/*.tsbuildinfo
 .claude/
 **/.cache/
+.prisma/
+.agents/
+**/.env
