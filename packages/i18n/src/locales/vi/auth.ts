@@ -69,6 +69,10 @@ export const viAuth = {
     recoveryInvalid: {
       title: "Liên kết khôi phục không hợp lệ",
       detail: "Liên kết khôi phục này không hợp lệ hoặc đã hết hạn."
+    },
+    pbacDenied: {
+      title: "Không có quyền thực hiện",
+      detail: "Bạn không có quyền thực hiện hành động này."
     }
   }
 } as const satisfies AuthMessages;

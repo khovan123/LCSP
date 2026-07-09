@@ -69,6 +69,10 @@ export const enAuth = {
     recoveryInvalid: {
       title: "Recovery link invalid",
       detail: "This recovery link is invalid or has expired."
+    },
+    pbacDenied: {
+      title: "Action not permitted",
+      detail: "You do not have permission to perform this action."
     }
   }
 } as const satisfies AuthMessages;

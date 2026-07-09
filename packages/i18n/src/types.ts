@@ -17,6 +17,7 @@ export type AuthMessages = {
     mfaInvalid: { title: string; detail: string };
     mfaRateLimited: { title: string; detail: string };
     recoveryInvalid: { title: string; detail: string };
+    pbacDenied: { title: string; detail: string };
   };
 };
 

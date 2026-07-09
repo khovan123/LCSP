@@ -153,7 +153,9 @@ export function dateFromEpochMsRequired(value: number): Date {
   return new Date(value);
 }
 
-export function jsonToSubjectAttributes(value: Prisma.JsonValue): SubjectAttributes {
+export function jsonToSubjectAttributes(
+  value: Prisma.JsonValue,
+): SubjectAttributes {
   if (!value || Array.isArray(value) || typeof value !== "object") {
     return {};
   }

@@ -4,10 +4,7 @@ export class RevokeSessionCommand {
   readonly sessionToken: string;
   readonly requestMeta: RequestMeta;
 
-  constructor(
-    sessionToken: string,
-    requestMeta: RequestMeta = {},
-  ) {
+  constructor(sessionToken: string, requestMeta: RequestMeta = {}) {
     this.sessionToken = sessionToken;
     this.requestMeta = requestMeta;
   }

@@ -38,7 +38,9 @@ export type ProblemKey =
   | "auth.errors.mfaRateLimited.title"
   | "auth.errors.mfaRateLimited.detail"
   | "auth.errors.recoveryInvalid.title"
-  | "auth.errors.recoveryInvalid.detail";
+  | "auth.errors.recoveryInvalid.detail"
+  | "auth.errors.pbacDenied.title"
+  | "auth.errors.pbacDenied.detail";
 
 export type AppProblem<TCode extends string = AuthErrorCode> = {
   type: string;

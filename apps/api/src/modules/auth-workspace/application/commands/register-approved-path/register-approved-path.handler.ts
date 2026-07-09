@@ -1,6 +1,9 @@
 import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
 
-import { Membership, User } from "../../../domain/models/auth-workspace.models.ts";
+import {
+  Membership,
+  User,
+} from "../../../domain/models/auth-workspace.models.ts";
 import { hashSecret } from "../../../infrastructure/security/security.utils.ts";
 import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
 import type { RegisterSuccess } from "../../contracts/auth-workspace/register-approved-path.contract.ts";

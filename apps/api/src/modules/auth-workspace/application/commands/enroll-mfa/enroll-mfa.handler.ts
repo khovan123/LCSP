@@ -29,12 +29,14 @@ export class EnrollMfaHandler {
       sessionToken,
     );
     if (!session) {
-      return createProblemResult(AUTH_ERROR_CODES.sessionInvalid, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
     }
 
-    const existingEnrollment = await this.repositories.mfaEnrollments.findByUserId(
-      session.userId,
-    );
+    const existingEnrollment =
+      await this.repositories.mfaEnrollments.findByUserId(session.userId);
     if (existingEnrollment && !session.isMfaVerified()) {
       // A valid-but-unverified session must not be able to silently replace
       // an existing TOTP secret (would let a stolen pre-MFA session hijack MFA).
@@ -46,7 +48,10 @@ export class EnrollMfaHandler {
       session.userId,
     );
     if (!user) {
-      return createProblemResult(AUTH_ERROR_CODES.sessionInvalid, correlationId);
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
     }
 
     const plainSecret = generateTotpSecret();

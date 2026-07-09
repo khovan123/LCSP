@@ -1,13 +1,18 @@
 import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
 
-import { hashSecret, verifySecret } from "../../../infrastructure/security/security.utils.ts";
+import {
+  hashSecret,
+  verifySecret,
+} from "../../../infrastructure/security/security.utils.ts";
 import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
 import type { SignInSuccess } from "../../contracts/auth-workspace/sign-in.contract.ts";
 import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { SignInCommand } from "./sign-in.command.ts";
 
-const DECOY_PASSWORD_HASH = hashSecret("decoy-password-for-constant-time-compare");
+const DECOY_PASSWORD_HASH = hashSecret(
+  "decoy-password-for-constant-time-compare",
+);
 
 export class SignInHandler {
   constructor(
@@ -164,7 +169,11 @@ export class SignInHandler {
       repositories,
       organizationId,
     );
-    const mfaRequired = this.support.isMfaRequired(user, organization, mfaEnrollment);
+    const mfaRequired = this.support.isMfaRequired(
+      user,
+      organization,
+      mfaEnrollment,
+    );
 
     return {
       ok: true,

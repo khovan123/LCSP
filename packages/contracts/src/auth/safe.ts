@@ -19,7 +19,8 @@ export const PROBLEM_REQUIRED_ACTIONS: Record<AuthErrorCode, RequiredAction> = {
   [AUTH_ERROR_CODES.mfaRequired]: REQUIRED_ACTIONS.verifyMfa,
   [AUTH_ERROR_CODES.mfaInvalid]: REQUIRED_ACTIONS.verifyMfa,
   [AUTH_ERROR_CODES.mfaRateLimited]: REQUIRED_ACTIONS.waitAndRetry,
-  [AUTH_ERROR_CODES.recoveryInvalid]: REQUIRED_ACTIONS.retryRecovery
+  [AUTH_ERROR_CODES.recoveryInvalid]: REQUIRED_ACTIONS.retryRecovery,
+  [AUTH_ERROR_CODES.pbacDenied]: REQUIRED_ACTIONS.contactOwner
 };
 
 type ProblemDefaults = {
@@ -131,6 +132,12 @@ export const PROBLEM_DEFAULTS: Record<AuthErrorCode, ProblemDefaults> = {
     status: 400,
     titleKey: "auth.errors.recoveryInvalid.title",
     detailKey: "auth.errors.recoveryInvalid.detail"
+  },
+  [AUTH_ERROR_CODES.pbacDenied]: {
+    type: "authz/pbac-denied",
+    status: 403,
+    titleKey: "auth.errors.pbacDenied.title",
+    detailKey: "auth.errors.pbacDenied.detail"
   }
 };
 
