@@ -13,9 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -25,22 +22,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build API
-        run: pnpm --filter @lcsp/api build
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-
       - name: Deploy to Prisma Compute
         id: deploy
-        uses: prisma/compute-deploy@main
-        with:
-          api-token: ${{ secrets.PRISMA_API_TOKEN }}
-          compute-service-id: cmrcdwclv0gm41cgjdnyds1e7
-          artifact-path: apps/api/dist
-          entrypoint: src/main.js
-          bun-install: "false"
-
-      - name: Print deployment info
         run: |
-          echo "Version: ${{ steps.deploy.outputs.version-id }}"
-          echo "Service endpoint: ${{ steps.deploy.outputs.service-endpoint-domain }}"
+          npx --yes @prisma/cli@latest app deploy \
+            --project proj_cmrcdus2n0gjj1cgjp0qkrhyo \
+            --prod --yes --no-interactive --json
+        env:
+          PRISMA_SERVICE_TOKEN: ${{ secrets.PRISMA_API_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
