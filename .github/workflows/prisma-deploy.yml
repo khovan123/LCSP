@@ -1,0 +1,42 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build API
+        run: pnpm --filter @lcsp/api build
+
+      - name: Deploy to Prisma Compute
+        id: deploy
+        uses: prisma/compute-deploy@main
+        with:
+          api-token: ${{ secrets.PRISMA_API_TOKEN }}
+          compute-service-id: cps_nwpkmiuffmqo1g5pbuj5g8x7
+          artifact-path: apps/api/dist
+          entrypoint: src/main.js
+          bun-install: "false"
+
+      - name: Print deployment info
+        run: |
+          echo "Version: ${{ steps.deploy.outputs.version-id }}"
+          echo "Service endpoint: ${{ steps.deploy.outputs.service-endpoint-domain }}"

@@ -12,6 +12,7 @@
     "typecheck": "pnpm --filter @lcsp/api prisma:generate && pnpm exec tsc -b"
   },
   "devDependencies": {
+    "@prisma/compute-sdk": "^0.33.0",
     "@types/node": "^22.15.30",
     "typescript": "^5.8.0"
   }

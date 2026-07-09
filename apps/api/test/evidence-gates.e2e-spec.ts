@@ -6,6 +6,7 @@
 
 import * as assert from "node:assert/strict";
 
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -29,7 +30,7 @@ describe("Evidence gates and immutability (e2e) [AC-005, AC-006, AC-007]", () =>
   beforeAll(async () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
     pushPrismaSchema();
-    prisma = new PrismaClient({ datasources: { db: { url: TEST_DATABASE_URL } } });
+    prisma = new PrismaClient({ adapter: new PrismaPg(TEST_DATABASE_URL) });
     await prisma.$connect();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({

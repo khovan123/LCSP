@@ -57,7 +57,7 @@ export class CapturingRecoveryNotifier {
 export function pushPrismaSchema(): void {
   execFileSync(
     "pnpm",
-    ["exec", "prisma", "db", "push", "--accept-data-loss", "--skip-generate"],
+    ["exec", "prisma", "db", "push", "--accept-data-loss"],
     {
       cwd: apiRoot,
       env: {
