@@ -201,9 +201,45 @@ jobs:
 
             const primary = taskMatches.find((m) => m.docPath);
 
-            let currentBody = pr.body || '';
+            // Normalize CRLF: GitHub's PR template / web editor can hand back \r\n, which
+            // breaks the `\n`-anchored section regexes below if left as-is.
+            let currentBody = (pr.body || '').replace(/\r\n/g, '\n');
 
-            if (primary && !/^## Summary/m.test(currentBody)) {
+            // Fill the template's "Jira issue: LCSP-___" placeholder line, if present.
+            // The underscore pattern only matches the unfilled placeholder, so this is a no-op
+            // once a real key has been written there (by us or a human).
+            currentBody = currentBody.replace(
+              /Jira issue:\s*[A-Z]+-_+/i,
+              `Jira issue: ${issueKeys.join(', ')}`,
+            );
+
+            // A section counts as "blank" (safe to auto-fill) if every non-empty line in it is
+            // just a bare list marker with no text — i.e. the untouched PR-template placeholder
+            // ("-"), not something a human actually wrote.
+            function isBlankSection(text) {
+              const lines = text
+                .split('\n')
+                .map((l) => l.trim())
+                .filter((l) => l.length > 0);
+              return lines.length === 0 || lines.every((l) => /^[-*]\s*(\[[ xX]\])?\s*$/.test(l));
+            }
+
+            // Replaces the body content under `## <heading>` with `newContent`, but only when
+            // that section is currently blank/placeholder — never overwrites real human content,
+            // and is naturally idempotent across re-runs (edited/synchronize) once filled once.
+            function fillSectionIfBlank(body, heading, newContent) {
+              // Stop the section at the next `## ` heading, the Jira-links marker block (already
+              // present on a re-run), or end of string — otherwise a trailing section swallows the
+              // marker comment and looks non-blank.
+              const re = new RegExp(`(## ${heading}\\n)([\\s\\S]*?)(?=\\n## |\\n${bodyMarkerStart}|$)`);
+              const m = body.match(re);
+              if (!m) return { body, found: false, replaced: false };
+              if (!isBlankSection(m[2])) return { body, found: true, replaced: false };
+              const replacement = `${m[1]}\n${newContent}\n`;
+              return { body: body.slice(0, m.index) + replacement + body.slice(m.index + m[0].length), found: true, replaced: true };
+            }
+
+            if (primary) {
               const summaryLines = [
                 `Implements **${primary.taskId}: ${primary.title}**${primary.module ? ` (\`${primary.module}\`)` : ''}.`,
               ];
@@ -217,34 +253,53 @@ jobs:
                 }
               }
 
-              const testPlanLines = primary.testCases.length > 0
+              const checklistLines = primary.testCases.length > 0
                 ? primary.testCases.map(([id, scenario, expected]) => `- [ ] ${id}: ${scenario} — ${expected}`)
                 : [`- [ ] Manually verify against \`${primary.docPath}\``];
-
               const closesLine = `Closes ${issueKeys.join(', ')} (${primary.taskId}: ${primary.title}).`;
+              const verificationContent = `${checklistLines.join('\n')}\n\n${closesLine}`;
 
-              const generatedSection = [
-                '## Summary',
-                '',
-                summaryLines.join('\n'),
-                '',
-                '## Test plan',
-                '',
-                testPlanLines.join('\n'),
-                '',
-                closesLine,
-              ].join('\n');
+              const summaryResult = fillSectionIfBlank(currentBody, 'Summary', summaryLines.join('\n'));
+              currentBody = summaryResult.body;
 
+              // Support either heading name: this repo's template says "Verification"; fall back
+              // to "Test plan" if a body already uses that instead.
+              let verificationResult = fillSectionIfBlank(currentBody, 'Verification', verificationContent);
+              if (!verificationResult.found) {
+                verificationResult = fillSectionIfBlank(currentBody, 'Test plan', verificationContent);
+              }
+              currentBody = verificationResult.body;
+
+              if (summaryResult.replaced || verificationResult.replaced) {
+                core.notice(
+                  `Prefilled Summary/Verification from ${primary.docPath} (${primary.taskId}). Fill in real verification results before merge.`,
+                );
+              } else if (!summaryResult.found && !verificationResult.found) {
+                // Body doesn't follow the template at all (no Summary/Verification headings) —
+                // fall back to prepending a full generated block, same as a from-scratch PR.
+                const generatedSection = [
+                  '## Summary',
+                  '',
+                  summaryLines.join('\n'),
+                  '',
+                  '## Verification',
+                  '',
+                  verificationContent,
+                ].join('\n');
+                core.notice(
+                  `No Summary/Verification headings found in PR body — prepending a full block from ${primary.docPath} (${primary.taskId}).`,
+                );
+                currentBody = currentBody.trim().length > 0
+                  ? `${generatedSection}\n\n${currentBody.trim()}`
+                  : generatedSection;
+              } else {
+                core.notice(
+                  'Summary/Verification sections already have content — leaving them as-is.',
+                );
+              }
+            } else {
               core.notice(
-                `Prefilled Summary/Test plan from ${primary.docPath} (${primary.taskId}). Fill in real Test plan results before merge.`,
-              );
-
-              currentBody = currentBody.trim().length > 0
-                ? `${generatedSection}\n\n${currentBody.trim()}`
-                : generatedSection;
-            } else if (!primary) {
-              core.notice(
-                'No matching task doc found under docs/implementation/tasks for the detected Jira key(s) — skipping Summary/Test plan prefill.',
+                'No matching task doc found under docs/implementation/tasks for the detected Jira key(s) — skipping Summary/Verification prefill.',
               );
             }
 
@@ -265,7 +320,7 @@ jobs:
               ? currentBody.replace(markerPattern, jiraLinksSection)
               : `${currentBody.trim()}\n\n${jiraLinksSection}`.trim();
 
-            if (nextBody !== (pr.body || '')) {
+            if (nextBody !== (pr.body || '').replace(/\r\n/g, '\n')) {
               await github.rest.pulls.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
