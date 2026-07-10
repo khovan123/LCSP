@@ -43,6 +43,8 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       eventType: "ASSESSMENT_CREATED",
       actorId: assessment.ownerId,
       organizationId: assessment.organizationId,
+      resourceType: "Assessment",
+      resourceId: assessment.id,
       correlationId: command.correlationId,
       decision: "allow",
       payload: {

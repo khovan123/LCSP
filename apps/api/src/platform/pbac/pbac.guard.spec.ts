@@ -295,6 +295,7 @@ describe("PbacGuard", () => {
     const body = error.getResponse();
 
     expect(Object.keys(body as object).sort()).toEqual([
+      "code",
       "correlation_id",
       "error_code",
     ]);

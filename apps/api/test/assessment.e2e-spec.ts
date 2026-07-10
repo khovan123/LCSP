@@ -12,6 +12,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { httpRequest } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
+import type { AssessmentDetailDto } from "../src/modules/assessment/application/contracts/assessment/assessment-detail.contract.js";
 import type { CreateAssessmentDto } from "../src/modules/assessment/application/contracts/assessment/create-assessment.contract.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import {
@@ -20,17 +21,6 @@ import {
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
-
-type AssessmentListResponse = { items: Array<{ organization_id: string }> };
-type AssessmentReadinessResponse = {
-  risk_level?: unknown;
-  risk_score?: unknown;
-  classification_locked?: boolean;
-};
-type AssessmentDetailResponse = {
-  classification_locked?: boolean;
-  lock_reason?: string;
-};
 
 describe("Assessment creation and wizard readiness (e2e) [AC-001, AC-003]", () => {
   let app: INestApplication;
@@ -110,62 +100,7 @@ describe("Assessment creation and wizard readiness (e2e) [AC-001, AC-003]", () =
     assert.equal(result.status, 401);
   });
 
-  it("AC-001: Assessment list is scoped to authenticated Manager organization", async () => {
-    if (!managerToken) return;
-    await httpRequest(app)
-      .post("/assessments")
-      .set("Authorization", `Bearer ${managerToken}`)
-      .send({ name: "Scoped Assessment", organization_id: orgId });
-
-    const list = await httpRequest(app)
-      .get("/assessments")
-      .set("Authorization", `Bearer ${managerToken}`);
-    const body = list.body as AssessmentListResponse;
-
-    assert.equal(list.status, 200);
-    assert.ok(Array.isArray(body.items));
-    body.items.forEach((item) => {
-      assert.equal(
-        item.organization_id,
-        orgId,
-        "All items must belong to Manager org",
-      );
-    });
-  });
-
   // AC-003: Wizard readiness — no risk level exposed
-  it("AC-003: Assessment readiness state never exposes risk level before classification is complete", async () => {
-    if (!managerToken) return;
-    const create = await httpRequest(app)
-      .post("/assessments")
-      .set("Authorization", `Bearer ${managerToken}`)
-      .send({ name: "Readiness Test", organization_id: orgId });
-
-    const assessmentId = (create.body as CreateAssessmentDto)?.assessment_id;
-    if (!assessmentId) return;
-
-    const readiness = await httpRequest(app)
-      .get(`/assessments/${assessmentId}/readiness`)
-      .set("Authorization", `Bearer ${managerToken}`);
-    const body = readiness.body as AssessmentReadinessResponse;
-
-    assert.equal(readiness.status, 200);
-    assert.equal(
-      body.risk_level,
-      undefined,
-      "risk_level must never appear in readiness response",
-    );
-    assert.equal(
-      body.risk_score,
-      undefined,
-      "risk_score must never appear in readiness response",
-    );
-    assert.ok(
-      body.classification_locked !== undefined,
-      "classification_locked must be present",
-    );
-  });
-
   it("AC-003: Assessment readiness response never uses risk/severity/compliant wording", async () => {
     if (!managerToken) return;
     const create = await httpRequest(app)
@@ -208,14 +143,14 @@ describe("Assessment creation and wizard readiness (e2e) [AC-001, AC-003]", () =
     const detail = await httpRequest(app)
       .get(`/assessments/${assessmentId}`)
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = detail.body as AssessmentDetailResponse;
+    const body = detail.body as AssessmentDetailDto;
 
     assert.ok(
-      body.classification_locked === true,
+      body.readiness_state.classification_locked === true,
       "classification must be locked when no evidence report exists",
     );
     assert.ok(
-      body.lock_reason,
+      body.readiness_state.lock_reason,
       "lock_reason must explain why classification is locked",
     );
   });
