@@ -132,6 +132,7 @@ describe("config()", () => {
       crypto: { mfaSecretEncryptionKey: VALID_ENV.MFA_SECRET_ENCRYPTION_KEY },
       pythonWorker: { baseUrl: VALID_ENV.PYTHON_WORKER_BASE_URL },
       worker: { apiKey: VALID_ENV.WORKER_API_KEY },
+      internal: { apiToken: "test-internal-token" },
     });
   });
 

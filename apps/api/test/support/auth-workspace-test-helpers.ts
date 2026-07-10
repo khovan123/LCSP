@@ -159,7 +159,7 @@ export async function seedAuthWorkspaceFixture(
     data: {
       id: policyId,
       version: policyVersion,
-      actions: ["workspace:read", "assessment:create"],
+      actions: ["workspace:read", "assessment:create", "assessment:read"],
       subjectRole: "Manager",
       stateGate: "membership_active",
       organizationId,

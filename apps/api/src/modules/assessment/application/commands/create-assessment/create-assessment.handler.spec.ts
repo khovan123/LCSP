@@ -11,7 +11,10 @@ function buildHandler() {
   const save = jest
     .fn<AssessmentRepository["save"]>()
     .mockResolvedValue(undefined);
-  const repository: AssessmentRepository = { save };
+  const findById = jest
+    .fn<AssessmentRepository["findById"]>()
+    .mockResolvedValue(null);
+  const repository: AssessmentRepository = { save, findById };
 
   const write = jest
     .fn<AuditWriterService["write"]>()
@@ -162,6 +165,8 @@ describe("CreateAssessmentHandler", () => {
     expect(event.eventType).toBe("ASSESSMENT_CREATED");
     expect(event.actorId).toBe("user-1");
     expect(event.organizationId).toBe("org-1");
+    expect(event.resourceType).toBe("Assessment");
+    expect(event.resourceId).toBeTruthy();
     expect(event.correlationId).toBe("corr-1");
     expect(event.decision).toBe("allow");
     expect(JSON.stringify(event.payload)).not.toMatch(/Secret Project Name/);

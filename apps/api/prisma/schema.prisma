@@ -252,6 +252,22 @@ model Assessment {
   @@index([ownerId])
 }
 
+model WizardProfile {
+  id             String    @id
+  assessmentId   String    @unique
+  organizationId String
+  ownerId        String
+  version        Int       @default(1)
+  status         String    @default("IN_PROGRESS")
+  answers        Json
+  submittedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([assessmentId])
+  @@index([organizationId])
+}
+
 enum AuthMembershipStatus {
   invited
   active
