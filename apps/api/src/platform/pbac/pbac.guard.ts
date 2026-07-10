@@ -26,6 +26,7 @@ export interface PbacRequestContext {
   sessionId: string;
   organizationId: string;
   subjectRole: SubjectRole;
+  scope: string | null;
   grantedActions: string[];
   policyId: string;
   policyVersion: string;
@@ -108,6 +109,7 @@ export class PbacGuard implements CanActivate {
         sessionId: session.id,
         organizationId: session.organizationId,
         subjectRole,
+        scope: membership.subjectAttributes.scope ?? null,
         grantedActions: policy.actions,
         policyId: policy.id,
         policyVersion: policy.version,
@@ -162,6 +164,7 @@ export class PbacGuard implements CanActivate {
       sessionId: session.id,
       organizationId: session.organizationId,
       subjectRole,
+      scope: membership.subjectAttributes.scope ?? null,
       grantedActions: policy.actions,
       policyId: decision.policyId,
       policyVersion: decision.policyVersion,
