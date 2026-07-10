@@ -18,6 +18,11 @@ import { PbacGuard } from "./pbac.guard.js";
     PbacGuard,
     PbacPreflightService,
   ],
-  exports: [PbacEvaluatorService, PbacGuard],
+  exports: [
+    PbacEvaluatorService,
+    PbacContextLoader,
+    PbacGuard,
+    AuthWorkspaceModule,
+  ],
 })
 export class PbacModule {}

@@ -3,7 +3,9 @@ import { ConfigModule } from "@nestjs/config";
 
 import { config, configValidationSchema } from "./config/config.js";
 import { AppFeatureModule } from "./modules/app/app.module.js";
+import { AssessmentModule } from "./modules/assessment/assessment.module.js";
 import { AuthWorkspaceModule } from "./modules/auth-workspace/auth-workspace.module.js";
+import { HealthModule } from "./modules/health/health.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
 import { OutboxModule } from "./platform/outbox/outbox.module.js";
 import { PbacModule } from "./platform/pbac/pbac.module.js";
@@ -24,6 +26,8 @@ import { AuditModule } from "./platform/audit/audit.module.ts";
     AppFeatureModule,
     AuthWorkspaceModule,
     UsersModule,
+    AssessmentModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

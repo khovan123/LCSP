@@ -15,9 +15,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import request from "supertest";
+import { httpRequest } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
+import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import {
   TEST_DATABASE_URL,
   pushPrismaSchema,
@@ -50,10 +51,12 @@ describe("Audit trail completeness (e2e) [AC-020]", () => {
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
 
-    const signIn = await request(app.getHttpServer())
-      .post("/auth/sign-in")
-      .send({ email: "manager@acme.test", password: "CorrectHorseBatteryStaple!", organization_id: orgId });
-    managerToken = signIn.body?.session_token ?? "";
+    const signIn = await httpRequest(app).post("/auth/sign-in").send({
+      email: "manager@acme.test",
+      password: "CorrectHorseBatteryStaple!",
+      organization_id: orgId,
+    });
+    managerToken = (signIn.body as SignInSuccess)?.session_token ?? "";
   });
 
   afterAll(async () => {
@@ -63,7 +66,7 @@ describe("Audit trail completeness (e2e) [AC-020]", () => {
 
   it("AC-020: Assessment creation writes audit event with required fields", async () => {
     if (!managerToken) return;
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/assessments")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ name: "Audit Coverage Test", organization_id: orgId });
@@ -78,12 +81,18 @@ describe("Audit trail completeness (e2e) [AC-020]", () => {
     assert.ok(audit.organizationId, "Audit event must include organizationId");
     assert.ok(audit.resourceType, "Audit event must include resourceType");
     assert.ok(audit.resourceId, "Audit event must include resourceId");
-    assert.doesNotMatch(JSON.stringify(audit), SENSITIVE_PATTERNS, "Audit must not contain sensitive fields");
+    assert.doesNotMatch(
+      JSON.stringify(audit),
+      SENSITIVE_PATTERNS,
+      "Audit must not contain sensitive fields",
+    );
   });
 
   it("AC-020: Sign-in writes audit event", async () => {
     const audit = await prisma.authAuditEvent.findFirst({
-      where: { eventType: { in: ["SIGN_IN", "USER_SIGNED_IN", "LOGIN_SUCCESS"] } },
+      where: {
+        eventType: { in: ["SIGN_IN", "USER_SIGNED_IN", "LOGIN_SUCCESS"] },
+      },
       orderBy: { createdAt: "desc" },
     });
     assert.ok(audit, "Sign-in must write an audit event");
@@ -93,7 +102,7 @@ describe("Audit trail completeness (e2e) [AC-020]", () => {
   it("AC-020: PBAC denial writes AuthDecisionLog with decision=deny", async () => {
     if (!managerToken) return;
     // Make a request that will be denied (attempt something not in Manager policy)
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/internal/admin/reset")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({});
@@ -129,21 +138,29 @@ describe("Audit trail completeness (e2e) [AC-020]", () => {
     // The PBAC response to end user must not leak policy details
     // This tests the boundary between internal logging (OK to have policyId) and API response (NOT OK)
     if (!managerToken) return;
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/assessments/nonexistent/scan-trigger")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ snapshot_id: "snap-1" });
 
     if (result.status === 403) {
       const body = JSON.stringify(result.body);
-      assert.doesNotMatch(body, /policyId/, "403 response must not expose policyId");
-      assert.doesNotMatch(body, /"actions"\s*:\s*\[/, "403 response must not expose policy actions list");
+      assert.doesNotMatch(
+        body,
+        /policyId/,
+        "403 response must not expose policyId",
+      );
+      assert.doesNotMatch(
+        body,
+        /"actions"\s*:\s*\[/,
+        "403 response must not expose policy actions list",
+      );
     }
   });
 
   it("AC-020: All audit events for current session have consistent organizationId", async () => {
     if (!managerToken) return;
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/assessments")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ name: "Org Consistency Test", organization_id: orgId });

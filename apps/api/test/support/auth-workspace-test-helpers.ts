@@ -27,7 +27,8 @@ export type AuthFixture = {
 };
 
 export function ensureTestMfaEncryptionKey(): void {
-  process.env.MFA_ENCRYPTION_KEY ??= "test-only-mfa-encryption-key-do-not-use-in-prod";
+  process.env.MFA_ENCRYPTION_KEY ??=
+    "test-only-mfa-encryption-key-do-not-use-in-prod";
 }
 
 export type MfaFixture = {
@@ -41,7 +42,7 @@ export class CapturingRecoveryNotifier {
   public lastToken: string | null = null;
   public lastEmail: string | null = null;
 
-  async notify(input: {
+  notify(input: {
     userId: string;
     email: string;
     token: string;
@@ -51,23 +52,20 @@ export class CapturingRecoveryNotifier {
     void input.correlationId;
     this.lastToken = input.token;
     this.lastEmail = input.email;
+    return Promise.resolve();
   }
 }
 
 export function pushPrismaSchema(): void {
-  execFileSync(
-    "pnpm",
-    ["exec", "prisma", "db", "push", "--accept-data-loss"],
-    {
-      cwd: apiRoot,
-      env: {
-        ...process.env,
-        DATABASE_URL: TEST_DATABASE_URL,
-        XDG_CACHE_HOME: resolve(apiRoot, ".cache"),
-      },
-      stdio: "pipe",
+  execFileSync("pnpm", ["exec", "prisma", "db", "push", "--accept-data-loss"], {
+    cwd: apiRoot,
+    env: {
+      ...process.env,
+      DATABASE_URL: TEST_DATABASE_URL,
+      XDG_CACHE_HOME: resolve(apiRoot, ".cache"),
     },
-  );
+    stdio: "pipe",
+  });
 }
 
 export async function resetAuthWorkspaceDatabase(
@@ -161,7 +159,7 @@ export async function seedAuthWorkspaceFixture(
     data: {
       id: policyId,
       version: policyVersion,
-      actions: ["workspace:read"],
+      actions: ["workspace:read", "assessment:create"],
       subjectRole: "Manager",
       stateGate: "membership_active",
       organizationId,

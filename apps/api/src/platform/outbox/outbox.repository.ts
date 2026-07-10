@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import type { OutboxStatus } from "@lcsp/contracts/outbox";
+import type { OutboxMessageInput, OutboxStatus } from "@lcsp/contracts/outbox";
 
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import { OutboxMessageEntity } from "./outbox-message.entity.js";
@@ -22,6 +22,28 @@ interface OutboxRow {
 @Injectable()
 export class OutboxRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Inserts a new pending OutboxMessage; the publisher poller picks it up separately. */
+  async enqueue(
+    input: OutboxMessageInput,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    const client = tx ?? this.prisma;
+    const message = OutboxMessageEntity.create(crypto.randomUUID(), input);
+
+    await client.outboxMessage.create({
+      data: {
+        id: message.id,
+        aggregateType: message.aggregateType,
+        aggregateId: message.aggregateId,
+        eventType: message.eventType,
+        payload: message.payload as Prisma.InputJsonValue,
+        status: message.status,
+        attempts: message.attempts,
+        createdAt: message.createdAt,
+      },
+    });
+  }
 
   /**
    * Selects up to `batchSize` pending messages with SELECT ... FOR UPDATE SKIP LOCKED,

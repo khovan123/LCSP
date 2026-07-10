@@ -77,6 +77,7 @@ export class PbacGuard implements CanActivate {
       });
       throw new UnauthorizedException({
         error_code: AUTH_ERROR_CODES.sessionInvalid,
+        code: AUTH_ERROR_CODES.sessionInvalid,
         correlation_id: correlationId,
       });
     }
@@ -151,6 +152,7 @@ export class PbacGuard implements CanActivate {
       });
       throw new ForbiddenException({
         error_code: AUTH_ERROR_CODES.pbacDenied,
+        code: AUTH_ERROR_CODES.pbacDenied,
         correlation_id: correlationId,
       });
     }
@@ -199,22 +201,26 @@ export class PbacGuard implements CanActivate {
       case "SESSION_INVALID":
         return new UnauthorizedException({
           error_code: AUTH_ERROR_CODES.sessionInvalid,
+          code: AUTH_ERROR_CODES.sessionInvalid,
           correlation_id: correlationId,
         });
       case "MFA_REQUIRED":
         return new UnauthorizedException({
           error_code: AUTH_ERROR_CODES.mfaRequired,
+          code: AUTH_ERROR_CODES.mfaRequired,
           correlation_id: correlationId,
         });
       case "MEMBERSHIP_MISSING":
         return new ForbiddenException({
           error_code: AUTH_ERROR_CODES.membershipMissing,
+          code: AUTH_ERROR_CODES.membershipMissing,
           correlation_id: correlationId,
         });
       case "POLICY_NOT_FOUND":
       case "LOAD_ERROR":
         return new ForbiddenException({
           error_code: AUTH_ERROR_CODES.pbacDenied,
+          code: AUTH_ERROR_CODES.pbacDenied,
           correlation_id: correlationId,
         });
     }

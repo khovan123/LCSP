@@ -10,9 +10,13 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import request from "supertest";
+import { httpRequest } from "./support/http.js";
+
+import type { AuthErrorCode } from "@lcsp/contracts/auth";
 
 import { AppModule } from "../src/app.module.js";
+import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
+import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
 import {
   TEST_DATABASE_URL,
   pushPrismaSchema,
@@ -20,7 +24,12 @@ import {
   seedAuthWorkspaceFixture,
   type AuthFixture,
 } from "./support/auth-workspace-test-helpers.js";
-import { hashSecret, fingerprintToken } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
+
+type ErrorResponseBody = {
+  error_code: AuthErrorCode;
+  code: AuthErrorCode;
+  correlation_id: string;
+};
 
 describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-026]", () => {
   let app: INestApplication;
@@ -52,24 +61,20 @@ describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-02
     await seedDeveloperFixture(prisma, fixture.organizationId);
 
     // Obtain Manager session token
-    const managerSignIn = await request(app.getHttpServer())
-      .post("/auth/sign-in")
-      .send({
-        email: "manager@acme.test",
-        password: "CorrectHorseBatteryStaple!",
-        organization_id: fixture.organizationId,
-      });
-    managerToken = managerSignIn.body?.session_token ?? "";
+    const managerSignIn = await httpRequest(app).post("/auth/sign-in").send({
+      email: "manager@acme.test",
+      password: "CorrectHorseBatteryStaple!",
+      organization_id: fixture.organizationId,
+    });
+    managerToken = (managerSignIn.body as SignInSuccess)?.session_token ?? "";
 
     // Obtain Developer session token
-    const devSignIn = await request(app.getHttpServer())
-      .post("/auth/sign-in")
-      .send({
-        email: "developer@acme.test",
-        password: "DevPassword123!",
-        organization_id: fixture.organizationId,
-      });
-    developerToken = devSignIn.body?.session_token ?? "";
+    const devSignIn = await httpRequest(app).post("/auth/sign-in").send({
+      email: "developer@acme.test",
+      password: "DevPassword123!",
+      organization_id: fixture.organizationId,
+    });
+    developerToken = (devSignIn.body as SignInSuccess)?.session_token ?? "";
   });
 
   afterAll(async () => {
@@ -80,13 +85,20 @@ describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-02
   // AC-025: Developer cannot perform Manager-only actions
   it("AC-025: Developer cannot create an assessment (Manager-only action)", async () => {
     if (!developerToken) return;
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/assessments")
       .set("Authorization", `Bearer ${developerToken}`)
       .send({ name: "Test Assessment", purpose: "Testing" });
 
-    assert.equal(result.status, 403, "Developer must be denied assessment creation");
-    assert.ok(result.body.code, "Error response must have machine-readable code");
+    assert.equal(
+      result.status,
+      403,
+      "Developer must be denied assessment creation",
+    );
+    assert.ok(
+      (result.body as ErrorResponseBody).code,
+      "Error response must have machine-readable code",
+    );
     assert.doesNotMatch(
       JSON.stringify(result.body),
       /policyId|actions/i,
@@ -96,7 +108,7 @@ describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-02
 
   it("AC-025: Developer cannot trigger a scan (Manager-only action)", async () => {
     if (!developerToken) return;
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/assessments/any-id/scan-trigger")
       .set("Authorization", `Bearer ${developerToken}`)
       .send({ snapshot_id: "snap-1" });
@@ -106,7 +118,7 @@ describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-02
 
   it("AC-025: Developer cannot resolve a conflict (Manager-only action)", async () => {
     if (!developerToken) return;
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/assessments/any-id/conflicts/conf-1/resolve")
       .set("Authorization", `Bearer ${developerToken}`)
       .send({ resolution: "accepted", note: "test" });
@@ -116,7 +128,7 @@ describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-02
 
   it("AC-025: Developer cannot invite another developer (Manager-only action)", async () => {
     if (!developerToken) return;
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post(`/organizations/${fixture.organizationId}/invitations`)
       .set("Authorization", `Bearer ${developerToken}`)
       .send({ email: "another@acme.test", role: "Developer" });
@@ -127,7 +139,7 @@ describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-02
   // AC-024: PBAC-denied action audit
   it("AC-024: PBAC denial writes AuthDecisionLog without leaking policy details", async () => {
     if (!developerToken) return;
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/assessments")
       .set("Authorization", `Bearer ${developerToken}`)
       .send({ name: "Denied Assessment" });
@@ -141,7 +153,11 @@ describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-02
     assert.equal(decisionLog.decision, "deny");
     // Log must not expose raw policy content
     const logJson = JSON.stringify(decisionLog);
-    assert.doesNotMatch(logJson, /"policyId"\s*:\s*"[^"]{36,}"/, "Must not leak full policy ID");
+    assert.doesNotMatch(
+      logJson,
+      /"policyId"\s*:\s*"[^"]{36,}"/,
+      "Must not leak full policy ID",
+    );
   });
 
   // AC-026: Revoked Developer policy blocks new actions
@@ -150,13 +166,15 @@ describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-02
 
     // Revoke the Developer membership
     if (managerToken) {
-      await request(app.getHttpServer())
-        .delete(`/organizations/${fixture.organizationId}/memberships/developer-user-id`)
+      await httpRequest(app)
+        .delete(
+          `/organizations/${fixture.organizationId}/memberships/developer-user-id`,
+        )
         .set("Authorization", `Bearer ${managerToken}`);
     }
 
     // Developer token must now be denied
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/workspace")
       .set("Authorization", `Bearer ${developerToken}`);
 
@@ -169,8 +187,10 @@ describe("Developer PBAC enforcement and revocation (e2e) [AC-024, AC-025, AC-02
   it("AC-026: Revocation audit event is written when Developer membership is revoked", async () => {
     if (!managerToken) return;
 
-    await request(app.getHttpServer())
-      .delete(`/organizations/${fixture.organizationId}/memberships/developer-user-id`)
+    await httpRequest(app)
+      .delete(
+        `/organizations/${fixture.organizationId}/memberships/developer-user-id`,
+      )
       .set("Authorization", `Bearer ${managerToken}`);
 
     const auditEvent = await prisma.authAuditEvent.findFirst({
@@ -201,7 +221,11 @@ async function seedDeveloperFixture(
     data: {
       id: devPolicyId,
       version: "2026-06-26",
-      actions: ["evidence:read:redacted", "ai-usage-flow:read", "findings:read:redacted"],
+      actions: [
+        "evidence:read:redacted",
+        "ai-usage-flow:read",
+        "findings:read:redacted",
+      ],
       subjectRole: "Developer",
       stateGate: "membership_active",
       organizationId,
