@@ -1,0 +1,207 @@
+import { describe, it, expect, jest } from "@jest/globals";
+import { UnprocessableEntityException } from "@nestjs/common";
+
+import { Assessment } from "../../../domain/entities/assessment.entity.js";
+import type {
+  AssessmentListResult,
+  AssessmentRepository,
+} from "../../ports/persistence/assessment.repository.js";
+import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { ListAssessmentsQuery } from "./list-assessments.query.js";
+import { ListAssessmentsHandler } from "./list-assessments.handler.js";
+
+function makeAssessment(name = "Assessment") {
+  return Assessment.create({
+    organizationId: "org-1",
+    ownerId: "user-1",
+    name,
+  });
+}
+
+function buildHandler(input: {
+  result?: AssessmentListResult;
+  wizardProfiles?: Array<{ assessmentId: string; status: string }>;
+}) {
+  const findMany = jest
+    .fn<AssessmentRepository["findMany"]>()
+    .mockResolvedValue(input.result ?? { items: [], total: 0 });
+  const repository: AssessmentRepository = {
+    save: jest.fn<AssessmentRepository["save"]>(),
+    findById: jest.fn<AssessmentRepository["findById"]>(),
+    findMany,
+  };
+
+  const wizardFindMany = jest
+    .fn<() => Promise<Array<{ assessmentId: string; status: string }>>>()
+    .mockResolvedValue(input.wizardProfiles ?? []);
+  const prisma = {
+    wizardProfile: { findMany: wizardFindMany },
+  } as unknown as PrismaService;
+
+  const handler = new ListAssessmentsHandler(repository, prisma);
+  return { handler, findMany, wizardFindMany };
+}
+
+function query(
+  overrides: Partial<{
+    subjectRole: "Manager" | "Developer" | "SystemAdmin";
+    scope: string | null;
+    page: number | undefined;
+    pageSize: number | undefined;
+    status: string | undefined;
+  }> = {},
+) {
+  return new ListAssessmentsQuery(
+    "org-1",
+    "user-1",
+    overrides.subjectRole ?? "Manager",
+    overrides.scope ?? null,
+    overrides.page,
+    overrides.pageSize,
+    overrides.status,
+    "corr-1",
+  );
+}
+
+describe("ListAssessmentsHandler", () => {
+  // T01
+  it("returns a paginated list for a Manager with assessments", async () => {
+    const assessment = makeAssessment("First");
+    const { handler } = buildHandler({
+      result: { items: [assessment], total: 1 },
+    });
+
+    const result = await handler.execute(query());
+
+    expect(result.assessments).toHaveLength(1);
+    expect(result.assessments[0].assessment_id).toBe(assessment.id);
+    expect(result.assessments[0].name).toBe("First");
+    expect(result.assessments[0].wizard_status).toBe("NOT_STARTED");
+    expect(result.total).toBe(1);
+    expect(result.page).toBe(1);
+    expect(result.page_size).toBe(20);
+    expect(result.correlation_id).toBe("corr-1");
+  });
+
+  // T02
+  it("returns an empty array for a Manager with no assessments", async () => {
+    const { handler } = buildHandler({ result: { items: [], total: 0 } });
+
+    const result = await handler.execute(query());
+
+    expect(result.assessments).toEqual([]);
+    expect(result.total).toBe(0);
+  });
+
+  it("scopes the query to organizationId + ownerId for a Manager", async () => {
+    const { handler, findMany } = buildHandler({});
+
+    await handler.execute(query({ subjectRole: "Manager" }));
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: "org-1", ownerId: "user-1" }),
+    );
+    const criteria = findMany.mock.calls[0][0];
+    expect(criteria.assessmentId).toBeUndefined();
+  });
+
+  // T03
+  it("passes page_size through to the repository criteria", async () => {
+    const { handler, findMany } = buildHandler({});
+
+    await handler.execute(query({ pageSize: 5 }));
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ pageSize: 5 }),
+    );
+  });
+
+  // T04
+  it("passes a valid status filter through to the repository criteria", async () => {
+    const { handler, findMany } = buildHandler({});
+
+    await handler.execute(query({ status: "WIZARD_IN_PROGRESS" }));
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "WIZARD_IN_PROGRESS" }),
+    );
+  });
+
+  it("rejects an unknown status filter with INVALID_REQUEST", async () => {
+    const { handler } = buildHandler({});
+
+    await expect(
+      handler.execute(query({ status: "NOT_A_REAL_STATUS" })),
+    ).rejects.toThrow(UnprocessableEntityException);
+  });
+
+  // T06
+  it("scopes a Developer to only their scoped assessment id", async () => {
+    const { handler, findMany } = buildHandler({});
+
+    await handler.execute(
+      query({ subjectRole: "Developer", scope: "assessment-42" }),
+    );
+
+    const criteria = findMany.mock.calls[0][0];
+    expect(criteria.assessmentId).toBe("assessment-42");
+    expect(criteria.ownerId).toBeUndefined();
+  });
+
+  it("returns an empty list without querying when a Developer has no scope", async () => {
+    const { handler, findMany } = buildHandler({});
+
+    const result = await handler.execute(
+      query({ subjectRole: "Developer", scope: null }),
+    );
+
+    expect(result.assessments).toEqual([]);
+    expect(result.total).toBe(0);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  // T07
+  it("clamps page_size above 100 down to 100", async () => {
+    const { handler, findMany } = buildHandler({});
+
+    const result = await handler.execute(query({ pageSize: 500 }));
+
+    expect(result.page_size).toBe(100);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ pageSize: 100 }),
+    );
+  });
+
+  it("clamps page below 1 up to 1", async () => {
+    const { handler } = buildHandler({});
+
+    const result = await handler.execute(query({ page: 0 }));
+
+    expect(result.page).toBe(1);
+  });
+
+  // T08
+  it("never includes risk/severity/classification wording in the response", async () => {
+    const assessment = makeAssessment();
+    const { handler } = buildHandler({
+      result: { items: [assessment], total: 1 },
+    });
+
+    const result = await handler.execute(query());
+
+    const serialized = JSON.stringify(result).toLowerCase();
+    expect(serialized).not.toMatch(/\brisk\b|\bseverity\b|classification/);
+  });
+
+  it("resolves wizard_status per assessment from WizardProfile rows", async () => {
+    const assessment = makeAssessment();
+    const { handler } = buildHandler({
+      result: { items: [assessment], total: 1 },
+      wizardProfiles: [{ assessmentId: assessment.id, status: "SUBMITTED" }],
+    });
+
+    const result = await handler.execute(query());
+
+    expect(result.assessments[0].wizard_status).toBe("SUBMITTED");
+  });
+});

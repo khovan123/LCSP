@@ -1,4 +1,6 @@
-export type AssessmentStatus = "WIZARD_IN_PROGRESS";
+export const ASSESSMENT_STATUSES = ["WIZARD_IN_PROGRESS"] as const;
+
+export type AssessmentStatus = (typeof ASSESSMENT_STATUSES)[number];
 
 type AssessmentProps = {
   id: string;

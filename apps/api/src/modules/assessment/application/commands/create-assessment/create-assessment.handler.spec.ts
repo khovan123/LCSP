@@ -14,7 +14,10 @@ function buildHandler() {
   const findById = jest
     .fn<AssessmentRepository["findById"]>()
     .mockResolvedValue(null);
-  const repository: AssessmentRepository = { save, findById };
+  const findMany = jest
+    .fn<AssessmentRepository["findMany"]>()
+    .mockResolvedValue({ items: [], total: 0 });
+  const repository: AssessmentRepository = { save, findById, findMany };
 
   const write = jest
     .fn<AuditWriterService["write"]>()
