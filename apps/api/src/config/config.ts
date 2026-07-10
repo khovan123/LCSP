@@ -74,5 +74,8 @@ export function config(): AppConfig {
     worker: {
       apiKey: env.WORKER_API_KEY ?? "",
     },
+    internal: {
+      apiToken: env.INTERNAL_API_TOKEN ?? "test-internal-token",
+    },
   };
 }

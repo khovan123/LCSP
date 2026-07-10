@@ -4,11 +4,15 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import request from "supertest";
+import { httpRequest } from "./support/http.js";
 
 import { AUTH_ERROR_CODES, type ProblemResult } from "@lcsp/contracts/auth";
 
 import { AppModule } from "../src/app.module.js";
+import type {
+  OAuthCallbackSuccess,
+  OAuthStartSuccess,
+} from "../src/modules/auth-workspace/application/contracts/auth-workspace/oauth.contract.js";
 import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
 import {
   TEST_DATABASE_URL,
@@ -74,19 +78,19 @@ describe("OAuth login (e2e)", () => {
   // ── OAuth start ────────────────────────────────────────────────
 
   it("valid provider and allowlisted redirect_uri returns an authorization URL with a state param", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ provider: "github", redirect_uri: ALLOWED_REDIRECT_URI })
       .expect(200);
 
-    const success = expectSuccess(result.body);
-    const url = new URL(success.authorization_url as string);
+    const success = expectSuccess(result.body as OAuthStartSuccess);
+    const url = new URL(success.authorization_url);
     assert.ok(url.searchParams.get("state"));
     assert.equal(typeof success.correlation_id, "string");
   });
 
   it("unsupported provider is rejected", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ provider: "gitlab", redirect_uri: ALLOWED_REDIRECT_URI })
       .expect(200);
@@ -96,7 +100,7 @@ describe("OAuth login (e2e)", () => {
   });
 
   it("redirect_uri outside the server allowlist is rejected", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ provider: "github", redirect_uri: "http://evil.test/callback" })
       .expect(200);
@@ -106,7 +110,7 @@ describe("OAuth login (e2e)", () => {
   });
 
   it("missing request parameters are rejected", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ provider: "github" })
       .expect(200);
@@ -116,12 +120,12 @@ describe("OAuth login (e2e)", () => {
   });
 
   it("persists a state row with a ~10 minute expiry and never returns state/nonce in the response or audit trail", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ provider: "github", redirect_uri: ALLOWED_REDIRECT_URI })
       .expect(200);
 
-    const success = expectSuccess(result.body);
+    const success = expectSuccess(result.body as OAuthStartSuccess);
     assert.equal("state" in success, false);
     assert.equal("nonce" in success, false);
 
@@ -151,16 +155,16 @@ describe("OAuth login (e2e)", () => {
     const state = await startOAuthFlow();
     mockGithubFetch("111");
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
       .expect(200);
 
-    const success = expectSuccess(result.body);
+    const success = expectSuccess(result.body as OAuthCallbackSuccess);
     assert.equal(typeof success.session_token, "string");
     assert.equal(success.organization_id, organizationId);
     assert.equal(success.mfa_required, false);
-    assert.ok((success.expires_at as number) > Date.now());
+    assert.ok(success.expires_at > Date.now());
 
     const session = await prisma.authSession.findFirst({
       where: { userId },
@@ -170,7 +174,7 @@ describe("OAuth login (e2e)", () => {
 
   it("rejects a callback with an unknown state", async () => {
     mockGithubFetch("222");
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({
         code: "good-code",
@@ -196,7 +200,7 @@ describe("OAuth login (e2e)", () => {
     });
     mockGithubFetch("333");
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({
         code: "good-code",
@@ -218,12 +222,12 @@ describe("OAuth login (e2e)", () => {
     const state = await startOAuthFlow();
     mockGithubFetch("444");
 
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
       .expect(200);
 
-    const replay = await request(app.getHttpServer())
+    const replay = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
       .expect(200);
@@ -239,7 +243,7 @@ describe("OAuth login (e2e)", () => {
         fakeResponse(401, { error: "bad_verification_code" }),
       )) as unknown as typeof fetch;
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "bad-code", state, provider: "github" })
       .expect(200);
@@ -259,7 +263,7 @@ describe("OAuth login (e2e)", () => {
     const state = await startOAuthFlow();
     mockGithubFetch("999-unknown");
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
       .expect(200);
@@ -277,7 +281,7 @@ describe("OAuth login (e2e)", () => {
     const state = await startOAuthFlow();
     mockGithubFetch("555");
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
       .expect(200);
@@ -295,7 +299,7 @@ describe("OAuth login (e2e)", () => {
     const state = await startOAuthFlow();
     mockGithubFetch("666");
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
       .expect(200);
@@ -313,7 +317,7 @@ describe("OAuth login (e2e)", () => {
     const state = await startOAuthFlow();
     mockGithubFetch("777");
 
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
       .expect(200);
@@ -325,12 +329,12 @@ describe("OAuth login (e2e)", () => {
   });
 
   async function startOAuthFlow(): Promise<string> {
-    const start = await request(app.getHttpServer())
+    const start = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ provider: "github", redirect_uri: ALLOWED_REDIRECT_URI })
       .expect(200);
-    const success = expectSuccess(start.body);
-    const url = new URL(success.authorization_url as string);
+    const success = expectSuccess(start.body as OAuthStartSuccess);
+    const url = new URL(success.authorization_url);
     const state = url.searchParams.get("state");
     assert.ok(state, "expected a state param on the authorization URL");
     return state;

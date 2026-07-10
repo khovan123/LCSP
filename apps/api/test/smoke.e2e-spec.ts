@@ -8,10 +8,13 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import request from "supertest";
+import { httpRequest } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
-import { TEST_DATABASE_URL, pushPrismaSchema } from "./support/auth-workspace-test-helpers.js";
+import {
+  TEST_DATABASE_URL,
+  pushPrismaSchema,
+} from "./support/auth-workspace-test-helpers.js";
 
 describe("API smoke test (e2e) [AC-027]", () => {
   let app: INestApplication;
@@ -36,7 +39,7 @@ describe("API smoke test (e2e) [AC-027]", () => {
   });
 
   it("AC-027: Health endpoint returns 200", async () => {
-    const result = await request(app.getHttpServer()).get("/health");
+    const result = await httpRequest(app).get("/health");
     assert.ok(
       [200, 204].includes(result.status),
       `Health endpoint must return 2xx, got ${result.status}`,
@@ -44,15 +47,19 @@ describe("API smoke test (e2e) [AC-027]", () => {
   });
 
   it("AC-027: Health endpoint response does not expose internal configuration", async () => {
-    const result = await request(app.getHttpServer()).get("/health");
+    const result = await httpRequest(app).get("/health");
     if (result.status !== 200) return;
 
     const body = JSON.stringify(result.body);
-    assert.doesNotMatch(body, /DATABASE_URL|password|secret|token/i, "Health must not expose config secrets");
+    assert.doesNotMatch(
+      body,
+      /DATABASE_URL|password|secret|token/i,
+      "Health must not expose config secrets",
+    );
   });
 
   it("AC-027: API is reachable and JSON Content-Type is returned for structured endpoints", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/assessments")
       .set("Accept", "application/json");
 
@@ -72,13 +79,16 @@ describe("API smoke test (e2e) [AC-027]", () => {
 
   it("AC-027: Database connectivity verified — Prisma can connect to test DB", async () => {
     // Raw DB check — not via API
-    const result = await prisma.$queryRaw<{ result: number }[]>`SELECT 1 as result`;
+    const result = await prisma.$queryRaw<
+      { result: number }[]
+    >`SELECT 1 as result`;
     assert.equal(result[0].result, 1, "Database must be reachable");
   });
 
   it("AC-027: Unknown routes return 404, not 500", async () => {
-    const result = await request(app.getHttpServer())
-      .get("/this-route-does-not-exist-at-all-xyz");
+    const result = await httpRequest(app).get(
+      "/this-route-does-not-exist-at-all-xyz",
+    );
     assert.equal(result.status, 404, "Unknown routes must return 404");
   });
 });

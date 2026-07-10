@@ -1,3 +1,4 @@
+import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
@@ -12,7 +13,7 @@ import {
 } from "./support/auth-workspace-test-helpers.js";
 
 describe("AppController (e2e)", () => {
-  let app: any;
+  let app: INestApplication;
   let prisma: PrismaClient;
 
   beforeAll(async () => {

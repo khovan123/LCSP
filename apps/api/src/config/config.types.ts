@@ -37,6 +37,10 @@ export interface WorkerConfig {
   apiKey: string;
 }
 
+export interface InternalConfig {
+  apiToken: string;
+}
+
 export type NodeEnv = "development" | "production" | "test";
 
 export interface AppConfig {
@@ -49,4 +53,5 @@ export interface AppConfig {
   crypto: CryptoConfig;
   pythonWorker: PythonWorkerConfig;
   worker: WorkerConfig;
+  internal: InternalConfig;
 }

@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import { PrismaService } from "../src/infrastructure/prisma/prisma.service.js";
 import { OutboxRepository } from "../src/platform/outbox/outbox.repository.js";
-import { TEST_DATABASE_URL, pushPrismaSchema } from "./support/auth-workspace-test-helpers.js";
+import {
+  TEST_DATABASE_URL,
+  pushPrismaSchema,
+} from "./support/auth-workspace-test-helpers.js";
 
 describe("OutboxRepository (e2e, real Postgres)", () => {
   let prisma: PrismaService;
@@ -23,7 +26,11 @@ describe("OutboxRepository (e2e, real Postgres)", () => {
     await prisma.outboxMessage.deleteMany();
   });
 
-  function seed(overrides: Partial<Parameters<typeof prisma.outboxMessage.create>[0]["data"]> = {}) {
+  function seed(
+    overrides: Partial<
+      Parameters<typeof prisma.outboxMessage.create>[0]["data"]
+    > = {},
+  ) {
     return prisma.outboxMessage.create({
       data: {
         id: randomUUID(),
@@ -42,8 +49,8 @@ describe("OutboxRepository (e2e, real Postgres)", () => {
     await seed({ status: "published", publishedAt: new Date() });
     await seed({ status: "failed" });
 
-    const ids = await repository.withPendingBatch(10, async (messages) =>
-      messages.map((m) => m.id),
+    const ids = await repository.withPendingBatch(10, (messages) =>
+      Promise.resolve(messages.map((m) => m.id)),
     );
 
     expect(ids).toEqual([pending.id]);
@@ -53,8 +60,8 @@ describe("OutboxRepository (e2e, real Postgres)", () => {
     const older = await seed({ createdAt: new Date("2026-01-01T00:00:00Z") });
     const newer = await seed({ createdAt: new Date("2026-01-02T00:00:00Z") });
 
-    const ids = await repository.withPendingBatch(10, async (messages) =>
-      messages.map((m) => m.id),
+    const ids = await repository.withPendingBatch(10, (messages) =>
+      Promise.resolve(messages.map((m) => m.id)),
     );
 
     expect(ids).toEqual([older.id, newer.id]);

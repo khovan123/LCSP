@@ -177,6 +177,8 @@ model AuthAuditEvent {
   eventType      String
   actorId        String?
   organizationId String?
+  resourceType   String?
+  resourceId     String?
   decision       AuthDecision?
   reasonCode     String?
   correlationId  String
@@ -234,6 +236,20 @@ model User {
   email       String   @unique
   displayName String
   createdAt   DateTime @default(now())
+}
+
+model Assessment {
+  id             String   @id
+  organizationId String
+  ownerId        String
+  name           String
+  description    String?
+  status         String   @default("WIZARD_IN_PROGRESS")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([ownerId])
 }
 
 enum AuthMembershipStatus {

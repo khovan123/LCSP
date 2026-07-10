@@ -9,9 +9,11 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import request from "supertest";
+import { httpRequest } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
+import type { CreateAssessmentDto } from "../src/modules/assessment/application/contracts/assessment/create-assessment.contract.js";
+import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import {
   TEST_DATABASE_URL,
   pushPrismaSchema,
@@ -42,10 +44,12 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
 
-    const signIn = await request(app.getHttpServer())
-      .post("/auth/sign-in")
-      .send({ email: "manager@acme.test", password: "CorrectHorseBatteryStaple!", organization_id: orgId });
-    managerToken = signIn.body?.session_token ?? "";
+    const signIn = await httpRequest(app).post("/auth/sign-in").send({
+      email: "manager@acme.test",
+      password: "CorrectHorseBatteryStaple!",
+      organization_id: orgId,
+    });
+    managerToken = (signIn.body as SignInSuccess)?.session_token ?? "";
   });
 
   afterAll(async () => {
@@ -56,7 +60,7 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
   // AC-039: Outbox message created exactly once per state change
   it("AC-039: Creating an assessment creates exactly one OutboxMessage", async () => {
     if (!managerToken) return;
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/assessments")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ name: "Outbox Idempotency Test", organization_id: orgId });
@@ -67,9 +71,12 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
         orderBy: { createdAt: "desc" },
       });
 
-      assert.ok(outboxMessages.length >= 1, "Assessment creation must produce at least one OutboxMessage");
+      assert.ok(
+        outboxMessages.length >= 1,
+        "Assessment creation must produce at least one OutboxMessage",
+      );
       // Check for duplicates — same aggregateId should have exactly one ASSESSMENT_CREATED
-      const aggregateIds = outboxMessages.map(m => m.aggregateId);
+      const aggregateIds = outboxMessages.map((m) => m.aggregateId);
       const uniqueIds = new Set(aggregateIds);
       assert.equal(
         aggregateIds.length,
@@ -86,13 +93,14 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
     if (!managerToken) return;
     // The only way to verify transactional atomicity in an e2e test is to check
     // that after a successful API call, both the domain entity and the outbox message exist
-    const createResult = await request(app.getHttpServer())
+    const createResult = await httpRequest(app)
       .post("/assessments")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ name: "Transactional Outbox Test", organization_id: orgId });
 
     if (createResult.status !== 201) return;
-    const assessmentId = createResult.body?.id;
+    const assessmentId = (createResult.body as CreateAssessmentDto)
+      ?.assessment_id;
     if (!assessmentId) return;
 
     try {
@@ -118,7 +126,10 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
           eventType: "ASSESSMENT_CREATED",
           aggregateId: "assessment-idempotent",
           aggregateType: "Assessment",
-          payload: JSON.stringify({ id: "assessment-idempotent", name: "Idempotency Test" }),
+          payload: JSON.stringify({
+            id: "assessment-idempotent",
+            name: "Idempotency Test",
+          }),
           createdAt: new Date().toISOString(),
           publishedAt: null,
         },
@@ -128,20 +139,28 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
     }
 
     // Process message twice via internal relay
-    const first = await request(app.getHttpServer())
+    const first = await httpRequest(app)
       .post("/internal/outbox/process")
-      .set("X-Internal-Token", process.env.INTERNAL_API_TOKEN ?? "test-internal-token")
+      .set(
+        "X-Internal-Token",
+        process.env.INTERNAL_API_TOKEN ?? "test-internal-token",
+      )
       .send({ message_id: messageId });
 
-    const second = await request(app.getHttpServer())
+    const second = await httpRequest(app)
       .post("/internal/outbox/process")
-      .set("X-Internal-Token", process.env.INTERNAL_API_TOKEN ?? "test-internal-token")
+      .set(
+        "X-Internal-Token",
+        process.env.INTERNAL_API_TOKEN ?? "test-internal-token",
+      )
       .send({ message_id: messageId });
 
     // Second processing must not create duplicate side effects
     // Both calls should succeed (idempotent) or second should be no-op
     if (first.status === 200 && second.status === 200) {
-      const outbox = await prisma.outboxMessage.findUnique({ where: { id: messageId } });
+      const outbox = await prisma.outboxMessage.findUnique({
+        where: { id: messageId },
+      });
       assert.ok(outbox, "OutboxMessage still exists after processing");
       // publishedAt must be set exactly once
       if (outbox?.publishedAt) {
@@ -149,7 +168,10 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
           where: { resourceId: "assessment-idempotent" },
         });
         // At most one event for idempotent processing
-        assert.ok(events.length <= 1, "Duplicate processing must not create duplicate audit events");
+        assert.ok(
+          events.length <= 1,
+          "Duplicate processing must not create duplicate audit events",
+        );
       }
     }
   });
@@ -173,15 +195,24 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
     }
 
     // Deliver the ASSESSMENT_CREATED event again (duplicate)
-    const dup = await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/internal/outbox/process")
-      .set("X-Internal-Token", process.env.INTERNAL_API_TOKEN ?? "test-internal-token")
+      .set(
+        "X-Internal-Token",
+        process.env.INTERNAL_API_TOKEN ?? "test-internal-token",
+      )
       .send({ event_type: "ASSESSMENT_CREATED", aggregate_id: assessmentId });
 
     // Assessment status must still be CLASSIFIED — not reset
-    const assessment = await prisma.assessment.findUnique({ where: { id: assessmentId } });
+    const assessment = await prisma.assessment.findUnique({
+      where: { id: assessmentId },
+    });
     if (assessment) {
-      assert.equal(assessment.status, "CLASSIFIED", "Duplicate delivery must not reset classification state");
+      assert.equal(
+        assessment.status,
+        "CLASSIFIED",
+        "Duplicate delivery must not reset classification state",
+      );
     }
   });
 });

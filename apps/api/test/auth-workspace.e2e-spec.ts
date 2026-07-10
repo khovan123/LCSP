@@ -4,13 +4,25 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import request from "supertest";
+import { httpRequest } from "./support/http.js";
 
 import { AUTH_ERROR_CODES, type ProblemResult } from "@lcsp/contracts/auth";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { AppModule } from "../src/app.module.js";
 import { AUTH_WORKSPACE_RECOVERY_NOTIFIER } from "../src/modules/auth-workspace/application/ports/notification/recovery-notifier.js";
+import type {
+  EnrollMfaSuccess,
+  VerifyMfaOtpSuccess,
+} from "../src/modules/auth-workspace/application/contracts/auth-workspace/mfa.contract.js";
+import type { UpdateProfileSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/profile.contract.js";
+import type {
+  ConfirmRecoverySuccess,
+  RequestRecoverySuccess,
+} from "../src/modules/auth-workspace/application/contracts/auth-workspace/recovery.contract.js";
+import type { RegisterSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/register-approved-path.contract.js";
+import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
+import type { WorkspaceSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/workspace.contract.js";
 import {
   type AuthFixture,
   CapturingRecoveryNotifier,
@@ -63,7 +75,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("approved sign-in creates an authenticated session scoped to organization", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.approvedUser.email,
@@ -71,13 +83,14 @@ describe("Auth workspace (e2e)", () => {
         organization_id: fixture.organizationId,
       })
       .expect(201);
+    const body = result.body as SignInSuccess;
 
-    assert.equal(result.body.user.organization_id, fixture.organizationId);
-    assert.equal(typeof result.body.session_token, "string");
+    assert.equal(body.user.organization_id, fixture.organizationId);
+    assert.equal(typeof body.session_token, "string");
   });
 
   it("approved invitation registration creates session through approved path", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/register-approved-path")
       .send({
         invite_id: "invite-approved",
@@ -85,7 +98,10 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(201);
 
-    assert.equal(result.body.user.email, "invitee@acme.test");
+    assert.equal(
+      (result.body as RegisterSuccess).user.email,
+      "invitee@acme.test",
+    );
     const invite = await prisma.authInvitation.findUnique({
       where: { id: "invite-approved" },
     });
@@ -93,7 +109,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("approved invitation cannot be replayed after first registration", async () => {
-    const first = await request(app.getHttpServer())
+    const first = await httpRequest(app)
       .post("/auth/register-approved-path")
       .send({
         invite_id: "invite-approved",
@@ -101,7 +117,7 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(201);
 
-    const replay = await request(app.getHttpServer())
+    const replay = await httpRequest(app)
       .post("/auth/register-approved-path")
       .send({
         invite_id: "invite-approved",
@@ -109,13 +125,13 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(201);
 
-    assert.equal(first.body.ok, true);
+    assert.equal((first.body as RegisterSuccess).ok, true);
     const failure = expectFailure(replay.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidInviteState);
   });
 
   it("invalid credentials return stable safe error without echoing secrets", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.approvedUser.email,
@@ -134,7 +150,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("invalid invite state is rejected with safe machine-readable contract", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/register-approved-path")
       .send({
         invite_id: "invite-pending",
@@ -148,7 +164,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("approved invitation still blocks registration when email verification is pending", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/register-approved-path")
       .send({
         invite_id: "invite-unverified",
@@ -164,7 +180,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("approved invitation still blocks registration when membership is not active", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/register-approved-path")
       .send({
         invite_id: "invite-not-active",
@@ -177,7 +193,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("email verification is required before continuing to workspace", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.unverifiedUser.email,
@@ -194,7 +210,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("membership missing blocks access before workspace data is returned", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.noMembershipUser.email,
@@ -208,7 +224,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("protected workspace endpoint fails closed without authentication", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .expect(200);
@@ -221,7 +237,7 @@ describe("Auth workspace (e2e)", () => {
   it("workspace access fails closed when request organization does not match session scope", async () => {
     const signIn = await signInApprovedUser();
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: "org-2" })
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -235,7 +251,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("revoked session cannot access protected workspace", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", "Bearer revoked-session-token")
@@ -260,7 +276,7 @@ describe("Auth workspace (e2e)", () => {
       },
     });
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -292,7 +308,7 @@ describe("Auth workspace (e2e)", () => {
       },
     });
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -306,7 +322,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("repeated failed logins trigger temporary lock expectation", async () => {
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.approvedUser.email,
@@ -315,7 +331,7 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(201);
 
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.approvedUser.email,
@@ -324,7 +340,7 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(201);
 
-    const locked = await request(app.getHttpServer())
+    const locked = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.approvedUser.email,
@@ -340,13 +356,13 @@ describe("Auth workspace (e2e)", () => {
   it("audit trail records allow/deny events without leaking secrets", async () => {
     const signIn = await signInApprovedUser();
 
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .expect(200);
 
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/auth/revoke-session")
       .send({ session_token: signIn.session_token })
       .expect(201);
@@ -354,7 +370,9 @@ describe("Auth workspace (e2e)", () => {
     const auditEvents = await prisma.authAuditEvent.findMany({
       orderBy: { createdAt: "asc" },
     });
-    const serializedAudit = JSON.stringify(auditEvents.map((item) => item.payload));
+    const serializedAudit = JSON.stringify(
+      auditEvents.map((item) => item.payload),
+    );
 
     assert.match(serializedAudit, /auth\.login\.succeeded/);
     assert.match(serializedAudit, /workspace\.access\.allowed/);
@@ -367,20 +385,21 @@ describe("Auth workspace (e2e)", () => {
 
   it("MFA enrollment returns a TOTP URI for authenticator app setup", async () => {
     const signIn = await signInApprovedUser();
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/mfa/enroll")
       .send({ session_token: signIn.session_token })
       .expect(201);
 
-    assert.equal(result.body.ok, true);
-    assert.match(result.body.totp_uri, /^otpauth:\/\/totp\//);
+    const body = result.body as EnrollMfaSuccess;
+    assert.equal(body.ok, true);
+    assert.match(body.totp_uri, /^otpauth:\/\/totp\//);
   });
 
   it("workspace access is blocked when MFA is enrolled but not yet verified", async () => {
     const signIn = await signInApprovedUser();
     await seedMfaEnrollment(prisma, fixture.approvedUser.id);
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -392,7 +411,7 @@ describe("Auth workspace (e2e)", () => {
 
   it("sign-in response includes mfa_required flag when MFA is enrolled", async () => {
     await seedMfaEnrollment(prisma, fixture.approvedUser.id);
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.approvedUser.email,
@@ -401,8 +420,9 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(201);
 
-    assert.equal(result.body.ok, true);
-    assert.equal(result.body.mfa_required, true);
+    const body = result.body as SignInSuccess;
+    assert.equal(body.ok, true);
+    assert.equal(body.mfa_required, true);
   });
 
   it("valid OTP verifies MFA and grants workspace access", async () => {
@@ -410,25 +430,25 @@ describe("Auth workspace (e2e)", () => {
     const mfa = await seedMfaEnrollment(prisma, fixture.approvedUser.id);
 
     const otp = totpForTime(mfa.totpSecret, Date.now());
-    const verify = await request(app.getHttpServer())
+    const verify = await httpRequest(app)
       .post("/auth/mfa/verify-otp")
       .send({ session_token: signIn.session_token, otp })
       .expect(201);
-    assert.equal(verify.body.ok, true);
+    assert.equal((verify.body as VerifyMfaOtpSuccess).ok, true);
 
-    const workspace = await request(app.getHttpServer())
+    const workspace = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .expect(200);
-    assert.equal(workspace.body.ok, true);
+    assert.equal((workspace.body as WorkspaceSuccess).ok, true);
   });
 
   it("invalid OTP is rejected and audit event is recorded", async () => {
     const signIn = await signInApprovedUser();
     await seedMfaEnrollment(prisma, fixture.approvedUser.id);
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/mfa/verify-otp")
       .send({ session_token: signIn.session_token, otp: "000000" })
       .expect(201);
@@ -438,7 +458,9 @@ describe("Auth workspace (e2e)", () => {
 
     const auditEvents = await prisma.authAuditEvent.findMany();
     const mfaFailed = auditEvents.find(
-      (e) => (e.payload as Record<string, unknown>)["event_type"] === "auth.mfa.failed",
+      (e) =>
+        (e.payload as Record<string, unknown>)["event_type"] ===
+        "auth.mfa.failed",
     );
     assert.ok(mfaFailed, "auth.mfa.failed audit event should be recorded");
   });
@@ -448,13 +470,13 @@ describe("Auth workspace (e2e)", () => {
     const mfa = await seedMfaEnrollment(prisma, fixture.approvedUser.id);
 
     const otp = totpForTime(mfa.totpSecret, Date.now());
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/auth/mfa/verify-otp")
       .send({ session_token: signIn.session_token, otp })
       .expect(201);
 
     const signIn2 = await signInApprovedUser();
-    const replay = await request(app.getHttpServer())
+    const replay = await httpRequest(app)
       .post("/auth/mfa/verify-otp")
       .send({ session_token: signIn2.session_token, otp })
       .expect(201);
@@ -468,13 +490,13 @@ describe("Auth workspace (e2e)", () => {
     await seedMfaEnrollment(prisma, fixture.approvedUser.id);
 
     for (let i = 0; i < 5; i++) {
-      await request(app.getHttpServer())
+      await httpRequest(app)
         .post("/auth/mfa/verify-otp")
         .send({ session_token: signIn.session_token, otp: "000000" })
         .expect(201);
     }
 
-    const locked = await request(app.getHttpServer())
+    const locked = await httpRequest(app)
       .post("/auth/mfa/verify-otp")
       .send({ session_token: signIn.session_token, otp: "000001" })
       .expect(201);
@@ -487,9 +509,8 @@ describe("Auth workspace (e2e)", () => {
 
   it("expired session is denied access with audit event recorded", async () => {
     const expiredToken = "expired-session-token";
-    const { hashSecret, fingerprintToken } = await import(
-      "../src/modules/auth-workspace/infrastructure/security/security.utils.js"
-    );
+    const { hashSecret, fingerprintToken } =
+      await import("../src/modules/auth-workspace/infrastructure/security/security.utils.js");
     await prisma.authSession.create({
       data: {
         id: "session-expired",
@@ -502,7 +523,7 @@ describe("Auth workspace (e2e)", () => {
       },
     });
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${expiredToken}`)
@@ -515,12 +536,12 @@ describe("Auth workspace (e2e)", () => {
   it("revoke-session records audit event and blocks subsequent workspace access", async () => {
     const signIn = await signInApprovedUser();
 
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/auth/revoke-session")
       .send({ session_token: signIn.session_token })
       .expect(201);
 
-    const workspace = await request(app.getHttpServer())
+    const workspace = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -531,7 +552,9 @@ describe("Auth workspace (e2e)", () => {
 
     const auditEvents = await prisma.authAuditEvent.findMany();
     const revoked = auditEvents.find(
-      (e) => (e.payload as Record<string, unknown>)["event_type"] === "auth.session.revoked",
+      (e) =>
+        (e.payload as Record<string, unknown>)["event_type"] ===
+        "auth.session.revoked",
     );
     assert.ok(revoked, "auth.session.revoked audit event should be recorded");
   });
@@ -540,7 +563,7 @@ describe("Auth workspace (e2e)", () => {
 
   it("profile update succeeds and returns updated_fields without secret values", async () => {
     const signIn = await signInApprovedUser();
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .patch("/auth/profile")
       .send({
         session_token: signIn.session_token,
@@ -549,16 +572,17 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(200);
 
-    assert.equal(result.body.ok, true);
-    assert.ok(Array.isArray(result.body.updated_fields));
-    assert.ok(result.body.updated_fields.includes("display_name"));
-    assert.ok(result.body.updated_fields.includes("recovery_email"));
+    const body = result.body as UpdateProfileSuccess;
+    assert.equal(body.ok, true);
+    assert.ok(Array.isArray(body.updated_fields));
+    assert.ok(body.updated_fields.includes("display_name"));
+    assert.ok(body.updated_fields.includes("recovery_email"));
     assert.doesNotMatch(JSON.stringify(result.body), /recovery@safe\.test/);
   });
 
   it("profile update audit event records field names not values", async () => {
     const signIn = await signInApprovedUser();
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .patch("/auth/profile")
       .send({
         session_token: signIn.session_token,
@@ -569,9 +593,14 @@ describe("Auth workspace (e2e)", () => {
 
     const auditEvents = await prisma.authAuditEvent.findMany();
     const profileUpdated = auditEvents.find(
-      (e) => (e.payload as Record<string, unknown>)["event_type"] === "auth.profile.updated",
+      (e) =>
+        (e.payload as Record<string, unknown>)["event_type"] ===
+        "auth.profile.updated",
     );
-    assert.ok(profileUpdated, "auth.profile.updated audit event should be recorded");
+    assert.ok(
+      profileUpdated,
+      "auth.profile.updated audit event should be recorded",
+    );
     const auditStr = JSON.stringify(profileUpdated?.payload);
     assert.doesNotMatch(auditStr, /private@secret\.test/);
     assert.doesNotMatch(auditStr, /Audit Test Name/);
@@ -581,12 +610,12 @@ describe("Auth workspace (e2e)", () => {
 
   it("re-enrolling MFA requires a verified session so a stolen pre-MFA session cannot replace the secret", async () => {
     const signIn = await signInApprovedUser();
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/auth/mfa/enroll")
       .send({ session_token: signIn.session_token })
       .expect(201);
 
-    const reEnroll = await request(app.getHttpServer())
+    const reEnroll = await httpRequest(app)
       .post("/auth/mfa/enroll")
       .send({ session_token: signIn.session_token })
       .expect(201);
@@ -599,7 +628,7 @@ describe("Auth workspace (e2e)", () => {
     const signIn = await signInApprovedUser();
     await seedMfaEnrollment(prisma, fixture.approvedUser.id);
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .patch("/auth/profile")
       .send({ session_token: signIn.session_token, display_name: "Blocked" })
       .expect(200);
@@ -610,9 +639,12 @@ describe("Auth workspace (e2e)", () => {
 
   it("profile update rejects a malformed recovery_email", async () => {
     const signIn = await signInApprovedUser();
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .patch("/auth/profile")
-      .send({ session_token: signIn.session_token, recovery_email: "not-an-email" })
+      .send({
+        session_token: signIn.session_token,
+        recovery_email: "not-an-email",
+      })
       .expect(200);
 
     const failure = expectFailure(result.body);
@@ -628,7 +660,7 @@ describe("Auth workspace (e2e)", () => {
     const signIn = await signInApprovedUser();
     assert.equal(signIn.mfa_required, true);
 
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -639,7 +671,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("client-facing user projection only exposes role, not other PBAC subject attributes", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.approvedUser.email,
@@ -656,25 +688,27 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("password recovery request does not leak whether the account exists", async () => {
-    const known = await request(app.getHttpServer())
+    const known = await httpRequest(app)
       .post("/auth/recovery/request")
       .send({ email: fixture.approvedUser.email })
       .expect(201);
 
-    const unknown = await request(app.getHttpServer())
+    const unknown = await httpRequest(app)
       .post("/auth/recovery/request")
       .send({ email: "nobody-here@acme.test" })
       .expect(201);
 
-    assert.equal(known.body.ok, true);
-    assert.equal(unknown.body.ok, true);
-    assert.deepEqual(Object.keys(known.body), Object.keys(unknown.body));
+    const knownBody = known.body as RequestRecoverySuccess;
+    const unknownBody = unknown.body as RequestRecoverySuccess;
+    assert.equal(knownBody.ok, true);
+    assert.equal(unknownBody.ok, true);
+    assert.deepEqual(Object.keys(knownBody), Object.keys(unknownBody));
   });
 
   it("password recovery confirm resets the password and revokes existing sessions", async () => {
     const signIn = await signInApprovedUser();
 
-    await request(app.getHttpServer())
+    await httpRequest(app)
       .post("/auth/recovery/request")
       .send({ email: fixture.approvedUser.email })
       .expect(201);
@@ -682,13 +716,13 @@ describe("Auth workspace (e2e)", () => {
     const token = recoveryNotifier.lastToken;
     assert.ok(token, "recovery notifier should have captured a token");
 
-    const confirm = await request(app.getHttpServer())
+    const confirm = await httpRequest(app)
       .post("/auth/recovery/confirm")
       .send({ token, new_password: "BrandNewPassword456!" })
       .expect(201);
-    assert.equal(confirm.body.ok, true);
+    assert.equal((confirm.body as ConfirmRecoverySuccess).ok, true);
 
-    const oldSessionCheck = await request(app.getHttpServer())
+    const oldSessionCheck = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -696,7 +730,7 @@ describe("Auth workspace (e2e)", () => {
     const revokedFailure = expectFailure(oldSessionCheck.body);
     assert.equal(revokedFailure.problem.code, AUTH_ERROR_CODES.sessionInvalid);
 
-    const newSignIn = await request(app.getHttpServer())
+    const newSignIn = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.approvedUser.email,
@@ -704,11 +738,11 @@ describe("Auth workspace (e2e)", () => {
         organization_id: fixture.organizationId,
       })
       .expect(201);
-    assert.equal(newSignIn.body.ok, true);
+    assert.equal((newSignIn.body as SignInSuccess).ok, true);
   });
 
   it("password recovery confirm rejects an invalid or expired token", async () => {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/recovery/confirm")
       .send({ token: "not-a-real-token", new_password: "SomethingNew123!" })
       .expect(201);
@@ -718,7 +752,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   async function signInApprovedUser() {
-    const result = await request(app.getHttpServer())
+    const result = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
         email: fixture.approvedUser.email,
@@ -727,11 +761,13 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(201);
 
-    return expectSuccess(result.body);
+    return expectSuccess(result.body as SignInSuccess);
   }
 });
 
-function expectFailure<T extends object>(result: T | ProblemResult): ProblemResult {
+function expectFailure<T extends object>(
+  result: T | ProblemResult,
+): ProblemResult {
   if ("problem" in result) {
     return result;
   }

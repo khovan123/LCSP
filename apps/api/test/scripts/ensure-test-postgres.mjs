@@ -4,12 +4,18 @@ import net from "node:net";
 const containerName = "lcsp-api-test-postgres";
 const image = "postgres:16-alpine";
 
+/**
+ * @param {string[]} args
+ * @param {import("node:child_process").ExecFileSyncOptions} [options]
+ * @returns {string}
+ */
 function run(args, options = {}) {
-  return execFileSync("docker", args, {
+  const output = execFileSync("docker", args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     ...options,
-  }).trim();
+  });
+  return output.toString().trim();
 }
 
 function containerStatus() {
@@ -51,6 +57,10 @@ function ensureContainer() {
   }
 }
 
+/**
+ * @param {number} port
+ * @param {string} host
+ */
 function isPortOpen(port, host) {
   return new Promise((resolve) => {
     const socket = net.createConnection({ port, host });

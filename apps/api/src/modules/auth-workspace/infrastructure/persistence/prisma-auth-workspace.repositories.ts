@@ -620,13 +620,23 @@ function isRecordNotFoundError(error: unknown): boolean {
   );
 }
 
+// The dotted `event_type` values below are this module's original
+// analytics-style convention and are embedded verbatim in the JSON payload
+// for backward compatibility. The queryable `eventType` column is aliased to
+// the newer SCREAMING_SNAKE convention used by other modules, so callers can
+// query on a consistent shape without changing what's already stored in payload.
+const EVENT_TYPE_COLUMN_ALIASES: Record<string, string> = {
+  "auth.login.succeeded": "LOGIN_SUCCESS",
+};
+
 function normalizeAuditEvent(
   event: AuditEvent,
 ): Prisma.AuthAuditEventUncheckedCreateInput {
   const payload = event as Prisma.InputJsonValue;
+  const rawEventType = readString(event, "event_type");
   return {
     id: crypto.randomUUID(),
-    eventType: readString(event, "event_type"),
+    eventType: EVENT_TYPE_COLUMN_ALIASES[rawEventType] ?? rawEventType,
     actorId: readNullableString(event, "actor_id"),
     organizationId: readNullableString(event, "organization_id"),
     decision: readNullableDecision(event, "decision"),

@@ -39,6 +39,8 @@ export class AuditWriterService {
           eventType: event.eventType,
           actorId: event.actorId,
           organizationId: event.organizationId,
+          resourceType: event.resourceType ?? null,
+          resourceId: event.resourceId ?? null,
           correlationId: event.correlationId,
           decision: event.decision,
           payload: (payload ?? {}) as Prisma.InputJsonValue,
