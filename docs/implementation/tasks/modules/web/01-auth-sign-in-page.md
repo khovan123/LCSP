@@ -36,7 +36,7 @@ Render a sign-in form that submits to `POST /auth/sign-in`. Handle MFA pending s
 
 ## Business Rules
 
-1. On `sign_in_result.mfa_required = true` → redirect to `/auth/mfa/verify` with `session_token` as state (not in URL — use session cookie or memory state).
+1. On `sign_in_result.mfa_required = true` → redirect to `/mfa/verify` with `session_token` as state (not in URL — use session cookie or memory state). The `(auth)` route group does not add an `/auth` URL segment.
 2. On success with `mfa_required = false` → redirect to `/workspace`.
 3. On `ACCOUNT_LOCKED` error → show business-language message: "Account temporarily locked. Please try again later."
 4. Password field must not be stored in component state after form submission.

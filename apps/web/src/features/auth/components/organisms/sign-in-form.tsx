@@ -42,7 +42,7 @@ export function SignInForm() {
       return;
     }
     if (outcome.kind === "mfa_required") {
-      router.replace("/auth/mfa/verify");
+      router.replace("/mfa/verify");
       return;
     }
     form.setError("root", { message: outcome.detailKey });

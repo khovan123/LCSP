@@ -25,4 +25,23 @@ export const viPages = {
       requestFailedDetail: "Không thể đăng nhập. Vui lòng thử lại.",
     },
   },
+  mfaVerify: {
+    metadataTitle: "Xác minh danh tính | LCSP",
+    metadataDescription: "Hoàn tất xác minh đa yếu tố để tiếp tục.",
+    homeAriaLabel: "Trang chủ LCSP",
+    formEyebrow: "Xác minh bảo mật",
+    formTitle: "Nhập mã xác minh",
+    formDescription: "Dùng mã sáu chữ số từ ứng dụng xác thực của bạn.",
+    otpLabel: "Mã xác minh",
+    otpDescription: "Nhập mã sáu chữ số hiện tại.",
+    submit: "Xác minh mã",
+    submitting: "Đang xác minh mã",
+    accessHelp: "Cần trợ giúp? Hãy liên hệ chủ sở hữu tổ chức.",
+    errors: {
+      otpRequired: "Nhập mã xác minh của bạn.",
+      otpInvalidFormat: "Nhập mã xác minh gồm sáu chữ số.",
+      requestFailedTitle: "Không thể xác minh",
+      requestFailedDetail: "Không thể xác minh mã. Vui lòng thử lại.",
+    },
+  },
 } as const satisfies PagesMessages;

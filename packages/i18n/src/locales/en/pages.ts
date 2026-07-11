@@ -25,4 +25,23 @@ export const enPages = {
       requestFailedDetail: "Unable to sign in. Please try again.",
     },
   },
+  mfaVerify: {
+    metadataTitle: "Verify your identity | LCSP",
+    metadataDescription: "Complete multi-factor verification to continue.",
+    homeAriaLabel: "LCSP home",
+    formEyebrow: "Secure verification",
+    formTitle: "Enter your verification code",
+    formDescription: "Use the six-digit code from your authenticator app.",
+    otpLabel: "Verification code",
+    otpDescription: "Enter the current six-digit code.",
+    submit: "Verify code",
+    submitting: "Verifying code",
+    accessHelp: "Need help? Contact your organization owner.",
+    errors: {
+      otpRequired: "Enter your verification code.",
+      otpInvalidFormat: "Enter a six-digit verification code.",
+      requestFailedTitle: "Unable to verify",
+      requestFailedDetail: "Unable to verify the code. Please try again.",
+    },
+  },
 } as const satisfies PagesMessages;
