@@ -68,6 +68,6 @@ The following must not appear in active UX, epics or stories:
 - Final Vietnamese microcopy for wizard questions and blocker explanations.
 - Exact readiness-only export contents.
 - Manager-visible wording for automatic trusted trigger mapping states.
-- Final frontend component library decision.
+- ~~Final frontend component library decision.~~ RESOLVED 2026-07-11 — shadcn/ui (Base UI primitives), confirmed in code and bound into `DESIGN.md`. See `ux-LCSP-2026-06-24/.decision-log.md` resolution #7.
 
 These dependencies should be carried into epics/stories as scoped product/design tasks or story acceptance constraints. They do not block epics/stories generation.

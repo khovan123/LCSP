@@ -39,7 +39,35 @@ export type CommonMessages = {
   };
 };
 
+export type PagesMessages = {
+  signIn: {
+    metadataTitle: string;
+    metadataDescription: string;
+    homeAriaLabel: string;
+    formEyebrow: string;
+    formTitle: string;
+    formDescription: string;
+    emailLabel: string;
+    emailDescription: string;
+    passwordLabel: string;
+    passwordDescription: string;
+    submit: string;
+    submitting: string;
+    divider: string;
+    oauthGitHub: string;
+    accessHelp: string;
+    errors: {
+      emailRequired: string;
+      emailInvalid: string;
+      passwordRequired: string;
+      requestFailedTitle: string;
+      requestFailedDetail: string;
+    };
+  };
+};
+
 export type LocaleMessages = {
   auth: AuthMessages;
   common: CommonMessages;
+  pages: PagesMessages;
 };

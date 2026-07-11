@@ -60,3 +60,16 @@ Render a sign-in form that submits to `POST /auth/sign-in`. Handle MFA pending s
 - MFA redirect works correctly.
 - Session token never in URL or console.
 - Business-language error messages only.
+
+## Known UX Compliance Issue (flagged 2026-07-11, resolved 2026-07-11)
+
+The shipped implementation (`apps/web/src/features/auth/components/organisms/sign-in-page.tsx`) does not follow `DESIGN.md`'s "Brand & Style" rule: *"Avoid marketing hero layouts, decorative illustrations, large emotional gradients, or chatbot-style surfaces."*
+
+Specifics:
+
+- A 40%+ width split-screen hero panel (`bg-brand-surface`) with a large decorative gradient circle, a 5.7rem display heading, and a motion-safe fade/slide entrance animation — none of which are sanctioned by the spine.
+- Three undocumented tokens invented in `apps/web/src/app/globals.css` (`--brand-surface`, `--brand-foreground`, `--brand-accent`) outside the spine's Colors table (`{colors.primary}`, `{colors.background}`, `{colors.surface}`, `{colors.surface-muted}`, `{colors.warning}`, `{colors.success}`, `{colors.danger}`, `{colors.info}`).
+
+`DESIGN.md` now has an explicit **Auth Surface** pattern (single centered form card, no hero panel, no new brand-only tokens) added specifically so `MW-web-007` and `MW-web-008` do not repeat this drift.
+
+**Resolved:** `apps/web/src/features/auth/components/organisms/sign-in-page.tsx` rebuilt as a single centered layout (`BrandMark` + `SignInForm`'s existing `{components.form-card}`, already `max-w-md`/~28rem). Removed the hero `<section>`, the decorative gradient circle, and the `--brand-surface`/`--brand-foreground`/`--brand-accent` custom properties from `apps/web/src/app/globals.css` (and the matching `@theme inline` mappings). `BrandMark` now uses the canonical `border-primary` token instead of `border-brand-accent`. Dropped the now-unused hero-only i18n keys (`pages.signIn.eyebrow`/`heading`/`introduction`/`assurance`) from `packages/i18n` (en/vi) and `PagesMessages` type — `formEyebrow`/`formTitle`/`formDescription` already covered that copy inside the form card. Verified via `tsc --noEmit` (web + i18n), the existing `tests/story-1-2.web.test.ts` suite (8/8 pass), and a real dev-server screenshot in light + dark mode (no console errors). Also fixed an unrelated Base UI console warning on the GitHub OAuth button (`nativeButton={false}` needed when `render={<a .../>}`) found during this verification pass.
