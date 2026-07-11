@@ -18,12 +18,14 @@ Active implementation tasks live under `docs/implementation/tasks/modules/**`. L
 | `1.1` | `MW-pyp-003` Worker Secret Redaction Utility | `python-workers/platform` | `lcsp-python-workers` | [brief](../implementation/tasks/modules/python-workers/platform/03-worker-secret-redaction.md) |
 | `1.1` | `MW-qa-001` Auth Integration Test Suite | `qa` | `nestjs-api` | [brief](../implementation/tasks/modules/qa/01-auth-integration-tests.md) |
 | `1.2` | `MW-web-001` Sign-In Page | `web` | `nextjs` | [brief](../implementation/tasks/modules/web/01-auth-sign-in-page.md) |
+| `1.2` | `MW-web-007` MFA Verify Page | `web` | `nextjs` | [brief](../implementation/tasks/modules/web/07-mfa-verify-page.md) |
 | `1.3` | `MW-auth-008` OAuth/OIDC Start Endpoint | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/08-oauth-oidc-start-endpoint.md) |
 | `1.3` | `MW-auth-009` OAuth/OIDC Callback Endpoint | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/09-oauth-oidc-callback-endpoint.md) |
 | `1.4` | `MW-web-002` Workspace Dashboard Page | `web` | `nextjs` | [brief](../implementation/tasks/modules/web/02-workspace-dashboard-page.md) |
 | `1.5` | `MW-auth-010` Invite Developer Endpoint | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/10-invite-developer-endpoint.md) |
 | `1.5` | `MW-auth-011` Accept Developer Invitation Endpoint | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/11-accept-developer-invitation-endpoint.md) |
 | `1.5` | `MW-auth-012` Revoke Developer Membership Endpoint | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/12-revoke-developer-membership-endpoint.md) |
+| `1.5` | `MW-web-008` Developer Scoped Task Workspace | `web` | `nextjs` | [brief](../implementation/tasks/modules/web/08-developer-scoped-task-workspace.md) |
 | `1.6` | `MW-auth-013` PBAC Guard — NestJS Integration | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/13-pbac-guard.md) |
 | `1.6` | `MW-pbac-001` PBAC Policy Model — Prisma Schema + Types | `platform/pbac` | `nestjs-api` | [brief](../implementation/tasks/modules/platform/pbac/01-policy-model.md) |
 | `1.6` | `MW-pbac-002` PBAC Evaluator Service | `platform/pbac` | `nestjs-api` | [brief](../implementation/tasks/modules/platform/pbac/02-evaluator-service.md) |
@@ -70,6 +72,7 @@ Active implementation tasks live under `docs/implementation/tasks/modules/**`. L
 | `1.2` | `MW-auth-005` Session Revoke Endpoint | `P0` | `DONE` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/05-session-revoke-endpoint.md) |
 | `1.2` | `MW-auth-007` Update Profile Endpoint | `P0` | `DONE` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/07-update-profile-endpoint.md) |
 | `1.2` | `MW-web-001` Sign-In Page | `P0` | `READY_FOR_DEV` | `web` | `nextjs` | [brief](../implementation/tasks/modules/web/01-auth-sign-in-page.md) |
+| `1.2` | `MW-web-007` MFA Verify Page | `P0` | `READY_FOR_DEV` | `web` | `nextjs` | [brief](../implementation/tasks/modules/web/07-mfa-verify-page.md) |
 | `1.3` | `MW-auth-008` OAuth/OIDC Start Endpoint | `P0` | `READY_FOR_DEV` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/08-oauth-oidc-start-endpoint.md) |
 | `1.3` | `MW-auth-009` OAuth/OIDC Callback Endpoint | `P0` | `READY_FOR_DEV` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/09-oauth-oidc-callback-endpoint.md) |
 | `1.4` | `MW-auth-006` Get Workspace Endpoint | `P0` | `DONE` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/06-get-workspace-endpoint.md) |
@@ -77,6 +80,7 @@ Active implementation tasks live under `docs/implementation/tasks/modules/**`. L
 | `1.5` | `MW-auth-010` Invite Developer Endpoint | `P0` | `READY_FOR_DEV` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/10-invite-developer-endpoint.md) |
 | `1.5` | `MW-auth-011` Accept Developer Invitation Endpoint | `P0` | `READY_FOR_DEV` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/11-accept-developer-invitation-endpoint.md) |
 | `1.5` | `MW-auth-012` Revoke Developer Membership Endpoint | `P0` | `READY_FOR_DEV` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/12-revoke-developer-membership-endpoint.md) |
+| `1.5` | `MW-web-008` Developer Scoped Task Workspace | `P1` | `READY_FOR_DEV` | `web` | `nextjs` | [brief](../implementation/tasks/modules/web/08-developer-scoped-task-workspace.md) |
 | `1.6` | `MW-auth-013` PBAC Guard — NestJS Integration | `P0` | `READY_FOR_DEV` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/13-pbac-guard.md) |
 | `1.6` | `MW-pbac-001` PBAC Policy Model — Prisma Schema + Types | `P0` | `READY_FOR_DEV` | `platform/pbac` | `nestjs-api` | [brief](../implementation/tasks/modules/platform/pbac/01-policy-model.md) |
 | `1.6` | `MW-pbac-002` PBAC Evaluator Service | `P0` | `READY_FOR_DEV` | `platform/pbac` | `nestjs-api` | [brief](../implementation/tasks/modules/platform/pbac/02-evaluator-service.md) |

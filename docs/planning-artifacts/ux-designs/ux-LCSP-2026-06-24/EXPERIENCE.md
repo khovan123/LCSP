@@ -203,8 +203,8 @@ Failure: permission is revoked. Developer sees task revoked and cannot view find
 
 Failure: export text tries to imply legal conclusion. Guardrail blocks generation and shows report overclaim reason.
 
-## Open Questions
+## Open Questions (Resolved 2026-07-11)
 
-1. [ASSUMPTION] Frontend UI system is not confirmed. If shadcn/ui, MUI, or an internal system is selected, DESIGN.md should be updated to inherit its tokens explicitly.
-2. [ASSUMPTION] Vietnamese is used for product microcopy in this spine. Confirm final language policy.
-3. [ASSUMPTION] No visual mockups were rendered in this headless run. Confirm whether key screens are required for UX approval.
+1. **Frontend UI system** — RESOLVED: shadcn/ui (Base UI primitives) is the confirmed system, in use under `apps/web/src/components/ui` with tokens wired in `apps/web/src/app/globals.css`. `DESIGN.md`'s Colors/Components sections now bind to it explicitly (see "Token Binding" note under Auth Surface).
+2. **Product language policy** — RESOLVED: bilingual (Vietnamese + English), not Vietnamese-only. `@lcsp/i18n` ships parallel `en`/`vi` dictionaries with a `resolveMessage(locale, key)` resolver (`packages/i18n/src/resolver.ts`). Every customer-facing string must be a message key, never hardcoded in `apps/web`. **Known implementation gap:** `apps/web/src/features/auth/config/locale.ts` currently hardcodes `authLocale = "en"` with no session/user locale wired in — flagged as follow-up work, not a spec gap.
+3. **Key-screen mockups required for approval** — RESOLVED: not required. Per-page `UI Components` / `UI States` tables in each `docs/implementation/tasks/modules/web/*.md` task file (established convention since `MW-web-002`) are the approval bar, together with this spine's tokens and the Auth Surface / component patterns. Pixel-level mockups are optional, not blocking.
