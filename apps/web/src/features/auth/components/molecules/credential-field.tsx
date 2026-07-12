@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
-import { authLocale } from "../../config/locale";
+import { appLocale } from "@/lib/locale";
 import type { SignInFormValues } from "../../schemas/sign-in.schema";
 import type { CredentialFieldProps } from "../../types/sign-in.types";
 
@@ -22,7 +22,7 @@ export function CredentialField({ field }: CredentialFieldProps) {
   return (
     <Field data-invalid={Boolean(error) || undefined}>
       <FieldLabel htmlFor={field.name}>
-        {resolveMessage(authLocale, field.labelKey)}
+        {resolveMessage(appLocale, field.labelKey)}
       </FieldLabel>
       <Input
         id={field.name}
@@ -35,13 +35,13 @@ export function CredentialField({ field }: CredentialFieldProps) {
       {error ? (
         <FieldError>
           {resolveMessage(
-            authLocale,
+            appLocale,
             error as Parameters<typeof resolveMessage>[1],
           )}
         </FieldError>
       ) : (
         <FieldDescription>
-          {resolveMessage(authLocale, field.descriptionKey)}
+          {resolveMessage(appLocale, field.descriptionKey)}
         </FieldDescription>
       )}
     </Field>

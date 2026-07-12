@@ -27,7 +27,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { verifyMfaOtp } from "@/lib/api/auth-client";
 import type { MfaVerifyError } from "@/lib/api/types/mfa-verify.types";
 
-import { authLocale } from "../../config/locale";
+import { appLocale } from "@/lib/locale";
 import {
   mfaVerifySchema,
   type MfaVerifyFormValues,
@@ -68,12 +68,9 @@ export function MfaVerifyForm() {
 
   return (
     <FormCard
-      eyebrow={resolveMessage(authLocale, "pages.mfaVerify.formEyebrow")}
-      title={resolveMessage(authLocale, "pages.mfaVerify.formTitle")}
-      description={resolveMessage(
-        authLocale,
-        "pages.mfaVerify.formDescription",
-      )}
+      eyebrow={resolveMessage(appLocale, "pages.mfaVerify.formEyebrow")}
+      title={resolveMessage(appLocale, "pages.mfaVerify.formTitle")}
+      description={resolveMessage(appLocale, "pages.mfaVerify.formDescription")}
       footer={
         <>
           <Button
@@ -87,11 +84,11 @@ export function MfaVerifyForm() {
               <Spinner data-icon="inline-start" />
             ) : null}
             {form.formState.isSubmitting
-              ? resolveMessage(authLocale, "pages.mfaVerify.submitting")
-              : resolveMessage(authLocale, "pages.mfaVerify.submit")}
+              ? resolveMessage(appLocale, "pages.mfaVerify.submitting")
+              : resolveMessage(appLocale, "pages.mfaVerify.submit")}
           </Button>
           <p className="text-center text-xs leading-relaxed text-muted-foreground">
-            {resolveMessage(authLocale, "pages.mfaVerify.accessHelp")}
+            {resolveMessage(appLocale, "pages.mfaVerify.accessHelp")}
           </p>
         </>
       }
@@ -107,7 +104,7 @@ export function MfaVerifyForm() {
             data-disabled={form.formState.isSubmitting || isLocked || undefined}
           >
             <FieldLabel htmlFor="otp">
-              {resolveMessage(authLocale, "pages.mfaVerify.otpLabel")}
+              {resolveMessage(appLocale, "pages.mfaVerify.otpLabel")}
             </FieldLabel>
             <Controller
               control={form.control}
@@ -140,23 +137,23 @@ export function MfaVerifyForm() {
             {otpError ? (
               <FieldError>
                 {resolveMessage(
-                  authLocale,
+                  appLocale,
                   otpError as Parameters<typeof resolveMessage>[1],
                 )}
               </FieldError>
             ) : (
               <FieldDescription>
-                {resolveMessage(authLocale, "pages.mfaVerify.otpDescription")}
+                {resolveMessage(appLocale, "pages.mfaVerify.otpDescription")}
               </FieldDescription>
             )}
           </Field>
           {error ? (
             <Alert variant="destructive">
               <AlertTitle>
-                {resolveMessage(authLocale, error.titleKey)}
+                {resolveMessage(appLocale, error.titleKey)}
               </AlertTitle>
               <AlertDescription>
-                {resolveMessage(authLocale, error.detailKey)}
+                {resolveMessage(appLocale, error.detailKey)}
               </AlertDescription>
             </Alert>
           ) : null}

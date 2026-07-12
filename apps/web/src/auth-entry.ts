@@ -3,8 +3,8 @@ import { type Locale } from "@lcsp/contracts/shared";
 import { resolveMessage } from "@lcsp/i18n";
 
 export const PUBLIC_ENTRY_ROUTES = Object.freeze({
-  signIn: "/signin",
-  register: "/register"
+  signIn: "/sign-in",
+  register: "/register",
 });
 
 type BlockedApiResult = {
@@ -12,7 +12,10 @@ type BlockedApiResult = {
   problem: AppProblem;
 };
 
-export function buildBlockedAuthViewModel(apiResult: BlockedApiResult | null | undefined, locale: Locale = "vi") {
+export function buildBlockedAuthViewModel(
+  apiResult: BlockedApiResult | null | undefined,
+  locale: Locale = "vi",
+) {
   if (apiResult?.ok) {
     return null;
   }
@@ -20,9 +23,11 @@ export function buildBlockedAuthViewModel(apiResult: BlockedApiResult | null | u
   const problem = apiResult?.problem;
 
   return {
-    title: problem ? resolveMessage(locale, problem.titleKey) : "Không thể tiếp tục",
+    title: problem
+      ? resolveMessage(locale, problem.titleKey)
+      : resolveMessage(locale, "auth.errors.validationFailed.title"),
     body: problem ? resolveMessage(locale, problem.detailKey) : null,
     required_action: problem?.requiredAction,
-    correlation_id: problem?.correlationId
+    correlation_id: problem?.correlationId,
   };
 }

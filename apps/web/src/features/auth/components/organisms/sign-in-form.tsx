@@ -14,7 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { signIn } from "@/lib/api/auth-client";
 
 import { signInFields } from "../../config/sign-in-fields";
-import { authLocale } from "../../config/locale";
+import { appLocale } from "@/lib/locale";
 import { signInSchema } from "../../schemas/sign-in.schema";
 import type { SignInFormValues } from "../../schemas/sign-in.schema";
 import { CredentialField } from "../molecules/credential-field";
@@ -51,9 +51,9 @@ export function SignInForm() {
   return (
     <FormProvider {...form}>
       <FormCard
-        eyebrow={resolveMessage(authLocale, "pages.signIn.formEyebrow")}
-        title={resolveMessage(authLocale, "pages.signIn.formTitle")}
-        description={resolveMessage(authLocale, "pages.signIn.formDescription")}
+        eyebrow={resolveMessage(appLocale, "pages.signIn.formEyebrow")}
+        title={resolveMessage(appLocale, "pages.signIn.formTitle")}
+        description={resolveMessage(appLocale, "pages.signIn.formDescription")}
         footer={
           <>
             <Button
@@ -67,11 +67,11 @@ export function SignInForm() {
                 <Spinner data-icon="inline-start" />
               ) : null}
               {form.formState.isSubmitting
-                ? resolveMessage(authLocale, "pages.signIn.submitting")
-                : resolveMessage(authLocale, "pages.signIn.submit")}
+                ? resolveMessage(appLocale, "pages.signIn.submitting")
+                : resolveMessage(appLocale, "pages.signIn.submit")}
             </Button>
             <LabeledSeparator
-              label={resolveMessage(authLocale, "pages.signIn.divider")}
+              label={resolveMessage(appLocale, "pages.signIn.divider")}
             />
             <Button
               className="w-full"
@@ -79,10 +79,10 @@ export function SignInForm() {
               nativeButton={false}
               render={<a href="/api/auth/oauth/start?provider=github" />}
             >
-              {resolveMessage(authLocale, "pages.signIn.oauthGitHub")}
+              {resolveMessage(appLocale, "pages.signIn.oauthGitHub")}
             </Button>
             <p className="text-center text-xs leading-relaxed text-muted-foreground">
-              {resolveMessage(authLocale, "pages.signIn.accessHelp")}
+              {resolveMessage(appLocale, "pages.signIn.accessHelp")}
             </p>
           </>
         }
@@ -100,12 +100,12 @@ export function SignInForm() {
               <Alert variant="destructive">
                 <AlertTitle>
                   {resolveMessage(
-                    authLocale,
+                    appLocale,
                     "pages.signIn.errors.requestFailedTitle",
                   )}
                 </AlertTitle>
                 <AlertDescription>
-                  {resolveMessage(authLocale, rootError)}
+                  {resolveMessage(appLocale, rootError)}
                 </AlertDescription>
               </Alert>
             ) : null}
