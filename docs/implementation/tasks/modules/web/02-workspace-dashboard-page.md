@@ -3,7 +3,7 @@ task_id: MW-web-002
 module: web
 runtime: nextjs
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 1.4
 depends_on:
   - auth-workspace/06-get-workspace-endpoint.md
@@ -42,7 +42,7 @@ Show the Manager's organization workspace: org name, membership role, assessment
 1. Fetch workspace context and assessment list on page mount.
 2. Show `granted_actions` from workspace response to conditionally render "Create Assessment" button. This is UI-only hint — button click is still PBAC-gated at server.
 3. Assessment cards: show `status` and `wizard_status` in business language (not enum values).
-4. Status labels: `WIZARD_IN_PROGRESS` → "Wizard In Progress", `WIZARD_SUBMITTED` → "Ready for Evidence", etc.
+4. Status labels shown in business language per the Status Label Mapping table below (e.g. `WIZARD_IN_PROGRESS` → "In Progress", `WIZARD_SUBMITTED` → "Wizard Complete").
 5. Redirect to `/sign-in` if workspace fetch returns 401.
 6. Redirect to `/mfa/verify` if workspace fetch returns `MFA_REQUIRED`.
 
