@@ -20,20 +20,22 @@ Show the Manager's organization workspace: org name, membership role, assessment
 
 | File | Action | Notes |
 |---|---|---|
-| `apps/web/app/(workspace)/workspace/page.tsx` | Create | Workspace dashboard page |
-| `apps/web/app/(workspace)/workspace/assessment-list.tsx` | Create | Assessment card list |
-| `apps/web/components/ui/workspace-header.tsx` | Create | Org name + role display |
-| `apps/web/lib/api/workspace-client.ts` | Create | `GET /workspace` + `GET /assessments` wrappers |
+| `apps/web/src/app/workspace/page.tsx` | Create | Workspace dashboard page |
+| `apps/web/src/features/workspace/components/organisms/workspace-sidebar.tsx` | Create | Dashboard sidebar composition using shadcn `Sidebar` |
+| `apps/web/src/features/workspace/components/organisms/assessment-list.tsx` | Create | Assessment card list |
+| `apps/web/src/features/workspace/components/molecules/workspace-header.tsx` | Create | Org name + role display |
+| `apps/web/src/lib/api/workspace-client.ts` | Create | `GET /workspace` + `GET /assessments` wrappers |
 
 ## UI Components
 
 | Component | Notes |
 |---|---|
+| shadcn `Sidebar` dashboard shell | Primary workspace navigation |
 | Org name + Manager role badge | From `GET /workspace` response |
 | Assessment work-object cards | Name, status, wizard_status, created_at |
 | "Create Assessment" button | Visible if `assessment:create` in `granted_actions` |
-| Loading skeleton | While fetching assessments |
-| Empty state | "No assessments yet. Create your first assessment." |
+| shadcn `Skeleton` loading state | While fetching assessments |
+| shadcn `Empty` state | No-assessment state resolved through i18n keys |
 
 ## Business Rules
 
@@ -42,7 +44,7 @@ Show the Manager's organization workspace: org name, membership role, assessment
 3. Assessment cards: show `status` and `wizard_status` in business language (not enum values).
 4. Status labels: `WIZARD_IN_PROGRESS` → "Wizard In Progress", `WIZARD_SUBMITTED` → "Ready for Evidence", etc.
 5. Redirect to `/sign-in` if workspace fetch returns 401.
-6. Redirect to `/auth/mfa/verify` if workspace fetch returns `MFA_REQUIRED`.
+6. Redirect to `/mfa/verify` if workspace fetch returns `MFA_REQUIRED`.
 
 ## Status Label Mapping
 

@@ -83,6 +83,45 @@ export type PagesMessages = {
       requestFailedDetail: string;
     };
   };
+  workspace: {
+    metadataTitle: string;
+    metadataDescription: string;
+    productName: string;
+    sidebarTitle: string;
+    sidebarDescription: string;
+    sidebarToggle: string;
+    pageTitle: string;
+    pageDescription: string;
+    organizationLabel: string;
+    membershipRoleLabel: string;
+    navigationLabel: string;
+    overviewNav: string;
+    assessmentsNav: string;
+    documentsNav: string;
+    createAssessment: string;
+    assessmentsTitle: string;
+    assessmentsDescription: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    loadingAssessments: string;
+    statusLabel: string;
+    wizardStatusLabel: string;
+    createdAtLabel: string;
+    statuses: {
+      WIZARD_IN_PROGRESS: string;
+      WIZARD_SUBMITTED: string;
+      EVIDENCE_REQUIRED: string;
+      SCAN_IN_PROGRESS: string;
+      CLASSIFICATION_LOCKED: string;
+      READY_FOR_REVIEW: string;
+    };
+    errors: {
+      workspaceUnavailableTitle: string;
+      workspaceUnavailableDetail: string;
+      assessmentsUnavailableTitle: string;
+      assessmentsUnavailableDetail: string;
+    };
+  };
 };
 
 export type LocaleMessages = {
