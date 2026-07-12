@@ -44,4 +44,47 @@ export const enPages = {
       requestFailedDetail: "Unable to verify the code. Please try again.",
     },
   },
+  workspace: {
+    metadataTitle: "Workspace | LCSP",
+    metadataDescription: "Manage the active LCSP organization workspace.",
+    productName: "LCSP",
+    sidebarTitle: "Workspace",
+    sidebarDescription: "Workspace navigation",
+    sidebarToggle: "Toggle workspace navigation",
+    pageTitle: "Workspace dashboard",
+    pageDescription:
+      "Review organization context, granted workspace actions, and active assessments.",
+    organizationLabel: "Organization",
+    membershipRoleLabel: "Membership role",
+    navigationLabel: "Workspace navigation",
+    overviewNav: "Overview",
+    assessmentsNav: "Assessments",
+    documentsNav: "Documents",
+    createAssessment: "Create Assessment",
+    assessmentsTitle: "Assessments",
+    assessmentsDescription:
+      "Track assessment progress from wizard intake through review.",
+    emptyTitle: "No assessments yet",
+    emptyDescription: "Create your first assessment.",
+    loadingAssessments: "Loading assessments",
+    statusLabel: "Status",
+    wizardStatusLabel: "Wizard status",
+    createdAtLabel: "Created",
+    statuses: {
+      WIZARD_IN_PROGRESS: "In Progress",
+      WIZARD_SUBMITTED: "Wizard Complete",
+      EVIDENCE_REQUIRED: "Evidence Needed",
+      SCAN_IN_PROGRESS: "Scan Running",
+      CLASSIFICATION_LOCKED: "Classification Locked",
+      READY_FOR_REVIEW: "Ready for Review",
+    },
+    errors: {
+      workspaceUnavailableTitle: "Workspace unavailable",
+      workspaceUnavailableDetail:
+        "Workspace context cannot be loaded right now.",
+      assessmentsUnavailableTitle: "Assessments unavailable",
+      assessmentsUnavailableDetail:
+        "Assessment list cannot be loaded right now.",
+    },
+  },
 } as const satisfies PagesMessages;

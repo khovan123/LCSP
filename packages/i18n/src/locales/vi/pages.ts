@@ -44,4 +44,47 @@ export const viPages = {
       requestFailedDetail: "Không thể xác minh mã. Vui lòng thử lại.",
     },
   },
+  workspace: {
+    metadataTitle: "Workspace | LCSP",
+    metadataDescription: "Quản lý workspace tổ chức đang hoạt động trong LCSP.",
+    productName: "LCSP",
+    sidebarTitle: "Workspace",
+    sidebarDescription: "Điều hướng workspace",
+    sidebarToggle: "Ẩn hiện điều hướng workspace",
+    pageTitle: "Bảng điều khiển workspace",
+    pageDescription:
+      "Xem ngữ cảnh tổ chức, hành động workspace được cấp và các assessment đang hoạt động.",
+    organizationLabel: "Tổ chức",
+    membershipRoleLabel: "Vai trò thành viên",
+    navigationLabel: "Điều hướng workspace",
+    overviewNav: "Tổng quan",
+    assessmentsNav: "Assessment",
+    documentsNav: "Tài liệu",
+    createAssessment: "Tạo Assessment",
+    assessmentsTitle: "Assessment",
+    assessmentsDescription:
+      "Theo dõi tiến độ assessment từ wizard intake đến review.",
+    emptyTitle: "Chưa có assessment",
+    emptyDescription: "Tạo assessment đầu tiên của bạn.",
+    loadingAssessments: "Đang tải assessment",
+    statusLabel: "Trạng thái",
+    wizardStatusLabel: "Trạng thái wizard",
+    createdAtLabel: "Ngày tạo",
+    statuses: {
+      WIZARD_IN_PROGRESS: "Đang thực hiện",
+      WIZARD_SUBMITTED: "Wizard hoàn tất",
+      EVIDENCE_REQUIRED: "Cần evidence",
+      SCAN_IN_PROGRESS: "Đang scan",
+      CLASSIFICATION_LOCKED: "Classification đã khóa",
+      READY_FOR_REVIEW: "Sẵn sàng review",
+    },
+    errors: {
+      workspaceUnavailableTitle: "Workspace chưa khả dụng",
+      workspaceUnavailableDetail:
+        "Hiện không thể tải ngữ cảnh workspace.",
+      assessmentsUnavailableTitle: "Assessment chưa khả dụng",
+      assessmentsUnavailableDetail:
+        "Hiện không thể tải danh sách assessment.",
+    },
+  },
 } as const satisfies PagesMessages;

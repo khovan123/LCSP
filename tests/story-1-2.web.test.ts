@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import * as assert from "node:assert/strict";
 
-import { toSignInOutcome } from "../apps/web/src/lib/api/auth-client.ts";
 import {
   SESSION_COOKIE_NAME,
+  signInSchema,
   sessionCookieOptions,
-} from "../apps/web/src/lib/session/session-store.ts";
-import { signInSchema } from "../apps/web/src/features/auth/schemas/sign-in.schema.ts";
+  toSignInOutcome,
+} from "@lcsp/web";
 
 test("successful sign-in outcomes redirect without exposing a session token", () => {
   assert.deepEqual(toSignInOutcome({ ok: true, mfa_required: false }, true), {
