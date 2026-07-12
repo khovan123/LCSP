@@ -29,7 +29,7 @@
     "noEmit": false,
     "emitDeclarationOnly": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.json", "test/**/*.ts"],
   "references": [
     { "path": "../../packages/contracts" },
     { "path": "../../packages/i18n" }

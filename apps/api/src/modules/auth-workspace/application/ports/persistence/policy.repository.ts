@@ -6,4 +6,8 @@ export const AUTH_WORKSPACE_POLICY_REPOSITORY = Symbol(
 
 export interface PolicyRepository {
   findByIdAndVersion(id: string, version: string): Promise<Policy | null>;
+  findLatestByOrganizationAndRole(
+    organizationId: string,
+    subjectRole: string,
+  ): Promise<Policy | null>;
 }

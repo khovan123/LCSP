@@ -77,6 +77,7 @@ function buildRepositories(input: {
       findActiveByUserId: () => Promise.resolve(input.activeMemberships),
     },
     invitations: {
+      nextId: () => "unused",
       save: () => Promise.resolve(),
       findById: () => Promise.resolve(null),
       tryConsume: () => Promise.resolve(false),
@@ -89,6 +90,7 @@ function buildRepositories(input: {
     },
     policies: {
       findByIdAndVersion: () => Promise.resolve(null),
+      findLatestByOrganizationAndRole: () => Promise.resolve(null),
     },
     auditEvents: {
       append: (event) => {

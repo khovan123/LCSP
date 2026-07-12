@@ -1,0 +1,9 @@
+{
+  "subjectRole": "Developer",
+  "allowedActions": [
+    "evidence:read:redacted",
+    "ai-usage-flow:read",
+    "findings:read:redacted",
+    "conflict:comment"
+  ]
+}

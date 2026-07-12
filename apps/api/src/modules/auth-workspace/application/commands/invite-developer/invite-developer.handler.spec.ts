@@ -1,0 +1,173 @@
+import { describe, expect, it, jest } from "@jest/globals";
+import {
+  BadRequestException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+
+import {
+  Invitation,
+  Policy,
+} from "../../../domain/models/auth-workspace.models.ts";
+import type { InvitationRepository } from "../../ports/persistence/invitation.repository.ts";
+import type { PolicyRepository } from "../../ports/persistence/policy.repository.ts";
+import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
+import { DEVELOPER_ALLOWED_ACTIONS } from "../../config/developer-policy.config.ts";
+import { InviteDeveloperCommand } from "./invite-developer.command.ts";
+import { InviteDeveloperHandler } from "./invite-developer.handler.ts";
+
+const DEVELOPER_POLICY = new Policy({
+  id: "policy-developer",
+  version: "2026-06-26",
+  actions: DEVELOPER_ALLOWED_ACTIONS,
+  subjectRole: "Developer",
+  stateGate: "membership_active",
+  organizationId: "org-1",
+});
+
+function buildHandler(input?: {
+  assessmentBelongsToOrg?: boolean;
+  developerPolicy?: Policy | null;
+}) {
+  const savedInvitations: Invitation[] = [];
+  const auditEvents: Record<string, unknown>[] = [];
+
+  const invitations: InvitationRepository = {
+    nextId: () => "invite-1",
+    save: jest.fn<InvitationRepository["save"]>((invitation) => {
+      savedInvitations.push(invitation);
+      return Promise.resolve();
+    }),
+    findById: () => Promise.resolve(null),
+    tryConsume: () => Promise.resolve(false),
+  };
+
+  const policies: PolicyRepository = {
+    findByIdAndVersion: () => Promise.resolve(null),
+    findLatestByOrganizationAndRole: () =>
+      Promise.resolve(input?.developerPolicy ?? DEVELOPER_POLICY),
+  };
+
+  const support = new AuthWorkspaceSupportService();
+  jest.spyOn(support, "now").mockReturnValue(1_700_000_000_000);
+
+  const handler = new InviteDeveloperHandler(
+    support,
+    {
+      invitations,
+      policies,
+      auditEvents: {
+        append: (event) => {
+          auditEvents.push(event);
+          return Promise.resolve();
+        },
+      },
+    },
+    {
+      belongsToOrganization: () =>
+        Promise.resolve(input?.assessmentBelongsToOrg ?? true),
+    },
+  );
+
+  return { handler, savedInvitations, auditEvents };
+}
+
+describe("InviteDeveloperHandler", () => {
+  it("creates an approved scoped Developer invitation with clamped expiry", async () => {
+    const { handler, savedInvitations, auditEvents } = buildHandler();
+
+    const result = await handler.execute(
+      new InviteDeveloperCommand({
+        orgId: "org-1",
+        actorId: "manager-1",
+        email: "Developer@Example.TEST",
+        assessmentId: "assessment-1",
+        allowedActions: ["evidence:read:redacted", "ai-usage-flow:read"],
+        expiresInHours: 200,
+        correlationId: "corr-1",
+      }),
+    );
+
+    expect(result).toEqual({
+      invitation_id: "invite-1",
+      email: "developer@example.test",
+      expires_at: "2023-11-21T22:13:20.000Z",
+      allowed_actions: ["evidence:read:redacted", "ai-usage-flow:read"],
+      correlation_id: "corr-1",
+    });
+
+    const invitation = savedInvitations[0];
+    expect(invitation.state).toBe("approved");
+    expect(invitation.emailVerified).toBe(false);
+    expect(invitation.membershipStatus).toBe("active");
+    expect(invitation.subjectAttributes).toEqual({
+      role: "Developer",
+      scope: "assessment-1",
+      allowed_actions: ["evidence:read:redacted", "ai-usage-flow:read"],
+    });
+    expect(invitation.policyId).toBe("policy-developer");
+    expect(invitation.policyVersion).toBe("2026-06-26");
+    expect(invitation.expiresAt).toBe(1_700_000_000_000 + 168 * 60 * 60_000);
+    expect(auditEvents[0]).toMatchObject({
+      event_type: "AUTH_DEVELOPER_INVITED",
+      actor_id: "manager-1",
+      organization_id: "org-1",
+      decision: "allow",
+      correlation_id: "corr-1",
+    });
+  });
+
+  it("rejects Manager-only actions", async () => {
+    const { handler, savedInvitations } = buildHandler();
+
+    await expect(
+      handler.execute(
+        new InviteDeveloperCommand({
+          orgId: "org-1",
+          actorId: "manager-1",
+          email: "developer@example.test",
+          allowedActions: ["classification:request"],
+          correlationId: "corr-1",
+        }),
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(savedInvitations).toHaveLength(0);
+  });
+
+  it("rejects an assessment outside the Manager organization", async () => {
+    const { handler, savedInvitations } = buildHandler({
+      assessmentBelongsToOrg: false,
+    });
+
+    await expect(
+      handler.execute(
+        new InviteDeveloperCommand({
+          orgId: "org-1",
+          actorId: "manager-1",
+          email: "developer@example.test",
+          assessmentId: "assessment-other-org",
+          allowedActions: ["evidence:read:redacted"],
+          correlationId: "corr-1",
+        }),
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(savedInvitations).toHaveLength(0);
+  });
+
+  it("rejects invalid email with INVALID_EMAIL", async () => {
+    const { handler } = buildHandler();
+
+    await expect(
+      handler.execute(
+        new InviteDeveloperCommand({
+          orgId: "org-1",
+          actorId: "manager-1",
+          email: "not-an-email",
+          allowedActions: ["evidence:read:redacted"],
+          correlationId: "corr-1",
+        }),
+      ),
+    ).rejects.toThrow(UnprocessableEntityException);
+  });
+});

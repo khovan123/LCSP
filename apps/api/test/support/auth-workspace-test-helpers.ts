@@ -181,6 +181,8 @@ export async function seedAuthWorkspaceFixture(
         subjectAttributes: { role: "Manager", department: "Legal" },
         policyId,
         policyVersion,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
       {
         id: "membership-2",
@@ -190,6 +192,8 @@ export async function seedAuthWorkspaceFixture(
         subjectAttributes: { role: "Manager" },
         policyId,
         policyVersion,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
       {
         id: "membership-3",
@@ -199,6 +203,8 @@ export async function seedAuthWorkspaceFixture(
         subjectAttributes: { role: "Developer" },
         policyId,
         policyVersion,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     ],
   });
@@ -215,6 +221,7 @@ export async function seedAuthWorkspaceFixture(
         subjectAttributes: { role: "Manager", department: "Legal" },
         policyId,
         policyVersion,
+        expiresAt: new Date(Date.now() + 72 * 60 * 60_000),
       },
       {
         id: "invite-pending",
@@ -226,6 +233,7 @@ export async function seedAuthWorkspaceFixture(
         subjectAttributes: { role: "Developer" },
         policyId,
         policyVersion,
+        expiresAt: new Date(Date.now() + 72 * 60 * 60_000),
       },
       {
         id: "invite-unverified",
@@ -237,6 +245,7 @@ export async function seedAuthWorkspaceFixture(
         subjectAttributes: { role: "Manager" },
         policyId,
         policyVersion,
+        expiresAt: new Date(Date.now() + 72 * 60 * 60_000),
       },
       {
         id: "invite-not-active",
@@ -248,6 +257,7 @@ export async function seedAuthWorkspaceFixture(
         subjectAttributes: { role: "Developer" },
         policyId,
         policyVersion,
+        expiresAt: new Date(Date.now() + 72 * 60 * 60_000),
       },
     ],
   });

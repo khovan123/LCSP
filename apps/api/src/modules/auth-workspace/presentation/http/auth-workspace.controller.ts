@@ -1,14 +1,21 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Headers,
+  Param,
   Patch,
   Post,
   Query,
+  Req,
+  UseGuards,
 } from "@nestjs/common";
+import type { Request } from "express";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import type { RequestMeta } from "../../application/contracts/auth-workspace/common.contract.ts";
+import type { InviteDeveloperRequest } from "../../application/contracts/auth-workspace/invitation.contract.ts";
 import type {
   OAuthCallbackPayload,
   OAuthStartPayload,
@@ -22,10 +29,45 @@ import type { CredentialPayload } from "../../application/contracts/auth-workspa
 import type { WorkspaceRequest } from "../../application/contracts/auth-workspace/workspace.contract.ts";
 import type { UpdateProfilePayload } from "../../application/commands/update-profile/update-profile.command.ts";
 import { AuthWorkspaceFacade } from "../../application/services/auth-workspace/auth-workspace.facade.ts";
+import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
+import {
+  PbacGuard,
+  type PbacRequestContext,
+} from "../../../../platform/pbac/pbac.guard.js";
+
+interface AuthWorkspaceRequest extends Request {
+  pbacContext?: PbacRequestContext;
+  correlationId?: string;
+}
 
 @Controller()
 export class AuthWorkspaceController {
   constructor(private readonly authWorkspaceFacade: AuthWorkspaceFacade) {}
+
+  @Post("organizations/:orgId/invitations")
+  @UseGuards(PbacGuard)
+  @RequireAction("invite:developer")
+  inviteDeveloper(
+    @Param("orgId") orgId: string,
+    @Body() payload: InviteDeveloperRequest,
+    @Req() request: AuthWorkspaceRequest,
+  ) {
+    const pbacContext = request.pbacContext as PbacRequestContext;
+    if (pbacContext.organizationId !== orgId) {
+      throw new ForbiddenException({
+        error_code: AUTH_ERROR_CODES.pbacDenied,
+        code: AUTH_ERROR_CODES.pbacDenied,
+        correlation_id: request.correlationId,
+      });
+    }
+
+    return this.authWorkspaceFacade.inviteDeveloper(
+      orgId,
+      pbacContext.userId,
+      payload,
+      requestMeta(request.correlationId),
+    );
+  }
 
   @Post("auth/register-approved-path")
   registerApprovedPath(
