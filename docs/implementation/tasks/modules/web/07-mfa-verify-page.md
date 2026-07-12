@@ -3,7 +3,7 @@ task_id: MW-web-007
 module: web
 runtime: nextjs
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 1.2
 depends_on:
   - auth-workspace/04-mfa-verify-otp-endpoint.md
@@ -14,7 +14,7 @@ depends_on:
 
 ## Outcome
 
-Render the MFA challenge form reached after sign-in when `mfa_required = true`. Submit a 6-digit OTP to `POST /auth/mfa/verify-otp` using the pending session (httpOnly cookie already set at sign-in — never read from URL). On success, redirect to `/workspace`. Handle invalid code, replayed code, rate-limit lockout, and invalid/expired session. Follows the `DESIGN.md` Auth Surface pattern (centered form card, no hero panel).
+Render the MFA challenge form at the frontend route `/mfa/verify`, reached after sign-in when `mfa_required = true`. The `(auth)` route group is organizational only and does not add an `/auth` URL segment. Submit a 6-digit OTP to `POST /auth/mfa/verify-otp` using the pending session (httpOnly cookie already set at sign-in — never read from URL). On success, redirect to `/workspace`. Handle invalid code, replayed code, rate-limit lockout, and invalid/expired session. Follows the `DESIGN.md` Auth Surface pattern (centered form card, no hero panel).
 
 ## Module Files
 

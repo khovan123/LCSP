@@ -64,6 +64,25 @@ export type PagesMessages = {
       requestFailedDetail: string;
     };
   };
+  mfaVerify: {
+    metadataTitle: string;
+    metadataDescription: string;
+    homeAriaLabel: string;
+    formEyebrow: string;
+    formTitle: string;
+    formDescription: string;
+    otpLabel: string;
+    otpDescription: string;
+    submit: string;
+    submitting: string;
+    accessHelp: string;
+    errors: {
+      otpRequired: string;
+      otpInvalidFormat: string;
+      requestFailedTitle: string;
+      requestFailedDetail: string;
+    };
+  };
 };
 
 export type LocaleMessages = {
