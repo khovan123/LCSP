@@ -7,7 +7,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { httpRequest } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
-import { DEVELOPER_ALLOWED_ACTIONS } from "../src/modules/auth-workspace/application/config/developer-policy.config.js";
+import { DEVELOPER_ALLOWED_ACTIONS } from "@lcsp/contracts/pbac";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
 import {
@@ -89,7 +89,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     const body = result.body as AcceptInvitationBody;
     assert.equal(body.organization_id, fixture.organizationId);
     assert.equal(body.correlation_id, "corr-accept-1");
-    assert.deepEqual(body.allowed_actions, [...DEVELOPER_ALLOWED_ACTIONS]);
+    assert.deepEqual(body.allowed_actions, DEVELOPER_ALLOWED_ACTIONS);
     assert.ok(body.user_id);
     assert.ok(body.session_token);
     assert.ok(Date.parse(body.expires_at));
@@ -117,7 +117,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     assert.deepEqual(membership.subjectAttributes, {
       role: "Developer",
       scope: "assessment-1",
-      allowed_actions: [...DEVELOPER_ALLOWED_ACTIONS],
+      allowed_actions: DEVELOPER_ALLOWED_ACTIONS,
     });
     assert.equal(membership.policyId, "policy-developer");
   });
@@ -277,7 +277,7 @@ async function seedDeveloperInvitation(
       subjectAttributes: {
         role: "Developer",
         scope: "assessment-1",
-        allowed_actions: [...DEVELOPER_ALLOWED_ACTIONS],
+        allowed_actions: DEVELOPER_ALLOWED_ACTIONS,
       },
       policyId: "policy-developer",
       policyVersion: "2026-06-26",

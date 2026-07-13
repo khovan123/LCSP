@@ -1,3 +1,5 @@
+import { INVITE_DEVELOPER_ERROR_CODES } from "@lcsp/contracts/auth";
+
 export type InviteDeveloperRequest = {
   email?: string;
   assessment_id?: string;
@@ -14,7 +16,4 @@ export type InviteDeveloperResponse = {
 };
 
 export type InviteDeveloperErrorCode =
-  | "INVALID_ACTIONS"
-  | "ASSESSMENT_NOT_OWNED"
-  | "INVALID_EMAIL"
-  | "INVALID_REQUEST";
+  (typeof INVITE_DEVELOPER_ERROR_CODES)[keyof typeof INVITE_DEVELOPER_ERROR_CODES];

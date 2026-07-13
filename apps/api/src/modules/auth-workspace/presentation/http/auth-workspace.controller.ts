@@ -1,6 +1,8 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Headers,
@@ -29,6 +31,7 @@ import type {
 import type { CredentialPayload } from "../../application/contracts/auth-workspace/sign-in.contract.ts";
 import type { WorkspaceRequest } from "../../application/contracts/auth-workspace/workspace.contract.ts";
 import type { UpdateProfilePayload } from "../../application/commands/update-profile/update-profile.command.ts";
+import { REVOKE_MEMBERSHIP_ERROR_CODES } from "@lcsp/contracts/auth";
 import { AuthWorkspaceFacade } from "../../application/services/auth-workspace/auth-workspace.facade.ts";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import {
@@ -66,6 +69,32 @@ export class AuthWorkspaceController {
       orgId,
       pbacContext.userId,
       payload,
+      requestMeta(request.correlationId),
+    );
+  }
+
+  @Delete("organizations/:orgId/memberships/:userId")
+  @UseGuards(PbacGuard)
+  @RequireAction("membership:revoke")
+  revokeMembership(
+    @Param("orgId") orgId: string,
+    @Param("userId") userId: string,
+    @Req() request: AuthWorkspaceRequest,
+  ) {
+    const pbacContext = request.pbacContext as PbacRequestContext;
+    if (pbacContext.organizationId !== orgId) {
+      const errorCode = REVOKE_MEMBERSHIP_ERROR_CODES.organizationScopeMismatch;
+      throw new BadRequestException({
+        error_code: errorCode,
+        code: errorCode,
+        correlation_id: request.correlationId,
+      });
+    }
+
+    return this.authWorkspaceFacade.revokeMembership(
+      orgId,
+      pbacContext.userId,
+      userId,
       requestMeta(request.correlationId),
     );
   }

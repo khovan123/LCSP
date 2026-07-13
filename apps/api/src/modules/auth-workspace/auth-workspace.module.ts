@@ -10,6 +10,7 @@ import { InviteDeveloperHandler } from "./application/commands/invite-developer/
 import { OAuthCallbackHandler } from "./application/commands/oauth-callback/oauth-callback.handler.ts";
 import { OAuthStartHandler } from "./application/commands/oauth-start/oauth-start.handler.ts";
 import { RegisterApprovedPathHandler } from "./application/commands/register-approved-path/register-approved-path.handler.ts";
+import { RevokeMembershipHandler } from "./application/commands/revoke-membership/revoke-membership.handler.ts";
 import { RequestPasswordRecoveryHandler } from "./application/commands/request-password-recovery/request-password-recovery.handler.ts";
 import { RevokeSessionHandler } from "./application/commands/revoke-session/revoke-session.handler.ts";
 import { SignInHandler } from "./application/commands/sign-in/sign-in.handler.ts";
@@ -142,6 +143,12 @@ function handlerProvider<T>(
         new AcceptInvitationHandler(prisma),
     },
     {
+      provide: RevokeMembershipHandler,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) =>
+        new RevokeMembershipHandler(prisma),
+    },
+    {
       provide: AUTH_WORKSPACE_ASSESSMENT_SCOPE_REPOSITORY,
       useExisting: PrismaAssessmentScopeRepository,
     },
@@ -228,6 +235,7 @@ function handlerProvider<T>(
         OAuthCallbackHandler,
         InviteDeveloperHandler,
         AcceptInvitationHandler,
+        RevokeMembershipHandler,
       ],
       useFactory: (
         registerApprovedPathHandler: RegisterApprovedPathHandler,
@@ -243,6 +251,7 @@ function handlerProvider<T>(
         oauthCallbackHandler: OAuthCallbackHandler,
         inviteDeveloperHandler: InviteDeveloperHandler,
         acceptInvitationHandler: AcceptInvitationHandler,
+        revokeMembershipHandler: RevokeMembershipHandler,
       ) =>
         new AuthWorkspaceFacade(
           registerApprovedPathHandler,
@@ -258,6 +267,7 @@ function handlerProvider<T>(
           oauthCallbackHandler,
           inviteDeveloperHandler,
           acceptInvitationHandler,
+          revokeMembershipHandler,
         ),
     },
   ],

@@ -8,5 +8,3 @@ export const REQUIRED_ACTIONS = {
   retryRecovery: "retry_recovery_request",
   none: "none"
 } as const;
-
-export type RequiredAction = (typeof REQUIRED_ACTIONS)[keyof typeof REQUIRED_ACTIONS];

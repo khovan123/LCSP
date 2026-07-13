@@ -1,11 +1,14 @@
-export const ASSESSMENT_DETAIL_ERROR_CODES = {
-  notFound: "ASSESSMENT_NOT_FOUND",
-} as const;
+export { ASSESSMENT_ERROR_CODES as ASSESSMENT_DETAIL_ERROR_CODES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_ERROR_CODES as ASSESSMENT_DETAIL_ERROR_CODES,
+  WIZARD_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
 
 export type AssessmentDetailErrorCode =
   (typeof ASSESSMENT_DETAIL_ERROR_CODES)[keyof typeof ASSESSMENT_DETAIL_ERROR_CODES];
 
-export type WizardStatus = "NOT_STARTED" | "IN_PROGRESS" | "SUBMITTED";
+export type WizardStatus =
+  (typeof WIZARD_STATUS_CODES)[keyof typeof WIZARD_STATUS_CODES];
 
 export interface ReadinessState {
   classification_locked: boolean;

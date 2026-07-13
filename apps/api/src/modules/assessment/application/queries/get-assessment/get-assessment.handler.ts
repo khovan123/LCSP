@@ -2,6 +2,7 @@ import { Inject, NotFoundException } from "@nestjs/common";
 import { QueryHandler } from "@nestjs/cqrs";
 import type { IQueryHandler } from "@nestjs/cqrs";
 
+import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import {
   ASSESSMENT_REPOSITORY,
@@ -71,7 +72,7 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
 
   private throwNotFound(correlationId: string): never {
     throw new NotFoundException({
-      error_code: "ASSESSMENT_NOT_FOUND",
+      error_code: ASSESSMENT_ERROR_CODES.notFound,
       correlation_id: correlationId,
     });
   }
@@ -85,5 +86,7 @@ function nextActionFor(wizardStatus: WizardStatus): string {
       return "Continue the Wizard to complete your assessment.";
     case "SUBMITTED":
       return "Waiting for technical evidence before classification can proceed.";
+    default:
+      return "Continue the Wizard to complete your assessment.";
   }
 }

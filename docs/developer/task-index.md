@@ -79,7 +79,7 @@ Active implementation tasks live under `docs/implementation/tasks/modules/**`. L
 | `1.4` | `MW-web-002` Workspace Dashboard Page | `P0` | `READY_FOR_DEV` | `web` | `nextjs` | [brief](../implementation/tasks/modules/web/02-workspace-dashboard-page.md) |
 | `1.5` | `MW-auth-010` Invite Developer Endpoint | `P0` | `READY_FOR_DEV` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/10-invite-developer-endpoint.md) |
 | `1.5` | `MW-auth-011` Accept Developer Invitation Endpoint | `P0` | `REVIEW` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/11-accept-developer-invitation-endpoint.md) |
-| `1.5` | `MW-auth-012` Revoke Developer Membership Endpoint | `P0` | `READY_FOR_DEV` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/12-revoke-developer-membership-endpoint.md) |
+| `1.5` | `MW-auth-012` Revoke Developer Membership Endpoint | `P0` | `REVIEW` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/12-revoke-developer-membership-endpoint.md) |
 | `1.5` | `MW-web-008` Developer Scoped Task Workspace | `P1` | `READY_FOR_DEV` | `web` | `nextjs` | [brief](../implementation/tasks/modules/web/08-developer-scoped-task-workspace.md) |
 | `1.6` | `MW-auth-013` PBAC Guard — NestJS Integration | `P0` | `READY_FOR_DEV` | `auth-workspace` | `nestjs-api` | [brief](../implementation/tasks/modules/auth-workspace/13-pbac-guard.md) |
 | `1.6` | `MW-pbac-001` PBAC Policy Model — Prisma Schema + Types | `P0` | `READY_FOR_DEV` | `platform/pbac` | `nestjs-api` | [brief](../implementation/tasks/modules/platform/pbac/01-policy-model.md) |

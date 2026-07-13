@@ -3,6 +3,7 @@ import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
 
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
 import { Assessment } from "../../../domain/entities/assessment.entity.js";
 import { AssessmentMapper } from "../../mappers/assessment.mapper.js";
@@ -79,7 +80,7 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
 
     if (nameInvalid || descriptionInvalid) {
       throw new UnprocessableEntityException({
-        error_code: "INVALID_REQUEST",
+        error_code: ASSESSMENT_ERROR_CODES.invalidRequest,
         correlation_id: command.correlationId,
       });
     }

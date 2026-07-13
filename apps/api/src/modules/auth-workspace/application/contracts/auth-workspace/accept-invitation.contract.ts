@@ -1,3 +1,5 @@
+import { ACCEPT_INVITATION_ERROR_CODES } from "@lcsp/contracts/auth";
+
 export type AcceptInvitationRequest = {
   invitation_token?: string;
   display_name?: string;
@@ -14,8 +16,4 @@ export type AcceptInvitationResponse = {
 };
 
 export type AcceptInvitationErrorCode =
-  | "INVITATION_INVALID"
-  | "INVITATION_NOT_APPROVED"
-  | "EMAIL_ALREADY_EXISTS"
-  | "PASSWORD_TOO_SHORT"
-  | "INVALID_REQUEST";
+  (typeof ACCEPT_INVITATION_ERROR_CODES)[keyof typeof ACCEPT_INVITATION_ERROR_CODES];
