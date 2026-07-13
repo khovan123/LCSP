@@ -3,7 +3,7 @@ task_id: MW-auth-012
 module: auth-workspace
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: REVIEW
 epic_story: 1.5
 depends_on:
   - auth-workspace/10-invite-developer-endpoint.md
@@ -111,3 +111,37 @@ Manager must have `membership:revoke` in their `AuthPolicy.actions`. PBAC decisi
 - PBAC deny logged for unauthorized calls.
 - No session token material in audit payload.
 - Developer's next request returns `SESSION_INVALID` immediately.
+
+## Dev Agent Record
+
+### Debug Log References
+
+- RED: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/revoke-membership.e2e-spec.ts` failed with 404 before `DELETE /organizations/:orgId/memberships/:userId` existed.
+- GREEN: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/revoke-membership.e2e-spec.ts` passed.
+- Regression: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/accept-invitation.e2e-spec.ts test/invite-developer.e2e-spec.ts test/revoke-membership.e2e-spec.ts` passed.
+- DoD: `npm run lint`, `pnpm --filter @lcsp/api run build`, `rtk pnpm --filter @lcsp/api test`, and `rtk pnpm --filter @lcsp/api test:e2e` passed.
+
+### Completion Notes
+
+- Added protected `DELETE /organizations/:orgId/memberships/:userId` endpoint with `PbacGuard` and `RequireAction("membership:revoke")`.
+- Implemented Developer-only membership revocation with self-revoke prevention, org scope mismatch handling, active-membership lookup, single-transaction membership status update, active session invalidation, and clean audit event.
+- Added `AuthMembership.revokedAt` persistence field and migration to support revocation lifecycle timestamp.
+- Added e2e coverage for success, PBAC deny, missing/already revoked membership, self revoke, org mismatch, immediate Developer session invalidation, audit redaction, affected session count, and Manager workflow continuity.
+
+### File List
+
+- apps/api/prisma/migrations/20260713080000_auth_membership_revoked_at/migration.sql
+- apps/api/prisma/schema.prisma
+- apps/api/src/modules/auth-workspace/application/commands/revoke-membership/revoke-membership.command.ts
+- apps/api/src/modules/auth-workspace/application/commands/revoke-membership/revoke-membership.handler.ts
+- apps/api/src/modules/auth-workspace/application/contracts/auth-workspace/revoke-membership.contract.ts
+- apps/api/src/modules/auth-workspace/application/services/auth-workspace/auth-workspace.facade.ts
+- apps/api/src/modules/auth-workspace/auth-workspace.module.ts
+- apps/api/src/modules/auth-workspace/presentation/http/auth-workspace.controller.ts
+- apps/api/test/revoke-membership.e2e-spec.ts
+- docs/developer/task-index.md
+- docs/implementation/tasks/modules/auth-workspace/12-revoke-developer-membership-endpoint.md
+
+### Change Log
+
+- 2026-07-13: Implemented MW-auth-012 Revoke Developer Membership Endpoint and moved task to review.

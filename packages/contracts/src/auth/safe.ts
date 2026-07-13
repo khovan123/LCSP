@@ -1,6 +1,7 @@
-import { REQUIRED_ACTIONS, type RequiredAction } from "./actions.ts";
-import { AUTH_ERROR_CODES, type AuthErrorCode } from "./codes.ts";
+import { REQUIRED_ACTIONS } from "./actions.ts";
+import { AUTH_ERROR_CODES } from "./codes.ts";
 import type { AppProblem, ProblemKey, ProblemMeta, ProblemResult } from "./problems.ts";
+import type { AuthErrorCode, RequiredAction } from "./types.ts";
 
 export const PROBLEM_REQUIRED_ACTIONS: Record<AuthErrorCode, RequiredAction> = {
   [AUTH_ERROR_CODES.authRequired]: REQUIRED_ACTIONS.signIn,

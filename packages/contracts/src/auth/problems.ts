@@ -1,5 +1,4 @@
-import type { RequiredAction } from "./actions.ts";
-import type { AuthErrorCode } from "./codes.ts";
+import type { AuthErrorCode, RequiredAction } from "./types.ts";
 
 export type ProblemMetaValue = string | number | boolean | null;
 export type ProblemMeta = Record<string, ProblemMetaValue>;

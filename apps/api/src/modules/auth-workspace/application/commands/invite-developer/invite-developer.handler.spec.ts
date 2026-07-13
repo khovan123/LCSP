@@ -11,7 +11,7 @@ import {
 import type { InvitationRepository } from "../../ports/persistence/invitation.repository.ts";
 import type { PolicyRepository } from "../../ports/persistence/policy.repository.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
-import { DEVELOPER_ALLOWED_ACTIONS } from "../../config/developer-policy.config.ts";
+import { DEVELOPER_ALLOWED_ACTIONS } from "@lcsp/contracts/pbac";
 import { InviteDeveloperCommand } from "./invite-developer.command.ts";
 import { InviteDeveloperHandler } from "./invite-developer.handler.ts";
 

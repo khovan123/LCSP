@@ -17,7 +17,8 @@ import type {
 import {
   DEVELOPER_SUBJECT_ROLE,
   isDeveloperAllowedAction,
-} from "../../config/developer-policy.config.ts";
+} from "@lcsp/contracts/pbac";
+import { INVITE_DEVELOPER_ERROR_CODES } from "@lcsp/contracts/auth";
 import { InviteDeveloperCommand } from "./invite-developer.command.ts";
 
 const DEFAULT_EXPIRY_HOURS = 72;
@@ -47,7 +48,7 @@ export class InviteDeveloperHandler {
     if (!input.email || !EmailAddress.isValid(input.email)) {
       throw problem(
         UnprocessableEntityException,
-        "INVALID_EMAIL",
+        INVITE_DEVELOPER_ERROR_CODES.invalidEmail,
         correlationId,
       );
     }
@@ -56,11 +57,19 @@ export class InviteDeveloperHandler {
       !Array.isArray(input.allowedActions) ||
       input.allowedActions.length === 0
     ) {
-      throw problem(BadRequestException, "INVALID_ACTIONS", correlationId);
+      throw problem(
+        BadRequestException,
+        INVITE_DEVELOPER_ERROR_CODES.invalidActions,
+        correlationId,
+      );
     }
 
     if (!input.allowedActions.every(isDeveloperAllowedAction)) {
-      throw problem(BadRequestException, "INVALID_ACTIONS", correlationId);
+      throw problem(
+        BadRequestException,
+        INVITE_DEVELOPER_ERROR_CODES.invalidActions,
+        correlationId,
+      );
     }
 
     if (input.assessmentId) {
@@ -71,7 +80,7 @@ export class InviteDeveloperHandler {
       if (!owned) {
         throw problem(
           BadRequestException,
-          "ASSESSMENT_NOT_OWNED",
+          INVITE_DEVELOPER_ERROR_CODES.assessmentNotOwned,
           correlationId,
         );
       }
@@ -83,7 +92,11 @@ export class InviteDeveloperHandler {
         DEVELOPER_SUBJECT_ROLE,
       );
     if (!developerPolicy) {
-      throw problem(BadRequestException, "INVALID_REQUEST", correlationId);
+      throw problem(
+        BadRequestException,
+        INVITE_DEVELOPER_ERROR_CODES.invalidRequest,
+        correlationId,
+      );
     }
 
     const expiresAt =

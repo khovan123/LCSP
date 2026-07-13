@@ -2,6 +2,7 @@ import { Inject, UnprocessableEntityException } from "@nestjs/common";
 import { QueryHandler } from "@nestjs/cqrs";
 import type { IQueryHandler } from "@nestjs/cqrs";
 
+import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import {
   ASSESSMENT_REPOSITORY,
@@ -37,7 +38,7 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
 
     if (query.status && !isKnownStatus(query.status)) {
       throw new UnprocessableEntityException({
-        error_code: "INVALID_REQUEST",
+        error_code: ASSESSMENT_ERROR_CODES.invalidRequest,
         correlation_id: query.correlationId,
       });
     }

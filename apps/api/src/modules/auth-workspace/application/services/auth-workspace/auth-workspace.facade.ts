@@ -7,6 +7,7 @@ import type {
   InviteDeveloperRequest,
   InviteDeveloperResponse,
 } from "../../contracts/auth-workspace/invitation.contract.ts";
+import type { RevokeMembershipResponse } from "../../contracts/auth-workspace/revoke-membership.contract.ts";
 import type {
   OAuthCallbackPayload,
   OAuthStartPayload,
@@ -33,6 +34,8 @@ import { OAuthStartCommand } from "../../commands/oauth-start/oauth-start.comman
 import { OAuthStartHandler } from "../../commands/oauth-start/oauth-start.handler.ts";
 import { RegisterApprovedPathCommand } from "../../commands/register-approved-path/register-approved-path.command.ts";
 import { RegisterApprovedPathHandler } from "../../commands/register-approved-path/register-approved-path.handler.ts";
+import { RevokeMembershipCommand } from "../../commands/revoke-membership/revoke-membership.command.ts";
+import { RevokeMembershipHandler } from "../../commands/revoke-membership/revoke-membership.handler.ts";
 import { RequestPasswordRecoveryCommand } from "../../commands/request-password-recovery/request-password-recovery.command.ts";
 import { RequestPasswordRecoveryHandler } from "../../commands/request-password-recovery/request-password-recovery.handler.ts";
 import { RevokeSessionCommand } from "../../commands/revoke-session/revoke-session.command.ts";
@@ -61,6 +64,7 @@ export class AuthWorkspaceFacade {
     private readonly oauthCallbackHandler: OAuthCallbackHandler,
     private readonly inviteDeveloperHandler: InviteDeveloperHandler,
     private readonly acceptInvitationHandler: AcceptInvitationHandler,
+    private readonly revokeMembershipHandler: RevokeMembershipHandler,
   ) {}
 
   registerApprovedPath(
@@ -173,6 +177,22 @@ export class AuthWorkspaceFacade {
         invitationToken: payload.invitation_token,
         displayName: payload.display_name,
         password: payload.password,
+        correlationId: requestMeta.correlation_id,
+      }),
+    );
+  }
+
+  revokeMembership(
+    orgId: string,
+    actorId: string,
+    targetUserId: string,
+    requestMeta: RequestMeta = {},
+  ): Promise<RevokeMembershipResponse> {
+    return this.revokeMembershipHandler.execute(
+      new RevokeMembershipCommand({
+        orgId,
+        actorId,
+        targetUserId,
         correlationId: requestMeta.correlation_id,
       }),
     );

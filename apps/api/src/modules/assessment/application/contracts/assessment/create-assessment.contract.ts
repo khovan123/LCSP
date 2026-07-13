@@ -1,6 +1,5 @@
-export const ASSESSMENT_ERROR_CODES = {
-  invalidRequest: "INVALID_REQUEST",
-} as const;
+export { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
+import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 
 export type AssessmentErrorCode =
   (typeof ASSESSMENT_ERROR_CODES)[keyof typeof ASSESSMENT_ERROR_CODES];

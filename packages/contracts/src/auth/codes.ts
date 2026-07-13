@@ -21,7 +21,26 @@ export const AUTH_ERROR_CODES = {
   invalidRedirectUri: "INVALID_REDIRECT_URI",
   oauthStateInvalid: "OAUTH_STATE_INVALID",
   oauthCallbackInvalid: "OAUTH_CALLBACK_INVALID",
-  accountNotFound: "ACCOUNT_NOT_FOUND"
+  accountNotFound: "ACCOUNT_NOT_FOUND",
 } as const;
 
-export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[keyof typeof AUTH_ERROR_CODES];
+export const ACCEPT_INVITATION_ERROR_CODES = {
+  invitationInvalid: "INVITATION_INVALID",
+  invitationNotApproved: "INVITATION_NOT_APPROVED",
+  emailAlreadyExists: "EMAIL_ALREADY_EXISTS",
+  passwordTooShort: "PASSWORD_TOO_SHORT",
+  invalidRequest: "INVALID_REQUEST",
+} as const;
+
+export const INVITE_DEVELOPER_ERROR_CODES = {
+  invalidActions: "INVALID_ACTIONS",
+  assessmentNotOwned: "ASSESSMENT_NOT_OWNED",
+  invalidEmail: "INVALID_EMAIL",
+  invalidRequest: "INVALID_REQUEST",
+} as const;
+
+export const REVOKE_MEMBERSHIP_ERROR_CODES = {
+  membershipNotFound: "MEMBERSHIP_NOT_FOUND",
+  cannotSelfRevoke: "CANNOT_SELF_REVOKE",
+  organizationScopeMismatch: "ORG_SCOPE_MISMATCH",
+} as const;

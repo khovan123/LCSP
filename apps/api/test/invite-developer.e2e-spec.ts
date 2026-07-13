@@ -7,7 +7,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { httpRequest } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
-import { DEVELOPER_ALLOWED_ACTIONS } from "../src/modules/auth-workspace/application/config/developer-policy.config.js";
+import { DEVELOPER_ALLOWED_ACTIONS } from "@lcsp/contracts/pbac";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import {
   TEST_DATABASE_URL,

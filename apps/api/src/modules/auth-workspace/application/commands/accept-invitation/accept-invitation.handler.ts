@@ -8,6 +8,7 @@ import {
 import type { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
+import { ACCEPT_INVITATION_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   createCorrelationId,
   fingerprintToken,
@@ -37,13 +38,17 @@ export class AcceptInvitationHandler {
       !isNonEmptyString(invitationToken) ||
       !isValidDisplayName(displayName)
     ) {
-      throw problem(BadRequestException, "INVALID_REQUEST", correlationId);
+      throw problem(
+        BadRequestException,
+        ACCEPT_INVITATION_ERROR_CODES.invalidRequest,
+        correlationId,
+      );
     }
 
     if (!isNonEmptyString(password) || password.length < MIN_PASSWORD_LENGTH) {
       throw problem(
         UnprocessableEntityException,
-        "PASSWORD_TOO_SHORT",
+        ACCEPT_INVITATION_ERROR_CODES.passwordTooShort,
         correlationId,
       );
     }
@@ -54,18 +59,30 @@ export class AcceptInvitationHandler {
     });
 
     if (!invitation || invitation.expiresAt <= now) {
-      throw problem(BadRequestException, "INVITATION_INVALID", correlationId);
+      throw problem(
+        BadRequestException,
+        ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
+        correlationId,
+      );
     }
 
     if (invitation.state !== "approved") {
-      throw problem(BadRequestException, "INVITATION_INVALID", correlationId);
+      throw problem(
+        BadRequestException,
+        ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
+        correlationId,
+      );
     }
 
     const existingUser = await this.prisma.authUser.findUnique({
       where: { email: invitation.email },
     });
     if (existingUser) {
-      throw problem(ConflictException, "EMAIL_ALREADY_EXISTS", correlationId);
+      throw problem(
+        ConflictException,
+        ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists,
+        correlationId,
+      );
     }
 
     const policy = await this.prisma.authPolicy.findUnique({
@@ -77,7 +94,11 @@ export class AcceptInvitationHandler {
       },
     });
     if (!policy) {
-      throw problem(BadRequestException, "INVITATION_INVALID", correlationId);
+      throw problem(
+        BadRequestException,
+        ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
+        correlationId,
+      );
     }
 
     const userId = crypto.randomUUID();
@@ -101,7 +122,11 @@ export class AcceptInvitationHandler {
         data: { state: "consumed" },
       });
       if (consumed.count !== 1) {
-        throw problem(BadRequestException, "INVITATION_INVALID", correlationId);
+        throw problem(
+          BadRequestException,
+          ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
+          correlationId,
+        );
       }
 
       await tx.authUser.create({
