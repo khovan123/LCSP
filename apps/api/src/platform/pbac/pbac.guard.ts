@@ -62,7 +62,9 @@ export class PbacGuard implements CanActivate {
       metadata?.type === "action" ? metadata.action : SESSION_CHECK_ACTION;
 
     const request = context.switchToHttp().getRequest<RequestWithPbac>();
-    const correlationId = createCorrelationId();
+    const correlationId =
+      headerString(request.headers?.["x-correlation-id"]) ??
+      createCorrelationId();
     request.correlationId = correlationId;
 
     const token = this.extractToken(request);
@@ -109,7 +111,7 @@ export class PbacGuard implements CanActivate {
         sessionId: session.id,
         organizationId: session.organizationId,
         subjectRole,
-        scope: membership.subjectAttributes.scope ?? null,
+        scope: readStringAttribute(membership.subjectAttributes.scope) ?? null,
         grantedActions: policy.actions,
         policyId: policy.id,
         policyVersion: policy.version,
@@ -128,7 +130,10 @@ export class PbacGuard implements CanActivate {
 
     const evaluationContext: PbacEvaluationContext = {
       action: metadata.action,
-      subject: { role: subjectRole, scope: membership.subjectAttributes.scope },
+      subject: {
+        role: subjectRole,
+        scope: readStringAttribute(membership.subjectAttributes.scope),
+      },
       policy: {
         id: policy.id,
         organizationId: policy.organizationId,
@@ -164,7 +169,7 @@ export class PbacGuard implements CanActivate {
       sessionId: session.id,
       organizationId: session.organizationId,
       subjectRole,
-      scope: membership.subjectAttributes.scope ?? null,
+      scope: readStringAttribute(membership.subjectAttributes.scope) ?? null,
       grantedActions: policy.actions,
       policyId: decision.policyId,
       policyVersion: decision.policyVersion,
@@ -257,4 +262,18 @@ export class PbacGuard implements CanActivate {
       );
     }
   }
+}
+
+function readStringAttribute(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function headerString(value: string | string[] | undefined): string | null {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+  if (Array.isArray(value) && typeof value[0] === "string") {
+    return value[0];
+  }
+  return null;
 }

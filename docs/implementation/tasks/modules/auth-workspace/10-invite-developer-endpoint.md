@@ -3,7 +3,8 @@ task_id: MW-auth-010
 module: auth-workspace
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: REVIEW
+baseline_commit: bf4653daad074be2c0e34c38cbd2be0ce524d8c5
 epic_story: 1.5
 depends_on:
   - auth-workspace/06-get-workspace-endpoint.md
@@ -117,3 +118,56 @@ Allow a Manager to create a scoped Developer invitation for a specific assessmen
 - Manager-only actions never granted to Developer invitations.
 - PBAC deny logged for unauthorized calls.
 - Manager workflow continues independently of Developer acceptance.
+
+## Dev Agent Record
+
+### Debug Log References
+
+- RED: `rtk pnpm --filter @lcsp/api test -- --runTestsByPath src/modules/auth-workspace/application/commands/invite-developer/invite-developer.handler.spec.ts` failed on missing `invite-developer.command.ts`.
+- GREEN: `rtk pnpm --filter @lcsp/api test --runTestsByPath src/modules/auth-workspace/application/commands/invite-developer/invite-developer.handler.spec.ts` passed.
+- E2E: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/invite-developer.e2e-spec.ts` passed.
+- Regression: `rtk pnpm --filter @lcsp/api lint`, `rtk pnpm --filter @lcsp/api build`, `rtk pnpm --filter @lcsp/api test`, and `rtk pnpm --filter @lcsp/api test:e2e` passed.
+
+### Completion Notes
+
+- Added `POST /organizations/:orgId/invitations` with `PbacGuard` + `RequireAction("invite:developer")`.
+- Added invite command, request/response contract, handler validation, developer action allowlist, assessment organization scope check, developer policy lookup, invitation creation, expiry clamp, and `AUTH_DEVELOPER_INVITED` audit event.
+- Moved Developer policy action allowlist into JSON-backed config under `application/config/policies`.
+- Added `AuthInvitation.expiresAt` persistence and Prisma migration.
+- Preserved Manager golden path independence: invite creation is optional and assessment e2e continues without Developer acceptance.
+
+### File List
+
+- apps/api/prisma/migrations/20260713000000_auth_invitation_expires_at/migration.sql
+- apps/api/nest-cli.json
+- apps/api/prisma/schema.prisma
+- apps/api/src/modules/app/infrastructure/providers/static-app-greeting.provider.ts
+- apps/api/src/modules/auth-workspace/application/config/developer-policy.config.ts
+- apps/api/src/modules/auth-workspace/application/config/policies/developer-policy.json
+- apps/api/src/modules/auth-workspace/application/commands/invite-developer/invite-developer.command.ts
+- apps/api/src/modules/auth-workspace/application/commands/invite-developer/invite-developer.handler.spec.ts
+- apps/api/src/modules/auth-workspace/application/commands/invite-developer/invite-developer.handler.ts
+- apps/api/src/modules/auth-workspace/application/commands/oauth-callback/oauth-callback.handler.spec.ts
+- apps/api/src/modules/auth-workspace/application/contracts/auth-workspace/invitation.contract.ts
+- apps/api/src/modules/auth-workspace/application/ports/persistence/assessment-scope.repository.ts
+- apps/api/src/modules/auth-workspace/application/ports/persistence/invitation.repository.ts
+- apps/api/src/modules/auth-workspace/application/ports/persistence/policy.repository.ts
+- apps/api/src/modules/auth-workspace/application/services/auth-workspace/auth-workspace.facade.ts
+- apps/api/src/modules/auth-workspace/auth-workspace.module.ts
+- apps/api/src/modules/auth-workspace/domain/entities/invitation.entity.ts
+- apps/api/src/modules/auth-workspace/domain/value-objects/subject-attributes.value-object.ts
+- apps/api/src/modules/auth-workspace/infrastructure/persistence/prisma-assessment-scope.repository.ts
+- apps/api/src/modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.mappers.ts
+- apps/api/src/modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.repositories.ts
+- apps/api/src/modules/auth-workspace/presentation/http/auth-workspace.controller.ts
+- apps/api/src/platform/pbac/pbac-preflight.service.ts
+- apps/api/src/platform/pbac/pbac.guard.ts
+- apps/api/test/invite-developer.e2e-spec.ts
+- apps/api/test/support/auth-workspace-test-helpers.ts
+- apps/api/tsconfig.build.json
+- docs/implementation-artifacts/sprint-status.yaml
+- docs/implementation/tasks/modules/auth-workspace/10-invite-developer-endpoint.md
+
+### Change Log
+
+- 2026-07-13: Implemented MW-auth-010 Invite Developer Endpoint and moved task to review.

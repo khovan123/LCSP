@@ -4,7 +4,7 @@ import type { AppGreetingProvider } from "../../application/ports/app-greeting.p
 
 @Injectable()
 export class StaticAppGreetingProvider implements AppGreetingProvider {
-  async getGreeting(): Promise<string> {
-    return "Hello World!";
+  getGreeting(): Promise<string> {
+    return Promise.resolve("Hello World!");
   }
 }

@@ -70,7 +70,7 @@ export class PbacPreflightService {
         action: input.action,
         subject: {
           role: membership.role() as SubjectRole,
-          scope: membership.subjectAttributes.scope,
+          scope: readStringAttribute(membership.subjectAttributes.scope),
         },
         policy: {
           id: policy.id,
@@ -149,4 +149,8 @@ export class PbacPreflightService {
       );
     }
   }
+}
+
+function readStringAttribute(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }

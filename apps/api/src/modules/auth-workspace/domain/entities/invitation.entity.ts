@@ -17,6 +17,7 @@ export class Invitation {
   private subjectAttributesValue: SubjectAttributes;
   readonly policyId: string;
   readonly policyVersion: string;
+  readonly expiresAt: number;
 
   constructor(input: {
     id: string;
@@ -28,6 +29,7 @@ export class Invitation {
     subjectAttributes?: SubjectAttributesRecord;
     policyId: string;
     policyVersion: string;
+    expiresAt: number;
   }) {
     this.id = input.id;
     this.email = EmailAddress.create(input.email);
@@ -40,6 +42,7 @@ export class Invitation {
     );
     this.policyId = input.policyId;
     this.policyVersion = input.policyVersion;
+    this.expiresAt = input.expiresAt;
   }
 
   get subjectAttributes(): SubjectAttributesRecord {

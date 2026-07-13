@@ -1,5 +1,9 @@
 import type { RequestMeta } from "../../contracts/auth-workspace/common.contract.ts";
 import type {
+  InviteDeveloperRequest,
+  InviteDeveloperResponse,
+} from "../../contracts/auth-workspace/invitation.contract.ts";
+import type {
   OAuthCallbackPayload,
   OAuthStartPayload,
 } from "../../contracts/auth-workspace/oauth.contract.ts";
@@ -15,6 +19,8 @@ import { ConfirmPasswordRecoveryCommand } from "../../commands/confirm-password-
 import { ConfirmPasswordRecoveryHandler } from "../../commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
 import { EnrollMfaCommand } from "../../commands/enroll-mfa/enroll-mfa.command.ts";
 import { EnrollMfaHandler } from "../../commands/enroll-mfa/enroll-mfa.handler.ts";
+import { InviteDeveloperCommand } from "../../commands/invite-developer/invite-developer.command.ts";
+import { InviteDeveloperHandler } from "../../commands/invite-developer/invite-developer.handler.ts";
 import { OAuthCallbackCommand } from "../../commands/oauth-callback/oauth-callback.command.ts";
 import { OAuthCallbackHandler } from "../../commands/oauth-callback/oauth-callback.handler.ts";
 import { OAuthStartCommand } from "../../commands/oauth-start/oauth-start.command.ts";
@@ -47,6 +53,7 @@ export class AuthWorkspaceFacade {
     private readonly confirmPasswordRecoveryHandler: ConfirmPasswordRecoveryHandler,
     private readonly oauthStartHandler: OAuthStartHandler,
     private readonly oauthCallbackHandler: OAuthCallbackHandler,
+    private readonly inviteDeveloperHandler: InviteDeveloperHandler,
   ) {}
 
   registerApprovedPath(
@@ -128,6 +135,25 @@ export class AuthWorkspaceFacade {
   oauthCallback(payload: OAuthCallbackPayload, requestMeta: RequestMeta = {}) {
     return this.oauthCallbackHandler.execute(
       new OAuthCallbackCommand(payload, requestMeta),
+    );
+  }
+
+  inviteDeveloper(
+    orgId: string,
+    actorId: string,
+    payload: InviteDeveloperRequest,
+    requestMeta: RequestMeta = {},
+  ): Promise<InviteDeveloperResponse> {
+    return this.inviteDeveloperHandler.execute(
+      new InviteDeveloperCommand({
+        orgId,
+        actorId,
+        email: payload.email,
+        assessmentId: payload.assessment_id,
+        allowedActions: payload.allowed_actions,
+        expiresInHours: payload.expires_in_hours,
+        correlationId: requestMeta.correlation_id,
+      }),
     );
   }
 }

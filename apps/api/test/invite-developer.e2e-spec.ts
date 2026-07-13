@@ -1,0 +1,238 @@
+import * as assert from "node:assert/strict";
+
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
+import type { INestApplication } from "@nestjs/common";
+import { Test, TestingModule } from "@nestjs/testing";
+import { httpRequest } from "./support/http.js";
+
+import { AppModule } from "../src/app.module.js";
+import { DEVELOPER_ALLOWED_ACTIONS } from "../src/modules/auth-workspace/application/config/developer-policy.config.js";
+import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
+import {
+  TEST_DATABASE_URL,
+  pushPrismaSchema,
+  resetAuthWorkspaceDatabase,
+  seedAuthWorkspaceFixture,
+  type AuthFixture,
+} from "./support/auth-workspace-test-helpers.js";
+
+type InviteDeveloperBody = {
+  invitation_id: string;
+  email: string;
+  correlation_id: string;
+  allowed_actions: string[];
+};
+
+type ErrorBody = {
+  code?: string;
+  error_code?: string;
+};
+
+describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
+  let app: INestApplication;
+  let prisma: PrismaClient;
+  let fixture: AuthFixture;
+  let managerToken: string;
+
+  beforeAll(async () => {
+    process.env.DATABASE_URL = TEST_DATABASE_URL;
+    pushPrismaSchema();
+
+    prisma = new PrismaClient({
+      adapter: new PrismaPg(TEST_DATABASE_URL),
+    });
+    await prisma.$connect();
+
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+  });
+
+  beforeEach(async () => {
+    await resetAuthWorkspaceDatabase(prisma);
+    fixture = await seedAuthWorkspaceFixture(prisma);
+    await seedDeveloperPolicy(prisma, fixture.organizationId);
+
+    const signIn = await httpRequest(app).post("/auth/sign-in").send({
+      email: "manager@acme.test",
+      password: "CorrectHorseBatteryStaple!",
+      organization_id: fixture.organizationId,
+    });
+    managerToken = (signIn.body as SignInSuccess).session_token;
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await prisma.$disconnect();
+  });
+
+  it("T01/T07 creates a scoped Developer invitation for an org-owned assessment", async () => {
+    await grantManagerInviteAction(prisma);
+    await seedAssessment(
+      prisma,
+      fixture.organizationId,
+      fixture.approvedUser.id,
+    );
+
+    const result = await httpRequest(app)
+      .post(`/organizations/${fixture.organizationId}/invitations`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .set("x-correlation-id", "corr-invite-1")
+      .send({
+        email: "Developer@Example.TEST",
+        assessment_id: "assessment-1",
+        allowed_actions: ["evidence:read:redacted", "ai-usage-flow:read"],
+        expires_in_hours: 72,
+      });
+
+    assert.equal(result.status, 201);
+    const body = result.body as InviteDeveloperBody;
+    assert.equal(body.email, "developer@example.test");
+    assert.equal(body.correlation_id, "corr-invite-1");
+    assert.deepEqual(body.allowed_actions, [
+      "evidence:read:redacted",
+      "ai-usage-flow:read",
+    ]);
+
+    const invitation = await prisma.authInvitation.findUniqueOrThrow({
+      where: { id: body.invitation_id },
+    });
+    assert.equal(invitation.state, "approved");
+    assert.equal(invitation.emailVerified, false);
+    assert.equal(invitation.membershipStatus, "active");
+    assert.equal(invitation.policyId, "policy-developer");
+    assert.match(JSON.stringify(invitation.subjectAttributes), /Developer/);
+    assert.doesNotMatch(
+      JSON.stringify(invitation.subjectAttributes),
+      /classification:request|final-report:generate|organization:manage/,
+    );
+
+    const audit = await prisma.authAuditEvent.findFirstOrThrow({
+      where: { eventType: "AUTH_DEVELOPER_INVITED" },
+    });
+    assert.equal(audit.correlationId, "corr-invite-1");
+  });
+
+  it("T02 returns PBAC_DENIED and writes AuthDecisionLog when Manager lacks invite action", async () => {
+    const result = await httpRequest(app)
+      .post(`/organizations/${fixture.organizationId}/invitations`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({
+        email: "developer@example.test",
+        allowed_actions: ["evidence:read:redacted"],
+      });
+
+    assert.equal(result.status, 403);
+    assert.equal((result.body as ErrorBody).code, "PBAC_DENIED");
+
+    const decision = await prisma.authDecisionLog.findFirstOrThrow({
+      where: { action: "invite:developer", decision: "deny" },
+      orderBy: { createdAt: "desc" },
+    });
+    assert.equal(decision.resourceType, "HttpRoute");
+  });
+
+  it("T03 rejects Manager-only actions", async () => {
+    await grantManagerInviteAction(prisma);
+
+    const result = await httpRequest(app)
+      .post(`/organizations/${fixture.organizationId}/invitations`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({
+        email: "developer@example.test",
+        allowed_actions: ["final-report:generate"],
+      });
+
+    assert.equal(result.status, 400);
+    assert.equal((result.body as ErrorBody).error_code, "INVALID_ACTIONS");
+  });
+
+  it("T04 rejects assessment scope outside the organization", async () => {
+    await grantManagerInviteAction(prisma);
+    await seedAssessment(prisma, "org-other", fixture.approvedUser.id);
+
+    const result = await httpRequest(app)
+      .post(`/organizations/${fixture.organizationId}/invitations`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({
+        email: "developer@example.test",
+        assessment_id: "assessment-1",
+        allowed_actions: ["evidence:read:redacted"],
+      });
+
+    assert.equal(result.status, 400);
+    assert.equal((result.body as ErrorBody).error_code, "ASSESSMENT_NOT_OWNED");
+  });
+
+  it("T05 rejects invalid email", async () => {
+    await grantManagerInviteAction(prisma);
+
+    const result = await httpRequest(app)
+      .post(`/organizations/${fixture.organizationId}/invitations`)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({
+        email: "not-an-email",
+        allowed_actions: ["evidence:read:redacted"],
+      });
+
+    assert.equal(result.status, 422);
+    assert.equal((result.body as ErrorBody).error_code, "INVALID_EMAIL");
+  });
+});
+
+async function seedDeveloperPolicy(
+  prisma: PrismaClient,
+  organizationId: string,
+): Promise<void> {
+  await prisma.authPolicy.create({
+    data: {
+      id: "policy-developer",
+      version: "2026-06-26",
+      actions: DEVELOPER_ALLOWED_ACTIONS,
+      subjectRole: "Developer",
+      stateGate: "membership_active",
+      organizationId,
+    },
+  });
+}
+
+async function grantManagerInviteAction(prisma: PrismaClient): Promise<void> {
+  await prisma.authPolicy.update({
+    where: {
+      id_version: {
+        id: "policy-manager-workspace",
+        version: "2026-06-26",
+      },
+    },
+    data: { actions: { push: "invite:developer" } },
+  });
+}
+
+async function seedAssessment(
+  prisma: PrismaClient,
+  organizationId: string,
+  ownerId: string,
+): Promise<void> {
+  await prisma.assessment.upsert({
+    where: { id: "assessment-1" },
+    create: {
+      id: "assessment-1",
+      organizationId,
+      ownerId,
+      name: "Assessment 1",
+      description: null,
+      status: "WIZARD_IN_PROGRESS",
+    },
+    update: {
+      organizationId,
+      ownerId,
+      name: "Assessment 1",
+      description: null,
+      status: "WIZARD_IN_PROGRESS",
+    },
+  });
+}

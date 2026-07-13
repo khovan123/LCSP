@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import { PrismaModule } from "../../infrastructure/prisma/prisma.module.js";
 import { ConfirmPasswordRecoveryHandler } from "./application/commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
 import { EnrollMfaHandler } from "./application/commands/enroll-mfa/enroll-mfa.handler.ts";
+import { InviteDeveloperHandler } from "./application/commands/invite-developer/invite-developer.handler.ts";
 import { OAuthCallbackHandler } from "./application/commands/oauth-callback/oauth-callback.handler.ts";
 import { OAuthStartHandler } from "./application/commands/oauth-start/oauth-start.handler.ts";
 import { RegisterApprovedPathHandler } from "./application/commands/register-approved-path/register-approved-path.handler.ts";
@@ -17,6 +18,8 @@ import {
   AUTH_WORKSPACE_RECOVERY_NOTIFIER,
   type RecoveryNotifier,
 } from "./application/ports/notification/recovery-notifier.ts";
+import { AUTH_WORKSPACE_ASSESSMENT_SCOPE_REPOSITORY } from "./application/ports/persistence/assessment-scope.repository.ts";
+import type { AssessmentScopeRepository } from "./application/ports/persistence/assessment-scope.repository.ts";
 import type { AuthWorkspaceRepositories } from "./application/ports/persistence/auth-workspace-repositories.ts";
 import { AuthWorkspaceSupportService } from "./application/services/auth-workspace/auth-workspace-support.service.ts";
 import { AuthWorkspaceFacade } from "./application/services/auth-workspace/auth-workspace.facade.ts";
@@ -39,6 +42,7 @@ import {
   PrismaSessionRepository,
   PrismaUserRepository,
 } from "./infrastructure/persistence/prisma-auth-workspace.repositories.ts";
+import { PrismaAssessmentScopeRepository } from "./infrastructure/persistence/prisma-assessment-scope.repository.ts";
 import { AuthWorkspaceController } from "./presentation/http/auth-workspace.controller.ts";
 
 const REPOSITORY_PROVIDERS = [
@@ -56,6 +60,7 @@ const REPOSITORY_PROVIDERS = [
   PrismaRecoveryRequestRepository,
   PrismaOAuthStateRepository,
   PrismaOAuthIdentityRepository,
+  PrismaAssessmentScopeRepository,
 ];
 
 const AUTH_WORKSPACE_REPOSITORIES_BAG = "AUTH_WORKSPACE_REPOSITORIES_BAG";
@@ -128,12 +133,29 @@ function handlerProvider<T>(
     GitHubOAuthProvider,
     OAuthProviderRegistry,
     handlerProvider(RegisterApprovedPathHandler),
+    {
+      provide: AUTH_WORKSPACE_ASSESSMENT_SCOPE_REPOSITORY,
+      useExisting: PrismaAssessmentScopeRepository,
+    },
     handlerProvider(SignInHandler),
     handlerProvider(RevokeSessionHandler),
     handlerProvider(GetWorkspaceHandler),
     handlerProvider(EnrollMfaHandler),
     handlerProvider(VerifyMfaOtpHandler),
     handlerProvider(UpdateProfileHandler),
+    {
+      provide: InviteDeveloperHandler,
+      inject: [
+        AuthWorkspaceSupportService,
+        AUTH_WORKSPACE_REPOSITORIES_BAG,
+        AUTH_WORKSPACE_ASSESSMENT_SCOPE_REPOSITORY,
+      ],
+      useFactory: (
+        support: AuthWorkspaceSupportService,
+        repositories: AuthWorkspaceRepositories,
+        assessmentScope: AssessmentScopeRepository,
+      ) => new InviteDeveloperHandler(support, repositories, assessmentScope),
+    },
     {
       provide: RequestPasswordRecoveryHandler,
       inject: [
@@ -196,6 +218,7 @@ function handlerProvider<T>(
         ConfirmPasswordRecoveryHandler,
         OAuthStartHandler,
         OAuthCallbackHandler,
+        InviteDeveloperHandler,
       ],
       useFactory: (
         registerApprovedPathHandler: RegisterApprovedPathHandler,
@@ -209,6 +232,7 @@ function handlerProvider<T>(
         confirmPasswordRecoveryHandler: ConfirmPasswordRecoveryHandler,
         oauthStartHandler: OAuthStartHandler,
         oauthCallbackHandler: OAuthCallbackHandler,
+        inviteDeveloperHandler: InviteDeveloperHandler,
       ) =>
         new AuthWorkspaceFacade(
           registerApprovedPathHandler,
@@ -222,6 +246,7 @@ function handlerProvider<T>(
           confirmPasswordRecoveryHandler,
           oauthStartHandler,
           oauthCallbackHandler,
+          inviteDeveloperHandler,
         ),
     },
   ],

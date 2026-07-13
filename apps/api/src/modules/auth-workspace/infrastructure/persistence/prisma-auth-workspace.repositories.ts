@@ -202,6 +202,10 @@ export class PrismaMembershipRepository implements MembershipRepository {
 export class PrismaInvitationRepository implements InvitationRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  nextId(): string {
+    return crypto.randomUUID();
+  }
+
   async save(invitation: Invitation): Promise<void> {
     await this.prisma.authInvitation.upsert({
       where: { id: invitation.id },
@@ -217,6 +221,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
         ),
         policyId: invitation.policyId,
         policyVersion: invitation.policyVersion,
+        expiresAt: dateFromEpochMsRequired(invitation.expiresAt),
       },
       update: {
         email: invitation.email.toString(),
@@ -228,6 +233,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
         ),
         policyId: invitation.policyId,
         policyVersion: invitation.policyVersion,
+        expiresAt: dateFromEpochMsRequired(invitation.expiresAt),
       },
     });
   }
@@ -330,6 +336,18 @@ export class PrismaPolicyRepository implements PolicyRepository {
           version,
         },
       },
+    });
+
+    return record ? mapPolicyRecord(record) : null;
+  }
+
+  async findLatestByOrganizationAndRole(
+    organizationId: string,
+    subjectRole: string,
+  ): Promise<Policy | null> {
+    const record = await this.prisma.authPolicy.findFirst({
+      where: { organizationId, subjectRole },
+      orderBy: { createdAt: "desc" },
     });
 
     return record ? mapPolicyRecord(record) : null;

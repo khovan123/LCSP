@@ -90,6 +90,7 @@ export function mapInvitationRecord(record: AuthInvitation): Invitation {
     subjectAttributes: jsonToSubjectAttributes(record.subjectAttributes),
     policyId: record.policyId,
     policyVersion: record.policyVersion,
+    expiresAt: record.expiresAt.getTime(),
   });
 }
 
