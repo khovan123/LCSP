@@ -65,6 +65,7 @@ export function pushPrismaSchema(): void {
       XDG_CACHE_HOME: resolve(apiRoot, ".cache"),
     },
     stdio: "pipe",
+    shell: process.platform === "win32",
   });
 }
 
