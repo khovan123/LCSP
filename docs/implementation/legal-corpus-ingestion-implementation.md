@@ -56,7 +56,7 @@ validated LegalSource
 -> validate response and final URL
 -> store immutable PDF/HTML snapshot in S3-compatible storage
 -> compute SHA-256 content hash
--> extract document identity/effective dates/relationships
+-> extract document identity/effective dates/source effect status/relationships
 -> normalize chapter/article/clause/point hierarchy
 -> create LegalDocument and LegalCorpusItem records in DRAFT corpus
 -> audit provenance
@@ -110,6 +110,7 @@ Regex may support extraction but must not be the only validation mechanism. Pars
 | Response too large/type unsupported | `LEGAL_SOURCE_RESPONSE_REJECTED`; fail closed |
 | Snapshot/hash failure | `LEGAL_SNAPSHOT_FAILED`; no normalization |
 | Identity extraction failure | `LEGAL_IDENTITY_EXTRACTION_FAILED`; manual correction required |
+| Source effect status conflicts with derived effective/repeal state, or is missing/unmapped | `LEGAL_EFFECT_STATUS_CONFLICT`; manual review; corpus version approval blocked (see `legal-corpus-source-spec.md` Source Effect Status) |
 | Normalization failure | `LEGAL_NORMALIZATION_FAILED`; no approval |
 | Content hash changed | create new document/snapshot staging version; do not mutate approved version |
 
@@ -134,6 +135,7 @@ Approval validates:
 - every source is validated;
 - document number/type/title/issuer are correct;
 - issue/effective dates are present or explicitly reviewed;
+- `source_effect_status` is captured and consistent with the derived effective/repeal state (no unresolved `LEGAL_EFFECT_STATUS_CONFLICT`);
 - article/clause/point normalization is accurate;
 - amendment/supersession relationships are reviewed;
 - snapshot and normalized content hashes are recorded;
