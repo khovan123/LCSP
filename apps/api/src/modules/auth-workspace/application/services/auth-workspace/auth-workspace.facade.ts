@@ -1,5 +1,9 @@
 import type { RequestMeta } from "../../contracts/auth-workspace/common.contract.ts";
 import type {
+  AcceptInvitationRequest,
+  AcceptInvitationResponse,
+} from "../../contracts/auth-workspace/accept-invitation.contract.ts";
+import type {
   InviteDeveloperRequest,
   InviteDeveloperResponse,
 } from "../../contracts/auth-workspace/invitation.contract.ts";
@@ -17,6 +21,8 @@ import type { WorkspaceRequest } from "../../contracts/auth-workspace/workspace.
 import type { UpdateProfilePayload } from "../../commands/update-profile/update-profile.command.ts";
 import { ConfirmPasswordRecoveryCommand } from "../../commands/confirm-password-recovery/confirm-password-recovery.command.ts";
 import { ConfirmPasswordRecoveryHandler } from "../../commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
+import { AcceptInvitationCommand } from "../../commands/accept-invitation/accept-invitation.command.ts";
+import { AcceptInvitationHandler } from "../../commands/accept-invitation/accept-invitation.handler.ts";
 import { EnrollMfaCommand } from "../../commands/enroll-mfa/enroll-mfa.command.ts";
 import { EnrollMfaHandler } from "../../commands/enroll-mfa/enroll-mfa.handler.ts";
 import { InviteDeveloperCommand } from "../../commands/invite-developer/invite-developer.command.ts";
@@ -54,6 +60,7 @@ export class AuthWorkspaceFacade {
     private readonly oauthStartHandler: OAuthStartHandler,
     private readonly oauthCallbackHandler: OAuthCallbackHandler,
     private readonly inviteDeveloperHandler: InviteDeveloperHandler,
+    private readonly acceptInvitationHandler: AcceptInvitationHandler,
   ) {}
 
   registerApprovedPath(
@@ -152,6 +159,20 @@ export class AuthWorkspaceFacade {
         assessmentId: payload.assessment_id,
         allowedActions: payload.allowed_actions,
         expiresInHours: payload.expires_in_hours,
+        correlationId: requestMeta.correlation_id,
+      }),
+    );
+  }
+
+  acceptInvitation(
+    payload: AcceptInvitationRequest,
+    requestMeta: RequestMeta = {},
+  ): Promise<AcceptInvitationResponse> {
+    return this.acceptInvitationHandler.execute(
+      new AcceptInvitationCommand({
+        invitationToken: payload.invitation_token,
+        displayName: payload.display_name,
+        password: payload.password,
         correlationId: requestMeta.correlation_id,
       }),
     );
