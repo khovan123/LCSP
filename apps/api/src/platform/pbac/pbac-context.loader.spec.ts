@@ -64,30 +64,50 @@ function makeLoader(
     mfaEnrollments?: Partial<MfaEnrollmentRepository>;
   } = {},
 ) {
-  const sessions = {
-    findByFingerprint: jest
-      .fn<SessionRepository["findByFingerprint"]>()
-      .mockResolvedValue(makeSession()),
-    ...overrides.sessions,
-  } as unknown as SessionRepository;
-  const memberships = {
-    findByUserAndOrganization: jest
-      .fn<MembershipRepository["findByUserAndOrganization"]>()
-      .mockResolvedValue(makeMembership()),
-    ...overrides.memberships,
-  } as unknown as MembershipRepository;
-  const policies = {
-    findByIdAndVersion: jest
-      .fn<PolicyRepository["findByIdAndVersion"]>()
-      .mockResolvedValue(makePolicy()),
-    ...overrides.policies,
+  const sessions: SessionRepository = {
+    nextId: overrides.sessions?.nextId ?? (() => "session-1"),
+    save: overrides.sessions?.save ?? (() => Promise.resolve()),
+    findByFingerprint:
+      overrides.sessions?.findByFingerprint ??
+      jest
+        .fn<SessionRepository["findByFingerprint"]>()
+        .mockResolvedValue(makeSession()),
+    revokeAllForUser:
+      overrides.sessions?.revokeAllForUser ?? (() => Promise.resolve()),
   };
-  const mfaEnrollments = {
-    findByUserId: jest
-      .fn<MfaEnrollmentRepository["findByUserId"]>()
-      .mockResolvedValue(null),
-    ...overrides.mfaEnrollments,
-  } as unknown as MfaEnrollmentRepository;
+  const memberships: MembershipRepository = {
+    nextId: overrides.memberships?.nextId ?? (() => "membership-1"),
+    save: overrides.memberships?.save ?? (() => Promise.resolve()),
+    findByUserAndOrganization:
+      overrides.memberships?.findByUserAndOrganization ??
+      jest
+        .fn<MembershipRepository["findByUserAndOrganization"]>()
+        .mockResolvedValue(makeMembership()),
+    findActiveByUserId:
+      overrides.memberships?.findActiveByUserId ?? (() => Promise.resolve([])),
+  };
+  const policies: PolicyRepository = {
+    findByIdAndVersion:
+      overrides.policies?.findByIdAndVersion ??
+      jest
+        .fn<PolicyRepository["findByIdAndVersion"]>()
+        .mockResolvedValue(makePolicy()),
+    findLatestByOrganizationAndRole:
+      overrides.policies?.findLatestByOrganizationAndRole ??
+      jest
+        .fn<PolicyRepository["findLatestByOrganizationAndRole"]>()
+        .mockResolvedValue(makePolicy()),
+  };
+  const mfaEnrollments: MfaEnrollmentRepository = {
+    findByUserId:
+      overrides.mfaEnrollments?.findByUserId ??
+      jest
+        .fn<MfaEnrollmentRepository["findByUserId"]>()
+        .mockResolvedValue(null),
+    save: overrides.mfaEnrollments?.save ?? (() => Promise.resolve()),
+    deleteByUserId:
+      overrides.mfaEnrollments?.deleteByUserId ?? (() => Promise.resolve()),
+  };
 
   return new PbacContextLoader(sessions, memberships, policies, mfaEnrollments);
 }

@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
 import { PrismaModule } from "../../infrastructure/prisma/prisma.module.js";
+import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
+import { AcceptInvitationHandler } from "./application/commands/accept-invitation/accept-invitation.handler.ts";
 import { ConfirmPasswordRecoveryHandler } from "./application/commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
 import { EnrollMfaHandler } from "./application/commands/enroll-mfa/enroll-mfa.handler.ts";
 import { InviteDeveloperHandler } from "./application/commands/invite-developer/invite-developer.handler.ts";
@@ -134,6 +136,12 @@ function handlerProvider<T>(
     OAuthProviderRegistry,
     handlerProvider(RegisterApprovedPathHandler),
     {
+      provide: AcceptInvitationHandler,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) =>
+        new AcceptInvitationHandler(prisma),
+    },
+    {
       provide: AUTH_WORKSPACE_ASSESSMENT_SCOPE_REPOSITORY,
       useExisting: PrismaAssessmentScopeRepository,
     },
@@ -219,6 +227,7 @@ function handlerProvider<T>(
         OAuthStartHandler,
         OAuthCallbackHandler,
         InviteDeveloperHandler,
+        AcceptInvitationHandler,
       ],
       useFactory: (
         registerApprovedPathHandler: RegisterApprovedPathHandler,
@@ -233,6 +242,7 @@ function handlerProvider<T>(
         oauthStartHandler: OAuthStartHandler,
         oauthCallbackHandler: OAuthCallbackHandler,
         inviteDeveloperHandler: InviteDeveloperHandler,
+        acceptInvitationHandler: AcceptInvitationHandler,
       ) =>
         new AuthWorkspaceFacade(
           registerApprovedPathHandler,
@@ -247,6 +257,7 @@ function handlerProvider<T>(
           oauthStartHandler,
           oauthCallbackHandler,
           inviteDeveloperHandler,
+          acceptInvitationHandler,
         ),
     },
   ],

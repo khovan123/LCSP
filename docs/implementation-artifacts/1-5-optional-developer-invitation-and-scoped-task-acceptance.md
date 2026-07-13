@@ -1,6 +1,6 @@
 # Story 1.5: Optional Developer Invitation and Scoped Task Acceptance
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -155,13 +155,32 @@ GPT-5 Codex
 - Batch `bmad-create-story` run on 2026-07-02T22:01:26+07:00.
 - Source packet: `docs/developer/story-handbook/1-5-optional-developer-invitation-and-scoped-task-acceptance.md`.
 - Canonical title/source alignment: `docs/planning-artifacts/epics.md`.
+- MW-auth-011 RED: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/accept-invitation.e2e-spec.ts` failed with 404 before the endpoint existed.
+- MW-auth-011 GREEN: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/accept-invitation.e2e-spec.ts` passed.
+- MW-auth-011 regression: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/invite-developer.e2e-spec.ts`, `npm run lint`, `pnpm --filter @lcsp/api run build`, `rtk pnpm --filter @lcsp/api test`, and `rtk pnpm --filter @lcsp/api test:e2e` passed.
 
 ### Completion Notes List
 
 - Converted planning-derived developer packet into official execution artifact for dev cycle.
 - Status set to `ready-for-dev` in `docs/implementation-artifacts/sprint-status.yaml`.
 - Story retains planning authority references and scope guardrails for downstream `dev-story` work.
+- MW-auth-011 complete: added public Developer invitation acceptance endpoint with atomic consume/user/membership/session creation and clean audit event.
+- Story remains `in-progress`; other Story 1.5 work such as revoke Developer membership and web scoped task workspace is outside MW-auth-011 scope.
 
 ### File List
 
 - docs/implementation-artifacts/1-5-optional-developer-invitation-and-scoped-task-acceptance.md
+- apps/api/src/modules/auth-workspace/application/commands/accept-invitation/accept-invitation.command.ts
+- apps/api/src/modules/auth-workspace/application/commands/accept-invitation/accept-invitation.handler.ts
+- apps/api/src/modules/auth-workspace/application/contracts/auth-workspace/accept-invitation.contract.ts
+- apps/api/src/modules/auth-workspace/application/services/auth-workspace/auth-workspace.facade.ts
+- apps/api/src/modules/auth-workspace/auth-workspace.module.ts
+- apps/api/src/modules/auth-workspace/presentation/http/auth-workspace.controller.ts
+- apps/api/src/platform/pbac/pbac-context.loader.spec.ts
+- apps/api/test/accept-invitation.e2e-spec.ts
+- docs/developer/task-index.md
+- docs/implementation/tasks/modules/auth-workspace/11-accept-developer-invitation-endpoint.md
+
+### Change Log
+
+- 2026-07-13: Implemented MW-auth-011 Accept Developer Invitation Endpoint; Story 1.5 remains in-progress for remaining task slices.

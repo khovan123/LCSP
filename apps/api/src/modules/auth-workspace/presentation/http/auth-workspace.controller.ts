@@ -15,6 +15,7 @@ import type { Request } from "express";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import type { RequestMeta } from "../../application/contracts/auth-workspace/common.contract.ts";
+import type { AcceptInvitationRequest } from "../../application/contracts/auth-workspace/accept-invitation.contract.ts";
 import type { InviteDeveloperRequest } from "../../application/contracts/auth-workspace/invitation.contract.ts";
 import type {
   OAuthCallbackPayload,
@@ -75,6 +76,17 @@ export class AuthWorkspaceController {
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     return this.authWorkspaceFacade.registerApprovedPath(
+      payload,
+      requestMeta(correlationId),
+    );
+  }
+
+  @Post("auth/accept-invitation")
+  acceptInvitation(
+    @Body() payload: AcceptInvitationRequest,
+    @Headers("x-correlation-id") correlationId?: string,
+  ) {
+    return this.authWorkspaceFacade.acceptInvitation(
       payload,
       requestMeta(correlationId),
     );

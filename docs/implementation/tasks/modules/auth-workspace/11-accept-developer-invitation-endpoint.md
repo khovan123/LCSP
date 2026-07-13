@@ -3,7 +3,7 @@ task_id: MW-auth-011
 module: auth-workspace
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: REVIEW
 epic_story: 1.5
 depends_on:
   - auth-workspace/10-invite-developer-endpoint.md
@@ -117,3 +117,36 @@ Public endpoint. Developer's PBAC policy is seeded from the invitation's `subjec
 - Invalid/expired/consumed invitations return `INVITATION_INVALID`.
 - No password in audit payload or logs.
 - Developer membership `subjectAttributes` matches original invitation scope exactly.
+
+## Dev Agent Record
+
+### Debug Log References
+
+- RED: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/accept-invitation.e2e-spec.ts` failed with 404 before `POST /auth/accept-invitation` existed.
+- GREEN: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/accept-invitation.e2e-spec.ts` passed.
+- Regression: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/invite-developer.e2e-spec.ts` passed.
+- DoD: `npm run lint`, `pnpm --filter @lcsp/api run build`, `rtk pnpm --filter @lcsp/api test`, and `rtk pnpm --filter @lcsp/api test:e2e` passed.
+
+### Completion Notes
+
+- Added public `POST /auth/accept-invitation` endpoint with invitation token, display name, and password contract.
+- Implemented atomic Developer invitation acceptance: validate approved/unexpired token, reject duplicate email and short password, consume invitation, create user, membership, session, and acceptance audit in one transaction.
+- Returned scoped Developer projection with organization, session expiry, correlation ID, and allowed action hint without treating it as PBAC authority.
+- Added e2e coverage for valid accept, missing/consumed/expired token, duplicate email, short password, audit redaction, and Manager golden path continuity.
+
+### File List
+
+- apps/api/src/modules/auth-workspace/application/commands/accept-invitation/accept-invitation.command.ts
+- apps/api/src/modules/auth-workspace/application/commands/accept-invitation/accept-invitation.handler.ts
+- apps/api/src/modules/auth-workspace/application/contracts/auth-workspace/accept-invitation.contract.ts
+- apps/api/src/modules/auth-workspace/application/services/auth-workspace/auth-workspace.facade.ts
+- apps/api/src/modules/auth-workspace/auth-workspace.module.ts
+- apps/api/src/modules/auth-workspace/presentation/http/auth-workspace.controller.ts
+- apps/api/src/platform/pbac/pbac-context.loader.spec.ts
+- apps/api/test/accept-invitation.e2e-spec.ts
+- docs/developer/task-index.md
+- docs/implementation/tasks/modules/auth-workspace/11-accept-developer-invitation-endpoint.md
+
+### Change Log
+
+- 2026-07-13: Implemented MW-auth-011 Accept Developer Invitation Endpoint and moved task to review.
