@@ -8,6 +8,7 @@ import type { MembershipRepository } from "../../modules/auth-workspace/applicat
 import type { MfaEnrollmentRepository } from "../../modules/auth-workspace/application/ports/persistence/mfa.repository.js";
 import type { PolicyRepository } from "../../modules/auth-workspace/application/ports/persistence/policy.repository.js";
 import type { SessionRepository } from "../../modules/auth-workspace/application/ports/persistence/session.repository.js";
+import { hashSecret } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
 import { PbacContextLoader } from "./pbac-context.loader.js";
 
 const NOW = 1_700_000_000_000;
@@ -19,7 +20,7 @@ function makeSession(
     id: "session-1",
     userId: "user-1",
     organizationId: "org-1",
-    tokenHash: "hash",
+    tokenHash: hashSecret("raw-token"),
     expiresAt: NOW + 60_000,
     revokedAt: null,
     mfaVerifiedAt: null,
@@ -145,6 +146,22 @@ describe("PbacContextLoader", () => {
         findByFingerprint: jest
           .fn<SessionRepository["findByFingerprint"]>()
           .mockResolvedValue(makeSession({ expiresAt: NOW - 1000 })),
+      },
+    });
+
+    const result = await loader.load("raw-token", NOW);
+
+    expect(result).toEqual({ ok: false, reason: "SESSION_INVALID" });
+  });
+
+  it("SESSION_INVALID when the token hash does not verify", async () => {
+    const loader = makeLoader({
+      sessions: {
+        findByFingerprint: jest
+          .fn<SessionRepository["findByFingerprint"]>()
+          .mockResolvedValue(
+            makeSession({ tokenHash: hashSecret("different-token") }),
+          ),
       },
     });
 
