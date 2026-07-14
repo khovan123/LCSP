@@ -10,6 +10,7 @@ import {
 } from "../../../domain/models/auth-workspace.models.ts";
 import type { InvitationRepository } from "../../ports/persistence/invitation.repository.ts";
 import type { PolicyRepository } from "../../ports/persistence/policy.repository.ts";
+import type { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { DEVELOPER_ALLOWED_ACTIONS } from "@lcsp/contracts/pbac";
 import { InviteDeveloperCommand } from "./invite-developer.command.ts";
@@ -47,7 +48,13 @@ function buildHandler(input?: {
       Promise.resolve(input?.developerPolicy ?? DEVELOPER_POLICY),
   };
 
-  const support = new AuthWorkspaceSupportService();
+  const authAudit = {
+    write: (event: Record<string, unknown>) => {
+      auditEvents.push(event);
+      return Promise.resolve();
+    },
+  } as unknown as AuthAuditService;
+  const support = new AuthWorkspaceSupportService(authAudit);
   jest.spyOn(support, "now").mockReturnValue(1_700_000_000_000);
 
   const handler = new InviteDeveloperHandler(
@@ -55,12 +62,6 @@ function buildHandler(input?: {
     {
       invitations,
       policies,
-      auditEvents: {
-        append: (event) => {
-          auditEvents.push(event);
-          return Promise.resolve();
-        },
-      },
     },
     {
       belongsToOrganization: () =>

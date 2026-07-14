@@ -31,6 +31,7 @@ import type {
 import type { RegisterPayload } from "../../contracts/auth-workspace/register-approved-path.contract.ts";
 import type { CredentialPayload } from "../../contracts/auth-workspace/sign-in.contract.ts";
 import type { WorkspaceAuthorization } from "../../contracts/auth-workspace/workspace.contract.ts";
+import type { AuthAuditService } from "./auth-audit.service.ts";
 
 const FAILED_LOGIN_LIMIT = 3;
 const LOCK_WINDOW_MS = 15 * 60_000;
@@ -39,7 +40,7 @@ const SESSION_TTL_MS = 8 * 60 * 60_000;
 export class AuthWorkspaceSupportService {
   private readonly workspaceAuthorization: WorkspaceAuthorizationDomainService;
 
-  constructor() {
+  constructor(private readonly authAudit?: AuthAuditService) {
     this.workspaceAuthorization = new WorkspaceAuthorizationDomainService();
   }
 
@@ -89,11 +90,12 @@ export class AuthWorkspaceSupportService {
     );
   }
 
-  recordAudit(
-    repositories: AuthWorkspaceRepositories,
-    event: AuditEvent,
-  ): Promise<void> {
-    return repositories.auditEvents.append(event);
+  recordAudit(repositories: unknown, event: AuditEvent): Promise<void> {
+    void repositories;
+    if (!this.authAudit) {
+      return Promise.resolve();
+    }
+    return this.authAudit.write(event);
   }
 
   recordDecision(

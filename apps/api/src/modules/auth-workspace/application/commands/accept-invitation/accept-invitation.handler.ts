@@ -19,6 +19,8 @@ import type {
   AcceptInvitationErrorCode,
   AcceptInvitationResponse,
 } from "../../contracts/auth-workspace/accept-invitation.contract.ts";
+import { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
+import { AUTH_AUDIT_EVENT_TYPES } from "../../services/auth-workspace/audit-event-types.ts";
 import { AcceptInvitationCommand } from "./accept-invitation.command.ts";
 
 const SESSION_TTL_MS = 8 * 60 * 60_000;
@@ -26,7 +28,10 @@ const MIN_PASSWORD_LENGTH = 12;
 const MAX_DISPLAY_NAME_LENGTH = 100;
 
 export class AcceptInvitationHandler {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authAudit: AuthAuditService,
+  ) {}
 
   async execute(
     command: AcceptInvitationCommand,
@@ -165,22 +170,20 @@ export class AcceptInvitationHandler {
         },
       });
 
-      await tx.authAuditEvent.create({
-        data: {
-          id: crypto.randomUUID(),
-          eventType: "AUTH_DEVELOPER_INVITATION_ACCEPTED",
+      await this.authAudit.writeInTx(
+        {
+          eventType: AUTH_AUDIT_EVENT_TYPES.authDeveloperInvitationAccepted,
           actorId: userId,
           organizationId: invitation.organizationId,
           resourceType: "AuthInvitation",
           resourceId: null,
           decision: "allow",
-          reasonCode: null,
           correlationId,
           sessionId,
           policyId: invitation.policyId,
           policyVersion: invitation.policyVersion,
           payload: {
-            event_type: "AUTH_DEVELOPER_INVITATION_ACCEPTED",
+            event_type: AUTH_AUDIT_EVENT_TYPES.authDeveloperInvitationAccepted,
             actor_id: userId,
             organization_id: invitation.organizationId,
             decision: "allow",
@@ -190,7 +193,8 @@ export class AcceptInvitationHandler {
             policy_version: invitation.policyVersion,
           },
         },
-      });
+        tx,
+      );
     });
 
     return {

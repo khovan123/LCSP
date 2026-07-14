@@ -141,6 +141,30 @@ describe("AuditWriterService", () => {
     await expect(service.writeInTx(makeEvent(), tx)).resolves.toBeUndefined();
   });
 
+  it("preserves optional auth audit metadata columns", async () => {
+    const { client, create } = makePrisma();
+    const service = new AuditWriterService(client);
+
+    await service.write(
+      makeEvent({
+        reasonCode: "AUTHORIZED",
+        sessionId: "session-1",
+        policyId: "policy-1",
+        policyVersion: "v1",
+      }),
+    );
+
+    const [{ data }] = create.mock.calls[0] as [
+      { data: Record<string, unknown> },
+    ];
+    expect(data).toMatchObject({
+      reasonCode: "AUTHORIZED",
+      sessionId: "session-1",
+      policyId: "policy-1",
+      policyVersion: "v1",
+    });
+  });
+
   it("T07: occurredAt (createdAt) is service-generated, not derived from caller input", async () => {
     const { client, create } = makePrisma();
     const service = new AuditWriterService(client);

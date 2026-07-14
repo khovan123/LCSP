@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 
 import { PrismaModule } from "../../infrastructure/prisma/prisma.module.js";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
+import { AuditModule } from "../../platform/audit/audit.module.js";
 import { AcceptInvitationHandler } from "./application/commands/accept-invitation/accept-invitation.handler.ts";
 import { ConfirmPasswordRecoveryHandler } from "./application/commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
 import { EnrollMfaHandler } from "./application/commands/enroll-mfa/enroll-mfa.handler.ts";
@@ -24,6 +25,7 @@ import {
 import { AUTH_WORKSPACE_ASSESSMENT_SCOPE_REPOSITORY } from "./application/ports/persistence/assessment-scope.repository.ts";
 import type { AssessmentScopeRepository } from "./application/ports/persistence/assessment-scope.repository.ts";
 import type { AuthWorkspaceRepositories } from "./application/ports/persistence/auth-workspace-repositories.ts";
+import { AuthAuditService } from "./application/services/auth-workspace/auth-audit.service.ts";
 import { AuthWorkspaceSupportService } from "./application/services/auth-workspace/auth-workspace-support.service.ts";
 import { AuthWorkspaceFacade } from "./application/services/auth-workspace/auth-workspace.facade.ts";
 import { NoopRecoveryNotifierService } from "./infrastructure/notification/noop-recovery-notifier.service.ts";
@@ -86,7 +88,7 @@ function handlerProvider<T>(
 }
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, AuditModule],
   controllers: [AuthWorkspaceController],
   providers: [
     ...REPOSITORY_PROVIDERS,
@@ -127,7 +129,9 @@ function handlerProvider<T>(
     },
     {
       provide: AuthWorkspaceSupportService,
-      useFactory: () => new AuthWorkspaceSupportService(),
+      inject: [AuthAuditService],
+      useFactory: (authAudit: AuthAuditService) =>
+        new AuthWorkspaceSupportService(authAudit),
     },
     {
       provide: AUTH_WORKSPACE_RECOVERY_NOTIFIER,
@@ -135,18 +139,19 @@ function handlerProvider<T>(
     },
     GitHubOAuthProvider,
     OAuthProviderRegistry,
+    AuthAuditService,
     handlerProvider(RegisterApprovedPathHandler),
     {
       provide: AcceptInvitationHandler,
-      inject: [PrismaService],
-      useFactory: (prisma: PrismaService) =>
-        new AcceptInvitationHandler(prisma),
+      inject: [PrismaService, AuthAuditService],
+      useFactory: (prisma: PrismaService, authAudit: AuthAuditService) =>
+        new AcceptInvitationHandler(prisma, authAudit),
     },
     {
       provide: RevokeMembershipHandler,
-      inject: [PrismaService],
-      useFactory: (prisma: PrismaService) =>
-        new RevokeMembershipHandler(prisma),
+      inject: [PrismaService, AuthAuditService],
+      useFactory: (prisma: PrismaService, authAudit: AuthAuditService) =>
+        new RevokeMembershipHandler(prisma, authAudit),
     },
     {
       provide: AUTH_WORKSPACE_ASSESSMENT_SCOPE_REPOSITORY,
@@ -273,6 +278,7 @@ function handlerProvider<T>(
   ],
   exports: [
     AuthWorkspaceFacade,
+    AuthAuditService,
     // Exposed for platform/pbac's PbacGuard, which needs read access to
     // sessions/memberships/policies/MFA enrollment and write access to the
     // decision log — reusing these rather than duplicating the same Prisma
