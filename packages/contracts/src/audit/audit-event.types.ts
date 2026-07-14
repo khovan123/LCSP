@@ -6,7 +6,11 @@ export interface AuditEventInput {
   organizationId: string | null;
   resourceType?: string | null;
   resourceId?: string | null;
+  reasonCode?: string | null;
   correlationId: string;
+  sessionId?: string | null;
+  policyId?: string | null;
+  policyVersion?: string | null;
   decision: AuditDecision | null;
   payload?: Record<string, unknown>;
 }
