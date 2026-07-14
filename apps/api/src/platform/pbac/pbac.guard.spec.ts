@@ -85,6 +85,7 @@ function makeGuard(
   overrides: {
     loadResult?: PbacContextResult;
     evaluateResult?: PbacDecisionResult;
+    evaluateImpl?: PbacEvaluatorService["evaluate"];
     appendImpl?: (decision: AuthorizationDecision) => Promise<void>;
   } = {},
 ) {
@@ -108,7 +109,7 @@ function makeGuard(
 
   const evaluate = jest
     .fn<PbacEvaluatorService["evaluate"]>()
-    .mockReturnValue(evaluateResult);
+    .mockImplementation(overrides.evaluateImpl ?? (() => evaluateResult));
   const evaluator = { evaluate } as unknown as PbacEvaluatorService;
 
   const append = jest
@@ -295,7 +296,6 @@ describe("PbacGuard", () => {
     const body = error.getResponse();
 
     expect(Object.keys(body as object).sort()).toEqual([
-      "code",
       "correlation_id",
       "error_code",
     ]);
@@ -381,14 +381,88 @@ describe("PbacGuard", () => {
     await expect(guard.canActivate(context)).resolves.toBe(true);
   });
 
-  it("defaults to session-only behavior when no decorator is applied", async () => {
-    const { guard, evaluate } = makeGuard();
+  it("defaults to deny when PbacGuard is applied without @RequireAction() or @RequireSession()", async () => {
+    const { guard, load, evaluate, append } = makeGuard();
     const { context } = makeContext({
       handler: DummyController.prototype.noDecorator,
       authorization: "Bearer token",
     });
 
-    await expect(guard.canActivate(context)).resolves.toBe(true);
+    const error = await guard.canActivate(context).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      error_code: "PBAC_DENIED",
+    });
+    expect(load).not.toHaveBeenCalled();
     expect(evaluate).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: "deny",
+        reason_code: "PBAC_METADATA_MISSING",
+      }),
+    );
+  });
+
+  it("denies cleanly when the membership has no subject role attribute", async () => {
+    const { guard, evaluate, append } = makeGuard({
+      loadResult: {
+        ok: true,
+        session: makeSession(),
+        membership: new Membership({
+          id: "membership-1",
+          userId: "user-1",
+          organizationId: "org-1",
+          status: "active",
+          subjectAttributes: {},
+          policyId: "policy-1",
+          policyVersion: "v1",
+        }),
+        policy: makePolicy(),
+      },
+    });
+    const { context } = makeContext({
+      handler: DummyController.prototype.inviteDeveloper,
+      authorization: "Bearer token",
+    });
+
+    const error = await guard.canActivate(context).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      error_code: "PBAC_DENIED",
+    });
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: "deny",
+        reason_code: "SUBJECT_ATTRIBUTE_MISSING",
+      }),
+    );
+  });
+
+  it("denies cleanly if the evaluator throws unexpectedly", async () => {
+    const { guard, append } = makeGuard({
+      evaluateImpl: () => {
+        throw new Error("boom");
+      },
+    });
+    const { context } = makeContext({
+      handler: DummyController.prototype.inviteDeveloper,
+      authorization: "Bearer token",
+    });
+
+    const error = await guard.canActivate(context).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      error_code: "PBAC_DENIED",
+    });
+    expect(append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        decision: "deny",
+        reason_code: "EVALUATOR_ERROR",
+      }),
+    );
   });
 });

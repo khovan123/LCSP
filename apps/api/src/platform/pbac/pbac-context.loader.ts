@@ -4,7 +4,10 @@ import type {
   Policy,
   Session,
 } from "../../modules/auth-workspace/domain/models/auth-workspace.models.js";
-import { fingerprintToken } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
+import {
+  fingerprintToken,
+  verifySecret,
+} from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
 import {
   PrismaMembershipRepository,
   PrismaMfaEnrollmentRepository,
@@ -49,7 +52,11 @@ export class PbacContextLoader {
     try {
       const fingerprint = fingerprintToken(token);
       const session = await this.sessions.findByFingerprint(fingerprint);
-      if (!session || !session.isActive(now)) {
+      if (
+        !session ||
+        !verifySecret(token, session.tokenHash) ||
+        !session.isActive(now)
+      ) {
         return { ok: false, reason: "SESSION_INVALID" };
       }
 
