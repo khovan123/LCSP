@@ -45,7 +45,7 @@ function ensureContainer() {
       "-e",
       "POSTGRES_DB=lcsp_api_test",
       "-p",
-      "127.0.0.1:55432:5432",
+      "127.0.0.1:54322:5432",
       "-d",
       image,
     ]);
@@ -95,7 +95,7 @@ function waitUntilReady() {
   throw new Error("PostgreSQL test container did not become ready in time");
 }
 
-if (!(await isPortOpen(55432, "127.0.0.1"))) {
+if (!(await isPortOpen(54322, "127.0.0.1"))) {
   ensureContainer();
   waitUntilReady();
 }

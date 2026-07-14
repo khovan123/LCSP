@@ -290,3 +290,18 @@ enum AuthDecision {
 enum AuthStateGate {
   membership_active
 }
+
+model RepositoryConnection {
+  id               String   @id
+  assessmentId     String
+  installationId   String
+  repositoryOwner  String
+  repositoryName   String
+  repositoryId     String
+  selectedBranch   String?
+  status           String   @default("connected")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([assessmentId])
+}

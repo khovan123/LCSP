@@ -160,6 +160,44 @@ describe("OAuth login (e2e)", () => {
 
   // ── OAuth callback ─────────────────────────────────────────────
 
+  it("rejects a callback missing the code parameter", async () => {
+    const result = await httpRequest(app)
+      .get("/auth/oauth/callback")
+      .query({ state: "some-state", provider: "github" })
+      .expect(200);
+      
+    const failure = expectFailure(result.body);
+    assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
+  });
+
+  it("rejects a callback missing the state parameter", async () => {
+    const result = await httpRequest(app)
+      .get("/auth/oauth/callback")
+      .query({ code: "good-code", provider: "github" })
+      .expect(200);
+      
+    const failure = expectFailure(result.body);
+    assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
+  });
+
+  it("successful OAuth login does not create any RepositoryConnection as side effect", async () => {
+    await seedLinkedUser({
+      emailVerified: true,
+      providerAccountId: "side-effect-test",
+      membershipStatus: "active",
+    });
+    const state = await startOAuthFlow();
+    mockGithubFetch("side-effect-test");
+
+    await httpRequest(app)
+      .get("/auth/oauth/callback")
+      .query({ code: "good-code", state, provider: "github" })
+      .expect(200);
+
+    const count = await prisma.repositoryConnection.count();
+    assert.equal(count, 0);
+  });
+
   it("completes login for a linked, verified account with exactly one active membership", async () => {
     const userId = await seedLinkedUser({
       emailVerified: true,

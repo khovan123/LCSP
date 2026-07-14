@@ -15,7 +15,7 @@ import { AuditModule } from "./platform/audit/audit.module.ts";
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [".env.test", ".env"],
+      envFilePath: process.env.NODE_ENV === "test" ? [".env.test", ".env"] : [".env"],
       load: [config],
       validationSchema: configValidationSchema,
       validationOptions: { abortEarly: false, allowUnknown: true },
