@@ -17,7 +17,7 @@ const apiRoot = resolve(testSupportDir, "../..");
 
 export const TEST_DATABASE_URL =
   process.env.DATABASE_URL ??
-  "postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public";
+  "postgresql://postgres:postgres@127.0.0.1:54322/lcsp_api_test?schema=public";
 
 export type AuthFixture = {
   organizationId: string;
