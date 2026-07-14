@@ -71,8 +71,12 @@ describe("OAuth login (e2e)", () => {
   });
 
   afterAll(async () => {
-    await app.close();
-    await prisma.$disconnect();
+    if (app) {
+      await app.close();
+    }
+    if (prisma) {
+      await prisma.$disconnect();
+    }
   });
 
   // ── OAuth start ────────────────────────────────────────────────
@@ -109,10 +113,20 @@ describe("OAuth login (e2e)", () => {
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidRedirectUri);
   });
 
-  it("missing request parameters are rejected", async () => {
+  it("missing redirect_uri is rejected", async () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ provider: "github" })
+      .expect(200);
+
+    const failure = expectFailure(result.body);
+    assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
+  });
+
+  it("missing provider is rejected", async () => {
+    const result = await httpRequest(app)
+      .get("/auth/oauth/start")
+      .query({ redirect_uri: ALLOWED_REDIRECT_URI })
       .expect(200);
 
     const failure = expectFailure(result.body);

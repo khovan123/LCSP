@@ -8,17 +8,17 @@
   "scripts": {
     "build": "pnpm run prisma:generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "prisma:generate": "XDG_CACHE_HOME=.cache prisma generate",
+    "prisma:generate": "cross-env XDG_CACHE_HOME=.cache prisma generate",
     "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
+    "start:dev": "nest start --watch --exec tsx",
+    "start:debug": "nest start --debug --watch --exec tsx",
     "start:prod": "node dist/src/main.js",
     "lint": "eslint \"{src,test}/**/*.ts\"",
-    "test": "NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./jest.config.ts",
-    "test:watch": "NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./jest.config.ts --watch",
-    "test:cov": "NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./jest.config.ts --coverage",
-    "test:debug": "NODE_OPTIONS=--experimental-vm-modules node --inspect-brk -r tsconfig-paths/register -r ts-node/register ../../node_modules/.bin/jest --config ./jest.config.ts --runInBand",
-    "test:e2e": "node ./test/scripts/ensure-test-postgres.mjs && DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./test/jest-e2e.ts"
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./jest.config.ts",
+    "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./jest.config.ts --watch",
+    "test:cov": "cross-env NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./jest.config.ts --coverage",
+    "test:debug": "cross-env NODE_OPTIONS=--experimental-vm-modules node --inspect-brk -r tsconfig-paths/register -r ts-node/register ../../node_modules/.bin/jest --config ./jest.config.ts --runInBand",
+    "test:e2e": "node ./test/scripts/ensure-test-postgres.mjs && cross-env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./test/jest-e2e.ts"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -53,6 +53,7 @@
     "@types/jest": "^30.0.0",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^7.0.0",
+    "cross-env": "^10.1.0",
     "dotenv": "^16.6.1",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
@@ -67,6 +68,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.23.1",
     "typescript-eslint": "^8.20.0"
   }
 }
