@@ -171,6 +171,6 @@ def test_t07_secrets_redacted_from_logs(config, pbac_mock, channel_mock, method_
     logger.info("test_secret", token="super-secret-123", api_key="secret-key")
 
     captured = capsys.readouterr()
-    assert "***REDACTED***" in captured.out
+    assert "[REDACTED]" in captured.out
     assert "super-secret-123" not in captured.out
     assert "secret-key" not in captured.out

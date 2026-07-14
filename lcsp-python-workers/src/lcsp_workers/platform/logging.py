@@ -1,16 +1,16 @@
 import structlog
 from lcsp_workers.platform.correlation import get_correlation_id
+from lcsp_workers.platform.redaction import redact_dict
+
 
 def _inject_correlation_id(logger, method_name, event_dict):
     event_dict["correlation_id"] = get_correlation_id()
     return event_dict
 
+
 def _redact_secrets(logger, method_name, event_dict):
-    SECRET_KEYS = {"password", "token", "secret", "api_key", "authorization"}
-    for key in list(event_dict.keys()):
-        if key.lower() in SECRET_KEYS:
-            event_dict[key] = "***REDACTED***"
-    return event_dict
+    return redact_dict(event_dict)
+
 
 def configure_logging(level: str = "INFO") -> None:
     structlog.configure(
@@ -27,6 +27,7 @@ def configure_logging(level: str = "INFO") -> None:
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
+
 
 def get_logger(name: str):
     return structlog.get_logger(name)
