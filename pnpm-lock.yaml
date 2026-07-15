@@ -150,6 +150,12 @@ importers:
 
   apps/web:
     dependencies:
+      '@lcsp/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@lcsp/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@base-ui/react':
         specifier: ^1.6.0
         version: 1.6.0(@types/react@19.2.17)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -214,7 +220,11 @@ importers:
 
   packages/contracts: {}
 
-  packages/i18n: {}
+  packages/i18n:
+    dependencies:
+      '@lcsp/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
 packages:
 

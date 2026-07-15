@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 const REPO_ROOT = process.cwd();
@@ -7,6 +7,10 @@ const SCAN_ROOTS = [...SOURCE_ROOTS, resolve(REPO_ROOT, "tests")];
 const SOURCE_FILE_PATTERN = /\.(ts|tsx)$/;
 const SOURCE_PATH_PATTERN = /(?:^|[/\\])(?:apps|packages)[/\\][^"'`]+[/\\]src[/\\]/;
 const PACKAGE_SOURCE_PATH_PATTERN = /^@lcsp\/[^"'`]+\/src\//;
+const FIX_MODE = process.argv.includes("--fix");
+const IMPORT_POLICY_FILES = process.env.IMPORT_POLICY_FILES?.split(/\s+/)
+  .map((filePath) => filePath.trim())
+  .filter(Boolean);
 
 function listFiles(directory) {
   const entries = readdirSync(directory, { withFileTypes: true });
@@ -32,7 +36,25 @@ function listFiles(directory) {
   return files;
 }
 
+function scanFiles() {
+  if (IMPORT_POLICY_FILES && IMPORT_POLICY_FILES.length > 0) {
+    return IMPORT_POLICY_FILES.map((filePath) => resolve(REPO_ROOT, filePath)).filter(
+      (filePath) =>
+        existsSync(filePath) &&
+        SOURCE_FILE_PATTERN.test(filePath) &&
+        SCAN_ROOTS.some((root) => filePath.startsWith(root + "/") || filePath === root),
+    );
+  }
+
+  return SCAN_ROOTS.flatMap((root) => listFiles(root));
+}
+
 function findNearestPackageName(filePath) {
+  const packageJson = findNearestPackageJson(filePath);
+  return typeof packageJson?.name === "string" ? packageJson.name : null;
+}
+
+function findNearestPackageJson(filePath) {
   let currentDirectory = dirname(filePath);
 
   while (currentDirectory.startsWith(REPO_ROOT)) {
@@ -41,7 +63,7 @@ function findNearestPackageName(filePath) {
     try {
       if (statSync(packageJsonPath).isFile()) {
         const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
-        return typeof packageJson.name === "string" ? packageJson.name : null;
+        return { ...packageJson, root: currentDirectory };
       }
     } catch {
       // Keep walking until the repo root.
@@ -83,30 +105,154 @@ function findNearestPackageRoot(filePath) {
   return null;
 }
 
-function extractSpecifiers(sourceText) {
-  const specifiers = [];
-  const pattern = /(?:^|\n)\s*(?:import|export)\s+(?:type\s+)?(?:[^"'`\n]+?\s+from\s+)?["']([^"']+)["']/g;
+function extractSpecifierMatches(sourceText) {
+  const matches = [];
+  const pattern = /(?:^|\n)\s*(?:import|export)\s+(?:type\s+)?(?:[^"'`\n]+?\s+from\s+)?(["'])([^"']+)\1/g;
 
   for (const match of sourceText.matchAll(pattern)) {
-    specifiers.push(match[1]);
+    matches.push({
+      specifier: match[2],
+      start: match.index + match[0].lastIndexOf(match[2]),
+      end: match.index + match[0].lastIndexOf(match[2]) + match[2].length,
+    });
   }
 
-  return specifiers;
+  return matches;
 }
 
 function isUnderSourceRoot(filePath) {
   return SOURCE_ROOTS.some((root) => filePath.startsWith(root + "/") || filePath === root);
 }
 
-const violations = [];
+function normalizeSpecifier(filePath) {
+  const normalized = filePath.replace(/\\/g, "/").replace(/\.(tsx?|jsx?)$/, "");
+  return normalized.startsWith(".") ? normalized : `./${normalized}`;
+}
 
-for (const root of SCAN_ROOTS) {
-  for (const filePath of listFiles(root)) {
+function relativeSpecifier(fromFilePath, toFilePath) {
+  return normalizeSpecifier(relative(dirname(fromFilePath), toFilePath));
+}
+
+function candidateSourceFile(packageRoot, packageSubpath) {
+  const sourceSubpath = packageSubpath === "." ? "index" : packageSubpath.replace(/^\.\//, "");
+  const candidates = [
+    resolve(packageRoot, "src", `${sourceSubpath}.ts`),
+    resolve(packageRoot, "src", `${sourceSubpath}.tsx`),
+    resolve(packageRoot, "src", sourceSubpath, "index.ts"),
+    resolve(packageRoot, "src", sourceSubpath, "index.tsx"),
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+function packageExportForSourcePath(packageJson, sourcePath) {
+  const exports = packageJson?.exports;
+  if (!exports || typeof exports !== "object" || Array.isArray(exports)) {
+    return null;
+  }
+
+  const normalizedSourcePath = `./${relative(packageJson.root, sourcePath).replace(/\\/g, "/")}`;
+
+  for (const [exportPath, targetPath] of Object.entries(exports)) {
+    if (typeof targetPath === "string" && targetPath === normalizedSourcePath) {
+      return exportPath === "." ? packageJson.name : `${packageJson.name}/${exportPath.replace(/^\.\//, "")}`;
+    }
+  }
+
+  return null;
+}
+
+function resolveImportTarget(importerPath, specifier) {
+  const resolved = resolve(dirname(importerPath), specifier);
+  const candidates = [
+    resolved,
+    `${resolved}.ts`,
+    `${resolved}.tsx`,
+    join(resolved, "index.ts"),
+    join(resolved, "index.tsx"),
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? resolved;
+}
+
+function safeFixForSpecifier(filePath, specifier, packageName, packageRoot) {
+  if (!isUnderSourceRoot(filePath)) {
+    return null;
+  }
+
+  if (packageName && packageRoot && (specifier === packageName || specifier.startsWith(`${packageName}/`))) {
+    const packageSubpath = specifier === packageName ? "." : `./${specifier.slice(packageName.length + 1)}`;
+    const targetFilePath = candidateSourceFile(packageRoot, packageSubpath);
+
+    if (!targetFilePath) {
+      return null;
+    }
+
+    return {
+      specifier: relativeSpecifier(filePath, targetFilePath),
+      reason: `self-import "${specifier}" -> internal relative import`,
+    };
+  }
+
+  if (specifier.startsWith("./") || specifier.startsWith("../")) {
+    const targetFilePath = resolveImportTarget(filePath, specifier);
+    const targetPackageJson = findNearestPackageJson(targetFilePath);
+
+    if (!targetPackageJson || !targetPackageJson.root || targetPackageJson.root === packageRoot) {
+      return null;
+    }
+
+    const publicExportSpecifier = packageExportForSourcePath(targetPackageJson, targetFilePath);
+
+    if (!publicExportSpecifier) {
+      return null;
+    }
+
+    return {
+      specifier: publicExportSpecifier,
+      reason: `cross-package relative import "${specifier}" -> public package export`,
+    };
+  }
+
+  return null;
+}
+
+function applyReplacements(sourceText, replacements) {
+  let fixedText = sourceText;
+
+  for (const replacement of replacements.sort((left, right) => right.start - left.start)) {
+    fixedText = `${fixedText.slice(0, replacement.start)}${replacement.specifier}${fixedText.slice(replacement.end)}`;
+  }
+
+  return fixedText;
+}
+
+const violations = [];
+const fixes = [];
+
+for (const filePath of scanFiles()) {
     const sourceText = readFileSync(filePath, "utf8");
     const packageName = findNearestPackageName(filePath);
     const packageRoot = findNearestPackageRoot(filePath);
+    const replacements = [];
 
-    for (const specifier of extractSpecifiers(sourceText)) {
+    for (const match of extractSpecifierMatches(sourceText)) {
+      const { specifier } = match;
+      const safeFix = safeFixForSpecifier(filePath, specifier, packageName, packageRoot);
+
+      if (FIX_MODE && safeFix) {
+        replacements.push({
+          start: match.start,
+          end: match.end,
+          specifier: safeFix.specifier,
+        });
+        fixes.push({
+          filePath,
+          message: safeFix.reason,
+        });
+        continue;
+      }
+
       if (isUnderSourceRoot(filePath) && (specifier.startsWith("./") || specifier.startsWith("../"))) {
         const resolvedImportPath = resolve(dirname(filePath), specifier);
         const leavesPackageBoundary =
@@ -115,7 +261,7 @@ for (const root of SCAN_ROOTS) {
         if (leavesPackageBoundary) {
           violations.push({
             filePath,
-            message: `relative workspace import/export "${specifier}" leaves the current app/package boundary and is not allowed`
+            message: `relative workspace import/export "${specifier}" leaves the current app/package boundary and is not allowed`,
           });
         }
       }
@@ -127,18 +273,31 @@ for (const root of SCAN_ROOTS) {
       ) {
         violations.push({
           filePath,
-          message: `self-import "${specifier}" is not allowed inside ${packageName}; use internal relative imports within the current app/package instead`
+          message: `self-import "${specifier}" is not allowed inside ${packageName}; use internal relative imports within the current app/package instead`,
         });
       }
 
       if (SOURCE_PATH_PATTERN.test(specifier) || PACKAGE_SOURCE_PATH_PATTERN.test(specifier)) {
         violations.push({
           filePath,
-          message: `direct workspace source-path import "${specifier}" is not allowed; import via public package/app exports instead`
+          message: `direct workspace source-path import "${specifier}" is not allowed; import via public package/app exports instead`,
         });
       }
     }
+
+    if (FIX_MODE && replacements.length > 0) {
+      writeFileSync(filePath, applyReplacements(sourceText, replacements));
+    }
+}
+
+if (FIX_MODE && fixes.length > 0) {
+  console.log("Import policy safe fixes applied:\n");
+
+  for (const fix of fixes) {
+    console.log(`- ${relative(REPO_ROOT, fix.filePath)}: ${fix.message}`);
   }
+
+  console.log("");
 }
 
 if (violations.length > 0) {
