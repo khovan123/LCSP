@@ -44,8 +44,8 @@ jobs:
             )];
 
             if (issueKeys.length === 0) {
-              core.setFailed(
-                `Missing Jira issue key in PR title. Add a ${projectKey}-123 style key to the PR title.`,
+              core.warning(
+                `No Jira issue key detected in PR title. Skipping Jira link/prefill workflow. Add a ${projectKey}-123 style key to enable it.`,
               );
               return;
             }
