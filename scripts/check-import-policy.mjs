@@ -8,6 +8,9 @@ const SOURCE_FILE_PATTERN = /\.(ts|tsx)$/;
 const SOURCE_PATH_PATTERN = /(?:^|[/\\])(?:apps|packages)[/\\][^"'`]+[/\\]src[/\\]/;
 const PACKAGE_SOURCE_PATH_PATTERN = /^@lcsp\/[^"'`]+\/src\//;
 const FIX_MODE = process.argv.includes("--fix");
+const IMPORT_POLICY_FILES = process.env.IMPORT_POLICY_FILES?.split(/\s+/)
+  .map((filePath) => filePath.trim())
+  .filter(Boolean);
 
 function listFiles(directory) {
   const entries = readdirSync(directory, { withFileTypes: true });
@@ -31,6 +34,19 @@ function listFiles(directory) {
   }
 
   return files;
+}
+
+function scanFiles() {
+  if (IMPORT_POLICY_FILES && IMPORT_POLICY_FILES.length > 0) {
+    return IMPORT_POLICY_FILES.map((filePath) => resolve(REPO_ROOT, filePath)).filter(
+      (filePath) =>
+        existsSync(filePath) &&
+        SOURCE_FILE_PATTERN.test(filePath) &&
+        SCAN_ROOTS.some((root) => filePath.startsWith(root + "/") || filePath === root),
+    );
+  }
+
+  return SCAN_ROOTS.flatMap((root) => listFiles(root));
 }
 
 function findNearestPackageName(filePath) {
@@ -214,8 +230,7 @@ function applyReplacements(sourceText, replacements) {
 const violations = [];
 const fixes = [];
 
-for (const root of SCAN_ROOTS) {
-  for (const filePath of listFiles(root)) {
+for (const filePath of scanFiles()) {
     const sourceText = readFileSync(filePath, "utf8");
     const packageName = findNearestPackageName(filePath);
     const packageRoot = findNearestPackageRoot(filePath);
@@ -273,7 +288,6 @@ for (const root of SCAN_ROOTS) {
     if (FIX_MODE && replacements.length > 0) {
       writeFileSync(filePath, applyReplacements(sourceText, replacements));
     }
-  }
 }
 
 if (FIX_MODE && fixes.length > 0) {

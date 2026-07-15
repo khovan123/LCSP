@@ -17,7 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       api: ${{ steps.filter.outputs.api }}
+      api_files: ${{ steps.filter.outputs.api_files }}
       web: ${{ steps.filter.outputs.web }}
+      web_files: ${{ steps.filter.outputs.web_files }}
       python: ${{ steps.filter.outputs.python }}
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +27,7 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          list-files: shell
           filters: |
             api:
               - '.github/workflows/check-changed.yml'
@@ -75,16 +78,28 @@ jobs:
       - name: Auto-fix import policy
         if: needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true'
         run: pnpm run check:imports -- --fix
+        env:
+          IMPORT_POLICY_FILES: |
+            ${{ needs.changes.outputs.api_files }}
+            ${{ needs.changes.outputs.web_files }}
 
       - name: Auto-fix API lint
         if: needs.changes.outputs.api == 'true'
         continue-on-error: true
-        run: pnpm --filter @lcsp/api exec eslint "{src,test}/**/*.ts" --fix
+        run: |
+          files="$(printf '%s\n' ${{ needs.changes.outputs.api_files }} | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }')"
+          if [ -n "$files" ]; then
+            pnpm --dir apps/api exec eslint $files --fix
+          fi
 
       - name: Auto-fix web lint
         if: needs.changes.outputs.web == 'true'
         continue-on-error: true
-        run: pnpm --filter @lcsp/web exec eslint --fix
+        run: |
+          files="$(printf '%s\n' ${{ needs.changes.outputs.web_files }} | awk '/^apps\/web\/.*\.(ts|tsx)$/ { sub("^apps/web/", ""); print }')"
+          if [ -n "$files" ]; then
+            pnpm --dir apps/web exec eslint $files --fix
+          fi
 
       - name: Commit auto-fixes
         if: github.event_name == 'pull_request' && (needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true')
