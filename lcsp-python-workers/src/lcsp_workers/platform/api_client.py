@@ -2,6 +2,16 @@ import time
 import httpx
 from structlog import get_logger
 
+from lcsp_workers.platform.api_client_contracts import (
+    CORRELATION_ID_HEADER,
+    WORKER_API_KEY_HEADER,
+    CallbackLogEvent,
+    CallbackPath,
+    client_error_message,
+    network_error_message,
+    server_error_message,
+    unexpected_error_message,
+)
 from lcsp_workers.platform.correlation import get_correlation_id
 from lcsp_workers.platform.redaction import redact_dict, redact_source_code
 from lcsp_workers.platform.callback_schemas import (
@@ -38,8 +48,8 @@ class WorkerApiClient:
         url = f"{self._base_url}{path}"
         cid = get_correlation_id()
         headers = {
-            "X-Worker-Api-Key": self._api_key,
-            "X-Correlation-Id": cid,
+            WORKER_API_KEY_HEADER: self._api_key,
+            CORRELATION_ID_HEADER: cid,
         }
         safe_payload = self._redact_callback_payload(payload)
 
@@ -55,20 +65,18 @@ class WorkerApiClient:
                 # Check for 4xx errors (client error, do not retry)
                 if 400 <= resp.status_code < 500:
                     logger.error(
-                        "API_CALLBACK_CLIENT_ERROR",
+                        CallbackLogEvent.CLIENT_ERROR,
                         path=path,
                         status_code=resp.status_code,
                     )
-                    raise WorkerCallbackError(
-                        f"Callback failed with client error {resp.status_code}."
-                    )
+                    raise WorkerCallbackError(client_error_message(resp.status_code))
 
                 # Check for 5xx errors (server error, retry)
                 if resp.status_code >= 500:
                     if attempt < self._max_retries - 1:
                         backoff = 2 ** attempt
                         logger.warning(
-                            "API_CALLBACK_SERVER_ERROR_RETRYING",
+                            CallbackLogEvent.SERVER_ERROR_RETRYING,
                             path=path,
                             status_code=resp.status_code,
                             attempt=attempt + 1,
@@ -78,13 +86,12 @@ class WorkerApiClient:
                         continue
                     else:
                         logger.error(
-                            "API_CALLBACK_SERVER_ERROR_TERMINAL",
+                            CallbackLogEvent.SERVER_ERROR_TERMINAL,
                             path=path,
                             status_code=resp.status_code,
                         )
                         raise WorkerCallbackError(
-                            f"Callback failed after {self._max_retries} attempts "
-                            f"with server error {resp.status_code}."
+                            server_error_message(self._max_retries, resp.status_code)
                         )
 
                 # Success
@@ -94,7 +101,7 @@ class WorkerApiClient:
                 if attempt < self._max_retries - 1:
                     backoff = 2 ** attempt
                     logger.warning(
-                        "API_CALLBACK_NETWORK_ERROR_RETRYING",
+                        CallbackLogEvent.NETWORK_ERROR_RETRYING,
                         path=path,
                         error=type(exc).__name__,
                         attempt=attempt + 1,
@@ -104,17 +111,14 @@ class WorkerApiClient:
                     continue
                 else:
                     logger.error(
-                        "API_CALLBACK_NETWORK_ERROR_TERMINAL",
+                        CallbackLogEvent.NETWORK_ERROR_TERMINAL,
                         path=path,
                         error=type(exc).__name__,
                     )
-                    raise WorkerCallbackError(
-                        "Callback network request failed after "
-                        f"{self._max_retries} attempts."
-                    )
+                    raise WorkerCallbackError(network_error_message(self._max_retries))
 
         # Should not reach here
-        raise WorkerCallbackError("Callback failed unexpectedly.")
+        raise WorkerCallbackError(unexpected_error_message())
 
     def _redact_callback_payload(self, payload: dict) -> dict:
         safe_payload = dict(payload)
@@ -128,41 +132,41 @@ class WorkerApiClient:
     def post_scan_callback(
         self, scan_job_id: str, payload: ScanCallbackPayload
     ) -> CallbackResponse:
-        path = f"/internal/callbacks/scan/{scan_job_id}"
+        path = CallbackPath.SCAN.format(scan_job_id=scan_job_id)
         resp_data = self._post_with_retry(path, payload.model_dump())
         return CallbackResponse(**resp_data)
 
     def post_technical_profile_callback(
         self, payload: TechnicalProfileCallbackPayload
     ) -> CallbackResponse:
-        path = "/internal/callbacks/technical-profile"
+        path = CallbackPath.TECHNICAL_PROFILE
         resp_data = self._post_with_retry(path, payload.model_dump())
         return CallbackResponse(**resp_data)
 
     def post_ai_usage_flow_callback(
         self, payload: AIUsageFlowCallbackPayload
     ) -> CallbackResponse:
-        path = "/internal/callbacks/ai-usage-flow"
+        path = CallbackPath.AI_USAGE_FLOW
         resp_data = self._post_with_retry(path, payload.model_dump())
         return CallbackResponse(**resp_data)
 
     def post_verified_profile_callback(
         self, payload: VerifiedProfileCallbackPayload
     ) -> CallbackResponse:
-        path = "/internal/callbacks/verified-profile"
+        path = CallbackPath.VERIFIED_PROFILE
         resp_data = self._post_with_retry(path, payload.model_dump())
         return CallbackResponse(**resp_data)
 
     def post_legal_rule_match_callback(
         self, payload: LegalRuleMatchCallbackPayload
     ) -> CallbackResponse:
-        path = "/internal/callbacks/legal-rule-match"
+        path = CallbackPath.LEGAL_RULE_MATCH
         resp_data = self._post_with_retry(path, payload.model_dump())
         return CallbackResponse(**resp_data)
 
     def post_classification_callback(
         self, payload: ClassificationCallbackPayload
     ) -> CallbackResponse:
-        path = "/internal/callbacks/classification"
+        path = CallbackPath.CLASSIFICATION
         resp_data = self._post_with_retry(path, payload.model_dump())
         return CallbackResponse(**resp_data)
