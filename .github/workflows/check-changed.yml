@@ -156,6 +156,8 @@ jobs:
 
       - name: Build API
         run: pnpm --filter @lcsp/api build
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/lcsp_api_test?schema=public
 
   web:
     name: Web checks
