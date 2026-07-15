@@ -146,6 +146,11 @@ jobs:
             echo "No changed API TypeScript files to lint."
           fi
 
+      - name: Generate Prisma client
+        run: pnpm --filter @lcsp/api prisma:generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/lcsp_api_test?schema=public
+
       - name: Test API
         run: pnpm --filter @lcsp/api test
 
