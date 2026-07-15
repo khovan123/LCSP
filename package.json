@@ -6,7 +6,9 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "check:imports": "node scripts/check-import-policy.mjs",
+    "check:branch": "node scripts/check-branch-name.mjs",
     "lint": "pnpm run check:imports && pnpm run typecheck",
+    "prepare": "husky",
     "test": "pnpm run test:web && pnpm --filter @lcsp/api test:e2e",
     "test:web": "node --test tests/*.web.test.ts",
     "typecheck": "pnpm --filter @lcsp/api prisma:generate && pnpm exec tsc -b"
@@ -14,6 +16,7 @@
   "devDependencies": {
     "@prisma/compute-sdk": "^0.33.0",
     "@types/node": "^22.15.30",
+    "husky": "^9.1.7",
     "typescript": "^5.8.0"
   }
 }
