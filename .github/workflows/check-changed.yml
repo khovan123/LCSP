@@ -138,7 +138,13 @@ jobs:
         run: pnpm run check:imports
 
       - name: Lint API
-        run: pnpm --filter @lcsp/api lint
+        run: |
+          files="$(printf '%s\n' ${{ needs.changes.outputs.api_files }} | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }')"
+          if [ -n "$files" ]; then
+            pnpm --dir apps/api exec eslint $files
+          else
+            echo "No changed API TypeScript files to lint."
+          fi
 
       - name: Test API
         run: pnpm --filter @lcsp/api test
@@ -173,7 +179,13 @@ jobs:
         run: pnpm run check:imports
 
       - name: Lint web
-        run: pnpm --filter @lcsp/web lint
+        run: |
+          files="$(printf '%s\n' ${{ needs.changes.outputs.web_files }} | awk '/^apps\/web\/.*\.(ts|tsx)$/ { sub("^apps/web/", ""); print }')"
+          if [ -n "$files" ]; then
+            pnpm --dir apps/web exec eslint $files
+          else
+            echo "No changed web TypeScript files to lint."
+          fi
 
       - name: Build web
         run: pnpm --filter @lcsp/web build
