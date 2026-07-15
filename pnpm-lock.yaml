@@ -220,7 +220,11 @@ importers:
 
   packages/contracts: {}
 
-  packages/i18n: {}
+  packages/i18n:
+    dependencies:
+      '@lcsp/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
 packages:
 
