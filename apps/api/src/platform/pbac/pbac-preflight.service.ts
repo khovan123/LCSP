@@ -1,4 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import {
+  PBAC_DECISION,
+  PBAC_REASON_CODE,
+  type PbacDecisionValue,
+} from "@lcsp/contracts/pbac";
 
 import {
   PrismaAuthorizationDecisionRepository,
@@ -19,7 +24,7 @@ export interface PbacPreflightInput {
 }
 
 export interface PbacPreflightResult {
-  decision: "allow" | "deny";
+  decision: PbacDecisionValue;
   reasonCode: string | null;
   correlationId: string;
 }
@@ -55,7 +60,7 @@ export class PbacPreflightService {
         input.organizationId,
       );
       if (!membership) {
-        return this.deny(input, "MEMBERSHIP_MISSING");
+        return this.deny(input, PBAC_REASON_CODE.membershipMissing);
       }
 
       const policy = await this.policies.findByIdAndVersion(
@@ -63,7 +68,7 @@ export class PbacPreflightService {
         membership.policyVersion,
       );
       if (!policy) {
-        return this.deny(input, "POLICY_NOT_FOUND");
+        return this.deny(input, PBAC_REASON_CODE.policyNotFound);
       }
 
       const evaluationContext: PbacEvaluationContext = {
@@ -85,9 +90,9 @@ export class PbacPreflightService {
 
       const result = this.evaluator.evaluate(evaluationContext);
       const reasonCode =
-        result.decision === "deny"
-          ? (result.reasonCode ?? "PBAC_DENIED")
-          : "AUTHORIZED";
+        result.decision === PBAC_DECISION.deny
+          ? (result.reasonCode ?? PBAC_REASON_CODE.denied)
+          : PBAC_REASON_CODE.authorized;
 
       await this.recordDecision(
         input,
@@ -99,17 +104,23 @@ export class PbacPreflightService {
 
       return {
         decision: result.decision,
-        reasonCode: result.decision === "deny" ? reasonCode : null,
+        reasonCode: result.decision === PBAC_DECISION.deny ? reasonCode : null,
         correlationId: input.correlationId,
       };
     } catch (error) {
       this.logger.error(
         `PBAC preflight evaluation failed (action=${input.action}): ${(error as Error).message}`,
       );
-      await this.recordDecision(input, "deny", "LOAD_ERROR", null, null);
+      await this.recordDecision(
+        input,
+        PBAC_DECISION.deny,
+        PBAC_REASON_CODE.loadError,
+        null,
+        null,
+      );
       return {
-        decision: "deny",
-        reasonCode: "LOAD_ERROR",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.loadError,
         correlationId: input.correlationId,
       };
     }
@@ -119,14 +130,24 @@ export class PbacPreflightService {
     input: PbacPreflightInput,
     reasonCode: string,
   ): Promise<PbacPreflightResult> {
-    await this.recordDecision(input, "deny", reasonCode, null, null);
-    return { decision: "deny", reasonCode, correlationId: input.correlationId };
+    await this.recordDecision(
+      input,
+      PBAC_DECISION.deny,
+      reasonCode,
+      null,
+      null,
+    );
+    return {
+      decision: PBAC_DECISION.deny,
+      reasonCode,
+      correlationId: input.correlationId,
+    };
   }
 
   /** Never throws — a decision-log write failure must not change the allow/deny outcome. */
   private async recordDecision(
     input: PbacPreflightInput,
-    decision: "allow" | "deny",
+    decision: PbacDecisionValue,
     reasonCode: string,
     policyId: string | null,
     policyVersion: string | null,

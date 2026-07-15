@@ -145,9 +145,9 @@ export class AuthWorkspaceController {
   @UseGuards(PbacGuard)
   @RequireSession()
   getWorkspace(
-    @Query("organization_id") organizationId: string | undefined,
-    @Headers("authorization") authorization: string | undefined,
     @Req() request: AuthWorkspaceRequest,
+    @Query("organization_id") organizationId?: string,
+    @Headers("authorization") authorization?: string,
   ) {
     const workspaceRequest: WorkspaceRequest = {
       organization_id: organizationId,
