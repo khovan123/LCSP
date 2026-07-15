@@ -1,4 +1,4 @@
-name: Check Changed Areas
+name: autofix.ci
 
 on:
   pull_request:
