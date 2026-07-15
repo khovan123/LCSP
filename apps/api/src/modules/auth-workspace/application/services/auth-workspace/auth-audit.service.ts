@@ -1,14 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import type { AuditDecision, AuditEventInput } from "@lcsp/contracts/audit";
+import {
+  AUTH_AUDIT_EVENT_TYPES,
+  type AuthAuditEventType,
+} from "@lcsp/contracts/auth";
 
 import { AuditSanitizer } from "../../../../../platform/audit/audit-sanitizer.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import type { AuditEvent } from "../../../domain/models/auth-workspace.models.ts";
-import {
-  AUTH_AUDIT_EVENT_TYPES,
-  type AuthAuditEventType,
-} from "./audit-event-types.js";
 
 export type AuthAuditEventInput = {
   eventType: AuthAuditEventType;

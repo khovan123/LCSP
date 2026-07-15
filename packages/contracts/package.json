@@ -12,6 +12,7 @@
     "./audit/audit-event.types": "./src/audit/audit-event.types.ts",
     "./auth": "./src/auth/index.ts",
     "./auth/actions": "./src/auth/actions.ts",
+    "./auth/audit-event-types": "./src/auth/audit-event-types.ts",
     "./auth/codes": "./src/auth/codes.ts",
     "./auth/problems": "./src/auth/problems.ts",
     "./auth/redact": "./src/auth/redact.ts",

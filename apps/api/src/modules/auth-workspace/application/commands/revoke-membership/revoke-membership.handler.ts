@@ -1,11 +1,13 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import {
+  AUTH_AUDIT_EVENT_TYPES,
+  REVOKE_MEMBERSHIP_ERROR_CODES,
+} from "@lcsp/contracts/auth";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
-import { REVOKE_MEMBERSHIP_ERROR_CODES } from "@lcsp/contracts/auth";
 import { createCorrelationId } from "../../../infrastructure/security/security.utils.ts";
 import { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
-import { AUTH_AUDIT_EVENT_TYPES } from "../../services/auth-workspace/audit-event-types.ts";
 import type {
   RevokeMembershipErrorCode,
   RevokeMembershipResponse,

@@ -6,9 +6,12 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import {
+  ACCEPT_INVITATION_ERROR_CODES,
+  AUTH_AUDIT_EVENT_TYPES,
+} from "@lcsp/contracts/auth";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
-import { ACCEPT_INVITATION_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   createCorrelationId,
   fingerprintToken,
@@ -20,7 +23,6 @@ import type {
   AcceptInvitationResponse,
 } from "../../contracts/auth-workspace/accept-invitation.contract.ts";
 import { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
-import { AUTH_AUDIT_EVENT_TYPES } from "../../services/auth-workspace/audit-event-types.ts";
 import { AcceptInvitationCommand } from "./accept-invitation.command.ts";
 
 const SESSION_TTL_MS = 8 * 60 * 60_000;

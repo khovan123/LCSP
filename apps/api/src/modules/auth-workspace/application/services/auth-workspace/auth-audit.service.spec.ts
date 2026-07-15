@@ -1,9 +1,9 @@
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
+import { AUTH_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
 
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { AuthAuditService } from "./auth-audit.service.ts";
-import { AUTH_AUDIT_EVENT_TYPES } from "./audit-event-types.ts";
 
 function makeService(
   overrides: {
