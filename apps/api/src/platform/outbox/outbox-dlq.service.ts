@@ -11,7 +11,10 @@ export class OutboxDlqService {
     private readonly auditWriter: AuditWriterService,
   ) {}
 
-  async getDlqMessages(): Promise<{ messages: OutboxMessageEntity[]; count: number }> {
+  async getDlqMessages(): Promise<{
+    messages: OutboxMessageEntity[];
+    count: number;
+  }> {
     const messages = await this.outboxRepository.findDlqMessages();
     return { messages, count: messages.length };
   }
@@ -32,7 +35,10 @@ export class OutboxDlqService {
       resourceId: id,
       decision: "allow",
       correlationId: randomUUID(),
-      payload: { originalEventType: message.eventType, aggregateId: message.aggregateId },
+      payload: {
+        originalEventType: message.eventType,
+        aggregateId: message.aggregateId,
+      },
     });
   }
 
@@ -52,7 +58,10 @@ export class OutboxDlqService {
       resourceId: id,
       decision: "allow",
       correlationId: randomUUID(),
-      payload: { originalEventType: message.eventType, aggregateId: message.aggregateId },
+      payload: {
+        originalEventType: message.eventType,
+        aggregateId: message.aggregateId,
+      },
     });
   }
 }

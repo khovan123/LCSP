@@ -16,9 +16,7 @@ describe("OutboxDlqController", () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [OutboxDlqController],
-      providers: [
-        { provide: OutboxDlqService, useValue: serviceMock },
-      ],
+      providers: [{ provide: OutboxDlqService, useValue: serviceMock }],
     }).compile();
 
     controller = module.get<OutboxDlqController>(OutboxDlqController);
@@ -40,15 +38,18 @@ describe("OutboxDlqController", () => {
     it("should replay message using fallback actorId", async () => {
       const req = { user: null } as unknown as any;
       const result = await controller.replayMessage("1", req);
-      
+
       expect(service.replayMessage).toHaveBeenCalledWith("1", "system-admin");
-      expect(result).toEqual({ success: true, message: "Message 1 queued for replay" });
+      expect(result).toEqual({
+        success: true,
+        message: "Message 1 queued for replay",
+      });
     });
 
     it("should replay message using user's actorId if available", async () => {
       const req = { user: { id: "user-123" } } as unknown as any;
       await controller.replayMessage("1", req);
-      
+
       expect(service.replayMessage).toHaveBeenCalledWith("1", "user-123");
     });
   });
@@ -57,15 +58,18 @@ describe("OutboxDlqController", () => {
     it("should delete message using fallback actorId", async () => {
       const req = { user: null } as unknown as any;
       const result = await controller.deleteMessage("1", req);
-      
+
       expect(service.deleteMessage).toHaveBeenCalledWith("1", "system-admin");
-      expect(result).toEqual({ success: true, message: "Message 1 permanently deleted" });
+      expect(result).toEqual({
+        success: true,
+        message: "Message 1 permanently deleted",
+      });
     });
 
     it("should delete message using user's actorId if available", async () => {
       const req = { user: { id: "user-123" } } as unknown as any;
       await controller.deleteMessage("1", req);
-      
+
       expect(service.deleteMessage).toHaveBeenCalledWith("1", "user-123");
     });
   });
