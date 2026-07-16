@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { PBAC_DECISION, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
 
 import type {
   PbacDecisionResult,
@@ -17,8 +18,8 @@ export class PbacEvaluatorService {
         `PBAC evaluation threw — defaulting to deny: ${(error as Error).message}`,
       );
       return {
-        decision: "deny",
-        reasonCode: "POLICY_NOT_FOUND",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.policyNotFound,
         policyId: ctx?.policy?.id ?? "",
         policyVersion: ctx?.policy?.version ?? "",
       };
@@ -30,8 +31,8 @@ export class PbacEvaluatorService {
 
     if (!policy) {
       return {
-        decision: "deny",
-        reasonCode: "POLICY_NOT_FOUND",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.policyNotFound,
         policyId: "",
         policyVersion: "",
       };
@@ -42,8 +43,8 @@ export class PbacEvaluatorService {
       ctx.membershipStatus !== "active"
     ) {
       return {
-        decision: "deny",
-        reasonCode: "STATE_GATE_FAILED",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.stateGateFailed,
         policyId: policy.id,
         policyVersion: policy.version,
       };
@@ -51,8 +52,8 @@ export class PbacEvaluatorService {
 
     if (ctx.subject.role !== policy.subjectRole) {
       return {
-        decision: "deny",
-        reasonCode: "SUBJECT_ROLE_MISMATCH",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.subjectRoleMismatch,
         policyId: policy.id,
         policyVersion: policy.version,
       };
@@ -60,15 +61,15 @@ export class PbacEvaluatorService {
 
     if (!policy.actions.includes(ctx.action)) {
       return {
-        decision: "deny",
-        reasonCode: "ACTION_NOT_GRANTED",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.actionNotGranted,
         policyId: policy.id,
         policyVersion: policy.version,
       };
     }
 
     return {
-      decision: "allow",
+      decision: PBAC_DECISION.allow,
       policyId: policy.id,
       policyVersion: policy.version,
     };

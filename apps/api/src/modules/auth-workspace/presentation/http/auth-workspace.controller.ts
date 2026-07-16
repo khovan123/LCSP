@@ -34,6 +34,7 @@ import type { UpdateProfilePayload } from "../../application/commands/update-pro
 import { REVOKE_MEMBERSHIP_ERROR_CODES } from "@lcsp/contracts/auth";
 import { AuthWorkspaceFacade } from "../../application/services/auth-workspace/auth-workspace.facade.ts";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
+import { RequireSession } from "../../../../platform/pbac/decorators/require-session.decorator.js";
 import {
   PbacGuard,
   type PbacRequestContext,
@@ -141,27 +142,32 @@ export class AuthWorkspaceController {
   }
 
   @Get("workspace")
+  @UseGuards(PbacGuard)
+  @RequireSession()
   getWorkspace(
+    @Req() request: AuthWorkspaceRequest,
     @Query("organization_id") organizationId?: string,
     @Headers("authorization") authorization?: string,
-    @Headers("x-correlation-id") correlationId?: string,
   ) {
-    const request: WorkspaceRequest = {
+    const workspaceRequest: WorkspaceRequest = {
       organization_id: organizationId,
       session_token: bearerToken(authorization),
-      correlation_id: correlationId,
+      correlation_id: request.correlationId,
     };
-    return this.authWorkspaceFacade.getWorkspace(request);
+    return this.authWorkspaceFacade.getWorkspace(workspaceRequest);
   }
 
   @Post("auth/mfa/enroll")
+  @UseGuards(PbacGuard)
+  @RequireSession()
   enrollMfa(
     @Body() body: { session_token?: string },
-    @Headers("x-correlation-id") correlationId?: string,
+    @Headers("authorization") authorization: string | undefined,
+    @Req() request: AuthWorkspaceRequest,
   ) {
     return this.authWorkspaceFacade.enrollMfa(
-      body.session_token ?? "",
-      requestMeta(correlationId),
+      bearerToken(authorization) ?? body.session_token ?? "",
+      requestMeta(request.correlationId),
     );
   }
 
@@ -178,15 +184,18 @@ export class AuthWorkspaceController {
   }
 
   @Patch("auth/profile")
+  @UseGuards(PbacGuard)
+  @RequireSession()
   updateProfile(
     @Body() body: UpdateProfilePayload & { session_token?: string },
-    @Headers("x-correlation-id") correlationId?: string,
+    @Headers("authorization") authorization: string | undefined,
+    @Req() request: AuthWorkspaceRequest,
   ) {
     const { session_token, ...payload } = body;
     return this.authWorkspaceFacade.updateProfile(
-      session_token ?? "",
+      bearerToken(authorization) ?? session_token ?? "",
       payload,
-      requestMeta(correlationId),
+      requestMeta(request.correlationId),
     );
   }
 
