@@ -8,19 +8,31 @@ import { OutboxMessageEntity } from "./outbox-message.entity.js";
 
 describe("OutboxDlqService", () => {
   let service: OutboxDlqService;
-  let outboxRepository: jest.Mocked<OutboxRepository>;
-  let auditWriter: jest.Mocked<AuditWriterService>;
+  let findDlqMessages: jest.MockedFunction<OutboxRepository["findDlqMessages"]>;
+  let findMessageById: jest.MockedFunction<OutboxRepository["findMessageById"]>;
+  let resetMessageForReplay: jest.MockedFunction<
+    OutboxRepository["resetMessageForReplay"]
+  >;
+  let deleteMessage: jest.MockedFunction<OutboxRepository["deleteMessage"]>;
+  let writeAudit: jest.MockedFunction<AuditWriterService["write"]>;
 
   beforeEach(async () => {
+    findDlqMessages = jest.fn<OutboxRepository["findDlqMessages"]>();
+    findMessageById = jest.fn<OutboxRepository["findMessageById"]>();
+    resetMessageForReplay =
+      jest.fn<OutboxRepository["resetMessageForReplay"]>();
+    deleteMessage = jest.fn<OutboxRepository["deleteMessage"]>();
+    writeAudit = jest.fn<AuditWriterService["write"]>();
+
     const outboxRepositoryMock = {
-      findDlqMessages: jest.fn(),
-      findMessageById: jest.fn(),
-      resetMessageForReplay: jest.fn(),
-      deleteMessage: jest.fn(),
+      findDlqMessages,
+      findMessageById,
+      resetMessageForReplay,
+      deleteMessage,
     };
 
     const auditWriterMock = {
-      write: jest.fn(),
+      write: writeAudit,
       writeInTx: jest.fn(),
     };
 
@@ -33,19 +45,17 @@ describe("OutboxDlqService", () => {
     }).compile();
 
     service = module.get<OutboxDlqService>(OutboxDlqService);
-    outboxRepository = module.get(OutboxRepository);
-    auditWriter = module.get(AuditWriterService);
   });
 
   describe("getDlqMessages", () => {
     it("should return messages and count", async () => {
       const mockMessages = [{ id: "1" } as OutboxMessageEntity];
-      outboxRepository.findDlqMessages.mockResolvedValue(mockMessages);
+      findDlqMessages.mockResolvedValue(mockMessages);
 
       const result = await service.getDlqMessages();
 
       expect(result).toEqual({ messages: mockMessages, count: 1 });
-      expect(outboxRepository.findDlqMessages).toHaveBeenCalled();
+      expect(findDlqMessages).toHaveBeenCalled();
     });
   });
 
@@ -57,12 +67,12 @@ describe("OutboxDlqService", () => {
         eventType: "TEST",
         aggregateId: "123",
       } as OutboxMessageEntity;
-      outboxRepository.findMessageById.mockResolvedValue(mockMessage);
+      findMessageById.mockResolvedValue(mockMessage);
 
       await service.replayMessage("1", "actor-1");
 
-      expect(outboxRepository.resetMessageForReplay).toHaveBeenCalledWith("1");
-      expect(auditWriter.write).toHaveBeenCalledWith(
+      expect(resetMessageForReplay).toHaveBeenCalledWith("1");
+      expect(writeAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: "OUTBOX_DLQ_REPLAYED",
           actorId: "actor-1",
@@ -72,16 +82,16 @@ describe("OutboxDlqService", () => {
 
     it("should throw NotFoundException if message is not in DLQ", async () => {
       const mockMessage = { id: "1", status: "failed" } as OutboxMessageEntity;
-      outboxRepository.findMessageById.mockResolvedValue(mockMessage);
+      findMessageById.mockResolvedValue(mockMessage);
 
       await expect(service.replayMessage("1", "actor-1")).rejects.toThrow(
         NotFoundException,
       );
-      expect(outboxRepository.resetMessageForReplay).not.toHaveBeenCalled();
+      expect(resetMessageForReplay).not.toHaveBeenCalled();
     });
 
     it("should throw NotFoundException if message does not exist", async () => {
-      outboxRepository.findMessageById.mockResolvedValue(null);
+      findMessageById.mockResolvedValue(null);
 
       await expect(service.replayMessage("1", "actor-1")).rejects.toThrow(
         NotFoundException,
@@ -97,12 +107,12 @@ describe("OutboxDlqService", () => {
         eventType: "TEST",
         aggregateId: "123",
       } as OutboxMessageEntity;
-      outboxRepository.findMessageById.mockResolvedValue(mockMessage);
+      findMessageById.mockResolvedValue(mockMessage);
 
       await service.deleteMessage("1", "actor-1");
 
-      expect(outboxRepository.deleteMessage).toHaveBeenCalledWith("1");
-      expect(auditWriter.write).toHaveBeenCalledWith(
+      expect(deleteMessage).toHaveBeenCalledWith("1");
+      expect(writeAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: "OUTBOX_DLQ_DISCARDED",
           actorId: "actor-1",
@@ -115,12 +125,12 @@ describe("OutboxDlqService", () => {
         id: "1",
         status: "published",
       } as OutboxMessageEntity;
-      outboxRepository.findMessageById.mockResolvedValue(mockMessage);
+      findMessageById.mockResolvedValue(mockMessage);
 
       await expect(service.deleteMessage("1", "actor-1")).rejects.toThrow(
         NotFoundException,
       );
-      expect(outboxRepository.deleteMessage).not.toHaveBeenCalled();
+      expect(deleteMessage).not.toHaveBeenCalled();
     });
   });
 });

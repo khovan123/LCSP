@@ -5,13 +5,21 @@ import { OutboxDlqService } from "./outbox-dlq.service.js";
 
 describe("OutboxDlqController", () => {
   let controller: OutboxDlqController;
-  let service: jest.Mocked<OutboxDlqService>;
+  let getDlqMessages: jest.MockedFunction<OutboxDlqService["getDlqMessages"]>;
+  let replayMessage: jest.MockedFunction<OutboxDlqService["replayMessage"]>;
+  let deleteMessage: jest.MockedFunction<OutboxDlqService["deleteMessage"]>;
+
+  type ControllerRequest = Parameters<OutboxDlqController["replayMessage"]>[1];
 
   beforeEach(async () => {
+    getDlqMessages = jest.fn<OutboxDlqService["getDlqMessages"]>();
+    replayMessage = jest.fn<OutboxDlqService["replayMessage"]>();
+    deleteMessage = jest.fn<OutboxDlqService["deleteMessage"]>();
+
     const serviceMock = {
-      getDlqMessages: jest.fn(),
-      replayMessage: jest.fn(),
-      deleteMessage: jest.fn(),
+      getDlqMessages,
+      replayMessage,
+      deleteMessage,
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -20,26 +28,25 @@ describe("OutboxDlqController", () => {
     }).compile();
 
     controller = module.get<OutboxDlqController>(OutboxDlqController);
-    service = module.get(OutboxDlqService);
   });
 
   describe("getDlqMessages", () => {
     it("should return DLQ messages", async () => {
       const mockResult = { messages: [], count: 0 };
-      service.getDlqMessages.mockResolvedValue(mockResult);
+      getDlqMessages.mockResolvedValue(mockResult);
 
       const result = await controller.getDlqMessages();
       expect(result).toEqual(mockResult);
-      expect(service.getDlqMessages).toHaveBeenCalled();
+      expect(getDlqMessages).toHaveBeenCalled();
     });
   });
 
   describe("replayMessage", () => {
     it("should replay message using fallback actorId", async () => {
-      const req = { user: null } as unknown as any;
+      const req = { user: undefined } as ControllerRequest;
       const result = await controller.replayMessage("1", req);
 
-      expect(service.replayMessage).toHaveBeenCalledWith("1", "system-admin");
+      expect(replayMessage).toHaveBeenCalledWith("1", "system-admin");
       expect(result).toEqual({
         success: true,
         message: "Message 1 queued for replay",
@@ -47,19 +54,19 @@ describe("OutboxDlqController", () => {
     });
 
     it("should replay message using user's actorId if available", async () => {
-      const req = { user: { id: "user-123" } } as unknown as any;
+      const req = { user: { id: "user-123" } } as ControllerRequest;
       await controller.replayMessage("1", req);
 
-      expect(service.replayMessage).toHaveBeenCalledWith("1", "user-123");
+      expect(replayMessage).toHaveBeenCalledWith("1", "user-123");
     });
   });
 
   describe("deleteMessage", () => {
     it("should delete message using fallback actorId", async () => {
-      const req = { user: null } as unknown as any;
+      const req = { user: undefined } as ControllerRequest;
       const result = await controller.deleteMessage("1", req);
 
-      expect(service.deleteMessage).toHaveBeenCalledWith("1", "system-admin");
+      expect(deleteMessage).toHaveBeenCalledWith("1", "system-admin");
       expect(result).toEqual({
         success: true,
         message: "Message 1 permanently deleted",
@@ -67,10 +74,10 @@ describe("OutboxDlqController", () => {
     });
 
     it("should delete message using user's actorId if available", async () => {
-      const req = { user: { id: "user-123" } } as unknown as any;
+      const req = { user: { id: "user-123" } } as ControllerRequest;
       await controller.deleteMessage("1", req);
 
-      expect(service.deleteMessage).toHaveBeenCalledWith("1", "user-123");
+      expect(deleteMessage).toHaveBeenCalledWith("1", "user-123");
     });
   });
 });
