@@ -9,6 +9,11 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import {
+  PBAC_DECISION,
+  PBAC_REASON_CODE,
+  type PbacDecisionValue,
+} from "@lcsp/contracts/pbac";
 
 import { PrismaAuthorizationDecisionRepository } from "../../modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.repositories.js";
 import { createCorrelationId } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
@@ -17,9 +22,16 @@ import {
   PBAC_METADATA_KEY,
   type PbacMetadata,
 } from "./decorators/pbac-metadata.js";
-import { PbacContextLoader } from "./pbac-context.loader.js";
+import {
+  PbacContextLoader,
+  type PbacContextDenialReason,
+} from "./pbac-context.loader.js";
 import { PbacEvaluatorService } from "./pbac-evaluator.service.js";
-import type { PbacEvaluationContext, SubjectRole } from "./pbac.types.js";
+import type {
+  PbacDecisionResult,
+  PbacEvaluationContext,
+  SubjectRole,
+} from "./pbac.types.js";
 
 export interface PbacRequestContext {
   userId: string;
@@ -58,29 +70,41 @@ export class PbacGuard implements CanActivate {
       PBAC_METADATA_KEY,
       [context.getHandler(), context.getClass()],
     );
-    const action =
-      metadata?.type === "action" ? metadata.action : SESSION_CHECK_ACTION;
-
     const request = context.switchToHttp().getRequest<RequestWithPbac>();
     const correlationId =
       headerString(request.headers?.["x-correlation-id"]) ??
       createCorrelationId();
     request.correlationId = correlationId;
 
+    if (!metadata) {
+      await this.recordDecision({
+        organizationId: null,
+        action: "pbac:metadata",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.metadataMissing,
+        policyId: null,
+        policyVersion: null,
+        correlationId,
+      });
+      throw this.pbacDenied(correlationId);
+    }
+
+    const action =
+      metadata.type === "action" ? metadata.action : SESSION_CHECK_ACTION;
+
     const token = this.extractToken(request);
     if (!token) {
       await this.recordDecision({
         organizationId: null,
         action,
-        decision: "deny",
-        reasonCode: "SESSION_INVALID",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.sessionInvalid,
         policyId: null,
         policyVersion: null,
         correlationId,
       });
       throw new UnauthorizedException({
         error_code: AUTH_ERROR_CODES.sessionInvalid,
-        code: AUTH_ERROR_CODES.sessionInvalid,
         correlation_id: correlationId,
       });
     }
@@ -91,7 +115,7 @@ export class PbacGuard implements CanActivate {
       await this.recordDecision({
         organizationId: null,
         action,
-        decision: "deny",
+        decision: PBAC_DECISION.deny,
         reasonCode: result.reason,
         policyId: null,
         policyVersion: null,
@@ -101,16 +125,27 @@ export class PbacGuard implements CanActivate {
     }
 
     const { session, membership, policy } = result;
-    const subjectRole = membership.role() as SubjectRole;
+    const subjectRole = membership.role();
+    if (!subjectRole) {
+      await this.recordDecision({
+        organizationId: session.organizationId,
+        action,
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.subjectAttributeMissing,
+        policyId: policy.id,
+        policyVersion: policy.version,
+        correlationId,
+      });
+      throw this.pbacDenied(correlationId);
+    }
 
-    if (metadata?.type !== "action") {
-      // @RequireSession() (or no decorator at all) — session + active
-      // membership only, no PBAC action gate.
+    if (metadata.type !== "action") {
+      // @RequireSession() — session + active membership only, no PBAC action gate.
       request.pbacContext = {
         userId: session.userId,
         sessionId: session.id,
         organizationId: session.organizationId,
-        subjectRole,
+        subjectRole: subjectRole as SubjectRole,
         scope: readStringAttribute(membership.subjectAttributes.scope) ?? null,
         grantedActions: policy.actions,
         policyId: policy.id,
@@ -119,8 +154,8 @@ export class PbacGuard implements CanActivate {
       await this.recordDecision({
         organizationId: session.organizationId,
         action,
-        decision: "allow",
-        reasonCode: "AUTHORIZED",
+        decision: PBAC_DECISION.allow,
+        reasonCode: PBAC_REASON_CODE.authorized,
         policyId: policy.id,
         policyVersion: policy.version,
         correlationId,
@@ -131,7 +166,7 @@ export class PbacGuard implements CanActivate {
     const evaluationContext: PbacEvaluationContext = {
       action: metadata.action,
       subject: {
-        role: subjectRole,
+        role: subjectRole as SubjectRole,
         scope: readStringAttribute(membership.subjectAttributes.scope),
       },
       policy: {
@@ -145,30 +180,43 @@ export class PbacGuard implements CanActivate {
       membershipStatus: membership.status,
     };
 
-    const decision = this.evaluator.evaluate(evaluationContext);
+    let decision: PbacDecisionResult;
+    try {
+      decision = this.evaluator.evaluate(evaluationContext);
+    } catch (error) {
+      this.logger.error(
+        `PBAC evaluator threw — defaulting to deny: ${(error as Error).message}`,
+      );
+      await this.recordDecision({
+        organizationId: session.organizationId,
+        action: metadata.action,
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.evaluatorError,
+        policyId: policy.id,
+        policyVersion: policy.version,
+        correlationId,
+      });
+      throw this.pbacDenied(correlationId);
+    }
 
     if (decision.decision === "deny") {
       await this.recordDecision({
         organizationId: session.organizationId,
         action: metadata.action,
-        decision: "deny",
-        reasonCode: decision.reasonCode ?? "PBAC_DENIED",
+        decision: PBAC_DECISION.deny,
+        reasonCode: decision.reasonCode ?? PBAC_REASON_CODE.denied,
         policyId: decision.policyId || null,
         policyVersion: decision.policyVersion || null,
         correlationId,
       });
-      throw new ForbiddenException({
-        error_code: AUTH_ERROR_CODES.pbacDenied,
-        code: AUTH_ERROR_CODES.pbacDenied,
-        correlation_id: correlationId,
-      });
+      throw this.pbacDenied(correlationId);
     }
 
     request.pbacContext = {
       userId: session.userId,
       sessionId: session.id,
       organizationId: session.organizationId,
-      subjectRole,
+      subjectRole: subjectRole as SubjectRole,
       scope: readStringAttribute(membership.subjectAttributes.scope) ?? null,
       grantedActions: policy.actions,
       policyId: decision.policyId,
@@ -178,8 +226,8 @@ export class PbacGuard implements CanActivate {
     await this.recordDecision({
       organizationId: session.organizationId,
       action: metadata.action,
-      decision: "allow",
-      reasonCode: "AUTHORIZED",
+      decision: PBAC_DECISION.allow,
+      reasonCode: PBAC_REASON_CODE.authorized,
       policyId: decision.policyId,
       policyVersion: decision.policyVersion,
       correlationId,
@@ -197,48 +245,43 @@ export class PbacGuard implements CanActivate {
   }
 
   private exceptionFor(
-    reason:
-      | "SESSION_INVALID"
-      | "MFA_REQUIRED"
-      | "MEMBERSHIP_MISSING"
-      | "POLICY_NOT_FOUND"
-      | "LOAD_ERROR",
+    reason: PbacContextDenialReason,
     correlationId: string,
   ): UnauthorizedException | ForbiddenException {
     switch (reason) {
-      case "SESSION_INVALID":
+      case PBAC_REASON_CODE.sessionInvalid:
         return new UnauthorizedException({
           error_code: AUTH_ERROR_CODES.sessionInvalid,
-          code: AUTH_ERROR_CODES.sessionInvalid,
           correlation_id: correlationId,
         });
-      case "MFA_REQUIRED":
+      case PBAC_REASON_CODE.mfaRequired:
         return new UnauthorizedException({
           error_code: AUTH_ERROR_CODES.mfaRequired,
-          code: AUTH_ERROR_CODES.mfaRequired,
           correlation_id: correlationId,
         });
-      case "MEMBERSHIP_MISSING":
+      case PBAC_REASON_CODE.membershipMissing:
         return new ForbiddenException({
           error_code: AUTH_ERROR_CODES.membershipMissing,
-          code: AUTH_ERROR_CODES.membershipMissing,
           correlation_id: correlationId,
         });
-      case "POLICY_NOT_FOUND":
-      case "LOAD_ERROR":
-        return new ForbiddenException({
-          error_code: AUTH_ERROR_CODES.pbacDenied,
-          code: AUTH_ERROR_CODES.pbacDenied,
-          correlation_id: correlationId,
-        });
+      case PBAC_REASON_CODE.policyNotFound:
+      case PBAC_REASON_CODE.loadError:
+        return this.pbacDenied(correlationId);
     }
+  }
+
+  private pbacDenied(correlationId: string): ForbiddenException {
+    return new ForbiddenException({
+      error_code: AUTH_ERROR_CODES.pbacDenied,
+      correlation_id: correlationId,
+    });
   }
 
   /** Never throws — a decision-log write failure must not change the allow/deny outcome. */
   private async recordDecision(input: {
     organizationId: string | null;
     action: string;
-    decision: "allow" | "deny";
+    decision: PbacDecisionValue;
     reasonCode: string;
     policyId: string | null;
     policyVersion: string | null;

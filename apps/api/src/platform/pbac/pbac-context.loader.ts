@@ -1,10 +1,14 @@
 import { Inject, Injectable } from "@nestjs/common";
+import { PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
 import type {
   Membership,
   Policy,
   Session,
 } from "../../modules/auth-workspace/domain/models/auth-workspace.models.js";
-import { fingerprintToken } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
+import {
+  fingerprintToken,
+  verifySecret,
+} from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
 import {
   PrismaMembershipRepository,
   PrismaMfaEnrollmentRepository,
@@ -17,11 +21,11 @@ import type { PolicyRepository } from "../../modules/auth-workspace/application/
 import type { SessionRepository } from "../../modules/auth-workspace/application/ports/persistence/session.repository.js";
 
 export type PbacContextDenialReason =
-  | "SESSION_INVALID"
-  | "MFA_REQUIRED"
-  | "MEMBERSHIP_MISSING"
-  | "POLICY_NOT_FOUND"
-  | "LOAD_ERROR";
+  | typeof PBAC_REASON_CODE.sessionInvalid
+  | typeof PBAC_REASON_CODE.mfaRequired
+  | typeof PBAC_REASON_CODE.membershipMissing
+  | typeof PBAC_REASON_CODE.policyNotFound
+  | typeof PBAC_REASON_CODE.loadError;
 
 export type PbacContextResult =
   | { ok: true; session: Session; membership: Membership; policy: Policy }
@@ -49,15 +53,19 @@ export class PbacContextLoader {
     try {
       const fingerprint = fingerprintToken(token);
       const session = await this.sessions.findByFingerprint(fingerprint);
-      if (!session || !session.isActive(now)) {
-        return { ok: false, reason: "SESSION_INVALID" };
+      if (
+        !session ||
+        !verifySecret(token, session.tokenHash) ||
+        !session.isActive(now)
+      ) {
+        return { ok: false, reason: PBAC_REASON_CODE.sessionInvalid };
       }
 
       const mfaEnrollment = await this.mfaEnrollments.findByUserId(
         session.userId,
       );
       if (mfaEnrollment && !session.isMfaVerified()) {
-        return { ok: false, reason: "MFA_REQUIRED" };
+        return { ok: false, reason: PBAC_REASON_CODE.mfaRequired };
       }
 
       const membership = await this.memberships.findByUserAndOrganization(
@@ -65,7 +73,7 @@ export class PbacContextLoader {
         session.organizationId,
       );
       if (!membership || !membership.isActive()) {
-        return { ok: false, reason: "MEMBERSHIP_MISSING" };
+        return { ok: false, reason: PBAC_REASON_CODE.membershipMissing };
       }
 
       const policy = await this.policies.findByIdAndVersion(
@@ -73,13 +81,13 @@ export class PbacContextLoader {
         membership.policyVersion,
       );
       if (!policy) {
-        return { ok: false, reason: "POLICY_NOT_FOUND" };
+        return { ok: false, reason: PBAC_REASON_CODE.policyNotFound };
       }
 
       return { ok: true, session, membership, policy };
     } catch {
       // Any unexpected DB failure at any stage — deny, never allow on error.
-      return { ok: false, reason: "LOAD_ERROR" };
+      return { ok: false, reason: PBAC_REASON_CODE.loadError };
     }
   }
 }

@@ -13,5 +13,8 @@
     "./locales/vi": "./src/locales/vi/index.ts",
     "./locales/vi/auth": "./src/locales/vi/auth.ts",
     "./locales/vi/common": "./src/locales/vi/common.ts"
+  },
+  "dependencies": {
+    "@lcsp/contracts": "workspace:*"
   }
 }
