@@ -5,6 +5,7 @@ const config: Config = {
   rootDir: "..",
   testEnvironment: "node",
   testRegex: "test/.*\\.e2e-spec\\.ts$",
+  setupFiles: ["<rootDir>/test/jest-env.ts"],
   extensionsToTreatAsEsm: [".ts"],
   transform: {
     "^.+\\.ts$": [

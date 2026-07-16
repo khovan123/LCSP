@@ -3,6 +3,9 @@ import net from "node:net";
 
 const containerName = "lcsp-api-test-postgres";
 const image = "postgres:16-alpine";
+const host = "127.0.0.1";
+const hostPort = 55432;
+const containerPort = 5432;
 
 /**
  * @param {string[]} args
@@ -45,7 +48,7 @@ function ensureContainer() {
       "-e",
       "POSTGRES_DB=lcsp_api_test",
       "-p",
-      "127.0.0.1:54322:5432",
+      `${host}:${hostPort}:${containerPort}`,
       "-d",
       image,
     ]);
@@ -95,7 +98,12 @@ function waitUntilReady() {
   throw new Error("PostgreSQL test container did not become ready in time");
 }
 
-if (!(await isPortOpen(54322, "127.0.0.1"))) {
-  ensureContainer();
-  waitUntilReady();
+ensureContainer();
+waitUntilReady();
+
+if (!(await isPortOpen(hostPort, host))) {
+  throw new Error(
+    `PostgreSQL test container is ready but ${host}:${hostPort} is not reachable. ` +
+      `Recreate ${containerName} with ${host}:${hostPort}:${containerPort}.`,
+  );
 }
