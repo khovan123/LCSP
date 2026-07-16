@@ -18,7 +18,7 @@
     "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./jest.config.ts --watch",
     "test:cov": "cross-env NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./jest.config.ts --coverage",
     "test:debug": "cross-env NODE_OPTIONS=--experimental-vm-modules node --inspect-brk -r tsconfig-paths/register -r ts-node/register ../../node_modules/.bin/jest --config ./jest.config.ts --runInBand",
-    "test:e2e": "node ./test/scripts/ensure-test-postgres.mjs && cross-env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/lcsp_api_test?schema=public NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./test/jest-e2e.ts"
+    "test:e2e": "node ./test/scripts/ensure-test-postgres.mjs && cross-env DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./test/jest-e2e.ts"
   },
   "exports": {
     ".": "./src/index.ts",

@@ -83,6 +83,12 @@ jobs:
             ${{ needs.changes.outputs.api_files }}
             ${{ needs.changes.outputs.web_files }}
 
+      - name: Generate Prisma client
+        if: needs.changes.outputs.api == 'true'
+        run: pnpm --filter @lcsp/api prisma:generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public
+
       - name: Auto-fix API lint
         if: needs.changes.outputs.api == 'true'
         continue-on-error: true
@@ -137,6 +143,11 @@ jobs:
       - name: Check import policy
         run: pnpm run check:imports
 
+      - name: Generate Prisma client
+        run: pnpm --filter @lcsp/api prisma:generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public
+
       - name: Lint API
         run: |
           files="$(printf '%s\n' ${{ needs.changes.outputs.api_files }} | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }')"
@@ -146,18 +157,13 @@ jobs:
             echo "No changed API TypeScript files to lint."
           fi
 
-      - name: Generate Prisma client
-        run: pnpm --filter @lcsp/api prisma:generate
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/lcsp_api_test?schema=public
-
       - name: Test API
         run: pnpm --filter @lcsp/api test
 
       - name: Build API
         run: pnpm --filter @lcsp/api build
         env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/lcsp_api_test?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public
 
   web:
     name: Web checks

@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
 import type { ConfigService } from "@nestjs/config";
+import { Logger } from "@nestjs/common";
 
 import { OutboxMessageEntity } from "./outbox-message.entity.js";
 import { OutboxPublisherService } from "./outbox-publisher.service.js";
@@ -95,7 +96,16 @@ function makeMessage(
 }
 
 describe("OutboxPublisherService", () => {
+  let loggerErrorSpy: jest.SpiedFunction<typeof Logger.prototype.error>;
+
+  beforeEach(() => {
+    loggerErrorSpy = jest
+      .spyOn(Logger.prototype, "error")
+      .mockImplementation(() => undefined);
+  });
+
   afterEach(() => {
+    loggerErrorSpy.mockRestore();
     jest.useRealTimers();
   });
 

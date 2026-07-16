@@ -113,4 +113,47 @@ export class OutboxRepository {
       },
     });
   }
+
+  async findDlqMessages(): Promise<OutboxMessageEntity[]> {
+    const rows = await this.prisma.outboxMessage.findMany({
+      where: { status: "dlq" },
+      orderBy: { createdAt: "desc" },
+    });
+    return rows.map((row) =>
+      OutboxMessageEntity.fromPersistence({
+        ...row,
+        payload: row.payload as Record<string, unknown>,
+        status: row.status as OutboxStatus,
+      }),
+    );
+  }
+
+  async findMessageById(id: string): Promise<OutboxMessageEntity | null> {
+    const row = await this.prisma.outboxMessage.findUnique({
+      where: { id },
+    });
+    if (!row) return null;
+    return OutboxMessageEntity.fromPersistence({
+      ...row,
+      payload: row.payload as Record<string, unknown>,
+      status: row.status as OutboxStatus,
+    });
+  }
+
+  async resetMessageForReplay(id: string): Promise<void> {
+    await this.prisma.outboxMessage.update({
+      where: { id },
+      data: {
+        status: "pending",
+        attempts: 0,
+        errorMessage: null,
+      },
+    });
+  }
+
+  async deleteMessage(id: string): Promise<void> {
+    await this.prisma.outboxMessage.delete({
+      where: { id },
+    });
+  }
 }

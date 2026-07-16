@@ -4,12 +4,16 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { OutboxPublisherService } from "./outbox-publisher.service.js";
 import { OutboxRepository } from "./outbox.repository.js";
 import { RabbitMqClient } from "./rabbitmq.client.js";
+import { OutboxDlqController } from "./outbox-dlq.controller.js";
+import { OutboxDlqService } from "./outbox-dlq.service.js";
 
 @Global()
 @Module({
   imports: [ConfigModule],
+  controllers: [OutboxDlqController],
   providers: [
     OutboxRepository,
+    OutboxDlqService,
     {
       provide: RabbitMqClient,
       inject: [ConfigService],
