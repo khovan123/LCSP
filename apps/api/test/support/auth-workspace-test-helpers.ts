@@ -165,6 +165,7 @@ export async function seedAuthWorkspaceFixture(
         "assessment:create",
         "assessment:read",
         "assessment:list",
+        "github:connect",
       ],
       subjectRole: "Manager",
       stateGate: "membership_active",
