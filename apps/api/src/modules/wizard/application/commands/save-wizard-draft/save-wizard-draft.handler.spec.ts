@@ -4,7 +4,7 @@ import { SaveWizardDraftHandler } from "./save-wizard-draft.handler.js";
 import { SaveWizardDraftCommand } from "./save-wizard-draft.command.js";
 import {
   WIZARD_PROFILE_REPOSITORY,
-  WizardProfileRepository,
+  type WizardProfileRepository,
 } from "../../ports/persistence/wizard-profile.repository.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { WizardProfileEntity } from "../../../domain/entities/wizard-profile.entity.js";
@@ -183,7 +183,7 @@ describe("SaveWizardDraftHandler", () => {
       await handler.execute(command);
 
       const auditArg = auditWriter.write.mock.calls[0][0];
-      expect(auditArg.payload.answers).toBeUndefined();
+      expect(auditArg.payload?.answers).toBeUndefined();
       expect(auditArg.payload).toEqual({
         assessmentId: "assessment-123",
         wizardProfileId: "wizard-id-4",
