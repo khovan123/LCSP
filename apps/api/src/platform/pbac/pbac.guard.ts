@@ -32,23 +32,9 @@ import type {
   PbacEvaluationContext,
   SubjectRole,
 } from "./pbac.types.js";
+import type { PbacRequestContext } from "./interfaces/pbac-request.interface.js";
+import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
 
-export interface PbacRequestContext {
-  userId: string;
-  sessionId: string;
-  organizationId: string;
-  subjectRole: SubjectRole;
-  scope: string | null;
-  grantedActions: string[];
-  policyId: string;
-  policyVersion: string;
-}
-
-interface RequestWithPbac {
-  headers: Record<string, string | string[] | undefined>;
-  pbacContext?: PbacRequestContext;
-  correlationId?: string;
-}
 
 const SESSION_CHECK_ACTION = "session:verify";
 const DECISION_LOG_RESOURCE_TYPE = "HttpRoute";
@@ -70,7 +56,7 @@ export class PbacGuard implements CanActivate {
       PBAC_METADATA_KEY,
       [context.getHandler(), context.getClass()],
     );
-    const request = context.switchToHttp().getRequest<RequestWithPbac>();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const correlationId =
       headerString(request.headers?.["x-correlation-id"]) ??
       createCorrelationId();
@@ -219,8 +205,8 @@ export class PbacGuard implements CanActivate {
       subjectRole: subjectRole as SubjectRole,
       scope: readStringAttribute(membership.subjectAttributes.scope) ?? null,
       grantedActions: policy.actions,
-      policyId: decision.policyId,
-      policyVersion: decision.policyVersion,
+      policyId: decision.policyId ?? null,
+      policyVersion: decision.policyVersion ?? null,
     };
 
     await this.recordDecision({
@@ -236,7 +222,7 @@ export class PbacGuard implements CanActivate {
     return true;
   }
 
-  private extractToken(request: RequestWithPbac): string | null {
+  private extractToken(request: AuthenticatedRequest): string | null {
     const header = request.headers?.authorization;
     if (typeof header !== "string") return null;
     const [scheme, token] = header.split(" ");

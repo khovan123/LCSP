@@ -35,15 +35,9 @@ import { REVOKE_MEMBERSHIP_ERROR_CODES } from "@lcsp/contracts/auth";
 import { AuthWorkspaceFacade } from "../../application/services/auth-workspace/auth-workspace.facade.ts";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { RequireSession } from "../../../../platform/pbac/decorators/require-session.decorator.js";
-import {
-  PbacGuard,
-  type PbacRequestContext,
-} from "../../../../platform/pbac/pbac.guard.js";
-
-interface AuthWorkspaceRequest extends Request {
-  pbacContext?: PbacRequestContext;
-  correlationId?: string;
-}
+import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
+import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 
 @Controller()
 export class AuthWorkspaceController {
@@ -55,7 +49,7 @@ export class AuthWorkspaceController {
   inviteDeveloper(
     @Param("orgId") orgId: string,
     @Body() payload: InviteDeveloperRequest,
-    @Req() request: AuthWorkspaceRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
     const pbacContext = request.pbacContext as PbacRequestContext;
     if (pbacContext.organizationId !== orgId) {
@@ -80,7 +74,7 @@ export class AuthWorkspaceController {
   revokeMembership(
     @Param("orgId") orgId: string,
     @Param("userId") userId: string,
-    @Req() request: AuthWorkspaceRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
     const pbacContext = request.pbacContext as PbacRequestContext;
     if (pbacContext.organizationId !== orgId) {
@@ -145,7 +139,7 @@ export class AuthWorkspaceController {
   @UseGuards(PbacGuard)
   @RequireSession()
   getWorkspace(
-    @Req() request: AuthWorkspaceRequest,
+    @Req() request: AuthenticatedRequest,
     @Query("organization_id") organizationId?: string,
     @Headers("authorization") authorization?: string,
   ) {
@@ -163,7 +157,7 @@ export class AuthWorkspaceController {
   enrollMfa(
     @Body() body: { session_token?: string },
     @Headers("authorization") authorization: string | undefined,
-    @Req() request: AuthWorkspaceRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
     return this.authWorkspaceFacade.enrollMfa(
       bearerToken(authorization) ?? body.session_token ?? "",
@@ -189,7 +183,7 @@ export class AuthWorkspaceController {
   updateProfile(
     @Body() body: UpdateProfilePayload & { session_token?: string },
     @Headers("authorization") authorization: string | undefined,
-    @Req() request: AuthWorkspaceRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
     const { session_token, ...payload } = body;
     return this.authWorkspaceFacade.updateProfile(
