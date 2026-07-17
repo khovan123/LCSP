@@ -93,3 +93,39 @@ def test_t07_raw_source_code_rejected():
             findings=[],
             raw_source_code="print('hello')",  # Not allowed
         )
+
+
+def test_callback_payload_is_redacted_before_serialization(client):
+    """MW-pyp-003: callback payloads are redacted before httpx serialization."""
+    payload = ScanCallbackPayload(
+        status="COMPLETED",
+        findings=[
+            {
+                "finding_type": "SAFE",
+                "description": "saw Bearer abc.def-ghi_123",
+                "metadata": {"api_key": "secret-key-value"},
+            },
+            {
+                "finding_type": "RAW_CODE",
+                "snippet": "function run() {\n  return token;\n}",
+            },
+        ],
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"success": True}
+        mock_post.return_value = mock_resp
+
+        client.post_scan_callback("job123", payload)
+
+        _, kwargs = mock_post.call_args
+        serialized_payload = kwargs["json"]
+        assert serialized_payload["findings"] == [
+            {
+                "finding_type": "SAFE",
+                "description": "saw Bearer [REDACTED]",
+                "metadata": {"api_key": "[REDACTED]"},
+            }
+        ]
