@@ -10,6 +10,8 @@ const VALID_ENV = {
   OAUTH_GITHUB_CLIENT_SECRET: "client-secret",
   OAUTH_ALLOWED_REDIRECT_URIS: "http://localhost:3000/callback",
   GITHUB_APP_SLUG: "lcsp-app",
+  GITHUB_APP_ID: "123456",
+  GITHUB_APP_PRIVATE_KEY: "test-private-key",
   GITHUB_APP_ALLOWED_REDIRECT_URIS: "http://localhost:3000/github/callback",
   GITHUB_APP_CLIENT_ID: "gh-app-client-id",
   GITHUB_APP_CLIENT_SECRET: "gh-app-client-secret",
@@ -125,10 +127,12 @@ describe("config()", () => {
         allowedRedirectUris: [VALID_ENV.OAUTH_ALLOWED_REDIRECT_URIS],
       },
       github: {
+        appId: VALID_ENV.GITHUB_APP_ID,
         appSlug: VALID_ENV.GITHUB_APP_SLUG,
         allowedRedirectUris: [VALID_ENV.GITHUB_APP_ALLOWED_REDIRECT_URIS],
         clientId: VALID_ENV.GITHUB_APP_CLIENT_ID,
         clientSecret: VALID_ENV.GITHUB_APP_CLIENT_SECRET,
+        privateKey: VALID_ENV.GITHUB_APP_PRIVATE_KEY,
       },
       rabbitmq: {
         url: VALID_ENV.RABBITMQ_URL,

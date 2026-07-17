@@ -55,6 +55,9 @@ function buildHandler(options?: {
     .mockResolvedValue(undefined);
   const repositoryConnectionRepository: RepositoryConnectionRepository = {
     save,
+    findById: jest
+      .fn<RepositoryConnectionRepository["findById"]>()
+      .mockResolvedValue(null),
   };
 
   const exchangeCodeForAccessToken = jest

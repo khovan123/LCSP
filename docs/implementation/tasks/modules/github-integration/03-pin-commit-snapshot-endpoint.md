@@ -3,7 +3,7 @@ task_id: MW-gh-003
 module: github-integration
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.2
 depends_on:
   - github-integration/02-github-app-callback-endpoint.md
@@ -101,7 +101,7 @@ model RepositorySnapshot {
 | Name | Type | Safe payload |
 |---|---|---|
 | `PinSnapshotCommand` | App command | `{ assessmentId, connectionId, branch?, ref?, commitSha?, correlationId? }` |
-| `event.snapshot.created` | Outbox | `{ snapshotId, assessmentId, commitSha, connectionId, correlationId }` |
+| `snapshot.created` | Outbox | `{ snapshotId, assessmentId, commitSha, connectionId, correlationId }` |
 | `SNAPSHOT_CREATED` | `AuthAuditEvent` | `{ snapshotId, assessmentId, commitSha, correlationId }` |
 
 ## Test Cases
@@ -123,3 +123,9 @@ model RepositorySnapshot {
 - No raw source persisted — metadata only.
 - Outbox message `snapshot.created` created for scan trigger.
 - Failure audited with safe reason code.
+
+## Implementation Evidence
+
+- API build, TypeScript, ESLint, import policy, and contract-literal policy pass.
+- Unit coverage verifies ref precedence, repository scope, metadata-only persistence, ephemeral installation token use, PBAC decorator metadata, and atomic snapshot/outbox persistence.
+- E2E coverage verifies success, explicit SHA, resolution failure, organization isolation, PBAC denial, audit events, and absence of raw source persistence.

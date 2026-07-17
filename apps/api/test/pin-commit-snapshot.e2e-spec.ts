@@ -1,0 +1,216 @@
+/** MW-gh-003: Pin Commit Snapshot Endpoint. */
+
+import * as assert from "node:assert/strict";
+
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
+import type { INestApplication } from "@nestjs/common";
+import { Test, type TestingModule } from "@nestjs/testing";
+
+import { AppModule } from "../src/app.module.js";
+import type { PinSnapshotDto } from "../src/modules/github-integration/application/contracts/github-integration/pin-snapshot.contract.js";
+import { GitHubAppClient } from "../src/modules/github-integration/infrastructure/github/github-app.client.js";
+import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
+import {
+  pushPrismaSchema,
+  resetAuthWorkspaceDatabase,
+  seedAuthWorkspaceFixture,
+  TEST_DATABASE_URL,
+} from "./support/auth-workspace-test-helpers.js";
+import { httpRequest } from "./support/http.js";
+
+const RESOLVED_SHA = "a".repeat(40);
+type ErrorResponse = { error_code?: string };
+
+describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
+  let app: INestApplication;
+  let prisma: PrismaClient;
+  let managerToken: string;
+  let resolveCommitError = false;
+
+  beforeAll(async () => {
+    process.env.DATABASE_URL = TEST_DATABASE_URL;
+    pushPrismaSchema();
+    prisma = new PrismaClient({ adapter: new PrismaPg(TEST_DATABASE_URL) });
+    await prisma.$connect();
+
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(GitHubAppClient)
+      .useValue({
+        resolveCommit: () => {
+          if (resolveCommitError) {
+            return Promise.reject(new Error("unresolvable"));
+          }
+          return Promise.resolve({
+            sha: RESOLVED_SHA,
+            repositoryFullName: "acme/example-repo",
+            htmlUrl: `https://github.com/acme/example-repo/commit/${RESOLVED_SHA}`,
+            authorDate: "2026-07-18T00:00:00.000Z",
+            committerDate: "2026-07-18T00:00:01.000Z",
+          });
+        },
+      })
+      .compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+  });
+
+  beforeEach(async () => {
+    resolveCommitError = false;
+    await prisma.repositorySnapshot.deleteMany();
+    await prisma.repositoryConnection.deleteMany();
+    await prisma.assessment.deleteMany();
+    await resetAuthWorkspaceDatabase(prisma);
+    await seedAuthWorkspaceFixture(prisma);
+    await prisma.assessment.create({
+      data: {
+        id: "assessment-1",
+        organizationId: "org-1",
+        ownerId: "user-1",
+        name: "Snapshot assessment",
+        status: "WIZARD_IN_PROGRESS",
+      },
+    });
+    await prisma.repositoryConnection.create({
+      data: {
+        id: "connection-1",
+        assessmentId: "assessment-1",
+        organizationId: "org-1",
+        userId: "user-1",
+        installationId: "installation-1",
+        repositoryId: "repo-1",
+        repositoryName: "example-repo",
+        repositoryFullName: "acme/example-repo",
+        defaultBranch: "main",
+        permissions: { contents: "read" },
+        status: "active",
+      },
+    });
+
+    const signIn = await httpRequest(app).post("/auth/sign-in").send({
+      email: "manager@acme.test",
+      password: "CorrectHorseBatteryStaple!",
+      organization_id: "org-1",
+    });
+    managerToken = (signIn.body as SignInSuccess).session_token;
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await prisma.$disconnect();
+  });
+
+  it("T01/T06/T07/T08: Manager pins metadata-only snapshot and outbox event", async () => {
+    const response = await httpRequest(app)
+      .post("/assessments/assessment-1/snapshots")
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({ connection_id: "connection-1", branch: "main" });
+    const body = response.body as PinSnapshotDto;
+
+    assert.equal(response.status, 201);
+    assert.equal(body.commit_sha, RESOLVED_SHA);
+    assert.equal(body.status, "ready");
+    assert.equal(body.branch, "main");
+
+    const snapshot = await prisma.repositorySnapshot.findUnique({
+      where: { id: body.snapshot_id },
+    });
+    assert.ok(snapshot);
+    assert.deepEqual(snapshot.providerMetadata, {
+      authorDate: "2026-07-18T00:00:00.000Z",
+      committerDate: "2026-07-18T00:00:01.000Z",
+      htmlUrl: `https://github.com/acme/example-repo/commit/${RESOLVED_SHA}`,
+      requestedRevision: "main",
+    });
+    assert.equal("source" in snapshot, false);
+    assert.doesNotMatch(JSON.stringify(snapshot), /raw source/i);
+
+    const event = await prisma.outboxMessage.findFirst({
+      where: { aggregateId: body.snapshot_id, eventType: "snapshot.created" },
+    });
+    assert.ok(event);
+    assert.equal(
+      (event.payload as { snapshotId?: string }).snapshotId,
+      body.snapshot_id,
+    );
+    const audit = await prisma.authAuditEvent.findFirst({
+      where: { eventType: "SNAPSHOT_CREATED", resourceId: body.snapshot_id },
+    });
+    assert.ok(audit);
+  });
+
+  it("T02: explicit commit SHA is accepted as the immutable revision", async () => {
+    const response = await httpRequest(app)
+      .post("/assessments/assessment-1/snapshots")
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({ connection_id: "connection-1", commit_sha: "b".repeat(40) });
+
+    assert.equal(response.status, 201);
+    assert.equal((response.body as PinSnapshotDto).commit_sha, RESOLVED_SHA);
+  });
+
+  it("T03: unresolvable ref is audited and creates no snapshot or outbox event", async () => {
+    resolveCommitError = true;
+    const beforeOutbox = await prisma.outboxMessage.count();
+
+    const response = await httpRequest(app)
+      .post("/assessments/assessment-1/snapshots")
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({ connection_id: "connection-1", ref: "refs/heads/missing" });
+
+    assert.equal(response.status, 400);
+    assert.equal(
+      (response.body as ErrorResponse).error_code,
+      "REF_NOT_RESOLVABLE",
+    );
+    assert.equal(await prisma.repositorySnapshot.count(), 0);
+    assert.equal(await prisma.outboxMessage.count(), beforeOutbox);
+    assert.ok(
+      await prisma.authAuditEvent.findFirst({
+        where: { eventType: "SNAPSHOT_PIN_FAILED" },
+      }),
+    );
+  });
+
+  it("T04: connection outside the session organization is hidden", async () => {
+    await prisma.repositoryConnection.update({
+      where: { id: "connection-1" },
+      data: { organizationId: "org-other" },
+    });
+
+    const response = await httpRequest(app)
+      .post("/assessments/assessment-1/snapshots")
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({ connection_id: "connection-1", branch: "main" });
+
+    assert.equal(response.status, 404);
+    assert.equal(
+      (response.body as ErrorResponse).error_code,
+      "CONNECTION_NOT_FOUND",
+    );
+  });
+
+  it("T05: actor without snapshot:create is denied by PBAC", async () => {
+    await prisma.authPolicy.update({
+      where: {
+        id_version: {
+          id: "policy-manager-workspace",
+          version: "2026-06-26",
+        },
+      },
+      data: { actions: ["workspace:read"] },
+    });
+
+    const response = await httpRequest(app)
+      .post("/assessments/assessment-1/snapshots")
+      .set("Authorization", `Bearer ${managerToken}`)
+      .send({ connection_id: "connection-1", branch: "main" });
+
+    assert.equal(response.status, 403);
+    assert.equal((response.body as ErrorResponse).error_code, "PBAC_DENIED");
+    assert.equal(await prisma.repositorySnapshot.count(), 0);
+  });
+});
