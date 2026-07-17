@@ -366,7 +366,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
   });
 
   it("U04 - unknown state returns OAUTH_STATE_INVALID and records audit failure", async () => {
-    oauthState = null as any;
+    oauthState = null as unknown as OAuthState;
     const result = await execute();
     expect("problem" in result && result.problem.code).toBe(
       AUTH_ERROR_CODES.oauthStateInvalid,
@@ -452,7 +452,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
   });
 
   it("U08 - unknown provider identity returns ACCOUNT_NOT_FOUND", async () => {
-    identity = null as any;
+    identity = null as unknown as OAuthIdentity;
     const result = await execute();
     expect("problem" in result && result.problem.code).toBe(
       AUTH_ERROR_CODES.accountNotFound,
@@ -515,7 +515,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
   });
 
   it("U11 - success audit payload does not contain provider access token", async () => {
-    (provider.claims as any).access_token = "LEAKED_TOKEN_MARKER";
+    Object.assign(provider.claims, { access_token: "LEAKED_TOKEN_MARKER" });
     await execute();
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),

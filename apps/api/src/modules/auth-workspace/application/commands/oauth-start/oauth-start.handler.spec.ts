@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { jest } from "@jest/globals";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
@@ -6,14 +7,17 @@ import { OAuthStartCommand } from "./oauth-start.command.ts";
 import type { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import type { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provider.registry.ts";
 import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
+import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
+import type { ConfigService } from "@nestjs/config";
+import type { OAuthProvider } from "../../../infrastructure/oauth/oauth-provider.interface.ts";
 
 describe("OAuthStartHandler", () => {
   let handler: OAuthStartHandler;
   let mockSupportService: jest.Mocked<AuthWorkspaceSupportService>;
-  let mockRepositories: any;
+  let mockRepositories: jest.Mocked<AuthWorkspaceRepositories>;
   let mockProviderRegistry: jest.Mocked<OAuthProviderRegistry>;
-  let mockConfigService: any;
-  let mockProvider: any;
+  let mockConfigService: jest.Mocked<ConfigService>;
+  let mockProvider: jest.Mocked<OAuthProvider>;
 
   beforeEach(() => {
     mockSupportService = {
@@ -24,33 +28,40 @@ describe("OAuthStartHandler", () => {
 
     mockRepositories = {
       oauthStates: {
-        nextId: jest.fn().mockReturnValue("mock-state-id"),
-        save: jest.fn().mockImplementation(async () => {}),
+        nextId: jest
+          .fn<AuthWorkspaceRepositories["oauthStates"]["nextId"]>()
+          .mockReturnValue("mock-state-id"),
+        save: jest
+          .fn<AuthWorkspaceRepositories["oauthStates"]["save"]>()
+          .mockImplementation(async () => {}),
       },
       auditRecords: {
-        nextId: jest.fn(),
-        save: jest.fn(),
+        nextId: jest.fn<AuthWorkspaceRepositories["auditRecords"]["nextId"]>(),
+        save: jest.fn<AuthWorkspaceRepositories["auditRecords"]["save"]>(),
       },
-    };
+    } as unknown as jest.Mocked<AuthWorkspaceRepositories>;
 
     mockProvider = {
       buildAuthorizationUrl: jest
-        .fn()
+        .fn<OAuthProvider["buildAuthorizationUrl"]>()
         .mockReturnValue("https://mock-provider.com/auth?state=abc"),
-    };
+    } as unknown as jest.Mocked<OAuthProvider>;
 
     mockProviderRegistry = {
       resolve: jest.fn().mockReturnValue(mockProvider),
     } as unknown as jest.Mocked<OAuthProviderRegistry>;
 
     mockConfigService = {
-      get: jest.fn().mockImplementation((key, defaultValue) => {
-        if (key === "oauth.allowedRedirectUris") {
-          return ["http://localhost:3000/callback"];
-        }
-        return defaultValue;
-      }),
-    };
+      get: jest
+        .fn<ConfigService["get"]>()
+        .mockImplementation((key: any, defaultValue: any) => {
+          if (key === "oauth.allowedRedirectUris") {
+            return ["http://localhost:3000/callback"];
+          }
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+          return defaultValue;
+        }),
+    } as unknown as jest.Mocked<ConfigService>;
 
     handler = new OAuthStartHandler(
       mockSupportService,
