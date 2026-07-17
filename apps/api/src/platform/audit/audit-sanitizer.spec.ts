@@ -45,4 +45,23 @@ describe("AuditSanitizer", () => {
     expect(result.payload).toEqual({ userId: "u-1" });
     expect(result.removedKeys.sort()).toEqual(["passwordHash", "sessionToken"]);
   });
+
+  it("removes sensitive keys recursively", () => {
+    const result = AuditSanitizer.sanitize({
+      safe: true,
+      details: {
+        apiKey: "secret",
+        attempts: [{ recoveryCode: "secret", result: "ok" }],
+      },
+    });
+
+    expect(result.payload).toEqual({
+      safe: true,
+      details: { attempts: [{ result: "ok" }] },
+    });
+    expect(result.removedKeys).toEqual([
+      "details.apiKey",
+      "details.attempts[0].recoveryCode",
+    ]);
+  });
 });
