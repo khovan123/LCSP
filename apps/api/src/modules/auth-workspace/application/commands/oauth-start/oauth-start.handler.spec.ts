@@ -35,9 +35,8 @@ describe("OAuthStartHandler", () => {
           .fn<AuthWorkspaceRepositories["oauthStates"]["save"]>()
           .mockImplementation(async () => {}),
       },
-      auditRecords: {
-        nextId: jest.fn<AuthWorkspaceRepositories["auditRecords"]["nextId"]>(),
-        save: jest.fn<AuthWorkspaceRepositories["auditRecords"]["save"]>(),
+      auditEvents: {
+        append: jest.fn<AuthWorkspaceRepositories["auditEvents"]["append"]>(),
       },
     } as unknown as jest.Mocked<AuthWorkspaceRepositories>;
 
@@ -54,7 +53,7 @@ describe("OAuthStartHandler", () => {
     mockConfigService = {
       get: jest
         .fn<ConfigService["get"]>()
-        .mockImplementation((key: any, defaultValue: any) => {
+        .mockImplementation((key: string, defaultValue?: any) => {
           if (key === "oauth.allowedRedirectUris") {
             return ["http://localhost:3000/callback"];
           }
