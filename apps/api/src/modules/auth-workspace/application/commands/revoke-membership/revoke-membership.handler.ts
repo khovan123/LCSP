@@ -1,11 +1,13 @@
-import * as crypto from "node:crypto";
-
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import {
+  AUTH_AUDIT_EVENT_TYPES,
+  REVOKE_MEMBERSHIP_ERROR_CODES,
+} from "@lcsp/contracts/auth";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
-import { REVOKE_MEMBERSHIP_ERROR_CODES } from "@lcsp/contracts/auth";
 import { createCorrelationId } from "../../../infrastructure/security/security.utils.ts";
+import { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
 import type {
   RevokeMembershipErrorCode,
   RevokeMembershipResponse,
@@ -13,7 +15,10 @@ import type {
 import { RevokeMembershipCommand } from "./revoke-membership.command.ts";
 
 export class RevokeMembershipHandler {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authAudit: AuthAuditService,
+  ) {}
 
   async execute(
     command: RevokeMembershipCommand,
@@ -80,22 +85,19 @@ export class RevokeMembershipHandler {
         data: { revokedAt },
       });
 
-      await tx.authAuditEvent.create({
-        data: {
-          id: crypto.randomUUID(),
-          eventType: "AUTH_DEVELOPER_REVOKED",
+      await this.authAudit.writeInTx(
+        {
+          eventType: AUTH_AUDIT_EVENT_TYPES.authDeveloperRevoked,
           actorId,
           organizationId: orgId,
           resourceType: "AuthMembership",
           resourceId: membership.id,
           decision: "allow",
-          reasonCode: null,
           correlationId,
-          sessionId: null,
           policyId: membership.policyId,
           policyVersion: membership.policyVersion,
           payload: {
-            event_type: "AUTH_DEVELOPER_REVOKED",
+            event_type: AUTH_AUDIT_EVENT_TYPES.authDeveloperRevoked,
             actor_id: actorId,
             organization_id: orgId,
             decision: "allow",
@@ -107,7 +109,8 @@ export class RevokeMembershipHandler {
             policy_version: membership.policyVersion,
           },
         },
-      });
+        tx,
+      );
 
       return revokedSessions.count;
     });

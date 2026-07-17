@@ -6,7 +6,6 @@ import {
 import { Invitation } from "../../../domain/models/auth-workspace.models.ts";
 import { EmailAddress } from "../../../domain/value-objects/email-address.value-object.ts";
 import type { AssessmentScopeRepository } from "../../ports/persistence/assessment-scope.repository.ts";
-import type { AuditEventRepository } from "../../ports/persistence/audit-event.repository.ts";
 import type { InvitationRepository } from "../../ports/persistence/invitation.repository.ts";
 import type { PolicyRepository } from "../../ports/persistence/policy.repository.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
@@ -28,7 +27,6 @@ const MILLIS_PER_HOUR = 60 * 60_000;
 type InviteDeveloperRepositories = {
   invitations: Pick<InvitationRepository, "nextId" | "save">;
   policies: Pick<PolicyRepository, "findLatestByOrganizationAndRole">;
-  auditEvents: AuditEventRepository;
 };
 
 export class InviteDeveloperHandler {
@@ -121,7 +119,7 @@ export class InviteDeveloperHandler {
     });
 
     await this.repositories.invitations.save(invitation);
-    await this.repositories.auditEvents.append({
+    await this.support.recordAudit(this.repositories, {
       event_type: "AUTH_DEVELOPER_INVITED",
       actor_id: input.actorId,
       organization_id: input.orgId,
