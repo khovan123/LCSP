@@ -2,7 +2,7 @@ import time
 import httpx
 from structlog import get_logger
 
-from lcsp_workers.platform.api_client_contracts import (
+from package.contract.api_client_contracts import (
     CORRELATION_ID_HEADER,
     WORKER_API_KEY_HEADER,
     CallbackLogEvent,
