@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Delete, Param, Req } from "@nestjs/common";
-import type { Request } from "express";
+
 import { OutboxDlqService } from "./outbox-dlq.service.js";
 
 import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";

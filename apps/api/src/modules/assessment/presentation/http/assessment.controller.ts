@@ -9,11 +9,10 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import type { Request } from "express";
 
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
-import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
+
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { CreateAssessmentCommand } from "../../application/commands/create-assessment/create-assessment.command.js";
 import { GetAssessmentQuery } from "../../application/queries/get-assessment/get-assessment.query.js";

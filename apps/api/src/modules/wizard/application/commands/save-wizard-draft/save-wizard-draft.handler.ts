@@ -47,7 +47,7 @@ export class SaveWizardDraftHandler implements ICommandHandler<
       if (profile.status === "SUBMITTED") {
         throw new WizardAlreadySubmittedException();
       }
-      profile.answers = answers;
+      profile.answers = { ...profile.answers, ...answers };
       profile.version += 1;
     } else {
       profile = new WizardProfileEntity({

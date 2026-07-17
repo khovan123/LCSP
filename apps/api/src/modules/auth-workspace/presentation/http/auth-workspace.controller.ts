@@ -13,7 +13,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import type { Request } from "express";
+
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import type { RequestMeta } from "../../application/contracts/auth-workspace/common.contract.ts";
@@ -36,7 +36,7 @@ import { AuthWorkspaceFacade } from "../../application/services/auth-workspace/a
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { RequireSession } from "../../../../platform/pbac/decorators/require-session.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
-import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
+
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 
 @Controller()

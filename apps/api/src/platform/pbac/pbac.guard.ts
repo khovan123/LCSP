@@ -32,7 +32,7 @@ import type {
   PbacEvaluationContext,
   SubjectRole,
 } from "./pbac.types.js";
-import type { PbacRequestContext } from "./interfaces/pbac-request.interface.js";
+
 import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
 
 const SESSION_CHECK_ACTION = "session:verify";

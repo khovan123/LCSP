@@ -1,6 +1,6 @@
 import { Controller, Put, Param, Body, UseGuards, Req } from "@nestjs/common";
 import { CommandBus } from "@nestjs/cqrs";
-import type { Request } from "express";
+
 import type {
   SaveWizardDraftRequest,
   SaveWizardDraftResponse,

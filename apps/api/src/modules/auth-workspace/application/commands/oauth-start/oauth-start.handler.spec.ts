@@ -34,7 +34,9 @@ describe("OAuthStartHandler", () => {
     };
 
     mockProvider = {
-      buildAuthorizationUrl: jest.fn().mockReturnValue("https://mock-provider.com/auth?state=abc"),
+      buildAuthorizationUrl: jest
+        .fn()
+        .mockReturnValue("https://mock-provider.com/auth?state=abc"),
     };
 
     mockProviderRegistry = {
@@ -59,30 +61,42 @@ describe("OAuthStartHandler", () => {
   });
 
   it("U01 - missing provider returns VALIDATION_FAILED", async () => {
-    const command = new OAuthStartCommand({ provider: "", redirect_uri: "http://localhost:3000/callback" }, {});
+    const command = new OAuthStartCommand(
+      { provider: "", redirect_uri: "http://localhost:3000/callback" },
+      {},
+    );
     const result = (await handler.execute(command)) as AuthProblemResult;
-    
+
     expect(result.ok).toBe(false);
     expect(result.problem.code).toBe(AUTH_ERROR_CODES.validationFailed);
   });
 
   it("U02 - missing redirect_uri returns VALIDATION_FAILED", async () => {
-    const command = new OAuthStartCommand({ provider: "github", redirect_uri: "" }, {});
+    const command = new OAuthStartCommand(
+      { provider: "github", redirect_uri: "" },
+      {},
+    );
     const result = (await handler.execute(command)) as AuthProblemResult;
-    
+
     expect(result.ok).toBe(false);
     expect(result.problem.code).toBe(AUTH_ERROR_CODES.validationFailed);
   });
 
   it("U03 - unsupported provider returns UNSUPPORTED_PROVIDER and records audit failure", async () => {
-    mockProviderRegistry.resolve.mockReturnValue(null as any);
-    
-    const command = new OAuthStartCommand({ provider: "invalid-provider", redirect_uri: "http://localhost:3000/callback" }, { correlation_id: "corr-1" });
+    mockProviderRegistry.resolve.mockReturnValue(null);
+
+    const command = new OAuthStartCommand(
+      {
+        provider: "invalid-provider",
+        redirect_uri: "http://localhost:3000/callback",
+      },
+      { correlation_id: "corr-1" },
+    );
     const result = (await handler.execute(command)) as AuthProblemResult;
-    
+
     expect(result.ok).toBe(false);
     expect(result.problem.code).toBe(AUTH_ERROR_CODES.unsupportedProvider);
-    
+
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
       mockRepositories,
       expect.objectContaining({
@@ -95,12 +109,15 @@ describe("OAuthStartHandler", () => {
   });
 
   it("U04 - redirect_uri not in allowlist returns INVALID_REDIRECT_URI and records audit failure", async () => {
-    const command = new OAuthStartCommand({ provider: "github", redirect_uri: "http://hacker.com/callback" }, { correlation_id: "corr-1" });
+    const command = new OAuthStartCommand(
+      { provider: "github", redirect_uri: "http://hacker.com/callback" },
+      { correlation_id: "corr-1" },
+    );
     const result = (await handler.execute(command)) as AuthProblemResult;
-    
+
     expect(result.ok).toBe(false);
     expect(result.problem.code).toBe(AUTH_ERROR_CODES.invalidRedirectUri);
-    
+
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
       mockRepositories,
       expect.objectContaining({
@@ -112,12 +129,17 @@ describe("OAuthStartHandler", () => {
   });
 
   it("U05 - happy path saves state, nonce and returns authorization_url", async () => {
-    const command = new OAuthStartCommand({ provider: "github", redirect_uri: "http://localhost:3000/callback" }, { correlation_id: "corr-1" });
+    const command = new OAuthStartCommand(
+      { provider: "github", redirect_uri: "http://localhost:3000/callback" },
+      { correlation_id: "corr-1" },
+    );
     const result = await handler.execute(command);
-    
+
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.authorization_url).toBe("https://mock-provider.com/auth?state=abc");
+      expect(result.authorization_url).toBe(
+        "https://mock-provider.com/auth?state=abc",
+      );
       expect(result.correlation_id).toBe("corr-1");
     }
 
@@ -127,7 +149,7 @@ describe("OAuthStartHandler", () => {
     expect(savedState.redirectUri).toBe("http://localhost:3000/callback");
     expect(savedState.state).toBeDefined();
     expect(savedState.nonce).toBeDefined();
-    
+
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
       mockRepositories,
       expect.objectContaining({
@@ -140,7 +162,10 @@ describe("OAuthStartHandler", () => {
   });
 
   it("U06 - audit payload does not contain state or nonce", async () => {
-    const command = new OAuthStartCommand({ provider: "github", redirect_uri: "http://localhost:3000/callback" }, {});
+    const command = new OAuthStartCommand(
+      { provider: "github", redirect_uri: "http://localhost:3000/callback" },
+      {},
+    );
     await handler.execute(command);
 
     const savedState = mockRepositories.oauthStates.save.mock.calls[0][0];

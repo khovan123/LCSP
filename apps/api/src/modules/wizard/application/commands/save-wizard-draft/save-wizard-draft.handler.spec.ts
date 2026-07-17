@@ -1,30 +1,36 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from "@nestjs/testing";
 import { SaveWizardDraftHandler } from "./save-wizard-draft.handler.js";
 import { SaveWizardDraftCommand } from "./save-wizard-draft.command.js";
-import { WIZARD_PROFILE_REPOSITORY } from "../../ports/persistence/wizard-profile.repository.js";
+import {
+  WIZARD_PROFILE_REPOSITORY,
+  WizardProfileRepository,
+} from "../../ports/persistence/wizard-profile.repository.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { WizardProfileEntity } from "../../../domain/entities/wizard-profile.entity.js";
 import {
   AssessmentNotFoundException,
   WizardAlreadySubmittedException,
 } from "../../../domain/exceptions/wizard.exceptions.js";
-import { randomUUID } from "node:crypto";
+
 import { jest } from "@jest/globals";
 
 describe("SaveWizardDraftHandler", () => {
   let handler: SaveWizardDraftHandler;
-  let wizardRepository: any;
-  let auditWriter: any;
+  let wizardRepository: jest.Mocked<WizardProfileRepository>;
+  let auditWriter: jest.Mocked<AuditWriterService>;
 
   beforeEach(async () => {
     wizardRepository = {
-      verifyAssessmentOwnership: jest.fn(),
-      findByAssessmentId: jest.fn(),
-      upsertDraft: jest.fn(),
+      verifyAssessmentOwnership:
+        jest.fn<WizardProfileRepository["verifyAssessmentOwnership"]>(),
+      findByAssessmentId:
+        jest.fn<WizardProfileRepository["findByAssessmentId"]>(),
+      upsertDraft: jest.fn<WizardProfileRepository["upsertDraft"]>(),
     };
     auditWriter = {
-      write: jest.fn(),
-    };
+      write: jest.fn<AuditWriterService["write"]>(),
+    } as unknown as jest.Mocked<AuditWriterService>;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -126,8 +132,11 @@ describe("SaveWizardDraftHandler", () => {
       expect(wizardRepository.upsertDraft).toHaveBeenCalled();
       const upsertArg = wizardRepository.upsertDraft.mock.calls[0][0];
       expect(upsertArg.version).toBe(3); // Bumped from 2
-      expect(upsertArg.answers).toEqual({ question1: "answer1" });
-
+      // T07: Partial save preserves existing answers
+      expect(upsertArg.answers).toEqual({
+        oldQuestion: "oldAnswer",
+        question1: "answer1",
+      });
       expect(result.version).toBe(3);
     });
 
@@ -148,13 +157,38 @@ describe("SaveWizardDraftHandler", () => {
       expect(auditWriter.write).not.toHaveBeenCalled();
     });
 
-    it("T04: should throw AssessmentNotFoundException if ownership verification fails", async () => {
+    it("T05: should throw AssessmentNotFoundException if ownership verification fails", async () => {
       wizardRepository.verifyAssessmentOwnership.mockResolvedValue(false); // Verification failed
 
       await expect(handler.execute(command)).rejects.toThrow(
         AssessmentNotFoundException,
       );
       expect(wizardRepository.findByAssessmentId).not.toHaveBeenCalled();
+    });
+
+    it("T08: should not include answers in the audit payload", async () => {
+      wizardRepository.verifyAssessmentOwnership.mockResolvedValue(true);
+      wizardRepository.findByAssessmentId.mockResolvedValue(null);
+      wizardRepository.upsertDraft.mockImplementation((profile) => {
+        return Promise.resolve(
+          new WizardProfileEntity({
+            ...profile,
+            id: "wizard-id-4",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }),
+        );
+      });
+
+      await handler.execute(command);
+
+      const auditArg = auditWriter.write.mock.calls[0][0];
+      expect(auditArg.payload.answers).toBeUndefined();
+      expect(auditArg.payload).toEqual({
+        assessmentId: "assessment-123",
+        wizardProfileId: "wizard-id-4",
+        version: 1,
+      });
     });
   });
 });
