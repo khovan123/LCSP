@@ -115,6 +115,15 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       },
     });
     assert.equal(activeSessions, 0);
+
+    const decision = await prisma.authDecisionLog.findFirstOrThrow({
+      where: {
+        correlationId: "corr-revoke-1",
+        action: "membership:revoke",
+        decision: "allow",
+      },
+    });
+    assert.equal(decision.resourceType, "HttpRoute");
   });
 
   it("T02 returns PBAC_DENIED and writes AuthDecisionLog when Manager lacks revoke action", async () => {
@@ -123,7 +132,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     assert.equal(result.status, 403);
-    assert.equal((result.body as ErrorBody).code, "PBAC_DENIED");
+    assert.equal((result.body as ErrorBody).error_code, "PBAC_DENIED");
 
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: { action: "membership:revoke", decision: "deny" },
@@ -181,11 +190,8 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${developerToken}`);
 
-    assert.equal(result.status, 200);
-    assert.equal(
-      (result.body as { problem?: { code?: string } }).problem?.code,
-      "SESSION_INVALID",
-    );
+    assert.equal(result.status, 401);
+    assert.equal((result.body as ErrorBody).error_code, "SESSION_INVALID");
   });
 
   it("T08 writes clean audit payload without session token material", async () => {

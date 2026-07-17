@@ -115,6 +115,15 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       where: { eventType: "AUTH_DEVELOPER_INVITED" },
     });
     assert.equal(audit.correlationId, "corr-invite-1");
+
+    const decision = await prisma.authDecisionLog.findFirstOrThrow({
+      where: {
+        correlationId: "corr-invite-1",
+        action: "invite:developer",
+        decision: "allow",
+      },
+    });
+    assert.equal(decision.resourceType, "HttpRoute");
   });
 
   it("T02 returns PBAC_DENIED and writes AuthDecisionLog when Manager lacks invite action", async () => {
@@ -127,7 +136,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       });
 
     assert.equal(result.status, 403);
-    assert.equal((result.body as ErrorBody).code, "PBAC_DENIED");
+    assert.equal((result.body as ErrorBody).error_code, "PBAC_DENIED");
 
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: { action: "invite:developer", decision: "deny" },

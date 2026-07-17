@@ -35,6 +35,11 @@ import {
   totpForTime,
 } from "./support/auth-workspace-test-helpers.js";
 
+type HttpErrorBody = {
+  error_code?: string;
+  correlation_id?: string;
+};
+
 describe("Auth workspace (e2e)", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -227,11 +232,19 @@ describe("Auth workspace (e2e)", () => {
     const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
-      .expect(200);
+      .set("x-correlation-id", "corr-workspace-no-session")
+      .expect(401);
 
-    const failure = expectFailure(result.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.authRequired);
-    assert.equal("workspace" in failure, false);
+    assert.equal(
+      (result.body as HttpErrorBody).error_code,
+      AUTH_ERROR_CODES.sessionInvalid,
+    );
+    assert.equal("workspace" in result.body, false);
+
+    const decision = await prisma.authDecisionLog.findFirstOrThrow({
+      where: { correlationId: "corr-workspace-no-session" },
+    });
+    assert.equal(decision.decision, "deny");
   });
 
   it("workspace access fails closed when request organization does not match session scope", async () => {
@@ -255,10 +268,12 @@ describe("Auth workspace (e2e)", () => {
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", "Bearer revoked-session-token")
-      .expect(200);
+      .expect(401);
 
-    const failure = expectFailure(result.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.sessionInvalid);
+    assert.equal(
+      (result.body as HttpErrorBody).error_code,
+      AUTH_ERROR_CODES.sessionInvalid,
+    );
   });
 
   it("deny-by-default blocks workspace access when subject attributes are incomplete", async () => {
@@ -280,10 +295,12 @@ describe("Auth workspace (e2e)", () => {
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .expect(200);
+      .expect(403);
 
-    const failure = expectFailure(result.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.authzSubjectIncomplete);
+    assert.equal(
+      (result.body as HttpErrorBody).error_code,
+      AUTH_ERROR_CODES.pbacDenied,
+    );
   });
 
   it("deny-by-default blocks workspace access when policy state gate is not satisfied", async () => {
@@ -360,7 +377,13 @@ describe("Auth workspace (e2e)", () => {
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
+      .set("x-correlation-id", "corr-workspace-allow")
       .expect(200);
+
+    const allowDecision = await prisma.authDecisionLog.findFirstOrThrow({
+      where: { correlationId: "corr-workspace-allow" },
+    });
+    assert.equal(allowDecision.decision, "allow");
 
     await httpRequest(app)
       .post("/auth/revoke-session")
@@ -387,6 +410,7 @@ describe("Auth workspace (e2e)", () => {
     const signIn = await signInApprovedUser();
     const result = await httpRequest(app)
       .post("/auth/mfa/enroll")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
       .send({ session_token: signIn.session_token })
       .expect(201);
 
@@ -403,10 +427,12 @@ describe("Auth workspace (e2e)", () => {
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .expect(200);
+      .expect(401);
 
-    const failure = expectFailure(result.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaRequired);
+    assert.equal(
+      (result.body as HttpErrorBody).error_code,
+      AUTH_ERROR_CODES.mfaRequired,
+    );
   });
 
   it("sign-in response includes mfa_required flag when MFA is enrolled", async () => {
@@ -527,10 +553,12 @@ describe("Auth workspace (e2e)", () => {
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${expiredToken}`)
-      .expect(200);
+      .expect(401);
 
-    const failure = expectFailure(result.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.sessionInvalid);
+    assert.equal(
+      (result.body as HttpErrorBody).error_code,
+      AUTH_ERROR_CODES.sessionInvalid,
+    );
   });
 
   it("revoke-session records audit event and blocks subsequent workspace access", async () => {
@@ -545,10 +573,12 @@ describe("Auth workspace (e2e)", () => {
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .expect(200);
+      .expect(401);
 
-    const failure = expectFailure(workspace.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.sessionInvalid);
+    assert.equal(
+      (workspace.body as HttpErrorBody).error_code,
+      AUTH_ERROR_CODES.sessionInvalid,
+    );
 
     const auditEvents = await prisma.authAuditEvent.findMany();
     const revoked = auditEvents.find(
@@ -565,6 +595,7 @@ describe("Auth workspace (e2e)", () => {
     const signIn = await signInApprovedUser();
     const result = await httpRequest(app)
       .patch("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
       .send({
         session_token: signIn.session_token,
         display_name: "Test Manager",
@@ -584,6 +615,7 @@ describe("Auth workspace (e2e)", () => {
     const signIn = await signInApprovedUser();
     await httpRequest(app)
       .patch("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
       .send({
         session_token: signIn.session_token,
         display_name: "Audit Test Name",
@@ -612,16 +644,20 @@ describe("Auth workspace (e2e)", () => {
     const signIn = await signInApprovedUser();
     await httpRequest(app)
       .post("/auth/mfa/enroll")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
       .send({ session_token: signIn.session_token })
       .expect(201);
 
     const reEnroll = await httpRequest(app)
       .post("/auth/mfa/enroll")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
       .send({ session_token: signIn.session_token })
-      .expect(201);
+      .expect(401);
 
-    const failure = expectFailure(reEnroll.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaRequired);
+    assert.equal(
+      (reEnroll.body as HttpErrorBody).error_code,
+      AUTH_ERROR_CODES.mfaRequired,
+    );
   });
 
   it("profile update is blocked when MFA is enrolled but not yet verified", async () => {
@@ -630,17 +666,21 @@ describe("Auth workspace (e2e)", () => {
 
     const result = await httpRequest(app)
       .patch("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
       .send({ session_token: signIn.session_token, display_name: "Blocked" })
-      .expect(200);
+      .expect(401);
 
-    const failure = expectFailure(result.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaRequired);
+    assert.equal(
+      (result.body as HttpErrorBody).error_code,
+      AUTH_ERROR_CODES.mfaRequired,
+    );
   });
 
   it("profile update rejects a malformed recovery_email", async () => {
     const signIn = await signInApprovedUser();
     const result = await httpRequest(app)
       .patch("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
       .send({
         session_token: signIn.session_token,
         recovery_email: "not-an-email",
@@ -726,9 +766,11 @@ describe("Auth workspace (e2e)", () => {
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .expect(200);
-    const revokedFailure = expectFailure(oldSessionCheck.body);
-    assert.equal(revokedFailure.problem.code, AUTH_ERROR_CODES.sessionInvalid);
+      .expect(401);
+    assert.equal(
+      (oldSessionCheck.body as HttpErrorBody).error_code,
+      AUTH_ERROR_CODES.sessionInvalid,
+    );
 
     const newSignIn = await httpRequest(app)
       .post("/auth/sign-in")

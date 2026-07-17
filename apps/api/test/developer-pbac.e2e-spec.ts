@@ -86,7 +86,7 @@ describe("Developer PBAC enforcement (e2e) [AC-024, AC-025]", () => {
       "Developer must be denied assessment creation",
     );
     assert.ok(
-      (result.body as ErrorResponseBody).code,
+      (result.body as ErrorResponseBody).error_code,
       "Error response must have machine-readable code",
     );
     assert.doesNotMatch(
