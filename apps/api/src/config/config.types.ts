@@ -14,6 +14,11 @@ export interface OAuthConfig {
   allowedRedirectUris: string[];
 }
 
+export interface GithubConfig {
+  appSlug: string;
+  allowedRedirectUris: string[];
+}
+
 export interface RabbitMqConfig {
   url: string;
   exchange: string;
@@ -48,6 +53,7 @@ export interface AppConfig {
   database: DatabaseConfig;
   auth: AuthConfig;
   oauth: OAuthConfig;
+  github: GithubConfig;
   rabbitmq: RabbitMqConfig;
   outbox: OutboxConfig;
   crypto: CryptoConfig;

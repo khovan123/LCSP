@@ -305,3 +305,16 @@ model RepositoryConnection {
 
   @@index([assessmentId])
 }
+
+model GitHubAppInstallState {
+  id             String   @id
+  state          String   @unique
+  assessmentId   String?
+  organizationId String
+  userId         String
+  redirectUri    String
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+}

@@ -9,6 +9,8 @@ const VALID_ENV = {
   OAUTH_GITHUB_CLIENT_ID: "client-id",
   OAUTH_GITHUB_CLIENT_SECRET: "client-secret",
   OAUTH_ALLOWED_REDIRECT_URIS: "http://localhost:3000/callback",
+  GITHUB_APP_SLUG: "lcsp-app",
+  GITHUB_APP_ALLOWED_REDIRECT_URIS: "http://localhost:3000/github/callback",
   RABBITMQ_URL: "amqp://guest:guest@localhost:5672",
   RABBITMQ_EXCHANGE: "lcsp.events",
   OUTBOX_POLL_INTERVAL_MS: "1000",
@@ -119,6 +121,10 @@ describe("config()", () => {
         githubClientId: VALID_ENV.OAUTH_GITHUB_CLIENT_ID,
         githubClientSecret: VALID_ENV.OAUTH_GITHUB_CLIENT_SECRET,
         allowedRedirectUris: [VALID_ENV.OAUTH_ALLOWED_REDIRECT_URIS],
+      },
+      github: {
+        appSlug: VALID_ENV.GITHUB_APP_SLUG,
+        allowedRedirectUris: [VALID_ENV.GITHUB_APP_ALLOWED_REDIRECT_URIS],
       },
       rabbitmq: {
         url: VALID_ENV.RABBITMQ_URL,
