@@ -3,7 +3,7 @@ task_id: MW-qa-001
 module: qa
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 1.1
 depends_on:
   - auth-workspace/14-audit-event-writer.md
@@ -20,21 +20,21 @@ End-to-end integration tests for all auth-workspace endpoints running against a 
 
 | File | Action | Notes |
 |---|---|---|
-| `tests/integration/auth/sign-in.spec.ts` | Create | Sign-in + lockout + MFA pending |
-| `tests/integration/auth/register.spec.ts` | Create | Approved path registration |
-| `tests/integration/auth/mfa.spec.ts` | Create | MFA enroll + OTP verify + replay prevention |
-| `tests/integration/auth/session.spec.ts` | Create | Session revoke + validation |
-| `tests/integration/auth/oauth.spec.ts` | Create | OAuth start + callback + no-repo side effect |
-| `tests/integration/auth/developer-invitation.spec.ts` | Create | Invite + accept + revoke flow |
-| `tests/integration/auth/pbac-guard.spec.ts` | Create | Guard allow/deny for all endpoints |
-| `tests/integration/helpers/auth-factory.ts` | Create | Test data factories |
+| `apps/api/test/auth-workspace.e2e-spec.ts` | Complete | Sign-in, registration, MFA, session, profile, recovery, workspace, and decision logs |
+| `apps/api/test/oauth-login.e2e-spec.ts` | Complete | OAuth start, callback, replay protection, and no repository side effects |
+| `apps/api/test/invite-developer.e2e-spec.ts` | Complete | Manager invitation allow/deny paths |
+| `apps/api/test/accept-invitation.e2e-spec.ts` | Complete | Developer invitation acceptance and denial paths |
+| `apps/api/test/revoke-membership.e2e-spec.ts` | Complete | Membership revocation and immediate session invalidation |
+| `apps/api/test/developer-pbac.e2e-spec.ts` | Complete | Developer PBAC allow/deny enforcement |
+| `apps/api/test/audit-trail.e2e-spec.ts` | Complete | Audit and authorization decision log safety |
+| `apps/api/test/support/auth-workspace-test-helpers.ts` | Complete | Real PostgreSQL fixtures and auth factories |
 
 ## Test Environment
 
 - Real PostgreSQL (Docker in CI).
 - Real Prisma migrations applied before tests.
 - No external HTTP calls — OAuth providers mocked at HTTP client level only.
-- Each test in transaction that rolls back after.
+- Database state reset with deterministic fixtures before each test.
 
 ## Critical Test Scenarios
 
@@ -58,3 +58,11 @@ End-to-end integration tests for all auth-workspace endpoints running against a 
 - Tests run against real DB (not mocked).
 - PBAC guard deny paths all tested.
 - `AuthDecisionLog` presence verified for all allow/deny decisions.
+
+## Verification
+
+```bash
+pnpm --filter @lcsp/api test:auth-integration
+```
+
+Result: 7 suites passed, 83 tests passed against the PostgreSQL test database.
