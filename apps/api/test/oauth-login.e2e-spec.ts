@@ -165,7 +165,7 @@ describe("OAuth login (e2e)", () => {
       .get("/auth/oauth/callback")
       .query({ state: "some-state", provider: "github" })
       .expect(200);
-      
+
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
   });
@@ -175,7 +175,7 @@ describe("OAuth login (e2e)", () => {
       .get("/auth/oauth/callback")
       .query({ code: "good-code", provider: "github" })
       .expect(200);
-      
+
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
   });

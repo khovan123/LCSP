@@ -9,20 +9,15 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import type { Request } from "express";
 
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
-import type { PbacRequestContext } from "../../../../platform/pbac/pbac.guard.js";
+
+import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { CreateAssessmentCommand } from "../../application/commands/create-assessment/create-assessment.command.js";
 import { GetAssessmentQuery } from "../../application/queries/get-assessment/get-assessment.query.js";
 import { ListAssessmentsQuery } from "../../application/queries/list-assessments/list-assessments.query.js";
 import { CreateAssessmentRequest } from "./dto/create-assessment.request.js";
-
-interface AssessmentRequest extends Request {
-  pbacContext?: PbacRequestContext;
-  correlationId?: string;
-}
 
 @Controller("assessments")
 export class AssessmentController {
@@ -36,9 +31,9 @@ export class AssessmentController {
   @RequireAction("assessment:create")
   async createAssessment(
     @Body() body: CreateAssessmentRequest,
-    @Req() request: AssessmentRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext as PbacRequestContext;
+    const pbacContext = request.pbacContext;
 
     return this.commandBus.execute(
       new CreateAssessmentCommand(
@@ -58,9 +53,9 @@ export class AssessmentController {
     @Query("page") page: string | undefined,
     @Query("page_size") pageSize: string | undefined,
     @Query("status") status: string | undefined,
-    @Req() request: AssessmentRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext as PbacRequestContext;
+    const pbacContext = request.pbacContext;
 
     return this.queryBus.execute(
       new ListAssessmentsQuery(
@@ -81,9 +76,9 @@ export class AssessmentController {
   @RequireAction("assessment:read")
   async getAssessment(
     @Param("assessmentId") assessmentId: string,
-    @Req() request: AssessmentRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext as PbacRequestContext;
+    const pbacContext = request.pbacContext;
 
     return this.queryBus.execute(
       new GetAssessmentQuery(

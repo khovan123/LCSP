@@ -9,6 +9,7 @@ import { AuthWorkspaceModule } from "./modules/auth-workspace/auth-workspace.mod
 import { GitHubIntegrationModule } from "./modules/github-integration/github-integration.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
+import { WizardModule } from "./modules/wizard/wizard.module.js";
 import { OutboxModule } from "./platform/outbox/outbox.module.js";
 import { PbacModule } from "./platform/pbac/pbac.module.js";
 import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.module.js";
@@ -32,6 +33,7 @@ import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.modul
     AssessmentModule,
     GitHubIntegrationModule,
     AuditFeatureModule,
+    WizardModule,
     HealthModule,
   ],
 })

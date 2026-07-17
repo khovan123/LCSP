@@ -1,13 +1,8 @@
 import { Controller, Get, Post, Delete, Param, Req } from "@nestjs/common";
-import type { Request } from "express";
+
 import { OutboxDlqService } from "./outbox-dlq.service.js";
 
-// sau ni làm guard rồi thì tách ni ra
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-  };
-}
+import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
 
 @Controller("internal/outbox/dlq")
 export class OutboxDlqController {

@@ -13,7 +13,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import type { Request } from "express";
+
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import type { RequestMeta } from "../../application/contracts/auth-workspace/common.contract.ts";
@@ -35,15 +35,9 @@ import { REVOKE_MEMBERSHIP_ERROR_CODES } from "@lcsp/contracts/auth";
 import { AuthWorkspaceFacade } from "../../application/services/auth-workspace/auth-workspace.facade.ts";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { RequireSession } from "../../../../platform/pbac/decorators/require-session.decorator.js";
-import {
-  PbacGuard,
-  type PbacRequestContext,
-} from "../../../../platform/pbac/pbac.guard.js";
+import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 
-interface AuthWorkspaceRequest extends Request {
-  pbacContext?: PbacRequestContext;
-  correlationId?: string;
-}
+import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 
 @Controller()
 export class AuthWorkspaceController {
@@ -55,9 +49,9 @@ export class AuthWorkspaceController {
   inviteDeveloper(
     @Param("orgId") orgId: string,
     @Body() payload: InviteDeveloperRequest,
-    @Req() request: AuthWorkspaceRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext as PbacRequestContext;
+    const pbacContext = request.pbacContext;
     if (pbacContext.organizationId !== orgId) {
       throw new ForbiddenException({
         error_code: AUTH_ERROR_CODES.pbacDenied,
@@ -80,9 +74,9 @@ export class AuthWorkspaceController {
   revokeMembership(
     @Param("orgId") orgId: string,
     @Param("userId") userId: string,
-    @Req() request: AuthWorkspaceRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext as PbacRequestContext;
+    const pbacContext = request.pbacContext;
     if (pbacContext.organizationId !== orgId) {
       const errorCode = REVOKE_MEMBERSHIP_ERROR_CODES.organizationScopeMismatch;
       throw new BadRequestException({
@@ -145,7 +139,7 @@ export class AuthWorkspaceController {
   @UseGuards(PbacGuard)
   @RequireSession()
   getWorkspace(
-    @Req() request: AuthWorkspaceRequest,
+    @Req() request: AuthenticatedRequest,
     @Query("organization_id") organizationId?: string,
     @Headers("authorization") authorization?: string,
   ) {
@@ -163,7 +157,7 @@ export class AuthWorkspaceController {
   enrollMfa(
     @Body() body: { session_token?: string },
     @Headers("authorization") authorization: string | undefined,
-    @Req() request: AuthWorkspaceRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
     return this.authWorkspaceFacade.enrollMfa(
       bearerToken(authorization) ?? body.session_token ?? "",
@@ -189,7 +183,7 @@ export class AuthWorkspaceController {
   updateProfile(
     @Body() body: UpdateProfilePayload & { session_token?: string },
     @Headers("authorization") authorization: string | undefined,
-    @Req() request: AuthWorkspaceRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
     const { session_token, ...payload } = body;
     return this.authWorkspaceFacade.updateProfile(

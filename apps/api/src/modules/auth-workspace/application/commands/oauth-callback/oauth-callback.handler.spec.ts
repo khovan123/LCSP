@@ -278,7 +278,9 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
 
   beforeEach(() => {
     support = new AuthWorkspaceSupportService();
-    recordAuditSpy = jest.spyOn(support, "recordAudit").mockImplementation(async () => {});
+    recordAuditSpy = jest
+      .spyOn(support, "recordAudit")
+      .mockImplementation(async () => {});
 
     provider = new StubOidcProvider();
     registry = {
@@ -320,7 +322,11 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     });
   });
 
-  function execute(commandArgs: Partial<ConstructorParameters<typeof OAuthCallbackCommand>[0]> = {}) {
+  function execute(
+    commandArgs: Partial<
+      ConstructorParameters<typeof OAuthCallbackCommand>[0]
+    > = {},
+  ) {
     const repositories = buildRepositories({
       oauthState,
       identity,
@@ -340,26 +346,37 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
 
   it("U01 - missing code returns VALIDATION_FAILED", async () => {
     const result = await execute({ code: "" });
-    expect("problem" in result && result.problem.code).toBe(AUTH_ERROR_CODES.validationFailed);
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.validationFailed,
+    );
   });
 
   it("U02 - missing state returns VALIDATION_FAILED", async () => {
     const result = await execute({ state: "" });
-    expect("problem" in result && result.problem.code).toBe(AUTH_ERROR_CODES.validationFailed);
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.validationFailed,
+    );
   });
 
   it("U03 - missing provider returns VALIDATION_FAILED", async () => {
     const result = await execute({ provider: "" });
-    expect("problem" in result && result.problem.code).toBe(AUTH_ERROR_CODES.validationFailed);
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.validationFailed,
+    );
   });
 
   it("U04 - unknown state returns OAUTH_STATE_INVALID and records audit failure", async () => {
-    oauthState = null as any;
+    oauthState = null as unknown as OAuthState;
     const result = await execute();
-    expect("problem" in result && result.problem.code).toBe(AUTH_ERROR_CODES.oauthStateInvalid);
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthStateInvalid,
+    );
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ decision: "deny", event_type: "auth.oauth.login.failed" })
+      expect.objectContaining({
+        decision: "deny",
+        event_type: "auth.oauth.login.failed",
+      }),
     );
   });
 
@@ -367,12 +384,17 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     oauthState = new OAuthState({
       ...oauthState,
       expiresAt: Date.now() - 1000,
-    } as any);
+    });
     const result = await execute();
-    expect("problem" in result && result.problem.code).toBe(AUTH_ERROR_CODES.oauthStateInvalid);
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthStateInvalid,
+    );
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ decision: "deny", event_type: "auth.oauth.login.failed" })
+      expect.objectContaining({
+        decision: "deny",
+        event_type: "auth.oauth.login.failed",
+      }),
     );
   });
 
@@ -384,35 +406,63 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
       activeMemberships: [membership],
     });
     const handler = new OAuthCallbackHandler(support, repositories, registry);
-    
+
     // First call consumes state successfully
-    await handler.execute(new OAuthCallbackCommand({ code: "good", state: oauthState.state, provider: provider.name }));
-    
+    await handler.execute(
+      new OAuthCallbackCommand({
+        code: "good",
+        state: oauthState.state,
+        provider: provider.name,
+      }),
+    );
+
     // Second call fails
-    const result = await handler.execute(new OAuthCallbackCommand({ code: "good", state: oauthState.state, provider: provider.name }));
-    expect("problem" in result && result.problem.code).toBe(AUTH_ERROR_CODES.oauthStateInvalid);
+    const result = await handler.execute(
+      new OAuthCallbackCommand({
+        code: "good",
+        state: oauthState.state,
+        provider: provider.name,
+      }),
+    );
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthStateInvalid,
+    );
   });
 
   it("U07 - handleCallback failure maps to OAUTH_CALLBACK_INVALID without leaking provider detail", async () => {
-    jest.spyOn(provider, "handleCallback").mockRejectedValue(new Error("Network Error at Provider API"));
+    jest
+      .spyOn(provider, "handleCallback")
+      .mockRejectedValue(new Error("Network Error at Provider API"));
     const result = await execute();
-    expect("problem" in result && result.problem.code).toBe(AUTH_ERROR_CODES.oauthCallbackInvalid);
-    
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthCallbackInvalid,
+    );
+
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ decision: "deny", event_type: "auth.oauth.login.failed" })
+      expect.objectContaining({
+        decision: "deny",
+        event_type: "auth.oauth.login.failed",
+      }),
     );
     const auditPayload = recordAuditSpy.mock.calls[0][1];
-    expect(JSON.stringify(auditPayload)).not.toContain("Network Error at Provider API");
+    expect(JSON.stringify(auditPayload)).not.toContain(
+      "Network Error at Provider API",
+    );
   });
 
   it("U08 - unknown provider identity returns ACCOUNT_NOT_FOUND", async () => {
-    identity = null as any;
+    identity = null as unknown as OAuthIdentity;
     const result = await execute();
-    expect("problem" in result && result.problem.code).toBe(AUTH_ERROR_CODES.accountNotFound);
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.accountNotFound,
+    );
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ decision: "deny", event_type: "auth.oauth.login.failed" })
+      expect.objectContaining({
+        decision: "deny",
+        event_type: "auth.oauth.login.failed",
+      }),
     );
   });
 
@@ -424,10 +474,15 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
       emailVerified: false,
     });
     const result = await execute();
-    expect("problem" in result && result.problem.code).toBe(AUTH_ERROR_CODES.accountNotFound);
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.accountNotFound,
+    );
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ decision: "deny", event_type: "auth.oauth.login.failed" })
+      expect.objectContaining({
+        decision: "deny",
+        event_type: "auth.oauth.login.failed",
+      }),
     );
   });
 
@@ -446,20 +501,28 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
         provider: provider.name,
       }),
     );
-    
-    expect("problem" in result && result.problem.code).toBe(AUTH_ERROR_CODES.membershipMissing);
+
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.membershipMissing,
+    );
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ decision: "deny", event_type: "auth.oauth.login.failed" })
+      expect.objectContaining({
+        decision: "deny",
+        event_type: "auth.oauth.login.failed",
+      }),
     );
   });
 
   it("U11 - success audit payload does not contain provider access token", async () => {
-    (provider.claims as any).access_token = "LEAKED_TOKEN_MARKER";
+    Object.assign(provider.claims, { access_token: "LEAKED_TOKEN_MARKER" });
     await execute();
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ decision: "allow", event_type: "auth.oauth.login.succeeded" })
+      expect.objectContaining({
+        decision: "allow",
+        event_type: "auth.oauth.login.succeeded",
+      }),
     );
     const auditPayload = recordAuditSpy.mock.calls[0][1];
     expect(JSON.stringify(auditPayload)).not.toContain("LEAKED_TOKEN_MARKER");

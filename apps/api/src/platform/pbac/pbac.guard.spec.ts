@@ -18,7 +18,8 @@ import type {
   PbacContextResult,
 } from "./pbac-context.loader.js";
 import type { PbacEvaluatorService } from "./pbac-evaluator.service.js";
-import { PbacGuard, type PbacRequestContext } from "./pbac.guard.js";
+import { PbacGuard } from "./pbac.guard.js";
+import type { PbacRequestContext } from "./interfaces/pbac-request.interface.js";
 import type { PbacDecisionResult } from "./pbac.types.js";
 
 class DummyController {

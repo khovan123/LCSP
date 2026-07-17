@@ -4,7 +4,7 @@ import type { Request } from "express";
 
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
-import type { PbacRequestContext } from "../../../../platform/pbac/pbac.guard.js";
+import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
 import { GitHubAppStartCommand } from "../../application/commands/github-app-start/github-app-start.command.js";
 
 interface GitHubIntegrationRequest extends Request {

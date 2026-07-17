@@ -3,10 +3,8 @@ import { QueryBus } from "@nestjs/cqrs";
 import type { Request } from "express";
 
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
-import {
-  PbacGuard,
-  type PbacRequestContext,
-} from "../../../../platform/pbac/pbac.guard.js";
+import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
 import { ListAuditEventsQuery } from "../../application/queries/list-audit-events/list-audit-events.query.js";
 
 interface AuditRequest extends Request {
