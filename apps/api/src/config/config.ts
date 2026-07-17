@@ -15,6 +15,8 @@ export const configValidationSchema = Joi.object({
   OAUTH_ALLOWED_REDIRECT_URIS: Joi.string().required(),
   GITHUB_APP_SLUG: Joi.string().required(),
   GITHUB_APP_ALLOWED_REDIRECT_URIS: Joi.string().required(),
+  GITHUB_APP_CLIENT_ID: Joi.string().required(),
+  GITHUB_APP_CLIENT_SECRET: Joi.string().required(),
   RABBITMQ_URL: Joi.string().required(),
   RABBITMQ_EXCHANGE: Joi.string().default("lcsp.events"),
   OUTBOX_POLL_INTERVAL_MS: Joi.number().integer().positive().default(1000),
@@ -63,6 +65,8 @@ export function config(): AppConfig {
       allowedRedirectUris: parseRedirectUris(
         env.GITHUB_APP_ALLOWED_REDIRECT_URIS ?? "",
       ),
+      clientId: env.GITHUB_APP_CLIENT_ID ?? "",
+      clientSecret: env.GITHUB_APP_CLIENT_SECRET ?? "",
     },
     rabbitmq: {
       url: env.RABBITMQ_URL ?? "",

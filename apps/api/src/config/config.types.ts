@@ -17,6 +17,8 @@ export interface OAuthConfig {
 export interface GithubConfig {
   appSlug: string;
   allowedRedirectUris: string[];
+  clientId: string;
+  clientSecret: string;
 }
 
 export interface RabbitMqConfig {

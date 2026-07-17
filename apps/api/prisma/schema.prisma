@@ -292,17 +292,22 @@ enum AuthStateGate {
 }
 
 model RepositoryConnection {
-  id               String   @id
-  assessmentId     String
-  installationId   String
-  repositoryOwner  String
-  repositoryName   String
-  repositoryId     String
-  selectedBranch   String?
-  status           String   @default("connected")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                 String    @id
+  assessmentId       String?
+  organizationId     String
+  userId             String
+  installationId     String
+  repositoryId       String
+  repositoryName     String
+  repositoryFullName String
+  defaultBranch      String
+  permissions        Json
+  status             String    @default("active")
+  connectedAt        DateTime  @default(now())
+  revokedAt          DateTime?
 
+  @@unique([installationId, repositoryId])
+  @@index([organizationId])
   @@index([assessmentId])
 }
 

@@ -186,6 +186,7 @@ describe("OAuth login (e2e)", () => {
       providerAccountId: "side-effect-test",
       membershipStatus: "active",
     });
+    const before = await prisma.repositoryConnection.count();
     const state = await startOAuthFlow();
     mockGithubFetch("side-effect-test");
 
@@ -194,8 +195,8 @@ describe("OAuth login (e2e)", () => {
       .query({ code: "good-code", state, provider: "github" })
       .expect(200);
 
-    const count = await prisma.repositoryConnection.count();
-    assert.equal(count, 0);
+    const after = await prisma.repositoryConnection.count();
+    assert.equal(after, before);
   });
 
   it("completes login for a linked, verified account with exactly one active membership", async () => {

@@ -17,7 +17,17 @@ function buildHandler(options?: {
   const save = jest
     .fn<GitHubAppInstallStateRepository["save"]>()
     .mockResolvedValue(undefined);
-  const installStateRepository: GitHubAppInstallStateRepository = { save };
+  const findByState = jest
+    .fn<GitHubAppInstallStateRepository["findByState"]>()
+    .mockResolvedValue(null);
+  const deleteById = jest
+    .fn<GitHubAppInstallStateRepository["deleteById"]>()
+    .mockResolvedValue(undefined);
+  const installStateRepository: GitHubAppInstallStateRepository = {
+    save,
+    findByState,
+    deleteById,
+  };
 
   const buildInstallationUrl = jest
     .fn<GitHubAppClient["buildInstallationUrl"]>()
