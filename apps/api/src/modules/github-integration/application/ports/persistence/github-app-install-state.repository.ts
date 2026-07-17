@@ -6,4 +6,6 @@ export const GITHUB_APP_INSTALL_STATE_REPOSITORY = Symbol(
 
 export interface GitHubAppInstallStateRepository {
   save(installState: GitHubAppInstallState): Promise<void>;
+  findByState(state: string): Promise<GitHubAppInstallState | null>;
+  deleteById(id: string): Promise<void>;
 }

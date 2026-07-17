@@ -1,0 +1,9 @@
+import { RepositoryConnection } from "../../../domain/entities/repository-connection.entity.js";
+
+export const REPOSITORY_CONNECTION_REPOSITORY = Symbol(
+  "REPOSITORY_CONNECTION_REPOSITORY",
+);
+
+export interface RepositoryConnectionRepository {
+  save(connection: RepositoryConnection): Promise<void>;
+}

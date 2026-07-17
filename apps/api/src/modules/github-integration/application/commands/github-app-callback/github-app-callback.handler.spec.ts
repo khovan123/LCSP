@@ -1,0 +1,268 @@
+import { describe, it, expect, jest } from "@jest/globals";
+import { BadRequestException } from "@nestjs/common";
+
+import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { GitHubAppInstallState } from "../../../domain/entities/github-app-install-state.entity.js";
+import type { GitHubAppClient } from "../../../infrastructure/github/github-app.client.js";
+import type { GitHubAppInstallStateRepository } from "../../ports/persistence/github-app-install-state.repository.js";
+import type { RepositoryConnectionRepository } from "../../ports/persistence/repository-connection.repository.js";
+import { GitHubAppCallbackCommand } from "./github-app-callback.command.js";
+import { GitHubAppCallbackHandler } from "./github-app-callback.handler.js";
+
+const RAW_ACCESS_TOKEN = "ghs_should_never_be_stored_or_returned";
+
+function buildInstallState(overrides?: {
+  expiresAt?: Date;
+}): GitHubAppInstallState {
+  return GitHubAppInstallState.rehydrate({
+    id: "install-state-1",
+    state: "state-token-1",
+    assessmentId: null,
+    organizationId: "org-1",
+    userId: "user-1",
+    redirectUri: "http://localhost:3000/github/callback",
+    expiresAt: overrides?.expiresAt ?? new Date(Date.now() + 60_000),
+    createdAt: new Date(),
+  });
+}
+
+function buildHandler(options?: {
+  installState?: GitHubAppInstallState | null;
+  permissions?: Record<string, string>;
+  exchangeError?: boolean;
+  metadataError?: boolean;
+}) {
+  const findByState = jest
+    .fn<GitHubAppInstallStateRepository["findByState"]>()
+    .mockResolvedValue(
+      options?.installState === undefined
+        ? buildInstallState()
+        : options.installState,
+    );
+  const deleteById = jest
+    .fn<GitHubAppInstallStateRepository["deleteById"]>()
+    .mockResolvedValue(undefined);
+  const installStateRepository: GitHubAppInstallStateRepository = {
+    save: jest
+      .fn<GitHubAppInstallStateRepository["save"]>()
+      .mockResolvedValue(undefined),
+    findByState,
+    deleteById,
+  };
+
+  const save = jest
+    .fn<RepositoryConnectionRepository["save"]>()
+    .mockResolvedValue(undefined);
+  const repositoryConnectionRepository: RepositoryConnectionRepository = {
+    save,
+  };
+
+  const exchangeCodeForAccessToken = jest
+    .fn<GitHubAppClient["exchangeCodeForAccessToken"]>()
+    .mockImplementation(() =>
+      options?.exchangeError
+        ? Promise.reject(new Error("token_exchange_failed"))
+        : Promise.resolve(RAW_ACCESS_TOKEN),
+    );
+  const fetchInstallationMetadata = jest
+    .fn<GitHubAppClient["fetchInstallationMetadata"]>()
+    .mockImplementation(() =>
+      options?.metadataError
+        ? Promise.reject(new Error("metadata_fetch_failed"))
+        : Promise.resolve({
+            permissions: options?.permissions ?? { contents: "read" },
+            repository: {
+              id: "repo-1",
+              name: "example-repo",
+              fullName: "acme/example-repo",
+              defaultBranch: "main",
+            },
+          }),
+    );
+  const githubAppClient = {
+    exchangeCodeForAccessToken,
+    fetchInstallationMetadata,
+  } as unknown as GitHubAppClient;
+
+  const write = jest
+    .fn<AuditWriterService["write"]>()
+    .mockResolvedValue(undefined);
+  const auditWriter = { write } as unknown as AuditWriterService;
+
+  const handler = new GitHubAppCallbackHandler(
+    installStateRepository,
+    repositoryConnectionRepository,
+    githubAppClient,
+    auditWriter,
+  );
+
+  return {
+    handler,
+    findByState,
+    deleteById,
+    save,
+    exchangeCodeForAccessToken,
+    fetchInstallationMetadata,
+    write,
+  };
+}
+
+describe("GitHubAppCallbackHandler", () => {
+  // T01
+  it("creates a RepositoryConnection for a valid state and installation", async () => {
+    const { handler, save } = buildHandler();
+
+    const result = await handler.execute(
+      new GitHubAppCallbackCommand(
+        "installation-1",
+        "code-1",
+        "state-token-1",
+        "corr-1",
+      ),
+    );
+
+    expect(result.repository_full_name).toBe("acme/example-repo");
+    expect(result.default_branch).toBe("main");
+    expect(result.status).toBe("active");
+    expect(result.correlation_id).toBe("corr-1");
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  // T02
+  it("throws BadRequestException with GITHUB_STATE_INVALID when state is not found", async () => {
+    const { handler, save } = buildHandler({ installState: null });
+
+    try {
+      await handler.execute(
+        new GitHubAppCallbackCommand(
+          "installation-1",
+          "code-1",
+          "unknown-state",
+          "corr-1",
+        ),
+      );
+      throw new Error("expected rejection");
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toEqual({
+        error_code: "GITHUB_STATE_INVALID",
+        correlation_id: "corr-1",
+      });
+    }
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  // T03
+  it("throws BadRequestException with GITHUB_STATE_INVALID when state is expired", async () => {
+    const { handler, deleteById, save } = buildHandler({
+      installState: buildInstallState({
+        expiresAt: new Date(Date.now() - 1000),
+      }),
+    });
+
+    try {
+      await handler.execute(
+        new GitHubAppCallbackCommand(
+          "installation-1",
+          "code-1",
+          "state-token-1",
+          "corr-1",
+        ),
+      );
+      throw new Error("expected rejection");
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toEqual({
+        error_code: "GITHUB_STATE_INVALID",
+        correlation_id: "corr-1",
+      });
+    }
+    expect(deleteById).toHaveBeenCalledWith("install-state-1");
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  // T04
+  it("throws BadRequestException with GITHUB_CALLBACK_INVALID when token exchange fails", async () => {
+    const { handler, save } = buildHandler({ exchangeError: true });
+
+    try {
+      await handler.execute(
+        new GitHubAppCallbackCommand(
+          "installation-1",
+          "bad-code",
+          "state-token-1",
+          "corr-1",
+        ),
+      );
+      throw new Error("expected rejection");
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toEqual({
+        error_code: "GITHUB_CALLBACK_INVALID",
+        correlation_id: "corr-1",
+      });
+    }
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  // T05
+  it("throws BadRequestException with PERMISSIONS_INSUFFICIENT when installation has write permissions", async () => {
+    const { handler, save } = buildHandler({
+      permissions: { contents: "write" },
+    });
+
+    try {
+      await handler.execute(
+        new GitHubAppCallbackCommand(
+          "installation-1",
+          "code-1",
+          "state-token-1",
+          "corr-1",
+        ),
+      );
+      throw new Error("expected rejection");
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toEqual({
+        error_code: "PERMISSIONS_INSUFFICIENT",
+        correlation_id: "corr-1",
+      });
+    }
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  // T08
+  it("deletes the GitHubAppInstallState after a successful callback (one-time use)", async () => {
+    const { handler, deleteById } = buildHandler();
+
+    await handler.execute(
+      new GitHubAppCallbackCommand(
+        "installation-1",
+        "code-1",
+        "state-token-1",
+        "corr-1",
+      ),
+    );
+
+    expect(deleteById).toHaveBeenCalledWith("install-state-1");
+  });
+
+  // T06 / T09
+  it("never stores or returns the raw access token, and the audit event has no token", async () => {
+    const { handler, save, write } = buildHandler();
+
+    const result = await handler.execute(
+      new GitHubAppCallbackCommand(
+        "installation-1",
+        "code-1",
+        "state-token-1",
+        "corr-1",
+      ),
+    );
+
+    expect(JSON.stringify(result)).not.toMatch(RAW_ACCESS_TOKEN);
+    const savedConnection = save.mock.calls[0][0];
+    expect(JSON.stringify(savedConnection)).not.toMatch(RAW_ACCESS_TOKEN);
+
+    expect(write).toHaveBeenCalledTimes(1);
+    const event = write.mock.calls[0][0];
+    expect(event.eventType).toBe("GITHUB_APP_CONNECTED");
+    expect(JSON.stringify(event.payload)).not.toMatch(RAW_ACCESS_TOKEN);
+  });
+});

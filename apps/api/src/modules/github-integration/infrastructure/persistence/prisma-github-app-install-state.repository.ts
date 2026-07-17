@@ -22,4 +22,27 @@ export class PrismaGitHubAppInstallStateRepository implements GitHubAppInstallSt
       },
     });
   }
+
+  async findByState(state: string): Promise<GitHubAppInstallState | null> {
+    const row = await this.prisma.gitHubAppInstallState.findUnique({
+      where: { state },
+    });
+    if (!row) {
+      return null;
+    }
+    return GitHubAppInstallState.rehydrate({
+      id: row.id,
+      state: row.state,
+      assessmentId: row.assessmentId,
+      organizationId: row.organizationId,
+      userId: row.userId,
+      redirectUri: row.redirectUri,
+      expiresAt: row.expiresAt,
+      createdAt: row.createdAt,
+    });
+  }
+
+  async deleteById(id: string): Promise<void> {
+    await this.prisma.gitHubAppInstallState.deleteMany({ where: { id } });
+  }
 }
