@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import type { RepositoryConnectionStatus } from "@lcsp/contracts/github-integration";
 import type { RepositoryConnectionRepository } from "../../application/ports/persistence/repository-connection.repository.js";
 import { RepositoryConnection } from "../../domain/entities/repository-connection.entity.js";
 
@@ -25,6 +26,29 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
         connectedAt: connection.connectedAt,
         revokedAt: connection.revokedAt,
       },
+    });
+  }
+
+  async findById(id: string): Promise<RepositoryConnection | null> {
+    const row = await this.prisma.repositoryConnection.findUnique({
+      where: { id },
+    });
+    if (!row) return null;
+
+    return RepositoryConnection.rehydrate({
+      id: row.id,
+      assessmentId: row.assessmentId,
+      organizationId: row.organizationId,
+      userId: row.userId,
+      installationId: row.installationId,
+      repositoryId: row.repositoryId,
+      repositoryName: row.repositoryName,
+      repositoryFullName: row.repositoryFullName,
+      defaultBranch: row.defaultBranch,
+      permissions: row.permissions as Record<string, string>,
+      status: row.status as RepositoryConnectionStatus,
+      connectedAt: row.connectedAt,
+      revokedAt: row.revokedAt,
     });
   }
 }

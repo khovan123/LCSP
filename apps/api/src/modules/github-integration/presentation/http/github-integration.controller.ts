@@ -1,7 +1,10 @@
 import {
+  Body,
   Controller,
   Get,
   Headers,
+  Param,
+  Post,
   Query,
   Req,
   UseGuards,
@@ -16,17 +19,20 @@ import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pb
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { GitHubAppCallbackCommand } from "../../application/commands/github-app-callback/github-app-callback.command.js";
 import { GitHubAppStartCommand } from "../../application/commands/github-app-start/github-app-start.command.js";
+import { PinSnapshotCommand } from "../../application/commands/pin-snapshot/pin-snapshot.command.js";
+import type { PinSnapshotDto } from "../../application/contracts/github-integration/pin-snapshot.contract.js";
+import { PinSnapshotRequest } from "./dto/pin-snapshot.request.js";
 
 interface GitHubIntegrationRequest extends Request {
   pbacContext?: PbacRequestContext;
   correlationId?: string;
 }
 
-@Controller("github")
+@Controller()
 export class GitHubIntegrationController {
   constructor(private readonly commandBus: CommandBus) {}
 
-  @Get("app/start")
+  @Get("github/app/start")
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.githubConnect)
   async startAppInstallation(
@@ -47,7 +53,7 @@ export class GitHubIntegrationController {
     );
   }
 
-  @Get("app/callback")
+  @Get("github/app/callback")
   async handleAppCallback(
     @Query("installation_id") installationId: string,
     @Query("code") code: string,
@@ -60,6 +66,31 @@ export class GitHubIntegrationController {
         code,
         state,
         correlationId ?? createCorrelationId(),
+      ),
+    );
+  }
+
+  @Post("assessments/:assessmentId/snapshots")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.snapshotCreate)
+  async pinSnapshot(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: PinSnapshotRequest,
+    @Req() request: GitHubIntegrationRequest,
+  ): Promise<PinSnapshotDto> {
+    const context = request.pbacContext as PbacRequestContext;
+    return this.commandBus.execute<PinSnapshotCommand, PinSnapshotDto>(
+      new PinSnapshotCommand(
+        assessmentId,
+        context.organizationId,
+        context.userId,
+        context.subjectRole,
+        context.scope ?? undefined,
+        body.connection_id,
+        body.branch,
+        body.ref,
+        body.commit_sha,
+        request.correlationId as string,
       ),
     );
   }

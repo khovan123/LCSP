@@ -10,6 +10,7 @@ export const PBAC_ACTIONS = {
   membershipRevoke: "membership:revoke",
   metadataCheck: "pbac:metadata",
   sessionVerify: "session:verify",
+  snapshotCreate: "snapshot:create",
   wizardWrite: "wizard:write",
   workspaceRead: "workspace:read",
 } as const;

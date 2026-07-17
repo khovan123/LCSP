@@ -1,6 +1,6 @@
 # Story 3.2: Pin Commit and Create RepositorySnapshot
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -29,9 +29,9 @@ As a Manager or scoped Developer, I want to pin a branch or commit snapshot, so 
 
 ## Tasks / Subtasks
 
-- [ ] Resolve branch/ref/commit into immutable RepositorySnapshot metadata tied to assessment. (AC: 1)
-- [ ] Ensure downstream scan references snapshot ID rather than mutable branch head. (AC: 2)
-- [ ] Enforce cleanup and no long-term raw source persistence after snapshot operations. (AC: 3)
+- [x] Resolve branch/ref/commit into immutable RepositorySnapshot metadata tied to assessment. (AC: 1)
+- [x] Ensure downstream scan references snapshot ID rather than mutable branch head. (AC: 2)
+- [x] Enforce cleanup and no long-term raw source persistence after snapshot operations. (AC: 3)
 
 ## Dev Notes
 
@@ -166,9 +166,44 @@ GPT-5 Codex
 ### Completion Notes List
 
 - Converted planning-derived developer packet into official execution artifact for dev cycle.
-- Status set to `ready-for-dev` in `docs/implementation-artifacts/sprint-status.yaml`.
+- Implemented `POST /assessments/:assessmentId/snapshots` with PBAC assessment scope enforcement and safe error codes.
+- Added per-request GitHub App installation token creation, immutable commit resolution, and repository-scope validation without persisting credentials or raw source.
+- Added atomic RepositorySnapshot/outbox persistence plus success and failure audit events.
+- Added unit and E2E coverage; API build, typecheck, lint, import policy, and contract-literal checks pass.
+- Status set to `review` in `docs/implementation-artifacts/sprint-status.yaml`.
 - Story retains planning authority references and scope guardrails for downstream `dev-story` work.
 
 ### File List
 
 - docs/implementation-artifacts/3-2-pin-commit-and-create-repositorysnapshot.md
+- docs/implementation-artifacts/sprint-status.yaml
+- docs/implementation/tasks/modules/github-integration/03-pin-commit-snapshot-endpoint.md
+- apps/api/.env.test
+- apps/api/prisma/migrations/20260718120000_add_repository_snapshot/migration.sql
+- apps/api/prisma/schema.prisma
+- apps/api/src/config/config.spec.ts
+- apps/api/src/config/config.ts
+- apps/api/src/config/config.types.ts
+- apps/api/src/modules/github-integration/application/commands/github-app-callback/github-app-callback.handler.spec.ts
+- apps/api/src/modules/github-integration/application/commands/pin-snapshot/pin-snapshot.command.ts
+- apps/api/src/modules/github-integration/application/commands/pin-snapshot/pin-snapshot.handler.spec.ts
+- apps/api/src/modules/github-integration/application/commands/pin-snapshot/pin-snapshot.handler.ts
+- apps/api/src/modules/github-integration/application/contracts/github-integration/pin-snapshot.contract.ts
+- apps/api/src/modules/github-integration/application/ports/persistence/repository-connection.repository.ts
+- apps/api/src/modules/github-integration/application/ports/persistence/repository-snapshot.repository.ts
+- apps/api/src/modules/github-integration/domain/entities/repository-snapshot.entity.ts
+- apps/api/src/modules/github-integration/github-integration.module.ts
+- apps/api/src/modules/github-integration/infrastructure/github/github-app.client.spec.ts
+- apps/api/src/modules/github-integration/infrastructure/github/github-app.client.ts
+- apps/api/src/modules/github-integration/infrastructure/persistence/prisma-github-integration.repository.ts
+- apps/api/src/modules/github-integration/infrastructure/persistence/prisma-repository-snapshot.repository.spec.ts
+- apps/api/src/modules/github-integration/infrastructure/persistence/prisma-repository-snapshot.repository.ts
+- apps/api/src/modules/github-integration/presentation/http/dto/pin-snapshot.request.ts
+- apps/api/src/modules/github-integration/presentation/http/github-integration.controller.spec.ts
+- apps/api/src/modules/github-integration/presentation/http/github-integration.controller.ts
+- apps/api/test/pin-commit-snapshot.e2e-spec.ts
+- apps/api/test/support/auth-workspace-test-helpers.ts
+- packages/contracts/src/github-integration/codes.ts
+- packages/contracts/src/github-integration/events.ts
+- packages/contracts/src/github-integration/statuses.ts
+- packages/contracts/src/pbac/actions.ts

@@ -311,6 +311,26 @@ model RepositoryConnection {
   @@index([assessmentId])
 }
 
+model RepositorySnapshot {
+  id                 String   @id
+  assessmentId       String
+  organizationId     String
+  connectionId       String
+  repositoryId       String
+  repositoryFullName String
+  branch             String?
+  ref                String?
+  commitSha          String
+  providerMetadata   Json
+  actorId            String
+  status             String   @default("ready")
+  createdAt          DateTime @default(now())
+
+  @@index([assessmentId])
+  @@index([connectionId])
+  @@index([commitSha])
+}
+
 model GitHubAppInstallState {
   id             String   @id
   state          String   @unique

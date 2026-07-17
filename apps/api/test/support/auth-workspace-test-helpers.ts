@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { PrismaClient } from "@prisma/client";
 
+import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+
 import {
   encryptMfaSecret,
   fingerprintToken,
@@ -166,6 +168,7 @@ export async function seedAuthWorkspaceFixture(
         "assessment:read",
         "assessment:list",
         "github:connect",
+        PBAC_ACTIONS.snapshotCreate,
       ],
       subjectRole: "Manager",
       stateGate: "membership_active",
