@@ -1,10 +1,12 @@
+import type { WizardStatusCode } from "@lcsp/contracts/assessment";
+
 export class WizardProfileEntity {
   id: string;
   assessmentId: string;
   organizationId: string;
   ownerId: string;
   version: number;
-  status: "IN_PROGRESS" | "SUBMITTED";
+  status: WizardStatusCode;
   answers: Record<string, any>;
   submittedAt: Date | null;
   createdAt: Date;

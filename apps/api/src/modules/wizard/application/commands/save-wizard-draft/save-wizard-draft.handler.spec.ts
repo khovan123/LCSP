@@ -12,6 +12,7 @@ import {
   AssessmentNotFoundException,
   WizardAlreadySubmittedException,
 } from "../../../domain/exceptions/wizard.exceptions.js";
+import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 
 import { jest } from "@jest/globals";
 
@@ -81,7 +82,7 @@ describe("SaveWizardDraftHandler", () => {
 
       const upsertArg = wizardRepository.upsertDraft.mock.calls[0][0];
       expect(upsertArg.version).toBe(1);
-      expect(upsertArg.status).toBe("IN_PROGRESS");
+      expect(upsertArg.status).toBe(WIZARD_STATUS_CODES.inProgress);
       expect(upsertArg.answers).toEqual({ question1: "answer1" });
 
       expect(auditWriter.write).toHaveBeenCalledWith({
@@ -100,7 +101,7 @@ describe("SaveWizardDraftHandler", () => {
       });
 
       expect(result.wizard_profile_id).toBe("wizard-id-1");
-      expect(result.status).toBe("IN_PROGRESS");
+      expect(result.status).toBe(WIZARD_STATUS_CODES.inProgress);
       expect(result.version).toBe(1);
       expect(result.correlation_id).toBe("corr-id-1");
     });
@@ -114,7 +115,7 @@ describe("SaveWizardDraftHandler", () => {
           organizationId: "org-1",
           ownerId: "owner-1",
           version: 2,
-          status: "IN_PROGRESS",
+          status: WIZARD_STATUS_CODES.inProgress,
           answers: { oldQuestion: "oldAnswer" },
         }),
       );
@@ -146,7 +147,7 @@ describe("SaveWizardDraftHandler", () => {
         new WizardProfileEntity({
           id: "wizard-id-3",
           assessmentId: "assessment-123",
-          status: "SUBMITTED",
+          status: WIZARD_STATUS_CODES.submitted,
         }),
       );
 

@@ -12,6 +12,7 @@ import {
 } from "../../../domain/exceptions/wizard.exceptions.js";
 import { WizardProfileEntity } from "../../../domain/entities/wizard-profile.entity.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 
 @CommandHandler(SaveWizardDraftCommand)
 export class SaveWizardDraftHandler implements ICommandHandler<
@@ -44,7 +45,7 @@ export class SaveWizardDraftHandler implements ICommandHandler<
     let profile = await this.wizardRepository.findByAssessmentId(assessmentId);
 
     if (profile) {
-      if (profile.status === "SUBMITTED") {
+      if (profile.status === WIZARD_STATUS_CODES.submitted) {
         throw new WizardAlreadySubmittedException();
       }
       profile.answers = { ...profile.answers, ...answers };
@@ -56,7 +57,7 @@ export class SaveWizardDraftHandler implements ICommandHandler<
         organizationId,
         ownerId,
         version: 1,
-        status: "IN_PROGRESS",
+        status: WIZARD_STATUS_CODES.inProgress,
         answers,
       });
     }
