@@ -11,10 +11,10 @@ import type { Request } from "express";
 
 import { createCorrelationId } from "../../../auth-workspace/infrastructure/security/security.utils.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
+import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { GitHubAppCallbackCommand } from "../../application/commands/github-app-callback/github-app-callback.command.js";
 import { GitHubAppStartCommand } from "../../application/commands/github-app-start/github-app-start.command.js";
-import type { PbacRequestContext } from "src/platform/pbac/interfaces/pbac-request.interface.ts";
 
 interface GitHubIntegrationRequest extends Request {
   pbacContext?: PbacRequestContext;
