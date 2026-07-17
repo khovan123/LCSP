@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../../../infrastructure/prisma/prisma.service.js';
-import type { WizardProfileRepository } from '../../application/ports/persistence/wizard-profile.repository.js';
-import { WizardProfileEntity } from '../../domain/entities/wizard-profile.entity.js';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import type { WizardProfileRepository } from "../../application/ports/persistence/wizard-profile.repository.js";
+import { WizardProfileEntity } from "../../domain/entities/wizard-profile.entity.js";
 
 @Injectable()
 export class PrismaWizardRepository implements WizardProfileRepository {
@@ -22,7 +22,9 @@ export class PrismaWizardRepository implements WizardProfileRepository {
     return count > 0;
   }
 
-  async findByAssessmentId(assessmentId: string): Promise<WizardProfileEntity | null> {
+  async findByAssessmentId(
+    assessmentId: string,
+  ): Promise<WizardProfileEntity | null> {
     const data = await this.prisma.wizardProfile.findUnique({
       where: { assessmentId },
     });
@@ -33,7 +35,7 @@ export class PrismaWizardRepository implements WizardProfileRepository {
       organizationId: data.organizationId,
       ownerId: data.ownerId,
       version: data.version,
-      status: data.status as 'IN_PROGRESS' | 'SUBMITTED',
+      status: data.status as "IN_PROGRESS" | "SUBMITTED",
       answers: data.answers as Record<string, any>,
       submittedAt: data.submittedAt,
       createdAt: data.createdAt,
@@ -41,7 +43,9 @@ export class PrismaWizardRepository implements WizardProfileRepository {
     });
   }
 
-  async upsertDraft(profile: WizardProfileEntity): Promise<WizardProfileEntity> {
+  async upsertDraft(
+    profile: WizardProfileEntity,
+  ): Promise<WizardProfileEntity> {
     const data = await this.prisma.wizardProfile.upsert({
       where: { assessmentId: profile.assessmentId },
       update: {
@@ -66,7 +70,7 @@ export class PrismaWizardRepository implements WizardProfileRepository {
       organizationId: data.organizationId,
       ownerId: data.ownerId,
       version: data.version,
-      status: data.status as 'IN_PROGRESS' | 'SUBMITTED',
+      status: data.status as "IN_PROGRESS" | "SUBMITTED",
       answers: data.answers as Record<string, any>,
       submittedAt: data.submittedAt,
       createdAt: data.createdAt,

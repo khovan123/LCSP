@@ -20,8 +20,6 @@ import { GetAssessmentQuery } from "../../application/queries/get-assessment/get
 import { ListAssessmentsQuery } from "../../application/queries/list-assessments/list-assessments.query.js";
 import { CreateAssessmentRequest } from "./dto/create-assessment.request.js";
 
-
-
 @Controller("assessments")
 export class AssessmentController {
   constructor(
@@ -36,7 +34,7 @@ export class AssessmentController {
     @Body() body: CreateAssessmentRequest,
     @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext as PbacRequestContext;
+    const pbacContext = request.pbacContext;
 
     return this.commandBus.execute(
       new CreateAssessmentCommand(
@@ -58,7 +56,7 @@ export class AssessmentController {
     @Query("status") status: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext as PbacRequestContext;
+    const pbacContext = request.pbacContext;
 
     return this.queryBus.execute(
       new ListAssessmentsQuery(
@@ -81,7 +79,7 @@ export class AssessmentController {
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext as PbacRequestContext;
+    const pbacContext = request.pbacContext;
 
     return this.queryBus.execute(
       new GetAssessmentQuery(

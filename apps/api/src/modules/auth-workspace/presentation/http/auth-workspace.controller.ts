@@ -51,7 +51,7 @@ export class AuthWorkspaceController {
     @Body() payload: InviteDeveloperRequest,
     @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext as PbacRequestContext;
+    const pbacContext = request.pbacContext;
     if (pbacContext.organizationId !== orgId) {
       throw new ForbiddenException({
         error_code: AUTH_ERROR_CODES.pbacDenied,
@@ -76,7 +76,7 @@ export class AuthWorkspaceController {
     @Param("userId") userId: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext as PbacRequestContext;
+    const pbacContext = request.pbacContext;
     if (pbacContext.organizationId !== orgId) {
       const errorCode = REVOKE_MEMBERSHIP_ERROR_CODES.organizationScopeMismatch;
       throw new BadRequestException({

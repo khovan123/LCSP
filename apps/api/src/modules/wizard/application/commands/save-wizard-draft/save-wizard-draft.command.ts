@@ -1,5 +1,5 @@
-import { Command } from '@nestjs/cqrs';
-import type { SaveWizardDraftResponse } from '../../contracts/wizard/wizard-draft.contract.js';
+import { Command } from "@nestjs/cqrs";
+import type { SaveWizardDraftResponse } from "../../contracts/wizard/wizard-draft.contract.js";
 
 export class SaveWizardDraftCommand extends Command<SaveWizardDraftResponse> {
   constructor(

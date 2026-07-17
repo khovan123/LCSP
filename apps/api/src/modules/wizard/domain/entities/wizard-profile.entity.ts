@@ -4,7 +4,7 @@ export class WizardProfileEntity {
   organizationId: string;
   ownerId: string;
   version: number;
-  status: 'IN_PROGRESS' | 'SUBMITTED';
+  status: "IN_PROGRESS" | "SUBMITTED";
   answers: Record<string, any>;
   submittedAt: Date | null;
   createdAt: Date;
