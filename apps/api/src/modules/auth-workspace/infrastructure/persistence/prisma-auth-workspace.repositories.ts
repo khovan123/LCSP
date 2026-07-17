@@ -1,5 +1,11 @@
 import * as crypto from "node:crypto";
 
+import {
+  authAuditReadDecision,
+  authAuditReadNullableString,
+  authAuditReadString,
+  normalizeLegacyAuthAuditEventType,
+} from "@lcsp/contracts/auth";
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 
@@ -638,53 +644,22 @@ function isRecordNotFoundError(error: unknown): boolean {
   );
 }
 
-// The dotted `event_type` values below are this module's original
-// analytics-style convention and are embedded verbatim in the JSON payload
-// for backward compatibility. The queryable `eventType` column is aliased to
-// the newer SCREAMING_SNAKE convention used by other modules, so callers can
-// query on a consistent shape without changing what's already stored in payload.
-const EVENT_TYPE_COLUMN_ALIASES: Record<string, string> = {
-  "auth.login.succeeded": "LOGIN_SUCCESS",
-};
-
 function normalizeAuditEvent(
   event: AuditEvent,
 ): Prisma.AuthAuditEventUncheckedCreateInput {
   const payload = event as Prisma.InputJsonValue;
-  const rawEventType = readString(event, "event_type");
+  const rawEventType = authAuditReadString(event, "event_type");
   return {
     id: crypto.randomUUID(),
-    eventType: EVENT_TYPE_COLUMN_ALIASES[rawEventType] ?? rawEventType,
-    actorId: readNullableString(event, "actor_id"),
-    organizationId: readNullableString(event, "organization_id"),
-    decision: readNullableDecision(event, "decision"),
-    reasonCode: readNullableString(event, "reason_code"),
-    correlationId: readString(event, "correlation_id"),
-    sessionId: readNullableString(event, "session_id"),
-    policyId: readNullableString(event, "policy_id"),
-    policyVersion: readNullableString(event, "policy_version"),
+    eventType: normalizeLegacyAuthAuditEventType(rawEventType),
+    actorId: authAuditReadNullableString(event, "actor_id"),
+    organizationId: authAuditReadNullableString(event, "organization_id"),
+    decision: authAuditReadDecision(event, "decision"),
+    reasonCode: authAuditReadNullableString(event, "reason_code"),
+    correlationId: authAuditReadString(event, "correlation_id"),
+    sessionId: authAuditReadNullableString(event, "session_id"),
+    policyId: authAuditReadNullableString(event, "policy_id"),
+    policyVersion: authAuditReadNullableString(event, "policy_version"),
     payload,
   };
-}
-
-function readString(event: AuditEvent, key: string): string {
-  const value = event[key];
-  if (typeof value !== "string") {
-    throw new Error(`Audit event field ${key} must be a string`);
-  }
-
-  return value;
-}
-
-function readNullableString(event: AuditEvent, key: string): string | null {
-  const value = event[key];
-  return typeof value === "string" ? value : null;
-}
-
-function readNullableDecision(
-  event: AuditEvent,
-  key: string,
-): "allow" | "deny" | null {
-  const value = event[key];
-  return value === "allow" || value === "deny" ? value : null;
 }
