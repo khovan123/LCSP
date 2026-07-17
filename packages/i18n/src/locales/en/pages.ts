@@ -78,6 +78,18 @@ export const enPages = {
       CLASSIFICATION_LOCKED: "Classification Locked",
       READY_FOR_REVIEW: "Ready for Review",
     },
+    wizardStatuses: {
+      NOT_STARTED: "Not Started",
+      IN_PROGRESS: "In Progress",
+      SUBMITTED: "Submitted",
+    },
+    nextActions: {
+      wizardNotStarted:
+        "Start the Wizard to describe how this AI system is used.",
+      wizardInProgress: "Continue the Wizard to complete your assessment.",
+      wizardSubmitted:
+        "Waiting for technical evidence before classification can proceed.",
+    },
     errors: {
       workspaceUnavailableTitle: "Workspace unavailable",
       workspaceUnavailableDetail:

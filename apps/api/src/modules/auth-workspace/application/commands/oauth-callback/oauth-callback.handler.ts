@@ -1,4 +1,9 @@
-import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  createProblemResult,
+} from "@lcsp/contracts/auth";
 
 import type { OAuthProviderRegistry } from "../../../infrastructure/oauth/oauth-provider.registry.ts";
 import type { OAuthCallbackClaims } from "../../../infrastructure/oauth/oauth-provider.interface.ts";
@@ -174,10 +179,10 @@ export class OAuthCallbackHandler {
     );
 
     await this.support.recordAudit(repositories, {
-      event_type: "auth.oauth.login.succeeded",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginSucceeded,
       actor_id: user.id,
       organization_id: organizationId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
       provider: oauthState.provider,
     });
@@ -213,10 +218,10 @@ export class OAuthCallbackHandler {
     actorId: string | null,
   ): Promise<void> {
     await this.support.recordAudit(repositories, {
-      event_type: "auth.oauth.login.failed",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       actor_id: actorId,
       organization_id: null,
-      decision: "deny",
+      decision: AUDIT_DECISIONS.deny,
       reason_code: reasonCode,
       correlation_id: correlationId,
     });

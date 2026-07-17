@@ -6,8 +6,9 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "check:imports": "node scripts/check-import-policy.mjs",
+    "check:contracts": "node scripts/check-contract-literals.mjs",
     "check:branch": "node scripts/check-branch-name.mjs",
-    "lint": "pnpm run check:imports && pnpm run typecheck",
+    "lint": "pnpm run check:imports && pnpm run check:contracts && pnpm run typecheck",
     "prepare": "husky",
     "test": "pnpm run test:web && pnpm --filter @lcsp/api test:e2e",
     "test:web": "node --test tests/*.web.test.ts",

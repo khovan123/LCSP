@@ -8,6 +8,6 @@ export interface InvitationRepository {
   nextId(): string;
   save(invitation: Invitation): Promise<void>;
   findById(id: string): Promise<Invitation | null>;
-  /** Atomically flips state "approved" -> "consumed". Returns false if it was not in "approved" state (already consumed/raced). */
+  /** Atomically consumes an approved invitation. Returns false if it was already consumed or raced. */
   tryConsume(id: string): Promise<boolean>;
 }

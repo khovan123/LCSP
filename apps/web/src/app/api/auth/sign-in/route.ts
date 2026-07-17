@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import {
   SESSION_COOKIE_NAME,
@@ -25,9 +26,12 @@ export async function POST(request: Request) {
   const payload: unknown = await apiResponse.json().catch(() => null);
 
   if (!isSignInApiSuccess(payload)) {
-    return NextResponse.json(payload ?? { code: "INVALID_CREDENTIALS" }, {
-      status: apiResponse.ok ? 401 : apiResponse.status,
-    });
+    return NextResponse.json(
+      payload ?? { code: AUTH_ERROR_CODES.invalidCredentials },
+      {
+        status: apiResponse.ok ? 401 : apiResponse.status,
+      },
+    );
   }
 
   const response = NextResponse.json({

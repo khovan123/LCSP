@@ -2,6 +2,13 @@ import {
   BadRequestException,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUTH_AUDIT_EVENT_TYPES,
+  AUTH_INVITATION_STATES,
+  AUTH_MEMBERSHIP_STATUSES,
+  INVITE_DEVELOPER_ERROR_CODES,
+} from "@lcsp/contracts/auth";
 
 import { Invitation } from "../../../domain/models/auth-workspace.models.ts";
 import { EmailAddress } from "../../../domain/value-objects/email-address.value-object.ts";
@@ -17,7 +24,6 @@ import {
   DEVELOPER_SUBJECT_ROLE,
   isDeveloperAllowedAction,
 } from "@lcsp/contracts/pbac";
-import { INVITE_DEVELOPER_ERROR_CODES } from "@lcsp/contracts/auth";
 import { InviteDeveloperCommand } from "./invite-developer.command.ts";
 
 const DEFAULT_EXPIRY_HOURS = 72;
@@ -105,9 +111,9 @@ export class InviteDeveloperHandler {
       id: this.repositories.invitations.nextId(),
       email,
       organizationId: input.orgId,
-      state: "approved",
+      state: AUTH_INVITATION_STATES.approved,
       emailVerified: false,
-      membershipStatus: "active",
+      membershipStatus: AUTH_MEMBERSHIP_STATUSES.active,
       subjectAttributes: {
         role: DEVELOPER_SUBJECT_ROLE,
         ...(input.assessmentId ? { scope: input.assessmentId } : {}),
@@ -120,10 +126,10 @@ export class InviteDeveloperHandler {
 
     await this.repositories.invitations.save(invitation);
     await this.support.recordAudit(this.repositories, {
-      event_type: "AUTH_DEVELOPER_INVITED",
+      event_type: AUTH_AUDIT_EVENT_TYPES.authDeveloperInvited,
       actor_id: input.actorId,
       organization_id: input.orgId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
       policy_id: developerPolicy.id,
       policy_version: developerPolicy.version,

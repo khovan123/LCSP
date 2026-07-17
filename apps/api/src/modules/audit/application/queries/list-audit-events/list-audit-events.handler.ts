@@ -1,6 +1,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import type { Prisma } from "@prisma/client";
+import { ORGANIZATION_SCOPE_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type {
@@ -24,7 +25,10 @@ export class ListAuditEventsHandler implements IQueryHandler<ListAuditEventsQuer
 
   async execute(query: ListAuditEventsQuery): Promise<AuditEventListDto> {
     if (query.organizationId !== query.sessionOrganizationId) {
-      this.badRequest("ORG_SCOPE_MISMATCH", query.correlationId);
+      this.badRequest(
+        ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
+        query.correlationId,
+      );
     }
 
     const page = this.positiveInteger(

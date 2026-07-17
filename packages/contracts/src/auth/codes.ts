@@ -39,8 +39,12 @@ export const INVITE_DEVELOPER_ERROR_CODES = {
   invalidRequest: "INVALID_REQUEST",
 } as const;
 
+export const ORGANIZATION_SCOPE_ERROR_CODES = {
+  mismatch: "ORG_SCOPE_MISMATCH",
+} as const;
+
 export const REVOKE_MEMBERSHIP_ERROR_CODES = {
   membershipNotFound: "MEMBERSHIP_NOT_FOUND",
   cannotSelfRevoke: "CANNOT_SELF_REVOKE",
-  organizationScopeMismatch: "ORG_SCOPE_MISMATCH",
+  organizationScopeMismatch: ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
 } as const;

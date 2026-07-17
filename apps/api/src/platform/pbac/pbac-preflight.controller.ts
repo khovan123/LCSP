@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type { PbacDecisionValue } from "@lcsp/contracts/pbac";
 
 import { PbacPreflightService } from "./pbac-preflight.service.js";
 
@@ -19,7 +20,7 @@ interface PreflightRequestBody {
 }
 
 interface PreflightResponseBody {
-  decision: "allow" | "deny";
+  decision: PbacDecisionValue;
   reason_code: string | null;
   correlation_id: string;
 }

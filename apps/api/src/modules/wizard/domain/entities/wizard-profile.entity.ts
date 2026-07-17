@@ -1,4 +1,4 @@
-import type { WizardStatusCode } from "@lcsp/contracts/assessment";
+import type { PersistedWizardStatusCode } from "@lcsp/contracts/assessment";
 
 export class WizardProfileEntity {
   id: string;
@@ -6,7 +6,7 @@ export class WizardProfileEntity {
   organizationId: string;
   ownerId: string;
   version: number;
-  status: WizardStatusCode;
+  status: PersistedWizardStatusCode;
   answers: Record<string, any>;
   submittedAt: Date | null;
   createdAt: Date;

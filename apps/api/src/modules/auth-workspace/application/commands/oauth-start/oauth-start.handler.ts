@@ -1,4 +1,9 @@
-import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  createProblemResult,
+} from "@lcsp/contracts/auth";
 import type { ConfigService } from "@nestjs/config";
 
 import { OAuthState } from "../../../domain/models/auth-workspace.models.ts";
@@ -86,10 +91,10 @@ export class OAuthStartHandler {
     });
 
     await this.support.recordAudit(repositories, {
-      event_type: "auth.oauth.start.succeeded",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartSucceeded,
       actor_id: null,
       organization_id: null,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
       provider: providerName,
     });
@@ -107,10 +112,10 @@ export class OAuthStartHandler {
     reasonCode: string,
   ): Promise<void> {
     await this.support.recordAudit(repositories, {
-      event_type: "auth.oauth.start.failed",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartFailed,
       actor_id: null,
       organization_id: null,
-      decision: "deny",
+      decision: AUDIT_DECISIONS.deny,
       reason_code: reasonCode,
       correlation_id: correlationId,
     });

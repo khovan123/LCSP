@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
+import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
@@ -28,7 +29,7 @@ export class AssessmentController {
 
   @Post()
   @UseGuards(PbacGuard)
-  @RequireAction("assessment:create")
+  @RequireAction(PBAC_ACTIONS.assessmentCreate)
   async createAssessment(
     @Body() body: CreateAssessmentRequest,
     @Req() request: AuthenticatedRequest,
@@ -48,7 +49,7 @@ export class AssessmentController {
 
   @Get()
   @UseGuards(PbacGuard)
-  @RequireAction("assessment:list")
+  @RequireAction(PBAC_ACTIONS.assessmentList)
   async listAssessments(
     @Query("page") page: string | undefined,
     @Query("page_size") pageSize: string | undefined,
@@ -73,7 +74,7 @@ export class AssessmentController {
 
   @Get(":assessmentId")
   @UseGuards(PbacGuard)
-  @RequireAction("assessment:read")
+  @RequireAction(PBAC_ACTIONS.assessmentRead)
   async getAssessment(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,

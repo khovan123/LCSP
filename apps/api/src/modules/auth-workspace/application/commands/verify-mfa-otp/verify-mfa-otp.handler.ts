@@ -1,4 +1,9 @@
-import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  createProblemResult,
+} from "@lcsp/contracts/auth";
 
 import { MfaRateLimit } from "../../../domain/entities/mfa-rate-limit.entity.ts";
 import {
@@ -54,10 +59,10 @@ export class VerifyMfaOtpHandler {
     );
     if (rateLimit?.isLocked(now)) {
       await this.support.recordAudit(this.repositories, {
-        event_type: "auth.mfa.rate_limited",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRateLimited,
         actor_id: session.userId,
         organization_id: session.organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.mfaRateLimited,
         correlation_id: correlationId,
       });
@@ -136,10 +141,10 @@ export class VerifyMfaOtpHandler {
     await this.repositories.mfaRateLimits.save(existingRateLimit);
 
     await this.support.recordAudit(this.repositories, {
-      event_type: "auth.mfa.verified",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaVerified,
       actor_id: session.userId,
       organization_id: session.organizationId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
     });
 
@@ -161,10 +166,10 @@ export class VerifyMfaOtpHandler {
     );
 
     await this.support.recordAudit(this.repositories, {
-      event_type: "auth.mfa.failed",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed,
       actor_id: userId,
       organization_id: organizationId,
-      decision: "deny",
+      decision: AUDIT_DECISIONS.deny,
       reason_code: AUTH_ERROR_CODES.mfaInvalid,
       otp_failure_reason: reason,
       correlation_id: correlationId,

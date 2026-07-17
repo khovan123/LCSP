@@ -1,8 +1,15 @@
 import {
   AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
   createProblemResult,
   type AuthErrorCode,
 } from "@lcsp/contracts/auth";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  PBAC_ACTIONS,
+  PBAC_DECISION,
+  PBAC_REASON_CODE,
+} from "@lcsp/contracts/pbac";
 
 import type {
   AuditEvent,
@@ -73,7 +80,7 @@ export class AuthWorkspaceSupportService {
       // Only the role label is client-safe; other subject attributes are
       // internal PBAC policy-evaluation inputs and must not leak to the client.
       subject_attributes: membership.hasRole()
-        ? { role: membership.role() as string }
+        ? { role: membership.role() }
         : {},
     };
   }
@@ -197,10 +204,10 @@ export class AuthWorkspaceSupportService {
     });
     await repositories.sessions.save(session, fingerprint);
     await this.recordAudit(repositories, {
-      event_type: "auth.session.created",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.sessionCreated,
       actor_id: user.id,
       organization_id: organizationId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
       session_id: session.id,
       policy_id: null,
@@ -260,8 +267,8 @@ export class AuthWorkspaceSupportService {
         organization_id: membership?.organizationId ?? null,
         resource_type: "Workspace",
         resource_id: resourceId,
-        action: "workspace:read",
-        decision: "deny",
+        action: PBAC_ACTIONS.workspaceRead,
+        decision: PBAC_DECISION.deny,
         reason_code: domainDecision.code,
         policy_id: membership?.policyId ?? null,
         policy_version: membership?.policyVersion ?? null,
@@ -274,9 +281,9 @@ export class AuthWorkspaceSupportService {
       organization_id: organizationId,
       resource_type: "Workspace",
       resource_id: resourceId,
-      action: "workspace:read",
-      decision: "allow",
-      reason_code: "AUTHORIZED",
+      action: PBAC_ACTIONS.workspaceRead,
+      decision: PBAC_DECISION.allow,
+      reason_code: PBAC_REASON_CODE.authorized,
       policy_id: membership?.policyId ?? null,
       policy_version: membership?.policyVersion ?? null,
       correlation_id: correlationId,

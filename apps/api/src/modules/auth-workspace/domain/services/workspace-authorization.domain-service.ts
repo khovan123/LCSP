@@ -1,4 +1,5 @@
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { PBAC_ACTIONS, PBAC_STATE_GATES } from "@lcsp/contracts/pbac";
 
 import { Membership } from "../entities/membership.entity.ts";
 import { Policy } from "../entities/policy.entity.ts";
@@ -35,13 +36,16 @@ export class WorkspaceAuthorizationDomainService {
       };
     }
 
-    if (policy.stateGate === "membership_active" && !membership.isActive()) {
+    if (
+      policy.stateGate === PBAC_STATE_GATES.membershipActive &&
+      !membership.isActive()
+    ) {
       return { allowed: false, code: AUTH_ERROR_CODES.authzStateGateBlocked };
     }
 
     if (
       policy.subjectRole !== membership.role() ||
-      !policy.allows("workspace:read")
+      !policy.allows(PBAC_ACTIONS.workspaceRead)
     ) {
       return { allowed: false, code: AUTH_ERROR_CODES.authzEvaluatorFailure };
     }

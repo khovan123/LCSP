@@ -2,6 +2,8 @@ import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
 import { Inject } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import { SaveWizardDraftCommand } from "./save-wizard-draft.command.js";
 import type { SaveWizardDraftResponse } from "../../contracts/wizard/wizard-draft.contract.js";
 import { WIZARD_PROFILE_REPOSITORY } from "../../ports/persistence/wizard-profile.repository.js";
@@ -67,12 +69,12 @@ export class SaveWizardDraftHandler implements ICommandHandler<
 
     // 4. Audit logging
     await this.auditWriter.write({
-      eventType: "WIZARD_DRAFT_SAVED",
+      eventType: WIZARD_EVENT_TYPES.draftSaved,
       actorId: ownerId,
       organizationId,
       resourceType: "wizard_profile",
       resourceId: savedProfile.id,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       payload: {
         assessmentId,
         wizardProfileId: savedProfile.id,

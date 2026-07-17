@@ -1,9 +1,13 @@
 import { Inject, UnprocessableEntityException } from "@nestjs/common";
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
-import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_ERROR_CODES,
+  ASSESSMENT_EVENT_TYPES,
+} from "@lcsp/contracts/assessment";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
 import { Assessment } from "../../../domain/entities/assessment.entity.js";
 import { AssessmentMapper } from "../../mappers/assessment.mapper.js";
@@ -41,13 +45,13 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
     await this.assessmentRepository.save(assessment);
 
     await this.auditWriter.write({
-      eventType: "ASSESSMENT_CREATED",
+      eventType: ASSESSMENT_EVENT_TYPES.created,
       actorId: assessment.ownerId,
       organizationId: assessment.organizationId,
       resourceType: "Assessment",
       resourceId: assessment.id,
       correlationId: command.correlationId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       payload: {
         assessmentId: assessment.id,
         organizationId: assessment.organizationId,
@@ -59,7 +63,7 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
     await this.outboxRepository.enqueue({
       aggregateType: "Assessment",
       aggregateId: assessment.id,
-      eventType: "assessment.created",
+      eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
       payload: {
         assessmentId: assessment.id,
         organizationId: assessment.organizationId,

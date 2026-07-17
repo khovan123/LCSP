@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import {
+  REPOSITORY_CONNECTION_STATUSES,
+  type RepositoryConnectionStatus,
+} from "@lcsp/contracts/github-integration";
 
 type RepositoryConnectionProps = {
   id: string;
@@ -11,7 +15,7 @@ type RepositoryConnectionProps = {
   repositoryFullName: string;
   defaultBranch: string;
   permissions: Record<string, string>;
-  status: "active" | "revoked";
+  status: RepositoryConnectionStatus;
   connectedAt: Date;
   revokedAt: Date | null;
 };
@@ -41,7 +45,7 @@ export class RepositoryConnection {
       repositoryFullName: input.repositoryFullName,
       defaultBranch: input.defaultBranch,
       permissions: input.permissions,
-      status: "active",
+      status: REPOSITORY_CONNECTION_STATUSES.active,
       connectedAt: new Date(),
       revokedAt: null,
     });
@@ -91,7 +95,7 @@ export class RepositoryConnection {
     return this.props.permissions;
   }
 
-  get status(): "active" | "revoked" {
+  get status(): RepositoryConnectionStatus {
     return this.props.status;
   }
 

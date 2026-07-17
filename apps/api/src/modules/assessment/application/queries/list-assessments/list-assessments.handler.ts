@@ -2,7 +2,12 @@ import { Inject, UnprocessableEntityException } from "@nestjs/common";
 import { QueryHandler } from "@nestjs/cqrs";
 import type { IQueryHandler } from "@nestjs/cqrs";
 
-import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_ERROR_CODES,
+  ASSESSMENT_STATUS_CODES,
+  SUBJECT_ROLES,
+  WIZARD_STATUS_CODES,
+} from "@lcsp/contracts";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import {
   ASSESSMENT_REPOSITORY,
@@ -14,7 +19,6 @@ import type {
   AssessmentSummary,
 } from "../../contracts/assessment/assessment-list.contract.js";
 import type { WizardStatus } from "../../contracts/assessment/assessment-detail.contract.js";
-import { ASSESSMENT_STATUSES } from "../../../domain/entities/assessment.entity.js";
 import { ListAssessmentsQuery } from "./list-assessments.query.js";
 
 const DEFAULT_PAGE = 1;
@@ -36,11 +40,15 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
       Math.max(1, query.pageSize ?? DEFAULT_PAGE_SIZE),
     );
 
-    if (query.status && !isKnownStatus(query.status)) {
-      throw new UnprocessableEntityException({
-        error_code: ASSESSMENT_ERROR_CODES.invalidRequest,
-        correlation_id: query.correlationId,
-      });
+    let status: AssessmentListCriteria["status"];
+    if (query.status) {
+      if (!isKnownStatus(query.status)) {
+        throw new UnprocessableEntityException({
+          error_code: ASSESSMENT_ERROR_CODES.invalidRequest,
+          correlation_id: query.correlationId,
+        });
+      }
+      status = query.status;
     }
 
     const emptyResult = (): AssessmentListDto => ({
@@ -53,16 +61,16 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
 
     // Developer (or any non-Manager role) with no scope on their membership has
     // nothing to see — fail closed rather than falling through to an org-wide query.
-    if (query.subjectRole !== "Manager" && !query.scope) {
+    if (query.subjectRole !== SUBJECT_ROLES.manager && !query.scope) {
       return emptyResult();
     }
 
     const criteria: AssessmentListCriteria = {
       organizationId: query.organizationId,
-      status: query.status,
+      status,
       page,
       pageSize,
-      ...(query.subjectRole === "Manager"
+      ...(query.subjectRole === SUBJECT_ROLES.manager
         ? { ownerId: query.sessionUserId }
         : { assessmentId: query.scope as string }),
     };
@@ -81,7 +89,8 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
       assessment_id: item.id,
       name: item.name,
       status: item.status,
-      wizard_status: wizardStatuses.get(item.id) ?? "NOT_STARTED",
+      wizard_status:
+        wizardStatuses.get(item.id) ?? WIZARD_STATUS_CODES.notStarted,
       created_at: item.createdAt.toISOString(),
       updated_at: item.updatedAt.toISOString(),
     }));
@@ -109,6 +118,10 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
   }
 }
 
-function isKnownStatus(status: string): boolean {
-  return (ASSESSMENT_STATUSES as readonly string[]).includes(status);
+function isKnownStatus(
+  status: string,
+): status is (typeof ASSESSMENT_STATUS_CODES)[keyof typeof ASSESSMENT_STATUS_CODES] {
+  return Object.values(ASSESSMENT_STATUS_CODES).some(
+    (knownStatus) => knownStatus === status,
+  );
 }

@@ -1,3 +1,8 @@
+import {
+  AUDIT_DECISIONS,
+  type AuditDecision,
+} from "../audit/audit-event.types.ts";
+
 export const AUTH_AUDIT_EVENT_TYPES = {
   authSignInSuccess: "AUTH_SIGN_IN_SUCCESS",
   authSignInFailed: "AUTH_SIGN_IN_FAILED",
@@ -17,18 +22,51 @@ export const AUTH_AUDIT_EVENT_TYPES = {
 export type AuthAuditEventType =
   (typeof AUTH_AUDIT_EVENT_TYPES)[keyof typeof AUTH_AUDIT_EVENT_TYPES];
 
+export const AUTH_LEGACY_AUDIT_EVENT_TYPES = {
+  loginSucceeded: "auth.login.succeeded",
+  loginFailed: "auth.login.failed",
+  sessionCreated: "auth.session.created",
+  sessionRevoked: "auth.session.revoked",
+  registerSucceeded: "auth.register.succeeded",
+  registerFailed: "auth.register.failed",
+  mfaEnrolled: "auth.mfa.enrolled",
+  mfaVerified: "auth.mfa.verified",
+  mfaFailed: "auth.mfa.failed",
+  mfaRateLimited: "auth.mfa.rate_limited",
+  profileUpdated: "auth.profile.updated",
+  recoveryRequested: "auth.recovery.requested",
+  recoveryConfirmed: "auth.recovery.confirmed",
+  recoveryConfirmFailed: "auth.recovery.confirm_failed",
+  oauthStartSucceeded: "auth.oauth.start.succeeded",
+  oauthStartFailed: "auth.oauth.start.failed",
+  oauthLoginSucceeded: "auth.oauth.login.succeeded",
+  oauthLoginFailed: "auth.oauth.login.failed",
+  workspaceAccessAllowed: "workspace.access.allowed",
+  workspaceAccessDenied: "workspace.access.denied",
+} as const;
+
 export const LEGACY_AUTH_AUDIT_EVENT_TYPE_ALIASES: Record<string, string> = {
-  "auth.login.succeeded": "LOGIN_SUCCESS",
-  "auth.login.failed": AUTH_AUDIT_EVENT_TYPES.authSignInFailed,
-  "auth.session.revoked": AUTH_AUDIT_EVENT_TYPES.authSessionRevoked,
-  "auth.mfa.enrolled": AUTH_AUDIT_EVENT_TYPES.authMfaEnrolled,
-  "auth.mfa.verified": AUTH_AUDIT_EVENT_TYPES.authMfaOtpVerified,
-  "auth.mfa.failed": AUTH_AUDIT_EVENT_TYPES.authMfaOtpFailed,
-  "auth.profile.updated": AUTH_AUDIT_EVENT_TYPES.authProfileUpdated,
-  "auth.oauth.start.succeeded": AUTH_AUDIT_EVENT_TYPES.authOauthStart,
-  "auth.oauth.start.failed": AUTH_AUDIT_EVENT_TYPES.authOauthStart,
-  "auth.oauth.login.succeeded": AUTH_AUDIT_EVENT_TYPES.authOauthLoginSuccess,
-  "auth.oauth.login.failed": AUTH_AUDIT_EVENT_TYPES.authOauthLoginFailed,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded]: "LOGIN_SUCCESS",
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed]:
+    AUTH_AUDIT_EVENT_TYPES.authSignInFailed,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.sessionRevoked]:
+    AUTH_AUDIT_EVENT_TYPES.authSessionRevoked,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaEnrolled]:
+    AUTH_AUDIT_EVENT_TYPES.authMfaEnrolled,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaVerified]:
+    AUTH_AUDIT_EVENT_TYPES.authMfaOtpVerified,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed]:
+    AUTH_AUDIT_EVENT_TYPES.authMfaOtpFailed,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.profileUpdated]:
+    AUTH_AUDIT_EVENT_TYPES.authProfileUpdated,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartSucceeded]:
+    AUTH_AUDIT_EVENT_TYPES.authOauthStart,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartFailed]:
+    AUTH_AUDIT_EVENT_TYPES.authOauthStart,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginSucceeded]:
+    AUTH_AUDIT_EVENT_TYPES.authOauthLoginSuccess,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed]:
+    AUTH_AUDIT_EVENT_TYPES.authOauthLoginFailed,
 };
 
 export type LegacyAuthAuditEvent = Record<string, unknown>;
@@ -78,7 +116,9 @@ export function authAuditReadNullableString(
 export function authAuditReadDecision(
   event: LegacyAuthAuditEvent,
   key: string,
-): "allow" | "deny" | null {
+): AuditDecision | null {
   const value = event[key];
-  return value === "allow" || value === "deny" ? value : null;
+  return value === AUDIT_DECISIONS.allow || value === AUDIT_DECISIONS.deny
+    ? value
+    : null;
 }

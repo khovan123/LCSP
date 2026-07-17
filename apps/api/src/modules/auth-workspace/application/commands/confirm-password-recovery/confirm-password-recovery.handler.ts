@@ -1,4 +1,9 @@
-import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  createProblemResult,
+} from "@lcsp/contracts/auth";
 
 import {
   fingerprintToken,
@@ -43,10 +48,10 @@ export class ConfirmPasswordRecoveryHandler {
       );
     if (!recoveryRequest || !recoveryRequest.isValid(now)) {
       await this.support.recordAudit(repositories, {
-        event_type: "auth.recovery.confirm_failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.recoveryConfirmFailed,
         actor_id: recoveryRequest?.userId ?? null,
         organization_id: null,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.recoveryInvalid,
         correlation_id: correlationId,
       });
@@ -74,10 +79,10 @@ export class ConfirmPasswordRecoveryHandler {
     await repositories.sessions.revokeAllForUser(user.id, now);
 
     await this.support.recordAudit(repositories, {
-      event_type: "auth.recovery.confirmed",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.recoveryConfirmed,
       actor_id: user.id,
       organization_id: null,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
     });
 

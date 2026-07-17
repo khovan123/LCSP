@@ -1,4 +1,9 @@
-import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  createProblemResult,
+} from "@lcsp/contracts/auth";
 
 import { EmailAddress } from "../../../domain/value-objects/email-address.value-object.ts";
 import type { AuthProblemResult } from "../../contracts/auth-workspace/common.contract.ts";
@@ -111,10 +116,10 @@ export class UpdateProfileHandler {
     await this.repositories.users.save(user);
 
     await this.support.recordAudit(this.repositories, {
-      event_type: "auth.profile.updated",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.profileUpdated,
       actor_id: user.id,
       organization_id: session.organizationId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       updated_fields: updatedFields,
       correlation_id: correlationId,
     });

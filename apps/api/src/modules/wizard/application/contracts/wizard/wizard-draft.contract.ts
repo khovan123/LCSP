@@ -4,8 +4,9 @@ export interface SaveWizardDraftRequest {
 
 export interface SaveWizardDraftResponse {
   wizard_profile_id: string;
-  status: string;
+  status: WizardStatusCode;
   version: number;
   updated_at: string;
   correlation_id: string;
 }
+import type { WizardStatusCode } from "@lcsp/contracts/assessment";

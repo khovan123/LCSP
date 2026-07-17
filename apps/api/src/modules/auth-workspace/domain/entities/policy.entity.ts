@@ -1,9 +1,11 @@
+import type { StateGate } from "@lcsp/contracts/pbac";
+
 export class Policy {
   readonly id: string;
   readonly version: string;
   readonly actions: string[];
   readonly subjectRole: string;
-  readonly stateGate: "membership_active";
+  readonly stateGate: StateGate;
   organizationId: string;
 
   constructor(input: {
@@ -11,7 +13,7 @@ export class Policy {
     version: string;
     actions: string[];
     subjectRole: string;
-    stateGate: "membership_active";
+    stateGate: StateGate;
     organizationId: string;
   }) {
     this.id = input.id;

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import type { PersistedWizardStatusCode } from "@lcsp/contracts/assessment";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { WizardProfileRepository } from "../../application/ports/persistence/wizard-profile.repository.js";
 import { WizardProfileEntity } from "../../domain/entities/wizard-profile.entity.js";
@@ -35,7 +36,7 @@ export class PrismaWizardRepository implements WizardProfileRepository {
       organizationId: data.organizationId,
       ownerId: data.ownerId,
       version: data.version,
-      status: data.status as "IN_PROGRESS" | "SUBMITTED",
+      status: data.status as PersistedWizardStatusCode,
       answers: data.answers as Record<string, any>,
       submittedAt: data.submittedAt,
       createdAt: data.createdAt,
@@ -70,7 +71,7 @@ export class PrismaWizardRepository implements WizardProfileRepository {
       organizationId: data.organizationId,
       ownerId: data.ownerId,
       version: data.version,
-      status: data.status as "IN_PROGRESS" | "SUBMITTED",
+      status: data.status as PersistedWizardStatusCode,
       answers: data.answers as Record<string, any>,
       submittedAt: data.submittedAt,
       createdAt: data.createdAt,

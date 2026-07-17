@@ -1,6 +1,11 @@
+import type {
+  AssessmentAction,
+  AssessmentStatusCode,
+  WizardStatusCode,
+} from "@lcsp/contracts/assessment";
 import type { MessageKey } from "@lcsp/i18n";
 
-export type WorkspaceAction = "assessment:create" | (string & {});
+export type WorkspaceAction = AssessmentAction | (string & {});
 
 export type WorkspaceContext = {
   organization: {
@@ -13,19 +18,13 @@ export type WorkspaceContext = {
   granted_actions: WorkspaceAction[];
 };
 
-export type AssessmentStatus =
-  | "WIZARD_IN_PROGRESS"
-  | "WIZARD_SUBMITTED"
-  | "EVIDENCE_REQUIRED"
-  | "SCAN_IN_PROGRESS"
-  | "CLASSIFICATION_LOCKED"
-  | "READY_FOR_REVIEW";
+export type AssessmentStatus = AssessmentStatusCode;
 
 export type AssessmentSummary = {
   id: string;
   name: string;
   status: AssessmentStatus;
-  wizard_status: AssessmentStatus;
+  wizard_status: WizardStatusCode;
   created_at: string;
 };
 
@@ -46,9 +45,7 @@ export type WorkspaceErrorOutcome = {
 };
 
 export type WorkspaceOutcome =
-  | WorkspaceLoadedOutcome
-  | WorkspaceRedirectOutcome
-  | WorkspaceErrorOutcome;
+  WorkspaceLoadedOutcome | WorkspaceRedirectOutcome | WorkspaceErrorOutcome;
 
 export type AssessmentsOutcome =
   | {

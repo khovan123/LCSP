@@ -7,6 +7,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus } from "@nestjs/cqrs";
+import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import type { Request } from "express";
 
 import { createCorrelationId } from "../../../auth-workspace/infrastructure/security/security.utils.js";
@@ -27,7 +28,7 @@ export class GitHubIntegrationController {
 
   @Get("app/start")
   @UseGuards(PbacGuard)
-  @RequireAction("github:connect")
+  @RequireAction(PBAC_ACTIONS.githubConnect)
   async startAppInstallation(
     @Query("redirect_uri") redirectUri: string | undefined,
     @Query("assessment_id") assessmentId: string | undefined,

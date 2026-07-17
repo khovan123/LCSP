@@ -1,4 +1,9 @@
-export type AuditDecision = "allow" | "deny";
+import { PBAC_DECISION } from "../pbac/decisions.ts";
+
+export const AUDIT_DECISIONS = PBAC_DECISION;
+
+export type AuditDecision =
+  (typeof AUDIT_DECISIONS)[keyof typeof AUDIT_DECISIONS];
 
 export interface AuditEventInput {
   eventType: string;

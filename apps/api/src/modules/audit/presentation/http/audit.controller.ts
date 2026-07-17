@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query, Req, UseGuards } from "@nestjs/common";
 import { QueryBus } from "@nestjs/cqrs";
+import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import type { Request } from "express";
 
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
@@ -18,7 +19,7 @@ export class AuditController {
 
   @Get()
   @UseGuards(PbacGuard)
-  @RequireAction("audit:read")
+  @RequireAction(PBAC_ACTIONS.auditRead)
   async listAuditEvents(
     @Param("orgId") organizationId: string,
     @Query("event_type") eventType: string | undefined,

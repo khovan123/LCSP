@@ -1,3 +1,4 @@
+import type { AuthMembershipStatus } from "@lcsp/contracts/auth";
 import type {
   PbacDecision,
   PbacDecisionResult,
@@ -19,7 +20,7 @@ export type {
 export interface PbacMembershipContext {
   organizationId: string;
   userId: string;
-  membershipStatus: string;
+  membershipStatus: AuthMembershipStatus;
   policyId: string;
   policyVersion: string;
 }

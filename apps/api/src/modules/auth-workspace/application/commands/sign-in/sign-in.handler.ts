@@ -1,4 +1,9 @@
-import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  createProblemResult,
+} from "@lcsp/contracts/auth";
 
 import {
   hashSecret,
@@ -44,10 +49,10 @@ export class SignInHandler {
       // response latency doesn't reveal whether the email is registered.
       verifySecret(password, DECOY_PASSWORD_HASH);
       await this.support.recordAudit(repositories, {
-        event_type: "auth.login.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: null,
         organization_id: organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.invalidCredentials,
         correlation_id: correlationId,
       });
@@ -59,10 +64,10 @@ export class SignInHandler {
 
     if (user.isLocked(this.support.now())) {
       await this.support.recordAudit(repositories, {
-        event_type: "auth.login.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
         organization_id: organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.temporaryLock,
         correlation_id: correlationId,
       });
@@ -77,10 +82,10 @@ export class SignInHandler {
       );
       await repositories.users.save(user);
       await this.support.recordAudit(repositories, {
-        event_type: "auth.login.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
         organization_id: organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: user.lockUntil
           ? AUTH_ERROR_CODES.temporaryLock
           : AUTH_ERROR_CODES.invalidCredentials,
@@ -99,10 +104,10 @@ export class SignInHandler {
 
     if (!user.emailVerified) {
       await this.support.recordAudit(repositories, {
-        event_type: "auth.login.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
         organization_id: organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.emailVerificationRequired,
         correlation_id: correlationId,
       });
@@ -119,10 +124,10 @@ export class SignInHandler {
     );
     if (!membership) {
       await this.support.recordAudit(repositories, {
-        event_type: "auth.login.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
         organization_id: organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.membershipMissing,
         correlation_id: correlationId,
       });
@@ -134,10 +139,10 @@ export class SignInHandler {
 
     if (!membership.isActive()) {
       await this.support.recordAudit(repositories, {
-        event_type: "auth.login.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
         organization_id: organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.invalidInviteState,
         correlation_id: correlationId,
       });
@@ -154,10 +159,10 @@ export class SignInHandler {
       correlationId,
     );
     await this.support.recordAudit(repositories, {
-      event_type: "auth.login.succeeded",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
       actor_id: user.id,
       organization_id: organizationId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
     });
 

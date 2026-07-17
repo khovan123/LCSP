@@ -15,6 +15,7 @@ import {
 } from "@nestjs/common";
 
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
 import type { RequestMeta } from "../../application/contracts/auth-workspace/common.contract.ts";
 import type { AcceptInvitationRequest } from "../../application/contracts/auth-workspace/accept-invitation.contract.ts";
@@ -45,7 +46,7 @@ export class AuthWorkspaceController {
 
   @Post("organizations/:orgId/invitations")
   @UseGuards(PbacGuard)
-  @RequireAction("invite:developer")
+  @RequireAction(PBAC_ACTIONS.inviteDeveloper)
   inviteDeveloper(
     @Param("orgId") orgId: string,
     @Body() payload: InviteDeveloperRequest,
@@ -70,7 +71,7 @@ export class AuthWorkspaceController {
 
   @Delete("organizations/:orgId/memberships/:userId")
   @UseGuards(PbacGuard)
-  @RequireAction("membership:revoke")
+  @RequireAction(PBAC_ACTIONS.membershipRevoke)
   revokeMembership(
     @Param("orgId") orgId: string,
     @Param("userId") userId: string,

@@ -1,6 +1,21 @@
-export type SubjectRole = "Manager" | "Developer" | "SystemAdmin";
-export type StateGate = "membership_active";
-export type PbacDecision = "allow" | "deny";
+import type { AuthMembershipStatus } from "../auth/types.ts";
+import { PBAC_DECISION } from "./decisions.ts";
+import type { PbacReasonCode } from "./decisions.ts";
+
+export const SUBJECT_ROLES = {
+  manager: "Manager",
+  developer: "Developer",
+  systemAdmin: "SystemAdmin",
+} as const;
+
+export const PBAC_STATE_GATES = {
+  membershipActive: "membership_active",
+} as const;
+
+export type SubjectRole = (typeof SUBJECT_ROLES)[keyof typeof SUBJECT_ROLES];
+export type StateGate =
+  (typeof PBAC_STATE_GATES)[keyof typeof PBAC_STATE_GATES];
+export type PbacDecision = (typeof PBAC_DECISION)[keyof typeof PBAC_DECISION];
 
 export interface PolicyDocument {
   id: string;
@@ -21,12 +36,12 @@ export interface PbacEvaluationContext {
   action: string;
   subject: SubjectAttributes;
   policy: PolicyDocument;
-  membershipStatus: string;
+  membershipStatus: AuthMembershipStatus;
 }
 
 export interface PbacDecisionResult {
   decision: PbacDecision;
-  reasonCode?: string;
+  reasonCode?: PbacReasonCode;
   policyId: string;
   policyVersion: string;
 }

@@ -11,6 +11,7 @@ import { Reflector } from "@nestjs/core";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   PBAC_DECISION,
+  PBAC_ACTIONS,
   PBAC_REASON_CODE,
   type PbacDecisionValue,
 } from "@lcsp/contracts/pbac";
@@ -35,7 +36,6 @@ import type {
 
 import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
 
-const SESSION_CHECK_ACTION = "session:verify";
 const DECISION_LOG_RESOURCE_TYPE = "HttpRoute";
 
 @Injectable()
@@ -64,7 +64,7 @@ export class PbacGuard implements CanActivate {
     if (!metadata) {
       await this.recordDecision({
         organizationId: null,
-        action: "pbac:metadata",
+        action: PBAC_ACTIONS.metadataCheck,
         decision: PBAC_DECISION.deny,
         reasonCode: PBAC_REASON_CODE.metadataMissing,
         policyId: null,
@@ -75,7 +75,7 @@ export class PbacGuard implements CanActivate {
     }
 
     const action =
-      metadata.type === "action" ? metadata.action : SESSION_CHECK_ACTION;
+      metadata.type === "action" ? metadata.action : PBAC_ACTIONS.sessionVerify;
 
     const token = this.extractToken(request);
     if (!token) {
@@ -184,7 +184,7 @@ export class PbacGuard implements CanActivate {
       throw this.pbacDenied(correlationId);
     }
 
-    if (decision.decision === "deny") {
+    if (decision.decision === PBAC_DECISION.deny) {
       await this.recordDecision({
         organizationId: session.organizationId,
         action: metadata.action,

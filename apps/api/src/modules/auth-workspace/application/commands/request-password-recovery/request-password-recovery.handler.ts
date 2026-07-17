@@ -1,4 +1,9 @@
-import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  createProblemResult,
+} from "@lcsp/contracts/auth";
 
 import { RecoveryRequest } from "../../../domain/models/auth-workspace.models.ts";
 import {
@@ -48,10 +53,10 @@ export class RequestPasswordRecoveryHandler {
       // latency doesn't reveal whether the email is registered.
       hashSecret("decoy-recovery-lookup-for-constant-time-compare");
       await this.support.recordAudit(repositories, {
-        event_type: "auth.recovery.requested",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.recoveryRequested,
         actor_id: null,
         organization_id: null,
-        decision: "allow",
+        decision: AUDIT_DECISIONS.allow,
         correlation_id: correlationId,
       });
       return { ok: true, correlation_id: correlationId };
@@ -78,10 +83,10 @@ export class RequestPasswordRecoveryHandler {
     });
 
     await this.support.recordAudit(repositories, {
-      event_type: "auth.recovery.requested",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.recoveryRequested,
       actor_id: user.id,
       organization_id: null,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
     });
 

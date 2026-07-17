@@ -15,7 +15,10 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getAssessmentStatusLabelKey } from "@/lib/api/workspace-client";
+import {
+  getAssessmentStatusLabelKey,
+  getWizardStatusLabelKey,
+} from "@/lib/api/workspace-client";
 
 import { appLocale } from "@/lib/locale";
 import type { AssessmentSummary } from "../../types/workspace.types";
@@ -115,7 +118,7 @@ function AssessmentCard({
   );
   const wizardStatus = resolveMessage(
     appLocale,
-    getAssessmentStatusLabelKey(assessment.wizard_status),
+    getWizardStatusLabelKey(assessment.wizard_status),
   );
 
   return (

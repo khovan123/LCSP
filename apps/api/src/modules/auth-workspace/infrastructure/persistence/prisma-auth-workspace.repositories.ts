@@ -1,6 +1,8 @@
 import * as crypto from "node:crypto";
 
 import {
+  AUTH_INVITATION_STATES,
+  AUTH_MEMBERSHIP_STATUSES,
   authAuditReadDecision,
   authAuditReadNullableString,
   authAuditReadString,
@@ -197,7 +199,7 @@ export class PrismaMembershipRepository implements MembershipRepository {
 
   async findActiveByUserId(userId: string): Promise<Membership[]> {
     const records = await this.prisma.authMembership.findMany({
-      where: { userId, status: "active" },
+      where: { userId, status: AUTH_MEMBERSHIP_STATUSES.active },
     });
 
     return records.map(mapMembershipRecord);
@@ -254,8 +256,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
 
   async tryConsume(id: string): Promise<boolean> {
     const result = await this.prisma.authInvitation.updateMany({
-      where: { id, state: "approved" },
-      data: { state: "consumed" },
+      where: { id, state: AUTH_INVITATION_STATES.approved },
+      data: { state: AUTH_INVITATION_STATES.consumed },
     });
     return result.count > 0;
   }

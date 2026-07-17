@@ -1,4 +1,6 @@
-export type AuditEventDecision = "allow" | "deny" | null;
+import type { AuditDecision } from "@lcsp/contracts/audit";
+
+export type AuditEventDecision = AuditDecision | null;
 
 export interface AuditEventSummary {
   event_id: string;

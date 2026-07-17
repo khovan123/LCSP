@@ -1,5 +1,6 @@
 import { Controller, Put, Param, Body, UseGuards, Req } from "@nestjs/common";
 import { CommandBus } from "@nestjs/cqrs";
+import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
 import type {
   SaveWizardDraftRequest,
@@ -18,7 +19,7 @@ export class WizardController {
 
   @Put(":assessmentId/wizard/draft")
   @UseGuards(PbacGuard)
-  @RequireAction("wizard:write")
+  @RequireAction(PBAC_ACTIONS.wizardWrite)
   async saveWizardDraft(
     @Param("assessmentId") assessmentId: string,
     @Body() body: SaveWizardDraftRequest,

@@ -1,5 +1,10 @@
 import { BadRequestException, Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  GITHUB_INTEGRATION_EVENT_TYPES,
+  GITHUB_REPOSITORY_PERMISSION_LEVELS,
+} from "@lcsp/contracts/github-integration";
 
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { RepositoryConnection } from "../../../domain/entities/repository-connection.entity.js";
@@ -76,7 +81,9 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
       });
     }
 
-    if (metadata.permissions.contents !== "read") {
+    if (
+      metadata.permissions.contents !== GITHUB_REPOSITORY_PERMISSION_LEVELS.read
+    ) {
       throw new BadRequestException({
         error_code: GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
         correlation_id: command.correlationId,
@@ -97,13 +104,13 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
     await this.repositoryConnectionRepository.save(connection);
 
     await this.auditWriter.write({
-      eventType: "GITHUB_APP_CONNECTED",
+      eventType: GITHUB_INTEGRATION_EVENT_TYPES.appConnected,
       actorId: installState.userId,
       organizationId: installState.organizationId,
       resourceType: "RepositoryConnection",
       resourceId: connection.id,
       correlationId: command.correlationId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       payload: {
         connectionId: connection.id,
         repositoryFullName: connection.repositoryFullName,

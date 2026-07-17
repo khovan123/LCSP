@@ -1,3 +1,9 @@
+import {
+  AUTH_ERROR_CODES,
+  type AuthErrorCode,
+  type ProblemCodeEnvelope,
+} from "@lcsp/contracts/auth";
+
 import type {
   MfaVerifyOutcome,
   MfaVerifyRequest,
@@ -23,12 +29,6 @@ export type SignInOutcome =
         | "auth.errors.temporaryLock.detail";
     };
 
-type ApiProblem = {
-  code?: string;
-  error_code?: string;
-  problem?: { code?: string; error_code?: string };
-};
-
 export function toSignInOutcome(payload: unknown, ok: boolean): SignInOutcome {
   if (ok && isSignInSuccess(payload)) {
     return payload.mfa_required
@@ -37,7 +37,7 @@ export function toSignInOutcome(payload: unknown, ok: boolean): SignInOutcome {
   }
 
   const code = getProblemCode(payload);
-  if (code === "TEMPORARY_LOCKED") {
+  if (code === AUTH_ERROR_CODES.temporaryLock) {
     return {
       kind: "error",
       titleKey: "auth.errors.temporaryLock.title",
@@ -80,17 +80,17 @@ export function toMfaVerifyOutcome(
   }
 
   const code = getProblemCode(payload);
-  if (code === "SESSION_INVALID") {
+  if (code === AUTH_ERROR_CODES.sessionInvalid) {
     return { kind: "session_invalid" };
   }
-  if (code === "MFA_RATE_LIMITED") {
+  if (code === AUTH_ERROR_CODES.mfaRateLimited) {
     return {
       kind: "rate_limited",
       titleKey: "auth.errors.mfaRateLimited.title",
       detailKey: "auth.errors.mfaRateLimited.detail",
     };
   }
-  if (code === "OTP_INVALID" || code === "OTP_REPLAYED") {
+  if (code === AUTH_ERROR_CODES.mfaInvalid) {
     return {
       kind: "invalid",
       titleKey: "auth.errors.mfaInvalid.title",
@@ -129,16 +129,18 @@ function isSignInSuccess(
   );
 }
 
-function getProblemCode(payload: unknown): string | undefined {
+function getProblemCode(payload: unknown): AuthErrorCode | undefined {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
 
-  const problem = payload as ApiProblem;
-  return (
-    problem.problem?.code ??
-    problem.problem?.error_code ??
-    problem.code ??
-    problem.error_code
-  );
+  const problem = payload as ProblemCodeEnvelope;
+  if ("problem" in problem && problem.problem) {
+    return (
+      problem.problem.code ??
+      ("error_code" in problem.problem ? problem.problem.error_code : undefined)
+    );
+  }
+
+  return "code" in problem ? (problem.code ?? problem.error_code) : undefined;
 }

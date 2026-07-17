@@ -78,13 +78,23 @@ export const viPages = {
       CLASSIFICATION_LOCKED: "Classification đã khóa",
       READY_FOR_REVIEW: "Sẵn sàng review",
     },
+    wizardStatuses: {
+      NOT_STARTED: "Chưa bắt đầu",
+      IN_PROGRESS: "Đang thực hiện",
+      SUBMITTED: "Đã gửi",
+    },
+    nextActions: {
+      wizardNotStarted:
+        "Bắt đầu Wizard để mô tả cách hệ thống AI được sử dụng.",
+      wizardInProgress: "Tiếp tục Wizard để hoàn thành assessment.",
+      wizardSubmitted:
+        "Đang chờ bằng chứng kỹ thuật trước khi có thể phân loại.",
+    },
     errors: {
       workspaceUnavailableTitle: "Workspace chưa khả dụng",
-      workspaceUnavailableDetail:
-        "Hiện không thể tải ngữ cảnh workspace.",
+      workspaceUnavailableDetail: "Hiện không thể tải ngữ cảnh workspace.",
       assessmentsUnavailableTitle: "Assessment chưa khả dụng",
-      assessmentsUnavailableDetail:
-        "Hiện không thể tải danh sách assessment.",
+      assessmentsUnavailableDetail: "Hiện không thể tải danh sách assessment.",
     },
   },
 } as const satisfies PagesMessages;

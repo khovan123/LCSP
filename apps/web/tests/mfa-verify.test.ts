@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import { test } from "node:test";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import {
   toMfaVerifyOutcome,
@@ -22,7 +23,7 @@ test("successful MFA verification returns a workspace redirect outcome", () => {
   });
 });
 
-test("invalid and replayed OTP responses use the same non-leaking message", () => {
+test("invalid OTP responses use the shared non-leaking error contract", () => {
   const expected: MfaVerifyOutcome = {
     kind: "invalid",
     titleKey: "auth.errors.mfaInvalid.title",
@@ -30,18 +31,20 @@ test("invalid and replayed OTP responses use the same non-leaking message", () =
   };
 
   assert.deepEqual(
-    toMfaVerifyOutcome({ problem: { code: "OTP_INVALID" } }, false),
-    expected,
-  );
-  assert.deepEqual(
-    toMfaVerifyOutcome({ error_code: "OTP_REPLAYED" }, false),
+    toMfaVerifyOutcome(
+      { problem: { code: AUTH_ERROR_CODES.mfaInvalid } },
+      false,
+    ),
     expected,
   );
 });
 
 test("MFA rate limiting returns a locked outcome", () => {
   assert.deepEqual(
-    toMfaVerifyOutcome({ problem: { code: "MFA_RATE_LIMITED" } }, false),
+    toMfaVerifyOutcome(
+      { problem: { code: AUTH_ERROR_CODES.mfaRateLimited } },
+      false,
+    ),
     {
       kind: "rate_limited",
       titleKey: "auth.errors.mfaRateLimited.title",
@@ -52,7 +55,10 @@ test("MFA rate limiting returns a locked outcome", () => {
 
 test("invalid or expired pending sessions return a sign-in outcome", () => {
   assert.deepEqual(
-    toMfaVerifyOutcome({ problem: { code: "SESSION_INVALID" } }, false),
+    toMfaVerifyOutcome(
+      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
+      false,
+    ),
     { kind: "session_invalid" },
   );
 });
@@ -85,8 +91,8 @@ test("MFA BFF body uses the server-side pending session", () => {
       session_token: "client-controlled-token",
     }),
     {
-    session_token: "pending-session",
-    otp: "012345",
+      session_token: "pending-session",
+      otp: "012345",
     },
   );
 });

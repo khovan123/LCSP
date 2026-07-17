@@ -1,6 +1,9 @@
-export const ASSESSMENT_STATUSES = ["WIZARD_IN_PROGRESS"] as const;
+import {
+  ASSESSMENT_STATUS_CODES,
+  type AssessmentStatusCode,
+} from "@lcsp/contracts/assessment";
 
-export type AssessmentStatus = (typeof ASSESSMENT_STATUSES)[number];
+export type AssessmentStatus = AssessmentStatusCode;
 
 type AssessmentProps = {
   id: string;
@@ -30,7 +33,7 @@ export class Assessment {
       ownerId: input.ownerId,
       name: input.name.trim(),
       description: input.description?.trim() || null,
-      status: "WIZARD_IN_PROGRESS",
+      status: ASSESSMENT_STATUS_CODES.wizardInProgress,
       createdAt: now,
       updatedAt: now,
     });

@@ -18,7 +18,7 @@ export type AuthorizationDecision = {
   resource_type: string;
   resource_id: string;
   action: string;
-  decision: "allow" | "deny";
+  decision: PbacDecisionValue;
   reason_code: string;
   policy_id: string | null;
   policy_version: string | null;
@@ -26,3 +26,4 @@ export type AuthorizationDecision = {
 };
 
 export type AuditEvent = Record<string, unknown>;
+import type { PbacDecisionValue } from "@lcsp/contracts/pbac";

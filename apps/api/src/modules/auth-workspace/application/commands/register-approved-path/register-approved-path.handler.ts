@@ -1,4 +1,10 @@
-import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  AUTH_MEMBERSHIP_STATUSES,
+  createProblemResult,
+} from "@lcsp/contracts/auth";
 
 import {
   Membership,
@@ -38,10 +44,10 @@ export class RegisterApprovedPathHandler {
     const invite = await repositories.invitations.findById(inviteId);
     if (!invite || !invite.isApproved()) {
       await this.support.recordAudit(repositories, {
-        event_type: "auth.register.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.registerFailed,
         actor_id: null,
         organization_id: invite?.organizationId ?? null,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.invalidInviteState,
         correlation_id: correlationId,
       });
@@ -53,10 +59,10 @@ export class RegisterApprovedPathHandler {
 
     if (!invite.emailVerified) {
       await this.support.recordAudit(repositories, {
-        event_type: "auth.register.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.registerFailed,
         actor_id: null,
         organization_id: invite.organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.emailVerificationRequired,
         correlation_id: correlationId,
       });
@@ -66,12 +72,12 @@ export class RegisterApprovedPathHandler {
       );
     }
 
-    if (invite.membershipStatus !== "active") {
+    if (invite.membershipStatus !== AUTH_MEMBERSHIP_STATUSES.active) {
       await this.support.recordAudit(repositories, {
-        event_type: "auth.register.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.registerFailed,
         actor_id: null,
         organization_id: invite.organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.invalidInviteState,
         correlation_id: correlationId,
       });
@@ -84,10 +90,10 @@ export class RegisterApprovedPathHandler {
     const normalizedEmail = this.support.normalizeInvitationEmail(invite);
     if (await repositories.users.findByEmail(normalizedEmail)) {
       await this.support.recordAudit(repositories, {
-        event_type: "auth.register.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.registerFailed,
         actor_id: null,
         organization_id: invite.organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.invalidInviteState,
         correlation_id: correlationId,
       });
@@ -100,10 +106,10 @@ export class RegisterApprovedPathHandler {
     const consumed = await repositories.invitations.tryConsume(invite.id);
     if (!consumed) {
       await this.support.recordAudit(repositories, {
-        event_type: "auth.register.failed",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.registerFailed,
         actor_id: null,
         organization_id: invite.organizationId,
-        decision: "deny",
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.invalidInviteState,
         correlation_id: correlationId,
       });
@@ -126,10 +132,10 @@ export class RegisterApprovedPathHandler {
     } catch (error) {
       if (error instanceof DuplicateEmailError) {
         await this.support.recordAudit(repositories, {
-          event_type: "auth.register.failed",
+          event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.registerFailed,
           actor_id: null,
           organization_id: invite.organizationId,
-          decision: "deny",
+          decision: AUDIT_DECISIONS.deny,
           reason_code: AUTH_ERROR_CODES.invalidInviteState,
           correlation_id: correlationId,
         });
@@ -159,10 +165,10 @@ export class RegisterApprovedPathHandler {
       correlationId,
     );
     await this.support.recordAudit(repositories, {
-      event_type: "auth.register.succeeded",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.registerSucceeded,
       actor_id: user.id,
       organization_id: invite.organizationId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
     });
 

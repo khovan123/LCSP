@@ -1,8 +1,15 @@
+import {
+  ASSESSMENT_ACTIONS,
+  WIZARD_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import type { MessageKey } from "@lcsp/i18n";
 
 import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
-import { assessmentStatusLabelKeys } from "../../features/workspace/config/status-labels.ts";
+import {
+  assessmentStatusLabelKeys,
+  wizardStatusLabelKeys,
+} from "../../features/workspace/config/status-labels.ts";
 import type {
   AssessmentStatus,
   AssessmentSummary,
@@ -37,13 +44,19 @@ type WorkspaceApiPayload = {
 };
 
 export function canCreateAssessment(grantedActions: readonly string[]) {
-  return grantedActions.includes("assessment:create");
+  return grantedActions.includes(ASSESSMENT_ACTIONS.create);
 }
 
 export function getAssessmentStatusLabelKey(
   status: AssessmentStatus,
 ): MessageKey {
   return assessmentStatusLabelKeys[status];
+}
+
+export function getWizardStatusLabelKey(
+  status: keyof typeof wizardStatusLabelKeys,
+): MessageKey {
+  return wizardStatusLabelKeys[status];
 }
 
 export async function getWorkspace(): Promise<WorkspaceOutcome> {
@@ -195,8 +208,17 @@ function isAssessmentSummary(payload: unknown): payload is AssessmentSummary {
     typeof candidate.id === "string" &&
     typeof candidate.name === "string" &&
     isAssessmentStatus(candidate.status) &&
-    isAssessmentStatus(candidate.wizard_status) &&
+    isWizardStatus(candidate.wizard_status) &&
     typeof candidate.created_at === "string"
+  );
+}
+
+function isWizardStatus(status: unknown): boolean {
+  return (
+    typeof status === "string" &&
+    Object.values(WIZARD_STATUS_CODES).some(
+      (knownStatus) => knownStatus === status,
+    )
   );
 }
 

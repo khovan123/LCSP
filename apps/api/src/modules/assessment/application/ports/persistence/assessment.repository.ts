@@ -1,4 +1,7 @@
-import { Assessment } from "../../../domain/entities/assessment.entity.js";
+import {
+  Assessment,
+  type AssessmentStatus,
+} from "../../../domain/entities/assessment.entity.js";
 
 export const ASSESSMENT_REPOSITORY = Symbol("ASSESSMENT_REPOSITORY");
 
@@ -6,7 +9,7 @@ export interface AssessmentListCriteria {
   organizationId: string;
   ownerId?: string;
   assessmentId?: string;
-  status?: string;
+  status?: AssessmentStatus;
   page: number;
   pageSize: number;
 }

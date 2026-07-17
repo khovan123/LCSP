@@ -2,9 +2,13 @@ import { BadRequestException, Inject } from "@nestjs/common";
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
 import { ConfigService } from "@nestjs/config";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
-import { GITHUB_INTEGRATION_ERROR_CODES } from "@lcsp/contracts/github-integration";
+import {
+  GITHUB_INTEGRATION_ERROR_CODES,
+  GITHUB_INTEGRATION_EVENT_TYPES,
+} from "@lcsp/contracts/github-integration";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { GitHubAppInstallState } from "../../../domain/entities/github-app-install-state.entity.js";
@@ -71,13 +75,13 @@ export class GitHubAppStartHandler implements ICommandHandler<GitHubAppStartComm
     });
 
     await this.auditWriter.write({
-      eventType: "GITHUB_APP_INSTALL_STARTED",
+      eventType: GITHUB_INTEGRATION_EVENT_TYPES.appInstallStarted,
       actorId: command.userId,
       organizationId: command.organizationId,
       resourceType: "GitHubAppInstallState",
       resourceId: installState.id,
       correlationId: command.correlationId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       payload: {
         userId: command.userId,
         organizationId: command.organizationId,

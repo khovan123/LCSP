@@ -5,6 +5,11 @@ import type {
   INVITE_DEVELOPER_ERROR_CODES,
   REVOKE_MEMBERSHIP_ERROR_CODES,
 } from "./codes.ts";
+import type {
+  AUTH_INVITATION_STATES,
+  AUTH_MEMBERSHIP_STATUSES,
+  WORKSPACE_CAPABILITY_SOURCES,
+} from "./states.ts";
 
 export type RequiredAction =
   (typeof REQUIRED_ACTIONS)[keyof typeof REQUIRED_ACTIONS];
@@ -20,3 +25,12 @@ export type InviteDeveloperErrorCode =
 
 export type RevokeMembershipErrorCode =
   (typeof REVOKE_MEMBERSHIP_ERROR_CODES)[keyof typeof REVOKE_MEMBERSHIP_ERROR_CODES];
+
+export type AuthMembershipStatus =
+  (typeof AUTH_MEMBERSHIP_STATUSES)[keyof typeof AUTH_MEMBERSHIP_STATUSES];
+
+export type AuthInvitationState =
+  (typeof AUTH_INVITATION_STATES)[keyof typeof AUTH_INVITATION_STATES];
+
+export type WorkspaceCapabilitySource =
+  (typeof WORKSPACE_CAPABILITY_SOURCES)[keyof typeof WORKSPACE_CAPABILITY_SOURCES];

@@ -1,9 +1,12 @@
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   AUTH_AUDIT_EVENT_TYPES,
+  AUTH_MEMBERSHIP_STATUSES,
   REVOKE_MEMBERSHIP_ERROR_CODES,
 } from "@lcsp/contracts/auth";
+import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
 import { createCorrelationId } from "../../../infrastructure/security/security.utils.ts";
@@ -45,8 +48,8 @@ export class RevokeMembershipHandler {
 
     if (
       !membership ||
-      membership.status !== "active" ||
-      roleFrom(membership.subjectAttributes) !== "Developer"
+      membership.status !== AUTH_MEMBERSHIP_STATUSES.active ||
+      roleFrom(membership.subjectAttributes) !== SUBJECT_ROLES.developer
     ) {
       throw problem(
         NotFoundException,
@@ -60,10 +63,10 @@ export class RevokeMembershipHandler {
       const revokedMembership = await tx.authMembership.updateMany({
         where: {
           id: membership.id,
-          status: "active",
+          status: AUTH_MEMBERSHIP_STATUSES.active,
         },
         data: {
-          status: "revoked",
+          status: AUTH_MEMBERSHIP_STATUSES.revoked,
           revokedAt,
         },
       });
@@ -92,7 +95,7 @@ export class RevokeMembershipHandler {
           organizationId: orgId,
           resourceType: "AuthMembership",
           resourceId: membership.id,
-          decision: "allow",
+          decision: AUDIT_DECISIONS.allow,
           correlationId,
           policyId: membership.policyId,
           policyVersion: membership.policyVersion,
@@ -100,7 +103,7 @@ export class RevokeMembershipHandler {
             event_type: AUTH_AUDIT_EVENT_TYPES.authDeveloperRevoked,
             actor_id: actorId,
             organization_id: orgId,
-            decision: "allow",
+            decision: AUDIT_DECISIONS.allow,
             correlation_id: correlationId,
             target_user_id: targetUserId,
             affected_sessions: revokedSessions.count,

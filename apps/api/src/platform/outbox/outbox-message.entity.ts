@@ -1,4 +1,8 @@
-import type { OutboxMessageInput, OutboxStatus } from "@lcsp/contracts/outbox";
+import {
+  OUTBOX_STATUSES,
+  type OutboxMessageInput,
+  type OutboxStatus,
+} from "@lcsp/contracts/outbox";
 
 export class OutboxMessageEntity {
   readonly id: string;
@@ -50,7 +54,7 @@ export class OutboxMessageEntity {
       aggregateId: input.aggregateId,
       eventType: input.eventType,
       payload: input.payload,
-      status: "pending",
+      status: OUTBOX_STATUSES.pending,
       attempts: 0,
       lastAttemptAt: null,
       publishedAt: null,

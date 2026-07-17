@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
 import { buildMfaVerifyApiBody } from "./mfa-verify-proxy";
@@ -9,7 +10,7 @@ export async function POST(request: NextRequest) {
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!sessionToken) {
     return NextResponse.json(
-      { problem: { code: "SESSION_INVALID" } },
+      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
       { status: 401 },
     );
   }

@@ -1,8 +1,16 @@
 import { Inject, NotFoundException } from "@nestjs/common";
 import { QueryHandler } from "@nestjs/cqrs";
+import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import type { IQueryHandler } from "@nestjs/cqrs";
 
-import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_ERROR_CODES,
+  ASSESSMENT_LOCK_REASONS,
+  ASSESSMENT_MISSING_EVIDENCE_CODES,
+  ASSESSMENT_NEXT_ACTION_KEYS,
+  WIZARD_STATUS_CODES,
+  type AssessmentNextActionKey,
+} from "@lcsp/contracts/assessment";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import {
   ASSESSMENT_REPOSITORY,
@@ -33,7 +41,7 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
     }
 
     if (
-      query.subjectRole === "Manager" &&
+      query.subjectRole === SUBJECT_ROLES.manager &&
       assessment.ownerId !== query.sessionUserId
     ) {
       this.throwNotFound(query.correlationId);
@@ -44,15 +52,17 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
     });
     const wizardStatus: WizardStatus = wizardProfile
       ? (wizardProfile.status as WizardStatus)
-      : "NOT_STARTED";
+      : WIZARD_STATUS_CODES.notStarted;
 
     // classification_locked is unconditionally true until MW-evid-001 (Get Technical
     // Evidence Report Endpoint) creates TechnicalEvidenceReport — there is no accepted
     // report to check yet, so "locked" is the only correct answer, not a placeholder.
     const readinessState: ReadinessState = {
       classification_locked: true,
-      lock_reason: "LOCKED_EVIDENCE_REQUIRED",
-      missing_evidence: ["technical_evidence_report"],
+      lock_reason: ASSESSMENT_LOCK_REASONS.evidenceRequired,
+      missing_evidence: [
+        ASSESSMENT_MISSING_EVIDENCE_CODES.technicalEvidenceReport,
+      ],
     };
 
     return {
@@ -78,15 +88,15 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
   }
 }
 
-function nextActionFor(wizardStatus: WizardStatus): string {
+function nextActionFor(wizardStatus: WizardStatus): AssessmentNextActionKey {
   switch (wizardStatus) {
-    case "NOT_STARTED":
-      return "Start the Wizard to describe how this AI system is used.";
-    case "IN_PROGRESS":
-      return "Continue the Wizard to complete your assessment.";
-    case "SUBMITTED":
-      return "Waiting for technical evidence before classification can proceed.";
+    case WIZARD_STATUS_CODES.notStarted:
+      return ASSESSMENT_NEXT_ACTION_KEYS.wizardNotStarted;
+    case WIZARD_STATUS_CODES.inProgress:
+      return ASSESSMENT_NEXT_ACTION_KEYS.wizardInProgress;
+    case WIZARD_STATUS_CODES.submitted:
+      return ASSESSMENT_NEXT_ACTION_KEYS.wizardSubmitted;
     default:
-      return "Continue the Wizard to complete your assessment.";
+      return ASSESSMENT_NEXT_ACTION_KEYS.wizardInProgress;
   }
 }

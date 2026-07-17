@@ -1,3 +1,6 @@
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
+
 import { fingerprintToken } from "../../../infrastructure/security/security.utils.ts";
 import type { RevokeSessionSuccess } from "../../contracts/auth-workspace/revoke-session.contract.ts";
 import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
@@ -23,10 +26,10 @@ export class RevokeSessionHandler {
       await repositories.sessions.save(session);
     }
     await this.support.recordAudit(repositories, {
-      event_type: "auth.session.revoked",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.sessionRevoked,
       actor_id: session?.userId ?? null,
       organization_id: session?.organizationId ?? null,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
     });
     return { ok: true, correlation_id: correlationId };

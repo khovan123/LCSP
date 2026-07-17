@@ -1,5 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { PBAC_DECISION, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
+import {
+  PBAC_DECISION,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+} from "@lcsp/contracts/pbac";
 
 import type {
   PbacDecisionResult,
@@ -39,8 +44,8 @@ export class PbacEvaluatorService {
     }
 
     if (
-      policy.stateGate === "membership_active" &&
-      ctx.membershipStatus !== "active"
+      policy.stateGate === PBAC_STATE_GATES.membershipActive &&
+      ctx.membershipStatus !== AUTH_MEMBERSHIP_STATUSES.active
     ) {
       return {
         decision: PBAC_DECISION.deny,

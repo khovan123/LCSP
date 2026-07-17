@@ -6,9 +6,12 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   ACCEPT_INVITATION_ERROR_CODES,
   AUTH_AUDIT_EVENT_TYPES,
+  AUTH_INVITATION_STATES,
+  AUTH_MEMBERSHIP_STATUSES,
 } from "@lcsp/contracts/auth";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
@@ -73,7 +76,7 @@ export class AcceptInvitationHandler {
       );
     }
 
-    if (invitation.state !== "approved") {
+    if (invitation.state !== AUTH_INVITATION_STATES.approved) {
       throw problem(
         BadRequestException,
         ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
@@ -123,10 +126,10 @@ export class AcceptInvitationHandler {
       const consumed = await tx.authInvitation.updateMany({
         where: {
           id: invitation.id,
-          state: "approved",
+          state: AUTH_INVITATION_STATES.approved,
           expiresAt: { gt: now },
         },
-        data: { state: "consumed" },
+        data: { state: AUTH_INVITATION_STATES.consumed },
       });
       if (consumed.count !== 1) {
         throw problem(
@@ -153,7 +156,7 @@ export class AcceptInvitationHandler {
           id: membershipId,
           userId,
           organizationId: invitation.organizationId,
-          status: "active",
+          status: AUTH_MEMBERSHIP_STATUSES.active,
           subjectAttributes,
           policyId: invitation.policyId,
           policyVersion: invitation.policyVersion,
@@ -179,7 +182,7 @@ export class AcceptInvitationHandler {
           organizationId: invitation.organizationId,
           resourceType: "AuthInvitation",
           resourceId: null,
-          decision: "allow",
+          decision: AUDIT_DECISIONS.allow,
           correlationId,
           sessionId,
           policyId: invitation.policyId,
@@ -188,7 +191,7 @@ export class AcceptInvitationHandler {
             event_type: AUTH_AUDIT_EVENT_TYPES.authDeveloperInvitationAccepted,
             actor_id: userId,
             organization_id: invitation.organizationId,
-            decision: "allow",
+            decision: AUDIT_DECISIONS.allow,
             correlation_id: correlationId,
             session_id: sessionId,
             policy_id: invitation.policyId,

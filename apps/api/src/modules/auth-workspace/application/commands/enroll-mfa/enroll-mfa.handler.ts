@@ -1,4 +1,9 @@
-import { AUTH_ERROR_CODES, createProblemResult } from "@lcsp/contracts/auth";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  createProblemResult,
+} from "@lcsp/contracts/auth";
 
 import {
   encryptMfaSecret,
@@ -64,10 +69,10 @@ export class EnrollMfaHandler {
     await this.repositories.mfaEnrollments.save(enrollment);
 
     await this.support.recordAudit(this.repositories, {
-      event_type: "auth.mfa.enrolled",
+      event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaEnrolled,
       actor_id: session.userId,
       organization_id: session.organizationId,
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
     });
 

@@ -1,6 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import type { OutboxMessageInput, OutboxStatus } from "@lcsp/contracts/outbox";
+import {
+  OUTBOX_STATUSES,
+  type OutboxMessageInput,
+  type OutboxStatus,
+} from "@lcsp/contracts/outbox";
 
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import { OutboxMessageEntity } from "./outbox-message.entity.js";
@@ -60,7 +64,7 @@ export class OutboxRepository {
     return this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<OutboxRow[]>`
         SELECT * FROM "OutboxMessage"
-        WHERE status = 'pending'
+        WHERE status = ${OUTBOX_STATUSES.pending}
         ORDER BY "createdAt" ASC
         LIMIT ${batchSize}
         FOR UPDATE SKIP LOCKED
@@ -89,7 +93,7 @@ export class OutboxRepository {
   ): Promise<void> {
     await tx.outboxMessage.update({
       where: { id },
-      data: { status: "published", publishedAt },
+      data: { status: OUTBOX_STATUSES.published, publishedAt },
     });
   }
 
@@ -101,7 +105,8 @@ export class OutboxRepository {
     errorMessage: string,
     now: Date,
   ): Promise<void> {
-    const status: OutboxStatus = attempts >= maxAttempts ? "dlq" : "failed";
+    const status: OutboxStatus =
+      attempts >= maxAttempts ? OUTBOX_STATUSES.dlq : OUTBOX_STATUSES.failed;
 
     await tx.outboxMessage.update({
       where: { id },
@@ -116,7 +121,7 @@ export class OutboxRepository {
 
   async findDlqMessages(): Promise<OutboxMessageEntity[]> {
     const rows = await this.prisma.outboxMessage.findMany({
-      where: { status: "dlq" },
+      where: { status: OUTBOX_STATUSES.dlq },
       orderBy: { createdAt: "desc" },
     });
     return rows.map((row) =>
@@ -144,7 +149,7 @@ export class OutboxRepository {
     await this.prisma.outboxMessage.update({
       where: { id },
       data: {
-        status: "pending",
+        status: OUTBOX_STATUSES.pending,
         attempts: 0,
         errorMessage: null,
       },

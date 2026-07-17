@@ -115,6 +115,16 @@ export type PagesMessages = {
       CLASSIFICATION_LOCKED: string;
       READY_FOR_REVIEW: string;
     };
+    wizardStatuses: {
+      NOT_STARTED: string;
+      IN_PROGRESS: string;
+      SUBMITTED: string;
+    };
+    nextActions: {
+      wizardNotStarted: string;
+      wizardInProgress: string;
+      wizardSubmitted: string;
+    };
     errors: {
       workspaceUnavailableTitle: string;
       workspaceUnavailableDetail: string;

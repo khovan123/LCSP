@@ -1,3 +1,9 @@
+import {
+  AUTH_INVITATION_STATES,
+  AUTH_MEMBERSHIP_STATUSES,
+  type AuthInvitationState,
+} from "@lcsp/contracts/auth";
+
 import type { MembershipStatus } from "./membership.entity.ts";
 import { EmailAddress } from "../value-objects/email-address.value-object.ts";
 import {
@@ -5,7 +11,7 @@ import {
   type SubjectAttributesRecord,
 } from "../value-objects/subject-attributes.value-object.ts";
 
-export type InvitationState = "approved" | "pending" | "consumed";
+export type InvitationState = AuthInvitationState;
 
 export class Invitation {
   readonly id: string;
@@ -50,18 +56,18 @@ export class Invitation {
   }
 
   isApproved(): boolean {
-    return this.state === "approved";
+    return this.state === AUTH_INVITATION_STATES.approved;
   }
 
   isConsumable(): boolean {
     return (
       this.isApproved() &&
       this.emailVerified &&
-      this.membershipStatus === "active"
+      this.membershipStatus === AUTH_MEMBERSHIP_STATUSES.active
     );
   }
 
   consume(): void {
-    this.state = "consumed";
+    this.state = AUTH_INVITATION_STATES.consumed;
   }
 }

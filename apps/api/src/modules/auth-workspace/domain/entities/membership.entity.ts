@@ -3,7 +3,7 @@ import {
   type SubjectAttributesRecord,
 } from "../value-objects/subject-attributes.value-object.ts";
 
-export type MembershipStatus = "invited" | "active" | "revoked";
+export type MembershipStatus = AuthMembershipStatus;
 
 export class Membership {
   readonly id: string;
@@ -51,10 +51,14 @@ export class Membership {
   }
 
   isActive(): boolean {
-    return this.status === "active";
+    return this.status === AUTH_MEMBERSHIP_STATUSES.active;
   }
 
   belongsToOrganization(organizationId: string): boolean {
     return this.organizationId === organizationId;
   }
 }
+import {
+  AUTH_MEMBERSHIP_STATUSES,
+  type AuthMembershipStatus,
+} from "@lcsp/contracts/auth";

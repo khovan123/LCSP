@@ -1,4 +1,5 @@
 import type { AuthorizationDecision } from "../../../domain/models/auth-workspace.models.ts";
+import type { WorkspaceCapabilitySource } from "@lcsp/contracts/auth";
 import type { AuthProblemResult } from "./common.contract.ts";
 
 export type WorkspaceRequest = {
@@ -20,6 +21,6 @@ export type WorkspaceSuccess = {
   };
   capabilities: {
     can_view_workspace: true;
-    source: "backend_projection";
+    source: WorkspaceCapabilitySource;
   };
 };

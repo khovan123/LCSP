@@ -1,4 +1,17 @@
-export type OutboxStatus = "pending" | "published" | "failed" | "dlq";
+export const OUTBOX_STATUSES = {
+  pending: "pending",
+  published: "published",
+  failed: "failed",
+  dlq: "dlq",
+} as const;
+
+export const OUTBOX_AUDIT_EVENT_TYPES = {
+  dlqReplayed: "OUTBOX_DLQ_REPLAYED",
+  dlqDiscarded: "OUTBOX_DLQ_DISCARDED",
+} as const;
+
+export type OutboxStatus =
+  (typeof OUTBOX_STATUSES)[keyof typeof OUTBOX_STATUSES];
 
 export interface OutboxMessageInput {
   aggregateType: string;
