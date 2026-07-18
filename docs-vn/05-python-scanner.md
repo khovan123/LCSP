@@ -24,6 +24,8 @@ command.scan.requested.v1
 - Semgrep custom rules cho AI pattern detection.
 - PostgreSQL metadata-only persistence.
 - Ephemeral restricted workspace và cleanup verification.
+- Lấy source duy nhất qua internal snapshot service có worker authentication; scanner không gọi GitHub trực tiếp.
+- GitHub installation token và GitHub App private key chỉ tồn tại trong GitHub Integration phía NestJS API.
 
 `astroid` và HTTP analyzer service không phải dependency bắt buộc của MVP.
 
@@ -32,7 +34,7 @@ command.scan.requested.v1
 ```text
 lock ScanJob
 -> tạo workspace
--> materialize commit snapshot
+-> gọi internal snapshot service và materialize đúng pinned commit
 -> inventory và giới hạn file
 -> Syft SBOM/dependency inventory
 -> Knip và deptry dependency usage analysis
@@ -105,7 +107,10 @@ Chỉ import package không đủ để xác nhận model invocation.
 
 ## Bảo mật workspace
 
-- Chỉ checkout commit đã chọn.
+- Chỉ materialize commit đã chọn qua `SnapshotServiceClient`.
+- Scanner không import GitHub SDK/OAuth client, không nhận installation token và không gọi GitHub trực tiếp.
+- Internal service xác thực worker, đối chiếu scan job/snapshot/organization/commit, rồi stream archive theo no-store policy.
+- Archive phải được giới hạn và chống path traversal, symlink/hardlink, device file, vượt độ sâu/số file và decompression bomb trước khi giải nén.
 - Không chạy build, test, Docker, CI, script hoặc source code của khách hàng.
 - Có giới hạn số file, kích thước, độ sâu và timeout.
 - Có giới hạn CPU, memory, time và output cho từng tool.

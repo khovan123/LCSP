@@ -21,6 +21,8 @@ PYTHON_WORKER_OWNS_REPOSITORY_SCAN_LIFECYCLE
 PYTHON_AST_STACK_AST_PLUS_LIBCST
 TS_JS_INTEGRATION_NODE_SUBPROCESS_JSON_STDIO
 PYTHON_PACKAGING_PYPROJECT_POETRY
+SNAPSHOT_RETRIEVAL_INTERNAL_SERVICE_ONLY
+GITHUB_CREDENTIALS_API_BOUNDARY_ONLY
 ```
 
 A standalone Python Worker is the sole consumer of `command.scan.requested.v1` and owns:
@@ -35,7 +37,7 @@ A standalone Python Worker is the sole consumer of `command.scan.requested.v1` a
 8. workspace deletion and cleanup verification;
 9. terminal ScanJob transaction and completed/failed OutboxEvent.
 
-NestJS API retains authentication, PBAC enforcement boundary, trusted scan trigger / ScanJob creation/query, and downstream orchestration projections.
+NestJS API retains authentication, PBAC enforcement boundary, trusted scan trigger / ScanJob creation/query, GitHub Integration credentials, and downstream orchestration projections. Commit-pinned materialization is split across the boundary: GitHub Integration validates scan/snapshot scope and streams the archive through an authenticated internal endpoint; Python Worker extracts it into the restricted workspace. The scanner runtime never calls GitHub or receives GitHub credentials.
 
 Phase 5.2L expands scanner requirements beyond the original ADR-023 baseline. Syft, Knip, deptry, Semgrep custom rules, and tree-sitter/custom parser are now required scanner toolchain components. ADR-023 remains historical authority for Python scanner lifecycle ownership, but its narrower `ast/libcst` + `ts-morph` toolchain is superseded in part by Phase 5.2L.
 
@@ -59,6 +61,8 @@ Phase 5.2M widens the scanner's role toward primary technical evidence source (s
 | Graph runtime | Python-native scan-local graph model; no graph database and no Node `graphology` runtime dependency |
 | Persistence | PostgreSQL metadata only |
 | Workspace | restricted ephemeral directory under ADR-016 policy |
+| Snapshot retrieval | authenticated internal snapshot service; no direct scanner-to-GitHub access |
+| GitHub credentials | API-owned GitHub Integration boundary only; never queue/worker configuration or payload |
 
 ## TS/JS Analyzer Integration
 
@@ -101,6 +105,8 @@ The scanner does not claim complete analysis of arbitrary dynamic Python.
 | Root | `${LCSP_SCANNER_WORKSPACE_ROOT:-.lcsp/tmp/scanner-workspaces}` |
 | Naming | `{scanJobId}-{repositorySnapshotId}-{shortCommitSha}` |
 | Contents | selected commit-pinned snapshot only |
+| Materialization source | `SnapshotServiceClient` calling the authenticated internal archive endpoint |
+| Integrity | scan job/snapshot/organization scope and pinned commit SHA validated before streaming and extraction |
 | Cleanup | after success or every terminal failure path |
 | Completion gate | cleanup verification required before completed event |
 | Cleanup failure | `SCANNER_WORKSPACE_CLEANUP_FAILED`, security audit, downstream blocked |
@@ -124,6 +130,8 @@ Queue retry budget remains 3 attempts with 30s, 120s, and 600s backoff before DL
 - No raw source, secrets, full prompts, or full AST bodies to LLM.
 - No long-term raw source persistence.
 - Queue payloads are reference-only.
+- Scanner code and configuration contain no GitHub client, installation token, or GitHub App private key.
+- Internal snapshot responses are streamed with no-store behavior; archives are not persisted by the API.
 - Subprocess output is validated/redacted before persistence.
 - Workspace cleanup is mandatory and failure-blocking.
 

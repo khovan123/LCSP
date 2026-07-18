@@ -81,7 +81,7 @@ Startup validates required environment, PostgreSQL connectivity, RabbitMQ connec
 2. Bind `lcsp.scan-worker.v1`.
 3. Consume `command.scan.requested.v1`.
 4. Acquire idempotent job lock and mark RUNNING with AuditEvent.
-5. Create restricted workspace and materialize selected snapshot.
+5. Call the authenticated internal snapshot service by scan job/snapshot reference, verify pinned commit metadata, and safely materialize the streamed archive into the restricted workspace.
 6. Inventory files and enforce file/size/time bounds.
 7. Run Syft, Knip and deptry where applicable.
 8. Run Python AST/CST and bounded semantic analysis.
@@ -151,6 +151,9 @@ Cleanup failure uses `SCANNER_WORKSPACE_CLEANUP_FAILED` and never stages a compl
 | Root | `${LCSP_SCANNER_WORKSPACE_ROOT:-.lcsp/tmp/scanner-workspaces}` |
 | Name | `{scanJobId}-{repositorySnapshotId}-{shortCommitSha}` |
 | Scope | selected snapshot only |
+| Retrieval | internal `SnapshotServiceClient` only; direct GitHub HTTP/SDK access prohibited |
+| Credentials | worker has no GitHub token, GitHub App private key, or GitHub OAuth client |
+| Archive | bounded no-store stream with traversal/link/device/decompression protections |
 | Process | non-root/restricted filesystem permissions |
 | Network | restricted after repository retrieval |
 | Bounds | file count, file bytes, depth, and timeout |
@@ -164,7 +167,7 @@ Do not persist source bodies, repository archives, full ASTs, credentials, or su
 
 | Failure | Retry | Behavior |
 |---|---:|---|
-| Transient repository/network failure | bounded | retry under queue policy; terminal `REPOSITORY_ACCESS_FAILED` after budget |
+| Transient internal snapshot/upstream network failure | bounded | retry under queue policy; terminal `REPOSITORY_ACCESS_FAILED` after budget |
 | Single-file parser failure | no job retry | coverage limitation and continue when safe |
 | Dynamic/reflection boundary | no | `UNSUPPORTED_DYNAMIC_FLOW`; do not infer |
 | TS/JS analyzer failure | no job retry by default | affected-file coverage limitation; continue when safe |
@@ -183,6 +186,7 @@ Retryable job failures use the canonical 30s, 120s, and 600s backoff budget befo
 - Syft/Knip/deptry/Semgrep/tree-sitter outputs are pinned, bounded, redacted, normalized and provenance-recorded.
 - Duplicate command does not duplicate artifacts.
 - Raw source is absent from persistent stores, queues, logs, audit, and LLM input.
+- Scanner has no direct GitHub dependency; snapshot/commit scope and internal worker authentication are contract-tested.
 - Completed event requires quality-valid report and verified cleanup.
 - Failure contains correlation ID, safe code, and actionable recovery without sensitive content.
 - Tool failure severity table is governed by `docs/implementation/decisions/scanner-severity-tool-provenance-decision.md`.

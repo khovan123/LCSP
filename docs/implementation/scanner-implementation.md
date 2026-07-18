@@ -48,6 +48,8 @@ Python scanner process runtime, package layout, run command, tool invocation, wo
 | Graph runtime | Python-native scan-local adjacency/node-edge model |
 | Persistence | PostgreSQL metadata only |
 | Workspace | restricted ephemeral workspace |
+| Snapshot retrieval | authenticated `SnapshotServiceClient` to the API-owned internal snapshot service |
+| GitHub access | GitHub Integration in NestJS API only; prohibited in scanner runtime |
 | Optional `astroid` | Post-MVP evaluation only |
 | HTTP analyzer service | Post-MVP scaling alternative only |
 
@@ -92,6 +94,9 @@ Dependency/SBOM facts persist as normalized metadata: `PackageDependency`, `SBOM
 
 | Item | Decision |
 |---|---|
+| Materialization source | internal snapshot archive endpoint authenticated with worker service credentials |
+| Credential boundary | installation token and GitHub App private key never enter worker config, queue payload, logs, or memory |
+| Archive handling | bounded streaming, no-store, pinned commit verification, safe extraction |
 | Root | `${LCSP_SCANNER_WORKSPACE_ROOT:-.lcsp/tmp/scanner-workspaces}` |
 | Naming | `{scanJobId}-{repositorySnapshotId}-{shortCommitSha}` |
 | Contents | selected snapshot only |

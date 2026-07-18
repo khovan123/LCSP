@@ -62,6 +62,8 @@ Forbidden:
 | Graph assembly | scan-local normalized graph in Python Worker |
 | Persistence | PostgreSQL metadata only |
 | Workspace | restricted ephemeral directory with verified cleanup |
+| Snapshot retrieval | authenticated internal snapshot service owned by GitHub Integration |
+| GitHub credential boundary | NestJS API only; scanner never calls GitHub or receives GitHub credentials |
 | LLM boundary | LLM Gateway only, sanitized metadata only |
 
 Superseded active behavior:
@@ -88,7 +90,7 @@ The scanner must never claim complete understanding of arbitrary dynamic code.
 
 1. Validate and lock ScanJob.
 2. Create restricted workspace.
-3. Materialize selected repository snapshot.
+3. Request the selected snapshot from the authenticated internal snapshot service, verify the pinned commit metadata, and safely materialize the bounded stream.
 4. Inventory files and enforce bounds.
 5. Parse manifests and configuration.
 6. Run Syft SBOM/dependency inventory.
@@ -371,6 +373,10 @@ Generic function names such as `review()` are insufficient without surrounding p
 - workspace root: `${LCSP_SCANNER_WORKSPACE_ROOT:-.lcsp/tmp/scanner-workspaces}`;
 - non-root/restricted process;
 - selected commit only;
+- source retrieval only through the authenticated internal snapshot service;
+- no GitHub SDK/client, installation token, GitHub App private key, or direct GitHub HTTP request in the scanner runtime;
+- internal service validates worker identity plus scan job, organization, snapshot, repository connection, and pinned commit scope before streaming;
+- archives use no-store bounded streaming and safe extraction protections for traversal, links, device files, depth, file count, and decompression bombs;
 - file count, size, depth, and timeout limits;
 - restricted outbound access after snapshot retrieval;
 - secret redaction before persistence;

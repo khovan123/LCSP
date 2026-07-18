@@ -12,7 +12,8 @@ Static Scanner Workspace and Sandbox
 
 1. **Given** a RepositoryScanJob is ready
    **When** the Python scanner worker locks the job
-   **Then** it materializes the pinned snapshot in a restricted temporary workspace
+   **Then** it obtains the pinned archive through the authenticated internal snapshot service and materializes it in a restricted temporary workspace
+   **And** the scanner does not call GitHub directly or receive GitHub credentials
    **And** records workspace ID, snapshot ID, worker lease, start time, and cleanup policy
    **And** does not persist raw source outside the restricted workspace.
 
@@ -28,7 +29,9 @@ Static Scanner Workspace and Sandbox
 
 ## Tasks / Subtasks
 
-- [ ] Materialize pinned snapshot into restricted temporary scanner workspace with lease metadata. (AC: 1)
+- [ ] Add the GitHub Integration-owned internal snapshot archive endpoint with worker authentication and scan/snapshot scope validation. (AC: 1)
+- [ ] Materialize the pinned snapshot through `SnapshotServiceClient` into the restricted temporary scanner workspace with lease metadata. (AC: 1)
+- [ ] Enforce that scanner code, configuration, and queue payloads contain no GitHub client or credential. (AC: 1)
 - [ ] Block build/test/install/docker/runtime execution inside scanner flow. (AC: 2)
 - [ ] Verify cleanup on success, failure and timeout before marking job outcome. (AC: 3)
 
@@ -53,36 +56,42 @@ Static Scanner Workspace and Sandbox
 
 ### Story-Specific Implementation Tasks
 
-- Materialize pinned snapshot into restricted temporary scanner workspace with lease metadata.
+- Stream the pinned archive from the GitHub Integration-owned internal snapshot service; keep GitHub credentials inside the API boundary.
+- Materialize through `SnapshotServiceClient` into the restricted temporary scanner workspace with lease metadata.
 - Block build/test/install/docker/runtime execution inside scanner flow.
 - Verify cleanup on success, failure and timeout before marking job outcome.
 
 ### Task to Acceptance Criteria Traceability
 
-- `AC1`: Materialize pinned snapshot into restricted temporary scanner workspace with lease metadata.
+- `AC1`: Internal service authenticates the worker, validates scan/snapshot scope and pinned commit, then streams the archive; scanner materializes it without direct GitHub access.
 - `AC2`: Block build/test/install/docker/runtime execution inside scanner flow.
 - `AC3`: Verify cleanup on success, failure and timeout before marking job outcome.
 
 ### Dependencies and Prerequisites
 
 - Story 3.3 scan job orchestration.
+- GitHub Integration repository connection and pinned snapshot authority.
 - Python worker platform and scanner runtime authority.
 
 ### Explicit Non-Goals
 
 - No persistent raw source outside restricted workspace.
+- No direct GitHub access, GitHub SDK, installation token, or GitHub App private key in the scanner runtime.
 - No arbitrary command execution.
 - No completed event before cleanup verification.
 
 ### Story-Specific Risks and Edge Cases
 
 - Workspace leak after failure.
+- Credential leakage across the API/worker boundary or a scan job requesting an unrelated snapshot.
+- Archive traversal, unsafe links, decompression bomb, or commit mismatch during materialization.
 - Unsupported runtime action accidentally executed.
 - Cleanup failure hidden behind successful scan status.
 
 ### Architecture Compliance
 
-- NestJS API chỉ tạo trusted trigger, persist status và enqueue command qua outbox; Python Worker Platform sở hữu scan/tool execution và downstream profile work.
+- NestJS API sở hữu GitHub Integration, GitHub credentials và internal snapshot streaming endpoint; Python Worker Platform chỉ sở hữu restricted workspace, scan/tool execution và downstream profile work.
+- Queue payload chỉ chứa reference; scanner dùng worker service authentication để lấy đúng snapshot đã pin và không gọi GitHub trực tiếp.
 - Scanner worker phải dùng restricted workspace, pinned tools, bounded resources và cleanup verification trước completed event.
 - TechnicalProfile là artifact kỹ thuật bất biến; không được dùng như AIUsageFlow, VerifiedProfile hay compliance status.
 
@@ -119,7 +128,7 @@ Static Scanner Workspace and Sandbox
 
 ### Testing Requirements
 
-- API/worker contract tests cho trusted trigger, outbox enqueue và status projection.
+- API/worker contract tests cho trusted trigger, internal snapshot authorization/scope/commit integrity, outbox enqueue và status projection.
 - Scanner sandbox/cleanup security tests, provenance/severity policy assertions.
 - TechnicalEvidenceReport gate coverage và immutable TechnicalProfile versioning tests.
 
