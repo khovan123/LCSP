@@ -1,3 +1,5 @@
+import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
+import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
 
@@ -35,7 +37,7 @@ describe("OutboxRepository", () => {
 
     expect(update).toHaveBeenCalledWith({
       where: { id: "outbox-1" },
-      data: { status: "published", publishedAt },
+      data: { status: OUTBOX_STATUSES.published, publishedAt },
     });
   });
 
@@ -49,7 +51,7 @@ describe("OutboxRepository", () => {
     expect(update).toHaveBeenCalledWith({
       where: { id: "outbox-1" },
       data: {
-        status: "failed",
+        status: OUTBOX_STATUSES.failed,
         attempts: 3,
         lastAttemptAt: now,
         errorMessage: "boom",
@@ -67,7 +69,7 @@ describe("OutboxRepository", () => {
     expect(update).toHaveBeenCalledWith({
       where: { id: "outbox-1" },
       data: {
-        status: "dlq",
+        status: OUTBOX_STATUSES.dlq,
         attempts: 5,
         lastAttemptAt: now,
         errorMessage: "boom",
@@ -96,7 +98,7 @@ describe("OutboxRepository", () => {
       await repository.enqueue({
         aggregateType: "Assessment",
         aggregateId: "assessment-1",
-        eventType: "assessment.created",
+        eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
         payload: { assessmentId: "assessment-1" },
       });
 
@@ -114,9 +116,9 @@ describe("OutboxRepository", () => {
       };
       expect(call.data.aggregateType).toBe("Assessment");
       expect(call.data.aggregateId).toBe("assessment-1");
-      expect(call.data.eventType).toBe("assessment.created");
+      expect(call.data.eventType).toBe(ASSESSMENT_EVENT_TYPES.createdOutbox);
       expect(call.data.payload).toEqual({ assessmentId: "assessment-1" });
-      expect(call.data.status).toBe("pending");
+      expect(call.data.status).toBe(OUTBOX_STATUSES.pending);
       expect(call.data.attempts).toBe(0);
       expect(call.data.id).toBeTruthy();
     });
@@ -132,7 +134,7 @@ describe("OutboxRepository", () => {
         {
           aggregateType: "Assessment",
           aggregateId: "assessment-1",
-          eventType: "assessment.created",
+          eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
           payload: {},
         },
         tx,

@@ -1,3 +1,9 @@
+import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
+import { PBAC_DECISION } from "@lcsp/contracts/pbac";
+import {
+  GITHUB_INTEGRATION_ERROR_CODES,
+  GITHUB_INTEGRATION_EVENT_TYPES,
+} from "@lcsp/contracts/github-integration";
 import { describe, it, expect, jest } from "@jest/globals";
 import { BadRequestException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
@@ -122,7 +128,7 @@ describe("GitHubAppStartHandler", () => {
       );
     } catch (error) {
       expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: "INVALID_REDIRECT_URI",
+        error_code: GITHUB_INTEGRATION_ERROR_CODES.invalidRedirectUri,
         correlation_id: "corr-1",
       });
     }
@@ -176,7 +182,7 @@ describe("GitHubAppStartHandler", () => {
       );
     } catch (error) {
       expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: "ASSESSMENT_NOT_FOUND",
+        error_code: ASSESSMENT_ERROR_CODES.notFound,
         correlation_id: "corr-1",
       });
     }
@@ -241,11 +247,13 @@ describe("GitHubAppStartHandler", () => {
     const savedState = save.mock.calls[0][0];
     expect(write).toHaveBeenCalledTimes(1);
     const event = write.mock.calls[0][0];
-    expect(event.eventType).toBe("GITHUB_APP_INSTALL_STARTED");
+    expect(event.eventType).toBe(
+      GITHUB_INTEGRATION_EVENT_TYPES.appInstallStarted,
+    );
     expect(event.actorId).toBe("user-1");
     expect(event.organizationId).toBe("org-1");
     expect(event.correlationId).toBe("corr-1");
-    expect(event.decision).toBe("allow");
+    expect(event.decision).toBe(PBAC_DECISION.allow);
     expect(JSON.stringify(event.payload)).not.toMatch(savedState.state);
   });
 });

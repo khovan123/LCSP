@@ -1,3 +1,9 @@
+import {
+  PBAC_DECISION,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 /**
  * AC-024: Organization and PBAC-denied action audit.
  * AC-025: Developer cannot perform Manager-only actions.
@@ -105,12 +111,12 @@ describe("Developer PBAC enforcement (e2e) [AC-024, AC-025]", () => {
       .send({ name: "Denied Assessment" });
 
     const decisionLog = await prisma.authDecisionLog.findFirst({
-      where: { decision: "deny" },
+      where: { decision: PBAC_DECISION.deny },
       orderBy: { createdAt: "desc" },
     });
 
     assert.ok(decisionLog, "AuthDecisionLog must be written on PBAC denial");
-    assert.equal(decisionLog.decision, "deny");
+    assert.equal(decisionLog.decision, PBAC_DECISION.deny);
     // Log must not expose raw policy content
     const logJson = JSON.stringify(decisionLog);
     assert.doesNotMatch(
@@ -145,8 +151,8 @@ async function seedDeveloperFixture(
         "ai-usage-flow:read",
         "findings:read:redacted",
       ],
-      subjectRole: "Developer",
-      stateGate: "membership_active",
+      subjectRole: SUBJECT_ROLES.developer,
+      stateGate: PBAC_STATE_GATES.membershipActive,
       organizationId,
     },
   });
@@ -156,8 +162,8 @@ async function seedDeveloperFixture(
       id: "membership-developer",
       userId: "developer-user-id",
       organizationId,
-      status: "active",
-      subjectAttributes: { role: "Developer" },
+      status: AUTH_MEMBERSHIP_STATUSES.active,
+      subjectAttributes: { role: SUBJECT_ROLES.developer },
       policyId: devPolicyId,
       policyVersion: "2026-06-26",
     },

@@ -1,3 +1,5 @@
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 /* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from "@nestjs/testing";
 import { SaveWizardDraftHandler } from "./save-wizard-draft.handler.js";
@@ -86,12 +88,12 @@ describe("SaveWizardDraftHandler", () => {
       expect(upsertArg.answers).toEqual({ question1: "answer1" });
 
       expect(auditWriter.write).toHaveBeenCalledWith({
-        eventType: "WIZARD_DRAFT_SAVED",
+        eventType: WIZARD_EVENT_TYPES.draftSaved,
         actorId: "owner-1",
         organizationId: "org-1",
         resourceType: "wizard_profile",
         resourceId: "wizard-id-1",
-        decision: "allow",
+        decision: AUDIT_DECISIONS.allow,
         payload: {
           assessmentId: "assessment-123",
           wizardProfileId: "wizard-id-1",

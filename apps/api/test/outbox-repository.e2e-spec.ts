@@ -1,3 +1,5 @@
+import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
+import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
 import { randomUUID } from "node:crypto";
 
 import { PrismaService } from "../src/infrastructure/prisma/prisma.service.js";
@@ -36,7 +38,7 @@ describe("OutboxRepository (e2e, real Postgres)", () => {
         id: randomUUID(),
         aggregateType: "Assessment",
         aggregateId: randomUUID(),
-        eventType: "assessment.created",
+        eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
         payload: { foo: "bar" },
         ...overrides,
       },
@@ -45,9 +47,9 @@ describe("OutboxRepository (e2e, real Postgres)", () => {
 
   it("T07: excludes dlq/published/failed rows from the pending batch", async () => {
     const pending = await seed();
-    await seed({ status: "dlq" });
-    await seed({ status: "published", publishedAt: new Date() });
-    await seed({ status: "failed" });
+    await seed({ status: OUTBOX_STATUSES.dlq });
+    await seed({ status: OUTBOX_STATUSES.published, publishedAt: new Date() });
+    await seed({ status: OUTBOX_STATUSES.failed });
 
     const ids = await repository.withPendingBatch(10, (messages) =>
       Promise.resolve(messages.map((m) => m.id)),

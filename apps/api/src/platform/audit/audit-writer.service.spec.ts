@@ -1,3 +1,6 @@
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
+import { PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
 import type { AuditEventInput } from "@lcsp/contracts/audit";
@@ -29,11 +32,11 @@ function makeTx(
 
 function makeEvent(overrides: Partial<AuditEventInput> = {}): AuditEventInput {
   return {
-    eventType: "auth.login.succeeded",
+    eventType: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
     actorId: "user-1",
     organizationId: "org-1",
     correlationId: "corr-1",
-    decision: "allow",
+    decision: AUDIT_DECISIONS.allow,
     ...overrides,
   };
 }
@@ -147,7 +150,7 @@ describe("AuditWriterService", () => {
 
     await service.write(
       makeEvent({
-        reasonCode: "AUTHORIZED",
+        reasonCode: PBAC_REASON_CODE.authorized,
         sessionId: "session-1",
         policyId: "policy-1",
         policyVersion: "v1",
@@ -158,7 +161,7 @@ describe("AuditWriterService", () => {
       { data: Record<string, unknown> },
     ];
     expect(data).toMatchObject({
-      reasonCode: "AUTHORIZED",
+      reasonCode: PBAC_REASON_CODE.authorized,
       sessionId: "session-1",
       policyId: "policy-1",
       policyVersion: "v1",

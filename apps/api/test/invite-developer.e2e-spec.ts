@@ -1,3 +1,17 @@
+import {
+  AUTH_AUDIT_EVENT_TYPES,
+  AUTH_INVITATION_STATES,
+  AUTH_MEMBERSHIP_STATUSES,
+  INVITE_DEVELOPER_ERROR_CODES,
+} from "@lcsp/contracts/auth";
+import {
+  PBAC_ACTIONS,
+  PBAC_DECISION,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import * as assert from "node:assert/strict";
 
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -101,9 +115,9 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
     const invitation = await prisma.authInvitation.findUniqueOrThrow({
       where: { id: body.invitation_id },
     });
-    assert.equal(invitation.state, "approved");
+    assert.equal(invitation.state, AUTH_INVITATION_STATES.approved);
     assert.equal(invitation.emailVerified, false);
-    assert.equal(invitation.membershipStatus, "active");
+    assert.equal(invitation.membershipStatus, AUTH_MEMBERSHIP_STATUSES.active);
     assert.equal(invitation.policyId, "policy-developer");
     assert.match(JSON.stringify(invitation.subjectAttributes), /Developer/);
     assert.doesNotMatch(
@@ -112,15 +126,15 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
     );
 
     const audit = await prisma.authAuditEvent.findFirstOrThrow({
-      where: { eventType: "AUTH_DEVELOPER_INVITED" },
+      where: { eventType: AUTH_AUDIT_EVENT_TYPES.authDeveloperInvited },
     });
     assert.equal(audit.correlationId, "corr-invite-1");
 
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: {
         correlationId: "corr-invite-1",
-        action: "invite:developer",
-        decision: "allow",
+        action: PBAC_ACTIONS.inviteDeveloper,
+        decision: PBAC_DECISION.allow,
       },
     });
     assert.equal(decision.resourceType, "HttpRoute");
@@ -136,10 +150,16 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       });
 
     assert.equal(result.status, 403);
-    assert.equal((result.body as ErrorBody).error_code, "PBAC_DENIED");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      PBAC_REASON_CODE.denied,
+    );
 
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
-      where: { action: "invite:developer", decision: "deny" },
+      where: {
+        action: PBAC_ACTIONS.inviteDeveloper,
+        decision: PBAC_DECISION.deny,
+      },
       orderBy: { createdAt: "desc" },
     });
     assert.equal(decision.resourceType, "HttpRoute");
@@ -157,7 +177,10 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       });
 
     assert.equal(result.status, 400);
-    assert.equal((result.body as ErrorBody).error_code, "INVALID_ACTIONS");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      INVITE_DEVELOPER_ERROR_CODES.invalidActions,
+    );
   });
 
   it("T04 rejects assessment scope outside the organization", async () => {
@@ -174,7 +197,10 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       });
 
     assert.equal(result.status, 400);
-    assert.equal((result.body as ErrorBody).error_code, "ASSESSMENT_NOT_OWNED");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      INVITE_DEVELOPER_ERROR_CODES.assessmentNotOwned,
+    );
   });
 
   it("T05 rejects invalid email", async () => {
@@ -189,7 +215,10 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       });
 
     assert.equal(result.status, 422);
-    assert.equal((result.body as ErrorBody).error_code, "INVALID_EMAIL");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      INVITE_DEVELOPER_ERROR_CODES.invalidEmail,
+    );
   });
 });
 
@@ -202,8 +231,8 @@ async function seedDeveloperPolicy(
       id: "policy-developer",
       version: "2026-06-26",
       actions: DEVELOPER_ALLOWED_ACTIONS,
-      subjectRole: "Developer",
-      stateGate: "membership_active",
+      subjectRole: SUBJECT_ROLES.developer,
+      stateGate: PBAC_STATE_GATES.membershipActive,
       organizationId,
     },
   });
@@ -217,7 +246,7 @@ async function grantManagerInviteAction(prisma: PrismaClient): Promise<void> {
         version: "2026-06-26",
       },
     },
-    data: { actions: { push: "invite:developer" } },
+    data: { actions: { push: PBAC_ACTIONS.inviteDeveloper } },
   });
 }
 
@@ -234,14 +263,14 @@ async function seedAssessment(
       ownerId,
       name: "Assessment 1",
       description: null,
-      status: "WIZARD_IN_PROGRESS",
+      status: ASSESSMENT_STATUS_CODES.wizardInProgress,
     },
     update: {
       organizationId,
       ownerId,
       name: "Assessment 1",
       description: null,
-      status: "WIZARD_IN_PROGRESS",
+      status: ASSESSMENT_STATUS_CODES.wizardInProgress,
     },
   });
 }

@@ -1,3 +1,5 @@
+import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
+import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
 import type { ConfigService } from "@nestjs/config";
@@ -83,9 +85,9 @@ function makeMessage(
     id: "outbox-1",
     aggregateType: "Assessment",
     aggregateId: "assessment-1",
-    eventType: "assessment.created",
+    eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
     payload: { foo: "bar" },
-    status: "pending",
+    status: OUTBOX_STATUSES.pending,
     attempts: 0,
     lastAttemptAt: null,
     publishedAt: null,
@@ -140,9 +142,13 @@ describe("OutboxPublisherService", () => {
 
     await service.poll();
 
-    expect(publish).toHaveBeenCalledWith("lcsp.events", "assessment.created", {
-      foo: "bar",
-    });
+    expect(publish).toHaveBeenCalledWith(
+      "lcsp.events",
+      ASSESSMENT_EVENT_TYPES.createdOutbox,
+      {
+        foo: "bar",
+      },
+    );
     expect(markPublished).toHaveBeenCalledWith(
       {},
       "outbox-1",

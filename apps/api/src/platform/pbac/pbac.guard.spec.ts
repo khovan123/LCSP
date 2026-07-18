@@ -1,3 +1,11 @@
+import {
+  PBAC_ACTIONS,
+  PBAC_DECISION,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { jest } from "@jest/globals";
 import {
   ForbiddenException,
@@ -23,7 +31,7 @@ import type { PbacRequestContext } from "./interfaces/pbac-request.interface.js"
 import type { PbacDecisionResult } from "./pbac.types.js";
 
 class DummyController {
-  @RequireAction("invite:developer")
+  @RequireAction(PBAC_ACTIONS.inviteDeveloper)
   inviteDeveloper(this: void): void {}
 
   @RequireSession()
@@ -64,8 +72,8 @@ function makeMembership(): Membership {
     id: "membership-1",
     userId: "user-1",
     organizationId: "org-1",
-    status: "active",
-    subjectAttributes: { role: "Manager" },
+    status: AUTH_MEMBERSHIP_STATUSES.active,
+    subjectAttributes: { role: SUBJECT_ROLES.manager },
     policyId: "policy-1",
     policyVersion: "v1",
   });
@@ -75,9 +83,9 @@ function makePolicy(): Policy {
   return new Policy({
     id: "policy-1",
     version: "v1",
-    actions: ["invite:developer"],
-    subjectRole: "Manager",
-    stateGate: "membership_active",
+    actions: [PBAC_ACTIONS.inviteDeveloper],
+    subjectRole: SUBJECT_ROLES.manager,
+    stateGate: PBAC_STATE_GATES.membershipActive,
     organizationId: "org-1",
   });
 }
@@ -103,7 +111,7 @@ function makeGuard(
   const loader = { load } as unknown as PbacContextLoader;
 
   const evaluateResult: PbacDecisionResult = overrides.evaluateResult ?? {
-    decision: "allow",
+    decision: PBAC_DECISION.allow,
     policyId: "policy-1",
     policyVersion: "v1",
   };
@@ -134,8 +142,8 @@ describe("PbacGuard", () => {
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: "allow",
-        action: "invite:developer",
+        decision: PBAC_DECISION.allow,
+        action: PBAC_ACTIONS.inviteDeveloper,
       }),
     );
     expect(
@@ -144,7 +152,7 @@ describe("PbacGuard", () => {
       userId: "user-1",
       sessionId: "session-1",
       organizationId: "org-1",
-      subjectRole: "Manager",
+      subjectRole: SUBJECT_ROLES.manager,
       policyId: "policy-1",
     });
   });
@@ -159,14 +167,14 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(UnauthorizedException);
     expect((error as UnauthorizedException).getResponse()).toMatchObject({
-      error_code: "SESSION_INVALID",
+      error_code: PBAC_REASON_CODE.sessionInvalid,
     });
     expect(load).not.toHaveBeenCalled();
   });
 
   it("T03/T04: SESSION_INVALID (expired or revoked) from the loader returns 401 SESSION_INVALID", async () => {
     const { guard } = makeGuard({
-      loadResult: { ok: false, reason: "SESSION_INVALID" },
+      loadResult: { ok: false, reason: PBAC_REASON_CODE.sessionInvalid },
     });
     const { context } = makeContext({
       handler: DummyController.prototype.inviteDeveloper,
@@ -177,13 +185,13 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(UnauthorizedException);
     expect((error as UnauthorizedException).getResponse()).toMatchObject({
-      error_code: "SESSION_INVALID",
+      error_code: PBAC_REASON_CODE.sessionInvalid,
     });
   });
 
   it("T05: MFA enrolled + unverified returns 401 MFA_REQUIRED", async () => {
     const { guard } = makeGuard({
-      loadResult: { ok: false, reason: "MFA_REQUIRED" },
+      loadResult: { ok: false, reason: PBAC_REASON_CODE.mfaRequired },
     });
     const { context } = makeContext({
       handler: DummyController.prototype.inviteDeveloper,
@@ -194,13 +202,13 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(UnauthorizedException);
     expect((error as UnauthorizedException).getResponse()).toMatchObject({
-      error_code: "MFA_REQUIRED",
+      error_code: PBAC_REASON_CODE.mfaRequired,
     });
   });
 
   it("T06: no active membership returns 403 MEMBERSHIP_MISSING", async () => {
     const { guard } = makeGuard({
-      loadResult: { ok: false, reason: "MEMBERSHIP_MISSING" },
+      loadResult: { ok: false, reason: PBAC_REASON_CODE.membershipMissing },
     });
     const { context } = makeContext({
       handler: DummyController.prototype.inviteDeveloper,
@@ -211,15 +219,15 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: "MEMBERSHIP_MISSING",
+      error_code: PBAC_REASON_CODE.membershipMissing,
     });
   });
 
   it("T07: action not in policy returns 403 PBAC_DENIED", async () => {
     const { guard, append } = makeGuard({
       evaluateResult: {
-        decision: "deny",
-        reasonCode: "ACTION_NOT_GRANTED",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.actionNotGranted,
         policyId: "policy-1",
         policyVersion: "v1",
       },
@@ -233,19 +241,19 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: "PBAC_DENIED",
+      error_code: PBAC_REASON_CODE.denied,
     });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: "deny",
-        reason_code: "ACTION_NOT_GRANTED",
+        decision: PBAC_DECISION.deny,
+        reason_code: PBAC_REASON_CODE.actionNotGranted,
       }),
     );
   });
 
   it("T08: policy not found in DB returns 403 PBAC_DENIED", async () => {
     const { guard } = makeGuard({
-      loadResult: { ok: false, reason: "POLICY_NOT_FOUND" },
+      loadResult: { ok: false, reason: PBAC_REASON_CODE.policyNotFound },
     });
     const { context } = makeContext({
       handler: DummyController.prototype.inviteDeveloper,
@@ -256,13 +264,13 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: "PBAC_DENIED",
+      error_code: PBAC_REASON_CODE.denied,
     });
   });
 
   it("T09: DB error during load returns 403 PBAC_DENIED (deny on error)", async () => {
     const { guard } = makeGuard({
-      loadResult: { ok: false, reason: "LOAD_ERROR" },
+      loadResult: { ok: false, reason: PBAC_REASON_CODE.loadError },
     });
     const { context } = makeContext({
       handler: DummyController.prototype.inviteDeveloper,
@@ -273,15 +281,15 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: "PBAC_DENIED",
+      error_code: PBAC_REASON_CODE.denied,
     });
   });
 
   it("T10: 403 response body has no policyId or actions — clean", async () => {
     const { guard } = makeGuard({
       evaluateResult: {
-        decision: "deny",
-        reasonCode: "ACTION_NOT_GRANTED",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.actionNotGranted,
         policyId: "policy-1",
         policyVersion: "v1",
       },
@@ -327,13 +335,13 @@ describe("PbacGuard", () => {
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(evaluate).not.toHaveBeenCalled();
     expect(append).toHaveBeenCalledWith(
-      expect.objectContaining({ decision: "allow" }),
+      expect.objectContaining({ decision: PBAC_DECISION.allow }),
     );
   });
 
   it("T13: AuthDecisionLog (append) is written for allow and every deny reason", async () => {
     const scenarios: PbacContextResult[] = [
-      { ok: false, reason: "SESSION_INVALID" },
+      { ok: false, reason: PBAC_REASON_CODE.sessionInvalid },
       {
         ok: true,
         session: makeSession(),
@@ -356,8 +364,8 @@ describe("PbacGuard", () => {
 
     const { guard: denyGuard, append: denyAppend } = makeGuard({
       evaluateResult: {
-        decision: "deny",
-        reasonCode: "ACTION_NOT_GRANTED",
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.actionNotGranted,
         policyId: "policy-1",
         policyVersion: "v1",
       },
@@ -393,14 +401,14 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: "PBAC_DENIED",
+      error_code: PBAC_REASON_CODE.denied,
     });
     expect(load).not.toHaveBeenCalled();
     expect(evaluate).not.toHaveBeenCalled();
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: "deny",
-        reason_code: "PBAC_METADATA_MISSING",
+        decision: PBAC_DECISION.deny,
+        reason_code: PBAC_REASON_CODE.metadataMissing,
       }),
     );
   });
@@ -414,7 +422,7 @@ describe("PbacGuard", () => {
           id: "membership-1",
           userId: "user-1",
           organizationId: "org-1",
-          status: "active",
+          status: AUTH_MEMBERSHIP_STATUSES.active,
           subjectAttributes: {},
           policyId: "policy-1",
           policyVersion: "v1",
@@ -431,13 +439,13 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: "PBAC_DENIED",
+      error_code: PBAC_REASON_CODE.denied,
     });
     expect(evaluate).not.toHaveBeenCalled();
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: "deny",
-        reason_code: "SUBJECT_ATTRIBUTE_MISSING",
+        decision: PBAC_DECISION.deny,
+        reason_code: PBAC_REASON_CODE.subjectAttributeMissing,
       }),
     );
   });
@@ -457,12 +465,12 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: "PBAC_DENIED",
+      error_code: PBAC_REASON_CODE.denied,
     });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: "deny",
-        reason_code: "EVALUATOR_ERROR",
+        decision: PBAC_DECISION.deny,
+        reason_code: PBAC_REASON_CODE.evaluatorError,
       }),
     );
   });

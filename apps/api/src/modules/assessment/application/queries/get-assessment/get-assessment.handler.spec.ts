@@ -1,3 +1,9 @@
+import {
+  ASSESSMENT_LOCK_REASONS,
+  ASSESSMENT_STATUS_CODES,
+  WIZARD_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
+import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { describe, it, expect, jest } from "@jest/globals";
 import { NotFoundException } from "@nestjs/common";
 
@@ -65,14 +71,14 @@ describe("GetAssessmentHandler", () => {
         "assessment-1",
         "org-1",
         "user-1",
-        "Manager",
+        SUBJECT_ROLES.manager,
         "corr-1",
       ),
     );
 
     expect(result.assessment_id).toBe(assessment.id);
     expect(result.name).toBe("Test Assessment");
-    expect(result.status).toBe("WIZARD_IN_PROGRESS");
+    expect(result.status).toBe(ASSESSMENT_STATUS_CODES.wizardInProgress);
     expect(result.owner_id).toBe("user-1");
     expect(result.organization_id).toBe("org-1");
     expect(result.correlation_id).toBe("corr-1");
@@ -88,19 +94,19 @@ describe("GetAssessmentHandler", () => {
         "assessment-1",
         "org-1",
         "user-1",
-        "Manager",
+        SUBJECT_ROLES.manager,
         "corr-1",
       ),
     );
 
-    expect(result.wizard_status).toBe("NOT_STARTED");
+    expect(result.wizard_status).toBe(WIZARD_STATUS_CODES.notStarted);
   });
 
   it("reports wizard_status from the WizardProfile row when it exists", async () => {
     const assessment = makeAssessment();
     const { handler } = buildHandler({
       assessment,
-      wizardProfile: { status: "IN_PROGRESS" },
+      wizardProfile: { status: WIZARD_STATUS_CODES.inProgress },
     });
 
     const result = await handler.execute(
@@ -108,12 +114,12 @@ describe("GetAssessmentHandler", () => {
         "assessment-1",
         "org-1",
         "user-1",
-        "Manager",
+        SUBJECT_ROLES.manager,
         "corr-1",
       ),
     );
 
-    expect(result.wizard_status).toBe("IN_PROGRESS");
+    expect(result.wizard_status).toBe(WIZARD_STATUS_CODES.inProgress);
   });
 
   // T02: classification always locked until MW-evid-001 lands (no TechnicalEvidenceReport table yet)
@@ -126,13 +132,15 @@ describe("GetAssessmentHandler", () => {
         "assessment-1",
         "org-1",
         "user-1",
-        "Manager",
+        SUBJECT_ROLES.manager,
         "corr-1",
       ),
     );
 
     expect(result.readiness_state.classification_locked).toBe(true);
-    expect(result.readiness_state.lock_reason).toBe("LOCKED_EVIDENCE_REQUIRED");
+    expect(result.readiness_state.lock_reason).toBe(
+      ASSESSMENT_LOCK_REASONS.evidenceRequired,
+    );
     expect(result.readiness_state.missing_evidence.length).toBeGreaterThan(0);
   });
 
@@ -146,7 +154,7 @@ describe("GetAssessmentHandler", () => {
           "missing",
           "org-1",
           "user-1",
-          "Manager",
+          SUBJECT_ROLES.manager,
           "corr-1",
         ),
       ),
@@ -163,7 +171,7 @@ describe("GetAssessmentHandler", () => {
           assessment.id,
           "org-1",
           "user-1",
-          "Manager",
+          SUBJECT_ROLES.manager,
           "corr-1",
         ),
       ),
@@ -183,7 +191,7 @@ describe("GetAssessmentHandler", () => {
           assessment.id,
           "org-1",
           "user-1",
-          "Manager",
+          SUBJECT_ROLES.manager,
           "corr-1",
         ),
       ),
@@ -203,7 +211,7 @@ describe("GetAssessmentHandler", () => {
         assessment.id,
         "org-1",
         "user-3",
-        "Developer",
+        SUBJECT_ROLES.developer,
         "corr-1",
       ),
     );
@@ -221,7 +229,7 @@ describe("GetAssessmentHandler", () => {
         assessment.id,
         "org-1",
         "user-1",
-        "Manager",
+        SUBJECT_ROLES.manager,
         "corr-1",
       ),
     );
@@ -242,18 +250,18 @@ describe("GetAssessmentHandler", () => {
     });
     const { handler: inProgress } = buildHandler({
       assessment,
-      wizardProfile: { status: "IN_PROGRESS" },
+      wizardProfile: { status: WIZARD_STATUS_CODES.inProgress },
     });
     const { handler: submitted } = buildHandler({
       assessment,
-      wizardProfile: { status: "SUBMITTED" },
+      wizardProfile: { status: WIZARD_STATUS_CODES.submitted },
     });
 
     const query = new GetAssessmentQuery(
       assessment.id,
       "org-1",
       "user-1",
-      "Manager",
+      SUBJECT_ROLES.manager,
       "corr-1",
     );
     const a = await notStarted.execute(query);

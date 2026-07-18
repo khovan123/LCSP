@@ -1,3 +1,10 @@
+import {
+  PBAC_ACTIONS,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { jest } from "@jest/globals";
 
 import { Membership } from "../../modules/auth-workspace/domain/entities/membership.entity.js";
@@ -35,8 +42,8 @@ function makeMembership(
     id: "membership-1",
     userId: "user-1",
     organizationId: "org-1",
-    status: "active",
-    subjectAttributes: { role: "Manager" },
+    status: AUTH_MEMBERSHIP_STATUSES.active,
+    subjectAttributes: { role: SUBJECT_ROLES.manager },
     policyId: "policy-1",
     policyVersion: "v1",
     ...overrides,
@@ -49,9 +56,9 @@ function makePolicy(
   return new Policy({
     id: "policy-1",
     version: "v1",
-    actions: ["invite:developer"],
-    subjectRole: "Manager",
-    stateGate: "membership_active",
+    actions: [PBAC_ACTIONS.inviteDeveloper],
+    subjectRole: SUBJECT_ROLES.manager,
+    stateGate: PBAC_STATE_GATES.membershipActive,
     organizationId: "org-1",
     ...overrides,
   });
@@ -137,7 +144,10 @@ describe("PbacContextLoader", () => {
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: "SESSION_INVALID" });
+    expect(result).toEqual({
+      ok: false,
+      reason: PBAC_REASON_CODE.sessionInvalid,
+    });
   });
 
   it("SESSION_INVALID when the session has expired", async () => {
@@ -151,7 +161,10 @@ describe("PbacContextLoader", () => {
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: "SESSION_INVALID" });
+    expect(result).toEqual({
+      ok: false,
+      reason: PBAC_REASON_CODE.sessionInvalid,
+    });
   });
 
   it("SESSION_INVALID when the token hash does not verify", async () => {
@@ -167,7 +180,10 @@ describe("PbacContextLoader", () => {
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: "SESSION_INVALID" });
+    expect(result).toEqual({
+      ok: false,
+      reason: PBAC_REASON_CODE.sessionInvalid,
+    });
   });
 
   it("SESSION_INVALID when the session is revoked", async () => {
@@ -181,7 +197,10 @@ describe("PbacContextLoader", () => {
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: "SESSION_INVALID" });
+    expect(result).toEqual({
+      ok: false,
+      reason: PBAC_REASON_CODE.sessionInvalid,
+    });
   });
 
   it("MFA_REQUIRED when MFA is enrolled but the session has not verified it", async () => {
@@ -201,7 +220,7 @@ describe("PbacContextLoader", () => {
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: "MFA_REQUIRED" });
+    expect(result).toEqual({ ok: false, reason: PBAC_REASON_CODE.mfaRequired });
   });
 
   it("allows when MFA is enrolled and the session has verified it", async () => {
@@ -248,7 +267,10 @@ describe("PbacContextLoader", () => {
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: "MEMBERSHIP_MISSING" });
+    expect(result).toEqual({
+      ok: false,
+      reason: PBAC_REASON_CODE.membershipMissing,
+    });
   });
 
   it("MEMBERSHIP_MISSING when the membership exists but is not active", async () => {
@@ -256,13 +278,18 @@ describe("PbacContextLoader", () => {
       memberships: {
         findByUserAndOrganization: jest
           .fn<MembershipRepository["findByUserAndOrganization"]>()
-          .mockResolvedValue(makeMembership({ status: "revoked" })),
+          .mockResolvedValue(
+            makeMembership({ status: AUTH_MEMBERSHIP_STATUSES.revoked }),
+          ),
       },
     });
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: "MEMBERSHIP_MISSING" });
+    expect(result).toEqual({
+      ok: false,
+      reason: PBAC_REASON_CODE.membershipMissing,
+    });
   });
 
   it("POLICY_NOT_FOUND when the membership's policy cannot be loaded", async () => {
@@ -276,7 +303,10 @@ describe("PbacContextLoader", () => {
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: "POLICY_NOT_FOUND" });
+    expect(result).toEqual({
+      ok: false,
+      reason: PBAC_REASON_CODE.policyNotFound,
+    });
   });
 
   it("LOAD_ERROR (deny, never throw) when a repository throws", async () => {
@@ -290,6 +320,6 @@ describe("PbacContextLoader", () => {
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: "LOAD_ERROR" });
+    expect(result).toEqual({ ok: false, reason: PBAC_REASON_CODE.loadError });
   });
 });

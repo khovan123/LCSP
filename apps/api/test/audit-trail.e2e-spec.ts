@@ -1,3 +1,5 @@
+import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
+import { PBAC_DECISION } from "@lcsp/contracts/pbac";
 /**
  * AC-020: Complete audit trail for all state-changing operations.
  *
@@ -72,7 +74,7 @@ describe("Audit trail completeness (e2e) [AC-020]", () => {
       .send({ name: "Audit Coverage Test", organization_id: orgId });
 
     const audit = await prisma.authAuditEvent.findFirst({
-      where: { eventType: "ASSESSMENT_CREATED" },
+      where: { eventType: ASSESSMENT_EVENT_TYPES.created },
       orderBy: { createdAt: "desc" },
     });
 
@@ -108,12 +110,12 @@ describe("Audit trail completeness (e2e) [AC-020]", () => {
       .send({});
 
     const decisionLog = await prisma.authDecisionLog.findFirst({
-      where: { decision: "deny" },
+      where: { decision: PBAC_DECISION.deny },
       orderBy: { createdAt: "desc" },
     });
     // May or may not have denied — but any denial must be logged
     if (decisionLog) {
-      assert.equal(decisionLog.decision, "deny");
+      assert.equal(decisionLog.decision, PBAC_DECISION.deny);
       assert.doesNotMatch(JSON.stringify(decisionLog), SENSITIVE_PATTERNS);
     }
   });

@@ -1,3 +1,10 @@
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
+import type { AuthMembershipStatus } from "@lcsp/contracts/auth";
+import {
+  PBAC_ACTIONS,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
 import * as assert from "node:assert/strict";
 
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -184,7 +191,7 @@ describe("OAuth login (e2e)", () => {
     await seedLinkedUser({
       emailVerified: true,
       providerAccountId: "side-effect-test",
-      membershipStatus: "active",
+      membershipStatus: AUTH_MEMBERSHIP_STATUSES.active,
     });
     const before = await prisma.repositoryConnection.count();
     const state = await startOAuthFlow();
@@ -203,7 +210,7 @@ describe("OAuth login (e2e)", () => {
     const userId = await seedLinkedUser({
       emailVerified: true,
       providerAccountId: "111",
-      membershipStatus: "active",
+      membershipStatus: AUTH_MEMBERSHIP_STATUSES.active,
     });
     const state = await startOAuthFlow();
     mockGithubFetch("111");
@@ -270,7 +277,7 @@ describe("OAuth login (e2e)", () => {
     await seedLinkedUser({
       emailVerified: true,
       providerAccountId: "444",
-      membershipStatus: "active",
+      membershipStatus: AUTH_MEMBERSHIP_STATUSES.active,
     });
     const state = await startOAuthFlow();
     mockGithubFetch("444");
@@ -329,7 +336,7 @@ describe("OAuth login (e2e)", () => {
     await seedLinkedUser({
       emailVerified: false,
       providerAccountId: "555",
-      membershipStatus: "active",
+      membershipStatus: AUTH_MEMBERSHIP_STATUSES.active,
     });
     const state = await startOAuthFlow();
     mockGithubFetch("555");
@@ -347,7 +354,7 @@ describe("OAuth login (e2e)", () => {
     await seedLinkedUser({
       emailVerified: true,
       providerAccountId: "666",
-      membershipStatus: "revoked",
+      membershipStatus: AUTH_MEMBERSHIP_STATUSES.revoked,
     });
     const state = await startOAuthFlow();
     mockGithubFetch("666");
@@ -365,7 +372,7 @@ describe("OAuth login (e2e)", () => {
     await seedLinkedUser({
       emailVerified: true,
       providerAccountId: "777",
-      membershipStatus: "active",
+      membershipStatus: AUTH_MEMBERSHIP_STATUSES.active,
     });
     const state = await startOAuthFlow();
     mockGithubFetch("777");
@@ -413,7 +420,7 @@ describe("OAuth login (e2e)", () => {
   async function seedLinkedUser(input: {
     emailVerified: boolean;
     providerAccountId: string;
-    membershipStatus: "active" | "revoked";
+    membershipStatus: AuthMembershipStatus;
   }): Promise<string> {
     const userId = `user-oauth-${input.providerAccountId}`;
     await prisma.authUser.create({
@@ -443,9 +450,9 @@ describe("OAuth login (e2e)", () => {
       create: {
         id: "policy-oauth-workspace",
         version: "2026-07-10",
-        actions: ["workspace:read"],
-        subjectRole: "Manager",
-        stateGate: "membership_active",
+        actions: [PBAC_ACTIONS.workspaceRead],
+        subjectRole: SUBJECT_ROLES.manager,
+        stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId,
       },
       update: {},
@@ -456,7 +463,7 @@ describe("OAuth login (e2e)", () => {
         userId,
         organizationId,
         status: input.membershipStatus,
-        subjectAttributes: { role: "Manager" },
+        subjectAttributes: { role: SUBJECT_ROLES.manager },
         policyId: "policy-oauth-workspace",
         policyVersion: "2026-07-10",
       },

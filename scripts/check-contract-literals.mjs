@@ -2,6 +2,8 @@ import { readFile, readdir } from "node:fs/promises";
 import { extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import ts from "typescript";
+
 import {
   ASSESSMENT_ACTIONS,
   ASSESSMENT_ERROR_CODES,
@@ -31,6 +33,9 @@ import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_REPOSITORY_PERMISSION_LEVELS,
   REPOSITORY_CONNECTION_STATUSES,
+  REPOSITORY_SCAN_JOB_STATUSES,
+  REPOSITORY_SCAN_TRIGGER_SOURCES,
+  REPOSITORY_SNAPSHOT_STATUSES,
 } from "@lcsp/contracts/github-integration";
 import {
   OUTBOX_AUDIT_EVENT_TYPES,
@@ -47,7 +52,7 @@ import { SERVICE_HEALTH_STATUSES } from "@lcsp/contracts/shared";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const sourceRoots = ["apps/api/src", "apps/web/src"];
+const sourceRoots = ["apps/api/src", "apps/api/test", "apps/web/src"];
 const extensions = new Set([".ts", ".tsx"]);
 const canonicalValues = new Set(
   [
@@ -77,6 +82,9 @@ const canonicalValues = new Set(
     PBAC_REASON_CODE,
     PBAC_STATE_GATES,
     REPOSITORY_CONNECTION_STATUSES,
+    REPOSITORY_SCAN_JOB_STATUSES,
+    REPOSITORY_SCAN_TRIGGER_SOURCES,
+    REPOSITORY_SNAPSHOT_STATUSES,
     REQUIRED_ACTIONS,
     REVOKE_MEMBERSHIP_ERROR_CODES,
     SERVICE_HEALTH_STATUSES,
@@ -96,11 +104,7 @@ async function collectFiles(directory) {
     if (entry.isDirectory()) {
       if (path === join(root, "apps/web/src/components/ui")) continue;
       files.push(...(await collectFiles(path)));
-    } else if (
-      extensions.has(extname(entry.name)) &&
-      !entry.name.endsWith(".spec.ts") &&
-      !entry.name.endsWith(".test.ts")
-    ) {
+    } else if (extensions.has(extname(entry.name))) {
       files.push(path);
     }
   }
@@ -112,18 +116,40 @@ const violations = [];
 
 for (const sourceRoot of sourceRoots) {
   for (const file of await collectFiles(join(root, sourceRoot))) {
-    const lines = (await readFile(file, "utf8")).split("\n");
-    lines.forEach((line, index) => {
-      for (const value of canonicalValues) {
+    const source = await readFile(file, "utf8");
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+    );
+    const isTestFile = file.endsWith(".spec.ts") || file.endsWith(".test.ts");
+
+    function visit(node) {
+      if (
+        (ts.isStringLiteral(node) ||
+          ts.isNoSubstitutionTemplateLiteral(node)) &&
+        canonicalValues.has(node.text)
+      ) {
         if (
-          line.includes(`"${value}"`) ||
-          line.includes(`'${value}'`) ||
-          line.includes(`\`${value}\``)
+          !(
+            isTestFile &&
+            node.text === SERVICE_HEALTH_STATUSES.ok &&
+            !file.includes(`${join("modules", "health")}`)
+          )
         ) {
-          violations.push(`${relative(root, file)}:${index + 1}: ${value}`);
+          const { line } = sourceFile.getLineAndCharacterOfPosition(
+            node.getStart(sourceFile),
+          );
+          violations.push(`${relative(root, file)}:${line + 1}: ${node.text}`);
         }
       }
-    });
+
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
   }
 }
 

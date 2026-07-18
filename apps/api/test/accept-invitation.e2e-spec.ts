@@ -1,3 +1,11 @@
+import {
+  ACCEPT_INVITATION_ERROR_CODES,
+  AUTH_AUDIT_EVENT_TYPES,
+  AUTH_INVITATION_STATES,
+  AUTH_MEMBERSHIP_STATUSES,
+} from "@lcsp/contracts/auth";
+import { PBAC_STATE_GATES, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import * as assert from "node:assert/strict";
 
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -97,7 +105,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     const invitation = await prisma.authInvitation.findUniqueOrThrow({
       where: { id: "developer-invite-1" },
     });
-    assert.equal(invitation.state, "consumed");
+    assert.equal(invitation.state, AUTH_INVITATION_STATES.consumed);
 
     const user = await prisma.authUser.findUniqueOrThrow({
       where: { id: body.user_id },
@@ -115,7 +123,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
       },
     });
     assert.deepEqual(membership.subjectAttributes, {
-      role: "Developer",
+      role: SUBJECT_ROLES.developer,
       scope: "assessment-1",
       allowed_actions: DEVELOPER_ALLOWED_ACTIONS,
     });
@@ -130,13 +138,16 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     });
 
     assert.equal(result.status, 400);
-    assert.equal((result.body as ErrorBody).error_code, "INVITATION_INVALID");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
+    );
   });
 
   it("T03 rejects an already consumed invitation", async () => {
     await prisma.authInvitation.update({
       where: { id: "developer-invite-1" },
-      data: { state: "consumed" },
+      data: { state: AUTH_INVITATION_STATES.consumed },
     });
 
     const result = await httpRequest(app).post("/auth/accept-invitation").send({
@@ -146,7 +157,10 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     });
 
     assert.equal(result.status, 400);
-    assert.equal((result.body as ErrorBody).error_code, "INVITATION_INVALID");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
+    );
   });
 
   it("T04 rejects an expired invitation", async () => {
@@ -162,7 +176,10 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     });
 
     assert.equal(result.status, 400);
-    assert.equal((result.body as ErrorBody).error_code, "INVITATION_INVALID");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
+    );
   });
 
   it("T05 rejects when the invitation email already has an account", async () => {
@@ -183,7 +200,10 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     });
 
     assert.equal(result.status, 409);
-    assert.equal((result.body as ErrorBody).error_code, "EMAIL_ALREADY_EXISTS");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists,
+    );
   });
 
   it("T06 rejects a short password", async () => {
@@ -194,7 +214,10 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     });
 
     assert.equal(result.status, 422);
-    assert.equal((result.body as ErrorBody).error_code, "PASSWORD_TOO_SHORT");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      ACCEPT_INVITATION_ERROR_CODES.passwordTooShort,
+    );
   });
 
   it("T09 writes a clean audit event without password or invitation token material", async () => {
@@ -205,7 +228,9 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     });
 
     const audit = await prisma.authAuditEvent.findFirstOrThrow({
-      where: { eventType: "AUTH_DEVELOPER_INVITATION_ACCEPTED" },
+      where: {
+        eventType: AUTH_AUDIT_EVENT_TYPES.authDeveloperInvitationAccepted,
+      },
     });
     const serialized = JSON.stringify(audit);
     assert.doesNotMatch(serialized, /DeveloperPass123!|developer-invite-1/);
@@ -237,8 +262,8 @@ async function seedDeveloperPolicy(
       id: "policy-developer",
       version: "2026-06-26",
       actions: DEVELOPER_ALLOWED_ACTIONS,
-      subjectRole: "Developer",
-      stateGate: "membership_active",
+      subjectRole: SUBJECT_ROLES.developer,
+      stateGate: PBAC_STATE_GATES.membershipActive,
       organizationId,
     },
   });
@@ -256,14 +281,14 @@ async function seedDeveloperInvitation(
       ownerId: "user-approved",
       name: "Assessment 1",
       description: null,
-      status: "WIZARD_IN_PROGRESS",
+      status: ASSESSMENT_STATUS_CODES.wizardInProgress,
     },
     update: {
       organizationId,
       ownerId: "user-approved",
       name: "Assessment 1",
       description: null,
-      status: "WIZARD_IN_PROGRESS",
+      status: ASSESSMENT_STATUS_CODES.wizardInProgress,
     },
   });
   await prisma.authInvitation.create({
@@ -271,11 +296,11 @@ async function seedDeveloperInvitation(
       id: "developer-invite-1",
       email: "newdeveloper@acme.test",
       organizationId,
-      state: "approved",
+      state: AUTH_INVITATION_STATES.approved,
       emailVerified: false,
-      membershipStatus: "active",
+      membershipStatus: AUTH_MEMBERSHIP_STATUSES.active,
       subjectAttributes: {
-        role: "Developer",
+        role: SUBJECT_ROLES.developer,
         scope: "assessment-1",
         allowed_actions: DEVELOPER_ALLOWED_ACTIONS,
       },

@@ -1,3 +1,10 @@
+import { PBAC_DECISION } from "@lcsp/contracts/pbac";
+import {
+  GITHUB_INTEGRATION_ERROR_CODES,
+  GITHUB_INTEGRATION_EVENT_TYPES,
+  GITHUB_REPOSITORY_PERMISSION_LEVELS,
+  REPOSITORY_SNAPSHOT_STATUSES,
+} from "@lcsp/contracts/github-integration";
 import { describe, expect, it, jest } from "@jest/globals";
 import {
   BadRequestException,
@@ -34,7 +41,7 @@ function connection(overrides?: {
     repositoryName: "example-repo",
     repositoryFullName: "acme/example-repo",
     defaultBranch: "main",
-    permissions: { contents: "read" },
+    permissions: { contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read },
     status: overrides?.status ?? REPOSITORY_CONNECTION_STATUSES.active,
     connectedAt: new Date("2026-07-18T00:00:00.000Z"),
     revokedAt: null,
@@ -147,7 +154,7 @@ describe("PinSnapshotHandler", () => {
       repository_full_name: "acme/example-repo",
       commit_sha: "a".repeat(40),
       branch: "main",
-      status: "ready",
+      status: REPOSITORY_SNAPSHOT_STATUSES.ready,
       correlation_id: "corr-1",
     });
     expect(saveWithCreatedEvent).toHaveBeenCalledTimes(1);
@@ -160,7 +167,7 @@ describe("PinSnapshotHandler", () => {
     });
     expect(snapshot.providerMetadata).not.toHaveProperty("source");
     expect(event).toMatchObject({
-      eventType: "snapshot.created",
+      eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated,
       payload: {
         assessmentId: "assessment-1",
         commitSha: "a".repeat(40),
@@ -170,8 +177,8 @@ describe("PinSnapshotHandler", () => {
     });
     expect(write).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: "SNAPSHOT_CREATED",
-        decision: "allow",
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
+        decision: PBAC_DECISION.allow,
       }),
     );
   });
@@ -255,15 +262,15 @@ describe("PinSnapshotHandler", () => {
       throw new Error("expected rejection");
     } catch (error) {
       expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: "REF_NOT_RESOLVABLE",
+        error_code: GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
         correlation_id: "corr-1",
       });
     }
     expect(saveWithCreatedEvent).not.toHaveBeenCalled();
     expect(write).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: "SNAPSHOT_PIN_FAILED",
-        decision: "deny",
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotPinFailedAudit,
+        decision: PBAC_DECISION.deny,
         payload: expect.not.objectContaining({ source: expect.anything() }),
       }),
     );
@@ -279,7 +286,7 @@ describe("PinSnapshotHandler", () => {
       throw new Error("expected rejection");
     } catch (error) {
       expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: "REF_OUT_OF_SCOPE",
+        error_code: GITHUB_INTEGRATION_ERROR_CODES.refOutOfScope,
         correlation_id: "corr-1",
       });
     }

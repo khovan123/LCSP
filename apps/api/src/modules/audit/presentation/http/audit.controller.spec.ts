@@ -1,3 +1,4 @@
+import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import { jest } from "@jest/globals";
 import type { QueryBus } from "@nestjs/cqrs";
 
@@ -14,7 +15,10 @@ describe("AuditController", () => {
       AuditController.prototype.listAuditEvents,
     ) as unknown;
 
-    expect(metadata).toEqual({ type: "action", action: "audit:read" });
+    expect(metadata).toEqual({
+      type: "action",
+      action: PBAC_ACTIONS.auditRead,
+    });
   });
 
   it("dispatches the organization-scoped list query", async () => {

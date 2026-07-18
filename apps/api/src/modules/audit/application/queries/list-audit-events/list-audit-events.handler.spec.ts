@@ -1,3 +1,5 @@
+import { AUDIT_DECISIONS, type AuditDecision } from "@lcsp/contracts/audit";
+import { ORGANIZATION_SCOPE_ERROR_CODES } from "@lcsp/contracts/auth";
 import { BadRequestException } from "@nestjs/common";
 import { jest } from "@jest/globals";
 
@@ -13,7 +15,7 @@ interface AuditRow {
   eventType: string;
   actorId: string | null;
   organizationId: string | null;
-  decision: "allow" | "deny" | null;
+  decision: AuditDecision | null;
   payload: Record<string, unknown>;
   createdAt: Date;
 }
@@ -51,7 +53,7 @@ function buildHandler() {
       eventType: "auth.sign_in",
       actorId: "user-1",
       organizationId: "org-1",
-      decision: "allow",
+      decision: AUDIT_DECISIONS.allow,
       payload: {
         email: "dev@example.com",
         sessionToken: "must-not-leak",
@@ -89,7 +91,7 @@ describe("ListAuditEventsHandler", () => {
           event_type: "auth.sign_in",
           actor_id: "user-1",
           organization_id: "org-1",
-          decision: "allow",
+          decision: AUDIT_DECISIONS.allow,
           payload: {
             email: "dev@example.com",
             nested: { safe: true },
@@ -175,7 +177,7 @@ describe("ListAuditEventsHandler", () => {
       handler.execute(query({ sessionOrganizationId: "org-2" })),
     ).rejects.toMatchObject({
       response: {
-        error_code: "ORG_SCOPE_MISMATCH",
+        error_code: ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
         correlation_id: "corr-1",
       },
     });

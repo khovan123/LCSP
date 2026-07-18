@@ -1,3 +1,8 @@
+import {
+  ASSESSMENT_STATUS_CODES,
+  WIZARD_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
+import { SUBJECT_ROLES, type SubjectRole } from "@lcsp/contracts/pbac";
 import { describe, it, expect, jest } from "@jest/globals";
 import { UnprocessableEntityException } from "@nestjs/common";
 
@@ -44,7 +49,7 @@ function buildHandler(input: {
 
 function query(
   overrides: Partial<{
-    subjectRole: "Manager" | "Developer" | "SystemAdmin";
+    subjectRole: SubjectRole;
     scope: string | null;
     page: number | undefined;
     pageSize: number | undefined;
@@ -54,7 +59,7 @@ function query(
   return new ListAssessmentsQuery(
     "org-1",
     "user-1",
-    overrides.subjectRole ?? "Manager",
+    overrides.subjectRole ?? SUBJECT_ROLES.manager,
     overrides.scope ?? null,
     overrides.page,
     overrides.pageSize,
@@ -76,7 +81,9 @@ describe("ListAssessmentsHandler", () => {
     expect(result.assessments).toHaveLength(1);
     expect(result.assessments[0].assessment_id).toBe(assessment.id);
     expect(result.assessments[0].name).toBe("First");
-    expect(result.assessments[0].wizard_status).toBe("NOT_STARTED");
+    expect(result.assessments[0].wizard_status).toBe(
+      WIZARD_STATUS_CODES.notStarted,
+    );
     expect(result.total).toBe(1);
     expect(result.page).toBe(1);
     expect(result.page_size).toBe(20);
@@ -96,7 +103,7 @@ describe("ListAssessmentsHandler", () => {
   it("scopes the query to organizationId + ownerId for a Manager", async () => {
     const { handler, findMany } = buildHandler({});
 
-    await handler.execute(query({ subjectRole: "Manager" }));
+    await handler.execute(query({ subjectRole: SUBJECT_ROLES.manager }));
 
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ organizationId: "org-1", ownerId: "user-1" }),
@@ -120,10 +127,14 @@ describe("ListAssessmentsHandler", () => {
   it("passes a valid status filter through to the repository criteria", async () => {
     const { handler, findMany } = buildHandler({});
 
-    await handler.execute(query({ status: "WIZARD_IN_PROGRESS" }));
+    await handler.execute(
+      query({ status: ASSESSMENT_STATUS_CODES.wizardInProgress }),
+    );
 
     expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "WIZARD_IN_PROGRESS" }),
+      expect.objectContaining({
+        status: ASSESSMENT_STATUS_CODES.wizardInProgress,
+      }),
     );
   });
 
@@ -140,7 +151,7 @@ describe("ListAssessmentsHandler", () => {
     const { handler, findMany } = buildHandler({});
 
     await handler.execute(
-      query({ subjectRole: "Developer", scope: "assessment-42" }),
+      query({ subjectRole: SUBJECT_ROLES.developer, scope: "assessment-42" }),
     );
 
     const criteria = findMany.mock.calls[0][0];
@@ -152,7 +163,7 @@ describe("ListAssessmentsHandler", () => {
     const { handler, findMany } = buildHandler({});
 
     const result = await handler.execute(
-      query({ subjectRole: "Developer", scope: null }),
+      query({ subjectRole: SUBJECT_ROLES.developer, scope: null }),
     );
 
     expect(result.assessments).toEqual([]);
@@ -197,11 +208,15 @@ describe("ListAssessmentsHandler", () => {
     const assessment = makeAssessment();
     const { handler } = buildHandler({
       result: { items: [assessment], total: 1 },
-      wizardProfiles: [{ assessmentId: assessment.id, status: "SUBMITTED" }],
+      wizardProfiles: [
+        { assessmentId: assessment.id, status: WIZARD_STATUS_CODES.submitted },
+      ],
     });
 
     const result = await handler.execute(query());
 
-    expect(result.assessments[0].wizard_status).toBe("SUBMITTED");
+    expect(result.assessments[0].wizard_status).toBe(
+      WIZARD_STATUS_CODES.submitted,
+    );
   });
 });

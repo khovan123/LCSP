@@ -1,3 +1,4 @@
+import { PBAC_DECISION, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
 import { jest } from "@jest/globals";
 import { UnauthorizedException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
@@ -18,7 +19,7 @@ function makeController(
       overrides.evaluateImpl ??
         (() =>
           Promise.resolve({
-            decision: "allow",
+            decision: PBAC_DECISION.allow,
             reasonCode: null,
             correlationId: "corr-1",
           })),
@@ -79,7 +80,7 @@ describe("PbacPreflightController", () => {
     );
 
     expect(response).toEqual({
-      decision: "allow",
+      decision: PBAC_DECISION.allow,
       reason_code: null,
       correlation_id: "corr-1",
     });
@@ -89,8 +90,8 @@ describe("PbacPreflightController", () => {
     const { controller } = makeController({
       evaluateImpl: () =>
         Promise.resolve({
-          decision: "deny",
-          reasonCode: "ACTION_NOT_GRANTED",
+          decision: PBAC_DECISION.deny,
+          reasonCode: PBAC_REASON_CODE.actionNotGranted,
           correlationId: "corr-1",
         }),
     });
@@ -101,8 +102,8 @@ describe("PbacPreflightController", () => {
     );
 
     expect(response).toEqual({
-      decision: "deny",
-      reason_code: "ACTION_NOT_GRANTED",
+      decision: PBAC_DECISION.deny,
+      reason_code: PBAC_REASON_CODE.actionNotGranted,
       correlation_id: "corr-1",
     });
   });
