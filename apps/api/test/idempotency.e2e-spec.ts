@@ -1,3 +1,4 @@
+import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
 /**
  * AC-039: Outbox message published exactly once per state-changing event.
  * AC-040: Duplicate RabbitMQ consumer delivery is idempotent.
@@ -67,7 +68,7 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
 
     try {
       const outboxMessages = await prisma.outboxMessage.findMany({
-        where: { eventType: "ASSESSMENT_CREATED" },
+        where: { eventType: ASSESSMENT_EVENT_TYPES.created },
         orderBy: { createdAt: "desc" },
       });
 
@@ -123,7 +124,7 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
       await prisma.outboxMessage.create({
         data: {
           id: messageId,
-          eventType: "ASSESSMENT_CREATED",
+          eventType: ASSESSMENT_EVENT_TYPES.created,
           aggregateId: "assessment-idempotent",
           aggregateType: "Assessment",
           payload: JSON.stringify({
@@ -201,7 +202,10 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
         "X-Internal-Token",
         process.env.INTERNAL_API_TOKEN ?? "test-internal-token",
       )
-      .send({ event_type: "ASSESSMENT_CREATED", aggregate_id: assessmentId });
+      .send({
+        event_type: ASSESSMENT_EVENT_TYPES.created,
+        aggregate_id: assessmentId,
+      });
 
     // Assessment status must still be CLASSIFIED — not reset
     const assessment = await prisma.assessment.findUnique({

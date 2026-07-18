@@ -1,3 +1,9 @@
+import {
+  AUTH_INVITATION_STATES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  REQUIRED_ACTIONS,
+} from "@lcsp/contracts/auth";
+import { PBAC_DECISION, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import * as assert from "node:assert/strict";
 
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -110,7 +116,7 @@ describe("Auth workspace (e2e)", () => {
     const invite = await prisma.authInvitation.findUnique({
       where: { id: "invite-approved" },
     });
-    assert.equal(invite?.state, "consumed");
+    assert.equal(invite?.state, AUTH_INVITATION_STATES.consumed);
   });
 
   it("approved invitation cannot be replayed after first registration", async () => {
@@ -165,7 +171,7 @@ describe("Auth workspace (e2e)", () => {
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidInviteState);
-    assert.equal(failure.problem.requiredAction, "accept_valid_invite");
+    assert.equal(failure.problem.requiredAction, REQUIRED_ACTIONS.acceptInvite);
   });
 
   it("approved invitation still blocks registration when email verification is pending", async () => {
@@ -244,7 +250,7 @@ describe("Auth workspace (e2e)", () => {
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: { correlationId: "corr-workspace-no-session" },
     });
-    assert.equal(decision.decision, "deny");
+    assert.equal(decision.decision, PBAC_DECISION.deny);
   });
 
   it("workspace access fails closed when request organization does not match session scope", async () => {
@@ -383,7 +389,7 @@ describe("Auth workspace (e2e)", () => {
     const allowDecision = await prisma.authDecisionLog.findFirstOrThrow({
       where: { correlationId: "corr-workspace-allow" },
     });
-    assert.equal(allowDecision.decision, "allow");
+    assert.equal(allowDecision.decision, PBAC_DECISION.allow);
 
     await httpRequest(app)
       .post("/auth/revoke-session")
@@ -486,7 +492,7 @@ describe("Auth workspace (e2e)", () => {
     const mfaFailed = auditEvents.find(
       (e) =>
         (e.payload as Record<string, unknown>)["event_type"] ===
-        "auth.mfa.failed",
+        AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed,
     );
     assert.ok(mfaFailed, "auth.mfa.failed audit event should be recorded");
   });
@@ -584,7 +590,7 @@ describe("Auth workspace (e2e)", () => {
     const revoked = auditEvents.find(
       (e) =>
         (e.payload as Record<string, unknown>)["event_type"] ===
-        "auth.session.revoked",
+        AUTH_LEGACY_AUDIT_EVENT_TYPES.sessionRevoked,
     );
     assert.ok(revoked, "auth.session.revoked audit event should be recorded");
   });
@@ -627,7 +633,7 @@ describe("Auth workspace (e2e)", () => {
     const profileUpdated = auditEvents.find(
       (e) =>
         (e.payload as Record<string, unknown>)["event_type"] ===
-        "auth.profile.updated",
+        AUTH_LEGACY_AUDIT_EVENT_TYPES.profileUpdated,
     );
     assert.ok(
       profileUpdated,
@@ -723,7 +729,7 @@ describe("Auth workspace (e2e)", () => {
     const success = expectSuccess(result.body) as {
       user: { subject_attributes: Record<string, string> };
     };
-    assert.equal(success.user.subject_attributes.role, "Manager");
+    assert.equal(success.user.subject_attributes.role, SUBJECT_ROLES.manager);
     assert.equal("department" in success.user.subject_attributes, false);
   });
 

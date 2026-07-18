@@ -3,7 +3,7 @@ task_id: MW-gh-004
 module: github-integration
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.3
 depends_on:
   - github-integration/03-pin-commit-snapshot-endpoint.md
@@ -96,7 +96,7 @@ model RepositoryScanJob {
 | Name | Type | Safe payload |
 |---|---|---|
 | `TriggerScanCommand` | App command | `{ assessmentId, snapshotId, triggerSource, idempotencyKey, correlationId? }` |
-| `event.scan.triggered` | Outbox | `{ scanJobId, assessmentId, snapshotId, triggerSource, correlationId }` |
+| `scan.triggered` | Outbox | `{ scanJobId, assessmentId, snapshotId, triggerSource, correlationId }` |
 | `SCAN_JOB_TRIGGERED` | `AuthAuditEvent` | `{ scanJobId, assessmentId, snapshotId, triggerSource, correlationId }` |
 
 ## Test Cases
@@ -117,3 +117,11 @@ model RepositoryScanJob {
 - Assessment state gate prevents invalid trigger.
 - Outbox message `scan.triggered` created for Python scanner.
 - Re-run does not mutate prior accepted evidence chain.
+
+## Implementation Evidence
+
+- Manual triggers require PBAC `scan:trigger` plus Manager ownership; trusted triggers require a constant-time verified worker API key.
+- Snapshot tenant/scope, assessment state, and repository mapping are validated before durable enqueue.
+- Scan job and `scan.triggered` outbox command persist atomically; duplicate delivery returns the existing job with HTTP 200 and emits no second command.
+- Material idempotency conflicts are rejected, while retries can return an existing job after the assessment state advances.
+- Unit and E2E coverage verifies manual/trusted authorization, state and mapping gates, duplicate/conflict behavior, audit signals, and immutable terminal job history.

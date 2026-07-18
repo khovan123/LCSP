@@ -1,3 +1,8 @@
+import { PBAC_DECISION, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import {
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  AUTH_MEMBERSHIP_STATUSES,
+} from "@lcsp/contracts/auth";
 import { describe, it, expect, beforeEach, jest } from "@jest/globals";
 
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
@@ -178,8 +183,8 @@ describe("OAuthCallbackHandler generic OIDC claim validation", () => {
       id: "membership-1",
       userId: user.id,
       organizationId: "org-1",
-      status: "active",
-      subjectAttributes: { role: "Manager" },
+      status: AUTH_MEMBERSHIP_STATUSES.active,
+      subjectAttributes: { role: SUBJECT_ROLES.manager },
       policyId: "policy-1",
       policyVersion: "v1",
     });
@@ -307,8 +312,8 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
       id: "membership-1",
       userId: user.id,
       organizationId: "org-1",
-      status: "active",
-      subjectAttributes: { role: "Manager" },
+      status: AUTH_MEMBERSHIP_STATUSES.active,
+      subjectAttributes: { role: SUBJECT_ROLES.manager },
       policyId: "policy-1",
       policyVersion: "v1",
     });
@@ -374,8 +379,8 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: "deny",
-        event_type: "auth.oauth.login.failed",
+        decision: PBAC_DECISION.deny,
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
   });
@@ -392,8 +397,8 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: "deny",
-        event_type: "auth.oauth.login.failed",
+        decision: PBAC_DECISION.deny,
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
   });
@@ -441,8 +446,8 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: "deny",
-        event_type: "auth.oauth.login.failed",
+        decision: PBAC_DECISION.deny,
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
     const auditPayload = recordAuditSpy.mock.calls[0][1];
@@ -460,8 +465,8 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: "deny",
-        event_type: "auth.oauth.login.failed",
+        decision: PBAC_DECISION.deny,
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
   });
@@ -480,8 +485,8 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: "deny",
-        event_type: "auth.oauth.login.failed",
+        decision: PBAC_DECISION.deny,
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
   });
@@ -508,8 +513,8 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: "deny",
-        event_type: "auth.oauth.login.failed",
+        decision: PBAC_DECISION.deny,
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
   });
@@ -520,8 +525,8 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: "allow",
-        event_type: "auth.oauth.login.succeeded",
+        decision: PBAC_DECISION.allow,
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginSucceeded,
       }),
     );
     const auditPayload = recordAuditSpy.mock.calls[0][1];

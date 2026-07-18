@@ -1,3 +1,9 @@
+import {
+  GITHUB_INTEGRATION_ERROR_CODES,
+  GITHUB_INTEGRATION_EVENT_TYPES,
+  GITHUB_REPOSITORY_PERMISSION_LEVELS,
+  REPOSITORY_CONNECTION_STATUSES,
+} from "@lcsp/contracts/github-integration";
 import { describe, it, expect, jest } from "@jest/globals";
 import { BadRequestException } from "@nestjs/common";
 
@@ -73,7 +79,9 @@ function buildHandler(options?: {
       options?.metadataError
         ? Promise.reject(new Error("metadata_fetch_failed"))
         : Promise.resolve({
-            permissions: options?.permissions ?? { contents: "read" },
+            permissions: options?.permissions ?? {
+              contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read,
+            },
             repository: {
               id: "repo-1",
               name: "example-repo",
@@ -126,7 +134,7 @@ describe("GitHubAppCallbackHandler", () => {
 
     expect(result.repository_full_name).toBe("acme/example-repo");
     expect(result.default_branch).toBe("main");
-    expect(result.status).toBe("active");
+    expect(result.status).toBe(REPOSITORY_CONNECTION_STATUSES.active);
     expect(result.correlation_id).toBe("corr-1");
     expect(save).toHaveBeenCalledTimes(1);
   });
@@ -147,7 +155,7 @@ describe("GitHubAppCallbackHandler", () => {
       throw new Error("expected rejection");
     } catch (error) {
       expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: "GITHUB_STATE_INVALID",
+        error_code: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
         correlation_id: "corr-1",
       });
     }
@@ -174,7 +182,7 @@ describe("GitHubAppCallbackHandler", () => {
       throw new Error("expected rejection");
     } catch (error) {
       expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: "GITHUB_STATE_INVALID",
+        error_code: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
         correlation_id: "corr-1",
       });
     }
@@ -198,7 +206,7 @@ describe("GitHubAppCallbackHandler", () => {
       throw new Error("expected rejection");
     } catch (error) {
       expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: "GITHUB_CALLBACK_INVALID",
+        error_code: GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
         correlation_id: "corr-1",
       });
     }
@@ -223,7 +231,7 @@ describe("GitHubAppCallbackHandler", () => {
       throw new Error("expected rejection");
     } catch (error) {
       expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: "PERMISSIONS_INSUFFICIENT",
+        error_code: GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
         correlation_id: "corr-1",
       });
     }
@@ -265,7 +273,7 @@ describe("GitHubAppCallbackHandler", () => {
 
     expect(write).toHaveBeenCalledTimes(1);
     const event = write.mock.calls[0][0];
-    expect(event.eventType).toBe("GITHUB_APP_CONNECTED");
+    expect(event.eventType).toBe(GITHUB_INTEGRATION_EVENT_TYPES.appConnected);
     expect(JSON.stringify(event.payload)).not.toMatch(RAW_ACCESS_TOKEN);
   });
 });

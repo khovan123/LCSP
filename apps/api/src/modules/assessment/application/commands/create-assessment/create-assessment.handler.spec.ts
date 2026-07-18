@@ -1,3 +1,9 @@
+import {
+  ASSESSMENT_ERROR_CODES,
+  ASSESSMENT_EVENT_TYPES,
+  ASSESSMENT_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
+import { PBAC_DECISION } from "@lcsp/contracts/pbac";
 import { describe, it, expect, jest } from "@jest/globals";
 import { UnprocessableEntityException } from "@nestjs/common";
 
@@ -53,7 +59,7 @@ describe("CreateAssessmentHandler", () => {
       ),
     );
 
-    expect(result.status).toBe("WIZARD_IN_PROGRESS");
+    expect(result.status).toBe(ASSESSMENT_STATUS_CODES.wizardInProgress);
     expect(result.assessment_id).toBeTruthy();
     expect(result.correlation_id).toBe("corr-1");
     expect(save).toHaveBeenCalledTimes(1);
@@ -87,7 +93,7 @@ describe("CreateAssessmentHandler", () => {
       );
     } catch (error) {
       expect((error as UnprocessableEntityException).getResponse()).toEqual({
-        error_code: "INVALID_REQUEST",
+        error_code: ASSESSMENT_ERROR_CODES.invalidRequest,
         correlation_id: "corr-1",
       });
     }
@@ -165,13 +171,13 @@ describe("CreateAssessmentHandler", () => {
 
     expect(write).toHaveBeenCalledTimes(1);
     const event = write.mock.calls[0][0];
-    expect(event.eventType).toBe("ASSESSMENT_CREATED");
+    expect(event.eventType).toBe(ASSESSMENT_EVENT_TYPES.created);
     expect(event.actorId).toBe("user-1");
     expect(event.organizationId).toBe("org-1");
     expect(event.resourceType).toBe("Assessment");
     expect(event.resourceId).toBeTruthy();
     expect(event.correlationId).toBe("corr-1");
-    expect(event.decision).toBe("allow");
+    expect(event.decision).toBe(PBAC_DECISION.allow);
     expect(JSON.stringify(event.payload)).not.toMatch(/Secret Project Name/);
     expect(JSON.stringify(event.payload)).not.toMatch(/Sensitive description/);
   });
@@ -209,7 +215,7 @@ describe("CreateAssessmentHandler", () => {
 
     expect(enqueue).toHaveBeenCalledTimes(1);
     const input = enqueue.mock.calls[0][0];
-    expect(input.eventType).toBe("assessment.created");
+    expect(input.eventType).toBe(ASSESSMENT_EVENT_TYPES.createdOutbox);
     expect(input.aggregateType).toBe("Assessment");
   });
 });

@@ -1,3 +1,4 @@
+import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
 import { jest } from "@jest/globals";
 
 interface FakeChannel {
@@ -80,7 +81,9 @@ describe("RabbitMqClient", () => {
 
     const client = new RabbitMqClient("amqp://fake");
     await client.ensureConnected();
-    await client.publish("lcsp.events", "assessment.created", { a: 1 });
+    await client.publish("lcsp.events", ASSESSMENT_EVENT_TYPES.createdOutbox, {
+      a: 1,
+    });
 
     expect(connect).toHaveBeenCalledTimes(1);
     expect(connection.createChannel).toHaveBeenCalledTimes(1);
@@ -92,11 +95,13 @@ describe("RabbitMqClient", () => {
     connect.mockResolvedValue(connection);
 
     const client = new RabbitMqClient("amqp://fake");
-    await client.publish("lcsp.events", "assessment.created", { foo: "bar" });
+    await client.publish("lcsp.events", ASSESSMENT_EVENT_TYPES.createdOutbox, {
+      foo: "bar",
+    });
 
     expect(channel.publish).toHaveBeenCalledWith(
       "lcsp.events",
-      "assessment.created",
+      ASSESSMENT_EVENT_TYPES.createdOutbox,
       Buffer.from(JSON.stringify({ foo: "bar" })),
       { contentType: "application/json", persistent: true },
     );
@@ -111,7 +116,7 @@ describe("RabbitMqClient", () => {
     const client = new RabbitMqClient("amqp://fake");
 
     await expect(
-      client.publish("lcsp.events", "assessment.created", {}),
+      client.publish("lcsp.events", ASSESSMENT_EVENT_TYPES.createdOutbox, {}),
     ).rejects.toThrow(/backpressure/i);
   });
 

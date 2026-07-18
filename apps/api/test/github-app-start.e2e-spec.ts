@@ -1,3 +1,20 @@
+import {
+  GITHUB_INTEGRATION_ERROR_CODES,
+  GITHUB_INTEGRATION_EVENT_TYPES,
+} from "@lcsp/contracts/github-integration";
+import type { GithubIntegrationErrorCode } from "@lcsp/contracts/github-integration";
+import {
+  ASSESSMENT_ERROR_CODES,
+  ASSESSMENT_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
+import type { AssessmentErrorCode } from "@lcsp/contracts/assessment";
+import {
+  PBAC_ACTIONS,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 /**
  * MW-gh-001: GitHub App OAuth Start Endpoint.
  * Test cases T01-T08 from docs/implementation/tasks/modules/github-integration/01-github-app-oauth-start-endpoint.md
@@ -23,7 +40,7 @@ import {
 } from "./support/auth-workspace-test-helpers.js";
 
 type ErrorResponseBody = {
-  error_code: AuthErrorCode | "INVALID_REDIRECT_URI" | "ASSESSMENT_NOT_FOUND";
+  error_code: AuthErrorCode | GithubIntegrationErrorCode | AssessmentErrorCode;
   correlation_id: string;
 };
 
@@ -96,9 +113,9 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
       data: {
         id: restrictedPolicyId,
         version: "2026-07-17",
-        actions: ["workspace:read"],
-        subjectRole: "Manager",
-        stateGate: "membership_active",
+        actions: [PBAC_ACTIONS.workspaceRead],
+        subjectRole: SUBJECT_ROLES.manager,
+        stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -119,8 +136,8 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
         id: "membership-no-github-connect",
         userId: restrictedUserId,
         organizationId: orgId,
-        status: "active",
-        subjectAttributes: { role: "Manager" },
+        status: AUTH_MEMBERSHIP_STATUSES.active,
+        subjectAttributes: { role: SUBJECT_ROLES.manager },
         policyId: restrictedPolicyId,
         policyVersion: "2026-07-17",
       },
@@ -141,7 +158,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 403);
-    assert.equal(body.error_code, "PBAC_DENIED");
+    assert.equal(body.error_code, PBAC_REASON_CODE.denied);
   });
 
   // T03
@@ -153,7 +170,10 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
-    assert.equal(body.error_code, "INVALID_REDIRECT_URI");
+    assert.equal(
+      body.error_code,
+      GITHUB_INTEGRATION_ERROR_CODES.invalidRedirectUri,
+    );
   });
 
   // T04
@@ -164,7 +184,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
         organizationId: "org-other",
         ownerId: "someone-else",
         name: "Other Org Assessment",
-        status: "WIZARD_IN_PROGRESS",
+        status: ASSESSMENT_STATUS_CODES.wizardInProgress,
       },
     });
 
@@ -178,7 +198,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
-    assert.equal(body.error_code, "ASSESSMENT_NOT_FOUND");
+    assert.equal(body.error_code, ASSESSMENT_ERROR_CODES.notFound);
   });
 
   // T05
@@ -233,7 +253,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     const audit = await prisma.authAuditEvent.findFirst({
-      where: { eventType: "GITHUB_APP_INSTALL_STARTED" },
+      where: { eventType: GITHUB_INTEGRATION_EVENT_TYPES.appInstallStarted },
       orderBy: { createdAt: "desc" },
     });
     const installState = await prisma.gitHubAppInstallState.findFirst({

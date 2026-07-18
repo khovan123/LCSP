@@ -1,3 +1,7 @@
+import {
+  OUTBOX_AUDIT_EVENT_TYPES,
+  OUTBOX_STATUSES,
+} from "@lcsp/contracts/outbox";
 import { jest } from "@jest/globals";
 import { Test, TestingModule } from "@nestjs/testing";
 import { OutboxDlqService } from "./outbox-dlq.service.js";
@@ -63,7 +67,7 @@ describe("OutboxDlqService", () => {
     it("should replay a valid DLQ message and write audit", async () => {
       const mockMessage = {
         id: "1",
-        status: "dlq",
+        status: OUTBOX_STATUSES.dlq,
         eventType: "TEST",
         aggregateId: "123",
       } as OutboxMessageEntity;
@@ -74,14 +78,17 @@ describe("OutboxDlqService", () => {
       expect(resetMessageForReplay).toHaveBeenCalledWith("1");
       expect(writeAudit).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: "OUTBOX_DLQ_REPLAYED",
+          eventType: OUTBOX_AUDIT_EVENT_TYPES.dlqReplayed,
           actorId: "actor-1",
         }),
       );
     });
 
     it("should throw NotFoundException if message is not in DLQ", async () => {
-      const mockMessage = { id: "1", status: "failed" } as OutboxMessageEntity;
+      const mockMessage = {
+        id: "1",
+        status: OUTBOX_STATUSES.failed,
+      } as OutboxMessageEntity;
       findMessageById.mockResolvedValue(mockMessage);
 
       await expect(service.replayMessage("1", "actor-1")).rejects.toThrow(
@@ -103,7 +110,7 @@ describe("OutboxDlqService", () => {
     it("should delete a valid DLQ message and write audit", async () => {
       const mockMessage = {
         id: "1",
-        status: "dlq",
+        status: OUTBOX_STATUSES.dlq,
         eventType: "TEST",
         aggregateId: "123",
       } as OutboxMessageEntity;
@@ -114,7 +121,7 @@ describe("OutboxDlqService", () => {
       expect(deleteMessage).toHaveBeenCalledWith("1");
       expect(writeAudit).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: "OUTBOX_DLQ_DISCARDED",
+          eventType: OUTBOX_AUDIT_EVENT_TYPES.dlqDiscarded,
           actorId: "actor-1",
         }),
       );
@@ -123,7 +130,7 @@ describe("OutboxDlqService", () => {
     it("should throw NotFoundException if message is not in DLQ", async () => {
       const mockMessage = {
         id: "1",
-        status: "published",
+        status: OUTBOX_STATUSES.published,
       } as OutboxMessageEntity;
       findMessageById.mockResolvedValue(mockMessage);
 

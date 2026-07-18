@@ -331,6 +331,24 @@ model RepositorySnapshot {
   @@index([commitSha])
 }
 
+model RepositoryScanJob {
+  id             String   @id
+  assessmentId   String
+  snapshotId     String
+  organizationId String
+  idempotencyKey String   @unique
+  triggerSource  String
+  status         String   @default("QUEUED")
+  attemptCount   Int      @default(0)
+  correlationId  String
+  blockedReason  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([assessmentId])
+  @@index([snapshotId])
+}
+
 model GitHubAppInstallState {
   id             String   @id
   state          String   @unique

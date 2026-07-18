@@ -1,3 +1,13 @@
+import {
+  PBAC_DECISION,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import {
+  AUTH_AUDIT_EVENT_TYPES,
+  AUTH_INVITATION_STATES,
+  AUTH_MEMBERSHIP_STATUSES,
+} from "@lcsp/contracts/auth";
 import { describe, expect, it, jest } from "@jest/globals";
 import {
   BadRequestException,
@@ -20,8 +30,8 @@ const DEVELOPER_POLICY = new Policy({
   id: "policy-developer",
   version: "2026-06-26",
   actions: DEVELOPER_ALLOWED_ACTIONS,
-  subjectRole: "Developer",
-  stateGate: "membership_active",
+  subjectRole: SUBJECT_ROLES.developer,
+  stateGate: PBAC_STATE_GATES.membershipActive,
   organizationId: "org-1",
 });
 
@@ -97,11 +107,11 @@ describe("InviteDeveloperHandler", () => {
     });
 
     const invitation = savedInvitations[0];
-    expect(invitation.state).toBe("approved");
+    expect(invitation.state).toBe(AUTH_INVITATION_STATES.approved);
     expect(invitation.emailVerified).toBe(false);
-    expect(invitation.membershipStatus).toBe("active");
+    expect(invitation.membershipStatus).toBe(AUTH_MEMBERSHIP_STATUSES.active);
     expect(invitation.subjectAttributes).toEqual({
-      role: "Developer",
+      role: SUBJECT_ROLES.developer,
       scope: "assessment-1",
       allowed_actions: ["evidence:read:redacted", "ai-usage-flow:read"],
     });
@@ -109,10 +119,10 @@ describe("InviteDeveloperHandler", () => {
     expect(invitation.policyVersion).toBe("2026-06-26");
     expect(invitation.expiresAt).toBe(1_700_000_000_000 + 168 * 60 * 60_000);
     expect(auditEvents[0]).toMatchObject({
-      event_type: "AUTH_DEVELOPER_INVITED",
+      event_type: AUTH_AUDIT_EVENT_TYPES.authDeveloperInvited,
       actor_id: "manager-1",
       organization_id: "org-1",
-      decision: "allow",
+      decision: PBAC_DECISION.allow,
       correlation_id: "corr-1",
     });
   });

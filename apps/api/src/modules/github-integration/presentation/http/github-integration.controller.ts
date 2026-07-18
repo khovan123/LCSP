@@ -7,11 +7,12 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
-import type { Request } from "express";
+import type { Response } from "express";
 
 import { createCorrelationId } from "../../../auth-workspace/infrastructure/security/security.utils.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
@@ -20,10 +21,17 @@ import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { GitHubAppCallbackCommand } from "../../application/commands/github-app-callback/github-app-callback.command.js";
 import { GitHubAppStartCommand } from "../../application/commands/github-app-start/github-app-start.command.js";
 import { PinSnapshotCommand } from "../../application/commands/pin-snapshot/pin-snapshot.command.js";
+import { TriggerScanCommand } from "../../application/commands/trigger-scan/trigger-scan.command.js";
 import type { PinSnapshotDto } from "../../application/contracts/github-integration/pin-snapshot.contract.js";
+import type { TriggerScanDto } from "../../application/contracts/github-integration/trigger-scan.contract.js";
 import { PinSnapshotRequest } from "./dto/pin-snapshot.request.js";
+import { TriggerScanRequest } from "./dto/trigger-scan.request.js";
+import {
+  ScanTriggerGuard,
+  type ScanTriggerRequestContext,
+} from "./scan-trigger.guard.js";
 
-interface GitHubIntegrationRequest extends Request {
+interface GitHubIntegrationRequest extends ScanTriggerRequestContext {
   pbacContext?: PbacRequestContext;
   correlationId?: string;
 }
@@ -93,5 +101,35 @@ export class GitHubIntegrationController {
         request.correlationId as string,
       ),
     );
+  }
+
+  @Post("assessments/:assessmentId/scan-jobs")
+  @UseGuards(ScanTriggerGuard)
+  @RequireAction(PBAC_ACTIONS.scanTrigger)
+  async triggerScan(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: TriggerScanRequest,
+    @Req() request: GitHubIntegrationRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<TriggerScanDto> {
+    const context = request.pbacContext;
+    const result = await this.commandBus.execute<
+      TriggerScanCommand,
+      TriggerScanDto
+    >(
+      new TriggerScanCommand(
+        assessmentId,
+        body.snapshot_id,
+        request.scanTriggerSource as TriggerScanCommand["triggerSource"],
+        body.idempotency_key,
+        context?.userId ?? null,
+        context?.organizationId ?? null,
+        context?.subjectRole ?? null,
+        context?.scope ?? undefined,
+        request.correlationId ?? createCorrelationId(),
+      ),
+    );
+    response.status(result.is_new ? 201 : 200);
+    return result;
   }
 }

@@ -1,3 +1,4 @@
+import { GITHUB_INTEGRATION_EVENT_TYPES } from "@lcsp/contracts/github-integration";
 import { describe, expect, it, jest } from "@jest/globals";
 
 import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
@@ -41,7 +42,7 @@ describe("PrismaRepositorySnapshotRepository", () => {
     const event = {
       aggregateType: "RepositorySnapshot",
       aggregateId: snapshot.id,
-      eventType: "snapshot.created",
+      eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated,
       payload: { snapshotId: snapshot.id },
     };
 

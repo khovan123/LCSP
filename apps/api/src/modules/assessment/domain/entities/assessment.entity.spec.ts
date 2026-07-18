@@ -1,3 +1,4 @@
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { describe, it, expect } from "@jest/globals";
 
 import { Assessment } from "./assessment.entity.js";
@@ -11,7 +12,7 @@ describe("Assessment", () => {
         name: "My AI System Assessment",
       });
 
-      expect(assessment.status).toBe("WIZARD_IN_PROGRESS");
+      expect(assessment.status).toBe(ASSESSMENT_STATUS_CODES.wizardInProgress);
       expect(assessment.id).toBeTruthy();
       expect(assessment.organizationId).toBe("org-1");
       expect(assessment.ownerId).toBe("user-1");
@@ -58,7 +59,7 @@ describe("Assessment", () => {
         ownerId: "user-1",
         name: "Rehydrated",
         description: null,
-        status: "WIZARD_IN_PROGRESS",
+        status: ASSESSMENT_STATUS_CODES.wizardInProgress,
         createdAt,
         updatedAt,
       });

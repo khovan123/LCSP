@@ -1,3 +1,10 @@
+import {
+  PBAC_DECISION,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { PbacEvaluatorService } from "./pbac-evaluator.service.js";
 import type { PbacEvaluationContext, PolicyDocument } from "./pbac.types.js";
 
@@ -6,8 +13,8 @@ function buildPolicy(overrides: Partial<PolicyDocument> = {}): PolicyDocument {
     id: "policy-1",
     organizationId: "org-1",
     version: "1",
-    subjectRole: "Manager",
-    stateGate: "membership_active",
+    subjectRole: SUBJECT_ROLES.manager,
+    stateGate: PBAC_STATE_GATES.membershipActive,
     actions: ["assessment.create"],
     ...overrides,
   };
@@ -18,9 +25,9 @@ function buildContext(
 ): PbacEvaluationContext {
   return {
     action: "assessment.create",
-    subject: { role: "Manager" },
+    subject: { role: SUBJECT_ROLES.manager },
     policy: buildPolicy(),
-    membershipStatus: "active",
+    membershipStatus: AUTH_MEMBERSHIP_STATUSES.active,
     ...overrides,
   };
 }
@@ -32,7 +39,7 @@ describe("PbacEvaluatorService", () => {
     const result = service.evaluate(buildContext());
 
     expect(result).toEqual({
-      decision: "allow",
+      decision: PBAC_DECISION.allow,
       policyId: "policy-1",
       policyVersion: "1",
     });
@@ -43,26 +50,26 @@ describe("PbacEvaluatorService", () => {
       buildContext({ policy: null as unknown as PolicyDocument }),
     );
 
-    expect(result.decision).toBe("deny");
-    expect(result.reasonCode).toBe("POLICY_NOT_FOUND");
+    expect(result.decision).toBe(PBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(PBAC_REASON_CODE.policyNotFound);
   });
 
   it("T03: stateGate membership_active, membership not active → deny STATE_GATE_FAILED", () => {
     const result = service.evaluate(
-      buildContext({ membershipStatus: "invited" }),
+      buildContext({ membershipStatus: AUTH_MEMBERSHIP_STATUSES.invited }),
     );
 
-    expect(result.decision).toBe("deny");
-    expect(result.reasonCode).toBe("STATE_GATE_FAILED");
+    expect(result.decision).toBe(PBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(PBAC_REASON_CODE.stateGateFailed);
   });
 
   it("T04: subject role mismatch → deny SUBJECT_ROLE_MISMATCH", () => {
     const result = service.evaluate(
-      buildContext({ subject: { role: "Developer" } }),
+      buildContext({ subject: { role: SUBJECT_ROLES.developer } }),
     );
 
-    expect(result.decision).toBe("deny");
-    expect(result.reasonCode).toBe("SUBJECT_ROLE_MISMATCH");
+    expect(result.decision).toBe(PBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(PBAC_REASON_CODE.subjectRoleMismatch);
   });
 
   it("T05: action not in policy.actions → deny ACTION_NOT_GRANTED", () => {
@@ -70,8 +77,8 @@ describe("PbacEvaluatorService", () => {
       buildContext({ action: "assessment.delete" }),
     );
 
-    expect(result.decision).toBe("deny");
-    expect(result.reasonCode).toBe("ACTION_NOT_GRANTED");
+    expect(result.decision).toBe(PBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(PBAC_REASON_CODE.actionNotGranted);
   });
 
   it("T06: evaluator throws internally → caught, returns deny", () => {
@@ -84,7 +91,7 @@ describe("PbacEvaluatorService", () => {
 
     const result = service.evaluate(buildContext({ policy: brokenPolicy }));
 
-    expect(result.decision).toBe("deny");
+    expect(result.decision).toBe(PBAC_DECISION.deny);
   });
 
   it("T07: multiple actions in policy, one matches → allow", () => {
@@ -97,7 +104,7 @@ describe("PbacEvaluatorService", () => {
       }),
     );
 
-    expect(result.decision).toBe("allow");
+    expect(result.decision).toBe(PBAC_DECISION.allow);
   });
 
   it("T08: empty policy.actions array → deny ACTION_NOT_GRANTED", () => {
@@ -105,7 +112,7 @@ describe("PbacEvaluatorService", () => {
       buildContext({ policy: buildPolicy({ actions: [] }) }),
     );
 
-    expect(result.decision).toBe("deny");
-    expect(result.reasonCode).toBe("ACTION_NOT_GRANTED");
+    expect(result.decision).toBe(PBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(PBAC_REASON_CODE.actionNotGranted);
   });
 });

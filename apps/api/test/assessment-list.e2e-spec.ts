@@ -1,3 +1,16 @@
+import {
+  ASSESSMENT_ACTIONS,
+  ASSESSMENT_ERROR_CODES,
+  ASSESSMENT_STATUS_CODES,
+  WIZARD_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
+import {
+  PBAC_ACTIONS,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 /**
  * MW-asmt-003: List Assessments Endpoint.
  */
@@ -87,7 +100,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
     assert.equal(body.page_size, 20);
     assert.ok(body.correlation_id);
     body.assessments.forEach((item) => {
-      assert.equal(item.wizard_status, "NOT_STARTED");
+      assert.equal(item.wizard_status, WIZARD_STATUS_CODES.notStarted);
       assert.ok(item.assessment_id);
       assert.ok(item.created_at);
       assert.ok(item.updated_at);
@@ -129,14 +142,14 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
 
     const result = await httpRequest(app)
       .get("/assessments")
-      .query({ status: "WIZARD_IN_PROGRESS" })
+      .query({ status: ASSESSMENT_STATUS_CODES.wizardInProgress })
       .set("Authorization", `Bearer ${managerToken}`);
     const body = result.body as AssessmentListDto;
 
     assert.equal(result.status, 200);
     assert.ok(body.assessments.length >= 1);
     body.assessments.forEach((item) => {
-      assert.equal(item.status, "WIZARD_IN_PROGRESS");
+      assert.equal(item.status, ASSESSMENT_STATUS_CODES.wizardInProgress);
     });
   });
 
@@ -148,7 +161,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 422);
-    assert.equal(body.error_code, "INVALID_REQUEST");
+    assert.equal(body.error_code, ASSESSMENT_ERROR_CODES.invalidRequest);
   });
 
   // T05
@@ -158,9 +171,9 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       data: {
         id: restrictedPolicyId,
         version: "2026-07-10",
-        actions: ["workspace:read", "assessment:create"],
-        subjectRole: "Manager",
-        stateGate: "membership_active",
+        actions: [PBAC_ACTIONS.workspaceRead, ASSESSMENT_ACTIONS.create],
+        subjectRole: SUBJECT_ROLES.manager,
+        stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -179,8 +192,8 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
         id: "membership-no-assessment-list",
         userId: restrictedUserId,
         organizationId: orgId,
-        status: "active",
-        subjectAttributes: { role: "Manager" },
+        status: AUTH_MEMBERSHIP_STATUSES.active,
+        subjectAttributes: { role: SUBJECT_ROLES.manager },
         policyId: restrictedPolicyId,
         policyVersion: "2026-07-10",
       },
@@ -199,7 +212,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 403);
-    assert.equal(body.error_code, "PBAC_DENIED");
+    assert.equal(body.error_code, PBAC_REASON_CODE.denied);
   });
 
   // T06
@@ -213,7 +226,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
         organizationId: orgId,
         ownerId: "user-1",
         name: "Developer Scoped Assessment",
-        status: "WIZARD_IN_PROGRESS",
+        status: ASSESSMENT_STATUS_CODES.wizardInProgress,
       },
     });
 
@@ -222,9 +235,9 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       data: {
         id: devPolicyId,
         version: "2026-07-10",
-        actions: ["assessment:list"],
-        subjectRole: "Developer",
-        stateGate: "membership_active",
+        actions: [PBAC_ACTIONS.assessmentList],
+        subjectRole: SUBJECT_ROLES.developer,
+        stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -243,8 +256,11 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
         id: "membership-developer-list",
         userId: devUserId,
         organizationId: orgId,
-        status: "active",
-        subjectAttributes: { role: "Developer", scope: scopedAssessment.id },
+        status: AUTH_MEMBERSHIP_STATUSES.active,
+        subjectAttributes: {
+          role: SUBJECT_ROLES.developer,
+          scope: scopedAssessment.id,
+        },
         policyId: devPolicyId,
         policyVersion: "2026-07-10",
       },
@@ -275,9 +291,9 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       data: {
         id: devPolicyId,
         version: "2026-07-10",
-        actions: ["assessment:list"],
-        subjectRole: "Developer",
-        stateGate: "membership_active",
+        actions: [PBAC_ACTIONS.assessmentList],
+        subjectRole: SUBJECT_ROLES.developer,
+        stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -296,8 +312,8 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
         id: "membership-developer-no-scope",
         userId: devUserId,
         organizationId: orgId,
-        status: "active",
-        subjectAttributes: { role: "Developer" },
+        status: AUTH_MEMBERSHIP_STATUSES.active,
+        subjectAttributes: { role: SUBJECT_ROLES.developer },
         policyId: devPolicyId,
         policyVersion: "2026-07-10",
       },

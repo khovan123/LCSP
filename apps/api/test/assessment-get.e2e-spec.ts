@@ -1,3 +1,17 @@
+import {
+  ASSESSMENT_ACTIONS,
+  ASSESSMENT_ERROR_CODES,
+  ASSESSMENT_LOCK_REASONS,
+  ASSESSMENT_STATUS_CODES,
+  WIZARD_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
+import {
+  PBAC_ACTIONS,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 /**
  * MW-asmt-002: Get Assessment Endpoint.
  * Test cases T01-T08 (T03 deferred to MW-evid-001 — no TechnicalEvidenceReport
@@ -86,10 +100,10 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
     assert.equal(result.status, 200);
     assert.equal(body.assessment_id, assessmentId);
     assert.equal(body.name, "Detail Test Assessment");
-    assert.equal(body.status, "WIZARD_IN_PROGRESS");
+    assert.equal(body.status, ASSESSMENT_STATUS_CODES.wizardInProgress);
     assert.equal(body.owner_id, "user-1");
     assert.equal(body.organization_id, orgId);
-    assert.equal(body.wizard_status, "NOT_STARTED");
+    assert.equal(body.wizard_status, WIZARD_STATUS_CODES.notStarted);
     assert.ok(body.created_at);
     assert.ok(body.updated_at);
     assert.ok(body.correlation_id);
@@ -105,7 +119,10 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
     const body = result.body as AssessmentDetailDto;
 
     assert.equal(body.readiness_state.classification_locked, true);
-    assert.equal(body.readiness_state.lock_reason, "LOCKED_EVIDENCE_REQUIRED");
+    assert.equal(
+      body.readiness_state.lock_reason,
+      ASSESSMENT_LOCK_REASONS.evidenceRequired,
+    );
     assert.ok(body.readiness_state.missing_evidence.length > 0);
   });
 
@@ -122,7 +139,7 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
         organizationId: otherOrgId,
         ownerId: "someone-else",
         name: "Foreign Assessment",
-        status: "WIZARD_IN_PROGRESS",
+        status: ASSESSMENT_STATUS_CODES.wizardInProgress,
       },
     });
 
@@ -132,7 +149,7 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 404);
-    assert.equal(body.error_code, "ASSESSMENT_NOT_FOUND");
+    assert.equal(body.error_code, ASSESSMENT_ERROR_CODES.notFound);
   });
 
   it("T04b: Manager cannot read another Manager's assessment in the same org -> 404", async () => {
@@ -143,7 +160,7 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
         organizationId: orgId,
         ownerId: "some-other-manager",
         name: "Not Mine",
-        status: "WIZARD_IN_PROGRESS",
+        status: ASSESSMENT_STATUS_CODES.wizardInProgress,
       },
     });
 
@@ -153,7 +170,7 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 404);
-    assert.equal(body.error_code, "ASSESSMENT_NOT_FOUND");
+    assert.equal(body.error_code, ASSESSMENT_ERROR_CODES.notFound);
   });
 
   // T05
@@ -165,9 +182,9 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
       data: {
         id: restrictedPolicyId,
         version: "2026-07-10",
-        actions: ["workspace:read", "assessment:create"],
-        subjectRole: "Manager",
-        stateGate: "membership_active",
+        actions: [PBAC_ACTIONS.workspaceRead, ASSESSMENT_ACTIONS.create],
+        subjectRole: SUBJECT_ROLES.manager,
+        stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -186,8 +203,8 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
         id: "membership-no-assessment-read",
         userId: restrictedUserId,
         organizationId: orgId,
-        status: "active",
-        subjectAttributes: { role: "Manager" },
+        status: AUTH_MEMBERSHIP_STATUSES.active,
+        subjectAttributes: { role: SUBJECT_ROLES.manager },
         policyId: restrictedPolicyId,
         policyVersion: "2026-07-10",
       },
@@ -206,7 +223,7 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 403);
-    assert.equal(body.error_code, "PBAC_DENIED");
+    assert.equal(body.error_code, PBAC_REASON_CODE.denied);
   });
 
   // T06
@@ -233,9 +250,9 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
       data: {
         id: devPolicyId,
         version: "2026-07-10",
-        actions: ["assessment:read"],
-        subjectRole: "Developer",
-        stateGate: "membership_active",
+        actions: [PBAC_ACTIONS.assessmentRead],
+        subjectRole: SUBJECT_ROLES.developer,
+        stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -254,8 +271,8 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
         id: "membership-developer-read",
         userId: devUserId,
         organizationId: orgId,
-        status: "active",
-        subjectAttributes: { role: "Developer" },
+        status: AUTH_MEMBERSHIP_STATUSES.active,
+        subjectAttributes: { role: SUBJECT_ROLES.developer },
         policyId: devPolicyId,
         policyVersion: "2026-07-10",
       },
@@ -301,7 +318,7 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
         assessmentId,
         organizationId: orgId,
         ownerId: "user-1",
-        status: "IN_PROGRESS",
+        status: WIZARD_STATUS_CODES.inProgress,
         answers: {},
       },
     });
@@ -311,6 +328,6 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
     const body = result.body as AssessmentDetailDto;
 
-    assert.equal(body.wizard_status, "IN_PROGRESS");
+    assert.equal(body.wizard_status, WIZARD_STATUS_CODES.inProgress);
   });
 });

@@ -1,3 +1,16 @@
+import {
+  ASSESSMENT_ERROR_CODES,
+  ASSESSMENT_EVENT_TYPES,
+  ASSESSMENT_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
+import {
+  PBAC_ACTIONS,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
+import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
 /**
  * MW-asmt-001: Create Assessment Endpoint.
  * Test cases T01-T08 from docs/implementation/tasks/modules/assessment/01-create-assessment-endpoint.md
@@ -83,7 +96,7 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
     assert.equal(result.status, 201);
     assert.ok(body.assessment_id);
     assert.equal(body.name, "My AI System Assessment");
-    assert.equal(body.status, "WIZARD_IN_PROGRESS");
+    assert.equal(body.status, ASSESSMENT_STATUS_CODES.wizardInProgress);
     assert.equal(body.owner_id, "user-1");
     assert.equal(body.organization_id, orgId);
     assert.ok(body.created_at);
@@ -97,9 +110,9 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
       data: {
         id: restrictedPolicyId,
         version: "2026-07-10",
-        actions: ["workspace:read"],
-        subjectRole: "Manager",
-        stateGate: "membership_active",
+        actions: [PBAC_ACTIONS.workspaceRead],
+        subjectRole: SUBJECT_ROLES.manager,
+        stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -120,8 +133,8 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
         id: "membership-no-assessment-create",
         userId: restrictedUserId,
         organizationId: orgId,
-        status: "active",
-        subjectAttributes: { role: "Manager" },
+        status: AUTH_MEMBERSHIP_STATUSES.active,
+        subjectAttributes: { role: SUBJECT_ROLES.manager },
         policyId: restrictedPolicyId,
         policyVersion: "2026-07-10",
       },
@@ -142,7 +155,7 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 403);
-    assert.equal(body.error_code, "PBAC_DENIED");
+    assert.equal(body.error_code, PBAC_REASON_CODE.denied);
   });
 
   // T03
@@ -154,7 +167,7 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 422);
-    assert.equal(body.error_code, "INVALID_REQUEST");
+    assert.equal(body.error_code, ASSESSMENT_ERROR_CODES.invalidRequest);
   });
 
   // T04, T05, T06
@@ -170,7 +183,7 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
     });
 
     assert.ok(row, "assessment row must exist");
-    assert.equal(row?.status, "WIZARD_IN_PROGRESS");
+    assert.equal(row?.status, ASSESSMENT_STATUS_CODES.wizardInProgress);
     assert.equal(row?.ownerId, "user-1");
     assert.equal(row?.organizationId, orgId);
   });
@@ -186,7 +199,7 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
       });
 
     const audit = await prisma.authAuditEvent.findFirst({
-      where: { eventType: "ASSESSMENT_CREATED" },
+      where: { eventType: ASSESSMENT_EVENT_TYPES.created },
       orderBy: { createdAt: "desc" },
     });
 
@@ -224,11 +237,11 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
     const outbox = await prisma.outboxMessage.findFirst({
       where: {
         aggregateId: body.assessment_id,
-        eventType: "assessment.created",
+        eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
       },
     });
 
     assert.ok(outbox, "assessment.created OutboxMessage must be written");
-    assert.equal(outbox?.status, "pending");
+    assert.equal(outbox?.status, OUTBOX_STATUSES.pending);
   });
 });

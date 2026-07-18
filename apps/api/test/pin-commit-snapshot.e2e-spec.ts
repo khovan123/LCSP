@@ -1,3 +1,12 @@
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
+import {
+  GITHUB_INTEGRATION_ERROR_CODES,
+  GITHUB_INTEGRATION_EVENT_TYPES,
+  GITHUB_REPOSITORY_PERMISSION_LEVELS,
+  REPOSITORY_CONNECTION_STATUSES,
+  REPOSITORY_SNAPSHOT_STATUSES,
+} from "@lcsp/contracts/github-integration";
+import { PBAC_ACTIONS, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
 /** MW-gh-003: Pin Commit Snapshot Endpoint. */
 
 import * as assert from "node:assert/strict";
@@ -71,7 +80,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
         organizationId: "org-1",
         ownerId: "user-1",
         name: "Snapshot assessment",
-        status: "WIZARD_IN_PROGRESS",
+        status: ASSESSMENT_STATUS_CODES.wizardInProgress,
       },
     });
     await prisma.repositoryConnection.create({
@@ -85,8 +94,8 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
         repositoryName: "example-repo",
         repositoryFullName: "acme/example-repo",
         defaultBranch: "main",
-        permissions: { contents: "read" },
-        status: "active",
+        permissions: { contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read },
+        status: REPOSITORY_CONNECTION_STATUSES.active,
       },
     });
 
@@ -112,7 +121,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
 
     assert.equal(response.status, 201);
     assert.equal(body.commit_sha, RESOLVED_SHA);
-    assert.equal(body.status, "ready");
+    assert.equal(body.status, REPOSITORY_SNAPSHOT_STATUSES.ready);
     assert.equal(body.branch, "main");
 
     const snapshot = await prisma.repositorySnapshot.findUnique({
@@ -129,7 +138,10 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
     assert.doesNotMatch(JSON.stringify(snapshot), /raw source/i);
 
     const event = await prisma.outboxMessage.findFirst({
-      where: { aggregateId: body.snapshot_id, eventType: "snapshot.created" },
+      where: {
+        aggregateId: body.snapshot_id,
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated,
+      },
     });
     assert.ok(event);
     assert.equal(
@@ -137,7 +149,10 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       body.snapshot_id,
     );
     const audit = await prisma.authAuditEvent.findFirst({
-      where: { eventType: "SNAPSHOT_CREATED", resourceId: body.snapshot_id },
+      where: {
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
+        resourceId: body.snapshot_id,
+      },
     });
     assert.ok(audit);
   });
@@ -164,13 +179,15 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
     assert.equal(response.status, 400);
     assert.equal(
       (response.body as ErrorResponse).error_code,
-      "REF_NOT_RESOLVABLE",
+      GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
     );
     assert.equal(await prisma.repositorySnapshot.count(), 0);
     assert.equal(await prisma.outboxMessage.count(), beforeOutbox);
     assert.ok(
       await prisma.authAuditEvent.findFirst({
-        where: { eventType: "SNAPSHOT_PIN_FAILED" },
+        where: {
+          eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotPinFailedAudit,
+        },
       }),
     );
   });
@@ -189,7 +206,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
     assert.equal(response.status, 404);
     assert.equal(
       (response.body as ErrorResponse).error_code,
-      "CONNECTION_NOT_FOUND",
+      GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
     );
   });
 
@@ -201,7 +218,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
           version: "2026-06-26",
         },
       },
-      data: { actions: ["workspace:read"] },
+      data: { actions: [PBAC_ACTIONS.workspaceRead] },
     });
 
     const response = await httpRequest(app)
@@ -210,7 +227,10 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       .send({ connection_id: "connection-1", branch: "main" });
 
     assert.equal(response.status, 403);
-    assert.equal((response.body as ErrorResponse).error_code, "PBAC_DENIED");
+    assert.equal(
+      (response.body as ErrorResponse).error_code,
+      PBAC_REASON_CODE.denied,
+    );
     assert.equal(await prisma.repositorySnapshot.count(), 0);
   });
 });

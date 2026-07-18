@@ -1,3 +1,5 @@
+import { PBAC_DECISION } from "@lcsp/contracts/pbac";
+import { AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
 /* eslint-disable @typescript-eslint/unbound-method */
 import { jest } from "@jest/globals";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
@@ -110,8 +112,8 @@ describe("OAuthStartHandler", () => {
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
       mockRepositories,
       expect.objectContaining({
-        event_type: "auth.oauth.start.failed",
-        decision: "deny",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartFailed,
+        decision: PBAC_DECISION.deny,
         reason_code: AUTH_ERROR_CODES.unsupportedProvider,
         correlation_id: "corr-1",
       }),
@@ -131,8 +133,8 @@ describe("OAuthStartHandler", () => {
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
       mockRepositories,
       expect.objectContaining({
-        event_type: "auth.oauth.start.failed",
-        decision: "deny",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartFailed,
+        decision: PBAC_DECISION.deny,
         reason_code: AUTH_ERROR_CODES.invalidRedirectUri,
       }),
     );
@@ -163,8 +165,8 @@ describe("OAuthStartHandler", () => {
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
       mockRepositories,
       expect.objectContaining({
-        event_type: "auth.oauth.start.succeeded",
-        decision: "allow",
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartSucceeded,
+        decision: PBAC_DECISION.allow,
         provider: "github",
         correlation_id: "corr-1",
       }),

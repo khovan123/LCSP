@@ -1,3 +1,9 @@
+import {
+  GITHUB_INTEGRATION_ERROR_CODES,
+  GITHUB_INTEGRATION_EVENT_TYPES,
+  GITHUB_REPOSITORY_PERMISSION_LEVELS,
+  REPOSITORY_CONNECTION_STATUSES,
+} from "@lcsp/contracts/github-integration";
 /**
  * MW-gh-002: GitHub App Callback Endpoint.
  * Test cases T01-T09 from docs/implementation/tasks/modules/github-integration/02-github-app-callback-endpoint.md
@@ -105,7 +111,9 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
   }
 
   function mockGithubAppFetch(
-    permissions: Record<string, string> = { contents: "read" },
+    permissions: Record<string, string> = {
+      contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read,
+    },
   ): void {
     globalThis.fetch = ((input: string | URL) => {
       const urlStr = input.toString();
@@ -157,7 +165,7 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     assert.equal(result.status, 200);
     assert.equal(body.repository_full_name, "acme/example-repo");
     assert.equal(body.default_branch, "main");
-    assert.equal(body.status, "active");
+    assert.equal(body.status, REPOSITORY_CONNECTION_STATUSES.active);
     assert.ok(body.connection_id);
     assert.ok(body.correlation_id);
 
@@ -179,7 +187,10 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
-    assert.equal(body.error_code, "GITHUB_STATE_INVALID");
+    assert.equal(
+      body.error_code,
+      GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
+    );
   });
 
   // T03
@@ -197,7 +208,10 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
-    assert.equal(body.error_code, "GITHUB_STATE_INVALID");
+    assert.equal(
+      body.error_code,
+      GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
+    );
   });
 
   // T04
@@ -211,7 +225,10 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
-    assert.equal(body.error_code, "GITHUB_CALLBACK_INVALID");
+    assert.equal(
+      body.error_code,
+      GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
+    );
   });
 
   // T05
@@ -225,7 +242,10 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
-    assert.equal(body.error_code, "PERMISSIONS_INSUFFICIENT");
+    assert.equal(
+      body.error_code,
+      GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
+    );
   });
 
   // T06
@@ -288,7 +308,7 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
       .query({ installation_id: INSTALLATION_ID, code: "good-code", state });
 
     const audit = await prisma.authAuditEvent.findFirst({
-      where: { eventType: "GITHUB_APP_CONNECTED" },
+      where: { eventType: GITHUB_INTEGRATION_EVENT_TYPES.appConnected },
       orderBy: { createdAt: "desc" },
     });
 

@@ -1,3 +1,16 @@
+import {
+  AUTH_AUDIT_EVENT_TYPES,
+  AUTH_MEMBERSHIP_STATUSES,
+  ORGANIZATION_SCOPE_ERROR_CODES,
+  REVOKE_MEMBERSHIP_ERROR_CODES,
+} from "@lcsp/contracts/auth";
+import {
+  PBAC_ACTIONS,
+  PBAC_DECISION,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
 import * as assert from "node:assert/strict";
 
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -103,7 +116,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
         },
       },
     });
-    assert.equal(membership.status, "revoked");
+    assert.equal(membership.status, AUTH_MEMBERSHIP_STATUSES.revoked);
     assert.ok(membership.revokedAt);
 
     const activeSessions = await prisma.authSession.count({
@@ -119,8 +132,8 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: {
         correlationId: "corr-revoke-1",
-        action: "membership:revoke",
-        decision: "allow",
+        action: PBAC_ACTIONS.membershipRevoke,
+        decision: PBAC_DECISION.allow,
       },
     });
     assert.equal(decision.resourceType, "HttpRoute");
@@ -132,10 +145,16 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     assert.equal(result.status, 403);
-    assert.equal((result.body as ErrorBody).error_code, "PBAC_DENIED");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      PBAC_REASON_CODE.denied,
+    );
 
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
-      where: { action: "membership:revoke", decision: "deny" },
+      where: {
+        action: PBAC_ACTIONS.membershipRevoke,
+        decision: PBAC_DECISION.deny,
+      },
       orderBy: { createdAt: "desc" },
     });
     assert.equal(decision.resourceType, "HttpRoute");
@@ -151,7 +170,10 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     assert.equal(result.status, 404);
-    assert.equal((result.body as ErrorBody).error_code, "MEMBERSHIP_NOT_FOUND");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      REVOKE_MEMBERSHIP_ERROR_CODES.membershipNotFound,
+    );
   });
 
   it("T04 rejects Manager self-revoke", async () => {
@@ -164,7 +186,10 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     assert.equal(result.status, 400);
-    assert.equal((result.body as ErrorBody).error_code, "CANNOT_SELF_REVOKE");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      REVOKE_MEMBERSHIP_ERROR_CODES.cannotSelfRevoke,
+    );
   });
 
   it("T05 rejects organization scope mismatch", async () => {
@@ -175,7 +200,10 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     assert.equal(result.status, 400);
-    assert.equal((result.body as ErrorBody).error_code, "ORG_SCOPE_MISMATCH");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
+    );
   });
 
   it("T06 Developer active session is invalid immediately after revoke", async () => {
@@ -191,7 +219,10 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${developerToken}`);
 
     assert.equal(result.status, 401);
-    assert.equal((result.body as ErrorBody).error_code, "SESSION_INVALID");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      PBAC_REASON_CODE.sessionInvalid,
+    );
   });
 
   it("T08 writes clean audit payload without session token material", async () => {
@@ -202,7 +233,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     const audit = await prisma.authAuditEvent.findFirstOrThrow({
-      where: { eventType: "AUTH_DEVELOPER_REVOKED" },
+      where: { eventType: AUTH_AUDIT_EVENT_TYPES.authDeveloperRevoked },
     });
     const serialized = JSON.stringify(audit);
     assert.doesNotMatch(serialized, new RegExp(developerToken));
@@ -235,7 +266,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
           organizationId: fixture.organizationId,
         },
       },
-      data: { status: "revoked", revokedAt: new Date() },
+      data: { status: AUTH_MEMBERSHIP_STATUSES.revoked, revokedAt: new Date() },
     });
 
     const result = await httpRequest(app)
@@ -243,7 +274,10 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     assert.equal(result.status, 404);
-    assert.equal((result.body as ErrorBody).error_code, "MEMBERSHIP_NOT_FOUND");
+    assert.equal(
+      (result.body as ErrorBody).error_code,
+      REVOKE_MEMBERSHIP_ERROR_CODES.membershipNotFound,
+    );
   });
 });
 
@@ -255,7 +289,7 @@ async function grantManagerRevokeAction(prisma: PrismaClient): Promise<void> {
         version: "2026-06-26",
       },
     },
-    data: { actions: { push: "membership:revoke" } },
+    data: { actions: { push: PBAC_ACTIONS.membershipRevoke } },
   });
 }
 
@@ -276,9 +310,9 @@ async function seedDeveloper(
     data: {
       id: "policy-developer-revoke",
       version: "2026-07-13",
-      actions: ["workspace:read"],
-      subjectRole: "Developer",
-      stateGate: "membership_active",
+      actions: [PBAC_ACTIONS.workspaceRead],
+      subjectRole: SUBJECT_ROLES.developer,
+      stateGate: PBAC_STATE_GATES.membershipActive,
       organizationId,
     },
   });
@@ -287,8 +321,11 @@ async function seedDeveloper(
       id: "membership-dev",
       userId: "user-dev",
       organizationId,
-      status: "active",
-      subjectAttributes: { role: "Developer", scope: "assessment-1" },
+      status: AUTH_MEMBERSHIP_STATUSES.active,
+      subjectAttributes: {
+        role: SUBJECT_ROLES.developer,
+        scope: "assessment-1",
+      },
       policyId: "policy-developer-revoke",
       policyVersion: "2026-07-13",
     },

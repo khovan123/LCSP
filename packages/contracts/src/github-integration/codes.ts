@@ -6,4 +6,10 @@ export const GITHUB_INTEGRATION_ERROR_CODES = {
   permissionsInsufficient: "PERMISSIONS_INSUFFICIENT",
   refNotResolvable: "REF_NOT_RESOLVABLE",
   refOutOfScope: "REF_OUT_OF_SCOPE",
+  snapshotNotFound: "SNAPSHOT_NOT_FOUND",
+  assessmentStateInvalid: "ASSESSMENT_STATE_INVALID",
+  scanBlockedMapping: "SCAN_BLOCKED_MAPPING",
+  scanIdempotencyConflict: "IDEMPOTENCY_CONFLICT",
+  scanIdempotencyKeyRequired: "IDEMPOTENCY_KEY_REQUIRED",
+  scanTriggerSourceInvalid: "SCAN_TRIGGER_SOURCE_INVALID",
 } as const;

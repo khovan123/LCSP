@@ -1,3 +1,11 @@
+import {
+  PBAC_ACTIONS,
+  PBAC_DECISION,
+  PBAC_REASON_CODE,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { jest } from "@jest/globals";
 
 import { Membership } from "../../modules/auth-workspace/domain/entities/membership.entity.js";
@@ -19,8 +27,8 @@ function makeMembership(
     id: "membership-1",
     userId: "user-1",
     organizationId: "org-1",
-    status: "active",
-    subjectAttributes: { role: "Manager" },
+    status: AUTH_MEMBERSHIP_STATUSES.active,
+    subjectAttributes: { role: SUBJECT_ROLES.manager },
     policyId: "policy-1",
     policyVersion: "v1",
     ...overrides,
@@ -33,9 +41,9 @@ function makePolicy(
   return new Policy({
     id: "policy-1",
     version: "v1",
-    actions: ["scan:trigger"],
-    subjectRole: "Manager",
-    stateGate: "membership_active",
+    actions: [PBAC_ACTIONS.scanTrigger],
+    subjectRole: SUBJECT_ROLES.manager,
+    stateGate: PBAC_STATE_GATES.membershipActive,
     organizationId: "org-1",
     ...overrides,
   });
@@ -47,7 +55,7 @@ function makeInput(
   return {
     userId: "user-1",
     organizationId: "org-1",
-    action: "scan:trigger",
+    action: PBAC_ACTIONS.scanTrigger,
     correlationId: "corr-1",
     ...overrides,
   };
@@ -107,35 +115,35 @@ describe("PbacPreflightService", () => {
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: "allow",
+      decision: PBAC_DECISION.allow,
       reasonCode: null,
       correlationId: "corr-1",
     });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: "allow",
-        reason_code: "AUTHORIZED",
-        action: "scan:trigger",
+        decision: PBAC_DECISION.allow,
+        reason_code: PBAC_REASON_CODE.authorized,
+        action: PBAC_ACTIONS.scanTrigger,
       }),
     );
   });
 
   it("T02: membership revoked since task dispatch returns deny STATE_GATE_FAILED", async () => {
     const { service, append } = makeService({
-      membership: makeMembership({ status: "revoked" }),
+      membership: makeMembership({ status: AUTH_MEMBERSHIP_STATUSES.revoked }),
     });
 
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: "deny",
-      reasonCode: "STATE_GATE_FAILED",
+      decision: PBAC_DECISION.deny,
+      reasonCode: PBAC_REASON_CODE.stateGateFailed,
       correlationId: "corr-1",
     });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: "deny",
-        reason_code: "STATE_GATE_FAILED",
+        decision: PBAC_DECISION.deny,
+        reason_code: PBAC_REASON_CODE.stateGateFailed,
       }),
     );
   });
@@ -148,8 +156,8 @@ describe("PbacPreflightService", () => {
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: "deny",
-      reasonCode: "ACTION_NOT_GRANTED",
+      decision: PBAC_DECISION.deny,
+      reasonCode: PBAC_REASON_CODE.actionNotGranted,
       correlationId: "corr-1",
     });
   });
@@ -160,8 +168,8 @@ describe("PbacPreflightService", () => {
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: "deny",
-      reasonCode: "MEMBERSHIP_MISSING",
+      decision: PBAC_DECISION.deny,
+      reasonCode: PBAC_REASON_CODE.membershipMissing,
       correlationId: "corr-1",
     });
     expect(findByIdAndVersion).not.toHaveBeenCalled();
@@ -173,8 +181,8 @@ describe("PbacPreflightService", () => {
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: "deny",
-      reasonCode: "POLICY_NOT_FOUND",
+      decision: PBAC_DECISION.deny,
+      reasonCode: PBAC_REASON_CODE.policyNotFound,
       correlationId: "corr-1",
     });
   });
@@ -185,7 +193,9 @@ describe("PbacPreflightService", () => {
     await service.evaluate(makeInput());
 
     expect(append).toHaveBeenCalledTimes(1);
-    expect(append.mock.calls[0][0]).toMatchObject({ decision: "allow" });
+    expect(append.mock.calls[0][0]).toMatchObject({
+      decision: PBAC_DECISION.allow,
+    });
   });
 
   it("T08: AuthDecisionLog is written for a deny decision", async () => {
@@ -196,7 +206,9 @@ describe("PbacPreflightService", () => {
     await service.evaluate(makeInput());
 
     expect(append).toHaveBeenCalledTimes(1);
-    expect(append.mock.calls[0][0]).toMatchObject({ decision: "deny" });
+    expect(append.mock.calls[0][0]).toMatchObject({
+      decision: PBAC_DECISION.deny,
+    });
   });
 
   it("denies with LOAD_ERROR (never throws) when a repository throws", async () => {
@@ -207,8 +219,8 @@ describe("PbacPreflightService", () => {
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: "deny",
-      reasonCode: "LOAD_ERROR",
+      decision: PBAC_DECISION.deny,
+      reasonCode: PBAC_REASON_CODE.loadError,
       correlationId: "corr-1",
     });
   });
@@ -219,7 +231,7 @@ describe("PbacPreflightService", () => {
     });
 
     await expect(service.evaluate(makeInput())).resolves.toEqual({
-      decision: "allow",
+      decision: PBAC_DECISION.allow,
       reasonCode: null,
       correlationId: "corr-1",
     });

@@ -1,3 +1,7 @@
+import {
+  ASSESSMENT_EVENT_TYPES,
+  ASSESSMENT_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
 /**
  * AC-001: PBAC-authorized assessment creation, audit event.
  * AC-003: Readiness-only state, no risk level, blocked/degraded messaging.
@@ -76,7 +80,7 @@ describe("Assessment creation and wizard readiness (e2e) [AC-001, AC-003]", () =
       "user-1",
       "Assessment owner must be the creating Manager",
     );
-    assert.equal(body.status, "WIZARD_IN_PROGRESS");
+    assert.equal(body.status, ASSESSMENT_STATUS_CODES.wizardInProgress);
   });
 
   it("AC-001: Assessment creation writes ASSESSMENT_CREATED audit event", async () => {
@@ -87,7 +91,7 @@ describe("Assessment creation and wizard readiness (e2e) [AC-001, AC-003]", () =
       .send({ name: "Audit Test Assessment", organization_id: orgId });
 
     const audit = await prisma.authAuditEvent.findFirst({
-      where: { eventType: "ASSESSMENT_CREATED" },
+      where: { eventType: ASSESSMENT_EVENT_TYPES.created },
     });
     assert.ok(audit, "ASSESSMENT_CREATED audit event must be written");
     assert.doesNotMatch(JSON.stringify(audit), /password|token|secret/i);
