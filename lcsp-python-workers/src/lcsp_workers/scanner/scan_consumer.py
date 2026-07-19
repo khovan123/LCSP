@@ -86,9 +86,13 @@ class ScanConsumer(ConsumerBase):
                 sbom_entries=len(syft_result.entries),
             )
 
+            if time.monotonic() - started_at > self.scan_timeout_seconds:
+                raise ArchiveMaterializationError(
+                    f"scan timeout exceeded for job {envelope.scan_job_id!r}"
+                )
+
             semgrep_result = self._semgrep_tool.run(result.workspace_path)
             self._record_semgrep_executions(tool_registry, semgrep_result)
-
             logger.info(
                 "SCAN_TOOL_PROVENANCE_RECORDED",
                 tool_provenance=[asdict(item) for item in tool_registry.all()],
