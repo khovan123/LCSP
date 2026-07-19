@@ -13,7 +13,6 @@ import type { Response } from "express";
 import { InternalTokenGuard } from "../../../../platform/internal-auth/internal-token.guard.js";
 import {
   type SnapshotArchiveStreamResult,
-  StreamSnapshotArchiveHandler,
 } from "../../application/queries/stream-snapshot-archive/stream-snapshot-archive.handler.js";
 import { StreamSnapshotArchiveQuery } from "../../application/queries/stream-snapshot-archive/stream-snapshot-archive.query.js";
 
