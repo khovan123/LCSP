@@ -268,7 +268,9 @@ class SyftTool:
         candidate = Path(raw_location)
 
         if not candidate.is_absolute():
-            cleaned = raw_location.replace("\\", "/").lstrip("./")
+            cleaned = raw_location.replace("\\", "/")
+            if cleaned.startswith("./"):
+                cleaned = cleaned[2:]
             return cleaned
 
         try:
