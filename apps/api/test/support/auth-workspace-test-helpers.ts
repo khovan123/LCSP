@@ -135,6 +135,7 @@ export async function seedAuthWorkspaceFixture(
       {
         id: approvedUserId,
         email: "manager@acme.test",
+        displayName: "Acme Manager",
         passwordHash: hashSecret("CorrectHorseBatteryStaple!"),
         emailVerified: true,
         failedLoginCount: 0,
