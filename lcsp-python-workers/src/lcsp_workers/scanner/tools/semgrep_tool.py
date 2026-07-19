@@ -81,16 +81,25 @@ class SemgrepTool:
             ai_ruleset_hash = self._sha256_file(self._ai_ruleset_path)
             secret_ruleset_hash = self._sha256_file(self._secret_ruleset_path)
         except OSError as error:
-            unavailable = ToolExecutionResult(
-                tool_name=AI_USAGE_TOOL_NAME,
-                tool_version="unknown",
-                outcome=OUTCOME_TOOL_FAILURE,
-                config_hash="sha256:unavailable",
-                messages=[f"semgrep ruleset unavailable: {error}"],
-            )
+            message = f"semgrep ruleset unavailable: {error}"
             return SemgrepRunResult(
                 findings=[],
-                executions=[unavailable],
+                executions=[
+                    ToolExecutionResult(
+                        tool_name=AI_USAGE_TOOL_NAME,
+                        tool_version="unknown",
+                        outcome=OUTCOME_TOOL_FAILURE,
+                        config_hash="sha256:unavailable",
+                        messages=[message],
+                    ),
+                    ToolExecutionResult(
+                        tool_name=SECRET_DETECT_TOOL_NAME,
+                        tool_version="unknown",
+                        outcome=OUTCOME_TOOL_FAILURE,
+                        config_hash="sha256:unavailable",
+                        messages=[message],
+                    ),
+                ],
                 redaction_applied=False,
             )
 
