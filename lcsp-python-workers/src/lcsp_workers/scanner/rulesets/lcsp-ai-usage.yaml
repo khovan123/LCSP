@@ -1,0 +1,51 @@
+rules:
+  - id: lcsp.openai-client
+    message: OpenAI client integration detected
+    severity: INFO
+    languages: [python]
+    pattern-either:
+      - pattern: import openai
+      - pattern: openai.OpenAI(...)
+
+  - id: lcsp.anthropic-client
+    message: Anthropic client integration detected
+    severity: INFO
+    languages: [python, javascript, typescript]
+    pattern-either:
+      - pattern: import anthropic
+      - pattern: anthropic.Anthropic(...)
+      - pattern: new Anthropic(...)
+
+  - id: lcsp.langchain-import
+    message: LangChain framework usage detected
+    severity: INFO
+    languages: [python]
+    pattern: from langchain import ...
+
+  - id: lcsp.autogen-import
+    message: AutoGen agent framework usage detected
+    severity: INFO
+    languages: [python]
+    pattern: import autogen
+
+  - id: lcsp.model-call
+    message: LLM model invocation detected
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    pattern-either:
+      - pattern: $CLIENT.chat.completions.create(...)
+      - pattern: $CLIENT.messages.create(...)
+
+  - id: lcsp.embeddings-call
+    message: Embeddings invocation detected
+    severity: WARNING
+    languages: [python, javascript, typescript]
+    pattern: $CLIENT.embeddings.create(...)
+
+  - id: lcsp.llm-api-key-ref
+    message: LLM provider environment key reference detected
+    severity: INFO
+    languages: [python, javascript, typescript]
+    pattern-either:
+      - pattern: OPENAI_API_KEY
+      - pattern: ANTHROPIC_API_KEY

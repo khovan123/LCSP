@@ -9,6 +9,7 @@ from lcsp_workers.platform.queue_consumer import ConsumerBase
 
 from .snapshot_service_client import SnapshotArchiveRequest, SnapshotServiceClient
 from .tool_registry import ToolRegistry
+from .tools.semgrep_tool import SemgrepRunResult, SemgrepTool
 from .tools.syft_tool import SyftTool
 from .tools.tool_base import OUTCOME_SUCCESS
 from .workspace import ArchiveMaterializationError, ScannerWorkspace
@@ -35,6 +36,7 @@ class ScanConsumer(ConsumerBase):
         snapshot_client: SnapshotServiceClient | None = None,
         workspace: ScannerWorkspace | None = None,
         syft_tool: SyftTool | None = None,
+        semgrep_tool: SemgrepTool | None = None,
     ):
         super().__init__(config, pbac_client)
         self._snapshot_client = snapshot_client or SnapshotServiceClient(
@@ -43,6 +45,7 @@ class ScanConsumer(ConsumerBase):
         )
         self._workspace = workspace or ScannerWorkspace()
         self._syft_tool = syft_tool or SyftTool()
+        self._semgrep_tool = semgrep_tool or SemgrepTool()
 
     def handle(self, message: dict, correlation_id: str) -> None:
         started_at = time.monotonic()
@@ -77,29 +80,23 @@ class ScanConsumer(ConsumerBase):
             )
 
             syft_result = self._syft_tool.run(result.workspace_path)
-            tool_registry.register(syft_result.execution)
-
-            logger.info(
-                "SCAN_TOOL_EXECUTED",
-                tool_name=syft_result.execution.tool_name,
-                tool_version=syft_result.execution.tool_version,
-                outcome=syft_result.execution.outcome,
-                config_hash=syft_result.execution.config_hash,
+            self._record_tool_execution(
+                tool_registry,
+                syft_result.execution,
                 sbom_entries=len(syft_result.entries),
             )
 
+            if time.monotonic() - started_at > self.scan_timeout_seconds:
+                raise ArchiveMaterializationError(
+                    f"scan timeout exceeded for job {envelope.scan_job_id!r}"
+                )
+
+            semgrep_result = self._semgrep_tool.run(result.workspace_path)
+            self._record_semgrep_executions(tool_registry, semgrep_result)
             logger.info(
                 "SCAN_TOOL_PROVENANCE_RECORDED",
                 tool_provenance=[asdict(item) for item in tool_registry.all()],
             )
-
-            if syft_result.execution.outcome != OUTCOME_SUCCESS:
-                logger.warning(
-                    "SCAN_TOOL_NON_BLOCKING_FAILURE",
-                    tool_name=syft_result.execution.tool_name,
-                    outcome=syft_result.execution.outcome,
-                    messages=syft_result.execution.messages,
-                )
 
             if time.monotonic() - started_at > self.scan_timeout_seconds:
                 raise ArchiveMaterializationError(
@@ -138,3 +135,44 @@ class ScanConsumer(ConsumerBase):
             if isinstance(value, str) and value.strip():
                 return value.strip()
         return None
+
+    def _record_semgrep_executions(
+        self,
+        tool_registry: ToolRegistry,
+        semgrep_result: SemgrepRunResult,
+    ) -> None:
+        from .tools.semgrep_tool import AI_USAGE_TOOL_NAME
+
+        for execution in semgrep_result.executions:
+            context: dict[str, object] = {}
+            if execution.tool_name == AI_USAGE_TOOL_NAME:
+                context["semgrep_findings"] = len(semgrep_result.findings)
+            else:
+                context["redaction_applied"] = semgrep_result.redaction_applied
+
+            self._record_tool_execution(tool_registry, execution, **context)
+
+    def _record_tool_execution(
+        self,
+        tool_registry: ToolRegistry,
+        execution,
+        **context: object,
+    ) -> None:
+        tool_registry.register(execution)
+
+        logger.info(
+            "SCAN_TOOL_EXECUTED",
+            tool_name=execution.tool_name,
+            tool_version=execution.tool_version,
+            outcome=execution.outcome,
+            config_hash=execution.config_hash,
+            **context,
+        )
+
+        if execution.outcome != OUTCOME_SUCCESS:
+            logger.warning(
+                "SCAN_TOOL_NON_BLOCKING_FAILURE",
+                tool_name=execution.tool_name,
+                outcome=execution.outcome,
+                messages=execution.messages,
+            )
