@@ -13,7 +13,7 @@ class ManifestParser:
         rules: list[ManifestRule] | None = None,
         max_manifest_files: int = MAX_MANIFEST_FILES,
     ) -> None:
-        self._rules = rules or build_manifest_rules()
+        self._rules = build_manifest_rules() if rules is None else rules
         self._max_manifest_files = max_manifest_files
 
     def parse_workspace(self, workspace_path: str | Path) -> ManifestParseResult:
