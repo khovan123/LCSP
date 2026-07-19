@@ -1,6 +1,10 @@
+---
+baseline_commit: 04647ccb88a1933d89bdee74cb2d17f27745d011
+---
+
 # Story 1.4: Organization Membership and Manager Policy Scope
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -23,9 +27,9 @@ As a Manager, I want LCSP to recognize my organization and Manager policy scope,
 
 ## Tasks / Subtasks
 
-- [ ] Materialize active organization/workspace context for authenticated users. (AC: 1)
-- [ ] Bind Manager subject attributes and policy versioning into PBAC evaluation context. (AC: 2)
-- [ ] Project safe allow/deny results into workspace UX while auditing server-side decisions. (AC: 2)
+- [x] Materialize active organization/workspace context for authenticated users. (AC: 1)
+- [x] Bind Manager subject attributes and policy versioning into PBAC evaluation context. (AC: 2)
+- [x] Project safe allow/deny results into workspace UX while auditing server-side decisions. (AC: 2)
 
 ## Dev Notes
 
@@ -149,13 +153,36 @@ GPT-5 Codex
 - Batch `bmad-create-story` run on 2026-07-02T22:01:26+07:00.
 - Source packet: `docs/developer/story-handbook/1-4-organization-membership-and-manager-policy-scope.md`.
 - Canonical title/source alignment: `docs/planning-artifacts/epics.md`.
+- RED: `auth-workspace.e2e-spec.ts` failed because `GET /workspace` did not expose the flat organization context contract.
+- GREEN: targeted auth-workspace E2E passed 36/36; full API E2E passed 181/181.
+
+### Implementation Plan
+
+- Lock the flat workspace response contract with an end-to-end regression test.
+- Reuse the exact membership-bound policy evaluation and return only its safe action projection.
+- Verify the existing web projection, safe redirects, and server-side authorization audit trail.
 
 ### Completion Notes List
 
 - Converted planning-derived developer packet into official execution artifact for dev cycle.
 - Status set to `ready-for-dev` in `docs/implementation-artifacts/sprint-status.yaml`.
 - Story retains planning authority references and scope guardrails for downstream `dev-story` work.
+- Materialized the active organization, Manager membership, session expiry, MFA state, and granted actions in the workspace response.
+- Preserved deny-by-default evaluation and projected actions from the exact policy ID/version bound to the active membership without exposing policy or token internals.
+- Verified the workspace UX consumes backend-projected actions only, with safe auth/MFA redirects and server-side PBAC decision auditing.
+- Validation: API build passed; API unit tests passed 269/269; API E2E passed 181/181; web tests passed 4/4; changed API files passed ESLint and Prettier checks.
+- Repository-wide lint/typecheck remains blocked by pre-existing `github-integration` spec errors outside Story 1.4 scope.
 
 ### File List
 
 - docs/implementation-artifacts/1-4-organization-membership-and-manager-policy-scope.md
+- docs/implementation-artifacts/sprint-status.yaml
+- apps/api/src/modules/auth-workspace/application/contracts/auth-workspace/workspace.contract.ts
+- apps/api/src/modules/auth-workspace/application/queries/get-workspace/get-workspace.handler.ts
+- apps/api/src/modules/auth-workspace/application/services/auth-workspace/auth-workspace-support.service.ts
+- apps/api/test/auth-workspace.e2e-spec.ts
+- apps/api/test/support/auth-workspace-test-helpers.ts
+
+## Change Log
+
+- 2026-07-19: Implemented the safe organization/Manager workspace context projection, policy-bound granted actions, and authorization audit coverage; moved story to review.

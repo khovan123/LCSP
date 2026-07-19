@@ -2,7 +2,6 @@ import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   AUTH_ERROR_CODES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
-  WORKSPACE_CAPABILITY_SOURCES,
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
@@ -170,16 +169,16 @@ export class GetWorkspaceHandler {
 
     return {
       ok: true,
+      organization_id: session.organizationId,
+      organization_name: sessionOrganization.name,
+      user_id: user.id,
+      display_name: user.displayName ?? user.email.toString(),
+      membership_status: authorization.membership_status,
+      subject_role: authorization.subject_role,
+      granted_actions: authorization.granted_actions,
+      session_expires_at: new Date(session.expiresAt).toISOString(),
+      mfa_verified: session.isMfaVerified(),
       correlation_id: correlationId,
-      workspace: {
-        id: "workspace-home",
-        organization_id: session.organizationId,
-        name: sessionOrganization.name,
-      },
-      capabilities: {
-        can_view_workspace: true,
-        source: WORKSPACE_CAPABILITY_SOURCES.backendProjection,
-      },
     };
   }
 }

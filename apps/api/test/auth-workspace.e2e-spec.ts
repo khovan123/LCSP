@@ -1,9 +1,14 @@
 import {
   AUTH_INVITATION_STATES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  AUTH_MEMBERSHIP_STATUSES,
   REQUIRED_ACTIONS,
 } from "@lcsp/contracts/auth";
-import { PBAC_DECISION, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import {
+  PBAC_ACTIONS,
+  PBAC_DECISION,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
 import * as assert from "node:assert/strict";
 
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -342,6 +347,56 @@ describe("Auth workspace (e2e)", () => {
       failure.problem.code,
       AUTH_ERROR_CODES.authzTenantScopeMismatch,
     );
+  });
+
+  it("returns the active Manager organization context and safe PBAC action projection", async () => {
+    const signIn = await signInApprovedUser();
+
+    const result = await httpRequest(app)
+      .get("/workspace")
+      .query({ organization_id: fixture.organizationId })
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .set("x-correlation-id", "corr-manager-workspace-context")
+      .expect(200);
+
+    const body = result.body as WorkspaceSuccess & Record<string, unknown>;
+    assert.equal(body.organization_id, fixture.organizationId);
+    assert.equal(body.organization_name, "Acme Legal");
+    assert.equal(body.user_id, fixture.approvedUser.id);
+    assert.equal(body.display_name, "Acme Manager");
+    assert.equal(body.membership_status, AUTH_MEMBERSHIP_STATUSES.active);
+    assert.equal(body.subject_role, SUBJECT_ROLES.manager);
+    assert.deepEqual(body.granted_actions, [
+      PBAC_ACTIONS.workspaceRead,
+      PBAC_ACTIONS.assessmentCreate,
+      PBAC_ACTIONS.assessmentRead,
+      PBAC_ACTIONS.assessmentList,
+      PBAC_ACTIONS.githubConnect,
+      PBAC_ACTIONS.scanRead,
+      PBAC_ACTIONS.scanTrigger,
+      PBAC_ACTIONS.snapshotCreate,
+    ]);
+    assert.equal(body.mfa_verified, false);
+    assert.equal(body.correlation_id, "corr-manager-workspace-context");
+    assert.equal(Number.isNaN(Date.parse(body.session_expires_at)), false);
+    assert.equal("policyId" in body, false);
+    assert.equal("policyVersion" in body, false);
+    assert.equal("tokenHash" in body, false);
+
+    const decision = await prisma.authDecisionLog.findFirstOrThrow({
+      where: {
+        correlationId: "corr-manager-workspace-context",
+        resourceType: "Workspace",
+      },
+    });
+    assert.equal(decision.organizationId, fixture.organizationId);
+    assert.equal(decision.resourceType, "Workspace");
+    assert.equal(decision.resourceId, "workspace-home");
+    assert.equal(decision.action, PBAC_ACTIONS.workspaceRead);
+    assert.equal(decision.decision, PBAC_DECISION.allow);
+    assert.equal(decision.policyId, "policy-manager-workspace");
+    assert.equal(decision.policyVersion, "2026-06-26");
+    assert.equal(decision.correlationId, "corr-manager-workspace-context");
   });
 
   it("repeated failed logins trigger temporary lock expectation", async () => {

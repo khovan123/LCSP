@@ -257,10 +257,14 @@ export class AuthWorkspaceSupportService {
       policy ?? undefined,
       organizationId,
     );
+    const subjectRole = membership?.role();
 
-    if (!domainDecision.allowed) {
+    if (!domainDecision.allowed || !membership || !policy || !subjectRole) {
+      const denialCode = domainDecision.allowed
+        ? AUTH_ERROR_CODES.authzEvaluatorFailure
+        : domainDecision.code;
       const denied = createProblemResult(
-        domainDecision.code as AuthErrorCode,
+        denialCode as AuthErrorCode,
         correlationId,
       );
       await this.recordDecision(repositories, {
@@ -269,7 +273,7 @@ export class AuthWorkspaceSupportService {
         resource_id: resourceId,
         action: PBAC_ACTIONS.workspaceRead,
         decision: PBAC_DECISION.deny,
-        reason_code: domainDecision.code,
+        reason_code: denialCode,
         policy_id: membership?.policyId ?? null,
         policy_version: membership?.policyVersion ?? null,
         correlation_id: correlationId,
@@ -289,7 +293,13 @@ export class AuthWorkspaceSupportService {
       correlation_id: correlationId,
     };
     await this.recordDecision(repositories, allowed);
-    return { ok: true, decision: allowed };
+    return {
+      ok: true,
+      decision: allowed,
+      membership_status: membership.status,
+      subject_role: subjectRole,
+      granted_actions: [...policy.actions],
+    };
   }
 
   private requireString(value: unknown): value is string {
