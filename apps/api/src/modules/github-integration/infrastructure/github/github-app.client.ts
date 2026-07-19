@@ -166,17 +166,17 @@ export class GitHubAppClient {
       `${GITHUB_API_BASE_URL}/repos/${input.repositoryFullName}/commits/${encodeURIComponent(input.revision)}`,
       accessToken,
     );
-    const expectedApiPrefix = `${GITHUB_API_BASE_URL}/repos/${input.repositoryFullName}/commits/`;
-    const expectedHtmlPrefix = `https://github.com/${input.repositoryFullName}/commit/`;
+    const expectedApiPrefix = `${GITHUB_API_BASE_URL}/repos/${input.repositoryFullName}/commits/`.toLowerCase();
+    const expectedHtmlPrefix = `https://github.com/${input.repositoryFullName}/commit/`.toLowerCase();
 
     if (
       !commit ||
       typeof commit.sha !== "string" ||
       !/^[0-9a-f]{40}$/i.test(commit.sha) ||
       typeof commit.url !== "string" ||
-      !commit.url.startsWith(expectedApiPrefix) ||
+      !commit.url.toLowerCase().startsWith(expectedApiPrefix) ||
       typeof commit.html_url !== "string" ||
-      !commit.html_url.startsWith(expectedHtmlPrefix)
+      !commit.html_url.toLowerCase().startsWith(expectedHtmlPrefix)
     ) {
       throw new GitHubAppClientError("github_commit_resolution_failed");
     }
@@ -251,12 +251,17 @@ export class GitHubAppClient {
   }
 
   private createAppJwt(): string {
-    const appId = this.configService.get<string>("github.appId", "");
+    const appIdStr = this.configService.get<string>("github.appId", "");
     const privateKey = this.configService
       .get<string>("github.privateKey", "")
       .replace(/\\n/g, "\n");
-    if (!appId || !privateKey) {
+    if (!appIdStr || !privateKey) {
       throw new GitHubAppClientError("github_app_credentials_missing");
+    }
+
+    const appId = parseInt(appIdStr, 10);
+    if (isNaN(appId)) {
+      throw new GitHubAppClientError("github_app_credentials_invalid");
     }
 
     const issuedAt = Math.floor(Date.now() / 1000) - 60;
@@ -315,6 +320,7 @@ export class GitHubAppClient {
           accept: "application/vnd.github+json",
           "user-agent": "lcsp-api",
         },
+        body: "",
       });
     } catch {
       throw new GitHubAppClientError("github_app_api_unreachable");

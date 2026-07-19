@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-06-26T10:24:37+07:00"
-last_updated: "2026-07-19T21:17:45+07:00"
+last_updated: "2026-07-19T20:55:00+07:00"
 project: "LCSP — Legal Compliance Support Platform"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -62,7 +62,7 @@ development_status:
   epic-2-retrospective: optional
   epic-3: in-progress
   3-1-connect-read-only-github-repository: ready-for-dev
-  3-2-pin-commit-and-create-repositorysnapshot: review
+  3-2-pin-commit-and-create-repositorysnapshot: done
   3-3-trusted-scan-trigger-and-scan-job-orchestration: ready-for-dev
   3-4-static-scanner-workspace-and-sandbox: ready-for-dev
   3-5-static-scanner-toolchain-execution: ready-for-dev

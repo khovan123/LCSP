@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Inject,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
@@ -32,6 +33,7 @@ import { PinSnapshotCommand } from "./pin-snapshot.command.js";
 
 @CommandHandler(PinSnapshotCommand)
 export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
+  private readonly logger = new Logger(PinSnapshotHandler.name);
   constructor(
     @Inject(REPOSITORY_CONNECTION_REPOSITORY)
     private readonly connectionRepository: RepositoryConnectionRepository,
@@ -107,7 +109,12 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
         repositoryFullName: connection.repositoryFullName,
         revision,
       });
-    } catch {
+    } catch (error) {
+      this.logger.error(
+        `Failed to resolve commit ref "${revision}" for installation ${connection.installationId}: ${
+          error instanceof Error ? error.stack : error
+        }`,
+      );
       await this.auditDenied(
         command,
         GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,

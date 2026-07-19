@@ -1,6 +1,6 @@
 # Story 3.2: Pin Commit and Create RepositorySnapshot
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -207,3 +207,16 @@ GPT-5 Codex
 - packages/contracts/src/github-integration/events.ts
 - packages/contracts/src/github-integration/statuses.ts
 - packages/contracts/src/pbac/actions.ts
+
+### Review Findings
+
+- [x] [Review][Patch] Case-Sensitive StartsWith check in GitHubAppClient blocks mixed-case repository resolution [apps/api/src/modules/github-integration/infrastructure/github/github-app.client.ts:177-179]
+- [x] [Review][Patch] App JWT generation uses string-typed appId violating GitHub specification [apps/api/src/modules/github-integration/infrastructure/github/github-app.client.ts:254-267]
+- [x] [Review][Patch] postJson method in GitHubAppClient POSTs without body causing potential proxy hangs [apps/api/src/modules/github-integration/infrastructure/github/github-app.client.ts:318]
+- [x] [Review][Patch] Swallowing client errors in PinSnapshotHandler prevents configuration debugging [apps/api/src/modules/github-integration/application/commands/pin-snapshot/pin-snapshot.handler.ts:105-119]
+- [x] [Review][Defer] Missing database foreign key constraints for RepositorySnapshot [apps/api/prisma/schema.prisma:314] — deferred, pre-existing design pattern
+- [x] [Review][Defer] Missing indexes on organizationId/actorId in RepositorySnapshot [apps/api/prisma/schema.prisma:329-331] — deferred, minor optimization
+- [x] [Review][Defer] Missing token caching for installation access tokens [apps/api/src/modules/github-integration/infrastructure/github/github-app.client.ts:154] — deferred, performance optimization
+- [x] [Review][Defer] Inconsistent audit logs when connection ID is missing [apps/api/src/modules/github-integration/application/commands/pin-snapshot/pin-snapshot.handler.ts:199-200] — deferred, minor logging inconsistency
+- [x] [Review][Defer] Out-of-scope repository validation check is redundant in PinSnapshotHandler [apps/api/src/modules/github-integration/application/commands/pin-snapshot/pin-snapshot.handler.ts:121] — deferred, pre-existing redundancy
+
