@@ -10,6 +10,7 @@ export const PBAC_ACTIONS = {
   membershipRevoke: "membership:revoke",
   metadataCheck: "pbac:metadata",
   sessionVerify: "session:verify",
+  scanRead: "scan:read",
   scanTrigger: "scan:trigger",
   snapshotCreate: "snapshot:create",
   wizardWrite: "wizard:write",
