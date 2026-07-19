@@ -1,88 +1,247 @@
-"""
-AC-030: Scanner worker clones workspace via internal snapshot service (no direct GitHub access).
-        Workspace is ephemeral — cleaned up after scan regardless of outcome.
-"""
-import os
+"""AC-030 - LCSP-113 scanner workspace setup tests."""
+
+from __future__ import annotations
+
+import io
+import tarfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
+from lcsp_workers.platform.config import WorkerConfig
+from lcsp_workers.scanner import scan_consumer as scan_consumer_module
+from lcsp_workers.scanner.scan_consumer import ScanConsumer
+from lcsp_workers.scanner.snapshot_service_client import (
+    SnapshotArchiveRequest,
+    SnapshotServiceClient,
+)
+from lcsp_workers.scanner import workspace as workspace_module
+from lcsp_workers.scanner.workspace import (
+    ArchiveMaterializationError,
+    ScannerWorkspace,
+)
+
+
+def _build_tar_gz(members: dict[str, bytes]) -> bytes:
+    archive = io.BytesIO()
+    with tarfile.open(fileobj=archive, mode="w:gz") as tar:
+        for member_name, content in members.items():
+            info = tarfile.TarInfo(name=member_name)
+            info.size = len(content)
+            tar.addfile(info, io.BytesIO(content))
+    return archive.getvalue()
+
 
 @pytest.mark.p0
-@pytest.mark.asyncio
-async def test_workspace_cloned_via_internal_service_not_github(
-    scan_job_payload: dict,
+@pytest.mark.integration
+def test_workspace_materializes_archive_and_records_stats(
     workspace_dir: Path,
 ) -> None:
-    """
-    AC-030: Workspace must be obtained from internal snapshot service, not from
-    direct GitHub API calls inside the scanner worker.
-    """
-    # RED: ScannerWorker not yet implemented.
-    # When implemented: ScannerWorker.__init__ must not import or call any
-    # GitHub OAuth client. Clone must go through SnapshotServiceClient.
-    with pytest.raises(ImportError):
-        from lcsp_workers.scanner.worker import ScannerWorker  # noqa: F401
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
+    archive = _build_tar_gz(
+        {
+            "repo/README.md": b"hello world\n",
+            "repo/src/app.py": b"print('ok')\n",
+        }
+    )
+
+    result = workspace.materialize("job-1", archive, snapshot_id="snap-1")
+
+    assert result.job_id == "job-1"
+    assert result.snapshot_id == "snap-1"
+    assert result.total_size_bytes == len(b"hello world\n") + len(b"print('ok')\n")
+    assert result.extracted_files == 2
+    assert result.skipped_files == 0
+    assert result.coverage_limited is False
+    assert (result.workspace_path / "repo" / "README.md").read_text() == "hello world\n"
+    assert (result.workspace_path / "repo" / "src" / "app.py").read_text() == "print('ok')\n"
+
+    workspace.cleanup("job-1")
+    assert not result.workspace_path.exists()
 
 
 @pytest.mark.p0
-@pytest.mark.asyncio
-async def test_workspace_cleaned_up_after_successful_scan(
-    scan_job_payload: dict,
+@pytest.mark.integration
+def test_workspace_skips_files_over_limit_and_marks_coverage_limited(
     workspace_dir: Path,
 ) -> None:
-    """
-    AC-030: Workspace directory must not exist after scan completes successfully.
-    """
-    # RED: ScannerWorker not yet implemented.
-    # When implemented: after run(), workspace_path must not exist on filesystem.
-    workspace_path = workspace_dir / "clone"
-    workspace_path.mkdir()
-    assert workspace_path.exists()
+    workspace = ScannerWorkspace(
+        root_path=workspace_dir / "scanner",
+        max_file_size_bytes=100,
+    )
+    archive = _build_tar_gz(
+        {
+            "repo/small.txt": b"small",
+            "repo/large.bin": b"x" * 101,
+        }
+    )
 
-    # Stub: after implementation, assert:
-    # await worker.run(scan_job_payload)
-    # assert not workspace_path.exists()
-    pytest.skip("AC-030 RED: ScannerWorker not implemented — cleanup contract not verifiable yet")
+    result = workspace.materialize("job-2", archive)
+
+    assert result.extracted_files == 1
+    assert result.skipped_files == 1
+    assert result.coverage_limited is True
+    assert (result.workspace_path / "repo" / "small.txt").exists()
+    assert not (result.workspace_path / "repo" / "large.bin").exists()
+
+    workspace.cleanup("job-2")
 
 
 @pytest.mark.p0
-@pytest.mark.asyncio
-async def test_workspace_cleaned_up_after_failed_scan(
-    scan_job_payload: dict,
+@pytest.mark.integration
+def test_workspace_rejects_path_traversal_and_cleans_up(
     workspace_dir: Path,
 ) -> None:
-    """
-    AC-030: Workspace directory must not exist after scan fails (except TERMINAL_PRIVACY_FAILURE).
-    """
-    # RED: ScannerWorker not yet implemented.
-    pytest.skip("AC-030 RED: ScannerWorker not implemented — cleanup on failure not verifiable yet")
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
+    archive = _build_tar_gz({"../escape.txt": b"nope"})
+
+    with pytest.raises(ArchiveMaterializationError):
+        workspace.materialize("job-3", archive)
+
+    assert not workspace.workspace_path("job-3").exists()
 
 
 @pytest.mark.p0
-@pytest.mark.asyncio
-async def test_workspace_preserved_on_terminal_privacy_failure(
-    scan_job_payload: dict,
+@pytest.mark.integration
+def test_workspace_rejects_excessive_depth(
     workspace_dir: Path,
 ) -> None:
-    """
-    AC-030: On TERMINAL_PRIVACY_FAILURE the workspace must be PRESERVED for incident investigation.
-    """
-    # RED: ScannerWorker not yet implemented.
-    pytest.skip("AC-030 RED: ScannerWorker not implemented — privacy failure preservation not verifiable yet")
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner", max_path_depth=3)
+    archive = _build_tar_gz({"repo/a/b/c/d.txt": b"deep"})
+
+    with pytest.raises(ArchiveMaterializationError):
+        workspace.materialize("job-4", archive)
+
+    assert not workspace.workspace_path("job-4").exists()
 
 
 @pytest.mark.p0
-def test_scanner_worker_does_not_import_github_oauth_client() -> None:
-    """
-    AC-030: Scanner worker module must not depend on GitHub OAuth client.
-    """
-    # RED: Module not yet importable.
-    try:
-        import lcsp_workers.scanner.worker as worker_mod
-        source = Path(worker_mod.__file__).read_text()
-        assert "github_oauth" not in source, "Scanner must not import GitHub OAuth client"
-        assert "GitHubOAuthClient" not in source
-    except ImportError:
-        pytest.skip("AC-030 RED: lcsp_workers.scanner.worker not yet implemented")
+@pytest.mark.integration
+def test_workspace_rejects_excessive_member_count(
+    workspace_dir: Path,
+) -> None:
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner", max_member_count=1)
+    archive = _build_tar_gz({
+        "repo/first.txt": b"one",
+        "repo/second.txt": b"two",
+    })
+
+    with pytest.raises(ArchiveMaterializationError):
+        workspace.materialize("job-5", archive)
+
+    assert not workspace.workspace_path("job-5").exists()
+
+
+@pytest.mark.p0
+@pytest.mark.integration
+def test_workspace_cleanup_failure_blocks_completion(
+    workspace_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
+    archive = _build_tar_gz({"repo/README.md": b"hello\n"})
+
+    workspace.materialize("job-6", archive)
+
+    def failing_rmtree(path: Path) -> None:
+        raise OSError("cleanup failed")
+
+    monkeypatch.setattr(workspace_module.shutil, "rmtree", failing_rmtree)
+
+    with pytest.raises(ArchiveMaterializationError):
+        workspace.cleanup("job-6")
+
+
+@pytest.mark.p0
+@pytest.mark.integration
+def test_workspace_rejects_decompression_bomb(
+    workspace_dir: Path,
+) -> None:
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner", max_expansion_ratio=5)
+    archive = _build_tar_gz({"repo/bomb.txt": b"A" * 1024})
+
+    with pytest.raises(ArchiveMaterializationError):
+        workspace.materialize("job-7", archive)
+
+    assert not workspace.workspace_path("job-7").exists()
+
+
+@pytest.mark.p0
+@pytest.mark.integration
+def test_scan_consumer_uses_internal_snapshot_service_and_cleans_up(
+    workspace_dir: Path,
+) -> None:
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
+    archive = _build_tar_gz({"repo/README.md": b"hello\n"})
+
+    snapshot_client = MagicMock(spec=SnapshotServiceClient)
+    snapshot_client.download_snapshot_archive.return_value = archive
+
+    config = WorkerConfig(
+        rabbitmq_url="amqp://guest:guest@localhost/",
+        rabbitmq_exchange="test.events",
+        nestjs_api_base_url="http://api.test",
+        worker_api_key="worker-test-key",
+        log_level="INFO",
+        max_retries=3,
+    )
+    consumer = ScanConsumer(config, snapshot_client=snapshot_client, workspace=workspace)
+
+    consumer.handle(
+        {
+            "scanJobId": "job-4",
+            "snapshotId": "snap-4",
+            "correlationId": "corr-4",
+        },
+        correlation_id="fallback-corr",
+    )
+
+    snapshot_client.download_snapshot_archive.assert_called_once_with(
+        SnapshotArchiveRequest(
+            snapshot_id="snap-4",
+            scan_job_id="job-4",
+            correlation_id="corr-4",
+        )
+    )
+    assert not workspace.workspace_path("job-4").exists()
+
+
+@pytest.mark.p0
+@pytest.mark.integration
+def test_scan_consumer_cleanup_runs_on_timeout(
+    workspace_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
+    archive = _build_tar_gz({"repo/README.md": b"hello\n"})
+
+    snapshot_client = MagicMock(spec=SnapshotServiceClient)
+    snapshot_client.download_snapshot_archive.return_value = archive
+
+    config = WorkerConfig(
+        rabbitmq_url="amqp://guest:guest@localhost/",
+        rabbitmq_exchange="test.events",
+        nestjs_api_base_url="http://api.test",
+        worker_api_key="worker-test-key",
+        log_level="INFO",
+        max_retries=3,
+    )
+    consumer = ScanConsumer(config, snapshot_client=snapshot_client, workspace=workspace)
+    consumer.scan_timeout_seconds = 0
+
+    times = iter([1.0, 2.0])
+    monkeypatch.setattr(scan_consumer_module.time, "monotonic", lambda: next(times))
+
+    with pytest.raises(ArchiveMaterializationError):
+        consumer.handle(
+            {
+                "scanJobId": "job-5",
+                "snapshotId": "snap-5",
+                "correlationId": "corr-5",
+            },
+            correlation_id="fallback-corr",
+        )
+
+    assert not workspace.workspace_path("job-5").exists()
+

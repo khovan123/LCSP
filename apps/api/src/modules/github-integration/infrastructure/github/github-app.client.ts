@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { createSign } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
@@ -25,6 +26,12 @@ export interface GitHubResolvedCommit {
   htmlUrl: string;
   authorDate: string | null;
   committerDate: string | null;
+}
+
+export interface GitHubRepositoryArchiveDownload {
+  stream: Readable;
+  contentType: string;
+  resolvedUrl: string;
 }
 
 @Injectable()
@@ -178,6 +185,47 @@ export class GitHubAppClient {
     };
   }
 
+  async downloadRepositoryArchive(input: {
+    installationId: string;
+    repositoryFullName: string;
+    commitSha: string;
+  }): Promise<GitHubRepositoryArchiveDownload> {
+    const accessToken = await this.createInstallationAccessToken(
+      input.installationId,
+    );
+
+    let response: Response;
+    try {
+      response = await fetch(
+        `${GITHUB_API_BASE_URL}/repos/${input.repositoryFullName}/tarball/${input.commitSha}`,
+        {
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            accept: "application/gzip",
+            "user-agent": "lcsp-api",
+          },
+        },
+      );
+    } catch {
+      throw new GitHubAppClientError("github_repository_archive_unreachable");
+    }
+
+    if (!response.ok || !response.body) {
+      throw new GitHubAppClientError("github_repository_archive_failed");
+    }
+
+    const resolvedUrl = new URL(response.url);
+    if (!this.isArchiveHostAllowed(resolvedUrl.hostname)) {
+      throw new GitHubAppClientError("github_repository_archive_redirect_rejected");
+    }
+
+    return {
+      stream: Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>),
+      contentType: response.headers.get("content-type") ?? "application/gzip",
+      resolvedUrl: response.url,
+    };
+  }
+
   private async createInstallationAccessToken(
     installationId: string,
   ): Promise<string> {
@@ -267,6 +315,12 @@ export class GitHubAppClient {
       throw new GitHubAppClientError("github_app_api_request_failed");
     }
     return (await response.json().catch(() => null)) as T | null;
+  }
+
+  private isArchiveHostAllowed(hostname: string): boolean {
+    return ["api.github.com", "codeload.github.com", "github.com"].includes(
+      hostname,
+    );
   }
 }
 
