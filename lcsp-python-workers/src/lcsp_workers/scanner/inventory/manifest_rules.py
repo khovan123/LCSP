@@ -197,9 +197,12 @@ def parse_package_json(file_path: Path, workspace: Path) -> ManifestFact:
         for key in ("dependencies", "devDependencies"):
             deps = payload.get(key)
             if isinstance(deps, dict):
-                package_names.extend(_extract_mapping_keys(deps))
+                for dep_name in deps.keys():
+                    if isinstance(dep_name, str):
+                        npm_name = _extract_npm_name_from_descriptor(dep_name)
+                        if npm_name:
+                            package_names.append(npm_name)
         config_key_names.extend([key for key in ("name", "scripts") if key in payload])
-
     return _build_fact(
         manifest_type="package_json",
         file_path=file_path,
