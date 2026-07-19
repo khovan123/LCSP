@@ -7,7 +7,6 @@ import {
 import { Readable } from "node:stream";
 
 import {
-  GITHUB_INTEGRATION_ERROR_CODES,
   REPOSITORY_CONNECTION_STATUSES,
   REPOSITORY_SCAN_JOB_STATUSES,
 } from "@lcsp/contracts/github-integration";
@@ -66,7 +65,7 @@ describe("StreamSnapshotArchiveHandler", () => {
       },
     } as unknown as PrismaService;
     const githubAppClient = {
-      downloadRepositoryArchive: jest.fn().mockImplementation(async () => {
+      downloadRepositoryArchive: jest.fn().mockImplementation(() => {
         if (options?.archiveError) throw new Error(options.archiveError);
         return (
           options?.archive ?? {

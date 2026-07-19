@@ -5,7 +5,6 @@ import { InternalSnapshotController } from "./internal-snapshot.controller.js";
 
 describe("InternalSnapshotController", () => {
   it("dispatches the snapshot archive query and streams the response", async () => {
-    const pipe = jest.fn();
     const result = {
       snapshotId: "snapshot-1",
       commitSha: "a".repeat(40),

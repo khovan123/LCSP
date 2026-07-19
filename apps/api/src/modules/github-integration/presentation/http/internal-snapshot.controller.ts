@@ -11,6 +11,10 @@ import { QueryBus } from "@nestjs/cqrs";
 import type { Response } from "express";
 
 import { InternalTokenGuard } from "../../../../platform/internal-auth/internal-token.guard.js";
+import {
+  type SnapshotArchiveStreamResult,
+  StreamSnapshotArchiveHandler,
+} from "../../application/queries/stream-snapshot-archive/stream-snapshot-archive.handler.js";
 import { StreamSnapshotArchiveQuery } from "../../application/queries/stream-snapshot-archive/stream-snapshot-archive.query.js";
 
 interface InternalSnapshotRequest {
@@ -32,7 +36,7 @@ export class InternalSnapshotController {
     const correlationId = readHeader(request.headers["x-correlation-id"]);
     const result = await this.queryBus.execute<
       StreamSnapshotArchiveQuery,
-      Awaited<ReturnType<QueryBus["execute"]>>
+      SnapshotArchiveStreamResult
     >(new StreamSnapshotArchiveQuery(snapshotId, scanJobId, correlationId));
 
     response.status(200);
