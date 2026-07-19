@@ -11,12 +11,9 @@ import { QueryBus } from "@nestjs/cqrs";
 import type { Response } from "express";
 
 import { InternalTokenGuard } from "../../../../platform/internal-auth/internal-token.guard.js";
+import type { InternalSnapshotRequest } from "./dto/internal-snapshot.request.js";
 import { type SnapshotArchiveStreamResult } from "../../application/queries/stream-snapshot-archive/stream-snapshot-archive.handler.js";
 import { StreamSnapshotArchiveQuery } from "../../application/queries/stream-snapshot-archive/stream-snapshot-archive.query.js";
-
-interface InternalSnapshotRequest {
-  headers: Record<string, string | string[] | undefined>;
-}
 
 @Controller("internal/repository-snapshots")
 @UseGuards(InternalTokenGuard)

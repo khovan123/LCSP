@@ -7,6 +7,11 @@ import { ConfigService } from "@nestjs/config";
 const GITHUB_APP_INSTALL_BASE_URL = "https://github.com/apps";
 const GITHUB_APP_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const GITHUB_API_BASE_URL = "https://api.github.com";
+const ALLOWED_ARCHIVE_HOSTS = new Set([
+  "api.github.com",
+  "codeload.github.com",
+  "github.com",
+]);
 
 export class GitHubAppClientError extends Error {}
 
@@ -322,9 +327,7 @@ export class GitHubAppClient {
   }
 
   private isArchiveHostAllowed(hostname: string): boolean {
-    return ["api.github.com", "codeload.github.com", "github.com"].includes(
-      hostname,
-    );
+    return ALLOWED_ARCHIVE_HOSTS.has(hostname);
   }
 }
 
