@@ -34,7 +34,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
   async execute(
     query: StreamSnapshotArchiveQuery,
   ): Promise<SnapshotArchiveStreamResult> {
-    const scanJob = (await this.prisma.repositoryScanJob.findUnique({
+    const scanJob = await this.prisma.repositoryScanJob.findUnique({
       where: { id: query.scanJobId },
       select: {
         id: true,
@@ -42,14 +42,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
         organizationId: true,
         status: true,
       },
-    })) as unknown as
-      | {
-          id: string;
-          snapshotId: string;
-          organizationId: string;
-          status: string;
-        }
-      | null;
+    });
 
     if (!scanJob || scanJob.snapshotId !== query.snapshotId) {
       throw new ConflictException({
@@ -68,7 +61,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
       });
     }
 
-    const snapshot = (await this.prisma.repositorySnapshot.findUnique({
+    const snapshot = await this.prisma.repositorySnapshot.findUnique({
       where: { id: query.snapshotId },
       select: {
         id: true,
@@ -78,16 +71,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
         commitSha: true,
         status: true,
       },
-    })) as unknown as
-      | {
-          id: string;
-          organizationId: string;
-          connectionId: string;
-          repositoryFullName: string;
-          commitSha: string;
-          status: string;
-        }
-      | null;
+    });
 
     if (!snapshot || snapshot.organizationId !== scanJob.organizationId) {
       throw new NotFoundException({
@@ -96,7 +80,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
       });
     }
 
-    const connection = (await this.prisma.repositoryConnection.findUnique({
+    const connection = await this.prisma.repositoryConnection.findUnique({
       where: { id: snapshot.connectionId },
       select: {
         id: true,
@@ -104,14 +88,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
         organizationId: true,
         status: true,
       },
-    })) as unknown as
-      | {
-          id: string;
-          installationId: string;
-          organizationId: string;
-          status: string;
-        }
-      | null;
+    });
 
     if (
       !connection ||
