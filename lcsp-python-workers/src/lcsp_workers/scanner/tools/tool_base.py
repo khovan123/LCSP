@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from pathlib import Path
+from typing import Protocol, TypeVar
+
+
+TResult = TypeVar("TResult")
 
 
 OUTCOME_SUCCESS = "success"
@@ -18,6 +22,6 @@ class ToolExecutionResult:
     messages: list[str] = field(default_factory=list)
 
 
-class ScannerTool(Protocol):
-    def run(self, workspace_path: str) -> ToolExecutionResult:
+class ScannerTool(Protocol[TResult]):
+    def run(self, workspace_path: str | Path) -> TResult:
         ...
