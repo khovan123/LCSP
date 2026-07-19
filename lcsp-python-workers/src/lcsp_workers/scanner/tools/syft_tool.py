@@ -52,12 +52,23 @@ class SyftTool:
 
     def run(self, workspace_path: str | Path) -> SyftRunResult:
         workspace = Path(workspace_path)
-        config_hash = self._sha256_file(self._config_path)
+        try:
+            config_hash = self._sha256_file(self._config_path)
+        except OSError as error:
+            return SyftRunResult(
+                entries=[],
+                execution=ToolExecutionResult(
+                    tool_name=DEFAULT_TOOL_NAME,
+                    tool_version="unknown",
+                    outcome=OUTCOME_TOOL_FAILURE,
+                    config_hash="sha256:unavailable",
+                    messages=[f"syft config unavailable: {error}"],
+                ),
+            )
 
         version_result = self._read_version(config_hash)
         if version_result.outcome != OUTCOME_SUCCESS:
             return SyftRunResult(entries=[], execution=version_result)
-
         command = [
             self._syft_binary,
             f"dir:{workspace}",
