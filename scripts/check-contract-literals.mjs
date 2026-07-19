@@ -49,7 +49,13 @@ import {
   SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
 import { SERVICE_HEALTH_STATUSES } from "@lcsp/contracts/shared";
-import { SCAN_ERROR_CODES, SCAN_JOB_GUIDANCE } from "@lcsp/contracts/scan";
+import {
+  SCAN_CALLBACK_STATUSES,
+  SCAN_ERROR_CODES,
+  SCAN_EVENT_TYPES,
+  SCAN_JOB_GUIDANCE,
+  TECHNICAL_EVIDENCE_REPORT_STATUSES,
+} from "@lcsp/contracts/scan";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -88,10 +94,13 @@ const canonicalValues = new Set(
     REPOSITORY_SNAPSHOT_STATUSES,
     REQUIRED_ACTIONS,
     REVOKE_MEMBERSHIP_ERROR_CODES,
+    SCAN_CALLBACK_STATUSES,
     SCAN_ERROR_CODES,
+    SCAN_EVENT_TYPES,
     SCAN_JOB_GUIDANCE,
     SERVICE_HEALTH_STATUSES,
     SUBJECT_ROLES,
+    TECHNICAL_EVIDENCE_REPORT_STATUSES,
     WIZARD_EVENT_TYPES,
     WIZARD_STATUS_CODES,
     WORKSPACE_CAPABILITY_SOURCES,

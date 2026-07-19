@@ -34,6 +34,7 @@
     "./pbac/policy.types": "./src/pbac/policy.types.ts",
     "./pbac/types": "./src/pbac/types.ts",
     "./scan": "./src/scan/index.ts",
+    "./scan/callback": "./src/scan/callback.ts",
     "./scan/codes": "./src/scan/codes.ts",
     "./scan/guidance": "./src/scan/guidance.ts",
     "./shared": "./src/shared/index.ts",

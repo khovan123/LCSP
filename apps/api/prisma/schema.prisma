@@ -349,6 +349,25 @@ model RepositoryScanJob {
   @@index([snapshotId])
 }
 
+model TechnicalEvidenceReport {
+  id              String   @id
+  scanJobId       String   @unique
+  assessmentId    String
+  organizationId  String
+  snapshotId      String
+  toolsVersion    Json
+  configHash      Json
+  evidencePayload Json
+  privacyFlags    Json
+  schemaVersion   String
+  status          String   @default("accepted")
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+
+  @@index([assessmentId])
+  @@index([scanJobId])
+}
+
 model GitHubAppInstallState {
   id             String   @id
   state          String   @unique

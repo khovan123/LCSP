@@ -3,7 +3,7 @@ task_id: MW-scan-002
 module: scan
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.3
 depends_on:
   - scan/01-scan-job-status-endpoint.md
@@ -126,3 +126,12 @@ model TechnicalEvidenceReport {
 - `TechnicalEvidenceReport` created with schema version, tool versions, config hashes.
 - Outbox message `scan.evidence-accepted` triggers downstream.
 - Failed scanner reports create rejected evidence record and transition job to `FAILED`.
+
+## Implementation Evidence
+
+- Added worker-authenticated `POST /internal/scan-jobs/:scanJobId/callback` using constant-time API-key comparison and correlation propagation.
+- Added schema/provenance validation for supported callback status, schema version, tool versions, config hashes, failed-job error code, and path/body job identity.
+- Privacy validation rejects source/raw-content keys, known secret patterns, `containsSourceCode != false`, and `secretsRedacted != true` before evidence persistence.
+- Added the `TechnicalEvidenceReport` Prisma model and migration. Report creation, guarded job transition, accepted-evidence outbox event, and audit event persist in one transaction.
+- Successful and partial evidence complete the job; scanner failures create a rejected report and transition the job to `FAILED` without emitting the accepted-evidence event.
+- Verification passes 19 scan unit tests, 8 callback E2E tests covering T01-T09, ESLint, TypeScript, contract/import policies, and `git diff --check`.
