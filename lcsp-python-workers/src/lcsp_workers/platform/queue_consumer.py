@@ -1,8 +1,10 @@
 import json
+import os
 import signal
 import pika
 
 from lcsp_workers.platform.correlation import extract_from_amqp_headers, set_correlation_id
+from lcsp_workers.platform.health import DEFAULT_HEALTH_PORT, HealthServer
 from lcsp_workers.platform.logging import get_logger
 
 logger = get_logger(__name__)
@@ -16,6 +18,8 @@ class ConsumerBase:
         self._config = config
         self._pbac = pbac_client
         self._shutdown = False
+        self._channel = None
+        self._health_server: HealthServer | None = None
 
     def handle(self, message: dict, correlation_id: str) -> None:
         """Override with domain logic."""
@@ -23,16 +27,32 @@ class ConsumerBase:
 
     def run(self) -> None:
         signal.signal(signal.SIGTERM, self._handle_sigterm)
-        conn = pika.BlockingConnection(pika.URLParameters(self._config.rabbitmq_url))
-        channel = conn.channel()
-        channel.queue_declare(queue=self.queue_name, durable=True)
-        channel.basic_qos(prefetch_count=1)
-        channel.basic_consume(self.queue_name, self._on_message)
-        
-        while not self._shutdown:
-            conn.process_data_events(time_limit=1)
-            
-        conn.close()
+        conn = None
+        self._health_server = HealthServer(
+            worker_name=self.__class__.__name__,
+            rabbitmq_connected_provider=self._is_rabbitmq_connected,
+            port=self._read_health_port(),
+        )
+
+        try:
+            self._health_server.start()
+
+            conn = pika.BlockingConnection(pika.URLParameters(self._config.rabbitmq_url))
+            channel = conn.channel()
+            self._channel = channel
+            channel.queue_declare(queue=self.queue_name, durable=True)
+            channel.basic_qos(prefetch_count=1)
+            channel.basic_consume(self.queue_name, self._on_message)
+
+            while not self._shutdown:
+                conn.process_data_events(time_limit=1)
+        finally:
+            self._channel = None
+            if conn is not None:
+                conn.close()
+            if self._health_server is not None:
+                self._health_server.stop()
+                self._health_server = None
 
     def _on_message(self, ch, method, properties, body) -> None:
         headers = properties.headers or {}
@@ -81,3 +101,24 @@ class ConsumerBase:
         if x_death:
             return int(x_death[0].get("count", 1))
         return 0
+
+    def _is_rabbitmq_connected(self) -> bool:
+        channel = self._channel
+        if channel is None:
+            return False
+        return bool(getattr(channel, "is_open", False))
+
+    def _read_health_port(self) -> int:
+        raw = os.getenv("HEALTH_PORT")
+        if raw is None:
+            return DEFAULT_HEALTH_PORT
+
+        try:
+            port = int(raw)
+        except (TypeError, ValueError):
+            return DEFAULT_HEALTH_PORT
+
+        if port <= 0 or port > 65535:
+            return DEFAULT_HEALTH_PORT
+
+        return port
