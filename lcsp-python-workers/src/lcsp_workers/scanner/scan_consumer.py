@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from lcsp_workers.platform.correlation import set_correlation_id
 from lcsp_workers.platform.logging import get_logger
@@ -43,7 +43,6 @@ class ScanConsumer(ConsumerBase):
         )
         self._workspace = workspace or ScannerWorkspace()
         self._syft_tool = syft_tool or SyftTool()
-        self._tool_registry = ToolRegistry()
 
     def handle(self, message: dict, correlation_id: str) -> None:
         started_at = time.monotonic()
@@ -59,6 +58,7 @@ class ScanConsumer(ConsumerBase):
         )
 
         result = None
+        tool_registry = ToolRegistry()
         try:
             result = self._workspace.materialize(
                 envelope.scan_job_id,
@@ -77,7 +77,7 @@ class ScanConsumer(ConsumerBase):
             )
 
             syft_result = self._syft_tool.run(result.workspace_path)
-            self._tool_registry.register(syft_result.execution)
+            tool_registry.register(syft_result.execution)
 
             logger.info(
                 "SCAN_TOOL_EXECUTED",
@@ -86,6 +86,11 @@ class ScanConsumer(ConsumerBase):
                 outcome=syft_result.execution.outcome,
                 config_hash=syft_result.execution.config_hash,
                 sbom_entries=len(syft_result.entries),
+            )
+
+            logger.info(
+                "SCAN_TOOL_PROVENANCE_RECORDED",
+                tool_provenance=[asdict(item) for item in tool_registry.all()],
             )
 
             if syft_result.execution.outcome != OUTCOME_SUCCESS:
