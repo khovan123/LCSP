@@ -49,6 +49,7 @@ import {
   SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
 import { SERVICE_HEALTH_STATUSES } from "@lcsp/contracts/shared";
+import { SCAN_ERROR_CODES, SCAN_JOB_GUIDANCE } from "@lcsp/contracts/scan";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -87,6 +88,8 @@ const canonicalValues = new Set(
     REPOSITORY_SNAPSHOT_STATUSES,
     REQUIRED_ACTIONS,
     REVOKE_MEMBERSHIP_ERROR_CODES,
+    SCAN_ERROR_CODES,
+    SCAN_JOB_GUIDANCE,
     SERVICE_HEALTH_STATUSES,
     SUBJECT_ROLES,
     WIZARD_EVENT_TYPES,
@@ -132,13 +135,11 @@ for (const sourceRoot of sourceRoots) {
           ts.isNoSubstitutionTemplateLiteral(node)) &&
         canonicalValues.has(node.text)
       ) {
-        if (
-          !(
-            isTestFile &&
-            node.text === SERVICE_HEALTH_STATUSES.ok &&
-            !file.includes(`${join("modules", "health")}`)
-          )
-        ) {
+        if (!(
+          isTestFile &&
+          node.text === SERVICE_HEALTH_STATUSES.ok &&
+          !file.includes(`${join("modules", "health")}`)
+        )) {
           const { line } = sourceFile.getLineAndCharacterOfPosition(
             node.getStart(sourceFile),
           );

@@ -173,6 +173,7 @@ export async function seedAuthWorkspaceFixture(
         PBAC_ACTIONS.assessmentRead,
         PBAC_ACTIONS.assessmentList,
         PBAC_ACTIONS.githubConnect,
+        PBAC_ACTIONS.scanRead,
         PBAC_ACTIONS.scanTrigger,
         PBAC_ACTIONS.snapshotCreate,
       ],
