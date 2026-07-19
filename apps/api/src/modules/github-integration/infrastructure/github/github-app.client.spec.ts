@@ -74,7 +74,7 @@ describe("GitHubAppClient.resolveCommit", () => {
     expect(jwt.split(".")).toHaveLength(3);
     expect(
       JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString()),
-    ).toMatchObject({ iss: "123456" });
+    ).toMatchObject({ iss: 123456 });
 
     expect(fetchMock.mock.calls[1][1]).toMatchObject({
       headers: expect.objectContaining({
