@@ -16,6 +16,7 @@ from lcsp_workers.scanner.snapshot_service_client import (
     SnapshotArchiveRequest,
     SnapshotServiceClient,
 )
+from lcsp_workers.scanner.tools.semgrep_tool import SemgrepRunResult
 from lcsp_workers.scanner.tools.syft_tool import SyftRunResult
 from lcsp_workers.scanner.tools.tool_base import OUTCOME_SUCCESS, ToolExecutionResult
 from lcsp_workers.scanner import workspace as workspace_module
@@ -35,6 +36,29 @@ def _mock_syft_result() -> SyftRunResult:
             config_hash="sha256:test",
             messages=[],
         ),
+    )
+
+
+def _mock_semgrep_result() -> SemgrepRunResult:
+    return SemgrepRunResult(
+        findings=[],
+        executions=[
+            ToolExecutionResult(
+                tool_name="semgrep_ai_usage",
+                tool_version="semgrep 1.99.0",
+                outcome=OUTCOME_SUCCESS,
+                config_hash="sha256:ai-test",
+                messages=[],
+            ),
+            ToolExecutionResult(
+                tool_name="semgrep_secret_detect",
+                tool_version="semgrep 1.99.0",
+                outcome=OUTCOME_SUCCESS,
+                config_hash="sha256:secret-test",
+                messages=[],
+            ),
+        ],
+        redaction_applied=False,
     )
 
 
@@ -203,11 +227,14 @@ def test_scan_consumer_uses_internal_snapshot_service_and_cleans_up(
     )
     syft_tool = MagicMock()
     syft_tool.run.return_value = _mock_syft_result()
+    semgrep_tool = MagicMock()
+    semgrep_tool.run.return_value = _mock_semgrep_result()
     consumer = ScanConsumer(
         config,
         snapshot_client=snapshot_client,
         workspace=workspace,
         syft_tool=syft_tool,
+        semgrep_tool=semgrep_tool,
     )
 
     consumer.handle(
@@ -226,6 +253,8 @@ def test_scan_consumer_uses_internal_snapshot_service_and_cleans_up(
             correlation_id="corr-4",
         )
     )
+    syft_tool.run.assert_called_once()
+    semgrep_tool.run.assert_called_once()
     assert not workspace.workspace_path("job-4").exists()
 
 
@@ -251,11 +280,14 @@ def test_scan_consumer_cleanup_runs_on_timeout(
     )
     syft_tool = MagicMock()
     syft_tool.run.return_value = _mock_syft_result()
+    semgrep_tool = MagicMock()
+    semgrep_tool.run.return_value = _mock_semgrep_result()
     consumer = ScanConsumer(
         config,
         snapshot_client=snapshot_client,
         workspace=workspace,
         syft_tool=syft_tool,
+        semgrep_tool=semgrep_tool,
     )
     consumer.scan_timeout_seconds = 0
 
