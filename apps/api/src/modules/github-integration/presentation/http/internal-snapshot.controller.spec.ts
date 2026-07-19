@@ -15,7 +15,9 @@ describe("InternalSnapshotController", () => {
       stream: { pipe: jest.fn() },
     };
     const execute = jest.fn().mockResolvedValue(result);
-    const controller = new InternalSnapshotController({ execute } as unknown as QueryBus);
+    const controller = new InternalSnapshotController({
+      execute,
+    } as unknown as QueryBus);
     const setHeader = jest.fn();
     const response = {
       status: jest.fn().mockReturnValue(undefined),

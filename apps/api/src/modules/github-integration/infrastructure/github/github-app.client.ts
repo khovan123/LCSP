@@ -216,11 +216,15 @@ export class GitHubAppClient {
 
     const resolvedUrl = new URL(response.url);
     if (!this.isArchiveHostAllowed(resolvedUrl.hostname)) {
-      throw new GitHubAppClientError("github_repository_archive_redirect_rejected");
+      throw new GitHubAppClientError(
+        "github_repository_archive_redirect_rejected",
+      );
     }
 
     return {
-      stream: Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>),
+      stream: Readable.fromWeb(
+        response.body as globalThis.ReadableStream<Uint8Array>,
+      ),
       contentType: response.headers.get("content-type") ?? "application/gzip",
       resolvedUrl: response.url,
     };

@@ -25,9 +25,7 @@ type SnapshotArchiveStreamResult = {
 };
 
 @QueryHandler(StreamSnapshotArchiveQuery)
-export class StreamSnapshotArchiveHandler
-  implements IQueryHandler<StreamSnapshotArchiveQuery>
-{
+export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapshotArchiveQuery> {
   constructor(
     private readonly prisma: PrismaService,
     private readonly githubAppClient: GitHubAppClient,

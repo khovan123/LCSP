@@ -1,4 +1,12 @@
-import { Controller, Get, Param, Query, Req, Res, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import { QueryBus } from "@nestjs/cqrs";
 import type { Response } from "express";
 
@@ -28,7 +36,10 @@ export class InternalSnapshotController {
     >(new StreamSnapshotArchiveQuery(snapshotId, scanJobId, correlationId));
 
     response.status(200);
-    response.setHeader("content-type", result.contentType ?? "application/gzip");
+    response.setHeader(
+      "content-type",
+      result.contentType ?? "application/gzip",
+    );
     response.setHeader("cache-control", "no-store");
     response.setHeader("x-snapshot-id", result.snapshotId);
     response.setHeader("x-commit-sha", result.commitSha);

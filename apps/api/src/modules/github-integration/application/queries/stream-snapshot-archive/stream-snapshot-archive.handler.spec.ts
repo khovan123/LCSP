@@ -1,8 +1,16 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import { BadGatewayException, ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  BadGatewayException,
+  ConflictException,
+  NotFoundException,
+} from "@nestjs/common";
 import { Readable } from "node:stream";
 
-import { GITHUB_INTEGRATION_ERROR_CODES, REPOSITORY_CONNECTION_STATUSES, REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
+import {
+  GITHUB_INTEGRATION_ERROR_CODES,
+  REPOSITORY_CONNECTION_STATUSES,
+  REPOSITORY_SCAN_JOB_STATUSES,
+} from "@lcsp/contracts/github-integration";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { GitHubAppClient } from "../../../infrastructure/github/github-app.client.js";
@@ -37,22 +45,37 @@ describe("StreamSnapshotArchiveHandler", () => {
     scanJob?: typeof scanJob | null;
     snapshot?: typeof snapshot | null;
     connection?: typeof connection | null;
-    archive?: { contentType: string; resolvedUrl: string; stream: NodeJS.ReadableStream };
+    archive?: {
+      contentType: string;
+      resolvedUrl: string;
+      stream: NodeJS.ReadableStream;
+    };
     archiveError?: string;
   }) {
     const prisma = {
-      repositoryScanJob: { findUnique: jest.fn().mockResolvedValue(options?.scanJob ?? scanJob) },
-      repositorySnapshot: { findUnique: jest.fn().mockResolvedValue(options?.snapshot ?? snapshot) },
-      repositoryConnection: { findUnique: jest.fn().mockResolvedValue(options?.connection ?? connection) },
+      repositoryScanJob: {
+        findUnique: jest.fn().mockResolvedValue(options?.scanJob ?? scanJob),
+      },
+      repositorySnapshot: {
+        findUnique: jest.fn().mockResolvedValue(options?.snapshot ?? snapshot),
+      },
+      repositoryConnection: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(options?.connection ?? connection),
+      },
     } as unknown as PrismaService;
     const githubAppClient = {
       downloadRepositoryArchive: jest.fn().mockImplementation(async () => {
         if (options?.archiveError) throw new Error(options.archiveError);
-        return options?.archive ?? {
-          contentType: "application/gzip",
-          resolvedUrl: "https://codeload.github.com/acme/example-repo/tar.gz/a",
-          stream: Readable.from([Buffer.from("archive")]),
-        };
+        return (
+          options?.archive ?? {
+            contentType: "application/gzip",
+            resolvedUrl:
+              "https://codeload.github.com/acme/example-repo/tar.gz/a",
+            stream: Readable.from([Buffer.from("archive")]),
+          }
+        );
       }),
     } as unknown as GitHubAppClient;
     return new StreamSnapshotArchiveHandler(prisma, githubAppClient);
@@ -76,7 +99,9 @@ describe("StreamSnapshotArchiveHandler", () => {
     });
 
     await expect(
-      handler.execute(new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1")),
+      handler.execute(
+        new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1"),
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -84,15 +109,21 @@ describe("StreamSnapshotArchiveHandler", () => {
     const handler = buildHandler({ snapshot: null });
 
     await expect(
-      handler.execute(new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1")),
+      handler.execute(
+        new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1"),
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it("maps archive retrieval failure to bad gateway", async () => {
-    const handler = buildHandler({ archiveError: "github_repository_archive_unreachable" });
+    const handler = buildHandler({
+      archiveError: "github_repository_archive_unreachable",
+    });
 
     await expect(
-      handler.execute(new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1")),
+      handler.execute(
+        new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1"),
+      ),
     ).rejects.toBeInstanceOf(BadGatewayException);
   });
 });
