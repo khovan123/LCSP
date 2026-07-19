@@ -8,6 +8,8 @@ epic_story: 1.5
 depends_on:
   - auth-workspace/11-accept-developer-invitation-endpoint.md
   - auth-workspace/12-revoke-developer-membership-endpoint.md
+  - auth-workspace/15-preview-developer-invitation-endpoint.md
+  - auth-workspace/16-developer-scoped-workspace-context-endpoint.md
   - evidence/01-get-technical-evidence-endpoint.md
   - web/02-workspace-dashboard-page.md
 ---
@@ -30,6 +32,9 @@ Covers EXPERIENCE.md Flow 4 ("Developer handles a scoped task") end to end: a De
 | `apps/web/src/lib/api/auth-client.ts` | Modify | Add `acceptInvitation()` wrapper |
 | `apps/web/src/lib/api/evidence-client.ts` | Create | `GET /assessments/:id/evidence` wrapper |
 | `apps/web/src/app/api/auth/accept-invitation/route.ts` | Create | BFF route — sets session cookie from `POST /auth/accept-invitation` response |
+| `apps/web/src/app/api/auth/invitations/preview/route.ts` | Create | Public BFF route — forwards token in JSON body and returns display-safe preview only |
+| `apps/web/src/app/api/workspace/developer-task/route.ts` | Create | Protected BFF route — reads httpOnly session cookie and proxies current scoped context |
+| `apps/web/src/app/api/assessments/[id]/evidence/route.ts` | Create | Protected BFF route — reads httpOnly session cookie and proxies redacted evidence |
 
 ## UI Components — Accept Invitation
 
@@ -52,11 +57,11 @@ Covers EXPERIENCE.md Flow 4 ("Developer handles a scoped task") end to end: a De
 ## Business Rules
 
 1. `/invite/accept?token=...` reads `invitation_token` from the URL query — this is the one legitimate case of a credential-adjacent value in a URL, because it is a single-use invitation token, not a session token or password (distinct from the "no session token/password in URL" rule elsewhere).
-2. On successful `POST /auth/accept-invitation` → BFF route sets the returned `session_token` as an httpOnly cookie (same mechanism as `MW-web-001`) and redirects to the scoped task workspace for the invitation's `assessment_id` (or to a task-selection view if the invitation was not scoped to one assessment). `session_token` itself never reaches client JS or the URL.
+2. Before acceptance, the page calls the MW-auth-015 preview contract through the BFF and shows its exact organization, assessment, scope, actions, and expiry projection. On successful `POST /auth/accept-invitation`, the BFF sets the returned `session_token` as an httpOnly cookie (same mechanism as `MW-web-001`) and redirects using the authoritative response scope (or to a task-selection view for organization scope). `session_token` itself never reaches client JS or the URL.
 3. `INVITATION_INVALID` (not found, expired, or already consumed) → single business-language message: "This invitation link is no longer valid. Ask your organization owner for a new one." (do not distinguish expired vs. consumed vs. not-found — same non-leaking principle as sign-in's invalid-credentials message).
 4. `EMAIL_ALREADY_EXISTS` → "An account already exists for this email. Sign in instead." with a link to `/sign-in`.
 5. `PASSWORD_TOO_SHORT` → inline field-level business-language validation, mirrors `MW-web-001`'s password rules.
-6. Scoped task workspace fetches `GET /assessments/:id/evidence` on mount. Response `granted_actions`/scope shown are a UI-only hint (server enforces PBAC independently, per `MW-web-002` rule 2) — this page must never assume it can show something the API didn't return.
+6. Scoped task workspace fetches MW-auth-016 current context and `GET /assessments/:id/evidence` through protected BFF routes on mount. Response `granted_actions`/scope shown are UI-only hints (server enforces PBAC independently, per `MW-web-002` rule 2) — this page must never assume it can show something the APIs did not return.
 7. `file_path` and `line_number` are `null` for Developer-scoped requests (server already redacts them) — the UI must omit these fields from the findings list entirely rather than rendering `null`/"N/A".
 8. On `401 SESSION_INVALID` while fetching evidence → redirect to `/sign-in` (membership/session was fully revoked or expired, mirrors `MW-web-002` rule 5).
 9. On `403 PBAC_DENIED` while fetching evidence (session still valid, scope narrowed) → show the revoked banner inline; do not redirect away, so the Developer understands *why* they lost access rather than landing on an unexplained sign-in screen.
