@@ -2,12 +2,23 @@ import { Module } from "@nestjs/common";
 import { CqrsModule } from "@nestjs/cqrs";
 
 import { PbacModule } from "../../platform/pbac/pbac.module.js";
+import { ProcessScanCallbackHandler } from "./application/commands/process-scan-callback/process-scan-callback.handler.js";
 import { GetScanJobHandler } from "./application/queries/get-scan-job/get-scan-job.handler.js";
-import { ScanController } from "./presentation/http/scan.controller.js";
+import { EvidenceSchemaValidatorService } from "./application/services/scan/evidence-schema-validator.service.js";
+import {
+  InternalScanController,
+  ScanController,
+} from "./presentation/http/scan.controller.js";
+import { WorkerApiKeyGuard } from "./presentation/http/worker-api-key.guard.js";
 
 @Module({
   imports: [CqrsModule, PbacModule],
-  controllers: [ScanController],
-  providers: [GetScanJobHandler],
+  controllers: [ScanController, InternalScanController],
+  providers: [
+    GetScanJobHandler,
+    ProcessScanCallbackHandler,
+    EvidenceSchemaValidatorService,
+    WorkerApiKeyGuard,
+  ],
 })
 export class ScanModule {}

@@ -1,10 +1,12 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import type { QueryBus } from "@nestjs/cqrs";
+import type { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { SCAN_CALLBACK_STATUSES } from "@lcsp/contracts/scan";
 
 import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-metadata.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
-import { ScanController } from "./scan.controller.js";
+import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
+import { InternalScanController, ScanController } from "./scan.controller.js";
 
 describe("ScanController", () => {
   it("requires the scan:read PBAC action", () => {
@@ -47,6 +49,39 @@ describe("ScanController", () => {
       organizationId: "org-1",
       subjectRole: SUBJECT_ROLES.developer,
       scope: "assessment-1",
+      correlationId: "corr-1",
+    });
+  });
+});
+
+describe("InternalScanController", () => {
+  it("dispatches the worker callback command", async () => {
+    const execute = jest.fn<(command: unknown) => Promise<unknown>>();
+    execute.mockResolvedValue({ accepted: true });
+    const controller = new InternalScanController({
+      execute,
+    } as unknown as CommandBus);
+    const payload = {
+      scan_job_id: "scan-job-1",
+      tools_version: { semgrep: "1.0.0" },
+      config_hash: { semgrep: "sha256:abc" },
+      evidence_payload: { findings: [] },
+      privacy_flags: {
+        containsSourceCode: false,
+        secretsRedacted: true,
+      },
+      schema_version: "1.0.0",
+      status: SCAN_CALLBACK_STATUSES.success,
+    };
+
+    await controller.processCallback("scan-job-1", payload, "corr-1");
+
+    expect(execute.mock.calls[0]?.[0]).toBeInstanceOf(
+      ProcessScanCallbackCommand,
+    );
+    expect(execute.mock.calls[0]?.[0]).toMatchObject({
+      scanJobId: "scan-job-1",
+      payload,
       correlationId: "corr-1",
     });
   });
