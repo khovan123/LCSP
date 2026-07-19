@@ -26,7 +26,6 @@ describe("InternalSnapshotController", () => {
     await controller.streamArchive(
       "snapshot-1",
       "scan-job-1",
-      "scan-job-1",
       { headers: { "x-correlation-id": "corr-1" } } as never,
       response,
     );

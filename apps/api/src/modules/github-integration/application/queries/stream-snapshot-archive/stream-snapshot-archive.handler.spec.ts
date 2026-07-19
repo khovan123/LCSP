@@ -51,17 +51,30 @@ describe("StreamSnapshotArchiveHandler", () => {
     };
     archiveError?: string;
   }) {
+    const hasOption = <K extends keyof NonNullable<typeof options>>(
+      key: K,
+    ): boolean =>
+      Boolean(options && Object.prototype.hasOwnProperty.call(options, key));
+
     const prisma = {
       repositoryScanJob: {
-        findUnique: jest.fn().mockResolvedValue(options?.scanJob ?? scanJob),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(hasOption("scanJob") ? options?.scanJob : scanJob),
       },
       repositorySnapshot: {
-        findUnique: jest.fn().mockResolvedValue(options?.snapshot ?? snapshot),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(
+            hasOption("snapshot") ? options?.snapshot : snapshot,
+          ),
       },
       repositoryConnection: {
         findUnique: jest
           .fn()
-          .mockResolvedValue(options?.connection ?? connection),
+          .mockResolvedValue(
+            hasOption("connection") ? options?.connection : connection,
+          ),
       },
     } as unknown as PrismaService;
     const githubAppClient = {
