@@ -6,6 +6,7 @@ export const GITHUB_INTEGRATION_ERROR_CODES = {
   permissionsInsufficient: "PERMISSIONS_INSUFFICIENT",
   refNotResolvable: "REF_NOT_RESOLVABLE",
   refOutOfScope: "REF_OUT_OF_SCOPE",
+  snapshotScanMismatch: "SNAPSHOT_SCAN_MISMATCH",
   snapshotNotFound: "SNAPSHOT_NOT_FOUND",
   snapshotRetrievalFailed: "SNAPSHOT_RETRIEVAL_FAILED",
   assessmentStateInvalid: "ASSESSMENT_STATE_INVALID",
