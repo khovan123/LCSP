@@ -141,9 +141,11 @@ class ScanConsumer(ConsumerBase):
         tool_registry: ToolRegistry,
         semgrep_result: SemgrepRunResult,
     ) -> None:
+        from .tools.semgrep_tool import AI_USAGE_TOOL_NAME
+
         for execution in semgrep_result.executions:
             context: dict[str, object] = {}
-            if execution.tool_name == "semgrep_ai_usage":
+            if execution.tool_name == AI_USAGE_TOOL_NAME:
                 context["semgrep_findings"] = len(semgrep_result.findings)
             else:
                 context["redaction_applied"] = semgrep_result.redaction_applied
