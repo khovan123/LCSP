@@ -33,9 +33,10 @@ class ConsumerBase:
             rabbitmq_connected_provider=self._is_rabbitmq_connected,
             port=self._read_health_port(),
         )
-        self._health_server.start()
 
         try:
+            self._health_server.start()
+
             conn = pika.BlockingConnection(pika.URLParameters(self._config.rabbitmq_url))
             channel = conn.channel()
             self._channel = channel
