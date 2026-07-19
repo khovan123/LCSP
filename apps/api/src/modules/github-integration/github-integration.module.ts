@@ -2,10 +2,12 @@ import { Module } from "@nestjs/common";
 import { CqrsModule } from "@nestjs/cqrs";
 
 import { PbacModule } from "../../platform/pbac/pbac.module.js";
+import { InternalTokenGuard } from "../../platform/internal-auth/internal-token.guard.js";
 import { GitHubAppCallbackHandler } from "./application/commands/github-app-callback/github-app-callback.handler.js";
 import { GitHubAppStartHandler } from "./application/commands/github-app-start/github-app-start.handler.js";
 import { PinSnapshotHandler } from "./application/commands/pin-snapshot/pin-snapshot.handler.js";
 import { TriggerScanHandler } from "./application/commands/trigger-scan/trigger-scan.handler.js";
+import { StreamSnapshotArchiveHandler } from "./application/queries/stream-snapshot-archive/stream-snapshot-archive.handler.js";
 import { GITHUB_APP_INSTALL_STATE_REPOSITORY } from "./application/ports/persistence/github-app-install-state.repository.js";
 import { REPOSITORY_CONNECTION_REPOSITORY } from "./application/ports/persistence/repository-connection.repository.js";
 import { REPOSITORY_SNAPSHOT_REPOSITORY } from "./application/ports/persistence/repository-snapshot.repository.js";
@@ -15,18 +17,21 @@ import { PrismaGitHubAppInstallStateRepository } from "./infrastructure/persiste
 import { PrismaRepositoryConnectionRepository } from "./infrastructure/persistence/prisma-github-integration.repository.js";
 import { PrismaRepositorySnapshotRepository } from "./infrastructure/persistence/prisma-repository-snapshot.repository.js";
 import { PrismaRepositoryScanJobRepository } from "./infrastructure/persistence/prisma-repository-scan-job.repository.js";
+import { InternalSnapshotController } from "./presentation/http/internal-snapshot.controller.js";
 import { GitHubIntegrationController } from "./presentation/http/github-integration.controller.js";
 import { ScanTriggerGuard } from "./presentation/http/scan-trigger.guard.js";
 
 @Module({
   imports: [CqrsModule, PbacModule],
-  controllers: [GitHubIntegrationController],
+  controllers: [GitHubIntegrationController, InternalSnapshotController],
   providers: [
     GitHubAppStartHandler,
     GitHubAppCallbackHandler,
     PinSnapshotHandler,
     TriggerScanHandler,
+    StreamSnapshotArchiveHandler,
     GitHubAppClient,
+    InternalTokenGuard,
     PrismaGitHubAppInstallStateRepository,
     PrismaRepositoryConnectionRepository,
     PrismaRepositorySnapshotRepository,
