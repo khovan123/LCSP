@@ -16,11 +16,26 @@ from lcsp_workers.scanner.snapshot_service_client import (
     SnapshotArchiveRequest,
     SnapshotServiceClient,
 )
+from lcsp_workers.scanner.tools.syft_tool import SyftRunResult
+from lcsp_workers.scanner.tools.tool_base import OUTCOME_SUCCESS, ToolExecutionResult
 from lcsp_workers.scanner import workspace as workspace_module
 from lcsp_workers.scanner.workspace import (
     ArchiveMaterializationError,
     ScannerWorkspace,
 )
+
+
+def _mock_syft_result() -> SyftRunResult:
+    return SyftRunResult(
+        entries=[],
+        execution=ToolExecutionResult(
+            tool_name="syft",
+            tool_version="syft v1.0.0",
+            outcome=OUTCOME_SUCCESS,
+            config_hash="sha256:test",
+            messages=[],
+        ),
+    )
 
 
 def _build_tar_gz(members: dict[str, bytes]) -> bytes:
@@ -186,7 +201,14 @@ def test_scan_consumer_uses_internal_snapshot_service_and_cleans_up(
         log_level="INFO",
         max_retries=3,
     )
-    consumer = ScanConsumer(config, snapshot_client=snapshot_client, workspace=workspace)
+    syft_tool = MagicMock()
+    syft_tool.run.return_value = _mock_syft_result()
+    consumer = ScanConsumer(
+        config,
+        snapshot_client=snapshot_client,
+        workspace=workspace,
+        syft_tool=syft_tool,
+    )
 
     consumer.handle(
         {
@@ -227,7 +249,14 @@ def test_scan_consumer_cleanup_runs_on_timeout(
         log_level="INFO",
         max_retries=3,
     )
-    consumer = ScanConsumer(config, snapshot_client=snapshot_client, workspace=workspace)
+    syft_tool = MagicMock()
+    syft_tool.run.return_value = _mock_syft_result()
+    consumer = ScanConsumer(
+        config,
+        snapshot_client=snapshot_client,
+        workspace=workspace,
+        syft_tool=syft_tool,
+    )
     consumer.scan_timeout_seconds = 0
 
     times = iter([1.0, 2.0])

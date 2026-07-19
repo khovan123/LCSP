@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from lcsp_workers.platform.correlation import set_correlation_id
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.platform.queue_consumer import ConsumerBase
 
 from .snapshot_service_client import SnapshotArchiveRequest, SnapshotServiceClient
+from .tool_registry import ToolRegistry
+from .tools.syft_tool import SyftTool
+from .tools.tool_base import OUTCOME_SUCCESS
 from .workspace import ArchiveMaterializationError, ScannerWorkspace
 
 logger = get_logger(__name__)
@@ -31,6 +34,7 @@ class ScanConsumer(ConsumerBase):
         pbac_client=None,
         snapshot_client: SnapshotServiceClient | None = None,
         workspace: ScannerWorkspace | None = None,
+        syft_tool: SyftTool | None = None,
     ):
         super().__init__(config, pbac_client)
         self._snapshot_client = snapshot_client or SnapshotServiceClient(
@@ -38,6 +42,7 @@ class ScanConsumer(ConsumerBase):
             config.worker_api_key,
         )
         self._workspace = workspace or ScannerWorkspace()
+        self._syft_tool = syft_tool or SyftTool()
 
     def handle(self, message: dict, correlation_id: str) -> None:
         started_at = time.monotonic()
@@ -53,6 +58,7 @@ class ScanConsumer(ConsumerBase):
         )
 
         result = None
+        tool_registry = ToolRegistry()
         try:
             result = self._workspace.materialize(
                 envelope.scan_job_id,
@@ -69,6 +75,32 @@ class ScanConsumer(ConsumerBase):
                 skipped_files=result.skipped_files,
                 coverage_limited=result.coverage_limited,
             )
+
+            syft_result = self._syft_tool.run(result.workspace_path)
+            tool_registry.register(syft_result.execution)
+
+            logger.info(
+                "SCAN_TOOL_EXECUTED",
+                tool_name=syft_result.execution.tool_name,
+                tool_version=syft_result.execution.tool_version,
+                outcome=syft_result.execution.outcome,
+                config_hash=syft_result.execution.config_hash,
+                sbom_entries=len(syft_result.entries),
+            )
+
+            logger.info(
+                "SCAN_TOOL_PROVENANCE_RECORDED",
+                tool_provenance=[asdict(item) for item in tool_registry.all()],
+            )
+
+            if syft_result.execution.outcome != OUTCOME_SUCCESS:
+                logger.warning(
+                    "SCAN_TOOL_NON_BLOCKING_FAILURE",
+                    tool_name=syft_result.execution.tool_name,
+                    outcome=syft_result.execution.outcome,
+                    messages=syft_result.execution.messages,
+                )
+
             if time.monotonic() - started_at > self.scan_timeout_seconds:
                 raise ArchiveMaterializationError(
                     f"scan timeout exceeded for job {envelope.scan_job_id!r}"
