@@ -13,7 +13,9 @@ describe("InternalSnapshotController", () => {
       resolvedUrl: "https://codeload.github.com/acme/example-repo/tar.gz/a",
       stream: { pipe: jest.fn() },
     };
-    const execute = jest.fn().mockResolvedValue(result);
+    const execute = jest
+      .fn<() => Promise<typeof result>>()
+      .mockResolvedValue(result);
     const controller = new InternalSnapshotController({
       execute,
     } as unknown as QueryBus);

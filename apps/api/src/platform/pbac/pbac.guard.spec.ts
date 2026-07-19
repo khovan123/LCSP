@@ -20,6 +20,7 @@ import { Session } from "../../modules/auth-workspace/domain/entities/session.en
 import type { AuthorizationDecisionRepository } from "../../modules/auth-workspace/application/ports/persistence/authorization-decision.repository.js";
 import type { AuthorizationDecision } from "../../modules/auth-workspace/domain/models/auth-workspace.models.js";
 import { RequireAction } from "./decorators/require-action.decorator.js";
+import { RequireAnyAction } from "./decorators/require-any-action.decorator.js";
 import { RequireSession } from "./decorators/require-session.decorator.js";
 import type {
   PbacContextLoader,
@@ -36,6 +37,12 @@ class DummyController {
 
   @RequireSession()
   getWorkspace(this: void): void {}
+
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  getEvidence(this: void): void {}
 
   noDecorator(this: void): void {}
 }
@@ -472,6 +479,70 @@ describe("PbacGuard", () => {
         decision: PBAC_DECISION.deny,
         reason_code: PBAC_REASON_CODE.evaluatorError,
       }),
+    );
+  });
+
+  it("selects and records the first allowed action from @RequireAnyAction", async () => {
+    const { guard, evaluate, append } = makeGuard({
+      evaluateImpl: (context) => ({
+        decision:
+          context.action === PBAC_ACTIONS.evidenceReadRedacted
+            ? PBAC_DECISION.allow
+            : PBAC_DECISION.deny,
+        reasonCode:
+          context.action === PBAC_ACTIONS.evidenceReadRedacted
+            ? undefined
+            : PBAC_REASON_CODE.actionNotGranted,
+        policyId: "policy-1",
+        policyVersion: "v1",
+      }),
+    });
+    const { context, request } = makeContext({
+      handler: DummyController.prototype.getEvidence,
+      authorization: "Bearer token",
+    });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+
+    expect(evaluate).toHaveBeenCalledTimes(2);
+    expect(
+      (request as { pbacContext?: PbacRequestContext }).pbacContext
+        ?.selectedAction,
+    ).toBe(PBAC_ACTIONS.evidenceReadRedacted);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: PBAC_ACTIONS.evidenceReadRedacted,
+        decision: PBAC_DECISION.allow,
+      }),
+    );
+  });
+
+  it("denies and records every candidate when @RequireAnyAction has no allowed action", async () => {
+    const { guard, append } = makeGuard({
+      evaluateResult: {
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.actionNotGranted,
+        policyId: "policy-1",
+        policyVersion: "v1",
+      },
+    });
+    const { context } = makeContext({
+      handler: DummyController.prototype.getEvidence,
+      authorization: "Bearer token",
+    });
+
+    const error = await guard.canActivate(context).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect(append).toHaveBeenCalledTimes(2);
+    expect(append).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ action: PBAC_ACTIONS.evidenceRead }),
+    );
+    expect(append).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ action: PBAC_ACTIONS.evidenceReadRedacted }),
     );
   });
 });

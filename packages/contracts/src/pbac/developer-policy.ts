@@ -5,7 +5,7 @@ import { PBAC_ACTIONS } from "./actions.ts";
 export const DEVELOPER_SUBJECT_ROLE = "Developer";
 
 export const DEVELOPER_ALLOWED_ACTION_VALUES = [
-  "evidence:read:redacted",
+  PBAC_ACTIONS.evidenceReadRedacted,
   "ai-usage-flow:read",
   "findings:read:redacted",
   "conflict:comment",

@@ -1,4 +1,5 @@
 import {
+  PBAC_ACTIONS,
   PBAC_DECISION,
   PBAC_STATE_GATES,
   SUBJECT_ROLES,
@@ -147,7 +148,7 @@ async function seedDeveloperFixture(
       id: devPolicyId,
       version: "2026-06-26",
       actions: [
-        "evidence:read:redacted",
+        PBAC_ACTIONS.evidenceReadRedacted,
         "ai-usage-flow:read",
         "findings:read:redacted",
       ],

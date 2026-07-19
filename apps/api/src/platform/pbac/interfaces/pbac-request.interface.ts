@@ -7,6 +7,7 @@ export interface PbacRequestContext {
   subjectRole: SubjectRole;
   scope: string | null;
   grantedActions: string[];
+  selectedAction: string | null;
   policyId: string | null;
   policyVersion: string | null;
 }

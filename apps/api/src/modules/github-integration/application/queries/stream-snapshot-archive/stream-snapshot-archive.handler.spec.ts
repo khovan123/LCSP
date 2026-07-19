@@ -9,6 +9,7 @@ import { Readable } from "node:stream";
 import {
   REPOSITORY_CONNECTION_STATUSES,
   REPOSITORY_SCAN_JOB_STATUSES,
+  REPOSITORY_SNAPSHOT_STATUSES,
 } from "@lcsp/contracts/github-integration";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
@@ -23,7 +24,7 @@ describe("StreamSnapshotArchiveHandler", () => {
     connectionId: "connection-1",
     repositoryFullName: "acme/example-repo",
     commitSha: "a".repeat(40),
-    status: "ready",
+    status: REPOSITORY_SNAPSHOT_STATUSES.ready,
   };
 
   const scanJob = {
@@ -59,19 +60,19 @@ describe("StreamSnapshotArchiveHandler", () => {
     const prisma = {
       repositoryScanJob: {
         findUnique: jest
-          .fn()
+          .fn<() => Promise<typeof scanJob | null | undefined>>()
           .mockResolvedValue(hasOption("scanJob") ? options?.scanJob : scanJob),
       },
       repositorySnapshot: {
         findUnique: jest
-          .fn()
+          .fn<() => Promise<typeof snapshot | null | undefined>>()
           .mockResolvedValue(
             hasOption("snapshot") ? options?.snapshot : snapshot,
           ),
       },
       repositoryConnection: {
         findUnique: jest
-          .fn()
+          .fn<() => Promise<typeof connection | null | undefined>>()
           .mockResolvedValue(
             hasOption("connection") ? options?.connection : connection,
           ),

@@ -5,6 +5,8 @@ export const PBAC_ACTIONS = {
   assessmentList: "assessment:list",
   assessmentRead: "assessment:read",
   auditRead: "audit:read",
+  evidenceRead: "evidence:read",
+  evidenceReadRedacted: "evidence:read:redacted",
   githubConnect: "github:connect",
   inviteDeveloper: "invite:developer",
   membershipRevoke: "membership:revoke",
