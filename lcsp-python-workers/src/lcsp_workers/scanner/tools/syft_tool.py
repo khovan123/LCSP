@@ -278,10 +278,8 @@ class SyftTool:
             return relative.as_posix()
         except ValueError:
             # Force location to remain relative and avoid leaking host paths.
-            drive, tail = os.path.splitdrive(raw_location)
-            del drive
-            sanitized = tail.replace("\\", "/").lstrip("/")
-            return sanitized
+            _, tail = os.path.splitdrive(raw_location)
+            return Path(tail).name
 
     def _sha256_file(self, path: Path) -> str:
         digest = hashlib.sha256()
