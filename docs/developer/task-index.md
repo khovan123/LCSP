@@ -109,7 +109,7 @@ Active implementation tasks live under `docs/implementation/tasks/modules/**`. L
 | `3.3` | `MW-scan-002` Scan Job Callback Endpoint | `P0` | `READY_FOR_DEV` | `scan` | `nestjs-api` | [brief](../implementation/tasks/modules/scan/02-scan-job-callback-endpoint.md) |
 | `3.3` | `MW-scan-003` Re-Run Scan Endpoint | `P1` | `READY_FOR_DEV` | `scan` | `nestjs-api` | [brief](../implementation/tasks/modules/scan/03-rerun-scan-endpoint.md) |
 | `3.4` | `MW-scan-py-001` Scanner Workspace Setup and Materialization | `P0` | `READY_FOR_DEV` | `python-workers/scanner` | `nestjs-api + python-workers` | [brief](../implementation/tasks/modules/python-workers/scanner/01-scanner-workspace-setup.md) |
-| `3.5` | `MW-evid-001` Get Technical Evidence Report Endpoint | `P0` | `READY_FOR_DEV` | `evidence` | `nestjs-api` | [brief](../implementation/tasks/modules/evidence/01-get-technical-evidence-endpoint.md) |
+| `3.5` | `MW-evid-001` Get Technical Evidence Report Endpoint | `P0` | `DONE` | `evidence` | `nestjs-api` | [brief](../implementation/tasks/modules/evidence/01-get-technical-evidence-endpoint.md) |
 | `3.5` | `MW-qa-002` Python Scanner Unit Tests | `P0` | `READY_FOR_DEV` | `qa` | `lcsp-python-workers` | [brief](../implementation/tasks/modules/qa/02-scanner-unit-tests.md) |
 | `3.5` | `MW-scan-py-002` Syft SBOM Tool Wrapper | `P0` | `READY_FOR_DEV` | `python-workers/scanner` | `lcsp-python-workers` | [brief](../implementation/tasks/modules/python-workers/scanner/02-syft-sbom-tool.md) |
 | `3.5` | `MW-scan-py-003` Semgrep AI Usage Rules Tool | `P0` | `READY_FOR_DEV` | `python-workers/scanner` | `lcsp-python-workers` | [brief](../implementation/tasks/modules/python-workers/scanner/03-semgrep-ai-rules-tool.md) |

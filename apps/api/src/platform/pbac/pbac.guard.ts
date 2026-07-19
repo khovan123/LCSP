@@ -74,8 +74,13 @@ export class PbacGuard implements CanActivate {
       throw this.pbacDenied(correlationId);
     }
 
-    const action =
-      metadata.type === "action" ? metadata.action : PBAC_ACTIONS.sessionVerify;
+    const candidateActions =
+      metadata.type === "action"
+        ? [metadata.action]
+        : metadata.type === "action_any"
+          ? metadata.actions
+          : [];
+    const action = candidateActions[0] ?? PBAC_ACTIONS.sessionVerify;
 
     const token = this.extractToken(request);
     if (!token) {
@@ -124,7 +129,7 @@ export class PbacGuard implements CanActivate {
       throw this.pbacDenied(correlationId);
     }
 
-    if (metadata.type !== "action") {
+    if (metadata.type === "session") {
       // @RequireSession() — session + active membership only, no PBAC action gate.
       request.pbacContext = {
         userId: session.userId,
@@ -133,6 +138,7 @@ export class PbacGuard implements CanActivate {
         subjectRole: subjectRole as SubjectRole,
         scope: readStringAttribute(membership.subjectAttributes.scope) ?? null,
         grantedActions: policy.actions,
+        selectedAction: null,
         policyId: policy.id,
         policyVersion: policy.version,
       };
@@ -148,52 +154,68 @@ export class PbacGuard implements CanActivate {
       return true;
     }
 
-    const evaluationContext: PbacEvaluationContext = {
-      action: metadata.action,
-      subject: {
-        role: subjectRole as SubjectRole,
-        scope: readStringAttribute(membership.subjectAttributes.scope),
-      },
-      policy: {
-        id: policy.id,
-        organizationId: policy.organizationId,
-        version: policy.version,
-        subjectRole: policy.subjectRole as SubjectRole,
-        stateGate: policy.stateGate,
-        actions: policy.actions,
-      },
-      membershipStatus: membership.status,
-    };
+    const deniedDecisions: Array<{
+      action: string;
+      decision: PbacDecisionResult;
+    }> = [];
+    let allowed: { action: string; decision: PbacDecisionResult } | undefined;
 
-    let decision: PbacDecisionResult;
-    try {
-      decision = this.evaluator.evaluate(evaluationContext);
-    } catch (error) {
-      this.logger.error(
-        `PBAC evaluator threw — defaulting to deny: ${(error as Error).message}`,
-      );
-      await this.recordDecision({
-        organizationId: session.organizationId,
-        action: metadata.action,
-        decision: PBAC_DECISION.deny,
-        reasonCode: PBAC_REASON_CODE.evaluatorError,
-        policyId: policy.id,
-        policyVersion: policy.version,
-        correlationId,
-      });
-      throw this.pbacDenied(correlationId);
+    for (const candidateAction of candidateActions) {
+      const evaluationContext: PbacEvaluationContext = {
+        action: candidateAction,
+        subject: {
+          role: subjectRole as SubjectRole,
+          scope: readStringAttribute(membership.subjectAttributes.scope),
+        },
+        policy: {
+          id: policy.id,
+          organizationId: policy.organizationId,
+          version: policy.version,
+          subjectRole: policy.subjectRole as SubjectRole,
+          stateGate: policy.stateGate,
+          actions: policy.actions,
+        },
+        membershipStatus: membership.status,
+      };
+
+      let decision: PbacDecisionResult;
+      try {
+        decision = this.evaluator.evaluate(evaluationContext);
+      } catch (error) {
+        this.logger.error(
+          `PBAC evaluator threw — defaulting to deny: ${(error as Error).message}`,
+        );
+        await this.recordDecision({
+          organizationId: session.organizationId,
+          action: candidateAction,
+          decision: PBAC_DECISION.deny,
+          reasonCode: PBAC_REASON_CODE.evaluatorError,
+          policyId: policy.id,
+          policyVersion: policy.version,
+          correlationId,
+        });
+        throw this.pbacDenied(correlationId);
+      }
+
+      if (decision.decision === PBAC_DECISION.allow) {
+        allowed = { action: candidateAction, decision };
+        break;
+      }
+      deniedDecisions.push({ action: candidateAction, decision });
     }
 
-    if (decision.decision === PBAC_DECISION.deny) {
-      await this.recordDecision({
-        organizationId: session.organizationId,
-        action: metadata.action,
-        decision: PBAC_DECISION.deny,
-        reasonCode: decision.reasonCode ?? PBAC_REASON_CODE.denied,
-        policyId: decision.policyId || null,
-        policyVersion: decision.policyVersion || null,
-        correlationId,
-      });
+    if (!allowed) {
+      for (const denied of deniedDecisions) {
+        await this.recordDecision({
+          organizationId: session.organizationId,
+          action: denied.action,
+          decision: PBAC_DECISION.deny,
+          reasonCode: denied.decision.reasonCode ?? PBAC_REASON_CODE.denied,
+          policyId: denied.decision.policyId || null,
+          policyVersion: denied.decision.policyVersion || null,
+          correlationId,
+        });
+      }
       throw this.pbacDenied(correlationId);
     }
 
@@ -204,17 +226,18 @@ export class PbacGuard implements CanActivate {
       subjectRole: subjectRole as SubjectRole,
       scope: readStringAttribute(membership.subjectAttributes.scope) ?? null,
       grantedActions: policy.actions,
-      policyId: decision.policyId ?? null,
-      policyVersion: decision.policyVersion ?? null,
+      selectedAction: allowed.action,
+      policyId: allowed.decision.policyId ?? null,
+      policyVersion: allowed.decision.policyVersion ?? null,
     };
 
     await this.recordDecision({
       organizationId: session.organizationId,
-      action: metadata.action,
+      action: allowed.action,
       decision: PBAC_DECISION.allow,
       reasonCode: PBAC_REASON_CODE.authorized,
-      policyId: decision.policyId,
-      policyVersion: decision.policyVersion,
+      policyId: allowed.decision.policyId,
+      policyVersion: allowed.decision.policyVersion,
       correlationId,
     });
 

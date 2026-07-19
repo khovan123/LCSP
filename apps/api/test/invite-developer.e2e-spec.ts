@@ -99,7 +99,10 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       .send({
         email: "Developer@Example.TEST",
         assessment_id: "assessment-1",
-        allowed_actions: ["evidence:read:redacted", "ai-usage-flow:read"],
+        allowed_actions: [
+          PBAC_ACTIONS.evidenceReadRedacted,
+          "ai-usage-flow:read",
+        ],
         expires_in_hours: 72,
       });
 
@@ -108,7 +111,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
     assert.equal(body.email, "developer@example.test");
     assert.equal(body.correlation_id, "corr-invite-1");
     assert.deepEqual(body.allowed_actions, [
-      "evidence:read:redacted",
+      PBAC_ACTIONS.evidenceReadRedacted,
       "ai-usage-flow:read",
     ]);
 
@@ -146,7 +149,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         email: "developer@example.test",
-        allowed_actions: ["evidence:read:redacted"],
+        allowed_actions: [PBAC_ACTIONS.evidenceReadRedacted],
       });
 
     assert.equal(result.status, 403);
@@ -193,7 +196,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       .send({
         email: "developer@example.test",
         assessment_id: "assessment-1",
-        allowed_actions: ["evidence:read:redacted"],
+        allowed_actions: [PBAC_ACTIONS.evidenceReadRedacted],
       });
 
     assert.equal(result.status, 400);
@@ -211,7 +214,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         email: "not-an-email",
-        allowed_actions: ["evidence:read:redacted"],
+        allowed_actions: [PBAC_ACTIONS.evidenceReadRedacted],
       });
 
     assert.equal(result.status, 422);

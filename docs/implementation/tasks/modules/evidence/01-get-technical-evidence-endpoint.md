@@ -3,7 +3,7 @@ task_id: MW-evid-001
 module: evidence
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.5
 depends_on:
   - scan/02-scan-job-callback-endpoint.md

@@ -36,6 +36,7 @@ describe("ScanController", () => {
         subjectRole: SUBJECT_ROLES.developer,
         scope: "assessment-1",
         grantedActions: [PBAC_ACTIONS.scanRead],
+        selectedAction: PBAC_ACTIONS.scanRead,
         policyId: "policy-developer",
         policyVersion: "v1",
       },

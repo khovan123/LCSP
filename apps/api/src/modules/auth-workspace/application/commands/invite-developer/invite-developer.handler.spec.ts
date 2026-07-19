@@ -1,4 +1,6 @@
 import {
+  DEVELOPER_ALLOWED_ACTIONS,
+  PBAC_ACTIONS,
   PBAC_DECISION,
   PBAC_STATE_GATES,
   SUBJECT_ROLES,
@@ -22,7 +24,6 @@ import type { InvitationRepository } from "../../ports/persistence/invitation.re
 import type { PolicyRepository } from "../../ports/persistence/policy.repository.ts";
 import type { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
-import { DEVELOPER_ALLOWED_ACTIONS } from "@lcsp/contracts/pbac";
 import { InviteDeveloperCommand } from "./invite-developer.command.ts";
 import { InviteDeveloperHandler } from "./invite-developer.handler.ts";
 
@@ -92,7 +93,10 @@ describe("InviteDeveloperHandler", () => {
         actorId: "manager-1",
         email: "Developer@Example.TEST",
         assessmentId: "assessment-1",
-        allowedActions: ["evidence:read:redacted", "ai-usage-flow:read"],
+        allowedActions: [
+          PBAC_ACTIONS.evidenceReadRedacted,
+          "ai-usage-flow:read",
+        ],
         expiresInHours: 200,
         correlationId: "corr-1",
       }),
@@ -102,7 +106,10 @@ describe("InviteDeveloperHandler", () => {
       invitation_id: "invite-1",
       email: "developer@example.test",
       expires_at: "2023-11-21T22:13:20.000Z",
-      allowed_actions: ["evidence:read:redacted", "ai-usage-flow:read"],
+      allowed_actions: [
+        PBAC_ACTIONS.evidenceReadRedacted,
+        "ai-usage-flow:read",
+      ],
       correlation_id: "corr-1",
     });
 
@@ -113,7 +120,10 @@ describe("InviteDeveloperHandler", () => {
     expect(invitation.subjectAttributes).toEqual({
       role: SUBJECT_ROLES.developer,
       scope: "assessment-1",
-      allowed_actions: ["evidence:read:redacted", "ai-usage-flow:read"],
+      allowed_actions: [
+        PBAC_ACTIONS.evidenceReadRedacted,
+        "ai-usage-flow:read",
+      ],
     });
     expect(invitation.policyId).toBe("policy-developer");
     expect(invitation.policyVersion).toBe("2026-06-26");
@@ -157,7 +167,7 @@ describe("InviteDeveloperHandler", () => {
           actorId: "manager-1",
           email: "developer@example.test",
           assessmentId: "assessment-other-org",
-          allowedActions: ["evidence:read:redacted"],
+          allowedActions: [PBAC_ACTIONS.evidenceReadRedacted],
           correlationId: "corr-1",
         }),
       ),
@@ -175,7 +185,7 @@ describe("InviteDeveloperHandler", () => {
           orgId: "org-1",
           actorId: "manager-1",
           email: "not-an-email",
-          allowedActions: ["evidence:read:redacted"],
+          allowedActions: [PBAC_ACTIONS.evidenceReadRedacted],
           correlationId: "corr-1",
         }),
       ),
