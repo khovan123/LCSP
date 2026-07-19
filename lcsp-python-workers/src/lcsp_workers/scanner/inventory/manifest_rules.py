@@ -346,10 +346,10 @@ def parse_dockerfile(file_path: Path, workspace: Path) -> ManifestFact:
             stripped = line.strip()
             upper = stripped.upper()
             if upper.startswith("FROM "):
-                image = stripped[5:].strip().split(" AS ", 1)[0].strip()
+                image_part = stripped[5:].strip()
+                image = re.split(r"\s+AS\s+", image_part, maxsplit=1, flags=re.IGNORECASE)[0].strip()
                 if image:
                     config_keys.append(f"from:{image}")
-            if upper.startswith("EXPOSE "):
                 exposed = stripped[7:].strip()
                 if exposed:
                     config_keys.append(f"expose:{exposed}")
