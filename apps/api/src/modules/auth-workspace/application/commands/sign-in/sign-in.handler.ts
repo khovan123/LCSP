@@ -23,7 +23,7 @@ export class SignInHandler {
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,
-  ) {}
+  ) { }
 
   async execute(
     command: SignInCommand,

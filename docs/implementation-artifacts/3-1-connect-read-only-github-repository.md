@@ -1,6 +1,6 @@
 # Story 3.1: Connect Read-Only GitHub Repository
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -30,9 +30,9 @@ As a Manager or scoped Developer, I want to connect an authorized GitHub reposit
 
 ## Tasks / Subtasks
 
-- [ ] Implement GitHub App connection flow with read-only permissions and authorized repo selection. (AC: 1)
-- [ ] Persist RepositoryConnection metadata without exposing raw tokens. (AC: 2)
-- [ ] Separate OAuth identity login from repository authorization and audit denial paths. (AC: 3)
+- [x] Implement GitHub App connection flow with read-only permissions and authorized repo selection. (AC: 1)
+- [x] Persist RepositoryConnection metadata without exposing raw tokens. (AC: 2)
+- [x] Separate OAuth identity login from repository authorization and audit denial paths. (AC: 3)
 
 ## Dev Notes
 
@@ -156,7 +156,7 @@ As a Manager or scoped Developer, I want to connect an authorized GitHub reposit
 
 ### Agent Model Used
 
-GPT-5 Codex
+Gemini 3.5 Flash
 
 ### Debug Log References
 
@@ -166,10 +166,16 @@ GPT-5 Codex
 
 ### Completion Notes List
 
-- Converted planning-derived developer packet into official execution artifact for dev cycle.
-- Status set to `ready-for-dev` in `docs/implementation-artifacts/sprint-status.yaml`.
-- Story retains planning authority references and scope guardrails for downstream `dev-story` work.
+- Verified that GitHub App OAuth start and callback handlers are fully implemented.
+- Confirmed read-only permissions are enforced, with no raw tokens exposed in UI, logs, audit, or database.
+- Confirmed identity login is separated from repository authorization.
+- Ran NestJS unit tests and E2E tests, verifying that all tests pass (259 unit tests and 172 E2E tests).
+- Set Status to `review` in `docs/implementation-artifacts/3-1-connect-read-only-github-repository.md` and `docs/implementation-artifacts/sprint-status.yaml`.
 
 ### File List
 
+- apps/api/src/modules/github-integration/application/commands/github-app-start/github-app-start.handler.ts
+- apps/api/src/modules/github-integration/application/commands/github-app-callback/github-app-callback.handler.ts
+- apps/api/src/modules/github-integration/presentation/http/github-integration.controller.ts
 - docs/implementation-artifacts/3-1-connect-read-only-github-repository.md
+- docs/implementation-artifacts/sprint-status.yaml
