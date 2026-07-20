@@ -12,6 +12,10 @@ class CallbackPath(StrEnum):
     VERIFIED_PROFILE = "/internal/callbacks/verified-profile"
     LEGAL_RULE_MATCH = "/internal/callbacks/legal-rule-match"
     CLASSIFICATION = "/internal/callbacks/classification"
+    AUDIT_EXPORT = "/internal/callbacks/audit-export/{export_request_id}"
+
+class InternalPath(StrEnum):
+    AUDIT_EVENTS = "/internal/organizations/{organization_id}/audit-events"
 
 
 class CallbackLogEvent(StrEnum):

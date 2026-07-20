@@ -13,6 +13,7 @@ dependencies = [
   "anthropic==0.42.0",
   "redis==5.2.1",
   "tiktoken==0.8.0",
+  "boto3==1.34.144",
 ]
 
 [project.optional-dependencies]

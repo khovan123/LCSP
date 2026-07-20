@@ -7,6 +7,7 @@ from package.contract.api_client_contracts import (
     WORKER_API_KEY_HEADER,
     CallbackLogEvent,
     CallbackPath,
+    InternalPath,
     client_error_message,
     network_error_message,
     server_error_message,
@@ -22,6 +23,7 @@ from lcsp_workers.platform.callback_schemas import (
     VerifiedProfileCallbackPayload,
     LegalRuleMatchCallbackPayload,
     ClassificationCallbackPayload,
+    AuditExportCallbackPayload,
 )
 
 logger = get_logger(__name__)
@@ -120,6 +122,81 @@ class WorkerApiClient:
         # Should not reach here
         raise WorkerCallbackError(unexpected_error_message())
 
+    def _get_with_retry(self, path: str, params: dict = None) -> dict | list:
+        """
+        Executes a GET request with exponential backoff for network and 5xx errors.
+        Fails fast on 4xx errors.
+        """
+        url = f"{self._base_url}{path}"
+        cid = get_correlation_id()
+        headers = {
+            WORKER_API_KEY_HEADER: self._api_key,
+            CORRELATION_ID_HEADER: cid,
+        }
+
+        for attempt in range(self._max_retries):
+            try:
+                resp = httpx.get(
+                    url,
+                    params=params,
+                    headers=headers,
+                    timeout=self._timeout,
+                )
+
+                if 400 <= resp.status_code < 500:
+                    logger.error(
+                        CallbackLogEvent.CLIENT_ERROR,
+                        path=path,
+                        status_code=resp.status_code,
+                    )
+                    raise WorkerCallbackError(client_error_message(resp.status_code))
+
+                if resp.status_code >= 500:
+                    if attempt < self._max_retries - 1:
+                        backoff = 2 ** attempt
+                        logger.warning(
+                            CallbackLogEvent.SERVER_ERROR_RETRYING,
+                            path=path,
+                            status_code=resp.status_code,
+                            attempt=attempt + 1,
+                            sleep=backoff,
+                        )
+                        time.sleep(backoff)
+                        continue
+                    else:
+                        logger.error(
+                            CallbackLogEvent.SERVER_ERROR_TERMINAL,
+                            path=path,
+                            status_code=resp.status_code,
+                        )
+                        raise WorkerCallbackError(
+                            server_error_message(self._max_retries, resp.status_code)
+                        )
+
+                return resp.json()
+
+            except httpx.RequestError as exc:
+                if attempt < self._max_retries - 1:
+                    backoff = 2 ** attempt
+                    logger.warning(
+                        CallbackLogEvent.NETWORK_ERROR_RETRYING,
+                        path=path,
+                        error=type(exc).__name__,
+                        attempt=attempt + 1,
+                        sleep=backoff,
+                    )
+                    time.sleep(backoff)
+                    continue
+                else:
+                    logger.error(
+                        CallbackLogEvent.NETWORK_ERROR_TERMINAL,
+                        path=path,
+                        error=type(exc).__name__,
+                    )
+                    raise WorkerCallbackError(network_error_message(self._max_retries))
+
+        raise WorkerCallbackError(unexpected_error_message())
+
     def _redact_callback_payload(self, payload: dict) -> dict:
         safe_payload = dict(payload)
         findings = safe_payload.get("findings")
@@ -168,5 +245,19 @@ class WorkerApiClient:
         self, payload: ClassificationCallbackPayload
     ) -> CallbackResponse:
         path = CallbackPath.CLASSIFICATION
+        resp_data = self._post_with_retry(path, payload.model_dump())
+        return CallbackResponse(**resp_data)
+
+    def get_audit_events(
+        self, organization_id: str, from_date: str, to_date: str
+    ) -> list[dict]:
+        path = InternalPath.AUDIT_EVENTS.format(organization_id=organization_id)
+        params = {"from_date": from_date, "to_date": to_date}
+        return self._get_with_retry(path, params=params)
+
+    def post_audit_export_callback(
+        self, export_request_id: str, payload: AuditExportCallbackPayload
+    ) -> CallbackResponse:
+        path = CallbackPath.AUDIT_EXPORT.format(export_request_id=export_request_id)
         resp_data = self._post_with_retry(path, payload.model_dump())
         return CallbackResponse(**resp_data)
