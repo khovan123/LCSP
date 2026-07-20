@@ -1,4 +1,5 @@
 import { ASSESSMENT_ACTIONS } from "../assessment/actions.ts";
+import { DOCUMENT_ACTIONS } from "../document/actions.ts";
 
 export const PBAC_ACTIONS = {
   assessmentCreate: ASSESSMENT_ACTIONS.create,
@@ -12,6 +13,7 @@ export const PBAC_ACTIONS = {
   evidenceRead: "evidence:read",
   evidenceReadRedacted: "evidence:read:redacted",
   finalReportGenerate: "final-report:generate",
+  documentGenerate: DOCUMENT_ACTIONS.generate,
   githubConnect: "github:connect",
   inviteDeveloper: "invite:developer",
   managerDecisionChange: "manager-decision:change",
