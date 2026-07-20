@@ -13,7 +13,7 @@ const ALLOWED_ARCHIVE_HOSTS = new Set([
   "github.com",
 ]);
 
-export class GitHubAppClientError extends Error { }
+export class GitHubAppClientError extends Error {}
 
 export interface GitHubAppInstallationMetadata {
   permissions: Record<string, string>;
@@ -41,7 +41,7 @@ export interface GitHubRepositoryArchiveDownload {
 
 @Injectable()
 export class GitHubAppClient {
-  constructor(private readonly configService: ConfigService) { }
+  constructor(private readonly configService: ConfigService) {}
 
   buildInstallationUrl(input: { state: string; redirectUri: string }): string {
     const appSlug = this.configService.get<string>("github.appSlug", "");
