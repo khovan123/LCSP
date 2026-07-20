@@ -23,10 +23,16 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
+          # Pull-request mode normally calls the changed-files REST API. Use
+          # the checked-out git history instead so transient GitHub API 5xx
+          # responses cannot fail change detection.
+          token: ''
           list-files: shell
           filters: |
             api:

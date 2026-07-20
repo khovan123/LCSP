@@ -18,6 +18,7 @@ import { SignInHandler } from "./application/commands/sign-in/sign-in.handler.ts
 import { UpdateProfileHandler } from "./application/commands/update-profile/update-profile.handler.ts";
 import { VerifyMfaOtpHandler } from "./application/commands/verify-mfa-otp/verify-mfa-otp.handler.ts";
 import { GetWorkspaceHandler } from "./application/queries/get-workspace/get-workspace.handler.ts";
+import { PreviewInvitationHandler } from "./application/queries/preview-invitation/preview-invitation.handler.ts";
 import {
   AUTH_WORKSPACE_RECOVERY_NOTIFIER,
   type RecoveryNotifier,
@@ -148,6 +149,12 @@ function handlerProvider<T>(
         new AcceptInvitationHandler(prisma, authAudit),
     },
     {
+      provide: PreviewInvitationHandler,
+      inject: [PrismaService, AuthAuditService],
+      useFactory: (prisma: PrismaService, authAudit: AuthAuditService) =>
+        new PreviewInvitationHandler(prisma, authAudit),
+    },
+    {
       provide: RevokeMembershipHandler,
       inject: [PrismaService, AuthAuditService],
       useFactory: (prisma: PrismaService, authAudit: AuthAuditService) =>
@@ -240,6 +247,7 @@ function handlerProvider<T>(
         OAuthCallbackHandler,
         InviteDeveloperHandler,
         AcceptInvitationHandler,
+        PreviewInvitationHandler,
         RevokeMembershipHandler,
       ],
       useFactory: (
@@ -256,6 +264,7 @@ function handlerProvider<T>(
         oauthCallbackHandler: OAuthCallbackHandler,
         inviteDeveloperHandler: InviteDeveloperHandler,
         acceptInvitationHandler: AcceptInvitationHandler,
+        previewInvitationHandler: PreviewInvitationHandler,
         revokeMembershipHandler: RevokeMembershipHandler,
       ) =>
         new AuthWorkspaceFacade(
@@ -272,6 +281,7 @@ function handlerProvider<T>(
           oauthCallbackHandler,
           inviteDeveloperHandler,
           acceptInvitationHandler,
+          previewInvitationHandler,
           revokeMembershipHandler,
         ),
     },

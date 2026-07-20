@@ -6,6 +6,8 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -19,6 +21,7 @@ import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
 import type { RequestMeta } from "../../application/contracts/auth-workspace/common.contract.ts";
 import type { AcceptInvitationRequest } from "../../application/contracts/auth-workspace/accept-invitation.contract.ts";
+import type { InvitationPreviewRequest } from "../../application/contracts/auth-workspace/invitation-preview.contract.ts";
 import type { InviteDeveloperRequest } from "../../application/contracts/auth-workspace/invitation.contract.ts";
 import type {
   OAuthCallbackPayload,
@@ -112,6 +115,18 @@ export class AuthWorkspaceController {
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     return this.authWorkspaceFacade.acceptInvitation(
+      payload,
+      requestMeta(correlationId),
+    );
+  }
+
+  @Post("auth/invitations/preview")
+  @HttpCode(HttpStatus.OK)
+  previewInvitation(
+    @Body() payload: InvitationPreviewRequest,
+    @Headers("x-correlation-id") correlationId?: string,
+  ) {
+    return this.authWorkspaceFacade.previewInvitation(
       payload,
       requestMeta(correlationId),
     );

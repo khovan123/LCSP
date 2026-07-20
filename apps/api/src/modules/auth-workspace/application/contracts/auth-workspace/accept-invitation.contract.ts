@@ -12,6 +12,9 @@ export type AcceptInvitationResponse = {
   expires_at: string;
   organization_id: string;
   allowed_actions: string[];
+  scope:
+    | { type: "assessment"; assessment_id: string }
+    | { type: "organization"; assessment_id: null };
   correlation_id: string;
 };
 

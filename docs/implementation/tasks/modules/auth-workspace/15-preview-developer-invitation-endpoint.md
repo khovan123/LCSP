@@ -3,7 +3,7 @@ task_id: MW-auth-015
 module: auth-workspace
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 1.5
 depends_on:
   - auth-workspace/10-invite-developer-endpoint.md
@@ -114,4 +114,3 @@ Public endpoint. The invitation token authorizes only this narrow, read-only pre
 - Preview never mutates invitation or authentication state and all invalid states remain non-enumerable.
 - Acceptance returns authoritative assessment or organization scope without exposing the session token beyond the existing API boundary.
 - Unit/e2e coverage verifies scope parity, tenant isolation, action filtering, and audit/token redaction.
-

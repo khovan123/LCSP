@@ -32,6 +32,9 @@ type AcceptInvitationBody = {
   expires_at: string;
   organization_id: string;
   allowed_actions: string[];
+  scope:
+    | { type: "assessment"; assessment_id: string }
+    | { type: "organization"; assessment_id: null };
   correlation_id: string;
 };
 
@@ -39,6 +42,12 @@ type ErrorBody = {
   code?: string;
   error_code?: string;
   correlation_id?: string;
+};
+
+type PreviewBody = {
+  scope:
+    | { type: "assessment"; assessment: { id: string; name: string } }
+    | { type: "organization"; assessment: null };
 };
 
 describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
@@ -84,6 +93,11 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
   });
 
   it("T01/T08/T10 accepts a valid scoped invitation once and creates user, membership, and session", async () => {
+    const preview = await httpRequest(app)
+      .post("/auth/invitations/preview")
+      .send({ invitation_token: "developer-invite-1" });
+    assert.equal(preview.status, 200);
+
     const result = await httpRequest(app)
       .post("/auth/accept-invitation")
       .set("x-correlation-id", "corr-accept-1")
@@ -98,6 +112,15 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     assert.equal(body.organization_id, fixture.organizationId);
     assert.equal(body.correlation_id, "corr-accept-1");
     assert.deepEqual(body.allowed_actions, DEVELOPER_ALLOWED_ACTIONS);
+    assert.deepEqual(body.scope, {
+      type: "assessment",
+      assessment_id: "assessment-1",
+    });
+    const previewScope = (preview.body as PreviewBody).scope;
+    assert.equal(previewScope.type, "assessment");
+    if (previewScope.type === "assessment") {
+      assert.equal(body.scope.assessment_id, previewScope.assessment.id);
+    }
     assert.ok(body.user_id);
     assert.ok(body.session_token);
     assert.ok(Date.parse(body.expires_at));
@@ -235,6 +258,69 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
     const serialized = JSON.stringify(audit);
     assert.doesNotMatch(serialized, /DeveloperPass123!|developer-invite-1/);
     assert.equal(audit.organizationId, fixture.organizationId);
+  });
+
+  it("returns organization scope when accepting an organization invitation", async () => {
+    await prisma.authInvitation.update({
+      where: { id: "developer-invite-1" },
+      data: {
+        subjectAttributes: {
+          role: SUBJECT_ROLES.developer,
+          allowed_actions: DEVELOPER_ALLOWED_ACTIONS,
+        },
+      },
+    });
+
+    const result = await httpRequest(app).post("/auth/accept-invitation").send({
+      invitation_token: "developer-invite-1",
+      display_name: "Organization Developer",
+      password: "DeveloperPass123!",
+    });
+    assert.equal(result.status, 201);
+    assert.deepEqual((result.body as AcceptInvitationBody).scope, {
+      type: "organization",
+      assessment_id: null,
+    });
+  });
+
+  it("persists only the filtered action projection in the membership", async () => {
+    const expectedAction = DEVELOPER_ALLOWED_ACTIONS[0];
+    await prisma.authInvitation.update({
+      where: { id: "developer-invite-1" },
+      data: {
+        subjectAttributes: {
+          role: SUBJECT_ROLES.developer,
+          scope: "assessment-1",
+          allowed_actions: [
+            expectedAction,
+            "assessment:create",
+            "unknown:action",
+          ],
+        },
+      },
+    });
+
+    const result = await httpRequest(app).post("/auth/accept-invitation").send({
+      invitation_token: "developer-invite-1",
+      display_name: "Filtered Developer",
+      password: "DeveloperPass123!",
+    });
+    assert.equal(result.status, 201);
+    const body = result.body as AcceptInvitationBody;
+    assert.deepEqual(body.allowed_actions, [expectedAction]);
+    const membership = await prisma.authMembership.findUniqueOrThrow({
+      where: {
+        userId_organizationId: {
+          userId: body.user_id,
+          organizationId: fixture.organizationId,
+        },
+      },
+    });
+    assert.deepEqual(
+      (membership.subjectAttributes as { allowed_actions: string[] })
+        .allowed_actions,
+      [expectedAction],
+    );
   });
 
   it("T11 leaves the Manager golden path available after Developer acceptance", async () => {

@@ -26,6 +26,10 @@ import type {
   AcceptInvitationResponse,
 } from "../../contracts/auth-workspace/accept-invitation.contract.ts";
 import { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
+import {
+  invitationAssessmentId,
+  projectInvitationScope,
+} from "../../services/auth-workspace/invitation-scope-projection.ts";
 import { AcceptInvitationCommand } from "./accept-invitation.command.ts";
 
 const SESSION_TTL_MS = 8 * 60 * 60_000;
@@ -63,71 +67,72 @@ export class AcceptInvitationHandler {
       );
     }
 
-    const now = new Date();
-    const invitation = await this.prisma.authInvitation.findUnique({
-      where: { id: invitationToken },
-    });
-
-    if (!invitation || invitation.expiresAt <= now) {
-      throw problem(
-        BadRequestException,
-        ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
-        correlationId,
-      );
-    }
-
-    if (invitation.state !== AUTH_INVITATION_STATES.approved) {
-      throw problem(
-        BadRequestException,
-        ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
-        correlationId,
-      );
-    }
-
-    const existingUser = await this.prisma.authUser.findUnique({
-      where: { email: invitation.email },
-    });
-    if (existingUser) {
-      throw problem(
-        ConflictException,
-        ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists,
-        correlationId,
-      );
-    }
-
-    const policy = await this.prisma.authPolicy.findUnique({
-      where: {
-        id_version: {
-          id: invitation.policyId,
-          version: invitation.policyVersion,
-        },
-      },
-    });
-    if (!policy) {
-      throw problem(
-        BadRequestException,
-        ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
-        correlationId,
-      );
-    }
-
     const userId = crypto.randomUUID();
     const membershipId = crypto.randomUUID();
     const sessionId = crypto.randomUUID();
     const sessionToken = issueOpaqueToken();
     const sessionExpiresAt = new Date(Date.now() + SESSION_TTL_MS);
-    const subjectAttributes = jsonObject(invitation.subjectAttributes);
-    const allowedActions = allowedActionsFrom(
-      subjectAttributes,
-      policy.actions,
-    );
+    const accepted = await this.prisma.$transaction(async (tx) => {
+      const invitation = await tx.authInvitation.findUnique({
+        where: { id: invitationToken },
+      });
+      const now = new Date();
+      if (
+        !invitation ||
+        invitation.expiresAt <= now ||
+        invitation.state !== AUTH_INVITATION_STATES.approved
+      ) {
+        throw problem(
+          BadRequestException,
+          ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
+          correlationId,
+        );
+      }
 
-    await this.prisma.$transaction(async (tx) => {
+      const policy = await tx.authPolicy.findUnique({
+        where: {
+          id_version: {
+            id: invitation.policyId,
+            version: invitation.policyVersion,
+          },
+        },
+      });
+      const assessmentId = invitationAssessmentId(invitation.subjectAttributes);
+      const assessment = assessmentId
+        ? await tx.assessment.findUnique({ where: { id: assessmentId } })
+        : null;
+      const projection = policy
+        ? projectInvitationScope({
+            organizationId: invitation.organizationId,
+            subjectAttributes: invitation.subjectAttributes,
+            policy,
+            assessment,
+          })
+        : null;
+      if (!projection) {
+        throw problem(
+          BadRequestException,
+          ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
+          correlationId,
+        );
+      }
+
+      const existingUser = await tx.authUser.findUnique({
+        where: { email: invitation.email },
+      });
+      if (existingUser) {
+        throw problem(
+          ConflictException,
+          ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists,
+          correlationId,
+        );
+      }
+
       const consumed = await tx.authInvitation.updateMany({
         where: {
           id: invitation.id,
           state: AUTH_INVITATION_STATES.approved,
-          expiresAt: { gt: now },
+          expiresAt: { gt: new Date() },
         },
         data: { state: AUTH_INVITATION_STATES.consumed },
       });
@@ -157,7 +162,10 @@ export class AcceptInvitationHandler {
           userId,
           organizationId: invitation.organizationId,
           status: AUTH_MEMBERSHIP_STATUSES.active,
-          subjectAttributes,
+          subjectAttributes: {
+            ...(invitation.subjectAttributes as Prisma.JsonObject),
+            allowed_actions: projection.allowedActions,
+          },
           policyId: invitation.policyId,
           policyVersion: invitation.policyVersion,
         },
@@ -200,14 +208,23 @@ export class AcceptInvitationHandler {
         },
         tx,
       );
+
+      return { invitation, projection };
     });
 
     return {
       user_id: userId,
       session_token: sessionToken,
       expires_at: sessionExpiresAt.toISOString(),
-      organization_id: invitation.organizationId,
-      allowed_actions: allowedActions,
+      organization_id: accepted.invitation.organizationId,
+      allowed_actions: accepted.projection.allowedActions,
+      scope:
+        accepted.projection.scope.type === "assessment"
+          ? {
+              type: "assessment",
+              assessment_id: accepted.projection.scope.assessmentId,
+            }
+          : { type: "organization", assessment_id: null },
       correlation_id: correlationId,
     };
   }
@@ -223,29 +240,6 @@ function isValidDisplayName(value: unknown): value is string {
     value.trim().length >= 1 &&
     value.trim().length <= MAX_DISPLAY_NAME_LENGTH
   );
-}
-
-function jsonObject(value: Prisma.JsonValue): Prisma.JsonObject {
-  if (!value || Array.isArray(value) || typeof value !== "object") {
-    return {};
-  }
-  return value;
-}
-
-function allowedActionsFrom(
-  subjectAttributes: Prisma.JsonObject,
-  policyActions: string[],
-): string[] {
-  const allowedActions = subjectAttributes.allowed_actions;
-  if (
-    Array.isArray(allowedActions) &&
-    allowedActions.every(
-      (action): action is string => typeof action === "string",
-    )
-  ) {
-    return [...allowedActions];
-  }
-  return [...policyActions];
 }
 
 function problem(
