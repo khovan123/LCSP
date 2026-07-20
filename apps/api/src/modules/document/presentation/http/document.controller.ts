@@ -1,4 +1,11 @@
-import { Controller, Param, Post, Req, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  HttpCode,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
 import { CommandBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
@@ -13,6 +20,7 @@ export class DocumentController {
   constructor(private readonly commandBus: CommandBus) {}
 
   @Post(":assessmentId/documents/final-report")
+  @HttpCode(202)
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.documentGenerate)
   async requestFinalReport(
