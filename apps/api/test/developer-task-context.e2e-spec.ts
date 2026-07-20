@@ -9,13 +9,16 @@ import {
   SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Prisma } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import * as assert from "node:assert/strict";
 
 import { AppModule } from "../src/app.module.js";
-import type { DeveloperTaskContextResponse } from "../src/modules/auth-workspace/application/contracts/auth-workspace/developer-task-context.contract.js";
+import {
+  DEVELOPER_TASK_CONTEXT_ERROR_CODES,
+  type DeveloperTaskContextResponse,
+} from "../src/modules/auth-workspace/application/contracts/auth-workspace/developer-task-context.contract.js";
 import {
   fingerprintToken,
   hashSecret,
@@ -124,13 +127,16 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
   });
 
   it.each([
-    ["revoked", { revokedAt: new Date() }],
+    ["with a revocation timestamp", { revokedAt: new Date() }],
     ["expired", { expiresAt: new Date(0) }],
   ])("T03 rejects a %s session with SESSION_INVALID", async (_case, data) => {
     await prisma.authSession.update({ where: { id: SESSION_ID }, data });
     const response = await getContext(app);
     assert.equal(response.status, 401);
-    assert.equal((response.body as ErrorBody).error_code, "SESSION_INVALID");
+    assert.equal(
+      (response.body as ErrorBody).error_code,
+      DEVELOPER_TASK_CONTEXT_ERROR_CODES.sessionInvalid,
+    );
   });
 
   it("T04 denies immediately after the current policy actions are narrowed", async () => {
@@ -140,7 +146,10 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
     });
     const response = await getContext(app);
     assert.equal(response.status, 403);
-    assert.equal((response.body as ErrorBody).error_code, "PBAC_DENIED");
+    assert.equal(
+      (response.body as ErrorBody).error_code,
+      DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
+    );
   });
 
   it("T05 maps a revoked membership to non-enumerating PBAC_DENIED", async () => {
@@ -152,7 +161,10 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
     });
     const response = await getContext(app);
     assert.equal(response.status, 403);
-    assert.equal((response.body as ErrorBody).error_code, "PBAC_DENIED");
+    assert.equal(
+      (response.body as ErrorBody).error_code,
+      DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
+    );
     assert.doesNotMatch(JSON.stringify(response.body), /membership/i);
   });
 
@@ -191,7 +203,10 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
     });
     const response = await getContext(app);
     assert.equal(response.status, 403);
-    assert.equal((response.body as ErrorBody).error_code, "PBAC_DENIED");
+    assert.equal(
+      (response.body as ErrorBody).error_code,
+      DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
+    );
   });
 
   it("T08 denies when the pinned policy cannot be resolved", async () => {
@@ -208,7 +223,10 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
     });
     const response = await getContext(app, "corr-missing-policy");
     assert.equal(response.status, 403);
-    assert.equal((response.body as ErrorBody).error_code, "PBAC_DENIED");
+    assert.equal(
+      (response.body as ErrorBody).error_code,
+      DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
+    );
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: { correlationId: "corr-missing-policy" },
     });
@@ -227,7 +245,10 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
       .get("/workspace/developer-task")
       .set("authorization", `Bearer ${managerToken}`);
     assert.equal(denied.status, 403);
-    assert.equal((denied.body as ErrorBody).error_code, "PBAC_DENIED");
+    assert.equal(
+      (denied.body as ErrorBody).error_code,
+      DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
+    );
 
     const workspace = await httpRequest(app)
       .get("/workspace")
@@ -297,7 +318,7 @@ async function seedDeveloper(prisma: PrismaClient, organizationId: string) {
 
 function updateAttributes(
   prisma: PrismaClient,
-  subjectAttributes: Record<string, unknown>,
+  subjectAttributes: Prisma.InputJsonObject,
 ) {
   return prisma.authMembership.update({
     where: {

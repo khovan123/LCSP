@@ -146,7 +146,7 @@ describe("Preview Developer Invitation endpoint (e2e) [MW-auth-015]", () => {
     ["unknown", () => Promise.resolve()],
     ["expired", () => updateInvite(prisma, { expiresAt: new Date(0) })],
     [
-      "consumed",
+      "already used",
       () => updateInvite(prisma, { state: AUTH_INVITATION_STATES.consumed }),
     ],
     [
@@ -249,7 +249,7 @@ describe("Preview Developer Invitation endpoint (e2e) [MW-auth-015]", () => {
     async (payload) => {
       const response = await httpRequest(app)
         .post("/auth/invitations/preview")
-        .send(payload);
+        .send(payload ?? undefined);
       assert.equal(response.status, 400);
       assert.equal(
         (response.body as { error_code: string }).error_code,

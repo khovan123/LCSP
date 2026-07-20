@@ -1,4 +1,5 @@
 import { resolveMessage } from "@lcsp/i18n";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -34,6 +35,8 @@ type AssessmentListProps = {
   statusLabel: string;
   wizardStatusLabel: string;
   createdAtLabel: string;
+  getAssessmentHref?: (assessment: AssessmentSummary) => string;
+  openAssessmentLabel?: string;
 };
 
 export function AssessmentList({
@@ -47,6 +50,8 @@ export function AssessmentList({
   statusLabel,
   wizardStatusLabel,
   createdAtLabel,
+  getAssessmentHref,
+  openAssessmentLabel,
 }: AssessmentListProps) {
   return (
     <section
@@ -93,6 +98,8 @@ export function AssessmentList({
               statusLabel={statusLabel}
               wizardStatusLabel={wizardStatusLabel}
               createdAtLabel={createdAtLabel}
+              href={getAssessmentHref?.(assessment)}
+              openAssessmentLabel={openAssessmentLabel}
             />
           ))}
         </div>
@@ -106,11 +113,15 @@ function AssessmentCard({
   statusLabel,
   wizardStatusLabel,
   createdAtLabel,
+  href,
+  openAssessmentLabel,
 }: {
   assessment: AssessmentSummary;
   statusLabel: string;
   wizardStatusLabel: string;
   createdAtLabel: string;
+  href?: string;
+  openAssessmentLabel?: string;
 }) {
   const status = resolveMessage(
     appLocale,
@@ -124,7 +135,18 @@ function AssessmentCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{assessment.name}</CardTitle>
+        <CardTitle>
+          {href ? (
+            <Link className="underline-offset-4 hover:underline" href={href}>
+              {assessment.name}
+              {openAssessmentLabel ? (
+                <span className="sr-only"> — {openAssessmentLabel}</span>
+              ) : null}
+            </Link>
+          ) : (
+            assessment.name
+          )}
+        </CardTitle>
         <CardDescription>
           {createdAtLabel}: {formatAssessmentDate(assessment.created_at)}
         </CardDescription>

@@ -1,6 +1,6 @@
 import {
+  ACCEPT_INVITATION_ERROR_CODES,
   AUTH_ERROR_CODES,
-  type AuthErrorCode,
   type ProblemCodeEnvelope,
 } from "@lcsp/contracts/auth";
 
@@ -10,6 +10,38 @@ import type {
 } from "./types/mfa-verify.types";
 
 export type { MfaVerifyOutcome } from "./types/mfa-verify.types";
+
+export type InvitationScope =
+  | {
+      type: "assessment";
+      assessment: { id: string; name: string };
+    }
+  | { type: "organization"; assessment: null };
+
+export type InvitationPreview = {
+  organization: { id: string; name: string };
+  scope: InvitationScope;
+  allowed_actions: string[];
+  expires_at: string;
+};
+
+export type InvitationPreviewOutcome =
+  | { kind: "loaded"; preview: InvitationPreview }
+  | { kind: "invitation_invalid" }
+  | { kind: "error" };
+
+export type AcceptInvitationRequest = {
+  invitation_token: string;
+  display_name: string;
+  password: string;
+};
+
+export type AcceptInvitationOutcome =
+  | { kind: "invitation_accepted"; location: string }
+  | { kind: "invitation_invalid" }
+  | { kind: "email_already_exists" }
+  | { kind: "password_too_short" }
+  | { kind: "error" };
 
 export type SignInRequest = {
   email: string;
@@ -64,6 +96,68 @@ export async function signIn(
 
   const payload: unknown = await response.json().catch(() => null);
   return toSignInOutcome(payload, response.ok);
+}
+
+export async function previewInvitation(
+  invitationToken: string,
+): Promise<InvitationPreviewOutcome> {
+  const response = await fetch("/api/auth/invitations/preview", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ invitation_token: invitationToken }),
+  });
+  const payload: unknown = await response.json().catch(() => null);
+
+  return toInvitationPreviewOutcome(payload, response.ok);
+}
+
+export async function acceptInvitation(
+  request: AcceptInvitationRequest,
+): Promise<AcceptInvitationOutcome> {
+  const response = await fetch("/api/auth/accept-invitation", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(request),
+  });
+  const payload: unknown = await response.json().catch(() => null);
+
+  return toAcceptInvitationOutcome(payload, response.ok);
+}
+
+export function toInvitationPreviewOutcome(
+  payload: unknown,
+  ok: boolean,
+): InvitationPreviewOutcome {
+  if (ok && isInvitationPreview(payload)) {
+    return { kind: "loaded", preview: payload };
+  }
+
+  return getProblemCode(payload) ===
+    ACCEPT_INVITATION_ERROR_CODES.invitationInvalid
+    ? { kind: "invitation_invalid" }
+    : { kind: "error" };
+}
+
+export function toAcceptInvitationOutcome(
+  payload: unknown,
+  ok: boolean,
+): AcceptInvitationOutcome {
+  if (ok && isAcceptedInvitation(payload)) {
+    return { kind: "invitation_accepted", location: payload.location };
+  }
+
+  switch (getProblemCode(payload)) {
+    case ACCEPT_INVITATION_ERROR_CODES.invitationInvalid:
+      return { kind: "invitation_invalid" };
+    case ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists:
+      return { kind: "email_already_exists" };
+    case ACCEPT_INVITATION_ERROR_CODES.passwordTooShort:
+      return { kind: "password_too_short" };
+    default:
+      return { kind: "error" };
+  }
 }
 
 export function toMfaVerifyOutcome(
@@ -129,7 +223,41 @@ function isSignInSuccess(
   );
 }
 
-function getProblemCode(payload: unknown): AuthErrorCode | undefined {
+function isInvitationPreview(payload: unknown): payload is InvitationPreview {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const candidate = payload as InvitationPreview;
+  const scopeIsValid =
+    candidate.scope?.type === "organization"
+      ? candidate.scope.assessment === null
+      : candidate.scope?.type === "assessment" &&
+        typeof candidate.scope.assessment?.id === "string" &&
+        typeof candidate.scope.assessment.name === "string";
+
+  return (
+    typeof candidate.organization?.id === "string" &&
+    typeof candidate.organization.name === "string" &&
+    scopeIsValid &&
+    Array.isArray(candidate.allowed_actions) &&
+    candidate.allowed_actions.every((action) => typeof action === "string") &&
+    typeof candidate.expires_at === "string"
+  );
+}
+
+function isAcceptedInvitation(
+  payload: unknown,
+): payload is { ok: true; location: string } {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    (payload as { ok?: unknown }).ok === true &&
+    typeof (payload as { location?: unknown }).location === "string"
+  );
+}
+
+function getProblemCode(payload: unknown): string | undefined {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
