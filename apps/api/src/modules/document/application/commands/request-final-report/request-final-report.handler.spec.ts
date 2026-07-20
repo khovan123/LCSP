@@ -105,11 +105,11 @@ describe("RequestFinalReportHandler", () => {
   it("throws ASSESSMENT_NOT_FOUND when assessment does not exist", async () => {
     const { handler, command } = buildHandler({ assessment: null });
 
-    await expect(handler.execute(command)).rejects.toThrow(NotFoundException);
-
     try {
       await handler.execute(command);
+      throw new Error("Expected NotFoundException");
     } catch (error) {
+      expect(error).toBeInstanceOf(NotFoundException);
       expect((error as NotFoundException).getResponse()).toEqual({
         error_code: DOCUMENT_ERROR_CODES.assessmentNotFound,
         correlation_id: "corr-1",
