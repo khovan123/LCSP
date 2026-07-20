@@ -111,7 +111,11 @@ export class PbacGuard implements CanActivate {
         policyVersion: null,
         correlationId,
       });
-      throw this.exceptionFor(result.reason, correlationId);
+      throw this.exceptionFor(
+        result.reason,
+        correlationId,
+        metadata.membershipMissingAsPbacDenied === true,
+      );
     }
 
     const { session, membership, policy } = result;
@@ -255,6 +259,7 @@ export class PbacGuard implements CanActivate {
   private exceptionFor(
     reason: PbacContextDenialReason,
     correlationId: string,
+    membershipMissingAsPbacDenied = false,
   ): UnauthorizedException | ForbiddenException {
     switch (reason) {
       case PBAC_REASON_CODE.sessionInvalid:
@@ -268,6 +273,9 @@ export class PbacGuard implements CanActivate {
           correlation_id: correlationId,
         });
       case PBAC_REASON_CODE.membershipMissing:
+        if (membershipMissingAsPbacDenied) {
+          return this.pbacDenied(correlationId);
+        }
         return new ForbiddenException({
           error_code: AUTH_ERROR_CODES.membershipMissing,
           correlation_id: correlationId,

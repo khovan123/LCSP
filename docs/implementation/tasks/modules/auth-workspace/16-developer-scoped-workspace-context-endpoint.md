@@ -3,7 +3,7 @@ task_id: MW-auth-016
 module: auth-workspace
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 1.5
 depends_on:
   - auth-workspace/15-preview-developer-invitation-endpoint.md
@@ -29,6 +29,10 @@ Return the current, display-safe organization and assessment context for an auth
 | `apps/api/src/modules/auth-workspace/infrastructure/persistence/prisma-assessment-scope.repository.ts` | Modify | Select only assessment ID, organization ID, and name |
 | `apps/api/src/modules/auth-workspace/application/services/auth-workspace/auth-workspace.facade.ts` | Modify | Expose query dispatch |
 | `apps/api/src/modules/auth-workspace/auth-workspace.module.ts` | Modify | Register the context handler |
+| `apps/api/src/platform/pbac/decorators/require-any-action-as-pbac.decorator.ts` | Create | Keep inactive-membership failures non-enumerating for this scoped route |
+| `apps/api/src/platform/pbac/decorators/pbac-metadata.ts` | Modify | Carry endpoint-specific membership denial behavior |
+| `apps/api/src/platform/pbac/pbac.guard.ts` | Modify | Map inactive membership to the endpoint's stable `PBAC_DENIED` contract |
+| `packages/contracts/src/auth/audit-event-types.ts` | Modify | Add allow/deny context projection audit events |
 | `apps/api/test/developer-task-context.e2e-spec.ts` | Create | Scope, revocation, narrowing, and non-leak coverage |
 
 ## API Contract
@@ -104,4 +108,3 @@ Protected by session validation and PBAC. Assessment-scoped context requires the
 - Session revocation and action narrowing produce distinct 401/403 outcomes and never leave protected context accessible.
 - Cross-tenant and malformed-scope states fail closed with safe errors and audited decisions.
 - E2E tests cover positive, negative, revocation, narrowing, tenant-isolation, and response-redaction behavior.
-

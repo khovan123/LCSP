@@ -17,7 +17,10 @@ import {
 } from "@nestjs/common";
 
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import {
+  DEVELOPER_ALLOWED_ACTION_VALUES,
+  PBAC_ACTIONS,
+} from "@lcsp/contracts/pbac";
 
 import type { RequestMeta } from "../../application/contracts/auth-workspace/common.contract.ts";
 import type { AcceptInvitationRequest } from "../../application/contracts/auth-workspace/accept-invitation.contract.ts";
@@ -38,6 +41,7 @@ import type { UpdateProfilePayload } from "../../application/commands/update-pro
 import { REVOKE_MEMBERSHIP_ERROR_CODES } from "@lcsp/contracts/auth";
 import { AuthWorkspaceFacade } from "../../application/services/auth-workspace/auth-workspace.facade.ts";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
+import { RequireAnyActionAsPbac } from "../../../../platform/pbac/decorators/require-any-action-as-pbac.decorator.js";
 import { RequireSession } from "../../../../platform/pbac/decorators/require-session.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 
@@ -165,6 +169,16 @@ export class AuthWorkspaceController {
       correlation_id: request.correlationId,
     };
     return this.authWorkspaceFacade.getWorkspace(workspaceRequest);
+  }
+
+  @Get("workspace/developer-task")
+  @UseGuards(PbacGuard)
+  @RequireAnyActionAsPbac(...DEVELOPER_ALLOWED_ACTION_VALUES)
+  getDeveloperTaskContext(@Req() request: AuthenticatedRequest) {
+    return this.authWorkspaceFacade.getDeveloperTaskContext(
+      request.pbacContext,
+      request.correlationId!,
+    );
   }
 
   @Post("auth/mfa/enroll")

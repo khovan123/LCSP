@@ -52,8 +52,12 @@ import { VerifyMfaOtpCommand } from "../../commands/verify-mfa-otp/verify-mfa-ot
 import { VerifyMfaOtpHandler } from "../../commands/verify-mfa-otp/verify-mfa-otp.handler.ts";
 import { GetWorkspaceHandler } from "../../queries/get-workspace/get-workspace.handler.ts";
 import { GetWorkspaceQuery } from "../../queries/get-workspace/get-workspace.query.ts";
+import { GetDeveloperTaskContextHandler } from "../../queries/get-developer-task-context/get-developer-task-context.handler.ts";
+import { GetDeveloperTaskContextQuery } from "../../queries/get-developer-task-context/get-developer-task-context.query.ts";
 import { PreviewInvitationHandler } from "../../queries/preview-invitation/preview-invitation.handler.ts";
 import { PreviewInvitationQuery } from "../../queries/preview-invitation/preview-invitation.query.ts";
+import type { PbacRequestContext } from "../../../../../platform/pbac/interfaces/pbac-request.interface.ts";
+import type { DeveloperTaskContextResponse } from "../../contracts/auth-workspace/developer-task-context.contract.ts";
 
 export class AuthWorkspaceFacade {
   constructor(
@@ -72,6 +76,7 @@ export class AuthWorkspaceFacade {
     private readonly acceptInvitationHandler: AcceptInvitationHandler,
     private readonly previewInvitationHandler: PreviewInvitationHandler,
     private readonly revokeMembershipHandler: RevokeMembershipHandler,
+    private readonly getDeveloperTaskContextHandler: GetDeveloperTaskContextHandler,
   ) {}
 
   registerApprovedPath(
@@ -95,6 +100,15 @@ export class AuthWorkspaceFacade {
 
   getWorkspace(request: WorkspaceRequest = {}) {
     return this.getWorkspaceHandler.execute(new GetWorkspaceQuery(request));
+  }
+
+  getDeveloperTaskContext(
+    context: PbacRequestContext,
+    correlationId: string,
+  ): Promise<DeveloperTaskContextResponse> {
+    return this.getDeveloperTaskContextHandler.execute(
+      new GetDeveloperTaskContextQuery(context, correlationId),
+    );
   }
 
   enrollMfa(sessionToken: string, requestMeta: RequestMeta = {}) {
