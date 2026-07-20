@@ -166,8 +166,10 @@ export class GitHubAppClient {
       `${GITHUB_API_BASE_URL}/repos/${input.repositoryFullName}/commits/${encodeURIComponent(input.revision)}`,
       accessToken,
     );
-    const expectedApiPrefix = `${GITHUB_API_BASE_URL}/repos/${input.repositoryFullName}/commits/`.toLowerCase();
-    const expectedHtmlPrefix = `https://github.com/${input.repositoryFullName}/commit/`.toLowerCase();
+    const expectedApiPrefix =
+      `${GITHUB_API_BASE_URL}/repos/${input.repositoryFullName}/commits/`.toLowerCase();
+    const expectedHtmlPrefix =
+      `https://github.com/${input.repositoryFullName}/commit/`.toLowerCase();
 
     if (
       !commit ||
