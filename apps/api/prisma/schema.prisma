@@ -368,6 +368,33 @@ model TechnicalEvidenceReport {
   @@index([scanJobId])
 }
 
+model ClassificationResult {
+  id                        String   @id
+  assessmentId              String
+  organizationId            String
+  technicalEvidenceReportId String   @unique
+  guardrailStatus           String
+  createdAt                 DateTime @default(now())
+
+  @@index([assessmentId, organizationId, createdAt])
+}
+
+model DocumentRequest {
+  id                     String   @id
+  assessmentId           String
+  organizationId         String
+  requestedById          String
+  classificationResultId String
+  documentType           String
+  status                 String   @default("QUEUED")
+  correlationId          String
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([assessmentId, organizationId, documentType, status, createdAt])
+  @@index([organizationId, createdAt])
+}
+
 model GitHubAppInstallState {
   id             String   @id
   state          String   @unique
