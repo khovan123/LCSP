@@ -17,6 +17,7 @@ import { RequestFinalReportCommand } from "./request-final-report.command.js";
 const CLASSIFICATION_GUARDRAIL_STATUS_PASSED = "passed";
 const ASSESSMENT_RESOURCE_TYPE = "Assessment";
 const DOCUMENT_REQUEST_RESOURCE_TYPE = "DocumentRequest";
+const DOCUMENT_REQUEST_LOCK_PREFIX = "document-final-report";
 
 @CommandHandler(RequestFinalReportCommand)
 export class RequestFinalReportHandler implements ICommandHandler<RequestFinalReportCommand> {
@@ -64,11 +65,15 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
       });
     }
 
-    const documentRequestId = crypto.randomUUID();
+    const documentRequestId = await this.prisma.$transaction(async (tx) => {
+      const lockKey = [
+        DOCUMENT_REQUEST_LOCK_PREFIX,
+        command.organizationId,
+        command.assessmentId,
+      ].join(":");
 
-    await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(hashtext(${command.assessmentId}))
+        SELECT pg_advisory_xact_lock(hashtext(${lockKey}))
       `;
 
       const existingRequest = await tx.documentRequest.findFirst({
@@ -93,9 +98,9 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
         });
       }
 
-      await tx.documentRequest.create({
+      const created = await tx.documentRequest.create({
         data: {
-          id: documentRequestId,
+          id: crypto.randomUUID(),
           assessmentId: command.assessmentId,
           organizationId: command.organizationId,
           requestedById: command.requestedById,
@@ -104,12 +109,15 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
           status: DOCUMENT_REQUEST_STATUSES.queued,
           correlationId: command.correlationId,
         },
+        select: { id: true },
       });
+
+      return created.id;
     });
 
     await this.outboxRepository.enqueue({
       aggregateType: DOCUMENT_REQUEST_RESOURCE_TYPE,
-      aggregateId: command.assessmentId,
+      aggregateId: documentRequestId,
       eventType: DOCUMENT_EVENT_TYPES.finalReportRequested,
       payload: {
         documentRequestId,

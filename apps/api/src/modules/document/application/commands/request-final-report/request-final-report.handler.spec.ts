@@ -33,22 +33,27 @@ function buildHandler(options?: {
   const findAssessment = jest.fn(() => assessment);
   const findEvidence = jest.fn(() => evidence);
   const findExisting = jest.fn(() => existing);
-  const createDocumentRequest = jest.fn().mockResolvedValue(undefined);
-  const advisoryLock = jest.fn().mockResolvedValue(undefined);
-  const transaction = jest.fn(async (callback: (tx: unknown) => unknown) =>
-    callback({
-      $executeRaw: advisoryLock,
-      documentRequest: {
-        findFirst: findExisting,
-        create: createDocumentRequest,
-      },
-    }),
+  const createDocumentRequest = jest.fn().mockResolvedValue({
+    id: "document-request-1",
+  });
+  const advisoryLock = jest.fn().mockResolvedValue(1);
+
+  const tx = {
+    $executeRaw: advisoryLock,
+    documentRequest: {
+      findFirst: findExisting,
+      create: createDocumentRequest,
+    },
+  };
+
+  const transaction = jest.fn((cb: (arg: typeof tx) => Promise<string>) =>
+    cb(tx),
   );
 
   const prisma = {
+    $transaction: transaction,
     assessment: { findUnique: findAssessment },
     classificationResult: { findFirst: findEvidence },
-    $transaction: transaction,
   } as unknown as PrismaService;
 
   const enqueue = jest
@@ -170,6 +175,7 @@ describe("RequestFinalReportHandler", () => {
     expect(enqueue).toHaveBeenCalledTimes(1);
     const outbox = enqueue.mock.calls[0][0];
     expect(outbox.eventType).toBe(DOCUMENT_EVENT_TYPES.finalReportRequested);
+    expect(outbox.aggregateId).toBe("document-request-1");
     expect(outbox.payload).toEqual(
       expect.objectContaining({
         assessmentId: "asmt-1",

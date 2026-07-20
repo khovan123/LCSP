@@ -98,7 +98,7 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
     );
     const body = response.body as SuccessResponse;
 
-    assert.equal(response.status, 201);
+    assert.equal(response.status, 202);
     assert.ok(body.document_request_id);
     assert.equal(body.status, DOCUMENT_REQUEST_STATUSES.queued);
     assert.equal(body.document_type, DOCUMENT_TYPES.finalReport);
@@ -112,7 +112,7 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
         where: {
           eventType: DOCUMENT_EVENT_TYPES.finalReportRequested,
           aggregateType: "DocumentRequest",
-          aggregateId: "assessment-1",
+          aggregateId: body.document_request_id,
         },
       }),
       prisma.authAuditEvent.count({
