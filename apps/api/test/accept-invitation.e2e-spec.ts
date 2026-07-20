@@ -4,7 +4,11 @@ import {
   AUTH_INVITATION_STATES,
   AUTH_MEMBERSHIP_STATUSES,
 } from "@lcsp/contracts/auth";
-import { PBAC_STATE_GATES, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import {
+  PBAC_ACTIONS,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import * as assert from "node:assert/strict";
 
@@ -293,7 +297,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
           scope: "assessment-1",
           allowed_actions: [
             expectedAction,
-            "assessment:create",
+            PBAC_ACTIONS.assessmentCreate,
             "unknown:action",
           ],
         },

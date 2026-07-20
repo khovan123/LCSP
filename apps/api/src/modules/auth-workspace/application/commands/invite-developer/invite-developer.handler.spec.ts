@@ -77,6 +77,7 @@ function buildHandler(input?: {
     {
       belongsToOrganization: () =>
         Promise.resolve(input?.assessmentBelongsToOrg ?? true),
+      findDisplayByIdAndOrganization: () => Promise.resolve(null),
     },
   );
 
