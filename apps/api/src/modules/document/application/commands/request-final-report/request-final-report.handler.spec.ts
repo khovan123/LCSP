@@ -30,9 +30,9 @@ function buildHandler(options?: {
   const existing: { id: string } | null =
     options?.existing === undefined ? null : options.existing;
 
-  const findAssessment = jest.fn(async () => assessment);
-  const findEvidence = jest.fn(async () => evidence);
-  const findExisting = jest.fn(async () => existing);
+  const findAssessment = jest.fn(() => assessment);
+  const findEvidence = jest.fn(() => evidence);
+  const findExisting = jest.fn(() => existing);
   const createDocumentRequest = jest.fn().mockResolvedValue(undefined);
 
   const prisma = {
