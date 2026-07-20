@@ -1,0 +1,166 @@
+import { describe, expect, it, jest } from "@jest/globals";
+import { ConflictException, NotFoundException } from "@nestjs/common";
+import {
+  DOCUMENT_ERROR_CODES,
+  DOCUMENT_EVENT_TYPES,
+} from "@lcsp/contracts/document";
+
+import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import type { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { RequestFinalReportCommand } from "./request-final-report.command.js";
+import { RequestFinalReportHandler } from "./request-final-report.handler.js";
+
+function buildHandler(options?: {
+  assessment?: { id: string; organizationId: string } | null;
+  evidence?: { id: string; evidencePayload: unknown } | null;
+  existing?: { id: string } | null;
+}) {
+  const findAssessment = jest
+    .fn()
+    .mockResolvedValue(options?.assessment ?? { id: "asmt-1", organizationId: "org-1" });
+  const findEvidence = jest.fn().mockResolvedValue(
+    options?.evidence ?? {
+      id: "classification-1",
+      guardrailStatus: "passed",
+    },
+  );
+  const findExisting = jest.fn().mockResolvedValue(options?.existing ?? null);
+  const createDocumentRequest = jest.fn().mockResolvedValue(undefined);
+
+  const prisma = {
+    assessment: { findUnique: findAssessment },
+    classificationResult: { findFirst: findEvidence },
+    documentRequest: { findFirst: findExisting, create: createDocumentRequest },
+  } as unknown as PrismaService;
+
+  const enqueue = jest
+    .fn<OutboxRepository["enqueue"]>()
+    .mockResolvedValue(undefined);
+  const outbox = { enqueue } as unknown as OutboxRepository;
+
+  const write = jest
+    .fn<AuditWriterService["write"]>()
+    .mockResolvedValue(undefined);
+  const audit = { write } as unknown as AuditWriterService;
+
+  const handler = new RequestFinalReportHandler(prisma, outbox, audit);
+  const command = new RequestFinalReportCommand(
+    "asmt-1",
+    "org-1",
+    "user-1",
+    "corr-1",
+  );
+
+  return {
+    handler,
+    command,
+    findAssessment,
+    findEvidence,
+    findExisting,
+    enqueue,
+    write,
+    createDocumentRequest,
+  };
+}
+
+describe("RequestFinalReportHandler", () => {
+  it("returns QUEUED response when guardrail is passed", async () => {
+    const { handler, command, enqueue } = buildHandler();
+
+    const result = await handler.execute(command);
+
+    expect(result.status).toBe("QUEUED");
+    expect(result.document_type).toBe("FinalReport");
+    expect(result.correlation_id).toBe("corr-1");
+    expect(result.document_request_id).toBeTruthy();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws ASSESSMENT_NOT_FOUND when assessment does not exist", async () => {
+    const { handler, command } = buildHandler({ assessment: null });
+
+    await expect(handler.execute(command)).rejects.toThrow(NotFoundException);
+
+    try {
+      await handler.execute(command);
+    } catch (error) {
+      expect((error as NotFoundException).getResponse()).toEqual({
+        error_code: DOCUMENT_ERROR_CODES.assessmentNotFound,
+        correlation_id: "corr-1",
+      });
+    }
+  });
+
+  it("throws CLASSIFICATION_GUARDRAIL_NOT_PASSED when guardrail is degraded", async () => {
+    const { handler, command } = buildHandler({
+      evidence: {
+        id: "classification-1",
+        guardrailStatus: "degraded",
+      },
+    });
+
+    await expect(handler.execute(command)).rejects.toThrow(ConflictException);
+
+    try {
+      await handler.execute(command);
+    } catch (error) {
+      expect((error as ConflictException).getResponse()).toEqual({
+        error_code: DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed,
+        correlation_id: "corr-1",
+      });
+    }
+  });
+
+  it("throws CLASSIFICATION_GUARDRAIL_NOT_PASSED when guardrail is blocked", async () => {
+    const { handler, command } = buildHandler({
+      evidence: {
+        id: "classification-1",
+        guardrailStatus: "blocked",
+      },
+    });
+
+    await expect(handler.execute(command)).rejects.toThrow(ConflictException);
+  });
+
+  it("throws DOCUMENT_ALREADY_QUEUED when an active request exists", async () => {
+    const { handler, command } = buildHandler({ existing: { id: "outbox-1" } });
+
+    await expect(handler.execute(command)).rejects.toThrow(ConflictException);
+
+    try {
+      await handler.execute(command);
+    } catch (error) {
+      expect((error as ConflictException).getResponse()).toEqual({
+        error_code: DOCUMENT_ERROR_CODES.alreadyQueued,
+        correlation_id: "corr-1",
+      });
+    }
+  });
+
+  it("enqueues final report outbox event and writes audit", async () => {
+    const { handler, command, enqueue, write, createDocumentRequest } =
+      buildHandler();
+
+    await handler.execute(command);
+
+    expect(createDocumentRequest).toHaveBeenCalledTimes(1);
+
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    const outbox = enqueue.mock.calls[0][0];
+    expect(outbox.eventType).toBe(DOCUMENT_EVENT_TYPES.finalReportRequested);
+    expect(outbox.payload).toEqual(
+      expect.objectContaining({
+        assessmentId: "asmt-1",
+        classificationResultId: "classification-1",
+        correlationId: "corr-1",
+      }),
+    );
+
+    expect(write).toHaveBeenCalled();
+    const firstEvent = write.mock.calls[0][0];
+    expect(firstEvent.eventType).toBe(
+      DOCUMENT_EVENT_TYPES.finalReportRequestedAudit,
+    );
+  });
+});
