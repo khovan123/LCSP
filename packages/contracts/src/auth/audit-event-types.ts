@@ -15,6 +15,8 @@ export const AUTH_AUDIT_EVENT_TYPES = {
   authOauthLoginSuccess: "AUTH_OAUTH_LOGIN_SUCCESS",
   authOauthLoginFailed: "AUTH_OAUTH_LOGIN_FAILED",
   authDeveloperInvited: "AUTH_DEVELOPER_INVITED",
+  authDeveloperInvitationPreviewDenied:
+    "AUTH_DEVELOPER_INVITATION_PREVIEW_DENIED",
   authDeveloperInvitationAccepted: "AUTH_DEVELOPER_INVITATION_ACCEPTED",
   authDeveloperRevoked: "AUTH_DEVELOPER_REVOKED",
 } as const;

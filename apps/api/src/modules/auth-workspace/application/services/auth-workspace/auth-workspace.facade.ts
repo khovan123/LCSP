@@ -4,6 +4,10 @@ import type {
   AcceptInvitationResponse,
 } from "../../contracts/auth-workspace/accept-invitation.contract.ts";
 import type {
+  InvitationPreviewRequest,
+  InvitationPreviewResponse,
+} from "../../contracts/auth-workspace/invitation-preview.contract.ts";
+import type {
   InviteDeveloperRequest,
   InviteDeveloperResponse,
 } from "../../contracts/auth-workspace/invitation.contract.ts";
@@ -48,6 +52,8 @@ import { VerifyMfaOtpCommand } from "../../commands/verify-mfa-otp/verify-mfa-ot
 import { VerifyMfaOtpHandler } from "../../commands/verify-mfa-otp/verify-mfa-otp.handler.ts";
 import { GetWorkspaceHandler } from "../../queries/get-workspace/get-workspace.handler.ts";
 import { GetWorkspaceQuery } from "../../queries/get-workspace/get-workspace.query.ts";
+import { PreviewInvitationHandler } from "../../queries/preview-invitation/preview-invitation.handler.ts";
+import { PreviewInvitationQuery } from "../../queries/preview-invitation/preview-invitation.query.ts";
 
 export class AuthWorkspaceFacade {
   constructor(
@@ -64,6 +70,7 @@ export class AuthWorkspaceFacade {
     private readonly oauthCallbackHandler: OAuthCallbackHandler,
     private readonly inviteDeveloperHandler: InviteDeveloperHandler,
     private readonly acceptInvitationHandler: AcceptInvitationHandler,
+    private readonly previewInvitationHandler: PreviewInvitationHandler,
     private readonly revokeMembershipHandler: RevokeMembershipHandler,
   ) {}
 
@@ -179,6 +186,18 @@ export class AuthWorkspaceFacade {
         password: payload.password,
         correlationId: requestMeta.correlation_id,
       }),
+    );
+  }
+
+  previewInvitation(
+    payload: InvitationPreviewRequest,
+    requestMeta: RequestMeta = {},
+  ): Promise<InvitationPreviewResponse> {
+    return this.previewInvitationHandler.execute(
+      new PreviewInvitationQuery(
+        payload?.invitation_token,
+        requestMeta.correlation_id,
+      ),
     );
   }
 
