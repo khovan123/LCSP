@@ -11,23 +11,32 @@ import type { OutboxRepository } from "../../../../../platform/outbox/outbox.rep
 import { RequestFinalReportCommand } from "./request-final-report.command.js";
 import { RequestFinalReportHandler } from "./request-final-report.handler.js";
 
+type AssessmentRecord = { id: string; organizationId: string };
+type ClassificationResultRecord = { id: string; guardrailStatus: string };
+
 function buildHandler(options?: {
-  assessment?: { id: string; organizationId: string } | null;
-  evidence?: { id: string; evidencePayload: unknown } | null;
+  assessment?: AssessmentRecord | null;
+  evidence?: ClassificationResultRecord | null;
   existing?: { id: string } | null;
 }) {
-  const findAssessment = jest
-    .fn()
-    .mockResolvedValue(
-      options?.assessment ?? { id: "asmt-1", organizationId: "org-1" },
-    );
-  const findEvidence = jest.fn().mockResolvedValue(
-    options?.evidence ?? {
-      id: "classification-1",
-      guardrailStatus: "passed",
-    },
-  );
-  const findExisting = jest.fn().mockResolvedValue(options?.existing ?? null);
+  const assessment: AssessmentRecord | null =
+    (options?.assessment === undefined
+      ? { id: "asmt-1", organizationId: "org-1" }
+      : options.assessment) as AssessmentRecord | null;
+  const evidence: ClassificationResultRecord | null =
+    (options?.evidence === undefined
+      ? {
+          id: "classification-1",
+          guardrailStatus: "passed",
+        }
+      : options.evidence) as ClassificationResultRecord | null;
+  const existing: { id: string } | null =
+    (options?.existing === undefined ? null : options.existing) as { id: string } | null;
+
+  const findAssessment = jest.fn(async () => assessment);
+  const findEvidence = jest.fn(async () => evidence);
+  const findExisting = jest.fn(async () => existing);
+>>>>>>> 12aeb4b (test(LCSP-81): fix request final report spec null handling)
   const createDocumentRequest = jest.fn().mockResolvedValue(undefined);
 
   const prisma = {
@@ -55,8 +64,13 @@ function buildHandler(options?: {
   );
 
   return {
-    handler,
-    command,
+    (options?.existing === undefined ? null : options.existing) as {
+      id: string;
+    } | null;
+
+  const findAssessment = jest.fn(async () => assessment);
+  const findEvidence = jest.fn(async () => evidence);
+  const findExisting = jest.fn(async () => existing);
     findAssessment,
     findEvidence,
     findExisting,
