@@ -20,23 +20,19 @@ function buildHandler(options?: {
   existing?: { id: string } | null;
 }) {
   const assessment: AssessmentRecord | null =
-    (options?.assessment === undefined
+    options?.assessment === undefined
       ? { id: "asmt-1", organizationId: "org-1" }
-      : options.assessment) as AssessmentRecord | null;
+      : options.assessment;
   const evidence: ClassificationResultRecord | null =
-    (options?.evidence === undefined
-      ? {
-          id: "classification-1",
-          guardrailStatus: "passed",
-        }
-      : options.evidence) as ClassificationResultRecord | null;
+    options?.evidence === undefined
+      ? { id: "classification-1", guardrailStatus: "passed" }
+      : options.evidence;
   const existing: { id: string } | null =
-    (options?.existing === undefined ? null : options.existing) as { id: string } | null;
+    options?.existing === undefined ? null : options.existing;
 
   const findAssessment = jest.fn(async () => assessment);
   const findEvidence = jest.fn(async () => evidence);
   const findExisting = jest.fn(async () => existing);
->>>>>>> 12aeb4b (test(LCSP-81): fix request final report spec null handling)
   const createDocumentRequest = jest.fn().mockResolvedValue(undefined);
 
   const prisma = {
@@ -64,13 +60,8 @@ function buildHandler(options?: {
   );
 
   return {
-    (options?.existing === undefined ? null : options.existing) as {
-      id: string;
-    } | null;
-
-  const findAssessment = jest.fn(async () => assessment);
-  const findEvidence = jest.fn(async () => evidence);
-  const findExisting = jest.fn(async () => existing);
+    handler,
+    command,
     findAssessment,
     findEvidence,
     findExisting,
@@ -110,10 +101,7 @@ describe("RequestFinalReportHandler", () => {
 
   it("throws CLASSIFICATION_GUARDRAIL_NOT_PASSED when guardrail is degraded", async () => {
     const { handler, command } = buildHandler({
-      evidence: {
-        id: "classification-1",
-        guardrailStatus: "degraded",
-      },
+      evidence: { id: "classification-1", guardrailStatus: "degraded" },
     });
 
     await expect(handler.execute(command)).rejects.toThrow(ConflictException);
@@ -130,10 +118,7 @@ describe("RequestFinalReportHandler", () => {
 
   it("throws CLASSIFICATION_GUARDRAIL_NOT_PASSED when guardrail is blocked", async () => {
     const { handler, command } = buildHandler({
-      evidence: {
-        id: "classification-1",
-        guardrailStatus: "blocked",
-      },
+      evidence: { id: "classification-1", guardrailStatus: "blocked" },
     });
 
     await expect(handler.execute(command)).rejects.toThrow(ConflictException);
@@ -180,3 +165,4 @@ describe("RequestFinalReportHandler", () => {
     );
   });
 });
+
