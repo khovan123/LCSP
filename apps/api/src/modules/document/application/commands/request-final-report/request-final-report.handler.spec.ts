@@ -34,11 +34,21 @@ function buildHandler(options?: {
   const findEvidence = jest.fn(() => evidence);
   const findExisting = jest.fn(() => existing);
   const createDocumentRequest = jest.fn().mockResolvedValue(undefined);
+  const advisoryLock = jest.fn().mockResolvedValue(undefined);
+  const transaction = jest.fn(async (callback: (tx: unknown) => unknown) =>
+    callback({
+      $executeRaw: advisoryLock,
+      documentRequest: {
+        findFirst: findExisting,
+        create: createDocumentRequest,
+      },
+    }),
+  );
 
   const prisma = {
     assessment: { findUnique: findAssessment },
     classificationResult: { findFirst: findEvidence },
-    documentRequest: { findFirst: findExisting, create: createDocumentRequest },
+    $transaction: transaction,
   } as unknown as PrismaService;
 
   const enqueue = jest
@@ -65,6 +75,8 @@ function buildHandler(options?: {
     findAssessment,
     findEvidence,
     findExisting,
+    advisoryLock,
+    transaction,
     enqueue,
     write,
     createDocumentRequest,
@@ -73,7 +85,7 @@ function buildHandler(options?: {
 
 describe("RequestFinalReportHandler", () => {
   it("returns QUEUED response when guardrail is passed", async () => {
-    const { handler, command, enqueue } = buildHandler();
+    const { handler, command, enqueue, transaction } = buildHandler();
 
     const result = await handler.execute(command);
 
@@ -81,6 +93,7 @@ describe("RequestFinalReportHandler", () => {
     expect(result.document_type).toBe("FinalReport");
     expect(result.correlation_id).toBe("corr-1");
     expect(result.document_request_id).toBeTruthy();
+    expect(transaction).toHaveBeenCalledTimes(1);
     expect(enqueue).toHaveBeenCalledTimes(1);
   });
 
@@ -140,11 +153,19 @@ describe("RequestFinalReportHandler", () => {
   });
 
   it("enqueues final report outbox event and writes audit", async () => {
-    const { handler, command, enqueue, write, createDocumentRequest } =
+    const {
+      handler,
+      command,
+      enqueue,
+      write,
+      createDocumentRequest,
+      advisoryLock,
+    } =
       buildHandler();
 
     await handler.execute(command);
 
+    expect(advisoryLock).toHaveBeenCalledTimes(1);
     expect(createDocumentRequest).toHaveBeenCalledTimes(1);
 
     expect(enqueue).toHaveBeenCalledTimes(1);

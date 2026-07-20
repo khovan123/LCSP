@@ -64,41 +64,47 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
       });
     }
 
-    const existingRequest = await this.prisma.documentRequest.findFirst({
-      where: {
-        assessmentId: command.assessmentId,
-        organizationId: command.organizationId,
-        documentType: DOCUMENT_TYPES.finalReport,
-        status: {
-          in: [
-            DOCUMENT_REQUEST_STATUSES.queued,
-            DOCUMENT_REQUEST_STATUSES.generating,
-          ],
-        },
-      },
-      select: { id: true },
-    });
-
-    if (existingRequest) {
-      throw new ConflictException({
-        error_code: DOCUMENT_ERROR_CODES.alreadyQueued,
-        correlation_id: command.correlationId,
-      });
-    }
-
     const documentRequestId = crypto.randomUUID();
 
-    await this.prisma.documentRequest.create({
-      data: {
-        id: documentRequestId,
-        assessmentId: command.assessmentId,
-        organizationId: command.organizationId,
-        requestedById: command.requestedById,
-        classificationResultId: classificationResult.id,
-        documentType: DOCUMENT_TYPES.finalReport,
-        status: DOCUMENT_REQUEST_STATUSES.queued,
-        correlationId: command.correlationId,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtext(${command.assessmentId}))
+      `;
+
+      const existingRequest = await tx.documentRequest.findFirst({
+        where: {
+          assessmentId: command.assessmentId,
+          organizationId: command.organizationId,
+          documentType: DOCUMENT_TYPES.finalReport,
+          status: {
+            in: [
+              DOCUMENT_REQUEST_STATUSES.queued,
+              DOCUMENT_REQUEST_STATUSES.generating,
+            ],
+          },
+        },
+        select: { id: true },
+      });
+
+      if (existingRequest) {
+        throw new ConflictException({
+          error_code: DOCUMENT_ERROR_CODES.alreadyQueued,
+          correlation_id: command.correlationId,
+        });
+      }
+
+      await tx.documentRequest.create({
+        data: {
+          id: documentRequestId,
+          assessmentId: command.assessmentId,
+          organizationId: command.organizationId,
+          requestedById: command.requestedById,
+          classificationResultId: classificationResult.id,
+          documentType: DOCUMENT_TYPES.finalReport,
+          status: DOCUMENT_REQUEST_STATUSES.queued,
+          correlationId: command.correlationId,
+        },
+      });
     });
 
     await this.outboxRepository.enqueue({
