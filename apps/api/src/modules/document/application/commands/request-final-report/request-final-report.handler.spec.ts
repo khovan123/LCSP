@@ -160,8 +160,7 @@ describe("RequestFinalReportHandler", () => {
       write,
       createDocumentRequest,
       advisoryLock,
-    } =
-      buildHandler();
+    } = buildHandler();
 
     await handler.execute(command);
 
