@@ -2,8 +2,9 @@
 title: 'MW-auth-015: Preview Developer Invitation and Preserve Acceptance Scope'
 type: 'feature'
 created: '2026-07-19T00:00:00+07:00'
-status: 'in-review'
+status: 'done'
 baseline_revision: '324eb37012767627be112d397a6bec07e88d223a'
+final_revision: '8113882f8908c56d7f7c848a8d798d4efbf0a5ad'
 review_loop_iteration: 0
 followup_review_recommended: true
 context:
