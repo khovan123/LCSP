@@ -18,6 +18,7 @@ import { SignInHandler } from "./application/commands/sign-in/sign-in.handler.ts
 import { UpdateProfileHandler } from "./application/commands/update-profile/update-profile.handler.ts";
 import { VerifyMfaOtpHandler } from "./application/commands/verify-mfa-otp/verify-mfa-otp.handler.ts";
 import { GetWorkspaceHandler } from "./application/queries/get-workspace/get-workspace.handler.ts";
+import { GetDeveloperTaskContextHandler } from "./application/queries/get-developer-task-context/get-developer-task-context.handler.ts";
 import { PreviewInvitationHandler } from "./application/queries/preview-invitation/preview-invitation.handler.ts";
 import {
   AUTH_WORKSPACE_RECOVERY_NOTIFIER,
@@ -161,6 +162,20 @@ function handlerProvider<T>(
         new RevokeMembershipHandler(prisma, authAudit),
     },
     {
+      provide: GetDeveloperTaskContextHandler,
+      inject: [
+        PrismaService,
+        AUTH_WORKSPACE_ASSESSMENT_SCOPE_REPOSITORY,
+        AuthAuditService,
+      ],
+      useFactory: (
+        prisma: PrismaService,
+        assessmentScopes: AssessmentScopeRepository,
+        authAudit: AuthAuditService,
+      ) =>
+        new GetDeveloperTaskContextHandler(prisma, assessmentScopes, authAudit),
+    },
+    {
       provide: AUTH_WORKSPACE_ASSESSMENT_SCOPE_REPOSITORY,
       useExisting: PrismaAssessmentScopeRepository,
     },
@@ -249,6 +264,7 @@ function handlerProvider<T>(
         AcceptInvitationHandler,
         PreviewInvitationHandler,
         RevokeMembershipHandler,
+        GetDeveloperTaskContextHandler,
       ],
       useFactory: (
         registerApprovedPathHandler: RegisterApprovedPathHandler,
@@ -266,6 +282,7 @@ function handlerProvider<T>(
         acceptInvitationHandler: AcceptInvitationHandler,
         previewInvitationHandler: PreviewInvitationHandler,
         revokeMembershipHandler: RevokeMembershipHandler,
+        getDeveloperTaskContextHandler: GetDeveloperTaskContextHandler,
       ) =>
         new AuthWorkspaceFacade(
           registerApprovedPathHandler,
@@ -283,6 +300,7 @@ function handlerProvider<T>(
           acceptInvitationHandler,
           previewInvitationHandler,
           revokeMembershipHandler,
+          getDeveloperTaskContextHandler,
         ),
     },
   ],

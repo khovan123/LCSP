@@ -19,6 +19,8 @@ export const AUTH_AUDIT_EVENT_TYPES = {
     "AUTH_DEVELOPER_INVITATION_PREVIEW_DENIED",
   authDeveloperInvitationAccepted: "AUTH_DEVELOPER_INVITATION_ACCEPTED",
   authDeveloperRevoked: "AUTH_DEVELOPER_REVOKED",
+  authDeveloperTaskContextAllowed: "AUTH_DEVELOPER_TASK_CONTEXT_ALLOWED",
+  authDeveloperTaskContextDenied: "AUTH_DEVELOPER_TASK_CONTEXT_DENIED",
 } as const;
 
 export type AuthAuditEventType =

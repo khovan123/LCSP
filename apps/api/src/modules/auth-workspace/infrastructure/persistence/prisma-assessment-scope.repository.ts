@@ -1,7 +1,10 @@
 import { Injectable } from "@nestjs/common";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
-import type { AssessmentScopeRepository } from "../../application/ports/persistence/assessment-scope.repository.ts";
+import type {
+  AssessmentScopeDisplay,
+  AssessmentScopeRepository,
+} from "../../application/ports/persistence/assessment-scope.repository.ts";
 
 @Injectable()
 export class PrismaAssessmentScopeRepository implements AssessmentScopeRepository {
@@ -15,5 +18,15 @@ export class PrismaAssessmentScopeRepository implements AssessmentScopeRepositor
       where: { id: assessmentId, organizationId },
     });
     return count === 1;
+  }
+
+  findDisplayByIdAndOrganization(
+    assessmentId: string,
+    organizationId: string,
+  ): Promise<AssessmentScopeDisplay | null> {
+    return this.prisma.assessment.findFirst({
+      where: { id: assessmentId, organizationId },
+      select: { id: true, organizationId: true, name: true },
+    });
   }
 }
