@@ -91,7 +91,11 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
   it("returns QUEUED and writes document request, outbox, and audit when guardrail passed", async () => {
     await seedClassification(prisma, "passed");
 
-    const response = await requestFinalReport(app, managerToken, "assessment-1");
+    const response = await requestFinalReport(
+      app,
+      managerToken,
+      "assessment-1",
+    );
     const body = response.body as SuccessResponse;
 
     assert.equal(response.status, 201);
@@ -129,7 +133,11 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
   it("returns 409 CLASSIFICATION_GUARDRAIL_NOT_PASSED when latest classification is degraded", async () => {
     await seedClassification(prisma, "degraded");
 
-    const response = await requestFinalReport(app, managerToken, "assessment-1");
+    const response = await requestFinalReport(
+      app,
+      managerToken,
+      "assessment-1",
+    );
 
     assert.equal(response.status, 409);
     assert.equal(
@@ -147,7 +155,10 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
   });
 
   it("returns 409 DOCUMENT_ALREADY_QUEUED when a QUEUED request already exists", async () => {
-    const { classificationResultId } = await seedClassification(prisma, "passed");
+    const { classificationResultId } = await seedClassification(
+      prisma,
+      "passed",
+    );
     await prisma.documentRequest.create({
       data: {
         id: "doc-req-existing",
@@ -161,7 +172,11 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
       },
     });
 
-    const response = await requestFinalReport(app, managerToken, "assessment-1");
+    const response = await requestFinalReport(
+      app,
+      managerToken,
+      "assessment-1",
+    );
 
     assert.equal(response.status, 409);
     assert.equal(
@@ -208,10 +223,17 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
       },
     });
 
-    const response = await requestFinalReport(app, managerToken, "assessment-1");
+    const response = await requestFinalReport(
+      app,
+      managerToken,
+      "assessment-1",
+    );
 
     assert.equal(response.status, 403);
-    assert.equal((response.body as ErrorResponse).error_code, PBAC_REASON_CODE.denied);
+    assert.equal(
+      (response.body as ErrorResponse).error_code,
+      PBAC_REASON_CODE.denied,
+    );
   });
 });
 

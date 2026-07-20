@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  NotFoundException,
-} from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
@@ -22,9 +19,7 @@ const ASSESSMENT_RESOURCE_TYPE = "Assessment";
 const DOCUMENT_REQUEST_RESOURCE_TYPE = "DocumentRequest";
 
 @CommandHandler(RequestFinalReportCommand)
-export class RequestFinalReportHandler
-  implements ICommandHandler<RequestFinalReportCommand>
-{
+export class RequestFinalReportHandler implements ICommandHandler<RequestFinalReportCommand> {
   constructor(
     private readonly prisma: PrismaService,
     private readonly outboxRepository: OutboxRepository,
@@ -46,17 +41,18 @@ export class RequestFinalReportHandler
       });
     }
 
-    const classificationResult = await this.prisma.classificationResult.findFirst({
-      where: {
-        assessmentId: command.assessmentId,
-        organizationId: command.organizationId,
-      },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        guardrailStatus: true,
-      },
-    });
+    const classificationResult =
+      await this.prisma.classificationResult.findFirst({
+        where: {
+          assessmentId: command.assessmentId,
+          organizationId: command.organizationId,
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          guardrailStatus: true,
+        },
+      });
 
     if (
       !classificationResult ||

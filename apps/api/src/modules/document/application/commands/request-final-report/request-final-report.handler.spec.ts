@@ -18,7 +18,9 @@ function buildHandler(options?: {
 }) {
   const findAssessment = jest
     .fn()
-    .mockResolvedValue(options?.assessment ?? { id: "asmt-1", organizationId: "org-1" });
+    .mockResolvedValue(
+      options?.assessment ?? { id: "asmt-1", organizationId: "org-1" },
+    );
   const findEvidence = jest.fn().mockResolvedValue(
     options?.evidence ?? {
       id: "classification-1",
