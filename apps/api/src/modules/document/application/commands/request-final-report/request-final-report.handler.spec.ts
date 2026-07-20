@@ -145,11 +145,11 @@ describe("RequestFinalReportHandler", () => {
   it("throws DOCUMENT_ALREADY_QUEUED when an active request exists", async () => {
     const { handler, command } = buildHandler({ existing: { id: "outbox-1" } });
 
-    await expect(handler.execute(command)).rejects.toThrow(ConflictException);
-
     try {
       await handler.execute(command);
+      throw new Error("Expected ConflictException");
     } catch (error) {
+      expect(error).toBeInstanceOf(ConflictException);
       expect((error as ConflictException).getResponse()).toEqual({
         error_code: DOCUMENT_ERROR_CODES.alreadyQueued,
         correlation_id: "corr-1",
