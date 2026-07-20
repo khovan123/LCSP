@@ -122,11 +122,11 @@ describe("RequestFinalReportHandler", () => {
       evidence: { id: "classification-1", guardrailStatus: "degraded" },
     });
 
-    await expect(handler.execute(command)).rejects.toThrow(ConflictException);
-
     try {
       await handler.execute(command);
+      throw new Error("Expected ConflictException");
     } catch (error) {
+      expect(error).toBeInstanceOf(ConflictException);
       expect((error as ConflictException).getResponse()).toEqual({
         error_code: DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed,
         correlation_id: "corr-1",
