@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-06-26T10:24:37+07:00"
-last_updated: "2026-07-19T21:17:45+07:00"
+last_updated: "2026-07-21T19:29:00Z"
 project: "LCSP — Legal Compliance Support Platform"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -47,7 +47,7 @@ development_status:
   1-2-mfa-session-recovery-and-profile-safety: done
   1-3-oauth-oidc-login-without-repository-authorization: review
   1-4-organization-membership-and-manager-policy-scope: review
-  1-5-optional-developer-invitation-and-scoped-task-acceptance: in-progress
+  1-5-optional-developer-invitation-and-scoped-task-acceptance: review
   1-6-manager-only-action-enforcement: ready-for-dev
   1-7-pbac-policy-runtime-and-deny-on-failure-contract: review
   1-8-foundational-audit-outbox-and-event-contract: ready-for-dev
