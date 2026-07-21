@@ -166,6 +166,7 @@ GPT-5 Codex
 - MW-auth-012 RED: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/revoke-membership.e2e-spec.ts` failed with 404 before the endpoint existed.
 - MW-auth-012 GREEN: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/revoke-membership.e2e-spec.ts` passed.
 - MW-auth-012 regression: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/accept-invitation.e2e-spec.ts test/invite-developer.e2e-spec.ts test/revoke-membership.e2e-spec.ts`, `npm run lint`, `pnpm --filter @lcsp/api run build`, `rtk pnpm --filter @lcsp/api test`, and `rtk pnpm --filter @lcsp/api test:e2e` passed.
+- Final Story 1.5 check on 2026-07-22: `rtk pnpm test` passed with web 29/29 and API e2e 216/216; `rtk npm run lint` passed import policy, contract literal policy, Prisma generation, and TypeScript build.
 
 ### Completion Notes List
 
@@ -174,8 +175,8 @@ GPT-5 Codex
 - Story retains planning authority references and scope guardrails for downstream `dev-story` work.
 - MW-auth-011 complete: added public Developer invitation acceptance endpoint with atomic consume/user/membership/session creation and clean audit event.
 - MW-auth-012 complete: added PBAC-protected Developer membership revocation with transactionally revoked membership, active session invalidation, self-revoke prevention, org mismatch guard, and clean audit event.
-- Story remains `in-progress`; web scoped task workspace is outside MW-auth-012 scope.
 - **Added**: Implemented web scoped task workspace component (`DeveloperTaskWorkspace`) that loads developer task context and technical evidence, handles all access states (redirect, access_revoked, error, loading, empty, loaded), and displays scope summary and findings appropriately.
+- Final check confirms all Story 1.5 tasks are complete, regression tests pass, and File List has been synchronized with the implemented API, web, i18n, contract, and test artifacts.
 
 ### File List
 
@@ -194,6 +195,30 @@ GPT-5 Codex
 - apps/api/src/modules/auth-workspace/application/commands/revoke-membership/revoke-membership.handler.ts
 - apps/api/src/modules/auth-workspace/application/contracts/auth-workspace/revoke-membership.contract.ts
 - apps/api/test/revoke-membership.e2e-spec.ts
+- apps/web/src/app/(auth)/invite/accept/page.tsx
+- apps/web/src/app/(workspace)/developer/assessments/page.tsx
+- apps/web/src/app/(workspace)/developer/assessments/[id]/page.tsx
+- apps/web/src/app/api/auth/accept-invitation/route.ts
+- apps/web/src/app/api/auth/invitations/preview/route.ts
+- apps/web/src/app/api/assessments/[id]/evidence/route.ts
+- apps/web/src/app/api/workspace/developer-task/route.ts
+- apps/web/src/features/auth/components/organisms/accept-invitation-form.tsx
+- apps/web/src/features/auth/schemas/accept-invitation.schema.ts
+- apps/web/src/features/developer-task/components/organisms/developer-task-selection.tsx
+- apps/web/src/features/developer-task/components/organisms/developer-task-workspace.tsx
+- apps/web/src/features/developer-task/components/organisms/redacted-findings-list.tsx
+- apps/web/src/features/developer-task/components/organisms/scope-summary-card.tsx
+- apps/web/src/features/developer-task/config/action-labels.ts
+- apps/web/src/features/developer-task/types/developer-task.types.ts
+- apps/web/src/index.ts
+- apps/web/src/lib/api/auth-client.ts
+- apps/web/src/lib/api/developer-task-client.ts
+- apps/web/src/lib/api/evidence-client.ts
+- packages/contracts/src/auth/audit-event-types.ts
+- packages/i18n/src/locales/en/pages.ts
+- packages/i18n/src/locales/vi/pages.ts
+- packages/i18n/src/types.ts
+- tests/story-1-5.web.test.ts
 - docs/developer/task-index.md
 - docs/implementation/tasks/modules/auth-workspace/11-accept-developer-invitation-endpoint.md
 - docs/implementation/tasks/modules/auth-workspace/12-revoke-developer-membership-endpoint.md
@@ -202,3 +227,4 @@ GPT-5 Codex
 
 - 2026-07-13: Implemented MW-auth-011 Accept Developer Invitation Endpoint; Story 1.5 remains in-progress for remaining task slices.
 - 2026-07-13: Implemented MW-auth-012 Revoke Developer Membership Endpoint; Story 1.5 remains in-progress for web scoped task workspace.
+- 2026-07-22: Completed final Story 1.5 verification and synchronized Dev Agent Record evidence/File List.
