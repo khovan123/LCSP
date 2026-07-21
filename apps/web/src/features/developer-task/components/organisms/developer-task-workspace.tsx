@@ -186,8 +186,8 @@ export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string 
                     <ScopeSummaryCard context={contextOutcome.context} />
                     {evidenceOutcome?.kind === "loaded" ? (
                       <RedactedFindingsList findings={evidenceOutcome.findings} />
-                    ) : evidenceOutcome?.kind === "empty" ||
-                      evidenceOutcome?.kind === "loaded" && evidenceOutcome.findings.length === 0 ? (
+                    ) : (evidenceOutcome?.kind === "empty" ||
+                      evidenceOutcome?.kind === "loaded" && evidenceOutcome.findings.length === 0) ? (
                         <div className="mt-6">
                           <p className="text-muted-foreground">
                             {resolveMessage(appLocale, "pages.developerTask.emptyTitle")}
@@ -202,8 +202,10 @@ export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string 
                         </p>
                       ) : null}
                   </>
-                )}
-            )}
+                )
+              </>
+              )
+            }
           </div>
         </main>
       </SidebarInset>
