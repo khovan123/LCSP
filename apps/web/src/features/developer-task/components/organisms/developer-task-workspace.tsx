@@ -19,48 +19,117 @@ import { appLocale } from "@/lib/locale";
 import type {
   DeveloperFinding,
   DeveloperTaskContext,
-  DeveloperTaskContextOutcome,
-  EvidenceOutcome,
 } from "../../types/developer-task.types";
 import { RedactedFindingsList } from "./redacted-findings-list";
 import { ScopeSummaryCard } from "./scope-summary-card";
 
+type PageState = "loading" | "loaded" | "empty" | "access_revoked" | "error";
+
 export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string }) {
   const router = useRouter();
+  const [pageState, setPageState] = useState<PageState>("loading");
   const [context, setContext] = useState<DeveloperTaskContext | null>(null);
-  const [contextOutcome, setContextOutcome] = useState<DeveloperTaskContextOutcome | null>(
-    null
-  );
-  const [evidenceOutcome, setEvidenceOutcome] = useState<EvidenceOutcome | null>(
-    null
-  );
+  const [findings, setFindings] = useState<DeveloperFinding[]>([]);
 
   useEffect(() => {
     let isActive = true;
+    let requestInFlight = false;
 
     async function loadTask() {
-      if (!assessmentId) return;
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const [contextOutcome, evidenceOutcome] = await Promise.all([
+          getDeveloperTaskContext(),
+          getTechnicalEvidence(assessmentId),
+        ]);
+        if (!isActive) return;
 
-      // Load both context and evidence in parallel
-      const [contextResult, evidenceResult] = await Promise.all([
-        getDeveloperTaskContext(),
-        getTechnicalEvidence(assessmentId),
-      ]);
+        if (contextOutcome.kind === "redirect") {
+          setContext(null);
+          setFindings([]);
+          router.replace(contextOutcome.location);
+          return;
+        }
+        if (evidenceOutcome.kind === "redirect") {
+          setContext(null);
+          setFindings([]);
+          router.replace(evidenceOutcome.location);
+          return;
+        }
+        if (
+          contextOutcome.kind === "access_revoked" ||
+          evidenceOutcome.kind === "access_revoked"
+        ) {
+          setContext(null);
+          setFindings([]);
+          setPageState("access_revoked");
+          return;
+        }
+        if (contextOutcome.kind !== "loaded" || evidenceOutcome.kind === "error") {
+          setContext(null);
+          setFindings([]);
+          setPageState("error");
+          return;
+        }
+        if (
+          contextOutcome.context.scope.type === "assessment" &&
+          contextOutcome.context.scope.assessment.id !== assessmentId
+        ) {
+          setContext(null);
+          setFindings([]);
+          setPageState("access_revoked");
+          return;
+        }
 
-      if (!isActive) return;
+        setContext(contextOutcome.context);
+        if (evidenceOutcome.kind === "empty") {
+          setFindings([]);
+          setPageState("empty");
+          return;
+        }
+        if (evidenceOutcome.kind === "loaded") {
+          setFindings(evidenceOutcome.findings);
+          setPageState(evidenceOutcome.findings.length === 0 ? "empty" : "loaded");
+          return;
+        }
 
-      setContextOutcome(contextResult);
-      setEvidenceOutcome(evidenceResult);
+        setContext(null);
+        setFindings([]);
+        setPageState("error");
+      } finally {
+        requestInFlight = false;
+      }
     }
 
     void loadTask().catch(() => {
       if (isActive) {
-        setContextOutcome({ kind: "error" });
-        setEvidenceOutcome({ kind: "error" });
+        setContext(null);
+        setFindings([]);
+        setPageState("error");
       }
     });
+    const revalidate = () => {
+      void loadTask().catch(() => {
+        if (isActive) {
+          setContext(null);
+          setFindings([]);
+          setPageState("error");
+        }
+      });
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") revalidate();
+    };
+    window.addEventListener("focus", revalidate);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const intervalId = window.setInterval(revalidate, 5_000);
+
     return () => {
       isActive = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", revalidate);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [assessmentId, router]);
 
@@ -106,34 +175,13 @@ export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string 
               </p>
             </header>
 
-            {/* Loading state */}
-            {!contextOutcome || !evidenceOutcome ? (
+            {pageState === "loading" ? (
               <p role="status" className="text-sm text-muted-foreground">
                 {resolveMessage(appLocale, "pages.developerTask.loading")}
               </p>
             ) : null}
 
-            {/* Redirect cases */}
-            {(contextOutcome.kind === "redirect" || evidenceOutcome?.kind === "redirect") && (
-              <>
-                {contextOutcome.kind === "redirect" && (
-                  <p role="status" className="text-sm text-muted-foreground">
-                    Redirecting...
-                  </p>
-                )}
-                {evidenceOutcome?.kind === "redirect" && (
-                  <p role="status" className="text-sm text-muted-foreground">
-                    Redirecting...
-                  </p>
-                )}
-              </>
-            )}
-
-            {/* Access revoked */}
-            {((contextOutcome.kind === "access_revoked" ||
-                evidenceOutcome?.kind === "access_revoked") &&
-                !(contextOutcome.kind === "redirect" ||
-                  evidenceOutcome?.kind === "redirect")) && (
+            {pageState === "access_revoked" ? (
               <Alert variant="destructive" data-component="blocked-banner">
                 <AlertTitle>
                   {resolveMessage(appLocale, "pages.developerTask.revokedTitle")}
@@ -142,15 +190,9 @@ export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string 
                   {resolveMessage(appLocale, "pages.developerTask.revokedDetail")}
                 </AlertDescription>
               </Alert>
-            )}
+            ) : null}
 
-            {/* Error state */}
-            {((contextOutcome.kind === "error" ||
-                evidenceOutcome?.kind === "error") &&
-                !(contextOutcome.kind === "access_revoked" ||
-                  evidenceOutcome?.kind === "access_revoked") &&
-                !(contextOutcome.kind === "redirect" ||
-                  evidenceOutcome?.kind === "redirect")) && (
+            {pageState === "error" ? (
               <Alert variant="destructive">
                 <AlertTitle>
                   {resolveMessage(appLocale, "pages.developerTask.errorTitle")}
@@ -159,53 +201,14 @@ export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string 
                   {resolveMessage(appLocale, "pages.developerTask.errorDetail")}
                 </AlertDescription>
               </Alert>
-            )}
+            ) : null}
 
-            {/* Success state - show scope and findings */}
-            {contextOutcome.kind === "loaded" && contextOutcome.context && (
+            {context && (pageState === "loaded" || pageState === "empty") ? (
               <>
-                {/* Scope mismatch check - if we're on an assessment page but context is for org scope */}
-                {contextOutcome.context.scope.type === "assessment" &&
-                  contextOutcome.context.scope.assessment.id !== assessmentId && (
-                    <Alert variant="destructive" data-component="blocked-banner">
-                      <AlertTitle>
-                        {resolveMessage(appLocale, "pages.developerTask.revokedTitle")}
-                      </AlertTitle>
-                      <AlertDescription>
-                        {resolveMessage(appLocale, "pages.developerTask.revokedDetail")}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                {/* Show scope summary and findings when we have valid context */}
-                {!(
-                  contextOutcome.context.scope.type === "assessment" &&
-                  contextOutcome.context.scope.assessment.id !== assessmentId
-                ) && (
-                  <>
-                    <ScopeSummaryCard context={contextOutcome.context} />
-                    {evidenceOutcome?.kind === "loaded" ? (
-                      <RedactedFindingsList findings={evidenceOutcome.findings} />
-                    ) : (evidenceOutcome?.kind === "empty" ||
-                      evidenceOutcome?.kind === "loaded" && evidenceOutcome.findings.length === 0) ? (
-                        <div className="mt-6">
-                          <p className="text-muted-foreground">
-                            {resolveMessage(appLocale, "pages.developerTask.emptyTitle")}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {resolveMessage(appLocale, "pages.developerTask.emptyDescription")}
-                          </p>
-                        </div>
-                      ) : evidenceOutcome?.kind === "loading" ? (
-                        <p role="status" className="text-sm text-muted-foreground">
-                          {resolveMessage(appLocale, "pages.developerTask.loading")}
-                        </p>
-                      ) : null}
-                  </>
-                )
+                <ScopeSummaryCard context={context} />
+                <RedactedFindingsList findings={findings} />
               </>
-              )
-            }
+            ) : null}
           </div>
         </main>
       </SidebarInset>
