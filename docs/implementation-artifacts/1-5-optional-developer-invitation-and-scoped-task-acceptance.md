@@ -1,6 +1,11 @@
+---
+baseline_revision: 2dcf9ab47c00215edbef0da829282f34c07bcf84
+status: completed
+---
+
 # Story 1.5: Optional Developer Invitation and Scoped Task Acceptance
 
-Status: in-progress
+Status: completed
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -29,9 +34,9 @@ As a Manager, I want to invite a Developer with a scoped PBAC task, so that the 
 
 ## Tasks / Subtasks
 
-- [ ] Add Developer invitation issuance, acceptance and scoped membership/policy binding. (AC: 1)
-- [ ] Persist optional collaborator scope without making Developer mandatory for Manager golden path. (AC: 2)
-- [ ] Audit invitation lifecycle, scope assignment and revocation-safe acceptance behavior. (AC: 3)
+- [x] Add Developer invitation issuance, acceptance and scoped membership/policy binding. (AC: 1)
+- [x] Persist optional collaborator scope without making Developer mandatory for Manager golden path. (AC: 2)
+- [x] Audit invitation lifecycle, scope assignment and revocation-safe acceptance behavior. (AC: 3)
 
 ## Dev Notes
 
@@ -170,6 +175,7 @@ GPT-5 Codex
 - MW-auth-011 complete: added public Developer invitation acceptance endpoint with atomic consume/user/membership/session creation and clean audit event.
 - MW-auth-012 complete: added PBAC-protected Developer membership revocation with transactionally revoked membership, active session invalidation, self-revoke prevention, org mismatch guard, and clean audit event.
 - Story remains `in-progress`; web scoped task workspace is outside MW-auth-012 scope.
+- **Added**: Implemented web scoped task workspace component (`DeveloperTaskWorkspace`) that loads developer task context and technical evidence, handles all access states (redirect, access_revoked, error, loading, empty, loaded), and displays scope summary and findings appropriately.
 
 ### File List
 
