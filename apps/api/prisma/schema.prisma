@@ -384,6 +384,23 @@ model TechnicalProfile {
   @@index([assessmentId])
 }
 
+model AIUsageFlow {
+  id                 String   @id @default(uuid())
+  technicalProfileId String   @unique
+  assessmentId       String
+  organizationId     String
+  schemaVersion      String
+  providerVersion    String
+  claims             Json
+  unknownUsages      Json
+  privacyFlags       Json
+  status             String   @default("accepted")
+  rejectionReason    String?
+  createdAt          DateTime @default(now())
+
+  @@index([assessmentId])
+}
+
 model ClassificationResult {
   id                        String   @id
   assessmentId              String
