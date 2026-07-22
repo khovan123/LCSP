@@ -3,7 +3,7 @@ task_id: MW-intel-002
 module: python-workers/intelligence
 runtime: lcsp-python-workers
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 4.2
 depends_on:
   - python-workers/intelligence/01-technical-profile-worker.md
@@ -155,3 +155,23 @@ Thresholds: `< 0.40` → `ABSTAINED`; `0.40..0.64` → `DETECTED` (not material-
 - `verificationSource` set correctly; missing `WizardProfile` never blocks generation alone.
 - `evidence_refs` set for all material claims; no raw source/prompt/secret/AST content in any output field.
 - Conflict candidates generated per the Conflict Generation Rules table.
+
+## Implementation Evidence
+
+- Added deterministic AIUsageFlow worker modules under `lcsp-python-workers/src/lcsp_workers/intelligence/`:
+  - `ai_usage_flow_consumer.py`
+  - `ai_usage_flow_rule_engine.py`
+  - `confidence_calculator.py`
+  - `conflict_candidate_builder.py`
+- Implemented `AIUsageFlowConsumer` as a `ConsumerBase` subclass for queue `intelligence.technical-profile-ready`, routing key `technical-profile-ready`, with `requires_pbac = False` for system event processing.
+- Implemented canonical 15-category claim base-score table and deterministic confidence formula from `docs/specs/ai-usage-flow-domain-spec.md`.
+- Implemented deterministic claim generation for provider usage, model invocation, generated output, content labeling, provider-only abstention, missing-evidence rejection, coverage limitation preservation, and `WIZARD_NO_AI_BUT_INVOCATION_EXISTS` conflict candidate generation.
+- Updated `AIUsageFlowCallbackPayload` and `WorkerApiClient` to submit to `POST /internal/ai-usage-flow/callback` and fetch required TechnicalProfile/TechnicalEvidenceReport/WizardProfile inputs.
+- Added unit coverage in `lcsp-python-workers/tests/test_ai_usage_flow_worker.py` for T01–T10, consumer callback behavior, and no-network/no-LLM generation behavior.
+
+## Validation
+
+- `python -m py_compile lcsp-python-workers/src/lcsp_workers/intelligence/ai_usage_flow_consumer.py lcsp-python-workers/src/lcsp_workers/intelligence/ai_usage_flow_rule_engine.py lcsp-python-workers/src/lcsp_workers/intelligence/confidence_calculator.py lcsp-python-workers/src/lcsp_workers/intelligence/conflict_candidate_builder.py lcsp-python-workers/src/lcsp_workers/intelligence/technical_profile_consumer.py lcsp-python-workers/src/lcsp_workers/intelligence/technical_profile_builder.py lcsp-python-workers/src/lcsp_workers/platform/api_client.py lcsp-python-workers/src/lcsp_workers/platform/callback_schemas.py lcsp-python-workers/src/package/contract/api_client_contracts.py`
+  - Result: passed.
+- `python -m pytest lcsp-python-workers/tests/test_ai_usage_flow_worker.py lcsp-python-workers/tests/test_technical_profile_worker.py lcsp-python-workers/tests/test_api_client.py lcsp-python-workers/tests/test_queue_consumer.py lcsp-python-workers/tests/test_evidence_assembler.py -q`
+  - Result: 47 passed, 1 warning (`asyncio_mode` pytest config warning in minimal targeted environment).

@@ -7,6 +7,7 @@ from lcsp_workers.platform.api_client import WorkerApiClient, WorkerCallbackErro
 from lcsp_workers.platform.callback_schemas import (
     ScanCallbackPayload,
     CallbackResponse,
+    AIUsageFlowCallbackPayload,
     TechnicalProfileCallbackPayload,
 )
 from lcsp_workers.platform.correlation import set_correlation_id
@@ -166,3 +167,46 @@ def test_get_accepted_technical_evidence_report_rejects_non_accepted(client):
 
         with pytest.raises(WorkerCallbackError, match="not accepted"):
             client.get_accepted_technical_evidence_report("ter-1")
+
+
+def test_ai_usage_flow_callback_uses_internal_ai_usage_flow_endpoint(client):
+    payload = AIUsageFlowCallbackPayload(
+        technical_profile_id="tp-1",
+        assessment_id="assessment-1",
+        schema_version="1.0.0",
+        provider_version="lcsp.ai-usage-flow-worker.v1",
+        claims=[],
+        unknown_usages=[],
+        privacy_flags={"containsSourceCode": False, "secretsRedacted": True},
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"accepted": True}
+        mock_post.return_value = mock_resp
+
+        client.post_ai_usage_flow_callback(payload)
+
+        url = mock_post.call_args.args[0]
+        assert url == "http://testserver/internal/ai-usage-flow/callback"
+
+
+def test_get_accepted_technical_profile_rejects_non_accepted(client):
+    with patch("lcsp_workers.platform.api_client.httpx.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"id": "tp-1", "status": "rejected"}
+        mock_get.return_value = mock_resp
+
+        with pytest.raises(WorkerCallbackError, match="not accepted"):
+            client.get_accepted_technical_profile("tp-1")
+
+
+def test_get_wizard_profile_returns_none_for_404(client):
+    with patch("lcsp_workers.platform.api_client.httpx.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_get.return_value = mock_resp
+
+        assert client.get_wizard_profile_for_assessment("assessment-1") is None

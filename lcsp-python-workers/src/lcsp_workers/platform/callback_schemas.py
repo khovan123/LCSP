@@ -34,8 +34,14 @@ class TechnicalProfileCallbackPayload(BaseModel):
 
 class AIUsageFlowCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    scan_job_id: str
-    usage_flows: List[Dict[str, Any]]
+    technical_profile_id: str
+    assessment_id: str
+    schema_version: str
+    provider_version: str
+    claims: List[Dict[str, Any]]
+    unknown_usages: List[Dict[str, Any]]
+    privacy_flags: Dict[str, Any]
+    flow_data: Dict[str, Any] = Field(default_factory=dict)
 
 class VerifiedProfileCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
