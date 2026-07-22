@@ -248,8 +248,34 @@ class WorkerApiClient:
         self, payload: AIUsageFlowCallbackPayload
     ) -> CallbackResponse:
         path = CallbackPath.AI_USAGE_FLOW
-        resp_data = self._post_with_retry(path, payload.model_dump())
+        resp_data = self._post_with_retry(path, payload.model_dump(exclude_none=True))
         return CallbackResponse(**resp_data)
+
+    def get_accepted_technical_profile(self, technical_profile_id: str) -> dict:
+        path = InternalPath.TECHNICAL_PROFILE.format(
+            technical_profile_id=technical_profile_id
+        )
+        data = self._get_with_retry(path)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Technical profile response was invalid.")
+        status = str(data.get("status", "")).lower()
+        if status and status != "accepted":
+            raise WorkerCallbackError("Technical profile is not accepted.")
+        return data
+
+    def get_wizard_profile_for_assessment(self, assessment_id: str) -> dict | None:
+        path = InternalPath.WIZARD_PROFILE.format(assessment_id=assessment_id)
+        try:
+            data = self._get_with_retry(path)
+        except WorkerCallbackError as exc:
+            if "client error 404" in str(exc):
+                return None
+            raise
+        if data is None:
+            return None
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Wizard profile response was invalid.")
+        return data
 
     def post_verified_profile_callback(
         self, payload: VerifiedProfileCallbackPayload

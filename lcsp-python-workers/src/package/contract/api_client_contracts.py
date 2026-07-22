@@ -8,7 +8,7 @@ CORRELATION_ID_HEADER = "X-Correlation-Id"
 class CallbackPath(StrEnum):
     SCAN = "/internal/callbacks/scan/{scan_job_id}"
     TECHNICAL_PROFILE = "/internal/evidence/technical-profile-callback"
-    AI_USAGE_FLOW = "/internal/callbacks/ai-usage-flow"
+    AI_USAGE_FLOW = "/internal/ai-usage-flow/callback"
     VERIFIED_PROFILE = "/internal/callbacks/verified-profile"
     LEGAL_RULE_MATCH = "/internal/callbacks/legal-rule-match"
     CLASSIFICATION = "/internal/callbacks/classification"
@@ -17,6 +17,8 @@ class CallbackPath(StrEnum):
 class InternalPath(StrEnum):
     AUDIT_EVENTS = "/internal/organizations/{organization_id}/audit-events"
     TECHNICAL_EVIDENCE_REPORT = "/internal/evidence/reports/{evidence_report_id}"
+    TECHNICAL_PROFILE = "/internal/evidence/technical-profiles/{technical_profile_id}"
+    WIZARD_PROFILE = "/internal/assessments/{assessment_id}/wizard-profile"
 
 
 class CallbackLogEvent(StrEnum):
