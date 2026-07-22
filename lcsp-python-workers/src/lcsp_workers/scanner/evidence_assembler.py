@@ -5,6 +5,7 @@ from typing import Iterable
 
 from lcsp_workers.platform.callback_schemas import ScanCallbackPayload
 from lcsp_workers.platform.redaction import redact_dict, redact_source_code
+from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalysisResult
 from lcsp_workers.scanner.dependencies.dependency_fact import PackageDependency
 
 from .tools.semgrep_tool import SemgrepRunResult
@@ -55,6 +56,7 @@ class EvidenceAssembler:
         coverage_notes: list[str],
         package_dependencies: list[PackageDependency] | None = None,
         dependency_executions: list[ToolExecutionResult] | None = None,
+        python_analysis: PythonAnalysisResult | None = None,
     ) -> ScanCallbackPayload:
         executions = [
             syft_result.execution,
@@ -71,6 +73,7 @@ class EvidenceAssembler:
             "package_dependencies": [
                 asdict(package) for package in (package_dependencies or [])
             ],
+            "python_analysis": asdict(python_analysis) if python_analysis else None,
             "tool_failures": [
                 asdict(record) for record in self._tool_failures(executions)
             ],

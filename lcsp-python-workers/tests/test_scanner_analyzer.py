@@ -173,3 +173,180 @@ def test_finding_does_not_include_source_code(sample_python_repo: Path) -> None:
                         )
     except ImportError:
         pytest.skip("AC-032 RED: PythonAstAnalyzer not yet implemented")
+
+
+@pytest.mark.p0
+def test_t01_openai_chat_completion_call_site(workspace_dir: Path) -> None:
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
+    src = workspace_dir / "src"
+    src.mkdir()
+    (src / "app.py").write_text(
+        "import openai\n"
+        "client = openai.OpenAI()\n"
+        "client.chat.completions.create(model='gpt-4o', messages=[])\n",
+        encoding="utf-8",
+    )
+
+    result = PythonAnalyzer(workspace_dir).analyze()
+
+    site = next(site for site in result.ai_call_sites if site.matched_rule_id == "py-openai-chat-completions")
+    assert site.finding_type == "AI_PROVIDER_USAGE"
+    assert site.analysis_level == "L1"
+    assert site.kwarg_names == ["model", "messages"]
+
+
+@pytest.mark.p0
+def test_t02_langchain_prompt_template_detected(workspace_dir: Path) -> None:
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
+    src = workspace_dir / "src"
+    src.mkdir()
+    (src / "prompt.py").write_text(
+        "from langchain.prompts import ChatPromptTemplate\n"
+        "template = ChatPromptTemplate.from_template('safe placeholder')\n",
+        encoding="utf-8",
+    )
+
+    result = PythonAnalyzer(workspace_dir).analyze()
+
+    assert any(
+        site.matched_rule_id == "py-langchain-prompt"
+        and site.finding_type == "SYSTEM_PROMPT_DETECTED"
+        for site in result.ai_call_sites
+    )
+
+
+@pytest.mark.p0
+def test_t03_getattr_dynamic_flow_is_unsupported(workspace_dir: Path) -> None:
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
+    (workspace_dir / "dynamic.py").write_text(
+        "method = 'predict'\ngetattr(model, method)(payload)\n",
+        encoding="utf-8",
+    )
+
+    result = PythonAnalyzer(workspace_dir).analyze()
+
+    assert result.unsupported_dynamic_flows
+    assert result.ai_call_sites[0].has_dynamic_call is True
+    assert result.ai_call_sites[0].finding_type == "UNSUPPORTED_DYNAMIC_FLOW"
+
+
+@pytest.mark.p0
+def test_t04_dynamic_system_prompt_reference(workspace_dir: Path) -> None:
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
+    (workspace_dir / "prompt.py").write_text(
+        "SYSTEM_PROMPT = 'policy'\n"
+        "message = f'system: {SYSTEM_PROMPT}'\n",
+        encoding="utf-8",
+    )
+
+    result = PythonAnalyzer(workspace_dir).analyze()
+
+    assert any(site.finding_type == "DYNAMIC_SYSTEM_PROMPT_REFERENCE" for site in result.ai_call_sites)
+
+
+@pytest.mark.p0
+def test_t05_large_python_file_skipped(workspace_dir: Path) -> None:
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
+    (workspace_dir / "large.py").write_text("x = 1\n" * 40000, encoding="utf-8")
+
+    result = PythonAnalyzer(workspace_dir).analyze()
+
+    assert result.files_skipped == 1
+    assert result.coverage_limitation is True
+
+
+@pytest.mark.p0
+def test_t06_call_args_schema_contains_names_only(workspace_dir: Path) -> None:
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
+    (workspace_dir / "app.py").write_text(
+        "import openai\n"
+        "client = openai.OpenAI()\n"
+        "client.responses.create('secret prompt', model='gpt-4o')\n",
+        encoding="utf-8",
+    )
+
+    result = PythonAnalyzer(workspace_dir).analyze()
+    site = next(site for site in result.ai_call_sites if site.matched_rule_id == "py-openai-responses")
+
+    assert site.call_args_schema == ["position_0", "model"]
+    assert "secret prompt" not in str(site)
+
+
+@pytest.mark.p0
+def test_t07_venv_folder_not_traversed(workspace_dir: Path) -> None:
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
+    venv = workspace_dir / "venv"
+    venv.mkdir()
+    (venv / "ignored.py").write_text("import openai\nopenai.chat.completions.create()\n", encoding="utf-8")
+
+    result = PythonAnalyzer(workspace_dir).analyze()
+
+    assert result.files_analyzed == 0
+    assert result.ai_call_sites == []
+
+
+@pytest.mark.p0
+def test_t08_l3_cross_file_direct_import_chain(workspace_dir: Path) -> None:
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
+    (workspace_dir / "main.py").write_text("from helper import ask\nask()\n", encoding="utf-8")
+    (workspace_dir / "helper.py").write_text(
+        "import openai\n"
+        "client = openai.OpenAI()\n"
+        "def ask():\n"
+        "    return client.chat.completions.create(model='gpt-4o')\n",
+        encoding="utf-8",
+    )
+
+    result = PythonAnalyzer(workspace_dir).analyze()
+
+    assert any(
+        site.analysis_level == "L3"
+        and site.matched_rule_id == "py-openai-chat-completions"
+        for site in result.ai_call_sites
+    )
+
+
+@pytest.mark.p0
+def test_t09_sklearn_predict_detected(workspace_dir: Path) -> None:
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
+    (workspace_dir / "ml.py").write_text(
+        "from sklearn.linear_model import LogisticRegression\n"
+        "model = LogisticRegression()\n"
+        "model.predict(X)\n",
+        encoding="utf-8",
+    )
+
+    result = PythonAnalyzer(workspace_dir).analyze()
+
+    site = next(site for site in result.ai_call_sites if site.matched_rule_id == "py-sklearn-predict")
+    assert site.finding_type == "AI_PROVIDER_USAGE"
+    assert site.confidence == 0.65
+
+
+@pytest.mark.p0
+def test_t10_llamaindex_query_engine_detected(workspace_dir: Path) -> None:
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
+    (workspace_dir / "rag.py").write_text(
+        "from llama_index.core import VectorStoreIndex\n"
+        "index = VectorStoreIndex([])\n"
+        "index.as_query_engine().query(question)\n",
+        encoding="utf-8",
+    )
+
+    result = PythonAnalyzer(workspace_dir).analyze()
+
+    assert any(
+        site.matched_rule_id == "py-llamaindex-query"
+        and site.finding_type == "RAG_USAGE_SIGNAL"
+        for site in result.ai_call_sites
+    )
