@@ -169,6 +169,10 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
       resolution_note: note,
     });
 
+    if (!isMountedRef.current) {
+      return;
+    }
+
     if (outcome.kind === "validation_error") {
       setSubmittingIds((prev) => ({ ...prev, [conflictId]: false }));
       setFormErrors((prev) => ({
