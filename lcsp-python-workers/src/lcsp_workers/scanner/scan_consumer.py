@@ -124,7 +124,7 @@ class ScanConsumer(ConsumerBase):
                 classification_limitations = [
                     {
                         "file_path": "<workspace>",
-                        "reason": f"language_classification_failed: {error}",
+                        "reason": f"language_classification_failed: {type(error).__name__}",
                     }
                 ]
                 logger.warning(
