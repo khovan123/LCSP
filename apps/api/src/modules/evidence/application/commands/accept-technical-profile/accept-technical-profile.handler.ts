@@ -1,0 +1,244 @@
+import * as crypto from "node:crypto";
+
+import {
+  ConflictException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+import {
+  AUDIT_DECISIONS,
+  AUDIT_REDACTION_STATUSES,
+  buildAuditEventInput,
+} from "@lcsp/contracts/audit";
+import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  SCAN_ERROR_CODES,
+  SCAN_EVENT_TYPES,
+  TECHNICAL_EVIDENCE_REPORT_STATUSES,
+  TECHNICAL_PROFILE_SCHEMA_VERSIONS,
+  TECHNICAL_PROFILE_STATUSES,
+} from "@lcsp/contracts/scan";
+import { Prisma } from "@prisma/client";
+
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import type { TechnicalProfileCallbackDto } from "../../contracts/evidence/technical-profile-callback.contract.js";
+import { AcceptTechnicalProfileCommand } from "./accept-technical-profile.command.js";
+
+const TECHNICAL_PROFILE_WORKER_ACTOR_ID = "technical-profile-worker";
+const FORBIDDEN_PROFILE_KEYS = new Set([
+  "codesnippet",
+  "filecontent",
+  "rawoutput",
+  "rawsource",
+  "rawsourcecode",
+  "snippet",
+  "sourcecode",
+  "sourcecontent",
+]);
+const SECRET_PATTERNS = [
+  /\bgh[oprsu]_[A-Za-z0-9_]{20,}\b/,
+  /\bsk-ant-[A-Za-z0-9_-]{16,}\b/,
+  /\bAKIA[A-Z0-9]{16}\b/,
+  /\bBearer\s+[A-Za-z0-9._~+/-]{12,}=*/i,
+];
+
+@CommandHandler(AcceptTechnicalProfileCommand)
+export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTechnicalProfileCommand> {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async execute(
+    command: AcceptTechnicalProfileCommand,
+  ): Promise<TechnicalProfileCallbackDto> {
+    this.validate(command);
+
+    const payload = command.payload;
+    const evidenceReport = await this.prisma.technicalEvidenceReport.findFirst({
+      where: {
+        id: payload.evidence_report_id,
+        assessmentId: payload.assessment_id,
+        status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+      },
+      select: {
+        id: true,
+        assessmentId: true,
+        organizationId: true,
+      },
+    });
+    if (!evidenceReport) {
+      throw new NotFoundException(
+        this.errorBody(command, SCAN_ERROR_CODES.evidenceReportNotFound),
+      );
+    }
+
+    const existing = await this.prisma.technicalProfile.findUnique({
+      where: { evidenceReportId: evidenceReport.id },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ConflictException(
+        this.errorBody(command, SCAN_ERROR_CODES.profileAlreadyExists),
+      );
+    }
+
+    const technicalProfileId = crypto.randomUUID();
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.technicalProfile.create({
+          data: {
+            id: technicalProfileId,
+            evidenceReportId: evidenceReport.id,
+            assessmentId: evidenceReport.assessmentId,
+            organizationId: evidenceReport.organizationId,
+            schemaVersion: payload.schema_version,
+            providerVersion: payload.provider_version,
+            profileData: payload.profile_data as Prisma.InputJsonValue,
+            privacyFlags: payload.privacy_flags as Prisma.InputJsonValue,
+            status: TECHNICAL_PROFILE_STATUSES.accepted,
+          },
+        });
+
+        const outboxEvent = buildOutboxMessageInput({
+          aggregateType: "TechnicalProfile",
+          aggregateId: technicalProfileId,
+          eventType: SCAN_EVENT_TYPES.technicalProfileReady,
+          organizationId: evidenceReport.organizationId,
+          assessmentId: evidenceReport.assessmentId,
+          correlationId: command.correlationId,
+          causationId: evidenceReport.id,
+          actor: { id: TECHNICAL_PROFILE_WORKER_ACTOR_ID, type: "service" },
+          result: SCAN_EVENT_TYPES.technicalProfileAcceptedAudit,
+          redactionStatus: AUDIT_REDACTION_STATUSES.none,
+          idempotencyKey: `${technicalProfileId}:${SCAN_EVENT_TYPES.technicalProfileReady}`,
+          payload: {
+            technicalProfileId,
+            assessmentId: evidenceReport.assessmentId,
+            evidenceReportId: evidenceReport.id,
+            correlationId: command.correlationId,
+          },
+        });
+        await tx.outboxMessage.create({
+          data: {
+            id: crypto.randomUUID(),
+            aggregateType: outboxEvent.aggregateType,
+            aggregateId: outboxEvent.aggregateId,
+            eventType: outboxEvent.eventType,
+            payload: outboxEvent.payload as Prisma.InputJsonValue,
+          },
+        });
+
+        const auditEvent = buildAuditEventInput({
+          eventType: SCAN_EVENT_TYPES.technicalProfileAcceptedAudit,
+          actorId: TECHNICAL_PROFILE_WORKER_ACTOR_ID,
+          organizationId: evidenceReport.organizationId,
+          assessmentId: evidenceReport.assessmentId,
+          resourceType: "TechnicalProfile",
+          resourceId: technicalProfileId,
+          correlationId: command.correlationId,
+          causationId: evidenceReport.id,
+          decision: AUDIT_DECISIONS.allow,
+          result: SCAN_EVENT_TYPES.technicalProfileAcceptedAudit,
+          redactionStatus: AUDIT_REDACTION_STATUSES.none,
+          actor: { id: TECHNICAL_PROFILE_WORKER_ACTOR_ID, type: "service" },
+          payload: {
+            technicalProfileId,
+            assessmentId: evidenceReport.assessmentId,
+            evidenceReportId: evidenceReport.id,
+            correlationId: command.correlationId,
+          },
+        });
+        await tx.authAuditEvent.create({
+          data: {
+            id: crypto.randomUUID(),
+            eventType: auditEvent.eventType,
+            actorId: auditEvent.actorId,
+            organizationId: auditEvent.organizationId,
+            resourceType: auditEvent.resourceType ?? null,
+            resourceId: auditEvent.resourceId ?? null,
+            correlationId: auditEvent.correlationId,
+            reasonCode: auditEvent.reasonCode ?? null,
+            decision: auditEvent.decision,
+            payload: auditEvent.payload as Prisma.InputJsonValue,
+          },
+        });
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new ConflictException(
+          this.errorBody(command, SCAN_ERROR_CODES.profileAlreadyExists),
+        );
+      }
+      throw error;
+    }
+
+    return {
+      accepted: true,
+      technical_profile_id: technicalProfileId,
+      correlation_id: command.correlationId,
+    };
+  }
+
+  private validate(command: AcceptTechnicalProfileCommand): void {
+    const payload = command.payload;
+    if (
+      !isRecord(payload) ||
+      !clean(payload.evidence_report_id) ||
+      !clean(payload.assessment_id) ||
+      !TECHNICAL_PROFILE_SCHEMA_VERSIONS.includes(
+        payload.schema_version as (typeof TECHNICAL_PROFILE_SCHEMA_VERSIONS)[number],
+      ) ||
+      !clean(payload.provider_version) ||
+      !isRecord(payload.profile_data) ||
+      !isRecord(payload.privacy_flags)
+    ) {
+      throw new UnprocessableEntityException(
+        this.errorBody(command, SCAN_ERROR_CODES.technicalProfileSchemaInvalid),
+      );
+    }
+
+    if (
+      payload.privacy_flags.containsSourceCode !== false ||
+      payload.privacy_flags.secretsRedacted !== true ||
+      containsUnsafeProfile(payload.profile_data)
+    ) {
+      throw new UnprocessableEntityException(
+        this.errorBody(command, SCAN_ERROR_CODES.privacyFlagsInvalid),
+      );
+    }
+  }
+
+  private errorBody(command: AcceptTechnicalProfileCommand, errorCode: string) {
+    return {
+      error_code: errorCode,
+      correlation_id: command.correlationId,
+    };
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function clean(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function containsUnsafeProfile(value: unknown): boolean {
+  if (typeof value === "string") {
+    return SECRET_PATTERNS.some((pattern) => pattern.test(value));
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsUnsafeProfile);
+  }
+  if (!isRecord(value)) return false;
+
+  return Object.entries(value).some(([key, entry]) => {
+    const normalizedKey = key.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+    return (
+      FORBIDDEN_PROFILE_KEYS.has(normalizedKey) || containsUnsafeProfile(entry)
+    );
+  });
+}
