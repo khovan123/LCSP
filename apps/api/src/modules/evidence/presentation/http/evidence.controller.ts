@@ -1,10 +1,28 @@
-import { Controller, Get, Param, Req, UseGuards } from "@nestjs/common";
-import { QueryBus } from "@nestjs/cqrs";
+import { randomUUID } from "node:crypto";
+
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { RequireAnyAction } from "../../../../platform/pbac/decorators/require-any-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
+import { AcceptTechnicalProfileCommand } from "../../application/commands/accept-technical-profile/accept-technical-profile.command.js";
+import type {
+  TechnicalProfileCallbackDto,
+  TechnicalProfileCallbackRequest,
+} from "../../application/contracts/evidence/technical-profile-callback.contract.js";
 import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evidence.query.js";
 
 @Controller("assessments")
@@ -29,6 +47,26 @@ export class EvidenceController {
         context.scope,
         context.selectedAction,
         request.correlationId as string,
+      ),
+    );
+  }
+}
+
+@Controller("internal/evidence")
+export class InternalEvidenceController {
+  constructor(private readonly commandBus: CommandBus) {}
+
+  @Post("technical-profile-callback")
+  @HttpCode(200)
+  @UseGuards(WorkerApiKeyGuard)
+  async acceptTechnicalProfile(
+    @Body() payload: TechnicalProfileCallbackRequest,
+    @Headers("x-correlation-id") correlationId?: string,
+  ): Promise<TechnicalProfileCallbackDto> {
+    return this.commandBus.execute(
+      new AcceptTechnicalProfileCommand(
+        payload,
+        correlationId?.trim() || randomUUID(),
       ),
     );
   }

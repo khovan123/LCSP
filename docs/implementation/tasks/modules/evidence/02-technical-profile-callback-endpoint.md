@@ -3,7 +3,7 @@ task_id: MW-evid-002
 module: evidence
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.6
 depends_on:
   - evidence/01-get-technical-evidence-endpoint.md
@@ -116,3 +116,40 @@ model TechnicalProfile {
 - Immutable once accepted — no update endpoint.
 - Outbox `technical-profile-ready` triggers downstream AI usage flow.
 - Audit event written with no profile content.
+
+## Implementation Evidence
+
+- Added `TechnicalProfile` Prisma model with unique `evidenceReportId` and assessment index.
+- Added `POST /internal/evidence/technical-profile-callback` guarded by `X-Worker-Api-Key`.
+- Added `AcceptTechnicalProfileCommand` and handler for accepted evidence lookup, duplicate rejection, schema/privacy validation, immutable persistence, outbox emission, and audit writing.
+- Added scan contract constants for TechnicalProfile status, schema version, ready event, accepted audit event, and callback error codes.
+- Added e2e coverage for T01–T07, including invalid API key, privacy rejection, duplicate profile rejection, missing evidence report, outbox/audit safe refs, and no update path.
+
+## File List
+
+- `apps/api/prisma/schema.prisma`
+- `apps/api/src/modules/evidence/application/commands/accept-technical-profile/accept-technical-profile.command.ts`
+- `apps/api/src/modules/evidence/application/commands/accept-technical-profile/accept-technical-profile.handler.ts`
+- `apps/api/src/modules/evidence/application/contracts/evidence/technical-profile-callback.contract.ts`
+- `apps/api/src/modules/evidence/evidence.module.ts`
+- `apps/api/src/modules/evidence/presentation/http/evidence.controller.ts`
+- `apps/api/test/technical-profile-callback.e2e-spec.ts`
+- `packages/contracts/src/scan/callback.ts`
+- `packages/contracts/src/scan/codes.ts`
+
+## Validation
+
+- `pnpm --filter @lcsp/api prisma:generate`
+  - Result: passed.
+- `pnpm --filter @lcsp/api test:e2e -- --runInBand --runTestsByPath test/technical-profile-callback.e2e-spec.ts`
+  - Result: passed, 7 tests.
+- `pnpm --filter @lcsp/api test:e2e -- --runInBand --runTestsByPath test/technical-profile-callback.e2e-spec.ts test/scan-job-callback.e2e-spec.ts`
+  - Result: passed, 15 tests.
+- `pnpm --filter @lcsp/api test:e2e`
+  - Result: passed, 27 suites / 231 tests.
+- `pnpm --filter @lcsp/api lint`
+  - Result: passed.
+- `npm run lint`
+  - Result: blocked by pre-existing contract literal failures in `apps/api/src/modules/document/application/commands/request-final-report/request-final-report.handler.spec.ts:97` and `apps/api/test/document-final-report.e2e-spec.ts:271`.
+- `npm run typecheck`
+  - Result: blocked by pre-existing type errors in `apps/api/src/modules/document/application/commands/request-final-report/request-final-report.handler.spec.ts:36` and `:39`.

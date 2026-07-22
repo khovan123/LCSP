@@ -368,6 +368,22 @@ model TechnicalEvidenceReport {
   @@index([scanJobId])
 }
 
+model TechnicalProfile {
+  id               String   @id @default(uuid())
+  evidenceReportId String   @unique
+  assessmentId     String
+  organizationId   String
+  schemaVersion    String
+  providerVersion  String
+  profileData      Json
+  privacyFlags     Json
+  status           String   @default("accepted")
+  rejectionReason  String?
+  createdAt        DateTime @default(now())
+
+  @@index([assessmentId])
+}
+
 model ClassificationResult {
   id                        String   @id
   assessmentId              String
