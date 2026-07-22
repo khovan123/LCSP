@@ -11,6 +11,8 @@ from lcsp_workers.platform.queue_consumer import ConsumerBase
 from .analyzers.python_analyzer import PythonAnalyzer
 from .dependencies.dependency_normalizer import DependencyNormalizer
 from .evidence_assembler import EvidenceAssembler, PrivacyAssertionError
+from .inventory.analyzer_router import AnalyzerRouter
+from .inventory.language_classifier import LanguageClassifier
 from .snapshot_service_client import SnapshotArchiveRequest, SnapshotServiceClient
 from .tool_registry import ToolRegistry
 from .tools.deptry_tool import DeptryTool
@@ -45,6 +47,8 @@ class ScanConsumer(ConsumerBase):
         semgrep_tool: SemgrepTool | None = None,
         knip_tool: KnipTool | None = None,
         deptry_tool: DeptryTool | None = None,
+        language_classifier: LanguageClassifier | None = None,
+        analyzer_router: AnalyzerRouter | None = None,
         dependency_normalizer: DependencyNormalizer | None = None,
         api_client: WorkerApiClient | None = None,
         evidence_assembler: EvidenceAssembler | None = None,
@@ -59,6 +63,8 @@ class ScanConsumer(ConsumerBase):
         self._semgrep_tool = semgrep_tool or SemgrepTool()
         self._knip_tool = knip_tool or KnipTool()
         self._deptry_tool = deptry_tool or DeptryTool()
+        self._language_classifier = language_classifier or LanguageClassifier()
+        self._analyzer_router = analyzer_router or AnalyzerRouter()
         self._dependency_normalizer = dependency_normalizer or DependencyNormalizer()
         self._api_client = api_client or WorkerApiClient(
             config.nestjs_api_base_url,
@@ -97,6 +103,37 @@ class ScanConsumer(ConsumerBase):
                 skipped_files=result.skipped_files,
                 coverage_limited=result.coverage_limited,
             )
+
+            classification_limitations: list[dict[str, str]] = []
+            routed_python_files: list[str] | None = None
+            try:
+                classifications = self._language_classifier.classify_workspace(
+                    result.workspace_path
+                )
+                dispatch = self._analyzer_router.route(classifications)
+                routed_python_files = list(dispatch.python_files)
+                classification_limitations = list(dispatch.coverage_limitations)
+                logger.info(
+                    "SCAN_LANGUAGE_CLASSIFIED",
+                    classified_files=len(classifications),
+                    python_files=len(dispatch.python_files),
+                    ts_js_files=len(dispatch.ts_js_files),
+                    basic_files=len(dispatch.basic_files),
+                    skipped_files=len(dispatch.skipped_files),
+                    coverage_limitations=len(dispatch.coverage_limitations),
+                )
+            except Exception as error:
+                classification_limitations = [
+                    {
+                        "file_path": "<workspace>",
+                        "reason": f"language_classification_failed: {type(error).__name__}",
+                    }
+                ]
+                logger.exception(
+                    "SCAN_LANGUAGE_CLASSIFICATION_FAILED",
+                    scan_job_id=envelope.scan_job_id,
+                    error=str(error),
+                )
 
             syft_result = self._syft_tool.run(result.workspace_path)
             self._record_tool_execution(
@@ -151,8 +188,10 @@ class ScanConsumer(ConsumerBase):
                 sbom_entries=syft_result.entries,
                 usage_facts=[*knip_result.facts, *deptry_result.facts],
             )
-            python_analysis = PythonAnalyzer(result.workspace_path).analyze()
-            coverage_notes = self._coverage_notes(result)
+            python_analysis = PythonAnalyzer(result.workspace_path).analyze(
+                include_files=routed_python_files
+            )
+            coverage_notes = self._coverage_notes(result, classification_limitations)
             callback_payload = self._evidence_assembler.assemble(
                 scan_job_id=envelope.scan_job_id,
                 syft_result=syft_result,
@@ -257,10 +296,21 @@ class ScanConsumer(ConsumerBase):
                 messages=execution.messages,
             )
 
-    def _coverage_notes(self, result) -> list[str]:
+    def _coverage_notes(
+        self,
+        result,
+        classification_limitations: list[dict[str, str]] | None = None,
+    ) -> list[str]:
         notes: list[str] = []
         if result.coverage_limited:
             notes.append(
                 f"Scanner coverage limited: skipped {result.skipped_files} files due to workspace safety limits."
+            )
+
+        for limitation in classification_limitations or []:
+            file_path = limitation.get("file_path", "<unknown>")
+            reason = limitation.get("reason", "unsupported")
+            notes.append(
+                f"SCAN_COVERAGE_LIMITATION: file={file_path} reason={reason}"
             )
         return notes
