@@ -37,3 +37,9 @@ class ClassificationCallbackPayload(BaseModel):
     scan_job_id: str
     classification_level: str
     reasoning: Optional[str] = None
+
+class AuditExportCallbackPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    export_url: Optional[str] = None
+    error_message: Optional[str] = None
