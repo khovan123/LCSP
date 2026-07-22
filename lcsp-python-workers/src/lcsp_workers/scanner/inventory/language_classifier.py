@@ -140,6 +140,17 @@ class LanguageClassifier:
                 coverage_limitation=True,
             )
 
+        if file_path.name in LOCK_FILE_NAMES:
+            return LanguageClassification(
+                file_path=relative_path,
+                language=LANGUAGE_OTHER,
+                support_level=SUPPORT_SKIP,
+                file_size_bytes=file_size,
+                line_count=None,
+                skip_reason="lock_file",
+                coverage_limitation=False,
+            )
+
         suffix = file_path.suffix.lower()
         if suffix in BINARY_EXTENSIONS:
             return LanguageClassification(
