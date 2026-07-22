@@ -533,3 +533,67 @@ def test_scan_consumer_emits_classifier_coverage_limitations_in_callback(
     )
 
     api_client.post_scan_callback.assert_called_once()
+
+
+@pytest.mark.p0
+@pytest.mark.integration
+def test_scan_consumer_limits_python_analysis_to_routed_quota(
+    workspace_dir: Path,
+) -> None:
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
+    members = {
+        f"repo/src/file_{index}.py": b"def f():\n    return 1\n"
+        for index in range(501)
+    }
+    archive = _build_tar_gz(members)
+
+    snapshot_client = MagicMock(spec=SnapshotServiceClient)
+    snapshot_client.download_snapshot_archive.return_value = archive
+
+    config = WorkerConfig(
+        rabbitmq_url="amqp://guest:guest@localhost/",
+        rabbitmq_exchange="test.events",
+        nestjs_api_base_url="http://api.test",
+        worker_api_key="worker-test-key",
+        log_level="INFO",
+        max_retries=3,
+    )
+    syft_tool = MagicMock()
+    syft_tool.run.return_value = _mock_syft_result()
+    semgrep_tool = MagicMock()
+    semgrep_tool.run.return_value = _mock_semgrep_result()
+    knip_tool = MagicMock()
+    knip_tool.run.return_value = _mock_knip_result()
+    deptry_tool = MagicMock()
+    deptry_tool.run.return_value = _mock_deptry_result()
+    api_client = MagicMock()
+
+    def assert_python_analysis_is_routed(scan_job_id, payload) -> None:
+        assert scan_job_id == "job-9"
+        analysis = payload.evidence_payload.get("python_analysis") or {}
+        assert analysis.get("files_analyzed") == 500
+        coverage_notes = payload.evidence_payload.get("coverage_notes", [])
+        assert any("python_file_limit_exceeded" in note for note in coverage_notes)
+
+    api_client.post_scan_callback.side_effect = assert_python_analysis_is_routed
+    consumer = ScanConsumer(
+        config,
+        snapshot_client=snapshot_client,
+        workspace=workspace,
+        syft_tool=syft_tool,
+        semgrep_tool=semgrep_tool,
+        knip_tool=knip_tool,
+        deptry_tool=deptry_tool,
+        api_client=api_client,
+    )
+
+    consumer.handle(
+        {
+            "scanJobId": "job-9",
+            "snapshotId": "snap-9",
+            "correlationId": "corr-9",
+        },
+        correlation_id="fallback-corr",
+    )
+
+    api_client.post_scan_callback.assert_called_once()

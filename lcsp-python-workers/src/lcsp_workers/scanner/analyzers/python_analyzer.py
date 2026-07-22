@@ -85,8 +85,8 @@ class PythonAnalyzer:
         self._cst_parser = PythonCstParser()
         self._level_guard = LevelGuard()
 
-    def analyze(self) -> PythonAnalysisResult:
-        parsed_files = self._parse_workspace()
+    def analyze(self, include_files: Iterable[str] | None = None) -> PythonAnalysisResult:
+        parsed_files = self._parse_workspace(include_files)
         import_map: dict[str, str] = {}
         for parsed in parsed_files:
             import_map.update(parsed.import_map)
@@ -123,12 +123,35 @@ class PythonAnalyzer:
             coverage_limitation=any(parsed.coverage_limited for parsed in parsed_files),
         )
 
-    def _parse_workspace(self) -> list[ParsedPythonFile]:
+    def _parse_workspace(
+        self,
+        include_files: Iterable[str] | None = None,
+    ) -> list[ParsedPythonFile]:
         parsed_files: list[ParsedPythonFile] = []
-        for path in sorted(self._workspace.rglob("*.py")):
-            if not self._level_guard.allowed_path(path):
+
+        if include_files is None:
+            for path in sorted(self._workspace.rglob("*.py")):
+                if not self._level_guard.allowed_path(path):
+                    continue
+                parsed_files.append(self._ast_parser.parse_file(path, self._workspace))
+            return parsed_files
+
+        workspace_resolved = self._workspace.resolve(strict=False)
+        for relative_file in include_files:
+            candidate = (self._workspace / relative_file).resolve(strict=False)
+            try:
+                candidate.relative_to(workspace_resolved)
+            except ValueError:
                 continue
-            parsed_files.append(self._ast_parser.parse_file(path, self._workspace))
+
+            if not candidate.is_file() or candidate.suffix.lower() != ".py":
+                continue
+            if not self._level_guard.allowed_path(candidate):
+                continue
+
+            parsed_files.append(self._ast_parser.parse_file(candidate, self._workspace))
+
+        parsed_files.sort(key=lambda parsed: parsed.relative_path)
         return parsed_files
 
     def _analyze_file(

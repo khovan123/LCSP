@@ -105,11 +105,13 @@ class ScanConsumer(ConsumerBase):
             )
 
             classification_limitations: list[dict[str, str]] = []
+            routed_python_files: list[str] | None = None
             try:
                 classifications = self._language_classifier.classify_workspace(
                     result.workspace_path
                 )
                 dispatch = self._analyzer_router.route(classifications)
+                routed_python_files = list(dispatch.python_files)
                 classification_limitations = list(dispatch.coverage_limitations)
                 logger.info(
                     "SCAN_LANGUAGE_CLASSIFIED",
@@ -185,7 +187,9 @@ class ScanConsumer(ConsumerBase):
                 sbom_entries=syft_result.entries,
                 usage_facts=[*knip_result.facts, *deptry_result.facts],
             )
-            python_analysis = PythonAnalyzer(result.workspace_path).analyze()
+            python_analysis = PythonAnalyzer(result.workspace_path).analyze(
+                include_files=routed_python_files
+            )
             coverage_notes = self._coverage_notes(result, classification_limitations)
             callback_payload = self._evidence_assembler.assemble(
                 scan_job_id=envelope.scan_job_id,
