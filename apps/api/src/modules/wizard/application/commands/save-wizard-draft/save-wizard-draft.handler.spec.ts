@@ -1,10 +1,7 @@
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import {
-  PBAC_ACTIONS,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 /* eslint-disable @typescript-eslint/unbound-method */
 import { ForbiddenException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";

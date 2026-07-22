@@ -10,7 +10,10 @@ import {
   SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
 import { describe, it, expect, jest } from "@jest/globals";
-import { ForbiddenException, UnprocessableEntityException } from "@nestjs/common";
+import {
+  ForbiddenException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 
 import type { AssessmentRepository } from "../../ports/persistence/assessment.repository.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
