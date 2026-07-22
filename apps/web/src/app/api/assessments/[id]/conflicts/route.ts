@@ -20,8 +20,17 @@ export async function GET(
 
   const { id } = await params;
   const status = request.nextUrl.searchParams.get("status") ?? "PENDING";
-  const page = request.nextUrl.searchParams.get("page") ?? "1";
-  const pageSize = request.nextUrl.searchParams.get("page_size") ?? "20";
+
+  const pageRaw = Number.parseInt(request.nextUrl.searchParams.get("page") ?? "1", 10);
+  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? String(pageRaw) : "1";
+
+  const pageSizeRaw = Number.parseInt(
+    request.nextUrl.searchParams.get("page_size") ?? "20",
+    10,
+  );
+  const pageSizeNumber =
+    Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? Math.min(pageSizeRaw, 100) : 20;
+  const pageSize = String(pageSizeNumber);
 
   const query = new URLSearchParams({
     status,
