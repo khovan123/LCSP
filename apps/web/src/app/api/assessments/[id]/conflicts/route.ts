@@ -19,8 +19,7 @@ export async function GET(
   }
 
   const { id } = await params;
-  const status = request.nextUrl.searchParams.get("status") ?? "PENDING";
-
+  const status = "PENDING";
   const pageRaw = Number.parseInt(request.nextUrl.searchParams.get("page") ?? "1", 10);
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? String(pageRaw) : "1";
 
