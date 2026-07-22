@@ -94,13 +94,14 @@ def test_t05_node_modules_is_excluded_before_classification(workspace_dir: Path)
 @pytest.mark.p0
 def test_t06_router_enforces_python_quota_and_records_limitation(workspace_dir: Path) -> None:
     (workspace_dir / "src").mkdir()
-    for index in range(501):
+    max_python_files = 5
+    for index in range(max_python_files + 1):
         (workspace_dir / "src" / f"f_{index}.py").write_text("print('ok')\n", encoding="utf-8")
 
     classifications = LanguageClassifier().classify_workspace(workspace_dir)
-    dispatch = AnalyzerRouter(max_python_files=500).route(classifications)
+    dispatch = AnalyzerRouter(max_python_files=max_python_files).route(classifications)
 
-    assert len(dispatch.python_files) == 500
+    assert len(dispatch.python_files) == max_python_files
     assert len(dispatch.skipped_files) == 1
     assert dispatch.skipped_files[0].startswith("src/f_")
     assert dispatch.skipped_files[0].endswith(".py")
