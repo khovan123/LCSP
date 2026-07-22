@@ -8,13 +8,17 @@ import {
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUDIT_DECISIONS,
+  AUDIT_REDACTION_STATUSES,
+} from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
+import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
@@ -163,10 +167,18 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       triggerSource: command.triggerSource,
       correlationId: command.correlationId,
     });
-    const event = {
+    const event = buildOutboxMessageInput({
       aggregateType: "RepositoryScanJob",
       aggregateId: job.id,
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered,
+      organizationId: job.organizationId,
+      assessmentId: job.assessmentId,
+      correlationId: job.correlationId,
+      causationId: command.correlationId,
+      actor: { id: command.actorId, type: isTrusted ? "service" : "user" },
+      result: GITHUB_INTEGRATION_EVENT_TYPES.scanJobTriggeredAudit,
+      redactionStatus: AUDIT_REDACTION_STATUSES.none,
+      idempotencyKey: job.idempotencyKey,
       payload: {
         scanJobId: job.id,
         assessmentId: job.assessmentId,
@@ -176,7 +188,7 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
         idempotencyKey: job.idempotencyKey,
         correlationId: job.correlationId,
       },
-    };
+    });
 
     try {
       await this.scanJobRepository.saveWithTriggeredEvent(job, event);
@@ -193,10 +205,14 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanJobTriggeredAudit,
       actorId: command.actorId,
       organizationId: snapshot.organizationId,
+      assessmentId: job.assessmentId,
       resourceType: "RepositoryScanJob",
       resourceId: job.id,
       correlationId: command.correlationId,
+      causationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,
+      result: GITHUB_INTEGRATION_EVENT_TYPES.scanJobTriggeredAudit,
+      redactionStatus: AUDIT_REDACTION_STATUSES.none,
       payload: event.payload,
     });
 

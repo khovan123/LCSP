@@ -15,7 +15,7 @@ export const TECHNICAL_EVIDENCE_REPORT_STATUSES = {
 export const SCAN_EVIDENCE_SCHEMA_VERSIONS = ["1.0.0"] as const;
 
 export const SCAN_EVENT_TYPES = {
-  evidenceAccepted: "scan.evidence-accepted",
+  evidenceAccepted: "event.technical-evidence.accepted.v1",
   evidenceAcceptedAudit: "SCAN_EVIDENCE_ACCEPTED",
   evidenceRejectedAudit: "SCAN_EVIDENCE_REJECTED",
 } as const;

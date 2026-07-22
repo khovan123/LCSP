@@ -1,4 +1,8 @@
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUDIT_DECISIONS,
+  AUDIT_EVENT_SCHEMA_VERSION,
+  AUDIT_REDACTION_STATUSES,
+} from "@lcsp/contracts/audit";
 import { AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
 import { PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
 import { jest } from "@jest/globals";
@@ -59,7 +63,13 @@ describe("AuditWriterService", () => {
       organizationId: event.organizationId,
       correlationId: event.correlationId,
       decision: event.decision,
-      payload: { userId: "u-1" },
+      payload: {
+        schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
+        actor: { id: "user-1", type: "user" },
+        redactionStatus: AUDIT_REDACTION_STATUSES.none,
+        result: AUDIT_DECISIONS.allow,
+        userId: "u-1",
+      },
     });
     expect(typeof data.id).toBe("string");
     expect(data.createdAt).toBeInstanceOf(Date);
@@ -81,7 +91,13 @@ describe("AuditWriterService", () => {
     const [{ data }] = create.mock.calls[0] as [
       { data: Record<string, unknown> },
     ];
-    expect(data.payload).toEqual({ userId: "u-1" });
+    expect(data.payload).toEqual({
+      schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
+      actor: { id: "user-1", type: "user" },
+      redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
+      result: AUDIT_DECISIONS.allow,
+      userId: "u-1",
+    });
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("passwordHash"),
     );
@@ -98,10 +114,16 @@ describe("AuditWriterService", () => {
     const [{ data }] = create.mock.calls[0] as [
       { data: Record<string, unknown> },
     ];
-    expect(data.payload).toEqual({ userId: "u-1" });
+    expect(data.payload).toEqual({
+      schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
+      actor: { id: "user-1", type: "user" },
+      redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
+      result: AUDIT_DECISIONS.allow,
+      userId: "u-1",
+    });
   });
 
-  it("T04: write() does not throw when the DB write fails, and logs the error", async () => {
+  it("T04: write() rejects when the DB write fails, and logs the error", async () => {
     const { client, create } = makePrisma({
       create: jest
         .fn<CreateFn>()
@@ -113,7 +135,7 @@ describe("AuditWriterService", () => {
       "error",
     );
 
-    await expect(service.write(makeEvent())).resolves.toBeUndefined();
+    await expect(service.write(makeEvent())).rejects.toThrow("db unavailable");
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(errorSpy).toHaveBeenCalledWith(
@@ -132,7 +154,7 @@ describe("AuditWriterService", () => {
     expect(prismaCreate).not.toHaveBeenCalled();
   });
 
-  it("T05/T06: writeInTx() never throws, even when the transaction client rejects", async () => {
+  it("T05/T06: writeInTx() rejects when the transaction client rejects", async () => {
     const { client } = makePrisma();
     const { tx } = makeTx({
       create: jest
@@ -141,7 +163,9 @@ describe("AuditWriterService", () => {
     });
     const service = new AuditWriterService(client);
 
-    await expect(service.writeInTx(makeEvent(), tx)).resolves.toBeUndefined();
+    await expect(service.writeInTx(makeEvent(), tx)).rejects.toThrow(
+      "tx rolled back",
+    );
   });
 
   it("preserves optional auth audit metadata columns", async () => {

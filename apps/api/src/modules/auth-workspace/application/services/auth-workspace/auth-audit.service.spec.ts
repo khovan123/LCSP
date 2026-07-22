@@ -89,7 +89,7 @@ describe("AuthAuditService", () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("mfaSecret"));
   });
 
-  it("T05: writer failure is logged and not rethrown", async () => {
+  it("T05: writer failure is logged and rethrown so required audit is not silently dropped", async () => {
     const { service } = makeService({
       write: () => Promise.reject(new Error("db unavailable")),
     });
@@ -106,7 +106,7 @@ describe("AuthAuditService", () => {
         correlationId: "corr-1",
         decision: PBAC_DECISION.deny,
       }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("db unavailable");
 
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("db unavailable"),

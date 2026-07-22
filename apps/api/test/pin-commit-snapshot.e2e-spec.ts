@@ -1,5 +1,9 @@
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import {
+  AUDIT_EVENT_SCHEMA_VERSION,
+  AUDIT_REDACTION_STATUSES,
+} from "@lcsp/contracts/audit";
+import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
   GITHUB_REPOSITORY_PERMISSION_LEVELS,
@@ -7,6 +11,7 @@ import {
   REPOSITORY_SNAPSHOT_STATUSES,
 } from "@lcsp/contracts/github-integration";
 import { PBAC_ACTIONS, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { OUTBOX_MESSAGE_SCHEMA_VERSION } from "@lcsp/contracts/outbox";
 /** MW-gh-003: Pin Commit Snapshot Endpoint. */
 
 import * as assert from "node:assert/strict";
@@ -148,6 +153,14 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       (event.payload as { snapshotId?: string }).snapshotId,
       body.snapshot_id,
     );
+    assert.equal(
+      (event.payload as { schemaVersion?: string }).schemaVersion,
+      OUTBOX_MESSAGE_SCHEMA_VERSION,
+    );
+    assert.equal(
+      (event.payload as { correlationId?: string }).correlationId,
+      body.correlation_id,
+    );
     const audit = await prisma.authAuditEvent.findFirst({
       where: {
         eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
@@ -155,6 +168,14 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       },
     });
     assert.ok(audit);
+    assert.equal(
+      (audit.payload as { schemaVersion?: string }).schemaVersion,
+      AUDIT_EVENT_SCHEMA_VERSION,
+    );
+    assert.equal(
+      (audit.payload as { redactionStatus?: string }).redactionStatus,
+      AUDIT_REDACTION_STATUSES.none,
+    );
   });
 
   it("T02: explicit commit SHA is accepted as the immutable revision", async () => {
