@@ -151,6 +151,9 @@ export function toResolveConflictOutcome(
   }
 
   const code = getProblemCode(payload);
+  if (status === 400 && code === "DISMISS_REASON_REQUIRED") {
+    return { kind: "validation_error", reason: "dismiss_reason_required" };
+  }
   if (code === AUTH_ERROR_CODES.mfaRequired) {
     return { kind: "redirect", location: "/mfa/verify" };
   }
