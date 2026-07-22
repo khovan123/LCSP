@@ -130,6 +130,7 @@ export const viPages = {
     assessmentsNav: "Assessment",
     documentsNav: "Tài liệu",
     createAssessment: "Tạo Assessment",
+    openConflictResolution: "Mở xử lý xung đột",
     assessmentsTitle: "Assessment",
     assessmentsDescription:
       "Theo dõi tiến độ assessment từ wizard intake đến review.",
@@ -164,6 +165,50 @@ export const viPages = {
       workspaceUnavailableDetail: "Hiện không thể tải ngữ cảnh workspace.",
       assessmentsUnavailableTitle: "Assessment chưa khả dụng",
       assessmentsUnavailableDetail: "Hiện không thể tải danh sách assessment.",
+    },
+  },
+  reconciliation: {
+    metadataTitle: "Xử lý xung đột | LCSP",
+    metadataDescription:
+      "Xem các xung đột scan đang chờ và ghi nhận quyết định xử lý.",
+    pageTitle: "Xử lý xung đột",
+    pageDescription:
+      "Giải quyết hoặc bác bỏ từng xung đột đang chờ. Bác bỏ bắt buộc phải có lý do.",
+    loading: "Đang tải các xung đột đang chờ",
+    pendingSectionLabel: "Các xung đột đang chờ",
+    pendingBadge: "Đang chờ",
+    scoreLabel: "Điểm xung đột",
+    evidenceRefsLabel: "Tham chiếu evidence",
+    resolutionLabel: "Kết quả xử lý",
+    resolutionResolved: "Đã giải quyết",
+    resolutionDismissed: "Bác bỏ",
+    resolutionNoteLabel: "Ghi chú xử lý",
+    resolutionNotePlaceholder:
+      "Thêm ngữ cảnh cho quyết định này. Bắt buộc khi bác bỏ xung đột.",
+    submitAction: "Gửi kết quả xử lý",
+    submitting: "Đang gửi",
+    allResolvedTitle: "Tất cả xung đột đã được xử lý",
+    allResolvedDetail:
+      "Hiện không còn xung đột đang chờ cho assessment này.",
+    accessRevokedTitle: "Không còn quyền truy cập",
+    accessRevokedDetail:
+      "Bạn không còn quyền xem hoặc xử lý xung đột cho assessment này.",
+    errorTitle: "Không thể tải xung đột",
+    errorDetail: "Vui lòng thử lại sau ít phút.",
+    conflictTypeLabels: {
+      evidenceContradiction: "Mâu thuẫn evidence",
+      scopeMismatch: "Không khớp phạm vi",
+      unverifiableFinding: "Phát hiện không thể xác minh",
+      generic: "Xung đột",
+    },
+    errors: {
+      dismissReasonRequired: "Hãy nhập lý do trước khi bác bỏ xung đột này.",
+      alreadyResolved:
+        "Xung đột này đã được xử lý trước đó. Danh sách đã được làm mới.",
+      conflictNotFound:
+        "Không còn tìm thấy xung đột này. Danh sách đã được làm mới.",
+      resolveFailed:
+        "Không thể hoàn tất yêu cầu xử lý. Vui lòng thử lại.",
     },
   },
 } as const satisfies PagesMessages;

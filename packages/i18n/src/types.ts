@@ -166,6 +166,7 @@ export type PagesMessages = {
     assessmentsNav: string;
     documentsNav: string;
     createAssessment: string;
+    openConflictResolution: string;
     assessmentsTitle: string;
     assessmentsDescription: string;
     emptyTitle: string;
@@ -197,6 +198,42 @@ export type PagesMessages = {
       workspaceUnavailableDetail: string;
       assessmentsUnavailableTitle: string;
       assessmentsUnavailableDetail: string;
+    };
+  };
+  reconciliation: {
+    metadataTitle: string;
+    metadataDescription: string;
+    pageTitle: string;
+    pageDescription: string;
+    loading: string;
+    pendingSectionLabel: string;
+    pendingBadge: string;
+    scoreLabel: string;
+    evidenceRefsLabel: string;
+    resolutionLabel: string;
+    resolutionResolved: string;
+    resolutionDismissed: string;
+    resolutionNoteLabel: string;
+    resolutionNotePlaceholder: string;
+    submitAction: string;
+    submitting: string;
+    allResolvedTitle: string;
+    allResolvedDetail: string;
+    accessRevokedTitle: string;
+    accessRevokedDetail: string;
+    errorTitle: string;
+    errorDetail: string;
+    conflictTypeLabels: {
+      evidenceContradiction: string;
+      scopeMismatch: string;
+      unverifiableFinding: string;
+      generic: string;
+    };
+    errors: {
+      dismissReasonRequired: string;
+      alreadyResolved: string;
+      conflictNotFound: string;
+      resolveFailed: string;
     };
   };
 };
