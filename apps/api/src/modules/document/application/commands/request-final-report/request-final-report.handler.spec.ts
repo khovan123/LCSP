@@ -3,6 +3,7 @@ import { ConflictException, NotFoundException } from "@nestjs/common";
 import {
   DOCUMENT_ERROR_CODES,
   DOCUMENT_EVENT_TYPES,
+  DOCUMENT_REQUEST_STATUSES,
 } from "@lcsp/contracts/document";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
@@ -33,10 +34,12 @@ function buildHandler(options?: {
   const findAssessment = jest.fn(() => assessment);
   const findEvidence = jest.fn(() => evidence);
   const findExisting = jest.fn(() => existing);
-  const createDocumentRequest = jest.fn().mockResolvedValue({
-    id: "document-request-1",
-  });
-  const advisoryLock = jest.fn().mockResolvedValue(1);
+  const createDocumentRequest = jest
+    .fn<() => Promise<{ id: string }>>()
+    .mockResolvedValue({
+      id: "document-request-1",
+    });
+  const advisoryLock = jest.fn<() => Promise<number>>().mockResolvedValue(1);
 
   const tx = {
     $executeRaw: advisoryLock,
@@ -94,7 +97,7 @@ describe("RequestFinalReportHandler", () => {
 
     const result = await handler.execute(command);
 
-    expect(result.status).toBe("QUEUED");
+    expect(result.status).toBe(DOCUMENT_REQUEST_STATUSES.queued);
     expect(result.document_type).toBe("FinalReport");
     expect(result.correlation_id).toBe("corr-1");
     expect(result.document_request_id).toBeTruthy();

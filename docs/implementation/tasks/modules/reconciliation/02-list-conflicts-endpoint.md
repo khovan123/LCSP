@@ -3,7 +3,7 @@ task_id: MW-rec-002
 module: reconciliation
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 5.2
 depends_on:
   - reconciliation/01-conflict-detection-callback-endpoint.md
@@ -97,3 +97,44 @@ Return all pending conflicts for an assessment for Manager review. Includes conf
 - Conflicts returned with score, explanation, type, and refs.
 - Default filter is `PENDING`.
 - No raw source code or finding content in `evidence_refs`.
+
+## Implementation Evidence
+
+- Added `GET /assessments/:assessmentId/conflicts` in the reconciliation HTTP surface, guarded by `PbacGuard` and `PBAC_ACTIONS.conflictRead`.
+- Added `conflict:read` to PBAC action contracts and Manager-only action coverage.
+- Added `ListConflictsQuery`, `ListConflictsHandler`, and `ConflictListDto` contract.
+- Handler verifies the assessment belongs to the caller's organization before reading conflicts.
+- Handler defaults `status` to `PENDING`, clamps pagination to `page >= 1` and `page_size <= 100`, and validates known conflict statuses.
+- Handler returns conflict ID, type, score, explanation, status, evidence reference IDs, creation timestamp, total/page metadata, and correlation ID.
+- Handler filters `evidence_refs` to string IDs only, preventing raw finding/source content from leaking in the response.
+- Added e2e coverage for T01-T06.
+- Cleaned existing document test contract-literal and Jest mock typing issues so repo-wide validation passes.
+
+## File List
+
+- `apps/api/src/modules/reconciliation/presentation/http/reconciliation.controller.ts`
+- `apps/api/src/modules/reconciliation/reconciliation.module.ts`
+- `apps/api/src/modules/reconciliation/application/contracts/reconciliation/conflict-list.contract.ts`
+- `apps/api/src/modules/reconciliation/application/queries/list-conflicts/list-conflicts.query.ts`
+- `apps/api/src/modules/reconciliation/application/queries/list-conflicts/list-conflicts.handler.ts`
+- `apps/api/test/list-conflicts.e2e-spec.ts`
+- `packages/contracts/src/pbac/actions.ts`
+- `packages/contracts/src/pbac/manager-policy.ts`
+- `tests/story-1-6.web.test.ts`
+- `apps/api/src/modules/document/application/commands/request-final-report/request-final-report.handler.spec.ts`
+- `apps/api/test/document-final-report.e2e-spec.ts`
+
+## Validation
+
+- `pnpm --filter @lcsp/api test:e2e -- --runInBand --runTestsByPath test/list-conflicts.e2e-spec.ts`
+  - Result: passed, 6 tests.
+- `pnpm run lint`
+  - Result: passed.
+- `pnpm run test:web`
+  - Result: passed, 31 tests.
+- `NODE_OPTIONS=--experimental-vm-modules pnpm --dir apps/api exec jest --config ./jest.config.ts --runInBand --watchman=false`
+  - Result: passed, 46 suites / 286 tests.
+- `pnpm --filter @lcsp/api build`
+  - Result: passed.
+- `pnpm --filter @lcsp/api test:e2e`
+  - Result: passed, 30 suites / 249 tests.
