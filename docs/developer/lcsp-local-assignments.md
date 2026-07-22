@@ -109,7 +109,7 @@ Local-only assignment plan generated from `docs/implementation/tasks/modules` vi
 - `LCSP-100` `MW-intel-001`: TechnicalProfile Worker (python-workers/intelligence, Story 3.6, P0, READY_FOR_DEV, support)
 - `LCSP-101` `MW-intel-002`: AIUsageFlow Worker (python-workers/intelligence, Story 4.2, P0, READY_FOR_DEV, support)
 - `LCSP-102` `MW-intel-003`: Conflict Detection Worker (python-workers/intelligence, Story 5.1, P0, READY_FOR_DEV, support)
-- `LCSP-116` `MW-scan-py-004`: Evidence Report Assembly and Callback (python-workers/scanner, Story 3.5, P0, READY_FOR_DEV, support)
+- `LCSP-116` `MW-scan-py-004`: Evidence Report Assembly and Callback (python-workers/scanner, Story 3.5, P0, DONE, support)
 - `LCSP-117` `MW-scan-py-005`: Knip + deptry Dependency Usage Analysis Tool (python-workers/scanner, Story 3.5, P0, READY_FOR_DEV, support)
 - `LCSP-118` `MW-scan-py-006`: Python AST/CST Analyzer (Bounded L0–L3) (python-workers/scanner, Story 3.5, P0, READY_FOR_DEV, support)
 - `LCSP-128` `MW-qa-001`: Auth Integration Test Suite (qa, Story 1.1, P0, READY_FOR_DEV, support)
@@ -136,4 +136,3 @@ Local-only assignment plan generated from `docs/implementation/tasks/modules` vi
 - `LCSP-133` `MW-rec-003`: Resolve Conflict Endpoint (reconciliation, Story 5.3, P0, READY_FOR_DEV, support)
 - `LCSP-134` `MW-rec-004`: VerifiedProfile Callback Endpoint (reconciliation, Story 5.4, P0, READY_FOR_DEV, support)
 - `LCSP-147` `MW-wiz-004`: Wizard Readiness Export Endpoint (wizard, Story 2.4, P1, READY_FOR_DEV, support)
-

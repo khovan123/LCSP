@@ -3,7 +3,7 @@ task_id: MW-scan-py-004
 module: python-workers/scanner
 runtime: lcsp-python-workers
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.5
 depends_on:
   - python-workers/scanner/02-syft-sbom-tool.md
@@ -76,3 +76,12 @@ class PrivacyFlags:
 - Tool failures recorded but non-blocking (unless all tools failed with zero findings).
 - Workspace cleanup runs after callback.
 - `redact_dict()` + `redact_source_code()` applied to full payload.
+
+## Implementation Evidence
+
+- Added `lcsp-python-workers/src/lcsp_workers/scanner/evidence_assembler.py` to assemble Syft SBOM entries, Semgrep AI usage signals, tool failure records, coverage notes, tool versions, config hashes, schema version, and callback privacy flags into the NestJS scan callback contract.
+- Updated `ScanConsumer` to run Syft → Semgrep, assemble the evidence payload, submit `WorkerApiClient.post_scan_callback(...)`, and only clean up the scanner workspace after callback submission.
+- Updated `ScanCallbackPayload`/`CallbackResponse` to support the active NestJS callback response/request fields while preserving existing worker callback tests.
+- Hardened callback redaction for nested `evidence_payload.ai_usage_signals`; source-like findings are stripped before callback and secret patterns are redacted without redacting provenance `config_hash` values.
+- Added tests for full payload assembly, partial tool failure callback, all-tools-failed callback payload, privacy assertion abort, final redaction, and callback-before-cleanup ordering.
+- Validation: Python compile checks passed for changed worker files and tests. Targeted pytest passed: `lcsp-python-workers/tests/test_evidence_assembler.py`, `lcsp-python-workers/tests/test_scanner_workspace.py`, and `lcsp-python-workers/tests/test_api_client.py` — 22 passed, 1 warning.
