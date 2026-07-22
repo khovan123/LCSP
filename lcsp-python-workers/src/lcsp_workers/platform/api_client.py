@@ -204,13 +204,25 @@ class WorkerApiClient:
             safe_payload["findings"] = redact_source_code(
                 [finding for finding in findings if isinstance(finding, dict)]
             )
+        evidence_payload = safe_payload.get("evidence_payload")
+        if isinstance(evidence_payload, dict):
+            safe_evidence_payload = dict(evidence_payload)
+            signals = safe_evidence_payload.get("ai_usage_signals")
+            if isinstance(signals, list):
+                safe_evidence_payload["ai_usage_signals"] = redact_source_code(
+                    [signal for signal in signals if isinstance(signal, dict)]
+                )
+            safe_payload["evidence_payload"] = safe_evidence_payload
         return redact_dict(safe_payload)
 
     def post_scan_callback(
         self, scan_job_id: str, payload: ScanCallbackPayload
     ) -> CallbackResponse:
         path = CallbackPath.SCAN.format(scan_job_id=scan_job_id)
-        resp_data = self._post_with_retry(path, payload.model_dump())
+        request_payload = payload.model_dump(exclude_none=True)
+        if request_payload.get("findings") == []:
+            request_payload.pop("findings")
+        resp_data = self._post_with_retry(path, request_payload)
         return CallbackResponse(**resp_data)
 
     def post_technical_profile_callback(

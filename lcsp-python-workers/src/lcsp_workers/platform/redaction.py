@@ -7,7 +7,7 @@ REDACTED_GITHUB_TOKEN = "[REDACTED:GITHUB_TOKEN]"
 REDACTED_MAX_DEPTH = "[REDACTED:MAX_DEPTH]"
 
 SENSITIVE_KEY_PATTERN = re.compile(
-    r"password|token|secret|key|nonce|code|hash|credential|auth|api_key",
+    r"password|token|secret|key|nonce|code|credential|auth|api_key",
     re.IGNORECASE,
 )
 

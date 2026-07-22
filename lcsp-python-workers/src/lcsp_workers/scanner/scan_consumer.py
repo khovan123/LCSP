@@ -3,10 +3,12 @@ from __future__ import annotations
 import time
 from dataclasses import asdict, dataclass
 
+from lcsp_workers.platform.api_client import WorkerApiClient
 from lcsp_workers.platform.correlation import set_correlation_id
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.platform.queue_consumer import ConsumerBase
 
+from .evidence_assembler import EvidenceAssembler, PrivacyAssertionError
 from .snapshot_service_client import SnapshotArchiveRequest, SnapshotServiceClient
 from .tool_registry import ToolRegistry
 from .tools.semgrep_tool import SemgrepRunResult, SemgrepTool
@@ -37,6 +39,8 @@ class ScanConsumer(ConsumerBase):
         workspace: ScannerWorkspace | None = None,
         syft_tool: SyftTool | None = None,
         semgrep_tool: SemgrepTool | None = None,
+        api_client: WorkerApiClient | None = None,
+        evidence_assembler: EvidenceAssembler | None = None,
     ):
         super().__init__(config, pbac_client)
         self._snapshot_client = snapshot_client or SnapshotServiceClient(
@@ -46,6 +50,11 @@ class ScanConsumer(ConsumerBase):
         self._workspace = workspace or ScannerWorkspace()
         self._syft_tool = syft_tool or SyftTool()
         self._semgrep_tool = semgrep_tool or SemgrepTool()
+        self._api_client = api_client or WorkerApiClient(
+            config.nestjs_api_base_url,
+            config.worker_api_key,
+        )
+        self._evidence_assembler = evidence_assembler or EvidenceAssembler()
 
     def handle(self, message: dict, correlation_id: str) -> None:
         started_at = time.monotonic()
@@ -102,6 +111,31 @@ class ScanConsumer(ConsumerBase):
                 raise ArchiveMaterializationError(
                     f"scan timeout exceeded for job {envelope.scan_job_id!r}"
                 )
+
+            coverage_notes = self._coverage_notes(result)
+            callback_payload = self._evidence_assembler.assemble(
+                scan_job_id=envelope.scan_job_id,
+                syft_result=syft_result,
+                semgrep_result=semgrep_result,
+                coverage_notes=coverage_notes,
+            )
+            self._api_client.post_scan_callback(
+                envelope.scan_job_id,
+                callback_payload,
+            )
+            logger.info(
+                "SCAN_EVIDENCE_CALLBACK_SUBMITTED",
+                scan_job_id=envelope.scan_job_id,
+                status=callback_payload.status,
+                schema_version=callback_payload.schema_version,
+            )
+        except PrivacyAssertionError as error:
+            logger.error(
+                "SCAN_EVIDENCE_PRIVACY_ASSERTION_FAILED",
+                scan_job_id=envelope.scan_job_id,
+                error_code=error.error_code,
+            )
+            raise
         except Exception:
             if result is None:
                 self._workspace.cleanup(envelope.scan_job_id)
@@ -176,3 +210,11 @@ class ScanConsumer(ConsumerBase):
                 outcome=execution.outcome,
                 messages=execution.messages,
             )
+
+    def _coverage_notes(self, result) -> list[str]:
+        notes: list[str] = []
+        if result.coverage_limited:
+            notes.append(
+                f"Scanner coverage limited: skipped {result.skipped_files} files due to workspace safety limits."
+            )
+        return notes

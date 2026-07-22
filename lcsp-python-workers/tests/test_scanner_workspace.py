@@ -229,12 +229,14 @@ def test_scan_consumer_uses_internal_snapshot_service_and_cleans_up(
     syft_tool.run.return_value = _mock_syft_result()
     semgrep_tool = MagicMock()
     semgrep_tool.run.return_value = _mock_semgrep_result()
+    api_client = MagicMock()
     consumer = ScanConsumer(
         config,
         snapshot_client=snapshot_client,
         workspace=workspace,
         syft_tool=syft_tool,
         semgrep_tool=semgrep_tool,
+        api_client=api_client,
     )
 
     consumer.handle(
@@ -255,7 +257,61 @@ def test_scan_consumer_uses_internal_snapshot_service_and_cleans_up(
     )
     syft_tool.run.assert_called_once()
     semgrep_tool.run.assert_called_once()
+    api_client.post_scan_callback.assert_called_once()
     assert not workspace.workspace_path("job-4").exists()
+
+
+@pytest.mark.p0
+@pytest.mark.integration
+def test_scan_consumer_posts_callback_before_workspace_cleanup(
+    workspace_dir: Path,
+) -> None:
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
+    archive = _build_tar_gz({"repo/README.md": b"hello\n"})
+
+    snapshot_client = MagicMock(spec=SnapshotServiceClient)
+    snapshot_client.download_snapshot_archive.return_value = archive
+
+    config = WorkerConfig(
+        rabbitmq_url="amqp://guest:guest@localhost/",
+        rabbitmq_exchange="test.events",
+        nestjs_api_base_url="http://api.test",
+        worker_api_key="worker-test-key",
+        log_level="INFO",
+        max_retries=3,
+    )
+    syft_tool = MagicMock()
+    syft_tool.run.return_value = _mock_syft_result()
+    semgrep_tool = MagicMock()
+    semgrep_tool.run.return_value = _mock_semgrep_result()
+    api_client = MagicMock()
+
+    def assert_workspace_exists_during_callback(scan_job_id, payload) -> None:
+        assert scan_job_id == "job-6"
+        assert payload.scan_job_id == "job-6"
+        assert workspace.workspace_path("job-6").exists()
+
+    api_client.post_scan_callback.side_effect = assert_workspace_exists_during_callback
+    consumer = ScanConsumer(
+        config,
+        snapshot_client=snapshot_client,
+        workspace=workspace,
+        syft_tool=syft_tool,
+        semgrep_tool=semgrep_tool,
+        api_client=api_client,
+    )
+
+    consumer.handle(
+        {
+            "scanJobId": "job-6",
+            "snapshotId": "snap-6",
+            "correlationId": "corr-6",
+        },
+        correlation_id="fallback-corr",
+    )
+
+    api_client.post_scan_callback.assert_called_once()
+    assert not workspace.workspace_path("job-6").exists()
 
 
 @pytest.mark.p0
@@ -282,12 +338,14 @@ def test_scan_consumer_cleanup_runs_on_timeout(
     syft_tool.run.return_value = _mock_syft_result()
     semgrep_tool = MagicMock()
     semgrep_tool.run.return_value = _mock_semgrep_result()
+    api_client = MagicMock()
     consumer = ScanConsumer(
         config,
         snapshot_client=snapshot_client,
         workspace=workspace,
         syft_tool=syft_tool,
         semgrep_tool=semgrep_tool,
+        api_client=api_client,
     )
     consumer.scan_timeout_seconds = 0
 
@@ -305,4 +363,3 @@ def test_scan_consumer_cleanup_runs_on_timeout(
         )
 
     assert not workspace.workspace_path("job-5").exists()
-
