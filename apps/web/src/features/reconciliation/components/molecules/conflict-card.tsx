@@ -77,8 +77,8 @@ export function ConflictCard({
             {resolveMessage(appLocale, "pages.reconciliation.evidenceRefsLabel")}
           </p>
           <div className="flex flex-wrap gap-2">
-            {conflict.evidence_refs.map((ref) => (
-              <Badge key={ref} variant="secondary">
+            {conflict.evidence_refs.map((ref, index) => (
+              <Badge key={`${ref}-${index}`} variant="secondary">
                 {ref}
               </Badge>
             ))}
