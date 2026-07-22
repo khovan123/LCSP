@@ -3,7 +3,7 @@ task_id: MW-rec-001
 module: reconciliation
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 5.1
 depends_on:
   - ai-usage-flow/01-ai-usage-flow-callback-endpoint.md
@@ -127,3 +127,44 @@ model ConflictRecord {
 - Empty conflicts emit `no-conflicts` event (not missing event).
 - Score validated to 0.0–1.0 range.
 - All conflicts routed to Manager via PENDING status.
+
+## Implementation Evidence
+
+- Added `ConflictRecord` Prisma model with `assessmentId,status` index and pending/resolution fields.
+- Added `POST /internal/reconciliation/conflict-callback` guarded by `X-Worker-Api-Key`.
+- Added `AcceptConflictCommand`, callback contract, handler, domain entity, and NestJS module.
+- Handler verifies accepted `AIUsageFlow`, accepts explicit empty conflict arrays, validates conflict type, score range, evidence refs, schema, provider version, and privacy flags.
+- Handler persists one `ConflictRecord` per conflict with `PENDING` status, emits `event.reconciliation.conflicts-detected.v1` or `event.reconciliation.no-conflicts.v1`, and writes `CONFLICT_DETECTED` per conflict or `NO_CONFLICTS_DETECTED`.
+- Added scan contract constants for conflict statuses, callback schema version, outbox/audit event names, and callback error codes.
+- Added e2e coverage for T01–T07 plus invalid worker key and missing AIUsageFlow.
+
+## File List
+
+- `apps/api/prisma/schema.prisma`
+- `apps/api/src/app.module.ts`
+- `apps/api/src/modules/reconciliation/reconciliation.module.ts`
+- `apps/api/src/modules/reconciliation/application/commands/accept-conflict/accept-conflict.command.ts`
+- `apps/api/src/modules/reconciliation/application/commands/accept-conflict/accept-conflict.handler.ts`
+- `apps/api/src/modules/reconciliation/application/contracts/reconciliation/conflict-detection-callback.contract.ts`
+- `apps/api/src/modules/reconciliation/domain/entities/conflict-record.entity.ts`
+- `apps/api/src/modules/reconciliation/presentation/http/reconciliation.controller.ts`
+- `apps/api/test/conflict-detection-callback.e2e-spec.ts`
+- `packages/contracts/src/scan/callback.ts`
+- `packages/contracts/src/scan/codes.ts`
+
+## Validation
+
+- `pnpm --filter @lcsp/api prisma:generate`
+  - Result: passed.
+- `pnpm --filter @lcsp/api test:e2e -- --runInBand --runTestsByPath test/conflict-detection-callback.e2e-spec.ts`
+  - Result: passed, 6 tests.
+- `pnpm --filter @lcsp/api test:e2e -- --runInBand --runTestsByPath test/conflict-detection-callback.e2e-spec.ts test/ai-usage-flow-callback.e2e-spec.ts`
+  - Result: passed, 12 tests.
+- `pnpm --filter @lcsp/api test:e2e`
+  - Result: passed, 29 suites / 243 tests.
+- `pnpm --filter @lcsp/api lint`
+  - Result: passed.
+- `npm run lint`
+  - Result: blocked by pre-existing contract literal failures in `apps/api/src/modules/document/application/commands/request-final-report/request-final-report.handler.spec.ts:97` and `apps/api/test/document-final-report.e2e-spec.ts:271`.
+- `npm run typecheck`
+  - Result: blocked by pre-existing type errors in `apps/api/src/modules/document/application/commands/request-final-report/request-final-report.handler.spec.ts:36` and `:39`.

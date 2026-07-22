@@ -11,6 +11,7 @@ import { EvidenceModule } from "./modules/evidence/evidence.module.js";
 import { DocumentModule } from "./modules/document/document.module.js";
 import { GitHubIntegrationModule } from "./modules/github-integration/github-integration.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
+import { ReconciliationModule } from "./modules/reconciliation/reconciliation.module.js";
 import { ScanModule } from "./modules/scan/scan.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
 import { WizardModule } from "./modules/wizard/wizard.module.js";
@@ -39,6 +40,7 @@ import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.modul
     EvidenceModule,
     DocumentModule,
     GitHubIntegrationModule,
+    ReconciliationModule,
     ScanModule,
     AuditFeatureModule,
     WizardModule,

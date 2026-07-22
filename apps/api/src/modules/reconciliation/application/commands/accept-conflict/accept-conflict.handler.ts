@@ -1,0 +1,334 @@
+import * as crypto from "node:crypto";
+
+import {
+  NotFoundException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+import {
+  AUDIT_DECISIONS,
+  AUDIT_REDACTION_STATUSES,
+  buildAuditEventInput,
+} from "@lcsp/contracts/audit";
+import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  AI_USAGE_FLOW_STATUSES,
+  CONFLICT_DETECTION_SCHEMA_VERSIONS,
+  CONFLICT_RECORD_STATUSES,
+  SCAN_ERROR_CODES,
+  SCAN_EVENT_TYPES,
+} from "@lcsp/contracts/scan";
+import { Prisma } from "@prisma/client";
+
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import type {
+  ConflictDetectionCallbackDto,
+  ConflictInputRequest,
+  ConflictType,
+} from "../../contracts/reconciliation/conflict-detection-callback.contract.js";
+import { AcceptConflictCommand } from "./accept-conflict.command.js";
+
+const RECONCILIATION_WORKER_ACTOR_ID = "conflict-detection-worker";
+const CONFLICT_TYPES = new Set<ConflictType>([
+  "evidence_contradiction",
+  "scope_mismatch",
+  "unverifiable",
+]);
+const FORBIDDEN_PAYLOAD_KEYS = new Set([
+  "codesnippet",
+  "filecontent",
+  "fullastbody",
+  "fullprompt",
+  "rawoutput",
+  "rawsource",
+  "rawsourcecode",
+  "snippet",
+  "sourcecode",
+  "sourcecontent",
+]);
+const SECRET_PATTERNS = [
+  /\bgh[oprsu]_[A-Za-z0-9_]{20,}\b/,
+  /\bsk-ant-[A-Za-z0-9_-]{16,}\b/,
+  /\bAKIA[A-Z0-9]{16}\b/,
+  /\bBearer\s+[A-Za-z0-9._~+/-]{12,}=*/i,
+];
+
+@CommandHandler(AcceptConflictCommand)
+export class AcceptConflictHandler implements ICommandHandler<AcceptConflictCommand> {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async execute(
+    command: AcceptConflictCommand,
+  ): Promise<ConflictDetectionCallbackDto> {
+    this.validate(command);
+
+    const payload = command.payload;
+    const aiUsageFlow = await this.prisma.aIUsageFlow.findFirst({
+      where: {
+        id: payload.ai_usage_flow_id,
+        assessmentId: payload.assessment_id,
+        status: AI_USAGE_FLOW_STATUSES.accepted,
+      },
+      select: {
+        id: true,
+        assessmentId: true,
+        organizationId: true,
+      },
+    });
+    if (!aiUsageFlow) {
+      throw new NotFoundException(
+        this.errorBody(command, SCAN_ERROR_CODES.aiUsageFlowNotFound),
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const conflictIds = payload.conflicts.map(() => crypto.randomUUID());
+
+      await Promise.all(
+        payload.conflicts.map((conflict, index) =>
+          tx.conflictRecord.create({
+            data: {
+              id: conflictIds[index],
+              aiUsageFlowId: aiUsageFlow.id,
+              assessmentId: aiUsageFlow.assessmentId,
+              organizationId: aiUsageFlow.organizationId,
+              conflictType: conflict.conflict_type,
+              conflictScore: conflict.conflict_score,
+              scoreExplanation: conflict.score_explanation,
+              evidenceRefs: conflict.evidence_refs,
+              status: CONFLICT_RECORD_STATUSES.pending,
+            },
+          }),
+        ),
+      );
+
+      const eventType =
+        payload.conflicts.length > 0
+          ? SCAN_EVENT_TYPES.reconciliationConflictsDetected
+          : SCAN_EVENT_TYPES.reconciliationNoConflicts;
+      const auditType =
+        payload.conflicts.length > 0
+          ? SCAN_EVENT_TYPES.conflictDetectedAudit
+          : SCAN_EVENT_TYPES.noConflictsDetectedAudit;
+
+      const outboxEvent = buildOutboxMessageInput({
+        aggregateType: "AIUsageFlow",
+        aggregateId: aiUsageFlow.id,
+        eventType,
+        organizationId: aiUsageFlow.organizationId,
+        assessmentId: aiUsageFlow.assessmentId,
+        correlationId: command.correlationId,
+        causationId: aiUsageFlow.id,
+        actor: { id: RECONCILIATION_WORKER_ACTOR_ID, type: "service" },
+        result: auditType,
+        redactionStatus: AUDIT_REDACTION_STATUSES.none,
+        idempotencyKey: `${aiUsageFlow.id}:${eventType}:${command.correlationId}`,
+        payload: {
+          assessmentId: aiUsageFlow.assessmentId,
+          aiUsageFlowId: aiUsageFlow.id,
+          conflictCount: payload.conflicts.length,
+          correlationId: command.correlationId,
+        },
+      });
+      await tx.outboxMessage.create({
+        data: {
+          id: crypto.randomUUID(),
+          aggregateType: outboxEvent.aggregateType,
+          aggregateId: outboxEvent.aggregateId,
+          eventType: outboxEvent.eventType,
+          payload: outboxEvent.payload as Prisma.InputJsonValue,
+        },
+      });
+
+      if (payload.conflicts.length === 0) {
+        await this.createAudit(tx, {
+          eventType: SCAN_EVENT_TYPES.noConflictsDetectedAudit,
+          resourceId: aiUsageFlow.id,
+          resourceType: "AIUsageFlow",
+          organizationId: aiUsageFlow.organizationId,
+          assessmentId: aiUsageFlow.assessmentId,
+          correlationId: command.correlationId,
+          causationId: aiUsageFlow.id,
+          payload: {
+            aiUsageFlowId: aiUsageFlow.id,
+            assessmentId: aiUsageFlow.assessmentId,
+            conflictCount: 0,
+            correlationId: command.correlationId,
+          },
+        });
+        return;
+      }
+
+      await Promise.all(
+        payload.conflicts.map((conflict, index) =>
+          this.createAudit(tx, {
+            eventType: SCAN_EVENT_TYPES.conflictDetectedAudit,
+            resourceId: conflictIds[index],
+            resourceType: "ConflictRecord",
+            organizationId: aiUsageFlow.organizationId,
+            assessmentId: aiUsageFlow.assessmentId,
+            correlationId: command.correlationId,
+            causationId: aiUsageFlow.id,
+            payload: {
+              conflictId: conflictIds[index],
+              conflictType: conflict.conflict_type,
+              assessmentId: aiUsageFlow.assessmentId,
+              aiUsageFlowId: aiUsageFlow.id,
+              correlationId: command.correlationId,
+            },
+          }),
+        ),
+      );
+    });
+
+    return {
+      accepted: true,
+      conflict_count: payload.conflicts.length,
+      correlation_id: command.correlationId,
+    };
+  }
+
+  private validate(command: AcceptConflictCommand): void {
+    const payload = command.payload;
+    if (
+      !isRecord(payload) ||
+      !clean(payload.ai_usage_flow_id) ||
+      !clean(payload.assessment_id) ||
+      !CONFLICT_DETECTION_SCHEMA_VERSIONS.includes(
+        payload.schema_version as (typeof CONFLICT_DETECTION_SCHEMA_VERSIONS)[number],
+      ) ||
+      !clean(payload.provider_version) ||
+      !Array.isArray(payload.conflicts) ||
+      !payload.conflicts.every(isConflictInput) ||
+      !isRecord(payload.privacy_flags)
+    ) {
+      throw new UnprocessableEntityException(
+        this.errorBody(command, SCAN_ERROR_CODES.conflictSchemaInvalid),
+      );
+    }
+
+    if (
+      payload.conflicts.some(
+        (conflict) => !isValidScore(conflict.conflict_score),
+      )
+    ) {
+      throw new UnprocessableEntityException(
+        this.errorBody(command, SCAN_ERROR_CODES.conflictScoreInvalid),
+      );
+    }
+
+    if (
+      payload.conflicts.some((conflict) => conflict.evidence_refs.length === 0)
+    ) {
+      throw new UnprocessableEntityException(
+        this.errorBody(command, SCAN_ERROR_CODES.evidenceRefsEmpty),
+      );
+    }
+
+    if (
+      payload.privacy_flags.containsSourceCode !== false ||
+      payload.privacy_flags.secretsRedacted !== true ||
+      containsUnsafePayload(payload.conflicts)
+    ) {
+      throw new UnprocessableEntityException(
+        this.errorBody(command, SCAN_ERROR_CODES.privacyFlagsInvalid),
+      );
+    }
+  }
+
+  private async createAudit(
+    tx: Prisma.TransactionClient,
+    input: {
+      eventType: string;
+      resourceType: string;
+      resourceId: string;
+      organizationId: string;
+      assessmentId: string;
+      correlationId: string;
+      causationId: string;
+      payload: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    const auditEvent = buildAuditEventInput({
+      eventType: input.eventType,
+      actorId: RECONCILIATION_WORKER_ACTOR_ID,
+      organizationId: input.organizationId,
+      assessmentId: input.assessmentId,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+      correlationId: input.correlationId,
+      causationId: input.causationId,
+      decision: AUDIT_DECISIONS.allow,
+      result: input.eventType,
+      redactionStatus: AUDIT_REDACTION_STATUSES.none,
+      actor: { id: RECONCILIATION_WORKER_ACTOR_ID, type: "service" },
+      payload: input.payload,
+    });
+    await tx.authAuditEvent.create({
+      data: {
+        id: crypto.randomUUID(),
+        eventType: auditEvent.eventType,
+        actorId: auditEvent.actorId,
+        organizationId: auditEvent.organizationId,
+        resourceType: auditEvent.resourceType ?? null,
+        resourceId: auditEvent.resourceId ?? null,
+        correlationId: auditEvent.correlationId,
+        reasonCode: auditEvent.reasonCode ?? null,
+        decision: auditEvent.decision,
+        payload: auditEvent.payload as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  private errorBody(command: AcceptConflictCommand, errorCode: string) {
+    return {
+      error_code: errorCode,
+      correlation_id: command.correlationId,
+    };
+  }
+}
+
+function isConflictInput(value: unknown): value is ConflictInputRequest {
+  if (!isRecord(value)) return false;
+  return (
+    isConflictType(value.conflict_type) &&
+    typeof value.conflict_score === "number" &&
+    Number.isFinite(value.conflict_score) &&
+    Boolean(clean(value.score_explanation)) &&
+    Array.isArray(value.evidence_refs) &&
+    value.evidence_refs.every((entry) => Boolean(clean(entry)))
+  );
+}
+
+function isConflictType(value: unknown): value is ConflictType {
+  return typeof value === "string" && CONFLICT_TYPES.has(value as ConflictType);
+}
+
+function isValidScore(value: number): boolean {
+  return value >= 0 && value <= 1;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function clean(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function containsUnsafePayload(value: unknown): boolean {
+  if (typeof value === "string") {
+    return SECRET_PATTERNS.some((pattern) => pattern.test(value));
+  }
+  if (Array.isArray(value)) {
+    return value.some(containsUnsafePayload);
+  }
+  if (!isRecord(value)) return false;
+
+  return Object.entries(value).some(([key, entry]) => {
+    const normalizedKey = key.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+    return (
+      FORBIDDEN_PAYLOAD_KEYS.has(normalizedKey) || containsUnsafePayload(entry)
+    );
+  });
+}

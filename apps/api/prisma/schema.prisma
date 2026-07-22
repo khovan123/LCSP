@@ -401,6 +401,24 @@ model AIUsageFlow {
   @@index([assessmentId])
 }
 
+model ConflictRecord {
+  id               String    @id @default(uuid())
+  aiUsageFlowId    String
+  assessmentId     String
+  organizationId   String
+  conflictType     String
+  conflictScore    Float
+  scoreExplanation String
+  evidenceRefs     Json
+  status           String    @default("PENDING")
+  resolvedAt       DateTime?
+  resolvedById     String?
+  resolutionNote   String?
+  createdAt        DateTime  @default(now())
+
+  @@index([assessmentId, status])
+}
+
 model ClassificationResult {
   id                        String   @id
   assessmentId              String
