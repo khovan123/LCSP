@@ -290,7 +290,8 @@ class LanguageClassifier:
 
     def _is_binary(self, file_path: Path) -> bool:
         try:
-            sample = file_path.read_bytes()[:512]
+            with file_path.open("rb") as handle:
+                sample = handle.read(512)
         except OSError:
             return True
 
