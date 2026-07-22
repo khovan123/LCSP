@@ -247,7 +247,7 @@ class LanguageClassifier:
                 coverage_limitation=coverage_limitation,
             )
 
-        if suffix in CONFIG_EXTENSIONS:
+        if suffix in CONFIG_EXTENSIONS or file_path.name == ".env":
             return LanguageClassification(
                 file_path=relative_path,
                 language=LANGUAGE_OTHER,
