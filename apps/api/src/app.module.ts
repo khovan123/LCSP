@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 
 import { config, configValidationSchema } from "./config/config.js";
 import { AppFeatureModule } from "./modules/app/app.module.js";
+import { AIUsageFlowModule } from "./modules/ai-usage-flow/ai-usage-flow.module.js";
 import { AssessmentModule } from "./modules/assessment/assessment.module.js";
 import { AuditModule as AuditFeatureModule } from "./modules/audit/audit.module.js";
 import { AuthWorkspaceModule } from "./modules/auth-workspace/auth-workspace.module.js";
@@ -30,6 +31,7 @@ import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.modul
     AuditPlatformModule,
     OutboxModule,
     PbacModule,
+    AIUsageFlowModule,
     AppFeatureModule,
     AuthWorkspaceModule,
     UsersModule,

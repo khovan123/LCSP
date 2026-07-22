@@ -3,7 +3,7 @@ task_id: MW-aiuf-001
 module: ai-usage-flow
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 4.2
 depends_on:
   - evidence/02-technical-profile-callback-endpoint.md
@@ -136,3 +136,43 @@ model AIUsageFlow {
 - `unknown_usages` preserved (not stripped).
 - Immutable once accepted.
 - Outbox `ai-usage-flow-ready` triggers conflict detection.
+
+## Implementation Evidence
+
+- Added `AIUsageFlow` Prisma model with unique `technicalProfileId` and assessment index.
+- Added `POST /internal/ai-usage-flow/callback` guarded by `X-Worker-Api-Key`.
+- Added `AcceptAIUsageFlowCommand`, callback contract, handler, domain entity, and NestJS module.
+- Handler verifies accepted `TechnicalProfile`, rejects duplicate flows, validates schema/privacy, requires evidence refs for material claims, preserves explicit `unknown_usages`, persists immutable `AIUsageFlow`, emits `event.ai-usage-flow.ready.v1`, and writes `AI_USAGE_FLOW_ACCEPTED` audit with safe refs only.
+- Added scan contract constants for AIUsageFlow status, schema version, ready event, accepted audit event, and callback error codes.
+- Added e2e coverage for T01–T07 plus missing TechnicalProfile and no update path.
+
+## File List
+
+- `apps/api/prisma/schema.prisma`
+- `apps/api/src/app.module.ts`
+- `apps/api/src/modules/ai-usage-flow/ai-usage-flow.module.ts`
+- `apps/api/src/modules/ai-usage-flow/application/commands/accept-ai-usage-flow/accept-ai-usage-flow.command.ts`
+- `apps/api/src/modules/ai-usage-flow/application/commands/accept-ai-usage-flow/accept-ai-usage-flow.handler.ts`
+- `apps/api/src/modules/ai-usage-flow/application/contracts/ai-usage-flow/ai-usage-flow-callback.contract.ts`
+- `apps/api/src/modules/ai-usage-flow/domain/entities/ai-usage-flow.entity.ts`
+- `apps/api/src/modules/ai-usage-flow/presentation/http/ai-usage-flow.controller.ts`
+- `apps/api/test/ai-usage-flow-callback.e2e-spec.ts`
+- `packages/contracts/src/scan/callback.ts`
+- `packages/contracts/src/scan/codes.ts`
+
+## Validation
+
+- `pnpm --filter @lcsp/api prisma:generate`
+  - Result: passed.
+- `pnpm --filter @lcsp/api test:e2e -- --runInBand --runTestsByPath test/ai-usage-flow-callback.e2e-spec.ts`
+  - Result: passed, 6 tests.
+- `pnpm --filter @lcsp/api test:e2e -- --runInBand --runTestsByPath test/ai-usage-flow-callback.e2e-spec.ts test/technical-profile-callback.e2e-spec.ts`
+  - Result: passed, 13 tests.
+- `pnpm --filter @lcsp/api test:e2e`
+  - Result: passed, 28 suites / 237 tests.
+- `pnpm --filter @lcsp/api lint`
+  - Result: passed.
+- `npm run lint`
+  - Result: blocked by pre-existing contract literal failures in `apps/api/src/modules/document/application/commands/request-final-report/request-final-report.handler.spec.ts:97` and `apps/api/test/document-final-report.e2e-spec.ts:271`.
+- `npm run typecheck`
+  - Result: blocked by pre-existing type errors in `apps/api/src/modules/document/application/commands/request-final-report/request-final-report.handler.spec.ts:36` and `:39`.
