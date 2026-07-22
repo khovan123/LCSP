@@ -113,7 +113,7 @@ Local-only assignment plan generated from `docs/implementation/tasks/modules` vi
 - `LCSP-117` `MW-scan-py-005`: Knip + deptry Dependency Usage Analysis Tool (python-workers/scanner, Story 3.5, P0, DONE, support)
 - `LCSP-118` `MW-scan-py-006`: Python AST/CST Analyzer (Bounded L0–L3) (python-workers/scanner, Story 3.5, P0, DONE, support)
 - `LCSP-128` `MW-qa-001`: Auth Integration Test Suite (qa, Story 1.1, P0, READY_FOR_DEV, support)
-- `LCSP-129` `MW-qa-002`: Python Scanner Unit Tests (qa, Story 3.5, P0, READY_FOR_DEV, support)
+- `LCSP-129` `MW-qa-002`: Python Scanner Unit Tests (qa, Story 3.5, P0, DONE, support)
 - `LCSP-138` `MW-web-001`: Sign-In Page (web, Story 1.2, P0, READY_FOR_DEV, support)
 - `LCSP-139` `MW-web-002`: Workspace Dashboard Page (web, Story 1.4, P0, READY_FOR_DEV, support)
 - `LCSP-140` `MW-web-003`: Wizard Form Page (web, Story 2.2, P0, READY_FOR_DEV, support)

@@ -11,11 +11,14 @@ import pytest
 
 from lcsp_workers.platform.config import WorkerConfig
 from lcsp_workers.scanner import scan_consumer as scan_consumer_module
+from lcsp_workers.scanner.evidence_assembler import PrivacyAssertionError
 from lcsp_workers.scanner.scan_consumer import ScanConsumer
 from lcsp_workers.scanner.snapshot_service_client import (
     SnapshotArchiveRequest,
     SnapshotServiceClient,
 )
+from lcsp_workers.scanner.tools.deptry_tool import DeptryRunResult
+from lcsp_workers.scanner.tools.knip_tool import KnipRunResult
 from lcsp_workers.scanner.tools.semgrep_tool import SemgrepRunResult
 from lcsp_workers.scanner.tools.syft_tool import SyftRunResult
 from lcsp_workers.scanner.tools.tool_base import OUTCOME_SUCCESS, ToolExecutionResult
@@ -59,6 +62,32 @@ def _mock_semgrep_result() -> SemgrepRunResult:
             ),
         ],
         redaction_applied=False,
+    )
+
+
+def _mock_knip_result() -> KnipRunResult:
+    return KnipRunResult(
+        facts=[],
+        execution=ToolExecutionResult(
+            tool_name="knip",
+            tool_version="not-run",
+            outcome=OUTCOME_SUCCESS,
+            config_hash="sha256:knip-test",
+            messages=[],
+        ),
+    )
+
+
+def _mock_deptry_result() -> DeptryRunResult:
+    return DeptryRunResult(
+        facts=[],
+        execution=ToolExecutionResult(
+            tool_name="deptry",
+            tool_version="not-run",
+            outcome=OUTCOME_SUCCESS,
+            config_hash="sha256:deptry-test",
+            messages=[],
+        ),
     )
 
 
@@ -229,6 +258,10 @@ def test_scan_consumer_uses_internal_snapshot_service_and_cleans_up(
     syft_tool.run.return_value = _mock_syft_result()
     semgrep_tool = MagicMock()
     semgrep_tool.run.return_value = _mock_semgrep_result()
+    knip_tool = MagicMock()
+    knip_tool.run.return_value = _mock_knip_result()
+    deptry_tool = MagicMock()
+    deptry_tool.run.return_value = _mock_deptry_result()
     api_client = MagicMock()
     consumer = ScanConsumer(
         config,
@@ -236,6 +269,8 @@ def test_scan_consumer_uses_internal_snapshot_service_and_cleans_up(
         workspace=workspace,
         syft_tool=syft_tool,
         semgrep_tool=semgrep_tool,
+        knip_tool=knip_tool,
+        deptry_tool=deptry_tool,
         api_client=api_client,
     )
 
@@ -257,7 +292,11 @@ def test_scan_consumer_uses_internal_snapshot_service_and_cleans_up(
     )
     syft_tool.run.assert_called_once()
     semgrep_tool.run.assert_called_once()
+    knip_tool.run.assert_called_once()
+    deptry_tool.run.assert_called_once()
     api_client.post_scan_callback.assert_called_once()
+    posted_payload = api_client.post_scan_callback.call_args.args[1]
+    assert posted_payload.privacy_flags["containsSourceCode"] is False
     assert not workspace.workspace_path("job-4").exists()
 
 
@@ -284,6 +323,10 @@ def test_scan_consumer_posts_callback_before_workspace_cleanup(
     syft_tool.run.return_value = _mock_syft_result()
     semgrep_tool = MagicMock()
     semgrep_tool.run.return_value = _mock_semgrep_result()
+    knip_tool = MagicMock()
+    knip_tool.run.return_value = _mock_knip_result()
+    deptry_tool = MagicMock()
+    deptry_tool.run.return_value = _mock_deptry_result()
     api_client = MagicMock()
 
     def assert_workspace_exists_during_callback(scan_job_id, payload) -> None:
@@ -298,6 +341,8 @@ def test_scan_consumer_posts_callback_before_workspace_cleanup(
         workspace=workspace,
         syft_tool=syft_tool,
         semgrep_tool=semgrep_tool,
+        knip_tool=knip_tool,
+        deptry_tool=deptry_tool,
         api_client=api_client,
     )
 
@@ -338,6 +383,10 @@ def test_scan_consumer_cleanup_runs_on_timeout(
     syft_tool.run.return_value = _mock_syft_result()
     semgrep_tool = MagicMock()
     semgrep_tool.run.return_value = _mock_semgrep_result()
+    knip_tool = MagicMock()
+    knip_tool.run.return_value = _mock_knip_result()
+    deptry_tool = MagicMock()
+    deptry_tool.run.return_value = _mock_deptry_result()
     api_client = MagicMock()
     consumer = ScanConsumer(
         config,
@@ -345,6 +394,8 @@ def test_scan_consumer_cleanup_runs_on_timeout(
         workspace=workspace,
         syft_tool=syft_tool,
         semgrep_tool=semgrep_tool,
+        knip_tool=knip_tool,
+        deptry_tool=deptry_tool,
         api_client=api_client,
     )
     consumer.scan_timeout_seconds = 0
@@ -363,3 +414,62 @@ def test_scan_consumer_cleanup_runs_on_timeout(
         )
 
     assert not workspace.workspace_path("job-5").exists()
+
+
+@pytest.mark.p0
+def test_scan_consumer_privacy_assertion_aborts_callback_and_cleans_up(
+    workspace_dir: Path,
+) -> None:
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
+    archive = _build_tar_gz({"repo/src/app.py": b"print('ok')\n"})
+
+    snapshot_client = MagicMock(spec=SnapshotServiceClient)
+    snapshot_client.download_snapshot_archive.return_value = archive
+
+    config = WorkerConfig(
+        rabbitmq_url="amqp://guest:guest@localhost/",
+        rabbitmq_exchange="test.events",
+        nestjs_api_base_url="http://api.test",
+        worker_api_key="worker-test-key",
+        log_level="INFO",
+        max_retries=3,
+    )
+    syft_tool = MagicMock()
+    syft_tool.run.return_value = _mock_syft_result()
+    semgrep_tool = MagicMock()
+    semgrep_tool.run.return_value = _mock_semgrep_result()
+    knip_tool = MagicMock()
+    knip_tool.run.return_value = _mock_knip_result()
+    deptry_tool = MagicMock()
+    deptry_tool.run.return_value = _mock_deptry_result()
+    api_client = MagicMock()
+    evidence_assembler = MagicMock()
+    evidence_assembler.assemble.side_effect = PrivacyAssertionError(
+        "source code detected"
+    )
+
+    consumer = ScanConsumer(
+        config,
+        snapshot_client=snapshot_client,
+        workspace=workspace,
+        syft_tool=syft_tool,
+        semgrep_tool=semgrep_tool,
+        knip_tool=knip_tool,
+        deptry_tool=deptry_tool,
+        api_client=api_client,
+        evidence_assembler=evidence_assembler,
+    )
+
+    with pytest.raises(PrivacyAssertionError):
+        consumer.handle(
+            {
+                "scanJobId": "job-privacy",
+                "snapshotId": "snap-privacy",
+                "correlationId": "corr-privacy",
+            },
+            correlation_id="fallback-corr",
+        )
+
+    evidence_assembler.assemble.assert_called_once()
+    api_client.post_scan_callback.assert_not_called()
+    assert not workspace.workspace_path("job-privacy").exists()
