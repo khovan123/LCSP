@@ -1,8 +1,9 @@
-import {
-  ASSESSMENT_ACTIONS,
-  WIZARD_STATUS_CODES,
-} from "@lcsp/contracts/assessment";
+import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import {
+  canUseManagerOnlyAction,
+  PBAC_ACTIONS,
+} from "@lcsp/contracts/pbac";
 import type { MessageKey } from "@lcsp/i18n";
 
 import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
@@ -44,7 +45,10 @@ type WorkspaceApiPayload = {
 };
 
 export function canCreateAssessment(grantedActions: readonly string[]) {
-  return grantedActions.includes(ASSESSMENT_ACTIONS.create);
+  return canUseManagerOnlyAction(
+    grantedActions,
+    PBAC_ACTIONS.assessmentCreate,
+  );
 }
 
 export function getAssessmentStatusLabelKey(

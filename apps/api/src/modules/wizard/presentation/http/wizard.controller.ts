@@ -26,6 +26,7 @@ export class WizardController {
     @Req() req: AuthenticatedRequest,
   ): Promise<SaveWizardDraftResponse> {
     const { userId, organizationId } = req.pbacContext;
+    const pbacContext = req.pbacContext;
     const correlationId = req.correlationId || randomUUID();
 
     return this.commandBus.execute(
@@ -35,6 +36,12 @@ export class WizardController {
         userId,
         body.answers,
         correlationId,
+        {
+          subjectRole: pbacContext.subjectRole,
+          selectedAction: pbacContext.selectedAction,
+          policyId: pbacContext.policyId,
+          policyVersion: pbacContext.policyVersion,
+        },
       ),
     );
   }

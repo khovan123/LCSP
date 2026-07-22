@@ -3,9 +3,17 @@ import {
   ASSESSMENT_EVENT_TYPES,
   ASSESSMENT_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import { PBAC_DECISION } from "@lcsp/contracts/pbac";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import {
+  PBAC_ACTIONS,
+  PBAC_DECISION,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
 import { describe, it, expect, jest } from "@jest/globals";
-import { UnprocessableEntityException } from "@nestjs/common";
+import {
+  ForbiddenException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 
 import type { AssessmentRepository } from "../../ports/persistence/assessment.repository.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -56,6 +64,12 @@ describe("CreateAssessmentHandler", () => {
         "My AI System Assessment",
         undefined,
         "corr-1",
+        {
+          subjectRole: SUBJECT_ROLES.manager,
+          selectedAction: PBAC_ACTIONS.assessmentCreate,
+          policyId: "policy-manager-workspace",
+          policyVersion: "2026-06-26",
+        },
       ),
     );
 
@@ -77,6 +91,12 @@ describe("CreateAssessmentHandler", () => {
           undefined,
           undefined,
           "corr-1",
+          {
+            subjectRole: SUBJECT_ROLES.manager,
+            selectedAction: PBAC_ACTIONS.assessmentCreate,
+            policyId: "policy-manager-workspace",
+            policyVersion: "2026-06-26",
+          },
         ),
       ),
     ).rejects.toThrow(UnprocessableEntityException);
@@ -89,6 +109,12 @@ describe("CreateAssessmentHandler", () => {
           undefined,
           undefined,
           "corr-1",
+          {
+            subjectRole: SUBJECT_ROLES.manager,
+            selectedAction: PBAC_ACTIONS.assessmentCreate,
+            policyId: "policy-manager-workspace",
+            policyVersion: "2026-06-26",
+          },
         ),
       );
     } catch (error) {
@@ -112,6 +138,12 @@ describe("CreateAssessmentHandler", () => {
           longName,
           undefined,
           "corr-1",
+          {
+            subjectRole: SUBJECT_ROLES.manager,
+            selectedAction: PBAC_ACTIONS.assessmentCreate,
+            policyId: "policy-manager-workspace",
+            policyVersion: "2026-06-26",
+          },
         ),
       ),
     ).rejects.toThrow(UnprocessableEntityException);
@@ -130,6 +162,12 @@ describe("CreateAssessmentHandler", () => {
           "Valid name",
           longDescription,
           "corr-1",
+          {
+            subjectRole: SUBJECT_ROLES.manager,
+            selectedAction: PBAC_ACTIONS.assessmentCreate,
+            policyId: "policy-manager-workspace",
+            policyVersion: "2026-06-26",
+          },
         ),
       ),
     ).rejects.toThrow(UnprocessableEntityException);
@@ -147,6 +185,12 @@ describe("CreateAssessmentHandler", () => {
         "Name",
         undefined,
         "corr-1",
+        {
+          subjectRole: SUBJECT_ROLES.manager,
+          selectedAction: PBAC_ACTIONS.assessmentCreate,
+          policyId: "policy-manager-workspace",
+          policyVersion: "2026-06-26",
+        },
       ),
     );
 
@@ -166,6 +210,12 @@ describe("CreateAssessmentHandler", () => {
         "Secret Project Name",
         "Sensitive description",
         "corr-1",
+        {
+          subjectRole: SUBJECT_ROLES.manager,
+          selectedAction: PBAC_ACTIONS.assessmentCreate,
+          policyId: "policy-manager-workspace",
+          policyVersion: "2026-06-26",
+        },
       ),
     );
 
@@ -177,6 +227,8 @@ describe("CreateAssessmentHandler", () => {
     expect(event.resourceType).toBe("Assessment");
     expect(event.resourceId).toBeTruthy();
     expect(event.correlationId).toBe("corr-1");
+    expect(event.policyId).toBe("policy-manager-workspace");
+    expect(event.policyVersion).toBe("2026-06-26");
     expect(event.decision).toBe(PBAC_DECISION.allow);
     expect(JSON.stringify(event.payload)).not.toMatch(/Secret Project Name/);
     expect(JSON.stringify(event.payload)).not.toMatch(/Sensitive description/);
@@ -193,6 +245,12 @@ describe("CreateAssessmentHandler", () => {
         "Name",
         undefined,
         "corr-1",
+        {
+          subjectRole: SUBJECT_ROLES.manager,
+          selectedAction: PBAC_ACTIONS.assessmentCreate,
+          policyId: "policy-manager-workspace",
+          policyVersion: "2026-06-26",
+        },
       ),
     );
 
@@ -210,6 +268,12 @@ describe("CreateAssessmentHandler", () => {
         "Name",
         undefined,
         "corr-1",
+        {
+          subjectRole: SUBJECT_ROLES.manager,
+          selectedAction: PBAC_ACTIONS.assessmentCreate,
+          policyId: "policy-manager-workspace",
+          policyVersion: "2026-06-26",
+        },
       ),
     );
 
@@ -217,5 +281,44 @@ describe("CreateAssessmentHandler", () => {
     const input = enqueue.mock.calls[0][0];
     expect(input.eventType).toBe(ASSESSMENT_EVENT_TYPES.createdOutbox);
     expect(input.aggregateType).toBe("Assessment");
+  });
+
+  it("denies service-level assessment creation when PBAC context is not Manager assessment:create", async () => {
+    const { handler, save, write, enqueue } = buildHandler();
+
+    await expect(
+      handler.execute(
+        new CreateAssessmentCommand(
+          "org-1",
+          "developer-1",
+          "Denied",
+          undefined,
+          "corr-deny",
+          {
+            subjectRole: SUBJECT_ROLES.developer,
+            selectedAction: PBAC_ACTIONS.assessmentCreate,
+            policyId: "policy-developer",
+            policyVersion: "2026-06-26",
+          },
+        ),
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(save).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: ASSESSMENT_EVENT_TYPES.created,
+        actorId: "developer-1",
+        organizationId: "org-1",
+        resourceType: "Assessment",
+        resourceId: null,
+        correlationId: "corr-deny",
+        decision: PBAC_DECISION.deny,
+        reasonCode: AUTH_ERROR_CODES.pbacDenied,
+        policyId: "policy-developer",
+        policyVersion: "2026-06-26",
+      }),
+    );
   });
 });

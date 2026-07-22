@@ -43,6 +43,12 @@ export class AssessmentController {
         body.name,
         body.description,
         request.correlationId as string,
+        {
+          subjectRole: pbacContext.subjectRole,
+          selectedAction: pbacContext.selectedAction,
+          policyId: pbacContext.policyId,
+          policyVersion: pbacContext.policyVersion,
+        },
       ),
     );
   }

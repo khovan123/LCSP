@@ -1,7 +1,13 @@
-import { Inject, UnprocessableEntityException } from "@nestjs/common";
+import {
+  ForbiddenException,
+  Inject,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import {
@@ -33,6 +39,7 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
   async execute(
     command: CreateAssessmentCommand,
   ): Promise<CreateAssessmentDto> {
+    await this.assertManagerOnlyAction(command);
     this.assertValid(command);
 
     const assessment = Assessment.create({
@@ -52,6 +59,8 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       resourceId: assessment.id,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,
+      policyId: command.authorization.policyId,
+      policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId: assessment.id,
         organizationId: assessment.organizationId,
@@ -74,6 +83,41 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
     });
 
     return AssessmentMapper.toCreateDto(assessment, command.correlationId);
+  }
+
+  private async assertManagerOnlyAction(
+    command: CreateAssessmentCommand,
+  ): Promise<void> {
+    const allowed =
+      command.authorization.subjectRole === SUBJECT_ROLES.manager &&
+      command.authorization.selectedAction === PBAC_ACTIONS.assessmentCreate &&
+      command.authorization.policyId !== null &&
+      command.authorization.policyVersion !== null;
+
+    if (allowed) return;
+
+    await this.auditWriter.write({
+      eventType: ASSESSMENT_EVENT_TYPES.created,
+      actorId: command.ownerId,
+      organizationId: command.organizationId,
+      resourceType: "Assessment",
+      resourceId: null,
+      correlationId: command.correlationId,
+      decision: AUDIT_DECISIONS.deny,
+      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      policyId: command.authorization.policyId,
+      policyVersion: command.authorization.policyVersion,
+      payload: {
+        action: PBAC_ACTIONS.assessmentCreate,
+        result: AUDIT_DECISIONS.deny,
+        correlationId: command.correlationId,
+      },
+    });
+
+    throw new ForbiddenException({
+      error_code: AUTH_ERROR_CODES.pbacDenied,
+      correlation_id: command.correlationId,
+    });
   }
 
   private assertValid(command: CreateAssessmentCommand): void {

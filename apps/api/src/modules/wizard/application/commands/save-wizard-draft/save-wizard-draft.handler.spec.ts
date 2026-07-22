@@ -1,6 +1,9 @@
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 /* eslint-disable @typescript-eslint/unbound-method */
+import { ForbiddenException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { SaveWizardDraftHandler } from "./save-wizard-draft.handler.js";
 import { SaveWizardDraftCommand } from "./save-wizard-draft.command.js";
@@ -53,6 +56,12 @@ describe("SaveWizardDraftHandler", () => {
       "owner-1",
       { question1: "answer1" },
       "corr-id-1",
+      {
+        subjectRole: SUBJECT_ROLES.manager,
+        selectedAction: PBAC_ACTIONS.wizardWrite,
+        policyId: "policy-manager-workspace",
+        policyVersion: "2026-06-26",
+      },
     );
 
     it("T01: should create a new draft if none exists and log audit event", async () => {
@@ -100,6 +109,8 @@ describe("SaveWizardDraftHandler", () => {
           version: 1,
         },
         correlationId: "corr-id-1",
+        policyId: "policy-manager-workspace",
+        policyVersion: "2026-06-26",
       });
 
       expect(result.wizard_profile_id).toBe("wizard-id-1");
@@ -192,6 +203,43 @@ describe("SaveWizardDraftHandler", () => {
         wizardProfileId: "wizard-id-4",
         version: 1,
       });
+    });
+
+    it("denies service-level draft save when PBAC context is not Manager wizard:write", async () => {
+      await expect(
+        handler.execute(
+          new SaveWizardDraftCommand(
+            "assessment-123",
+            "org-1",
+            "developer-1",
+            { question1: "answer1" },
+            "corr-deny",
+            {
+              subjectRole: SUBJECT_ROLES.developer,
+              selectedAction: PBAC_ACTIONS.wizardWrite,
+              policyId: "policy-developer",
+              policyVersion: "2026-06-26",
+            },
+          ),
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(wizardRepository.verifyAssessmentOwnership).not.toHaveBeenCalled();
+      expect(wizardRepository.upsertDraft).not.toHaveBeenCalled();
+      expect(auditWriter.write).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: WIZARD_EVENT_TYPES.draftSaved,
+          actorId: "developer-1",
+          organizationId: "org-1",
+          resourceType: "wizard_profile",
+          resourceId: null,
+          decision: AUDIT_DECISIONS.deny,
+          reasonCode: AUTH_ERROR_CODES.pbacDenied,
+          correlationId: "corr-deny",
+          policyId: "policy-developer",
+          policyVersion: "2026-06-26",
+        }),
+      );
     });
   });
 });
