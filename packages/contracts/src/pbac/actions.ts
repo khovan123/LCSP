@@ -11,6 +11,7 @@ export const PBAC_ACTIONS = {
   complianceDossierExport: "compliance-dossier:export",
   conflictFinalize: "conflict:finalize",
   conflictRead: "conflict:read",
+  conflictResolve: "conflict:resolve",
   evidenceRead: "evidence:read",
   evidenceReadRedacted: "evidence:read:redacted",
   finalReportGenerate: "final-report:generate",

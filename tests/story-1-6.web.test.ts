@@ -15,6 +15,7 @@ test("Story 1.6 manager-only action set covers accountable Manager authority", (
     PBAC_ACTIONS.wizardWrite,
     PBAC_ACTIONS.conflictFinalize,
     PBAC_ACTIONS.conflictRead,
+    PBAC_ACTIONS.conflictResolve,
     PBAC_ACTIONS.verifiedProfileApprove,
     PBAC_ACTIONS.classificationRun,
     PBAC_ACTIONS.finalReportGenerate,

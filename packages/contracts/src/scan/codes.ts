@@ -14,4 +14,6 @@ export const SCAN_ERROR_CODES = {
   conflictSchemaInvalid: "SCHEMA_INVALID",
   conflictScoreInvalid: "CONFLICT_SCORE_INVALID",
   evidenceRefsEmpty: "EVIDENCE_REFS_EMPTY",
+  conflictNotFound: "CONFLICT_NOT_FOUND",
+  conflictAlreadyResolved: "CONFLICT_ALREADY_RESOLVED",
 } as const;
