@@ -105,6 +105,8 @@ export function ConflictCard({
             id={`note-${conflict.conflict_id}`}
             value={resolutionNote}
             disabled={isSubmitting}
+            aria-invalid={Boolean(formError)}
+            aria-describedby={formError ? `conflict-error-${conflict.conflict_id}` : undefined}
             maxLength={2000}
             placeholder={resolveMessage(appLocale, "pages.reconciliation.resolutionNotePlaceholder")}
             onChange={(event) => onResolutionNoteChange(event.target.value)}
