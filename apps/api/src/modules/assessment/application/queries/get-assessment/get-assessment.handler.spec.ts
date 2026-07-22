@@ -37,11 +37,15 @@ function buildHandler(input: {
   const save = jest
     .fn<AssessmentRepository["save"]>()
     .mockResolvedValue(undefined);
+  const saveInTx = jest
+    .fn<AssessmentRepository["saveInTx"]>()
+    .mockResolvedValue(undefined);
   const findMany = jest
     .fn<AssessmentRepository["findMany"]>()
     .mockResolvedValue({ items: [], total: 0 });
   const repository: AssessmentRepository = {
     save,
+    saveInTx,
     findById,
     findMany,
   };

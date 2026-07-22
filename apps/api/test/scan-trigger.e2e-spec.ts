@@ -4,7 +4,12 @@ import {
   REPOSITORY_SNAPSHOT_STATUSES,
 } from "@lcsp/contracts/github-integration";
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
+import {
+  AUDIT_EVENT_SCHEMA_VERSION,
+  AUDIT_REDACTION_STATUSES,
+} from "@lcsp/contracts/audit";
 import { PBAC_ACTIONS, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { OUTBOX_MESSAGE_SCHEMA_VERSION } from "@lcsp/contracts/outbox";
 /** MW-gh-004: Scan Trigger Endpoint. */
 
 import * as assert from "node:assert/strict";
@@ -112,13 +117,28 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
       (event.payload as { snapshotId?: string }).snapshotId,
       "snapshot-1",
     );
-    assert.ok(
-      await prisma.authAuditEvent.findFirst({
-        where: {
-          eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanJobTriggeredAudit,
-          resourceId: body.scan_job_id,
-        },
-      }),
+    assert.equal(
+      (event.payload as { schemaVersion?: string }).schemaVersion,
+      OUTBOX_MESSAGE_SCHEMA_VERSION,
+    );
+    assert.equal(
+      (event.payload as { causationId?: string }).causationId,
+      body.correlation_id,
+    );
+    const audit = await prisma.authAuditEvent.findFirst({
+      where: {
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanJobTriggeredAudit,
+        resourceId: body.scan_job_id,
+      },
+    });
+    assert.ok(audit);
+    assert.equal(
+      (audit.payload as { schemaVersion?: string }).schemaVersion,
+      AUDIT_EVENT_SCHEMA_VERSION,
+    );
+    assert.equal(
+      (audit.payload as { redactionStatus?: string }).redactionStatus,
+      AUDIT_REDACTION_STATUSES.none,
     );
   });
 

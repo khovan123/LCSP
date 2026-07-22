@@ -1,6 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import type { AuditEventInput } from "@lcsp/contracts/audit";
+import {
+  AUDIT_EVENT_SCHEMA_VERSION,
+  AUDIT_REDACTION_STATUSES,
+  type AuditEventInput,
+} from "@lcsp/contracts/audit";
 
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import { AuditSanitizer } from "./audit-sanitizer.js";
@@ -27,6 +31,24 @@ export class AuditWriterService {
     event: AuditEventInput,
   ): Promise<void> {
     const { payload, removedKeys } = AuditSanitizer.sanitize(event.payload);
+    const redactionStatus =
+      event.redactionStatus ??
+      (removedKeys.length > 0
+        ? AUDIT_REDACTION_STATUSES.redacted
+        : AUDIT_REDACTION_STATUSES.none);
+    const actor = event.actor ?? {
+      id: event.actorId,
+      type: event.actorId ? "user" : "system",
+    };
+    const payloadWithEnvelope = {
+      ...(payload ?? {}),
+      schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
+      actor,
+      ...(event.assessmentId ? { assessmentId: event.assessmentId } : {}),
+      ...(event.causationId ? { causationId: event.causationId } : {}),
+      redactionStatus,
+      result: event.result ?? event.decision ?? event.eventType,
+    };
 
     for (const key of removedKeys) {
       this.logger.warn(`Audit payload field removed by sanitizer: ${key}`);
@@ -47,7 +69,7 @@ export class AuditWriterService {
           policyId: event.policyId ?? null,
           policyVersion: event.policyVersion ?? null,
           decision: event.decision,
-          payload: (payload ?? {}) as Prisma.InputJsonValue,
+          payload: payloadWithEnvelope as unknown as Prisma.InputJsonValue,
           createdAt: new Date(),
         },
       });
@@ -55,6 +77,7 @@ export class AuditWriterService {
       this.logger.error(
         `Failed to write audit event (eventType=${event.eventType}): ${(error as Error).message}`,
       );
+      throw error;
     }
   }
 }

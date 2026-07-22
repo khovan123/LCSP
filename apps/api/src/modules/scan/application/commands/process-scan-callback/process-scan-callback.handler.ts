@@ -7,8 +7,13 @@ import {
 } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import type { Prisma } from "@prisma/client";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUDIT_DECISIONS,
+  AUDIT_REDACTION_STATUSES,
+  buildAuditEventInput,
+} from "@lcsp/contracts/audit";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
+import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
 import {
   SCAN_CALLBACK_STATUSES,
   SCAN_ERROR_CODES,
@@ -113,40 +118,70 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
       });
 
       if (!isRejected) {
-        await tx.outboxMessage.create({
-          data: {
-            id: crypto.randomUUID(),
-            aggregateType: "TechnicalEvidenceReport",
-            aggregateId: reportId,
-            eventType: SCAN_EVENT_TYPES.evidenceAccepted,
-            payload: {
-              evidenceReportId: reportId,
-              assessmentId: job.assessmentId,
-              scanJobId: job.id,
-              correlationId: command.correlationId,
-            },
-          },
-        });
-      }
-
-      await tx.authAuditEvent.create({
-        data: {
-          id: crypto.randomUUID(),
-          eventType: auditEventType,
-          actorId: SCANNER_WORKER_ACTOR_ID,
+        const event = buildOutboxMessageInput({
+          aggregateType: "TechnicalEvidenceReport",
+          aggregateId: reportId,
+          eventType: SCAN_EVENT_TYPES.evidenceAccepted,
           organizationId: job.organizationId,
-          resourceType: "TechnicalEvidenceReport",
-          resourceId: reportId,
+          assessmentId: job.assessmentId,
           correlationId: command.correlationId,
-          reasonCode: rejectionReason,
-          decision: isRejected ? AUDIT_DECISIONS.deny : AUDIT_DECISIONS.allow,
+          causationId: job.id,
+          actor: { id: SCANNER_WORKER_ACTOR_ID, type: "service" },
+          result: SCAN_EVENT_TYPES.evidenceAcceptedAudit,
+          redactionStatus: AUDIT_REDACTION_STATUSES.none,
+          idempotencyKey: `${reportId}:${SCAN_EVENT_TYPES.evidenceAccepted}`,
           payload: {
             evidenceReportId: reportId,
             assessmentId: job.assessmentId,
             scanJobId: job.id,
-            schemaVersion: command.payload.schema_version,
             correlationId: command.correlationId,
           },
+        });
+        await tx.outboxMessage.create({
+          data: {
+            id: crypto.randomUUID(),
+            aggregateType: event.aggregateType,
+            aggregateId: event.aggregateId,
+            eventType: event.eventType,
+            payload: event.payload as Prisma.InputJsonValue,
+          },
+        });
+      }
+
+      const auditEvent = buildAuditEventInput({
+        eventType: auditEventType,
+        actorId: SCANNER_WORKER_ACTOR_ID,
+        organizationId: job.organizationId,
+        assessmentId: job.assessmentId,
+        resourceType: "TechnicalEvidenceReport",
+        resourceId: reportId,
+        correlationId: command.correlationId,
+        causationId: job.id,
+        reasonCode: rejectionReason,
+        decision: isRejected ? AUDIT_DECISIONS.deny : AUDIT_DECISIONS.allow,
+        result: auditEventType,
+        redactionStatus: AUDIT_REDACTION_STATUSES.none,
+        actor: { id: SCANNER_WORKER_ACTOR_ID, type: "service" },
+        payload: {
+          evidenceReportId: reportId,
+          assessmentId: job.assessmentId,
+          scanJobId: job.id,
+          evidenceSchemaVersion: command.payload.schema_version,
+          correlationId: command.correlationId,
+        },
+      });
+      await tx.authAuditEvent.create({
+        data: {
+          id: crypto.randomUUID(),
+          eventType: auditEvent.eventType,
+          actorId: auditEvent.actorId,
+          organizationId: auditEvent.organizationId,
+          resourceType: auditEvent.resourceType ?? null,
+          resourceId: auditEvent.resourceId ?? null,
+          correlationId: auditEvent.correlationId,
+          reasonCode: auditEvent.reasonCode ?? null,
+          decision: auditEvent.decision,
+          payload: auditEvent.payload as Prisma.InputJsonValue,
         },
       });
     });
@@ -168,22 +203,27 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
     error: unknown,
   ): Promise<void> {
     const reasonCode = errorCode(error);
-    await this.auditWriter.write({
+    await this.auditWriter.write(buildAuditEventInput({
       eventType: SCAN_EVENT_TYPES.evidenceRejectedAudit,
       actorId: SCANNER_WORKER_ACTOR_ID,
       organizationId: job.organizationId,
+      assessmentId: job.assessmentId,
       resourceType: "RepositoryScanJob",
       resourceId: job.id,
       correlationId: command.correlationId,
+      causationId: job.id,
       reasonCode,
       decision: AUDIT_DECISIONS.deny,
+      result: SCAN_EVENT_TYPES.evidenceRejectedAudit,
+      redactionStatus: AUDIT_REDACTION_STATUSES.none,
+      actor: { id: SCANNER_WORKER_ACTOR_ID, type: "service" },
       payload: {
         assessmentId: job.assessmentId,
         scanJobId: job.id,
         reasonCode,
         correlationId: command.correlationId,
       },
-    });
+    }));
   }
 
   private errorBody(

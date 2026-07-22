@@ -8,6 +8,10 @@ import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import {
+  AUDIT_EVENT_SCHEMA_VERSION,
+  AUDIT_REDACTION_STATUSES,
+} from "@lcsp/contracts/audit";
+import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
@@ -17,6 +21,7 @@ import {
   SCAN_EVENT_TYPES,
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
 } from "@lcsp/contracts/scan";
+import { OUTBOX_MESSAGE_SCHEMA_VERSION } from "@lcsp/contracts/outbox";
 
 import { AppModule } from "../src/app.module.js";
 import type {
@@ -100,7 +105,23 @@ describe("Scan Job Callback Endpoint (e2e) [MW-scan-002]", () => {
     assert.equal(report?.status, TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted);
     assert.equal(report?.schemaVersion, "1.0.0");
     assert.equal(outbox?.aggregateId, body.evidence_report_id);
+    assert.equal(
+      (outbox?.payload as { schemaVersion?: string }).schemaVersion,
+      OUTBOX_MESSAGE_SCHEMA_VERSION,
+    );
+    assert.equal(
+      (outbox?.payload as { causationId?: string }).causationId,
+      "scan-job-1",
+    );
     assert.equal(audit?.resourceId, body.evidence_report_id);
+    assert.equal(
+      (audit?.payload as { schemaVersion?: string }).schemaVersion,
+      AUDIT_EVENT_SCHEMA_VERSION,
+    );
+    assert.equal(
+      (audit?.payload as { redactionStatus?: string }).redactionStatus,
+      AUDIT_REDACTION_STATUSES.none,
+    );
   });
 
   it("T02 rejects containsSourceCode=true", async () => {

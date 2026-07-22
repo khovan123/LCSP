@@ -5,8 +5,12 @@ import {
 } from "@nestjs/common";
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUDIT_DECISIONS,
+  AUDIT_REDACTION_STATUSES,
+} from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -14,6 +18,7 @@ import {
   ASSESSMENT_ERROR_CODES,
   ASSESSMENT_EVENT_TYPES,
 } from "@lcsp/contracts/assessment";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
 import { Assessment } from "../../../domain/entities/assessment.entity.js";
 import { AssessmentMapper } from "../../mappers/assessment.mapper.js";
@@ -34,6 +39,7 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
     private readonly assessmentRepository: AssessmentRepository,
     private readonly auditWriter: AuditWriterService,
     private readonly outboxRepository: OutboxRepository,
+    private readonly prisma: PrismaService,
   ) {}
 
   async execute(
@@ -49,16 +55,18 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       description: command.description,
     });
 
-    await this.assessmentRepository.save(assessment);
-
-    await this.auditWriter.write({
+    const auditEvent = {
       eventType: ASSESSMENT_EVENT_TYPES.created,
       actorId: assessment.ownerId,
       organizationId: assessment.organizationId,
+      assessmentId: assessment.id,
       resourceType: "Assessment",
       resourceId: assessment.id,
       correlationId: command.correlationId,
+      causationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,
+      result: ASSESSMENT_EVENT_TYPES.created,
+      redactionStatus: AUDIT_REDACTION_STATUSES.none,
       policyId: command.authorization.policyId,
       policyVersion: command.authorization.policyVersion,
       payload: {
@@ -67,12 +75,19 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
         ownerId: assessment.ownerId,
         correlationId: command.correlationId,
       },
-    });
-
-    await this.outboxRepository.enqueue({
+    };
+    const outboxEvent = buildOutboxMessageInput({
       aggregateType: "Assessment",
       aggregateId: assessment.id,
       eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
+      organizationId: assessment.organizationId,
+      assessmentId: assessment.id,
+      correlationId: command.correlationId,
+      causationId: command.correlationId,
+      actor: { id: assessment.ownerId, type: "user" },
+      result: ASSESSMENT_EVENT_TYPES.created,
+      redactionStatus: AUDIT_REDACTION_STATUSES.none,
+      idempotencyKey: `${assessment.id}:${ASSESSMENT_EVENT_TYPES.createdOutbox}`,
       payload: {
         assessmentId: assessment.id,
         organizationId: assessment.organizationId,
@@ -80,6 +95,12 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
         status: assessment.status,
         correlationId: command.correlationId,
       },
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.assessmentRepository.saveInTx(assessment, tx);
+      await this.auditWriter.writeInTx(auditEvent, tx);
+      await this.outboxRepository.enqueue(outboxEvent, tx);
     });
 
     return AssessmentMapper.toCreateDto(assessment, command.correlationId);

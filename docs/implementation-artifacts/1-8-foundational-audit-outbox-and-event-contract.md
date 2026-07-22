@@ -1,6 +1,10 @@
+---
+baseline_commit: 2d13839313222c5e4ab9d3f551ddb0325011ca60
+---
+
 # Story 1.8: Foundational Audit, Outbox, and Event Contract
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -27,9 +31,9 @@ Foundational Audit, Outbox, and Event Contract
 
 ## Tasks / Subtasks
 
-- [ ] Define foundational audit event schema for auth/PBAC/session and early workflow actions. (AC: 1)
-- [ ] Introduce outbox ownership and event naming conventions for future async domains. (AC: 2)
-- [ ] Ensure append-only audit plus correlation ID propagation across sync-to-async boundary. (AC: 3)
+- [x] Define foundational audit event schema for auth/PBAC/session and early workflow actions. (AC: 1)
+- [x] Introduce outbox ownership and event naming conventions for future async domains. (AC: 2)
+- [x] Ensure append-only audit plus correlation ID propagation across sync-to-async boundary. (AC: 3)
 
 ## Dev Notes
 
@@ -153,13 +157,54 @@ GPT-5 Codex
 - Batch `bmad-create-story` run on 2026-07-02T22:01:26+07:00.
 - Source packet: `docs/developer/story-handbook/1-8-foundational-audit-outbox-and-event-contract.md`.
 - Canonical title/source alignment: `docs/planning-artifacts/epics.md`.
+- `bmad-dev-story` implementation run on 2026-07-22.
+- Red phase: `rtk pnpm --filter @lcsp/api test --runInBand --runTestsByPath src/platform/audit/foundational-event-contract.spec.ts` failed because `@lcsp/contracts/audit` did not export `AUDIT_EVENT_SCHEMA_VERSION`.
+- Targeted unit after implementation: `rtk pnpm --filter @lcsp/api test --runInBand --runTestsByPath src/platform/audit/foundational-event-contract.spec.ts src/platform/audit/audit-writer.service.spec.ts src/modules/auth-workspace/application/services/auth-workspace/auth-audit.service.spec.ts src/modules/assessment/application/commands/create-assessment/create-assessment.handler.spec.ts src/platform/outbox/outbox-message.entity.spec.ts src/platform/outbox/outbox.repository.spec.ts src/modules/github-integration/application/commands/pin-snapshot/pin-snapshot.handler.spec.ts src/modules/github-integration/application/commands/trigger-scan/trigger-scan.handler.spec.ts` passed 8/8 suites, 51/51 tests.
+- Targeted e2e: `rtk pnpm --filter @lcsp/api test:e2e --runInBand --runTestsByPath test/assessment-create.e2e-spec.ts test/pin-commit-snapshot.e2e-spec.ts test/scan-trigger.e2e-spec.ts test/scan-job-callback.e2e-spec.ts` passed 4/4 suites, 29/29 tests.
+- Full API unit: `rtk pnpm --filter @lcsp/api test` passed 45/45 suites, 280/280 tests.
+- Code quality: `rtk npm run lint` passed import policy, contract literal policy, Prisma generation and TypeScript build.
+- Full regression: `rtk pnpm test` passed web 31/31 and API e2e 25/25 suites, 219/219 tests.
 
 ### Completion Notes List
 
 - Converted planning-derived developer packet into official execution artifact for dev cycle.
 - Status set to `ready-for-dev` in `docs/implementation-artifacts/sprint-status.yaml`.
 - Story retains planning authority references and scope guardrails for downstream `dev-story` work.
+- Added foundational audit contract metadata: audit schema version, actor ref, assessment/correlation/causation metadata, result, redaction status, and safe payload builder.
+- Added foundational outbox message contract metadata and canonical `command.*.v1` / `event.*.v1` naming validation, then aligned assessment, snapshot, scan request and scan evidence event constants to the canonical pattern.
+- Hardened audit persistence so required audit writes fail closed instead of being logged and silently dropped; auth audit wrapper now rethrows writer failures.
+- Made assessment creation write the Assessment row, audit event and outbox message in one Prisma transaction using `saveInTx`, `writeInTx` and `enqueue(..., tx)`.
+- Propagated envelope metadata through existing sync-to-async boundaries for assessment creation, snapshot pinning, scan trigger creation and scan callback accepted evidence.
+- Added/updated unit and e2e tests for safe redaction, canonical event naming, schema/version metadata, correlation/causation propagation and transactional audit/outbox persistence.
 
 ### File List
 
+- apps/api/src/modules/assessment/application/commands/create-assessment/create-assessment.handler.spec.ts
+- apps/api/src/modules/assessment/application/commands/create-assessment/create-assessment.handler.ts
+- apps/api/src/modules/assessment/application/ports/persistence/assessment.repository.ts
+- apps/api/src/modules/assessment/application/queries/get-assessment/get-assessment.handler.spec.ts
+- apps/api/src/modules/assessment/application/queries/list-assessments/list-assessments.handler.spec.ts
+- apps/api/src/modules/assessment/infrastructure/persistence/prisma-assessment.repository.ts
+- apps/api/src/modules/auth-workspace/application/services/auth-workspace/auth-audit.service.spec.ts
+- apps/api/src/modules/auth-workspace/application/services/auth-workspace/auth-audit.service.ts
+- apps/api/src/modules/github-integration/application/commands/pin-snapshot/pin-snapshot.handler.ts
+- apps/api/src/modules/github-integration/application/commands/trigger-scan/trigger-scan.handler.ts
+- apps/api/src/modules/scan/application/commands/process-scan-callback/process-scan-callback.handler.ts
+- apps/api/src/platform/audit/audit-writer.service.spec.ts
+- apps/api/src/platform/audit/audit-writer.service.ts
+- apps/api/src/platform/audit/foundational-event-contract.spec.ts
+- apps/api/test/assessment-create.e2e-spec.ts
+- apps/api/test/pin-commit-snapshot.e2e-spec.ts
+- apps/api/test/scan-job-callback.e2e-spec.ts
+- apps/api/test/scan-trigger.e2e-spec.ts
 - docs/implementation-artifacts/1-8-foundational-audit-outbox-and-event-contract.md
+- docs/implementation-artifacts/sprint-status.yaml
+- packages/contracts/src/assessment/events.ts
+- packages/contracts/src/audit/audit-event.types.ts
+- packages/contracts/src/github-integration/events.ts
+- packages/contracts/src/outbox/outbox-message.types.ts
+- packages/contracts/src/scan/callback.ts
+
+## Change Log
+
+- 2026-07-22: Implemented foundational audit/outbox envelope contracts, canonical async event naming, fail-closed audit writes, transactional assessment create audit/outbox persistence, and regression coverage. Status moved `ready-for-dev` → `in-progress` → `review`.

@@ -5,14 +5,34 @@ export const AUDIT_DECISIONS = PBAC_DECISION;
 export type AuditDecision =
   (typeof AUDIT_DECISIONS)[keyof typeof AUDIT_DECISIONS];
 
+export const AUDIT_EVENT_SCHEMA_VERSION = "audit.event.v1";
+
+export const AUDIT_REDACTION_STATUSES = {
+  none: "none",
+  redacted: "redacted",
+} as const;
+
+export type AuditRedactionStatus =
+  (typeof AUDIT_REDACTION_STATUSES)[keyof typeof AUDIT_REDACTION_STATUSES];
+
+export interface AuditActorRef {
+  id: string | null;
+  type: "user" | "service" | "system";
+}
+
 export interface AuditEventInput {
   eventType: string;
   actorId: string | null;
   organizationId: string | null;
+  assessmentId?: string | null;
   resourceType?: string | null;
   resourceId?: string | null;
   reasonCode?: string | null;
   correlationId: string;
+  causationId?: string | null;
+  result?: string | null;
+  redactionStatus?: AuditRedactionStatus;
+  actor?: AuditActorRef;
   sessionId?: string | null;
   policyId?: string | null;
   policyVersion?: string | null;
@@ -24,4 +44,83 @@ export interface AuditEvent extends AuditEventInput {
   id: string;
   payload: Record<string, unknown>;
   occurredAt: Date;
+}
+
+export type MaterialAuditEventInput = Omit<
+  AuditEventInput,
+  "payload" | "redactionStatus" | "actor"
+> & {
+  actor?: AuditActorRef;
+  result: string;
+  redactionStatus: AuditRedactionStatus;
+  payload?: Record<string, unknown>;
+};
+
+const UNSAFE_EVENT_KEY_PATTERN =
+  /(password|secret|token|nonce|rawSource|sourceCode|prompt|credential|privateKey|apiKey|repositoryToken)/i;
+
+export function sanitizeEventPayload(
+  payload?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!payload) return undefined;
+
+  const sanitized = sanitizeRecord(payload);
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+}
+
+export function buildAuditEventInput(
+  input: MaterialAuditEventInput,
+): AuditEventInput {
+  const actor = input.actor ?? {
+    id: input.actorId,
+    type: input.actorId ? "user" : "system",
+  };
+  const safePayload = sanitizeEventPayload(input.payload) ?? {};
+
+  return {
+    ...input,
+    actor,
+    payload: {
+      ...safePayload,
+      schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
+      actor,
+      ...(input.assessmentId ? { assessmentId: input.assessmentId } : {}),
+      ...(input.causationId ? { causationId: input.causationId } : {}),
+      redactionStatus: input.redactionStatus,
+      result: input.result,
+    },
+  };
+}
+
+function sanitizeRecord(record: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(record)) {
+    if (UNSAFE_EVENT_KEY_PATTERN.test(key)) continue;
+    const sanitizedValue = sanitizeValue(value);
+    if (sanitizedValue !== undefined) {
+      sanitized[key] = sanitizedValue;
+    }
+  }
+
+  return sanitized;
+}
+
+function sanitizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => sanitizeValue(item))
+      .filter((item): item is unknown => item !== undefined);
+    return items;
+  }
+
+  if (isRecord(value)) {
+    return sanitizeRecord(value);
+  }
+
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

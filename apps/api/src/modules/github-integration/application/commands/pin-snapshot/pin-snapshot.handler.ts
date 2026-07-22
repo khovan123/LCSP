@@ -6,13 +6,17 @@ import {
 } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import {
+  AUDIT_DECISIONS,
+  AUDIT_REDACTION_STATUSES,
+} from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
   REPOSITORY_CONNECTION_STATUSES,
 } from "@lcsp/contracts/github-integration";
+import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
@@ -147,10 +151,18 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       actorId: command.actorId,
     });
 
-    await this.snapshotRepository.saveWithCreatedEvent(snapshot, {
+    await this.snapshotRepository.saveWithCreatedEvent(snapshot, buildOutboxMessageInput({
       aggregateType: "RepositorySnapshot",
       aggregateId: snapshot.id,
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated,
+      organizationId: snapshot.organizationId,
+      assessmentId: snapshot.assessmentId,
+      correlationId: command.correlationId,
+      causationId: command.correlationId,
+      actor: { id: command.actorId, type: "user" },
+      result: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
+      redactionStatus: AUDIT_REDACTION_STATUSES.none,
+      idempotencyKey: `${snapshot.id}:${GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated}`,
       payload: {
         snapshotId: snapshot.id,
         assessmentId: snapshot.assessmentId,
@@ -158,16 +170,20 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
         connectionId: snapshot.connectionId,
         correlationId: command.correlationId,
       },
-    });
+    }));
 
     await this.auditWriter.write({
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
       actorId: command.actorId,
       organizationId: command.organizationId,
+      assessmentId: snapshot.assessmentId,
       resourceType: "RepositorySnapshot",
       resourceId: snapshot.id,
       correlationId: command.correlationId,
+      causationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,
+      result: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
+      redactionStatus: AUDIT_REDACTION_STATUSES.none,
       payload: {
         snapshotId: snapshot.id,
         assessmentId: snapshot.assessmentId,

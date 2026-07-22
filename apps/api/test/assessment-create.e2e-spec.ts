@@ -10,7 +10,14 @@ import {
   SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
-import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
+import {
+  AUDIT_EVENT_SCHEMA_VERSION,
+  AUDIT_REDACTION_STATUSES,
+} from "@lcsp/contracts/audit";
+import {
+  OUTBOX_MESSAGE_SCHEMA_VERSION,
+  OUTBOX_STATUSES,
+} from "@lcsp/contracts/outbox";
 /**
  * MW-asmt-001: Create Assessment Endpoint.
  * Test cases T01-T08 from docs/implementation/tasks/modules/assessment/01-create-assessment-endpoint.md
@@ -204,6 +211,14 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
     });
 
     assert.ok(audit, "ASSESSMENT_CREATED audit event must be written");
+    assert.equal(
+      (audit.payload as { schemaVersion?: string }).schemaVersion,
+      AUDIT_EVENT_SCHEMA_VERSION,
+    );
+    assert.equal(
+      (audit.payload as { redactionStatus?: string }).redactionStatus,
+      AUDIT_REDACTION_STATUSES.none,
+    );
     assert.doesNotMatch(
       JSON.stringify(audit.payload),
       /Confidential Project Codename/,
@@ -243,5 +258,18 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
 
     assert.ok(outbox, "assessment.created OutboxMessage must be written");
     assert.equal(outbox?.status, OUTBOX_STATUSES.pending);
+    const payload = outbox?.payload as {
+      schemaVersion?: string;
+      correlationId?: string;
+      causationId?: string;
+      idempotencyKey?: string;
+    };
+    assert.equal(payload.schemaVersion, OUTBOX_MESSAGE_SCHEMA_VERSION);
+    assert.equal(payload.correlationId, body.correlation_id);
+    assert.equal(payload.causationId, body.correlation_id);
+    assert.equal(
+      payload.idempotencyKey,
+      `${body.assessment_id}:${ASSESSMENT_EVENT_TYPES.createdOutbox}`,
+    );
   });
 });
