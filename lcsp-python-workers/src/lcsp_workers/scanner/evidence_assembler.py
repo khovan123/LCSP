@@ -5,6 +5,7 @@ from typing import Iterable
 
 from lcsp_workers.platform.callback_schemas import ScanCallbackPayload
 from lcsp_workers.platform.redaction import redact_dict, redact_source_code
+from lcsp_workers.scanner.dependencies.dependency_fact import PackageDependency
 
 from .tools.semgrep_tool import SemgrepRunResult
 from .tools.syft_tool import SyftRunResult
@@ -52,8 +53,14 @@ class EvidenceAssembler:
         syft_result: SyftRunResult,
         semgrep_result: SemgrepRunResult,
         coverage_notes: list[str],
+        package_dependencies: list[PackageDependency] | None = None,
+        dependency_executions: list[ToolExecutionResult] | None = None,
     ) -> ScanCallbackPayload:
-        executions = [syft_result.execution, *semgrep_result.executions]
+        executions = [
+            syft_result.execution,
+            *semgrep_result.executions,
+            *(dependency_executions or []),
+        ]
         findings = [asdict(finding) for finding in semgrep_result.findings]
         redacted_findings = redact_source_code(findings)
         source_stripped = len(redacted_findings) == len(findings)
@@ -61,6 +68,9 @@ class EvidenceAssembler:
         evidence_payload = {
             "sbom_entries": [asdict(entry) for entry in syft_result.entries],
             "ai_usage_signals": redacted_findings,
+            "package_dependencies": [
+                asdict(package) for package in (package_dependencies or [])
+            ],
             "tool_failures": [
                 asdict(record) for record in self._tool_failures(executions)
             ],

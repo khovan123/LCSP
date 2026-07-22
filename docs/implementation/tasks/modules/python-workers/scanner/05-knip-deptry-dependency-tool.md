@@ -3,7 +3,7 @@ task_id: MW-scan-py-005
 module: python-workers/scanner
 runtime: lcsp-python-workers
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.5
 depends_on:
   - python-workers/scanner/01-scanner-workspace-setup.md
@@ -132,3 +132,13 @@ AI_PACKAGE_REGISTRY = {
 - No package install in workspace (Knip runs via pre-installed Node.js in scanner env).
 - Tool version and config hash recorded in evidence provenance.
 - Non-blocking on failure (`ACCEPTED_WITH_LIMITATION`).
+
+## Implementation Evidence
+
+- Added `lcsp-python-workers/src/lcsp_workers/scanner/dependencies/dependency_fact.py` with `DependencyUsageFact`, `PackageDependency`, all 6 usage states, and the AI package registry from this task brief.
+- Added `lcsp-python-workers/src/lcsp_workers/scanner/dependencies/dependency_normalizer.py` to merge Syft SBOM entries with Knip/deptry usage facts, distinguish declared/transitive/used/unused/missing states, and calculate capped confidence boost per confirming tool.
+- Added `lcsp-python-workers/src/lcsp_workers/scanner/tools/knip_tool.py` with JS/TS run-condition detection, `npx --no-install knip --reporter json`, pinned version check, config hash, timeout/failure handling, relative file refs, and no `node_modules` creation.
+- Added `lcsp-python-workers/src/lcsp_workers/scanner/tools/deptry_tool.py` with Python+manifest run-condition detection, `deptry . --json-output <tmp>`, pinned version check, config hash, timeout/failure handling, missing/unused parsing, and relative file refs.
+- Updated `ScanConsumer` to run Syft → Semgrep → Knip → deptry, record all tool provenance, normalize package dependencies, and include them in the scan callback evidence payload.
+- Updated `EvidenceAssembler` to include `package_dependencies` and dependency tool executions in the final redacted callback payload/tool failure records.
+- Validation: Python compile checks passed for changed worker files and tests. Targeted pytest passed: `test_dependency_usage_tools.py`, `test_evidence_assembler.py`, `test_scanner_workspace.py`, `test_api_client.py` — 30 passed, 1 warning. Full `lcsp-python-workers/tests` collection is blocked in the temporary Python 3.14 validation environment by missing `tiktoken`; installing full worker deps is blocked because `tiktoken==0.8.0` has no compatible wheel here and requires a Rust compiler.

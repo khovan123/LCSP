@@ -8,9 +8,12 @@ from lcsp_workers.platform.correlation import set_correlation_id
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.platform.queue_consumer import ConsumerBase
 
+from .dependencies.dependency_normalizer import DependencyNormalizer
 from .evidence_assembler import EvidenceAssembler, PrivacyAssertionError
 from .snapshot_service_client import SnapshotArchiveRequest, SnapshotServiceClient
 from .tool_registry import ToolRegistry
+from .tools.deptry_tool import DeptryTool
+from .tools.knip_tool import KnipTool
 from .tools.semgrep_tool import SemgrepRunResult, SemgrepTool
 from .tools.syft_tool import SyftTool
 from .tools.tool_base import OUTCOME_SUCCESS
@@ -39,6 +42,9 @@ class ScanConsumer(ConsumerBase):
         workspace: ScannerWorkspace | None = None,
         syft_tool: SyftTool | None = None,
         semgrep_tool: SemgrepTool | None = None,
+        knip_tool: KnipTool | None = None,
+        deptry_tool: DeptryTool | None = None,
+        dependency_normalizer: DependencyNormalizer | None = None,
         api_client: WorkerApiClient | None = None,
         evidence_assembler: EvidenceAssembler | None = None,
     ):
@@ -50,6 +56,9 @@ class ScanConsumer(ConsumerBase):
         self._workspace = workspace or ScannerWorkspace()
         self._syft_tool = syft_tool or SyftTool()
         self._semgrep_tool = semgrep_tool or SemgrepTool()
+        self._knip_tool = knip_tool or KnipTool()
+        self._deptry_tool = deptry_tool or DeptryTool()
+        self._dependency_normalizer = dependency_normalizer or DependencyNormalizer()
         self._api_client = api_client or WorkerApiClient(
             config.nestjs_api_base_url,
             config.worker_api_key,
@@ -102,9 +111,17 @@ class ScanConsumer(ConsumerBase):
 
             semgrep_result = self._semgrep_tool.run(result.workspace_path)
             self._record_semgrep_executions(tool_registry, semgrep_result)
-            logger.info(
-                "SCAN_TOOL_PROVENANCE_RECORDED",
-                tool_provenance=[asdict(item) for item in tool_registry.all()],
+
+            if time.monotonic() - started_at > self.scan_timeout_seconds:
+                raise ArchiveMaterializationError(
+                    f"scan timeout exceeded for job {envelope.scan_job_id!r}"
+                )
+
+            knip_result = self._knip_tool.run(result.workspace_path)
+            self._record_tool_execution(
+                tool_registry,
+                knip_result.execution,
+                dependency_facts=len(knip_result.facts),
             )
 
             if time.monotonic() - started_at > self.scan_timeout_seconds:
@@ -112,12 +129,38 @@ class ScanConsumer(ConsumerBase):
                     f"scan timeout exceeded for job {envelope.scan_job_id!r}"
                 )
 
+            deptry_result = self._deptry_tool.run(result.workspace_path)
+            self._record_tool_execution(
+                tool_registry,
+                deptry_result.execution,
+                dependency_facts=len(deptry_result.facts),
+            )
+
+            if time.monotonic() - started_at > self.scan_timeout_seconds:
+                raise ArchiveMaterializationError(
+                    f"scan timeout exceeded for job {envelope.scan_job_id!r}"
+                )
+
+            logger.info(
+                "SCAN_TOOL_PROVENANCE_RECORDED",
+                tool_provenance=[asdict(item) for item in tool_registry.all()],
+            )
+
+            package_dependencies = self._dependency_normalizer.normalize(
+                sbom_entries=syft_result.entries,
+                usage_facts=[*knip_result.facts, *deptry_result.facts],
+            )
             coverage_notes = self._coverage_notes(result)
             callback_payload = self._evidence_assembler.assemble(
                 scan_job_id=envelope.scan_job_id,
                 syft_result=syft_result,
                 semgrep_result=semgrep_result,
                 coverage_notes=coverage_notes,
+                package_dependencies=package_dependencies,
+                dependency_executions=[
+                    knip_result.execution,
+                    deptry_result.execution,
+                ],
             )
             self._api_client.post_scan_callback(
                 envelope.scan_job_id,
