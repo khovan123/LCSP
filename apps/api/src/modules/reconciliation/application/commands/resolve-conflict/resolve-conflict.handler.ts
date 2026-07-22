@@ -12,10 +12,7 @@ import {
 } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
-import {
-  PBAC_ACTIONS,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import {
   CONFLICT_RECORD_STATUSES,
   SCAN_ERROR_CODES,
@@ -40,9 +37,7 @@ export type ResolveConflictDto = {
 };
 
 @CommandHandler(ResolveConflictCommand)
-export class ResolveConflictHandler
-  implements ICommandHandler<ResolveConflictCommand>
-{
+export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCommand> {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditWriter: AuditWriterService,
@@ -196,7 +191,9 @@ export class ResolveConflictHandler
 
 function parseResolution(
   value: unknown,
-): typeof CONFLICT_RECORD_STATUSES.resolved | typeof CONFLICT_RECORD_STATUSES.dismissed {
+):
+  | typeof CONFLICT_RECORD_STATUSES.resolved
+  | typeof CONFLICT_RECORD_STATUSES.dismissed {
   if (
     value === CONFLICT_RECORD_STATUSES.resolved ||
     value === CONFLICT_RECORD_STATUSES.dismissed

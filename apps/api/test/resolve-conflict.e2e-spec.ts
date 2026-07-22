@@ -105,10 +105,16 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     ]);
     assert.equal(record.status, CONFLICT_RECORD_STATUSES.resolved);
     assert.equal(record.resolvedById, "user-1");
-    assert.equal(record.resolutionNote, "Manager accepts the technical evidence basis.");
+    assert.equal(
+      record.resolutionNote,
+      "Manager accepts the technical evidence basis.",
+    );
     assert.equal(audit.actorId, "user-1");
     assert.equal(audit.decision, AUDIT_DECISIONS.allow);
-    assert.equal((audit.payload as { resolution?: string }).resolution, CONFLICT_RECORD_STATUSES.resolved);
+    assert.equal(
+      (audit.payload as { resolution?: string }).resolution,
+      CONFLICT_RECORD_STATUSES.resolved,
+    );
   });
 
   it("T02 dismisses a pending conflict", async () => {
@@ -123,7 +129,10 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     const audit = await prisma.authAuditEvent.findFirstOrThrow({
       where: { eventType: SCAN_EVENT_TYPES.conflictDismissedAudit },
     });
-    assert.equal((audit.payload as { resolution?: string }).resolution, CONFLICT_RECORD_STATUSES.dismissed);
+    assert.equal(
+      (audit.payload as { resolution?: string }).resolution,
+      CONFLICT_RECORD_STATUSES.dismissed,
+    );
   });
 
   it("T03 emits all-conflicts-resolved when the last pending conflict is resolved", async () => {
@@ -232,9 +241,13 @@ async function resetDomainData(prisma: PrismaClient): Promise<void> {
   await prisma.assessment.deleteMany();
 }
 
-async function grantManagerConflictResolve(prisma: PrismaClient): Promise<void> {
+async function grantManagerConflictResolve(
+  prisma: PrismaClient,
+): Promise<void> {
   const policy = await prisma.authPolicy.findUniqueOrThrow({
-    where: { id_version: { id: "policy-manager-workspace", version: "2026-06-26" } },
+    where: {
+      id_version: { id: "policy-manager-workspace", version: "2026-06-26" },
+    },
   });
   await prisma.authPolicy.update({
     where: { id_version: { id: policy.id, version: policy.version } },
@@ -303,7 +316,9 @@ async function seedAssessmentChain(
       organizationId,
       toolsVersion: { semgrep: "1.0.0" },
       configHash: { semgrep: "sha256:abc" },
-      evidencePayload: { findings: [{ finding_id: `finding-${assessmentId}` }] },
+      evidencePayload: {
+        findings: [{ finding_id: `finding-${assessmentId}` }],
+      },
       privacyFlags: { containsSourceCode: false, secretsRedacted: true },
       schemaVersion: "1.0.0",
       status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
