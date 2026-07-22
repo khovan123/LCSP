@@ -1,0 +1,334 @@
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from typing import Any
+
+from .conflict_score_calculator import ConflictScoreCalculator
+
+
+SCHEMA_VERSION = "1.0.0"
+DEFAULT_PROVIDER_VERSION = "lcsp.conflict-detection-worker.v1"
+LOW_COVERAGE_MARKERS = {"low", "limited", "partial", "unknown"}
+
+
+@dataclass(frozen=True)
+class ConflictRecord:
+    conflict_id: str
+    conflict_type: str
+    ai_usage_flow_id: str
+    assessment_id: str
+    affected_claim_id: str
+    affected_claim_field: str
+    conflicting_source_refs: dict[str, Any]
+    evidence_refs: list[str]
+    conflict_score: float
+    score_explanation: str
+    confidence: str
+    contradiction_severity: str
+    source_versions: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+class ConflictDetector:
+    def __init__(
+        self,
+        *,
+        provider_version: str = DEFAULT_PROVIDER_VERSION,
+        score_calculator: ConflictScoreCalculator | None = None,
+    ) -> None:
+        self.provider_version = provider_version
+        self._score_calculator = score_calculator or ConflictScoreCalculator()
+
+    def detect(
+        self,
+        *,
+        ai_usage_flow: dict[str, Any] | None,
+        wizard_profile: dict[str, Any] | None,
+    ) -> list[ConflictRecord]:
+        if not ai_usage_flow or not wizard_profile:
+            return []
+
+        flow_data = self._flow_data(ai_usage_flow)
+        claims = self._claims(ai_usage_flow)
+        answers = self._answers(wizard_profile)
+        conflicts: list[ConflictRecord] = []
+
+        if self._wizard_external_llm_usage_is_false(answers):
+            for claim in claims:
+                if self._claim_says_external_llm_usage(claim):
+                    conflicts.append(
+                        self._build_record(
+                            conflict_type="evidence_contradiction",
+                            claim=claim,
+                            ai_usage_flow=flow_data,
+                            wizard_profile=wizard_profile,
+                            wizard_answer_ref="answers.external_llm_usage",
+                            severity="direct",
+                        )
+                    )
+
+        if self._wizard_says_no_autonomous_decision(answers):
+            for claim in claims:
+                if self._claim_says_agent_pattern(claim):
+                    conflicts.append(
+                        self._build_record(
+                            conflict_type="scope_mismatch",
+                            claim=claim,
+                            ai_usage_flow=flow_data,
+                            wizard_profile=wizard_profile,
+                            wizard_answer_ref="answers.decision_role",
+                            severity="scope_only",
+                        )
+                    )
+
+        for claim in claims:
+            if self._is_high_confidence(claim) and self._low_coverage_only(claim):
+                conflicts.append(
+                    self._build_record(
+                        conflict_type="unverifiable",
+                        claim=claim,
+                        ai_usage_flow=flow_data,
+                        wizard_profile=wizard_profile,
+                        wizard_answer_ref="coverage_limitations",
+                        severity="partial",
+                    )
+                )
+
+        return conflicts
+
+    def to_callback_payload(
+        self,
+        *,
+        ai_usage_flow: dict[str, Any],
+        wizard_profile: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        flow_data = self._flow_data(ai_usage_flow)
+        return {
+            "ai_usage_flow_id": self._flow_id(flow_data),
+            "assessment_id": self._assessment_id(flow_data, wizard_profile),
+            "schema_version": SCHEMA_VERSION,
+            "provider_version": self.provider_version,
+            "conflicts": [
+                conflict.to_dict()
+                for conflict in self.detect(
+                    ai_usage_flow=ai_usage_flow,
+                    wizard_profile=wizard_profile,
+                )
+            ],
+            "privacy_flags": {
+                "containsSourceCode": False,
+                "secretsRedacted": True,
+            },
+        }
+
+    def _build_record(
+        self,
+        *,
+        conflict_type: str,
+        claim: dict[str, Any],
+        ai_usage_flow: dict[str, Any],
+        wizard_profile: dict[str, Any],
+        wizard_answer_ref: str,
+        severity: str,
+    ) -> ConflictRecord:
+        confidence = self._confidence_label(claim)
+        score = self._score_calculator.calculate(
+            evidence_confidence=confidence,
+            contradiction_severity=severity,
+        )
+        claim_id = self._claim_id(claim)
+        flow_id = self._flow_id(ai_usage_flow)
+        evidence_refs = self._evidence_refs(claim)
+        return ConflictRecord(
+            conflict_id=f"{flow_id}:{conflict_type}:{claim_id}",
+            conflict_type=conflict_type,
+            ai_usage_flow_id=flow_id,
+            assessment_id=self._assessment_id(ai_usage_flow, wizard_profile),
+            affected_claim_id=claim_id,
+            affected_claim_field=str(
+                claim.get("claim_field") or claim.get("claimField") or "unknown"
+            ),
+            conflicting_source_refs={
+                "ai_usage_flow_claim": claim_id,
+                "wizard_profile": wizard_profile.get("id") or wizard_profile.get("wizard_profile_id"),
+                "wizard_answer": wizard_answer_ref,
+            },
+            evidence_refs=evidence_refs,
+            conflict_score=score,
+            score_explanation=self._score_calculator.explain(
+                conflict_type=conflict_type,
+                evidence_confidence=confidence,
+                contradiction_severity=severity,
+            ),
+            confidence=confidence,
+            contradiction_severity=severity,
+            source_versions={
+                "ai_usage_flow_schema_version": ai_usage_flow.get("schema_version")
+                or ai_usage_flow.get("schemaVersion"),
+                "wizard_profile_version": wizard_profile.get("version")
+                or wizard_profile.get("schema_version")
+                or wizard_profile.get("schemaVersion"),
+            },
+        )
+
+    def _flow_data(self, ai_usage_flow: dict[str, Any]) -> dict[str, Any]:
+        flow_data = ai_usage_flow.get("flow_data") or ai_usage_flow.get("flowData")
+        if isinstance(flow_data, dict):
+            merged = dict(flow_data)
+            merged.setdefault("claims", ai_usage_flow.get("claims"))
+            return merged
+        return ai_usage_flow
+
+    def _claims(self, ai_usage_flow: dict[str, Any]) -> list[dict[str, Any]]:
+        flow_data = self._flow_data(ai_usage_flow)
+        raw_claims = ai_usage_flow.get("claims") or flow_data.get("claims") or []
+        return [claim for claim in raw_claims if isinstance(claim, dict)]
+
+    def _answers(self, wizard_profile: dict[str, Any]) -> dict[str, Any]:
+        answers = wizard_profile.get("answers")
+        return answers if isinstance(answers, dict) else {}
+
+    def _wizard_external_llm_usage_is_false(self, answers: dict[str, Any]) -> bool:
+        values = [
+            answers.get("external_llm_usage"),
+            answers.get("externalLlmUsage"),
+            answers.get("usesExternalLlm"),
+            answers.get("uses_external_llm"),
+            answers.get("aiUse"),
+            answers.get("usesAi"),
+        ]
+        return any(self._is_false(value) for value in values)
+
+    def _wizard_says_no_autonomous_decision(self, answers: dict[str, Any]) -> bool:
+        value = answers.get("decision_role") or answers.get("decisionRole")
+        return str(value or "").lower() == "no_autonomous_decision"
+
+    def _claim_says_external_llm_usage(self, claim: dict[str, Any]) -> bool:
+        value = claim.get("claim_value") or claim.get("claimValue") or {}
+        category = str(claim.get("claim_category") or claim.get("claimCategory") or "")
+        field = str(claim.get("claim_field") or claim.get("claimField") or "")
+        if isinstance(value, dict):
+            explicit_values = [
+                value.get("external_llm_usage"),
+                value.get("externalLlmUsage"),
+                value.get("external_llm_usage_detected"),
+                value.get("externalLlmUsageDetected"),
+                value.get("invocationDetected"),
+            ]
+            if any(self._is_true(item) for item in explicit_values):
+                return True
+        return category in {"MODEL_PROVIDER_USAGE", "MODEL_INVOCATION"} or field in {
+            "external_llm_usage",
+            "provider_usage",
+            "model_invocation",
+        }
+
+    def _claim_says_agent_pattern(self, claim: dict[str, Any]) -> bool:
+        value = claim.get("claim_value") or claim.get("claimValue") or {}
+        category = str(claim.get("claim_category") or claim.get("claimCategory") or "")
+        field = str(claim.get("claim_field") or claim.get("claimField") or "")
+        if category in {"AGENT_PATTERN", "AGENTIC_WORKFLOW"}:
+            return True
+        if field == "agent_pattern":
+            return True
+        if isinstance(value, dict):
+            return any(
+                self._is_true(value.get(key))
+                for key in (
+                    "agent_pattern",
+                    "agentPattern",
+                    "autonomousDecisionDetected",
+                    "autonomous_decision_detected",
+                )
+            )
+        return False
+
+    def _is_high_confidence(self, claim: dict[str, Any]) -> bool:
+        raw = claim.get("confidence")
+        if isinstance(raw, (int, float)):
+            return float(raw) >= 0.8
+        return str(raw or "").lower() == "high"
+
+    def _low_coverage_only(self, claim: dict[str, Any]) -> bool:
+        ref_details = claim.get("evidence_ref_details") or claim.get("evidenceRefDetails")
+        if isinstance(ref_details, list) and ref_details:
+            coverage_values = [
+                str(
+                    item.get("coverage")
+                    or item.get("coverage_level")
+                    or item.get("coverageLevel")
+                    or item.get("tool_coverage")
+                    or item.get("toolCoverage")
+                    or ""
+                ).lower()
+                for item in ref_details
+                if isinstance(item, dict)
+            ]
+            return bool(coverage_values) and all(
+                value in LOW_COVERAGE_MARKERS for value in coverage_values
+            )
+
+        coverage = claim.get("evidence_coverage") or claim.get("evidenceCoverage")
+        if coverage:
+            if isinstance(coverage, list):
+                return bool(coverage) and all(
+                    str(item).lower() in LOW_COVERAGE_MARKERS for item in coverage
+                )
+            return str(coverage).lower() in LOW_COVERAGE_MARKERS
+
+        evidence_refs = self._evidence_refs(claim)
+        return bool(evidence_refs) and all(
+            ref.lower().startswith(("low:", "low-", "limited:", "limited-"))
+            for ref in evidence_refs
+        )
+
+    def _confidence_label(self, claim: dict[str, Any]) -> str:
+        raw = claim.get("confidence")
+        if isinstance(raw, (int, float)):
+            value = float(raw)
+            if value >= 0.8:
+                return "high"
+            if value >= 0.55:
+                return "medium"
+            if value > 0:
+                return "low"
+        label = str(raw or "unknown").lower()
+        return label if label in {"high", "medium", "low"} else "unknown"
+
+    def _claim_id(self, claim: dict[str, Any]) -> str:
+        return str(claim.get("claim_id") or claim.get("claimId") or "claim")
+
+    def _flow_id(self, ai_usage_flow: dict[str, Any]) -> str:
+        return str(
+            ai_usage_flow.get("ai_usage_flow_id")
+            or ai_usage_flow.get("aiUsageFlowId")
+            or ai_usage_flow.get("id")
+            or "ai-usage-flow"
+        )
+
+    def _assessment_id(
+        self,
+        ai_usage_flow: dict[str, Any],
+        wizard_profile: dict[str, Any] | None,
+    ) -> str:
+        return str(
+            ai_usage_flow.get("assessment_id")
+            or ai_usage_flow.get("assessmentId")
+            or (wizard_profile or {}).get("assessment_id")
+            or (wizard_profile or {}).get("assessmentId")
+            or "assessment"
+        )
+
+    def _evidence_refs(self, claim: dict[str, Any]) -> list[str]:
+        refs = claim.get("evidence_refs") or claim.get("evidenceRefs") or []
+        return [str(ref) for ref in refs]
+
+    def _is_false(self, value: Any) -> bool:
+        if value is None:
+            return False
+        return value is False or str(value).lower() in {"false", "no", "none", "no_ai"}
+
+    def _is_true(self, value: Any) -> bool:
+        return value is True or str(value).lower() in {"true", "yes", "detected"}

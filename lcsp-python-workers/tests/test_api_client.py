@@ -8,6 +8,7 @@ from lcsp_workers.platform.callback_schemas import (
     ScanCallbackPayload,
     CallbackResponse,
     AIUsageFlowCallbackPayload,
+    ConflictDetectionCallbackPayload,
     TechnicalProfileCallbackPayload,
 )
 from lcsp_workers.platform.correlation import set_correlation_id
@@ -210,3 +211,36 @@ def test_get_wizard_profile_returns_none_for_404(client):
         mock_get.return_value = mock_resp
 
         assert client.get_wizard_profile_for_assessment("assessment-1") is None
+
+
+def test_reconciliation_conflict_callback_uses_internal_endpoint(client):
+    payload = ConflictDetectionCallbackPayload(
+        ai_usage_flow_id="auf-1",
+        assessment_id="assessment-1",
+        schema_version="1.0.0",
+        provider_version="lcsp.conflict-detection-worker.v1",
+        conflicts=[],
+        privacy_flags={"containsSourceCode": False, "secretsRedacted": True},
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"accepted": True}
+        mock_post.return_value = mock_resp
+
+        client.post_reconciliation_conflict_callback(payload)
+
+        url = mock_post.call_args.args[0]
+        assert url == "http://testserver/internal/reconciliation/conflict-callback"
+
+
+def test_get_accepted_ai_usage_flow_rejects_non_ready_status(client):
+    with patch("lcsp_workers.platform.api_client.httpx.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"id": "auf-1", "status": "draft"}
+        mock_get.return_value = mock_resp
+
+        with pytest.raises(WorkerCallbackError, match="not accepted"):
+            client.get_accepted_ai_usage_flow("auf-1")

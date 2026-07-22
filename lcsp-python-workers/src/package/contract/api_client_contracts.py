@@ -9,6 +9,7 @@ class CallbackPath(StrEnum):
     SCAN = "/internal/callbacks/scan/{scan_job_id}"
     TECHNICAL_PROFILE = "/internal/evidence/technical-profile-callback"
     AI_USAGE_FLOW = "/internal/ai-usage-flow/callback"
+    RECONCILIATION_CONFLICT = "/internal/reconciliation/conflict-callback"
     VERIFIED_PROFILE = "/internal/callbacks/verified-profile"
     LEGAL_RULE_MATCH = "/internal/callbacks/legal-rule-match"
     CLASSIFICATION = "/internal/callbacks/classification"
@@ -18,6 +19,7 @@ class InternalPath(StrEnum):
     AUDIT_EVENTS = "/internal/organizations/{organization_id}/audit-events"
     TECHNICAL_EVIDENCE_REPORT = "/internal/evidence/reports/{evidence_report_id}"
     TECHNICAL_PROFILE = "/internal/evidence/technical-profiles/{technical_profile_id}"
+    AI_USAGE_FLOW = "/internal/ai-usage-flow/{ai_usage_flow_id}"
     WIZARD_PROFILE = "/internal/assessments/{assessment_id}/wizard-profile"
 
 
