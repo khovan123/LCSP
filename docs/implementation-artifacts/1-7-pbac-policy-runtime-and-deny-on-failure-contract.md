@@ -164,6 +164,9 @@ GPT-5 Codex
   - `MW-pbac-004` (Worker preflight) → `LCSP-98`, merged PR #14.
 - Unit suite (`pnpm test`): 106/106 passing (16 suites), including 46 PBAC-specific tests across `pbac-context.loader.spec.ts`, `pbac-evaluator.service.spec.ts`, `pbac.guard.spec.ts`, `pbac-preflight.service.spec.ts`, `pbac-preflight.controller.spec.ts`.
 - E2E suite (`pnpm test:e2e`): 96/96 previously-passing tests still pass. `developer-pbac.e2e-spec.ts` [AC-024/025/026] has 6 pre-existing failures, all traced to routes owned by *other* stories that don't exist yet (`POST /assessments`, `POST /assessments/:id/scan-trigger`, `POST /assessments/:id/conflicts/:id/resolve`, `POST /organizations/:id/invitations`, `DELETE /organizations/:id/memberships/:id` — Epic 2/3/4/5 and Story 1.4/1.5 territory) — every one 404s before it ever reaches `PbacGuard`, so none of them are a PBAC-runtime defect. The guard's own equivalent case (revoked/inactive membership → deny) is unit-tested and passing (`pbac-context.loader.spec.ts`: "MEMBERSHIP_MISSING when the membership exists but is not active").
+- `bmad-dev-story` revalidation run on 2026-07-22 after downstream Story 1.6 manager-only enforcement landed. No Story 1.7 runtime changes were required; the existing PBAC evaluator, guard, context loader, decision log repository and persisted policy-version model still satisfy all 3 ACs.
+- `rtk npm run lint`: passed import policy, contract literal policy, Prisma client generation and TypeScript build.
+- `rtk pnpm test`: passed web regression 31/31 and API e2e regression 25/25 suites, 219/219 tests.
 
 ### Completion Notes List
 
@@ -174,6 +177,7 @@ GPT-5 Codex
 - **AC2 (fail-closed)** — `PbacContextLoader.load()` (`pbac-context.loader.ts`) wraps the entire session→MFA→membership→policy lookup chain in try/catch, returning `LOAD_ERROR` (deny) on any unexpected storage failure — "never allow on error" per its own inline comment. `PbacEvaluatorService.evaluate()` separately catches any evaluator-internal throw and defaults to deny `POLICY_NOT_FOUND`. Missing policy, inactive state gate, role mismatch, and action-not-granted are each explicit deny branches, not fallthrough. All of these paths are unit-tested (T02–T06 in `pbac-evaluator.service.spec.ts`; `SESSION_INVALID`/`MFA_REQUIRED`/`MEMBERSHIP_MISSING`/`POLICY_NOT_FOUND`/`LOAD_ERROR` cases in `pbac-context.loader.spec.ts`).
 - **AC3 (persist + safe failure reasons)** — `AuthorizationDecision` rows are appended via `PrismaAuthorizationDecisionRepository` (`AuthDecisionLog` table) on every guard decision, carrying policy id/version and correlation id for audit. Thrown `UnauthorizedException`/`ForbiddenException` bodies only ever carry a machine-readable `error_code` (from `AUTH_ERROR_CODES`) and `correlation_id` — never raw policy content, action lists, or internal reason strings. Historical policy versions are preserved by construction: `AuthPolicy` is keyed by the composite `(id, version)` (never overwritten in place), and each `AuthMembership`/`AuthInvitation` pins its own `policyId`+`policyVersion`, so no separate cache-invalidation step is needed — the runtime always reads the current DB state and every past decision remains attributable to the exact policy version it was evaluated against.
 - No code changes were required for this story; verification-only. If a genuine gap had been found, it would have been implemented following the red-green-refactor cycle per the skill's Step 5, same as Story 1.3.
+- 2026-07-22 revalidation confirmed the deny-on-failure contract still holds after the manager-only action enforcement work: backend guard/service enforcement remains authoritative, safe caller errors stay redacted, and current full regression passes without Story 1.7 code changes.
 
 ### File List
 
@@ -195,3 +199,4 @@ GPT-5 Codex
 ## Change Log
 
 - 2026-07-10: Reconciled story tracking with already-merged PBAC runtime implementation (LCSP-95/96/97/98). No new code — verified each task/AC against existing evaluator/guard/loader/decision-log code and its 46 passing unit tests. All 3 story tasks complete; all 3 ACs satisfied. Status moved `ready-for-dev` → `in-progress` → `review`.
+- 2026-07-22: Revalidated Story 1.7 against the current repo after Story 1.6 enforcement work. `rtk npm run lint` and `rtk pnpm test` pass; no Story 1.7 code changes required.
