@@ -7,6 +7,7 @@ import {
   Headers,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -15,17 +16,24 @@ import {
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
-import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptConflictCommand } from "../../application/commands/accept-conflict/accept-conflict.command.js";
+import { ResolveConflictCommand } from "../../application/commands/resolve-conflict/resolve-conflict.command.js";
+import type { ResolveConflictDto } from "../../application/commands/resolve-conflict/resolve-conflict.handler.js";
 import type {
   ConflictDetectionCallbackDto,
   ConflictDetectionCallbackRequest,
 } from "../../application/contracts/reconciliation/conflict-detection-callback.contract.js";
 import type { ConflictListDto } from "../../application/contracts/reconciliation/conflict-list.contract.js";
 import { ListConflictsQuery } from "../../application/queries/list-conflicts/list-conflicts.query.js";
+
+type ResolveConflictRequest = {
+  resolution?: unknown;
+  resolution_note?: unknown;
+};
 
 @Controller("internal/reconciliation")
 export class InternalReconciliationController {
@@ -46,7 +54,10 @@ export class InternalReconciliationController {
 
 @Controller("assessments")
 export class ReconciliationController {
-  constructor(private readonly queryBus: QueryBus) {}
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus,
+  ) {}
 
   @Get(":assessmentId/conflicts")
   @UseGuards(PbacGuard)
@@ -70,6 +81,36 @@ export class ReconciliationController {
         pageSize !== undefined ? Number(pageSize) : undefined,
         status,
         request.correlationId as string,
+      ),
+    );
+  }
+
+  @Patch(":assessmentId/conflicts/:conflictId/resolve")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.conflictResolve)
+  async resolveConflict(
+    @Param("assessmentId") assessmentId: string,
+    @Param("conflictId") conflictId: string,
+    @Body() body: ResolveConflictRequest,
+    @Req() request: AuthenticatedRequest,
+  ): Promise<ResolveConflictDto> {
+    const pbacContext = request.pbacContext;
+
+    return this.commandBus.execute(
+      new ResolveConflictCommand(
+        assessmentId,
+        conflictId,
+        pbacContext.organizationId,
+        pbacContext.userId,
+        pbacContext.subjectRole,
+        body.resolution,
+        body.resolution_note,
+        request.correlationId as string,
+        {
+          selectedAction: pbacContext.selectedAction,
+          policyId: pbacContext.policyId,
+          policyVersion: pbacContext.policyVersion,
+        },
       ),
     );
   }

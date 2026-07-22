@@ -14,6 +14,8 @@ import { RequestFinalReportHandler } from "./request-final-report.handler.js";
 
 type AssessmentRecord = { id: string; organizationId: string };
 type ClassificationResultRecord = { id: string; guardrailStatus: string };
+type CreateDocumentRequestFn = () => Promise<{ id: string }>;
+type AdvisoryLockFn = () => Promise<number>;
 
 function buildHandler(options?: {
   assessment?: AssessmentRecord | null;
@@ -35,11 +37,9 @@ function buildHandler(options?: {
   const findEvidence = jest.fn(() => evidence);
   const findExisting = jest.fn(() => existing);
   const createDocumentRequest = jest
-    .fn<() => Promise<{ id: string }>>()
-    .mockResolvedValue({
-      id: "document-request-1",
-    });
-  const advisoryLock = jest.fn<() => Promise<number>>().mockResolvedValue(1);
+    .fn<CreateDocumentRequestFn>()
+    .mockResolvedValue({ id: "document-request-1" });
+  const advisoryLock = jest.fn<AdvisoryLockFn>().mockResolvedValue(1);
 
   const tx = {
     $executeRaw: advisoryLock,
