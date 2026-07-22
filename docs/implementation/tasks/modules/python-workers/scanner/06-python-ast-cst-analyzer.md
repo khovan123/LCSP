@@ -3,7 +3,7 @@ task_id: MW-scan-py-006
 module: python-workers/scanner
 runtime: lcsp-python-workers
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.5
 depends_on:
   - python-workers/scanner/01-scanner-workspace-setup.md
@@ -227,3 +227,13 @@ AI_RULE_TABLE = [
 - No argument values extracted — names only.
 - No raw source content in `PythonAnalysisResult`.
 - `venv/`, `node_modules/`, `__pycache__` excluded.
+
+## Implementation Evidence
+
+- Added bounded parser/analyzer modules: `parsers/python_ast_parser.py`, `parsers/python_cst_parser.py`, `analyzers/python_analyzer.py`, `analyzers/ai_pattern_rules.py`, and `analyzers/level_guard.py`.
+- Added compatibility wrapper `analyzers/python_ast.py` for existing scanner analyzer tests.
+- Implemented metadata-only `AiCallSite`, `PythonAnalysisResult`, and compatibility `TechnicalFinding` projection; no raw source or argument values are retained.
+- Implemented AI rule matching for OpenAI, Anthropic, Google/Vertex, Hugging Face, LangChain, LlamaIndex, sklearn, TensorFlow/Keras, PyTorch, local HTTP inference, generic predict/generate patterns, prompt references, and sensitive parameter names.
+- Enforced bounded behavior: 50 KB file cap, syntax-error skip, excluded runtime/build/cache directories, dynamic dispatch/`**kwargs` as `UNSUPPORTED_DYNAMIC_FLOW`, L1 direct calls, same-module parsing, and one-hop direct-import L3 propagation.
+- Wired `ScanConsumer` to run the Python analyzer and include `python_analysis` in `TechnicalEvidenceReport` callback evidence payload.
+- Validation: Python compile checks passed for changed analyzer/parser/evidence/consumer files and tests. Targeted pytest passed: `test_scanner_analyzer.py`, `test_evidence_assembler.py`, `test_scanner_workspace.py` — 30 passed, 1 skipped, 1 warning. Full `lcsp-python-workers/tests` collection is blocked in the temporary Python 3.14 validation environment by missing `tiktoken`; installing full worker deps remains blocked because `tiktoken==0.8.0` has no compatible wheel here and requires a Rust compiler.

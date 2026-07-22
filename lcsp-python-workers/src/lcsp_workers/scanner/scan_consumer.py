@@ -8,6 +8,7 @@ from lcsp_workers.platform.correlation import set_correlation_id
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.platform.queue_consumer import ConsumerBase
 
+from .analyzers.python_analyzer import PythonAnalyzer
 from .dependencies.dependency_normalizer import DependencyNormalizer
 from .evidence_assembler import EvidenceAssembler, PrivacyAssertionError
 from .snapshot_service_client import SnapshotArchiveRequest, SnapshotServiceClient
@@ -150,6 +151,7 @@ class ScanConsumer(ConsumerBase):
                 sbom_entries=syft_result.entries,
                 usage_facts=[*knip_result.facts, *deptry_result.facts],
             )
+            python_analysis = PythonAnalyzer(result.workspace_path).analyze()
             coverage_notes = self._coverage_notes(result)
             callback_payload = self._evidence_assembler.assemble(
                 scan_job_id=envelope.scan_job_id,
@@ -161,6 +163,7 @@ class ScanConsumer(ConsumerBase):
                     knip_result.execution,
                     deptry_result.execution,
                 ],
+                python_analysis=python_analysis,
             )
             self._api_client.post_scan_callback(
                 envelope.scan_job_id,
