@@ -13,6 +13,7 @@ import {
   DOCUMENT_TYPES,
 } from "@lcsp/contracts/document";
 import { PBAC_ACTIONS, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
@@ -268,7 +269,7 @@ async function seedClassification(
       evidencePayload: { guardrailStatus },
       privacyFlags: { containsSourceCode: false, secretsRedacted: true },
       schemaVersion: "1.0.0",
-      status: "accepted",
+      status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
     },
   });
 
