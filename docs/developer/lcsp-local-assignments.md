@@ -106,7 +106,7 @@ Local-only assignment plan generated from `docs/implementation/tasks/modules` vi
 - `LCSP-73` `MW-auth-010`: Invite Developer Endpoint (auth-workspace, Story 1.5, P0, READY_FOR_DEV, support)
 - `LCSP-74` `MW-auth-011`: Accept Developer Invitation Endpoint (auth-workspace, Story 1.5, P0, READY_FOR_DEV, support)
 - `LCSP-75` `MW-auth-012`: Revoke Developer Membership Endpoint (auth-workspace, Story 1.5, P0, READY_FOR_DEV, support)
-- `LCSP-100` `MW-intel-001`: TechnicalProfile Worker (python-workers/intelligence, Story 3.6, P0, READY_FOR_DEV, support)
+- `LCSP-100` `MW-intel-001`: TechnicalProfile Worker (python-workers/intelligence, Story 3.6, P0, DONE, support)
 - `LCSP-101` `MW-intel-002`: AIUsageFlow Worker (python-workers/intelligence, Story 4.2, P0, READY_FOR_DEV, support)
 - `LCSP-102` `MW-intel-003`: Conflict Detection Worker (python-workers/intelligence, Story 5.1, P0, READY_FOR_DEV, support)
 - `LCSP-116` `MW-scan-py-004`: Evidence Report Assembly and Callback (python-workers/scanner, Story 3.5, P0, DONE, support)

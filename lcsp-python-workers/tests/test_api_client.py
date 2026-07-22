@@ -4,7 +4,11 @@ from unittest.mock import patch, MagicMock
 from pydantic import ValidationError
 
 from lcsp_workers.platform.api_client import WorkerApiClient, WorkerCallbackError
-from lcsp_workers.platform.callback_schemas import ScanCallbackPayload, CallbackResponse
+from lcsp_workers.platform.callback_schemas import (
+    ScanCallbackPayload,
+    CallbackResponse,
+    TechnicalProfileCallbackPayload,
+)
 from lcsp_workers.platform.correlation import set_correlation_id
 
 @pytest.fixture
@@ -129,3 +133,36 @@ def test_callback_payload_is_redacted_before_serialization(client):
                 "metadata": {"api_key": "[REDACTED]"},
             }
         ]
+
+
+def test_technical_profile_callback_uses_evidence_endpoint(client):
+    payload = TechnicalProfileCallbackPayload(
+        evidence_report_id="ter-1",
+        assessment_id="assessment-1",
+        schema_version="1.0.0",
+        provider_version="lcsp.technical-profile-worker.v1",
+        profile_data={"evidence_quality": "high"},
+        privacy_flags={"containsSourceCode": False, "secretsRedacted": True},
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"accepted": True}
+        mock_post.return_value = mock_resp
+
+        client.post_technical_profile_callback(payload)
+
+        url = mock_post.call_args.args[0]
+        assert url == "http://testserver/internal/evidence/technical-profile-callback"
+
+
+def test_get_accepted_technical_evidence_report_rejects_non_accepted(client):
+    with patch("lcsp_workers.platform.api_client.httpx.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"id": "ter-1", "status": "rejected"}
+        mock_get.return_value = mock_resp
+
+        with pytest.raises(WorkerCallbackError, match="not accepted"):
+            client.get_accepted_technical_evidence_report("ter-1")
