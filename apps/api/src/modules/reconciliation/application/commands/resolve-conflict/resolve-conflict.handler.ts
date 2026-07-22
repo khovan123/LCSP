@@ -47,7 +47,10 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
   async execute(command: ResolveConflictCommand): Promise<ResolveConflictDto> {
     this.assertManagerOnly(command);
     const resolution = parseResolution(command.resolution);
-    const resolutionNote = parseResolutionNote(command.resolutionNote);
+    const resolutionNote = parseResolutionNote(
+      command.resolutionNote,
+      resolution,
+    );
     const resolvedAt = new Date();
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -206,7 +209,25 @@ function parseResolution(
   });
 }
 
-function parseResolutionNote(value: unknown): string | null {
+function parseResolutionNote(
+  value: unknown,
+  resolution:
+    | typeof CONFLICT_RECORD_STATUSES.resolved
+    | typeof CONFLICT_RECORD_STATUSES.dismissed,
+): string | null {
+  if (resolution === CONFLICT_RECORD_STATUSES.dismissed) {
+    if (
+      typeof value !== "string" ||
+      value.trim().length === 0 ||
+      value.length > RESOLUTION_NOTE_MAX_LENGTH
+    ) {
+      throw new UnprocessableEntityException({
+        error_code: SCAN_ERROR_CODES.conflictSchemaInvalid,
+      });
+    }
+    return value;
+  }
+
   if (value === undefined || value === null) return null;
   if (typeof value !== "string" || value.length > RESOLUTION_NOTE_MAX_LENGTH) {
     throw new UnprocessableEntityException({

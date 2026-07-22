@@ -4,6 +4,23 @@ Status: ready-for-dev
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
+## Course Correction - 2026-07-22
+
+LCSP-141 / `MW-web-004` is scoped to the current API contract for conflict list and resolve:
+
+- Use `conflict:read` for viewing/listing conflicts.
+- Use `conflict:resolve` for both `RESOLVED` and `DISMISSED`.
+- Do not use `conflict:finalize` for the page flow; backend progression after the last pending conflict is emitted through `event.reconciliation.all-conflicts-resolved`.
+
+Implementation expectation for this slice:
+
+- Manager enters the conflict page from the Workspace assessment list/card when an assessment has pending reconciliation conflicts.
+- `DISMISSED` is a final Manager decision for the current conflict/reconciliation version and requires a business-language reason.
+- After the last conflict is cleared, the page shows an all-resolved state and waits for downstream async progression rather than forcing an immediate redirect.
+- Unauthorized UX must be localized and friendly; raw backend error codes are not customer-facing copy.
+
+Gap retained for follow-up if Story 5.3 is implemented at full original depth: guided resolution choices, stale-version rejection, downstream impact preview, and separate persisted Manager interpretation may require API/contract expansion beyond the current binary `RESOLVED | DISMISSED` endpoint.
+
 ## Story
 
 As a Manager, I want to resolve material conflicts with guided choices and evidence context, so that LCSP can produce a coherent verified assessment profile.
