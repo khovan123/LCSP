@@ -189,9 +189,11 @@ export function sanitizeConflictListPayload(
     return null;
   }
 
-  const conflicts = candidate.conflicts
-    .map(projectConflictSummary)
-    .filter((item): item is ConflictSummary => item !== null);
+  const projected = candidate.conflicts.map(projectConflictSummary);
+  if (!projected.every((item) => item !== null)) {
+    return null;
+  }
+  const conflicts = projected as ConflictSummary[];
 
   if (
     typeof candidate.total !== "number" ||
