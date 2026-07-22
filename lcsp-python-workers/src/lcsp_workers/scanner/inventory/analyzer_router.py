@@ -7,7 +7,6 @@ from .language_types import (
     SUPPORT_BASIC,
     SUPPORT_FULL,
     SUPPORT_MANIFEST_ONLY,
-    SUPPORT_SKIP,
     AnalyzerDispatch,
     LanguageClassification,
 )
