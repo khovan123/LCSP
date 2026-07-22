@@ -120,11 +120,19 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
   it("T02 dismisses a pending conflict", async () => {
     const response = await resolveConflict(app, managerToken, "conflict-1", {
       resolution: CONFLICT_RECORD_STATUSES.dismissed,
+      resolution_note: "Manager determined this conflict is not material.",
     });
     const body = response.body as ResolveConflictDto;
 
     assert.equal(response.status, 200);
     assert.equal(body.status, CONFLICT_RECORD_STATUSES.dismissed);
+    const record = await prisma.conflictRecord.findUniqueOrThrow({
+      where: { id: "conflict-1" },
+    });
+    assert.equal(
+      record.resolutionNote,
+      "Manager determined this conflict is not material.",
+    );
 
     const audit = await prisma.authAuditEvent.findFirstOrThrow({
       where: { eventType: SCAN_EVENT_TYPES.conflictDismissedAudit },
@@ -171,6 +179,7 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
 
     const response = await resolveConflict(app, managerToken, "conflict-1", {
       resolution: CONFLICT_RECORD_STATUSES.dismissed,
+      resolution_note: "Already addressed in current Manager review.",
     });
 
     assertError(
@@ -214,6 +223,7 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
   it("T07 emits all-conflicts-resolved only when no pending conflicts remain", async () => {
     await resolveConflict(app, managerToken, "conflict-1", {
       resolution: CONFLICT_RECORD_STATUSES.dismissed,
+      resolution_note: "Conflict is not material for this assessment.",
     });
 
     const earlyOutboxCount = await prisma.outboxMessage.count({
@@ -223,12 +233,41 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
 
     await resolveConflict(app, managerToken, "conflict-2", {
       resolution: CONFLICT_RECORD_STATUSES.dismissed,
+      resolution_note: "Remaining conflict is intentionally dismissed.",
     });
 
     const finalOutboxCount = await prisma.outboxMessage.count({
       where: { eventType: SCAN_EVENT_TYPES.reconciliationAllConflictsResolved },
     });
     assert.equal(finalOutboxCount, 1);
+  });
+
+  it("T08 rejects dismissal without a non-empty reason", async () => {
+    const missingReason = await resolveConflict(
+      app,
+      managerToken,
+      "conflict-1",
+      {
+        resolution: CONFLICT_RECORD_STATUSES.dismissed,
+      },
+    );
+    assertError(
+      missingReason.status,
+      missingReason.body,
+      422,
+      SCAN_ERROR_CODES.conflictSchemaInvalid,
+    );
+
+    const blankReason = await resolveConflict(app, managerToken, "conflict-1", {
+      resolution: CONFLICT_RECORD_STATUSES.dismissed,
+      resolution_note: "   ",
+    });
+    assertError(
+      blankReason.status,
+      blankReason.body,
+      422,
+      SCAN_ERROR_CODES.conflictSchemaInvalid,
+    );
   });
 });
 

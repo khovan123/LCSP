@@ -35,7 +35,7 @@ Allow a Manager to resolve or dismiss a conflict. Resolution is audited and immu
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `resolution` | string | Yes | `RESOLVED` \| `DISMISSED` |
-| `resolution_note` | string | No | Max 2000 chars — business-language explanation |
+| `resolution_note` | string | Required when `resolution = DISMISSED`; optional when `resolution = RESOLVED` | Max 2000 chars — business-language explanation |
 
 **Success response (200):**
 
@@ -65,6 +65,9 @@ Allow a Manager to resolve or dismiss a conflict. Resolution is audited and immu
 6. If all resolved → emit outbox message `reconciliation.all-conflicts-resolved` for VerifiedProfile gate.
 7. `resolution_note` stored as-is (Manager-authored content). No LLM processing of this field.
 8. Audit event `CONFLICT_RESOLVED` or `CONFLICT_DISMISSED`.
+9. `DISMISSED` is a final Manager decision for the current conflict/reconciliation version, not a defer/snooze action.
+10. If `resolution = DISMISSED`, `resolution_note` must be a non-empty business-language reason after trim. Empty/missing note → `SCHEMA_INVALID`.
+11. If "handle later" behavior is needed later, add a separate `DEFERRED` state instead of overloading `DISMISSED`.
 
 ## Commands / Events
 
@@ -85,6 +88,7 @@ Allow a Manager to resolve or dismiss a conflict. Resolution is audited and immu
 | T05 | Developer attempts resolution | 403 `PBAC_DENIED` |
 | T06 | Conflict not in org | 404 `CONFLICT_NOT_FOUND` |
 | T07 | Outbox event only emitted when all resolved | DB verified — no early emission |
+| T08 | Dismiss without reason | 422 `SCHEMA_INVALID` |
 
 ## Definition of Done
 
@@ -92,3 +96,4 @@ Allow a Manager to resolve or dismiss a conflict. Resolution is audited and immu
 - Conflict immutable once resolved/dismissed.
 - `all-conflicts-resolved` outbox event emitted only when all PENDING cleared.
 - Audit event written with resolution, resolver ID.
+- Dismissal requires a non-empty Manager reason.
