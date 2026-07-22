@@ -1,11 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { getWorkspace } from "@/lib/api/workspace-client";
 import {
   getPendingConflicts,
   resolveConflict,
@@ -25,6 +33,7 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
   const [resolutions, setResolutions] = useState<Record<string, "RESOLVED" | "DISMISSED">>({});
   const [resolutionNotes, setResolutionNotes] = useState<Record<string, string>>({});
   const [formErrors, setFormErrors] = useState<Record<string, string | null>>({});
+  const [nextStepHref, setNextStepHref] = useState<string | null>(null);
 
   const clearConflictDraft = useCallback((conflictId: string) => {
     setSubmittingIds((prev) => {
@@ -150,6 +159,28 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
       isMountedRef.current = false;
     };
   }, [applyConflictListOutcome, assessmentId]);
+
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      const workspaceOutcome = await getWorkspace();
+      if (!active || !isMountedRef.current) {
+        return;
+      }
+
+      if (workspaceOutcome.kind === "loaded") {
+        setNextStepHref("/workspace#assessments");
+        return;
+      }
+
+      setNextStepHref(null);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const headingDescription = useMemo(
     () => resolveMessage(appLocale, "pages.reconciliation.pageDescription"),
@@ -285,6 +316,19 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
               {resolveMessage(appLocale, "pages.reconciliation.allResolvedDetail")}
             </EmptyDescription>
           </EmptyHeader>
+          {nextStepHref ? (
+            <EmptyContent>
+              <p className="text-sm text-muted-foreground">
+                {resolveMessage(appLocale, "pages.reconciliation.nextStepHint")}
+              </p>
+              <Link
+                href={nextStepHref}
+                className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {resolveMessage(appLocale, "pages.reconciliation.nextStepAction")}
+              </Link>
+            </EmptyContent>
+          ) : null}
         </Empty>
       ) : null}
 

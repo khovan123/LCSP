@@ -190,6 +190,8 @@ export const viPages = {
     allResolvedTitle: "Tất cả xung đột đã được xử lý",
     allResolvedDetail:
       "Hiện không còn xung đột đang chờ cho assessment này.",
+    nextStepHint: "Bạn có thể tiếp tục quy trình assessment.",
+    nextStepAction: "Quay lại danh sách assessment",
     accessRevokedTitle: "Không còn quyền truy cập",
     accessRevokedDetail:
       "Bạn không còn quyền xem hoặc xử lý xung đột cho assessment này.",

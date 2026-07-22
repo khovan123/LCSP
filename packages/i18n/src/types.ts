@@ -219,6 +219,8 @@ export type PagesMessages = {
     submitting: string;
     allResolvedTitle: string;
     allResolvedDetail: string;
+    nextStepHint: string;
+    nextStepAction: string;
     accessRevokedTitle: string;
     accessRevokedDetail: string;
     errorTitle: string;

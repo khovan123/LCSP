@@ -192,6 +192,8 @@ export const enPages = {
     allResolvedTitle: "All conflicts are resolved",
     allResolvedDetail:
       "There are no pending conflicts for this assessment right now.",
+    nextStepHint: "You can continue with the assessment workflow.",
+    nextStepAction: "Back to assessments",
     accessRevokedTitle: "Access no longer available",
     accessRevokedDetail:
       "You no longer have permission to view or resolve conflicts for this assessment.",
