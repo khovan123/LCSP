@@ -19,9 +19,7 @@ const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 
 @QueryHandler(ListConflictsQuery)
-export class ListConflictsHandler
-  implements IQueryHandler<ListConflictsQuery>
-{
+export class ListConflictsHandler implements IQueryHandler<ListConflictsQuery> {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(query: ListConflictsQuery): Promise<ConflictListDto> {

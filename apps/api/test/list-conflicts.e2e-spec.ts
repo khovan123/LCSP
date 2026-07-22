@@ -290,7 +290,9 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
         scoreExplanation:
           overrides.scoreExplanation ??
           "Manager answer and technical evidence disagree.",
-        evidenceRefs: overrides.evidenceRefs ?? ["evidence-report-1::finding-1"],
+        evidenceRefs: overrides.evidenceRefs ?? [
+          "evidence-report-1::finding-1",
+        ],
         status: overrides.status ?? CONFLICT_RECORD_STATUSES.pending,
       },
     });
