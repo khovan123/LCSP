@@ -54,8 +54,8 @@ function buildHandler() {
     .mockResolvedValue(undefined);
   const outboxRepository = { enqueue } as unknown as OutboxRepository;
   const tx = { tx: "assessment-create" };
-  const transaction = jest.fn(async (callback: (tx: unknown) => unknown) =>
-    callback(tx),
+  const transaction = jest.fn((callback: (tx: unknown) => unknown) =>
+    Promise.resolve(callback(tx)),
   );
   const prisma = { $transaction: transaction };
 
