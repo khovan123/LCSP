@@ -10,4 +10,8 @@ export const SCAN_ERROR_CODES = {
   aiUsageFlowAlreadyExists: "FLOW_ALREADY_EXISTS",
   aiUsageFlowSchemaInvalid: "SCHEMA_INVALID",
   claimMissingEvidenceRef: "CLAIM_MISSING_EVIDENCE_REF",
+  aiUsageFlowNotFound: "AI_USAGE_FLOW_NOT_FOUND",
+  conflictSchemaInvalid: "SCHEMA_INVALID",
+  conflictScoreInvalid: "CONFLICT_SCORE_INVALID",
+  evidenceRefsEmpty: "EVIDENCE_REFS_EMPTY",
 } as const;
