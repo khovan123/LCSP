@@ -24,8 +24,13 @@ class ScanCallbackPayload(BaseModel):
 
 class TechnicalProfileCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    scan_job_id: str
+    evidence_report_id: str
+    assessment_id: str
+    schema_version: str
+    provider_version: str
     profile_data: Dict[str, Any]
+    privacy_flags: Dict[str, Any]
+    scan_job_id: Optional[str] = None
 
 class AIUsageFlowCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")

@@ -229,8 +229,20 @@ class WorkerApiClient:
         self, payload: TechnicalProfileCallbackPayload
     ) -> CallbackResponse:
         path = CallbackPath.TECHNICAL_PROFILE
-        resp_data = self._post_with_retry(path, payload.model_dump())
+        resp_data = self._post_with_retry(path, payload.model_dump(exclude_none=True))
         return CallbackResponse(**resp_data)
+
+    def get_accepted_technical_evidence_report(self, evidence_report_id: str) -> dict:
+        path = InternalPath.TECHNICAL_EVIDENCE_REPORT.format(
+            evidence_report_id=evidence_report_id
+        )
+        data = self._get_with_retry(path)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Technical evidence report response was invalid.")
+        status = str(data.get("status", "")).lower()
+        if status and status != "accepted":
+            raise WorkerCallbackError("Technical evidence report is not accepted.")
+        return data
 
     def post_ai_usage_flow_callback(
         self, payload: AIUsageFlowCallbackPayload

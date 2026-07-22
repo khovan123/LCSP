@@ -3,7 +3,7 @@ task_id: MW-intel-001
 module: python-workers/intelligence
 runtime: lcsp-python-workers
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.6
 depends_on:
   - python-workers/scanner/04-evidence-report-assembly.md
@@ -87,3 +87,18 @@ class TechnicalProfile:
 - Evidence quality evaluated from tool coverage and signal presence.
 - `dependency_ai_packages` from SBOM (names only, no versions in signal list).
 - `contains_source_code = False` asserted before callback.
+
+## Implementation Evidence
+
+- Added deterministic intelligence package under `lcsp-python-workers/src/lcsp_workers/intelligence/`.
+- Added `TechnicalProfileConsumer` as a `ConsumerBase` subclass for queue `intelligence.evidence-accepted`, routing key `scan.evidence-accepted`, with `requires_pbac = False` for system event processing.
+- Added `TechnicalProfileBuilder` and `EvidenceQualityEvaluator` for evidence-only profile derivation; no LLM gateway/provider calls are used.
+- Updated worker callback schema/API client to submit `TechnicalProfile` payloads to `POST /internal/evidence/technical-profile-callback`.
+- Added unit coverage in `lcsp-python-workers/tests/test_technical_profile_worker.py` for T01–T07 and consumer callback behavior.
+
+## Validation
+
+- `python -m py_compile lcsp-python-workers/src/lcsp_workers/intelligence/__init__.py lcsp-python-workers/src/lcsp_workers/intelligence/evidence_quality_evaluator.py lcsp-python-workers/src/lcsp_workers/intelligence/technical_profile_builder.py lcsp-python-workers/src/lcsp_workers/intelligence/technical_profile_consumer.py lcsp-python-workers/src/lcsp_workers/platform/api_client.py lcsp-python-workers/src/lcsp_workers/platform/callback_schemas.py lcsp-python-workers/src/package/contract/api_client_contracts.py`
+  - Result: passed.
+- `python -m pytest lcsp-python-workers/tests/test_technical_profile_worker.py lcsp-python-workers/tests/test_api_client.py lcsp-python-workers/tests/test_queue_consumer.py lcsp-python-workers/tests/test_evidence_assembler.py -q`
+  - Result: 32 passed, 1 warning (`asyncio_mode` pytest config warning in minimal targeted environment).
