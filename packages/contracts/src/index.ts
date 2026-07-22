@@ -2,6 +2,7 @@ export * from "./audit/index.ts";
 export * from "./assessment/index.ts";
 export * from "./auth/index.ts";
 export * from "./evidence/index.ts";
+export * from "./document/index.ts";
 export * from "./github-integration/index.ts";
 export * from "./outbox/index.ts";
 export * from "./pbac/index.ts";
