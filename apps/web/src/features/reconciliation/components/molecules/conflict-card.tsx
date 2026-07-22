@@ -113,7 +113,15 @@ export function ConflictCard({
             className="min-h-24 rounded-md border bg-background px-3 py-2 text-sm"
           />
 
-          {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+          {formError ? (
+            <p
+              id={`conflict-error-${conflict.conflict_id}`}
+              role="alert"
+              className="text-sm text-destructive"
+            >
+              {formError}
+            </p>
+          ) : null}
         </div>
       </CardContent>
       <CardFooter className="justify-end">
