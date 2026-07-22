@@ -203,27 +203,29 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
     error: unknown,
   ): Promise<void> {
     const reasonCode = errorCode(error);
-    await this.auditWriter.write(buildAuditEventInput({
-      eventType: SCAN_EVENT_TYPES.evidenceRejectedAudit,
-      actorId: SCANNER_WORKER_ACTOR_ID,
-      organizationId: job.organizationId,
-      assessmentId: job.assessmentId,
-      resourceType: "RepositoryScanJob",
-      resourceId: job.id,
-      correlationId: command.correlationId,
-      causationId: job.id,
-      reasonCode,
-      decision: AUDIT_DECISIONS.deny,
-      result: SCAN_EVENT_TYPES.evidenceRejectedAudit,
-      redactionStatus: AUDIT_REDACTION_STATUSES.none,
-      actor: { id: SCANNER_WORKER_ACTOR_ID, type: "service" },
-      payload: {
+    await this.auditWriter.write(
+      buildAuditEventInput({
+        eventType: SCAN_EVENT_TYPES.evidenceRejectedAudit,
+        actorId: SCANNER_WORKER_ACTOR_ID,
+        organizationId: job.organizationId,
         assessmentId: job.assessmentId,
-        scanJobId: job.id,
-        reasonCode,
+        resourceType: "RepositoryScanJob",
+        resourceId: job.id,
         correlationId: command.correlationId,
-      },
-    }));
+        causationId: job.id,
+        reasonCode,
+        decision: AUDIT_DECISIONS.deny,
+        result: SCAN_EVENT_TYPES.evidenceRejectedAudit,
+        redactionStatus: AUDIT_REDACTION_STATUSES.none,
+        actor: { id: SCANNER_WORKER_ACTOR_ID, type: "service" },
+        payload: {
+          assessmentId: job.assessmentId,
+          scanJobId: job.id,
+          reasonCode,
+          correlationId: command.correlationId,
+        },
+      }),
+    );
   }
 
   private errorBody(

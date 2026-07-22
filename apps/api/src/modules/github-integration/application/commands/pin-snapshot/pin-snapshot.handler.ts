@@ -151,26 +151,29 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       actorId: command.actorId,
     });
 
-    await this.snapshotRepository.saveWithCreatedEvent(snapshot, buildOutboxMessageInput({
-      aggregateType: "RepositorySnapshot",
-      aggregateId: snapshot.id,
-      eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated,
-      organizationId: snapshot.organizationId,
-      assessmentId: snapshot.assessmentId,
-      correlationId: command.correlationId,
-      causationId: command.correlationId,
-      actor: { id: command.actorId, type: "user" },
-      result: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
-      redactionStatus: AUDIT_REDACTION_STATUSES.none,
-      idempotencyKey: `${snapshot.id}:${GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated}`,
-      payload: {
-        snapshotId: snapshot.id,
+    await this.snapshotRepository.saveWithCreatedEvent(
+      snapshot,
+      buildOutboxMessageInput({
+        aggregateType: "RepositorySnapshot",
+        aggregateId: snapshot.id,
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated,
+        organizationId: snapshot.organizationId,
         assessmentId: snapshot.assessmentId,
-        commitSha: snapshot.commitSha,
-        connectionId: snapshot.connectionId,
         correlationId: command.correlationId,
-      },
-    }));
+        causationId: command.correlationId,
+        actor: { id: command.actorId, type: "user" },
+        result: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
+        redactionStatus: AUDIT_REDACTION_STATUSES.none,
+        idempotencyKey: `${snapshot.id}:${GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated}`,
+        payload: {
+          snapshotId: snapshot.id,
+          assessmentId: snapshot.assessmentId,
+          commitSha: snapshot.commitSha,
+          connectionId: snapshot.connectionId,
+          correlationId: command.correlationId,
+        },
+      }),
+    );
 
     await this.auditWriter.write({
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,

@@ -66,7 +66,16 @@ function buildHandler() {
     prisma as never,
   );
 
-  return { handler, save, saveInTx, write, writeInTx, enqueue, tx, transaction };
+  return {
+    handler,
+    save,
+    saveInTx,
+    write,
+    writeInTx,
+    enqueue,
+    tx,
+    transaction,
+  };
 }
 
 describe("CreateAssessmentHandler", () => {

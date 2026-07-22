@@ -22,10 +22,7 @@ export interface AssessmentListResult {
 
 export interface AssessmentRepository {
   save(assessment: Assessment): Promise<void>;
-  saveInTx(
-    assessment: Assessment,
-    tx: Prisma.TransactionClient,
-  ): Promise<void>;
+  saveInTx(assessment: Assessment, tx: Prisma.TransactionClient): Promise<void>;
   findById(id: string): Promise<Assessment | null>;
   findMany(criteria: AssessmentListCriteria): Promise<AssessmentListResult>;
 }
