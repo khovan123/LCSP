@@ -57,11 +57,17 @@ export function ConflictCard({
             </span>
             <span className="font-medium">{scorePercent}%</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-2 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-label={resolveMessage(appLocale, "pages.reconciliation.scoreLabel")}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={scorePercent}
+          >
             <div
               className={`h-full ${scoreTone}`}
               style={{ width: `${scorePercent}%` }}
-              aria-label={resolveMessage(appLocale, "pages.reconciliation.scoreLabel")}
             />
           </div>
         </div>
