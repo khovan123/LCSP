@@ -186,6 +186,13 @@ export function WorkspaceDashboard() {
                 appLocale,
                 "pages.workspace.createdAtLabel",
               )}
+              getAssessmentHref={(assessment) =>
+                `/assessments/${assessment.id}/conflicts`
+              }
+              openAssessmentLabel={resolveMessage(
+                appLocale,
+                "pages.workspace.openConflictResolution",
+              )}
             />
           </div>
         </div>
