@@ -176,6 +176,7 @@ export async function seedAuthWorkspaceFixture(
         PBAC_ACTIONS.githubConnect,
         PBAC_ACTIONS.scanRead,
         PBAC_ACTIONS.scanTrigger,
+        PBAC_ACTIONS.documentGenerate,
         PBAC_ACTIONS.snapshotCreate,
       ],
       subjectRole: SUBJECT_ROLES.manager,

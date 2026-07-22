@@ -176,7 +176,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         email: "developer@example.test",
-        allowed_actions: ["final-report:generate"],
+        allowed_actions: [PBAC_ACTIONS.finalReportGenerate],
       });
 
     assert.equal(result.status, 400);

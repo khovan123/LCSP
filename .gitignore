@@ -36,3 +36,4 @@ _bmad/
 .prisma/
 .agents/
 **/.env
+.ua/

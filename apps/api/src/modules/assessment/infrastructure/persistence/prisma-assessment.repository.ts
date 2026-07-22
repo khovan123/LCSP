@@ -26,7 +26,21 @@ export class PrismaAssessmentRepository implements AssessmentRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async save(assessment: Assessment): Promise<void> {
-    await this.prisma.assessment.upsert({
+    await this.saveWithClient(this.prisma, assessment);
+  }
+
+  async saveInTx(
+    assessment: Assessment,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await this.saveWithClient(tx, assessment);
+  }
+
+  private async saveWithClient(
+    client: Prisma.TransactionClient,
+    assessment: Assessment,
+  ): Promise<void> {
+    await client.assessment.upsert({
       where: { id: assessment.id },
       create: {
         id: assessment.id,

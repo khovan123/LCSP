@@ -46,6 +46,7 @@ export class AuthAuditService {
       this.logger.error(
         `Failed to write auth audit event: ${(error as Error).message}`,
       );
+      throw error;
     }
   }
 
@@ -59,6 +60,7 @@ export class AuthAuditService {
       this.logger.error(
         `Failed to write auth audit event in transaction: ${(error as Error).message}`,
       );
+      throw error;
     }
   }
 

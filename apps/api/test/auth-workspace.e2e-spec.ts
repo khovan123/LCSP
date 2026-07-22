@@ -374,6 +374,7 @@ describe("Auth workspace (e2e)", () => {
       PBAC_ACTIONS.githubConnect,
       PBAC_ACTIONS.scanRead,
       PBAC_ACTIONS.scanTrigger,
+      PBAC_ACTIONS.documentGenerate,
       PBAC_ACTIONS.snapshotCreate,
     ]);
     assert.equal(body.mfa_verified, false);
