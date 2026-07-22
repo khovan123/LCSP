@@ -129,8 +129,9 @@ class ScanConsumer(ConsumerBase):
                         "reason": f"language_classification_failed: {type(error).__name__}",
                     }
                 ]
-                logger.warning(
+                logger.exception(
                     "SCAN_LANGUAGE_CLASSIFICATION_FAILED",
+                    scan_job_id=envelope.scan_job_id,
                     error=str(error),
                 )
 
