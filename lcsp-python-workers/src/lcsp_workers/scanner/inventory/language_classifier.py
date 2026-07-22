@@ -88,21 +88,45 @@ class LanguageClassifier:
     def __init__(self, *, max_file_size_bytes: int = DEFAULT_MAX_FILE_SIZE_BYTES) -> None:
         self._max_file_size_bytes = max_file_size_bytes
 
-    def classify_workspace(self, workspace_path: str | Path) -> list[LanguageClassification]:
-        workspace = Path(workspace_path).resolve(strict=False)
-        results: list[LanguageClassification] = []
+def classify_workspace(self, workspace_path: str | Path) -> list[LanguageClassification]:
+    import os
 
-        for file_path in sorted(workspace.rglob("*")):
-            if not file_path.is_file():
-                continue
+    workspace = Path(workspace_path).resolve(strict=False)
+    results: list[LanguageClassification] = []
 
+    for root, dirnames, filenames in os.walk(workspace):
+        rel_root = Path(root).resolve(strict=False).relative_to(workspace).as_posix()
+        if rel_root == ".":
+            rel_root = ""
+
+        dirnames[:] = [
+            d
+            for d in sorted(dirnames)
+            if not self._is_excluded(f"{rel_root}/{d}" if rel_root else d)
+        ]
+
+        for filename in sorted(filenames):
+            file_path = Path(root) / filename
             relative_path = file_path.resolve(strict=False).relative_to(workspace).as_posix()
             if self._is_excluded(relative_path):
                 continue
+            try:
+                results.append(self._classify_file(file_path, relative_path))
+            except OSError:
+                results.append(
+                    LanguageClassification(
+                        file_path=relative_path,
+                        language=LANGUAGE_UNKNOWN,
+                        support_level=SUPPORT_SKIP,
+                        file_size_bytes=0,
+                        line_count=None,
+                        skip_reason="file_access_failed",
+                        coverage_limitation=True,
+                    )
+                )
 
-            results.append(self._classify_file(file_path, relative_path))
-
-        return results
+    results.sort(key=lambda item: item.file_path)
+    return results
 
     def _classify_file(self, file_path: Path, relative_path: str) -> LanguageClassification:
         file_size = file_path.stat().st_size
