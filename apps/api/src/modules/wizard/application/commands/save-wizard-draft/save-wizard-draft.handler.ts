@@ -1,8 +1,10 @@
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
-import { Inject } from "@nestjs/common";
+import { ForbiddenException, Inject } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import { SaveWizardDraftCommand } from "./save-wizard-draft.command.js";
 import type { SaveWizardDraftResponse } from "../../contracts/wizard/wizard-draft.contract.js";
@@ -32,6 +34,7 @@ export class SaveWizardDraftHandler implements ICommandHandler<
   ): Promise<SaveWizardDraftResponse> {
     const { assessmentId, organizationId, ownerId, answers, correlationId } =
       command;
+    await this.assertManagerOnlyAction(command);
 
     // 1. Verify assessment exists and is owned by caller
     const isOwned = await this.wizardRepository.verifyAssessmentOwnership(
@@ -75,6 +78,8 @@ export class SaveWizardDraftHandler implements ICommandHandler<
       resourceType: "wizard_profile",
       resourceId: savedProfile.id,
       decision: AUDIT_DECISIONS.allow,
+      policyId: command.authorization.policyId,
+      policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId,
         wizardProfileId: savedProfile.id,
@@ -91,5 +96,40 @@ export class SaveWizardDraftHandler implements ICommandHandler<
       updated_at: savedProfile.updatedAt.toISOString(),
       correlation_id: correlationId,
     };
+  }
+
+  private async assertManagerOnlyAction(
+    command: SaveWizardDraftCommand,
+  ): Promise<void> {
+    const allowed =
+      command.authorization.subjectRole === SUBJECT_ROLES.manager &&
+      command.authorization.selectedAction === PBAC_ACTIONS.wizardWrite &&
+      command.authorization.policyId !== null &&
+      command.authorization.policyVersion !== null;
+
+    if (allowed) return;
+
+    await this.auditWriter.write({
+      eventType: WIZARD_EVENT_TYPES.draftSaved,
+      actorId: command.ownerId,
+      organizationId: command.organizationId,
+      resourceType: "wizard_profile",
+      resourceId: null,
+      decision: AUDIT_DECISIONS.deny,
+      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      correlationId: command.correlationId,
+      policyId: command.authorization.policyId,
+      policyVersion: command.authorization.policyVersion,
+      payload: {
+        assessmentId: command.assessmentId,
+        action: PBAC_ACTIONS.wizardWrite,
+        result: AUDIT_DECISIONS.deny,
+      },
+    });
+
+    throw new ForbiddenException({
+      error_code: AUTH_ERROR_CODES.pbacDenied,
+      correlation_id: command.correlationId,
+    });
   }
 }

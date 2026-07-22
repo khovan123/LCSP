@@ -1,6 +1,10 @@
+---
+baseline_commit: ce72894d829504024b988b0d19ce28da50e32275
+---
+
 # Story 1.6: Manager-Only Action Enforcement
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -23,9 +27,9 @@ As a Manager, I want Manager-only actions protected from Developer access, so th
 
 ## Tasks / Subtasks
 
-- [ ] Enumerate Manager-only actions and wire PBAC-protected API guard plus service recheck. (AC: 1)
-- [ ] Hide or block Manager-only UX actions based on backend capability projection. (AC: 2)
-- [ ] Audit allow/deny with policy id/version and correlation ID. (AC: 2)
+- [x] Enumerate Manager-only actions and wire PBAC-protected API guard plus service recheck. (AC: 1)
+- [x] Hide or block Manager-only UX actions based on backend capability projection. (AC: 2)
+- [x] Audit allow/deny with policy id/version and correlation ID. (AC: 2)
 
 ## Dev Notes
 
@@ -149,13 +153,47 @@ GPT-5 Codex
 - Batch `bmad-create-story` run on 2026-07-02T22:01:26+07:00.
 - Source packet: `docs/developer/story-handbook/1-6-manager-only-action-enforcement.md`.
 - Canonical title/source alignment: `docs/planning-artifacts/epics.md`.
+- RED: `rtk pnpm run test:web` failed because `@lcsp/contracts/pbac` did not export `MANAGER_ONLY_ACTIONS`.
+- RED: `rtk pnpm --filter @lcsp/api test --runTestsByPath src/modules/assessment/application/commands/create-assessment/create-assessment.handler.spec.ts src/modules/wizard/application/commands/save-wizard-draft/save-wizard-draft.handler.spec.ts` failed because service handlers did not recheck Manager-only PBAC context or write policy metadata in audit.
+- GREEN: `rtk pnpm run test:web` passed 31/31.
+- GREEN: `rtk pnpm --filter @lcsp/api test --runTestsByPath src/modules/assessment/application/commands/create-assessment/create-assessment.handler.spec.ts src/modules/wizard/application/commands/save-wizard-draft/save-wizard-draft.handler.spec.ts` passed 15/15.
+- GREEN: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/developer-pbac.e2e-spec.ts` passed 5/5.
+- Regression: `rtk pnpm --filter @lcsp/api test:e2e --runTestsByPath test/developer-pbac.e2e-spec.ts test/auth-workspace.e2e-spec.ts test/revoke-membership.e2e-spec.ts test/invite-developer.e2e-spec.ts` passed 55/55.
+- Final validation: `rtk npm run lint` passed import policy, contract literal policy, Prisma generation, and TypeScript build.
+- Final validation: `rtk pnpm test` passed web 31/31 and API e2e 25 suites / 219 tests.
 
 ### Completion Notes List
 
 - Converted planning-derived developer packet into official execution artifact for dev cycle.
 - Status set to `ready-for-dev` in `docs/implementation-artifacts/sprint-status.yaml`.
 - Story retains planning authority references and scope guardrails for downstream `dev-story` work.
+- Added canonical `MANAGER_ONLY_ACTIONS` contract covering current and planned Manager-only authority actions.
+- Wired existing Manager-only mutation routes (`assessment:create`, `wizard:write`) to pass PBAC context into command handlers and added service-level rechecks before mutation.
+- Updated Manager-only audit writes so allow and service-level deny events include policy id/version and correlation ID.
+- Updated workspace capability helper so Manager-only UI affordances remain hidden unless the backend grants the matching action.
+- Added Story 1.6 web, unit, and e2e coverage for Developer denial, Manager allow, service recheck, safe responses, and audit metadata.
 
 ### File List
 
 - docs/implementation-artifacts/1-6-manager-only-action-enforcement.md
+- docs/implementation-artifacts/sprint-status.yaml
+- packages/contracts/src/pbac/actions.ts
+- packages/contracts/src/pbac/index.ts
+- packages/contracts/src/pbac/manager-policy.ts
+- apps/web/src/lib/api/workspace-client.ts
+- tests/story-1-6.web.test.ts
+- apps/api/src/modules/assessment/application/commands/create-assessment/create-assessment.command.ts
+- apps/api/src/modules/assessment/application/commands/create-assessment/create-assessment.handler.ts
+- apps/api/src/modules/assessment/application/commands/create-assessment/create-assessment.handler.spec.ts
+- apps/api/src/modules/assessment/presentation/http/assessment.controller.ts
+- apps/api/src/modules/wizard/application/commands/save-wizard-draft/save-wizard-draft.command.ts
+- apps/api/src/modules/wizard/application/commands/save-wizard-draft/save-wizard-draft.handler.ts
+- apps/api/src/modules/wizard/application/commands/save-wizard-draft/save-wizard-draft.handler.spec.ts
+- apps/api/src/modules/wizard/presentation/http/wizard.controller.ts
+- apps/api/test/developer-pbac.e2e-spec.ts
+- apps/api/test/invite-developer.e2e-spec.ts
+- apps/api/test/support/auth-workspace-test-helpers.ts
+
+### Change Log
+
+- 2026-07-22: Implemented Story 1.6 Manager-only action enforcement and moved story to review.
