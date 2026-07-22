@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
 
@@ -18,6 +18,7 @@ import type { ConflictResolutionViewState } from "../../types/conflict.types";
 
 export function ConflictResolutionPage({ assessmentId }: { assessmentId: string }) {
   const router = useRouter();
+  const isMountedRef = useRef(true);
   const [viewState, setViewState] = useState<ConflictResolutionViewState>("loading");
   const [conflicts, setConflicts] = useState<ConflictSummary[]>([]);
   const [submittingIds, setSubmittingIds] = useState<Record<string, boolean>>({});
@@ -82,38 +83,54 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
     });
   }, []);
 
+  const applyConflictListOutcome = useCallback(
+    (
+      outcome: Awaited<ReturnType<typeof getPendingConflicts>>,
+      options?: { allowRedirect?: boolean },
+    ) => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      if (outcome.kind === "redirect") {
+        if (options?.allowRedirect !== false) {
+          router.replace(outcome.location);
+        }
+        return;
+      }
+
+      if (outcome.kind === "access_revoked") {
+        setViewState("access_revoked");
+        setConflicts([]);
+        return;
+      }
+
+      if (outcome.kind === "error") {
+        setViewState("error");
+        setConflicts([]);
+        return;
+      }
+
+      if (outcome.kind === "empty") {
+        setViewState("empty");
+        setConflicts([]);
+        return;
+      }
+
+      setConflicts(outcome.data.conflicts);
+      syncConflictDrafts(outcome.data.conflicts);
+      setViewState(outcome.data.conflicts.length === 0 ? "empty" : "loaded");
+    },
+    [router, syncConflictDrafts],
+  );
+
   const loadConflicts = useCallback(async () => {
     const outcome = await getPendingConflicts(assessmentId);
-
-    if (outcome.kind === "redirect") {
-      router.replace(outcome.location);
-      return;
-    }
-
-    if (outcome.kind === "access_revoked") {
-      setViewState("access_revoked");
-      setConflicts([]);
-      return;
-    }
-
-    if (outcome.kind === "error") {
-      setViewState("error");
-      setConflicts([]);
-      return;
-    }
-
-    if (outcome.kind === "empty") {
-      setViewState("empty");
-      setConflicts([]);
-      return;
-    }
-
-    setConflicts(outcome.data.conflicts);
-    syncConflictDrafts(outcome.data.conflicts);
-    setViewState(outcome.data.conflicts.length === 0 ? "empty" : "loaded");
-  }, [assessmentId, router, syncConflictDrafts]);
+    applyConflictListOutcome(outcome);
+  }, [applyConflictListOutcome, assessmentId]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     let active = true;
 
     void (async () => {
@@ -121,13 +138,18 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
         return;
       }
       setViewState("loading");
-      await loadConflicts();
+      const outcome = await getPendingConflicts(assessmentId);
+      if (!active) {
+        return;
+      }
+      applyConflictListOutcome(outcome);
     })();
 
     return () => {
       active = false;
+      isMountedRef.current = false;
     };
-  }, [loadConflicts]);
+  }, [applyConflictListOutcome, assessmentId]);
 
   const headingDescription = useMemo(
     () => resolveMessage(appLocale, "pages.reconciliation.pageDescription"),
