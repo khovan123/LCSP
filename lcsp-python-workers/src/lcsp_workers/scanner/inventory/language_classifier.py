@@ -181,7 +181,7 @@ class LanguageClassifier:
                 language=LANGUAGE_JAVASCRIPT,
                 support_level=SUPPORT_SKIP,
                 file_size_bytes=file_size,
-                line_count=None,
+                line_count=line_count,
                 skip_reason="minified_js_heuristic",
                 coverage_limitation=True,
             )
