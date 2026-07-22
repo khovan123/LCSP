@@ -3,7 +3,7 @@ task_id: MW-intel-003
 module: python-workers/intelligence
 runtime: lcsp-python-workers
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 5.1
 depends_on:
   - python-workers/intelligence/02-ai-usage-flow-worker.md
@@ -83,3 +83,22 @@ conflict_score = (evidence_confidence_weight * contradiction_severity) / normali
 - Conflict score 0.0–1.0 with business-language explanation.
 - Empty conflict result explicitly submitted (not omitted).
 - Three conflict types implemented: `evidence_contradiction`, `scope_mismatch`, `unverifiable`.
+
+## Implementation Evidence
+
+- Added `ConflictDetectionConsumer` for queue `intelligence.ai-usage-flow-ready`, routing key `ai-usage-flow-ready`, and no PBAC preflight.
+- Added deterministic `ConflictDetector` for:
+  - `evidence_contradiction`
+  - `scope_mismatch`
+  - `unverifiable`
+- Added `ConflictScoreCalculator` with bounded 0.0–1.0 score calculation and business-language explanations.
+- Added `ConflictDetectionCallbackPayload` and Worker API client support for:
+  - `GET /internal/ai-usage-flow/{ai_usage_flow_id}`
+  - `POST /internal/reconciliation/conflict-callback`
+- Empty no-conflict output is serialized as `conflicts: []`.
+
+## Validation
+
+- `python3 -m compileall -q lcsp-python-workers/src/lcsp_workers/intelligence lcsp-python-workers/src/lcsp_workers/platform lcsp-python-workers/src/package/contract lcsp-python-workers/tests/test_conflict_detection_worker.py`
+- `/tmp/lcsp-workers-venv/bin/python -m pytest lcsp-python-workers/tests/test_conflict_detection_worker.py lcsp-python-workers/tests/test_api_client.py -q`
+  - Result: 22 passed, 1 warning (`asyncio_mode` config warning)

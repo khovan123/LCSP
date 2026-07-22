@@ -20,6 +20,7 @@ from lcsp_workers.platform.callback_schemas import (
     ScanCallbackPayload,
     TechnicalProfileCallbackPayload,
     AIUsageFlowCallbackPayload,
+    ConflictDetectionCallbackPayload,
     VerifiedProfileCallbackPayload,
     LegalRuleMatchCallbackPayload,
     ClassificationCallbackPayload,
@@ -250,6 +251,23 @@ class WorkerApiClient:
         path = CallbackPath.AI_USAGE_FLOW
         resp_data = self._post_with_retry(path, payload.model_dump(exclude_none=True))
         return CallbackResponse(**resp_data)
+
+    def post_reconciliation_conflict_callback(
+        self, payload: ConflictDetectionCallbackPayload
+    ) -> CallbackResponse:
+        path = CallbackPath.RECONCILIATION_CONFLICT
+        resp_data = self._post_with_retry(path, payload.model_dump(exclude_none=True))
+        return CallbackResponse(**resp_data)
+
+    def get_accepted_ai_usage_flow(self, ai_usage_flow_id: str) -> dict:
+        path = InternalPath.AI_USAGE_FLOW.format(ai_usage_flow_id=ai_usage_flow_id)
+        data = self._get_with_retry(path)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("AIUsageFlow response was invalid.")
+        status = str(data.get("status", "")).lower()
+        if status and status not in {"accepted", "ready", "ai_usage_flow_ready"}:
+            raise WorkerCallbackError("AIUsageFlow is not accepted.")
+        return data
 
     def get_accepted_technical_profile(self, technical_profile_id: str) -> dict:
         path = InternalPath.TECHNICAL_PROFILE.format(

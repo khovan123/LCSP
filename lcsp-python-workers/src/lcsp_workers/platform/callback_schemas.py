@@ -43,6 +43,15 @@ class AIUsageFlowCallbackPayload(BaseModel):
     privacy_flags: Dict[str, Any]
     flow_data: Dict[str, Any] = Field(default_factory=dict)
 
+class ConflictDetectionCallbackPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ai_usage_flow_id: str
+    assessment_id: str
+    schema_version: str
+    provider_version: str
+    conflicts: List[Dict[str, Any]] = Field(default_factory=list)
+    privacy_flags: Dict[str, Any]
+
 class VerifiedProfileCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scan_job_id: str
