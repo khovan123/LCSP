@@ -447,7 +447,6 @@ def test_scan_consumer_privacy_assertion_aborts_callback_and_cleans_up(
     evidence_assembler.assemble.side_effect = PrivacyAssertionError(
         "source code detected"
     )
-
     consumer = ScanConsumer(
         config,
         snapshot_client=snapshot_client,
@@ -473,3 +472,64 @@ def test_scan_consumer_privacy_assertion_aborts_callback_and_cleans_up(
     evidence_assembler.assemble.assert_called_once()
     api_client.post_scan_callback.assert_not_called()
     assert not workspace.workspace_path("job-privacy").exists()
+
+
+@pytest.mark.p0
+@pytest.mark.integration
+def test_scan_consumer_emits_classifier_coverage_limitations_in_callback(
+    workspace_dir: Path,
+) -> None:
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
+    archive = _build_tar_gz({"repo/src/utils.min.js": b"const a=1;\n"})
+
+    snapshot_client = MagicMock(spec=SnapshotServiceClient)
+    snapshot_client.download_snapshot_archive.return_value = archive
+
+    config = WorkerConfig(
+        rabbitmq_url="amqp://guest:guest@localhost/",
+        rabbitmq_exchange="test.events",
+        nestjs_api_base_url="http://api.test",
+        worker_api_key="worker-test-key",
+        log_level="INFO",
+        max_retries=3,
+    )
+    syft_tool = MagicMock()
+    syft_tool.run.return_value = _mock_syft_result()
+    semgrep_tool = MagicMock()
+    semgrep_tool.run.return_value = _mock_semgrep_result()
+    knip_tool = MagicMock()
+    knip_tool.run.return_value = _mock_knip_result()
+    deptry_tool = MagicMock()
+    deptry_tool.run.return_value = _mock_deptry_result()
+    api_client = MagicMock()
+
+    def assert_coverage_limitation(scan_job_id, payload) -> None:
+        assert scan_job_id == "job-8"
+        coverage_notes = payload.evidence_payload.get("coverage_notes", [])
+        assert any(
+            "SCAN_COVERAGE_LIMITATION:" in note and "utils.min.js" in note
+            for note in coverage_notes
+        )
+
+    api_client.post_scan_callback.side_effect = assert_coverage_limitation
+    consumer = ScanConsumer(
+        config,
+        snapshot_client=snapshot_client,
+        workspace=workspace,
+        syft_tool=syft_tool,
+        semgrep_tool=semgrep_tool,
+        knip_tool=knip_tool,
+        deptry_tool=deptry_tool,
+        api_client=api_client,
+    )
+
+    consumer.handle(
+        {
+            "scanJobId": "job-8",
+            "snapshotId": "snap-8",
+            "correlationId": "corr-8",
+        },
+        correlation_id="fallback-corr",
+    )
+
+    api_client.post_scan_callback.assert_called_once()
