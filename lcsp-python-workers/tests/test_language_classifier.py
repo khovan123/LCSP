@@ -68,9 +68,9 @@ def test_t03_minified_js_skipped_with_coverage_limitation(workspace_dir: Path) -
 @pytest.mark.p0
 def test_t04_oversized_file_skipped_with_coverage_limitation(workspace_dir: Path) -> None:
     (workspace_dir / "src").mkdir()
-    (workspace_dir / "src" / "large.py").write_bytes(b"x" * (10 * 1024 * 1024 + 1))
+    (workspace_dir / "src" / "large.py").write_bytes(b"x" * 11)
 
-    classifications = LanguageClassifier().classify_workspace(workspace_dir)
+    classifications = LanguageClassifier(max_file_size_bytes=10).classify_workspace(workspace_dir)
     target = _find_classification(classifications, "src/large.py")
 
     assert target.support_level == SUPPORT_SKIP
