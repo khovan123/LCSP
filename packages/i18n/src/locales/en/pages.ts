@@ -130,6 +130,7 @@ export const enPages = {
     assessmentsNav: "Assessments",
     documentsNav: "Documents",
     createAssessment: "Create Assessment",
+    openConflictResolution: "Open conflict resolution",
     assessmentsTitle: "Assessments",
     assessmentsDescription:
       "Track assessment progress from wizard intake through review.",
@@ -166,6 +167,52 @@ export const enPages = {
       assessmentsUnavailableTitle: "Assessments unavailable",
       assessmentsUnavailableDetail:
         "Assessment list cannot be loaded right now.",
+    },
+  },
+  reconciliation: {
+    metadataTitle: "Conflict resolution | LCSP",
+    metadataDescription:
+      "Review pending scan conflicts and record a resolution decision.",
+    pageTitle: "Conflict resolution",
+    pageDescription:
+      "Resolve or dismiss each pending conflict. Dismissal requires a reason.",
+    loading: "Loading pending conflicts",
+    pendingSectionLabel: "Pending conflicts",
+    pendingBadge: "Pending",
+    scoreLabel: "Conflict score",
+    evidenceRefsLabel: "Evidence references",
+    resolutionLabel: "Resolution",
+    resolutionResolved: "Resolved",
+    resolutionDismissed: "Dismissed",
+    resolutionNoteLabel: "Resolution note",
+    resolutionNotePlaceholder:
+      "Add context for this decision. Required when you dismiss a conflict.",
+    submitAction: "Submit resolution",
+    submitting: "Submitting",
+    allResolvedTitle: "All conflicts are resolved",
+    allResolvedDetail:
+      "There are no pending conflicts for this assessment right now.",
+    nextStepHint: "You can continue with the assessment workflow.",
+    nextStepAction: "Back to assessments",
+    accessRevokedTitle: "Access no longer available",
+    accessRevokedDetail:
+      "You no longer have permission to view or resolve conflicts for this assessment.",
+    errorTitle: "Unable to load conflicts",
+    errorDetail: "Please try again in a moment.",
+    conflictTypeLabels: {
+      evidenceContradiction: "Evidence contradiction",
+      scopeMismatch: "Scope mismatch",
+      unverifiableFinding: "Unverifiable finding",
+      generic: "Conflict",
+    },
+    errors: {
+      dismissReasonRequired: "Enter a reason before dismissing this conflict.",
+      alreadyResolved:
+        "This conflict was already processed. The list has been refreshed.",
+      conflictNotFound:
+        "This conflict is no longer available. The list has been refreshed.",
+      resolveFailed:
+        "The resolution request could not be completed. Please try again.",
     },
   },
 } as const satisfies PagesMessages;
