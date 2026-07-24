@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { MessageKey, resolveMessage } from "@lcsp/i18n";
+import type { MessageKey } from "@lcsp/i18n";
+import { resolveMessage } from "@lcsp/i18n";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
