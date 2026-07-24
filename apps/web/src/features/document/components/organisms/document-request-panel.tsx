@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { resolveMessage } from "@lcsp/i18n";
+import { MessageKey, resolveMessage } from "@lcsp/i18n";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 export function DocumentRequestPanel({ assessmentId }: { assessmentId: string }) {
   const [status, setStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
-  const [messageKey, setMessageKey] = useState<string | null>(null);
+  const [messageKey, setMessageKey] = useState<MessageKey | null>(null);
 
   async function onRequestFinalReport() {
     setStatus("pending");
