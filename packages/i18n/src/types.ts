@@ -238,6 +238,40 @@ export type PagesMessages = {
       resolveFailed: string;
     };
   };
+  classification: {
+    metadataTitle: string;
+    metadataDescription: string;
+    pageTitle: string;
+    pageDescription: string;
+    loading: string;
+    summaryLabel: string;
+    referencesLabel: string;
+    generateFinalReport: string;
+    generateGapAnalysis: string;
+    errorTitle: string;
+    errorDetail: string;
+    states: {
+      lockedTitle: string;
+      lockedBadge: string;
+      lockedDescription: string;
+      lockedNextSteps: string;
+      processingTitle: string;
+      processingBadge: string;
+      processingDescription: string;
+      passedTitle: string;
+      passedBadge: string;
+      passedDescription: string;
+      passedSummary: string;
+      degradedTitle: string;
+      degradedBadge: string;
+      degradedDescription: string;
+      degradedSummary: string;
+      blockedTitle: string;
+      blockedBadge: string;
+      blockedDescription: string;
+      blockedSummary: string;
+    };
+  };
 };
 
 export type LocaleMessages = {
