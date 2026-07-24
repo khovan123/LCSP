@@ -250,6 +250,14 @@ export type PagesMessages = {
     generateGapAnalysis: string;
     errorTitle: string;
     errorDetail: string;
+    finalReportRequestedTitle: string;
+    finalReportRequestedDetail: string;
+    documentsPageDescription: string;
+    finalReportPageHint: string;
+    requestFinalReportButton: string;
+    gapAnalysisLabel: string;
+    gapAnalysisPendingMessage: string;
+    documentGuardrailBlocked: string;
     states: {
       lockedTitle: string;
       lockedBadge: string;
