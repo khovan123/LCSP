@@ -307,3 +307,105 @@ def test_semgrep_secret_detection_does_not_appear_in_evidence(
     assert result.findings[0].rule_id == "lcsp.openai-client"
     assert all("secret" not in finding.rule_id for finding in result.findings)
     assert result.redaction_applied is True
+
+
+@pytest.mark.p0
+def test_semgrep_tool_parses_full_ruleset_metadata_and_strips_source_fields(
+    workspace_dir: Path,
+    sample_python_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ai_ruleset, secret_ruleset = _write_rulesets(workspace_dir)
+    target_path = sample_python_repo / "src" / "ai_client.py"
+
+    ai_payload = {
+        "results": [
+            {
+                "check_id": "lcsp-openai-chat-completions-py",
+                "path": str(target_path),
+                "start": {"line": 3},
+                "end": {"line": 6},
+                "extra": {
+                    "message": "OpenAI chat completions API call",
+                    "severity": "WARNING",
+                    "lines": "response = client.chat.completions.create(...)",
+                    "metavars": {"$CLIENT": {"abstract_content": "client"}},
+                    "metadata": {
+                        "finding_type": "AI_PROVIDER_USAGE",
+                        "base_confidence": 0.9,
+                        "library_group": "openai",
+                    },
+                },
+            }
+        ]
+    }
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        if "--version" in command:
+            return _completed(command, 0, stdout="semgrep 1.99.0\n")
+        if str(ai_ruleset) in command:
+            return _completed(command, 0, stdout=json.dumps(ai_payload))
+        return _completed(command, 0, stdout=json.dumps({"results": []}))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = SemgrepTool(
+        ai_ruleset_path=ai_ruleset,
+        secret_ruleset_path=secret_ruleset,
+        pinned_version="1.",
+    ).run(sample_python_repo)
+
+    assert len(result.findings) == 1
+    finding = result.findings[0]
+    assert finding.rule_id == "lcsp-openai-chat-completions-py"
+    assert finding.signal_type == "provider_integration"
+    assert finding.finding_type == "AI_PROVIDER_USAGE"
+    assert finding.base_confidence == 0.9
+    assert finding.library_group == "openai"
+    assert finding.file_path == "src/ai_client.py"
+    finding_payload = json.dumps(finding.__dict__)
+    assert "chat.completions.create" not in finding_payload
+    assert "abstract_content" not in finding_payload
+
+
+@pytest.mark.p0
+def test_semgrep_full_ai_ruleset_declares_required_groups_and_metadata() -> None:
+    ruleset = (
+        Path(__file__).parents[1]
+        / "src"
+        / "lcsp_workers"
+        / "scanner"
+        / "rulesets"
+        / "lcsp-ai-usage.yaml"
+    )
+    source = ruleset.read_text(encoding="utf-8")
+
+    for expected in [
+        "options:",
+        "symbolic_propagation: true",
+        "strip_source: true",
+        "lcsp-openai-chat-completions-py",
+        "lcsp-openai-chat-completions-js",
+        "lcsp-anthropic-messages-js",
+        "lcsp-google-genai-js",
+        "lcsp-hf-inference-api-py",
+        "lcsp-langchain-agent-py",
+        "lcsp-llamaindex-query-py",
+        "lcsp-sklearn-predict-py",
+        "lcsp-tf-predict-py",
+        "lcsp-torch-inference-py",
+        "lcsp-local-inference-endpoint-py",
+        "lcsp-generic-generate-py",
+        "AI_DECISION_FLOW_SIGNAL",
+        "RAG_USAGE_SIGNAL",
+        "MODEL_OUTPUT_PARSER_SIGNAL",
+        "DYNAMIC_SYSTEM_PROMPT_REFERENCE",
+    ]:
+        assert expected in source
+
+    rule_blocks = [block for block in source.split("  - id: ") if block.startswith("lcsp-")]
+    assert len(rule_blocks) >= 20
+    for block in rule_blocks:
+        assert "finding_type:" in block
+        assert "base_confidence:" in block
+        assert "library_group:" in block
