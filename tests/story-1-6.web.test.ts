@@ -13,6 +13,7 @@ test("Story 1.6 manager-only action set covers accountable Manager authority", (
   assert.deepEqual(MANAGER_ONLY_ACTIONS, [
     PBAC_ACTIONS.assessmentCreate,
     PBAC_ACTIONS.wizardWrite,
+    PBAC_ACTIONS.wizardSubmit,
     PBAC_ACTIONS.conflictFinalize,
     PBAC_ACTIONS.conflictRead,
     PBAC_ACTIONS.conflictResolve,

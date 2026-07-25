@@ -297,7 +297,7 @@ async function seedAssessmentChain(
   });
   await prisma.aIUsageFlow.create({
     data: {
-      id: `ai-flow-${assessmentId}`,
+      id: "ai-flow-1",
       technicalProfileId: `technical-profile-${assessmentId}`,
       assessmentId,
       organizationId,
