@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from "@nestjs/testing";
 import {
   ConflictException,
@@ -28,6 +27,11 @@ import { AssessmentNotFoundException } from "../../../domain/exceptions/wizard.e
 
 import { jest } from "@jest/globals";
 
+type MockTransactionClient = {
+  wizardProfile: { upsert: jest.Mock };
+  assessment: { update: jest.Mock };
+};
+
 describe("SubmitWizardHandler", () => {
   let handler: SubmitWizardHandler;
   let wizardRepository: jest.Mocked<WizardProfileRepository>;
@@ -49,13 +53,14 @@ describe("SubmitWizardHandler", () => {
     } as unknown as jest.Mocked<AuditWriterService>;
 
     prismaService = {
-      $transaction: jest.fn().mockImplementation((callback: (tx: any) => any) => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-        return callback({
-          wizardProfile: { upsert: jest.fn() },
-          assessment: { update: jest.fn() },
-        });
-      }),
+      $transaction: jest.fn().mockImplementation(
+        (callback: any) => {
+          return callback({
+            wizardProfile: { upsert: jest.fn() },
+            assessment: { update: jest.fn() },
+          });
+        },
+      ),
     } as unknown as jest.Mocked<PrismaService>;
 
     outboxRepository = {
@@ -179,24 +184,22 @@ describe("SubmitWizardHandler", () => {
   it("T06: Assessment state transitions on submit", async () => {
     wizardRepository.verifyAssessmentOwnership.mockResolvedValue(true);
     wizardRepository.findByAssessmentId.mockResolvedValue(null);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
-    let assessmentUpdateArg: any;
-    prismaService.$transaction.mockImplementation((callback: (tx: any) => any) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-      return callback({
-        wizardProfile: { upsert: jest.fn() },
-        assessment: {
-          update: jest.fn().mockImplementation((arg: any) => {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-            assessmentUpdateArg = arg;
-          }),
-        },
-      });
-    });
+    let assessmentUpdateArg: { data: { status: string } } | undefined;
+    prismaService.$transaction.mockImplementation(
+      (callback: any) => {
+        return callback({
+          wizardProfile: { upsert: jest.fn() },
+          assessment: {
+            update: jest.fn().mockImplementation((arg: { data: { status: string } }) => {
+              assessmentUpdateArg = arg;
+            }),
+          },
+        });
+      },
+    );
 
     await handler.execute(command);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(assessmentUpdateArg.data.status).toBe(
+    expect(assessmentUpdateArg?.data.status).toBe(
       ASSESSMENT_STATUS_CODES.wizardSubmitted,
     );
   });
@@ -228,21 +231,22 @@ describe("SubmitWizardHandler", () => {
   });
 
   it("denies access if not manager or wrong PBAC action", async () => {
-    const invalidCommand = new SubmitWizardCommand(
-      command.assessmentId,
-      command.organizationId,
-      command.ownerId,
-      command.answers,
-      command.correlationId,
-      {
-        ...command.authorization,
-        subjectRole: SUBJECT_ROLES.developer,
-      },
-    );
+    await expect(
+      handler.execute(
+        new SubmitWizardCommand(
+          command.assessmentId,
+          command.organizationId,
+          command.ownerId,
+          command.answers,
+          command.correlationId,
+          {
+            ...command.authorization,
+            subjectRole: SUBJECT_ROLES.developer,
+          },
+        ),
+      ),
+    ).rejects.toThrow(ForbiddenException);
 
-    await expect(handler.execute(invalidCommand)).rejects.toThrow(
-      ForbiddenException,
-    );
     expect(auditWriter.write).toHaveBeenCalledWith(
       expect.objectContaining({ decision: AUDIT_DECISIONS.deny }),
     );
