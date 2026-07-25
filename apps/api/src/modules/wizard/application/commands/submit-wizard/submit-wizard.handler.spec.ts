@@ -7,7 +7,6 @@ import {
 } from "@nestjs/common";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import {
   ASSESSMENT_STATUS_CODES,
@@ -50,7 +49,8 @@ describe("SubmitWizardHandler", () => {
     } as unknown as jest.Mocked<AuditWriterService>;
 
     prismaService = {
-      $transaction: jest.fn().mockImplementation(async (callback: any) => {
+      $transaction: jest.fn().mockImplementation((callback: (tx: any) => any) => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return callback({
           wizardProfile: { upsert: jest.fn() },
           assessment: { update: jest.fn() },
@@ -179,12 +179,15 @@ describe("SubmitWizardHandler", () => {
   it("T06: Assessment state transitions on submit", async () => {
     wizardRepository.verifyAssessmentOwnership.mockResolvedValue(true);
     wizardRepository.findByAssessmentId.mockResolvedValue(null);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
     let assessmentUpdateArg: any;
-    prismaService.$transaction.mockImplementation(async (callback: any) => {
+    prismaService.$transaction.mockImplementation((callback: (tx: any) => any) => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       return callback({
         wizardProfile: { upsert: jest.fn() },
         assessment: {
-          update: jest.fn().mockImplementation((arg) => {
+          update: jest.fn().mockImplementation((arg: any) => {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             assessmentUpdateArg = arg;
           }),
         },
@@ -192,6 +195,7 @@ describe("SubmitWizardHandler", () => {
     });
 
     await handler.execute(command);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     expect(assessmentUpdateArg.data.status).toBe(
       ASSESSMENT_STATUS_CODES.wizardSubmitted,
     );
