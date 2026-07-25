@@ -231,7 +231,7 @@ describe("SubmitWizardHandler", () => {
     expect(auditArg.payload?.answers).toBeUndefined();
     expect(auditArg.payload).toEqual({
       assessmentId: "assessment-123",
-      wizardProfileId: expect.any(String),
+      wizardProfileId: expect.any(String) as unknown as string,
       version: 1,
       correlationId: "corr-id-1",
     });
@@ -255,7 +255,7 @@ describe("SubmitWizardHandler", () => {
     ).rejects.toThrow(ForbiddenException);
 
     expect(auditWriter.write).toHaveBeenCalledWith(
-      expect.objectContaining({ decision: AUDIT_DECISIONS.deny }),
+      expect.objectContaining({ decision: AUDIT_DECISIONS.deny }) as unknown as Parameters<typeof auditWriter.write>[0],
     );
   });
 });
