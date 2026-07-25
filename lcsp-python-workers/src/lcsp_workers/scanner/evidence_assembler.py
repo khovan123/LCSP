@@ -7,6 +7,7 @@ from lcsp_workers.platform.callback_schemas import ScanCallbackPayload
 from lcsp_workers.platform.redaction import redact_dict, redact_source_code
 from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalysisResult
 from lcsp_workers.scanner.dependencies.dependency_fact import PackageDependency
+from lcsp_workers.scanner.ts_js_bridge.bridge_types import TsJsBridgeResult
 
 from .tools.semgrep_tool import SemgrepRunResult
 from .tools.syft_tool import SyftRunResult
@@ -57,12 +58,15 @@ class EvidenceAssembler:
         package_dependencies: list[PackageDependency] | None = None,
         dependency_executions: list[ToolExecutionResult] | None = None,
         python_analysis: PythonAnalysisResult | None = None,
+        ts_js_analysis: TsJsBridgeResult | None = None,
     ) -> ScanCallbackPayload:
         executions = [
             syft_result.execution,
             *semgrep_result.executions,
             *(dependency_executions or []),
         ]
+        if ts_js_analysis is not None:
+            executions.append(ts_js_analysis.execution)
         findings = [asdict(finding) for finding in semgrep_result.findings]
         redacted_findings = redact_source_code(findings)
         source_stripped = len(redacted_findings) == len(findings)
@@ -74,6 +78,7 @@ class EvidenceAssembler:
                 asdict(package) for package in (package_dependencies or [])
             ],
             "python_analysis": asdict(python_analysis) if python_analysis else None,
+            "ts_js_analysis": asdict(ts_js_analysis) if ts_js_analysis else None,
             "tool_failures": [
                 asdict(record) for record in self._tool_failures(executions)
             ],

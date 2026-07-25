@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Callable
 
 from lcsp_workers.platform.api_client import WorkerApiClient
 from lcsp_workers.platform.correlation import set_correlation_id
@@ -14,6 +17,8 @@ from .evidence_assembler import EvidenceAssembler, PrivacyAssertionError
 from .inventory.analyzer_router import AnalyzerRouter
 from .inventory.language_classifier import LanguageClassifier
 from .snapshot_service_client import SnapshotArchiveRequest, SnapshotServiceClient
+from .ts_js_bridge.bridge import TsJsBridge
+from .ts_js_bridge.bridge_types import TsJsCoverageLimitation
 from .tool_registry import ToolRegistry
 from .tools.deptry_tool import DeptryTool
 from .tools.knip_tool import KnipTool
@@ -50,6 +55,7 @@ class ScanConsumer(ConsumerBase):
         language_classifier: LanguageClassifier | None = None,
         analyzer_router: AnalyzerRouter | None = None,
         dependency_normalizer: DependencyNormalizer | None = None,
+        ts_js_bridge_factory: Callable[[Path], TsJsBridge] | None = None,
         api_client: WorkerApiClient | None = None,
         evidence_assembler: EvidenceAssembler | None = None,
     ):
@@ -66,6 +72,9 @@ class ScanConsumer(ConsumerBase):
         self._language_classifier = language_classifier or LanguageClassifier()
         self._analyzer_router = analyzer_router or AnalyzerRouter()
         self._dependency_normalizer = dependency_normalizer or DependencyNormalizer()
+        self._ts_js_bridge_factory = ts_js_bridge_factory or (
+            lambda workspace_path: TsJsBridge(workspace=workspace_path)
+        )
         self._api_client = api_client or WorkerApiClient(
             config.nestjs_api_base_url,
             config.worker_api_key,
@@ -106,12 +115,14 @@ class ScanConsumer(ConsumerBase):
 
             classification_limitations: list[dict[str, str]] = []
             routed_python_files: list[str] | None = None
+            routed_ts_js_files: list[str] | None = None
             try:
                 classifications = self._language_classifier.classify_workspace(
                     result.workspace_path
                 )
                 dispatch = self._analyzer_router.route(classifications)
                 routed_python_files = list(dispatch.python_files)
+                routed_ts_js_files = list(dispatch.ts_js_files)
                 classification_limitations = list(dispatch.coverage_limitations)
                 logger.info(
                     "SCAN_LANGUAGE_CLASSIFIED",
@@ -179,6 +190,19 @@ class ScanConsumer(ConsumerBase):
                     f"scan timeout exceeded for job {envelope.scan_job_id!r}"
                 )
 
+            ts_js_analysis = asyncio.run(
+                self._ts_js_bridge_factory(result.workspace_path).analyze(
+                    include_files=routed_ts_js_files
+                )
+            )
+            self._record_tool_execution(
+                tool_registry,
+                ts_js_analysis.execution,
+                ts_js_findings=len(ts_js_analysis.findings),
+                ts_js_dynamic_flows=len(ts_js_analysis.unsupported_dynamic_flows),
+                ts_js_coverage_limitations=len(ts_js_analysis.coverage_limitations),
+            )
+
             logger.info(
                 "SCAN_TOOL_PROVENANCE_RECORDED",
                 tool_provenance=[asdict(item) for item in tool_registry.all()],
@@ -191,7 +215,13 @@ class ScanConsumer(ConsumerBase):
             python_analysis = PythonAnalyzer(result.workspace_path).analyze(
                 include_files=routed_python_files
             )
-            coverage_notes = self._coverage_notes(result, classification_limitations)
+            coverage_notes = self._coverage_notes(
+                result,
+                [
+                    *classification_limitations,
+                    *self._ts_js_coverage_limitations(ts_js_analysis.coverage_limitations),
+                ],
+            )
             callback_payload = self._evidence_assembler.assemble(
                 scan_job_id=envelope.scan_job_id,
                 syft_result=syft_result,
@@ -203,6 +233,7 @@ class ScanConsumer(ConsumerBase):
                     deptry_result.execution,
                 ],
                 python_analysis=python_analysis,
+                ts_js_analysis=ts_js_analysis,
             )
             self._api_client.post_scan_callback(
                 envelope.scan_job_id,
@@ -314,3 +345,15 @@ class ScanConsumer(ConsumerBase):
                 f"SCAN_COVERAGE_LIMITATION: file={file_path} reason={reason}"
             )
         return notes
+
+    def _ts_js_coverage_limitations(
+        self,
+        limitations: list[TsJsCoverageLimitation],
+    ) -> list[dict[str, str]]:
+        return [
+            {
+                "file_path": limitation.file_path,
+                "reason": limitation.reason,
+            }
+            for limitation in limitations
+        ]

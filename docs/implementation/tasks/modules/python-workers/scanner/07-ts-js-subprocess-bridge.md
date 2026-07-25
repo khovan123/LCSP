@@ -3,7 +3,7 @@ task_id: MW-scan-py-007
 module: python-workers/scanner
 runtime: lcsp-python-workers
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.5
 depends_on:
   - python-workers/scanner/01-scanner-workspace-setup.md
@@ -164,3 +164,51 @@ proc = await asyncio.create_subprocess_exec(
 - Stderr redacted before logging.
 - All TS/JS AI library patterns in `analyzer.ts` cover OpenAI, Anthropic, Google, Hugging Face, LangChain, LlamaIndex.
 - Bridge failure is non-blocking (`ACCEPTED_WITH_LIMITATION`).
+
+## Implementation Evidence
+
+- Added `TsJsBridge` async subprocess runner using `asyncio.create_subprocess_exec` with no shell interpolation.
+- Bridge invokes the canonical Node analyzer command shape with `--workspace` and versioned `--request` JSON.
+- Bridge runs only when routed JS/TS files are present, and skips safely when no `.js`, `.ts`, `.mjs`, `.cjs`, `.jsx`, or `.tsx` files exist.
+- Bridge passes a sanitized subprocess environment containing only `PATH`; explicit env safety assertions reject secret-bearing keys.
+- Bridge enforces a 150s default timeout, kills the process on timeout, and records `TS_JS_ANALYZER_FAILED` as a non-blocking coverage limitation.
+- Bridge captures stdout/stderr separately, never logs raw stdout, and redacts stderr before debug logging/result messages.
+- Added schema validation for analyzer stdout and normalization of absolute `file_path` values to workspace-relative paths.
+- Integrated TS/JS analysis into `ScanConsumer`, tool provenance, coverage notes, and evidence payload as `ts_js_analysis`.
+- Added nested TypeScript analyzer package with pinned `ts-morph@26.0.0`, strict `tsconfig.json`, `cli.ts`, and rule-backed `analyzer.ts`.
+- Added test coverage for T01-T10 plus worker-level invocation and evidence assembler provenance.
+
+## File List
+
+- `lcsp-python-workers/src/lcsp_workers/scanner/evidence_assembler.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/scan_consumer.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/ts_js_bridge/__init__.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/ts_js_bridge/bridge.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/ts_js_bridge/bridge_types.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/ts_js_bridge/schema_validator.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/ts_js_bridge/ts-js-analyzer/analyzer.ts`
+- `lcsp-python-workers/src/lcsp_workers/scanner/ts_js_bridge/ts-js-analyzer/cli.ts`
+- `lcsp-python-workers/src/lcsp_workers/scanner/ts_js_bridge/ts-js-analyzer/package.json`
+- `lcsp-python-workers/src/lcsp_workers/scanner/ts_js_bridge/ts-js-analyzer/tsconfig.json`
+- `lcsp-python-workers/tests/test_evidence_assembler.py`
+- `lcsp-python-workers/tests/test_scanner_workspace.py`
+- `lcsp-python-workers/tests/test_ts_js_bridge.py`
+
+## Validation
+
+- `./.venv/bin/pytest tests/test_ts_js_bridge.py`
+  - Result: passed, 11 tests.
+- `./.venv/bin/pytest tests/test_ts_js_bridge.py tests/test_evidence_assembler.py tests/test_scanner_workspace.py`
+  - Result: passed, 31 tests.
+- `./.venv/bin/pytest tests/test_worker_health.py`
+  - Result: passed, 5 tests, run outside filesystem sandbox because tests bind a local HTTP socket.
+- `pnpm run lint`
+  - Result: passed.
+- `./.venv/bin/python -m compileall src tests`
+  - Result: passed.
+- `pnpm --dir lcsp-python-workers/src/lcsp_workers/scanner/ts_js_bridge/ts-js-analyzer exec tsc -p tsconfig.json`
+  - Result: blocked by local dependency install state: nested package pins `ts-morph@26.0.0`, but `ts-morph` is not installed/resolvable from that package directory.
+- `./.venv/bin/pytest`
+  - Result: blocked by local venv dependency state: `tiktoken` missing during `tests/test_llm_gateway.py` collection.
+- Non-LLM explicit Python suite run
+  - Result: 151 passed / 8 skipped; remaining environment blockers were missing `boto3` for audit export consumer and sandboxed health socket binding. Health socket tests passed when rerun outside sandbox.

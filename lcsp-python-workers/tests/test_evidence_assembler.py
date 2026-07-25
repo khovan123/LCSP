@@ -10,6 +10,7 @@ from lcsp_workers.scanner.evidence_assembler import (
     EvidenceAssembler,
     PrivacyAssertionError,
 )
+from lcsp_workers.scanner.ts_js_bridge.bridge_types import TsJsBridgeResult, TsJsFinding
 from lcsp_workers.scanner.tools.semgrep_tool import SemgrepFinding, SemgrepRunResult
 from lcsp_workers.scanner.tools.syft_tool import SBOMEntry, SyftRunResult
 from lcsp_workers.scanner.tools.tool_base import (
@@ -75,6 +76,37 @@ def _semgrep_result(outcome: str = OUTCOME_SUCCESS) -> SemgrepRunResult:
             ),
         ],
         redaction_applied=outcome != OUTCOME_SUCCESS,
+    )
+
+
+def _ts_js_result() -> TsJsBridgeResult:
+    return TsJsBridgeResult(
+        files_analyzed=1,
+        files_skipped=0,
+        findings=[
+            TsJsFinding(
+                file_path="src/ai.ts",
+                line_number=3,
+                finding_type="AI_PROVIDER_USAGE",
+                rule_id="ts-openai-chat-completions",
+                import_source="openai",
+                call_expression="client.chat.completions.create",
+                kwarg_names=["model", "messages"],
+                analysis_level="L1",
+                has_dynamic_call=False,
+                confidence=0.9,
+            )
+        ],
+        unsupported_dynamic_flows=[],
+        coverage_limitations=[],
+        analyzer_version="1.0.0",
+        execution=ToolExecutionResult(
+            tool_name="ts_js_analyzer",
+            tool_version="1.0.0",
+            outcome=OUTCOME_SUCCESS,
+            config_hash="sha256:ts-js",
+            messages=[],
+        ),
     )
 
 
@@ -202,3 +234,20 @@ def test_t06_final_payload_redacts_secret_patterns_without_redacting_config_hash
     assert payload.config_hash["semgrep_ai_usage"] == "sha256:semgrep-ai"
     finding = payload.evidence_payload["ai_usage_signals"][0]
     assert finding["message"] == "OpenAI api_key=[REDACTED:ANTHROPIC_KEY]"
+
+
+@pytest.mark.p0
+def test_t07_assembles_ts_js_analysis_and_tool_provenance() -> None:
+    payload = EvidenceAssembler().assemble(
+        scan_job_id="scan-job-1",
+        syft_result=_syft_result(),
+        semgrep_result=_semgrep_result(),
+        coverage_notes=[],
+        ts_js_analysis=_ts_js_result(),
+    )
+
+    assert payload.tools_version["ts_js_analyzer"] == "1.0.0"
+    assert payload.config_hash["ts_js_analyzer"] == "sha256:ts-js"
+    ts_js_analysis = payload.evidence_payload["ts_js_analysis"]
+    assert ts_js_analysis["findings"][0]["rule_id"] == "ts-openai-chat-completions"
+    assert "source_code" not in str(ts_js_analysis)

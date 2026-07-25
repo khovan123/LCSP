@@ -5,7 +5,7 @@ from __future__ import annotations
 import io
 import tarfile
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -22,6 +22,10 @@ from lcsp_workers.scanner.tools.knip_tool import KnipRunResult
 from lcsp_workers.scanner.tools.semgrep_tool import SemgrepRunResult
 from lcsp_workers.scanner.tools.syft_tool import SyftRunResult
 from lcsp_workers.scanner.tools.tool_base import OUTCOME_SUCCESS, ToolExecutionResult
+from lcsp_workers.scanner.ts_js_bridge.bridge_types import (
+    TsJsBridgeResult,
+    TsJsFinding,
+)
 from lcsp_workers.scanner import workspace as workspace_module
 from lcsp_workers.scanner.workspace import (
     ArchiveMaterializationError,
@@ -86,6 +90,37 @@ def _mock_deptry_result() -> DeptryRunResult:
             tool_version="not-run",
             outcome=OUTCOME_SUCCESS,
             config_hash="sha256:deptry-test",
+            messages=[],
+        ),
+    )
+
+
+def _mock_ts_js_result() -> TsJsBridgeResult:
+    return TsJsBridgeResult(
+        files_analyzed=1,
+        files_skipped=0,
+        findings=[
+            TsJsFinding(
+                file_path="src/app.ts",
+                line_number=2,
+                finding_type="AI_PROVIDER_USAGE",
+                rule_id="ts-openai-chat-completions",
+                import_source="openai",
+                call_expression="client.chat.completions.create",
+                kwarg_names=["model", "messages"],
+                analysis_level="L1",
+                has_dynamic_call=False,
+                confidence=0.9,
+            )
+        ],
+        unsupported_dynamic_flows=[],
+        coverage_limitations=[],
+        analyzer_version="1.0.0",
+        execution=ToolExecutionResult(
+            tool_name="ts_js_analyzer",
+            tool_version="1.0.0",
+            outcome=OUTCOME_SUCCESS,
+            config_hash="sha256:ts-js",
             messages=[],
         ),
     )
@@ -596,4 +631,75 @@ def test_scan_consumer_limits_python_analysis_to_routed_quota(
         correlation_id="fallback-corr",
     )
 
+    api_client.post_scan_callback.assert_called_once()
+
+
+@pytest.mark.p0
+@pytest.mark.integration
+def test_scan_consumer_invokes_ts_js_bridge_with_routed_files(
+    workspace_dir: Path,
+) -> None:
+    workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
+    archive = _build_tar_gz(
+        {
+            "repo/src/app.ts": (
+                b"import OpenAI from 'openai';\n"
+                b"client.chat.completions.create({ model: 'gpt-4o', messages: [] });\n"
+            )
+        }
+    )
+
+    snapshot_client = MagicMock(spec=SnapshotServiceClient)
+    snapshot_client.download_snapshot_archive.return_value = archive
+
+    config = WorkerConfig(
+        rabbitmq_url="amqp://guest:guest@localhost/",
+        rabbitmq_exchange="test.events",
+        nestjs_api_base_url="http://api.test",
+        worker_api_key="worker-test-key",
+        log_level="INFO",
+        max_retries=3,
+    )
+    syft_tool = MagicMock()
+    syft_tool.run.return_value = _mock_syft_result()
+    semgrep_tool = MagicMock()
+    semgrep_tool.run.return_value = _mock_semgrep_result()
+    knip_tool = MagicMock()
+    knip_tool.run.return_value = _mock_knip_result()
+    deptry_tool = MagicMock()
+    deptry_tool.run.return_value = _mock_deptry_result()
+    api_client = MagicMock()
+    bridge = MagicMock()
+    bridge.analyze = AsyncMock(return_value=_mock_ts_js_result())
+    bridge_factory = MagicMock(return_value=bridge)
+
+    def assert_ts_js_analysis(scan_job_id, payload) -> None:
+        assert scan_job_id == "job-ts"
+        ts_js_analysis = payload.evidence_payload.get("ts_js_analysis") or {}
+        assert ts_js_analysis["findings"][0]["rule_id"] == "ts-openai-chat-completions"
+
+    api_client.post_scan_callback.side_effect = assert_ts_js_analysis
+    consumer = ScanConsumer(
+        config,
+        snapshot_client=snapshot_client,
+        workspace=workspace,
+        syft_tool=syft_tool,
+        semgrep_tool=semgrep_tool,
+        knip_tool=knip_tool,
+        deptry_tool=deptry_tool,
+        api_client=api_client,
+        ts_js_bridge_factory=bridge_factory,
+    )
+
+    consumer.handle(
+        {
+            "scanJobId": "job-ts",
+            "snapshotId": "snap-ts",
+            "correlationId": "corr-ts",
+        },
+        correlation_id="fallback-corr",
+    )
+
+    bridge_factory.assert_called_once()
+    bridge.analyze.assert_called_once_with(include_files=["repo/src/app.ts"])
     api_client.post_scan_callback.assert_called_once()
