@@ -86,10 +86,10 @@ describe("OutboxRepository (e2e, real Postgres)", () => {
       });
 
     const firstPromise = claimAndHold(300, lockAcquired);
-    
+
     // Wait until the first transaction has definitively acquired the row lock
     await lockAcquiredPromise;
-    
+
     const secondPromise = claimAndHold(0);
 
     const [first, second] = await Promise.all([firstPromise, secondPromise]);
