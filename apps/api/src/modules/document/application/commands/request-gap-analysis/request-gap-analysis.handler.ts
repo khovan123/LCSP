@@ -27,9 +27,12 @@ export class RequestGapAnalysisHandler implements ICommandHandler<RequestGapAnal
     private readonly auditWriter: AuditWriterService,
   ) {}
 
-  async execute(
-    command: RequestGapAnalysisCommand,
-  ): Promise<{ document_request_id: string; status: string; document_type: string; correlation_id: string }> {
+  async execute(command: RequestGapAnalysisCommand): Promise<{
+    document_request_id: string;
+    status: string;
+    document_type: string;
+    correlation_id: string;
+  }> {
     const assessment = await this.prisma.assessment.findUnique({
       where: { id: command.assessmentId },
       select: { id: true, organizationId: true },

@@ -3,8 +3,23 @@ import { NotFoundException } from "@nestjs/common";
 import { ProcessDocumentCallbackHandler } from "./process-document-callback.handler.js";
 import { ProcessDocumentCallbackCommand } from "./process-document-callback.command.js";
 
-function buildHandler(options?: { request?: { id: string; assessmentId: string; organizationId: string; correlationId?: string } | null }) {
-  const request = options?.request === undefined ? { id: "dr-1", assessmentId: "asmt-1", organizationId: "org-1", correlationId: "corr-1" } : options.request;
+function buildHandler(options?: {
+  request?: {
+    id: string;
+    assessmentId: string;
+    organizationId: string;
+    correlationId?: string;
+  } | null;
+}) {
+  const request =
+    options?.request === undefined
+      ? {
+          id: "dr-1",
+          assessmentId: "asmt-1",
+          organizationId: "org-1",
+          correlationId: "corr-1",
+        }
+      : options.request;
 
   const findUnique = jest.fn(() => request);
   const update = jest.fn().mockResolvedValue({} as never);
@@ -17,7 +32,7 @@ function buildHandler(options?: { request?: { id: string; assessmentId: string; 
 
   const auditWriter = {} as any;
 
-  const handler = new ProcessDocumentCallbackHandler(prisma, auditWriter as any);
+  const handler = new ProcessDocumentCallbackHandler(prisma, auditWriter);
 
   return { handler, prisma, findUnique, update, createAuthAudit };
 }
@@ -25,14 +40,25 @@ function buildHandler(options?: { request?: { id: string; assessmentId: string; 
 describe("ProcessDocumentCallbackHandler", () => {
   it("throws NotFoundException when document request missing", async () => {
     const { handler } = buildHandler({ request: null });
-    const command = new ProcessDocumentCallbackCommand({ document_request_id: "missing", status: "READY" }, "corr-1");
+    const command = new ProcessDocumentCallbackCommand(
+      { document_request_id: "missing", status: "READY" },
+      "corr-1",
+    );
 
     await expect(handler.execute(command)).rejects.toThrow(NotFoundException);
   });
 
   it("updates document request and writes audit when callback arrives", async () => {
-    const { handler, prisma, findUnique, update, createAuthAudit } = buildHandler();
-    const command = new ProcessDocumentCallbackCommand({ document_request_id: "dr-1", status: "READY", document_url: "https://obj/store/1" }, "corr-1");
+    const { handler, prisma, findUnique, update, createAuthAudit } =
+      buildHandler();
+    const command = new ProcessDocumentCallbackCommand(
+      {
+        document_request_id: "dr-1",
+        status: "READY",
+        document_url: "https://obj/store/1",
+      },
+      "corr-1",
+    );
 
     const result = await handler.execute(command);
 

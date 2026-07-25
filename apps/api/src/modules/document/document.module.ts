@@ -11,6 +11,10 @@ import { InternalDocumentController } from "./presentation/http/internal-documen
 @Module({
   imports: [CqrsModule, PbacModule],
   controllers: [DocumentController, InternalDocumentController],
-  providers: [RequestFinalReportHandler, RequestGapAnalysisHandler, ProcessDocumentCallbackHandler],
+  providers: [
+    RequestFinalReportHandler,
+    RequestGapAnalysisHandler,
+    ProcessDocumentCallbackHandler,
+  ],
 })
 export class DocumentModule {}

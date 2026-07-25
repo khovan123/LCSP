@@ -2,7 +2,11 @@ import { NotFoundException, HttpException } from "@nestjs/common";
 import * as crypto from "node:crypto";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { Prisma } from "@prisma/client";
-import { buildAuditEventInput, AUDIT_DECISIONS, AUDIT_REDACTION_STATUSES } from "@lcsp/contracts/audit";
+import {
+  buildAuditEventInput,
+  AUDIT_DECISIONS,
+  AUDIT_REDACTION_STATUSES,
+} from "@lcsp/contracts/audit";
 import {
   DOCUMENT_EVENT_TYPES,
   DOCUMENT_REQUEST_STATUSES,
@@ -11,7 +15,10 @@ import {
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
-import type { DocumentCallbackRequest, DocumentCallbackDto } from "../../contracts/document/document-callback.contract.js";
+import type {
+  DocumentCallbackRequest,
+  DocumentCallbackDto,
+} from "../../contracts/document/document-callback.contract.js";
 import { ProcessDocumentCallbackCommand } from "./process-document-callback.command.js";
 
 @CommandHandler(ProcessDocumentCallbackCommand)
@@ -21,11 +28,18 @@ export class ProcessDocumentCallbackHandler implements ICommandHandler<ProcessDo
     private readonly auditWriter: AuditWriterService,
   ) {}
 
-  async execute(command: ProcessDocumentCallbackCommand): Promise<DocumentCallbackDto> {
+  async execute(
+    command: ProcessDocumentCallbackCommand,
+  ): Promise<DocumentCallbackDto> {
     const payload = command.payload as DocumentCallbackRequest;
     const request = await this.prisma.documentRequest.findUnique({
       where: { id: payload.document_request_id },
-      select: { id: true, assessmentId: true, organizationId: true, correlationId: true },
+      select: {
+        id: true,
+        assessmentId: true,
+        organizationId: true,
+        correlationId: true,
+      },
     });
 
     if (!request) {
@@ -34,10 +48,11 @@ export class ProcessDocumentCallbackHandler implements ICommandHandler<ProcessDo
 
     const updateData: Prisma.DocumentRequestUpdateInput = {
       status: payload.status,
-    } as any;
+    };
 
     if (payload.document_url) updateData.documentUrl = payload.document_url;
-    if (payload.blocked_reason) updateData.blockedReason = payload.blocked_reason;
+    if (payload.blocked_reason)
+      updateData.blockedReason = payload.blocked_reason;
 
     await this.prisma.documentRequest.update({
       where: { id: payload.document_request_id },

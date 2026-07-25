@@ -93,7 +93,11 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
   it("returns QUEUED and writes document request, outbox, and audit when guardrail passed", async () => {
     await seedClassification(prisma, "passed");
 
-    const response = await requestGapAnalysis(app, managerToken, "assessment-1");
+    const response = await requestGapAnalysis(
+      app,
+      managerToken,
+      "assessment-1",
+    );
     const body = response.body as SuccessResponse;
 
     assert.equal(response.status, 202);
@@ -129,7 +133,11 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
   });
 
   it("returns 409 CLASSIFICATION_REQUIRED when no classification exists", async () => {
-    const response = await requestGapAnalysis(app, managerToken, "assessment-1");
+    const response = await requestGapAnalysis(
+      app,
+      managerToken,
+      "assessment-1",
+    );
 
     assert.equal(response.status, 409);
     assert.equal(
@@ -149,7 +157,11 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
   it("accepts worker callback and updates documentRequest to READY", async () => {
     await seedClassification(prisma, "passed");
 
-    const requestResp = await requestGapAnalysis(app, managerToken, "assessment-1");
+    const requestResp = await requestGapAnalysis(
+      app,
+      managerToken,
+      "assessment-1",
+    );
     const body = requestResp.body as SuccessResponse;
 
     const callbackResp = await httpRequest(app)
@@ -184,7 +196,10 @@ function requestGapAnalysis(
     .send({});
 }
 
-async function seedClassification(prisma: PrismaClient, guardrailStatus: string) {
+async function seedClassification(
+  prisma: PrismaClient,
+  guardrailStatus: string,
+) {
   const reportId = `evidence-${guardrailStatus}`;
   const classificationResultId = `classification-${guardrailStatus}`;
 
