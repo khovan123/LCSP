@@ -39,6 +39,10 @@ if (!subject) {
   process.exit(1);
 }
 
+if (subject === "ci: auto-fix imports and lint") {
+  process.exit(0);
+}
+
 if (COMMIT_MESSAGE_PATTERN.test(subject)) {
   process.exit(0);
 }

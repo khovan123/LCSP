@@ -79,7 +79,7 @@ export class SubmitWizardHandler implements ICommandHandler<
     if (validationErrors.length > 0) {
       throw new UnprocessableEntityException({
         error_code: "WIZARD_VALIDATION_FAILED",
-        messages: validationErrors,
+        message: validationErrors.map((e) => e.message).join(", "),
         correlation_id: correlationId,
       });
     }
