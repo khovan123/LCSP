@@ -1,0 +1,62 @@
+openapi: 3.0.3
+info:
+  title: LCSP Document API (fragment)
+  version: 1.0.0
+
+paths:
+  /assessments/{assessmentId}/documents/gap-analysis:
+    post:
+      summary: Request generation of a Gap Analysis document for an assessment
+      tags:
+        - documents
+      parameters:
+        - in: path
+          name: assessmentId
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: Request accepted (document queued)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  document_request_id:
+                    type: string
+                  status:
+                    type: string
+                    example: QUEUED
+                  document_type:
+                    type: string
+                    example: GapAnalysis
+                  correlation_id:
+                    type: string
+        '403':
+          description: PBAC denied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error_code:
+                    type: string
+        '404':
+          description: Assessment not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error_code:
+                    type: string
+        '409':
+          description: Business rule conflict (classification required or already queued)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error_code:
+                    type: string

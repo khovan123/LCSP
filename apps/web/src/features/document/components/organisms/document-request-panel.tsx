@@ -6,7 +6,7 @@ import { resolveMessage } from "@lcsp/i18n";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requestFinalReport } from "@/lib/api/document-client";
+import { requestFinalReport, requestGapAnalysis } from "@/lib/api/document-client";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,33 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
     setMessageKey(null);
 
     const outcome = await requestFinalReport(assessmentId);
+
+    if (outcome.kind === "requested") {
+      setStatus("success");
+      setMessageKey("pages.classification.finalReportRequestedDetail");
+      return;
+    }
+
+    if (outcome.kind === "blocked") {
+      setStatus("error");
+      setMessageKey(outcome.detailKey);
+      return;
+    }
+
+    if (outcome.kind === "redirect") {
+      window.location.assign(outcome.location);
+      return;
+    }
+
+    setStatus("error");
+    setMessageKey(outcome.detailKey);
+  }
+
+  async function onRequestGapAnalysis() {
+    setStatus("pending");
+    setMessageKey(null);
+
+    const outcome = await requestGapAnalysis(assessmentId);
 
     if (outcome.kind === "requested") {
       setStatus("success");
@@ -74,6 +101,14 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
           <p className="mt-2 text-sm text-muted-foreground">
             {resolveMessage(appLocale, "pages.classification.gapAnalysisPendingMessage")}
           </p>
+          <button
+            type="button"
+            className={cn(buttonVariants({ variant: "secondary" }), "mt-4")}
+            onClick={onRequestGapAnalysis}
+            disabled={status === "pending"}
+          >
+            {resolveMessage(appLocale, "pages.classification.generateGapAnalysis")}
+          </button>
         </div>
 
         {status === "success" && messageKey ? (

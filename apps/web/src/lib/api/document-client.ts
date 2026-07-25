@@ -33,6 +33,22 @@ export async function requestFinalReport(
   return toDocumentRequestOutcome(payload, response.ok, response.status);
 }
 
+export async function requestGapAnalysis(
+  assessmentId: string,
+): Promise<DocumentRequestOutcome> {
+  const response = await fetch(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/documents/gap-analysis`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+    },
+  );
+
+  const payload: unknown = await response.json().catch(() => null);
+  return toDocumentRequestOutcome(payload, response.ok, response.status);
+}
+
 export function toDocumentRequestOutcome(
   payload: unknown,
   ok: boolean,

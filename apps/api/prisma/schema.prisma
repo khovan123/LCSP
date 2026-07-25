@@ -455,6 +455,8 @@ model DocumentRequest {
   classificationResultId String
   documentType           String
   status                 String   @default("QUEUED")
+  documentUrl            String?
+  blockedReason          String?
   correlationId          String
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
