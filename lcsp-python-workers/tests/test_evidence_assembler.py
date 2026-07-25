@@ -10,6 +10,7 @@ from lcsp_workers.scanner.evidence_assembler import (
     EvidenceAssembler,
     PrivacyAssertionError,
 )
+from lcsp_workers.scanner.analyzers.ai_invocation_detector import TechnicalFinding
 from lcsp_workers.scanner.ts_js_bridge.bridge_types import TsJsBridgeResult, TsJsFinding
 from lcsp_workers.scanner.tools.semgrep_tool import SemgrepFinding, SemgrepRunResult
 from lcsp_workers.scanner.tools.syft_tool import SBOMEntry, SyftRunResult
@@ -251,3 +252,39 @@ def test_t07_assembles_ts_js_analysis_and_tool_provenance() -> None:
     ts_js_analysis = payload.evidence_payload["ts_js_analysis"]
     assert ts_js_analysis["findings"][0]["rule_id"] == "ts-openai-chat-completions"
     assert "source_code" not in str(ts_js_analysis)
+
+
+@pytest.mark.p0
+def test_t08_assembles_technical_findings_without_source_content() -> None:
+    technical_finding = TechnicalFinding(
+        finding_id="finding-1",
+        finding_type="AI_PROVIDER_USAGE",
+        file_path="src/app.py",
+        line_number=3,
+        rule_ids=["lcsp-openai-chat-completions-py"],
+        source_tools=["semgrep"],
+        analysis_level="L1",
+        confidence=0.35,
+        confidence_components={
+            "base": 0.35,
+            "direct_evidence_bonus": 0.0,
+            "corroboration_bonus": 0.0,
+            "coverage_penalty": 0.0,
+            "ambiguity_penalty": 0.0,
+        },
+        library_group="openai",
+        kwarg_names=["messages"],
+        has_dynamic_call=False,
+        coverage_note=None,
+    )
+
+    payload = EvidenceAssembler().assemble(
+        scan_job_id="scan-job-1",
+        syft_result=_syft_result(),
+        semgrep_result=_semgrep_result(),
+        coverage_notes=[],
+        technical_findings=[technical_finding],
+    )
+
+    assert payload.evidence_payload["technical_findings"][0]["finding_type"] == "AI_PROVIDER_USAGE"
+    assert "source_code" not in str(payload.evidence_payload["technical_findings"])

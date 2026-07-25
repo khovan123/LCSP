@@ -3,7 +3,7 @@ task_id: MW-scan-py-009
 module: python-workers/scanner
 runtime: lcsp-python-workers
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.5
 depends_on:
   - python-workers/scanner/05-knip-deptry-dependency-tool.md
@@ -360,3 +360,48 @@ None of these require L3+ analysis — they are L0-L2 signals.
 - Finding list sorted: limitations first, then by confidence descending.
 - `DISPLAY_ONLY_SIGNAL` only emitted on a fully-resolved path with no decisive signal present, never as a default/guess.
 - `USER_IMPACT_SIGNAL` evidence excludes bare HTTP response return — only decisive status/eligibility/price/notification patterns qualify.
+
+## Implementation Evidence
+
+- Added the AI invocation detector pipeline that fuses Semgrep, Python AST/CST, TS/JS bridge, SBOM, and Knip/deptry dependency facts into privacy-safe `TechnicalFinding` records.
+- Added canonical finding type constants and scanner-spec base confidence values, including limitation findings with confidence `1.00` as certainty of scanner limitation, not certainty of AI business behavior.
+- Implemented the exact confidence formula with `base`, `direct_evidence_bonus`, `corroboration_bonus`, `coverage_penalty`, and `ambiguity_penalty`, using round-half-up and clamping to `[0.00, 1.00]`.
+- Implemented deduplication by same file/finding type within a 3-line bucket, while keeping `SCAN_COVERAGE_LIMITATION` and `UNSUPPORTED_DYNAMIC_FLOW` distinct per tool/rule.
+- Added extended signal derivation for input/output, ranking, recommendation, status update, user impact, display-only, domain context, and harm potential signals.
+- Wired `AIInvocationDetector` into `ScanConsumer` so scanner callbacks now include `technical_findings` in the evidence payload assembled by `EvidenceAssembler`.
+- Added comments in the changed analyzer code explaining privacy boundaries, limitation semantics, post-dedup signal derivation, and deterministic confidence arithmetic.
+- Added focused tests for signal fusion, confidence calculation, dynamic flow boundaries, coverage limitations, source-free payloads, TS/JS bridge integration, and display-only versus decisive-signal precedence.
+
+## File List
+
+- `lcsp-python-workers/src/lcsp_workers/scanner/analyzers/__init__.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/analyzers/ai_invocation_detector.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/analyzers/confidence_calculator.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/analyzers/finding_deduplicator.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/analyzers/finding_types.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/analyzers/signal_fuser.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/evidence_assembler.py`
+- `lcsp-python-workers/src/lcsp_workers/scanner/scan_consumer.py`
+- `lcsp-python-workers/tests/test_ai_invocation_detector.py`
+- `lcsp-python-workers/tests/test_evidence_assembler.py`
+- `lcsp-python-workers/tests/test_scanner_workspace.py`
+- `docs/implementation/tasks/modules/python-workers/scanner/09-ai-invocation-detector.md`
+
+## Validation
+
+Baseline commit before task work: `8455adaea47aeccb6ba20f81805afc1a8e91573f`.
+
+- `./.venv/bin/pytest tests/test_ai_invocation_detector.py tests/test_evidence_assembler.py tests/test_scanner_workspace.py`
+  - Result: passed, 30 tests.
+- `./.venv/bin/pytest tests/test_ai_invocation_detector.py tests/test_semgrep_tool.py tests/test_ts_js_bridge.py tests/test_scanner_analyzer.py tests/test_dependency_usage_tools.py tests/test_evidence_assembler.py tests/test_scanner_workspace.py tests/test_technical_profile_worker.py tests/test_ai_usage_flow_worker.py`
+  - Result: passed, 97 tests.
+- `./.venv/bin/python -m compileall src/lcsp_workers/scanner/analyzers src/lcsp_workers/scanner/evidence_assembler.py src/lcsp_workers/scanner/scan_consumer.py tests/test_ai_invocation_detector.py tests/test_evidence_assembler.py tests/test_scanner_workspace.py`
+  - Result: passed.
+- `git diff --check`
+  - Result: passed.
+- `./.venv/bin/pytest`
+  - Result: blocked by local dependency state: `tiktoken` missing during `tests/test_llm_gateway.py` collection.
+- `./.venv/bin/pytest --ignore=tests/test_llm_gateway.py`
+  - Result: 163 passed / 8 skipped, with remaining failures unrelated to this task: local venv missing `boto3` for audit export consumer and sandboxed socket binding for health tests.
+- `./.venv/bin/pytest tests/test_worker_health.py`
+  - Result: passed, 5 tests, run outside filesystem sandbox because tests bind a local HTTP socket.

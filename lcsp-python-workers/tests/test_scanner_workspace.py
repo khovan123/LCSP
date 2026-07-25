@@ -677,6 +677,14 @@ def test_scan_consumer_invokes_ts_js_bridge_with_routed_files(
         assert scan_job_id == "job-ts"
         ts_js_analysis = payload.evidence_payload.get("ts_js_analysis") or {}
         assert ts_js_analysis["findings"][0]["rule_id"] == "ts-openai-chat-completions"
+        technical_findings = payload.evidence_payload.get("technical_findings") or []
+        provider = next(
+            finding
+            for finding in technical_findings
+            if finding["finding_type"] == "AI_PROVIDER_USAGE"
+        )
+        assert provider["rule_ids"] == ["ts-openai-chat-completions"]
+        assert provider["source_tools"] == ["ts_js_bridge"]
 
     api_client.post_scan_callback.side_effect = assert_ts_js_analysis
     consumer = ScanConsumer(

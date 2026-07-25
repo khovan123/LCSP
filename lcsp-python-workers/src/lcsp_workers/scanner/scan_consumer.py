@@ -11,6 +11,7 @@ from lcsp_workers.platform.correlation import set_correlation_id
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.platform.queue_consumer import ConsumerBase
 
+from .analyzers.ai_invocation_detector import AIInvocationDetector
 from .analyzers.python_analyzer import PythonAnalyzer
 from .dependencies.dependency_normalizer import DependencyNormalizer
 from .evidence_assembler import EvidenceAssembler, PrivacyAssertionError
@@ -56,6 +57,7 @@ class ScanConsumer(ConsumerBase):
         analyzer_router: AnalyzerRouter | None = None,
         dependency_normalizer: DependencyNormalizer | None = None,
         ts_js_bridge_factory: Callable[[Path], TsJsBridge] | None = None,
+        ai_invocation_detector: AIInvocationDetector | None = None,
         api_client: WorkerApiClient | None = None,
         evidence_assembler: EvidenceAssembler | None = None,
     ):
@@ -75,6 +77,7 @@ class ScanConsumer(ConsumerBase):
         self._ts_js_bridge_factory = ts_js_bridge_factory or (
             lambda workspace_path: TsJsBridge(workspace=workspace_path)
         )
+        self._ai_invocation_detector = ai_invocation_detector or AIInvocationDetector()
         self._api_client = api_client or WorkerApiClient(
             config.nestjs_api_base_url,
             config.worker_api_key,
@@ -215,6 +218,20 @@ class ScanConsumer(ConsumerBase):
             python_analysis = PythonAnalyzer(result.workspace_path).analyze(
                 include_files=routed_python_files
             )
+            technical_findings = self._ai_invocation_detector.detect(
+                semgrep_result=semgrep_result,
+                python_analysis=python_analysis,
+                ts_js_analysis=ts_js_analysis,
+                syft_result=syft_result,
+                package_dependencies=package_dependencies,
+                tool_executions=[
+                    syft_result.execution,
+                    *semgrep_result.executions,
+                    knip_result.execution,
+                    deptry_result.execution,
+                    ts_js_analysis.execution,
+                ],
+            )
             coverage_notes = self._coverage_notes(
                 result,
                 [
@@ -234,6 +251,7 @@ class ScanConsumer(ConsumerBase):
                 ],
                 python_analysis=python_analysis,
                 ts_js_analysis=ts_js_analysis,
+                technical_findings=technical_findings,
             )
             self._api_client.post_scan_callback(
                 envelope.scan_job_id,
@@ -335,7 +353,8 @@ class ScanConsumer(ConsumerBase):
         notes: list[str] = []
         if result.coverage_limited:
             notes.append(
-                f"Scanner coverage limited: skipped {result.skipped_files} files due to workspace safety limits."
+                "Scanner coverage limited: "
+                f"skipped {result.skipped_files} files due to workspace safety limits."
             )
 
         for limitation in classification_limitations or []:
