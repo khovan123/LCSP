@@ -9,12 +9,12 @@ import { AssessmentNotFoundException } from "../../../domain/exceptions/wizard.e
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { ReadinessEvaluatorService } from "../../services/wizard/readiness-evaluator.service.js";
-import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 
 @QueryHandler(GetReadinessQuery)
-export class GetReadinessHandler
-  implements IQueryHandler<GetReadinessQuery, ReadinessResponse>
-{
+export class GetReadinessHandler implements IQueryHandler<
+  GetReadinessQuery,
+  ReadinessResponse
+> {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditWriter: AuditWriterService,

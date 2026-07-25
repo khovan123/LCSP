@@ -7,6 +7,7 @@ import {
   Body,
   UseGuards,
   Req,
+  HttpCode,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
@@ -66,6 +67,7 @@ export class WizardController {
   }
 
   @Post(":assessmentId/wizard/submit")
+  @HttpCode(200)
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.wizardSubmit)
   async submitWizard(

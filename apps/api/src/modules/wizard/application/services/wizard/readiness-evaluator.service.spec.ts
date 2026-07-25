@@ -22,7 +22,10 @@ describe("ReadinessEvaluatorService", () => {
         expect.objectContaining({ type: "technical_evidence" }),
       ]),
     );
-    expect(result.completed_steps).toEqual(["wizard_profile", "repository_connected"]);
+    expect(result.completed_steps).toEqual([
+      "wizard_profile",
+      "repository_connected",
+    ]);
   });
 
   it("T02: WizardProfile submitted, evidence accepted -> classification_locked = false", () => {
@@ -93,6 +96,8 @@ describe("ReadinessEvaluatorService", () => {
       wizardStatus: null,
     });
 
-    expect(result.next_action).toBe("Connect a code repository to begin analysis.");
+    expect(result.next_action).toBe(
+      "Connect a code repository to begin analysis.",
+    );
   });
 });

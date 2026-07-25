@@ -94,6 +94,7 @@ describe("GetReadinessHandler", () => {
       ForbiddenException,
     );
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(auditWriter.write).toHaveBeenCalledWith(
       expect.objectContaining({
         decision: AUDIT_DECISIONS.deny,
@@ -103,13 +104,20 @@ describe("GetReadinessHandler", () => {
   });
 
   it("Happy path: calls evaluator and returns readiness response", async () => {
-    prismaService.assessment.findFirst.mockResolvedValue({ id: "assessment-123" } as Assessment);
-    prismaService.wizardProfile.findUnique.mockResolvedValue({ status: "SUBMITTED" } as WizardProfile);
-    prismaService.repositoryConnection.findFirst.mockResolvedValue({ id: "repo-1" } as RepositoryConnection);
+    prismaService.assessment.findFirst.mockResolvedValue({
+      id: "assessment-123",
+    } as Assessment);
+    prismaService.wizardProfile.findUnique.mockResolvedValue({
+      status: "SUBMITTED",
+    } as WizardProfile);
+    prismaService.repositoryConnection.findFirst.mockResolvedValue({
+      id: "repo-1",
+    } as RepositoryConnection);
     prismaService.technicalEvidenceReport.findFirst.mockResolvedValue(null);
 
     const result = await handler.execute(query);
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(evaluatorService.evaluate).toHaveBeenCalledWith({
       hasRepositoryConnection: true,
       hasAcceptedTechnicalEvidence: false,

@@ -178,6 +178,8 @@ export async function seedAuthWorkspaceFixture(
         PBAC_ACTIONS.scanTrigger,
         PBAC_ACTIONS.documentGenerate,
         PBAC_ACTIONS.snapshotCreate,
+        PBAC_ACTIONS.wizardWrite,
+        PBAC_ACTIONS.wizardSubmit,
       ],
       subjectRole: SUBJECT_ROLES.manager,
       stateGate: PBAC_STATE_GATES.membershipActive,

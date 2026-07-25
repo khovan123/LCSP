@@ -37,7 +37,8 @@ export class ReadinessEvaluatorService {
       missingEvidence.push({
         type: "repository_connection",
         label: "Repository Connection",
-        description: "A version control repository must be connected to analyze the codebase.",
+        description:
+          "A version control repository must be connected to analyze the codebase.",
       });
     }
 
@@ -48,19 +49,22 @@ export class ReadinessEvaluatorService {
       missingEvidence.push({
         type: "technical_evidence",
         label: "Technical Evidence",
-        description: "The repository must be successfully scanned to generate technical evidence.",
+        description:
+          "The repository must be successfully scanned to generate technical evidence.",
       });
     }
 
     // 4. Next Action logic (Business language only)
     let nextAction = "System is ready for classification.";
-    
+
     if (!input.hasRepositoryConnection) {
       nextAction = "Connect a code repository to begin analysis.";
     } else if (!input.hasAcceptedTechnicalEvidence) {
-      nextAction = "Wait for the repository scan to complete and generate technical evidence.";
+      nextAction =
+        "Wait for the repository scan to complete and generate technical evidence.";
     } else if (input.wizardStatus !== WIZARD_STATUS_CODES.submitted) {
-      nextAction = "Complete and submit the Assessment Wizard to provide business context.";
+      nextAction =
+        "Complete and submit the Assessment Wizard to provide business context.";
     }
 
     return {
