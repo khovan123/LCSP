@@ -1,4 +1,12 @@
-import { Controller, Put, Post, Param, Body, UseGuards, Req } from "@nestjs/common";
+import {
+  Controller,
+  Put,
+  Post,
+  Param,
+  Body,
+  UseGuards,
+  Req,
+} from "@nestjs/common";
 import { CommandBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 

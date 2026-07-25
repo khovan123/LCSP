@@ -13,28 +13,32 @@ export class WizardValidatorService {
     if (!this.isValidString(answers.purpose)) {
       errors.push({
         field: "purpose",
-        message: "Please describe the primary business purpose of your AI system.",
+        message:
+          "Please describe the primary business purpose of your AI system.",
       });
     }
 
     if (!this.isValidString(answers.sector)) {
       errors.push({
         field: "sector",
-        message: "Please select the regulated sector your AI system operates in.",
+        message:
+          "Please select the regulated sector your AI system operates in.",
       });
     }
 
     if (!this.isValidArray(answers.data_type)) {
       errors.push({
         field: "data_type",
-        message: "Please specify at least one type of data your AI system processes.",
+        message:
+          "Please specify at least one type of data your AI system processes.",
       });
     }
 
     if (!this.isValidString(answers.user_group)) {
       errors.push({
         field: "user_group",
-        message: "Please describe the group of users affected by your AI system.",
+        message:
+          "Please describe the group of users affected by your AI system.",
       });
     }
 
@@ -48,7 +52,8 @@ export class WizardValidatorService {
     if (!this.isValidString(answers.decision_role)) {
       errors.push({
         field: "decision_role",
-        message: "Please indicate whether your AI system makes autonomous decisions.",
+        message:
+          "Please indicate whether your AI system makes autonomous decisions.",
       });
     }
 
@@ -62,7 +67,8 @@ export class WizardValidatorService {
     if (!this.isValidBoolean(answers.external_llm_usage)) {
       errors.push({
         field: "external_llm_usage",
-        message: "Please indicate whether your AI system uses an external AI provider.",
+        message:
+          "Please indicate whether your AI system uses an external AI provider.",
       });
     }
 

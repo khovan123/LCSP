@@ -31,9 +31,10 @@ import { OutboxRepository } from "../../../../../platform/outbox/outbox.reposito
 import { WizardValidatorService } from "../../services/wizard/wizard-validator.service.js";
 
 @CommandHandler(SubmitWizardCommand)
-export class SubmitWizardHandler
-  implements ICommandHandler<SubmitWizardCommand, SubmitWizardResponse>
-{
+export class SubmitWizardHandler implements ICommandHandler<
+  SubmitWizardCommand,
+  SubmitWizardResponse
+> {
   constructor(
     @Inject(WIZARD_PROFILE_REPOSITORY)
     private readonly wizardRepository: WizardProfileRepository,
@@ -60,7 +61,8 @@ export class SubmitWizardHandler
     }
 
     // 2. Fetch existing profile
-    const profile = await this.wizardRepository.findByAssessmentId(assessmentId);
+    const profile =
+      await this.wizardRepository.findByAssessmentId(assessmentId);
     if (profile && profile.status === WIZARD_STATUS_CODES.submitted) {
       throw new ConflictException({
         error_code: "WIZARD_ALREADY_SUBMITTED",

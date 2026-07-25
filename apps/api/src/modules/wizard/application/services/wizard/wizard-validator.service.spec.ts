@@ -28,7 +28,8 @@ describe("WizardValidatorService", () => {
     const errors = service.validate({});
     expect(errors).toContainEqual({
       field: "purpose",
-      message: "Please describe the primary business purpose of your AI system.",
+      message:
+        "Please describe the primary business purpose of your AI system.",
     });
   });
 
@@ -44,13 +45,15 @@ describe("WizardValidatorService", () => {
     const errorsMissing = service.validate({});
     expect(errorsMissing).toContainEqual({
       field: "data_type",
-      message: "Please specify at least one type of data your AI system processes.",
+      message:
+        "Please specify at least one type of data your AI system processes.",
     });
 
     const errorsEmpty = service.validate({ data_type: [] });
     expect(errorsEmpty).toContainEqual({
       field: "data_type",
-      message: "Please specify at least one type of data your AI system processes.",
+      message:
+        "Please specify at least one type of data your AI system processes.",
     });
   });
 
@@ -74,7 +77,8 @@ describe("WizardValidatorService", () => {
     const errors = service.validate({});
     expect(errors).toContainEqual({
       field: "decision_role",
-      message: "Please indicate whether your AI system makes autonomous decisions.",
+      message:
+        "Please indicate whether your AI system makes autonomous decisions.",
     });
   });
 
@@ -90,7 +94,8 @@ describe("WizardValidatorService", () => {
     const errors = service.validate({});
     expect(errors).toContainEqual({
       field: "external_llm_usage",
-      message: "Please indicate whether your AI system uses an external AI provider.",
+      message:
+        "Please indicate whether your AI system uses an external AI provider.",
     });
   });
 
