@@ -27,6 +27,7 @@ export const PBAC_ACTIONS = {
   snapshotCreate: "snapshot:create",
   verifiedProfileApprove: "verified-profile:approve",
   wizardWrite: "wizard:write",
+  wizardSubmit: "wizard:submit",
   workspaceRead: "workspace:read",
 } as const;
 
