@@ -10,6 +10,7 @@ from lcsp_workers.platform.callback_schemas import (
     AIUsageFlowCallbackPayload,
     ConflictDetectionCallbackPayload,
     TechnicalProfileCallbackPayload,
+    VerifiedProfileCallbackPayload,
 )
 from lcsp_workers.platform.correlation import set_correlation_id
 
@@ -233,6 +234,67 @@ def test_reconciliation_conflict_callback_uses_internal_endpoint(client):
 
         url = mock_post.call_args.args[0]
         assert url == "http://testserver/internal/reconciliation/conflict-callback"
+
+
+def test_verified_profile_callback_uses_reconciliation_endpoint(client):
+    payload = VerifiedProfileCallbackPayload(
+        ai_usage_flow_id="auf-1",
+        assessment_id="assessment-1",
+        schema_version="1.0.0",
+        provider_version="lcsp.verified-profile-worker.v1",
+        profile_data={"verified_claims": []},
+        gates_passed_at={"conflicts_resolved": "2026-07-25T09:30:00Z"},
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"accepted": True}
+        mock_post.return_value = mock_resp
+
+        client.post_verified_profile_callback(payload)
+
+        url = mock_post.call_args.args[0]
+        assert url == (
+            "http://testserver/internal/reconciliation/verified-profile-callback"
+        )
+
+
+def test_verified_profile_pending_conflicts_error_preserves_error_code(client):
+    payload = VerifiedProfileCallbackPayload(
+        ai_usage_flow_id="auf-1",
+        assessment_id="assessment-1",
+        schema_version="1.0.0",
+        provider_version="lcsp.verified-profile-worker.v1",
+        profile_data={"verified_claims": []},
+        gates_passed_at={"conflicts_resolved": "2026-07-25T09:30:00Z"},
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 409
+        mock_resp.json.return_value = {"error_code": "PENDING_CONFLICTS_EXIST"}
+        mock_post.return_value = mock_resp
+
+        with pytest.raises(WorkerCallbackError, match="PENDING_CONFLICTS_EXIST"):
+            client.post_verified_profile_callback(payload)
+
+
+def test_get_verified_profile_reconciliation_context_uses_internal_endpoint(client):
+    with patch("lcsp_workers.platform.api_client.httpx.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"ai_usage_flow": {"id": "auf-1"}}
+        mock_get.return_value = mock_resp
+
+        data = client.get_verified_profile_reconciliation_context("assessment-1")
+
+        assert data == {"ai_usage_flow": {"id": "auf-1"}}
+        url = mock_get.call_args.args[0]
+        assert url == (
+            "http://testserver/internal/reconciliation/"
+            "verified-profile-context/assessment-1"
+        )
 
 
 def test_get_accepted_ai_usage_flow_rejects_non_ready_status(client):
