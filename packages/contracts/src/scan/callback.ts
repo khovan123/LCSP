@@ -28,10 +28,17 @@ export const CONFLICT_RECORD_STATUSES = {
   dismissed: "DISMISSED",
 } as const;
 
+export const VERIFIED_PROFILE_STATUSES = {
+  pendingApproval: "pending_approval",
+  approved: "approved",
+  autoApproved: "auto_approved",
+} as const;
+
 export const SCAN_EVIDENCE_SCHEMA_VERSIONS = ["1.0.0"] as const;
 export const TECHNICAL_PROFILE_SCHEMA_VERSIONS = ["1.0.0"] as const;
 export const AI_USAGE_FLOW_SCHEMA_VERSIONS = ["1.0.0"] as const;
 export const CONFLICT_DETECTION_SCHEMA_VERSIONS = ["1.0.0"] as const;
+export const VERIFIED_PROFILE_SCHEMA_VERSIONS = ["1.0.0"] as const;
 
 export const SCAN_EVENT_TYPES = {
   evidenceAccepted: "event.technical-evidence.accepted.v1",
@@ -42,6 +49,7 @@ export const SCAN_EVENT_TYPES = {
   reconciliationNoConflicts: "event.reconciliation.no-conflicts.v1",
   reconciliationAllConflictsResolved:
     "event.reconciliation.all-conflicts-resolved.v1",
+  verifiedProfileReady: "event.verified-profile.ready.v1",
   evidenceAcceptedAudit: "SCAN_EVIDENCE_ACCEPTED",
   evidenceRejectedAudit: "SCAN_EVIDENCE_REJECTED",
   technicalProfileAcceptedAudit: "TECHNICAL_PROFILE_ACCEPTED",
@@ -50,4 +58,5 @@ export const SCAN_EVENT_TYPES = {
   conflictResolvedAudit: "CONFLICT_RESOLVED",
   conflictDismissedAudit: "CONFLICT_DISMISSED",
   noConflictsDetectedAudit: "NO_CONFLICTS_DETECTED",
+  verifiedProfileAcceptedAudit: "VERIFIED_PROFILE_ACCEPTED",
 } as const;

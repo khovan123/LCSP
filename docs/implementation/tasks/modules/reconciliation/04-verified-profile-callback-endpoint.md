@@ -3,7 +3,7 @@ task_id: MW-rec-004
 module: reconciliation
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 5.4
 depends_on:
   - reconciliation/03-resolve-conflict-endpoint.md
@@ -116,3 +116,20 @@ model VerifiedProfile {
 - Immutable once accepted.
 - Outbox `verified-profile-ready` triggers legal matching.
 - Manager approval gate (`pending_approval`) honored before classification.
+
+## Implementation Notes
+
+- Added immutable `VerifiedProfile` persistence with a unique `aiUsageFlowId` guard.
+- Added `AcceptVerifiedProfileCommand` and handler to validate the worker payload, confirm the referenced `AIUsageFlow` is accepted, block unresolved conflicts, persist the profile, emit the ready outbox event, and write an audit record.
+- Added `POST /internal/reconciliation/verified-profile-callback` behind `WorkerApiKeyGuard`.
+- Added contract constants for verified profile statuses, schema versions, outbox event type, audit event type, and error codes.
+- Audit payload intentionally stores only identifiers/status metadata; `profile_data` is excluded because it can contain detailed evidence context.
+
+## Validation
+
+- `NODE_OPTIONS=--experimental-vm-modules pnpm exec jest --config ./jest.config.ts --runInBand --no-watchman --runTestsByPath src/modules/reconciliation/application/commands/accept-verified-profile/accept-verified-profile.handler.spec.ts` — passed.
+- `pnpm run typecheck` — passed.
+- `pnpm run build` from `apps/api` — passed.
+- `git diff --check` — passed.
+- `pnpm run lint` from repo root — blocked by pre-existing contract literal issues in `apps/web/src/features/document/components/organisms/document-request-panel.tsx`.
+- E2E callback test was added, but local execution is blocked during `prisma db push` because the local test database/schema engine setup is unavailable.
