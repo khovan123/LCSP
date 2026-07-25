@@ -72,16 +72,24 @@ describe("OutboxRepository (e2e, real Postgres)", () => {
   it("T05: SKIP LOCKED prevents two concurrent batches from claiming the same row", async () => {
     const message = await seed();
 
-    const claimAndHold = (delayMs: number) =>
+    let lockAcquired!: () => void;
+    const lockAcquiredPromise = new Promise<void>((resolve) => {
+      lockAcquired = resolve;
+    });
+
+    const claimAndHold = (delayMs: number, onAcquired?: () => void) =>
       repository.withPendingBatch(1, async (messages) => {
+        if (onAcquired) onAcquired();
         const claimedIds = messages.map((m) => m.id);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         return claimedIds;
       });
 
-    const firstPromise = claimAndHold(200);
-    // Give the first transaction time to acquire its row lock before the second starts.
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    const firstPromise = claimAndHold(300, lockAcquired);
+    
+    // Wait until the first transaction has definitively acquired the row lock
+    await lockAcquiredPromise;
+    
     const secondPromise = claimAndHold(0);
 
     const [first, second] = await Promise.all([firstPromise, secondPromise]);
