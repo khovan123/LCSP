@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from "@nestjs/testing";
 import {
   ConflictException,
@@ -52,15 +53,19 @@ describe("SubmitWizardHandler", () => {
       writeInTx: jest.fn<AuditWriterService["writeInTx"]>(),
     } as unknown as jest.Mocked<AuditWriterService>;
 
+    const mockTx: MockTransactionClient = {
+      wizardProfile: { upsert: jest.fn() },
+      assessment: { update: jest.fn() },
+    };
+
+    const mockTransaction = jest.fn(
+      async (callback: (tx: MockTransactionClient) => Promise<void>) => {
+        await callback(mockTx);
+      },
+    );
+
     prismaService = {
-      $transaction: jest.fn().mockImplementation(
-        (callback: any) => {
-          return callback({
-            wizardProfile: { upsert: jest.fn() },
-            assessment: { update: jest.fn() },
-          });
-        },
-      ),
+      $transaction: mockTransaction,
     } as unknown as jest.Mocked<PrismaService>;
 
     outboxRepository = {
@@ -185,16 +190,18 @@ describe("SubmitWizardHandler", () => {
     wizardRepository.verifyAssessmentOwnership.mockResolvedValue(true);
     wizardRepository.findByAssessmentId.mockResolvedValue(null);
     let assessmentUpdateArg: { data: { status: string } } | undefined;
-    prismaService.$transaction.mockImplementation(
-      (callback: any) => {
-        return callback({
-          wizardProfile: { upsert: jest.fn() },
-          assessment: {
-            update: jest.fn().mockImplementation((arg: { data: { status: string } }) => {
-              assessmentUpdateArg = arg;
-            }),
-          },
-        });
+    const mockTx: MockTransactionClient = {
+      wizardProfile: { upsert: jest.fn() },
+      assessment: {
+        update: jest.fn().mockImplementation((arg: { data: { status: string } }) => {
+          assessmentUpdateArg = arg;
+        }),
+      },
+    };
+
+    (prismaService.$transaction as jest.Mock).mockImplementation(
+      async (callback: (tx: MockTransactionClient) => Promise<void>) => {
+        await callback(mockTx);
       },
     );
 
