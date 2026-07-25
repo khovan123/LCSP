@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { Test, TestingModule } from "@nestjs/testing";
 import {
   ConflictException,
@@ -43,8 +45,10 @@ describe("SubmitWizardHandler", () => {
 
   beforeEach(async () => {
     wizardRepository = {
-      verifyAssessmentOwnership: jest.fn<WizardProfileRepository["verifyAssessmentOwnership"]>(),
-      findByAssessmentId: jest.fn<WizardProfileRepository["findByAssessmentId"]>(),
+      verifyAssessmentOwnership:
+        jest.fn<WizardProfileRepository["verifyAssessmentOwnership"]>(),
+      findByAssessmentId:
+        jest.fn<WizardProfileRepository["findByAssessmentId"]>(),
       upsertDraft: jest.fn<WizardProfileRepository["upsertDraft"]>(),
     };
 
@@ -124,7 +128,9 @@ describe("SubmitWizardHandler", () => {
     expect(outboxRepository.enqueue).toHaveBeenCalled();
 
     expect(result.status).toBe(WIZARD_STATUS_CODES.submitted);
-    expect(result.assessment_status).toBe(ASSESSMENT_STATUS_CODES.wizardSubmitted);
+    expect(result.assessment_status).toBe(
+      ASSESSMENT_STATUS_CODES.wizardSubmitted,
+    );
     expect(result.version).toBe(1);
     expect(result.correlation_id).toBe("corr-id-1");
   });
@@ -193,9 +199,11 @@ describe("SubmitWizardHandler", () => {
     const mockTx: MockTransactionClient = {
       wizardProfile: { upsert: jest.fn() },
       assessment: {
-        update: jest.fn().mockImplementation((arg: { data: { status: string } }) => {
-          assessmentUpdateArg = arg;
-        }),
+        update: jest
+          .fn()
+          .mockImplementation((arg: { data: { status: string } }) => {
+            assessmentUpdateArg = arg;
+          }),
       },
     };
 
@@ -231,7 +239,7 @@ describe("SubmitWizardHandler", () => {
     expect(auditArg.payload?.answers).toBeUndefined();
     expect(auditArg.payload).toEqual({
       assessmentId: "assessment-123",
-      wizardProfileId: expect.any(String) as unknown as string,
+      wizardProfileId: expect.any(String),
       version: 1,
       correlationId: "corr-id-1",
     });
@@ -255,7 +263,7 @@ describe("SubmitWizardHandler", () => {
     ).rejects.toThrow(ForbiddenException);
 
     expect(auditWriter.write).toHaveBeenCalledWith(
-      expect.objectContaining({ decision: AUDIT_DECISIONS.deny }) as unknown as Parameters<typeof auditWriter.write>[0],
+      expect.objectContaining({ decision: AUDIT_DECISIONS.deny }),
     );
   });
 });
