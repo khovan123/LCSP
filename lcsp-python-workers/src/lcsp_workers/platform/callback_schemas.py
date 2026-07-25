@@ -6,6 +6,8 @@ class CallbackResponse(BaseModel):
     success: Optional[bool] = None
     accepted: Optional[bool] = None
     evidence_report_id: Optional[str] = None
+    verified_profile_id: Optional[str] = None
+    status: Optional[str] = None
     correlation_id: Optional[str] = None
     message: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
@@ -54,8 +56,12 @@ class ConflictDetectionCallbackPayload(BaseModel):
 
 class VerifiedProfileCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    scan_job_id: str
-    verified_data: Dict[str, Any]
+    ai_usage_flow_id: str
+    assessment_id: str
+    schema_version: str
+    provider_version: str
+    profile_data: Dict[str, Any]
+    gates_passed_at: Dict[str, Any]
 
 class LegalRuleMatchCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")

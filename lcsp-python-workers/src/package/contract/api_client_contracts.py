@@ -10,7 +10,7 @@ class CallbackPath(StrEnum):
     TECHNICAL_PROFILE = "/internal/evidence/technical-profile-callback"
     AI_USAGE_FLOW = "/internal/ai-usage-flow/callback"
     RECONCILIATION_CONFLICT = "/internal/reconciliation/conflict-callback"
-    VERIFIED_PROFILE = "/internal/callbacks/verified-profile"
+    VERIFIED_PROFILE = "/internal/reconciliation/verified-profile-callback"
     LEGAL_RULE_MATCH = "/internal/callbacks/legal-rule-match"
     CLASSIFICATION = "/internal/callbacks/classification"
     AUDIT_EXPORT = "/internal/callbacks/audit-export/{export_request_id}"
@@ -20,6 +20,7 @@ class InternalPath(StrEnum):
     TECHNICAL_EVIDENCE_REPORT = "/internal/evidence/reports/{evidence_report_id}"
     TECHNICAL_PROFILE = "/internal/evidence/technical-profiles/{technical_profile_id}"
     AI_USAGE_FLOW = "/internal/ai-usage-flow/{ai_usage_flow_id}"
+    VERIFIED_PROFILE_CONTEXT = "/internal/reconciliation/verified-profile-context/{assessment_id}"
     WIZARD_PROFILE = "/internal/assessments/{assessment_id}/wizard-profile"
 
 

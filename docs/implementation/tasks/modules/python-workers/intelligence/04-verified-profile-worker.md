@@ -3,7 +3,7 @@ task_id: MW-intel-004
 module: python-workers/intelligence
 runtime: lcsp-python-workers
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 5.4
 depends_on:
   - python-workers/intelligence/03-conflict-detection-worker.md
@@ -75,3 +75,49 @@ class VerifiedProfileData:
 - Gate check via API call — re-queue on `PENDING_CONFLICTS_EXIST`.
 - `evidence_chain_integrity` accurately reflects material claim completeness.
 - No LLM calls.
+
+## Implementation Evidence
+
+- Added `VerifiedProfileBuilder` to assemble `VerifiedProfileData` from existing `AIUsageFlow` claims, optional `WizardProfile` context, and resolved conflict records without creating new claims.
+- Added conflict-resolution summaries that retain structured resolution metadata while intentionally excluding free-form Manager notes.
+- Added `evidence_chain_integrity` calculation so material claims without `evidence_refs` mark the profile as incomplete instead of silently passing.
+- Added `VerifiedProfileConsumer` for queue `intelligence.all-conflicts-resolved`, routing key `reconciliation.all-conflicts-resolved`, with `requires_pbac = False` for the system event.
+- Added pending-conflict handling so `PENDING_CONFLICTS_EXIST` from API callback failures is raised as a requeueable worker error.
+- Updated Python worker callback schema and API contract path to `POST /internal/reconciliation/verified-profile-callback`.
+- Added API client support for fetching VerifiedProfile reconciliation context from the NestJS internal API.
+- Added focused tests for all task scenarios plus API endpoint contract and error-code preservation.
+
+## File List
+
+- `lcsp-python-workers/src/lcsp_workers/intelligence/__init__.py`
+- `lcsp-python-workers/src/lcsp_workers/intelligence/verified_profile_builder.py`
+- `lcsp-python-workers/src/lcsp_workers/intelligence/verified_profile_consumer.py`
+- `lcsp-python-workers/src/lcsp_workers/platform/api_client.py`
+- `lcsp-python-workers/src/lcsp_workers/platform/callback_schemas.py`
+- `lcsp-python-workers/src/package/contract/api_client_contracts.py`
+- `lcsp-python-workers/tests/test_api_client.py`
+- `lcsp-python-workers/tests/test_verified_profile_worker.py`
+- `docs/implementation/tasks/modules/python-workers/intelligence/04-verified-profile-worker.md`
+
+## Validation
+
+Baseline commit before task work: `3b63ab925765f8f3598f3de44e049fc16646e073`.
+
+- `./.venv/bin/pytest tests/test_verified_profile_worker.py tests/test_api_client.py::test_verified_profile_callback_uses_reconciliation_endpoint`
+  - Result: passed, 8 tests.
+- `./.venv/bin/pytest tests/test_api_client.py tests/test_ai_usage_flow_worker.py tests/test_conflict_detection_worker.py tests/test_verified_profile_worker.py`
+  - Result: passed, 44 tests.
+- `./.venv/bin/pytest tests/test_api_client.py tests/test_technical_profile_worker.py tests/test_ai_usage_flow_worker.py tests/test_conflict_detection_worker.py tests/test_verified_profile_worker.py tests/test_queue_consumer.py`
+  - Result: passed, 62 tests.
+- `./.venv/bin/python -m compileall src/lcsp_workers/intelligence src/lcsp_workers/platform src/package/contract tests/test_verified_profile_worker.py tests/test_api_client.py`
+  - Result: passed.
+- `git diff --check`
+  - Result: passed.
+- Changed-file line length scan for Python files
+  - Result: passed.
+- `./.venv/bin/pytest`
+  - Result: blocked by local dependency state: `tiktoken` missing during `tests/test_llm_gateway.py` collection.
+- `./.venv/bin/pytest --ignore=tests/test_llm_gateway.py`
+  - Result: 173 passed / 8 skipped / 4 failed, with remaining failures unrelated to this task: local venv missing `boto3` for audit export consumer and sandboxed socket binding for health tests.
+- `./.venv/bin/pytest tests/test_worker_health.py`
+  - Result: passed, 5 tests, run outside filesystem sandbox because tests bind a local HTTP socket.

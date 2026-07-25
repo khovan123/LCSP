@@ -1,0 +1,148 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+from structlog import get_logger
+
+from lcsp_workers.platform.api_client import WorkerApiClient, WorkerCallbackError
+from lcsp_workers.platform.callback_schemas import VerifiedProfileCallbackPayload
+from lcsp_workers.platform.queue_consumer import ConsumerBase
+
+from .verified_profile_builder import (
+    DEFAULT_PROVIDER_VERSION,
+    SCHEMA_VERSION,
+    VerifiedProfileBuilder,
+)
+
+
+logger = get_logger(__name__)
+
+
+class PendingConflictsExist(RuntimeError):
+    """Raised so ConsumerBase nacks with requeue while the gate is still closed."""
+
+
+class VerifiedProfileConsumer(ConsumerBase):
+    queue_name = "intelligence.all-conflicts-resolved"
+    routing_key = "reconciliation.all-conflicts-resolved"
+    requires_pbac = False
+
+    def __init__(
+        self,
+        config,
+        pbac_client=None,
+        api_client: WorkerApiClient | None = None,
+        builder: VerifiedProfileBuilder | None = None,
+    ) -> None:
+        super().__init__(config, pbac_client)
+        self._api_client = api_client or WorkerApiClient(
+            config.nestjs_api_base_url,
+            config.worker_api_key,
+        )
+        self._builder = builder or VerifiedProfileBuilder()
+
+    def handle(self, message: dict, correlation_id: str) -> None:
+        assessment_id = self._required_message_id(message, "assessmentId")
+        conflicts_resolved_at = self._event_timestamp(message)
+        context = self._api_client.get_verified_profile_reconciliation_context(
+            assessment_id
+        )
+        ai_usage_flow = self._required_context_dict(context, "ai_usage_flow")
+        conflict_records = self._conflict_records(context)
+        if self._has_pending_conflicts(conflict_records):
+            raise PendingConflictsExist("PENDING_CONFLICTS_EXIST")
+
+        profile = self._builder.build(
+            ai_usage_flow=ai_usage_flow,
+            conflict_records=conflict_records,
+            wizard_profile=self._optional_context_dict(context, "wizard_profile"),
+            conflicts_resolved_at=conflicts_resolved_at,
+        )
+        callback_payload = VerifiedProfileCallbackPayload(
+            ai_usage_flow_id=self._flow_id(ai_usage_flow),
+            assessment_id=assessment_id,
+            schema_version=SCHEMA_VERSION,
+            provider_version=DEFAULT_PROVIDER_VERSION,
+            profile_data=profile.to_dict(),
+            gates_passed_at=profile.gates_passed_at,
+        )
+        try:
+            self._api_client.post_verified_profile_callback(callback_payload)
+        except WorkerCallbackError as error:
+            if "PENDING_CONFLICTS_EXIST" in str(error):
+                raise PendingConflictsExist("PENDING_CONFLICTS_EXIST") from error
+            raise
+        logger.info(
+            "VERIFIED_PROFILE_CALLBACK_SUBMITTED",
+            ai_usage_flow_id=callback_payload.ai_usage_flow_id,
+            assessment_id=callback_payload.assessment_id,
+            evidence_chain_integrity=profile.evidence_chain_integrity,
+            correlation_id=correlation_id,
+        )
+
+    def _required_message_id(self, message: dict[str, Any], key: str) -> str:
+        snake_key = key[0].lower() + "".join(
+            f"_{char.lower()}" if char.isupper() else char for char in key[1:]
+        )
+        value = message.get(key) or message.get(snake_key)
+        if not value:
+            raise ValueError(f"missing {key}")
+        return str(value)
+
+    def _event_timestamp(self, message: dict[str, Any]) -> str:
+        value = (
+            message.get("conflictsResolvedAt")
+            or message.get("conflicts_resolved_at")
+            or message.get("occurredAt")
+            or message.get("occurred_at")
+            or message.get("eventTime")
+            or message.get("event_time")
+        )
+        if value:
+            return str(value)
+        # Current outbox payloads only guarantee assessmentId, so preserve
+        # forward progress with a worker-side UTC gate timestamp when needed.
+        return datetime.now(timezone.utc).isoformat()
+
+    def _required_context_dict(self, context: dict[str, Any], key: str) -> dict[str, Any]:
+        camel_key = "".join(
+            part.capitalize() if index else part
+            for index, part in enumerate(key.split("_"))
+        )
+        value = context.get(key) or context.get(camel_key)
+        if not isinstance(value, dict):
+            raise ValueError(f"missing {key}")
+        return value
+
+    def _optional_context_dict(
+        self,
+        context: dict[str, Any],
+        key: str,
+    ) -> dict[str, Any] | None:
+        camel_key = "".join(
+            part.capitalize() if index else part
+            for index, part in enumerate(key.split("_"))
+        )
+        value = context.get(key) or context.get(camel_key)
+        return value if isinstance(value, dict) else None
+
+    def _conflict_records(self, context: dict[str, Any]) -> list[dict[str, Any]]:
+        records = (
+            context.get("conflicts")
+            or context.get("conflict_records")
+            or context.get("conflictRecords")
+            or []
+        )
+        return [record for record in records if isinstance(record, dict)]
+
+    def _has_pending_conflicts(self, records: list[dict[str, Any]]) -> bool:
+        return any(str(record.get("status") or "").upper() == "PENDING" for record in records)
+
+    def _flow_id(self, ai_usage_flow: dict[str, Any]) -> str:
+        return str(
+            ai_usage_flow.get("ai_usage_flow_id")
+            or ai_usage_flow.get("aiUsageFlowId")
+            or ai_usage_flow.get("id")
+            or "ai-usage-flow"
+        )

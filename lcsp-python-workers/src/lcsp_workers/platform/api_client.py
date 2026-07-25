@@ -67,12 +67,17 @@ class WorkerApiClient:
 
                 # Check for 4xx errors (client error, do not retry)
                 if 400 <= resp.status_code < 500:
+                    error_code = self._response_error_code(resp)
                     logger.error(
                         CallbackLogEvent.CLIENT_ERROR,
                         path=path,
                         status_code=resp.status_code,
+                        error_code=error_code,
                     )
-                    raise WorkerCallbackError(client_error_message(resp.status_code))
+                    message = client_error_message(resp.status_code)
+                    if error_code:
+                        message = f"{error_code}: {message}"
+                    raise WorkerCallbackError(message)
 
                 # Check for 5xx errors (server error, retry)
                 if resp.status_code >= 500:
@@ -122,6 +127,16 @@ class WorkerApiClient:
 
         # Should not reach here
         raise WorkerCallbackError(unexpected_error_message())
+
+    def _response_error_code(self, response) -> str | None:
+        try:
+            data = response.json()
+        except ValueError:
+            return None
+        if not isinstance(data, dict):
+            return None
+        value = data.get("error_code") or data.get("errorCode")
+        return str(value) if value else None
 
     def _get_with_retry(self, path: str, params: dict = None) -> dict | list:
         """
@@ -293,6 +308,17 @@ class WorkerApiClient:
             return None
         if not isinstance(data, dict):
             raise WorkerCallbackError("Wizard profile response was invalid.")
+        return data
+
+    def get_verified_profile_reconciliation_context(self, assessment_id: str) -> dict:
+        path = InternalPath.VERIFIED_PROFILE_CONTEXT.format(
+            assessment_id=assessment_id
+        )
+        data = self._get_with_retry(path)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError(
+                "VerifiedProfile reconciliation context response was invalid."
+            )
         return data
 
     def post_verified_profile_callback(
