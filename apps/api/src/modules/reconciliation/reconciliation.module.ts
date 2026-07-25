@@ -4,6 +4,7 @@ import { CqrsModule } from "@nestjs/cqrs";
 import { PbacModule } from "../../platform/pbac/pbac.module.js";
 import { WorkerApiKeyGuard } from "../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptConflictHandler } from "./application/commands/accept-conflict/accept-conflict.handler.js";
+import { AcceptVerifiedProfileHandler } from "./application/commands/accept-verified-profile/accept-verified-profile.handler.js";
 import { ResolveConflictHandler } from "./application/commands/resolve-conflict/resolve-conflict.handler.js";
 import { ListConflictsHandler } from "./application/queries/list-conflicts/list-conflicts.handler.js";
 import {
@@ -16,6 +17,7 @@ import {
   controllers: [InternalReconciliationController, ReconciliationController],
   providers: [
     AcceptConflictHandler,
+    AcceptVerifiedProfileHandler,
     ListConflictsHandler,
     ResolveConflictHandler,
     WorkerApiKeyGuard,

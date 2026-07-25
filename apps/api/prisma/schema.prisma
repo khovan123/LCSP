@@ -419,6 +419,23 @@ model ConflictRecord {
   @@index([assessmentId, status])
 }
 
+model VerifiedProfile {
+  id              String    @id @default(uuid())
+  aiUsageFlowId   String    @unique
+  assessmentId    String
+  organizationId  String
+  schemaVersion   String
+  providerVersion String
+  profileData     Json
+  gatesPassedAt   Json
+  status          String    @default("pending_approval")
+  approvedAt      DateTime?
+  approvedById    String?
+  createdAt       DateTime  @default(now())
+
+  @@index([assessmentId])
+}
+
 model ClassificationResult {
   id                        String   @id
   assessmentId              String

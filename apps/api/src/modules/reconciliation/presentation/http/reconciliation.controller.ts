@@ -21,6 +21,7 @@ import { RequireAction } from "../../../../platform/pbac/decorators/require-acti
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptConflictCommand } from "../../application/commands/accept-conflict/accept-conflict.command.js";
+import { AcceptVerifiedProfileCommand } from "../../application/commands/accept-verified-profile/accept-verified-profile.command.js";
 import { ResolveConflictCommand } from "../../application/commands/resolve-conflict/resolve-conflict.command.js";
 import type { ResolveConflictDto } from "../../application/commands/resolve-conflict/resolve-conflict.handler.js";
 import type {
@@ -28,6 +29,10 @@ import type {
   ConflictDetectionCallbackRequest,
 } from "../../application/contracts/reconciliation/conflict-detection-callback.contract.js";
 import type { ConflictListDto } from "../../application/contracts/reconciliation/conflict-list.contract.js";
+import type {
+  VerifiedProfileCallbackDto,
+  VerifiedProfileCallbackRequest,
+} from "../../application/contracts/reconciliation/verified-profile-callback.contract.js";
 import { ListConflictsQuery } from "../../application/queries/list-conflicts/list-conflicts.query.js";
 
 type ResolveConflictRequest = {
@@ -48,6 +53,21 @@ export class InternalReconciliationController {
   ): Promise<ConflictDetectionCallbackDto> {
     return this.commandBus.execute(
       new AcceptConflictCommand(payload, correlationId?.trim() || randomUUID()),
+    );
+  }
+
+  @Post("verified-profile-callback")
+  @HttpCode(200)
+  @UseGuards(WorkerApiKeyGuard)
+  async acceptVerifiedProfile(
+    @Body() payload: VerifiedProfileCallbackRequest,
+    @Headers("x-correlation-id") correlationId?: string,
+  ): Promise<VerifiedProfileCallbackDto> {
+    return this.commandBus.execute(
+      new AcceptVerifiedProfileCommand(
+        payload,
+        correlationId?.trim() || randomUUID(),
+      ),
     );
   }
 }
