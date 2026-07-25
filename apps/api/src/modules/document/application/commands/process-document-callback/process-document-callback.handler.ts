@@ -1,0 +1,82 @@
+import { NotFoundException, HttpException } from "@nestjs/common";
+import * as crypto from "node:crypto";
+import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+import { Prisma } from "@prisma/client";
+import { buildAuditEventInput, AUDIT_DECISIONS, AUDIT_REDACTION_STATUSES } from "@lcsp/contracts/audit";
+import {
+  DOCUMENT_EVENT_TYPES,
+  DOCUMENT_REQUEST_STATUSES,
+  DOCUMENT_TYPES,
+} from "@lcsp/contracts/document";
+
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import type { DocumentCallbackRequest, DocumentCallbackDto } from "../../contracts/document/document-callback.contract.js";
+import { ProcessDocumentCallbackCommand } from "./process-document-callback.command.js";
+
+@CommandHandler(ProcessDocumentCallbackCommand)
+export class ProcessDocumentCallbackHandler implements ICommandHandler<ProcessDocumentCallbackCommand> {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditWriter: AuditWriterService,
+  ) {}
+
+  async execute(command: ProcessDocumentCallbackCommand): Promise<DocumentCallbackDto> {
+    const payload = command.payload as DocumentCallbackRequest;
+    const request = await this.prisma.documentRequest.findUnique({
+      where: { id: payload.document_request_id },
+      select: { id: true, assessmentId: true, organizationId: true, correlationId: true },
+    });
+
+    if (!request) {
+      throw new NotFoundException();
+    }
+
+    const updateData: Prisma.DocumentRequestUpdateInput = {
+      status: payload.status,
+    } as any;
+
+    if (payload.document_url) updateData.documentUrl = payload.document_url;
+    if (payload.blocked_reason) updateData.blockedReason = payload.blocked_reason;
+
+    await this.prisma.documentRequest.update({
+      where: { id: payload.document_request_id },
+      data: updateData,
+    });
+
+    const auditEvent = buildAuditEventInput({
+      eventType: DOCUMENT_EVENT_TYPES.gapAnalysisRequestedAudit,
+      actorId: "document-worker",
+      organizationId: request.organizationId,
+      assessmentId: request.assessmentId,
+      resourceType: "DocumentRequest",
+      resourceId: request.id,
+      correlationId: request.correlationId ?? command.correlationId,
+      decision: AUDIT_DECISIONS.allow,
+      result: DOCUMENT_EVENT_TYPES.gapAnalysisRequestedAudit,
+      redactionStatus: AUDIT_REDACTION_STATUSES.none,
+      payload: payload as unknown as Record<string, unknown>,
+    });
+
+    await this.prisma.authAuditEvent.create({
+      data: {
+        id: crypto.randomUUID(),
+        eventType: auditEvent.eventType,
+        actorId: auditEvent.actorId,
+        organizationId: auditEvent.organizationId,
+        resourceType: auditEvent.resourceType ?? null,
+        resourceId: auditEvent.resourceId ?? null,
+        correlationId: auditEvent.correlationId,
+        reasonCode: auditEvent.reasonCode ?? null,
+        decision: auditEvent.decision,
+        payload: auditEvent.payload as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      processed: true,
+      document_request_id: payload.document_request_id,
+      correlation_id: request.correlationId ?? command.correlationId,
+    };
+  }
+}

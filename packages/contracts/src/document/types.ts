@@ -1,6 +1,8 @@
 export const DOCUMENT_REQUEST_STATUSES = {
   queued: "QUEUED",
   generating: "GENERATING",
+  ready: "READY",
+  failed: "FAILED",
 } as const;
 
 export type DocumentRequestStatus =
@@ -8,6 +10,7 @@ export type DocumentRequestStatus =
 
 export const DOCUMENT_TYPES = {
   finalReport: "FinalReport",
+  gapAnalysis: "GapAnalysis",
 } as const;
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[keyof typeof DOCUMENT_TYPES];
