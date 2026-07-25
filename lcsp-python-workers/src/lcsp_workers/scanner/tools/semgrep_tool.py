@@ -22,6 +22,8 @@ SECRET_DETECT_TOOL_NAME = "semgrep_secret_detect"
 INFO_SEVERITY = "INFO"
 WARNING_SEVERITY = "WARNING"
 DEFAULT_FINDING_MESSAGE = "AI usage pattern detected"
+DEFAULT_FINDING_TYPE = "AI_PROVIDER_USAGE"
+DEFAULT_BASE_CONFIDENCE = 0.0
 RULE_SIGNAL_TYPES = {
     "lcsp.openai-client": "provider_integration",
     "lcsp.anthropic-client": "provider_integration",
@@ -30,6 +32,16 @@ RULE_SIGNAL_TYPES = {
     "lcsp.model-call": "model_call",
     "lcsp.embeddings-call": "model_call",
     "lcsp.llm-api-key-ref": "provider_integration",
+}
+FINDING_TYPE_SIGNAL_TYPES = {
+    "AI_PROVIDER_USAGE": "provider_integration",
+    "AI_FRAMEWORK_USAGE": "framework_usage",
+    "AI_MODEL_INVOCATION": "model_call",
+    "AI_DECISION_FLOW_SIGNAL": "agent_pattern",
+    "SYSTEM_PROMPT_DETECTED": "prompt_signal",
+    "DYNAMIC_SYSTEM_PROMPT_REFERENCE": "prompt_signal",
+    "RAG_USAGE_SIGNAL": "rag_signal",
+    "MODEL_OUTPUT_PARSER_SIGNAL": "output_parser_signal",
 }
 
 
@@ -42,6 +54,9 @@ class SemgrepFinding:
     line_end: int
     message: str
     severity: str
+    finding_type: str = DEFAULT_FINDING_TYPE
+    base_confidence: float = DEFAULT_BASE_CONFIDENCE
+    library_group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -281,15 +296,22 @@ class SemgrepTool:
             start = result.get("start") if isinstance(result.get("start"), dict) else {}
             end = result.get("end") if isinstance(result.get("end"), dict) else {}
             extra = result.get("extra") if isinstance(result.get("extra"), dict) else {}
+            metadata = extra.get("metadata") if isinstance(extra.get("metadata"), dict) else {}
+            finding_type = self._read_finding_type(metadata)
 
+            # Store only rule metadata and positional facts. Semgrep source
+            # snippets live in extra.lines/metavars and are intentionally ignored.
             finding = SemgrepFinding(
                 rule_id=rule_id,
-                signal_type=RULE_SIGNAL_TYPES.get(rule_id, "provider_integration"),
+                signal_type=self._signal_type(rule_id, finding_type),
                 file_path=self._normalize_path(workspace, str(result.get("path", ""))),
                 line_start=self._read_line_number(start.get("line")),
                 line_end=self._read_line_number(end.get("line")),
                 message=self._sanitize_message(str(extra.get("message", DEFAULT_FINDING_MESSAGE))),
                 severity=self._normalize_severity(str(extra.get("severity", INFO_SEVERITY))),
+                finding_type=finding_type,
+                base_confidence=self._read_base_confidence(metadata),
+                library_group=self._read_library_group(metadata),
             )
             findings.append(finding)
 
@@ -307,6 +329,11 @@ class SemgrepTool:
                     line_end=finding.line_end,
                     message=self._sanitize_message(finding.message),
                     severity=self._normalize_severity(finding.severity),
+                    finding_type=self._read_finding_type(
+                        {"finding_type": finding.finding_type}
+                    ),
+                    base_confidence=self._clamp_confidence(finding.base_confidence),
+                    library_group=finding.library_group,
                 )
             )
         return sanitized
@@ -343,6 +370,31 @@ class SemgrepTool:
         if isinstance(value, int) and value > 0:
             return value
         return 1
+
+    def _signal_type(self, rule_id: str, finding_type: str) -> str:
+        if rule_id in RULE_SIGNAL_TYPES:
+            return RULE_SIGNAL_TYPES[rule_id]
+        return FINDING_TYPE_SIGNAL_TYPES.get(finding_type, "provider_integration")
+
+    def _read_finding_type(self, metadata: dict) -> str:
+        value = metadata.get("finding_type")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return DEFAULT_FINDING_TYPE
+
+    def _read_base_confidence(self, metadata: dict) -> float:
+        return self._clamp_confidence(metadata.get("base_confidence", DEFAULT_BASE_CONFIDENCE))
+
+    def _read_library_group(self, metadata: dict) -> str | None:
+        value = metadata.get("library_group")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return None
+
+    def _clamp_confidence(self, value: object) -> float:
+        if not isinstance(value, (int, float)):
+            return DEFAULT_BASE_CONFIDENCE
+        return round(min(1.0, max(0.0, float(value))), 2)
 
     def _count_results(self, payload: dict | None) -> int:
         if payload is None:

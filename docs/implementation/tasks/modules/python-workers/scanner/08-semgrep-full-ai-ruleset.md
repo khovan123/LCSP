@@ -3,8 +3,9 @@ task_id: MW-scan-py-008
 module: python-workers/scanner
 runtime: lcsp-python-workers
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 3.5
+baseline_commit: 59fa522219638c4929f4f821f470eecaee5f427d
 depends_on:
   - python-workers/scanner/03-semgrep-ai-rules-tool.md
 ---
@@ -386,3 +387,38 @@ Applied to EVERY Semgrep finding before storage. No exceptions.
 - `metadata.base_confidence` present in every rule.
 - Timeout 180s enforced on `semgrep --config` call.
 - Rule file valid YAML parseable by `semgrep --validate`.
+
+## Implementation Evidence
+
+- Replaced the partial `lcsp-ai-usage.yaml` with a full AI ruleset covering OpenAI, Anthropic, Google GenAI/Vertex, Hugging Face, LangChain, LlamaIndex, sklearn, TensorFlow/Keras, PyTorch, local inference endpoints, and generic prompt/model patterns.
+- Added top-level ruleset options and metadata (`symbolic_propagation`, `lcsp_version`, `strip_source`) and per-rule `finding_type`, `base_confidence`, and `library_group` metadata.
+- Extended `SemgrepFinding` with default-compatible metadata fields for `finding_type`, `base_confidence`, and `library_group`.
+- Updated Semgrep parsing so `extra.lines` and `extra.metavars` remain ignored while only rule metadata, message, severity, path, and line facts are stored.
+- Added signal-type derivation from canonical finding types while preserving legacy task `003` rule-id mappings.
+- Added tests for metadata parsing/source stripping and full ruleset coverage.
+
+## File List
+
+- `lcsp-python-workers/src/lcsp_workers/scanner/rulesets/lcsp-ai-usage.yaml`
+- `lcsp-python-workers/src/lcsp_workers/scanner/tools/semgrep_tool.py`
+- `lcsp-python-workers/tests/test_semgrep_tool.py`
+- `docs/implementation/tasks/modules/python-workers/scanner/08-semgrep-full-ai-ruleset.md`
+
+## Validation
+
+- `./.venv/bin/pytest tests/test_semgrep_tool.py`
+  - Result: passed, 9 tests.
+- `./.venv/bin/pytest tests/test_evidence_assembler.py tests/test_scanner_workspace.py`
+  - Result: passed, 20 tests.
+- `./.venv/bin/python -m compileall src/lcsp_workers/scanner/tools tests/test_semgrep_tool.py`
+  - Result: passed.
+- Python YAML structural validation using the host Python environment
+  - Result: passed, 34 Semgrep rules validated for required metadata.
+- `./.venv/bin/pytest`
+  - Result: blocked by local dependency state: `tiktoken` missing during `tests/test_llm_gateway.py` collection.
+- `./.venv/bin/pytest --ignore=tests/test_llm_gateway.py`
+  - Result: 153 passed / 8 skipped, with remaining failures unrelated to this task: local venv missing `boto3` for audit export consumer and sandboxed socket binding for health tests.
+- `./.venv/bin/pytest tests/test_worker_health.py`
+  - Result: passed, 5 tests, run outside filesystem sandbox because tests bind a local HTTP socket.
+- `semgrep --validate`
+  - Result: not run locally because the `semgrep` binary is not installed in this environment.
