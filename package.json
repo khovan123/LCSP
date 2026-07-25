@@ -12,7 +12,7 @@
     "lint": "pnpm run check:imports && pnpm run check:contracts && pnpm run typecheck",
     "prepare": "husky",
     "test": "pnpm run test:web && pnpm --filter @lcsp/api test:e2e",
-    "test:web": "node --test tests/*.web.test.ts",
+    "test:web": "node --test tests/*.web.test.ts apps/web/tests/*.test.ts",
     "typecheck": "pnpm --filter @lcsp/api prisma:generate && pnpm exec tsc -b"
   },
   "devDependencies": {
