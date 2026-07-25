@@ -2,12 +2,13 @@ import {
   Controller,
   Put,
   Post,
+  Get,
   Param,
   Body,
   UseGuards,
   Req,
 } from "@nestjs/common";
-import { CommandBus } from "@nestjs/cqrs";
+import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
 import type {
@@ -18,8 +19,10 @@ import type {
   SubmitWizardRequest,
   SubmitWizardResponse,
 } from "../../application/contracts/wizard/wizard-submit.contract.js";
+import type { ReadinessResponse } from "../../application/contracts/wizard/readiness.contract.js";
 import { SaveWizardDraftCommand } from "../../application/commands/save-wizard-draft/save-wizard-draft.command.js";
 import { SubmitWizardCommand } from "../../application/commands/submit-wizard/submit-wizard.command.js";
+import { GetReadinessQuery } from "../../application/queries/get-readiness/get-readiness.query.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { randomUUID } from "node:crypto";
@@ -28,7 +31,10 @@ import type { AuthenticatedRequest } from "../../../../common/interfaces/authent
 
 @Controller("assessments")
 export class WizardController {
-  constructor(private readonly commandBus: CommandBus) {}
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus,
+  ) {}
 
   @Put(":assessmentId/wizard/draft")
   @UseGuards(PbacGuard)
@@ -77,6 +83,33 @@ export class WizardController {
         organizationId,
         userId,
         body.answers,
+        correlationId,
+        {
+          subjectRole: pbacContext.subjectRole,
+          selectedAction: pbacContext.selectedAction,
+          policyId: pbacContext.policyId,
+          policyVersion: pbacContext.policyVersion,
+        },
+      ),
+    );
+  }
+
+  @Get(":assessmentId/readiness")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.assessmentRead)
+  async getReadiness(
+    @Param("assessmentId") assessmentId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<ReadinessResponse> {
+    const { userId, organizationId } = req.pbacContext;
+    const pbacContext = req.pbacContext;
+    const correlationId = req.correlationId || randomUUID();
+
+    return this.queryBus.execute(
+      new GetReadinessQuery(
+        assessmentId,
+        organizationId,
+        userId,
         correlationId,
         {
           subjectRole: pbacContext.subjectRole,

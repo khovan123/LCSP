@@ -7,7 +7,9 @@ import { WIZARD_PROFILE_REPOSITORY } from "./application/ports/persistence/wizar
 import { PrismaWizardRepository } from "./infrastructure/persistence/prisma-wizard.repository.js";
 import { SaveWizardDraftHandler } from "./application/commands/save-wizard-draft/save-wizard-draft.handler.js";
 import { SubmitWizardHandler } from "./application/commands/submit-wizard/submit-wizard.handler.js";
+import { GetReadinessHandler } from "./application/queries/get-readiness/get-readiness.handler.js";
 import { WizardValidatorService } from "./application/services/wizard/wizard-validator.service.js";
+import { ReadinessEvaluatorService } from "./application/services/wizard/readiness-evaluator.service.js";
 import { WizardController } from "./presentation/http/wizard.controller.js";
 
 @Module({
@@ -16,7 +18,9 @@ import { WizardController } from "./presentation/http/wizard.controller.js";
   providers: [
     SaveWizardDraftHandler,
     SubmitWizardHandler,
+    GetReadinessHandler,
     WizardValidatorService,
+    ReadinessEvaluatorService,
     PrismaWizardRepository,
     {
       provide: WIZARD_PROFILE_REPOSITORY,
