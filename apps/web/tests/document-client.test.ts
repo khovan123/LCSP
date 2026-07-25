@@ -1,0 +1,94 @@
+import * as assert from "node:assert/strict";
+import { test } from "node:test";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { DOCUMENT_ERROR_CODES } from "@lcsp/contracts/document";
+
+import {
+  sanitizeDocumentRequestPayload,
+  toDocumentRequestOutcome,
+} from "../src/lib/api/document-client.ts";
+
+test("document request outcome maps requested response correctly", () => {
+  const outcome = toDocumentRequestOutcome(
+    {
+      document_request_id: "req-123",
+      status: "queued",
+      document_type: "final_report",
+      correlation_id: "corr-456",
+    },
+    true,
+    200,
+  );
+
+  assert.equal(outcome.kind, "requested");
+  if (outcome.kind === "requested") {
+    assert.equal(outcome.data.document_request_id, "req-123");
+    assert.equal(outcome.data.status, "queued");
+    assert.equal(outcome.data.document_type, "final_report");
+    assert.equal(outcome.data.correlation_id, "corr-456");
+  }
+});
+
+test("document request outcome maps auth errors to redirect", () => {
+  assert.deepEqual(
+    toDocumentRequestOutcome(
+      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
+      false,
+      401,
+    ),
+    { kind: "redirect", location: "/sign-in" },
+  );
+});
+
+test("document request outcome maps classification guardrail failure to blocked", () => {
+  const outcome = toDocumentRequestOutcome(
+    { problem: { code: DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed } },
+    false,
+    409,
+  );
+
+  assert.equal(outcome.kind, "blocked");
+  if (outcome.kind === "blocked") {
+    assert.equal(outcome.titleKey, "pages.classification.errorTitle");
+    assert.equal(outcome.detailKey, "pages.classification.documentGuardrailBlocked");
+  }
+});
+
+test("document request outcome maps invalid payload to generic error", () => {
+  const outcome = toDocumentRequestOutcome(null, true, 200);
+
+  assert.equal(outcome.kind, "error");
+  if (outcome.kind === "error") {
+    assert.equal(outcome.titleKey, "pages.classification.errorTitle");
+    assert.equal(outcome.detailKey, "pages.classification.errorDetail");
+  }
+});
+
+test("sanitizeDocumentRequestPayload accepts valid payloads", () => {
+  assert.deepEqual(
+    sanitizeDocumentRequestPayload({
+      document_request_id: "req-321",
+      status: "queued",
+      document_type: "FinalReport",
+      correlation_id: "corr-654",
+    }),
+    {
+      document_request_id: "req-321",
+      status: "queued",
+      document_type: "FinalReport",
+      correlation_id: "corr-654",
+    },
+  );
+});
+
+test("sanitizeDocumentRequestPayload rejects invalid payloads", () => {
+  assert.equal(
+    sanitizeDocumentRequestPayload({
+      document_request_id: 123,
+      status: "queued",
+      document_type: "FinalReport",
+      correlation_id: "corr-654",
+    }),
+    null,
+  );
+});
