@@ -1,5 +1,7 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { NotFoundException } from "@nestjs/common";
+import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { ProcessDocumentCallbackHandler } from "./process-document-callback.handler.js";
 import { ProcessDocumentCallbackCommand } from "./process-document-callback.command.js";
 
@@ -22,19 +24,19 @@ function buildHandler(options?: {
       : options.request;
 
   const findUnique = jest.fn(() => request);
-  const update = jest.fn().mockResolvedValue({} as never);
-  const createAuthAudit = jest.fn().mockResolvedValue({} as never);
+  const update = jest.fn().mockResolvedValue({});
+  const createAuthAudit = jest.fn().mockResolvedValue({});
 
   const prisma = {
     documentRequest: { findUnique, update },
     authAuditEvent: { create: createAuthAudit },
-  } as unknown as any;
+  } as unknown as PrismaService;
 
-  const auditWriter = {} as any;
+  const auditWriter = {} as unknown as AuditWriterService;
 
   const handler = new ProcessDocumentCallbackHandler(prisma, auditWriter);
 
-  return { handler, prisma, findUnique, update, createAuthAudit };
+  return { handler, findUnique, update, createAuthAudit };
 }
 
 describe("ProcessDocumentCallbackHandler", () => {
@@ -49,8 +51,7 @@ describe("ProcessDocumentCallbackHandler", () => {
   });
 
   it("updates document request and writes audit when callback arrives", async () => {
-    const { handler, prisma, findUnique, update, createAuthAudit } =
-      buildHandler();
+    const { handler, findUnique, update, createAuthAudit } = buildHandler();
     const command = new ProcessDocumentCallbackCommand(
       {
         document_request_id: "dr-1",

@@ -1,4 +1,4 @@
-import { NotFoundException, HttpException } from "@nestjs/common";
+import { NotFoundException } from "@nestjs/common";
 import * as crypto from "node:crypto";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { Prisma } from "@prisma/client";
@@ -7,11 +7,7 @@ import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
 } from "@lcsp/contracts/audit";
-import {
-  DOCUMENT_EVENT_TYPES,
-  DOCUMENT_REQUEST_STATUSES,
-  DOCUMENT_TYPES,
-} from "@lcsp/contracts/document";
+import { DOCUMENT_EVENT_TYPES } from "@lcsp/contracts/document";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -50,9 +46,12 @@ export class ProcessDocumentCallbackHandler implements ICommandHandler<ProcessDo
       status: payload.status,
     };
 
-    if (payload.document_url) updateData.documentUrl = payload.document_url;
-    if (payload.blocked_reason)
+    if (payload.document_url) {
+      updateData.documentUrl = payload.document_url;
+    }
+    if (payload.blocked_reason) {
       updateData.blockedReason = payload.blocked_reason;
+    }
 
     await this.prisma.documentRequest.update({
       where: { id: payload.document_request_id },
