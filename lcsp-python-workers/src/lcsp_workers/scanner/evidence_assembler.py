@@ -5,6 +5,7 @@ from typing import Iterable
 
 from lcsp_workers.platform.callback_schemas import ScanCallbackPayload
 from lcsp_workers.platform.redaction import redact_dict, redact_source_code
+from lcsp_workers.scanner.analyzers.ai_invocation_detector import TechnicalFinding
 from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalysisResult
 from lcsp_workers.scanner.dependencies.dependency_fact import PackageDependency
 from lcsp_workers.scanner.ts_js_bridge.bridge_types import TsJsBridgeResult
@@ -59,6 +60,7 @@ class EvidenceAssembler:
         dependency_executions: list[ToolExecutionResult] | None = None,
         python_analysis: PythonAnalysisResult | None = None,
         ts_js_analysis: TsJsBridgeResult | None = None,
+        technical_findings: list[TechnicalFinding] | None = None,
     ) -> ScanCallbackPayload:
         executions = [
             syft_result.execution,
@@ -79,6 +81,9 @@ class EvidenceAssembler:
             ],
             "python_analysis": asdict(python_analysis) if python_analysis else None,
             "ts_js_analysis": asdict(ts_js_analysis) if ts_js_analysis else None,
+            "technical_findings": [
+                asdict(finding) for finding in (technical_findings or [])
+            ],
             "tool_failures": [
                 asdict(record) for record in self._tool_failures(executions)
             ],
