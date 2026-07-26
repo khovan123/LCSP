@@ -5,13 +5,19 @@ describe("GetActiveRuleCatalogHandler", () => {
   it("returns the latest approved rule catalog and approved rules", async () => {
     const prisma = {
       legalRuleCatalogVersion: {
-        findFirst: jest.fn().mockResolvedValue({ id: "catalog-1", version: "v1", status: "APPROVED" }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "catalog-1",
+          version: "v1",
+          status: "APPROVED",
+        }),
       },
       legalRule: {
         findMany: jest.fn().mockResolvedValue([
           {
             legalRuleId: "RULE-A",
-            requiredFacts: [{ field: "businessProcess", expectedValue: "AUTOMATED_DECISION" }],
+            requiredFacts: [
+              { field: "businessProcess", expectedValue: "AUTOMATED_DECISION" },
+            ],
             optionalFacts: [],
             blockingFacts: [],
             unknownFactPolicy: "BLOCK_ON_UNKNOWN",

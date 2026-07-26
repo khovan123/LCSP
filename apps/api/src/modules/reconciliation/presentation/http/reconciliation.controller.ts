@@ -78,7 +78,9 @@ export class InternalReconciliationController {
   async getVerifiedProfileById(
     @Param("verifiedProfileId") verifiedProfileId: string,
   ): Promise<unknown> {
-    return this.queryBus.execute(new GetVerifiedProfileByIdQuery(verifiedProfileId));
+    return this.queryBus.execute(
+      new GetVerifiedProfileByIdQuery(verifiedProfileId),
+    );
   }
 }
 
