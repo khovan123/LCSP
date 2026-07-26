@@ -1,4 +1,5 @@
-import { Test } from "@nestjs/testing";
+import { describe, expect, it, jest } from "@jest/globals";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { GetActiveRuleCatalogHandler } from "./get-active-rule-catalog.handler.js";
 
 describe("GetActiveRuleCatalogHandler", () => {
@@ -26,12 +27,12 @@ describe("GetActiveRuleCatalogHandler", () => {
           },
         ]),
       },
-    };
+    } as unknown as PrismaService;
 
-    const handler = new GetActiveRuleCatalogHandler(prisma as any);
-    const result = await handler.execute({} as any);
+    const handler = new GetActiveRuleCatalogHandler(prisma);
+    const result = await handler.execute();
 
     expect(result.versionId).toBe("catalog-1");
-    expect(result.rules[0].legalRuleId).toBe("RULE-A");
+    expect(result.rules[0]?.legalRuleId).toBe("RULE-A");
   });
 });

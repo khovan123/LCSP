@@ -43,7 +43,10 @@ type ResolveConflictRequest = {
 
 @Controller("internal/reconciliation")
 export class InternalReconciliationController {
-  constructor(private readonly commandBus: CommandBus) {}
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus,
+  ) {}
 
   @Post("conflict-callback")
   @HttpCode(200)
@@ -78,7 +81,7 @@ export class InternalReconciliationController {
   async getVerifiedProfileById(
     @Param("verifiedProfileId") verifiedProfileId: string,
   ): Promise<unknown> {
-    return this.queryBus.execute(
+    return await this.queryBus.execute(
       new GetVerifiedProfileByIdQuery(verifiedProfileId),
     );
   }

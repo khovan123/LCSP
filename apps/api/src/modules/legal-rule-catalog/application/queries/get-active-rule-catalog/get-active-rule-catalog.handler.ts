@@ -2,11 +2,26 @@ import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { GetActiveRuleCatalogQuery } from "./get-active-rule-catalog.query.js";
 
+type ActiveRuleCatalogResponse = {
+  versionId: string;
+  version: string;
+  status: string;
+  rules: Array<{
+    legalRuleId: string;
+    requiredFacts: unknown;
+    optionalFacts: unknown;
+    blockingFacts: unknown;
+    unknownFactPolicy: string;
+    citationLocatorRefs: unknown;
+    ruleFamily: string | null;
+  }>;
+};
+
 @QueryHandler(GetActiveRuleCatalogQuery)
 export class GetActiveRuleCatalogHandler implements IQueryHandler<GetActiveRuleCatalogQuery> {
   constructor(private readonly prisma: PrismaService) {}
 
-  async execute(): Promise<any> {
+  async execute(): Promise<ActiveRuleCatalogResponse> {
     const version = await this.prisma.legalRuleCatalogVersion.findFirst({
       where: { status: "APPROVED" },
       orderBy: { createdAt: "desc" },
