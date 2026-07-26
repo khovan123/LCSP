@@ -34,6 +34,7 @@ import type {
   VerifiedProfileCallbackRequest,
 } from "../../application/contracts/reconciliation/verified-profile-callback.contract.js";
 import { ListConflictsQuery } from "../../application/queries/list-conflicts/list-conflicts.query.js";
+import { GetVerifiedProfileByIdQuery } from "../../application/queries/get-verified-profile-by-id/get-verified-profile-by-id.query.js";
 
 type ResolveConflictRequest = {
   resolution?: unknown;
@@ -69,6 +70,15 @@ export class InternalReconciliationController {
         correlationId?.trim() || randomUUID(),
       ),
     );
+  }
+
+  @Get("verified-profiles/:verifiedProfileId")
+  @HttpCode(200)
+  @UseGuards(WorkerApiKeyGuard)
+  async getVerifiedProfileById(
+    @Param("verifiedProfileId") verifiedProfileId: string,
+  ): Promise<unknown> {
+    return this.queryBus.execute(new GetVerifiedProfileByIdQuery(verifiedProfileId));
   }
 }
 

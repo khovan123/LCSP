@@ -6,8 +6,9 @@ import {
   UseGuards,
   Req,
   HttpCode,
+  Get,
 } from "@nestjs/common";
-import { CommandBus } from "@nestjs/cqrs";
+import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
 import type {
@@ -21,15 +22,21 @@ import type {
 
 import { DraftLegalRuleCommand } from "../../application/commands/draft-legal-rule/draft-legal-rule.command.js";
 import { ApproveRuleCatalogVersionCommand } from "../../application/commands/approve-rule-catalog-version/approve-rule-catalog-version.command.js";
+import { GetActiveRuleCatalogQuery } from "../../application/queries/get-active-rule-catalog/get-active-rule-catalog.query.js";
+import { GetActiveLegalCorpusQuery } from "../../application/queries/get-active-legal-corpus/get-active-legal-corpus.query.js";
 
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
+import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 
 @Controller("internal/legal-rule-catalog")
 export class LegalRuleCatalogController {
-  constructor(private readonly commandBus: CommandBus) {}
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus,
+  ) {}
 
   @Post("rules")
   @HttpCode(201)
@@ -63,6 +70,20 @@ export class LegalRuleCatalogController {
         correlationId,
       ),
     );
+  }
+
+  @Get("active")
+  @HttpCode(200)
+  @UseGuards(WorkerApiKeyGuard)
+  async getActiveCatalog(): Promise<unknown> {
+    return this.queryBus.execute(new GetActiveRuleCatalogQuery());
+  }
+
+  @Get("corpus/active")
+  @HttpCode(200)
+  @UseGuards(WorkerApiKeyGuard)
+  async getActiveCorpus(): Promise<unknown> {
+    return this.queryBus.execute(new GetActiveLegalCorpusQuery());
   }
 
   @Post("versions/:versionId/approve")
