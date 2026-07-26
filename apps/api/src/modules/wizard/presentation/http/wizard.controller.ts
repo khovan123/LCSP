@@ -21,8 +21,10 @@ import type {
   SubmitWizardResponse,
 } from "../../application/contracts/wizard/wizard-submit.contract.js";
 import type { ReadinessResponse } from "../../application/contracts/wizard/readiness.contract.js";
+import type { ReadinessExportResponse } from "../../application/contracts/wizard/readiness-export.contract.js";
 import { SaveWizardDraftCommand } from "../../application/commands/save-wizard-draft/save-wizard-draft.command.js";
 import { SubmitWizardCommand } from "../../application/commands/submit-wizard/submit-wizard.command.js";
+import { GenerateReadinessExportCommand } from "../../application/commands/generate-readiness-export/generate-readiness-export.command.js";
 import { GetReadinessQuery } from "../../application/queries/get-readiness/get-readiness.query.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
@@ -109,6 +111,33 @@ export class WizardController {
 
     return this.queryBus.execute(
       new GetReadinessQuery(
+        assessmentId,
+        organizationId,
+        userId,
+        correlationId,
+        {
+          subjectRole: pbacContext.subjectRole,
+          selectedAction: pbacContext.selectedAction,
+          policyId: pbacContext.policyId,
+          policyVersion: pbacContext.policyVersion,
+        },
+      ),
+    );
+  }
+
+  @Post(":assessmentId/wizard/readiness-export")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.wizardExport)
+  async generateReadinessExport(
+    @Param("assessmentId") assessmentId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<ReadinessExportResponse> {
+    const { userId, organizationId } = req.pbacContext;
+    const pbacContext = req.pbacContext;
+    const correlationId = req.correlationId || randomUUID();
+
+    return this.commandBus.execute(
+      new GenerateReadinessExportCommand(
         assessmentId,
         organizationId,
         userId,

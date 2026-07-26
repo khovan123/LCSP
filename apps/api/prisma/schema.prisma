@@ -270,6 +270,22 @@ model WizardProfile {
   @@index([organizationId])
 }
 
+model ReadinessExport {
+  id             String   @id
+  assessmentId   String
+  organizationId String
+  ownerId        String
+  version        Int      @default(1)
+  status         String
+  contentJson    Json?
+  blockedReason  String?
+  generatedAt    DateTime @default(now())
+
+  @@index([assessmentId])
+  @@index([organizationId])
+  @@index([assessmentId, version])
+}
+
 enum AuthMembershipStatus {
   invited
   active

@@ -12,6 +12,7 @@ import {
   DOCUMENT_REQUEST_STATUSES,
   DOCUMENT_TYPES,
 } from "@lcsp/contracts/document";
+import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
@@ -215,7 +216,7 @@ async function seedClassification(
       evidencePayload: { guardrailStatus },
       privacyFlags: { containsSourceCode: false, secretsRedacted: true },
       schemaVersion: "1.0.0",
-      status: "accepted",
+      status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
     },
   });
 

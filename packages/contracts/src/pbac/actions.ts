@@ -28,6 +28,7 @@ export const PBAC_ACTIONS = {
   verifiedProfileApprove: "verified-profile:approve",
   wizardWrite: "wizard:write",
   wizardSubmit: "wizard:submit",
+  wizardExport: "wizard:export",
   workspaceRead: "workspace:read",
 } as const;
 

@@ -1,5 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_LOCK_REASONS,
+  WIZARD_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
 import type { MissingEvidenceItem } from "../../contracts/wizard/readiness.contract.js";
 
 export interface ReadinessEvaluationInput {
@@ -20,7 +23,9 @@ export interface ReadinessEvaluationResult {
 export class ReadinessEvaluatorService {
   evaluate(input: ReadinessEvaluationInput): ReadinessEvaluationResult {
     const classificationLocked = !input.hasAcceptedTechnicalEvidence;
-    const lockReason = classificationLocked ? "LOCKED_EVIDENCE_REQUIRED" : null;
+    const lockReason = classificationLocked
+      ? ASSESSMENT_LOCK_REASONS.evidenceRequired
+      : null;
 
     const missingEvidence: MissingEvidenceItem[] = [];
     const completedSteps: string[] = [];

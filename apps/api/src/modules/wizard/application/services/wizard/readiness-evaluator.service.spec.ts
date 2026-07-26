@@ -1,5 +1,8 @@
 import { ReadinessEvaluatorService } from "./readiness-evaluator.service.js";
-import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_LOCK_REASONS,
+  WIZARD_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
 
 describe("ReadinessEvaluatorService", () => {
   let service: ReadinessEvaluatorService;
@@ -16,7 +19,7 @@ describe("ReadinessEvaluatorService", () => {
     });
 
     expect(result.classification_locked).toBe(true);
-    expect(result.lock_reason).toBe("LOCKED_EVIDENCE_REQUIRED");
+    expect(result.lock_reason).toBe(ASSESSMENT_LOCK_REASONS.evidenceRequired);
     expect(result.missing_evidence).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "technical_evidence" }),

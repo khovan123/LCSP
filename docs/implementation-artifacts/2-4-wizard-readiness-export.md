@@ -1,6 +1,10 @@
+---
+baseline_commit: a56969fdf6ea7616b8f12fcad37d32659549e15f
+---
+
 # Story 2.4: Wizard Readiness Export
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -24,10 +28,10 @@ As a Manager, I want to generate a Wizard Readiness Export before technical evid
 
 ## Tasks / Subtasks
 
-- [ ] Create readiness-only export generation path from wizard/assessment entry points. (AC: 1)
-- [ ] Apply output guardrails to title, metadata, artifact history and file content. (AC: 2)
-- [ ] Persist versioned export artifact with owner, assessment ID, timestamp and audit event. (AC: 1)
-- [ ] Ensure readiness export template mirrors Wizard package semantics and `WIZARD-MAPPING.md`: readiness-only badge, missing-evidence checklist, unresolved unknowns, and next-step CTA set.
+- [x] Create readiness-only export generation path from wizard/assessment entry points. (AC: 1)
+- [x] Apply output guardrails to title, metadata, artifact history and file content. (AC: 2)
+- [x] Persist versioned export artifact with owner, assessment ID, timestamp and audit event. (AC: 1)
+- [x] Ensure readiness export template mirrors Wizard package semantics and `WIZARD-MAPPING.md`: readiness-only badge, missing-evidence checklist, unresolved unknowns, and next-step CTA set.
 
 ## Dev Notes
 
@@ -169,13 +173,51 @@ GPT-5 Codex
 - Batch `bmad-create-story` run on 2026-07-02T22:01:26+07:00.
 - Source packet: `docs/developer/story-handbook/2-4-wizard-readiness-export.md`.
 - Canonical title/source alignment: `docs/planning-artifacts/epics.md`.
+- Captured baseline commit `a56969fdf6ea7616b8f12fcad37d32659549e15f` before implementation.
+- Added failing e2e coverage for readiness export generation, blocked preconditions, PBAC denial, and immutable versioning before implementation.
+- Validation passed: focused guardrail unit, focused readiness export e2e, full API unit, full API e2e, root lint/typecheck contract checks, web tests, API build, and `git diff --check`.
 
 ### Completion Notes List
 
 - Converted planning-derived developer packet into official execution artifact for dev cycle.
 - Status set to `ready-for-dev` in `docs/implementation-artifacts/sprint-status.yaml`.
 - Story retains planning authority references and scope guardrails for downstream `dev-story` work.
+- Implemented `POST /assessments/:assessmentId/wizard/readiness-export` with Manager PBAC, ownership/org checks, submitted-wizard gate, and missing-technical-evidence lock gate.
+- Added readiness-only export contracts, guardrail service, append-only persistence, versioning, and safe audit events for generated/blocked export outcomes.
+- Export content now carries readiness-only labels, missing evidence checklist, unresolved unknown items, preparation guidance, version, timestamp, owner, assessment ID, and wizard profile version without final risk/classification/legal conclusion wording.
+- Updated PBAC/action and wizard event contracts so Manager policy and existing auth/readiness tests include the new export action and event types.
 
 ### File List
 
+- apps/api/prisma/migrations/20260726014847_add_readiness_export/migration.sql
+- apps/api/prisma/schema.prisma
+- apps/api/src/modules/document/application/commands/process-document-callback/process-document-callback.handler.spec.ts
+- apps/api/src/modules/wizard/application/commands/generate-readiness-export/generate-readiness-export.command.ts
+- apps/api/src/modules/wizard/application/commands/generate-readiness-export/generate-readiness-export.handler.ts
+- apps/api/src/modules/wizard/application/contracts/wizard/readiness-export.contract.ts
+- apps/api/src/modules/wizard/application/queries/get-readiness/get-readiness.handler.spec.ts
+- apps/api/src/modules/wizard/application/queries/get-readiness/get-readiness.handler.ts
+- apps/api/src/modules/wizard/application/services/wizard/readiness-evaluator.service.spec.ts
+- apps/api/src/modules/wizard/application/services/wizard/readiness-evaluator.service.ts
+- apps/api/src/modules/wizard/application/services/wizard/readiness-export-guardrail.service.spec.ts
+- apps/api/src/modules/wizard/application/services/wizard/readiness-export-guardrail.service.ts
+- apps/api/src/modules/wizard/domain/entities/readiness-export.entity.ts
+- apps/api/src/modules/wizard/domain/exceptions/wizard.exceptions.ts
+- apps/api/src/modules/wizard/presentation/http/wizard.controller.ts
+- apps/api/src/modules/wizard/wizard.module.ts
+- apps/api/test/auth-workspace.e2e-spec.ts
+- apps/api/test/document-gap-analysis.e2e-spec.ts
+- apps/api/test/support/auth-workspace-test-helpers.ts
+- apps/api/test/wizard-endpoints.e2e-spec.ts
+- apps/api/test/wizard-readiness-export.e2e-spec.ts
+- apps/web/src/features/document/components/organisms/document-request-panel.tsx
 - docs/implementation-artifacts/2-4-wizard-readiness-export.md
+- docs/implementation-artifacts/sprint-status.yaml
+- packages/contracts/src/pbac/actions.ts
+- packages/contracts/src/pbac/manager-policy.ts
+- packages/contracts/src/wizard/events.ts
+- tests/story-1-6.web.test.ts
+
+### Change Log
+
+- 2026-07-26: Implemented Wizard Readiness Export API slice with readiness-only contracts, guardrails, persistence, audit events, PBAC wiring, and focused/full validation coverage.

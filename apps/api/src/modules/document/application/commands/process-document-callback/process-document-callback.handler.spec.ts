@@ -5,13 +5,15 @@ import type { AuditWriterService } from "../../../../../platform/audit/audit-wri
 import { ProcessDocumentCallbackHandler } from "./process-document-callback.handler.js";
 import { ProcessDocumentCallbackCommand } from "./process-document-callback.command.js";
 
+type DocumentRequestProjection = {
+  id: string;
+  assessmentId: string;
+  organizationId: string;
+  correlationId?: string;
+};
+
 function buildHandler(options?: {
-  request?: {
-    id: string;
-    assessmentId: string;
-    organizationId: string;
-    correlationId?: string;
-  } | null;
+  request?: DocumentRequestProjection | null;
 }) {
   const request =
     options?.request === undefined
@@ -23,9 +25,13 @@ function buildHandler(options?: {
         }
       : options.request;
 
-  const findUnique = jest.fn(() => request);
-  const update = jest.fn().mockResolvedValue({});
-  const createAuthAudit = jest.fn().mockResolvedValue({});
+  const findUnique = jest
+    .fn<() => Promise<DocumentRequestProjection | null>>()
+    .mockResolvedValue(request);
+  const update = jest.fn<() => Promise<unknown>>().mockResolvedValue({});
+  const createAuthAudit = jest
+    .fn<() => Promise<unknown>>()
+    .mockResolvedValue({});
 
   const prisma = {
     documentRequest: { findUnique, update },

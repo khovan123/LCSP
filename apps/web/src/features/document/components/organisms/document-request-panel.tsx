@@ -11,17 +11,17 @@ import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
 export function DocumentRequestPanel({ assessmentId }: { assessmentId: string }) {
-  const [status, setStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [messageKey, setMessageKey] = useState<MessageKey | null>(null);
 
   async function onRequestFinalReport() {
-    setStatus("pending");
+    setStatus("loading");
     setMessageKey(null);
 
     const outcome = await requestFinalReport(assessmentId);
 
     if (outcome.kind === "requested") {
-      setStatus("success");
+      setStatus("done");
       setMessageKey("pages.classification.finalReportRequestedDetail");
       return;
     }
@@ -42,13 +42,13 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
   }
 
   async function onRequestGapAnalysis() {
-    setStatus("pending");
+    setStatus("loading");
     setMessageKey(null);
 
     const outcome = await requestGapAnalysis(assessmentId);
 
     if (outcome.kind === "requested") {
-      setStatus("success");
+      setStatus("done");
       setMessageKey("pages.classification.finalReportRequestedDetail");
       return;
     }
@@ -88,7 +88,7 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
             type="button"
             className={cn(buttonVariants({ variant: "default" }), "mt-4")}
             onClick={onRequestFinalReport}
-            disabled={status === "pending"}
+            disabled={status === "loading"}
           >
             {resolveMessage(appLocale, "pages.classification.requestFinalReportButton")}
           </button>
@@ -105,13 +105,13 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
             type="button"
             className={cn(buttonVariants({ variant: "secondary" }), "mt-4")}
             onClick={onRequestGapAnalysis}
-            disabled={status === "pending"}
+            disabled={status === "loading"}
           >
             {resolveMessage(appLocale, "pages.classification.generateGapAnalysis")}
           </button>
         </div>
 
-        {status === "success" && messageKey ? (
+        {status === "done" && messageKey ? (
           <Alert>
             <AlertTitle>{resolveMessage(appLocale, "pages.classification.finalReportRequestedTitle")}</AlertTitle>
             <AlertDescription>

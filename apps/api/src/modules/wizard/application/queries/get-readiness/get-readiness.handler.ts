@@ -3,6 +3,8 @@ import { ForbiddenException } from "@nestjs/common";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
+import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { GetReadinessQuery } from "./get-readiness.query.js";
 import type { ReadinessResponse } from "../../contracts/wizard/readiness.contract.js";
 import { AssessmentNotFoundException } from "../../../domain/exceptions/wizard.exceptions.js";
@@ -47,11 +49,15 @@ export class GetReadinessHandler implements IQueryHandler<
         where: { assessmentId },
       }),
       this.prisma.technicalEvidenceReport.findFirst({
-        where: { assessmentId, status: "accepted" },
+        where: {
+          assessmentId,
+          status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+        },
       }),
     ]);
 
-    const wizardStatus = wizardProfile?.status ?? "NOT_STARTED";
+    const wizardStatus =
+      wizardProfile?.status ?? WIZARD_STATUS_CODES.notStarted;
 
     // Evaluate readiness logic
     const evaluation = this.readinessEvaluator.evaluate({

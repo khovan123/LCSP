@@ -1,4 +1,5 @@
 import { ConflictException, NotFoundException } from "@nestjs/common";
+import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 
 export class WizardAlreadySubmittedException extends ConflictException {
   constructor(
@@ -17,7 +18,7 @@ export class AssessmentNotFoundException extends NotFoundException {
   ) {
     super({
       message,
-      error_code: "ASSESSMENT_NOT_FOUND",
+      error_code: ASSESSMENT_ERROR_CODES.notFound,
     });
   }
 }
