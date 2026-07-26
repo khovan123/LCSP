@@ -12,7 +12,7 @@ type VerifiedProfileResponse = {
   mergedProfile: unknown;
   evidenceRefs: unknown[];
   status: string | null;
-  gatesPassedAt: unknown | null;
+  gatesPassedAt: Date | null;
 };
 
 function toEvidenceRefs(profileData: unknown): unknown[] {
@@ -28,6 +28,19 @@ function toEvidenceRefs(profileData: unknown): unknown[] {
   }
 
   return [];
+}
+
+function toGatesPassedAt(value: unknown): Date | null {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
 }
 
 @QueryHandler(GetVerifiedProfileByIdQuery)
@@ -55,7 +68,7 @@ export class GetVerifiedProfileByIdHandler implements IQueryHandler<GetVerifiedP
       mergedProfile: profile.profileData,
       evidenceRefs: toEvidenceRefs(profile.profileData),
       status: profile.status,
-      gatesPassedAt: profile.gatesPassedAt,
+      gatesPassedAt: toGatesPassedAt(profile.gatesPassedAt),
     };
   }
 }
