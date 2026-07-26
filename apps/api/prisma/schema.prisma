@@ -532,3 +532,23 @@ model RuleApprovalRecord {
 
   @@index([legalRuleCatalogVersionId])
 }
+
+model LegalRuleMatch {
+  id                        String   @id @default(uuid())
+  verifiedProfileId         String
+  assessmentId              String
+  organizationId            String
+  corpusVersionId           String
+  legalRuleCatalogVersionId String
+  schemaVersion             String
+  matches                   Json
+  citationAllowlist         Json
+  overallCoverageStatus     String   @default("NO_CITATION")
+  guardrailStatus           String   @default("passed")
+  blockedReason             String?
+  status                    String   @default("accepted")
+  createdAt                 DateTime @default(now())
+
+  @@index([assessmentId])
+}
+

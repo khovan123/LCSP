@@ -18,4 +18,16 @@ export const SCAN_ERROR_CODES = {
   conflictAlreadyResolved: "CONFLICT_ALREADY_RESOLVED",
   pendingConflictsExist: "PENDING_CONFLICTS_EXIST",
   verifiedProfileSchemaInvalid: "SCHEMA_INVALID",
+  verifiedProfileNotFound: "VERIFIED_PROFILE_NOT_FOUND",
+  corpusVersionNotApproved: "CORPUS_VERSION_NOT_APPROVED",
+  ruleCatalogVersionNotApproved: "RULE_CATALOG_VERSION_NOT_APPROVED",
+  citationOutOfAllowlist: "CITATION_OUT_OF_ALLOWLIST",
+  citationRepealed: "CITATION_REPEALED",
+  legalRuleMatchSchemaInvalid: "SCHEMA_INVALID",
+  legalRuleMatchNotFound: "LEGAL_RULE_MATCH_NOT_FOUND",
 } as const;
+
+export type ScanErrorCode =
+  (typeof SCAN_ERROR_CODES)[keyof typeof SCAN_ERROR_CODES];
+
+

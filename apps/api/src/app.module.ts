@@ -7,7 +7,9 @@ import { AIUsageFlowModule } from "./modules/ai-usage-flow/ai-usage-flow.module.
 import { AssessmentModule } from "./modules/assessment/assessment.module.js";
 import { AuditModule as AuditFeatureModule } from "./modules/audit/audit.module.js";
 import { AuthWorkspaceModule } from "./modules/auth-workspace/auth-workspace.module.js";
+import { ClassificationModule } from "./modules/classification/classification.module.js";
 import { EvidenceModule } from "./modules/evidence/evidence.module.js";
+
 import { DocumentModule } from "./modules/document/document.module.js";
 import { GitHubIntegrationModule } from "./modules/github-integration/github-integration.module.js";
 import { HealthModule } from "./modules/health/health.module.js";
@@ -43,6 +45,7 @@ import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.modul
     GitHubIntegrationModule,
     ReconciliationModule,
     ScanModule,
+    ClassificationModule,
     AuditFeatureModule,
     WizardModule,
     LegalRuleCatalogModule,
