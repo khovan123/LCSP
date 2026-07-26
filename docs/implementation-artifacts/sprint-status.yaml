@@ -1,5 +1,5 @@
 # generated: 2026-06-26T10:24:37+07:00
-# last_updated: 2026-06-26T10:54:17+07:00
+# last_updated: 2026-07-26T02:05:08Z
 # project: LCSP — Legal Compliance Support Platform
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-06-26T10:24:37+07:00"
-last_updated: "2026-07-22T00:00:00Z"
+last_updated: "2026-07-26T02:05:08Z"
 project: "LCSP — Legal Compliance Support Platform"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -58,7 +58,7 @@ development_status:
   2-1-create-manager-owned-assessment: ready-for-dev
   2-2-complete-wizardprofile-in-business-language: ready-for-dev
   2-3-wizard-only-readiness-without-risk-level: ready-for-dev
-  2-4-wizard-readiness-export: ready-for-dev
+  2-4-wizard-readiness-export: review
   epic-2-retrospective: optional
   epic-3: in-progress
   3-1-connect-read-only-github-repository: ready-for-dev

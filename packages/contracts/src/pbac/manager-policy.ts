@@ -4,6 +4,7 @@ export const MANAGER_ONLY_ACTION_VALUES = [
   PBAC_ACTIONS.assessmentCreate,
   PBAC_ACTIONS.wizardWrite,
   PBAC_ACTIONS.wizardSubmit,
+  PBAC_ACTIONS.wizardExport,
   PBAC_ACTIONS.conflictFinalize,
   PBAC_ACTIONS.conflictRead,
   PBAC_ACTIONS.conflictResolve,

@@ -3,6 +3,10 @@ import { ForbiddenException } from "@nestjs/common";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import {
+  ASSESSMENT_LOCK_REASONS,
+  WIZARD_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
 import { GetReadinessHandler } from "./get-readiness.handler.js";
 import { GetReadinessQuery } from "./get-readiness.query.js";
 import { AssessmentNotFoundException } from "../../../domain/exceptions/wizard.exceptions.js";
@@ -37,7 +41,7 @@ describe("GetReadinessHandler", () => {
     evaluatorService = {
       evaluate: jest.fn().mockReturnValue({
         classification_locked: true,
-        lock_reason: "LOCKED_EVIDENCE_REQUIRED",
+        lock_reason: ASSESSMENT_LOCK_REASONS.evidenceRequired,
         missing_evidence: [],
         completed_steps: [],
         next_action: "Some next action",
@@ -108,7 +112,7 @@ describe("GetReadinessHandler", () => {
       id: "assessment-123",
     } as Assessment);
     prismaService.wizardProfile.findUnique.mockResolvedValue({
-      status: "SUBMITTED",
+      status: WIZARD_STATUS_CODES.submitted,
     } as WizardProfile);
     prismaService.repositoryConnection.findFirst.mockResolvedValue({
       id: "repo-1",
@@ -121,12 +125,12 @@ describe("GetReadinessHandler", () => {
     expect(evaluatorService.evaluate).toHaveBeenCalledWith({
       hasRepositoryConnection: true,
       hasAcceptedTechnicalEvidence: false,
-      wizardStatus: "SUBMITTED",
+      wizardStatus: WIZARD_STATUS_CODES.submitted,
     });
 
     expect(result.assessment_id).toBe("assessment-123");
-    expect(result.wizard_status).toBe("SUBMITTED");
+    expect(result.wizard_status).toBe(WIZARD_STATUS_CODES.submitted);
     expect(result.classification_locked).toBe(true);
-    expect(result.lock_reason).toBe("LOCKED_EVIDENCE_REQUIRED");
+    expect(result.lock_reason).toBe(ASSESSMENT_LOCK_REASONS.evidenceRequired);
   });
 });

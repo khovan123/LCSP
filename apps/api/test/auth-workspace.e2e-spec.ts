@@ -378,6 +378,7 @@ describe("Auth workspace (e2e)", () => {
       PBAC_ACTIONS.snapshotCreate,
       PBAC_ACTIONS.wizardWrite,
       PBAC_ACTIONS.wizardSubmit,
+      PBAC_ACTIONS.wizardExport,
     ]);
     assert.equal(body.mfa_verified, false);
     assert.equal(body.correlation_id, "corr-manager-workspace-context");
