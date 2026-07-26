@@ -94,7 +94,10 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
     );
     assert.doesNotMatch(serialized, /\b(HIGH|MEDIUM|LOW)\b/);
     assert.doesNotMatch(serialized, /\brisk\b/i);
-    assert.doesNotMatch(serialized, /classification result|final classification/i);
+    assert.doesNotMatch(
+      serialized,
+      /classification result|final classification/i,
+    );
     assert.doesNotMatch(serialized, /\bnon-compliant\b/i);
 
     const [exportRecord, audit] = await Promise.all([

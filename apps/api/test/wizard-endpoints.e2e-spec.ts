@@ -298,7 +298,10 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       assert.equal(res.status, 200);
       const body = res.body;
       assert.equal(body.status, WIZARD_STATUS_CODES.submitted);
-      assert.equal(body.assessment_status, ASSESSMENT_STATUS_CODES.wizardSubmitted);
+      assert.equal(
+        body.assessment_status,
+        ASSESSMENT_STATUS_CODES.wizardSubmitted,
+      );
       assert.ok(body.submitted_at);
     });
 

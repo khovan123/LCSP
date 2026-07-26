@@ -106,8 +106,7 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
 
     if (technicalEvidence) {
       throw new ConflictException({
-        error_code:
-          READINESS_EXPORT_ERROR_CODES.requiresLockedClassification,
+        error_code: READINESS_EXPORT_ERROR_CODES.requiresLockedClassification,
         correlation_id: command.correlationId,
       });
     }
