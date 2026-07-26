@@ -1,0 +1,294 @@
+import * as assert from "node:assert/strict";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
+import type { INestApplication } from "@nestjs/common";
+import { Test, TestingModule } from "@nestjs/testing";
+import { httpRequest } from "./support/http.js";
+
+import { AppModule } from "../src/app.module.js";
+import {
+  TEST_DATABASE_URL,
+  pushPrismaSchema,
+  resetAuthWorkspaceDatabase,
+  seedAuthWorkspaceFixture,
+} from "./support/auth-workspace-test-helpers.js";
+
+import {
+  PBAC_ACTIONS,
+  PBAC_STATE_GATES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
+import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
+
+describe("Legal Rule Catalog Endpoints (e2e)", () => {
+  let app: INestApplication;
+  let prisma: PrismaClient;
+  let authorToken: string;
+  let approverToken: string;
+  let restrictedToken: string;
+  const orgId = "org-1";
+
+  beforeAll(async () => {
+    process.env.DATABASE_URL = TEST_DATABASE_URL;
+    pushPrismaSchema();
+
+    prisma = new PrismaClient({ adapter: new PrismaPg(TEST_DATABASE_URL) });
+    await prisma.$connect();
+
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    await app.init();
+  });
+
+  beforeEach(async () => {
+    // Clear catalog data
+    await prisma.ruleApprovalRecord.deleteMany();
+    await prisma.legalRule.deleteMany();
+    await prisma.legalRuleCatalogVersion.deleteMany();
+
+    await resetAuthWorkspaceDatabase(prisma);
+    await seedAuthWorkspaceFixture(prisma); // sets up orgId
+
+    const hashFn = (
+      await import("../src/modules/auth-workspace/infrastructure/security/security.utils.js")
+    ).hashSecret;
+    const passwordHash = hashFn("CorrectHorseBatteryStaple!");
+
+    // 1. Setup Author User
+    const authorPolicyId = "policy-author";
+    await prisma.authPolicy.create({
+      data: {
+        id: authorPolicyId,
+        version: "2026-07-26-author",
+        actions: [PBAC_ACTIONS.legalRuleCatalogAuthor],
+        subjectRole: SUBJECT_ROLES.developer,
+        stateGate: PBAC_STATE_GATES.membershipActive,
+        organizationId: orgId,
+      },
+    });
+    const authorUserId = "user-author";
+    await prisma.authUser.create({
+      data: {
+        id: authorUserId,
+        email: "author@acme.test",
+        passwordHash,
+        emailVerified: true,
+        failedLoginCount: 0,
+      },
+    });
+    await prisma.authMembership.create({
+      data: {
+        id: "mem-author",
+        userId: authorUserId,
+        organizationId: orgId,
+        status: AUTH_MEMBERSHIP_STATUSES.active,
+        subjectAttributes: { role: SUBJECT_ROLES.developer },
+        policyId: authorPolicyId,
+        policyVersion: "2026-07-26-author",
+      },
+    });
+    const signInAuthor = await httpRequest(app).post("/auth/sign-in").send({
+      email: "author@acme.test",
+      password: "CorrectHorseBatteryStaple!",
+      organization_id: orgId,
+    });
+    authorToken = String(
+      (signInAuthor.body as { session_token?: string })?.session_token ?? "",
+    );
+
+    // 2. Setup Approver User
+    const approverPolicyId = "policy-approver";
+    await prisma.authPolicy.create({
+      data: {
+        id: approverPolicyId,
+        version: "2026-07-26-approver",
+        actions: [PBAC_ACTIONS.legalRuleCatalogApprove],
+        subjectRole: SUBJECT_ROLES.developer,
+        stateGate: PBAC_STATE_GATES.membershipActive,
+        organizationId: orgId,
+      },
+    });
+    const approverUserId = "user-approver";
+    await prisma.authUser.create({
+      data: {
+        id: approverUserId,
+        email: "approver@acme.test",
+        passwordHash,
+        emailVerified: true,
+        failedLoginCount: 0,
+      },
+    });
+    await prisma.authMembership.create({
+      data: {
+        id: "mem-approver",
+        userId: approverUserId,
+        organizationId: orgId,
+        status: AUTH_MEMBERSHIP_STATUSES.active,
+        subjectAttributes: { role: SUBJECT_ROLES.developer },
+        policyId: approverPolicyId,
+        policyVersion: "2026-07-26-approver",
+      },
+    });
+    const signInApprover = await httpRequest(app).post("/auth/sign-in").send({
+      email: "approver@acme.test",
+      password: "CorrectHorseBatteryStaple!",
+      organization_id: orgId,
+    });
+    approverToken = String(
+      (signInApprover.body as { session_token?: string })?.session_token ?? "",
+    );
+
+    // 3. Setup Restricted User (no rights)
+    const restrictedPolicyId = "policy-restricted";
+    await prisma.authPolicy.create({
+      data: {
+        id: restrictedPolicyId,
+        version: "2026-07-26-restricted",
+        actions: [PBAC_ACTIONS.workspaceRead],
+        subjectRole: SUBJECT_ROLES.developer,
+        stateGate: PBAC_STATE_GATES.membershipActive,
+        organizationId: orgId,
+      },
+    });
+    const restrictedUserId = "user-restricted";
+    await prisma.authUser.create({
+      data: {
+        id: restrictedUserId,
+        email: "restricted@acme.test",
+        passwordHash,
+        emailVerified: true,
+        failedLoginCount: 0,
+      },
+    });
+    await prisma.authMembership.create({
+      data: {
+        id: "mem-restricted",
+        userId: restrictedUserId,
+        organizationId: orgId,
+        status: AUTH_MEMBERSHIP_STATUSES.active,
+        subjectAttributes: { role: SUBJECT_ROLES.developer },
+        policyId: restrictedPolicyId,
+        policyVersion: "2026-07-26-restricted",
+      },
+    });
+
+    await prisma.legalRuleCatalogVersion.create({
+      data: {
+        id: "cat-version-1",
+        version: "v1.0.0",
+        ruleRefs: [],
+      },
+    });
+
+    const signInRestricted = await httpRequest(app).post("/auth/sign-in").send({
+      email: "restricted@acme.test",
+      password: "CorrectHorseBatteryStaple!",
+      organization_id: orgId,
+    });
+    restrictedToken = String(
+      (signInRestricted.body as { session_token?: string })?.session_token ??
+        "",
+    );
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await prisma.$disconnect();
+  });
+
+  describe("POST /internal/legal-rule-catalog/rules (Draft)", () => {
+    const payload = {
+      legalRuleId: "RULE-TEST-001",
+      legalRuleCatalogVersionId: "cat-version-1",
+      ruleFamily: "SECURITY",
+      requiredFacts: {},
+      unknownFactPolicy: "BLOCK",
+      citationLocatorRefs: [{ chunkId: "chunk-1" }],
+    };
+
+    it("T01: Returns 201 when called by author", async () => {
+      const response = await httpRequest(app)
+        .post("/internal/legal-rule-catalog/rules")
+        .set("Authorization", `Bearer ${authorToken}`)
+        .send(payload);
+
+      assert.equal(response.status, 201);
+      assert.equal(
+        (response.body as { legalRuleId?: string }).legalRuleId,
+        "RULE-TEST-001",
+      );
+      assert.equal((response.body as { status?: string }).status, "DRAFT");
+    });
+
+    it("T06: Returns 403 when called by restricted user", async () => {
+      const response = await httpRequest(app)
+        .post("/internal/legal-rule-catalog/rules")
+        .set("Authorization", `Bearer ${restrictedToken}`)
+        .send(payload);
+
+      assert.equal(response.status, 403);
+    });
+
+    it("T06: Returns 403 when called by approver user (missing author right)", async () => {
+      const response = await httpRequest(app)
+        .post("/internal/legal-rule-catalog/rules")
+        .set("Authorization", `Bearer ${approverToken}`)
+        .send(payload);
+
+      assert.equal(response.status, 403);
+    });
+  });
+
+  describe("POST /internal/legal-rule-catalog/versions/:id/approve", () => {
+    let versionId: string;
+
+    beforeEach(async () => {
+      await httpRequest(app)
+        .post("/internal/legal-rule-catalog/rules")
+        .set("Authorization", `Bearer ${authorToken}`)
+        .send({
+          legalRuleId: "RULE-TEST-002",
+          legalRuleCatalogVersionId: "cat-version-1",
+          ruleFamily: "RISK",
+          requiredFacts: {},
+          unknownFactPolicy: "BLOCK",
+          citationLocatorRefs: [],
+        });
+
+      versionId = "cat-version-1";
+    });
+
+    it("T04: Returns 200 when called by approver", async () => {
+      const response = await httpRequest(app)
+        .post(`/internal/legal-rule-catalog/versions/${versionId}/approve`)
+        .set("Authorization", `Bearer ${approverToken}`)
+        .send({
+          scopeDescription: "Approved for release",
+        });
+
+      assert.equal(response.status, 200);
+      assert.equal((response.body as { status?: string }).status, "APPROVED");
+    });
+
+    it("T06: Returns 403 when called by restricted user", async () => {
+      const response = await httpRequest(app)
+        .post(`/internal/legal-rule-catalog/versions/${versionId}/approve`)
+        .set("Authorization", `Bearer ${restrictedToken}`)
+        .send({ scopeDescription: "Test" });
+
+      assert.equal(response.status, 403);
+    });
+
+    it("T06: Returns 403 when called by author user (missing approve right)", async () => {
+      const response = await httpRequest(app)
+        .post(`/internal/legal-rule-catalog/versions/${versionId}/approve`)
+        .set("Authorization", `Bearer ${authorToken}`)
+        .send({ scopeDescription: "Test" });
+
+      assert.equal(response.status, 403);
+    });
+  });
+});

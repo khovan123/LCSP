@@ -18,6 +18,8 @@ export const PBAC_ACTIONS = {
   documentGenerate: DOCUMENT_ACTIONS.generate,
   githubConnect: "github:connect",
   inviteDeveloper: "invite:developer",
+  legalRuleCatalogAuthor: "legal-rule-catalog:author",
+  legalRuleCatalogApprove: "legal-rule-catalog:approve",
   managerDecisionChange: "manager-decision:change",
   membershipRevoke: "membership:revoke",
   metadataCheck: "pbac:metadata",

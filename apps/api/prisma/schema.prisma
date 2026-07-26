@@ -493,3 +493,42 @@ model GitHubAppInstallState {
 
   @@index([organizationId])
 }
+
+model LegalRuleCatalogVersion {
+  id         String    @id @default(uuid())
+  version    String
+  status     String    @default("DRAFT")
+  ruleRefs   Json
+  createdAt  DateTime  @default(now())
+  approvedAt DateTime?
+
+  @@index([status])
+}
+
+model LegalRule {
+  id                        String  @id @default(uuid())
+  legalRuleId               String  @unique
+  legalRuleCatalogVersionId String
+  ruleFamily                String
+  requiredFacts             Json
+  optionalFacts             Json?
+  blockingFacts             Json?
+  unknownFactPolicy         String
+  citationLocatorRefs       Json
+  status                    String  @default("DRAFT")
+  authoredBy                String
+
+  @@index([legalRuleCatalogVersionId])
+}
+
+model RuleApprovalRecord {
+  id                        String   @id @default(uuid())
+  legalRuleCatalogVersionId String
+  approvedBy                String
+  status                    String
+  scopeDescription          String
+  comments                  String?
+  approvalDate              DateTime @default(now())
+
+  @@index([legalRuleCatalogVersionId])
+}

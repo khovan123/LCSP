@@ -15,6 +15,7 @@ import { ReconciliationModule } from "./modules/reconciliation/reconciliation.mo
 import { ScanModule } from "./modules/scan/scan.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
 import { WizardModule } from "./modules/wizard/wizard.module.js";
+import { LegalRuleCatalogModule } from "./modules/legal-rule-catalog/legal-rule-catalog.module.js";
 import { OutboxModule } from "./platform/outbox/outbox.module.js";
 import { PbacModule } from "./platform/pbac/pbac.module.js";
 import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.module.js";
@@ -44,6 +45,7 @@ import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.modul
     ScanModule,
     AuditFeatureModule,
     WizardModule,
+    LegalRuleCatalogModule,
     HealthModule,
   ],
 })
