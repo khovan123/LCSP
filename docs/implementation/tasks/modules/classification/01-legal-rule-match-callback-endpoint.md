@@ -3,7 +3,7 @@ task_id: MW-cls-001
 module: classification
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 6.7
 depends_on:
   - reconciliation/04-verified-profile-callback-endpoint.md
@@ -153,3 +153,19 @@ model LegalRuleMatch {
 - `PRIMARY_MATCH`, `PARENT_CONTEXT`, `REFERENCED_CONTEXT` distinct in data.
 - Empty matches → blocked state (fail-closed Citation Guardrail).
 - Immutable once accepted.
+
+## Dev Agent Record & Verification Notes
+
+- **Date:** 2026-07-26
+- **Status:** DONE
+- **Implementation Highlights:**
+  - Added `LegalRuleMatch` model to `apps/api/prisma/schema.prisma` and generated Prisma Client.
+  - Implemented `CitationGuardrailService` to enforce citation allowlist validation and reject `REPEALED` citations.
+  - Implemented `AcceptLegalRuleMatchHandler` and `ClassificationController` endpoint (`POST /internal/classification/legal-rule-match-callback`).
+  - Added error codes, statuses, event types, and approved version lists to `@lcsp/contracts/scan`.
+  - Registered `ClassificationModule` in `AppModule`.
+- **Verification Results:**
+  - Unit tests: `pnpm --filter @lcsp/api test apps/api/src/modules/classification/` passed 9/9 tests.
+  - E2E tests: `pnpm --filter @lcsp/api test:e2e apps/api/test/legal-rule-match-callback.e2e-spec.ts` passed 9/9 tests.
+  - Build: `pnpm --filter @lcsp/api build` passed with zero errors.
+
