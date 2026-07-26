@@ -9,6 +9,7 @@ from lcsp_workers.platform.callback_schemas import (
     CallbackResponse,
     AIUsageFlowCallbackPayload,
     ConflictDetectionCallbackPayload,
+    LegalRuleMatchCallbackPayload,
     TechnicalProfileCallbackPayload,
     VerifiedProfileCallbackPayload,
 )
@@ -278,6 +279,27 @@ def test_verified_profile_pending_conflicts_error_preserves_error_code(client):
 
         with pytest.raises(WorkerCallbackError, match="PENDING_CONFLICTS_EXIST"):
             client.post_verified_profile_callback(payload)
+
+
+def test_legal_rule_match_callback_uses_classification_endpoint(client):
+    payload = LegalRuleMatchCallbackPayload(
+        verified_profile_id="vp-1",
+        assessment_id="assessment-1",
+        corpus_version_id="corpus-v1",
+        legal_rule_catalog_version_id="catalog-v1",
+        matches=[],
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"accepted": True}
+        mock_post.return_value = mock_resp
+
+        client.post_legal_rule_match_callback(payload)
+
+        url = mock_post.call_args.args[0]
+        assert url == "http://testserver/internal/classification/legal-rule-match-callback"
 
 
 def test_get_verified_profile_reconciliation_context_uses_internal_endpoint(client):

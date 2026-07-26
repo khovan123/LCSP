@@ -65,8 +65,14 @@ class VerifiedProfileCallbackPayload(BaseModel):
 
 class LegalRuleMatchCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    scan_job_id: str
+    verified_profile_id: str
+    assessment_id: str
+    corpus_version_id: str
+    legal_rule_catalog_version_id: str
+    schema_version: str = "1.0.0"
     matches: List[Dict[str, Any]]
+    citation_allowlist: List[str] = Field(default_factory=list)
+    overall_coverage_status: str = "NO_CITATION"
 
 class ClassificationCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
