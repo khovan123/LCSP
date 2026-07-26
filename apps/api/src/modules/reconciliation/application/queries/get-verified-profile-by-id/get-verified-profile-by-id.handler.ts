@@ -12,7 +12,7 @@ type VerifiedProfileResponse = {
   mergedProfile: unknown;
   evidenceRefs: unknown[];
   status: string | null;
-  gatesPassedAt: Date | null;
+  gatesPassedAt: unknown | null;
 };
 
 function toEvidenceRefs(profileData: unknown): unknown[] {
