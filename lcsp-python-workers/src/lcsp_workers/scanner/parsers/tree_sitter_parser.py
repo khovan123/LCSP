@@ -15,6 +15,11 @@ _ROUTE_PATTERNS = [
     r"urlpatterns\s*=",
 ]
 
+_CONTROLLER_PATTERNS = [
+    r"@Controller\s*\(",
+    r"@(?:Get|Post|Put|Delete|Patch)\s*\(",
+]
+
 _ASYNC_PATTERN = re.compile(r"^\s*async\s+def\s+([A-Za-z_][A-Za-z0-9_]*)")
 _FUNCTION_PATTERN = re.compile(r"^\s*def\s+([A-Za-z_][A-Za-z0-9_]*)")
 _CLASS_PATTERN = re.compile(r"^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)")
@@ -49,6 +54,19 @@ class StructuralParser:
                         line_number=index,
                         decorators=[self._decorator_name(stripped)],
                         graph_node_type="ROUTE",
+                        parse_source="custom_regex_fallback",
+                    )
+                )
+
+            if re.search("|".join(_CONTROLLER_PATTERNS), line):
+                facts.append(
+                    StructuralFact(
+                        file_path=str(path),
+                        pattern_type="controller",
+                        name=self._extract_name(lines, index, default="controller"),
+                        line_number=index,
+                        decorators=[self._decorator_name(stripped)],
+                        graph_node_type="CONTROLLER",
                         parse_source="custom_regex_fallback",
                     )
                 )

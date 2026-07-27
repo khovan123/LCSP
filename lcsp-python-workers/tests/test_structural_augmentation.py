@@ -81,3 +81,81 @@ def test_structural_augmentor_links_facts_to_existing_findings(tmp_path: Path) -
     )
 
     assert payload.evidence_payload["structural_facts"][0]["pattern_type"] == "route_handler"
+
+
+def test_structural_augmentor_skips_files_without_ai_findings(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    target = workspace / "src" / "no_ai.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "@app.get('/health')\n"
+        "def health():\n"
+        "    return {}\n",
+        encoding="utf-8",
+    )
+
+    augmentor = StructuralAugmentor(workspace_path=str(workspace))
+    facts = augmentor.augment(files=["src/no_ai.py"], finding_ids=[])
+
+    assert facts == []
+
+
+def test_structural_augmentor_records_controller_and_route_for_nestjs(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    target = workspace / "src" / "controller.ts"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "@Controller()\n"
+        "export class AppController {\n"
+        "  @Get('/generate')\n"
+        "  async generate() {\n"
+        "    return 1;\n"
+        "  }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    augmentor = StructuralAugmentor(workspace_path=str(workspace))
+    facts = augmentor.augment(files=["src/controller.ts"], finding_ids=["finding-2"])
+
+    assert any(fact.pattern_type == "controller" and fact.graph_node_type == "CONTROLLER" for fact in facts)
+    assert any(fact.pattern_type == "route_handler" and fact.graph_node_type == "ROUTE" for fact in facts)
+
+
+def test_structural_augmentor_tracks_parser_failures_as_coverage_limitations(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    target = workspace / "src" / "ai.py"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("def broken():\n    return 1\n", encoding="utf-8")
+
+    class ExplodingParser:
+        def parse_file(self, file_path: str | Path) -> list[object]:
+            raise RuntimeError("parser unavailable")
+
+    augmentor = StructuralAugmentor(workspace_path=str(workspace))
+    augmentor._parser = ExplodingParser()  # type: ignore[assignment]
+    facts = augmentor.augment(files=["src/ai.py"], finding_ids=["finding-3"])
+
+    assert facts == []
+    assert any("structural augmentation" in note.lower() for note in augmentor.last_coverage_notes)
+
+
+def test_structural_augmentor_caps_processed_files_and_records_limitation(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir(parents=True, exist_ok=True)
+    for index in range(101):
+        target = workspace / "src" / f"file_{index}.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("@app.get('/predict')\ndef predict():\n    return 1\n", encoding="utf-8")
+
+    augmentor = StructuralAugmentor(workspace_path=str(workspace))
+    facts = augmentor.augment(
+        files=[str(workspace / "src" / f"file_{index}.py") for index in range(101)],
+        finding_ids=["finding-4"],
+    )
+
+    assert len(facts) <= 100
+    assert any("100" in note for note in augmentor.last_coverage_notes)
