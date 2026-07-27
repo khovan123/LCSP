@@ -328,10 +328,31 @@ class WorkerApiClient:
         resp_data = self._post_with_retry(path, payload.model_dump())
         return CallbackResponse(**resp_data)
 
+    def get_verified_profile_by_id(self, verified_profile_id: str) -> dict:
+        path = f"/internal/reconciliation/verified-profiles/{verified_profile_id}"
+        data = self._get_with_retry(path)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Verified profile response was invalid.")
+        return data
+
+    def get_active_legal_rule_catalog(self) -> dict:
+        path = "/internal/legal-rule-catalog/active"
+        data = self._get_with_retry(path)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Legal rule catalog response was invalid.")
+        return data
+
+    def get_active_legal_corpus(self) -> dict:
+        path = "/internal/legal-rule-catalog/corpus/active"
+        data = self._get_with_retry(path)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Legal corpus response was invalid.")
+        return data
+
     def post_legal_rule_match_callback(
         self, payload: LegalRuleMatchCallbackPayload
     ) -> CallbackResponse:
-        path = CallbackPath.LEGAL_RULE_MATCH
+        path = "/internal/classification/legal-rule-match-callback"
         resp_data = self._post_with_retry(path, payload.model_dump())
         return CallbackResponse(**resp_data)
 
