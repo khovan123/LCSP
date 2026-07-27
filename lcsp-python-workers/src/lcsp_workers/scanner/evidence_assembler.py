@@ -10,6 +10,7 @@ from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalysisResult
 from lcsp_workers.scanner.dependencies.dependency_fact import PackageDependency
 from lcsp_workers.scanner.ts_js_bridge.bridge_types import TsJsBridgeResult
 
+from .parsers.structural_types import StructuralFact
 from .tools.semgrep_tool import SemgrepRunResult
 from .tools.syft_tool import SyftRunResult
 from .tools.tool_base import OUTCOME_SUCCESS, ToolExecutionResult
@@ -53,7 +54,7 @@ class EvidenceAssembler:
         self,
         *,
         scan_job_id: str,
-        syft_result: SyftRunResult,
+        syft_result: SyftRunResult | None,
         semgrep_result: SemgrepRunResult,
         coverage_notes: list[str],
         package_dependencies: list[PackageDependency] | None = None,
@@ -61,9 +62,10 @@ class EvidenceAssembler:
         python_analysis: PythonAnalysisResult | None = None,
         ts_js_analysis: TsJsBridgeResult | None = None,
         technical_findings: list[TechnicalFinding] | None = None,
+        structural_facts: list[StructuralFact] | None = None,
     ) -> ScanCallbackPayload:
         executions = [
-            syft_result.execution,
+            *( [syft_result.execution] if syft_result is not None else [] ),
             *semgrep_result.executions,
             *(dependency_executions or []),
         ]
@@ -74,7 +76,7 @@ class EvidenceAssembler:
         source_stripped = len(redacted_findings) == len(findings)
 
         evidence_payload = {
-            "sbom_entries": [asdict(entry) for entry in syft_result.entries],
+            "sbom_entries": [asdict(entry) for entry in (syft_result.entries if syft_result is not None else [])],
             "ai_usage_signals": redacted_findings,
             "package_dependencies": [
                 asdict(package) for package in (package_dependencies or [])
@@ -83,6 +85,9 @@ class EvidenceAssembler:
             "ts_js_analysis": asdict(ts_js_analysis) if ts_js_analysis else None,
             "technical_findings": [
                 asdict(finding) for finding in (technical_findings or [])
+            ],
+            "structural_facts": [
+                asdict(fact) for fact in (structural_facts or [])
             ],
             "tool_failures": [
                 asdict(record) for record in self._tool_failures(executions)
