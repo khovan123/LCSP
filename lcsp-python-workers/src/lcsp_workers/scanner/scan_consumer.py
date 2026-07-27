@@ -17,6 +17,7 @@ from .dependencies.dependency_normalizer import DependencyNormalizer
 from .evidence_assembler import EvidenceAssembler, PrivacyAssertionError
 from .inventory.analyzer_router import AnalyzerRouter
 from .inventory.language_classifier import LanguageClassifier
+from .parsers.structural_augmentor import StructuralAugmentor
 from .snapshot_service_client import SnapshotArchiveRequest, SnapshotServiceClient
 from .ts_js_bridge.bridge import TsJsBridge
 from .ts_js_bridge.bridge_types import TsJsCoverageLimitation
@@ -60,6 +61,7 @@ class ScanConsumer(ConsumerBase):
         ai_invocation_detector: AIInvocationDetector | None = None,
         api_client: WorkerApiClient | None = None,
         evidence_assembler: EvidenceAssembler | None = None,
+        structural_augmentor: StructuralAugmentor | None = None,
     ):
         super().__init__(config, pbac_client)
         self._snapshot_client = snapshot_client or SnapshotServiceClient(
@@ -83,6 +85,7 @@ class ScanConsumer(ConsumerBase):
             config.worker_api_key,
         )
         self._evidence_assembler = evidence_assembler or EvidenceAssembler()
+        self._structural_augmentor = structural_augmentor or StructuralAugmentor()
 
     def handle(self, message: dict, correlation_id: str) -> None:
         started_at = time.monotonic()
@@ -239,6 +242,22 @@ class ScanConsumer(ConsumerBase):
                     *self._ts_js_coverage_limitations(ts_js_analysis.coverage_limitations),
                 ],
             )
+            structural_facts: list | None = None
+            try:
+                candidate_files = [
+                    *routed_python_files,
+                    *routed_ts_js_files,
+                ]
+                structural_facts = self._structural_augmentor.augment(
+                    files=candidate_files or [],
+                    finding_ids=[finding.finding_id for finding in technical_findings],
+                )
+            except Exception as error:
+                logger.warning(
+                    "SCAN_STRUCTURAL_AUGMENTATION_FAILED",
+                    scan_job_id=envelope.scan_job_id,
+                    error=str(error),
+                )
             callback_payload = self._evidence_assembler.assemble(
                 scan_job_id=envelope.scan_job_id,
                 syft_result=syft_result,
@@ -252,6 +271,7 @@ class ScanConsumer(ConsumerBase):
                 python_analysis=python_analysis,
                 ts_js_analysis=ts_js_analysis,
                 technical_findings=technical_findings,
+                structural_facts=structural_facts,
             )
             self._api_client.post_scan_callback(
                 envelope.scan_job_id,
