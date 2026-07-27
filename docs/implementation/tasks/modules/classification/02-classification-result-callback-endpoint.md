@@ -3,7 +3,7 @@ task_id: MW-cls-002
 module: classification
 runtime: nestjs-api
 priority: P0
-status: READY_FOR_DEV
+status: DONE
 epic_story: 7.5
 depends_on:
   - classification/01-legal-rule-match-callback-endpoint.md
@@ -11,6 +11,20 @@ depends_on:
 ---
 
 # Classification Result Callback Endpoint
+
+## Dev Agent Record
+
+- **Agent**: Amelia (Senior Software Engineer)
+- **Status**: Completed
+- **Date**: 2026-07-27
+- **Key Implementation Details**:
+  - Defined `ClassificationResult` Prisma model with `@unique` on `legalRuleMatchId`.
+  - Added classification error codes, contract DTOs, `AcceptClassificationCommand`, and `AcceptClassificationHandler`.
+  - Created `OverclaimGuardrailService` to check prohibited tokens (`certified`, `validated`, `approved`, `production ready`, `compliant`, `non-compliant`).
+  - Added `POST /internal/classification/result-callback` endpoint guarded by `WorkerApiKeyGuard`.
+  - Emitted `event.classification-result.ready.v1` outbox event and audit logs (`CLASSIFICATION_ACCEPTED` / `CLASSIFICATION_BLOCKED`).
+  - Verified with 22 unit tests and 9 E2E tests passing 100%.
+
 
 ## Outcome
 
