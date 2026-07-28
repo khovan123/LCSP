@@ -17,11 +17,6 @@ import { GetDocumentQuery } from "./get-document.query.js";
 const DOWNLOAD_URL_TTL_MS = 5 * 60 * 1000;
 const GENERIC_BLOCKED_REASON =
   "Document generation is blocked until the required review items are resolved.";
-const COMPLETED_STATUSES = new Set([
-  DOCUMENT_REQUEST_STATUSES.ready,
-  DOCUMENT_REQUEST_STATUSES.failed,
-  DOCUMENT_REQUEST_STATUSES.blocked,
-] satisfies readonly DocumentRequestStatus[]);
 
 @QueryHandler(GetDocumentQuery)
 export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
@@ -99,7 +94,7 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
       download_url: download?.url ?? null,
       download_url_expires_at: download?.expiresAt ?? null,
       requested_at: documentRequest.createdAt.toISOString(),
-      completed_at: COMPLETED_STATUSES.has(status)
+      completed_at: isCompletedStatus(status)
         ? documentRequest.updatedAt.toISOString()
         : null,
       correlation_id: documentRequest.correlationId,
@@ -181,5 +176,17 @@ function toDocumentRequestStatus(value: string): DocumentRequestStatus {
       throw new NotFoundException({
         error_code: DOCUMENT_ERROR_CODES.documentNotFound,
       });
+  }
+}
+
+function isCompletedStatus(status: DocumentRequestStatus): boolean {
+  switch (status) {
+    case DOCUMENT_REQUEST_STATUSES.ready:
+    case DOCUMENT_REQUEST_STATUSES.failed:
+    case DOCUMENT_REQUEST_STATUSES.blocked:
+      return true;
+    case DOCUMENT_REQUEST_STATUSES.queued:
+    case DOCUMENT_REQUEST_STATUSES.generating:
+      return false;
   }
 }
