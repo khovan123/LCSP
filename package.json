@@ -18,6 +18,9 @@
     "typecheck": "pnpm --filter @lcsp/api prisma:generate && pnpm exec tsc -b"
   },
   "devDependencies": {
+    "@lcsp/contracts": "workspace:*",
+    "@lcsp/i18n": "workspace:*",
+    "@lcsp/web": "workspace:*",
     "@prisma/compute-sdk": "^0.33.0",
     "@types/node": "^22.15.30",
     "@typescript-eslint/eslint-plugin": "^8.65.0",

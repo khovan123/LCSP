@@ -8,6 +8,15 @@ importers:
 
   .:
     devDependencies:
+      '@lcsp/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
+      '@lcsp/i18n':
+        specifier: workspace:*
+        version: link:packages/i18n
+      '@lcsp/web':
+        specifier: workspace:*
+        version: link:apps/web
       '@prisma/compute-sdk':
         specifier: ^0.33.0
         version: 0.33.0(@prisma/management-api-sdk@1.47.0)
