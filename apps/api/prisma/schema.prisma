@@ -286,6 +286,24 @@ model ReadinessExport {
   @@index([assessmentId, version])
 }
 
+model AuditExportRequest {
+  id             String   @id
+  organizationId String
+  requestedById  String
+  fromDate       DateTime
+  toDate         DateTime
+  status         String   @default("READY")
+  version        Int      @default(1)
+  checksumSha256 String
+  contentJson    Json?
+  correlationId  String
+  createdAt      DateTime @default(now())
+  completedAt    DateTime?
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, version])
+}
+
 enum AuthMembershipStatus {
   invited
   active

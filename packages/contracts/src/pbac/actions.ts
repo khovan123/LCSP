@@ -6,6 +6,7 @@ export const PBAC_ACTIONS = {
   assessmentList: "assessment:list",
   assessmentRead: "assessment:read",
   assessmentSettingsManage: "assessment:settings:manage",
+  auditExport: "audit:export",
   auditRead: "audit:read",
   classificationRun: "classification:run",
   complianceDossierExport: "compliance-dossier:export",

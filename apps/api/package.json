@@ -28,8 +28,8 @@
     "./app.module": "./src/app.module.ts"
   },
   "dependencies": {
-    "@lcsp/contracts": "workspace:*",
-    "@lcsp/i18n": "workspace:*",
+    "@lcsp/contracts": "file:../../packages/contracts",
+    "@lcsp/i18n": "file:../../packages/i18n",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
