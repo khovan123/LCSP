@@ -5,7 +5,7 @@
 
 ## Tóm tắt
 
-Repository này được tổ chức như một workspace quản trị tri thức và automation support cho LCSP. Nó có ba lớp rõ ràng: tài liệu authority, tài liệu tóm lược/onboarding, và script/config hỗ trợ BMAD/WDS/ContextOS. Kiến trúc này tối ưu cho planning, review và AI context injection trước khi implementation runtime tồn tại.
+Repository này được tổ chức như một workspace quản trị tri thức và automation support cho LCSP. Nó có ba lớp rõ ràng: tài liệu authority, tài liệu tóm lược/onboarding, và script/config hỗ trợ BMAD/WDS. Kiến trúc này tối ưu cho planning, review và AI context injection trước khi implementation runtime tồn tại.
 
 ## Boundary kiến trúc
 
@@ -24,7 +24,7 @@ Repository này được tổ chức như một workspace quản trị tri thứ
 | `docs-vn/` | Tóm lược tiếng Việt để onboarding/review nhanh | Người đọc, nhóm triển khai |
 | `_bmad/scripts/` | Resolve config và customization theo nhiều lớp override | BMAD skills/workflows, shell users |
 | `_bmad/wds/scripts/` | Scaffold/validate tài liệu WDS theo cấu trúc cố định | WDS agents, designers |
-| `.github/copilot-instructions.md` | ContextOS integration note cho tooling hỗ trợ | Copilot/Context-aware tooling |
+| `.github/copilot-instructions.md` | Instruction note cho tooling hỗ trợ | Copilot/Context-aware tooling |
 | `RTK.md` + `AGENTS.md` | Điều khiển hành vi agent và shell conventions | AI coding agents |
 | `demo /` | Placeholder cho prototype hoặc future code areas | Chưa có integration thực chất |
 

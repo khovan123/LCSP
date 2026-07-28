@@ -27,7 +27,7 @@ LCSP trong repository này là một workspace tập trung vào tài liệu auth
 - **`_bmad/`**
   Chứa cấu hình BMAD, module config, script resolve customization/config và WDS support scripts.
 - **`.github/`**
-  Chứa instruction hỗ trợ Copilot/ContextOS.
+  Chứa instruction hỗ trợ Copilot.
 - **`demo /`**
   Chứa khung `rag/` và `scanner/`, nhưng hiện chưa có source runtime có ý nghĩa để tài liệu hóa như một application part.
 
@@ -39,7 +39,7 @@ LCSP trong repository này là một workspace tập trung vào tài liệu auth
 | Config | YAML, TOML, JSON | N/A | `_bmad/*/config.yaml`, `_bmad/config.toml`, `.mcp.json` |
 | Automation scripts | Python | 3.11+ | `_bmad/scripts/resolve_customization.py` và `_bmad/scripts/resolve_config.py` dùng `tomllib` |
 | UX scaffolding scripts | Node.js stdlib JavaScript | Không pin trong repo | `_bmad/wds/scripts/*.js` chỉ dùng `node:fs`, `node:path` |
-| Context tooling | RTK, ContextOS, BMAD/WDS | Theo workspace tooling | `RTK.md`, `.github/copilot-instructions.md`, `_bmad/` |
+| Context tooling | RTK, BMAD/WDS | Theo workspace tooling | `RTK.md`, `.github/copilot-instructions.md`, `_bmad/` |
 
 ## Đặc điểm kiến trúc nổi bật
 

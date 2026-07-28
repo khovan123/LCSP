@@ -10,7 +10,7 @@ Repository được tổ chức như một workspace tài liệu với automatio
 
 ```text
 LCSP/
-├── .github/                 # Tooling instructions for ContextOS/Copilot
+├── .github/                 # Tooling instructions for Copilot
 ├── .ruler/                  # Rule aggregation config
 ├── _bmad/                   # BMAD modules, config, scripts, manifests
 │   ├── scripts/             # Python config/customization resolvers + tests
@@ -156,7 +156,7 @@ Không phát hiện inventory asset đáng kể ở lần quét này. `design-ar
 - **`_bmad/config.toml`**: Cấu hình BMAD gốc do installer quản lý
 - **`_bmad/custom/config.toml`**: Override config do con người commit
 - **`.ruler/ruler.toml`**: Cấu hình rule concatenation
-- **`.github/copilot-instructions.md`**: Gợi ý integration cho ContextOS/Copilot
+- **`.github/copilot-instructions.md`**: Gợi ý instruction cho Copilot
 
 ## Ghi chú phát triển
 

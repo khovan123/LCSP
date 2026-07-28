@@ -46,14 +46,9 @@
 # url = "https://api.example.com/mcp"
 # headers = { Authorization = "Bearer REPLACE_ME" }
 
-# Added by ctx sync --rules
 [mcp]
 enabled = true
 merge_strategy = "merge"
-
-[mcp_servers.ctx-mcp]
-command = "node"
-args = ["/home/khovan/.codex/marketplaces/contextos/plugins/ctx/mcp/server.js"]
 
 [agents.codex]
 enabled = true
@@ -87,12 +82,10 @@ output_path = "AGENTS.md"
 enabled = true
 merge_strategy = "merge"
 
-# Imported by ctx sync --rules from Codex MCP config
 [mcp_servers.code-review-graph]
 command = "/home/khovan/.local/share/pipx/venvs/code-review-graph/bin/python"
 args = ["-m", "code_review_graph", "serve"]
 
-# Imported by ctx sync --rules from Codex MCP config
 [mcp_servers.agentmemory]
 command = "npx"
 args = ["-y", "@agentmemory/mcp"]
