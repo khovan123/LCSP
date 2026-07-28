@@ -6,9 +6,5 @@ export default defineComputeConfig({
       root: "apps/api",
       framework: "nestjs",
     },
-    web: {
-      root: "apps/web",
-      framework: "nextjs",
-    },
   },
 });
