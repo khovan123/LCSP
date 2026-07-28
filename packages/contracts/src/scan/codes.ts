@@ -25,9 +25,11 @@ export const SCAN_ERROR_CODES = {
   citationRepealed: "CITATION_REPEALED",
   legalRuleMatchSchemaInvalid: "SCHEMA_INVALID",
   legalRuleMatchNotFound: "LEGAL_RULE_MATCH_NOT_FOUND",
+  resultAlreadyExists: "RESULT_ALREADY_EXISTS",
+  classificationOverclaim: "CLASSIFICATION_OVERCLAIM",
+  classificationSchemaInvalid: "SCHEMA_INVALID",
+  classificationResultNotFound: "CLASSIFICATION_RESULT_NOT_FOUND",
 } as const;
 
 export type ScanErrorCode =
   (typeof SCAN_ERROR_CODES)[keyof typeof SCAN_ERROR_CODES];
-
-
