@@ -51,7 +51,7 @@ Repository này hiện là workspace tài liệu brownfield cho LCSP, không ph�
 - **`docs/`**: Bộ tài liệu authority active cho product, specs, architecture, implementation và test artifacts
 - **`docs-vn/`**: Bộ tóm lược tiếng Việt để onboarding/review nhanh
 - **`_bmad/`**: Config, manifest, script resolver và WDS scaffold support
-- **`.github/`**: Copilot/ContextOS instruction layer
+- **`.github/`**: Copilot instruction layer
 - **`demo /`**: Khung prototype rỗng cho `rag/` và `scanner/`; chưa chứa runtime source đáng kể
 - **`design-artifacts/`**: Nơi dự kiến chứa thiết kế WDS; hiện chưa có inventory active đáng kể
 

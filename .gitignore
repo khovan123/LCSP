@@ -1,7 +1,3 @@
-.contextos/
-
-# ContextOS install artefacts
-.codex/marketplaces/contextos/
 .claude/settings.json
 .gemini/
 

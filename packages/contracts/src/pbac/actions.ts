@@ -16,6 +16,8 @@ export const PBAC_ACTIONS = {
   evidenceReadRedacted: "evidence:read:redacted",
   finalReportGenerate: "final-report:generate",
   documentGenerate: DOCUMENT_ACTIONS.generate,
+  documentRead: DOCUMENT_ACTIONS.read,
+  documentReadRedacted: DOCUMENT_ACTIONS.readRedacted,
   githubConnect: "github:connect",
   inviteDeveloper: "invite:developer",
   legalRuleCatalogAuthor: "legal-rule-catalog:author",
