@@ -8,12 +8,6 @@ importers:
 
   .:
     devDependencies:
-      '@lcsp/contracts':
-        specifier: workspace:*
-        version: link:packages/contracts
-      '@lcsp/web':
-        specifier: workspace:*
-        version: link:apps/web
       '@prisma/compute-sdk':
         specifier: ^0.33.0
         version: 0.33.0(@prisma/management-api-sdk@1.47.0)
@@ -39,10 +33,10 @@ importers:
   apps/api:
     dependencies:
       '@lcsp/contracts':
-        specifier: workspace:*
+        specifier: file:../../packages/contracts
         version: link:../../packages/contracts
       '@lcsp/i18n':
-        specifier: workspace:*
+        specifier: file:../../packages/i18n
         version: link:../../packages/i18n
       '@nestjs/common':
         specifier: ^11.0.1
@@ -175,10 +169,10 @@ importers:
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.4))
       '@lcsp/contracts':
-        specifier: workspace:*
+        specifier: file:../../packages/contracts
         version: link:../../packages/contracts
       '@lcsp/i18n':
-        specifier: workspace:*
+        specifier: file:../../packages/i18n
         version: link:../../packages/i18n
       class-variance-authority:
         specifier: ^0.7.1
@@ -254,7 +248,7 @@ importers:
   packages/i18n:
     dependencies:
       '@lcsp/contracts':
-        specifier: workspace:*
+        specifier: file:../contracts
         version: link:../contracts
 
 packages:

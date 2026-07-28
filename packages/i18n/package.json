@@ -15,6 +15,6 @@
     "./locales/vi/common": "./src/locales/vi/common.ts"
   },
   "dependencies": {
-    "@lcsp/contracts": "workspace:*"
+    "@lcsp/contracts": "file:../contracts"
   }
 }
