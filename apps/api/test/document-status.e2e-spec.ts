@@ -382,8 +382,13 @@ async function seedDocumentRequest(
       assessmentId: "assessment-1",
       organizationId,
       schemaVersion: "1.0.0",
-      classificationData: { system_type: "HIGH_IMPACT_AI" },
+      classificationData: {
+        system_type: "HIGH_IMPACT_AI",
+        risk_level: "HIGH",
+        citation_basis: ["chunk-1"],
+      },
       guardrailStatus: "passed",
+      blockedReason: null,
       status: "accepted",
     },
   });

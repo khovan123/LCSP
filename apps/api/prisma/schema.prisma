@@ -471,17 +471,17 @@ model VerifiedProfile {
 }
 
 model ClassificationResult {
-  id                 String   @id @default(uuid())
-  legalRuleMatchId   String   @unique
-  verifiedProfileId  String
-  assessmentId       String
-  organizationId     String
-  schemaVersion      String
-  classificationData Json
-  guardrailStatus    String   @default("passed")
-  blockedReason      String?
-  status             String   @default("accepted")
-  createdAt          DateTime @default(now())
+  id                String   @id @default(uuid())
+  legalRuleMatchId  String?  @unique
+  verifiedProfileId String?
+  assessmentId      String
+  organizationId    String
+  schemaVersion     String?
+  classificationData Json?
+  guardrailStatus   String   @default("passed")
+  blockedReason     String?
+  status            String   @default("accepted")
+  createdAt         DateTime @default(now())
 
   @@index([assessmentId])
 }

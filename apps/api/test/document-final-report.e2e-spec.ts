@@ -282,8 +282,13 @@ async function seedClassification(
       assessmentId: "assessment-1",
       organizationId: "org-1",
       schemaVersion: "1.0.0",
-      classificationData: { system_type: "HIGH_IMPACT_AI" },
+      classificationData: {
+        system_type: "HIGH_IMPACT_AI",
+        risk_level: "HIGH",
+        citation_basis: ["chunk-1"],
+      },
       guardrailStatus,
+      blockedReason: null,
       status: "accepted",
     },
   });

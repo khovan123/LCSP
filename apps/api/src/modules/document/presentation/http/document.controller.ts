@@ -24,6 +24,7 @@ import { RequestFinalReportCommand } from "../../application/commands/request-fi
 import type { FinalReportRequestDto as GapAnalysisRequestDto } from "../../application/contracts/document/final-report-request.contract.js";
 import { RequestGapAnalysisCommand } from "../../application/commands/request-gap-analysis/request-gap-analysis.command.js";
 import { GetDocumentQuery } from "../../application/queries/get-document/get-document.query.js";
+import { ListDocumentsQuery } from "../../application/queries/list-documents/list-documents.query.js";
 import { DocumentStorageService } from "../../infrastructure/storage/document-storage.service.js";
 
 @Controller("assessments")
@@ -96,6 +97,28 @@ export class DocumentController {
       new GetDocumentQuery(
         assessmentId,
         documentRequestId,
+        context.organizationId,
+        context.scope,
+        context.selectedAction,
+        request.correlationId as string,
+      ),
+    );
+  }
+
+  @Get(":assessmentId/documents")
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.documentRead,
+    PBAC_ACTIONS.documentReadRedacted,
+  )
+  async listDocuments(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const context = request.pbacContext;
+    return this.queryBus.execute(
+      new ListDocumentsQuery(
+        assessmentId,
         context.organizationId,
         context.scope,
         context.selectedAction,
