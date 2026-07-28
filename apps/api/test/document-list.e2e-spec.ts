@@ -111,7 +111,9 @@ describe("Document List Endpoint (e2e)", () => {
     assert.equal(ready.status, DOCUMENT_REQUEST_STATUSES.ready);
     assert.ok(ready.download_url);
 
-    const queued = body.find((row) => row.document_request_id === "doc-queued-1");
+    const queued = body.find(
+      (row) => row.document_request_id === "doc-queued-1",
+    );
     assert.ok(queued !== undefined);
     if (!queued) {
       throw new Error("Expected queued document to be present in the list");
