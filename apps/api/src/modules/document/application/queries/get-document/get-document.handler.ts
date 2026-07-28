@@ -3,7 +3,9 @@ import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import {
   DOCUMENT_ERROR_CODES,
   DOCUMENT_REQUEST_STATUSES,
+  type DocumentRequestStatus,
   DOCUMENT_TYPES,
+  type DocumentType,
 } from "@lcsp/contracts/document";
 import { PBAC_ACTIONS, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
 
@@ -19,7 +21,7 @@ const COMPLETED_STATUSES = new Set([
   DOCUMENT_REQUEST_STATUSES.ready,
   DOCUMENT_REQUEST_STATUSES.failed,
   DOCUMENT_REQUEST_STATUSES.blocked,
-]);
+] satisfies readonly DocumentRequestStatus[]);
 
 @QueryHandler(GetDocumentQuery)
 export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
@@ -64,19 +66,19 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
       this.notFound(query.correlationId);
     }
 
+    const documentType = toDocumentType(documentRequest.documentType);
+    const status = toDocumentRequestStatus(documentRequest.status);
+
     const classification = await this.prisma.classificationResult.findUnique({
       where: { id: documentRequest.classificationResultId },
       select: { guardrailStatus: true },
     });
 
-    if (
-      allowRedactedRead &&
-      documentRequest.documentType === DOCUMENT_TYPES.finalReport
-    ) {
+    if (allowRedactedRead && documentType === DOCUMENT_TYPES.finalReport) {
       this.forbidden(query.correlationId);
     }
 
-    const isReady = documentRequest.status === DOCUMENT_REQUEST_STATUSES.ready;
+    const isReady = status === DOCUMENT_REQUEST_STATUSES.ready;
     const download = isReady
       ? this.buildDownload(
           documentRequest.assessmentId,
@@ -87,17 +89,17 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
 
     return {
       document_request_id: documentRequest.id,
-      document_type: documentRequest.documentType,
-      status: documentRequest.status,
+      document_type: documentType,
+      status,
       blocked_reason:
-        documentRequest.status === DOCUMENT_REQUEST_STATUSES.blocked
+        status === DOCUMENT_REQUEST_STATUSES.blocked
           ? toBusinessBlockedReason(documentRequest.blockedReason)
           : null,
       guardrail_status: classification?.guardrailStatus ?? null,
       download_url: download?.url ?? null,
       download_url_expires_at: download?.expiresAt ?? null,
       requested_at: documentRequest.createdAt.toISOString(),
-      completed_at: COMPLETED_STATUSES.has(documentRequest.status)
+      completed_at: COMPLETED_STATUSES.has(status)
         ? documentRequest.updatedAt.toISOString()
         : null,
       correlation_id: documentRequest.correlationId,
@@ -152,4 +154,32 @@ function looksTechnical(reason: string): boolean {
   return /(exception|stack|trace|\/|\\|\.ts\b|\.js\b|sql\b|timeout|503|500)/i.test(
     reason,
   );
+}
+
+function toDocumentType(value: string): DocumentType {
+  switch (value) {
+    case DOCUMENT_TYPES.finalReport:
+    case DOCUMENT_TYPES.gapAnalysis:
+    case DOCUMENT_TYPES.readinessExport:
+      return value;
+    default:
+      throw new NotFoundException({
+        error_code: DOCUMENT_ERROR_CODES.documentNotFound,
+      });
+  }
+}
+
+function toDocumentRequestStatus(value: string): DocumentRequestStatus {
+  switch (value) {
+    case DOCUMENT_REQUEST_STATUSES.queued:
+    case DOCUMENT_REQUEST_STATUSES.generating:
+    case DOCUMENT_REQUEST_STATUSES.ready:
+    case DOCUMENT_REQUEST_STATUSES.failed:
+    case DOCUMENT_REQUEST_STATUSES.blocked:
+      return value;
+    default:
+      throw new NotFoundException({
+        error_code: DOCUMENT_ERROR_CODES.documentNotFound,
+      });
+  }
 }

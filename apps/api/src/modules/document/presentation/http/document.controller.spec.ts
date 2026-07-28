@@ -1,6 +1,5 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { DOCUMENT_ERROR_CODES } from "@lcsp/contracts/document";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-metadata.js";
 import { GetDocumentQuery } from "../../application/queries/get-document/get-document.query.js";
