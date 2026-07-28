@@ -55,7 +55,9 @@ export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
       select: { id: true, guardrailStatus: true },
     });
 
-    const guardrailById = new Map(classificationMap.map((c) => [c.id, c.guardrailStatus]));
+    const guardrailById = new Map(
+      classificationMap.map((c) => [c.id, c.guardrailStatus]),
+    );
 
     const results = rows
       .map((documentRequest) => {
@@ -83,13 +85,17 @@ export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
             status === DOCUMENT_REQUEST_STATUSES.blocked
               ? this.toBusinessBlockedReason(documentRequest.blockedReason)
               : null,
-          guardrail_status: guardrailById.get(documentRequest.classificationResultId) ?? null,
+          guardrail_status:
+            guardrailById.get(documentRequest.classificationResultId) ?? null,
           download_url: download?.url ?? null,
           download_url_expires_at: download?.expiresAt ?? null,
           requested_at: documentRequest.createdAt.toISOString(),
-          completed_at: isReady || status === DOCUMENT_REQUEST_STATUSES.failed || status === DOCUMENT_REQUEST_STATUSES.blocked
-            ? documentRequest.updatedAt.toISOString()
-            : null,
+          completed_at:
+            isReady ||
+            status === DOCUMENT_REQUEST_STATUSES.failed ||
+            status === DOCUMENT_REQUEST_STATUSES.blocked
+              ? documentRequest.updatedAt.toISOString()
+              : null,
           correlation_id: documentRequest.correlationId,
         };
       })
@@ -158,10 +164,16 @@ export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
   }
 
   private notFound(correlationId: string): never {
-    throw new NotFoundException({ error_code: "DOCUMENT_NOT_FOUND", correlation_id: correlationId });
+    throw new NotFoundException({
+      error_code: "DOCUMENT_NOT_FOUND",
+      correlation_id: correlationId,
+    });
   }
 
   private forbidden(correlationId: string): never {
-    throw new ForbiddenException({ error_code: "PBAC_DENIED", correlation_id: correlationId });
+    throw new ForbiddenException({
+      error_code: "PBAC_DENIED",
+      correlation_id: correlationId,
+    });
   }
 }

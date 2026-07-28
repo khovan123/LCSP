@@ -6,10 +6,18 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
-import { DOCUMENT_REQUEST_STATUSES, DOCUMENT_TYPES } from "@lcsp/contracts/document";
+import {
+  DOCUMENT_REQUEST_STATUSES,
+  DOCUMENT_TYPES,
+} from "@lcsp/contracts/document";
 
 import { AppModule } from "../src/app.module.js";
-import { pushPrismaSchema, resetAuthWorkspaceDatabase, seedAuthWorkspaceFixture, TEST_DATABASE_URL } from "./support/auth-workspace-test-helpers.js";
+import {
+  pushPrismaSchema,
+  resetAuthWorkspaceDatabase,
+  seedAuthWorkspaceFixture,
+  TEST_DATABASE_URL,
+} from "./support/auth-workspace-test-helpers.js";
 import { httpRequest } from "./support/http.js";
 
 describe("Document List Endpoint (e2e)", () => {
@@ -113,7 +121,17 @@ async function enableManagerDocumentRead(prisma: PrismaClient) {
   });
 }
 
-async function seedDocumentRequest(prisma: PrismaClient, input: { id: string; status: string; documentType: string; organizationId?: string; documentUrl?: string; blockedReason?: string; }) {
+async function seedDocumentRequest(
+  prisma: PrismaClient,
+  input: {
+    id: string;
+    status: string;
+    documentType: string;
+    organizationId?: string;
+    documentUrl?: string;
+    blockedReason?: string;
+  },
+) {
   const matchId = `lrm-${input.id}`;
   const classificationResultId = `classification-${input.id}`;
   const organizationId = input.organizationId ?? "org-1";

@@ -101,7 +101,10 @@ describe("Classification Result Callback Endpoint (e2e) [MW-cls-002]", () => {
     assert.equal(clsResult?.verifiedProfileId, "vp-1");
     assert.equal(clsResult?.assessmentId, "assessment-1");
     assert.equal(clsResult?.organizationId, "org-1");
-    assert.equal(clsResult?.schemaVersion, CLASSIFICATION_RESULT_SCHEMA_VERSIONS[0]);
+    assert.equal(
+      clsResult?.schemaVersion,
+      CLASSIFICATION_RESULT_SCHEMA_VERSIONS[0],
+    );
     assert.deepEqual(clsResult?.classificationData, {
       system_type: "HIGH_IMPACT_AI",
       risk_level: "HIGH",

@@ -119,7 +119,8 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
           assessmentId: payload.assessment_id,
           organizationId: verifiedProfile.organizationId,
           schemaVersion: payload.schema_version,
-          classificationData: payload.classification_data as Prisma.InputJsonValue,
+          classificationData:
+            payload.classification_data as Prisma.InputJsonValue,
           guardrailStatus,
           blockedReason,
           status: "accepted",
