@@ -44,6 +44,17 @@ export const LEGAL_RULE_MATCH_GUARDRAIL_STATUSES = {
   blocked: "blocked",
 } as const;
 
+export const CLASSIFICATION_RESULT_STATUSES = {
+  accepted: "accepted",
+  rejected: "rejected",
+} as const;
+
+export const CLASSIFICATION_GUARDRAIL_STATUSES = {
+  passed: "passed",
+  degraded: "degraded",
+  blocked: "blocked",
+} as const;
+
 export const OVERALL_COVERAGE_STATUSES = {
   noCitation: "NO_CITATION",
   partialCitation: "PARTIAL_CITATION",
@@ -74,18 +85,19 @@ export const AI_USAGE_FLOW_SCHEMA_VERSIONS = ["1.0.0"] as const;
 export const CONFLICT_DETECTION_SCHEMA_VERSIONS = ["1.0.0"] as const;
 export const VERIFIED_PROFILE_SCHEMA_VERSIONS = ["1.0.0"] as const;
 export const LEGAL_RULE_MATCH_SCHEMA_VERSIONS = ["1.0.0"] as const;
+export const CLASSIFICATION_RESULT_SCHEMA_VERSIONS = ["1.0.0"] as const;
 
 export const SCAN_EVENT_TYPES = {
   evidenceAccepted: "event.technical-evidence.accepted.v1",
   technicalProfileReady: "event.technical-profile.ready.v1",
   aiUsageFlowReady: "event.ai-usage-flow.ready.v1",
-  reconciliationConflictsDetected:
-    "event.reconciliation.conflicts-detected.v1",
+  reconciliationConflictsDetected: "event.reconciliation.conflicts-detected.v1",
   reconciliationNoConflicts: "event.reconciliation.no-conflicts.v1",
   reconciliationAllConflictsResolved:
     "event.reconciliation.all-conflicts-resolved.v1",
   verifiedProfileReady: "event.verified-profile.ready.v1",
   legalRuleMatchReady: "event.legal-rule-match.ready.v1",
+  classificationResultReady: "event.classification-result.ready.v1",
   evidenceAcceptedAudit: "SCAN_EVIDENCE_ACCEPTED",
   evidenceRejectedAudit: "SCAN_EVIDENCE_REJECTED",
   technicalProfileAcceptedAudit: "TECHNICAL_PROFILE_ACCEPTED",
@@ -97,5 +109,6 @@ export const SCAN_EVENT_TYPES = {
   verifiedProfileAcceptedAudit: "VERIFIED_PROFILE_ACCEPTED",
   legalRuleMatchAcceptedAudit: "LEGAL_RULE_MATCH_ACCEPTED",
   legalRuleMatchBlockedAudit: "LEGAL_RULE_MATCH_BLOCKED",
+  classificationAcceptedAudit: "CLASSIFICATION_ACCEPTED",
+  classificationBlockedAudit: "CLASSIFICATION_BLOCKED",
 } as const;
-

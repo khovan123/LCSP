@@ -28,7 +28,6 @@ import { EvidenceSchemaValidatorService } from "../../services/scan/evidence-sch
 import { ProcessScanCallbackCommand } from "./process-scan-callback.command.js";
 
 const SCANNER_WORKER_ACTOR_ID = "scanner-worker";
-const GUARDRAIL_STATUS_UNKNOWN = "unknown";
 
 @CommandHandler(ProcessScanCallbackCommand)
 export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCallbackCommand> {
@@ -119,18 +118,6 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
       });
 
       if (!isRejected) {
-        await tx.classificationResult.create({
-          data: {
-            id: crypto.randomUUID(),
-            assessmentId: job.assessmentId,
-            organizationId: job.organizationId,
-            technicalEvidenceReportId: reportId,
-            guardrailStatus: extractGuardrailStatus(
-              command.payload.evidence_payload,
-            ),
-          },
-        });
-
         const event = buildOutboxMessageInput({
           aggregateType: "TechnicalEvidenceReport",
           aggregateId: reportId,
@@ -250,35 +237,6 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
       correlation_id: command.correlationId,
     };
   }
-}
-
-function extractGuardrailStatus(payload: Record<string, unknown>): string {
-  const directStatus =
-    asString(payload.guardrailStatus) ?? asString(payload.guardrail_status);
-  if (directStatus) {
-    return normalizeStatus(directStatus);
-  }
-
-  const classification = payload.classification;
-  if (classification && typeof classification === "object") {
-    const data = classification as Record<string, unknown>;
-    const nestedStatus =
-      asString(data.guardrailStatus) ?? asString(data.guardrail_status);
-    if (nestedStatus) {
-      return normalizeStatus(nestedStatus);
-    }
-  }
-
-  return GUARDRAIL_STATUS_UNKNOWN;
-}
-
-function asString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function normalizeStatus(value: string): string {
-  const normalized = value.trim().toLowerCase();
-  return normalized.length > 0 ? normalized : GUARDRAIL_STATUS_UNKNOWN;
 }
 
 function errorCode(error: unknown): string {

@@ -3,6 +3,7 @@ import { CommandBus } from "@nestjs/cqrs";
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
+import type { AcceptClassificationDto } from "../../application/contracts/classification/classification-result-callback.contract.js";
 import type {
   AcceptLegalRuleMatchDto,
   LegalRuleMatchCallbackResponseDto,
@@ -15,7 +16,7 @@ describe("ClassificationController", () => {
     (args: unknown) => Promise<LegalRuleMatchCallbackResponseDto>
   >;
 
-  const mockPayload: AcceptLegalRuleMatchDto = {
+  const mockMatchPayload: AcceptLegalRuleMatchDto = {
     verified_profile_id: "vp-1",
     assessment_id: "asm-1",
     corpus_version_id: "v1.0.0",
@@ -37,6 +38,17 @@ describe("ClassificationController", () => {
         usage_claim_ref: "uc-1",
       },
     ],
+  };
+
+  const mockClassificationPayload: AcceptClassificationDto = {
+    legal_rule_match_id: "lrm-123",
+    verified_profile_id: "vp-123",
+    assessment_id: "asm-123",
+    schema_version: "1.0.0",
+    classification_data: {
+      risk_level: "HIGH",
+    },
+    guardrail_status: "passed",
   };
 
   beforeEach(async () => {
@@ -71,7 +83,7 @@ describe("ClassificationController", () => {
 
   it("dispatches AcceptLegalRuleMatchCommand when endpoint is called", async () => {
     const result = await controller.acceptLegalRuleMatch(
-      mockPayload,
+      mockMatchPayload,
       "corr-123",
     );
 
@@ -84,8 +96,29 @@ describe("ClassificationController", () => {
 
     expect(mockExecuteCommand).toHaveBeenCalledWith(
       expect.objectContaining({
-        payload: mockPayload,
+        payload: mockMatchPayload,
         correlationId: "corr-123",
+      }),
+    );
+  });
+
+  it("dispatches AcceptClassificationCommand when result-callback endpoint is called", async () => {
+    const result = await controller.acceptClassificationResult(
+      mockClassificationPayload,
+      "corr-cls-123",
+    );
+
+    expect(result).toEqual({
+      accepted: true,
+      legal_rule_match_id: "lrm-123",
+      guardrail_status: "passed",
+      correlation_id: "corr-123",
+    });
+
+    expect(mockExecuteCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: mockClassificationPayload,
+        correlationId: "corr-cls-123",
       }),
     );
   });

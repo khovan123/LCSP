@@ -17,8 +17,6 @@ const config: Config = {
     ],
   },
   moduleNameMapper: {
-    "^(.*\\/scan\\/presentation\\/http\\/worker-api-key.guard)\\.js$":
-      "<rootDir>/src/modules/scan/presentation/http/worker-api-key.guard.js",
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
   maxWorkers: 1,

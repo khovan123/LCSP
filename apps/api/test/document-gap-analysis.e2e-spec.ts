@@ -12,7 +12,6 @@ import {
   DOCUMENT_REQUEST_STATUSES,
   DOCUMENT_TYPES,
 } from "@lcsp/contracts/document";
-import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
@@ -64,6 +63,7 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
     });
     await prisma.documentRequest.deleteMany();
     await prisma.classificationResult.deleteMany();
+    await prisma.legalRuleMatch.deleteMany();
     await prisma.technicalEvidenceReport.deleteMany();
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
@@ -201,32 +201,37 @@ async function seedClassification(
   prisma: PrismaClient,
   guardrailStatus: string,
 ) {
-  const reportId = `evidence-${guardrailStatus}`;
+  const matchId = `lrm-${guardrailStatus}`;
   const classificationResultId = `classification-${guardrailStatus}`;
 
-  await prisma.technicalEvidenceReport.create({
+  await prisma.legalRuleMatch.create({
     data: {
-      id: reportId,
-      scanJobId: `scan-job-${guardrailStatus}`,
+      id: matchId,
+      verifiedProfileId: "vp-1",
       assessmentId: "assessment-1",
       organizationId: "org-1",
-      snapshotId: "snapshot-1",
-      toolsVersion: { semgrep: "1.0.0" },
-      configHash: { semgrep: "sha256:abc" },
-      evidencePayload: { guardrailStatus },
-      privacyFlags: { containsSourceCode: false, secretsRedacted: true },
+      corpusVersionId: "LCSP-LEGAL-CORPUS-v0.1.0",
+      legalRuleCatalogVersionId: "LCSP-RULE-CATALOG-v0.1.0",
       schemaVersion: "1.0.0",
-      status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+      matches: [],
+      citationAllowlist: ["chunk-1"],
+      overallCoverageStatus: "COMPLETE_CITATION",
+      guardrailStatus: "passed",
+      status: "accepted",
     },
   });
 
   await prisma.classificationResult.create({
     data: {
       id: classificationResultId,
+      legalRuleMatchId: matchId,
+      verifiedProfileId: "vp-1",
       assessmentId: "assessment-1",
       organizationId: "org-1",
-      technicalEvidenceReportId: reportId,
+      schemaVersion: "1.0.0",
+      classificationData: { system_type: "HIGH_IMPACT_AI" },
       guardrailStatus,
+      status: "accepted",
     },
   });
 

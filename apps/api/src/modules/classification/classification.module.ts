@@ -2,8 +2,10 @@ import { Module } from "@nestjs/common";
 import { CqrsModule } from "@nestjs/cqrs";
 
 import { WorkerApiKeyGuard } from "../scan/presentation/http/worker-api-key.guard.js";
+import { AcceptClassificationHandler } from "./application/commands/accept-classification/accept-classification.handler.js";
 import { AcceptLegalRuleMatchHandler } from "./application/commands/accept-legal-rule-match/accept-legal-rule-match.handler.js";
 import { CitationGuardrailService } from "./application/services/classification/citation-guardrail.service.js";
+import { OverclaimGuardrailService } from "./application/services/classification/overclaim-guardrail.service.js";
 import { ClassificationController } from "./presentation/http/classification.controller.js";
 
 @Module({
@@ -11,7 +13,9 @@ import { ClassificationController } from "./presentation/http/classification.con
   controllers: [ClassificationController],
   providers: [
     AcceptLegalRuleMatchHandler,
+    AcceptClassificationHandler,
     CitationGuardrailService,
+    OverclaimGuardrailService,
     WorkerApiKeyGuard,
   ],
 })

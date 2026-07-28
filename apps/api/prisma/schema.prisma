@@ -453,14 +453,19 @@ model VerifiedProfile {
 }
 
 model ClassificationResult {
-  id                        String   @id
-  assessmentId              String
-  organizationId            String
-  technicalEvidenceReportId String   @unique
-  guardrailStatus           String
-  createdAt                 DateTime @default(now())
+  id                 String   @id @default(uuid())
+  legalRuleMatchId   String   @unique
+  verifiedProfileId  String
+  assessmentId       String
+  organizationId     String
+  schemaVersion      String
+  classificationData Json
+  guardrailStatus    String   @default("passed")
+  blockedReason      String?
+  status             String   @default("accepted")
+  createdAt          DateTime @default(now())
 
-  @@index([assessmentId, organizationId, createdAt])
+  @@index([assessmentId])
 }
 
 model DocumentRequest {
@@ -551,4 +556,3 @@ model LegalRuleMatch {
 
   @@index([assessmentId])
 }
-
