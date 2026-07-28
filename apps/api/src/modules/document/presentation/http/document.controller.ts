@@ -82,7 +82,10 @@ export class DocumentController {
 
   @Get(":assessmentId/documents/:documentRequestId")
   @UseGuards(PbacGuard)
-  @RequireAnyAction(PBAC_ACTIONS.documentRead, PBAC_ACTIONS.documentReadRedacted)
+  @RequireAnyAction(
+    PBAC_ACTIONS.documentRead,
+    PBAC_ACTIONS.documentReadRedacted,
+  )
   async getDocument(
     @Param("assessmentId") assessmentId: string,
     @Param("documentRequestId") documentRequestId: string,

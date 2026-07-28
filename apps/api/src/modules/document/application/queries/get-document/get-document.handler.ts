@@ -1,7 +1,4 @@
-import {
-  ForbiddenException,
-  NotFoundException,
-} from "@nestjs/common";
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import {
   DOCUMENT_ERROR_CODES,

@@ -51,7 +51,8 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
 
   beforeAll(async () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
-    process.env.DOCUMENT_DOWNLOAD_SIGNING_SECRET = "document-status-test-secret";
+    process.env.DOCUMENT_DOWNLOAD_SIGNING_SECRET =
+      "document-status-test-secret";
     pushPrismaSchema();
 
     prisma = new PrismaClient({ adapter: new PrismaPg(TEST_DATABASE_URL) });
@@ -114,12 +115,12 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     assert.ok(body.download_url);
     assert.ok(body.download_url_expires_at);
 
-    const expiresAt = Date.parse(body.download_url_expires_at as string);
+    const expiresAt = Date.parse(body.download_url_expires_at);
     const ttl = expiresAt - Date.now();
     assert.ok(ttl > 4 * 60 * 1000);
     assert.ok(ttl <= 5 * 60 * 1000 + 5_000);
 
-    const redirect = await httpRequest(app).get(body.download_url as string);
+    const redirect = await httpRequest(app).get(body.download_url);
     assert.equal(redirect.status, 302);
     assert.equal(
       redirect.headers.location,
@@ -149,7 +150,8 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
       id: "doc-blocked-1",
       status: DOCUMENT_REQUEST_STATUSES.blocked,
       documentType: DOCUMENT_TYPES.gapAnalysis,
-      blockedReason: "Exception at /private/reporting/generator.ts:42 with stack trace",
+      blockedReason:
+        "Exception at /private/reporting/generator.ts:42 with stack trace",
     });
 
     const response = await getDocumentStatus(

@@ -71,7 +71,9 @@ export class DocumentStorageService {
   }
 
   private sign(value: string): string {
-    return createHmac("sha256", this.secret()).update(value).digest("base64url");
+    return createHmac("sha256", this.secret())
+      .update(value)
+      .digest("base64url");
   }
 
   private secret(): string {
