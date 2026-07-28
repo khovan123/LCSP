@@ -1,11 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { DocumentStatusDto } from "@lcsp/contracts/document";
+import type { DocumentRequestStatus, DocumentType } from "@lcsp/contracts/document";
 import { DocumentListView } from "@/features/document/components/organisms/document-list-view";
 
+type DocumentStatusItem = {
+  document_request_id: string;
+  document_type: DocumentType;
+  status: DocumentRequestStatus;
+  blocked_reason: string | null;
+  guardrail_status: string | null;
+  download_url: string | null;
+  download_url_expires_at: string | null;
+  requested_at: string;
+  completed_at: string | null;
+  correlation_id: string;
+};
+
 export function DocumentsPageClient({ assessmentId }: { assessmentId: string }) {
-  const [documents, setDocuments] = useState<DocumentStatusDto[] | null>(null);
+  const [documents, setDocuments] = useState<DocumentStatusItem[] | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -17,7 +30,7 @@ export function DocumentsPageClient({ assessmentId }: { assessmentId: string }) 
         if (!mounted) return;
         if (res.ok) {
           const body = await res.json();
-          setDocuments(body as DocumentStatusDto[]);
+          setDocuments(body as DocumentStatusItem[]);
           return;
         }
         setDocuments([]);
