@@ -18,6 +18,7 @@ const ALLOWED_TYPES = [
 const COMMIT_MESSAGE_PATTERN = new RegExp(
   `^(${ALLOWED_TYPES.join("|")})(\\([a-z0-9-]+\\))?!?:\\s+LCSP-[0-9]+\\b.+`,
 );
+const MERGE_COMMIT_PATTERN = /^Merge branch '[^']+' into .+$/;
 
 const messageFile = process.argv.slice(2).find((arg) => arg !== "--");
 
@@ -40,6 +41,10 @@ if (!subject) {
 }
 
 if (subject === "ci: auto-fix imports and lint") {
+  process.exit(0);
+}
+
+if (MERGE_COMMIT_PATTERN.test(subject)) {
   process.exit(0);
 }
 
