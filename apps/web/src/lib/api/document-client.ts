@@ -1,5 +1,10 @@
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { DOCUMENT_ERROR_CODES } from "@lcsp/contracts/document";
+import {
+  DOCUMENT_ERROR_CODES,
+  DOCUMENT_REQUEST_STATUSES,
+  type DocumentRequestStatus,
+  type DocumentType,
+} from "@lcsp/contracts/document";
 import type { MessageKey } from "@lcsp/i18n";
 
 import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
@@ -10,10 +15,28 @@ export type DocumentRequestOutcome =
   | { kind: "error"; titleKey: MessageKey; detailKey: MessageKey }
   | { kind: "blocked"; titleKey: MessageKey; detailKey: MessageKey };
 
+export type DocumentStatusOutcome =
+  | { kind: "loaded"; data: DocumentStatusResult }
+  | { kind: "redirect"; location: string }
+  | { kind: "error"; titleKey: MessageKey; detailKey: MessageKey };
+
 export type DocumentRequestResult = {
   document_request_id: string;
   status: string;
   document_type: string;
+  correlation_id: string;
+};
+
+export type DocumentStatusResult = {
+  document_request_id: string;
+  document_type: DocumentType;
+  status: DocumentRequestStatus;
+  blocked_reason: string | null;
+  guardrail_status: string | null;
+  download_url: string | null;
+  download_url_expires_at: string | null;
+  requested_at: string;
+  completed_at: string | null;
   correlation_id: string;
 };
 
@@ -49,6 +72,22 @@ export async function requestGapAnalysis(
   return toDocumentRequestOutcome(payload, response.ok, response.status);
 }
 
+export async function getDocumentStatus(
+  assessmentId: string,
+  documentRequestId: string,
+): Promise<DocumentStatusOutcome> {
+  const response = await fetch(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/documents/${encodeURIComponent(documentRequestId)}`,
+    {
+      credentials: "same-origin",
+      cache: "no-store",
+    },
+  );
+
+  const payload: unknown = await response.json().catch(() => null);
+  return toDocumentStatusOutcome(payload, response.ok, response.status);
+}
+
 export function toDocumentRequestOutcome(
   payload: unknown,
   ok: boolean,
@@ -78,6 +117,27 @@ export function toDocumentRequestOutcome(
   };
 }
 
+export function toDocumentStatusOutcome(
+  payload: unknown,
+  ok: boolean,
+  status: number,
+): DocumentStatusOutcome {
+  if (ok && isDocumentStatusResult(payload)) {
+    return { kind: "loaded", data: payload };
+  }
+
+  const code = getProblemCode(payload);
+  if (status === 401 || code === AUTH_ERROR_CODES.sessionInvalid) {
+    return { kind: "redirect", location: PUBLIC_ENTRY_ROUTES.signIn };
+  }
+
+  return {
+    kind: "error",
+    titleKey: "pages.classification.errorTitle",
+    detailKey: "pages.classification.errorDetail",
+  };
+}
+
 function isDocumentRequestResult(payload: unknown): payload is DocumentRequestResult {
   if (typeof payload !== "object" || payload === null) {
     return false;
@@ -88,6 +148,21 @@ function isDocumentRequestResult(payload: unknown): payload is DocumentRequestRe
     typeof candidate.document_request_id === "string" &&
     typeof candidate.status === "string" &&
     typeof candidate.document_type === "string" &&
+    typeof candidate.correlation_id === "string"
+  );
+}
+
+function isDocumentStatusResult(payload: unknown): payload is DocumentStatusResult {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const candidate = payload as DocumentStatusResult;
+  return (
+    typeof candidate.document_request_id === "string" &&
+    typeof candidate.document_type === "string" &&
+    typeof candidate.status === "string" &&
+    typeof candidate.requested_at === "string" &&
     typeof candidate.correlation_id === "string"
   );
 }
@@ -114,4 +189,10 @@ export function sanitizeDocumentRequestPayload(
   payload: unknown,
 ): DocumentRequestResult | null {
   return isDocumentRequestResult(payload) ? payload : null;
+}
+
+export function sanitizeDocumentStatusPayload(
+  payload: unknown,
+): DocumentStatusResult | null {
+  return isDocumentStatusResult(payload) ? payload : null;
 }
