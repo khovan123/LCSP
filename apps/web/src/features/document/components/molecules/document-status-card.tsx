@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, Download } from "lucide-react";
 import type { DocumentRequestStatus, DocumentType } from "@lcsp/contracts/document";
 import { DOCUMENT_REQUEST_STATUSES, DOCUMENT_TYPES } from "@lcsp/contracts/document";
-import { resolveMessage } from "@lcsp/i18n";
+import { resolveMessage, type MessageKey } from "@lcsp/i18n";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +25,7 @@ type DocumentStatusCardProps = {
   canDownload: boolean;
 };
 
-function getLabelKey(documentType: DocumentType) {
+function getLabelKey(documentType: DocumentType): MessageKey {
   switch (documentType) {
     case DOCUMENT_TYPES.finalReport:
       return "pages.classification.documentTypes.finalReport";
@@ -38,7 +38,7 @@ function getLabelKey(documentType: DocumentType) {
   }
 }
 
-function getStatusLabelKey(status: DocumentRequestStatus): string {
+function getStatusLabelKey(status: DocumentRequestStatus): MessageKey {
   switch (status) {
     case DOCUMENT_REQUEST_STATUSES.queued:
       return "pages.classification.documentStates.queued";
