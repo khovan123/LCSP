@@ -20,6 +20,13 @@ import {
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest } from "./support/http.js";
 
+type SignInResponseBody = { session_token?: string };
+type DocumentListRow = {
+  document_request_id: string;
+  status: string;
+  download_url: string | null;
+};
+
 describe("Document List Endpoint (e2e)", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -64,7 +71,8 @@ describe("Document List Endpoint (e2e)", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: "org-1",
     });
-    managerToken = signIn.body.session_token;
+    const signInBody = signIn.body as SignInResponseBody;
+    managerToken = signInBody.session_token ?? "";
   });
 
   afterAll(async () => {
@@ -92,16 +100,22 @@ describe("Document List Endpoint (e2e)", () => {
       .set("X-Correlation-Id", "list-corr-1");
 
     assert.equal(res.status, 200);
-    const body = res.body as any[];
+    const body = res.body as DocumentListRow[];
     assert.ok(Array.isArray(body));
-    // Should include the ready gap analysis with download_url
-    const ready = body.find((b) => b.document_request_id === "doc-ready-1");
-    assert.ok(ready);
+
+    const ready = body.find((row) => row.document_request_id === "doc-ready-1");
+    assert.ok(ready !== undefined);
+    if (!ready) {
+      throw new Error("Expected ready document to be present in the list");
+    }
     assert.equal(ready.status, DOCUMENT_REQUEST_STATUSES.ready);
     assert.ok(ready.download_url);
 
-    const queued = body.find((b) => b.document_request_id === "doc-queued-1");
-    assert.ok(queued);
+    const queued = body.find((row) => row.document_request_id === "doc-queued-1");
+    assert.ok(queued !== undefined);
+    if (!queued) {
+      throw new Error("Expected queued document to be present in the list");
+    }
     assert.equal(queued.status, DOCUMENT_REQUEST_STATUSES.queued);
     assert.equal(queued.download_url, null);
   });

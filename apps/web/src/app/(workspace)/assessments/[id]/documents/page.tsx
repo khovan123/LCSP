@@ -9,45 +9,6 @@ export const metadata: Metadata = {
   description: resolveMessage(appLocale, "pages.classification.metadataDescription"),
 };
 
-const DEFAULT_DOCUMENTS = [
-  {
-    document_request_id: "gap-analysis",
-    document_type: "GapAnalysis",
-    status: "QUEUED",
-    blocked_reason: null,
-    guardrail_status: null,
-    download_url: null,
-    download_url_expires_at: null,
-    requested_at: "",
-    completed_at: null,
-    correlation_id: "",
-  },
-  {
-    document_request_id: "final-report",
-    document_type: "FinalReport",
-    status: "QUEUED",
-    blocked_reason: null,
-    guardrail_status: null,
-    download_url: null,
-    download_url_expires_at: null,
-    requested_at: "",
-    completed_at: null,
-    correlation_id: "",
-  },
-  {
-    document_request_id: "readiness-export",
-    document_type: "ReadinessExport",
-    status: "QUEUED",
-    blocked_reason: null,
-    guardrail_status: null,
-    download_url: null,
-    download_url_expires_at: null,
-    requested_at: "",
-    completed_at: null,
-    correlation_id: "",
-  },
-] as const;
-
 export default async function AssessmentDocumentsPage({
   params,
 }: {

@@ -1,7 +1,6 @@
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   DOCUMENT_ERROR_CODES,
-  DOCUMENT_REQUEST_STATUSES,
   type DocumentRequestStatus,
   type DocumentType,
 } from "@lcsp/contracts/document";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { DocumentStatusDto } from "@lcsp/contracts/document";
 import { DOCUMENT_TYPES } from "@lcsp/contracts/document";
 import { resolveMessage } from "@lcsp/i18n";
@@ -19,15 +19,9 @@ export function DocumentListView({
   documents,
   canDownloadFinalReport,
 }: DocumentListViewProps) {
-  const [items, setItems] = useState(documents);
-
-  useEffect(() => {
-    setItems(documents);
-  }, [documents]);
-
   const sortedDocuments = useMemo(
-    () => [...items].sort((left, right) => left.document_type.localeCompare(right.document_type)),
-    [items],
+    () => [...documents].sort((left, right) => left.document_type.localeCompare(right.document_type)),
+    [documents],
   );
 
   return (
