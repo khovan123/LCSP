@@ -1,16 +1,25 @@
 "use client";
 
 import { useMemo } from "react";
-import type { DocumentStatusDto } from "@lcsp/contracts/document";
-import { DOCUMENT_TYPES } from "@lcsp/contracts/document";
+import { DOCUMENT_TYPES, type DocumentRequestStatus, type DocumentType } from "@lcsp/contracts/document";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { appLocale } from "@/lib/locale";
 import { DocumentStatusCard } from "../molecules/document-status-card";
 
+type DocumentListItem = {
+  document_request_id: string;
+  document_type: DocumentType;
+  status: DocumentRequestStatus;
+  blocked_reason: string | null;
+  download_url: string | null;
+  download_url_expires_at: string | null;
+  requested_at: string;
+};
+
 type DocumentListViewProps = {
   assessmentId: string;
-  documents: DocumentStatusDto[];
+  documents: DocumentListItem[];
   canDownloadFinalReport: boolean;
 };
 
