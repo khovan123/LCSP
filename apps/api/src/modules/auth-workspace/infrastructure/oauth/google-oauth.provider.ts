@@ -28,7 +28,7 @@ export class GoogleOAuthProvider implements OAuthProvider {
   get isConfigured(): boolean {
     return Boolean(
       this.expectedAudience &&
-        this.configService.get<string>("oauth.googleClientSecret", ""),
+      this.configService.get<string>("oauth.googleClientSecret", ""),
     );
   }
 

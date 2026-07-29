@@ -67,7 +67,10 @@ export class AuthWorkspaceController {
     }
     const memberships = await this.prisma.authMembership.findMany({
       where: { organizationId: orgId, policy: { subjectRole: "Developer" } },
-      include: { user: { select: { id: true, email: true, displayName: true } }, policy: { select: { actions: true } } },
+      include: {
+        user: { select: { id: true, email: true, displayName: true } },
+        policy: { select: { actions: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
     return memberships.map((membership) => ({
