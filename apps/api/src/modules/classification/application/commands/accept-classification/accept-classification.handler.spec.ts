@@ -150,7 +150,14 @@ describe("AcceptClassificationHandler", () => {
           verifiedProfileId: "vp-123",
           assessmentId: "asm-123",
           organizationId: "org-123",
+          schemaVersion: "1.0.0",
+          classificationData: expect.objectContaining({
+            system_type: "HIGH_IMPACT_AI",
+            risk_level: "HIGH",
+          }),
           guardrailStatus: "passed",
+          blockedReason: null,
+          status: "accepted",
         }),
       }),
     );

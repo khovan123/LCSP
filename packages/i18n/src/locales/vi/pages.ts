@@ -254,5 +254,31 @@ export const viPages = {
     gapAnalysisLabel: "Phân tích khoảng trống",
     gapAnalysisPendingMessage: "Phân tích khoảng trống sẽ được tạo bởi bước worker tiếp theo sau phân loại. Nó sẽ khả dụng khi đường ống tài liệu sẵn sàng.",
     documentGuardrailBlocked: "Không thể tạo báo cáo cuối cùng vì guardrail phân loại chưa được vượt qua.",
+    documentList: {
+      title: "Tài liệu assessment",
+      description: "Theo dõi trạng thái tạo các tài liệu assessment có sẵn.",
+    },
+    documentMeta: {
+      requestedAt: "Yêu cầu lúc",
+    },
+    documentTypes: {
+      finalReport: "Báo cáo cuối cùng",
+      gapAnalysis: "Phân tích khoảng trống",
+      readinessExport: "Xuất sẵn sàng",
+      unknown: "Tài liệu",
+    },
+    documentStates: {
+      queued: "Đang chuẩn bị",
+      generating: "Đang tạo",
+      ready: "Sẵn sàng",
+      failed: "Tạo thất bại",
+      blocked: "Bị chặn",
+      unknown: "Đang chờ",
+      failedDetail: "Tạo tài liệu thất bại. Vui lòng thử lại.",
+      permissionDenied: "Quyền tải về bị hạn chế cho phạm vi hiện tại của bạn.",
+    },
+    documentActions: {
+      download: "Tải về",
+    },
   },
 } as const satisfies PagesMessages;

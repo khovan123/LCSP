@@ -14,11 +14,10 @@ import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
 import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_SCHEMA_VERSIONS,
-  CLASSIFICATION_RESULT_STATUSES,
   SCAN_ERROR_CODES,
   SCAN_EVENT_TYPES,
 } from "@lcsp/contracts/scan";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -121,10 +120,10 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
           organizationId: verifiedProfile.organizationId,
           schemaVersion: payload.schema_version,
           classificationData:
-            payload.classification_data as unknown as Prisma.InputJsonValue,
+            payload.classification_data as Prisma.InputJsonValue,
           guardrailStatus,
           blockedReason,
-          status: CLASSIFICATION_RESULT_STATUSES.accepted,
+          status: "accepted",
         },
       });
 

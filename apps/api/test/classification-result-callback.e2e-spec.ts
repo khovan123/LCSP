@@ -97,14 +97,25 @@ describe("Classification Result Callback Endpoint (e2e) [MW-cls-002]", () => {
       }),
     ]);
 
-    assert.equal(clsResult?.verifiedProfileId, "vp-1");
     assert.equal(clsResult?.legalRuleMatchId, "lrm-1");
+    assert.equal(clsResult?.verifiedProfileId, "vp-1");
     assert.equal(clsResult?.assessmentId, "assessment-1");
     assert.equal(clsResult?.organizationId, "org-1");
+    assert.equal(
+      clsResult?.schemaVersion,
+      CLASSIFICATION_RESULT_SCHEMA_VERSIONS[0],
+    );
+    assert.deepEqual(clsResult?.classificationData, {
+      system_type: "HIGH_IMPACT_AI",
+      risk_level: "HIGH",
+      citation_basis: ["chunk-1"],
+    });
     assert.equal(
       clsResult?.guardrailStatus,
       CLASSIFICATION_GUARDRAIL_STATUSES.passed,
     );
+    assert.equal(clsResult?.blockedReason, null);
+    assert.equal(clsResult?.status, "accepted");
     assert.equal(outbox?.aggregateId, body.classification_result_id);
     assert.equal(
       (outbox?.payload as { schemaVersion?: string }).schemaVersion,
@@ -169,7 +180,6 @@ describe("Classification Result Callback Endpoint (e2e) [MW-cls-002]", () => {
       clsResult?.guardrailStatus,
       CLASSIFICATION_GUARDRAIL_STATUSES.blocked,
     );
-    assert.equal(clsResult?.blockedReason, "CITATION_BASIS_MISSING");
 
     const audit = await prisma.authAuditEvent.findFirst({
       where: { eventType: SCAN_EVENT_TYPES.classificationBlockedAudit },

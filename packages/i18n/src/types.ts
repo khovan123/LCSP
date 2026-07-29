@@ -258,6 +258,32 @@ export type PagesMessages = {
     gapAnalysisLabel: string;
     gapAnalysisPendingMessage: string;
     documentGuardrailBlocked: string;
+    documentList: {
+      title: string;
+      description: string;
+    };
+    documentMeta: {
+      requestedAt: string;
+    };
+    documentTypes: {
+      finalReport: string;
+      gapAnalysis: string;
+      readinessExport: string;
+      unknown: string;
+    };
+    documentStates: {
+      queued: string;
+      generating: string;
+      ready: string;
+      failed: string;
+      blocked: string;
+      unknown: string;
+      failedDetail: string;
+      permissionDenied: string;
+    };
+    documentActions: {
+      download: string;
+    };
     states: {
       lockedTitle: string;
       lockedBadge: string;
