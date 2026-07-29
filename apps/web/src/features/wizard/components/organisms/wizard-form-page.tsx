@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  startTransition,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { startTransition, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
 import { BadgeCheck, CircleHelp, LoaderCircle } from "lucide-react";
@@ -29,20 +24,17 @@ import {
 } from "@/components/ui/sheet";
 import { appLocale } from "@/lib/locale";
 import {
-  getWizardAssessment,
-  saveWizardDraft,
-  submitWizard,
-} from "@/lib/api/wizard-client";
+  useSaveWizardDraftMutation,
+  useSubmitWizardMutation,
+  useWizardAssessmentQuery,
+} from "@/lib/api/assessment-queries";
 import {
   checkboxOptions,
   selectOptions,
   wizardSteps,
   WIZARD_LOCAL_STORAGE_PREFIX,
 } from "@/features/wizard/config/wizard-config";
-import type {
-  WizardAnswers,
-  WizardAssessment,
-} from "@/features/wizard/types/wizard.types";
+import type { WizardAnswers } from "@/features/wizard/types/wizard.types";
 
 const controlClassName =
   "w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30";
@@ -50,11 +42,13 @@ const sectionCardClassName = "border-border bg-card shadow-sm";
 
 export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
   const router = useRouter();
-  const [assessment, setAssessment] = useState<WizardAssessment | null>(null);
-  const [answers, setAnswers] = useState<WizardAnswers>({});
+  const assessmentQuery = useWizardAssessmentQuery(assessmentId);
+  const saveDraftMutation = useSaveWizardDraftMutation(assessmentId);
+  const submitWizardMutation = useSubmitWizardMutation(assessmentId);
+  const [answers, setAnswers] = useState<WizardAnswers>(() =>
+    normalizeAnswers(readLocalDraft(assessmentId)),
+  );
   const [currentStep, setCurrentStep] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isHydrated, setIsHydrated] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,7 +63,7 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
     async (draftAnswers: WizardAnswers) => {
       setIsSaving(true);
       setStatusKey("pages.wizard.draftSaving");
-      const outcome = await saveWizardDraft(assessmentId, draftAnswers);
+      const outcome = await saveDraftMutation.mutateAsync(draftAnswers);
       setIsSaving(false);
 
       if (outcome.kind === "redirect") {
@@ -92,58 +86,36 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
       setRootErrorKey(null);
       setStatusKey("pages.wizard.draftSaved");
     },
-    [assessmentId, router],
+    [router, saveDraftMutation],
   );
 
-  useEffect(() => {
-    let isActive = true;
-
-    async function loadAssessment() {
-      const outcome = await getWizardAssessment(assessmentId);
-      if (!isActive) {
-        return;
-      }
-
-      if (outcome.kind === "redirect") {
-        router.replace(outcome.location);
-        return;
-      }
-
-      if (outcome.kind === "error") {
-        setRootErrorKey(outcome.detailKey);
-        setIsLoading(false);
-        return;
-      }
-
-      const localDraft = readLocalDraft(assessmentId);
-      setAssessment(outcome.assessment);
-      setAnswers(normalizeAnswers(localDraft));
-      setIsReadOnly(outcome.assessment.wizardStatus === "SUBMITTED");
-      setIsHydrated(true);
-      setIsLoading(false);
-      setStatusKey(
-        outcome.assessment.wizardStatus === "SUBMITTED"
-          ? null
-          : "pages.wizard.draftSaved",
-      );
-    }
-
-    void loadAssessment();
-    return () => {
-      isActive = false;
-    };
-  }, [assessmentId, router]);
+  const assessment =
+    assessmentQuery.data?.kind === "loaded"
+      ? assessmentQuery.data.assessment
+      : null;
+  const queryErrorKey =
+    assessmentQuery.data?.kind === "error"
+      ? assessmentQuery.data.detailKey
+      : null;
+  const effectiveIsReadOnly =
+    isReadOnly || assessment?.wizardStatus === "SUBMITTED";
+  const effectiveStatusKey =
+    statusKey ??
+    (assessment && !effectiveIsReadOnly ? "pages.wizard.draftSaved" : null);
+  const effectiveRootErrorKey = queryErrorKey ?? rootErrorKey;
 
   useEffect(() => {
-    if (!isHydrated) {
-      return;
+    if (assessmentQuery.data?.kind === "redirect") {
+      router.replace(assessmentQuery.data.location);
     }
+  }, [assessmentQuery.data, router]);
 
+  useEffect(() => {
     writeLocalDraft(assessmentId, answers);
-  }, [answers, assessmentId, isHydrated]);
+  }, [answers, assessmentId]);
 
   useEffect(() => {
-    if (!isHydrated || isReadOnly) {
+    if (!assessment || effectiveIsReadOnly) {
       return;
     }
 
@@ -152,7 +124,7 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
     }, 2000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [answers, isHydrated, isReadOnly, saveDraftEvent]);
+  }, [answers, assessment, effectiveIsReadOnly, saveDraftEvent]);
 
   function updateAnswer<K extends keyof WizardAnswers>(
     key: K,
@@ -217,7 +189,9 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
     }
 
     setIsSubmitting(true);
-    const outcome = await submitWizard(assessmentId, serializeAnswers(answers));
+    const outcome = await submitWizardMutation.mutateAsync(
+      serializeAnswers(answers),
+    );
     setIsSubmitting(false);
 
     if (outcome.kind === "redirect") {
@@ -241,7 +215,7 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
     router.replace(`/assessments/${assessmentId}/readiness`);
   }
 
-  if (isLoading) {
+  if (assessmentQuery.isLoading) {
     return (
       <div className="mx-auto flex min-h-72 w-full max-w-6xl items-center justify-center px-4 py-10 lg:px-6">
         <Card className="w-full max-w-lg">
@@ -268,7 +242,7 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
                 <Badge variant="secondary">
                   {t("pages.wizard.progressLabel")}
                 </Badge>
-                {isReadOnly ? (
+                {effectiveIsReadOnly ? (
                   <Badge>{t("pages.wizard.readOnlyBadge")}</Badge>
                 ) : null}
               </div>
@@ -291,10 +265,10 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
                   complete={isStepComplete(index, answers)}
                 />
               ))}
-              {statusKey ? (
+              {effectiveStatusKey ? (
                 <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
                   {isSaving ? <LoaderCircle className="size-4 animate-spin" /> : <BadgeCheck className="size-4" />}
-                  <span>{t(statusKey)}</span>
+                  <span>{t(effectiveStatusKey)}</span>
                 </div>
               ) : null}
             </CardContent>
@@ -315,14 +289,14 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col gap-6">
-          {rootErrorKey ? (
+          {effectiveRootErrorKey ? (
             <Alert variant="destructive">
               <AlertTitle>{t("pages.wizard.errors.loadTitle")}</AlertTitle>
-              <AlertDescription>{t(rootErrorKey)}</AlertDescription>
+              <AlertDescription>{t(effectiveRootErrorKey)}</AlertDescription>
             </Alert>
           ) : null}
 
-          {isReadOnly ? (
+          {effectiveIsReadOnly ? (
             <ReadOnlySummary
               answers={answers}
               onBack={() => router.replace("/workspace")}

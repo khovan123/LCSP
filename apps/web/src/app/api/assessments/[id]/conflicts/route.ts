@@ -1,11 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { NextRequest } from "next/server";
+import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
 
 import { sanitizeConflictListPayload } from "@/lib/api/conflict-client";
-import { mockJsonResponse } from "@/lib/mocks/mock-response";
-import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
-
-const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
+import { mockJsonResponse } from "@/lib/server/fixtures/response";
+import { buildPaginationQuery } from "@/lib/server/query-params";
+import { requireSessionToken } from "@/lib/server/session-token";
+import {
+  upstreamRequest,
+  validatedUpstreamJson,
+} from "@/lib/server/upstream-request";
 
 export async function GET(
   request: NextRequest,
@@ -13,59 +16,18 @@ export async function GET(
 ) {
   const mock = await mockJsonResponse("conflicts.json");
   if (mock) return mock;
-  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (!sessionToken) {
-    return NextResponse.json(
-      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
-      { status: 401 },
-    );
-  }
+  const session = requireSessionToken(request);
+  if (!session.ok) return session.response;
 
   const { id } = await params;
-  const status = "PENDING";
-  const pageRaw = Number.parseInt(
-    request.nextUrl.searchParams.get("page") ?? "1",
-    10,
-  );
-  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? String(pageRaw) : "1";
-
-  const pageSizeRaw = Number.parseInt(
-    request.nextUrl.searchParams.get("page_size") ?? "20",
-    10,
-  );
-  const pageSizeNumber =
-    Number.isFinite(pageSizeRaw) && pageSizeRaw > 0
-      ? Math.min(pageSizeRaw, 100)
-      : 20;
-  const pageSize = String(pageSizeNumber);
-
-  const query = new URLSearchParams({
-    status,
-    page,
-    page_size: pageSize,
+  const query = buildPaginationQuery(request.nextUrl, {
+    extra: { status: CONFLICT_RECORD_STATUSES.pending },
   });
 
-  const apiResponse = await fetch(
-    `${apiBaseUrl}/assessments/${encodeURIComponent(id)}/conflicts?${query.toString()}`,
-    {
-      headers: { authorization: `Bearer ${sessionToken}` },
-      cache: "no-store",
-    },
+  const upstream = await upstreamRequest(
+    `/assessments/${encodeURIComponent(id)}/conflicts?${query.toString()}`,
+    { bearerToken: session.token },
   );
 
-  const payload: unknown = await apiResponse.json().catch(() => null);
-
-  if (apiResponse.ok) {
-    const sanitized = sanitizeConflictListPayload(payload);
-    if (!sanitized) {
-      return NextResponse.json(
-        { problem: { code: "UPSTREAM_RESPONSE_INVALID" } },
-        { status: 502 },
-      );
-    }
-
-    return NextResponse.json(sanitized, { status: apiResponse.status });
-  }
-
-  return NextResponse.json(payload, { status: apiResponse.status });
+  return validatedUpstreamJson(upstream, sanitizeConflictListPayload);
 }

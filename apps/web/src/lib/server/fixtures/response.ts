@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { NextResponse } from "next/server";
+import type { NextResponse } from "next/server";
+
+import { successJson } from "@/lib/server/problem-json";
+
+const MOCK_ASSET_PATH_SEGMENTS = ["src", "public", "assets", "mocks"] as const;
 
 export function isMockModeEnabled(): boolean {
   return process.env.LCSP_USE_MOCKS === "true";
@@ -14,16 +18,13 @@ export async function mockJsonResponse(
     return null;
   }
 
-  return NextResponse.json(await readMockJson(filename));
+  return successJson(await readMockJson(filename));
 }
 
 export async function readMockJson<T = unknown>(filename: string): Promise<T> {
   const filePath = path.join(
     process.cwd(),
-    "src",
-    "public",
-    "assets",
-    "mocks",
+    ...MOCK_ASSET_PATH_SEGMENTS,
     filename,
   );
   return JSON.parse(await readFile(filePath, "utf8")) as T;

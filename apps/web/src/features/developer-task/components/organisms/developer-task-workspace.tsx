@@ -1,130 +1,76 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getDeveloperTaskContext } from "@/lib/api/developer-task-client";
-import { getTechnicalEvidence } from "@/lib/api/evidence-client";
+import { useTechnicalEvidenceQuery } from "@/lib/api/assessment-queries";
+import { useDeveloperTaskContextQuery } from "@/lib/api/developer-task-queries";
 import { appLocale } from "@/lib/locale";
+import {
+  API_OUTCOME_KINDS,
+} from "@/lib/api/outcome-kinds";
 
-import type {
-  DeveloperFinding,
-  DeveloperTaskContext,
-} from "../../types/developer-task.types";
 import { RedactedFindingsList } from "./redacted-findings-list";
 import { ScopeSummaryCard } from "./scope-summary-card";
+import { DEVELOPER_TASK_SCOPE_TYPES } from "../../types/developer-task.types";
 
-type PageState = "loading" | "loaded" | "empty" | "access_revoked" | "error";
+const DEVELOPER_TASK_PAGE_STATES = {
+  loading: "loading",
+  loaded: API_OUTCOME_KINDS.loaded,
+  empty: API_OUTCOME_KINDS.empty,
+  accessRevoked: API_OUTCOME_KINDS.accessRevoked,
+  error: API_OUTCOME_KINDS.error,
+} as const;
+
+type PageState =
+  (typeof DEVELOPER_TASK_PAGE_STATES)[keyof typeof DEVELOPER_TASK_PAGE_STATES];
 
 export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string }) {
   const router = useRouter();
-  const [pageState, setPageState] = useState<PageState>("loading");
-  const [context, setContext] = useState<DeveloperTaskContext | null>(null);
-  const [findings, setFindings] = useState<DeveloperFinding[]>([]);
+  const contextQuery = useDeveloperTaskContextQuery();
+  const evidenceQuery = useTechnicalEvidenceQuery(assessmentId);
 
   useEffect(() => {
-    let isActive = true;
-    let requestInFlight = false;
-
-    async function loadTask() {
-      if (requestInFlight) return;
-      requestInFlight = true;
-      try {
-        const [contextOutcome, evidenceOutcome] = await Promise.all([
-          getDeveloperTaskContext(),
-          getTechnicalEvidence(assessmentId),
-        ]);
-        if (!isActive) return;
-
-        if (contextOutcome.kind === "redirect") {
-          setContext(null);
-          setFindings([]);
-          router.replace(contextOutcome.location);
-          return;
-        }
-        if (evidenceOutcome.kind === "redirect") {
-          setContext(null);
-          setFindings([]);
-          router.replace(evidenceOutcome.location);
-          return;
-        }
-        if (
-          contextOutcome.kind === "access_revoked" ||
-          evidenceOutcome.kind === "access_revoked"
-        ) {
-          setContext(null);
-          setFindings([]);
-          setPageState("access_revoked");
-          return;
-        }
-        if (contextOutcome.kind !== "loaded" || evidenceOutcome.kind === "error") {
-          setContext(null);
-          setFindings([]);
-          setPageState("error");
-          return;
-        }
-        if (
-          contextOutcome.context.scope.type === "assessment" &&
-          contextOutcome.context.scope.assessment.id !== assessmentId
-        ) {
-          setContext(null);
-          setFindings([]);
-          setPageState("access_revoked");
-          return;
-        }
-
-        setContext(contextOutcome.context);
-        if (evidenceOutcome.kind === "empty") {
-          setFindings([]);
-          setPageState("empty");
-          return;
-        }
-        if (evidenceOutcome.kind === "loaded") {
-          setFindings(evidenceOutcome.findings);
-          setPageState(evidenceOutcome.findings.length === 0 ? "empty" : "loaded");
-          return;
-        }
-
-        setContext(null);
-        setFindings([]);
-        setPageState("error");
-      } finally {
-        requestInFlight = false;
-      }
+    const contextOutcome = contextQuery.data;
+    const evidenceOutcome = evidenceQuery.data;
+    if (contextOutcome?.kind === API_OUTCOME_KINDS.redirect) {
+      router.replace(contextOutcome.location);
+      return;
     }
+    if (evidenceOutcome?.kind === API_OUTCOME_KINDS.redirect) {
+      router.replace(evidenceOutcome.location);
+    }
+  }, [contextQuery.data, evidenceQuery.data, router]);
 
-    void loadTask().catch(() => {
-      if (isActive) {
-        setContext(null);
-        setFindings([]);
-        setPageState("error");
-      }
-    });
-    const revalidate = () => {
-      void loadTask().catch(() => {
-        if (isActive) {
-          setContext(null);
-          setFindings([]);
-          setPageState("error");
-        }
-      });
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") revalidate();
-    };
-    window.addEventListener("focus", revalidate);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    const intervalId = window.setInterval(revalidate, 5_000);
-
-    return () => {
-      isActive = false;
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", revalidate);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [assessmentId, router]);
+  const contextOutcome = contextQuery.data;
+  const evidenceOutcome = evidenceQuery.data;
+  const context =
+    contextOutcome?.kind === API_OUTCOME_KINDS.loaded
+      ? contextOutcome.context
+      : null;
+  const findings =
+    evidenceOutcome?.kind === API_OUTCOME_KINDS.loaded
+      ? evidenceOutcome.findings
+      : [];
+  const scopeMismatch =
+    context?.scope.type === DEVELOPER_TASK_SCOPE_TYPES.assessment &&
+    context.scope.assessment.id !== assessmentId;
+  const pageState: PageState =
+    contextQuery.isLoading || evidenceQuery.isLoading
+      ? DEVELOPER_TASK_PAGE_STATES.loading
+      : contextOutcome?.kind === API_OUTCOME_KINDS.accessRevoked ||
+          evidenceOutcome?.kind === API_OUTCOME_KINDS.accessRevoked ||
+          scopeMismatch
+        ? DEVELOPER_TASK_PAGE_STATES.accessRevoked
+        : contextOutcome?.kind !== API_OUTCOME_KINDS.loaded ||
+            evidenceOutcome?.kind === API_OUTCOME_KINDS.error
+          ? DEVELOPER_TASK_PAGE_STATES.error
+          : evidenceOutcome?.kind === API_OUTCOME_KINDS.empty ||
+              findings.length === 0
+            ? DEVELOPER_TASK_PAGE_STATES.empty
+            : DEVELOPER_TASK_PAGE_STATES.loaded;
 
   return (
     <main className="flex flex-1 flex-col gap-6 px-4 py-6 text-foreground lg:px-6">
@@ -138,13 +84,13 @@ export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string 
           </p>
         </header>
 
-        {pageState === "loading" ? (
+        {pageState === DEVELOPER_TASK_PAGE_STATES.loading ? (
           <p role="status" className="text-sm text-muted-foreground">
             {resolveMessage(appLocale, "pages.developerTask.loading")}
           </p>
         ) : null}
 
-        {pageState === "access_revoked" ? (
+        {pageState === DEVELOPER_TASK_PAGE_STATES.accessRevoked ? (
           <Alert variant="destructive" data-component="blocked-banner">
             <AlertTitle>
               {resolveMessage(appLocale, "pages.developerTask.revokedTitle")}
@@ -155,7 +101,7 @@ export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string 
           </Alert>
         ) : null}
 
-        {pageState === "error" ? (
+        {pageState === DEVELOPER_TASK_PAGE_STATES.error ? (
           <Alert variant="destructive">
             <AlertTitle>
               {resolveMessage(appLocale, "pages.developerTask.errorTitle")}
@@ -166,7 +112,9 @@ export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string 
           </Alert>
         ) : null}
 
-        {context && (pageState === "loaded" || pageState === "empty") ? (
+        {context &&
+        (pageState === DEVELOPER_TASK_PAGE_STATES.loaded ||
+          pageState === DEVELOPER_TASK_PAGE_STATES.empty) ? (
           <>
             <ScopeSummaryCard context={context} />
             <RedactedFindingsList findings={findings} />

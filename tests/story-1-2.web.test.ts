@@ -8,6 +8,21 @@ import {
   toSignInOutcome,
 } from "@lcsp/web";
 
+function problem(code: string, status: number) {
+  return {
+    ok: false,
+    problem: {
+      type: `test/${code.toLowerCase().replaceAll("_", "-")}`,
+      status,
+      code,
+      titleKey: "auth.errors.validationFailed.title",
+      detailKey: "auth.errors.validationFailed.detail",
+      requiredAction: "none",
+      correlationId: "test-correlation",
+    },
+  };
+}
+
 test("successful sign-in outcomes redirect without exposing a session token", () => {
   assert.deepEqual(toSignInOutcome({ ok: true, mfa_required: false }, true), {
     kind: "authenticated",
@@ -19,7 +34,7 @@ test("successful sign-in outcomes redirect without exposing a session token", ()
 
 test("sign-in errors expose safe i18n keys", () => {
   assert.deepEqual(
-    toSignInOutcome({ problem: { code: "INVALID_CREDENTIALS" } }, false),
+    toSignInOutcome(problem("INVALID_CREDENTIALS", 401), false),
     {
       kind: "error",
       titleKey: "auth.errors.invalidCredentials.title",
@@ -27,7 +42,7 @@ test("sign-in errors expose safe i18n keys", () => {
     },
   );
   assert.deepEqual(
-    toSignInOutcome({ problem: { code: "TEMPORARY_LOCKED" } }, false),
+    toSignInOutcome(problem("TEMPORARY_LOCKED", 429), false),
     {
       kind: "error",
       titleKey: "auth.errors.temporaryLock.title",

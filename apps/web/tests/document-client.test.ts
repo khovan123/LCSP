@@ -8,6 +8,21 @@ import {
   toDocumentRequestOutcome,
 } from "../src/lib/api/document-client.ts";
 
+function problem(code: string, status: number) {
+  return {
+    ok: false,
+    problem: {
+      type: `test/${code.toLowerCase().replaceAll("_", "-")}`,
+      status,
+      code,
+      titleKey: "auth.errors.validationFailed.title",
+      detailKey: "auth.errors.validationFailed.detail",
+      requiredAction: "none",
+      correlationId: "test-correlation",
+    },
+  };
+}
+
 test("document request outcome maps requested response correctly", () => {
   const outcome = toDocumentRequestOutcome(
     {
@@ -32,7 +47,7 @@ test("document request outcome maps requested response correctly", () => {
 test("document request outcome maps auth errors to redirect", () => {
   assert.deepEqual(
     toDocumentRequestOutcome(
-      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
+      problem(AUTH_ERROR_CODES.sessionInvalid, 401),
       false,
       401,
     ),
@@ -42,7 +57,7 @@ test("document request outcome maps auth errors to redirect", () => {
 
 test("document request outcome maps classification guardrail failure to blocked", () => {
   const outcome = toDocumentRequestOutcome(
-    { problem: { code: DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed } },
+    problem(DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed, 409),
     false,
     409,
   );

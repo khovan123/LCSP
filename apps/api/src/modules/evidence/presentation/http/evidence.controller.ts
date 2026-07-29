@@ -17,12 +17,10 @@ import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { RequireAnyAction } from "../../../../platform/pbac/decorators/require-any-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptTechnicalProfileCommand } from "../../application/commands/accept-technical-profile/accept-technical-profile.command.js";
-import type {
-  TechnicalProfileCallbackDto,
-  TechnicalProfileCallbackRequest,
-} from "../../application/contracts/evidence/technical-profile-callback.contract.js";
+import type { TechnicalProfileCallbackRequest } from "../../application/contracts/evidence/technical-profile-callback.contract.js";
 import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evidence.query.js";
 
 @Controller("assessments")
@@ -40,13 +38,15 @@ export class EvidenceController {
     @Req() request: AuthenticatedRequest,
   ) {
     const context = request.pbacContext;
-    return this.queryBus.execute(
-      new GetEvidenceQuery(
-        assessmentId,
-        context.organizationId,
-        context.scope,
-        context.selectedAction,
-        request.correlationId as string,
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetEvidenceQuery(
+          assessmentId,
+          context.organizationId,
+          context.scope,
+          context.selectedAction,
+          request.correlationId as string,
+        ),
       ),
     );
   }
@@ -62,11 +62,13 @@ export class InternalEvidenceController {
   async acceptTechnicalProfile(
     @Body() payload: TechnicalProfileCallbackRequest,
     @Headers("x-correlation-id") correlationId?: string,
-  ): Promise<TechnicalProfileCallbackDto> {
-    return this.commandBus.execute(
-      new AcceptTechnicalProfileCommand(
-        payload,
-        correlationId?.trim() || randomUUID(),
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new AcceptTechnicalProfileCommand(
+          payload,
+          correlationId?.trim() || randomUUID(),
+        ),
       ),
     );
   }

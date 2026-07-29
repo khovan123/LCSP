@@ -13,6 +13,7 @@ import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { CreateAssessmentCommand } from "../../application/commands/create-assessment/create-assessment.command.js";
@@ -36,19 +37,21 @@ export class AssessmentController {
   ) {
     const pbacContext = request.pbacContext;
 
-    return this.commandBus.execute(
-      new CreateAssessmentCommand(
-        pbacContext.organizationId,
-        pbacContext.userId,
-        body.name,
-        body.description,
-        request.correlationId as string,
-        {
-          subjectRole: pbacContext.subjectRole,
-          selectedAction: pbacContext.selectedAction,
-          policyId: pbacContext.policyId,
-          policyVersion: pbacContext.policyVersion,
-        },
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new CreateAssessmentCommand(
+          pbacContext.organizationId,
+          pbacContext.userId,
+          body.name,
+          body.description,
+          request.correlationId as string,
+          {
+            subjectRole: pbacContext.subjectRole,
+            selectedAction: pbacContext.selectedAction,
+            policyId: pbacContext.policyId,
+            policyVersion: pbacContext.policyVersion,
+          },
+        ),
       ),
     );
   }
@@ -64,16 +67,18 @@ export class AssessmentController {
   ) {
     const pbacContext = request.pbacContext;
 
-    return this.queryBus.execute(
-      new ListAssessmentsQuery(
-        pbacContext.organizationId,
-        pbacContext.userId,
-        pbacContext.subjectRole,
-        pbacContext.scope,
-        page !== undefined ? Number(page) : undefined,
-        pageSize !== undefined ? Number(pageSize) : undefined,
-        status,
-        request.correlationId as string,
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new ListAssessmentsQuery(
+          pbacContext.organizationId,
+          pbacContext.userId,
+          pbacContext.subjectRole,
+          pbacContext.scope,
+          page !== undefined ? Number(page) : undefined,
+          pageSize !== undefined ? Number(pageSize) : undefined,
+          status,
+          request.correlationId as string,
+        ),
       ),
     );
   }
@@ -87,13 +92,15 @@ export class AssessmentController {
   ) {
     const pbacContext = request.pbacContext;
 
-    return this.queryBus.execute(
-      new GetAssessmentQuery(
-        assessmentId,
-        pbacContext.organizationId,
-        pbacContext.userId,
-        pbacContext.subjectRole,
-        request.correlationId as string,
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetAssessmentQuery(
+          assessmentId,
+          pbacContext.organizationId,
+          pbacContext.userId,
+          pbacContext.subjectRole,
+          request.correlationId as string,
+        ),
       ),
     );
   }

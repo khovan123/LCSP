@@ -1,10 +1,13 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { AUTH_ERROR_CODES, WORKSPACE_ERROR_CODES } from "@lcsp/contracts/auth";
+import { SHARED_ERROR_CODES } from "@lcsp/contracts/shared";
 
-import { isMockModeEnabled, readMockJson } from "@/lib/mocks/mock-response";
+import { isMockModeEnabled, readMockJson } from "@/lib/server/fixtures/response";
 import {
   MOCK_WORKSPACE_COOKIE_NAME,
   type MockDeveloperAccount,
-} from "@/lib/mocks/mock-workspace";
+} from "@/lib/server/fixtures/workspace";
+import { problemJson, successJson } from "@/lib/server/problem-json";
 import {
   SESSION_COOKIE_NAME,
   sessionCookieOptions,
@@ -12,10 +15,7 @@ import {
 
 export async function GET(request: NextRequest) {
   if (!isMockModeEnabled()) {
-    return NextResponse.json(
-      { problem: { code: "NOT_FOUND" } },
-      { status: 404 },
-    );
+    return problemJson(SHARED_ERROR_CODES.notFound, { status: 404 });
   }
 
   const account = await readMockJson<MockDeveloperAccount>(
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     MOCK_WORKSPACE_COOKIE_NAME,
   )?.value;
 
-  return NextResponse.json({
+  return successJson({
     email: account.email,
     workspaces: account.workspaces,
     selected_workspace_id: selectedWorkspaceId,
@@ -34,19 +34,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   if (!isMockModeEnabled()) {
-    return NextResponse.json(
-      { problem: { code: "NOT_FOUND" } },
-      { status: 404 },
-    );
+    return problemJson(SHARED_ERROR_CODES.notFound, { status: 404 });
   }
 
   const body: unknown = await request.json().catch(() => null);
   const workspaceId = (body as { workspace_id?: unknown })?.workspace_id;
   if (typeof workspaceId !== "string") {
-    return NextResponse.json(
-      { problem: { code: "VALIDATION_FAILED" } },
-      { status: 400 },
-    );
+    return problemJson(AUTH_ERROR_CODES.validationFailed, { status: 400 });
   }
 
   const account = await readMockJson<MockDeveloperAccount>(
@@ -56,14 +50,10 @@ export async function POST(request: NextRequest) {
     (workspace) => workspace.id === workspaceId,
   );
   if (!selectedWorkspace) {
-    return NextResponse.json(
-      { problem: { code: "WORKSPACE_NOT_FOUND" } },
-      { status: 404 },
-    );
+    return problemJson(WORKSPACE_ERROR_CODES.notFound, { status: 404 });
   }
 
-  const response = NextResponse.json({
-    ok: true,
+  const response = successJson({
     selected_workspace: selectedWorkspace,
   });
   response.cookies.set(

@@ -1,32 +1,20 @@
 "use client";
 
 import { resolveMessage } from "@lcsp/i18n";
-import { useEffect, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getAssessments } from "@/lib/api/workspace-client";
+import { useAssessmentsQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
-import type { AssessmentSummary } from "../../types/workspace.types";
 import { AssessmentList } from "./assessment-list";
 
 export function AssessmentsDirectory() {
-  const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    void getAssessments().then((outcome) => {
-      if (!active) return;
-      if (outcome.kind === "error") setHasError(true);
-      else setAssessments(outcome.assessments);
-      setIsLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+  const assessmentsQuery = useAssessmentsQuery();
+  const assessments =
+    assessmentsQuery.data?.kind === "loaded"
+      ? assessmentsQuery.data.assessments
+      : [];
+  const hasError = assessmentsQuery.data?.kind === "error";
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
@@ -46,9 +34,9 @@ export function AssessmentsDirectory() {
           </AlertDescription>
         </Alert>
       ) : null}
-      <AssessmentList
+        <AssessmentList
         assessments={assessments}
-        isLoading={isLoading}
+        isLoading={assessmentsQuery.isLoading}
         title={resolveMessage(appLocale, "pages.workspace.assessmentsTitle")}
         description={resolveMessage(
           appLocale,

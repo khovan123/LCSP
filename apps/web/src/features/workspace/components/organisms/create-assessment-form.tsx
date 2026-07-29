@@ -15,26 +15,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { createAssessment } from "@/lib/api/workspace-client";
+import { useCreateAssessmentMutation } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
 export function CreateAssessmentForm() {
   const router = useRouter();
+  const createAssessmentMutation = useCreateAssessmentMutation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasError, setHasError] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim()) return;
-    setIsSubmitting(true);
     setHasError(false);
-    const outcome = await createAssessment(
-      name.trim(),
-      description.trim() || undefined,
-    );
-    setIsSubmitting(false);
+    const outcome = await createAssessmentMutation.mutateAsync({
+      name: name.trim(),
+      description: description.trim() || undefined,
+    });
     if (outcome.kind === "created") {
       router.push(`/assessments/${outcome.assessmentId}/wizard`);
       return;
@@ -107,8 +105,8 @@ export function CreateAssessmentForm() {
               >
                 {t("pages.assessmentForm.cancel")}
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting
+              <Button type="submit" disabled={createAssessmentMutation.isPending}>
+                {createAssessmentMutation.isPending
                   ? t("pages.assessmentForm.submitting")
                   : t("pages.assessmentForm.submit")}
               </Button>

@@ -48,3 +48,8 @@ export const REVOKE_MEMBERSHIP_ERROR_CODES = {
   cannotSelfRevoke: "CANNOT_SELF_REVOKE",
   organizationScopeMismatch: ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
 } as const;
+
+export const WORKSPACE_ERROR_CODES = {
+  selectionRequired: "WORKSPACE_SELECTION_REQUIRED",
+  notFound: "WORKSPACE_NOT_FOUND",
+} as const;

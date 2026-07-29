@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { resolveMessage } from "@lcsp/i18n";
 import {
   ArrowRightIcon,
@@ -13,24 +12,19 @@ import { useRouter } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/spinner";
 import { useWorkspaceUiStore } from "@/features/workspace/stores/workspace-ui-store";
+import { useSignOutMutation } from "@/lib/api/auth-queries";
+import type { WorkspaceSelectionOption } from "@/lib/api/workspace-client";
+import {
+  usePersistWorkspaceSelectionMutation,
+  useWorkspaceSelectionQuery,
+} from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
-type WorkspaceOption = {
-  id: string;
-  name: string;
-  member_count?: number;
-  last_sign_in_days_ago?: number;
-};
-
-type WorkspaceSelectionPayload = {
-  email?: string;
-  workspaces: WorkspaceOption[];
-  selected_workspace_id?: string;
-};
+type WorkspaceOption = WorkspaceSelectionOption;
 
 export default function SelectWorkspacePage() {
   const router = useRouter();
-  const queryClient = useQueryClient();
+  const signOutMutation = useSignOutMutation();
   const setSelectedWorkspace = useWorkspaceUiStore(
     (state) => state.setSelectedWorkspace,
   );
@@ -38,27 +32,20 @@ export default function SelectWorkspacePage() {
     (state) => state.selectedWorkspaceId,
   );
 
-  const workspacesQuery = useQuery({
-    queryKey: ["mock-workspace-selection"],
-    queryFn: loadWorkspaceSelection,
-  });
+  const workspacesQuery = useWorkspaceSelectionQuery();
   const selectedId =
     selectedWorkspaceId ?? workspacesQuery.data?.selected_workspace_id;
 
-  const selectWorkspace = useMutation({
-    mutationFn: persistWorkspaceSelection,
-    onSuccess: async (workspace) => {
-      setSelectedWorkspace(workspace);
-      await queryClient.invalidateQueries({ queryKey: ["workspace"] });
-      await queryClient.invalidateQueries({
-        queryKey: ["mock-workspace-selection"],
-      });
-      router.replace("/workspace");
-    },
-  });
+  const selectWorkspace = usePersistWorkspaceSelectionMutation();
+
+  async function handleSelectWorkspace(workspaceId: string) {
+    const workspace = await selectWorkspace.mutateAsync(workspaceId);
+    setSelectedWorkspace(workspace);
+    router.replace("/workspace");
+  }
 
   async function handleSignOut() {
-    await fetch("/api/auth/sign-out", { method: "POST" }).catch(() => null);
+    await signOutMutation.mutateAsync();
     setSelectedWorkspace(undefined);
     router.replace("/sign-in");
   }
@@ -154,7 +141,7 @@ export default function SelectWorkspacePage() {
                 <button
                   key={workspace.id}
                   type="button"
-                  onClick={() => selectWorkspace.mutate(workspace.id)}
+                  onClick={() => void handleSelectWorkspace(workspace.id)}
                   disabled={selectWorkspace.isPending}
                   className="flex w-full items-center gap-4 px-8 py-5 text-left transition hover:bg-muted/45 disabled:cursor-wait disabled:opacity-80"
                 >
@@ -223,39 +210,6 @@ function MemberDots({ workspaceName }: { workspaceName: string }) {
       ))}
     </span>
   );
-}
-
-async function loadWorkspaceSelection(): Promise<WorkspaceSelectionPayload> {
-  const response = await fetch("/api/mock/workspace-selection", {
-    credentials: "same-origin",
-  });
-  if (!response.ok) {
-    throw new Error("workspace-selection-load-failed");
-  }
-  const payload = (await response.json()) as WorkspaceSelectionPayload;
-  return {
-    email: typeof payload.email === "string" ? payload.email : undefined,
-    workspaces: Array.isArray(payload.workspaces) ? payload.workspaces : [],
-    selected_workspace_id: payload.selected_workspace_id,
-  };
-}
-
-async function persistWorkspaceSelection(
-  workspaceId: string,
-): Promise<WorkspaceOption> {
-  const response = await fetch("/api/mock/workspace-selection", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ workspace_id: workspaceId }),
-  });
-  const payload = (await response.json().catch(() => null)) as {
-    selected_workspace?: WorkspaceOption;
-  } | null;
-  if (!response.ok || !payload?.selected_workspace) {
-    throw new Error("workspace-selection-save-failed");
-  }
-  return payload.selected_workspace;
 }
 
 function getWorkspaceInitials(name: string) {

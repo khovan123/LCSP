@@ -19,20 +19,13 @@ import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptConflictCommand } from "../../application/commands/accept-conflict/accept-conflict.command.js";
 import { AcceptVerifiedProfileCommand } from "../../application/commands/accept-verified-profile/accept-verified-profile.command.js";
 import { ResolveConflictCommand } from "../../application/commands/resolve-conflict/resolve-conflict.command.js";
-import type { ResolveConflictDto } from "../../application/commands/resolve-conflict/resolve-conflict.handler.js";
-import type {
-  ConflictDetectionCallbackDto,
-  ConflictDetectionCallbackRequest,
-} from "../../application/contracts/reconciliation/conflict-detection-callback.contract.js";
-import type { ConflictListDto } from "../../application/contracts/reconciliation/conflict-list.contract.js";
-import type {
-  VerifiedProfileCallbackDto,
-  VerifiedProfileCallbackRequest,
-} from "../../application/contracts/reconciliation/verified-profile-callback.contract.js";
+import type { ConflictDetectionCallbackRequest } from "../../application/contracts/reconciliation/conflict-detection-callback.contract.js";
+import type { VerifiedProfileCallbackRequest } from "../../application/contracts/reconciliation/verified-profile-callback.contract.js";
 import { ListConflictsQuery } from "../../application/queries/list-conflicts/list-conflicts.query.js";
 import { GetVerifiedProfileByIdQuery } from "../../application/queries/get-verified-profile-by-id/get-verified-profile-by-id.query.js";
 
@@ -54,9 +47,14 @@ export class InternalReconciliationController {
   async acceptConflictDetection(
     @Body() payload: ConflictDetectionCallbackRequest,
     @Headers("x-correlation-id") correlationId?: string,
-  ): Promise<ConflictDetectionCallbackDto> {
-    return this.commandBus.execute(
-      new AcceptConflictCommand(payload, correlationId?.trim() || randomUUID()),
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new AcceptConflictCommand(
+          payload,
+          correlationId?.trim() || randomUUID(),
+        ),
+      ),
     );
   }
 
@@ -66,11 +64,13 @@ export class InternalReconciliationController {
   async acceptVerifiedProfile(
     @Body() payload: VerifiedProfileCallbackRequest,
     @Headers("x-correlation-id") correlationId?: string,
-  ): Promise<VerifiedProfileCallbackDto> {
-    return this.commandBus.execute(
-      new AcceptVerifiedProfileCommand(
-        payload,
-        correlationId?.trim() || randomUUID(),
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new AcceptVerifiedProfileCommand(
+          payload,
+          correlationId?.trim() || randomUUID(),
+        ),
       ),
     );
   }
@@ -80,9 +80,11 @@ export class InternalReconciliationController {
   @UseGuards(WorkerApiKeyGuard)
   async getVerifiedProfileById(
     @Param("verifiedProfileId") verifiedProfileId: string,
-  ): Promise<unknown> {
-    return await this.queryBus.execute(
-      new GetVerifiedProfileByIdQuery(verifiedProfileId),
+  ) {
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetVerifiedProfileByIdQuery(verifiedProfileId),
+      ),
     );
   }
 }
@@ -103,19 +105,21 @@ export class ReconciliationController {
     @Query("page") page: string | undefined,
     @Query("page_size") pageSize: string | undefined,
     @Req() request: AuthenticatedRequest,
-  ): Promise<ConflictListDto> {
+  ) {
     const pbacContext = request.pbacContext;
 
-    return this.queryBus.execute(
-      new ListConflictsQuery(
-        assessmentId,
-        pbacContext.organizationId,
-        pbacContext.userId,
-        pbacContext.subjectRole,
-        page !== undefined ? Number(page) : undefined,
-        pageSize !== undefined ? Number(pageSize) : undefined,
-        status,
-        request.correlationId as string,
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new ListConflictsQuery(
+          assessmentId,
+          pbacContext.organizationId,
+          pbacContext.userId,
+          pbacContext.subjectRole,
+          page !== undefined ? Number(page) : undefined,
+          pageSize !== undefined ? Number(pageSize) : undefined,
+          status,
+          request.correlationId as string,
+        ),
       ),
     );
   }
@@ -128,24 +132,26 @@ export class ReconciliationController {
     @Param("conflictId") conflictId: string,
     @Body() body: ResolveConflictRequest,
     @Req() request: AuthenticatedRequest,
-  ): Promise<ResolveConflictDto> {
+  ) {
     const pbacContext = request.pbacContext;
 
-    return this.commandBus.execute(
-      new ResolveConflictCommand(
-        assessmentId,
-        conflictId,
-        pbacContext.organizationId,
-        pbacContext.userId,
-        pbacContext.subjectRole,
-        body.resolution,
-        body.resolution_note,
-        request.correlationId as string,
-        {
-          selectedAction: pbacContext.selectedAction,
-          policyId: pbacContext.policyId,
-          policyVersion: pbacContext.policyVersion,
-        },
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ResolveConflictCommand(
+          assessmentId,
+          conflictId,
+          pbacContext.organizationId,
+          pbacContext.userId,
+          pbacContext.subjectRole,
+          body.resolution,
+          body.resolution_note,
+          request.correlationId as string,
+          {
+            selectedAction: pbacContext.selectedAction,
+            policyId: pbacContext.policyId,
+            policyVersion: pbacContext.policyVersion,
+          },
+        ),
       ),
     );
   }

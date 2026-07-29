@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { resolveMessage } from "@lcsp/i18n";
 import { Building2Icon, CheckIcon, ChevronsUpDownIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -14,18 +13,15 @@ import {
 } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
 import { useWorkspaceUiStore } from "@/features/workspace/stores/workspace-ui-store";
+import type { WorkspaceSelectionOption } from "@/lib/api/workspace-client";
+import {
+  usePersistWorkspaceSelectionMutation,
+  useWorkspaceSelectionQuery,
+} from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
-type WorkspaceOption = {
-  id: string;
-  name: string;
-};
-
-type WorkspaceSelectionPayload = {
-  workspaces: WorkspaceOption[];
-  selected_workspace_id?: string;
-};
+type WorkspaceOption = WorkspaceSelectionOption;
 
 export function WorkspaceSwitcher({
   placement,
@@ -33,7 +29,6 @@ export function WorkspaceSwitcher({
   placement: "header" | "sidebar";
 }) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const switcherRef = useRef<HTMLDivElement | null>(null);
   const selectedWorkspaceId = useWorkspaceUiStore(
@@ -45,11 +40,7 @@ export function WorkspaceSwitcher({
   const setSelectedWorkspace = useWorkspaceUiStore(
     (state) => state.setSelectedWorkspace,
   );
-  const selectionQuery = useQuery({
-    queryKey: ["mock-workspace-selection"],
-    queryFn: loadWorkspaceSelection,
-    retry: false,
-  });
+  const selectionQuery = useWorkspaceSelectionQuery();
   const selectedId =
     selectedWorkspaceId ?? selectionQuery.data?.selected_workspace_id;
   const selectedWorkspace = selectionQuery.data?.workspaces.find(
@@ -59,17 +50,13 @@ export function WorkspaceSwitcher({
     selectedWorkspaceName ??
     selectedWorkspace?.name ??
     t("pages.appShell.switchWorkspace");
-  const switchWorkspace = useMutation({
-    mutationFn: persistWorkspaceSelection,
-    onSuccess: async (workspace) => {
-      setSelectedWorkspace(workspace);
-      await queryClient.invalidateQueries({ queryKey: ["workspace"] });
-      await queryClient.invalidateQueries({
-        queryKey: ["mock-workspace-selection"],
-      });
-      router.refresh();
-    },
-  });
+  const switchWorkspace = usePersistWorkspaceSelectionMutation();
+
+  async function handleSwitchWorkspace(workspaceId: string) {
+    const workspace = await switchWorkspace.mutateAsync(workspaceId);
+    setSelectedWorkspace(workspace);
+    router.refresh();
+  }
 
   useEffect(() => {
     if (selectedWorkspace && selectedWorkspaceName !== selectedWorkspace.name) {
@@ -177,7 +164,7 @@ export function WorkspaceSwitcher({
                   switchWorkspace.variables === workspace.id
                 }
                 onSelect={() => {
-                  switchWorkspace.mutate(workspace.id);
+                  void handleSwitchWorkspace(workspace.id);
                   setIsOpen(false);
                 }}
               />
@@ -223,34 +210,6 @@ function WorkspaceMenuRow({
       ) : null}
     </button>
   );
-}
-
-async function loadWorkspaceSelection(): Promise<WorkspaceSelectionPayload> {
-  const response = await fetch("/api/mock/workspace-selection", {
-    credentials: "same-origin",
-  });
-  if (!response.ok) {
-    throw new Error("workspace-selection-load-failed");
-  }
-  return (await response.json()) as WorkspaceSelectionPayload;
-}
-
-async function persistWorkspaceSelection(
-  workspaceId: string,
-): Promise<WorkspaceOption> {
-  const response = await fetch("/api/mock/workspace-selection", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ workspace_id: workspaceId }),
-  });
-  const payload = (await response.json().catch(() => null)) as {
-    selected_workspace?: WorkspaceOption;
-  } | null;
-  if (!response.ok || !payload?.selected_workspace) {
-    throw new Error("workspace-selection-save-failed");
-  }
-  return payload.selected_workspace;
 }
 
 function t(key: string) {

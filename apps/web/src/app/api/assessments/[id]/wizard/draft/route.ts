@@ -1,10 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { NextRequest } from "next/server";
 
-import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
-import { mockJsonResponse } from "@/lib/mocks/mock-response";
-
-const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
+import { mockJsonResponse } from "@/lib/server/fixtures/response";
+import { requireSessionToken } from "@/lib/server/session-token";
+import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 
 export async function PUT(
   request: NextRequest,
@@ -12,30 +10,21 @@ export async function PUT(
 ) {
   const mock = await mockJsonResponse("wizard-action.json");
   if (mock) return mock;
-  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (!sessionToken) {
-    return NextResponse.json(
-      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
-      { status: 401 },
-    );
-  }
+  const session = requireSessionToken(request);
+  if (!session.ok) return session.response;
 
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
 
-  const apiResponse = await fetch(
-    `${apiBaseUrl}/assessments/${encodeURIComponent(id)}/wizard/draft`,
+  const upstream = await upstreamRequest(
+    `/assessments/${encodeURIComponent(id)}/wizard/draft`,
     {
       method: "PUT",
-      headers: {
-        authorization: `Bearer ${sessionToken}`,
-        "content-type": "application/json",
-      },
+      bearerToken: session.token,
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-      cache: "no-store",
     },
   );
 
-  const payload: unknown = await apiResponse.json().catch(() => null);
-  return NextResponse.json(payload, { status: apiResponse.status });
+  return upstreamJson(upstream);
 }

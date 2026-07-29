@@ -16,6 +16,7 @@ export const SCAN_ERROR_CODES = {
   evidenceRefsEmpty: "EVIDENCE_REFS_EMPTY",
   conflictNotFound: "CONFLICT_NOT_FOUND",
   conflictAlreadyResolved: "CONFLICT_ALREADY_RESOLVED",
+  dismissReasonRequired: "DISMISS_REASON_REQUIRED",
   pendingConflictsExist: "PENDING_CONFLICTS_EXIST",
   verifiedProfileSchemaInvalid: "SCHEMA_INVALID",
   verifiedProfileNotFound: "VERIFIED_PROFILE_NOT_FOUND",

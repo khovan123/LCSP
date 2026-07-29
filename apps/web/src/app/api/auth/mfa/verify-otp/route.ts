@@ -1,28 +1,19 @@
-import { NextRequest, NextResponse } from "next/server";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { NextRequest } from "next/server";
 
-import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
+import { requireSessionToken } from "@/lib/server/session-token";
+import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 import { buildMfaVerifyApiBody } from "./mfa-verify-proxy";
 
-const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
-
 export async function POST(request: NextRequest) {
-  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (!sessionToken) {
-    return NextResponse.json(
-      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
-      { status: 401 },
-    );
-  }
+  const session = requireSessionToken(request);
+  if (!session.ok) return session.response;
 
   const body: unknown = await request.json().catch(() => null);
-  const apiResponse = await fetch(`${apiBaseUrl}/auth/mfa/verify-otp`, {
+  const upstream = await upstreamRequest("/auth/mfa/verify-otp", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(buildMfaVerifyApiBody(sessionToken, body)),
-    cache: "no-store",
+    body: JSON.stringify(buildMfaVerifyApiBody(session.token, body)),
   });
-  const payload: unknown = await apiResponse.json().catch(() => null);
 
-  return NextResponse.json(payload, { status: apiResponse.status });
+  return upstreamJson(upstream);
 }

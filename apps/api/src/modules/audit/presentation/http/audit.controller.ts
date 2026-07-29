@@ -19,11 +19,8 @@ import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
-import type {
-  AuditExportArtifact,
-  AuditExportRequestDto,
-  AuditExportStatusDto,
-} from "../../application/contracts/audit/audit-export.contract.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
+import type { AuditExportArtifact } from "../../application/contracts/audit/audit-export.contract.js";
 import { ExportAuditTrailCommand } from "../../application/commands/export-audit-trail/export-audit-trail.command.js";
 import { GetAuditExportArtifactQuery } from "../../application/queries/get-audit-export-artifact/get-audit-export-artifact.query.js";
 import { GetAuditExportQuery } from "../../application/queries/get-audit-export/get-audit-export.query.js";
@@ -58,17 +55,19 @@ export class AuditController {
   ) {
     const context = request.pbacContext;
 
-    return this.queryBus.execute(
-      new ListAuditEventsQuery(
-        organizationId,
-        context.organizationId,
-        eventType,
-        actorId,
-        fromDate,
-        toDate,
-        page === undefined ? undefined : Number(page),
-        pageSize === undefined ? undefined : Number(pageSize),
-        request.correlationId as string,
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new ListAuditEventsQuery(
+          organizationId,
+          context.organizationId,
+          eventType,
+          actorId,
+          fromDate,
+          toDate,
+          page === undefined ? undefined : Number(page),
+          pageSize === undefined ? undefined : Number(pageSize),
+          request.correlationId as string,
+        ),
       ),
     );
   }
@@ -81,20 +80,22 @@ export class AuditController {
     @Param("orgId") organizationId: string,
     @Body() body: AuditExportBody,
     @Req() request: AuthenticatedRequest,
-  ): Promise<AuditExportRequestDto> {
+  ) {
     const correlationId =
       typeof request.correlationId === "string"
         ? request.correlationId
         : crypto.randomUUID();
 
-    return this.commandBus.execute(
-      new ExportAuditTrailCommand(
-        organizationId,
-        request.pbacContext.organizationId,
-        request.pbacContext.userId,
-        body.from_date,
-        body.to_date,
-        correlationId,
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ExportAuditTrailCommand(
+          organizationId,
+          request.pbacContext.organizationId,
+          request.pbacContext.userId,
+          body.from_date,
+          body.to_date,
+          correlationId,
+        ),
       ),
     );
   }
@@ -106,13 +107,15 @@ export class AuditController {
     @Param("orgId") organizationId: string,
     @Param("exportRequestId") exportRequestId: string,
     @Req() request: AuthenticatedRequest,
-  ): Promise<AuditExportStatusDto> {
-    return this.queryBus.execute(
-      new GetAuditExportQuery(
-        organizationId,
-        request.pbacContext.organizationId,
-        exportRequestId,
-        request.correlationId as string,
+  ) {
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetAuditExportQuery(
+          organizationId,
+          request.pbacContext.organizationId,
+          exportRequestId,
+          request.correlationId as string,
+        ),
       ),
     );
   }

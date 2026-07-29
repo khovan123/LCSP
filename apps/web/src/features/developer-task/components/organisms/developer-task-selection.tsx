@@ -1,72 +1,65 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AssessmentList } from "@/features/workspace/components/organisms/assessment-list";
-import { getDeveloperTaskContext } from "@/lib/api/developer-task-client";
-import { getAssessments } from "@/lib/api/workspace-client";
+import { useDeveloperTaskContextQuery } from "@/lib/api/developer-task-queries";
+import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
+import { useAssessmentsQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
+import { DEVELOPER_TASK_SCOPE_TYPES } from "../../types/developer-task.types";
 
-import type { AssessmentSummary } from "../../../workspace/types/workspace.types";
+const DEVELOPER_TASK_SELECTION_STATES = {
+  loading: "loading",
+  loaded: API_OUTCOME_KINDS.loaded,
+  accessRevoked: API_OUTCOME_KINDS.accessRevoked,
+  error: API_OUTCOME_KINDS.error,
+} as const;
 
-type SelectionState = "loading" | "loaded" | "access_revoked" | "error";
+type SelectionState =
+  (typeof DEVELOPER_TASK_SELECTION_STATES)[keyof typeof DEVELOPER_TASK_SELECTION_STATES];
 
 export function DeveloperTaskSelection() {
   const router = useRouter();
-  const [state, setState] = useState<SelectionState>("loading");
-  const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
+  const contextQuery = useDeveloperTaskContextQuery();
+  const assessmentsQuery = useAssessmentsQuery();
 
   useEffect(() => {
-    let isActive = true;
-
-    async function loadSelection() {
-      const contextOutcome = await getDeveloperTaskContext();
-      if (!isActive) return;
-      if (contextOutcome.kind === "redirect") {
-        router.replace(contextOutcome.location);
-        return;
-      }
-      if (contextOutcome.kind === "access_revoked") {
-        setAssessments([]);
-        setState("access_revoked");
-        return;
-      }
-      if (contextOutcome.kind !== "loaded") {
-        setAssessments([]);
-        setState("error");
-        return;
-      }
-      if (contextOutcome.context.scope.type === "assessment") {
-        router.replace(
-          `/developer/assessments/${encodeURIComponent(contextOutcome.context.scope.assessment.id)}`,
-        );
-        return;
-      }
-
-      const assessmentsOutcome = await getAssessments();
-      if (!isActive) return;
-      if (assessmentsOutcome.kind !== "loaded") {
-        setAssessments([]);
-        setState("error");
-        return;
-      }
-      setAssessments(assessmentsOutcome.assessments);
-      setState("loaded");
+    const contextOutcome = contextQuery.data;
+    if (!contextOutcome) {
+      return;
     }
+    if (contextOutcome.kind === API_OUTCOME_KINDS.redirect) {
+      router.replace(contextOutcome.location);
+      return;
+    }
+    if (
+      contextOutcome.kind === API_OUTCOME_KINDS.loaded &&
+      contextOutcome.context.scope.type === DEVELOPER_TASK_SCOPE_TYPES.assessment
+    ) {
+      router.replace(
+        `/developer/assessments/${encodeURIComponent(contextOutcome.context.scope.assessment.id)}`,
+      );
+    }
+  }, [contextQuery.data, router]);
 
-    void loadSelection().catch(() => {
-      if (isActive) {
-        setAssessments([]);
-        setState("error");
-      }
-    });
-    return () => {
-      isActive = false;
-    };
-  }, [router]);
+  const contextOutcome = contextQuery.data;
+  const assessmentsOutcome = assessmentsQuery.data;
+  const assessments =
+    assessmentsOutcome?.kind === "loaded" ? assessmentsOutcome.assessments : [];
+  const state: SelectionState = contextQuery.isLoading
+    ? DEVELOPER_TASK_SELECTION_STATES.loading
+    : contextOutcome?.kind === API_OUTCOME_KINDS.accessRevoked
+      ? DEVELOPER_TASK_SELECTION_STATES.accessRevoked
+      : contextOutcome?.kind !== API_OUTCOME_KINDS.loaded ||
+          assessmentsOutcome?.kind === API_OUTCOME_KINDS.error
+        ? DEVELOPER_TASK_SELECTION_STATES.error
+        : assessmentsQuery.isLoading
+          ? DEVELOPER_TASK_SELECTION_STATES.loading
+          : DEVELOPER_TASK_SELECTION_STATES.loaded;
 
   return (
     <main className="flex flex-1 flex-col gap-6 px-4 py-6 text-foreground lg:px-6">
@@ -80,7 +73,7 @@ export function DeveloperTaskSelection() {
           </p>
         </header>
 
-        {state === "access_revoked" ? (
+        {state === DEVELOPER_TASK_SELECTION_STATES.accessRevoked ? (
           <Alert variant="destructive" data-component="blocked-banner">
             <AlertTitle>
               {resolveMessage(appLocale, "pages.developerTask.revokedTitle")}
@@ -90,7 +83,7 @@ export function DeveloperTaskSelection() {
             </AlertDescription>
           </Alert>
         ) : null}
-        {state === "error" ? (
+        {state === DEVELOPER_TASK_SELECTION_STATES.error ? (
           <Alert variant="destructive">
             <AlertTitle>
               {resolveMessage(appLocale, "pages.developerTask.errorTitle")}
@@ -101,10 +94,11 @@ export function DeveloperTaskSelection() {
           </Alert>
         ) : null}
 
-        {state === "loading" || state === "loaded" ? (
+        {state === DEVELOPER_TASK_SELECTION_STATES.loading ||
+        state === DEVELOPER_TASK_SELECTION_STATES.loaded ? (
           <AssessmentList
             assessments={assessments}
-            isLoading={state === "loading"}
+            isLoading={state === DEVELOPER_TASK_SELECTION_STATES.loading}
             title={resolveMessage(appLocale, "pages.workspace.assessmentsTitle")}
             description={resolveMessage(
               appLocale,

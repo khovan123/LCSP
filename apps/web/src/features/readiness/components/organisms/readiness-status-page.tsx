@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
 
@@ -11,10 +11,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { ClassificationStatusCard } from "@/components/ui/classification-status-card";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
-import {
-  getReadinessStatus,
-  type ReadinessStatusViewModel,
-} from "@/lib/api/readiness-client";
+import { useReadinessStatusQuery } from "@/lib/api/assessment-queries";
 
 export function ReadinessStatusPage({
   assessmentId,
@@ -22,52 +19,20 @@ export function ReadinessStatusPage({
   assessmentId: string;
 }) {
   const router = useRouter();
-  const [viewModel, setViewModel] = useState<ReadinessStatusViewModel | null>(
-    null,
-  );
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const readinessQuery = useReadinessStatusQuery(assessmentId);
 
   useEffect(() => {
-    let isActive = true;
-
-    async function load() {
-      setIsLoading(true);
-      setError(null);
-      const outcome = await getReadinessStatus(assessmentId);
-
-      if (!isActive) {
-        return;
-      }
-
-      if (outcome.kind === "redirect") {
-        router.replace(outcome.location);
-        return;
-      }
-
-      if (outcome.kind === "error") {
-        setError(t(outcome.titleKey));
-        setIsLoading(false);
-        return;
-      }
-
-      setViewModel(outcome.data);
-      setIsLoading(false);
+    if (readinessQuery.data?.kind === "redirect") {
+      router.replace(readinessQuery.data.location);
     }
-
-    void load();
-
-    return () => {
-      isActive = false;
-    };
-  }, [assessmentId, router]);
+  }, [readinessQuery.data, router]);
 
   const headingDescription = useMemo(
     () => t("pages.readiness.pageDescription"),
     [],
   );
 
-  if (isLoading) {
+  if (readinessQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
         <header className="space-y-2">
@@ -89,6 +54,13 @@ export function ReadinessStatusPage({
       </div>
     );
   }
+
+  const viewModel =
+    readinessQuery.data?.kind === "loaded" ? readinessQuery.data.data : null;
+  const error =
+    readinessQuery.data?.kind === "error"
+      ? t(readinessQuery.data.titleKey)
+      : null;
 
   if (error || !viewModel) {
     return (

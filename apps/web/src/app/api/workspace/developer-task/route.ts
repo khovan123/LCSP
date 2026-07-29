@@ -1,39 +1,23 @@
-import { NextRequest, NextResponse } from "next/server";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { NextRequest } from "next/server";
 
-import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
-import { mockJsonResponse } from "@/lib/mocks/mock-response";
-
-const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
+import { mockJsonResponse } from "@/lib/server/fixtures/response";
+import { requireSessionToken } from "@/lib/server/session-token";
+import {
+  upstreamRequest,
+  validatedUpstreamJson,
+} from "@/lib/server/upstream-request";
 
 export async function GET(request: NextRequest) {
   const mock = await mockJsonResponse("developer-task.json");
   if (mock) return mock;
-  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (!sessionToken) {
-    return NextResponse.json(
-      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
-      { status: 401 },
-    );
-  }
+  const session = requireSessionToken(request);
+  if (!session.ok) return session.response;
 
-  const apiResponse = await fetch(`${apiBaseUrl}/workspace/developer-task`, {
-    headers: { authorization: `Bearer ${sessionToken}` },
-    cache: "no-store",
+  const upstream = await upstreamRequest("/workspace/developer-task", {
+    bearerToken: session.token,
   });
-  const payload: unknown = await apiResponse.json().catch(() => null);
 
-  if (!apiResponse.ok) {
-    return NextResponse.json(payload, { status: apiResponse.status });
-  }
-
-  const context = toDisplaySafeContext(payload);
-  return context
-    ? NextResponse.json(context, { status: apiResponse.status })
-    : NextResponse.json(
-        { problem: { code: "UPSTREAM_RESPONSE_INVALID" } },
-        { status: 502 },
-      );
+  return validatedUpstreamJson(upstream, toDisplaySafeContext);
 }
 
 function toDisplaySafeContext(payload: unknown) {

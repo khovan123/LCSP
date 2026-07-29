@@ -1,29 +1,32 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { WORKSPACE_ERROR_CODES } from "@lcsp/contracts/auth";
 
-import { isMockModeEnabled, readMockJson } from "@/lib/mocks/mock-response";
+import { isMockModeEnabled, readMockJson } from "@/lib/server/fixtures/response";
 import {
   MOCK_WORKSPACE_COOKIE_NAME,
   type MockDeveloperAccount,
-} from "@/lib/mocks/mock-workspace";
-import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
-
-const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
+} from "@/lib/server/fixtures/workspace";
+import { problemJson, successJson } from "@/lib/server/problem-json";
+import {
+  readSessionToken,
+  requireSessionToken,
+} from "@/lib/server/session-token";
+import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 
 export async function GET(request: NextRequest) {
   if (isMockModeEnabled()) {
-    const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+    const sessionToken = readSessionToken(request);
     if (sessionToken === "mock-session:manager") {
-      return NextResponse.json(await readMockJson("workspace.json"));
+      return successJson(await readMockJson("workspace.json"));
     }
 
     const selectedWorkspaceId = request.cookies.get(
       MOCK_WORKSPACE_COOKIE_NAME,
     )?.value;
     if (!selectedWorkspaceId) {
-      return NextResponse.json(
-        { problem: { code: "WORKSPACE_SELECTION_REQUIRED" } },
-        { status: 409 },
-      );
+      return problemJson(WORKSPACE_ERROR_CODES.selectionRequired, {
+        status: 409,
+      });
     }
 
     const account = await readMockJson<MockDeveloperAccount>(
@@ -33,13 +36,12 @@ export async function GET(request: NextRequest) {
       (workspace) => workspace.id === selectedWorkspaceId,
     );
     if (!selectedWorkspace) {
-      return NextResponse.json(
-        { problem: { code: "WORKSPACE_SELECTION_REQUIRED" } },
-        { status: 409 },
-      );
+      return problemJson(WORKSPACE_ERROR_CODES.selectionRequired, {
+        status: 409,
+      });
     }
 
-    return NextResponse.json({
+    return successJson({
       organization: selectedWorkspace,
       membership: { role: "Developer" },
       granted_actions: [
@@ -55,18 +57,10 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (!sessionToken) {
-    return NextResponse.json(
-      { problem: { code: "SESSION_INVALID" } },
-      { status: 401 },
-    );
-  }
-  const apiResponse = await fetch(`${apiBaseUrl}/workspace`, {
-    headers: { authorization: `Bearer ${sessionToken}` },
-    cache: "no-store",
+  const session = requireSessionToken(request);
+  if (!session.ok) return session.response;
+  const upstream = await upstreamRequest("/workspace", {
+    bearerToken: session.token,
   });
-  return NextResponse.json(await apiResponse.json().catch(() => null), {
-    status: apiResponse.status,
-  });
+  return upstreamJson(upstream);
 }

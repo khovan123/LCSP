@@ -1,22 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
-const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
+import { NextRequest } from "next/server";
+
+import { requireSessionToken } from "@/lib/server/session-token";
+import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (!token)
-    return NextResponse.json(
-      { problem: { code: "SESSION_INVALID" } },
-      { status: 401 },
-    );
+  const session = requireSessionToken(request);
+  if (!session.ok) return session.response;
   const { id } = await params;
-  const response = await fetch(
-    `${apiBaseUrl}/organizations/${encodeURIComponent(id)}/developers`,
-    { headers: { authorization: `Bearer ${token}` }, cache: "no-store" },
+  const upstream = await upstreamRequest(
+    `/organizations/${encodeURIComponent(id)}/developers`,
+    { bearerToken: session.token },
   );
-  return NextResponse.json(await response.json().catch(() => null), {
-    status: response.status,
-  });
+  return upstreamJson(upstream);
 }

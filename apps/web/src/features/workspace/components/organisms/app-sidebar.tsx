@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { resolveMessage } from "@lcsp/i18n";
 import { LogOutIcon, ShieldCheckIcon } from "lucide-react";
 import Link from "next/link";
@@ -20,7 +19,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { getAssessments, getWorkspace } from "@/lib/api/workspace-client";
+import { useSignOutMutation } from "@/lib/api/auth-queries";
+import {
+  useAssessmentsQuery,
+  useWorkspaceQuery,
+} from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
 import type { AppShellNavigationSection } from "../../types/app-shell.types";
@@ -35,31 +38,20 @@ export function AppSidebar({
 }) {
   const pathname = usePathname();
   const [currentHash, setCurrentHash] = useState("");
-  const [isSigningOut, setIsSigningOut] = useState(false);
-  const workspaceQuery = useQuery({
-    queryKey: ["workspace"],
-    queryFn: async () => {
-      const outcome = await getWorkspace();
-      if (outcome.kind !== "loaded") {
-        throw new Error("workspace-load-failed");
-      }
-      return outcome.workspace;
-    },
-  });
-  const assessmentsQuery = useQuery({
-    queryKey: ["assessments"],
-    queryFn: async () => {
-      const outcome = await getAssessments();
-      if (outcome.kind !== "loaded") {
-        throw new Error("assessments-load-failed");
-      }
-      return outcome.assessments;
-    },
-  });
+  const signOutMutation = useSignOutMutation();
+  const workspaceQuery = useWorkspaceQuery();
+  const assessmentsQuery = useAssessmentsQuery();
+  const workspace =
+    workspaceQuery.data?.kind === "loaded"
+      ? workspaceQuery.data.workspace
+      : undefined;
+  const assessments =
+    assessmentsQuery.data?.kind === "loaded"
+      ? assessmentsQuery.data.assessments
+      : undefined;
 
   async function handleSignOut() {
-    setIsSigningOut(true);
-    await fetch("/api/auth/sign-out", { method: "POST" }).catch(() => null);
+    await signOutMutation.mutateAsync();
     window.location.assign("/sign-in");
   }
 
@@ -107,8 +99,7 @@ export function AppSidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        {workspaceQuery.data &&
-        workspaceQuery.data.membership.role !== "Manager" ? (
+        {workspace && workspace.membership.role !== "Manager" ? (
           <div className="px-2 pb-2">
             <p className="mb-1 px-2 text-xs font-semibold tracking-widest text-sidebar-foreground/55 uppercase">
               {t("pages.appShell.currentWorkspace")}
@@ -123,7 +114,7 @@ export function AppSidebar({
           <Fragment key={section.label}>
             <SidebarGroup>
               <SidebarGroupLabel>
-                {resolveSectionLabel(section, assessmentsQuery.data)}
+                {resolveSectionLabel(section, assessments)}
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
@@ -173,7 +164,7 @@ export function AppSidebar({
             <SidebarMenuButton
               type="button"
               onClick={() => void handleSignOut()}
-              disabled={isSigningOut}
+              disabled={signOutMutation.isPending}
               tooltip={t("pages.appShell.signOut")}
               className="cursor-pointer"
             >

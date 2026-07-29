@@ -15,9 +15,18 @@ export const AUDIT_REDACTION_STATUSES = {
 export type AuditRedactionStatus =
   (typeof AUDIT_REDACTION_STATUSES)[keyof typeof AUDIT_REDACTION_STATUSES];
 
+export const AUDIT_ACTOR_TYPES = {
+  user: "user",
+  service: "service",
+  system: "system",
+} as const;
+
+export type AuditActorType =
+  (typeof AUDIT_ACTOR_TYPES)[keyof typeof AUDIT_ACTOR_TYPES];
+
 export interface AuditActorRef {
   id: string | null;
-  type: "user" | "service" | "system";
+  type: AuditActorType;
 }
 
 export interface AuditEventInput {
@@ -73,7 +82,7 @@ export function buildAuditEventInput(
 ): AuditEventInput {
   const actor = input.actor ?? {
     id: input.actorId,
-    type: input.actorId ? "user" : "system",
+    type: input.actorId ? AUDIT_ACTOR_TYPES.user : AUDIT_ACTOR_TYPES.system,
   };
   const safePayload = sanitizeEventPayload(input.payload) ?? {};
 

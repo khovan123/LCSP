@@ -105,7 +105,7 @@ jobs:
         if: needs.changes.outputs.api == 'true'
         continue-on-error: true
         run: |
-          files="$(printf '%s\n' ${{ needs.changes.outputs.api_files }} | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }')"
+          files="$(printf '%s\n' ${{ needs.changes.outputs.api_files }} | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }' | while IFS= read -r file; do [ -f "apps/api/$file" ] && printf '%s\n' "$file"; done)"
           if [ -n "$files" ]; then
             pnpm --dir apps/api exec eslint $files --fix
           fi
@@ -114,7 +114,7 @@ jobs:
         if: needs.changes.outputs.web == 'true'
         continue-on-error: true
         run: |
-          files="$(printf '%s\n' ${{ needs.changes.outputs.web_files }} | awk '/^apps\/web\/.*\.(ts|tsx)$/ { sub("^apps/web/", ""); print }')"
+          files="$(printf '%s\n' ${{ needs.changes.outputs.web_files }} | awk '/^apps\/web\/.*\.(ts|tsx)$/ { sub("^apps/web/", ""); print }' | while IFS= read -r file; do [ -f "apps/web/$file" ] && printf '%s\n' "$file"; done)"
           if [ -n "$files" ]; then
             pnpm --dir apps/web exec eslint $files --fix
           fi
@@ -162,7 +162,7 @@ jobs:
 
       - name: Lint API
         run: |
-          files="$(printf '%s\n' ${{ needs.changes.outputs.api_files }} | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }')"
+          files="$(printf '%s\n' ${{ needs.changes.outputs.api_files }} | awk '/^apps\/api\/.*\.(ts|tsx)$/ { sub("^apps/api/", ""); print }' | while IFS= read -r file; do [ -f "apps/api/$file" ] && printf '%s\n' "$file"; done)"
           if [ -n "$files" ]; then
             pnpm --dir apps/api exec eslint $files
           else
@@ -202,7 +202,7 @@ jobs:
 
       - name: Lint web
         run: |
-          files="$(printf '%s\n' ${{ needs.changes.outputs.web_files }} | awk '/^apps\/web\/.*\.(ts|tsx)$/ { sub("^apps/web/", ""); print }')"
+          files="$(printf '%s\n' ${{ needs.changes.outputs.web_files }} | awk '/^apps\/web\/.*\.(ts|tsx)$/ { sub("^apps/web/", ""); print }' | while IFS= read -r file; do [ -f "apps/web/$file" ] && printf '%s\n' "$file"; done)"
           if [ -n "$files" ]; then
             pnpm --dir apps/web exec eslint $files
           else

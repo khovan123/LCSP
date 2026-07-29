@@ -1,6 +1,12 @@
 import { REQUIRED_ACTIONS } from "./actions.ts";
 import { AUTH_ERROR_CODES } from "./codes.ts";
-import type { AppProblem, ProblemKey, ProblemMeta, ProblemResult } from "./problems.ts";
+import type {
+  AppProblem,
+  ProblemKey,
+  ProblemMeta,
+  ProblemResult,
+  SuccessResult,
+} from "./problems.ts";
 import type { AuthErrorCode, RequiredAction } from "./types.ts";
 
 export const PROBLEM_REQUIRED_ACTIONS: Record<AuthErrorCode, RequiredAction> = {
@@ -212,5 +218,12 @@ export function createProblemResult(
   return {
     ok: false,
     problem: createProblem(errorCode, correlationId, overrides)
+  };
+}
+
+export function createSuccessResult<TData>(data: TData): SuccessResult<TData> {
+  return {
+    ok: true,
+    data
   };
 }

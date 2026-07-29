@@ -1,8 +1,14 @@
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment/codes";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
 import { SCAN_ERROR_CODES } from "@lcsp/contracts/scan/codes";
+import { apiRequest } from "./api-request.ts";
+import { API_OUTCOME_KINDS, API_VALIDATION_REASONS } from "./outcome-kinds.ts";
+import { getProblemCode } from "./problem-envelope.ts";
 
-export type ConflictStatus = "PENDING" | "RESOLVED" | "DISMISSED" | (string & {});
+export type ConflictStatus =
+  | (typeof CONFLICT_RECORD_STATUSES)[keyof typeof CONFLICT_RECORD_STATUSES]
+  | (string & {});
 
 export type ConflictSummary = {
   conflict_id: string;
@@ -23,56 +29,52 @@ export type ConflictListResult = {
 };
 
 export type ResolveConflictPayload = {
-  resolution: "RESOLVED" | "DISMISSED";
+  resolution:
+    | typeof CONFLICT_RECORD_STATUSES.resolved
+    | typeof CONFLICT_RECORD_STATUSES.dismissed;
   resolution_note?: string;
 };
 
 export type ResolveConflictResult = {
   conflict_id: string;
-  status: "RESOLVED" | "DISMISSED";
+  status:
+    | typeof CONFLICT_RECORD_STATUSES.resolved
+    | typeof CONFLICT_RECORD_STATUSES.dismissed;
   resolved_at: string;
   all_conflicts_resolved: boolean;
   correlation_id?: string;
 };
 
 export type ConflictListOutcome =
-  | { kind: "loaded"; data: ConflictListResult }
-  | { kind: "empty" }
-  | { kind: "redirect"; location: string }
-  | { kind: "access_revoked" }
-  | { kind: "error" };
+  | { kind: typeof API_OUTCOME_KINDS.loaded; data: ConflictListResult }
+  | { kind: typeof API_OUTCOME_KINDS.empty }
+  | { kind: typeof API_OUTCOME_KINDS.redirect; location: string }
+  | { kind: typeof API_OUTCOME_KINDS.accessRevoked }
+  | { kind: typeof API_OUTCOME_KINDS.error };
 
 export type ResolveConflictOutcome =
-  | { kind: "resolved"; data: ResolveConflictResult }
-  | { kind: "validation_error"; reason: "dismiss_reason_required" }
-  | { kind: "redirect"; location: string }
-  | { kind: "access_revoked" }
-  | { kind: "already_resolved" }
-  | { kind: "not_found" }
-  | { kind: "error" };
-
-type ApiProblemPayload = {
-  code?: string;
-  error_code?: string;
-  problem?: {
-    code?: string;
-    error_code?: string;
-  };
-};
+  | { kind: typeof API_OUTCOME_KINDS.resolved; data: ResolveConflictResult }
+  | {
+      kind: typeof API_OUTCOME_KINDS.validationError;
+      reason: typeof API_VALIDATION_REASONS.dismissReasonRequired;
+    }
+  | { kind: typeof API_OUTCOME_KINDS.redirect; location: string }
+  | { kind: typeof API_OUTCOME_KINDS.accessRevoked }
+  | { kind: typeof API_OUTCOME_KINDS.alreadyResolved }
+  | { kind: typeof API_OUTCOME_KINDS.notFound }
+  | { kind: typeof API_OUTCOME_KINDS.error };
 
 export async function getPendingConflicts(
   assessmentId: string,
 ): Promise<ConflictListOutcome> {
-  const response = await fetch(
+  const { payload, ok, status, problemCode } = await apiRequest(
     `/api/assessments/${encodeURIComponent(assessmentId)}/conflicts?status=PENDING`,
     {
-      credentials: "same-origin",
       cache: "no-store",
     },
   );
-  const payload: unknown = await response.json().catch(() => null);
 
-  return toConflictListOutcome(payload, response.ok, response.status);
+  return toConflictListOutcome(payload, ok, status, problemCode);
 }
 
 export async function resolveConflict(
@@ -81,20 +83,19 @@ export async function resolveConflict(
   request: ResolveConflictPayload,
 ): Promise<ResolveConflictOutcome> {
   if (
-    request.resolution === "DISMISSED" &&
+    request.resolution === CONFLICT_RECORD_STATUSES.dismissed &&
     (!request.resolution_note || request.resolution_note.trim().length === 0)
   ) {
     return {
-      kind: "validation_error",
-      reason: "dismiss_reason_required",
+      kind: API_OUTCOME_KINDS.validationError,
+      reason: API_VALIDATION_REASONS.dismissReasonRequired,
     };
   }
 
-  const response = await fetch(
+  const { payload, ok, status, problemCode } = await apiRequest(
     `/api/assessments/${encodeURIComponent(assessmentId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`,
     {
       method: "PATCH",
-      credentials: "same-origin",
       cache: "no-store",
       headers: {
         "content-type": "application/json",
@@ -103,74 +104,78 @@ export async function resolveConflict(
     },
   );
 
-  const payload: unknown = await response.json().catch(() => null);
-  return toResolveConflictOutcome(payload, response.ok, response.status);
+  return toResolveConflictOutcome(payload, ok, status, problemCode);
 }
 
 export function toConflictListOutcome(
   payload: unknown,
   ok: boolean,
   status: number,
+  problemCode = getProblemCode(payload),
 ): ConflictListOutcome {
   if (ok) {
     const data = sanitizeConflictListPayload(payload);
     if (!data) {
-      return { kind: "error" };
+      return { kind: API_OUTCOME_KINDS.error };
     }
     if (data.conflicts.length === 0) {
-      return { kind: "empty" };
+      return { kind: API_OUTCOME_KINDS.empty };
     }
-    return { kind: "loaded", data };
+    return { kind: API_OUTCOME_KINDS.loaded, data };
   }
 
-  const code = getProblemCode(payload);
-  if (code === AUTH_ERROR_CODES.mfaRequired) {
-    return { kind: "redirect", location: "/mfa/verify" };
+  if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
+    return { kind: API_OUTCOME_KINDS.redirect, location: "/mfa/verify" };
   }
-  if (status === 401 || code === AUTH_ERROR_CODES.sessionInvalid) {
-    return { kind: "redirect", location: "/sign-in" };
+  if (status === 401 || problemCode === AUTH_ERROR_CODES.sessionInvalid) {
+    return { kind: API_OUTCOME_KINDS.redirect, location: "/sign-in" };
   }
-  if (status === 403 || code === AUTH_ERROR_CODES.pbacDenied) {
-    return { kind: "access_revoked" };
+  if (status === 403 || problemCode === AUTH_ERROR_CODES.pbacDenied) {
+    return { kind: API_OUTCOME_KINDS.accessRevoked };
   }
-  if (status === 404 && code === ASSESSMENT_ERROR_CODES.notFound) {
-    return { kind: "empty" };
+  if (status === 404 && problemCode === ASSESSMENT_ERROR_CODES.notFound) {
+    return { kind: API_OUTCOME_KINDS.empty };
   }
 
-  return { kind: "error" };
+  return { kind: API_OUTCOME_KINDS.error };
 }
 
 export function toResolveConflictOutcome(
   payload: unknown,
   ok: boolean,
   status: number,
+  problemCode = getProblemCode(payload),
 ): ResolveConflictOutcome {
   if (ok) {
     const data = sanitizeResolveConflictPayload(payload);
-    return data ? { kind: "resolved", data } : { kind: "error" };
+    return data
+      ? { kind: API_OUTCOME_KINDS.resolved, data }
+      : { kind: API_OUTCOME_KINDS.error };
   }
 
-  const code = getProblemCode(payload);
-  if (status === 400 && code === "DISMISS_REASON_REQUIRED") {
-    return { kind: "validation_error", reason: "dismiss_reason_required" };
+  if (status === 400 && problemCode === SCAN_ERROR_CODES.dismissReasonRequired) {
+    return {
+      kind: API_OUTCOME_KINDS.validationError,
+      reason: API_VALIDATION_REASONS.dismissReasonRequired,
+    };
   }
-  if (code === AUTH_ERROR_CODES.mfaRequired) {
-    return { kind: "redirect", location: "/mfa/verify" };
+  if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
+    return { kind: API_OUTCOME_KINDS.redirect, location: "/mfa/verify" };
   }
-  if (status === 401 || code === AUTH_ERROR_CODES.sessionInvalid) {
-    return { kind: "redirect", location: "/sign-in" };
+  if (status === 401 || problemCode === AUTH_ERROR_CODES.sessionInvalid) {
+    return { kind: API_OUTCOME_KINDS.redirect, location: "/sign-in" };
   }
-  if (status === 403 || code === AUTH_ERROR_CODES.pbacDenied) {
-    return { kind: "access_revoked" };
+  if (status === 403 || problemCode === AUTH_ERROR_CODES.pbacDenied) {
+    return { kind: API_OUTCOME_KINDS.accessRevoked };
   }
-  if (status === 409 && code === SCAN_ERROR_CODES.conflictAlreadyResolved) {
-    return { kind: "already_resolved" };
+  if (status === 409 && problemCode === SCAN_ERROR_CODES.conflictAlreadyResolved) {
+    return { kind: API_OUTCOME_KINDS.alreadyResolved };
   }
-  if (status === 404 && code === SCAN_ERROR_CODES.conflictNotFound) {
-    return { kind: "not_found" };
+  if (status === 404 && problemCode === SCAN_ERROR_CODES.conflictNotFound) {
+    return { kind: API_OUTCOME_KINDS.notFound };
   }
 
-  return { kind: "error" };
+  return { kind: API_OUTCOME_KINDS.error };
 }
 
 export function sanitizeConflictListPayload(
@@ -235,7 +240,8 @@ export function sanitizeResolveConflictPayload(
 
   if (
     typeof candidate.conflict_id !== "string" ||
-    (candidate.status !== "RESOLVED" && candidate.status !== "DISMISSED") ||
+    (candidate.status !== CONFLICT_RECORD_STATUSES.resolved &&
+      candidate.status !== CONFLICT_RECORD_STATUSES.dismissed) ||
     typeof candidate.resolved_at !== "string" ||
     typeof candidate.all_conflicts_resolved !== "boolean"
   ) {
@@ -262,7 +268,9 @@ export function buildResolveConflictApiBody(body: unknown): ResolveConflictPaylo
 
   return {
     resolution:
-      request.resolution === "DISMISSED" ? "DISMISSED" : "RESOLVED",
+      request.resolution === CONFLICT_RECORD_STATUSES.dismissed
+        ? CONFLICT_RECORD_STATUSES.dismissed
+        : CONFLICT_RECORD_STATUSES.resolved,
     resolution_note:
       typeof request.resolution_note === "string"
         ? request.resolution_note
@@ -307,18 +315,4 @@ function projectConflictSummary(payload: unknown): ConflictSummary | null {
     evidence_refs: candidate.evidence_refs,
     created_at: candidate.created_at,
   };
-}
-
-function getProblemCode(payload: unknown): string | undefined {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-
-  const problem = payload as ApiProblemPayload;
-  return (
-    problem.problem?.code ??
-    problem.problem?.error_code ??
-    problem.code ??
-    problem.error_code
-  );
 }

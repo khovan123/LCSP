@@ -45,6 +45,7 @@ import { RequireAction } from "../../../../platform/pbac/decorators/require-acti
 import { RequireAnyActionAsPbac } from "../../../../platform/pbac/decorators/require-any-action-as-pbac.decorator.js";
 import { RequireSession } from "../../../../platform/pbac/decorators/require-session.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 
@@ -73,21 +74,23 @@ export class AuthWorkspaceController {
       },
       orderBy: { createdAt: "desc" },
     });
-    return memberships.map((membership) => ({
-      user_id: membership.user.id,
-      email: membership.user.email,
-      display_name: membership.user.displayName,
-      status: membership.status,
-      allowed_actions: membership.policy.actions,
-      subject_attributes: membership.subjectAttributes,
-      revoked_at: membership.revokedAt,
-    }));
+    return resultEnvelope(
+      memberships.map((membership) => ({
+        user_id: membership.user.id,
+        email: membership.user.email,
+        display_name: membership.user.displayName,
+        status: membership.status,
+        allowed_actions: membership.policy.actions,
+        subject_attributes: membership.subjectAttributes,
+        revoked_at: membership.revokedAt,
+      })),
+    );
   }
 
   @Post("organizations/:orgId/invitations")
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.inviteDeveloper)
-  inviteDeveloper(
+  async inviteDeveloper(
     @Param("orgId") orgId: string,
     @Body() payload: InviteDeveloperRequest,
     @Req() request: AuthenticatedRequest,
@@ -101,18 +104,20 @@ export class AuthWorkspaceController {
       });
     }
 
-    return this.authWorkspaceFacade.inviteDeveloper(
-      orgId,
-      pbacContext.userId,
-      payload,
-      requestMeta(request.correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.inviteDeveloper(
+        orgId,
+        pbacContext.userId,
+        payload,
+        requestMeta(request.correlationId),
+      ),
     );
   }
 
   @Delete("organizations/:orgId/memberships/:userId")
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.membershipRevoke)
-  revokeMembership(
+  async revokeMembership(
     @Param("orgId") orgId: string,
     @Param("userId") userId: string,
     @Req() request: AuthenticatedRequest,
@@ -127,71 +132,86 @@ export class AuthWorkspaceController {
       });
     }
 
-    return this.authWorkspaceFacade.revokeMembership(
-      orgId,
-      pbacContext.userId,
-      userId,
-      requestMeta(request.correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.revokeMembership(
+        orgId,
+        pbacContext.userId,
+        userId,
+        requestMeta(request.correlationId),
+      ),
     );
   }
 
   @Post("auth/register-approved-path")
-  registerApprovedPath(
+  async registerApprovedPath(
     @Body() payload: RegisterPayload,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return this.authWorkspaceFacade.registerApprovedPath(
-      payload,
-      requestMeta(correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.registerApprovedPath(
+        payload,
+        requestMeta(correlationId),
+      ),
     );
   }
 
   @Post("auth/accept-invitation")
-  acceptInvitation(
+  async acceptInvitation(
     @Body() payload: AcceptInvitationRequest,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return this.authWorkspaceFacade.acceptInvitation(
-      payload,
-      requestMeta(correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.acceptInvitation(
+        payload,
+        requestMeta(correlationId),
+      ),
     );
   }
 
   @Post("auth/invitations/preview")
   @HttpCode(HttpStatus.OK)
-  previewInvitation(
+  async previewInvitation(
     @Body() payload: InvitationPreviewRequest,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return this.authWorkspaceFacade.previewInvitation(
-      payload,
-      requestMeta(correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.previewInvitation(
+        payload,
+        requestMeta(correlationId),
+      ),
     );
   }
 
   @Post("auth/sign-in")
-  signIn(
+  async signIn(
     @Body() payload: CredentialPayload,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return this.authWorkspaceFacade.signIn(payload, requestMeta(correlationId));
+    return resultEnvelope(
+      await this.authWorkspaceFacade.signIn(
+        payload,
+        requestMeta(correlationId),
+      ),
+    );
   }
 
   @Post("auth/revoke-session")
-  revokeSession(
+  async revokeSession(
     @Body() body: { session_token?: string },
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return this.authWorkspaceFacade.revokeSession(
-      body.session_token ?? "",
-      requestMeta(correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.revokeSession(
+        body.session_token ?? "",
+        requestMeta(correlationId),
+      ),
     );
   }
 
   @Get("workspace")
   @UseGuards(PbacGuard)
   @RequireSession()
-  getWorkspace(
+  async getWorkspace(
     @Req() request: AuthenticatedRequest,
     @Query("organization_id") organizationId?: string,
     @Headers("authorization") authorization?: string,
@@ -201,85 +221,99 @@ export class AuthWorkspaceController {
       session_token: bearerToken(authorization),
       correlation_id: request.correlationId,
     };
-    return this.authWorkspaceFacade.getWorkspace(workspaceRequest);
+    return resultEnvelope(
+      await this.authWorkspaceFacade.getWorkspace(workspaceRequest),
+    );
   }
 
   @Get("workspace/developer-task")
   @UseGuards(PbacGuard)
   @RequireAnyActionAsPbac(...DEVELOPER_ALLOWED_ACTION_VALUES)
-  getDeveloperTaskContext(@Req() request: AuthenticatedRequest) {
-    return this.authWorkspaceFacade.getDeveloperTaskContext(
-      request.pbacContext,
-      request.correlationId!,
+  async getDeveloperTaskContext(@Req() request: AuthenticatedRequest) {
+    return resultEnvelope(
+      await this.authWorkspaceFacade.getDeveloperTaskContext(
+        request.pbacContext,
+        request.correlationId!,
+      ),
     );
   }
 
   @Post("auth/mfa/enroll")
   @UseGuards(PbacGuard)
   @RequireSession()
-  enrollMfa(
+  async enrollMfa(
     @Body() body: { session_token?: string },
     @Headers("authorization") authorization: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    return this.authWorkspaceFacade.enrollMfa(
-      bearerToken(authorization) ?? body.session_token ?? "",
-      requestMeta(request.correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.enrollMfa(
+        bearerToken(authorization) ?? body.session_token ?? "",
+        requestMeta(request.correlationId),
+      ),
     );
   }
 
   @Post("auth/mfa/verify-otp")
-  verifyMfaOtp(
+  async verifyMfaOtp(
     @Body() body: { session_token?: string; otp?: string },
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return this.authWorkspaceFacade.verifyMfaOtp(
-      body.session_token ?? "",
-      body.otp ?? "",
-      requestMeta(correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.verifyMfaOtp(
+        body.session_token ?? "",
+        body.otp ?? "",
+        requestMeta(correlationId),
+      ),
     );
   }
 
   @Patch("auth/profile")
   @UseGuards(PbacGuard)
   @RequireSession()
-  updateProfile(
+  async updateProfile(
     @Body() body: UpdateProfilePayload & { session_token?: string },
     @Headers("authorization") authorization: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
     const { session_token, ...payload } = body;
-    return this.authWorkspaceFacade.updateProfile(
-      bearerToken(authorization) ?? session_token ?? "",
-      payload,
-      requestMeta(request.correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.updateProfile(
+        bearerToken(authorization) ?? session_token ?? "",
+        payload,
+        requestMeta(request.correlationId),
+      ),
     );
   }
 
   @Post("auth/recovery/request")
-  requestPasswordRecovery(
+  async requestPasswordRecovery(
     @Body() payload: RequestRecoveryPayload,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return this.authWorkspaceFacade.requestPasswordRecovery(
-      payload,
-      requestMeta(correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.requestPasswordRecovery(
+        payload,
+        requestMeta(correlationId),
+      ),
     );
   }
 
   @Post("auth/recovery/confirm")
-  confirmPasswordRecovery(
+  async confirmPasswordRecovery(
     @Body() payload: ConfirmRecoveryPayload,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
-    return this.authWorkspaceFacade.confirmPasswordRecovery(
-      payload,
-      requestMeta(correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.confirmPasswordRecovery(
+        payload,
+        requestMeta(correlationId),
+      ),
     );
   }
 
   @Get("auth/oauth/start")
-  oauthStart(
+  async oauthStart(
     @Query("provider") provider?: string,
     @Query("redirect_uri") redirectUri?: string,
     @Headers("x-correlation-id") correlationId?: string,
@@ -288,23 +322,27 @@ export class AuthWorkspaceController {
       provider,
       redirect_uri: redirectUri,
     };
-    return this.authWorkspaceFacade.oauthStart(
-      payload,
-      requestMeta(correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.oauthStart(
+        payload,
+        requestMeta(correlationId),
+      ),
     );
   }
 
   @Get("auth/oauth/callback")
-  oauthCallback(
+  async oauthCallback(
     @Query("code") code?: string,
     @Query("state") state?: string,
     @Query("provider") provider?: string,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
     const payload: OAuthCallbackPayload = { code, state, provider };
-    return this.authWorkspaceFacade.oauthCallback(
-      payload,
-      requestMeta(correlationId),
+    return resultEnvelope(
+      await this.authWorkspaceFacade.oauthCallback(
+        payload,
+        requestMeta(correlationId),
+      ),
     );
   }
 }

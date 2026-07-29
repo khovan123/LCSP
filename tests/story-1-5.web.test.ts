@@ -21,6 +21,21 @@ import {
   toInvitationPreviewOutcome,
 } from "@lcsp/web";
 
+function problem(code: string, status: number) {
+  return {
+    ok: false,
+    problem: {
+      type: `test/${code.toLowerCase().replaceAll("_", "-")}`,
+      status,
+      code,
+      titleKey: "auth.errors.validationFailed.title",
+      detailKey: "auth.errors.validationFailed.detail",
+      requiredAction: "none",
+      correlationId: "test-correlation",
+    },
+  };
+}
+
 test("T01 accepted assessment invitation redirects without exposing session credentials", () => {
   assert.deepEqual(
     toAcceptInvitationOutcome(
@@ -43,8 +58,7 @@ test("T01 accepted assessment invitation redirects without exposing session cred
 
 test("T02 invitation failures collapse to one non-leaking state", () => {
   for (const payload of [
-    { problem: { code: ACCEPT_INVITATION_ERROR_CODES.invitationInvalid } },
-    { code: ACCEPT_INVITATION_ERROR_CODES.invitationInvalid },
+    problem(ACCEPT_INVITATION_ERROR_CODES.invitationInvalid, 403),
   ]) {
     assert.deepEqual(toInvitationPreviewOutcome(payload, false), {
       kind: "invitation_invalid",
@@ -54,7 +68,7 @@ test("T02 invitation failures collapse to one non-leaking state", () => {
     });
   }
   const sensitiveFailure = {
-    problem: { code: "INTERNAL_FAILURE" },
+    ...problem("INTERNAL_FAILURE", 500),
     invitation_token: "must-not-cross-the-bff",
     email: "developer@example.com",
   };
@@ -71,7 +85,7 @@ test("T02 invitation failures collapse to one non-leaking state", () => {
 test("T03 existing email receives its dedicated sign-in outcome", () => {
   assert.deepEqual(
     toAcceptInvitationOutcome(
-      { problem: { code: ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists } },
+      problem(ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists, 409),
       false,
     ),
     { kind: "email_already_exists" },
@@ -166,7 +180,7 @@ test("T06 evidence projection entirely removes source-location properties", () =
 test("T07 missing evidence becomes the normal empty state", () => {
   assert.deepEqual(
     toEvidenceOutcome(
-      { problem: { code: EVIDENCE_ERROR_CODES.notFound } },
+      problem(EVIDENCE_ERROR_CODES.notFound, 404),
       false,
       404,
     ),
@@ -177,7 +191,7 @@ test("T07 missing evidence becomes the normal empty state", () => {
 test("T08 session revocation redirects to sign-in", () => {
   assert.deepEqual(
     toEvidenceOutcome(
-      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
+      problem(AUTH_ERROR_CODES.sessionInvalid, 401),
       false,
       401,
     ),
@@ -185,7 +199,7 @@ test("T08 session revocation redirects to sign-in", () => {
   );
   assert.deepEqual(
     toEvidenceOutcome(
-      { problem: { code: AUTH_ERROR_CODES.mfaRequired } },
+      problem(AUTH_ERROR_CODES.mfaRequired, 401),
       false,
       401,
     ),
@@ -196,7 +210,7 @@ test("T08 session revocation redirects to sign-in", () => {
 test("T09 narrowed scope stays inline as revoked", () => {
   assert.deepEqual(
     toEvidenceOutcome(
-      { problem: { code: AUTH_ERROR_CODES.pbacDenied } },
+      problem(AUTH_ERROR_CODES.pbacDenied, 403),
       false,
       403,
     ),

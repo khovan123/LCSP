@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -13,27 +14,45 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { getWorkspace } from "@/lib/api/workspace-client";
-import {
-  getPendingConflicts,
-  resolveConflict,
-  type ConflictSummary,
+import type {
+  ConflictListOutcome,
+  ConflictSummary,
 } from "@/lib/api/conflict-client";
+import {
+  usePendingConflictsQuery,
+  useResolveConflictMutation,
+} from "@/lib/api/assessment-queries";
+import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
+import { useWorkspaceQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
 import { ConflictCard } from "../molecules/conflict-card";
-import type { ConflictResolutionViewState } from "../../types/conflict.types";
+import {
+  CONFLICT_RESOLUTION_VIEW_STATES,
+  type ConflictResolutionViewState,
+} from "../../types/conflict.types";
 
 export function ConflictResolutionPage({ assessmentId }: { assessmentId: string }) {
   const router = useRouter();
-  const isMountedRef = useRef(true);
-  const [viewState, setViewState] = useState<ConflictResolutionViewState>("loading");
-  const [conflicts, setConflicts] = useState<ConflictSummary[]>([]);
+  const [viewStateOverride, setViewStateOverride] =
+    useState<ConflictResolutionViewState | null>(null);
   const [submittingIds, setSubmittingIds] = useState<Record<string, boolean>>({});
-  const [resolutions, setResolutions] = useState<Record<string, "RESOLVED" | "DISMISSED">>({});
+  const [resolutions, setResolutions] = useState<
+    Record<
+      string,
+      | typeof CONFLICT_RECORD_STATUSES.resolved
+      | typeof CONFLICT_RECORD_STATUSES.dismissed
+    >
+  >({});
   const [resolutionNotes, setResolutionNotes] = useState<Record<string, string>>({});
   const [formErrors, setFormErrors] = useState<Record<string, string | null>>({});
-  const [nextStepHref, setNextStepHref] = useState<string | null>(null);
+  const conflictsQuery = usePendingConflictsQuery(assessmentId);
+  const resolveConflictMutation = useResolveConflictMutation(assessmentId);
+  const workspaceQuery = useWorkspaceQuery();
+  const nextStepHref =
+    workspaceQuery.data?.kind === API_OUTCOME_KINDS.loaded
+      ? "/workspace#assessments"
+      : null;
 
   const clearConflictDraft = useCallback((conflictId: string) => {
     setSubmittingIds((prev) => {
@@ -58,129 +77,33 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
     });
   }, []);
 
-  const syncConflictDrafts = useCallback((items: ConflictSummary[]) => {
-    const idSet = new Set(items.map((item) => item.conflict_id));
-    setResolutions((prev) => {
-      const next: Record<string, "RESOLVED" | "DISMISSED"> = {};
-      for (const item of items) {
-        next[item.conflict_id] = prev[item.conflict_id] ?? "RESOLVED";
-      }
-      return next;
-    });
-    setResolutionNotes((prev) => {
-      const next: Record<string, string> = {};
-      for (const item of items) {
-        next[item.conflict_id] = prev[item.conflict_id] ?? "";
-      }
-      return next;
-    });
-    setFormErrors((prev) => {
-      const next: Record<string, string | null> = {};
-      for (const item of items) {
-        next[item.conflict_id] = prev[item.conflict_id] ?? null;
-      }
-      return next;
-    });
-    setSubmittingIds((prev) => {
-      const next: Record<string, boolean> = {};
-      for (const [key, value] of Object.entries(prev)) {
-        if (idSet.has(key)) {
-          next[key] = value;
-        }
-      }
-      return next;
-    });
-  }, []);
-
-  const applyConflictListOutcome = useCallback(
-    (
-      outcome: Awaited<ReturnType<typeof getPendingConflicts>>,
-      options?: { allowRedirect?: boolean },
-    ) => {
-      if (!isMountedRef.current) {
-        return;
-      }
-
-      if (outcome.kind === "redirect") {
-        if (options?.allowRedirect !== false) {
-          router.replace(outcome.location);
-        }
-        return;
-      }
-
-      if (outcome.kind === "access_revoked") {
-        setViewState("access_revoked");
-        setConflicts([]);
-        return;
-      }
-
-      if (outcome.kind === "error") {
-        setViewState("error");
-        setConflicts([]);
-        return;
-      }
-
-      if (outcome.kind === "empty") {
-        setViewState("empty");
-        setConflicts([]);
-        return;
-      }
-
-      setConflicts(outcome.data.conflicts);
-      syncConflictDrafts(outcome.data.conflicts);
-      setViewState(outcome.data.conflicts.length === 0 ? "empty" : "loaded");
-    },
-    [router, syncConflictDrafts],
-  );
-
   const loadConflicts = useCallback(async () => {
-    const outcome = await getPendingConflicts(assessmentId);
-    applyConflictListOutcome(outcome);
-  }, [applyConflictListOutcome, assessmentId]);
+    await conflictsQuery.refetch();
+  }, [conflictsQuery]);
 
   useEffect(() => {
-    isMountedRef.current = true;
-    let active = true;
+    if (conflictsQuery.data?.kind === API_OUTCOME_KINDS.redirect) {
+      router.replace(conflictsQuery.data.location);
+    }
+  }, [conflictsQuery.data, router]);
 
-    void (async () => {
-      if (!active) {
-        return;
-      }
-      setViewState("loading");
-      const outcome = await getPendingConflicts(assessmentId);
-      if (!active) {
-        return;
-      }
-      applyConflictListOutcome(outcome);
-    })();
-
-    return () => {
-      active = false;
-      isMountedRef.current = false;
-    };
-  }, [applyConflictListOutcome, assessmentId]);
-
-  useEffect(() => {
-    let active = true;
-
-    void (async () => {
-      const workspaceOutcome = await getWorkspace();
-      if (!active || !isMountedRef.current) {
-        return;
-      }
-
-      if (workspaceOutcome.kind === "loaded") {
-        setNextStepHref("/workspace#assessments");
-        return;
-      }
-
-      setNextStepHref(null);
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  const conflictOutcome: ConflictListOutcome | undefined = conflictsQuery.data;
+  const conflicts =
+    conflictOutcome?.kind === API_OUTCOME_KINDS.loaded
+      ? conflictOutcome.data.conflicts
+      : [];
+  const queryViewState: ConflictResolutionViewState = conflictsQuery.isLoading
+    ? CONFLICT_RESOLUTION_VIEW_STATES.loading
+    : conflictOutcome?.kind === API_OUTCOME_KINDS.accessRevoked
+      ? CONFLICT_RESOLUTION_VIEW_STATES.accessRevoked
+      : conflictOutcome?.kind === API_OUTCOME_KINDS.error
+        ? CONFLICT_RESOLUTION_VIEW_STATES.error
+        : conflictOutcome?.kind === API_OUTCOME_KINDS.empty
+          ? CONFLICT_RESOLUTION_VIEW_STATES.empty
+          : conflictOutcome?.kind === API_OUTCOME_KINDS.loaded
+            ? CONFLICT_RESOLUTION_VIEW_STATES.loaded
+            : CONFLICT_RESOLUTION_VIEW_STATES.error;
+  const viewState = viewStateOverride ?? queryViewState;
 
   const headingDescription = useMemo(
     () => resolveMessage(appLocale, "pages.reconciliation.pageDescription"),
@@ -189,22 +112,22 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
 
   async function handleResolve(conflict: ConflictSummary) {
     const conflictId = conflict.conflict_id;
-    const resolution = resolutions[conflictId] ?? "RESOLVED";
+    const resolution =
+      resolutions[conflictId] ?? CONFLICT_RECORD_STATUSES.resolved;
     const note = resolutionNotes[conflictId] ?? "";
 
     setSubmittingIds((prev) => ({ ...prev, [conflictId]: true }));
     setFormErrors((prev) => ({ ...prev, [conflictId]: null }));
 
-    const outcome = await resolveConflict(assessmentId, conflictId, {
-      resolution,
-      resolution_note: note,
+    const outcome = await resolveConflictMutation.mutateAsync({
+      conflictId,
+      request: {
+        resolution,
+        resolution_note: note,
+      },
     });
 
-    if (!isMountedRef.current) {
-      return;
-    }
-
-    if (outcome.kind === "validation_error") {
+    if (outcome.kind === API_OUTCOME_KINDS.validationError) {
       setSubmittingIds((prev) => ({ ...prev, [conflictId]: false }));
       setFormErrors((prev) => ({
         ...prev,
@@ -216,18 +139,17 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
       return;
     }
 
-    if (outcome.kind === "redirect") {
+    if (outcome.kind === API_OUTCOME_KINDS.redirect) {
       router.replace(outcome.location);
       return;
     }
 
-    if (outcome.kind === "access_revoked") {
-      setViewState("access_revoked");
-      setConflicts([]);
+    if (outcome.kind === API_OUTCOME_KINDS.accessRevoked) {
+      setViewStateOverride(CONFLICT_RESOLUTION_VIEW_STATES.accessRevoked);
       return;
     }
 
-    if (outcome.kind === "already_resolved") {
+    if (outcome.kind === API_OUTCOME_KINDS.alreadyResolved) {
       setSubmittingIds((prev) => ({ ...prev, [conflictId]: false }));
       setFormErrors((prev) => ({
         ...prev,
@@ -240,7 +162,7 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
       return;
     }
 
-    if (outcome.kind === "not_found") {
+    if (outcome.kind === API_OUTCOME_KINDS.notFound) {
       setSubmittingIds((prev) => ({ ...prev, [conflictId]: false }));
       setFormErrors((prev) => ({
         ...prev,
@@ -253,7 +175,7 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
       return;
     }
 
-    if (outcome.kind === "error") {
+    if (outcome.kind === API_OUTCOME_KINDS.error) {
       setSubmittingIds((prev) => ({ ...prev, [conflictId]: false }));
       setFormErrors((prev) => ({
         ...prev,
@@ -278,13 +200,14 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
         <p className="text-sm text-muted-foreground">{headingDescription}</p>
       </header>
 
-      {viewState === "loading" ? (
+      {conflictsQuery.isLoading ||
+      viewState === CONFLICT_RESOLUTION_VIEW_STATES.loading ? (
         <p className="text-sm text-muted-foreground" role="status">
           {resolveMessage(appLocale, "pages.reconciliation.loading")}
         </p>
       ) : null}
 
-      {viewState === "access_revoked" ? (
+      {viewState === CONFLICT_RESOLUTION_VIEW_STATES.accessRevoked ? (
         <Alert variant="destructive">
           <AlertTitle>
             {resolveMessage(appLocale, "pages.reconciliation.accessRevokedTitle")}
@@ -295,7 +218,7 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
         </Alert>
       ) : null}
 
-      {viewState === "error" ? (
+      {viewState === CONFLICT_RESOLUTION_VIEW_STATES.error ? (
         <Alert variant="destructive">
           <AlertTitle>
             {resolveMessage(appLocale, "pages.reconciliation.errorTitle")}
@@ -306,7 +229,7 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
         </Alert>
       ) : null}
 
-      {viewState === "empty" ? (
+      {viewState === CONFLICT_RESOLUTION_VIEW_STATES.empty ? (
         <Empty className="rounded-xl border bg-card">
           <EmptyHeader>
             <EmptyTitle>
@@ -332,7 +255,7 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
         </Empty>
       ) : null}
 
-      {viewState === "loaded" ? (
+      {viewState === CONFLICT_RESOLUTION_VIEW_STATES.loaded ? (
         <section className="grid gap-4" aria-label={resolveMessage(appLocale, "pages.reconciliation.pendingSectionLabel")}>
           {conflicts.map((conflict) => {
             const conflictId = conflict.conflict_id;
@@ -340,7 +263,9 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
               <ConflictCard
                 key={conflictId}
                 conflict={conflict}
-                resolution={resolutions[conflictId] ?? "RESOLVED"}
+                resolution={
+                  resolutions[conflictId] ?? CONFLICT_RECORD_STATUSES.resolved
+                }
                 resolutionNote={resolutionNotes[conflictId] ?? ""}
                 isSubmitting={Boolean(submittingIds[conflictId])}
                 formError={formErrors[conflictId] ?? null}

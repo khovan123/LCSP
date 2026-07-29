@@ -8,21 +8,15 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { PbacDecisionValue } from "@lcsp/contracts/pbac";
 
 import { PbacPreflightService } from "./pbac-preflight.service.js";
+import { resultEnvelope } from "../problems/result-envelope.js";
 
 interface PreflightRequestBody {
   user_id?: string;
   organization_id?: string;
   action?: string;
   correlation_id?: string;
-}
-
-interface PreflightResponseBody {
-  decision: PbacDecisionValue;
-  reason_code: string | null;
-  correlation_id: string;
 }
 
 @Controller("internal/pbac")
@@ -36,7 +30,7 @@ export class PbacPreflightController {
   async preflight(
     @Body() body: PreflightRequestBody,
     @Headers("x-worker-api-key") apiKey?: string,
-  ): Promise<PreflightResponseBody> {
+  ) {
     this.assertWorkerApiKey(apiKey);
 
     const result = await this.preflightService.evaluate({
@@ -46,11 +40,11 @@ export class PbacPreflightController {
       correlationId: body.correlation_id ?? "",
     });
 
-    return {
+    return resultEnvelope({
       decision: result.decision,
       reason_code: result.reasonCode,
       correlation_id: result.correlationId,
-    };
+    });
   }
 
   private assertWorkerApiKey(provided?: string): void {

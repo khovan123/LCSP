@@ -15,11 +15,7 @@ export type WizardAnswers = {
   high_impact_indicator?: string;
 };
 
-export type WizardStatus =
-  | "NOT_STARTED"
-  | "IN_PROGRESS"
-  | "SUBMITTED"
-  | (string & {});
+export type WizardStatus = WizardStatusCode | (string & {});
 
 export type WizardAssessment = {
   assessmentId: string;
@@ -28,18 +24,25 @@ export type WizardAssessment = {
 };
 
 export type WizardPageOutcome =
-  | { kind: "loaded"; assessment: WizardAssessment }
-  | { kind: "redirect"; location: string }
-  | { kind: "error"; titleKey: string; detailKey: string };
+  | { kind: typeof API_OUTCOME_KINDS.loaded; assessment: WizardAssessment }
+  | { kind: typeof API_OUTCOME_KINDS.redirect; location: string }
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: string;
+      detailKey: string;
+    };
 
 export type WizardSaveOutcome =
-  | { kind: "saved"; savedAt: string | null }
-  | { kind: "redirect"; location: string }
-  | { kind: "already_submitted" }
-  | { kind: "error"; detailKey: string };
+  | { kind: typeof API_OUTCOME_KINDS.saved; savedAt: string | null }
+  | { kind: typeof API_OUTCOME_KINDS.redirect; location: string }
+  | { kind: typeof API_OUTCOME_KINDS.alreadySubmitted }
+  | { kind: typeof API_OUTCOME_KINDS.error; detailKey: string };
 
 export type WizardSubmitOutcome =
-  | { kind: "submitted" }
-  | { kind: "redirect"; location: string }
-  | { kind: "already_submitted" }
-  | { kind: "error"; detailKey: string };
+  | { kind: typeof API_OUTCOME_KINDS.submitted }
+  | { kind: typeof API_OUTCOME_KINDS.redirect; location: string }
+  | { kind: typeof API_OUTCOME_KINDS.alreadySubmitted }
+  | { kind: typeof API_OUTCOME_KINDS.error; detailKey: string };
+import type { WizardStatusCode } from "@lcsp/contracts/assessment";
+
+import { API_OUTCOME_KINDS } from "../../../lib/api/outcome-kinds.ts";

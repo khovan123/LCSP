@@ -12,7 +12,8 @@ import { FieldGroup } from "@/components/ui/field";
 import { LabeledSeparator } from "@/components/molecules/labeled-separator";
 import { FormCard } from "@/components/organisms/form-card";
 import { Spinner } from "@/components/ui/spinner";
-import { signIn } from "@/lib/api/auth-client";
+import { useSignInMutation } from "@/lib/api/auth-queries";
+import { API_OUTCOME_KINDS, API_REDIRECT_LOCATIONS } from "@/lib/api/outcome-kinds";
 import githubIcon from "@/public/assets/icons/github.svg";
 import googleIcon from "@/public/assets/icons/google.svg";
 
@@ -24,6 +25,7 @@ import { CredentialField } from "../molecules/credential-field";
 
 export function SignInForm() {
   const router = useRouter();
+  const signInMutation = useSignInMutation();
   const form = useForm<SignInFormValues>({
     resolver: zodResolver(signInSchema),
     defaultValues: { email: "", password: "" },
@@ -33,20 +35,23 @@ export function SignInForm() {
     | undefined;
 
   async function onSubmit(values: SignInFormValues) {
-    const outcome = await signIn(values).catch(() => ({
-      kind: "error" as const,
+    const outcome = await signInMutation.mutateAsync(values).catch(() => ({
+      kind: API_OUTCOME_KINDS.error,
       titleKey: "pages.signIn.errors.requestFailedTitle" as const,
       detailKey: "pages.signIn.errors.requestFailedDetail" as const,
     }));
     form.reset();
 
-    if (outcome.kind === "authenticated") {
+    if (outcome.kind === API_OUTCOME_KINDS.authenticated) {
       router.replace("/workspace");
       return;
     }
-    if (outcome.kind === "workspace_selection_required") { router.replace("/workspace/select"); return; }
-    if (outcome.kind === "mfa_required") {
-      router.replace("/mfa/verify");
+    if (outcome.kind === API_OUTCOME_KINDS.workspaceSelectionRequired) {
+      router.replace("/workspace/select");
+      return;
+    }
+    if (outcome.kind === API_OUTCOME_KINDS.mfaRequired) {
+      router.replace(API_REDIRECT_LOCATIONS.mfaVerify);
       return;
     }
     form.setError("root", { message: outcome.detailKey });

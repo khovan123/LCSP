@@ -1,6 +1,8 @@
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
+import { apiRequest } from "./api-request.ts";
+import { API_OUTCOME_KINDS } from "./outcome-kinds.ts";
 
 export type ReadinessStatusViewModel = {
   classificationLocked: boolean;
@@ -15,18 +17,13 @@ export type ReadinessStatusViewModel = {
 };
 
 type ReadinessStatusOutcome =
-  | { kind: "loaded"; data: ReadinessStatusViewModel }
-  | { kind: "redirect"; location: string }
-  | { kind: "error"; titleKey: string; detailKey: string };
-
-type ApiProblemPayload = {
-  code?: string;
-  error_code?: string;
-  problem?: {
-    code?: string;
-    error_code?: string;
-  };
-};
+  | { kind: typeof API_OUTCOME_KINDS.loaded; data: ReadinessStatusViewModel }
+  | { kind: typeof API_OUTCOME_KINDS.redirect; location: string }
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: string;
+      detailKey: string;
+    };
 
 type ReadinessPayload = {
   classification_locked?: unknown;
@@ -39,19 +36,16 @@ type ReadinessPayload = {
 export async function getReadinessStatus(
   assessmentId: string,
 ): Promise<ReadinessStatusOutcome> {
-  const response = await fetch(
+  const { payload, ok, status, problemCode } = await apiRequest(
     `/api/assessments/${encodeURIComponent(assessmentId)}/readiness`,
     {
-      credentials: "same-origin",
       cache: "no-store",
     },
   );
 
-  const payload: unknown = await response.json().catch(() => null);
-
-  if (response.ok && isReadinessPayload(payload)) {
+  if (ok && isReadinessPayload(payload)) {
     return {
-      kind: "loaded",
+      kind: API_OUTCOME_KINDS.loaded,
       data: {
         classificationLocked: payload.classification_locked,
         missingEvidence: payload.missing_evidence,
@@ -62,17 +56,19 @@ export async function getReadinessStatus(
     };
   }
 
-  const code = getProblemCode(payload);
   if (
-    response.status === 401 ||
-    code === AUTH_ERROR_CODES.authRequired ||
-    code === AUTH_ERROR_CODES.sessionInvalid
+    status === 401 ||
+    problemCode === AUTH_ERROR_CODES.authRequired ||
+    problemCode === AUTH_ERROR_CODES.sessionInvalid
   ) {
-    return { kind: "redirect", location: PUBLIC_ENTRY_ROUTES.signIn };
+    return {
+      kind: API_OUTCOME_KINDS.redirect,
+      location: PUBLIC_ENTRY_ROUTES.signIn,
+    };
   }
 
   return {
-    kind: "error",
+    kind: API_OUTCOME_KINDS.error,
     titleKey: "pages.readiness.errorTitle",
     detailKey: "pages.readiness.errorDetail",
   };
@@ -113,18 +109,3 @@ function isReadinessPayload(
     typeof candidate.updated_at === "string"
   );
 }
-
-function getProblemCode(payload: unknown): string | undefined {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-
-  const problem = payload as ApiProblemPayload;
-  return (
-    problem.problem?.code ??
-    problem.problem?.error_code ??
-    problem.code ??
-    problem.error_code
-  );
-}
-

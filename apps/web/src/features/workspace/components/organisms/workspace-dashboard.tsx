@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
 import Link from "next/link";
@@ -18,59 +18,45 @@ import {
 import {
   canCreateAssessment,
   getAssessmentStatusLabelKey,
-  getAssessments,
-  getWorkspace,
 } from "@/lib/api/workspace-client";
+import {
+  useAssessmentsQuery,
+  useWorkspaceQuery,
+} from "@/lib/api/workspace-queries";
 
 import { appLocale } from "@/lib/locale";
 import type {
   AssessmentSummary,
-  WorkspaceContext,
   WorkspaceErrorOutcome,
 } from "../../types/workspace.types";
 import { WorkspaceHeader } from "../molecules/workspace-header";
 
 export function WorkspaceDashboard() {
   const router = useRouter();
-  const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
-  const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
-  const [error, setError] = useState<WorkspaceErrorOutcome | null>(null);
+  const workspaceQuery = useWorkspaceQuery();
+  const assessmentsQuery = useAssessmentsQuery();
 
   useEffect(() => {
-    let isActive = true;
-
-    async function loadWorkspace() {
-      const workspaceOutcome = await getWorkspace();
-      if (!isActive) {
-        return;
-      }
-
-      if (workspaceOutcome.kind === "redirect") {
-        router.replace(workspaceOutcome.location);
-        return;
-      }
-
-      if (workspaceOutcome.kind === "error") {
-        setError(workspaceOutcome);
-        return;
-      }
-
-      setWorkspace(workspaceOutcome.workspace);
-      const assessmentsOutcome = await getAssessments();
-      if (!isActive) return;
-      if (assessmentsOutcome.kind === "error") {
-        setError(assessmentsOutcome);
-        return;
-      }
-      setAssessments(assessmentsOutcome.assessments);
+    if (workspaceQuery.data?.kind === "redirect") {
+      router.replace(workspaceQuery.data.location);
     }
+  }, [router, workspaceQuery.data]);
 
-    void loadWorkspace();
-
-    return () => {
-      isActive = false;
-    };
-  }, [router]);
+  const workspace =
+    workspaceQuery.data?.kind === "loaded"
+      ? workspaceQuery.data.workspace
+      : null;
+  const assessments =
+    assessmentsQuery.data?.kind === "loaded"
+      ? assessmentsQuery.data.assessments
+      : [];
+  const workspaceError = isWorkspaceErrorOutcome(workspaceQuery.data)
+    ? workspaceQuery.data
+    : null;
+  const assessmentsError = isWorkspaceErrorOutcome(assessmentsQuery.data)
+    ? assessmentsQuery.data
+    : null;
+  const error = workspaceError ?? assessmentsError;
 
   return (
     <main className="flex flex-1 flex-col gap-6 px-4 py-6 text-foreground lg:px-6">
@@ -198,6 +184,16 @@ function WorkspaceOverview({
         </CardContent>
       </Card>
     </>
+  );
+}
+
+function isWorkspaceErrorOutcome(
+  outcome: unknown,
+): outcome is WorkspaceErrorOutcome {
+  return (
+    typeof outcome === "object" &&
+    outcome !== null &&
+    (outcome as { kind?: unknown }).kind === "error"
   );
 }
 

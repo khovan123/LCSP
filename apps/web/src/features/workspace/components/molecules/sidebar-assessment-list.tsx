@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { resolveMessage } from "@lcsp/i18n";
 import {
   ChevronRightIcon,
@@ -27,24 +26,18 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
-import { getAssessments } from "@/lib/api/workspace-client";
+import { useAssessmentsQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
 export function SidebarAssessmentList() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [assessmentSearch, setAssessmentSearch] = useState("");
-  const assessmentsQuery = useQuery({
-    queryKey: ["assessments"],
-    queryFn: async () => {
-      const outcome = await getAssessments();
-      if (outcome.kind !== "loaded") {
-        throw new Error("assessments-load-failed");
-      }
-      return outcome.assessments;
-    },
-  });
-  const assessments = assessmentsQuery.data ?? [];
+  const assessmentsQuery = useAssessmentsQuery();
+  const assessments =
+    assessmentsQuery.data?.kind === "loaded"
+      ? assessmentsQuery.data.assessments
+      : [];
   const visibleAssessments = assessments.slice(0, 3);
   const normalizedSearch = assessmentSearch.trim().toLocaleLowerCase();
   const filteredAssessments = normalizedSearch
