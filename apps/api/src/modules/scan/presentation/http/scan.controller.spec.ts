@@ -6,6 +6,7 @@ import { SCAN_CALLBACK_STATUSES } from "@lcsp/contracts/scan";
 import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-metadata.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
 import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
+import { RerunScanCommand } from "../../application/commands/rerun-scan/rerun-scan.command.js";
 import { InternalScanController, ScanController } from "./scan.controller.js";
 
 describe("ScanController", () => {
@@ -25,7 +26,10 @@ describe("ScanController", () => {
   it("dispatches GetScanJobQuery with organization and Developer scope", async () => {
     const execute = jest.fn<(query: unknown) => Promise<unknown>>();
     execute.mockResolvedValue({ scan_job_id: "scan-job-1" });
-    const controller = new ScanController({ execute } as unknown as QueryBus);
+    const controller = new ScanController(
+      { execute } as unknown as QueryBus,
+      {} as unknown as CommandBus,
+    );
 
     await controller.getScanJob("assessment-1", "scan-job-1", {
       correlationId: "corr-1",
@@ -51,6 +55,64 @@ describe("ScanController", () => {
       subjectRole: SUBJECT_ROLES.developer,
       scope: "assessment-1",
       correlationId: "corr-1",
+    });
+  });
+
+  it("requires the scan:trigger PBAC action for rerunScan", () => {
+    const metadata = Reflect.getMetadata(
+      PBAC_METADATA_KEY,
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      ScanController.prototype.rerunScan,
+    ) as unknown;
+
+    expect(metadata).toEqual({
+      type: "action",
+      action: PBAC_ACTIONS.scanTrigger,
+    });
+  });
+
+  it("dispatches RerunScanCommand with correct arguments", async () => {
+    const execute = jest.fn<(command: unknown) => Promise<unknown>>();
+    execute.mockResolvedValue({ id: "new-scan-job-2", status: "QUEUED" });
+    const controller = new ScanController(
+      {} as unknown as QueryBus,
+      { execute } as unknown as CommandBus,
+    );
+
+    const pbacContext = {
+      userId: "manager-1",
+      sessionId: "session-1",
+      organizationId: "org-1",
+      subjectRole: SUBJECT_ROLES.manager,
+      scope: "assessment-1",
+      grantedActions: [PBAC_ACTIONS.scanTrigger],
+      selectedAction: PBAC_ACTIONS.scanTrigger,
+      policyId: "policy-manager",
+      policyVersion: "v1",
+    };
+
+    await controller.rerunScan(
+      "assessment-1",
+      {
+        snapshot_id: "snapshot-1",
+        idempotency_key: "key-1",
+        reason: "Test rerun",
+      },
+      {
+        correlationId: "corr-1",
+        pbacContext,
+      },
+    );
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]?.[0]).toBeInstanceOf(RerunScanCommand);
+    expect(execute.mock.calls[0]?.[0]).toMatchObject({
+      assessmentId: "assessment-1",
+      snapshotId: "snapshot-1",
+      idempotencyKey: "key-1",
+      pbacContext,
+      correlationId: "corr-1",
+      reason: "Test rerun",
     });
   });
 });

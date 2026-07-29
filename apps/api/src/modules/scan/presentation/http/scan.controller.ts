@@ -24,6 +24,8 @@ import type {
 } from "../../application/contracts/scan/scan-callback.contract.js";
 import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
+import { RerunScanCommand } from "../../application/commands/rerun-scan/rerun-scan.command.js";
+import type { RerunScanRequestDto, RerunScanResponseDto } from "../../application/contracts/scan/rerun-scan.contract.js";
 import { WorkerApiKeyGuard } from "./worker-api-key.guard.js";
 
 interface ScanStatusRequest {
@@ -33,7 +35,10 @@ interface ScanStatusRequest {
 
 @Controller("assessments/:assessmentId/scan-jobs")
 export class ScanController {
-  constructor(private readonly queryBus: QueryBus) {}
+  constructor(
+    private readonly queryBus: QueryBus,
+    private readonly commandBus: CommandBus,
+  ) {}
 
   @Get(":scanJobId")
   @UseGuards(PbacGuard)
@@ -52,6 +57,27 @@ export class ScanController {
         context.subjectRole,
         context.scope,
         request.correlationId,
+      ),
+    );
+  }
+
+  @Post("rerun")
+  @HttpCode(201)
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.scanTrigger)
+  async rerunScan(
+    @Param("assessmentId") assessmentId: string,
+    @Body() payload: RerunScanRequestDto,
+    @Req() request: ScanStatusRequest,
+  ): Promise<RerunScanResponseDto> {
+    return this.commandBus.execute(
+      new RerunScanCommand(
+        assessmentId,
+        payload.snapshot_id,
+        payload.idempotency_key,
+        request.pbacContext,
+        request.correlationId,
+        payload.reason,
       ),
     );
   }
