@@ -36,7 +36,7 @@ describe("OutboxDlqController", () => {
       getDlqMessages.mockResolvedValue(mockResult);
 
       const result = await controller.getDlqMessages();
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual({ ok: true, data: mockResult });
       expect(getDlqMessages).toHaveBeenCalled();
     });
   });
@@ -48,8 +48,11 @@ describe("OutboxDlqController", () => {
 
       expect(replayMessage).toHaveBeenCalledWith("1", "system-admin");
       expect(result).toEqual({
-        success: true,
-        message: "Message 1 queued for replay",
+        ok: true,
+        data: {
+          success: true,
+          message: "Message 1 queued for replay",
+        },
       });
     });
 
@@ -68,8 +71,11 @@ describe("OutboxDlqController", () => {
 
       expect(deleteMessage).toHaveBeenCalledWith("1", "system-admin");
       expect(result).toEqual({
-        success: true,
-        message: "Message 1 permanently deleted",
+        ok: true,
+        data: {
+          success: true,
+          message: "Message 1 permanently deleted",
+        },
       });
     });
 

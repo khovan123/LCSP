@@ -88,10 +88,13 @@ describe("ClassificationController", () => {
     );
 
     expect(result).toEqual({
-      accepted: true,
-      legal_rule_match_id: "lrm-123",
-      guardrail_status: "passed",
-      correlation_id: "corr-123",
+      ok: true,
+      data: {
+        accepted: true,
+        legal_rule_match_id: "lrm-123",
+        guardrail_status: "passed",
+        correlation_id: "corr-123",
+      },
     });
 
     expect(mockExecuteCommand).toHaveBeenCalledWith(
@@ -109,10 +112,13 @@ describe("ClassificationController", () => {
     );
 
     expect(result).toEqual({
-      accepted: true,
-      legal_rule_match_id: "lrm-123",
-      guardrail_status: "passed",
-      correlation_id: "corr-123",
+      ok: true,
+      data: {
+        accepted: true,
+        legal_rule_match_id: "lrm-123",
+        guardrail_status: "passed",
+        correlation_id: "corr-123",
+      },
     });
 
     expect(mockExecuteCommand).toHaveBeenCalledWith(
