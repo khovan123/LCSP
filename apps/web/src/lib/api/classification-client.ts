@@ -89,22 +89,31 @@ export function sanitizeAssessmentDetailPayload(
     return null;
   }
 
-  return {
-    assessment_id:
-      typeof candidate.assessment_id === "string"
-        ? candidate.assessment_id
-        : undefined,
-    name: typeof candidate.name === "string" ? candidate.name : undefined,
-    wizard_status:
-      typeof candidate.wizard_status === "string"
-        ? candidate.wizard_status
-        : undefined,
-    readiness_state:
-      readiness === undefined
-        ? undefined
-        : { classification_locked: locked },
-    guardrail_status: guardrailStatus as string | null | undefined,
-  };
+  const sanitized: AssessmentDetailPayload = {};
+
+  if (typeof candidate.assessment_id === "string") {
+    sanitized.assessment_id = candidate.assessment_id;
+  }
+
+  if (typeof candidate.name === "string") {
+    sanitized.name = candidate.name;
+  }
+
+  if (typeof candidate.wizard_status === "string") {
+    sanitized.wizard_status = candidate.wizard_status;
+  }
+
+  if (readiness !== undefined) {
+    sanitized.readiness_state = locked === undefined
+      ? {}
+      : { classification_locked: locked };
+  }
+
+  if (guardrailStatus !== undefined) {
+    sanitized.guardrail_status = guardrailStatus as string | null;
+  }
+
+  return sanitized;
 }
 
 export function toClassificationStatusOutcome(
