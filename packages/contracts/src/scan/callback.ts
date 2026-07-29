@@ -111,4 +111,5 @@ export const SCAN_EVENT_TYPES = {
   legalRuleMatchBlockedAudit: "LEGAL_RULE_MATCH_BLOCKED",
   classificationAcceptedAudit: "CLASSIFICATION_ACCEPTED",
   classificationBlockedAudit: "CLASSIFICATION_BLOCKED",
+  scanRerunTriggeredAudit: "SCAN_RERUN_TRIGGERED",
 } as const;

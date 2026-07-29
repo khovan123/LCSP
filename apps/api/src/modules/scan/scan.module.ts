@@ -10,6 +10,7 @@ import {
   ScanController,
 } from "./presentation/http/scan.controller.js";
 import { WorkerApiKeyGuard } from "./presentation/http/worker-api-key.guard.js";
+import { RerunScanHandler } from "./application/commands/rerun-scan/rerun-scan.handler.js";
 
 @Module({
   imports: [CqrsModule, PbacModule],
@@ -17,6 +18,7 @@ import { WorkerApiKeyGuard } from "./presentation/http/worker-api-key.guard.js";
   providers: [
     GetScanJobHandler,
     ProcessScanCallbackHandler,
+    RerunScanHandler,
     EvidenceSchemaValidatorService,
     WorkerApiKeyGuard,
   ],
