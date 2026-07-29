@@ -56,8 +56,8 @@ describe("OAuthStartHandler", () => {
       get: jest
         .fn<ConfigService["get"]>()
         .mockImplementation((key: string, defaultValue?: any) => {
-          if (key === "oauth.allowedRedirectUris") {
-            return ["http://localhost:3000/callback"];
+          if (key === "oauth.allowedRedirectOrigins") {
+            return ["http://localhost:3000"];
           }
           // eslint-disable-next-line @typescript-eslint/no-unsafe-return
           return defaultValue;

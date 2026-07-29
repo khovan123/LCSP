@@ -48,8 +48,17 @@ export type SignInRequest = {
   password: string;
 };
 
+export type SignInWorkspaceOption = {
+  id: string;
+  name: string;
+};
+
 export type SignInOutcome =
   | { kind: "authenticated" }
+  | {
+      kind: "workspace_selection_required";
+      workspaces: SignInWorkspaceOption[];
+    }
   | { kind: "mfa_required" }
   | {
       kind: "error";
@@ -63,6 +72,12 @@ export type SignInOutcome =
 
 export function toSignInOutcome(payload: unknown, ok: boolean): SignInOutcome {
   if (ok && isSignInSuccess(payload)) {
+    if (payload.workspace_selection_required) {
+      return {
+        kind: "workspace_selection_required",
+        workspaces: payload.workspaces ?? [],
+      };
+    }
     return payload.mfa_required
       ? { kind: "mfa_required" }
       : { kind: "authenticated" };
@@ -215,7 +230,12 @@ export async function verifyMfaOtp(
 
 function isSignInSuccess(
   payload: unknown,
-): payload is { ok: true; mfa_required?: boolean } {
+): payload is {
+  ok: true;
+  mfa_required?: boolean;
+  workspace_selection_required?: boolean;
+  workspaces?: SignInWorkspaceOption[];
+} {
   return (
     typeof payload === "object" &&
     payload !== null &&

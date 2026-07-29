@@ -141,6 +141,16 @@ function buildRepositories(input: {
     },
     oauthIdentities: {
       findByProviderAccount: () => Promise.resolve(input.identity),
+      linkToUser: (provider, providerAccountId, userId) =>
+        Promise.resolve(
+          new OAuthIdentity({
+            id: "linked-identity-1",
+            provider,
+            providerAccountId,
+            userId,
+            createdAt: Date.now(),
+          }),
+        ),
     },
   };
 
@@ -468,6 +478,48 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
         decision: PBAC_DECISION.deny,
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
+    );
+  });
+
+  it("links a verified provider email to an existing verified user", async () => {
+    identity = null as unknown as OAuthIdentity;
+    provider.claims = {
+      ...provider.claims,
+      email: user.email,
+      emailVerified: true,
+    };
+    const repositories = buildRepositories({
+      oauthState,
+      identity,
+      user,
+      activeMemberships: [membership],
+    });
+    const linkedIdentity = new OAuthIdentity({
+      id: "linked-identity-1",
+      userId: user.id,
+      provider: provider.name,
+      providerAccountId: provider.claims.providerAccountId,
+      createdAt: Date.now(),
+    });
+    repositories.users.findByEmail = () => Promise.resolve(user);
+    const linkToUser = jest
+      .spyOn(repositories.oauthIdentities, "linkToUser")
+      .mockResolvedValue(linkedIdentity);
+    const handler = new OAuthCallbackHandler(support, repositories, registry);
+
+    const result = await handler.execute(
+      new OAuthCallbackCommand({
+        code: "good-code",
+        state: oauthState.state,
+        provider: provider.name,
+      }),
+    );
+
+    expect("ok" in result && result.ok).toBe(true);
+    expect(linkToUser).toHaveBeenCalledWith(
+      provider.name,
+      provider.claims.providerAccountId,
+      user.id,
     );
   });
 

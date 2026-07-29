@@ -18,6 +18,8 @@ type WorkspaceHeaderProps = {
   membershipRole: string;
   createAssessmentLabel: string;
   showCreateAssessment: boolean;
+  onCreateAssessment?: () => void;
+  isCreatingAssessment?: boolean;
 };
 
 export function WorkspaceHeader({
@@ -29,6 +31,8 @@ export function WorkspaceHeader({
   membershipRole,
   createAssessmentLabel,
   showCreateAssessment,
+  onCreateAssessment,
+  isCreatingAssessment = false,
 }: WorkspaceHeaderProps) {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(18rem,1fr)]">
@@ -45,7 +49,13 @@ export function WorkspaceHeader({
           </CardDescription>
           {showCreateAssessment ? (
             <CardAction>
-              <Button>{createAssessmentLabel}</Button>
+              <Button
+                type="button"
+                onClick={onCreateAssessment}
+                disabled={isCreatingAssessment}
+              >
+                {createAssessmentLabel}
+              </Button>
             </CardAction>
           ) : null}
         </CardHeader>
@@ -55,18 +65,18 @@ export function WorkspaceHeader({
         <CardContent className="flex h-full items-center">
           <dl className="grid w-full gap-3">
             <div className="rounded-lg border bg-muted/35 p-4">
-            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              {organizationLabel}
-            </dt>
-            <dd className="mt-1 text-base font-medium">{organizationName}</dd>
+              <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {organizationLabel}
+              </dt>
+              <dd className="mt-1 text-base font-medium">{organizationName}</dd>
             </div>
             <div className="rounded-lg border bg-muted/35 p-4">
-            <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              {membershipRoleLabel}
-            </dt>
-            <dd className="mt-1">
+              <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {membershipRoleLabel}
+              </dt>
+              <dd className="mt-1">
                 <Badge variant="secondary">{membershipRole}</Badge>
-            </dd>
+              </dd>
             </div>
           </dl>
         </CardContent>

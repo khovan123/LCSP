@@ -57,6 +57,9 @@ export function sanitizeAssessmentDetailPayload(
   }
 
   const candidate = payload as {
+    assessment_id?: unknown;
+    name?: unknown;
+    wizard_status?: unknown;
     readiness_state?: unknown;
     guardrail_status?: unknown;
   };
@@ -87,6 +90,15 @@ export function sanitizeAssessmentDetailPayload(
   }
 
   return {
+    assessment_id:
+      typeof candidate.assessment_id === "string"
+        ? candidate.assessment_id
+        : undefined,
+    name: typeof candidate.name === "string" ? candidate.name : undefined,
+    wizard_status:
+      typeof candidate.wizard_status === "string"
+        ? candidate.wizard_status
+        : undefined,
     readiness_state:
       readiness === undefined
         ? undefined
@@ -179,6 +191,9 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
 }
 
 type AssessmentDetailPayload = {
+  assessment_id?: string;
+  name?: string;
+  wizard_status?: string;
   readiness_state?: {
     classification_locked?: boolean;
   };

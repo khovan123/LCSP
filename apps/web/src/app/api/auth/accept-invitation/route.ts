@@ -4,9 +4,7 @@ import {
   SESSION_COOKIE_NAME,
   sessionCookieOptions,
 } from "@/lib/session/session-store";
-import {
-  getAcceptedInvitationLocation,
-} from "@/lib/api/invitation-routing";
+import { getAcceptedInvitationLocation } from "@/lib/api/invitation-routing";
 import {
   isAcceptInvitationApiSuccess,
   safeAcceptInvitationErrorCode,

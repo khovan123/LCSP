@@ -34,7 +34,7 @@ export function DocumentsPageClient({ assessmentId }: { assessmentId: string }) 
           return;
         }
         setDocuments([]);
-      } catch (e) {
+      } catch {
         setDocuments([]);
       }
     }

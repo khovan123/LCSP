@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import { sanitizeDocumentRequestPayload } from "@/lib/api/document-client";
+import { mockJsonResponse } from "@/lib/mocks/mock-response";
 import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
 
 const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
@@ -10,6 +11,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const mock = await mockJsonResponse("document-action.json");
+  if (mock) return mock;
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!sessionToken) {
     return NextResponse.json(

@@ -119,10 +119,20 @@ export class OAuthCallbackHandler {
       );
     }
 
-    const identity = await repositories.oauthIdentities.findByProviderAccount(
+    let identity = await repositories.oauthIdentities.findByProviderAccount(
       oauthState.provider,
       claims.providerAccountId,
     );
+    if (!identity && claims.email && claims.emailVerified) {
+      const matchingUser = await repositories.users.findByEmail(claims.email);
+      if (matchingUser?.emailVerified) {
+        identity = await repositories.oauthIdentities.linkToUser(
+          oauthState.provider,
+          claims.providerAccountId,
+          matchingUser.id,
+        );
+      }
+    }
     if (!identity) {
       await this.recordFailure(
         repositories,

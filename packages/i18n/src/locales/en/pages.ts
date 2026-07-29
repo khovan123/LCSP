@@ -12,16 +12,29 @@ export const enPages = {
     developerTitle: "Developer tasks",
     workspaceNavigation: "Workspace",
     assessmentNavigation: "Current assessment",
+    chooseAssessmentToView: "Choose an assessment to view",
+    selectAssessmentFirst: "Please select your assessment first.",
     developerNavigation: "Developer",
     overview: "Overview",
     assessments: "Assessments",
+    recentAssessments: "Recent assessments",
+    moreAssessments: "More assessments",
+    allAssessments: "All assessments",
+    searchAssessments: "Search assessments",
+    noAssessmentMatches: "No matching assessments found.",
     wizard: "Intake wizard",
     readiness: "Readiness",
     classification: "Classification",
     documents: "Documents",
     conflicts: "Conflict review",
     developer: "Technical findings",
+    developers: "Developers",
     secureWorkspace: "Protected organization workspace",
+    signOut: "Sign out",
+    switchWorkspace: "Switch workspace",
+    currentWorkspace: "Current workspace",
+    switchingWorkspace: "Switching workspace",
+    workspaceMenuTitle: "Switch workspace",
     authEyebrow: "Governance, without the guesswork",
     authTitle: "Move every AI assessment forward with evidence.",
     authDescription:
@@ -41,8 +54,9 @@ export const enPages = {
       "On a shared device, do not save this password in your browser.",
     submit: "Sign in",
     submitting: "Checking access",
-    divider: "or",
-    oauthGitHub: "Continue with GitHub",
+    divider: "Others",
+    oauthGoogle: "Google",
+    oauthGitHub: "GitHub",
     accessHelp: "Need access? Contact your organization owner.",
     errors: {
       emailRequired: "Enter your work email.",
@@ -76,12 +90,14 @@ export const enPages = {
     metadataDescription: "Review and accept your scoped developer invitation.",
     eyebrow: "Developer access",
     title: "Accept your invitation",
-    description: "Review the access being granted before creating your account.",
+    description:
+      "Review the access being granted before creating your account.",
     loading: "Loading invitation details",
     organizationScope: "Organization-scoped access",
     expiresLabel: "Invitation expires",
     displayNameLabel: "Display name",
-    displayNameDescription: "Enter the name teammates should see (1–100 characters).",
+    displayNameDescription:
+      "Enter the name teammates should see (1–100 characters).",
     passwordLabel: "Password",
     passwordDescription: "Use at least 12 characters.",
     submit: "Accept invitation",
@@ -111,7 +127,8 @@ export const enPages = {
     pageTitle: "Scoped task workspace",
     pageDescription: "Review the redacted technical findings assigned to you.",
     selectionTitle: "Choose an assessment",
-    selectionDescription: "Open an assessment within your current organization scope.",
+    selectionDescription:
+      "Open an assessment within your current organization scope.",
     openAssessment: "Open technical findings",
     loading: "Loading your task",
     scopeTitle: "Your access scope",
@@ -124,7 +141,8 @@ export const enPages = {
     hiddenBoundary:
       "You cannot see: source code, file paths, line numbers, or Manager-only actions.",
     findingsTitle: "Redacted technical findings",
-    findingsDescription: "Only the finding details permitted by your current scope are shown.",
+    findingsDescription:
+      "Only the finding details permitted by your current scope are shown.",
     emptyTitle: "No technical findings available yet for this assessment.",
     emptyDescription: "Check back after technical evidence has been processed.",
     revokedTitle: "Access revoked",
@@ -157,17 +175,30 @@ export const enPages = {
     assessmentsNav: "Assessments",
     documentsNav: "Documents",
     createAssessment: "Create Assessment",
+    newAssessmentName: "New assessment",
     openConflictResolution: "Open conflict resolution",
     openWizard: "Open Wizard",
     assessmentsTitle: "Assessments",
     assessmentsDescription:
       "Track assessment progress from wizard intake through review.",
+    overviewAssessmentsTitle: "Manage assessments",
+    overviewAssessmentsDescription:
+      "Open the full list to track progress and continue each assessment.",
+    openAssessments: "Open assessment list",
+    insightsTitle: "Assessment overview",
+    totalAssessments: "Total assessments",
+    needsAttention: "Needs follow-up",
+    readyForReview: "Ready for review",
+    recentAssessmentsTitle: "Recent assessments",
+    recentAssessmentsDescription:
+      "Quickly open recently created assessments or view the full list.",
     emptyTitle: "No assessments yet",
     emptyDescription: "Create your first assessment.",
     loadingAssessments: "Loading assessments",
     statusLabel: "Status",
     wizardStatusLabel: "Wizard status",
     createdAtLabel: "Created",
+    progressLabel: "Assessment progress",
     statuses: {
       WIZARD_IN_PROGRESS: "In Progress",
       WIZARD_SUBMITTED: "Wizard Complete",
@@ -195,8 +226,40 @@ export const enPages = {
       assessmentsUnavailableTitle: "Assessments unavailable",
       assessmentsUnavailableDetail:
         "Assessment list cannot be loaded right now.",
+      createAssessmentTitle: "Unable to create assessment",
+      createAssessmentDetail: "Please try again.",
     },
   },
+  assessment: {
+    eyebrow: "Assessment workflow",
+    pageTitle: "Assessment overview",
+    pageDescription:
+      "Open the right workflow step to complete intake, check readiness, review classification, and manage compliance records.",
+    openOverview: "Open assessment overview",
+    moduleNavigation: "Assessment workflow steps",
+    openModule: "Open this step",
+    modules: {
+      wizard: "Describe the business context and how the AI system is used.",
+      readiness: "Review completed conditions and the evidence still needed.",
+      classification: "Review the classification state and available next actions.",
+      documents: "Generate, track, and download assessment documents.",
+      conflicts: "Review and record decisions for pending conflicts.",
+    },
+  },
+  assessmentForm: {
+    pageTitle: "Create assessment",
+    pageDescription: "Enter the basics before starting the Wizard intake.",
+    formTitle: "Assessment details",
+    formDescription: "You can add more detail in the next workflow steps.",
+    nameLabel: "Assessment name",
+    namePlaceholder: "Example: AI customer support assistant",
+    descriptionLabel: "Description",
+    descriptionPlaceholder: "Briefly describe the AI system to assess.",
+    cancel: "Cancel",
+    submit: "Create and start Wizard",
+    submitting: "Creating assessment",
+  },
+  developerManagement: { pageTitle: "Manage developers", pageDescription: "Grant and revoke Developer access for the current assessment scope.", inviteTitle: "Invite developer", emailLabel: "Work email", invite: "Send invitation", membersTitle: "Granted developers", scopeLabel: "Assessment scope", revoke: "Revoke access", empty: "No developers have been granted access to this assessment." },
   wizard: {
     metadataTitle: "Assessment Wizard | LCSP",
     metadataDescription:
@@ -251,7 +314,8 @@ export const enPages = {
       risk: "Special risk signals",
     },
     fields: {
-      preAiScopeLabel: "Does this system use AI or generate AI-based suggestions or content?",
+      preAiScopeLabel:
+        "Does this system use AI or generate AI-based suggestions or content?",
       preAiScopeDescription:
         "Choose the option that best matches the role of AI in this workflow today.",
       preAffectedPeopleLabel:
@@ -284,12 +348,14 @@ export const enPages = {
       userImpactLabel: "How strong is the impact on those people?",
       userImpactDescription:
         "Think about whether the output changes access, treatment, opportunities, or service quality.",
-      decisionRoleLabel: "What role does the AI output play in the final decision?",
+      decisionRoleLabel:
+        "What role does the AI output play in the final decision?",
       decisionRoleDescription:
         "Choose the option that best reflects how much the result influences the outcome.",
       decisionRoleExamples:
         "Example: a suggestion for staff review is different from an output that directly determines an outcome.",
-      humanOversightLabel: "Where does a person review the result before it takes effect?",
+      humanOversightLabel:
+        "Where does a person review the result before it takes effect?",
       humanOversightDescription:
         "This question appears when the AI output goes beyond simple background support.",
       externalLlmUsageLabel:
@@ -360,7 +426,8 @@ export const enPages = {
       loadTitle: "Unable to load this Wizard",
       loadDetail: "The assessment state could not be loaded right now.",
       saveFailed: "The draft could not be saved. Try again.",
-      submitFailed: "The Wizard could not be submitted. Review the highlighted answers and try again.",
+      submitFailed:
+        "The Wizard could not be submitted. Review the highlighted answers and try again.",
       alreadySubmitted:
         "This Wizard has already been submitted and is now read-only.",
       purposeRequired: "Describe the main business purpose before continuing.",
@@ -397,10 +464,8 @@ export const enPages = {
     missingTitle: "Still missing",
     nextActionTitle: "Next action",
     updatedAtLabel: "Updated",
-    noMissingEvidence:
-      "There are no missing readiness items at the moment.",
-    noCompletedSteps:
-      "No readiness milestones have been confirmed yet.",
+    noMissingEvidence: "There are no missing readiness items at the moment.",
+    noCompletedSteps: "No readiness milestones have been confirmed yet.",
     completedSteps: {
       wizardProfile: "Wizard profile submitted",
       repositoryConnected: "Repository connected",
@@ -416,6 +481,39 @@ export const enPages = {
       openClassification: "Open classification status",
       openDocuments: "Open documents",
     },
+  },
+  workspaceSelector: {
+    metadataTitle: "Select workspace | LCSP",
+    metadataDescription: "Select an organization workspace to continue.",
+    eyebrow: "Developer account",
+    title: "Choose a workspace",
+    description:
+      "Your account can belong to multiple workspaces managed by different Managers.",
+    welcomeBackTitle: "Welcome back!",
+    welcomeBackDescription: "Choose from an existing workspace to continue.",
+    continueExistingWorkspaces: "OR continue to existing workspaces",
+    readyToLaunch: "Ready to launch",
+    missingSomething: "Missing something?",
+    signInAnotherAccount: "Sign in to another account",
+    members: "members",
+    lastSignIn: "Last sign-in",
+    daysAgo: "days ago",
+    dayAgo: "day ago",
+    signedInAs: "Signed in as",
+    workspaceListLabel: "Workspaces you can access",
+    loading: "Loading workspaces",
+    submit: "Continue",
+    selected: "Selected",
+    openWorkspace: "Open workspace",
+    signOut: "Sign out of this account",
+    noWorkspacesTitle: "No workspaces",
+    noWorkspacesDetail:
+      "This demo account is not linked to any workspaces yet.",
+    errorTitle: "Unable to load workspaces",
+    errorDetail: "Sign in again or try later.",
+    privacyTerms: "Privacy & Terms",
+    contactUs: "Contact Us",
+    changeRegion: "Change region",
   },
   reconciliation: {
     metadataTitle: "Conflict resolution | LCSP",
@@ -465,9 +563,11 @@ export const enPages = {
   },
   classification: {
     metadataTitle: "Classification status | LCSP",
-    metadataDescription: "Review the current classification status for this assessment.",
+    metadataDescription:
+      "Review the current classification status for this assessment.",
     pageTitle: "Classification status",
-    pageDescription: "Track the current classification progress and the next step for this assessment.",
+    pageDescription:
+      "Track the current classification progress and the next step for this assessment.",
     loading: "Loading classification status",
     summaryLabel: "Summary",
     referencesLabel: "Applicable legal references",
@@ -478,35 +578,47 @@ export const enPages = {
     states: {
       lockedTitle: "Classification is locked",
       lockedBadge: "Locked",
-      lockedDescription: "Technical evidence is still required before classification can proceed.",
-      lockedNextSteps: "Add the missing technical evidence so the classification can continue and the next step can be prepared.",
+      lockedDescription:
+        "Technical evidence is still required before classification can proceed.",
+      lockedNextSteps:
+        "Add the missing technical evidence so the classification can continue and the next step can be prepared.",
       processingTitle: "Classification is in progress",
       processingBadge: "Processing",
       processingDescription: "The classification is still being prepared.",
       passedTitle: "Classification is ready",
       passedBadge: "Ready",
-      passedDescription: "The available legal references were verified and the classification can proceed.",
+      passedDescription:
+        "The available legal references were verified and the classification can proceed.",
       passedSummary: "Applicable legal references are ready for the next step.",
       degradedTitle: "Classification needs review",
       degradedBadge: "Needs review",
       degradedDescription: "Some legal references could not be fully verified.",
-      degradedSummary: "The classification is available, but a few references need review.",
+      degradedSummary:
+        "The classification is available, but a few references need review.",
       blockedTitle: "Classification could not be completed",
       blockedBadge: "Blocked",
-      blockedDescription: "The classification could not be completed because the citation basis was missing.",
-      blockedSummary: "A valid citation basis is required before the next step can proceed.",
+      blockedDescription:
+        "The classification could not be completed because the citation basis was missing.",
+      blockedSummary:
+        "A valid citation basis is required before the next step can proceed.",
     },
     finalReportRequestedTitle: "Final report request submitted",
-    finalReportRequestedDetail: "The final report request is queued. You can return later to download it once processing is complete.",
-    documentsPageDescription: "Request the final report and view the output status for this assessment.",
-    finalReportPageHint: "Request a guarded final report. This is only available when the classification guardrail has passed.",
+    finalReportRequestedDetail:
+      "The final report request is queued. You can return later to download it once processing is complete.",
+    documentsPageDescription:
+      "Request the final report and view the output status for this assessment.",
+    finalReportPageHint:
+      "Request a guarded final report. This is only available when the classification guardrail has passed.",
     requestFinalReportButton: "Request Final Report",
     gapAnalysisLabel: "Gap analysis",
-    gapAnalysisPendingMessage: "Gap analysis is generated by the next worker stage after classification. It will be available when the document pipeline is ready.",
-    documentGuardrailBlocked: "The final report cannot be generated because the classification guardrail has not passed.",
+    gapAnalysisPendingMessage:
+      "Gap analysis is generated by the next worker stage after classification. It will be available when the document pipeline is ready.",
+    documentGuardrailBlocked:
+      "The final report cannot be generated because the classification guardrail has not passed.",
     documentList: {
       title: "Assessment documents",
-      description: "Track the generation status of available assessment documents.",
+      description:
+        "Track the generation status of available assessment documents.",
     },
     documentMeta: {
       requestedAt: "Requested",

@@ -2,8 +2,8 @@
 
 import {
   startTransition,
+  useCallback,
   useEffect,
-  useEffectEvent,
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -65,32 +65,35 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
     "decision" | "oversight" | "provider" | null
   >(null);
 
-  const saveDraftEvent = useEffectEvent(async (draftAnswers: WizardAnswers) => {
-    setIsSaving(true);
-    setStatusKey("pages.wizard.draftSaving");
-    const outcome = await saveWizardDraft(assessmentId, draftAnswers);
-    setIsSaving(false);
+  const saveDraftEvent = useCallback(
+    async (draftAnswers: WizardAnswers) => {
+      setIsSaving(true);
+      setStatusKey("pages.wizard.draftSaving");
+      const outcome = await saveWizardDraft(assessmentId, draftAnswers);
+      setIsSaving(false);
 
-    if (outcome.kind === "redirect") {
-      router.replace(outcome.location);
-      return;
-    }
+      if (outcome.kind === "redirect") {
+        router.replace(outcome.location);
+        return;
+      }
 
-    if (outcome.kind === "already_submitted") {
-      setIsReadOnly(true);
-      setRootErrorKey("pages.wizard.errors.alreadySubmitted");
-      return;
-    }
+      if (outcome.kind === "already_submitted") {
+        setIsReadOnly(true);
+        setRootErrorKey("pages.wizard.errors.alreadySubmitted");
+        return;
+      }
 
-    if (outcome.kind === "error") {
-      setRootErrorKey(outcome.detailKey);
-      setStatusKey("pages.wizard.draftDirty");
-      return;
-    }
+      if (outcome.kind === "error") {
+        setRootErrorKey(outcome.detailKey);
+        setStatusKey("pages.wizard.draftDirty");
+        return;
+      }
 
-    setRootErrorKey(null);
-    setStatusKey("pages.wizard.draftSaved");
-  });
+      setRootErrorKey(null);
+      setStatusKey("pages.wizard.draftSaved");
+    },
+    [assessmentId, router],
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -1012,5 +1015,5 @@ function getSummaryItems(answers: WizardAnswers) {
 }
 
 function t(key: string) {
-  return t(key as Parameters<typeof resolveMessage>[1]);
+  return resolveMessage(appLocale, key as Parameters<typeof resolveMessage>[1]);
 }

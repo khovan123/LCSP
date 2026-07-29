@@ -1,10 +1,12 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { resolveMessage } from "@lcsp/i18n";
-import { ShieldCheckIcon } from "lucide-react";
+import { LogOutIcon, ShieldCheckIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import {
   Sidebar,
@@ -18,9 +20,13 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { getAssessments, getWorkspace } from "@/lib/api/workspace-client";
 import { appLocale } from "@/lib/locale";
 
 import type { AppShellNavigationSection } from "../../types/app-shell.types";
+import type { AssessmentSummary } from "../../types/workspace.types";
+import { SidebarAssessmentList } from "../molecules/sidebar-assessment-list";
+import { WorkspaceSwitcher } from "../molecules/workspace-switcher";
 
 export function AppSidebar({
   sections,
@@ -29,6 +35,33 @@ export function AppSidebar({
 }) {
   const pathname = usePathname();
   const [currentHash, setCurrentHash] = useState("");
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const workspaceQuery = useQuery({
+    queryKey: ["workspace"],
+    queryFn: async () => {
+      const outcome = await getWorkspace();
+      if (outcome.kind !== "loaded") {
+        throw new Error("workspace-load-failed");
+      }
+      return outcome.workspace;
+    },
+  });
+  const assessmentsQuery = useQuery({
+    queryKey: ["assessments"],
+    queryFn: async () => {
+      const outcome = await getAssessments();
+      if (outcome.kind !== "loaded") {
+        throw new Error("assessments-load-failed");
+      }
+      return outcome.assessments;
+    },
+  });
+
+  async function handleSignOut() {
+    setIsSigningOut(true);
+    await fetch("/api/auth/sign-out", { method: "POST" }).catch(() => null);
+    window.location.assign("/sign-in");
+  }
 
   useEffect(() => {
     function syncHash() {
@@ -74,43 +107,83 @@ export function AppSidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        {workspaceQuery.data &&
+        workspaceQuery.data.membership.role !== "Manager" ? (
+          <div className="px-2 pb-2">
+            <p className="mb-1 px-2 text-xs font-semibold tracking-widest text-sidebar-foreground/55 uppercase">
+              {t("pages.appShell.currentWorkspace")}
+            </p>
+            <WorkspaceSwitcher placement="sidebar" />
+          </div>
+        ) : null}
       </SidebarHeader>
 
       <SidebarContent>
-        {sections.map((section) => (
-          <SidebarGroup key={section.label}>
-            <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {section.items.map((item) => {
-                  const Icon = item.icon;
-                  const [itemPath, itemHash = ""] = item.href.split("#");
-                  const active = itemHash
-                    ? pathname === itemPath && currentHash === `#${itemHash}`
-                    : item.exact
-                      ? pathname === itemPath && currentHash === ""
-                      : pathname.startsWith(itemPath);
+        {sections.map((section, index) => (
+          <Fragment key={section.label}>
+            <SidebarGroup>
+              <SidebarGroupLabel>
+                {resolveSectionLabel(section, assessmentsQuery.data)}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    const [itemPath, itemHash = ""] = item.href.split("#");
+                    const active = itemHash
+                      ? pathname === itemPath && currentHash === `#${itemHash}`
+                      : item.exact
+                        ? pathname === itemPath && currentHash === ""
+                        : pathname.startsWith(itemPath);
 
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        isActive={active}
-                        render={<Link href={item.href} />}
-                        tooltip={item.label}
-                      >
-                        <Icon />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+                    return (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton
+                          isActive={active}
+                          render={<Link href={item.href} />}
+                          tooltip={item.disabledReason ?? item.label}
+                          onClick={(event) => {
+                            if (!item.disabled) return;
+                            event.preventDefault();
+                            toast.error(item.disabledReason);
+                          }}
+                          className={
+                            item.disabled
+                              ? "cursor-not-allowed opacity-55"
+                              : undefined
+                          }
+                        >
+                          <Icon />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+            {index === 0 ? <SidebarAssessmentList /> : null}
+          </Fragment>
         ))}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/70">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              type="button"
+              onClick={() => void handleSignOut()}
+              disabled={isSigningOut}
+              tooltip={t("pages.appShell.signOut")}
+              className="cursor-pointer"
+            >
+              <LogOutIcon className="text-destructive" />
+              <span className="text-destructive">
+                {t("pages.appShell.signOut")}
+              </span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <div className="flex items-center gap-2 px-2 py-1 text-xs text-sidebar-foreground/65">
           <ShieldCheckIcon className="size-4 text-sidebar-primary" />
           <span>{t("pages.appShell.secureWorkspace")}</span>
@@ -121,8 +194,23 @@ export function AppSidebar({
 }
 
 function t(key: string) {
-  return resolveMessage(
-    appLocale,
-    key as Parameters<typeof resolveMessage>[1],
+  return resolveMessage(appLocale, key as Parameters<typeof resolveMessage>[1]);
+}
+
+function resolveSectionLabel(
+  section: AppShellNavigationSection,
+  assessments?: AssessmentSummary[],
+) {
+  if (section.kind !== "assessment") {
+    return section.label;
+  }
+
+  if (!section.assessmentId) {
+    return t("pages.appShell.chooseAssessmentToView");
+  }
+
+  return (
+    assessments?.find((assessment) => assessment.id === section.assessmentId)
+      ?.name ?? section.label
   );
 }

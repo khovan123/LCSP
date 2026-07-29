@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import { sanitizeConflictListPayload } from "@/lib/api/conflict-client";
+import { mockJsonResponse } from "@/lib/mocks/mock-response";
 import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
 
 const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
@@ -10,6 +11,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const mock = await mockJsonResponse("conflicts.json");
+  if (mock) return mock;
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!sessionToken) {
     return NextResponse.json(
@@ -20,7 +23,10 @@ export async function GET(
 
   const { id } = await params;
   const status = "PENDING";
-  const pageRaw = Number.parseInt(request.nextUrl.searchParams.get("page") ?? "1", 10);
+  const pageRaw = Number.parseInt(
+    request.nextUrl.searchParams.get("page") ?? "1",
+    10,
+  );
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? String(pageRaw) : "1";
 
   const pageSizeRaw = Number.parseInt(
@@ -28,7 +34,9 @@ export async function GET(
     10,
   );
   const pageSizeNumber =
-    Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? Math.min(pageSizeRaw, 100) : 20;
+    Number.isFinite(pageSizeRaw) && pageSizeRaw > 0
+      ? Math.min(pageSizeRaw, 100)
+      : 20;
   const pageSize = String(pageSizeNumber);
 
   const query = new URLSearchParams({

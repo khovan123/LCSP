@@ -56,11 +56,11 @@ export class OAuthStartHandler {
       );
     }
 
-    const allowedRedirectUris = this.configService.get<string[]>(
-      "oauth.allowedRedirectUris",
+    const allowedRedirectOrigins = this.configService.get<string[]>(
+      "oauth.allowedRedirectOrigins",
       [],
     );
-    if (!allowedRedirectUris.includes(redirectUri)) {
+    if (!isAllowedRedirectOrigin(redirectUri, allowedRedirectOrigins)) {
       await this.recordFailure(
         repositories,
         correlationId,
@@ -126,4 +126,15 @@ function asNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
     : null;
+}
+
+function isAllowedRedirectOrigin(
+  redirectUri: string,
+  allowedOrigins: string[],
+): boolean {
+  try {
+    return allowedOrigins.includes(new URL(redirectUri).origin);
+  } catch {
+    return false;
+  }
 }

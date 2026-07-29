@@ -21,24 +21,28 @@ import { AppSidebar } from "./app-sidebar";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const assessmentId = pathname.match(/^\/assessments\/([^/]+)/)?.[1];
+  const candidateAssessmentId = pathname.match(/^\/assessments\/([^/]+)/)?.[1];
+  const assessmentId =
+    candidateAssessmentId === "new" ? undefined : candidateAssessmentId;
   const sections: AppShellNavigationSection[] = [
     {
       label: t("pages.appShell.workspaceNavigation"),
+      kind: "workspace",
       items: localizeNavigation(primaryNavigation),
     },
   ];
 
-  if (assessmentId) {
-    sections.push({
-      label: t("pages.appShell.assessmentNavigation"),
-      items: localizeNavigation(getAssessmentNavigation(assessmentId)),
-    });
-  }
+  sections.push({
+    label: t("pages.appShell.assessmentNavigation"),
+    kind: "assessment",
+    assessmentId,
+    items: localizeNavigation(getAssessmentNavigation(assessmentId)),
+  });
 
   if (pathname.startsWith("/developer")) {
     sections.push({
       label: t("pages.appShell.developerNavigation"),
+      kind: "developer",
       items: localizeNavigation(developerNavigation),
     });
   }
@@ -69,6 +73,7 @@ function localizeNavigation(
     labelKey: string;
     icon: AppShellNavigationItem["icon"];
     exact?: boolean;
+    disabled?: boolean;
   }>,
 ): AppShellNavigationItem[] {
   return definitions.map((item) => ({
@@ -76,12 +81,13 @@ function localizeNavigation(
     label: t(item.labelKey),
     icon: item.icon,
     exact: item.exact,
+    disabled: item.disabled,
+    disabledReason: item.disabled
+      ? t("pages.appShell.selectAssessmentFirst")
+      : undefined,
   }));
 }
 
 function t(key: string) {
-  return resolveMessage(
-    appLocale,
-    key as Parameters<typeof resolveMessage>[1],
-  );
+  return resolveMessage(appLocale, key as Parameters<typeof resolveMessage>[1]);
 }

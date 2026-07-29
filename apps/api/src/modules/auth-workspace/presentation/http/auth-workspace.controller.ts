@@ -40,6 +40,7 @@ import type { WorkspaceRequest } from "../../application/contracts/auth-workspac
 import type { UpdateProfilePayload } from "../../application/commands/update-profile/update-profile.command.ts";
 import { REVOKE_MEMBERSHIP_ERROR_CODES } from "@lcsp/contracts/auth";
 import { AuthWorkspaceFacade } from "../../application/services/auth-workspace/auth-workspace.facade.ts";
+import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { RequireAnyActionAsPbac } from "../../../../platform/pbac/decorators/require-any-action-as-pbac.decorator.js";
 import { RequireSession } from "../../../../platform/pbac/decorators/require-session.decorator.js";
@@ -49,7 +50,36 @@ import type { AuthenticatedRequest } from "../../../../common/interfaces/authent
 
 @Controller()
 export class AuthWorkspaceController {
-  constructor(private readonly authWorkspaceFacade: AuthWorkspaceFacade) {}
+  constructor(
+    private readonly authWorkspaceFacade: AuthWorkspaceFacade,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  @Get("organizations/:orgId/developers")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.inviteDeveloper)
+  async listDevelopers(
+    @Param("orgId") orgId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    if (request.pbacContext.organizationId !== orgId) {
+      throw new ForbiddenException({ error_code: AUTH_ERROR_CODES.pbacDenied });
+    }
+    const memberships = await this.prisma.authMembership.findMany({
+      where: { organizationId: orgId, policy: { subjectRole: "Developer" } },
+      include: { user: { select: { id: true, email: true, displayName: true } }, policy: { select: { actions: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return memberships.map((membership) => ({
+      user_id: membership.user.id,
+      email: membership.user.email,
+      display_name: membership.user.displayName,
+      status: membership.status,
+      allowed_actions: membership.policy.actions,
+      subject_attributes: membership.subjectAttributes,
+      revoked_at: membership.revokedAt,
+    }));
+  }
 
   @Post("organizations/:orgId/invitations")
   @UseGuards(PbacGuard)

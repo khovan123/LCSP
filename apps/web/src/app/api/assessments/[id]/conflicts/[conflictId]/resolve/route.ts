@@ -5,6 +5,7 @@ import {
   buildResolveConflictApiBody,
   sanitizeResolveConflictPayload,
 } from "@/lib/api/conflict-client";
+import { mockJsonResponse } from "@/lib/mocks/mock-response";
 import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
 
 const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
@@ -13,6 +14,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; conflictId: string }> },
 ) {
+  const mock = await mockJsonResponse("conflict-resolve.json");
+  if (mock) return mock;
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!sessionToken) {
     return NextResponse.json(

@@ -5,6 +5,12 @@
 
 ## Tóm tắt
 
+## Web state management
+
+- TanStack Query quản lý server state: workspace, assessments, Developer scopes, documents và readiness; mutation phải invalidate query liên quan.
+- Zustand chỉ quản lý shared UI state: assessment được chọn, sidebar, filter/sort và Wizard draft chưa gửi.
+- React Hook Form + Zod quản lý validation cho create assessment, Developer invitation và Wizard.
+
 Repository này được tổ chức như một workspace quản trị tri thức và automation support cho LCSP. Nó có ba lớp rõ ràng: tài liệu authority, tài liệu tóm lược/onboarding, và script/config hỗ trợ BMAD/WDS. Kiến trúc này tối ưu cho planning, review và AI context injection trước khi implementation runtime tồn tại.
 
 ## Boundary kiến trúc

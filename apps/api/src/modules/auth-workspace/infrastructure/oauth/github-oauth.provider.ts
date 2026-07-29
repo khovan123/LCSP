@@ -49,6 +49,8 @@ export class GitHubOAuthProvider implements OAuthProvider {
 
     return {
       providerAccountId,
+      email: null,
+      emailVerified: false,
       nonce: null,
       issuer: GITHUB_ISSUER,
       audience: this.expectedAudience,

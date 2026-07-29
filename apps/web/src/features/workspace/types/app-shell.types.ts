@@ -5,9 +5,13 @@ export type AppShellNavigationItem = {
   label: string;
   icon: LucideIcon;
   exact?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 export type AppShellNavigationSection = {
   label: string;
+  kind?: "workspace" | "assessment" | "developer";
+  assessmentId?: string;
   items: AppShellNavigationItem[];
 };

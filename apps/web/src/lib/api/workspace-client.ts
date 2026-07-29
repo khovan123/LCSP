@@ -16,16 +16,18 @@ import type {
   AssessmentSummary,
   AssessmentsOutcome,
   WorkspaceContext,
+  WorkspaceErrorOutcome,
   WorkspaceOutcome,
 } from "../../features/workspace/types/workspace.types.ts";
 
 export const WORKSPACE_ROUTES = Object.freeze({
   mfaVerify: "/mfa/verify",
+  workspaceSelect: "/workspace/select",
 });
 
 const workspaceApiPaths = Object.freeze({
-  workspace: "/workspace",
-  assessments: "/assessments",
+  workspace: "/api/workspace",
+  assessments: "/api/assessments",
 });
 
 type ApiProblemPayload = {
@@ -81,6 +83,32 @@ export async function getAssessments(): Promise<AssessmentsOutcome> {
   return toAssessmentsOutcome(payload, response.ok);
 }
 
+export async function createAssessment(
+  name: string,
+  description?: string,
+): Promise<
+  | { kind: "created"; assessmentId: string }
+  | WorkspaceErrorOutcome
+> {
+  const response = await fetch(workspaceApiPaths.assessments, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name, description }),
+  });
+  const payload: unknown = await response.json().catch(() => null);
+
+  if (response.ok && isCreatedAssessmentPayload(payload)) {
+    return { kind: "created", assessmentId: payload.assessment_id };
+  }
+
+  return {
+    kind: "error",
+    titleKey: "pages.workspace.errors.createAssessmentTitle",
+    detailKey: "pages.workspace.errors.createAssessmentDetail",
+  };
+}
+
 export function toWorkspaceOutcome(
   payload: unknown,
   ok: boolean,
@@ -105,6 +133,10 @@ export function toWorkspaceOutcome(
 
   if (code === AUTH_ERROR_CODES.mfaRequired) {
     return { kind: "redirect", location: WORKSPACE_ROUTES.mfaVerify };
+  }
+
+  if (code === "WORKSPACE_SELECTION_REQUIRED") {
+    return { kind: "redirect", location: WORKSPACE_ROUTES.workspaceSelect };
   }
 
   return {
@@ -214,6 +246,16 @@ function isAssessmentSummary(payload: unknown): payload is AssessmentSummary {
     isAssessmentStatus(candidate.status) &&
     isWizardStatus(candidate.wizard_status) &&
     typeof candidate.created_at === "string"
+  );
+}
+
+function isCreatedAssessmentPayload(
+  payload: unknown,
+): payload is { assessment_id: string } {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    typeof (payload as { assessment_id?: unknown }).assessment_id === "string"
   );
 }
 

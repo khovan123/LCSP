@@ -6,7 +6,10 @@ import { appLocale } from "@/lib/locale";
 
 export const metadata: Metadata = {
   title: resolveMessage(appLocale, "pages.classification.metadataTitle"),
-  description: resolveMessage(appLocale, "pages.classification.metadataDescription"),
+  description: resolveMessage(
+    appLocale,
+    "pages.classification.metadataDescription",
+  ),
 };
 
 export default async function AssessmentClassificationPage({

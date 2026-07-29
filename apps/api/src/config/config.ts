@@ -12,6 +12,9 @@ export const configValidationSchema = Joi.object({
   JWT_SECRET: Joi.string().min(32).required(),
   OAUTH_GITHUB_CLIENT_ID: Joi.string().required(),
   OAUTH_GITHUB_CLIENT_SECRET: Joi.string().required(),
+  OAUTH_GOOGLE_CLIENT_ID: Joi.string().allow("").default(""),
+  OAUTH_GOOGLE_CLIENT_SECRET: Joi.string().allow("").default(""),
+  OAUTH_ALLOWED_REDIRECT_ORIGINS: Joi.string().allow("").default(""),
   OAUTH_ALLOWED_REDIRECT_URIS: Joi.string().required(),
   GITHUB_APP_SLUG: Joi.string().required(),
   GITHUB_APP_ID: Joi.string().required(),
@@ -42,6 +45,16 @@ function parseRedirectUris(value: string): string[] {
     .filter((uri) => uri.length > 0);
 }
 
+function parseRedirectOrigins(value: string): string[] {
+  return parseRedirectUris(value).flatMap((entry) => {
+    try {
+      return [new URL(entry).origin];
+    } catch {
+      return [];
+    }
+  });
+}
+
 export function config(): AppConfig {
   const env = process.env;
 
@@ -58,6 +71,13 @@ export function config(): AppConfig {
     oauth: {
       githubClientId: env.OAUTH_GITHUB_CLIENT_ID ?? "",
       githubClientSecret: env.OAUTH_GITHUB_CLIENT_SECRET ?? "",
+      googleClientId: env.OAUTH_GOOGLE_CLIENT_ID ?? "",
+      googleClientSecret: env.OAUTH_GOOGLE_CLIENT_SECRET ?? "",
+      allowedRedirectOrigins: parseRedirectOrigins(
+        env.OAUTH_ALLOWED_REDIRECT_ORIGINS ||
+          env.OAUTH_ALLOWED_REDIRECT_URIS ||
+          "",
+      ),
       allowedRedirectUris: parseRedirectUris(
         env.OAUTH_ALLOWED_REDIRECT_URIS ?? "",
       ),

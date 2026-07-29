@@ -5,4 +5,9 @@ export interface OAuthIdentityRepository {
     provider: string,
     providerAccountId: string,
   ): Promise<OAuthIdentity | null>;
+  linkToUser(
+    provider: string,
+    providerAccountId: string,
+    userId: string,
+  ): Promise<OAuthIdentity>;
 }

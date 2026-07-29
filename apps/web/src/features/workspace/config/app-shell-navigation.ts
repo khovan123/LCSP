@@ -3,6 +3,7 @@ import {
   FileCheck2Icon,
   FileTextIcon,
   GaugeIcon,
+  UsersIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
   ScaleIcon,
@@ -14,6 +15,7 @@ type NavigationDefinition = {
   labelKey: string;
   icon: typeof LayoutDashboardIcon;
   exact?: boolean;
+  disabled?: boolean;
 };
 
 export const primaryNavigation = [
@@ -24,7 +26,7 @@ export const primaryNavigation = [
     exact: true,
   },
   {
-    href: "/workspace#assessments",
+    href: "/assessments",
     labelKey: "pages.appShell.assessments",
     icon: ListChecksIcon,
   },
@@ -39,35 +41,56 @@ export const developerNavigation = [
 ] as const satisfies readonly NavigationDefinition[];
 
 export function getAssessmentNavigation(
-  assessmentId: string,
+  assessmentId?: string,
 ): readonly NavigationDefinition[] {
-  const basePath = `/assessments/${encodeURIComponent(assessmentId)}`;
+  const basePath = assessmentId
+    ? `/assessments/${encodeURIComponent(assessmentId)}`
+    : "/assessments";
+  const disabled = !assessmentId;
 
   return [
+    {
+      href: `${basePath}/developers`,
+      labelKey: "pages.appShell.developers",
+      icon: UsersIcon,
+      disabled,
+    },
+    {
+      href: basePath,
+      labelKey: "pages.appShell.overview",
+      icon: LayoutDashboardIcon,
+      exact: true,
+      disabled,
+    },
     {
       href: `${basePath}/wizard`,
       labelKey: "pages.appShell.wizard",
       icon: FileCheck2Icon,
+      disabled,
     },
     {
       href: `${basePath}/readiness`,
       labelKey: "pages.appShell.readiness",
       icon: GaugeIcon,
+      disabled,
     },
     {
       href: `${basePath}/classification`,
       labelKey: "pages.appShell.classification",
       icon: ShieldCheckIcon,
+      disabled,
     },
     {
       href: `${basePath}/documents`,
       labelKey: "pages.appShell.documents",
       icon: FileTextIcon,
+      disabled,
     },
     {
       href: `${basePath}/conflicts`,
       labelKey: "pages.appShell.conflicts",
       icon: ScaleIcon,
+      disabled,
     },
   ];
 }

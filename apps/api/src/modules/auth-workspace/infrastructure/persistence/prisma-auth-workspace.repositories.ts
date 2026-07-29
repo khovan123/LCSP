@@ -626,6 +626,25 @@ export class PrismaOAuthIdentityRepository implements OAuthIdentityRepository {
 
     return record ? mapOAuthIdentityRecord(record) : null;
   }
+
+  async linkToUser(
+    provider: string,
+    providerAccountId: string,
+    userId: string,
+  ): Promise<OAuthIdentity> {
+    const record = await this.prisma.authOAuthIdentity.upsert({
+      where: { provider_providerAccountId: { provider, providerAccountId } },
+      create: {
+        id: crypto.randomUUID(),
+        provider,
+        providerAccountId,
+        userId,
+      },
+      update: {},
+    });
+
+    return mapOAuthIdentityRecord(record);
+  }
 }
 
 function isUniqueConstraintViolation(error: unknown): boolean {

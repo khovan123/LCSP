@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
+import { mockJsonResponse } from "@/lib/mocks/mock-response";
 
 const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
 
 export async function GET(request: NextRequest) {
+  const mock = await mockJsonResponse("developer-task.json");
+  if (mock) return mock;
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!sessionToken) {
     return NextResponse.json(
