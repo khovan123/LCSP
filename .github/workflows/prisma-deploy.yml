@@ -27,6 +27,7 @@ jobs:
         run: |
           npx --yes @prisma/cli@latest app deploy \
             --project proj_cmrcdus2n0gjj1cgjp0qkrhyo \
+            --no-db \
             --prod --yes --no-interactive --json
         env:
           PRISMA_SERVICE_TOKEN: ${{ secrets.PRISMA_API_TOKEN }}
