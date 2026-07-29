@@ -2,16 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardCheckIcon } from "lucide-react";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
-import { WorkspaceSidebar } from "@/features/workspace/components/organisms/workspace-sidebar";
 import { getDeveloperTaskContext } from "@/lib/api/developer-task-client";
 import { getTechnicalEvidence } from "@/lib/api/evidence-client";
 import { appLocale } from "@/lib/locale";
@@ -133,85 +126,53 @@ export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string 
     };
   }, [assessmentId, router]);
 
-  const navigationLabel = resolveMessage(
-    appLocale,
-    "pages.developerTask.navigationLabel",
-  );
-  const navigationItems = [
-    {
-      href: `/developer/assessments/${encodeURIComponent(assessmentId)}`,
-      label: resolveMessage(appLocale, "pages.developerTask.taskNav"),
-      icon: ClipboardCheckIcon,
-    },
-  ];
-
   return (
-    <SidebarProvider>
-      <WorkspaceSidebar
-        productName="LCSP"
-        navigationLabel={navigationLabel}
-        mobileTitle={resolveMessage(appLocale, "pages.developerTask.sidebarTitle")}
-        mobileDescription={resolveMessage(
-          appLocale,
-          "pages.developerTask.sidebarDescription",
-        )}
-        items={navigationItems}
-      />
-      <SidebarInset>
-        <main className="flex min-h-dvh flex-col gap-6 bg-background px-6 py-8 text-foreground">
-          <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
-            <SidebarTrigger
-              label={resolveMessage(appLocale, "pages.developerTask.sidebarToggle")}
-            />
-            <span className="text-sm text-muted-foreground">{navigationLabel}</span>
-          </div>
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-            <header>
-              <h1 className="text-3xl font-semibold tracking-tight">
-                {resolveMessage(appLocale, "pages.developerTask.pageTitle")}
-              </h1>
-              <p className="mt-2 text-muted-foreground">
-                {resolveMessage(appLocale, "pages.developerTask.pageDescription")}
-              </p>
-            </header>
+    <main className="flex flex-1 flex-col gap-6 px-4 py-6 text-foreground lg:px-6">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <header className="max-w-3xl">
+          <h2 className="font-heading text-3xl font-semibold tracking-tight">
+            {resolveMessage(appLocale, "pages.developerTask.pageTitle")}
+          </h2>
+          <p className="mt-2 text-muted-foreground">
+            {resolveMessage(appLocale, "pages.developerTask.pageDescription")}
+          </p>
+        </header>
 
-            {pageState === "loading" ? (
-              <p role="status" className="text-sm text-muted-foreground">
-                {resolveMessage(appLocale, "pages.developerTask.loading")}
-              </p>
-            ) : null}
+        {pageState === "loading" ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {resolveMessage(appLocale, "pages.developerTask.loading")}
+          </p>
+        ) : null}
 
-            {pageState === "access_revoked" ? (
-              <Alert variant="destructive" data-component="blocked-banner">
-                <AlertTitle>
-                  {resolveMessage(appLocale, "pages.developerTask.revokedTitle")}
-                </AlertTitle>
-                <AlertDescription>
-                  {resolveMessage(appLocale, "pages.developerTask.revokedDetail")}
-                </AlertDescription>
-              </Alert>
-            ) : null}
+        {pageState === "access_revoked" ? (
+          <Alert variant="destructive" data-component="blocked-banner">
+            <AlertTitle>
+              {resolveMessage(appLocale, "pages.developerTask.revokedTitle")}
+            </AlertTitle>
+            <AlertDescription>
+              {resolveMessage(appLocale, "pages.developerTask.revokedDetail")}
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-            {pageState === "error" ? (
-              <Alert variant="destructive">
-                <AlertTitle>
-                  {resolveMessage(appLocale, "pages.developerTask.errorTitle")}
-                </AlertTitle>
-                <AlertDescription>
-                  {resolveMessage(appLocale, "pages.developerTask.errorDetail")}
-                </AlertDescription>
-              </Alert>
-            ) : null}
+        {pageState === "error" ? (
+          <Alert variant="destructive">
+            <AlertTitle>
+              {resolveMessage(appLocale, "pages.developerTask.errorTitle")}
+            </AlertTitle>
+            <AlertDescription>
+              {resolveMessage(appLocale, "pages.developerTask.errorDetail")}
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-            {context && (pageState === "loaded" || pageState === "empty") ? (
-              <>
-                <ScopeSummaryCard context={context} />
-                <RedactedFindingsList findings={findings} />
-              </>
-            ) : null}
-          </div>
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+        {context && (pageState === "loaded" || pageState === "empty") ? (
+          <>
+            <ScopeSummaryCard context={context} />
+            <RedactedFindingsList findings={findings} />
+          </>
+        ) : null}
+      </div>
+    </main>
   );
 }

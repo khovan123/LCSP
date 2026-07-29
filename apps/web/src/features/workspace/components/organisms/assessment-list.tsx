@@ -59,13 +59,15 @@ export function AssessmentList({
       className="flex flex-col gap-4"
       aria-busy={isLoading}
     >
-      <div>
-        <h2 className="text-xl font-semibold">{title}</h2>
+      <div className="flex items-end justify-between gap-4">
+        <div>
+        <h2 className="font-heading text-2xl font-semibold">{title}</h2>
         <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {[0, 1].map((item) => (
             <Card key={item} aria-label={loadingLabel}>
               <CardHeader>
@@ -90,7 +92,7 @@ export function AssessmentList({
       ) : null}
 
       {!isLoading && assessments.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {assessments.map((assessment) => (
             <AssessmentCard
               key={assessment.id}
@@ -133,11 +135,11 @@ function AssessmentCard({
   );
 
   return (
-    <Card>
+    <Card className="group transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
       <CardHeader>
         <CardTitle>
           {href ? (
-            <Link className="underline-offset-4 hover:underline" href={href}>
+            <Link className="underline-offset-4 group-hover:text-primary hover:underline" href={href}>
               {assessment.name}
               {openAssessmentLabel ? (
                 <span className="sr-only"> — {openAssessmentLabel}</span>

@@ -5,8 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LCSP Web",
-  description: "Next.js web application for LCSP",
+  title: "LCSP",
+  description: "Legal Compliance Support Platform",
 };
 
 export default function RootLayout({

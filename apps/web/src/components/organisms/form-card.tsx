@@ -17,7 +17,7 @@ export function FormCard({
   footer,
 }: FormCardProps) {
   return (
-    <Card className="w-full max-w-md motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-500">
+    <Card className="w-full max-w-md">
       <CardHeader>
         <p className="font-mono text-xs font-semibold uppercase tracking-[0.13em] text-primary">
           {eyebrow}

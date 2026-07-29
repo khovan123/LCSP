@@ -69,7 +69,7 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">
           {resolveMessage(appLocale, "pages.classification.generateFinalReport")}
