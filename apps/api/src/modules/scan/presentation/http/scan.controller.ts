@@ -25,7 +25,10 @@ import type {
 import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
 import { RerunScanCommand } from "../../application/commands/rerun-scan/rerun-scan.command.js";
-import type { RerunScanRequestDto, RerunScanResponseDto } from "../../application/contracts/scan/rerun-scan.contract.js";
+import type {
+  RerunScanRequestDto,
+  RerunScanResponseDto,
+} from "../../application/contracts/scan/rerun-scan.contract.js";
 import { WorkerApiKeyGuard } from "./worker-api-key.guard.js";
 
 interface ScanStatusRequest {

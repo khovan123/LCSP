@@ -38,7 +38,7 @@ describe("RerunScanHandler", () => {
     "assessment-1",
     "snapshot-1",
     "idempotency-key",
-    defaultPbac as any,
+    defaultPbac,
     "corr-id",
     "reason",
   );
@@ -80,9 +80,9 @@ describe("RerunScanHandler", () => {
     }).compile();
 
     handler = module.get<RerunScanHandler>(RerunScanHandler);
-    prisma = module.get(PrismaService) as unknown as jest.Mocked<PrismaService>;
-    auditWriter = module.get(AuditWriterService) as unknown as jest.Mocked<AuditWriterService>;
-    outbox = module.get(OutboxRepository) as unknown as jest.Mocked<OutboxRepository>;
+    prisma = module.get(PrismaService);
+    auditWriter = module.get(AuditWriterService);
+    outbox = module.get(OutboxRepository);
   });
 
   it("throws BadRequestException if idempotencyKey is missing", async () => {
@@ -90,14 +90,16 @@ describe("RerunScanHandler", () => {
       "assessment-1",
       "snapshot-1",
       "",
-      defaultPbac as any,
+      defaultPbac,
       "corr",
     );
     await expect(handler.execute(cmd)).rejects.toThrow(BadRequestException);
   });
 
   it("[T02] returns existing job if idempotencyKey matches identically", async () => {
-    (prisma.repositoryScanJob.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (
+      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce({
       id: "job-1",
       status: "QUEUED",
       assessmentId: "assessment-1",
@@ -111,7 +113,9 @@ describe("RerunScanHandler", () => {
   });
 
   it("throws ConflictException if idempotencyKey exists but fields mismatch", async () => {
-    (prisma.repositoryScanJob.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (
+      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce({
       id: "job-1",
       assessmentId: "diff-assessment",
     });
@@ -122,8 +126,12 @@ describe("RerunScanHandler", () => {
   });
 
   it("[T05] throws NotFoundException if snapshot not found", async () => {
-    (prisma.repositoryScanJob.findUnique as jest.Mock<any>).mockResolvedValueOnce(null);
-    (prisma.repositorySnapshot.findUnique as jest.Mock<any>).mockResolvedValueOnce(null);
+    (
+      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce(null);
+    (
+      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce(null);
 
     await expect(handler.execute(defaultCommand)).rejects.toThrow(
       NotFoundException,
@@ -131,13 +139,19 @@ describe("RerunScanHandler", () => {
   });
 
   it("throws NotFoundException if assessment not found", async () => {
-    (prisma.repositoryScanJob.findUnique as jest.Mock<any>).mockResolvedValueOnce(null);
-    (prisma.repositorySnapshot.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (
+      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce(null);
+    (
+      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       organizationId: "org-1",
     });
-    (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce(null);
+    (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce(
+      null,
+    );
 
     await expect(handler.execute(defaultCommand)).rejects.toThrow(
       NotFoundException,
@@ -145,8 +159,12 @@ describe("RerunScanHandler", () => {
   });
 
   it("[T04] throws ForbiddenException if user is not owner and is manager", async () => {
-    (prisma.repositoryScanJob.findUnique as jest.Mock<any>).mockResolvedValueOnce(null);
-    (prisma.repositorySnapshot.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (
+      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce(null);
+    (
+      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       organizationId: "org-1",
@@ -164,8 +182,12 @@ describe("RerunScanHandler", () => {
   });
 
   it("throws ConflictException if assessment state is invalid", async () => {
-    (prisma.repositoryScanJob.findUnique as jest.Mock<any>).mockResolvedValueOnce(null);
-    (prisma.repositorySnapshot.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (
+      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce(null);
+    (
+      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       organizationId: "org-1",
@@ -183,8 +205,12 @@ describe("RerunScanHandler", () => {
   });
 
   it("[T01] creates new scan job, enqueues event, and writes audit", async () => {
-    (prisma.repositoryScanJob.findUnique as jest.Mock<any>).mockResolvedValueOnce(null);
-    (prisma.repositorySnapshot.findUnique as jest.Mock<any>).mockResolvedValueOnce({
+    (
+      prisma.repositoryScanJob.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce(null);
+    (
+      prisma.repositorySnapshot.findUnique as jest.Mock<any>
+    ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
       organizationId: "org-1",
@@ -196,7 +222,9 @@ describe("RerunScanHandler", () => {
       status: "WIZARD_SUBMITTED",
     });
 
-    (prisma.repositoryScanJob.findFirst as jest.Mock<any>).mockResolvedValueOnce({
+    (
+      prisma.repositoryScanJob.findFirst as jest.Mock<any>
+    ).mockResolvedValueOnce({
       id: "prior-job",
     });
 

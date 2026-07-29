@@ -40,7 +40,7 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
   async execute(command: RerunScanCommand): Promise<RerunScanResponseDto> {
     const pbac = command.pbacContext;
     // Basic org validation and PBAC was handled by the guard, but we still ensure assessment belongs to org
-    
+
     if (!command.idempotencyKey) {
       throw new BadRequestException({
         error_code: GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyKeyRequired,
@@ -51,7 +51,7 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
     const existing = await this.prisma.repositoryScanJob.findUnique({
       where: { idempotencyKey: command.idempotencyKey },
     });
-    
+
     if (existing) {
       if (
         existing.assessmentId !== command.assessmentId ||
@@ -63,7 +63,12 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
           correlation_id: command.correlationId,
         });
       }
-      return this.toDto(existing.id, existing.status, undefined, command.correlationId);
+      return this.toDto(
+        existing.id,
+        existing.status,
+        undefined,
+        command.correlationId,
+      );
     }
 
     const snapshot = await this.prisma.repositorySnapshot.findUnique({
@@ -75,7 +80,11 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
       },
     });
 
-    if (!snapshot || snapshot.organizationId !== pbac.organizationId || snapshot.assessmentId !== command.assessmentId) {
+    if (
+      !snapshot ||
+      snapshot.organizationId !== pbac.organizationId ||
+      snapshot.assessmentId !== command.assessmentId
+    ) {
       throw new NotFoundException({
         error_code: GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
         correlation_id: command.correlationId,
@@ -171,7 +180,12 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
         where: { idempotencyKey: command.idempotencyKey },
       });
       if (raced) {
-        return this.toDto(raced.id, raced.status, priorJob?.id, command.correlationId);
+        return this.toDto(
+          raced.id,
+          raced.status,
+          priorJob?.id,
+          command.correlationId,
+        );
       }
       throw e;
     }
@@ -197,7 +211,12 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
       },
     });
 
-    return this.toDto(newScanJobId, status, priorJob?.id, command.correlationId);
+    return this.toDto(
+      newScanJobId,
+      status,
+      priorJob?.id,
+      command.correlationId,
+    );
   }
 
   private toDto(
