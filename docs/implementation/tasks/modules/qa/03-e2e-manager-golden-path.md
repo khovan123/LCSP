@@ -3,7 +3,7 @@ task_id: MW-qa-003
 module: qa
 runtime: all
 priority: P1
-status: READY_FOR_DEV
+status: DONE
 epic_story: 2.1
 depends_on:
   - web/06-document-download-page.md
