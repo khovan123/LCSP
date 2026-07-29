@@ -10,7 +10,7 @@
     "check:branch": "node scripts/check-branch-name.mjs",
     "check:commit-message": "node scripts/check-commit-message.mjs",
     "compute:build:api": "pnpm dlx @prisma/cli@latest app build api",
-    "compute:deploy:api": "pnpm dlx @prisma/cli@latest app deploy api",
+    "compute:deploy:api": "pnpm dlx @prisma/cli@latest app deploy api --no-db",
     "lint": "pnpm run check:imports && pnpm run check:contracts && pnpm run typecheck",
     "prepare": "husky",
     "test": "pnpm run test:web && pnpm --filter @lcsp/api test:e2e",
