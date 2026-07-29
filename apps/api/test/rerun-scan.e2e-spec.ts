@@ -127,7 +127,10 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
       where: { aggregateId: body.scan_job_id },
     });
     assert.ok(event);
-    assert.equal((event.payload as any).replacesScanJobId, "prior-scan-job");
+    assert.equal(
+      (event.payload as Record<string, unknown>).replacesScanJobId,
+      "prior-scan-job",
+    );
 
     // Verify Audit
     const audit = await prisma.authAuditEvent.findFirst({

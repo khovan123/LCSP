@@ -61,7 +61,9 @@ describe("RerunScanHandler", () => {
             assessment: {
               findUnique: jest.fn(),
             },
-            $transaction: jest.fn((cb: any) => cb(prisma)),
+            $transaction: jest.fn((cb: (tx: PrismaService) => unknown) =>
+              cb(prisma),
+            ),
           },
         },
         {
@@ -233,9 +235,13 @@ describe("RerunScanHandler", () => {
     expect(result.status).toBe(REPOSITORY_SCAN_JOB_STATUSES.queued);
     expect(result.replaces_scan_job_id).toBe("prior-job");
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(prisma.$transaction).toHaveBeenCalled();
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(prisma.repositoryScanJob.create).toHaveBeenCalled();
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(outbox.enqueue).toHaveBeenCalled();
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(auditWriter.write).toHaveBeenCalled();
   });
 });
