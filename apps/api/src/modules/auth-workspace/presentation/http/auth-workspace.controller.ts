@@ -56,6 +56,71 @@ export class AuthWorkspaceController {
     private readonly prisma: PrismaService,
   ) {}
 
+  @Get("workspace/developers")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.inviteDeveloper)
+  async listWorkspaceDevelopers(@Req() request: AuthenticatedRequest) {
+    const orgId = request.pbacContext.organizationId;
+    const memberships = await this.prisma.authMembership.findMany({
+      where: {
+        organizationId: orgId,
+        policy: { subjectRole: SUBJECT_ROLES.developer },
+      },
+      include: {
+        user: { select: { id: true, email: true, displayName: true } },
+        policy: { select: { actions: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return resultEnvelope(
+      memberships.map((membership) => ({
+        user_id: membership.user.id,
+        email: membership.user.email,
+        display_name: membership.user.displayName,
+        status: membership.status,
+        allowed_actions: membership.policy.actions,
+        subject_attributes: membership.subjectAttributes,
+        revoked_at: membership.revokedAt,
+      })),
+    );
+  }
+
+  @Post("workspace/invitations")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.inviteDeveloper)
+  async inviteWorkspaceDeveloper(
+    @Body() payload: InviteDeveloperRequest,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const pbacContext = request.pbacContext;
+    return resultEnvelope(
+      await this.authWorkspaceFacade.inviteDeveloper(
+        pbacContext.organizationId,
+        pbacContext.userId,
+        payload,
+        requestMeta(request.correlationId),
+      ),
+    );
+  }
+
+  @Delete("workspace/memberships/:userId")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.membershipRevoke)
+  async revokeWorkspaceMembership(
+    @Param("userId") userId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const pbacContext = request.pbacContext;
+    return resultEnvelope(
+      await this.authWorkspaceFacade.revokeMembership(
+        pbacContext.organizationId,
+        pbacContext.userId,
+        userId,
+        requestMeta(request.correlationId),
+      ),
+    );
+  }
+
   @Get("organizations/:orgId/developers")
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.inviteDeveloper)
@@ -188,6 +253,7 @@ export class AuthWorkspaceController {
   }
 
   @Post("auth/sign-in")
+  @HttpCode(HttpStatus.OK)
   async signIn(
     @Body() payload: CredentialPayload,
     @Headers("x-correlation-id") correlationId?: string,

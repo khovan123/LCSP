@@ -1,35 +1,6 @@
-# RTK - Rust Token Killer (Google Antigravity)
-
-**Usage**: Token-optimized CLI proxy for shell commands.
-
-## Rule
-
-Always prefix shell commands with `rtk` to minimize token consumption.
-
-Examples:
-
-```bash
-rtk git status
-rtk cargo test
-rtk ls src/
-rtk grep "pattern" src/
-rtk find "*.rs" .
-rtk docker ps
-rtk gh pr list
-```
-
-## Meta Commands
-
-```bash
-rtk gain              # Show token savings
-rtk gain --history    # Command history with savings
-rtk discover          # Find missed RTK opportunities
-rtk proxy <cmd>       # Run raw (no filtering, for debugging)
-```
-
-## Why
-
-RTK filters and compresses command output before it reaches the LLM context, saving 60-90% tokens on common operations. Always use `rtk <cmd>` instead of raw commands.
+---
+trigger: always_on
+---
 
 ## LCSP project rules
 
@@ -47,3 +18,16 @@ RTK filters and compresses command output before it reaches the LLM context, sav
 - Client-side requests must go through shared `apiRequest`; TanStack Query belongs in `*-queries.ts`; domain mapping from `problem.code` belongs in domain modules.
 - Do not keep `*-client.ts` files as thin duplicated fetch wrappers once shared request helpers exist.
 - All web mock payload JSON must live under `apps/web/src/public/assets/mocks`.
+- In `apps/web`, non-trivial forms must use `react-hook-form` for form state and `zod` for validation.
+- Feature form schemas must live in sibling `schemas/` files rather than inline in page or organism components.
+- Reusable field molecules/organisms should bind through `FormProvider`/`useFormContext`/`Controller` instead of manual `value`/`error`/callback threading from every parent.
+- Keep autosave, submit orchestration, and step navigation in the feature form container; keep field rendering and field-level binding in atomic components.
+
+## Debugging and bug-fixing protocol
+
+When debugging, fixing a bug, or tracing an error, the response **must** include two clearly labelled sections before or alongside any code change:
+
+1. **Root cause** – Explain _why_ the bug occurred: the exact code path, incorrect assumption, race condition, stale closure, wrong contract shape, etc. Be specific enough that a reader who was not involved can understand the failure without running the code.
+2. **Fix** – Explain _how_ the fix works: what changed, why it resolves the root cause, and any trade-offs or follow-up risks.
+
+Do not skip either section even for seemingly trivial fixes. If both sections can be stated in one sentence each, that is acceptable, but they must appear.

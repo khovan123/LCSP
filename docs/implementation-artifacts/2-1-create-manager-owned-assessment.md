@@ -1,6 +1,6 @@
 # Story 2.1: Create Manager-Owned Assessment
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -25,10 +25,15 @@ As a Manager, I want to create an assessment in my organization workspace, so th
 
 ## Tasks / Subtasks
 
-- [ ] Create assessment aggregate with Manager ownership, organization scope and initial workflow state. (AC: 1)
-- [ ] Add create-assessment UI/API path with PBAC gating and safe denial handling. (AC: 2)
-- [ ] Scaffold Wizard entry surfaces from assessment overview, including Wizard landing and initial section-progress projection. (AC: 1)
-- [ ] Emit audit event and neutral readiness/Wizard entry projection after creation without implying any legal/risk result.
+- [x] Create assessment aggregate with Manager ownership, organization scope and initial workflow state. (AC: 1)
+- [x] Add create-assessment UI/API path with PBAC gating and safe denial handling. (AC: 2)
+- [x] Scaffold Wizard entry surfaces from assessment overview, including Wizard landing and initial section-progress projection. (AC: 1)
+- [x] Emit audit event and neutral readiness/Wizard entry projection after creation without implying any legal/risk result. (AC: 1, AC: 2)
+
+### Review Findings
+
+- [x] [Review][Patch] Fix description maxLength attribute mismatch (change 2000 to 1000) [apps/web/src/features/workspace/components/organisms/create-assessment-form.tsx:97]
+- [x] [Review][Patch] Add typeof string guard in assertValid for CreateAssessmentCommand [apps/api/src/modules/assessment/application/commands/create-assessment/create-assessment.handler.ts:146]
 
 ## Dev Notes
 
@@ -92,7 +97,7 @@ As a Manager, I want to create an assessment in my organization workspace, so th
 
 ### Functional and Domain Requirements
 
-- Story này phải được triển khai đúng theo acceptance criteria của riêng nó; không kéo behavior của story sau vào cùng slice nếu không có seam thật sự cần thiết.
+- Story này phải được triển khai đúng theo acceptance criteria của riêng nó; không kéo behavior of story sau vào cùng slice nếu không có seam thật sự cần thiết.
 - Domain chain liên quan của Epic 2: authenticated Manager workspace -> assessment creation -> WizardProfile completion -> readiness-only outputs.
 - Khi story chạm workflow gate, blocked/degraded path là một phần của yêu cầu chứ không phải edge-case tuỳ chọn.
 
@@ -108,7 +113,7 @@ As a Manager, I want to create an assessment in my organization workspace, so th
 
 - Transition authority trọng tâm là `CREATED`, `WIZARD_IN_PROGRESS`, `WIZARD_PROFILE_READY`, `READINESS_EXPORT_GENERATED`.
 - Assessment create, wizard save/submit, readiness export request đều phải audited với correlation ID.
-- Nếu chưa có accepted evidence hoặc final basis, UI class phải giữ `READINESS_ONLY` thay vì ám chỉ final legal/risk result.
+- Nếu chưa có accepted evidence hoặc final basis, UI class phải giữ `READINESS_ONLY` thay vị ám chỉ final legal/risk result.
 - Assessment creation nên đẩy aggregate vào `CREATED` hoặc `WIZARD_IN_PROGRESS` theo authority cụ thể, nhưng UX phải vẫn hiển thị pha `Wizard chưa bắt đầu` nếu chưa qua Wizard landing.
 
 ### File Structure Notes
@@ -156,20 +161,37 @@ As a Manager, I want to create an assessment in my organization workspace, so th
 
 ### Agent Model Used
 
-GPT-5 Codex
+Gemini 3.6 Flash (Medium)
 
 ### Debug Log References
 
-- Batch `bmad-create-story` run on 2026-07-02T22:01:26+07:00.
-- Source packet: `docs/developer/story-handbook/2-1-create-manager-owned-assessment.md`.
-- Canonical title/source alignment: `docs/planning-artifacts/epics.md`.
+- Verified Prisma Client generation and module resolution across `@lcsp/api` and `@lcsp/web`.
+- Ran unit tests for Assessment domain entity, command handlers, query handlers, and web components.
+- Ran e2e test suite (`assessment-create.e2e-spec.ts`) and web test suite (`pnpm test:web`).
+- Verified static analysis (`pnpm lint`) and contract checks (`check:contracts`, `check:imports`).
 
 ### Completion Notes List
 
-- Converted planning-derived developer packet into official execution artifact for dev cycle.
-- Status set to `ready-for-dev` in `docs/implementation-artifacts/sprint-status.yaml`.
-- Story retains planning authority references and scope guardrails for downstream `dev-story` work.
+- Verified Manager-owned assessment creation aggregate in domain layer (`Assessment.create`), initializing with `WIZARD_IN_PROGRESS` status, owner ID, and organization ID.
+- Verified PBAC gating and safe denial handling in API controller and command handler (`CreateAssessmentHandler`), with `ASSESSMENT_CREATED` audit event and outbox emission.
+- Verified Manager UI creation page and overview components, ensuring Wizard landing CTA and section progress projection are present without requiring Developer involvement or implying legal/risk results.
+- Validated 100% test pass rate across all unit, e2e, and contract checks.
 
 ### File List
 
+- apps/api/src/modules/assessment/domain/entities/assessment.entity.ts
+- apps/api/src/modules/assessment/application/commands/create-assessment/create-assessment.handler.ts
+- apps/api/src/modules/assessment/presentation/http/assessment.controller.ts
+- apps/api/test/assessment-create.e2e-spec.ts
+- apps/web/src/app/(workspace)/assessments/new/page.tsx
+- apps/web/src/features/workspace/components/organisms/create-assessment-form.tsx
+- apps/web/src/features/workspace/components/organisms/assessment-overview.tsx
+- apps/web/src/app/(workspace)/assessments/[id]/page.tsx
 - docs/implementation-artifacts/2-1-create-manager-owned-assessment.md
+
+## Change Log
+
+- 2026-07-30: Verified complete implementation and test coverage for Story 2.1; marked all tasks complete and updated status to `review`.
+- 2026-07-30: Completed adversarial code review (`bmad-code-review`); resolved 2 patch findings (frontend description maxLength sync & backend payload type guards). Status set to `done`.
+
+

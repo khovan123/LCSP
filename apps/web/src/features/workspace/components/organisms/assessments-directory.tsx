@@ -3,6 +3,7 @@
 import { resolveMessage } from "@lcsp/i18n";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { getAssessmentActiveHref } from "@/lib/api/workspace-client";
 import { useAssessmentsQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
@@ -60,7 +61,7 @@ export function AssessmentsDirectory() {
           appLocale,
           "pages.workspace.createdAtLabel",
         )}
-        getAssessmentHref={(assessment) => `/assessments/${assessment.id}`}
+        getAssessmentHref={(assessment) => getAssessmentActiveHref(assessment)}
         openAssessmentLabel={resolveMessage(
           appLocale,
           "pages.assessment.openOverview",

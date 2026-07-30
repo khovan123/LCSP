@@ -94,7 +94,21 @@ describe("Auth workspace (e2e)", () => {
         password: "CorrectHorseBatteryStaple!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(200);
+    const body = successBody<SignInSuccess>(result);
+
+    assert.equal(body.user.organization_id, fixture.organizationId);
+    assert.equal(typeof body.session_token, "string");
+  });
+
+  it("approved sign-in without organization_id auto-resolves active organization", async () => {
+    const result = await httpRequest(app)
+      .post("/auth/sign-in")
+      .send({
+        email: fixture.approvedUser.email,
+        password: "CorrectHorseBatteryStaple!",
+      })
+      .expect(200);
     const body = successBody<SignInSuccess>(result);
 
     assert.equal(body.user.organization_id, fixture.organizationId);
@@ -495,7 +509,7 @@ describe("Auth workspace (e2e)", () => {
         password: "CorrectHorseBatteryStaple!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(200);
 
     const body = successBody<SignInSuccess>(result);
     assert.equal(body.ok, true);
@@ -757,7 +771,7 @@ describe("Auth workspace (e2e)", () => {
         password: "CorrectHorseBatteryStaple!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(200);
 
     const success = successBody<{
       user: { subject_attributes: Record<string, string> };
@@ -815,7 +829,7 @@ describe("Auth workspace (e2e)", () => {
         password: "BrandNewPassword456!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(200);
     assert.equal(successBody<SignInSuccess>(newSignIn).ok, true);
   });
 
@@ -837,7 +851,7 @@ describe("Auth workspace (e2e)", () => {
         password: "CorrectHorseBatteryStaple!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(200);
 
     return successBody<SignInSuccess>(result);
   }

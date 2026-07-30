@@ -1,9 +1,10 @@
-import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
-import { AUTH_ERROR_CODES, WORKSPACE_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
-  canUseManagerOnlyAction,
-  PBAC_ACTIONS,
-} from "@lcsp/contracts/pbac";
+  ASSESSMENT_STATUS_CODES,
+  WIZARD_STATUS_CODES,
+  type WizardStatusCode,
+} from "@lcsp/contracts/assessment";
+import { AUTH_ERROR_CODES, WORKSPACE_ERROR_CODES } from "@lcsp/contracts/auth";
+import { canUseManagerOnlyAction, PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import type { MessageKey } from "@lcsp/i18n";
 
 import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
@@ -54,10 +55,7 @@ export type WorkspaceSelectionPayload = {
 };
 
 export function canCreateAssessment(grantedActions: readonly string[]) {
-  return canUseManagerOnlyAction(
-    grantedActions,
-    PBAC_ACTIONS.assessmentCreate,
-  );
+  return canUseManagerOnlyAction(grantedActions, PBAC_ACTIONS.assessmentCreate);
 }
 
 export function getAssessmentStatusLabelKey(
@@ -70,6 +68,39 @@ export function getWizardStatusLabelKey(
   status: keyof typeof wizardStatusLabelKeys,
 ): MessageKey {
   return wizardStatusLabelKeys[status];
+}
+
+export function getAssessmentActiveHref(assessment: {
+  id: string;
+  status: string;
+  wizard_status: string;
+}): string {
+  const encodedId = encodeURIComponent(assessment.id);
+
+  if (
+    assessment.wizard_status === WIZARD_STATUS_CODES.notStarted ||
+    assessment.wizard_status === WIZARD_STATUS_CODES.inProgress ||
+    assessment.status === ASSESSMENT_STATUS_CODES.wizardInProgress
+  ) {
+    return `/assessments/${encodedId}/wizard`;
+  }
+
+  if (
+    assessment.status === ASSESSMENT_STATUS_CODES.wizardSubmitted ||
+    assessment.status === ASSESSMENT_STATUS_CODES.evidenceRequired ||
+    assessment.status === ASSESSMENT_STATUS_CODES.scanInProgress
+  ) {
+    return `/assessments/${encodedId}/readiness`;
+  }
+
+  if (
+    assessment.status === ASSESSMENT_STATUS_CODES.classificationLocked ||
+    assessment.status === ASSESSMENT_STATUS_CODES.readyForReview
+  ) {
+    return `/assessments/${encodedId}/classification`;
+  }
+
+  return `/assessments/${encodedId}`;
 }
 
 export async function getWorkspace(): Promise<WorkspaceOutcome> {
@@ -123,9 +154,7 @@ export async function getWorkspaceSelection(): Promise<WorkspaceSelectionPayload
   const candidate = payload as WorkspaceSelectionPayload;
   return {
     email: typeof candidate.email === "string" ? candidate.email : undefined,
-    workspaces: Array.isArray(candidate.workspaces)
-      ? candidate.workspaces
-      : [],
+    workspaces: Array.isArray(candidate.workspaces) ? candidate.workspaces : [],
     selected_workspace_id:
       typeof candidate.selected_workspace_id === "string"
         ? candidate.selected_workspace_id
@@ -209,9 +238,23 @@ export function toAssessmentsOutcome(
   ok: boolean,
 ): AssessmentsOutcome {
   if (ok && isAssessmentsPayload(payload)) {
+    const rawAssessments = (payload as { assessments: unknown[] }).assessments;
+    const normalizedAssessments: AssessmentSummary[] = rawAssessments.map(
+      (item) => {
+        const candidate = item as Record<string, unknown>;
+        return {
+          id: (candidate.id ?? candidate.assessment_id) as string,
+          name: candidate.name as string,
+          status: candidate.status as AssessmentStatus,
+          wizard_status: candidate.wizard_status as WizardStatusCode,
+          created_at: candidate.created_at as string,
+        };
+      },
+    );
+
     return {
       kind: API_OUTCOME_KINDS.loaded,
-      assessments: payload.assessments,
+      assessments: normalizedAssessments,
     };
   }
 
@@ -295,14 +338,16 @@ function isAssessmentsPayload(
   );
 }
 
-function isAssessmentSummary(payload: unknown): payload is AssessmentSummary {
+function isAssessmentSummary(payload: unknown): boolean {
   if (typeof payload !== "object" || payload === null) {
     return false;
   }
 
-  const candidate = payload as AssessmentSummary;
+  const candidate = payload as Record<string, unknown>;
+  const id =
+    typeof candidate.id === "string" ? candidate.id : candidate.assessment_id;
   return (
-    typeof candidate.id === "string" &&
+    typeof id === "string" &&
     typeof candidate.name === "string" &&
     isAssessmentStatus(candidate.status) &&
     isWizardStatus(candidate.wizard_status) &&

@@ -137,11 +137,14 @@ export async function signIn(
 export async function previewInvitation(
   invitationToken: string,
 ): Promise<InvitationPreviewOutcome> {
-  const { payload, ok, problemCode } = await apiRequest("/api/auth/invitations/preview", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ invitation_token: invitationToken }),
-  });
+  const { payload, ok, problemCode } = await apiRequest(
+    "/api/auth/invitations/preview",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ invitation_token: invitationToken }),
+    },
+  );
 
   return toInvitationPreviewOutcome(payload, ok, problemCode);
 }
@@ -149,11 +152,14 @@ export async function previewInvitation(
 export async function acceptInvitation(
   request: AcceptInvitationRequest,
 ): Promise<AcceptInvitationOutcome> {
-  const { payload, ok, problemCode } = await apiRequest("/api/auth/accept-invitation", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(request),
-  });
+  const { payload, ok, problemCode } = await apiRequest(
+    "/api/auth/accept-invitation",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    },
+  );
 
   return toAcceptInvitationOutcome(payload, ok, problemCode);
 }
@@ -238,11 +244,14 @@ export function toMfaVerifyOutcome(
 export async function verifyMfaOtp(
   request: MfaVerifyRequest,
 ): Promise<MfaVerifyOutcome> {
-  const { payload, ok, problemCode } = await apiRequest("/api/auth/mfa/verify-otp", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(request),
-  });
+  const { payload, ok, problemCode } = await apiRequest(
+    "/api/auth/mfa/verify-otp",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    },
+  );
 
   return toMfaVerifyOutcome(payload, ok, problemCode);
 }
@@ -253,19 +262,17 @@ export async function signOut(): Promise<void> {
   }).catch(() => null);
 }
 
-function isSignInSuccess(
-  payload: unknown,
-): payload is {
-  ok: true;
+function isSignInSuccess(payload: unknown): payload is {
+  ok?: true;
   mfa_required?: boolean;
   workspace_selection_required?: boolean;
   workspaces?: SignInWorkspaceOption[];
 } {
-  return (
-    typeof payload === "object" &&
-    payload !== null &&
-    (payload as { ok?: unknown }).ok === true
-  );
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+  const candidate = payload as { ok?: unknown };
+  return candidate.ok === undefined || candidate.ok === true;
 }
 
 function isInvitationPreview(payload: unknown): payload is InvitationPreview {

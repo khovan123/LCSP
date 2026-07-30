@@ -2,8 +2,16 @@
   "organization": { "id": "org-lcsp", "name": "LCSP" },
   "membership": { "role": "Manager" },
   "granted_actions": [
-    "assessment:create", "assessment:list", "assessment:read", "wizard:write",
-    "wizard:submit", "conflict:read", "conflict:resolve", "evidence:read",
-    "document:generate", "document:read", "workspace:read"
+    "assessment:create",
+    "assessment:list",
+    "assessment:read",
+    "wizard:write",
+    "wizard:submit",
+    "conflict:read",
+    "conflict:resolve",
+    "evidence:read",
+    "document:generate",
+    "document:read",
+    "workspace:read"
   ]
 }

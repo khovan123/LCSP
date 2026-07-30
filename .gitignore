@@ -31,5 +31,7 @@ _bmad/
 **/.cache/
 .prisma/
 .agents/
+!.agents/rules/
+!.agents/rules/antigravity-project-rules.md
 **/.env
 .ua/

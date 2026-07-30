@@ -1,4 +1,8 @@
-import { Module } from "@nestjs/common";
+import {
+  type MiddlewareConsumer,
+  Module,
+  type NestModule,
+} from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 
@@ -22,6 +26,7 @@ import { LegalRuleCatalogModule } from "./modules/legal-rule-catalog/legal-rule-
 import { OutboxModule } from "./platform/outbox/outbox.module.js";
 import { PbacModule } from "./platform/pbac/pbac.module.js";
 import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.module.js";
+import { HttpLoggerMiddleware } from "./platform/logging/http-logger.middleware.js";
 import { ProblemExceptionFilter } from "./platform/problems/problem-exception.filter.js";
 import { ProblemStatusInterceptor } from "./platform/problems/problem-status.interceptor.js";
 
@@ -65,4 +70,8 @@ import { ProblemStatusInterceptor } from "./platform/problems/problem-status.int
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(HttpLoggerMiddleware).forRoutes("*");
+  }
+}

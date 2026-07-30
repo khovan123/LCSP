@@ -8,6 +8,7 @@ Ruler concatenates all .md files in this directory (and subdirectories), startin
 
 - Do not define TypeScript enums for app/domain value sets. Use `as const` objects and derive types from them.
 - Do not define direct string literal unions such as `type Status = "A" | "B"`. Define a constant source first, then derive the type:
+
   ```ts
   export const EVIDENCE_SEVERITIES = {
     low: "LOW",
@@ -18,6 +19,7 @@ Ruler concatenates all .md files in this directory (and subdirectories), startin
   export type EvidenceSeverity =
     (typeof EVIDENCE_SEVERITIES)[keyof typeof EVIDENCE_SEVERITIES];
   ```
+
 - Apply the same rule to discriminators such as `kind`, `type`, `status`, `reason`, `requiredAction`, and UI state strings. Local UI-only states may keep local constants, but domain/API values must live in `packages/contracts`.
 - Canonical domain/API values must use one format: `SCREAMING_SNAKE_CASE`. Do not introduce mixed styles such as `pending`, `pending_approval`, `FinalReport`, or `accessRevoked` for contract values.
 - Hardcoded error codes, status values, workflow values, PBAC actions, scan statuses, evidence severities, document types, lifecycle statuses, audit/resource/reason/aggregate values, and wizard/assessment statuses must be imported from `packages/contracts`; do not repeat raw strings in `apps/web` or `apps/api`.
@@ -53,3 +55,19 @@ Ruler concatenates all .md files in this directory (and subdirectories), startin
 - All mock payload data must live under `apps/web/src/public/assets/mocks`.
 - Type definitions, fixture readers, cookie constants, and mock-mode helpers may live under server/helper folders, but they must not embed mock payload objects that should be JSON assets.
 - Do not add mock JSON, fixture payloads, or seed-like web data outside `apps/web/src/public/assets/mocks`.
+
+## Frontend form architecture
+
+- In `apps/web`, non-trivial forms must use `react-hook-form` for form state and `zod` for validation. Do not introduce new manual form state stacks built from scattered `useState`, bespoke field error maps, and per-field submit plumbing when a form abstraction is appropriate.
+- Feature form schemas must live in sibling `schemas/` files, with exported inferred types reused by containers and field components. Do not inline large `zod` schemas inside page or organism components.
+- Prefer `FormProvider`, `useFormContext`, and `Controller` in reusable field molecules/organisms so parent containers do not have to thread `value`, `error`, and mutation callbacks through every field.
+- Keep orchestration concerns such as autosave, step transitions, submit side effects, and API outcomes in the feature form container; keep field rendering and field binding in atomic components.
+
+## Debugging and bug-fixing protocol
+
+When debugging, fixing a bug, or tracing an error, the response **must** include two clearly labelled sections before or alongside any code change:
+
+1. **Root cause** – Explain _why_ the bug occurred: the exact code path, incorrect assumption, race condition, stale closure, wrong contract shape, etc. Be specific enough that a reader who was not involved can understand the failure without running the code.
+2. **Fix** – Explain _how_ the fix works: what changed, why it resolves the root cause, and any trade-offs or follow-up risks.
+
+Do not skip either section even for seemingly trivial fixes. If both sections can be stated in one sentence each, that is acceptable, but they must appear.

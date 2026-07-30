@@ -15,6 +15,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  ASSESSMENT_NAME_MAX_LENGTH,
+  ASSESSMENT_DESCRIPTION_MAX_LENGTH,
+} from "@lcsp/contracts/assessment";
 import { useCreateAssessmentMutation } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
@@ -80,7 +84,7 @@ export function CreateAssessmentForm() {
                 onChange={(event) => setName(event.target.value)}
                 placeholder={t("pages.assessmentForm.namePlaceholder")}
                 required
-                maxLength={160}
+                maxLength={ASSESSMENT_NAME_MAX_LENGTH}
               />
             </label>
             <label
@@ -94,7 +98,7 @@ export function CreateAssessmentForm() {
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder={t("pages.assessmentForm.descriptionPlaceholder")}
-                maxLength={2000}
+                maxLength={ASSESSMENT_DESCRIPTION_MAX_LENGTH}
               />
             </label>
             <div className="flex flex-wrap justify-end gap-3">
@@ -105,7 +109,10 @@ export function CreateAssessmentForm() {
               >
                 {t("pages.assessmentForm.cancel")}
               </Button>
-              <Button type="submit" disabled={createAssessmentMutation.isPending}>
+              <Button
+                type="submit"
+                disabled={createAssessmentMutation.isPending}
+              >
                 {createAssessmentMutation.isPending
                   ? t("pages.assessmentForm.submitting")
                   : t("pages.assessmentForm.submit")}
