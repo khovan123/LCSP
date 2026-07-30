@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
+
 import { AI_USAGE_FLOW_STATUSES } from "@lcsp/contracts/scan";
 
 export class AIUsageFlowEntity {
+  readonly id: string = randomUUID();
+
   private constructor(
-    readonly id: string,
     readonly technicalProfileId: string,
     readonly assessmentId: string,
     readonly organizationId: string,
@@ -16,7 +19,6 @@ export class AIUsageFlowEntity {
   ) {}
 
   static accept(fields: {
-    id: string;
     technicalProfileId: string;
     assessmentId: string;
     organizationId: string;
@@ -28,7 +30,6 @@ export class AIUsageFlowEntity {
     createdAt?: Date;
   }): AIUsageFlowEntity {
     return new AIUsageFlowEntity(
-      fields.id,
       fields.technicalProfileId,
       fields.assessmentId,
       fields.organizationId,

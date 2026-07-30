@@ -1,15 +1,11 @@
 import * as crypto from "node:crypto";
 
-import {
-  Body,
-  Controller,
-  Headers,
-  Post,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { Body, Controller, Headers, HttpStatus, Post } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import { PbacPreflightService } from "./pbac-preflight.service.js";
+import { problemException } from "../problems/problem-factory.js";
 import { resultEnvelope } from "../problems/result-envelope.js";
 
 interface PreflightRequestBody {
@@ -51,7 +47,13 @@ export class PbacPreflightController {
     const expected = this.configService.get<string>("worker.apiKey", "");
 
     if (!expected || !provided || !timingSafeEqual(provided, expected)) {
-      throw new UnauthorizedException();
+      throw problemException(
+        AUTH_ERROR_CODES.sessionInvalid,
+        crypto.randomUUID(),
+        {
+          status: HttpStatus.UNAUTHORIZED,
+        },
+      );
     }
   }
 }

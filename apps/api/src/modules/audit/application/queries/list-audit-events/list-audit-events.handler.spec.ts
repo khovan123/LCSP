@@ -164,8 +164,8 @@ describe("ListAuditEventsHandler", () => {
       ),
     ).rejects.toMatchObject({
       response: {
-        error_code: "AUDIT_DATE_RANGE_EXCEEDED",
-        correlation_id: "corr-1",
+        ok: false,
+        problem: { code: "AUDIT_DATE_RANGE_EXCEEDED", correlationId: "corr-1" },
       },
     });
   });
@@ -177,8 +177,11 @@ describe("ListAuditEventsHandler", () => {
       handler.execute(query({ sessionOrganizationId: "org-2" })),
     ).rejects.toMatchObject({
       response: {
-        error_code: ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
-        correlation_id: "corr-1",
+        ok: false,
+        problem: {
+          code: ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
+          correlationId: "corr-1",
+        },
       },
     });
     expect(transaction).not.toHaveBeenCalled();

@@ -20,8 +20,14 @@ type RepositoryConnectionProps = {
   revokedAt: Date | null;
 };
 
+type NewRepositoryConnectionProps = Omit<RepositoryConnectionProps, "id">;
+
 export class RepositoryConnection {
-  private constructor(private readonly props: RepositoryConnectionProps) {}
+  private props: RepositoryConnectionProps;
+
+  private constructor(props: NewRepositoryConnectionProps) {
+    this.props = { ...props, id: randomUUID() };
+  }
 
   static create(input: {
     assessmentId: string | null;
@@ -35,7 +41,6 @@ export class RepositoryConnection {
     permissions: Record<string, string>;
   }): RepositoryConnection {
     return new RepositoryConnection({
-      id: randomUUID(),
       assessmentId: input.assessmentId,
       organizationId: input.organizationId,
       userId: input.userId,
@@ -52,7 +57,9 @@ export class RepositoryConnection {
   }
 
   static rehydrate(props: RepositoryConnectionProps): RepositoryConnection {
-    return new RepositoryConnection(props);
+    const entity = new RepositoryConnection(props);
+    entity.props = props;
+    return entity;
   }
 
   get id(): string {

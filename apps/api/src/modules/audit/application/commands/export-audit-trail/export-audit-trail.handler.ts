@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import type { Prisma } from "@prisma/client";
 import {
@@ -6,12 +6,18 @@ import {
   AUDIT_ERROR_CODES,
   AUDIT_EVENT_TYPES,
   AUDIT_EXPORT_STATUSES,
+  AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
 import { ORGANIZATION_SCOPE_ERROR_CODES } from "@lcsp/contracts/auth";
 import { createHash } from "node:crypto";
 
+import {
+  fromPrismaAuthDecision,
+  toPrismaAuditExportStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type {
   AuditExportArtifact,
   AuditExportArtifactEvent,
@@ -21,7 +27,6 @@ import { AuditRedactorService } from "../../services/audit/audit-redactor.servic
 import { ExportAuditTrailCommand } from "./export-audit-trail.command.js";
 
 const MAX_DATE_RANGE_MS = 365 * 24 * 60 * 60 * 1_000;
-const AUDIT_EXPORT_RESOURCE_TYPE = "AuditExportRequest";
 
 @CommandHandler(ExportAuditTrailCommand)
 export class ExportAuditTrailHandler implements ICommandHandler<ExportAuditTrailCommand> {
@@ -99,7 +104,7 @@ export class ExportAuditTrailHandler implements ICommandHandler<ExportAuditTrail
       event_type: row.eventType,
       actor_id: row.actorId,
       organization_id: row.organizationId ?? command.organizationId,
-      decision: row.decision,
+      decision: row.decision ? fromPrismaAuthDecision(row.decision) : null,
       payload: this.redactor.redact(row.payload),
       occurred_at: row.createdAt.toISOString(),
     }));
@@ -131,7 +136,7 @@ export class ExportAuditTrailHandler implements ICommandHandler<ExportAuditTrail
         requestedById: command.requestedById,
         fromDate,
         toDate,
-        status: AUDIT_EXPORT_STATUSES.ready,
+        status: toPrismaAuditExportStatus(AUDIT_EXPORT_STATUSES.ready),
         version,
         checksumSha256: checksum,
         contentJson: artifact as unknown as Prisma.InputJsonValue,
@@ -145,7 +150,7 @@ export class ExportAuditTrailHandler implements ICommandHandler<ExportAuditTrail
       eventType: AUDIT_EVENT_TYPES.exportGenerated,
       actorId: command.requestedById,
       organizationId: command.organizationId,
-      resourceType: AUDIT_EXPORT_RESOURCE_TYPE,
+      resourceType: AUDIT_RESOURCE_TYPES.auditExportRequest,
       resourceId: artifact.export_request_id,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,
@@ -184,10 +189,9 @@ export class ExportAuditTrailHandler implements ICommandHandler<ExportAuditTrail
     correlationId: string,
     field?: string,
   ): never {
-    throw new BadRequestException({
-      error_code: errorCode,
-      correlation_id: correlationId,
-      ...(field ? { field } : {}),
+    throw problemException(errorCode, correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+      ...(field ? { meta: { field } } : {}),
     });
   }
 }

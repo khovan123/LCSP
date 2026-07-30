@@ -1,8 +1,9 @@
-import { NotFoundException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import { AUDIT_ERROR_CODES } from "@lcsp/contracts/audit";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type { AuditExportArtifact } from "../../contracts/audit/audit-export.contract.js";
 import { GetAuditExportArtifactQuery } from "./get-audit-export-artifact.query.js";
 
@@ -24,10 +25,13 @@ export class GetAuditExportArtifactHandler implements IQueryHandler<GetAuditExpo
     });
 
     if (!exportRequest || !isAuditExportArtifact(exportRequest.contentJson)) {
-      throw new NotFoundException({
-        error_code: AUDIT_ERROR_CODES.exportNotFound,
-        correlation_id: query.correlationId,
-      });
+      throw problemException(
+        AUDIT_ERROR_CODES.exportNotFound,
+        query.correlationId,
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
     }
 
     return exportRequest.contentJson;

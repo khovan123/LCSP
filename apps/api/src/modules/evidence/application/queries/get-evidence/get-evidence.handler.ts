@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
@@ -7,7 +7,9 @@ import {
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
 } from "@lcsp/contracts/scan";
 
+import { toPrismaEvidenceAcceptanceStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { EvidenceRedactorService } from "../../services/evidence/evidence-redactor.service.js";
 import type {
   EvidenceDetailDto,
@@ -39,7 +41,9 @@ export class GetEvidenceHandler implements IQueryHandler<GetEvidenceQuery> {
       where: {
         assessmentId: query.assessmentId,
         organizationId: query.organizationId,
-        status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+        status: toPrismaEvidenceAcceptanceStatus(
+          TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+        ),
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: {
@@ -88,9 +92,8 @@ export class GetEvidenceHandler implements IQueryHandler<GetEvidenceQuery> {
   }
 
   private throwNotFound(correlationId: string): never {
-    throw new NotFoundException({
-      error_code: EVIDENCE_ERROR_CODES.notFound,
-      correlation_id: correlationId,
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
     });
   }
 }

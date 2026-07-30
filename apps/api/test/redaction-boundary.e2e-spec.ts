@@ -12,7 +12,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
@@ -56,7 +56,7 @@ describe("Redaction boundary (e2e) [AC-022]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    managerToken = (signIn.body as SignInSuccess)?.session_token ?? "";
+    managerToken = successBody<SignInSuccess>(signIn).session_token ?? "";
   });
 
   afterAll(async () => {

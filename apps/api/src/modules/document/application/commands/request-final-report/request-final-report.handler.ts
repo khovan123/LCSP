@@ -1,22 +1,27 @@
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   DOCUMENT_ERROR_CODES,
   DOCUMENT_EVENT_TYPES,
   DOCUMENT_REQUEST_STATUSES,
   DOCUMENT_TYPES,
 } from "@lcsp/contracts/document";
+import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
+import { CLASSIFICATION_GUARDRAIL_STATUSES } from "@lcsp/contracts/scan";
 
+import {
+  fromPrismaClassificationGuardrailStatus,
+  toPrismaDocumentRequestStatus,
+  toPrismaDocumentType,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type { FinalReportRequestDto } from "../../contracts/document/final-report-request.contract.js";
 import { RequestFinalReportCommand } from "./request-final-report.command.js";
 
-const CLASSIFICATION_GUARDRAIL_STATUS_PASSED = "passed";
-const ASSESSMENT_RESOURCE_TYPE = "Assessment";
-const DOCUMENT_REQUEST_RESOURCE_TYPE = "DocumentRequest";
 const DOCUMENT_REQUEST_LOCK_PREFIX = "document-final-report";
 
 @CommandHandler(RequestFinalReportCommand)
@@ -36,10 +41,11 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
     });
 
     if (!assessment || assessment.organizationId !== command.organizationId) {
-      throw new NotFoundException({
-        error_code: DOCUMENT_ERROR_CODES.assessmentNotFound,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        DOCUMENT_ERROR_CODES.assessmentNotFound,
+        command.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
     const classificationResult =
@@ -59,10 +65,11 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
       !classificationResult ||
       !hasPassedGuardrail(classificationResult.guardrailStatus)
     ) {
-      throw new ConflictException({
-        error_code: DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed,
+        command.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
     }
 
     const documentRequestId = await this.prisma.$transaction(async (tx) => {
@@ -80,11 +87,13 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
         where: {
           assessmentId: command.assessmentId,
           organizationId: command.organizationId,
-          documentType: DOCUMENT_TYPES.finalReport,
+          documentType: toPrismaDocumentType(DOCUMENT_TYPES.finalReport),
           status: {
             in: [
-              DOCUMENT_REQUEST_STATUSES.queued,
-              DOCUMENT_REQUEST_STATUSES.generating,
+              toPrismaDocumentRequestStatus(DOCUMENT_REQUEST_STATUSES.queued),
+              toPrismaDocumentRequestStatus(
+                DOCUMENT_REQUEST_STATUSES.generating,
+              ),
             ],
           },
         },
@@ -92,10 +101,11 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
       });
 
       if (existingRequest) {
-        throw new ConflictException({
-          error_code: DOCUMENT_ERROR_CODES.alreadyQueued,
-          correlation_id: command.correlationId,
-        });
+        throw problemException(
+          DOCUMENT_ERROR_CODES.alreadyQueued,
+          command.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
       }
 
       const created = await tx.documentRequest.create({
@@ -105,8 +115,10 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
           organizationId: command.organizationId,
           requestedById: command.requestedById,
           classificationResultId: classificationResult.id,
-          documentType: DOCUMENT_TYPES.finalReport,
-          status: DOCUMENT_REQUEST_STATUSES.queued,
+          documentType: toPrismaDocumentType(DOCUMENT_TYPES.finalReport),
+          status: toPrismaDocumentRequestStatus(
+            DOCUMENT_REQUEST_STATUSES.queued,
+          ),
           correlationId: command.correlationId,
         },
         select: { id: true },
@@ -116,7 +128,7 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
     });
 
     await this.outboxRepository.enqueue({
-      aggregateType: DOCUMENT_REQUEST_RESOURCE_TYPE,
+      aggregateType: OUTBOX_AGGREGATE_TYPES.documentRequest,
       aggregateId: documentRequestId,
       eventType: DOCUMENT_EVENT_TYPES.finalReportRequested,
       payload: {
@@ -131,7 +143,7 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
       eventType: DOCUMENT_EVENT_TYPES.finalReportRequestedAudit,
       actorId: command.requestedById,
       organizationId: command.organizationId,
-      resourceType: DOCUMENT_REQUEST_RESOURCE_TYPE,
+      resourceType: AUDIT_RESOURCE_TYPES.documentRequest,
       resourceId: documentRequestId,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,
@@ -147,7 +159,7 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
       eventType: DOCUMENT_EVENT_TYPES.finalReportRequestedAudit,
       actorId: command.requestedById,
       organizationId: command.organizationId,
-      resourceType: ASSESSMENT_RESOURCE_TYPE,
+      resourceType: AUDIT_RESOURCE_TYPES.assessment,
       resourceId: command.assessmentId,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,
@@ -167,6 +179,11 @@ export class RequestFinalReportHandler implements ICommandHandler<RequestFinalRe
   }
 }
 
-function hasPassedGuardrail(status: string): boolean {
-  return status.trim().toLowerCase() === CLASSIFICATION_GUARDRAIL_STATUS_PASSED;
+function hasPassedGuardrail(
+  status: Parameters<typeof fromPrismaClassificationGuardrailStatus>[0],
+): boolean {
+  return (
+    fromPrismaClassificationGuardrailStatus(status) ===
+    CLASSIFICATION_GUARDRAIL_STATUSES.passed
+  );
 }

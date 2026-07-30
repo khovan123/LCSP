@@ -1,6 +1,6 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   AUTH_AUDIT_EVENT_TYPES,
   AUTH_MEMBERSHIP_STATUSES,
@@ -9,13 +9,15 @@ import {
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
+import {
+  fromPrismaAuthMembershipStatus,
+  toPrismaAuthMembershipStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { createCorrelationId } from "../../../infrastructure/security/security.utils.ts";
 import { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
-import type {
-  RevokeMembershipErrorCode,
-  RevokeMembershipResponse,
-} from "../../contracts/auth-workspace/revoke-membership.contract.ts";
+import type { RevokeMembershipResponse } from "../../contracts/auth-workspace/revoke-membership.contract.ts";
 import { RevokeMembershipCommand } from "./revoke-membership.command.ts";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 
 export class RevokeMembershipHandler {
   constructor(
@@ -30,10 +32,10 @@ export class RevokeMembershipHandler {
     const correlationId = command.input.correlationId ?? createCorrelationId();
 
     if (actorId === targetUserId) {
-      throw problem(
-        BadRequestException,
+      throw problemException(
         REVOKE_MEMBERSHIP_ERROR_CODES.cannotSelfRevoke,
         correlationId,
+        { status: HttpStatus.BAD_REQUEST },
       );
     }
 
@@ -48,13 +50,14 @@ export class RevokeMembershipHandler {
 
     if (
       !membership ||
-      membership.status !== AUTH_MEMBERSHIP_STATUSES.active ||
+      fromPrismaAuthMembershipStatus(membership.status) !==
+        AUTH_MEMBERSHIP_STATUSES.active ||
       roleFrom(membership.subjectAttributes) !== SUBJECT_ROLES.developer
     ) {
-      throw problem(
-        NotFoundException,
+      throw problemException(
         REVOKE_MEMBERSHIP_ERROR_CODES.membershipNotFound,
         correlationId,
+        { status: HttpStatus.NOT_FOUND },
       );
     }
 
@@ -63,18 +66,20 @@ export class RevokeMembershipHandler {
       const revokedMembership = await tx.authMembership.updateMany({
         where: {
           id: membership.id,
-          status: AUTH_MEMBERSHIP_STATUSES.active,
+          status: toPrismaAuthMembershipStatus(AUTH_MEMBERSHIP_STATUSES.active),
         },
         data: {
-          status: AUTH_MEMBERSHIP_STATUSES.revoked,
+          status: toPrismaAuthMembershipStatus(
+            AUTH_MEMBERSHIP_STATUSES.revoked,
+          ),
           revokedAt,
         },
       });
       if (revokedMembership.count !== 1) {
-        throw problem(
-          NotFoundException,
+        throw problemException(
           REVOKE_MEMBERSHIP_ERROR_CODES.membershipNotFound,
           correlationId,
+          { status: HttpStatus.NOT_FOUND },
         );
       }
 
@@ -93,7 +98,7 @@ export class RevokeMembershipHandler {
           eventType: AUTH_AUDIT_EVENT_TYPES.authDeveloperRevoked,
           actorId,
           organizationId: orgId,
-          resourceType: "AuthMembership",
+          resourceType: AUDIT_RESOURCE_TYPES.authMembership,
           resourceId: membership.id,
           decision: AUDIT_DECISIONS.allow,
           correlationId,
@@ -132,16 +137,4 @@ function roleFrom(value: Prisma.JsonValue): string | null {
   }
   const role = value.role;
   return typeof role === "string" ? role : null;
-}
-
-function problem(
-  ExceptionClass: typeof BadRequestException | typeof NotFoundException,
-  errorCode: RevokeMembershipErrorCode,
-  correlationId: string,
-): BadRequestException | NotFoundException {
-  return new ExceptionClass({
-    error_code: errorCode,
-    code: errorCode,
-    correlation_id: correlationId,
-  });
 }

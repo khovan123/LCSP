@@ -1,21 +1,23 @@
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from "@nestjs/common";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { HttpStatus } from "@nestjs/common";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import {
   LEGAL_RULE_EVENT_TYPES,
   LEGAL_RULE_ERROR_CODES,
+  LEGAL_RULE_LIFECYCLE_STATUSES,
 } from "@lcsp/contracts/legal-rule-catalog";
 
 import { ApproveRuleCatalogVersionCommand } from "./approve-rule-catalog-version.command.js";
 import type { ApproveRuleCatalogVersionResponse } from "../../contracts/approve-catalog-version.contract.js";
+import {
+  fromPrismaLegalRuleLifecycleStatus,
+  toPrismaLegalRuleLifecycleStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 
 @CommandHandler(ApproveRuleCatalogVersionCommand)
 export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
@@ -37,17 +39,22 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
     });
 
     if (!version) {
-      throw new NotFoundException({
-        error_code: "CATALOG_VERSION_NOT_FOUND",
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        LEGAL_RULE_ERROR_CODES.catalogVersionNotFound,
+        command.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
-    if (version.status !== "DRAFT") {
-      throw new ConflictException({
-        error_code: LEGAL_RULE_ERROR_CODES.catalogVersionAlreadyApproved,
-        correlation_id: command.correlationId,
-      });
+    if (
+      fromPrismaLegalRuleLifecycleStatus(version.status) !==
+      LEGAL_RULE_LIFECYCLE_STATUSES.draft
+    ) {
+      throw problemException(
+        LEGAL_RULE_ERROR_CODES.catalogVersionAlreadyApproved,
+        command.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
     }
 
     const approvedAt = new Date();
@@ -57,7 +64,9 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
       await tx.legalRuleCatalogVersion.update({
         where: { id: command.legalRuleCatalogVersionId },
         data: {
-          status: "APPROVED",
+          status: toPrismaLegalRuleLifecycleStatus(
+            LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+          ),
           approvedAt,
         },
       });
@@ -67,7 +76,9 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
         data: {
           legalRuleCatalogVersionId: command.legalRuleCatalogVersionId,
           approvedBy: command.approvedBy,
-          status: "APPROVED",
+          status: toPrismaLegalRuleLifecycleStatus(
+            LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+          ),
           scopeDescription: command.scopeDescription,
           comments: command.comments,
           approvalDate: approvedAt,
@@ -77,7 +88,11 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
       // 3. Update all rules inside this version to APPROVED
       await tx.legalRule.updateMany({
         where: { legalRuleCatalogVersionId: command.legalRuleCatalogVersionId },
-        data: { status: "APPROVED" },
+        data: {
+          status: toPrismaLegalRuleLifecycleStatus(
+            LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+          ),
+        },
       });
 
       // 4. Audit event
@@ -86,7 +101,7 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
           eventType: LEGAL_RULE_EVENT_TYPES.catalogVersionApproved,
           actorId: command.approvedBy,
           organizationId: null,
-          resourceType: "legal_rule_catalog_version",
+          resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
           resourceId: command.legalRuleCatalogVersionId,
           decision: AUDIT_DECISIONS.allow,
           policyId: command.authorization.policyId,
@@ -104,7 +119,7 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
     return {
       id: command.legalRuleCatalogVersionId,
       version: version.version,
-      status: "APPROVED",
+      status: LEGAL_RULE_LIFECYCLE_STATUSES.approved,
       approvedAt: approvedAt.toISOString(),
     };
   }
@@ -124,7 +139,7 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
       eventType: LEGAL_RULE_EVENT_TYPES.catalogVersionApproved,
       actorId: command.approvedBy,
       organizationId: null,
-      resourceType: "legal_rule_catalog_version",
+      resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
       resourceId: command.legalRuleCatalogVersionId,
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.pbacDenied,
@@ -137,9 +152,8 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
       },
     });
 
-    throw new ForbiddenException({
-      error_code: AUTH_ERROR_CODES.pbacDenied,
-      correlation_id: command.correlationId,
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 }

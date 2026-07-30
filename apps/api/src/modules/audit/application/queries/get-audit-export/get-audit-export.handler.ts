@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import {
   AUDIT_ERROR_CODES,
@@ -8,6 +8,7 @@ import {
 import { ORGANIZATION_SCOPE_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { AuditExportStorageService } from "../../../infrastructure/storage/audit-export-storage.service.js";
 import type { AuditExportStatusDto } from "../../contracts/audit/audit-export.contract.js";
 import { GetAuditExportQuery } from "./get-audit-export.query.js";
@@ -23,10 +24,11 @@ export class GetAuditExportHandler implements IQueryHandler<GetAuditExportQuery>
 
   async execute(query: GetAuditExportQuery): Promise<AuditExportStatusDto> {
     if (query.organizationId !== query.sessionOrganizationId) {
-      throw new BadRequestException({
-        error_code: ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
-        correlation_id: query.correlationId,
-      });
+      throw problemException(
+        ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
+        query.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     const exportRequest = await this.prisma.auditExportRequest.findFirst({
@@ -48,13 +50,19 @@ export class GetAuditExportHandler implements IQueryHandler<GetAuditExportQuery>
     });
 
     if (!exportRequest) {
-      throw new NotFoundException({
-        error_code: AUDIT_ERROR_CODES.exportNotFound,
-        correlation_id: query.correlationId,
-      });
+      throw problemException(
+        AUDIT_ERROR_CODES.exportNotFound,
+        query.correlationId,
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
     }
 
-    const status = toAuditExportStatus(exportRequest.status);
+    const status = toAuditExportStatus(
+      exportRequest.status,
+      query.correlationId,
+    );
     const download =
       status === AUDIT_EXPORT_STATUSES.ready
         ? this.buildDownload(query.organizationId, exportRequest.id)
@@ -92,7 +100,10 @@ export class GetAuditExportHandler implements IQueryHandler<GetAuditExportQuery>
   }
 }
 
-function toAuditExportStatus(value: string): AuditExportStatus {
+function toAuditExportStatus(
+  value: string,
+  correlationId: string,
+): AuditExportStatus {
   switch (value) {
     case AUDIT_EXPORT_STATUSES.queued:
     case AUDIT_EXPORT_STATUSES.generating:
@@ -100,8 +111,8 @@ function toAuditExportStatus(value: string): AuditExportStatus {
     case AUDIT_EXPORT_STATUSES.failed:
       return value;
     default:
-      throw new NotFoundException({
-        error_code: AUDIT_ERROR_CODES.exportNotFound,
+      throw problemException(AUDIT_ERROR_CODES.exportNotFound, correlationId, {
+        status: HttpStatus.NOT_FOUND,
       });
   }
 }

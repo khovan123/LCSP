@@ -10,9 +10,9 @@ export type DocumentRequestStatus =
   (typeof DOCUMENT_REQUEST_STATUSES)[keyof typeof DOCUMENT_REQUEST_STATUSES];
 
 export const DOCUMENT_TYPES = {
-  finalReport: "FinalReport",
-  gapAnalysis: "GapAnalysis",
-  readinessExport: "ReadinessExport",
+  finalReport: "FINAL_REPORT",
+  gapAnalysis: "GAP_ANALYSIS",
+  readinessExport: "READINESS_EXPORT",
 } as const;
 
 export type DocumentType = (typeof DOCUMENT_TYPES)[keyof typeof DOCUMENT_TYPES];

@@ -6,7 +6,6 @@ describe("AuditEventEntity", () => {
   it("T01: creates an event with all fields", () => {
     const occurredAt = new Date("2026-01-01T00:00:00Z");
     const event = AuditEventEntity.create(
-      "audit-1",
       {
         eventType: AUTH_AUDIT_EVENT_TYPES.authSignInSuccess,
         actorId: "user-1",
@@ -18,7 +17,7 @@ describe("AuditEventEntity", () => {
       occurredAt,
     );
 
-    expect(event.id).toBe("audit-1");
+    expect(event.id).toEqual(expect.any(String));
     expect(event.eventType).toBe(AUTH_AUDIT_EVENT_TYPES.authSignInSuccess);
     expect(event.actorId).toBe("user-1");
     expect(event.organizationId).toBe("org-1");
@@ -29,7 +28,7 @@ describe("AuditEventEntity", () => {
   });
 
   it("T02: creates an event with actorId = null", () => {
-    const event = AuditEventEntity.create("audit-2", {
+    const event = AuditEventEntity.create({
       eventType: AUTH_AUDIT_EVENT_TYPES.authOauthStart,
       actorId: null,
       organizationId: "org-1",
@@ -41,7 +40,7 @@ describe("AuditEventEntity", () => {
   });
 
   it("T03: defaults payload to an empty object when not provided", () => {
-    const event = AuditEventEntity.create("audit-3", {
+    const event = AuditEventEntity.create({
       eventType: AUTH_AUDIT_EVENT_TYPES.authSessionRevoked,
       actorId: "user-1",
       organizationId: null,
@@ -54,7 +53,7 @@ describe("AuditEventEntity", () => {
 
   it("defaults occurredAt to now when not provided", () => {
     const before = Date.now();
-    const event = AuditEventEntity.create("audit-4", {
+    const event = AuditEventEntity.create({
       eventType: AUTH_AUDIT_EVENT_TYPES.authMfaEnrolled,
       actorId: "user-1",
       organizationId: "org-1",

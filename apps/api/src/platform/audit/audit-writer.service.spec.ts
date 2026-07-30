@@ -2,6 +2,7 @@ import {
   AUDIT_DECISIONS,
   AUDIT_EVENT_SCHEMA_VERSION,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
 import { PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
@@ -65,7 +66,7 @@ describe("AuditWriterService", () => {
       decision: event.decision,
       payload: {
         schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
-        actor: { id: "user-1", type: "user" },
+        actor: { id: "user-1", type: AUDIT_ACTOR_TYPES.user },
         redactionStatus: AUDIT_REDACTION_STATUSES.none,
         result: AUDIT_DECISIONS.allow,
         userId: "u-1",
@@ -93,7 +94,7 @@ describe("AuditWriterService", () => {
     ];
     expect(data.payload).toEqual({
       schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
-      actor: { id: "user-1", type: "user" },
+      actor: { id: "user-1", type: AUDIT_ACTOR_TYPES.user },
       redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
       result: AUDIT_DECISIONS.allow,
       userId: "u-1",
@@ -116,7 +117,7 @@ describe("AuditWriterService", () => {
     ];
     expect(data.payload).toEqual({
       schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
-      actor: { id: "user-1", type: "user" },
+      actor: { id: "user-1", type: AUDIT_ACTOR_TYPES.user },
       redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
       result: AUDIT_DECISIONS.allow,
       userId: "u-1",

@@ -1,8 +1,4 @@
-import {
-  BadGatewayException,
-  ConflictException,
-  NotFoundException,
-} from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 
 import {
@@ -11,7 +7,12 @@ import {
   REPOSITORY_SCAN_JOB_STATUSES,
 } from "@lcsp/contracts/github-integration";
 
+import {
+  fromPrismaRepositoryConnectionStatus,
+  fromPrismaRepositoryScanJobStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { StreamSnapshotArchiveQuery } from "./stream-snapshot-archive.query.js";
 import { GitHubAppClient } from "../../../infrastructure/github/github-app.client.js";
 
@@ -45,20 +46,23 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
     });
 
     if (!scanJob || scanJob.snapshotId !== query.snapshotId) {
-      throw new ConflictException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.snapshotScanMismatch,
-        correlation_id: query.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.snapshotScanMismatch,
+        query.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
     }
 
+    const scanJobStatus = fromPrismaRepositoryScanJobStatus(scanJob.status);
     if (
-      scanJob.status !== REPOSITORY_SCAN_JOB_STATUSES.queued &&
-      scanJob.status !== REPOSITORY_SCAN_JOB_STATUSES.running
+      scanJobStatus !== REPOSITORY_SCAN_JOB_STATUSES.queued &&
+      scanJobStatus !== REPOSITORY_SCAN_JOB_STATUSES.running
     ) {
-      throw new ConflictException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.snapshotScanMismatch,
-        correlation_id: query.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.snapshotScanMismatch,
+        query.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
     }
 
     const snapshot = await this.prisma.repositorySnapshot.findUnique({
@@ -74,10 +78,11 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
     });
 
     if (!snapshot || snapshot.organizationId !== scanJob.organizationId) {
-      throw new NotFoundException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
-        correlation_id: query.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
+        query.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
     const connection = await this.prisma.repositoryConnection.findUnique({
@@ -93,12 +98,14 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
     if (
       !connection ||
       connection.organizationId !== snapshot.organizationId ||
-      connection.status !== REPOSITORY_CONNECTION_STATUSES.active
+      fromPrismaRepositoryConnectionStatus(connection.status) !==
+        REPOSITORY_CONNECTION_STATUSES.active
     ) {
-      throw new NotFoundException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
-        correlation_id: query.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
+        query.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
     try {
@@ -119,16 +126,18 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
     } catch (error: unknown) {
       const reason = error instanceof Error ? error.message : "";
       if (reason === "github_repository_archive_redirect_rejected") {
-        throw new BadGatewayException({
-          error_code: GITHUB_INTEGRATION_ERROR_CODES.snapshotRetrievalFailed,
-          correlation_id: query.correlationId,
-        });
+        throw problemException(
+          GITHUB_INTEGRATION_ERROR_CODES.snapshotRetrievalFailed,
+          query.correlationId,
+          { status: HttpStatus.BAD_GATEWAY },
+        );
       }
 
-      throw new BadGatewayException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.snapshotRetrievalFailed,
-        correlation_id: query.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.snapshotRetrievalFailed,
+        query.correlationId,
+        { status: HttpStatus.BAD_GATEWAY },
+      );
     }
   }
 }

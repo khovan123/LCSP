@@ -43,7 +43,11 @@ function buildHandler(options?: {
     latestVersion === null ? null : { version: latestVersion },
   );
   const findMany = jest.fn(() => rows);
-  const create = jest.fn(() => ({ id: "export-1" }));
+  const create = jest.fn<
+    (input: { data: { status: string; checksumSha256: string } }) => {
+      id: string;
+    }
+  >(() => ({ id: "export-1" }));
   const prisma = {
     auditExportRequest: { findFirst: findLatest, create },
     authAuditEvent: { findMany },
@@ -116,8 +120,11 @@ describe("ExportAuditTrailHandler", () => {
       ),
     ).rejects.toMatchObject({
       response: {
-        error_code: ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
-        correlation_id: "corr-1",
+        ok: false,
+        problem: {
+          code: ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
+          correlationId: "corr-1",
+        },
       },
     });
   });
@@ -138,8 +145,11 @@ describe("ExportAuditTrailHandler", () => {
       ),
     ).rejects.toMatchObject({
       response: {
-        error_code: AUDIT_ERROR_CODES.dateRangeExceeded,
-        correlation_id: "corr-1",
+        ok: false,
+        problem: {
+          code: AUDIT_ERROR_CODES.dateRangeExceeded,
+          correlationId: "corr-1",
+        },
       },
     });
   });
@@ -160,9 +170,12 @@ describe("ExportAuditTrailHandler", () => {
       ),
     ).rejects.toMatchObject({
       response: {
-        error_code: AUDIT_ERROR_CODES.invalidQuery,
-        correlation_id: "corr-1",
-        field: "from_date",
+        ok: false,
+        problem: {
+          code: AUDIT_ERROR_CODES.invalidQuery,
+          correlationId: "corr-1",
+          meta: { field: "from_date" },
+        },
       },
     });
   });

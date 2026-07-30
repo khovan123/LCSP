@@ -1,11 +1,20 @@
-import { NotFoundException, ForbiddenException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import {
+  DOCUMENT_ACTIONS,
+  DOCUMENT_ERROR_CODES,
   DOCUMENT_REQUEST_STATUSES,
   DOCUMENT_TYPES,
 } from "@lcsp/contracts/document";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
+import {
+  fromPrismaClassificationGuardrailStatus,
+  fromPrismaDocumentRequestStatus,
+  fromPrismaDocumentType,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { DocumentStorageService } from "../../../infrastructure/storage/document-storage.service.js";
 import { ListDocumentsQuery } from "./list-documents.query.js";
 
@@ -21,8 +30,9 @@ export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
   ) {}
 
   async execute(query: ListDocumentsQuery) {
-    const allowRedactedRead = query.selectedAction === "document:read:redacted";
-    const allowFullRead = query.selectedAction === "document:read";
+    const allowRedactedRead =
+      query.selectedAction === DOCUMENT_ACTIONS.readRedacted;
+    const allowFullRead = query.selectedAction === DOCUMENT_ACTIONS.read;
     if (!allowFullRead && !allowRedactedRead) {
       this.forbidden(query.correlationId);
     }
@@ -56,18 +66,23 @@ export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
     });
 
     const guardrailById = new Map(
-      classificationMap.map((c) => [c.id, c.guardrailStatus]),
+      classificationMap.map((c) => [
+        c.id,
+        fromPrismaClassificationGuardrailStatus(c.guardrailStatus),
+      ]),
     );
 
     const results = rows
       .map((documentRequest) => {
-        const documentType = this.toDocumentType(documentRequest.documentType);
+        const documentType = fromPrismaDocumentType(
+          documentRequest.documentType,
+        );
         // If caller only has redacted read, do not include FinalReport
         if (allowRedactedRead && documentType === DOCUMENT_TYPES.finalReport) {
           return null;
         }
 
-        const status = this.toDocumentRequestStatus(documentRequest.status);
+        const status = fromPrismaDocumentRequestStatus(documentRequest.status);
         const isReady = status === DOCUMENT_REQUEST_STATUSES.ready;
         const download = isReady
           ? this.buildDownload(
@@ -139,41 +154,19 @@ export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
     );
   }
 
-  private toDocumentType(value: string) {
-    switch (value) {
-      case DOCUMENT_TYPES.finalReport:
-      case DOCUMENT_TYPES.gapAnalysis:
-      case DOCUMENT_TYPES.readinessExport:
-        return value;
-      default:
-        throw new NotFoundException({ error_code: "DOCUMENT_NOT_FOUND" });
-    }
-  }
-
-  private toDocumentRequestStatus(value: string) {
-    switch (value) {
-      case DOCUMENT_REQUEST_STATUSES.queued:
-      case DOCUMENT_REQUEST_STATUSES.generating:
-      case DOCUMENT_REQUEST_STATUSES.ready:
-      case DOCUMENT_REQUEST_STATUSES.failed:
-      case DOCUMENT_REQUEST_STATUSES.blocked:
-        return value;
-      default:
-        throw new NotFoundException({ error_code: "DOCUMENT_NOT_FOUND" });
-    }
-  }
-
   private notFound(correlationId: string): never {
-    throw new NotFoundException({
-      error_code: "DOCUMENT_NOT_FOUND",
-      correlation_id: correlationId,
-    });
+    throw problemException(
+      DOCUMENT_ERROR_CODES.documentNotFound,
+      correlationId,
+      {
+        status: HttpStatus.NOT_FOUND,
+      },
+    );
   }
 
   private forbidden(correlationId: string): never {
-    throw new ForbiddenException({
-      error_code: "PBAC_DENIED",
-      correlation_id: correlationId,
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 }

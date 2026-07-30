@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
 
 import { config, configValidationSchema } from "./config/config.js";
 import { AppFeatureModule } from "./modules/app/app.module.js";
@@ -21,6 +22,8 @@ import { LegalRuleCatalogModule } from "./modules/legal-rule-catalog/legal-rule-
 import { OutboxModule } from "./platform/outbox/outbox.module.js";
 import { PbacModule } from "./platform/pbac/pbac.module.js";
 import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.module.js";
+import { ProblemExceptionFilter } from "./platform/problems/problem-exception.filter.js";
+import { ProblemStatusInterceptor } from "./platform/problems/problem-status.interceptor.js";
 
 @Module({
   imports: [
@@ -50,6 +53,16 @@ import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.modul
     WizardModule,
     LegalRuleCatalogModule,
     HealthModule,
+  ],
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: ProblemExceptionFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ProblemStatusInterceptor,
+    },
   ],
 })
 export class AppModule {}

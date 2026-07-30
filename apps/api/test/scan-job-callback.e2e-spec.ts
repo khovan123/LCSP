@@ -14,6 +14,7 @@ import {
 import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
+  type RepositoryScanJobStatus,
 } from "@lcsp/contracts/github-integration";
 import {
   SCAN_CALLBACK_STATUSES,
@@ -34,10 +35,9 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
-type ErrorResponse = { error_code?: string };
 
 describe("Scan Job Callback Endpoint (e2e) [MW-scan-002]", () => {
   let app: INestApplication;
@@ -84,7 +84,7 @@ describe("Scan Job Callback Endpoint (e2e) [MW-scan-002]", () => {
     await createJob(prisma, REPOSITORY_SCAN_JOB_STATUSES.running);
 
     const response = await callback(app, validPayload());
-    const body = response.body as ScanCallbackDto;
+    const body = successBody<ScanCallbackDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -208,7 +208,7 @@ describe("Scan Job Callback Endpoint (e2e) [MW-scan-002]", () => {
         error_code: "SCANNER_EXECUTION_FAILED",
       }),
     );
-    const body = response.body as ScanCallbackDto;
+    const body = successBody<ScanCallbackDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, false);
@@ -278,7 +278,10 @@ function validPayload(
   };
 }
 
-async function createJob(prisma: PrismaClient, status: string) {
+async function createJob(
+  prisma: PrismaClient,
+  status: RepositoryScanJobStatus,
+) {
   await prisma.repositoryScanJob.create({
     data: {
       id: "scan-job-1",
@@ -314,5 +317,5 @@ function assertError(
   expectedCode: string,
 ): void {
   assert.equal(actualStatus, expectedStatus);
-  assert.equal((body as ErrorResponse).error_code, expectedCode);
+  assert.equal(problemCode(body), expectedCode);
 }

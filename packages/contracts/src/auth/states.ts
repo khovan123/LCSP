@@ -1,15 +1,15 @@
 export const AUTH_MEMBERSHIP_STATUSES = {
-  invited: "invited",
-  active: "active",
-  revoked: "revoked",
+  invited: "INVITED",
+  active: "ACTIVE",
+  revoked: "REVOKED",
 } as const;
 
 export const AUTH_INVITATION_STATES = {
-  approved: "approved",
-  pending: "pending",
-  consumed: "consumed",
+  approved: "APPROVED",
+  pending: "PENDING",
+  consumed: "CONSUMED",
 } as const;
 
 export const WORKSPACE_CAPABILITY_SOURCES = {
-  backendProjection: "backend_projection",
+  backendProjection: "BACKEND_PROJECTION",
 } as const;

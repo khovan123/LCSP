@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   ASSESSMENT_STATUS_CODES,
   type AssessmentStatusCode,
@@ -16,8 +18,14 @@ type AssessmentProps = {
   updatedAt: Date;
 };
 
+type NewAssessmentProps = Omit<AssessmentProps, "id">;
+
 export class Assessment {
-  private constructor(private readonly props: AssessmentProps) {}
+  private constructor(props: NewAssessmentProps) {
+    this.props = { ...props, id: randomUUID() };
+  }
+
+  private props: AssessmentProps;
 
   static create(input: {
     organizationId: string;
@@ -28,7 +36,6 @@ export class Assessment {
     const now = new Date();
 
     return new Assessment({
-      id: crypto.randomUUID(),
       organizationId: input.organizationId,
       ownerId: input.ownerId,
       name: input.name.trim(),
@@ -40,7 +47,9 @@ export class Assessment {
   }
 
   static rehydrate(props: AssessmentProps): Assessment {
-    return new Assessment(props);
+    const entity = new Assessment(props);
+    entity.props = props;
+    return entity;
   }
 
   get id(): string {

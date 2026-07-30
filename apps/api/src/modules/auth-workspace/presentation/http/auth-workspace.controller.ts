@@ -1,9 +1,7 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
-  ForbiddenException,
   Get,
   Headers,
   HttpCode,
@@ -20,6 +18,7 @@ import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   DEVELOPER_ALLOWED_ACTION_VALUES,
   PBAC_ACTIONS,
+  SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
 
 import type { RequestMeta } from "../../application/contracts/auth-workspace/common.contract.ts";
@@ -45,6 +44,7 @@ import { RequireAction } from "../../../../platform/pbac/decorators/require-acti
 import { RequireAnyActionAsPbac } from "../../../../platform/pbac/decorators/require-any-action-as-pbac.decorator.js";
 import { RequireSession } from "../../../../platform/pbac/decorators/require-session.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
@@ -64,10 +64,17 @@ export class AuthWorkspaceController {
     @Req() request: AuthenticatedRequest,
   ) {
     if (request.pbacContext.organizationId !== orgId) {
-      throw new ForbiddenException({ error_code: AUTH_ERROR_CODES.pbacDenied });
+      throw problemException(
+        AUTH_ERROR_CODES.pbacDenied,
+        request.correlationId as string,
+        { status: HttpStatus.FORBIDDEN },
+      );
     }
     const memberships = await this.prisma.authMembership.findMany({
-      where: { organizationId: orgId, policy: { subjectRole: "Developer" } },
+      where: {
+        organizationId: orgId,
+        policy: { subjectRole: SUBJECT_ROLES.developer },
+      },
       include: {
         user: { select: { id: true, email: true, displayName: true } },
         policy: { select: { actions: true } },
@@ -97,11 +104,11 @@ export class AuthWorkspaceController {
   ) {
     const pbacContext = request.pbacContext;
     if (pbacContext.organizationId !== orgId) {
-      throw new ForbiddenException({
-        error_code: AUTH_ERROR_CODES.pbacDenied,
-        code: AUTH_ERROR_CODES.pbacDenied,
-        correlation_id: request.correlationId,
-      });
+      throw problemException(
+        AUTH_ERROR_CODES.pbacDenied,
+        request.correlationId as string,
+        { status: HttpStatus.FORBIDDEN },
+      );
     }
 
     return resultEnvelope(
@@ -125,10 +132,8 @@ export class AuthWorkspaceController {
     const pbacContext = request.pbacContext;
     if (pbacContext.organizationId !== orgId) {
       const errorCode = REVOKE_MEMBERSHIP_ERROR_CODES.organizationScopeMismatch;
-      throw new BadRequestException({
-        error_code: errorCode,
-        code: errorCode,
-        correlation_id: request.correlationId,
+      throw problemException(errorCode, request.correlationId as string, {
+        status: HttpStatus.BAD_REQUEST,
       });
     }
 

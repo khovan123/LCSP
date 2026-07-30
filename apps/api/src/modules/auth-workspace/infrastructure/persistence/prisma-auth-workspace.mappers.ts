@@ -16,6 +16,11 @@ import type {
 } from "@prisma/client";
 
 import {
+  fromPrismaAuthInvitationState,
+  fromPrismaAuthMembershipStatus,
+  fromPrismaAuthStateGate,
+} from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import {
   Invitation,
   MfaEnrollment,
   MfaRateLimit,
@@ -33,7 +38,7 @@ import {
 import type { SubjectAttributes } from "../../domain/models/auth-workspace.models.ts";
 
 export function mapOrganizationRecord(record: AuthOrganization): Organization {
-  return new Organization({
+  return Organization.rehydrate({
     id: record.id,
     slug: record.slug,
     name: record.name,
@@ -42,7 +47,7 @@ export function mapOrganizationRecord(record: AuthOrganization): Organization {
 }
 
 export function mapUserRecord(record: AuthUser): User {
-  return new User({
+  return User.rehydrate({
     id: record.id,
     email: record.email,
     passwordHash: record.passwordHash,
@@ -58,7 +63,7 @@ export function mapUserRecord(record: AuthUser): User {
 export function mapRecoveryRequestRecord(
   record: AuthRecoveryRequest,
 ): RecoveryRequest {
-  return new RecoveryRequest({
+  return RecoveryRequest.rehydrate({
     id: record.id,
     userId: record.userId,
     tokenHash: record.tokenHash,
@@ -68,11 +73,11 @@ export function mapRecoveryRequestRecord(
 }
 
 export function mapMembershipRecord(record: AuthMembership): Membership {
-  return new Membership({
+  return Membership.rehydrate({
     id: record.id,
     userId: record.userId,
     organizationId: record.organizationId,
-    status: record.status,
+    status: fromPrismaAuthMembershipStatus(record.status),
     subjectAttributes: jsonToSubjectAttributes(record.subjectAttributes),
     policyId: record.policyId,
     policyVersion: record.policyVersion,
@@ -80,13 +85,13 @@ export function mapMembershipRecord(record: AuthMembership): Membership {
 }
 
 export function mapInvitationRecord(record: AuthInvitation): Invitation {
-  return new Invitation({
+  return Invitation.rehydrate({
     id: record.id,
     email: record.email,
     organizationId: record.organizationId,
-    state: record.state,
+    state: fromPrismaAuthInvitationState(record.state),
     emailVerified: record.emailVerified,
-    membershipStatus: record.membershipStatus,
+    membershipStatus: fromPrismaAuthMembershipStatus(record.membershipStatus),
     subjectAttributes: jsonToSubjectAttributes(record.subjectAttributes),
     policyId: record.policyId,
     policyVersion: record.policyVersion,
@@ -95,7 +100,7 @@ export function mapInvitationRecord(record: AuthInvitation): Invitation {
 }
 
 export function mapSessionRecord(record: AuthSession): Session {
-  return new Session({
+  return Session.rehydrate({
     id: record.id,
     userId: record.userId,
     organizationId: record.organizationId,
@@ -123,18 +128,18 @@ export function mapMfaRateLimitRecord(record: AuthMfaRateLimit): MfaRateLimit {
 }
 
 export function mapPolicyRecord(record: AuthPolicy): Policy {
-  return new Policy({
+  return Policy.rehydrate({
     id: record.id,
     version: record.version,
     actions: record.actions,
     subjectRole: record.subjectRole,
-    stateGate: record.stateGate,
+    stateGate: fromPrismaAuthStateGate(record.stateGate),
     organizationId: record.organizationId,
   });
 }
 
 export function mapOAuthStateRecord(record: AuthOAuthState): OAuthState {
-  return new OAuthState({
+  return OAuthState.rehydrate({
     id: record.id,
     state: record.state,
     nonce: record.nonce,
@@ -147,7 +152,7 @@ export function mapOAuthStateRecord(record: AuthOAuthState): OAuthState {
 export function mapOAuthIdentityRecord(
   record: AuthOAuthIdentity,
 ): OAuthIdentity {
-  return new OAuthIdentity({
+  return OAuthIdentity.rehydrate({
     id: record.id,
     userId: record.userId,
     provider: record.provider,

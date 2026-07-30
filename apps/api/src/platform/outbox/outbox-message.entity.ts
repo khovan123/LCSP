@@ -1,4 +1,7 @@
+import { randomUUID } from "node:crypto";
+
 import {
+  type OutboxAggregateType,
   OUTBOX_STATUSES,
   type OutboxMessageInput,
   type OutboxStatus,
@@ -6,7 +9,7 @@ import {
 
 export class OutboxMessageEntity {
   readonly id: string;
-  readonly aggregateType: string;
+  readonly aggregateType: OutboxAggregateType;
   readonly aggregateId: string;
   readonly eventType: string;
   readonly payload: Record<string, unknown>;
@@ -18,8 +21,7 @@ export class OutboxMessageEntity {
   readonly createdAt: Date;
 
   private constructor(fields: {
-    id: string;
-    aggregateType: string;
+    aggregateType: OutboxAggregateType;
     aggregateId: string;
     eventType: string;
     payload: Record<string, unknown>;
@@ -30,7 +32,7 @@ export class OutboxMessageEntity {
     errorMessage: string | null;
     createdAt: Date;
   }) {
-    this.id = fields.id;
+    this.id = randomUUID();
     this.aggregateType = fields.aggregateType;
     this.aggregateId = fields.aggregateId;
     this.eventType = fields.eventType;
@@ -44,12 +46,10 @@ export class OutboxMessageEntity {
   }
 
   static create(
-    id: string,
     input: OutboxMessageInput,
     createdAt: Date = new Date(),
   ): OutboxMessageEntity {
     return new OutboxMessageEntity({
-      id,
       aggregateType: input.aggregateType,
       aggregateId: input.aggregateId,
       eventType: input.eventType,
@@ -65,7 +65,7 @@ export class OutboxMessageEntity {
 
   static fromPersistence(fields: {
     id: string;
-    aggregateType: string;
+    aggregateType: OutboxAggregateType;
     aggregateId: string;
     eventType: string;
     payload: Record<string, unknown>;
@@ -76,6 +76,8 @@ export class OutboxMessageEntity {
     errorMessage: string | null;
     createdAt: Date;
   }): OutboxMessageEntity {
-    return new OutboxMessageEntity(fields);
+    const entity = new OutboxMessageEntity(fields);
+    Object.assign(entity, { id: fields.id });
+    return entity;
   }
 }

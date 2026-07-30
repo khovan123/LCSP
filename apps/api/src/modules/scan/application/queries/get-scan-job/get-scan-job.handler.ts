@@ -1,14 +1,18 @@
-import { NotFoundException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import {
   REPOSITORY_SCAN_JOB_STATUSES,
   type RepositoryScanJobStatus,
-  type RepositoryScanTriggerSource,
 } from "@lcsp/contracts/github-integration";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { SCAN_ERROR_CODES, SCAN_JOB_GUIDANCE } from "@lcsp/contracts/scan";
 
+import {
+  fromPrismaRepositoryScanJobStatus,
+  fromPrismaRepositoryScanTriggerSource,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type { ScanJobStatusDto } from "../../contracts/scan/scan-job-status.contract.js";
 import { GetScanJobQuery } from "./get-scan-job.query.js";
 
@@ -46,12 +50,12 @@ export class GetScanJobHandler implements IQueryHandler<GetScanJobQuery> {
       this.notFound(query.correlationId);
     }
 
-    const status = job.status as RepositoryScanJobStatus;
+    const status = fromPrismaRepositoryScanJobStatus(job.status);
     return {
       scan_job_id: job.id,
       assessment_id: job.assessmentId,
       status,
-      trigger_source: job.triggerSource as RepositoryScanTriggerSource,
+      trigger_source: fromPrismaRepositoryScanTriggerSource(job.triggerSource),
       attempt_count: job.attemptCount,
       blocked_reason:
         status === REPOSITORY_SCAN_JOB_STATUSES.blocked
@@ -65,9 +69,8 @@ export class GetScanJobHandler implements IQueryHandler<GetScanJobQuery> {
   }
 
   private notFound(correlationId: string): never {
-    throw new NotFoundException({
-      error_code: SCAN_ERROR_CODES.jobNotFound,
-      correlation_id: correlationId,
+    throw problemException(SCAN_ERROR_CODES.jobNotFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
     });
   }
 }

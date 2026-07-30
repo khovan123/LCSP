@@ -1,4 +1,4 @@
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
@@ -70,7 +70,7 @@ describe("SaveWizardDraftHandler", () => {
       wizardRepository.upsertDraft.mockImplementation((profile) => {
         // mock return what we passed in with some generated fields
         return Promise.resolve(
-          new WizardProfileEntity({
+          WizardProfileEntity.rehydrate({
             ...profile,
             id: "wizard-id-1",
             createdAt: new Date(),
@@ -100,7 +100,7 @@ describe("SaveWizardDraftHandler", () => {
         eventType: WIZARD_EVENT_TYPES.draftSaved,
         actorId: "owner-1",
         organizationId: "org-1",
-        resourceType: "wizard_profile",
+        resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
         resourceId: "wizard-id-1",
         decision: AUDIT_DECISIONS.allow,
         payload: {
@@ -122,7 +122,7 @@ describe("SaveWizardDraftHandler", () => {
     it("T02: should update an existing IN_PROGRESS draft and bump version", async () => {
       wizardRepository.verifyAssessmentOwnership.mockResolvedValue(true);
       wizardRepository.findByAssessmentId.mockResolvedValue(
-        new WizardProfileEntity({
+        WizardProfileEntity.rehydrate({
           id: "wizard-id-2",
           assessmentId: "assessment-123",
           organizationId: "org-1",
@@ -134,7 +134,7 @@ describe("SaveWizardDraftHandler", () => {
       );
       wizardRepository.upsertDraft.mockImplementation((p) =>
         Promise.resolve(
-          new WizardProfileEntity({
+          WizardProfileEntity.rehydrate({
             ...p,
             updatedAt: new Date(),
           }),
@@ -157,7 +157,7 @@ describe("SaveWizardDraftHandler", () => {
     it("T03: should throw WizardAlreadySubmittedException if status is SUBMITTED", async () => {
       wizardRepository.verifyAssessmentOwnership.mockResolvedValue(true);
       wizardRepository.findByAssessmentId.mockResolvedValue(
-        new WizardProfileEntity({
+        WizardProfileEntity.rehydrate({
           id: "wizard-id-3",
           assessmentId: "assessment-123",
           status: WIZARD_STATUS_CODES.submitted,
@@ -185,7 +185,7 @@ describe("SaveWizardDraftHandler", () => {
       wizardRepository.findByAssessmentId.mockResolvedValue(null);
       wizardRepository.upsertDraft.mockImplementation((profile) => {
         return Promise.resolve(
-          new WizardProfileEntity({
+          WizardProfileEntity.rehydrate({
             ...profile,
             id: "wizard-id-4",
             createdAt: new Date(),
@@ -231,7 +231,7 @@ describe("SaveWizardDraftHandler", () => {
           eventType: WIZARD_EVENT_TYPES.draftSaved,
           actorId: "developer-1",
           organizationId: "org-1",
-          resourceType: "wizard_profile",
+          resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
           resourceId: null,
           decision: AUDIT_DECISIONS.deny,
           reasonCode: AUTH_ERROR_CODES.pbacDenied,

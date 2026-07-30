@@ -21,8 +21,14 @@ export type RepositoryScanJobProps = {
   updatedAt: Date;
 };
 
+type NewRepositoryScanJobProps = Omit<RepositoryScanJobProps, "id">;
+
 export class RepositoryScanJob {
-  private constructor(private readonly props: RepositoryScanJobProps) {}
+  private props: RepositoryScanJobProps;
+
+  private constructor(props: NewRepositoryScanJobProps) {
+    this.props = { ...props, id: randomUUID() };
+  }
 
   static create(
     input: Omit<
@@ -38,7 +44,6 @@ export class RepositoryScanJob {
     const now = new Date();
     return new RepositoryScanJob({
       ...input,
-      id: randomUUID(),
       status: REPOSITORY_SCAN_JOB_STATUSES.queued,
       attemptCount: 0,
       blockedReason: null,
@@ -48,7 +53,9 @@ export class RepositoryScanJob {
   }
 
   static rehydrate(props: RepositoryScanJobProps): RepositoryScanJob {
-    return new RepositoryScanJob(props);
+    const entity = new RepositoryScanJob(props);
+    entity.props = props;
+    return entity;
   }
 
   get id(): string {

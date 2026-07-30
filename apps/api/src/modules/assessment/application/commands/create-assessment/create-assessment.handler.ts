@@ -1,16 +1,17 @@
-import {
-  ForbiddenException,
-  Inject,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { HttpStatus, Inject } from "@nestjs/common";
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -20,6 +21,7 @@ import {
 } from "@lcsp/contracts/assessment";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { Assessment } from "../../../domain/entities/assessment.entity.js";
 import { AssessmentMapper } from "../../mappers/assessment.mapper.js";
 import {
@@ -60,7 +62,7 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       actorId: assessment.ownerId,
       organizationId: assessment.organizationId,
       assessmentId: assessment.id,
-      resourceType: "Assessment",
+      resourceType: AUDIT_RESOURCE_TYPES.assessment,
       resourceId: assessment.id,
       correlationId: command.correlationId,
       causationId: command.correlationId,
@@ -77,14 +79,14 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       },
     };
     const outboxEvent = buildOutboxMessageInput({
-      aggregateType: "Assessment",
+      aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
       aggregateId: assessment.id,
       eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
       organizationId: assessment.organizationId,
       assessmentId: assessment.id,
       correlationId: command.correlationId,
       causationId: command.correlationId,
-      actor: { id: assessment.ownerId, type: "user" },
+      actor: { id: assessment.ownerId, type: AUDIT_ACTOR_TYPES.user },
       result: ASSESSMENT_EVENT_TYPES.created,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       idempotencyKey: `${assessment.id}:${ASSESSMENT_EVENT_TYPES.createdOutbox}`,
@@ -121,7 +123,7 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       eventType: ASSESSMENT_EVENT_TYPES.created,
       actorId: command.ownerId,
       organizationId: command.organizationId,
-      resourceType: "Assessment",
+      resourceType: AUDIT_RESOURCE_TYPES.assessment,
       resourceId: null,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.deny,
@@ -135,9 +137,8 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       },
     });
 
-    throw new ForbiddenException({
-      error_code: AUTH_ERROR_CODES.pbacDenied,
-      correlation_id: command.correlationId,
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 
@@ -148,10 +149,11 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       (command.description?.length ?? 0) > DESCRIPTION_MAX_LENGTH;
 
     if (nameInvalid || descriptionInvalid) {
-      throw new UnprocessableEntityException({
-        error_code: ASSESSMENT_ERROR_CODES.invalidRequest,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        ASSESSMENT_ERROR_CODES.invalidRequest,
+        command.correlationId,
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
+      );
     }
   }
 }

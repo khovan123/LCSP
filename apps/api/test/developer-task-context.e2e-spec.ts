@@ -29,7 +29,7 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const TOKEN = "developer-task-session-token";
 const USER_ID = "developer-task-user";
@@ -37,7 +37,6 @@ const SESSION_ID = "developer-task-session";
 const POLICY_ID = "developer-task-policy";
 const POLICY_VERSION = "1";
 const ASSESSMENT_ID = "developer-task-assessment";
-type ErrorBody = { error_code: string };
 
 describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () => {
   let app: INestApplication;
@@ -73,7 +72,7 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
 
   it("T01/T07/T09 returns exact assessment context and only current Developer actions", async () => {
     const response = await getContext(app, "corr-developer-task");
-    const body = response.body as DeveloperTaskContextResponse;
+    const body = successBody<DeveloperTaskContextResponse>(response);
 
     assert.equal(response.status, 200);
     assert.deepEqual(body, {
@@ -118,7 +117,7 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
     });
 
     const response = await getContext(app);
-    const body = response.body as DeveloperTaskContextResponse;
+    const body = successBody<DeveloperTaskContextResponse>(response);
     assert.equal(response.status, 200);
     assert.deepEqual(body.scope, {
       type: "organization",
@@ -134,7 +133,7 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
     const response = await getContext(app);
     assert.equal(response.status, 401);
     assert.equal(
-      (response.body as ErrorBody).error_code,
+      problemCode(response),
       DEVELOPER_TASK_CONTEXT_ERROR_CODES.sessionInvalid,
     );
   });
@@ -147,7 +146,7 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
     const response = await getContext(app);
     assert.equal(response.status, 403);
     assert.equal(
-      (response.body as ErrorBody).error_code,
+      problemCode(response),
       DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
     );
   });
@@ -162,7 +161,7 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
     const response = await getContext(app);
     assert.equal(response.status, 403);
     assert.equal(
-      (response.body as ErrorBody).error_code,
+      problemCode(response),
       DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
     );
     assert.doesNotMatch(JSON.stringify(response.body), /membership/i);
@@ -184,10 +183,7 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
       }
       const response = await getContext(app);
       assert.equal(response.status, 404);
-      assert.equal(
-        (response.body as ErrorBody).error_code,
-        "TASK_SCOPE_NOT_FOUND",
-      );
+      assert.equal(problemCode(response), "TASK_SCOPE_NOT_FOUND");
       assert.doesNotMatch(
         JSON.stringify(response.body),
         /Secret Foreign|foreign-org|developer-task-assessment/i,
@@ -204,7 +200,7 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
     const response = await getContext(app);
     assert.equal(response.status, 403);
     assert.equal(
-      (response.body as ErrorBody).error_code,
+      problemCode(response),
       DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
     );
   });
@@ -224,7 +220,7 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
     const response = await getContext(app, "corr-missing-policy");
     assert.equal(response.status, 403);
     assert.equal(
-      (response.body as ErrorBody).error_code,
+      problemCode(response),
       DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
     );
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
@@ -239,14 +235,15 @@ describe("Developer scoped workspace context endpoint (e2e) [MW-auth-016]", () =
       password: "CorrectHorseBatteryStaple!",
       organization_id: organizationId,
     });
-    const managerToken = (signIn.body as { session_token: string })
-      .session_token;
+    const managerToken = successBody<{ session_token: string }>(
+      signIn,
+    ).session_token;
     const denied = await httpRequest(app)
       .get("/workspace/developer-task")
       .set("authorization", `Bearer ${managerToken}`);
     assert.equal(denied.status, 403);
     assert.equal(
-      (denied.body as ErrorBody).error_code,
+      problemCode(denied),
       DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
     );
 

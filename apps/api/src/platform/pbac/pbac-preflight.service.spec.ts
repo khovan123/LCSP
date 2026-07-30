@@ -23,7 +23,7 @@ import {
 function makeMembership(
   overrides: Partial<ConstructorParameters<typeof Membership>[0]> = {},
 ): Membership {
-  return new Membership({
+  return Membership.rehydrate({
     id: "membership-1",
     userId: "user-1",
     organizationId: "org-1",
@@ -38,7 +38,7 @@ function makeMembership(
 function makePolicy(
   overrides: Partial<ConstructorParameters<typeof Policy>[0]> = {},
 ): Policy {
-  return new Policy({
+  return Policy.rehydrate({
     id: "policy-1",
     version: "v1",
     actions: [PBAC_ACTIONS.scanTrigger],

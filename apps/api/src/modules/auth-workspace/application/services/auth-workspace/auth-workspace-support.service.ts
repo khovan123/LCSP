@@ -2,9 +2,8 @@ import {
   AUTH_ERROR_CODES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
   createProblemResult,
-  type AuthErrorCode,
 } from "@lcsp/contracts/auth";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   PBAC_ACTIONS,
   PBAC_DECISION,
@@ -195,7 +194,6 @@ export class AuthWorkspaceSupportService {
     const token = issueOpaqueToken();
     const fingerprint = fingerprintToken(token);
     const session = new SessionEntity({
-      id: repositories.sessions.nextId(),
       userId: user.id,
       organizationId,
       tokenHash: hashSecret(token),
@@ -263,13 +261,10 @@ export class AuthWorkspaceSupportService {
       const denialCode = domainDecision.allowed
         ? AUTH_ERROR_CODES.authzEvaluatorFailure
         : domainDecision.code;
-      const denied = createProblemResult(
-        denialCode as AuthErrorCode,
-        correlationId,
-      );
+      const denied = createProblemResult(denialCode, correlationId);
       await this.recordDecision(repositories, {
         organization_id: membership?.organizationId ?? null,
-        resource_type: "Workspace",
+        resource_type: AUDIT_RESOURCE_TYPES.workspace,
         resource_id: resourceId,
         action: PBAC_ACTIONS.workspaceRead,
         decision: PBAC_DECISION.deny,
@@ -283,7 +278,7 @@ export class AuthWorkspaceSupportService {
 
     const allowed: AuthorizationDecision = {
       organization_id: organizationId,
-      resource_type: "Workspace",
+      resource_type: AUDIT_RESOURCE_TYPES.workspace,
       resource_id: resourceId,
       action: PBAC_ACTIONS.workspaceRead,
       decision: PBAC_DECISION.allow,

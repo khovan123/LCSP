@@ -1,4 +1,4 @@
-import { NotFoundException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import * as crypto from "node:crypto";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { Prisma } from "@prisma/client";
@@ -6,11 +6,22 @@ import {
   buildAuditEventInput,
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_IDS,
 } from "@lcsp/contracts/audit";
-import { DOCUMENT_EVENT_TYPES } from "@lcsp/contracts/document";
+import {
+  DOCUMENT_ERROR_CODES,
+  DOCUMENT_EVENT_TYPES,
+} from "@lcsp/contracts/document";
 
+import {
+  toPrismaAuditResourceType,
+  toPrismaAuthDecision,
+  toPrismaDocumentRequestStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type {
   DocumentCallbackRequest,
   DocumentCallbackDto,
@@ -39,11 +50,15 @@ export class ProcessDocumentCallbackHandler implements ICommandHandler<ProcessDo
     });
 
     if (!request) {
-      throw new NotFoundException();
+      throw problemException(
+        DOCUMENT_ERROR_CODES.documentNotFound,
+        command.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
     const updateData: Prisma.DocumentRequestUpdateInput = {
-      status: payload.status,
+      status: toPrismaDocumentRequestStatus(payload.status),
     };
 
     if (payload.document_url) {
@@ -60,10 +75,10 @@ export class ProcessDocumentCallbackHandler implements ICommandHandler<ProcessDo
 
     const auditEvent = buildAuditEventInput({
       eventType: DOCUMENT_EVENT_TYPES.gapAnalysisRequestedAudit,
-      actorId: "document-worker",
+      actorId: AUDIT_ACTOR_IDS.documentWorker,
       organizationId: request.organizationId,
       assessmentId: request.assessmentId,
-      resourceType: "DocumentRequest",
+      resourceType: AUDIT_RESOURCE_TYPES.documentRequest,
       resourceId: request.id,
       correlationId: request.correlationId ?? command.correlationId,
       decision: AUDIT_DECISIONS.allow,
@@ -78,11 +93,15 @@ export class ProcessDocumentCallbackHandler implements ICommandHandler<ProcessDo
         eventType: auditEvent.eventType,
         actorId: auditEvent.actorId,
         organizationId: auditEvent.organizationId,
-        resourceType: auditEvent.resourceType ?? null,
+        resourceType: auditEvent.resourceType
+          ? toPrismaAuditResourceType(auditEvent.resourceType)
+          : null,
         resourceId: auditEvent.resourceId ?? null,
         correlationId: auditEvent.correlationId,
         reasonCode: auditEvent.reasonCode ?? null,
-        decision: auditEvent.decision,
+        decision: auditEvent.decision
+          ? toPrismaAuthDecision(auditEvent.decision)
+          : null,
         payload: auditEvent.payload as Prisma.InputJsonValue,
       },
     });

@@ -1,15 +1,21 @@
-import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import {
   DOCUMENT_ERROR_CODES,
   DOCUMENT_REQUEST_STATUSES,
   type DocumentRequestStatus,
   DOCUMENT_TYPES,
-  type DocumentType,
 } from "@lcsp/contracts/document";
-import { PBAC_ACTIONS, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
+import {
+  fromPrismaClassificationGuardrailStatus,
+  fromPrismaDocumentRequestStatus,
+  fromPrismaDocumentType,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { DocumentStorageService } from "../../../infrastructure/storage/document-storage.service.js";
 import type { DocumentStatusDto } from "../../contracts/document/document-status.contract.js";
 import { GetDocumentQuery } from "./get-document.query.js";
@@ -61,8 +67,8 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
       this.notFound(query.correlationId);
     }
 
-    const documentType = toDocumentType(documentRequest.documentType);
-    const status = toDocumentRequestStatus(documentRequest.status);
+    const documentType = fromPrismaDocumentType(documentRequest.documentType);
+    const status = fromPrismaDocumentRequestStatus(documentRequest.status);
 
     const classification = await this.prisma.classificationResult.findUnique({
       where: { id: documentRequest.classificationResultId },
@@ -90,7 +96,9 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
         status === DOCUMENT_REQUEST_STATUSES.blocked
           ? toBusinessBlockedReason(documentRequest.blockedReason)
           : null,
-      guardrail_status: classification?.guardrailStatus ?? null,
+      guardrail_status: classification
+        ? fromPrismaClassificationGuardrailStatus(classification.guardrailStatus)
+        : null,
       download_url: download?.url ?? null,
       download_url_expires_at: download?.expiresAt ?? null,
       requested_at: documentRequest.createdAt.toISOString(),
@@ -123,16 +131,18 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
   }
 
   private notFound(correlationId: string): never {
-    throw new NotFoundException({
-      error_code: DOCUMENT_ERROR_CODES.documentNotFound,
-      correlation_id: correlationId,
-    });
+    throw problemException(
+      DOCUMENT_ERROR_CODES.documentNotFound,
+      correlationId,
+      {
+        status: HttpStatus.NOT_FOUND,
+      },
+    );
   }
 
   private forbidden(correlationId: string): never {
-    throw new ForbiddenException({
-      error_code: PBAC_REASON_CODE.denied,
-      correlation_id: correlationId,
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 }
@@ -149,34 +159,6 @@ function looksTechnical(reason: string): boolean {
   return /(exception|stack|trace|\/|\\|\.ts\b|\.js\b|sql\b|timeout|503|500)/i.test(
     reason,
   );
-}
-
-function toDocumentType(value: string): DocumentType {
-  switch (value) {
-    case DOCUMENT_TYPES.finalReport:
-    case DOCUMENT_TYPES.gapAnalysis:
-    case DOCUMENT_TYPES.readinessExport:
-      return value;
-    default:
-      throw new NotFoundException({
-        error_code: DOCUMENT_ERROR_CODES.documentNotFound,
-      });
-  }
-}
-
-function toDocumentRequestStatus(value: string): DocumentRequestStatus {
-  switch (value) {
-    case DOCUMENT_REQUEST_STATUSES.queued:
-    case DOCUMENT_REQUEST_STATUSES.generating:
-    case DOCUMENT_REQUEST_STATUSES.ready:
-    case DOCUMENT_REQUEST_STATUSES.failed:
-    case DOCUMENT_REQUEST_STATUSES.blocked:
-      return value;
-    default:
-      throw new NotFoundException({
-        error_code: DOCUMENT_ERROR_CODES.documentNotFound,
-      });
-  }
 }
 
 function isCompletedStatus(status: DocumentRequestStatus): boolean {

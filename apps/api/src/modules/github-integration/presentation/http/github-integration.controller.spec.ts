@@ -6,7 +6,11 @@ import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import {
+  PBAC_ACTIONS,
+  PBAC_METADATA_TYPES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
 
 import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-metadata.js";
 import { PinSnapshotCommand } from "../../application/commands/pin-snapshot/pin-snapshot.command.js";
@@ -23,7 +27,7 @@ describe("GitHubIntegrationController.pinSnapshot", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: "action",
+      type: PBAC_METADATA_TYPES.action,
       action: PBAC_ACTIONS.snapshotCreate,
     });
   });
@@ -75,7 +79,7 @@ describe("GitHubIntegrationController.triggerScan", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: "action",
+      type: PBAC_METADATA_TYPES.action,
       action: PBAC_ACTIONS.scanTrigger,
     });
   });

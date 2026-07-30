@@ -46,7 +46,10 @@ describe("AppController (e2e)", () => {
   it("bootstraps the Nest application and resolves the root controller", () => {
     const controller = app.get(AppController);
 
-    return expect(controller.getHello()).resolves.toBe("Hello World!");
+    return expect(controller.getHello()).resolves.toEqual({
+      ok: true,
+      data: "Hello World!",
+    });
   });
 
   it("resolves the users CQRS controller through dependency injection", async () => {
@@ -55,7 +58,12 @@ describe("AppController (e2e)", () => {
       email: "architect@lcsp.test",
       displayName: "LCSP Architect",
     });
-    const found = await controller.getUserById(created.id);
+    expect(created.ok).toBe(true);
+    if (!created.ok) {
+      throw new Error("Expected user creation to succeed");
+    }
+
+    const found = await controller.getUserById(created.data.id);
 
     expect(found).toEqual(created);
   });

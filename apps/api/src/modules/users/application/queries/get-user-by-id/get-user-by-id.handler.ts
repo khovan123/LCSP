@@ -1,8 +1,12 @@
-import { Inject, NotFoundException } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
+
+import { HttpStatus, Inject } from "@nestjs/common";
 import { QueryHandler } from "@nestjs/cqrs";
 import type { IQueryHandler } from "@nestjs/cqrs";
 
 import { UserMapper } from "../../mappers/user.mapper.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   USER_REPOSITORY,
   type UserRepository,
@@ -20,7 +24,9 @@ export class GetUserByIdHandler implements IQueryHandler<GetUserByIdQuery> {
     const user = await this.userRepository.findById(query.id);
 
     if (!user) {
-      throw new NotFoundException("User not found");
+      throw problemException(AUTH_ERROR_CODES.accountNotFound, randomUUID(), {
+        status: HttpStatus.NOT_FOUND,
+      });
     }
 
     return UserMapper.toDto(user);

@@ -65,7 +65,7 @@ function makeContext(options: {
 }
 
 function makeSession(): Session {
-  return new Session({
+  return Session.rehydrate({
     id: "session-1",
     userId: "user-1",
     organizationId: "org-1",
@@ -75,7 +75,7 @@ function makeSession(): Session {
 }
 
 function makeMembership(): Membership {
-  return new Membership({
+  return Membership.rehydrate({
     id: "membership-1",
     userId: "user-1",
     organizationId: "org-1",
@@ -87,7 +87,7 @@ function makeMembership(): Membership {
 }
 
 function makePolicy(): Policy {
-  return new Policy({
+  return Policy.rehydrate({
     id: "policy-1",
     version: "v1",
     actions: [PBAC_ACTIONS.inviteDeveloper],
@@ -174,7 +174,8 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(UnauthorizedException);
     expect((error as UnauthorizedException).getResponse()).toMatchObject({
-      error_code: PBAC_REASON_CODE.sessionInvalid,
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.sessionInvalid },
     });
     expect(load).not.toHaveBeenCalled();
   });
@@ -192,7 +193,8 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(UnauthorizedException);
     expect((error as UnauthorizedException).getResponse()).toMatchObject({
-      error_code: PBAC_REASON_CODE.sessionInvalid,
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.sessionInvalid },
     });
   });
 
@@ -209,7 +211,8 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(UnauthorizedException);
     expect((error as UnauthorizedException).getResponse()).toMatchObject({
-      error_code: PBAC_REASON_CODE.mfaRequired,
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.mfaRequired },
     });
   });
 
@@ -226,7 +229,8 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: PBAC_REASON_CODE.membershipMissing,
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.membershipMissing },
     });
   });
 
@@ -248,7 +252,8 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: PBAC_REASON_CODE.denied,
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.denied },
     });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -271,7 +276,8 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: PBAC_REASON_CODE.denied,
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.denied },
     });
   });
 
@@ -288,7 +294,8 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: PBAC_REASON_CODE.denied,
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.denied },
     });
   });
 
@@ -311,10 +318,11 @@ describe("PbacGuard", () => {
       .catch((e: unknown) => e)) as ForbiddenException;
     const body = error.getResponse();
 
-    expect(Object.keys(body as object).sort()).toEqual([
-      "correlation_id",
-      "error_code",
-    ]);
+    expect(Object.keys(body as object).sort()).toEqual(["ok", "problem"]);
+    expect(body).toMatchObject({
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.denied },
+    });
     expect(JSON.stringify(body)).not.toMatch(/policyId|actions/i);
   });
 
@@ -408,7 +416,8 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: PBAC_REASON_CODE.denied,
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.denied },
     });
     expect(load).not.toHaveBeenCalled();
     expect(evaluate).not.toHaveBeenCalled();
@@ -425,7 +434,7 @@ describe("PbacGuard", () => {
       loadResult: {
         ok: true,
         session: makeSession(),
-        membership: new Membership({
+        membership: Membership.rehydrate({
           id: "membership-1",
           userId: "user-1",
           organizationId: "org-1",
@@ -446,7 +455,8 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: PBAC_REASON_CODE.denied,
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.denied },
     });
     expect(evaluate).not.toHaveBeenCalled();
     expect(append).toHaveBeenCalledWith(
@@ -472,7 +482,8 @@ describe("PbacGuard", () => {
 
     expect(error).toBeInstanceOf(ForbiddenException);
     expect((error as ForbiddenException).getResponse()).toMatchObject({
-      error_code: PBAC_REASON_CODE.denied,
+      ok: false,
+      problem: { code: PBAC_REASON_CODE.denied },
     });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({

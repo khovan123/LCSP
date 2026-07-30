@@ -1,24 +1,27 @@
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import { HttpException, HttpStatus } from "@nestjs/common";
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
+import { WIZARD_ERROR_CODES } from "@lcsp/contracts/wizard";
 
-export class WizardAlreadySubmittedException extends ConflictException {
-  constructor(
-    message = "Wizard has already been submitted and cannot be updated.",
-  ) {
-    super({
-      message,
-      error_code: "WIZARD_ALREADY_SUBMITTED",
-    });
+import { problemResult } from "../../../../platform/problems/problem-factory.js";
+
+export class WizardAlreadySubmittedException extends HttpException {
+  constructor(correlationId: string) {
+    super(
+      problemResult(WIZARD_ERROR_CODES.alreadySubmitted, correlationId, {
+        status: HttpStatus.CONFLICT,
+      }),
+      HttpStatus.CONFLICT,
+    );
   }
 }
 
-export class AssessmentNotFoundException extends NotFoundException {
-  constructor(
-    message = "Assessment not found or you do not have permission to access it.",
-  ) {
-    super({
-      message,
-      error_code: ASSESSMENT_ERROR_CODES.notFound,
-    });
+export class AssessmentNotFoundException extends HttpException {
+  constructor(correlationId: string) {
+    super(
+      problemResult(ASSESSMENT_ERROR_CODES.notFound, correlationId, {
+        status: HttpStatus.NOT_FOUND,
+      }),
+      HttpStatus.NOT_FOUND,
+    );
   }
 }

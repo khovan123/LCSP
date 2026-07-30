@@ -143,7 +143,7 @@ function buildRepositories(input: {
       findByProviderAccount: () => Promise.resolve(input.identity),
       linkToUser: (provider, providerAccountId, userId) =>
         Promise.resolve(
-          new OAuthIdentity({
+          OAuthIdentity.rehydrate({
             id: "linked-identity-1",
             provider,
             providerAccountId,
@@ -173,7 +173,7 @@ describe("OAuthCallbackHandler generic OIDC claim validation", () => {
       resolve: (name: string) => (name === provider.name ? provider : null),
     } as unknown as OAuthProviderRegistry;
 
-    oauthState = new OAuthState({
+    oauthState = OAuthState.rehydrate({
       id: "state-1",
       state: "state-value",
       nonce: CORRECT_NONCE,
@@ -182,14 +182,14 @@ describe("OAuthCallbackHandler generic OIDC claim validation", () => {
       expiresAt: Date.now() + 60_000,
     });
 
-    user = new User({
+    user = User.rehydrate({
       id: "user-1",
       email: "oidc-user@acme.test",
       passwordHash: "unused",
       emailVerified: true,
     });
 
-    membership = new Membership({
+    membership = Membership.rehydrate({
       id: "membership-1",
       userId: user.id,
       organizationId: "org-1",
@@ -199,7 +199,7 @@ describe("OAuthCallbackHandler generic OIDC claim validation", () => {
       policyVersion: "v1",
     });
 
-    identity = new OAuthIdentity({
+    identity = OAuthIdentity.rehydrate({
       id: "identity-1",
       userId: user.id,
       provider: provider.name,
@@ -302,7 +302,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
       resolve: (name: string) => (name === provider.name ? provider : null),
     } as unknown as OAuthProviderRegistry;
 
-    oauthState = new OAuthState({
+    oauthState = OAuthState.rehydrate({
       id: "state-1",
       state: "state-value",
       nonce: CORRECT_NONCE,
@@ -311,14 +311,14 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
       expiresAt: Date.now() + 60_000,
     });
 
-    user = new User({
+    user = User.rehydrate({
       id: "user-1",
       email: "oidc-user@acme.test",
       passwordHash: "unused",
       emailVerified: true,
     });
 
-    membership = new Membership({
+    membership = Membership.rehydrate({
       id: "membership-1",
       userId: user.id,
       organizationId: "org-1",
@@ -328,7 +328,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
       policyVersion: "v1",
     });
 
-    identity = new OAuthIdentity({
+    identity = OAuthIdentity.rehydrate({
       id: "identity-1",
       userId: user.id,
       provider: provider.name,
@@ -396,7 +396,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
   });
 
   it("U05 - expired state returns OAUTH_STATE_INVALID and records audit failure", async () => {
-    oauthState = new OAuthState({
+    oauthState = OAuthState.rehydrate({
       ...oauthState,
       expiresAt: Date.now() - 1000,
     });
@@ -485,7 +485,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     identity = null as unknown as OAuthIdentity;
     provider.claims = {
       ...provider.claims,
-      email: user.email,
+      email: String(user.email),
       emailVerified: true,
     };
     const repositories = buildRepositories({
@@ -494,7 +494,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
       user,
       activeMemberships: [membership],
     });
-    const linkedIdentity = new OAuthIdentity({
+    const linkedIdentity = OAuthIdentity.rehydrate({
       id: "linked-identity-1",
       userId: user.id,
       provider: provider.name,
@@ -524,7 +524,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
   });
 
   it("U09 - unverified email returns ACCOUNT_NOT_FOUND", async () => {
-    user = new User({
+    user = User.rehydrate({
       id: "user-1",
       email: "oidc-user@acme.test",
       passwordHash: "unused",

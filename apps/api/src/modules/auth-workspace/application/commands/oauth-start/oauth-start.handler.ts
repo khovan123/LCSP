@@ -75,7 +75,6 @@ export class OAuthStartHandler {
     const state = issueOAuthStateToken();
     const nonce = issueOAuthStateToken();
     const oauthState = new OAuthState({
-      id: repositories.oauthStates.nextId(),
       state,
       nonce,
       provider: providerName,

@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 
 import {
   ConflictException,
+  HttpStatus,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -10,8 +11,14 @@ import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
   buildAuditEventInput,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_IDS,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import {
   SCAN_ERROR_CODES,
   SCAN_EVENT_TYPES,
@@ -21,11 +28,19 @@ import {
 } from "@lcsp/contracts/scan";
 import { Prisma } from "@prisma/client";
 
+import {
+  toPrismaAuditResourceType,
+  toPrismaAuthDecision,
+  toPrismaEvidenceAcceptanceStatus,
+  toPrismaOutboxAggregateType,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemResult } from "../../../../../platform/problems/problem-factory.js";
 import type { TechnicalProfileCallbackDto } from "../../contracts/evidence/technical-profile-callback.contract.js";
 import { AcceptTechnicalProfileCommand } from "./accept-technical-profile.command.js";
 
-const TECHNICAL_PROFILE_WORKER_ACTOR_ID = "technical-profile-worker";
+const TECHNICAL_PROFILE_WORKER_ACTOR_ID =
+  AUDIT_ACTOR_IDS.technicalProfileWorker;
 const FORBIDDEN_PROFILE_KEYS = new Set([
   "codesnippet",
   "filecontent",
@@ -57,7 +72,9 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
       where: {
         id: payload.evidence_report_id,
         assessmentId: payload.assessment_id,
-        status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+        status: toPrismaEvidenceAcceptanceStatus(
+          TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+        ),
       },
       select: {
         id: true,
@@ -94,19 +111,24 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
             providerVersion: payload.provider_version,
             profileData: payload.profile_data as Prisma.InputJsonValue,
             privacyFlags: payload.privacy_flags as Prisma.InputJsonValue,
-            status: TECHNICAL_PROFILE_STATUSES.accepted,
+            status: toPrismaEvidenceAcceptanceStatus(
+              TECHNICAL_PROFILE_STATUSES.accepted,
+            ),
           },
         });
 
         const outboxEvent = buildOutboxMessageInput({
-          aggregateType: "TechnicalProfile",
+          aggregateType: OUTBOX_AGGREGATE_TYPES.technicalProfile,
           aggregateId: technicalProfileId,
           eventType: SCAN_EVENT_TYPES.technicalProfileReady,
           organizationId: evidenceReport.organizationId,
           assessmentId: evidenceReport.assessmentId,
           correlationId: command.correlationId,
           causationId: evidenceReport.id,
-          actor: { id: TECHNICAL_PROFILE_WORKER_ACTOR_ID, type: "service" },
+          actor: {
+            id: TECHNICAL_PROFILE_WORKER_ACTOR_ID,
+            type: AUDIT_ACTOR_TYPES.service,
+          },
           result: SCAN_EVENT_TYPES.technicalProfileAcceptedAudit,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
           idempotencyKey: `${technicalProfileId}:${SCAN_EVENT_TYPES.technicalProfileReady}`,
@@ -120,7 +142,9 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
         await tx.outboxMessage.create({
           data: {
             id: crypto.randomUUID(),
-            aggregateType: outboxEvent.aggregateType,
+            aggregateType: toPrismaOutboxAggregateType(
+              outboxEvent.aggregateType,
+            ),
             aggregateId: outboxEvent.aggregateId,
             eventType: outboxEvent.eventType,
             payload: outboxEvent.payload as Prisma.InputJsonValue,
@@ -132,14 +156,17 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
           actorId: TECHNICAL_PROFILE_WORKER_ACTOR_ID,
           organizationId: evidenceReport.organizationId,
           assessmentId: evidenceReport.assessmentId,
-          resourceType: "TechnicalProfile",
+          resourceType: AUDIT_RESOURCE_TYPES.technicalProfile,
           resourceId: technicalProfileId,
           correlationId: command.correlationId,
           causationId: evidenceReport.id,
           decision: AUDIT_DECISIONS.allow,
           result: SCAN_EVENT_TYPES.technicalProfileAcceptedAudit,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
-          actor: { id: TECHNICAL_PROFILE_WORKER_ACTOR_ID, type: "service" },
+          actor: {
+            id: TECHNICAL_PROFILE_WORKER_ACTOR_ID,
+            type: AUDIT_ACTOR_TYPES.service,
+          },
           payload: {
             technicalProfileId,
             assessmentId: evidenceReport.assessmentId,
@@ -153,11 +180,15 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
             eventType: auditEvent.eventType,
             actorId: auditEvent.actorId,
             organizationId: auditEvent.organizationId,
-            resourceType: auditEvent.resourceType ?? null,
+            resourceType: auditEvent.resourceType
+              ? toPrismaAuditResourceType(auditEvent.resourceType)
+              : null,
             resourceId: auditEvent.resourceId ?? null,
             correlationId: auditEvent.correlationId,
             reasonCode: auditEvent.reasonCode ?? null,
-            decision: auditEvent.decision,
+            decision: auditEvent.decision
+              ? toPrismaAuthDecision(auditEvent.decision)
+              : null,
             payload: auditEvent.payload as Prisma.InputJsonValue,
           },
         });
@@ -211,10 +242,9 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
   }
 
   private errorBody(command: AcceptTechnicalProfileCommand, errorCode: string) {
-    return {
-      error_code: errorCode,
-      correlation_id: command.correlationId,
-    };
+    return problemResult(errorCode, command.correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+    });
   }
 }
 

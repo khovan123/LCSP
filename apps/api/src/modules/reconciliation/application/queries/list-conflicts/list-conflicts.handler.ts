@@ -1,12 +1,14 @@
-import {
-  NotFoundException,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
 
+import {
+  fromPrismaConflictRecordStatus,
+  toPrismaConflictRecordStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type {
   ConflictListDto,
   ConflictStatus,
@@ -31,10 +33,11 @@ export class ListConflictsHandler implements IQueryHandler<ListConflictsQuery> {
         : query.status.trim();
 
     if (!isKnownConflictStatus(status)) {
-      throw new UnprocessableEntityException({
-        error_code: ASSESSMENT_ERROR_CODES.invalidRequest,
-        correlation_id: query.correlationId,
-      });
+      throw problemException(
+        ASSESSMENT_ERROR_CODES.invalidRequest,
+        query.correlationId,
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
+      );
     }
 
     const assessment = await this.prisma.assessment.findFirst({
@@ -46,16 +49,17 @@ export class ListConflictsHandler implements IQueryHandler<ListConflictsQuery> {
     });
 
     if (!assessment) {
-      throw new NotFoundException({
-        error_code: ASSESSMENT_ERROR_CODES.notFound,
-        correlation_id: query.correlationId,
-      });
+      throw problemException(
+        ASSESSMENT_ERROR_CODES.notFound,
+        query.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
     const where = {
       assessmentId: query.assessmentId,
       organizationId: query.organizationId,
-      status,
+      status: toPrismaConflictRecordStatus(status),
     };
 
     const [items, total] = await Promise.all([
@@ -73,7 +77,7 @@ export class ListConflictsHandler implements IQueryHandler<ListConflictsQuery> {
       conflict_type: item.conflictType,
       conflict_score: item.conflictScore,
       score_explanation: item.scoreExplanation,
-      status: item.status as ConflictStatus,
+      status: fromPrismaConflictRecordStatus(item.status),
       evidence_refs: evidenceRefsOnly(item.evidenceRefs),
       created_at: item.createdAt.toISOString(),
     }));

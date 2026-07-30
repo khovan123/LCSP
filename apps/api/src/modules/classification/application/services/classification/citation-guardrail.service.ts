@@ -1,5 +1,6 @@
-import { Injectable, UnprocessableEntityException } from "@nestjs/common";
+import { HttpStatus, Injectable } from "@nestjs/common";
 import { SCAN_ERROR_CODES } from "@lcsp/contracts/scan";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 
 import type { LegalRuleMatchItemDto } from "../../contracts/classification/legal-rule-match-callback.contract.js";
 
@@ -8,7 +9,7 @@ export class CitationGuardrailService {
   validate(
     matches: LegalRuleMatchItemDto[],
     citationAllowlist: string[],
-    correlationId?: string,
+    correlationId: string,
   ): void {
     const allowSet = new Set(citationAllowlist);
 
@@ -18,10 +19,13 @@ export class CitationGuardrailService {
         (typeof match.legal_status === "string" &&
           match.legal_status.toUpperCase() === "REPEALED")
       ) {
-        throw new UnprocessableEntityException({
-          error_code: SCAN_ERROR_CODES.citationRepealed,
-          correlation_id: correlationId,
-        });
+        throw problemException(
+          SCAN_ERROR_CODES.citationRepealed,
+          correlationId,
+          {
+            status: HttpStatus.UNPROCESSABLE_ENTITY,
+          },
+        );
       }
 
       for (const chunkId of match.citation_chunk_ids) {
@@ -29,17 +33,19 @@ export class CitationGuardrailService {
           chunkId.toLowerCase().includes("repealed") ||
           chunkId.toLowerCase().endsWith(":repealed")
         ) {
-          throw new UnprocessableEntityException({
-            error_code: SCAN_ERROR_CODES.citationRepealed,
-            correlation_id: correlationId,
-          });
+          throw problemException(
+            SCAN_ERROR_CODES.citationRepealed,
+            correlationId,
+            { status: HttpStatus.UNPROCESSABLE_ENTITY },
+          );
         }
 
         if (!allowSet.has(chunkId)) {
-          throw new UnprocessableEntityException({
-            error_code: SCAN_ERROR_CODES.citationOutOfAllowlist,
-            correlation_id: correlationId,
-          });
+          throw problemException(
+            SCAN_ERROR_CODES.citationOutOfAllowlist,
+            correlationId,
+            { status: HttpStatus.UNPROCESSABLE_ENTITY },
+          );
         }
       }
     }

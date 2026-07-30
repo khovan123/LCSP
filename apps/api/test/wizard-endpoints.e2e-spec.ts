@@ -1,10 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import * as assert from "node:assert/strict";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import {
@@ -27,11 +27,12 @@ import {
   ASSESSMENT_STATUS_CODES,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
+import { WIZARD_ERROR_CODES, WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
 
 import {
+  OUTBOX_AGGREGATE_TYPES,
   OUTBOX_MESSAGE_SCHEMA_VERSION,
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
@@ -76,7 +77,9 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    managerToken = signInManager.body?.session_token ?? "";
+    managerToken =
+      successBody<{ session_token?: string }>(signInManager).session_token ??
+      "";
 
     // Setup Restricted User
     const restrictedPolicyId = "policy-no-wizard-access";
@@ -119,7 +122,9 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    restrictedToken = signInRestricted.body?.session_token ?? "";
+    restrictedToken =
+      successBody<{ session_token?: string }>(signInRestricted).session_token ??
+      "";
   });
 
   afterAll(async () => {
@@ -133,7 +138,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       .post("/assessments")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ name: "Wizard Test Assessment" });
-    assessmentId = res.body.assessment_id;
+    assessmentId = successBody<{ assessment_id: string }>(res).assessment_id;
   };
 
   describe("Save Wizard Draft [MW-wiz-001]", () => {
@@ -149,7 +154,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .send({ answers: { purpose: "Test purpose" } });
 
       assert.equal(res1.status, 200);
-      let body = res1.body;
+      let body = successBody<any>(res1);
       assert.equal(body.status, WIZARD_STATUS_CODES.inProgress);
       assert.equal(body.version, 1);
       assert.ok(body.wizard_profile_id);
@@ -172,7 +177,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         });
 
       assert.equal(res2.status, 200);
-      body = res2.body;
+      body = successBody<any>(res2);
       assert.equal(body.status, WIZARD_STATUS_CODES.inProgress);
       assert.equal(body.version, 2);
     });
@@ -183,14 +188,14 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`)
         .send({ answers: { purpose: "Draft 1" } });
       assert.equal(res1.status, 200);
-      assert.equal(res1.body.version, 1);
+      assert.equal(successBody<any>(res1).version, 1);
 
       const res2 = await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
         .send({ answers: { purpose: "Draft 2" } });
       assert.equal(res2.status, 200);
-      assert.equal(res2.body.version, 2);
+      assert.equal(successBody<any>(res2).version, 2);
     });
 
     it("T04: Attempt to save when already submitted -> 409", async () => {
@@ -212,7 +217,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`)
         .send({ answers: { purpose: "Draft" } });
       assert.equal(res.status, 409);
-      assert.equal(res.body.error_code, "WIZARD_ALREADY_SUBMITTED");
+      assert.equal(problemCode(res), WIZARD_ERROR_CODES.alreadySubmitted);
     });
 
     it("T05: Invalid/missing assessment -> 404", async () => {
@@ -221,7 +226,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`)
         .send({ answers: { purpose: "Draft" } });
       assert.equal(res.status, 404);
-      assert.equal(res.body.error_code, ASSESSMENT_ERROR_CODES.notFound);
+      assert.equal(problemCode(res), ASSESSMENT_ERROR_CODES.notFound);
     });
 
     it("T06: Actor lacks wizard:write -> 403 PBAC_DENIED", async () => {
@@ -230,7 +235,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${restrictedToken}`)
         .send({ answers: { purpose: "Draft" } });
       assert.equal(res.status, 403);
-      assert.equal(res.body.error_code, AUTH_ERROR_CODES.pbacDenied);
+      assert.equal(problemCode(res), AUTH_ERROR_CODES.pbacDenied);
     });
 
     it("T07: Partial save preserves existing fields", async () => {
@@ -296,7 +301,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .send({ answers: validAnswers });
 
       assert.equal(res.status, 200);
-      const body = res.body;
+      const body = successBody<any>(res);
       assert.equal(body.status, WIZARD_STATUS_CODES.submitted);
       assert.equal(
         body.assessment_status,
@@ -315,10 +320,11 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .send({ answers: invalidAnswers });
 
       assert.equal(res.status, 422);
-      const body = res.body;
-      assert.equal(body.error_code, "WIZARD_VALIDATION_FAILED");
-      assert.ok(body.message);
-      assert.doesNotMatch(body.message.toLowerCase(), /risk|severity/);
+      assert.equal(problemCode(res), WIZARD_ERROR_CODES.validationFailed);
+      assert.doesNotMatch(
+        JSON.stringify(res.body).toLowerCase(),
+        /risk|severity/,
+      );
     });
 
     it("T04: Already submitted -> 409 WIZARD_ALREADY_SUBMITTED", async () => {
@@ -333,7 +339,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .send({ answers: validAnswers });
 
       assert.equal(res.status, 409);
-      assert.equal(res.body.error_code, "WIZARD_ALREADY_SUBMITTED");
+      assert.equal(problemCode(res), WIZARD_ERROR_CODES.alreadySubmitted);
     });
 
     it("T05: Assessment not found -> 404", async () => {
@@ -343,7 +349,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .send({ answers: validAnswers });
 
       assert.equal(res.status, 404);
-      assert.equal(res.body.error_code, ASSESSMENT_ERROR_CODES.notFound);
+      assert.equal(problemCode(res), ASSESSMENT_ERROR_CODES.notFound);
     });
 
     it("T06: Verify Assessment.status transitions correctly upon submission", async () => {
@@ -370,7 +376,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
 
       const outbox = await prisma.outboxMessage.findFirst({
         where: {
-          aggregateType: "WizardProfile",
+          aggregateType: OUTBOX_AGGREGATE_TYPES.wizardProfile,
           eventType: WIZARD_EVENT_TYPES.submittedOutbox,
         },
       });
@@ -393,7 +399,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .send({ answers: { purpose: "Edited" } });
 
       assert.equal(res.status, 409);
-      assert.equal(res.body.error_code, "WIZARD_ALREADY_SUBMITTED");
+      assert.equal(problemCode(res), WIZARD_ERROR_CODES.alreadySubmitted);
     });
 
     it("T10: Audit payload WIZARD_SUBMITTED has no answers content", async () => {
@@ -436,7 +442,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`);
 
       assert.equal(res.status, 200);
-      const body = res.body;
+      const body = successBody<any>(res);
       assert.equal(body.classification_locked, true);
       assert.equal(body.lock_reason, ASSESSMENT_LOCK_REASONS.evidenceRequired);
     });
@@ -476,7 +482,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`);
 
       assert.equal(res.status, 200);
-      const body = res.body;
+      const body = successBody<any>(res);
       assert.equal(body.classification_locked, false);
     });
 
@@ -486,7 +492,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`);
 
       assert.equal(res.status, 200);
-      const body = res.body;
+      const body = successBody<any>(res);
       const missingEvidence = body.missing_evidence as any[];
       assert.ok(
         missingEvidence.some((item) => item.type === "repository_connection"),
@@ -515,7 +521,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`);
 
       assert.equal(res.status, 200);
-      const body = res.body;
+      const body = successBody<any>(res);
       const missingEvidence = body.missing_evidence as any[];
       assert.ok(
         missingEvidence.some((item) => item.type === "technical_evidence"),
@@ -528,7 +534,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`);
 
       assert.equal(res.status, 200);
-      const bodyStr = JSON.stringify(res.body).toLowerCase();
+      const bodyStr = JSON.stringify(successBody<any>(res)).toLowerCase();
       assert.doesNotMatch(bodyStr, /risk|severity/);
     });
 
@@ -538,9 +544,10 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`);
 
       assert.equal(res.status, 200);
-      assert.ok(res.body.next_action);
+      const body = successBody<any>(res);
+      assert.ok(body.next_action);
       assert.doesNotMatch(
-        String(res.body.next_action).toLowerCase(),
+        String(body.next_action).toLowerCase(),
         /risk|severity|violation|compliant/,
       );
     });
@@ -551,7 +558,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`);
 
       assert.equal(res.status, 404);
-      assert.equal(res.body.error_code, ASSESSMENT_ERROR_CODES.notFound);
+      assert.equal(problemCode(res), ASSESSMENT_ERROR_CODES.notFound);
     });
   });
 });

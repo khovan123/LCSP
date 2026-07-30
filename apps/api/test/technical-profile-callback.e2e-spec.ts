@@ -17,6 +17,7 @@ import {
   SCAN_EVENT_TYPES,
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
   TECHNICAL_PROFILE_STATUSES,
+  type TechnicalEvidenceReportStatus,
 } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
@@ -30,10 +31,9 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
-type ErrorResponse = { error_code?: string };
 
 describe("TechnicalProfile Callback Endpoint (e2e) [MW-evid-002]", () => {
   let app: INestApplication;
@@ -83,7 +83,7 @@ describe("TechnicalProfile Callback Endpoint (e2e) [MW-evid-002]", () => {
 
   it("T01/T06 accepts a valid profile, emits outbox, and audits safe refs", async () => {
     const response = await callback(app, validPayload());
-    const body = response.body as TechnicalProfileCallbackDto;
+    const body = successBody<TechnicalProfileCallbackDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -262,7 +262,7 @@ function validPayload(
 
 async function createEvidenceReport(
   prisma: PrismaClient,
-  status: string,
+  status: TechnicalEvidenceReportStatus,
 ): Promise<void> {
   await prisma.technicalEvidenceReport.create({
     data: {
@@ -299,5 +299,5 @@ function assertError(
   expectedCode: string,
 ): void {
   assert.equal(actualStatus, expectedStatus);
-  assert.equal((body as ErrorResponse).error_code, expectedCode);
+  assert.equal(problemCode(body), expectedCode);
 }

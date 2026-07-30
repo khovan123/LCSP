@@ -21,6 +21,7 @@ import {
   TECHNICAL_PROFILE_STATUSES,
   VERIFIED_PROFILE_SCHEMA_VERSIONS,
   VERIFIED_PROFILE_STATUSES,
+  type ConflictRecordStatus,
 } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
@@ -34,10 +35,9 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
-type ErrorResponse = { error_code?: string };
 
 describe("VerifiedProfile Callback Endpoint (e2e) [MW-rec-004]", () => {
   let app: INestApplication;
@@ -75,7 +75,7 @@ describe("VerifiedProfile Callback Endpoint (e2e) [MW-rec-004]", () => {
     ]);
 
     const response = await callback(app, validPayload());
-    const body = response.body as VerifiedProfileCallbackDto;
+    const body = successBody<VerifiedProfileCallbackDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -313,7 +313,7 @@ async function seedAssessmentChain(
 
 async function seedConflicts(
   prisma: PrismaClient,
-  conflicts: Array<{ id: string; status: string }>,
+  conflicts: Array<{ id: string; status: ConflictRecordStatus }>,
 ): Promise<void> {
   await prisma.conflictRecord.createMany({
     data: conflicts.map((conflict, index) => ({
@@ -353,5 +353,5 @@ function assertError(
   expectedCode: string,
 ): void {
   assert.equal(actualStatus, expectedStatus);
-  assert.equal((body as ErrorResponse).error_code, expectedCode);
+  assert.equal(problemCode(body), expectedCode);
 }

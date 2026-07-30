@@ -1,14 +1,11 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Inject,
-  NotFoundException,
-} from "@nestjs/common";
+import { HttpStatus, Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
@@ -16,11 +13,15 @@ import {
   GITHUB_INTEGRATION_EVENT_TYPES,
   REPOSITORY_CONNECTION_STATUSES,
 } from "@lcsp/contracts/github-integration";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { RepositorySnapshot } from "../../../domain/entities/repository-snapshot.entity.js";
 import { GitHubAppClient } from "../../../infrastructure/github/github-app.client.js";
 import type { PinSnapshotDto } from "../../contracts/github-integration/pin-snapshot.contract.js";
@@ -69,10 +70,11 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
         command,
         GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
       );
-      throw new NotFoundException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
+        command.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
     const isManagerOwner =
@@ -83,10 +85,13 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       command.scope === command.assessmentId;
     if (!isManagerOwner && !isScopedDeveloper) {
       await this.auditDenied(command, AUTH_ERROR_CODES.pbacDenied);
-      throw new ForbiddenException({
-        error_code: AUTH_ERROR_CODES.pbacDenied,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        AUTH_ERROR_CODES.pbacDenied,
+        command.correlationId,
+        {
+          status: HttpStatus.FORBIDDEN,
+        },
+      );
     }
 
     const branch = clean(command.branch);
@@ -97,10 +102,11 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
         command,
         GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
       );
-      throw new BadRequestException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
     const revision = commitSha ?? ref ?? branch ?? connection.defaultBranch;
 
@@ -116,10 +122,11 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
         command,
         GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
       );
-      throw new BadRequestException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     if (resolved.repositoryFullName !== connection.repositoryFullName) {
@@ -127,10 +134,11 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
         command,
         GITHUB_INTEGRATION_ERROR_CODES.refOutOfScope,
       );
-      throw new BadRequestException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.refOutOfScope,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.refOutOfScope,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     const snapshot = RepositorySnapshot.create({
@@ -154,14 +162,14 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
     await this.snapshotRepository.saveWithCreatedEvent(
       snapshot,
       buildOutboxMessageInput({
-        aggregateType: "RepositorySnapshot",
+        aggregateType: OUTBOX_AGGREGATE_TYPES.repositorySnapshot,
         aggregateId: snapshot.id,
         eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated,
         organizationId: snapshot.organizationId,
         assessmentId: snapshot.assessmentId,
         correlationId: command.correlationId,
         causationId: command.correlationId,
-        actor: { id: command.actorId, type: "user" },
+        actor: { id: command.actorId, type: AUDIT_ACTOR_TYPES.user },
         result: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
         redactionStatus: AUDIT_REDACTION_STATUSES.none,
         idempotencyKey: `${snapshot.id}:${GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated}`,
@@ -180,7 +188,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       actorId: command.actorId,
       organizationId: command.organizationId,
       assessmentId: snapshot.assessmentId,
-      resourceType: "RepositorySnapshot",
+      resourceType: AUDIT_RESOURCE_TYPES.repositorySnapshot,
       resourceId: snapshot.id,
       correlationId: command.correlationId,
       causationId: command.correlationId,
@@ -215,7 +223,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotPinFailedAudit,
       actorId: command.actorId,
       organizationId: command.organizationId,
-      resourceType: "RepositoryConnection",
+      resourceType: AUDIT_RESOURCE_TYPES.repositoryConnection,
       resourceId: clean(command.connectionId) ?? command.assessmentId,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.deny,

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   AUTH_INVITATION_STATES,
   AUTH_MEMBERSHIP_STATUSES,
@@ -13,6 +15,18 @@ import {
 
 export type InvitationState = AuthInvitationState;
 
+type InvitationInput = {
+  email: string;
+  organizationId: string;
+  state: InvitationState;
+  emailVerified: boolean;
+  membershipStatus: MembershipStatus;
+  subjectAttributes?: SubjectAttributesRecord;
+  policyId: string;
+  policyVersion: string;
+  expiresAt: number;
+};
+
 export class Invitation {
   readonly id: string;
   readonly email: EmailAddress;
@@ -25,19 +39,8 @@ export class Invitation {
   readonly policyVersion: string;
   readonly expiresAt: number;
 
-  constructor(input: {
-    id: string;
-    email: string;
-    organizationId: string;
-    state: InvitationState;
-    emailVerified: boolean;
-    membershipStatus: MembershipStatus;
-    subjectAttributes?: SubjectAttributesRecord;
-    policyId: string;
-    policyVersion: string;
-    expiresAt: number;
-  }) {
-    this.id = input.id;
+  constructor(input: InvitationInput) {
+    this.id = randomUUID();
     this.email = EmailAddress.create(input.email);
     this.organizationId = input.organizationId;
     this.state = input.state;
@@ -49,6 +52,12 @@ export class Invitation {
     this.policyId = input.policyId;
     this.policyVersion = input.policyVersion;
     this.expiresAt = input.expiresAt;
+  }
+
+  static rehydrate(input: InvitationInput & { id: string }): Invitation {
+    const entity = new Invitation(input);
+    Object.assign(entity, { id: input.id });
+    return entity;
   }
 
   get subjectAttributes(): SubjectAttributesRecord {

@@ -1,7 +1,12 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import {
+  PBAC_ACTIONS,
+  PBAC_METADATA_TYPES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
 import { SCAN_CALLBACK_STATUSES } from "@lcsp/contracts/scan";
+import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 
 import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-metadata.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
@@ -18,7 +23,7 @@ describe("ScanController", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: "action",
+      type: PBAC_METADATA_TYPES.action,
       action: PBAC_ACTIONS.scanRead,
     });
   });
@@ -66,14 +71,17 @@ describe("ScanController", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: "action",
+      type: PBAC_METADATA_TYPES.action,
       action: PBAC_ACTIONS.scanTrigger,
     });
   });
 
   it("dispatches RerunScanCommand with correct arguments", async () => {
     const execute = jest.fn<(command: unknown) => Promise<unknown>>();
-    execute.mockResolvedValue({ id: "new-scan-job-2", status: "QUEUED" });
+    execute.mockResolvedValue({
+      id: "new-scan-job-2",
+      status: REPOSITORY_SCAN_JOB_STATUSES.queued,
+    });
     const controller = new ScanController(
       {} as unknown as QueryBus,
       { execute } as unknown as CommandBus,

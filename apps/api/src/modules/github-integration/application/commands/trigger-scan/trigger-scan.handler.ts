@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpStatus,
   Inject,
   NotFoundException,
 } from "@nestjs/common";
@@ -9,8 +10,10 @@ import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import {
+  AUDIT_ACTOR_TYPES,
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
@@ -18,11 +21,16 @@ import {
   GITHUB_INTEGRATION_EVENT_TYPES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
+import { fromPrismaAssessmentStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemResult } from "../../../../../platform/problems/problem-factory.js";
 import { RepositoryScanJob } from "../../../domain/entities/repository-scan-job.entity.js";
 import type { TriggerScanDto } from "../../contracts/github-integration/trigger-scan.contract.js";
 import {
@@ -131,7 +139,10 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       return this.resolveExisting(command, existing, snapshot.organizationId);
     }
 
-    if (assessment.status !== ASSESSMENT_STATUS_CODES.wizardSubmitted) {
+    if (
+      fromPrismaAssessmentStatus(assessment.status) !==
+      ASSESSMENT_STATUS_CODES.wizardSubmitted
+    ) {
       await this.auditRejected(
         command,
         GITHUB_INTEGRATION_ERROR_CODES.assessmentStateInvalid,
@@ -168,14 +179,17 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       correlationId: command.correlationId,
     });
     const event = buildOutboxMessageInput({
-      aggregateType: "RepositoryScanJob",
+      aggregateType: OUTBOX_AGGREGATE_TYPES.repositoryScanJob,
       aggregateId: job.id,
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered,
       organizationId: job.organizationId,
       assessmentId: job.assessmentId,
       correlationId: job.correlationId,
       causationId: command.correlationId,
-      actor: { id: command.actorId, type: isTrusted ? "service" : "user" },
+      actor: {
+        id: command.actorId,
+        type: isTrusted ? AUDIT_ACTOR_TYPES.service : AUDIT_ACTOR_TYPES.user,
+      },
       result: GITHUB_INTEGRATION_EVENT_TYPES.scanJobTriggeredAudit,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       idempotencyKey: job.idempotencyKey,
@@ -206,7 +220,7 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       actorId: command.actorId,
       organizationId: snapshot.organizationId,
       assessmentId: job.assessmentId,
-      resourceType: "RepositoryScanJob",
+      resourceType: AUDIT_RESOURCE_TYPES.repositoryScanJob,
       resourceId: job.id,
       correlationId: command.correlationId,
       causationId: command.correlationId,
@@ -247,7 +261,7 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggerDuplicateAudit,
       actorId: command.actorId,
       organizationId,
-      resourceType: "RepositoryScanJob",
+      resourceType: AUDIT_RESOURCE_TYPES.repositoryScanJob,
       resourceId: existing.id,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,
@@ -284,7 +298,7 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggerRejectedAudit,
       actorId: command.actorId,
       organizationId,
-      resourceType: "RepositorySnapshot",
+      resourceType: AUDIT_RESOURCE_TYPES.repositorySnapshot,
       resourceId: clean(command.snapshotId) ?? command.assessmentId,
       correlationId: command.correlationId,
       reasonCode,
@@ -299,14 +313,10 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
     });
   }
 
-  private errorBody(
-    command: TriggerScanCommand,
-    errorCode: string,
-  ): { error_code: string; correlation_id: string } {
-    return {
-      error_code: errorCode,
-      correlation_id: command.correlationId,
-    };
+  private errorBody(command: TriggerScanCommand, errorCode: string) {
+    return problemResult(errorCode, command.correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+    });
   }
 }
 

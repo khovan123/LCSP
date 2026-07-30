@@ -1,4 +1,4 @@
-import { Inject, UnprocessableEntityException } from "@nestjs/common";
+import { HttpStatus, Inject } from "@nestjs/common";
 import { QueryHandler } from "@nestjs/cqrs";
 import type { IQueryHandler } from "@nestjs/cqrs";
 
@@ -8,7 +8,9 @@ import {
   SUBJECT_ROLES,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts";
+import { fromPrismaWizardStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import {
   ASSESSMENT_REPOSITORY,
   type AssessmentListCriteria,
@@ -43,10 +45,11 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
     let status: AssessmentListCriteria["status"];
     if (query.status) {
       if (!isKnownStatus(query.status)) {
-        throw new UnprocessableEntityException({
-          error_code: ASSESSMENT_ERROR_CODES.invalidRequest,
-          correlation_id: query.correlationId,
-        });
+        throw problemException(
+          ASSESSMENT_ERROR_CODES.invalidRequest,
+          query.correlationId,
+          { status: HttpStatus.UNPROCESSABLE_ENTITY },
+        );
       }
       status = query.status;
     }
@@ -113,7 +116,10 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
     });
 
     return new Map(
-      rows.map((row) => [row.assessmentId, row.status as WizardStatus]),
+      rows.map((row) => [
+        row.assessmentId,
+        fromPrismaWizardStatus(row.status),
+      ]),
     );
   }
 }

@@ -1,7 +1,10 @@
 import { Injectable } from "@nestjs/common";
 
+import {
+  fromPrismaRepositoryConnectionStatus,
+  toPrismaRepositoryConnectionStatus,
+} from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
-import type { RepositoryConnectionStatus } from "@lcsp/contracts/github-integration";
 import type { RepositoryConnectionRepository } from "../../application/ports/persistence/repository-connection.repository.js";
 import { RepositoryConnection } from "../../domain/entities/repository-connection.entity.js";
 
@@ -22,7 +25,7 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
         repositoryFullName: connection.repositoryFullName,
         defaultBranch: connection.defaultBranch,
         permissions: connection.permissions,
-        status: connection.status,
+        status: toPrismaRepositoryConnectionStatus(connection.status),
         connectedAt: connection.connectedAt,
         revokedAt: connection.revokedAt,
       },
@@ -46,7 +49,7 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
       repositoryFullName: row.repositoryFullName,
       defaultBranch: row.defaultBranch,
       permissions: row.permissions as Record<string, string>,
-      status: row.status as RepositoryConnectionStatus,
+      status: fromPrismaRepositoryConnectionStatus(row.status),
       connectedAt: row.connectedAt,
       revokedAt: row.revokedAt,
     });

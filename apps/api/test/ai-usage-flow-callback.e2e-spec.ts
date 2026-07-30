@@ -18,6 +18,7 @@ import {
   SCAN_EVENT_TYPES,
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
   TECHNICAL_PROFILE_STATUSES,
+  type TechnicalProfileStatus,
 } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
@@ -31,10 +32,9 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
-type ErrorResponse = { error_code?: string };
 
 describe("AIUsageFlow Callback Endpoint (e2e) [MW-aiuf-001]", () => {
   let app: INestApplication;
@@ -82,7 +82,7 @@ describe("AIUsageFlow Callback Endpoint (e2e) [MW-aiuf-001]", () => {
 
   it("T01/T03/T06 accepts valid claims, preserves unknowns, emits outbox, and audits safe refs", async () => {
     const response = await callback(app, validPayload());
-    const body = response.body as AIUsageFlowCallbackDto;
+    const body = successBody<AIUsageFlowCallbackDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -189,7 +189,7 @@ describe("AIUsageFlow Callback Endpoint (e2e) [MW-aiuf-001]", () => {
 
   it("T07 accepts empty claims when no AI usage was found", async () => {
     const response = await callback(app, validPayload({ claims: [] }));
-    const body = response.body as AIUsageFlowCallbackDto;
+    const body = successBody<AIUsageFlowCallbackDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -262,7 +262,7 @@ function validClaim() {
 
 async function createTechnicalProfile(
   prisma: PrismaClient,
-  status: string,
+  status: TechnicalProfileStatus,
 ): Promise<void> {
   await prisma.technicalEvidenceReport.create({
     data: {
@@ -312,5 +312,5 @@ function assertError(
   expectedCode: string,
 ): void {
   assert.equal(actualStatus, expectedStatus);
-  assert.equal((body as ErrorResponse).error_code, expectedCode);
+  assert.equal(problemCode(body), expectedCode);
 }

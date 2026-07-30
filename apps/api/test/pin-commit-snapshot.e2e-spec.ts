@@ -31,10 +31,9 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const RESOLVED_SHA = "a".repeat(40);
-type ErrorResponse = { error_code?: string };
 
 describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
   let app: INestApplication;
@@ -109,7 +108,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: "org-1",
     });
-    managerToken = (signIn.body as SignInSuccess).session_token;
+    managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
 
   afterAll(async () => {
@@ -122,7 +121,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       .post("/assessments/assessment-1/snapshots")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ connection_id: "connection-1", branch: "main" });
-    const body = response.body as PinSnapshotDto;
+    const body = successBody<PinSnapshotDto>(response);
 
     assert.equal(response.status, 201);
     assert.equal(body.commit_sha, RESOLVED_SHA);
@@ -185,7 +184,10 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       .send({ connection_id: "connection-1", commit_sha: "b".repeat(40) });
 
     assert.equal(response.status, 201);
-    assert.equal((response.body as PinSnapshotDto).commit_sha, RESOLVED_SHA);
+    assert.equal(
+      successBody<PinSnapshotDto>(response).commit_sha,
+      RESOLVED_SHA,
+    );
   });
 
   it("T03: unresolvable ref is audited and creates no snapshot or outbox event", async () => {
@@ -199,7 +201,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
 
     assert.equal(response.status, 400);
     assert.equal(
-      (response.body as ErrorResponse).error_code,
+      problemCode(response),
       GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
     );
     assert.equal(await prisma.repositorySnapshot.count(), 0);
@@ -226,7 +228,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
 
     assert.equal(response.status, 404);
     assert.equal(
-      (response.body as ErrorResponse).error_code,
+      problemCode(response),
       GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
     );
   });
@@ -248,10 +250,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       .send({ connection_id: "connection-1", branch: "main" });
 
     assert.equal(response.status, 403);
-    assert.equal(
-      (response.body as ErrorResponse).error_code,
-      PBAC_REASON_CODE.denied,
-    );
+    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
     assert.equal(await prisma.repositorySnapshot.count(), 0);
   });
 });

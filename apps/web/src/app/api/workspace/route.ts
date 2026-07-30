@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { WORKSPACE_ERROR_CODES } from "@lcsp/contracts/auth";
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { isMockModeEnabled, readMockJson } from "@/lib/server/fixtures/response";
 import {
@@ -43,16 +44,16 @@ export async function GET(request: NextRequest) {
 
     return successJson({
       organization: selectedWorkspace,
-      membership: { role: "Developer" },
+      membership: { role: SUBJECT_ROLES.developer },
       granted_actions: [
-        "assessment:list",
-        "assessment:read",
-        "wizard:write",
-        "wizard:submit",
-        "conflict:read",
-        "evidence:read",
-        "document:read",
-        "workspace:read",
+        PBAC_ACTIONS.assessmentList,
+        PBAC_ACTIONS.assessmentRead,
+        PBAC_ACTIONS.wizardWrite,
+        PBAC_ACTIONS.wizardSubmit,
+        PBAC_ACTIONS.conflictRead,
+        PBAC_ACTIONS.evidenceRead,
+        PBAC_ACTIONS.documentRead,
+        PBAC_ACTIONS.workspaceRead,
       ],
     });
   }

@@ -1,8 +1,8 @@
-import { BadRequestException, Inject } from "@nestjs/common";
+import { HttpStatus, Inject } from "@nestjs/common";
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
 import { ConfigService } from "@nestjs/config";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@lcsp/contracts/github-integration";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { GitHubAppInstallState } from "../../../domain/entities/github-app-install-state.entity.js";
 import { GitHubAppClient } from "../../../infrastructure/github/github-app.client.js";
 import {
@@ -41,10 +42,11 @@ export class GitHubAppStartHandler implements ICommandHandler<GitHubAppStartComm
     );
 
     if (!redirectUri || !allowedRedirectUris.includes(redirectUri)) {
-      throw new BadRequestException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.invalidRedirectUri,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.invalidRedirectUri,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     if (command.assessmentId) {
@@ -53,10 +55,11 @@ export class GitHubAppStartHandler implements ICommandHandler<GitHubAppStartComm
       });
 
       if (!assessment || assessment.organizationId !== command.organizationId) {
-        throw new BadRequestException({
-          error_code: ASSESSMENT_ERROR_CODES.notFound,
-          correlation_id: command.correlationId,
-        });
+        throw problemException(
+          ASSESSMENT_ERROR_CODES.notFound,
+          command.correlationId,
+          { status: HttpStatus.BAD_REQUEST },
+        );
       }
     }
 
@@ -78,7 +81,7 @@ export class GitHubAppStartHandler implements ICommandHandler<GitHubAppStartComm
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.appInstallStarted,
       actorId: command.userId,
       organizationId: command.organizationId,
-      resourceType: "GitHubAppInstallState",
+      resourceType: AUDIT_RESOURCE_TYPES.githubAppInstallState,
       resourceId: installState.id,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,

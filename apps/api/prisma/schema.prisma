@@ -175,11 +175,11 @@ model AuthOAuthIdentity {
 }
 
 model AuthAuditEvent {
-  id             String            @id
+  id             String             @id
   eventType      String
   actorId        String?
   organizationId String?
-  resourceType   String?
+  resourceType   AuditResourceType?
   resourceId     String?
   decision       AuthDecision?
   reasonCode     String?
@@ -188,8 +188,8 @@ model AuthAuditEvent {
   policyId       String?
   policyVersion  String?
   payload        Json
-  createdAt      DateTime          @default(now())
-  organization   AuthOrganization? @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime           @default(now())
+  organization   AuthOrganization?  @relation(fields: [organizationId], references: [id])
 
   @@index([correlationId])
   @@index([organizationId, createdAt])
@@ -198,36 +198,36 @@ model AuthAuditEvent {
 }
 
 model AuthDecisionLog {
-  id             String            @id
+  id             String                  @id
   organizationId String?
-  resourceType   String
+  resourceType   AuditResourceType
   resourceId     String
   action         String
   decision       AuthDecision
-  reasonCode     String
+  reasonCode     AuthorizationReasonCode
   policyId       String?
   policyVersion  String?
   correlationId  String
   payload        Json
-  createdAt      DateTime          @default(now())
-  organization   AuthOrganization? @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime                @default(now())
+  organization   AuthOrganization?       @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([correlationId])
 }
 
 model OutboxMessage {
-  id            String    @id
-  aggregateType String
+  id            String              @id
+  aggregateType OutboxAggregateType
   aggregateId   String
   eventType     String
   payload       Json
-  status        String    @default("pending")
-  attempts      Int       @default(0)
+  status        OutboxStatus        @default(PENDING)
+  attempts      Int                 @default(0)
   lastAttemptAt DateTime?
   publishedAt   DateTime?
   errorMessage  String?
-  createdAt     DateTime  @default(now())
+  createdAt     DateTime            @default(now())
 
   @@index([status, createdAt])
   @@index([aggregateType, aggregateId])
@@ -241,45 +241,45 @@ model User {
 }
 
 model Assessment {
-  id             String   @id
+  id             String           @id
   organizationId String
   ownerId        String
   name           String
   description    String?
-  status         String   @default("WIZARD_IN_PROGRESS")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status         AssessmentStatus @default(WIZARD_IN_PROGRESS)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([organizationId, status])
   @@index([ownerId])
 }
 
 model WizardProfile {
-  id             String    @id
-  assessmentId   String    @unique
+  id             String              @id
+  assessmentId   String              @unique
   organizationId String
   ownerId        String
-  version        Int       @default(1)
-  status         String    @default("IN_PROGRESS")
+  version        Int                 @default(1)
+  status         WizardProfileStatus @default(IN_PROGRESS)
   answers        Json
   submittedAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@index([assessmentId])
   @@index([organizationId])
 }
 
 model ReadinessExport {
-  id             String   @id
+  id             String                @id
   assessmentId   String
   organizationId String
   ownerId        String
-  version        Int      @default(1)
-  status         String
+  version        Int                   @default(1)
+  status         ReadinessExportStatus
   contentJson    Json?
   blockedReason  String?
-  generatedAt    DateTime @default(now())
+  generatedAt    DateTime              @default(now())
 
   @@index([assessmentId])
   @@index([organizationId])
@@ -287,17 +287,17 @@ model ReadinessExport {
 }
 
 model AuditExportRequest {
-  id             String   @id
+  id             String            @id
   organizationId String
   requestedById  String
   fromDate       DateTime
   toDate         DateTime
-  status         String   @default("READY")
-  version        Int      @default(1)
+  status         AuditExportStatus @default(READY)
+  version        Int               @default(1)
   checksumSha256 String
   contentJson    Json?
   correlationId  String
-  createdAt      DateTime @default(now())
+  createdAt      DateTime          @default(now())
   completedAt    DateTime?
 
   @@index([organizationId, createdAt])
@@ -305,28 +305,142 @@ model AuditExportRequest {
 }
 
 enum AuthMembershipStatus {
-  invited
-  active
-  revoked
+  INVITED
+  ACTIVE
+  REVOKED
 }
 
 enum AuthInvitationState {
-  approved
-  pending
-  consumed
+  APPROVED
+  PENDING
+  CONSUMED
 }
 
 enum AuthDecision {
-  allow
-  deny
+  ALLOW
+  DENY
 }
 
 enum AuthStateGate {
-  membership_active
+  MEMBERSHIP_ACTIVE
+}
+
+enum AuditResourceType {
+  AI_USAGE_FLOW
+  ASSESSMENT
+  ASSESSMENT_RECORD
+  AUDIT_EXPORT_REQUEST
+  AUTH_INVITATION
+  AUTH_MEMBERSHIP
+  AUTH_ORGANIZATION
+  AUTH_SESSION
+  CLASSIFICATION_RESULT
+  CONFLICT_RECORD
+  DOCUMENT_REQUEST
+  GITHUB_APP_INSTALL_STATE
+  HTTP_ROUTE
+  LEGAL_RULE
+  LEGAL_RULE_CATALOG_VERSION
+  LEGAL_RULE_MATCH
+  OUTBOX
+  READINESS_EXPORT
+  REPOSITORY_CONNECTION
+  REPOSITORY_SCAN_JOB
+  REPOSITORY_SNAPSHOT
+  TECHNICAL_EVIDENCE_REPORT
+  TECHNICAL_PROFILE
+  VERIFIED_PROFILE
+  WORKER_TASK
+  WORKSPACE
+  WIZARD_PROFILE
+}
+
+enum AuthorizationReasonCode {
+  ACTION_NOT_GRANTED
+  ACCOUNT_NOT_FOUND
+  AUTHORIZED
+  AUTHZ_EVALUATOR_FAILURE
+  AUTHZ_POLICY_UNAVAILABLE
+  AUTHZ_STATE_GATE_BLOCKED
+  AUTHZ_SUBJECT_INCOMPLETE
+  AUTHZ_TENANT_SCOPE_MISMATCH
+  AUTH_REQUIRED
+  EMAIL_VERIFICATION_REQUIRED
+  EVALUATOR_ERROR
+  INVALID_CREDENTIALS
+  INVALID_INVITE_STATE
+  INVALID_REDIRECT_URI
+  LOAD_ERROR
+  MEMBERSHIP_MISSING
+  MFA_REQUIRED
+  MFA_INVALID
+  MFA_RATE_LIMITED
+  OAUTH_CALLBACK_INVALID
+  OAUTH_STATE_INVALID
+  PBAC_DENIED
+  PBAC_METADATA_MISSING
+  POLICY_NOT_FOUND
+  RECOVERY_INVALID
+  SESSION_INVALID
+  STATE_GATE_FAILED
+  SUBJECT_ROLE_MISMATCH
+  SUBJECT_ATTRIBUTE_MISSING
+  TEMPORARY_LOCKED
+  UNSUPPORTED_PROVIDER
+  VALIDATION_FAILED
+}
+
+enum OutboxAggregateType {
+  AI_USAGE_FLOW
+  ASSESSMENT
+  AUTH_USER
+  CLASSIFICATION_RESULT
+  DOCUMENT_REQUEST
+  LEGAL_RULE_MATCH
+  REPOSITORY_SCAN_JOB
+  REPOSITORY_SNAPSHOT
+  TECHNICAL_EVIDENCE_REPORT
+  TECHNICAL_PROFILE
+  VERIFIED_PROFILE
+  WIZARD_PROFILE
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+  DLQ
+}
+
+enum AssessmentStatus {
+  WIZARD_IN_PROGRESS
+  WIZARD_SUBMITTED
+  EVIDENCE_REQUIRED
+  SCAN_IN_PROGRESS
+  CLASSIFICATION_LOCKED
+  READY_FOR_REVIEW
+}
+
+enum WizardProfileStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+}
+
+enum ReadinessExportStatus {
+  GENERATED
+  BLOCKED
+}
+
+enum AuditExportStatus {
+  QUEUED
+  GENERATING
+  READY
+  FAILED
 }
 
 model RepositoryConnection {
-  id                 String    @id
+  id                 String                     @id
   assessmentId       String?
   organizationId     String
   userId             String
@@ -336,8 +450,8 @@ model RepositoryConnection {
   repositoryFullName String
   defaultBranch      String
   permissions        Json
-  status             String    @default("active")
-  connectedAt        DateTime  @default(now())
+  status             RepositoryConnectionStatus @default(ACTIVE)
+  connectedAt        DateTime                   @default(now())
   revokedAt          DateTime?
 
   @@unique([installationId, repositoryId])
@@ -346,7 +460,7 @@ model RepositoryConnection {
 }
 
 model RepositorySnapshot {
-  id                 String   @id
+  id                 String                   @id
   assessmentId       String
   organizationId     String
   connectionId       String
@@ -357,8 +471,8 @@ model RepositorySnapshot {
   commitSha          String
   providerMetadata   Json
   actorId            String
-  status             String   @default("ready")
-  createdAt          DateTime @default(now())
+  status             RepositorySnapshotStatus @default(READY)
+  createdAt          DateTime                 @default(now())
 
   @@index([assessmentId])
   @@index([connectionId])
@@ -366,26 +480,26 @@ model RepositorySnapshot {
 }
 
 model RepositoryScanJob {
-  id             String   @id
+  id             String                      @id
   assessmentId   String
   snapshotId     String
   organizationId String
-  idempotencyKey String   @unique
-  triggerSource  String
-  status         String   @default("QUEUED")
-  attemptCount   Int      @default(0)
+  idempotencyKey String                      @unique
+  triggerSource  RepositoryScanTriggerSource
+  status         RepositoryScanJobStatus     @default(QUEUED)
+  attemptCount   Int                         @default(0)
   correlationId  String
   blockedReason  String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
 
   @@index([assessmentId])
   @@index([snapshotId])
 }
 
 model TechnicalEvidenceReport {
-  id              String   @id
-  scanJobId       String   @unique
+  id              String                   @id
+  scanJobId       String                   @unique
   assessmentId    String
   organizationId  String
   snapshotId      String
@@ -394,33 +508,33 @@ model TechnicalEvidenceReport {
   evidencePayload Json
   privacyFlags    Json
   schemaVersion   String
-  status          String   @default("accepted")
+  status          EvidenceAcceptanceStatus @default(ACCEPTED)
   rejectionReason String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime                 @default(now())
 
   @@index([assessmentId])
   @@index([scanJobId])
 }
 
 model TechnicalProfile {
-  id               String   @id @default(uuid())
-  evidenceReportId String   @unique
+  id               String                   @id @default(uuid())
+  evidenceReportId String                   @unique
   assessmentId     String
   organizationId   String
   schemaVersion    String
   providerVersion  String
   profileData      Json
   privacyFlags     Json
-  status           String   @default("accepted")
+  status           EvidenceAcceptanceStatus @default(ACCEPTED)
   rejectionReason  String?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime                 @default(now())
 
   @@index([assessmentId])
 }
 
 model AIUsageFlow {
-  id                 String   @id @default(uuid())
-  technicalProfileId String   @unique
+  id                 String                   @id @default(uuid())
+  technicalProfileId String                   @unique
   assessmentId       String
   organizationId     String
   schemaVersion      String
@@ -428,15 +542,15 @@ model AIUsageFlow {
   claims             Json
   unknownUsages      Json
   privacyFlags       Json
-  status             String   @default("accepted")
+  status             EvidenceAcceptanceStatus @default(ACCEPTED)
   rejectionReason    String?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime                 @default(now())
 
   @@index([assessmentId])
 }
 
 model ConflictRecord {
-  id               String    @id @default(uuid())
+  id               String               @id @default(uuid())
   aiUsageFlowId    String
   assessmentId     String
   organizationId   String
@@ -444,61 +558,61 @@ model ConflictRecord {
   conflictScore    Float
   scoreExplanation String
   evidenceRefs     Json
-  status           String    @default("PENDING")
+  status           ConflictRecordStatus @default(PENDING)
   resolvedAt       DateTime?
   resolvedById     String?
   resolutionNote   String?
-  createdAt        DateTime  @default(now())
+  createdAt        DateTime             @default(now())
 
   @@index([assessmentId, status])
 }
 
 model VerifiedProfile {
-  id              String    @id @default(uuid())
-  aiUsageFlowId   String    @unique
+  id              String                @id @default(uuid())
+  aiUsageFlowId   String                @unique
   assessmentId    String
   organizationId  String
   schemaVersion   String
   providerVersion String
   profileData     Json
   gatesPassedAt   Json
-  status          String    @default("pending_approval")
+  status          VerifiedProfileStatus @default(PENDING_APPROVAL)
   approvedAt      DateTime?
   approvedById    String?
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime              @default(now())
 
   @@index([assessmentId])
 }
 
 model ClassificationResult {
-  id                String   @id @default(uuid())
-  legalRuleMatchId  String?  @unique
-  verifiedProfileId String?
-  assessmentId      String
-  organizationId    String
-  schemaVersion     String?
+  id                 String                        @id @default(uuid())
+  legalRuleMatchId   String?                       @unique
+  verifiedProfileId  String?
+  assessmentId       String
+  organizationId     String
+  schemaVersion      String?
   classificationData Json?
-  guardrailStatus   String   @default("passed")
-  blockedReason     String?
-  status            String   @default("accepted")
-  createdAt         DateTime @default(now())
+  guardrailStatus    ClassificationGuardrailStatus @default(PASSED)
+  blockedReason      String?
+  status             EvidenceAcceptanceStatus      @default(ACCEPTED)
+  createdAt          DateTime                      @default(now())
 
   @@index([assessmentId])
 }
 
 model DocumentRequest {
-  id                     String   @id
+  id                     String                @id
   assessmentId           String
   organizationId         String
   requestedById          String
   classificationResultId String
-  documentType           String
-  status                 String   @default("QUEUED")
+  documentType           DocumentType
+  status                 DocumentRequestStatus @default(QUEUED)
   documentUrl            String?
   blockedReason          String?
   correlationId          String
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 
   @@index([assessmentId, organizationId, documentType, status, createdAt])
   @@index([organizationId, createdAt])
@@ -518,19 +632,19 @@ model GitHubAppInstallState {
 }
 
 model LegalRuleCatalogVersion {
-  id         String    @id @default(uuid())
+  id         String                   @id @default(uuid())
   version    String
-  status     String    @default("DRAFT")
+  status     LegalRuleLifecycleStatus @default(DRAFT)
   ruleRefs   Json
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime                 @default(now())
   approvedAt DateTime?
 
   @@index([status])
 }
 
 model LegalRule {
-  id                        String  @id @default(uuid())
-  legalRuleId               String  @unique
+  id                        String                   @id @default(uuid())
+  legalRuleId               String                   @unique
   legalRuleCatalogVersionId String
   ruleFamily                String
   requiredFacts             Json
@@ -538,26 +652,26 @@ model LegalRule {
   blockingFacts             Json?
   unknownFactPolicy         String
   citationLocatorRefs       Json
-  status                    String  @default("DRAFT")
+  status                    LegalRuleLifecycleStatus @default(DRAFT)
   authoredBy                String
 
   @@index([legalRuleCatalogVersionId])
 }
 
 model RuleApprovalRecord {
-  id                        String   @id @default(uuid())
+  id                        String                   @id @default(uuid())
   legalRuleCatalogVersionId String
   approvedBy                String
-  status                    String
+  status                    LegalRuleLifecycleStatus
   scopeDescription          String
   comments                  String?
-  approvalDate              DateTime @default(now())
+  approvalDate              DateTime                 @default(now())
 
   @@index([legalRuleCatalogVersionId])
 }
 
 model LegalRuleMatch {
-  id                        String   @id @default(uuid())
+  id                        String                        @id @default(uuid())
   verifiedProfileId         String
   assessmentId              String
   organizationId            String
@@ -566,11 +680,87 @@ model LegalRuleMatch {
   schemaVersion             String
   matches                   Json
   citationAllowlist         Json
-  overallCoverageStatus     String   @default("NO_CITATION")
-  guardrailStatus           String   @default("passed")
+  overallCoverageStatus     OverallCoverageStatus         @default(NO_CITATION)
+  guardrailStatus           LegalRuleMatchGuardrailStatus @default(PASSED)
   blockedReason             String?
-  status                    String   @default("accepted")
-  createdAt                 DateTime @default(now())
+  status                    EvidenceAcceptanceStatus      @default(ACCEPTED)
+  createdAt                 DateTime                      @default(now())
 
   @@index([assessmentId])
+}
+
+enum RepositoryConnectionStatus {
+  ACTIVE
+  REVOKED
+}
+
+enum RepositorySnapshotStatus {
+  READY
+}
+
+enum RepositoryScanJobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  BLOCKED
+}
+
+enum RepositoryScanTriggerSource {
+  MANUAL
+  TRUSTED
+}
+
+enum EvidenceAcceptanceStatus {
+  ACCEPTED
+  REJECTED
+}
+
+enum ConflictRecordStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+enum VerifiedProfileStatus {
+  PENDING_APPROVAL
+  APPROVED
+  AUTO_APPROVED
+}
+
+enum ClassificationGuardrailStatus {
+  PASSED
+  DEGRADED
+  BLOCKED
+}
+
+enum LegalRuleMatchGuardrailStatus {
+  PASSED
+  BLOCKED
+}
+
+enum OverallCoverageStatus {
+  NO_CITATION
+  PARTIAL_CITATION
+  COMPLETE_CITATION
+}
+
+enum DocumentRequestStatus {
+  QUEUED
+  GENERATING
+  READY
+  FAILED
+  BLOCKED
+}
+
+enum DocumentType {
+  FINAL_REPORT
+  GAP_ANALYSIS
+  READINESS_EXPORT
+}
+
+enum LegalRuleLifecycleStatus {
+  DRAFT
+  APPROVED
+  REJECTED
 }

@@ -1,8 +1,8 @@
 import {
-  BadRequestException,
   Controller,
   Get,
   HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -18,6 +18,7 @@ import type { AuthenticatedRequest } from "../../../../common/interfaces/authent
 import { RequireAnyAction } from "../../../../platform/pbac/decorators/require-any-action.decorator.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { RequestFinalReportCommand } from "../../application/commands/request-final-report/request-final-report.command.js";
 import { RequestGapAnalysisCommand } from "../../application/commands/request-gap-analysis/request-gap-analysis.command.js";
@@ -140,10 +141,13 @@ export class DocumentController {
     @Param("documentRequestId") documentRequestId: string,
     @Query("token") token?: string,
   ): { url: string } {
+    const correlationId = crypto.randomUUID();
     if (!token) {
-      throw new BadRequestException({
-        error_code: DOCUMENT_ERROR_CODES.downloadUrlInvalid,
-      });
+      throw problemException(
+        DOCUMENT_ERROR_CODES.downloadUrlInvalid,
+        correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     const payload = this.storage.verifySignedDownloadToken(
@@ -152,9 +156,11 @@ export class DocumentController {
       documentRequestId,
     );
     if (!payload) {
-      throw new BadRequestException({
-        error_code: DOCUMENT_ERROR_CODES.downloadUrlInvalid,
-      });
+      throw problemException(
+        DOCUMENT_ERROR_CODES.downloadUrlInvalid,
+        correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     return { url: payload.documentUrl };

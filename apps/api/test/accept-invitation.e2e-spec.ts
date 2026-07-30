@@ -16,7 +16,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import { DEVELOPER_ALLOWED_ACTIONS } from "@lcsp/contracts/pbac";
@@ -40,12 +40,6 @@ type AcceptInvitationBody = {
     | { type: "assessment"; assessment_id: string }
     | { type: "organization"; assessment_id: null };
   correlation_id: string;
-};
-
-type ErrorBody = {
-  code?: string;
-  error_code?: string;
-  correlation_id?: string;
 };
 
 type PreviewBody = {
@@ -88,7 +82,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: fixture.organizationId,
     });
-    managerToken = (signIn.body as SignInSuccess).session_token;
+    managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
 
   afterAll(async () => {
@@ -112,7 +106,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
       });
 
     assert.equal(result.status, 201);
-    const body = result.body as AcceptInvitationBody;
+    const body = successBody<AcceptInvitationBody>(result);
     assert.equal(body.organization_id, fixture.organizationId);
     assert.equal(body.correlation_id, "corr-accept-1");
     assert.deepEqual(body.allowed_actions, DEVELOPER_ALLOWED_ACTIONS);
@@ -120,7 +114,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
       type: "assessment",
       assessment_id: "assessment-1",
     });
-    const previewScope = (preview.body as PreviewBody).scope;
+    const previewScope = successBody<PreviewBody>(preview).scope;
     assert.equal(previewScope.type, "assessment");
     if (previewScope.type === "assessment") {
       assert.equal(body.scope.assessment_id, previewScope.assessment.id);
@@ -166,7 +160,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
 
     assert.equal(result.status, 400);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
     );
   });
@@ -185,7 +179,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
 
     assert.equal(result.status, 400);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
     );
   });
@@ -204,7 +198,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
 
     assert.equal(result.status, 400);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
     );
   });
@@ -228,7 +222,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
 
     assert.equal(result.status, 409);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists,
     );
   });
@@ -242,7 +236,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
 
     assert.equal(result.status, 422);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       ACCEPT_INVITATION_ERROR_CODES.passwordTooShort,
     );
   });
@@ -281,7 +275,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
       password: "DeveloperPass123!",
     });
     assert.equal(result.status, 201);
-    assert.deepEqual((result.body as AcceptInvitationBody).scope, {
+    assert.deepEqual(successBody<AcceptInvitationBody>(result).scope, {
       type: "organization",
       assessment_id: null,
     });
@@ -310,7 +304,7 @@ describe("Accept Developer Invitation endpoint (e2e) [MW-auth-011]", () => {
       password: "DeveloperPass123!",
     });
     assert.equal(result.status, 201);
-    const body = result.body as AcceptInvitationBody;
+    const body = successBody<AcceptInvitationBody>(result);
     assert.deepEqual(body.allowed_actions, [expectedAction]);
     const membership = await prisma.authMembership.findUniqueOrThrow({
       where: {

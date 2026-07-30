@@ -11,6 +11,13 @@ import {
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 
+import {
+  toPrismaAuthInvitationState,
+  toPrismaAuthMembershipStatus,
+  toPrismaAuditResourceType,
+  toPrismaAuthorizationReasonCode,
+  toPrismaAuthDecision,
+} from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditEventRepository } from "../../application/ports/persistence/audit-event.repository.ts";
 import type { AuthorizationDecisionRepository } from "../../application/ports/persistence/authorization-decision.repository.ts";
@@ -163,7 +170,7 @@ export class PrismaMembershipRepository implements MembershipRepository {
         id: membership.id,
         userId: membership.userId,
         organizationId: membership.organizationId,
-        status: membership.status,
+        status: toPrismaAuthMembershipStatus(membership.status),
         subjectAttributes: subjectAttributesToJson(
           membership.subjectAttributes,
         ),
@@ -171,7 +178,7 @@ export class PrismaMembershipRepository implements MembershipRepository {
         policyVersion: membership.policyVersion,
       },
       update: {
-        status: membership.status,
+        status: toPrismaAuthMembershipStatus(membership.status),
         subjectAttributes: subjectAttributesToJson(
           membership.subjectAttributes,
         ),
@@ -199,7 +206,10 @@ export class PrismaMembershipRepository implements MembershipRepository {
 
   async findActiveByUserId(userId: string): Promise<Membership[]> {
     const records = await this.prisma.authMembership.findMany({
-      where: { userId, status: AUTH_MEMBERSHIP_STATUSES.active },
+      where: {
+        userId,
+        status: toPrismaAuthMembershipStatus(AUTH_MEMBERSHIP_STATUSES.active),
+      },
     });
 
     return records.map(mapMembershipRecord);
@@ -221,9 +231,11 @@ export class PrismaInvitationRepository implements InvitationRepository {
         id: invitation.id,
         email: invitation.email.toString(),
         organizationId: invitation.organizationId,
-        state: invitation.state,
+        state: toPrismaAuthInvitationState(invitation.state),
         emailVerified: invitation.emailVerified,
-        membershipStatus: invitation.membershipStatus,
+        membershipStatus: toPrismaAuthMembershipStatus(
+          invitation.membershipStatus,
+        ),
         subjectAttributes: subjectAttributesToJson(
           invitation.subjectAttributes,
         ),
@@ -233,9 +245,11 @@ export class PrismaInvitationRepository implements InvitationRepository {
       },
       update: {
         email: invitation.email.toString(),
-        state: invitation.state,
+        state: toPrismaAuthInvitationState(invitation.state),
         emailVerified: invitation.emailVerified,
-        membershipStatus: invitation.membershipStatus,
+        membershipStatus: toPrismaAuthMembershipStatus(
+          invitation.membershipStatus,
+        ),
         subjectAttributes: subjectAttributesToJson(
           invitation.subjectAttributes,
         ),
@@ -256,8 +270,13 @@ export class PrismaInvitationRepository implements InvitationRepository {
 
   async tryConsume(id: string): Promise<boolean> {
     const result = await this.prisma.authInvitation.updateMany({
-      where: { id, state: AUTH_INVITATION_STATES.approved },
-      data: { state: AUTH_INVITATION_STATES.consumed },
+      where: {
+        id,
+        state: toPrismaAuthInvitationState(AUTH_INVITATION_STATES.approved),
+      },
+      data: {
+        state: toPrismaAuthInvitationState(AUTH_INVITATION_STATES.consumed),
+      },
     });
     return result.count > 0;
   }
@@ -383,11 +402,11 @@ export class PrismaAuthorizationDecisionRepository implements AuthorizationDecis
       data: {
         id: crypto.randomUUID(),
         organizationId: decision.organization_id,
-        resourceType: decision.resource_type,
+        resourceType: toPrismaAuditResourceType(decision.resource_type),
         resourceId: decision.resource_id,
         action: decision.action,
-        decision: decision.decision,
-        reasonCode: decision.reason_code,
+        decision: toPrismaAuthDecision(decision.decision),
+        reasonCode: toPrismaAuthorizationReasonCode(decision.reason_code),
         policyId: decision.policy_id,
         policyVersion: decision.policy_version,
         correlationId: decision.correlation_id,
@@ -675,7 +694,7 @@ function normalizeAuditEvent(
     eventType: normalizeLegacyAuthAuditEventType(rawEventType),
     actorId: authAuditReadNullableString(event, "actor_id"),
     organizationId: authAuditReadNullableString(event, "organization_id"),
-    decision: authAuditReadDecision(event, "decision"),
+    decision: mapNullableAuthDecision(authAuditReadDecision(event, "decision")),
     reasonCode: authAuditReadNullableString(event, "reason_code"),
     correlationId: authAuditReadString(event, "correlation_id"),
     sessionId: authAuditReadNullableString(event, "session_id"),
@@ -683,4 +702,10 @@ function normalizeAuditEvent(
     policyVersion: authAuditReadNullableString(event, "policy_version"),
     payload,
   };
+}
+
+function mapNullableAuthDecision(
+  decision: ReturnType<typeof authAuditReadDecision>,
+) {
+  return decision ? toPrismaAuthDecision(decision) : null;
 }

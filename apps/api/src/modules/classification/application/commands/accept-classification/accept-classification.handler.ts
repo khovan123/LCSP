@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 
 import {
   ConflictException,
+  HttpStatus,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -9,24 +10,40 @@ import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_IDS,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
+  CLASSIFICATION_RESULT_STATUSES,
   CLASSIFICATION_RESULT_SCHEMA_VERSIONS,
+  LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
   SCAN_ERROR_CODES,
   SCAN_EVENT_TYPES,
+  type ClassificationGuardrailStatus,
 } from "@lcsp/contracts/scan";
 import type { Prisma } from "@prisma/client";
 
+import {
+  fromPrismaLegalRuleMatchGuardrailStatus,
+  toPrismaClassificationGuardrailStatus,
+  toPrismaEvidenceAcceptanceStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { problemResult } from "../../../../../platform/problems/problem-factory.js";
 import type { ClassificationResultCallbackResponseDto } from "../../contracts/classification/classification-result-callback.contract.js";
 import { OverclaimGuardrailService } from "../../services/classification/overclaim-guardrail.service.js";
 import { AcceptClassificationCommand } from "./accept-classification.command.js";
 
-const CLASSIFICATION_WORKER_ACTOR_ID = "classification-result-worker";
+const CLASSIFICATION_WORKER_ACTOR_ID =
+  AUDIT_ACTOR_IDS.classificationResultWorker;
 
 @CommandHandler(AcceptClassificationCommand)
 export class AcceptClassificationHandler implements ICommandHandler<AcceptClassificationCommand> {
@@ -43,10 +60,11 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
     this.validate(command);
 
     const payload = command.payload;
+    const correlationId = command.correlationId ?? payload.assessment_id;
 
     this.overclaimGuardrail.validate(
       payload.classification_data,
-      command.correlationId,
+      correlationId,
     );
 
     const verifiedProfile = await this.prisma.verifiedProfile.findFirst({
@@ -86,7 +104,11 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
       );
     }
 
-    if (legalRuleMatch.guardrailStatus === "blocked") {
+    if (
+      fromPrismaLegalRuleMatchGuardrailStatus(
+        legalRuleMatch.guardrailStatus,
+      ) === LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.blocked
+    ) {
       throw new UnprocessableEntityException(
         this.errorBody(command, SCAN_ERROR_CODES.legalRuleMatchNotFound),
       );
@@ -121,9 +143,12 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
           schemaVersion: payload.schema_version,
           classificationData:
             payload.classification_data as Prisma.InputJsonValue,
-          guardrailStatus,
+          guardrailStatus:
+            toPrismaClassificationGuardrailStatus(guardrailStatus),
           blockedReason,
-          status: "accepted",
+          status: toPrismaEvidenceAcceptanceStatus(
+            CLASSIFICATION_RESULT_STATUSES.accepted,
+          ),
         },
       });
 
@@ -149,7 +174,7 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
       accepted: true,
       classification_result_id: classificationResultId,
       guardrail_status: guardrailStatus,
-      correlation_id: command.correlationId,
+      correlation_id: correlationId,
     };
   }
 
@@ -165,7 +190,7 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
       ) ||
       !isRecord(payload.classification_data) ||
       !Object.values(CLASSIFICATION_GUARDRAIL_STATUSES).includes(
-        payload.guardrail_status as (typeof CLASSIFICATION_GUARDRAIL_STATUSES)[keyof typeof CLASSIFICATION_GUARDRAIL_STATUSES],
+        payload.guardrail_status,
       )
     ) {
       throw new UnprocessableEntityException(
@@ -183,18 +208,21 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
       organizationId: string;
     },
     classificationResultId: string,
-    guardrailStatus: string,
+    guardrailStatus: ClassificationGuardrailStatus,
   ): Promise<void> {
     const correlationId = command.correlationId || classificationResultId;
     const message = buildOutboxMessageInput({
-      aggregateType: "ClassificationResult",
+      aggregateType: OUTBOX_AGGREGATE_TYPES.classificationResult,
       aggregateId: classificationResultId,
       eventType: SCAN_EVENT_TYPES.classificationResultReady,
       organizationId: verifiedProfile.organizationId,
       assessmentId: verifiedProfile.assessmentId,
       correlationId,
       causationId: verifiedProfile.id,
-      actor: { id: CLASSIFICATION_WORKER_ACTOR_ID, type: "service" },
+      actor: {
+        id: CLASSIFICATION_WORKER_ACTOR_ID,
+        type: AUDIT_ACTOR_TYPES.service,
+      },
       result: SCAN_EVENT_TYPES.classificationResultReady,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       idempotencyKey: `${classificationResultId}:${SCAN_EVENT_TYPES.classificationResultReady}`,
@@ -218,7 +246,7 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
       organizationId: string;
     },
     classificationResultId: string,
-    guardrailStatus: string,
+    guardrailStatus: ClassificationGuardrailStatus,
     blockedReason: string | null,
   ): Promise<void> {
     const isBlocked =
@@ -236,14 +264,17 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
         actorId: CLASSIFICATION_WORKER_ACTOR_ID,
         organizationId: verifiedProfile.organizationId,
         assessmentId: verifiedProfile.assessmentId,
-        resourceType: "ClassificationResult",
+        resourceType: AUDIT_RESOURCE_TYPES.classificationResult,
         resourceId: classificationResultId,
         correlationId,
         causationId: verifiedProfile.id,
         decision: isBlocked ? AUDIT_DECISIONS.deny : AUDIT_DECISIONS.allow,
         result: auditEventType,
         redactionStatus: AUDIT_REDACTION_STATUSES.none,
-        actor: { id: CLASSIFICATION_WORKER_ACTOR_ID, type: "service" },
+        actor: {
+          id: CLASSIFICATION_WORKER_ACTOR_ID,
+          type: AUDIT_ACTOR_TYPES.service,
+        },
         payload: {
           assessmentId: verifiedProfile.assessmentId,
           guardrailStatus,
@@ -256,10 +287,13 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
   }
 
   private errorBody(command: AcceptClassificationCommand, errorCode: string) {
-    return {
-      error_code: String(errorCode),
-      correlation_id: command.correlationId,
-    };
+    return problemResult(
+      String(errorCode),
+      command.correlationId ?? command.payload.assessment_id,
+      {
+        status: HttpStatus.BAD_REQUEST,
+      },
+    );
   }
 }
 

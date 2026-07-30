@@ -1,5 +1,8 @@
 import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
-import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
+import {
+  OUTBOX_STATUSES,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
 import type { ConfigService } from "@nestjs/config";
@@ -83,7 +86,7 @@ function makeMessage(
 ) {
   return OutboxMessageEntity.fromPersistence({
     id: "outbox-1",
-    aggregateType: "Assessment",
+    aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
     aggregateId: "assessment-1",
     eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
     payload: { foo: "bar" },

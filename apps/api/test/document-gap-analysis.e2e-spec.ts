@@ -12,8 +12,21 @@ import {
   DOCUMENT_REQUEST_STATUSES,
   DOCUMENT_TYPES,
 } from "@lcsp/contracts/document";
+import {
+  CLASSIFICATION_GUARDRAIL_STATUSES,
+  CLASSIFICATION_RESULT_STATUSES,
+  LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
+  OVERALL_COVERAGE_STATUSES,
+  type ClassificationGuardrailStatus,
+} from "@lcsp/contracts/scan";
+import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
 
 import { AppModule } from "../src/app.module.js";
+import {
+  toPrismaDocumentRequestStatus,
+  toPrismaDocumentType,
+  toPrismaOverallCoverageStatus,
+} from "../src/infrastructure/prisma/prisma-enum-mappers.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import {
   TEST_DATABASE_URL,
@@ -21,9 +34,8 @@ import {
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
-type ErrorResponse = { error_code?: string };
 type SuccessResponse = {
   document_request_id: string;
   status: string;
@@ -83,7 +95,7 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: "org-1",
     });
-    managerToken = (signIn.body as SignInSuccess).session_token;
+    managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
 
   afterAll(async () => {
@@ -92,14 +104,14 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
   });
 
   it("returns QUEUED and writes document request, outbox, and audit when guardrail passed", async () => {
-    await seedClassification(prisma, "passed");
+    await seedClassification(prisma, CLASSIFICATION_GUARDRAIL_STATUSES.passed);
 
     const response = await requestGapAnalysis(
       app,
       managerToken,
       "assessment-1",
     );
-    const body = response.body as SuccessResponse;
+    const body = successBody<SuccessResponse>(response);
 
     assert.equal(response.status, 202);
     assert.ok(body.document_request_id);
@@ -114,7 +126,7 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
       prisma.outboxMessage.findFirst({
         where: {
           eventType: DOCUMENT_EVENT_TYPES.gapAnalysisRequested,
-          aggregateType: "DocumentRequest",
+          aggregateType: OUTBOX_AGGREGATE_TYPES.documentRequest,
           aggregateId: body.document_request_id,
         },
       }),
@@ -127,8 +139,14 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
     ]);
 
     assert.ok(docRequest);
-    assert.equal(docRequest?.status, DOCUMENT_REQUEST_STATUSES.queued);
-    assert.equal(docRequest?.documentType, DOCUMENT_TYPES.gapAnalysis);
+    assert.equal(
+      docRequest?.status,
+      toPrismaDocumentRequestStatus(DOCUMENT_REQUEST_STATUSES.queued),
+    );
+    assert.equal(
+      docRequest?.documentType,
+      toPrismaDocumentType(DOCUMENT_TYPES.gapAnalysis),
+    );
     assert.ok(outbox);
     assert.equal(auditCount, 2);
   });
@@ -142,7 +160,7 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
 
     assert.equal(response.status, 409);
     assert.equal(
-      (response.body as ErrorResponse).error_code,
+      problemCode(response),
       DOCUMENT_ERROR_CODES.classificationRequired,
     );
 
@@ -156,14 +174,14 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
   });
 
   it("accepts worker callback and updates documentRequest to READY", async () => {
-    await seedClassification(prisma, "passed");
+    await seedClassification(prisma, CLASSIFICATION_GUARDRAIL_STATUSES.passed);
 
     const requestResp = await requestGapAnalysis(
       app,
       managerToken,
       "assessment-1",
     );
-    const body = requestResp.body as SuccessResponse;
+    const body = successBody<SuccessResponse>(requestResp);
 
     const callbackResp = await httpRequest(app)
       .post(`/internal/document-requests/${body.document_request_id}/callback`)
@@ -180,7 +198,10 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
     const updated = await prisma.documentRequest.findUnique({
       where: { id: body.document_request_id },
     });
-    assert.equal(updated?.status, DOCUMENT_REQUEST_STATUSES.ready);
+    assert.equal(
+      updated?.status,
+      toPrismaDocumentRequestStatus(DOCUMENT_REQUEST_STATUSES.ready),
+    );
     assert.equal(updated?.documentUrl, "https://example.test/gap.pdf");
   });
 });
@@ -199,7 +220,7 @@ function requestGapAnalysis(
 
 async function seedClassification(
   prisma: PrismaClient,
-  guardrailStatus: string,
+  guardrailStatus: ClassificationGuardrailStatus,
 ) {
   const matchId = `lrm-${guardrailStatus}`;
   const classificationResultId = `classification-${guardrailStatus}`;
@@ -215,9 +236,11 @@ async function seedClassification(
       schemaVersion: "1.0.0",
       matches: [],
       citationAllowlist: ["chunk-1"],
-      overallCoverageStatus: "COMPLETE_CITATION",
-      guardrailStatus: "passed",
-      status: "accepted",
+      overallCoverageStatus: toPrismaOverallCoverageStatus(
+        OVERALL_COVERAGE_STATUSES.completeCitation,
+      ),
+      guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
+      status: CLASSIFICATION_RESULT_STATUSES.accepted,
     },
   });
 
@@ -236,7 +259,7 @@ async function seedClassification(
       },
       guardrailStatus,
       blockedReason: null,
-      status: "accepted",
+      status: CLASSIFICATION_RESULT_STATUSES.accepted,
     },
   });
 

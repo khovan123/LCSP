@@ -1,4 +1,8 @@
-import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_EVENT_TYPES,
+  ASSESSMENT_STATUS_CODES,
+} from "@lcsp/contracts/assessment";
+import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
 /**
  * AC-039: Outbox message published exactly once per state-changing event.
  * AC-040: Duplicate RabbitMQ consumer delivery is idempotent.
@@ -10,7 +14,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import type { CreateAssessmentDto } from "../src/modules/assessment/application/contracts/assessment/create-assessment.contract.js";
@@ -50,7 +54,7 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    managerToken = (signIn.body as SignInSuccess)?.session_token ?? "";
+    managerToken = successBody<SignInSuccess>(signIn).session_token ?? "";
   });
 
   afterAll(async () => {
@@ -126,7 +130,7 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
           id: messageId,
           eventType: ASSESSMENT_EVENT_TYPES.created,
           aggregateId: "assessment-idempotent",
-          aggregateType: "Assessment",
+          aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
           payload: JSON.stringify({
             id: "assessment-idempotent",
             name: "Idempotency Test",
@@ -187,7 +191,7 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
           id: assessmentId,
           name: "Idempotent Assessment",
           organizationId: orgId,
-          status: "CLASSIFIED",
+          status: ASSESSMENT_STATUS_CODES.readyForReview,
           ownerId: "user-1",
         },
       });
@@ -207,14 +211,14 @@ describe("Outbox and consumer idempotency (e2e) [AC-039, AC-040]", () => {
         aggregate_id: assessmentId,
       });
 
-    // Assessment status must still be CLASSIFIED — not reset
+    // Assessment status must still be ready for review — not reset.
     const assessment = await prisma.assessment.findUnique({
       where: { id: assessmentId },
     });
     if (assessment) {
       assert.equal(
         assessment.status,
-        "CLASSIFIED",
+        ASSESSMENT_STATUS_CODES.readyForReview,
         "Duplicate delivery must not reset classification state",
       );
     }

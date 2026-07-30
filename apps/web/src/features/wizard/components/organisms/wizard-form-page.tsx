@@ -2,6 +2,7 @@
 
 import { startTransition, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { resolveMessage } from "@lcsp/i18n";
 import { BadgeCheck, CircleHelp, LoaderCircle } from "lucide-react";
 
@@ -98,7 +99,7 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
       ? assessmentQuery.data.detailKey
       : null;
   const effectiveIsReadOnly =
-    isReadOnly || assessment?.wizardStatus === "SUBMITTED";
+    isReadOnly || assessment?.wizardStatus === WIZARD_STATUS_CODES.submitted;
   const effectiveStatusKey =
     statusKey ??
     (assessment && !effectiveIsReadOnly ? "pages.wizard.draftSaved" : null);

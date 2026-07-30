@@ -17,7 +17,10 @@ import {
   PBAC_STATE_GATES,
   SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
-import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
+import {
+  CONFLICT_RECORD_STATUSES,
+  type ConflictRecordStatus,
+} from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
 import type { ConflictListDto } from "../src/modules/reconciliation/application/contracts/reconciliation/conflict-list.contract.js";
@@ -28,9 +31,7 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
-
-type ErrorResponseBody = { error_code: string; correlation_id: string };
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
   let app: INestApplication;
@@ -96,7 +97,7 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
       organization_id: orgId,
     });
     managerToken =
-      (signIn.body as { session_token?: string }).session_token ?? "";
+      successBody<{ session_token?: string }>(signIn).session_token ?? "";
   });
 
   afterAll(async () => {
@@ -115,7 +116,7 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     });
 
     const result = await listConflicts();
-    const body = result.body as ConflictListDto;
+    const body = successBody<ConflictListDto>(result);
 
     assert.equal(result.status, 200);
     assert.equal(body.conflicts.length, 2);
@@ -138,7 +139,7 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
   // T02
   it("T02: no conflicts -> 200 empty list", async () => {
     const result = await listConflicts();
-    const body = result.body as ConflictListDto;
+    const body = successBody<ConflictListDto>(result);
 
     assert.equal(result.status, 200);
     assert.deepEqual(body.conflicts, []);
@@ -156,7 +157,7 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     const result = await listConflicts({
       status: CONFLICT_RECORD_STATUSES.resolved,
     });
-    const body = result.body as ConflictListDto;
+    const body = successBody<ConflictListDto>(result);
 
     assert.equal(result.status, 200);
     assert.equal(body.conflicts.length, 1);
@@ -203,15 +204,14 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
       organization_id: orgId,
     });
     const restrictedToken =
-      (signIn.body as { session_token?: string }).session_token ?? "";
+      successBody<{ session_token?: string }>(signIn).session_token ?? "";
 
     const result = await httpRequest(app)
       .get("/assessments/assessment-conflicts-1/conflicts")
       .set("Authorization", `Bearer ${restrictedToken}`);
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 403);
-    assert.equal(body.error_code, PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
   });
 
   // T05
@@ -229,10 +229,9 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     const result = await httpRequest(app)
       .get("/assessments/assessment-other-org/conflicts")
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 404);
-    assert.equal(body.error_code, ASSESSMENT_ERROR_CODES.notFound);
+    assert.equal(problemCode(result), ASSESSMENT_ERROR_CODES.notFound);
   });
 
   // T06
@@ -249,7 +248,7 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     });
 
     const result = await listConflicts();
-    const body = result.body as ConflictListDto;
+    const body = successBody<ConflictListDto>(result);
     const serialized = JSON.stringify(body);
 
     assert.equal(result.status, 200);
@@ -276,7 +275,7 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
       conflictScore: number;
       scoreExplanation: string;
       evidenceRefs: unknown;
-      status: string;
+      status: ConflictRecordStatus;
     }> = {},
   ) {
     return prisma.conflictRecord.create({

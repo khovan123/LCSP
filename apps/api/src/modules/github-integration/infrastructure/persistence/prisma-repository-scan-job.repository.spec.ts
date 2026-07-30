@@ -5,6 +5,7 @@ import {
   REPOSITORY_SCAN_TRIGGER_SOURCES,
   REPOSITORY_SCAN_JOB_STATUSES,
 } from "@lcsp/contracts/github-integration";
+import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
 
 import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
@@ -36,7 +37,7 @@ describe("PrismaRepositoryScanJobRepository", () => {
       correlationId: "corr-1",
     });
     const event = {
-      aggregateType: "RepositoryScanJob",
+      aggregateType: OUTBOX_AGGREGATE_TYPES.repositoryScanJob,
       aggregateId: job.id,
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered,
       payload: { scanJobId: job.id },

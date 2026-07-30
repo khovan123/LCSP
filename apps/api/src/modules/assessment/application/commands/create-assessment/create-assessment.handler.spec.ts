@@ -3,6 +3,8 @@ import {
   ASSESSMENT_EVENT_TYPES,
   ASSESSMENT_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
+import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
+import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   PBAC_ACTIONS,
@@ -144,9 +146,14 @@ describe("CreateAssessmentHandler", () => {
         ),
       );
     } catch (error) {
-      expect((error as UnprocessableEntityException).getResponse()).toEqual({
-        error_code: ASSESSMENT_ERROR_CODES.invalidRequest,
-        correlation_id: "corr-1",
+      expect(
+        (error as UnprocessableEntityException).getResponse(),
+      ).toMatchObject({
+        ok: false,
+        problem: {
+          code: ASSESSMENT_ERROR_CODES.invalidRequest,
+          correlationId: "corr-1",
+        },
       });
     }
     expect(saveInTx).not.toHaveBeenCalled();
@@ -250,7 +257,7 @@ describe("CreateAssessmentHandler", () => {
     expect(event.eventType).toBe(ASSESSMENT_EVENT_TYPES.created);
     expect(event.actorId).toBe("user-1");
     expect(event.organizationId).toBe("org-1");
-    expect(event.resourceType).toBe("Assessment");
+    expect(event.resourceType).toBe(AUDIT_RESOURCE_TYPES.assessment);
     expect(event.resourceId).toBeTruthy();
     expect(event.correlationId).toBe("corr-1");
     expect(event.policyId).toBe("policy-manager-workspace");
@@ -306,7 +313,7 @@ describe("CreateAssessmentHandler", () => {
     expect(enqueue).toHaveBeenCalledTimes(1);
     const input = enqueue.mock.calls[0][0];
     expect(input.eventType).toBe(ASSESSMENT_EVENT_TYPES.createdOutbox);
-    expect(input.aggregateType).toBe("Assessment");
+    expect(input.aggregateType).toBe(OUTBOX_AGGREGATE_TYPES.assessment);
     expect(input.correlationId).toBe("corr-1");
     expect(input.causationId).toBe("corr-1");
     expect(input.organizationId).toBe("org-1");
@@ -375,7 +382,7 @@ describe("CreateAssessmentHandler", () => {
         eventType: ASSESSMENT_EVENT_TYPES.created,
         actorId: "developer-1",
         organizationId: "org-1",
-        resourceType: "Assessment",
+        resourceType: AUDIT_RESOURCE_TYPES.assessment,
         resourceId: null,
         correlationId: "corr-deny",
         decision: PBAC_DECISION.deny,

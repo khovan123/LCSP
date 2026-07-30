@@ -1,5 +1,6 @@
-import { Injectable, UnprocessableEntityException } from "@nestjs/common";
+import { HttpStatus, Injectable } from "@nestjs/common";
 import { SCAN_ERROR_CODES } from "@lcsp/contracts/scan";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 
 const PROHIBITED_OVERCLAIM_TERMS = [
   "certified",
@@ -14,7 +15,7 @@ const PROHIBITED_OVERCLAIM_TERMS = [
 export class OverclaimGuardrailService {
   validate(
     classificationData: Record<string, unknown>,
-    correlationId?: string,
+    correlationId: string,
   ): void {
     if (!classificationData || typeof classificationData !== "object") {
       return;
@@ -24,10 +25,11 @@ export class OverclaimGuardrailService {
 
     for (const term of PROHIBITED_OVERCLAIM_TERMS) {
       if (textPayload.includes(term.toLowerCase())) {
-        throw new UnprocessableEntityException({
-          error_code: SCAN_ERROR_CODES.classificationOverclaim,
-          correlation_id: correlationId,
-        });
+        throw problemException(
+          SCAN_ERROR_CODES.classificationOverclaim,
+          correlationId,
+          { status: HttpStatus.UNPROCESSABLE_ENTITY },
+        );
       }
     }
   }

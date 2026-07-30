@@ -261,9 +261,12 @@ describe("PinSnapshotHandler", () => {
       await handler.execute(command({ ref: "refs/heads/missing" }));
       throw new Error("expected rejection");
     } catch (error) {
-      expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
-        correlation_id: "corr-1",
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: GITHUB_INTEGRATION_ERROR_CODES.refNotResolvable,
+          correlationId: "corr-1",
+        },
       });
     }
     expect(saveWithCreatedEvent).not.toHaveBeenCalled();
@@ -285,9 +288,12 @@ describe("PinSnapshotHandler", () => {
       await handler.execute(command({ branch: "main" }));
       throw new Error("expected rejection");
     } catch (error) {
-      expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.refOutOfScope,
-        correlation_id: "corr-1",
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: GITHUB_INTEGRATION_ERROR_CODES.refOutOfScope,
+          correlationId: "corr-1",
+        },
       });
     }
     expect(saveWithCreatedEvent).not.toHaveBeenCalled();

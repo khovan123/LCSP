@@ -2,12 +2,10 @@ import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
 } from "@lcsp/contracts/github-integration";
-import type { GithubIntegrationErrorCode } from "@lcsp/contracts/github-integration";
 import {
   ASSESSMENT_ERROR_CODES,
   ASSESSMENT_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import type { AssessmentErrorCode } from "@lcsp/contracts/assessment";
 import {
   PBAC_ACTIONS,
   PBAC_REASON_CODE,
@@ -26,8 +24,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
-import type { AuthErrorCode } from "@lcsp/contracts/auth";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import type { GitHubAppStartDto } from "../src/modules/github-integration/application/contracts/github-integration/github-app-start.contract.js";
@@ -38,11 +35,6 @@ import {
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
-
-type ErrorResponseBody = {
-  error_code: AuthErrorCode | GithubIntegrationErrorCode | AssessmentErrorCode;
-  correlation_id: string;
-};
 
 const ALLOWED_REDIRECT_URI = "http://localhost:3000/github/callback";
 
@@ -78,7 +70,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    const signInBody = signIn.body as SignInSuccess;
+    const signInBody = successBody<SignInSuccess>(signIn);
     managerToken = signInBody?.session_token ?? "";
   });
 
@@ -95,7 +87,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
       .get("/github/app/start")
       .query({ redirect_uri: ALLOWED_REDIRECT_URI })
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = result.body as GitHubAppStartDto;
+    const body = successBody<GitHubAppStartDto>(result);
 
     assert.equal(result.status, 200);
     assert.match(
@@ -148,17 +140,17 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    const restrictedToken = (signIn.body as SignInSuccess)?.session_token ?? "";
+    const restrictedToken =
+      successBody<SignInSuccess>(signIn).session_token ?? "";
     assert.ok(restrictedToken, "sign-in must succeed for restricted fixture");
 
     const result = await httpRequest(app)
       .get("/github/app/start")
       .query({ redirect_uri: ALLOWED_REDIRECT_URI })
       .set("Authorization", `Bearer ${restrictedToken}`);
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 403);
-    assert.equal(body.error_code, PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
   });
 
   // T03
@@ -167,11 +159,10 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
       .get("/github/app/start")
       .query({ redirect_uri: "https://evil.example/callback" })
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
     assert.equal(
-      body.error_code,
+      problemCode(result),
       GITHUB_INTEGRATION_ERROR_CODES.invalidRedirectUri,
     );
   });
@@ -195,10 +186,9 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
         assessment_id: "assessment-other-org",
       })
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
-    assert.equal(body.error_code, ASSESSMENT_ERROR_CODES.notFound);
+    assert.equal(problemCode(result), ASSESSMENT_ERROR_CODES.notFound);
   });
 
   // T05

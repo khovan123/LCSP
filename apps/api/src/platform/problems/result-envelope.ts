@@ -15,6 +15,18 @@ export function isApiResult(
     return false;
   }
 
-  const candidate = value as { ok?: unknown };
-  return candidate.ok === true || candidate.ok === false;
+  const candidate = value as {
+    data?: unknown;
+    ok?: unknown;
+    problem?: unknown;
+  };
+  if (candidate.ok === true) {
+    return "data" in candidate;
+  }
+
+  if (candidate.ok === false) {
+    return typeof candidate.problem === "object" && candidate.problem !== null;
+  }
+
+  return false;
 }

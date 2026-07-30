@@ -10,6 +10,7 @@ import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import {
   AUDIT_EVENT_SCHEMA_VERSION,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
 import { OUTBOX_MESSAGE_SCHEMA_VERSION } from "@lcsp/contracts/outbox";
 import {
@@ -19,6 +20,7 @@ import {
   SCAN_EVENT_TYPES,
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
   TECHNICAL_PROFILE_STATUSES,
+  type AIUsageFlowStatus,
 } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
@@ -32,10 +34,9 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
-type ErrorResponse = { error_code?: string };
 
 describe("Conflict Detection Callback Endpoint (e2e) [MW-rec-001]", () => {
   let app: INestApplication;
@@ -83,7 +84,7 @@ describe("Conflict Detection Callback Endpoint (e2e) [MW-rec-001]", () => {
 
   it("T01/T07 accepts valid conflicts, creates pending records, emits event, and audits each conflict", async () => {
     const response = await callback(app, validPayload());
-    const body = response.body as ConflictDetectionCallbackDto;
+    const body = successBody<ConflictDetectionCallbackDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -119,7 +120,11 @@ describe("Conflict Detection Callback Endpoint (e2e) [MW-rec-001]", () => {
       OUTBOX_MESSAGE_SCHEMA_VERSION,
     );
     assert.equal(audits.length, 2);
-    assert.ok(audits.every((audit) => audit.resourceType === "ConflictRecord"));
+    assert.ok(
+      audits.every(
+        (audit) => audit.resourceType === AUDIT_RESOURCE_TYPES.conflictRecord,
+      ),
+    );
     assert.equal(
       (audits[0]?.payload as { schemaVersion?: string }).schemaVersion,
       AUDIT_EVENT_SCHEMA_VERSION,
@@ -132,7 +137,7 @@ describe("Conflict Detection Callback Endpoint (e2e) [MW-rec-001]", () => {
 
   it("T02 accepts empty conflicts and emits no-conflicts event", async () => {
     const response = await callback(app, validPayload({ conflicts: [] }));
-    const body = response.body as ConflictDetectionCallbackDto;
+    const body = successBody<ConflictDetectionCallbackDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -264,7 +269,7 @@ function validConflict(
 
 async function createAIUsageFlow(
   prisma: PrismaClient,
-  status: string,
+  status: AIUsageFlowStatus,
 ): Promise<void> {
   await prisma.technicalEvidenceReport.create({
     data: {
@@ -335,5 +340,5 @@ function assertError(
   expectedCode: string,
 ): void {
   assert.equal(actualStatus, expectedStatus);
-  assert.equal((body as ErrorResponse).error_code, expectedCode);
+  assert.equal(problemCode(body), expectedCode);
 }

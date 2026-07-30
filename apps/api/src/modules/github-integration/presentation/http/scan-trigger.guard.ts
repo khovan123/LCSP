@@ -1,15 +1,16 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 
 import {
-  BadRequestException,
   type CanActivate,
   type ExecutionContext,
+  HttpStatus,
   Injectable,
-  UnauthorizedException,
+  type HttpException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Request } from "express";
 
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
@@ -17,6 +18,7 @@ import {
 } from "@lcsp/contracts/github-integration";
 
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
 
 export interface ScanTriggerRequestContext extends Request {
   scanTriggerSource?: RepositoryScanTriggerSource;
@@ -34,28 +36,30 @@ export class ScanTriggerGuard implements CanActivate {
       .switchToHttp()
       .getRequest<ScanTriggerRequestContext>();
     const apiKey = headerString(request.headers["x-worker-api-key"]);
+    const correlationId =
+      headerString(request.headers["x-correlation-id"]) ?? randomUUID();
     const requestedSource = readTriggerSource(request.body);
 
     if (apiKey) {
-      this.assertWorkerApiKey(apiKey);
+      this.assertWorkerApiKey(apiKey, correlationId);
       if (
         requestedSource &&
         requestedSource !== REPOSITORY_SCAN_TRIGGER_SOURCES.trusted
       ) {
-        throw this.invalidSource();
+        throw this.invalidSource(correlationId);
       }
       request.scanTriggerSource = REPOSITORY_SCAN_TRIGGER_SOURCES.trusted;
       return true;
     }
 
     if (requestedSource === REPOSITORY_SCAN_TRIGGER_SOURCES.trusted) {
-      throw new UnauthorizedException();
+      throw this.unauthorized(correlationId);
     }
     if (
       requestedSource &&
       requestedSource !== REPOSITORY_SCAN_TRIGGER_SOURCES.manual
     ) {
-      throw this.invalidSource();
+      throw this.invalidSource(correlationId);
     }
 
     const allowed = await this.pbacGuard.canActivate(context);
@@ -65,16 +69,24 @@ export class ScanTriggerGuard implements CanActivate {
     return allowed;
   }
 
-  private assertWorkerApiKey(provided: string): void {
+  private assertWorkerApiKey(provided: string, correlationId: string): void {
     const expected = this.configService.get<string>("worker.apiKey", "");
     if (!expected || !secureEqual(provided, expected)) {
-      throw new UnauthorizedException();
+      throw this.unauthorized(correlationId);
     }
   }
 
-  private invalidSource(): BadRequestException {
-    return new BadRequestException({
-      error_code: GITHUB_INTEGRATION_ERROR_CODES.scanTriggerSourceInvalid,
+  private invalidSource(correlationId: string): HttpException {
+    return problemException(
+      GITHUB_INTEGRATION_ERROR_CODES.scanTriggerSourceInvalid,
+      correlationId,
+      { status: HttpStatus.BAD_REQUEST },
+    );
+  }
+
+  private unauthorized(correlationId: string): HttpException {
+    return problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId, {
+      status: HttpStatus.UNAUTHORIZED,
     });
   }
 }

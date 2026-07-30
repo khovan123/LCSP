@@ -10,6 +10,10 @@ import {
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
+import {
+  toPrismaAuthMembershipStatus,
+  toPrismaAuthStateGate,
+} from "../src/infrastructure/prisma/prisma-enum-mappers.ts";
 import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.ts";
 
 const ORGANIZATION = {
@@ -49,13 +53,13 @@ async function main() {
         ...POLICY,
         organizationId: organization.id,
         subjectRole: SUBJECT_ROLES.manager,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: toPrismaAuthStateGate(PBAC_STATE_GATES.membershipActive),
         actions: Object.values(PBAC_ACTIONS),
       },
       update: {
         organizationId: organization.id,
         subjectRole: SUBJECT_ROLES.manager,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: toPrismaAuthStateGate(PBAC_STATE_GATES.membershipActive),
         actions: Object.values(PBAC_ACTIONS),
       },
     });
@@ -83,13 +87,13 @@ async function main() {
           id: randomUUID(),
           userId: user.id,
           organizationId: organization.id,
-          status: AUTH_MEMBERSHIP_STATUSES.active,
+          status: toPrismaAuthMembershipStatus(AUTH_MEMBERSHIP_STATUSES.active),
           subjectAttributes: { role: SUBJECT_ROLES.manager },
           policyId: POLICY.id,
           policyVersion: POLICY.version,
         },
         update: {
-          status: AUTH_MEMBERSHIP_STATUSES.active,
+          status: toPrismaAuthMembershipStatus(AUTH_MEMBERSHIP_STATUSES.active),
           subjectAttributes: { role: SUBJECT_ROLES.manager },
           policyId: POLICY.id,
           policyVersion: POLICY.version,

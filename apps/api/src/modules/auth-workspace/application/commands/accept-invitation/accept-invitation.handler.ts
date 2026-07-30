@@ -1,12 +1,8 @@
 import * as crypto from "node:crypto";
 
-import {
-  BadRequestException,
-  ConflictException,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   ACCEPT_INVITATION_ERROR_CODES,
   AUTH_AUDIT_EVENT_TYPES,
@@ -21,16 +17,19 @@ import {
   hashSecret,
   issueOpaqueToken,
 } from "../../../infrastructure/security/security.utils.ts";
-import type {
-  AcceptInvitationErrorCode,
-  AcceptInvitationResponse,
-} from "../../contracts/auth-workspace/accept-invitation.contract.ts";
+import type { AcceptInvitationResponse } from "../../contracts/auth-workspace/accept-invitation.contract.ts";
 import { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
 import {
   invitationAssessmentId,
   projectInvitationScope,
 } from "../../services/auth-workspace/invitation-scope-projection.ts";
 import { AcceptInvitationCommand } from "./accept-invitation.command.ts";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import {
+  fromPrismaAuthInvitationState,
+  toPrismaAuthInvitationState,
+  toPrismaAuthMembershipStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 
 const SESSION_TTL_MS = 8 * 60 * 60_000;
 const MIN_PASSWORD_LENGTH = 12;
@@ -52,18 +51,18 @@ export class AcceptInvitationHandler {
       !isNonEmptyString(invitationToken) ||
       !isValidDisplayName(displayName)
     ) {
-      throw problem(
-        BadRequestException,
+      throw problemException(
         ACCEPT_INVITATION_ERROR_CODES.invalidRequest,
         correlationId,
+        { status: HttpStatus.BAD_REQUEST },
       );
     }
 
     if (!isNonEmptyString(password) || password.length < MIN_PASSWORD_LENGTH) {
-      throw problem(
-        UnprocessableEntityException,
+      throw problemException(
         ACCEPT_INVITATION_ERROR_CODES.passwordTooShort,
         correlationId,
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
       );
     }
 
@@ -80,12 +79,13 @@ export class AcceptInvitationHandler {
       if (
         !invitation ||
         invitation.expiresAt <= now ||
-        invitation.state !== AUTH_INVITATION_STATES.approved
+        fromPrismaAuthInvitationState(invitation.state) !==
+          AUTH_INVITATION_STATES.approved
       ) {
-        throw problem(
-          BadRequestException,
+        throw problemException(
           ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
           correlationId,
+          { status: HttpStatus.BAD_REQUEST },
         );
       }
 
@@ -110,10 +110,10 @@ export class AcceptInvitationHandler {
           })
         : null;
       if (!projection) {
-        throw problem(
-          BadRequestException,
+        throw problemException(
           ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
           correlationId,
+          { status: HttpStatus.BAD_REQUEST },
         );
       }
 
@@ -121,26 +121,28 @@ export class AcceptInvitationHandler {
         where: { email: invitation.email },
       });
       if (existingUser) {
-        throw problem(
-          ConflictException,
+        throw problemException(
           ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists,
           correlationId,
+          { status: HttpStatus.CONFLICT },
         );
       }
 
       const consumed = await tx.authInvitation.updateMany({
         where: {
           id: invitation.id,
-          state: AUTH_INVITATION_STATES.approved,
+          state: toPrismaAuthInvitationState(AUTH_INVITATION_STATES.approved),
           expiresAt: { gt: new Date() },
         },
-        data: { state: AUTH_INVITATION_STATES.consumed },
+        data: {
+          state: toPrismaAuthInvitationState(AUTH_INVITATION_STATES.consumed),
+        },
       });
       if (consumed.count !== 1) {
-        throw problem(
-          BadRequestException,
+        throw problemException(
           ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
           correlationId,
+          { status: HttpStatus.BAD_REQUEST },
         );
       }
 
@@ -161,7 +163,7 @@ export class AcceptInvitationHandler {
           id: membershipId,
           userId,
           organizationId: invitation.organizationId,
-          status: AUTH_MEMBERSHIP_STATUSES.active,
+          status: toPrismaAuthMembershipStatus(AUTH_MEMBERSHIP_STATUSES.active),
           subjectAttributes: {
             ...(invitation.subjectAttributes as Prisma.JsonObject),
             allowed_actions: projection.allowedActions,
@@ -188,7 +190,7 @@ export class AcceptInvitationHandler {
           eventType: AUTH_AUDIT_EVENT_TYPES.authDeveloperInvitationAccepted,
           actorId: userId,
           organizationId: invitation.organizationId,
-          resourceType: "AuthInvitation",
+          resourceType: AUDIT_RESOURCE_TYPES.authInvitation,
           resourceId: null,
           decision: AUDIT_DECISIONS.allow,
           correlationId,
@@ -240,19 +242,4 @@ function isValidDisplayName(value: unknown): value is string {
     value.trim().length >= 1 &&
     value.trim().length <= MAX_DISPLAY_NAME_LENGTH
   );
-}
-
-function problem(
-  ExceptionClass:
-    | typeof BadRequestException
-    | typeof ConflictException
-    | typeof UnprocessableEntityException,
-  errorCode: AcceptInvitationErrorCode,
-  correlationId: string,
-): BadRequestException | ConflictException | UnprocessableEntityException {
-  return new ExceptionClass({
-    error_code: errorCode,
-    code: errorCode,
-    correlation_id: correlationId,
-  });
 }

@@ -98,9 +98,11 @@ function expectError(callback: () => void, errorCode: string): void {
     throw new Error("Expected validation to fail");
   } catch (error) {
     expect(error).toBeInstanceOf(UnprocessableEntityException);
-    expect((error as UnprocessableEntityException).getResponse()).toEqual({
-      error_code: errorCode,
-      correlation_id: "corr-1",
-    });
+    expect((error as UnprocessableEntityException).getResponse()).toMatchObject(
+      {
+        ok: false,
+        problem: { code: errorCode, correlationId: "corr-1" },
+      },
+    );
   }
 }

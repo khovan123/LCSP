@@ -1,7 +1,4 @@
-import {
-  BadRequestException,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   AUTH_AUDIT_EVENT_TYPES,
@@ -16,15 +13,13 @@ import type { AssessmentScopeRepository } from "../../ports/persistence/assessme
 import type { InvitationRepository } from "../../ports/persistence/invitation.repository.ts";
 import type { PolicyRepository } from "../../ports/persistence/policy.repository.ts";
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
-import type {
-  InviteDeveloperErrorCode,
-  InviteDeveloperResponse,
-} from "../../contracts/auth-workspace/invitation.contract.ts";
+import type { InviteDeveloperResponse } from "../../contracts/auth-workspace/invitation.contract.ts";
 import {
   DEVELOPER_SUBJECT_ROLE,
   isDeveloperAllowedAction,
 } from "@lcsp/contracts/pbac";
 import { InviteDeveloperCommand } from "./invite-developer.command.ts";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 
 const DEFAULT_EXPIRY_HOURS = 72;
 const MAX_EXPIRY_HOURS = 168;
@@ -50,10 +45,10 @@ export class InviteDeveloperHandler {
       input.correlationId ?? this.support.createCorrelationId();
 
     if (!input.email || !EmailAddress.isValid(input.email)) {
-      throw problem(
-        UnprocessableEntityException,
+      throw problemException(
         INVITE_DEVELOPER_ERROR_CODES.invalidEmail,
         correlationId,
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
       );
     }
 
@@ -61,18 +56,18 @@ export class InviteDeveloperHandler {
       !Array.isArray(input.allowedActions) ||
       input.allowedActions.length === 0
     ) {
-      throw problem(
-        BadRequestException,
+      throw problemException(
         INVITE_DEVELOPER_ERROR_CODES.invalidActions,
         correlationId,
+        { status: HttpStatus.BAD_REQUEST },
       );
     }
 
     if (!input.allowedActions.every(isDeveloperAllowedAction)) {
-      throw problem(
-        BadRequestException,
+      throw problemException(
         INVITE_DEVELOPER_ERROR_CODES.invalidActions,
         correlationId,
+        { status: HttpStatus.BAD_REQUEST },
       );
     }
 
@@ -82,10 +77,10 @@ export class InviteDeveloperHandler {
         input.orgId,
       );
       if (!owned) {
-        throw problem(
-          BadRequestException,
+        throw problemException(
           INVITE_DEVELOPER_ERROR_CODES.assessmentNotOwned,
           correlationId,
+          { status: HttpStatus.BAD_REQUEST },
         );
       }
     }
@@ -96,10 +91,10 @@ export class InviteDeveloperHandler {
         DEVELOPER_SUBJECT_ROLE,
       );
     if (!developerPolicy) {
-      throw problem(
-        BadRequestException,
+      throw problemException(
         INVITE_DEVELOPER_ERROR_CODES.invalidRequest,
         correlationId,
+        { status: HttpStatus.BAD_REQUEST },
       );
     }
 
@@ -108,7 +103,6 @@ export class InviteDeveloperHandler {
     const email = EmailAddress.create(input.email).toString();
     const allowedActions = [...input.allowedActions];
     const invitation = new Invitation({
-      id: this.repositories.invitations.nextId(),
       email,
       organizationId: input.orgId,
       state: AUTH_INVITATION_STATES.approved,
@@ -158,17 +152,4 @@ function expiryHours(value: number | undefined): number {
     return DEFAULT_EXPIRY_HOURS;
   }
   return Math.min(Math.floor(value), MAX_EXPIRY_HOURS);
-}
-
-function problem(
-  ExceptionClass:
-    typeof BadRequestException | typeof UnprocessableEntityException,
-  errorCode: InviteDeveloperErrorCode,
-  correlationId: string,
-): BadRequestException | UnprocessableEntityException {
-  return new ExceptionClass({
-    error_code: errorCode,
-    code: errorCode,
-    correlation_id: correlationId,
-  });
 }

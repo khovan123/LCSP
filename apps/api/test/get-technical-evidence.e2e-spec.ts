@@ -14,7 +14,11 @@ import {
   PBAC_STATE_GATES,
   SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
-import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
+import {
+  TECHNICAL_EVIDENCE_REPORT_STATUSES,
+  type TechnicalEvidenceReportStatus,
+} from "@lcsp/contracts/scan";
+import { SERVICE_HEALTH_STATUSES } from "@lcsp/contracts/shared";
 
 import { AppModule } from "../src/app.module.js";
 import type { EvidenceDetailDto } from "../src/modules/evidence/application/contracts/evidence/evidence-detail.contract.js";
@@ -26,9 +30,7 @@ import {
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
-
-type ErrorBody = { error_code: string; correlation_id: string };
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const ORGANIZATION_ID = "org-1";
 const ASSESSMENT_ID = "assessment-evidence-1";
@@ -98,7 +100,7 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
     });
 
     const result = await getEvidence(managerToken, "corr-evidence-manager");
-    const body = result.body as EvidenceDetailDto;
+    const body = successBody<EvidenceDetailDto>(result);
 
     assert.equal(result.status, 200);
     assert.equal(body.evidence_report_id, "report-new");
@@ -120,7 +122,7 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
     const developerToken = await seedDeveloper(ASSESSMENT_ID);
 
     const result = await getEvidence(developerToken, "corr-evidence-dev");
-    const body = result.body as EvidenceDetailDto;
+    const body = successBody<EvidenceDetailDto>(result);
 
     assert.equal(result.status, 200);
     assert.deepEqual(body.findings, [
@@ -150,10 +152,8 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
     });
 
     const result = await getEvidence(managerToken, "corr-evidence-denied");
-    const body = result.body as ErrorBody;
-
     assert.equal(result.status, 403);
-    assert.equal(body.error_code, PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
     const decisions = await prisma.authDecisionLog.findMany({
       where: { correlationId: "corr-evidence-denied" },
       orderBy: { createdAt: "asc" },
@@ -213,7 +213,7 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
     });
 
     const result = await getEvidence(managerToken, "corr-evidence-safe");
-    const body = result.body as EvidenceDetailDto;
+    const body = successBody<EvidenceDetailDto>(result);
     const serialized = JSON.stringify(body);
 
     assert.equal(result.status, 200);
@@ -238,7 +238,7 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
       password,
       organization_id: ORGANIZATION_ID,
     });
-    const token = (result.body as SignInSuccess).session_token;
+    const token = successBody<SignInSuccess>(result).session_token;
     assert.ok(token, `sign-in must succeed for ${email}`);
     return token;
   }
@@ -281,7 +281,7 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
     overrides: {
       id?: string;
       organizationId?: string;
-      status?: string;
+      status?: TechnicalEvidenceReportStatus;
       evidencePayload?: Prisma.InputJsonValue;
       configHash?: Prisma.InputJsonValue;
       createdAt?: Date;
@@ -325,8 +325,11 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
 
 function assertNotFound(status: number, value: unknown): void {
   assert.equal(status, 404);
-  const body = value as ErrorBody;
-  assert.equal(body.error_code, EVIDENCE_ERROR_CODES.notFound);
-  assert.ok(body.correlation_id);
-  assert.deepEqual(Object.keys(body).sort(), ["correlation_id", "error_code"]);
+  assert.equal(problemCode(value), EVIDENCE_ERROR_CODES.notFound);
+  const body = value as { problem?: { correlationId?: string } };
+  assert.ok(body.problem?.correlationId);
+  assert.deepEqual(Object.keys(body).sort(), [
+    SERVICE_HEALTH_STATUSES.ok,
+    "problem",
+  ]);
 }

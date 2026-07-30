@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   ACCEPT_INVITATION_ERROR_CODES,
@@ -7,6 +7,8 @@ import {
 } from "@lcsp/contracts/auth";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
+import { fromPrismaAuthInvitationState } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type { InvitationPreviewResponse } from "../../contracts/auth-workspace/invitation-preview.contract.ts";
 import { createCorrelationId } from "../../../infrastructure/security/security.utils.ts";
 import { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
@@ -39,7 +41,8 @@ export class PreviewInvitationHandler {
     });
     if (
       !invitation ||
-      invitation.state !== AUTH_INVITATION_STATES.approved ||
+      fromPrismaAuthInvitationState(invitation.state) !==
+        AUTH_INVITATION_STATES.approved ||
       invitation.expiresAt <= new Date() ||
       !isNonEmptyString(invitation.organization.name)
     ) {
@@ -103,11 +106,11 @@ export class PreviewInvitationHandler {
         correlation_id: correlationId,
       },
     });
-    throw new BadRequestException({
-      error_code: ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
-      code: ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
-      correlation_id: correlationId,
-    });
+    throw problemException(
+      ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
+      correlationId,
+      { status: HttpStatus.BAD_REQUEST },
+    );
   }
 }
 

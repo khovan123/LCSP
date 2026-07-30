@@ -1,13 +1,15 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { Injectable, HttpStatus } from "@nestjs/common";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   OUTBOX_AUDIT_EVENT_TYPES,
+  OUTBOX_ERROR_CODES,
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
 import { OutboxRepository } from "./outbox.repository.js";
 import { AuditWriterService } from "../audit/audit-writer.service.js";
 import { OutboxMessageEntity } from "./outbox-message.entity.js";
 import { randomUUID } from "node:crypto";
+import { problemException } from "../problems/problem-factory.js";
 
 @Injectable()
 export class OutboxDlqService {
@@ -27,7 +29,13 @@ export class OutboxDlqService {
   async replayMessage(id: string, actorId: string): Promise<void> {
     const message = await this.outboxRepository.findMessageById(id);
     if (!message || message.status !== OUTBOX_STATUSES.dlq) {
-      throw new NotFoundException(`DLQ message with ID ${id} not found`);
+      throw problemException(
+        OUTBOX_ERROR_CODES.dlqMessageNotFound,
+        randomUUID(),
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
     }
 
     await this.outboxRepository.resetMessageForReplay(id);
@@ -36,7 +44,7 @@ export class OutboxDlqService {
       eventType: OUTBOX_AUDIT_EVENT_TYPES.dlqReplayed,
       actorId,
       organizationId: "system", // Or extract from context if applicable
-      resourceType: "outbox",
+      resourceType: AUDIT_RESOURCE_TYPES.outbox,
       resourceId: id,
       decision: AUDIT_DECISIONS.allow,
       correlationId: randomUUID(),
@@ -50,7 +58,13 @@ export class OutboxDlqService {
   async deleteMessage(id: string, actorId: string): Promise<void> {
     const message = await this.outboxRepository.findMessageById(id);
     if (!message || message.status !== OUTBOX_STATUSES.dlq) {
-      throw new NotFoundException(`DLQ message with ID ${id} not found`);
+      throw problemException(
+        OUTBOX_ERROR_CODES.dlqMessageNotFound,
+        randomUUID(),
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
     }
 
     await this.outboxRepository.deleteMessage(id);
@@ -59,7 +73,7 @@ export class OutboxDlqService {
       eventType: OUTBOX_AUDIT_EVENT_TYPES.dlqDiscarded,
       actorId,
       organizationId: "system",
-      resourceType: "outbox",
+      resourceType: AUDIT_RESOURCE_TYPES.outbox,
       resourceId: id,
       decision: AUDIT_DECISIONS.allow,
       correlationId: randomUUID(),

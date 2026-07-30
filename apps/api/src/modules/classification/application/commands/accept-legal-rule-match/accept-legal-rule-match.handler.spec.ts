@@ -4,6 +4,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
 import {
   LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
   OVERALL_COVERAGE_STATUSES,
@@ -12,6 +13,7 @@ import {
 } from "@lcsp/contracts/scan";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { toPrismaOverallCoverageStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import type { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
 import type { AcceptLegalRuleMatchDto } from "../../contracts/classification/legal-rule-match-callback.contract.js";
@@ -49,7 +51,7 @@ describe("AcceptLegalRuleMatchHandler", () => {
     legal_rule_catalog_version_id: "LCSP-RULE-CATALOG-v0.1.0",
     schema_version: "1.0.0",
     citation_allowlist: ["chunk-1", "chunk-2"],
-    overall_coverage_status: "COMPLETE_CITATION",
+    overall_coverage_status: OVERALL_COVERAGE_STATUSES.completeCitation,
     matches: [
       {
         match_id: "match-1",
@@ -60,7 +62,7 @@ describe("AcceptLegalRuleMatchHandler", () => {
         match_type: "PRIMARY_MATCH",
         citation_chunk_ids: ["chunk-1"],
         confidence: 0.95,
-        coverage_status: "COMPLETE_CITATION",
+        coverage_status: OVERALL_COVERAGE_STATUSES.completeCitation,
         usage_claim_ref: "claim-1",
       },
       {
@@ -72,7 +74,7 @@ describe("AcceptLegalRuleMatchHandler", () => {
         match_type: "REFERENCED_CONTEXT",
         citation_chunk_ids: ["chunk-2"],
         confidence: 0.85,
-        coverage_status: "COMPLETE_CITATION",
+        coverage_status: OVERALL_COVERAGE_STATUSES.completeCitation,
         usage_claim_ref: "claim-2",
       },
     ],
@@ -149,8 +151,10 @@ describe("AcceptLegalRuleMatchHandler", () => {
           assessmentId: "asm-123",
           organizationId: "org-123",
           corpusVersionId: "LCSP-LEGAL-CORPUS-v0.1.0",
-          guardrailStatus: "passed",
-          overallCoverageStatus: "COMPLETE_CITATION",
+          guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
+          overallCoverageStatus: toPrismaOverallCoverageStatus(
+            OVERALL_COVERAGE_STATUSES.completeCitation,
+          ),
         }),
       }),
     );
@@ -158,7 +162,7 @@ describe("AcceptLegalRuleMatchHandler", () => {
     expect(mockEnqueueOutbox).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: SCAN_EVENT_TYPES.legalRuleMatchReady,
-        aggregateType: "LegalRuleMatch",
+        aggregateType: OUTBOX_AGGREGATE_TYPES.legalRuleMatch,
       }),
       prisma,
     );
@@ -176,7 +180,7 @@ describe("AcceptLegalRuleMatchHandler", () => {
     const emptyPayload: AcceptLegalRuleMatchDto = {
       ...validPayload,
       matches: [],
-      overall_coverage_status: "NO_CITATION",
+      overall_coverage_status: OVERALL_COVERAGE_STATUSES.noCitation,
     };
     const command = new AcceptLegalRuleMatchCommand(emptyPayload, "corr-empty");
     const result = await handler.execute(command);
@@ -189,8 +193,10 @@ describe("AcceptLegalRuleMatchHandler", () => {
     expect(mockCreateLegalRuleMatch).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          guardrailStatus: "blocked",
-          overallCoverageStatus: OVERALL_COVERAGE_STATUSES.noCitation,
+          guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.blocked,
+          overallCoverageStatus: toPrismaOverallCoverageStatus(
+            OVERALL_COVERAGE_STATUSES.noCitation,
+          ),
           blockedReason: "NO_CITATION_BASIS",
         }),
       }),
@@ -222,9 +228,11 @@ describe("AcceptLegalRuleMatchHandler", () => {
       await handler.execute(command);
     } catch (err: unknown) {
       const response = (err as UnprocessableEntityException).getResponse() as {
-        error_code: string;
+        problem: { code: string };
       };
-      expect(response.error_code).toBe(SCAN_ERROR_CODES.citationOutOfAllowlist);
+      expect(response.problem.code).toBe(
+        SCAN_ERROR_CODES.citationOutOfAllowlist,
+      );
     }
   });
 
@@ -242,9 +250,9 @@ describe("AcceptLegalRuleMatchHandler", () => {
       await handler.execute(command);
     } catch (err: unknown) {
       const response = (err as UnprocessableEntityException).getResponse() as {
-        error_code: string;
+        problem: { code: string };
       };
-      expect(response.error_code).toBe(
+      expect(response.problem.code).toBe(
         SCAN_ERROR_CODES.corpusVersionNotApproved,
       );
     }
@@ -264,9 +272,9 @@ describe("AcceptLegalRuleMatchHandler", () => {
       await handler.execute(command);
     } catch (err: unknown) {
       const response = (err as UnprocessableEntityException).getResponse() as {
-        error_code: string;
+        problem: { code: string };
       };
-      expect(response.error_code).toBe(
+      expect(response.problem.code).toBe(
         SCAN_ERROR_CODES.ruleCatalogVersionNotApproved,
       );
     }
@@ -291,9 +299,9 @@ describe("AcceptLegalRuleMatchHandler", () => {
       await handler.execute(command);
     } catch (err: unknown) {
       const response = (err as UnprocessableEntityException).getResponse() as {
-        error_code: string;
+        problem: { code: string };
       };
-      expect(response.error_code).toBe(SCAN_ERROR_CODES.citationRepealed);
+      expect(response.problem.code).toBe(SCAN_ERROR_CODES.citationRepealed);
     }
   });
 
@@ -324,9 +332,9 @@ describe("AcceptLegalRuleMatchHandler", () => {
       await handler.execute(command);
     } catch (err: unknown) {
       const response = (err as NotFoundException).getResponse() as {
-        error_code: string;
+        problem: { code: string };
       };
-      expect(response.error_code).toBe(
+      expect(response.problem.code).toBe(
         SCAN_ERROR_CODES.verifiedProfileNotFound,
       );
     }

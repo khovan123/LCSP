@@ -8,6 +8,7 @@ import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import {
   ASSESSMENT_STATUS_CODES,
+  type AssessmentStatusCode,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
@@ -28,9 +29,7 @@ import {
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
-
-type ErrorResponse = { error_code?: string };
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
   let app: INestApplication;
@@ -62,7 +61,7 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: "org-1",
     });
-    managerToken = (signIn.body as SignInSuccess).session_token;
+    managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
 
   afterAll(async () => {
@@ -74,7 +73,7 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
     await seedSubmittedWizard(prisma);
 
     const response = await requestExport(app, managerToken);
-    const body = response.body as ReadinessExportResponse;
+    const body = successBody<ReadinessExportResponse>(response);
     const serialized = JSON.stringify(body);
 
     assert.equal(response.status, 201);
@@ -137,7 +136,7 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
 
     assert.equal(response.status, 409);
     assert.equal(
-      (response.body as ErrorResponse).error_code,
+      problemCode(response),
       READINESS_EXPORT_ERROR_CODES.requiresLockedClassification,
     );
   });
@@ -149,7 +148,7 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
 
     assert.equal(response.status, 422);
     assert.equal(
-      (response.body as ErrorResponse).error_code,
+      problemCode(response),
       READINESS_EXPORT_ERROR_CODES.wizardNotSubmitted,
     );
   });
@@ -171,10 +170,7 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
     const response = await requestExport(app, managerToken);
 
     assert.equal(response.status, 403);
-    assert.equal(
-      (response.body as ErrorResponse).error_code,
-      AUTH_ERROR_CODES.pbacDenied,
-    );
+    assert.equal(problemCode(response), AUTH_ERROR_CODES.pbacDenied);
   });
 
   it("T08 creates a new immutable row for each generated export", async () => {
@@ -186,8 +182,8 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
     assert.equal(first.status, 201);
     assert.equal(second.status, 201);
     assert.notEqual(
-      (first.body as ReadinessExportResponse).export_id,
-      (second.body as ReadinessExportResponse).export_id,
+      successBody<ReadinessExportResponse>(first).export_id,
+      successBody<ReadinessExportResponse>(second).export_id,
     );
     assert.equal(await prisma.readinessExport.count(), 2);
     assert.deepEqual(
@@ -245,7 +241,7 @@ async function seedSubmittedWizard(prisma: PrismaClient): Promise<void> {
 
 async function seedAssessment(
   prisma: PrismaClient,
-  status: string,
+  status: AssessmentStatusCode,
 ): Promise<void> {
   await prisma.assessment.create({
     data: {

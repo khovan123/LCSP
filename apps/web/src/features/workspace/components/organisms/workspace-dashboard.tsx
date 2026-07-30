@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { resolveMessage } from "@lcsp/i18n";
 import Link from "next/link";
 
@@ -110,10 +111,10 @@ function WorkspaceOverview({
   assessments: AssessmentSummary[];
 }) {
   const attention = assessments.filter(
-    (assessment) => assessment.status !== "READY_FOR_REVIEW",
+    (assessment) => assessment.status !== ASSESSMENT_STATUS_CODES.readyForReview,
   ).length;
   const ready = assessments.filter(
-    (assessment) => assessment.status === "READY_FOR_REVIEW",
+    (assessment) => assessment.status === ASSESSMENT_STATUS_CODES.readyForReview,
   ).length;
   const recent = [...assessments]
     .sort((a, b) => b.created_at.localeCompare(a.created_at))

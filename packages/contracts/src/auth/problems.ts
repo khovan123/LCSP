@@ -79,12 +79,3 @@ export type SuccessResult<TData = unknown> = {
 export type AppResult<TData = unknown, TCode extends string = AuthErrorCode> =
   | SuccessResult<TData>
   | ProblemResult<TCode>;
-
-/** Wire compatibility shape accepted at frontend/BFF boundaries during error migration. */
-export type ProblemCodeEnvelope<TCode extends string = AuthErrorCode> =
-  | ProblemResult<TCode>
-  | {
-      code?: TCode;
-      error_code?: TCode;
-      problem?: { code?: TCode; error_code?: TCode };
-    };

@@ -28,18 +28,29 @@ type RepositorySnapshotProps = {
   createdAt: Date;
 };
 
+type NewRepositorySnapshotProps = Omit<RepositorySnapshotProps, "id">;
+
 export class RepositorySnapshot {
-  private constructor(private readonly props: RepositorySnapshotProps) {}
+  private props: RepositorySnapshotProps;
+
+  private constructor(props: NewRepositorySnapshotProps) {
+    this.props = { ...props, id: randomUUID() };
+  }
 
   static create(
     input: Omit<RepositorySnapshotProps, "id" | "status" | "createdAt">,
   ): RepositorySnapshot {
     return new RepositorySnapshot({
       ...input,
-      id: randomUUID(),
       status: REPOSITORY_SNAPSHOT_STATUSES.ready,
       createdAt: new Date(),
     });
+  }
+
+  static rehydrate(props: RepositorySnapshotProps): RepositorySnapshot {
+    const entity = new RepositorySnapshot(props);
+    entity.props = props;
+    return entity;
   }
 
   get id(): string {

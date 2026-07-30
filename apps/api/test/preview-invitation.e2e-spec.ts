@@ -26,7 +26,7 @@ import {
   TEST_DATABASE_URL,
   type AuthFixture,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 type PreviewBody = {
   organization: { id: string; name: string };
@@ -92,7 +92,7 @@ describe("Preview Developer Invitation endpoint (e2e) [MW-auth-015]", () => {
 
     for (const response of responses) {
       assert.equal(response.status, 200);
-      const body = response.body as PreviewBody;
+      const body = successBody<PreviewBody>(response);
       assert.deepEqual(body.organization, {
         id: fixture.organizationId,
         name: "Acme Legal",
@@ -136,7 +136,7 @@ describe("Preview Developer Invitation endpoint (e2e) [MW-auth-015]", () => {
     });
     const response = await preview(app, "preview-invite");
     assert.equal(response.status, 200);
-    assert.deepEqual((response.body as PreviewBody).scope, {
+    assert.deepEqual(successBody<PreviewBody>(response).scope, {
       type: "organization",
       assessment: null,
     });
@@ -172,7 +172,7 @@ describe("Preview Developer Invitation endpoint (e2e) [MW-auth-015]", () => {
       const response = await preview(app, token);
       assert.equal(response.status, 400);
       assert.equal(
-        (response.body as { error_code: string }).error_code,
+        problemCode(response),
         ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
       );
 
@@ -239,7 +239,7 @@ describe("Preview Developer Invitation endpoint (e2e) [MW-auth-015]", () => {
     const response = await preview(app, "preview-invite");
     assert.equal(response.status, 400);
     assert.equal(
-      (response.body as { error_code: string }).error_code,
+      problemCode(response),
       ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
     );
   });
@@ -252,7 +252,7 @@ describe("Preview Developer Invitation endpoint (e2e) [MW-auth-015]", () => {
         .send(payload ?? undefined);
       assert.equal(response.status, 400);
       assert.equal(
-        (response.body as { error_code: string }).error_code,
+        problemCode(response),
         ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
       );
     },
@@ -265,7 +265,8 @@ describe("Preview Developer Invitation endpoint (e2e) [MW-auth-015]", () => {
       .send({ invitation_token: "missing-secret-token" });
     assert.equal(response.status, 400);
     assert.notEqual(
-      (response.body as { correlation_id: string }).correlation_id,
+      (response.body as { problem?: { correlationId?: string } }).problem
+        ?.correlationId,
       "missing-secret-token",
     );
     const audit = await prisma.authAuditEvent.findFirstOrThrow({
@@ -293,7 +294,7 @@ describe("Preview Developer Invitation endpoint (e2e) [MW-auth-015]", () => {
     });
     const response = await preview(app, "preview-invite");
     assert.equal(response.status, 200);
-    assert.deepEqual((response.body as PreviewBody).allowed_actions, [
+    assert.deepEqual(successBody<PreviewBody>(response).allowed_actions, [
       PBAC_ACTIONS.scanRead,
     ]);
     assert.doesNotMatch(

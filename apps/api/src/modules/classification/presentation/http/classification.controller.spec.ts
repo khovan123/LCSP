@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { CommandBus } from "@nestjs/cqrs";
 import { Test, type TestingModule } from "@nestjs/testing";
+import {
+  CLASSIFICATION_GUARDRAIL_STATUSES,
+  LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
+} from "@lcsp/contracts/scan";
 
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import type { AcceptClassificationDto } from "../../application/contracts/classification/classification-result-callback.contract.js";
@@ -48,7 +52,7 @@ describe("ClassificationController", () => {
     classification_data: {
       risk_level: "HIGH",
     },
-    guardrail_status: "passed",
+    guardrail_status: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
   };
 
   beforeEach(async () => {
@@ -57,7 +61,7 @@ describe("ClassificationController", () => {
       .mockResolvedValue({
         accepted: true,
         legal_rule_match_id: "lrm-123",
-        guardrail_status: "passed",
+        guardrail_status: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
         correlation_id: "corr-123",
       });
 
@@ -92,7 +96,7 @@ describe("ClassificationController", () => {
       data: {
         accepted: true,
         legal_rule_match_id: "lrm-123",
-        guardrail_status: "passed",
+        guardrail_status: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
         correlation_id: "corr-123",
       },
     });
@@ -116,7 +120,7 @@ describe("ClassificationController", () => {
       data: {
         accepted: true,
         legal_rule_match_id: "lrm-123",
-        guardrail_status: "passed",
+        guardrail_status: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
         correlation_id: "corr-123",
       },
     });

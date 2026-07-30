@@ -120,7 +120,6 @@ export class RegisterApprovedPathHandler {
     }
 
     const user = new User({
-      id: repositories.users.nextId(),
       email: normalizedEmail,
       passwordHash: hashSecret(password),
       emailVerified: invite.emailVerified,
@@ -148,7 +147,6 @@ export class RegisterApprovedPathHandler {
     }
 
     const membership = new Membership({
-      id: repositories.memberships.nextId(),
       userId: user.id,
       organizationId: invite.organizationId,
       status: invite.membershipStatus,

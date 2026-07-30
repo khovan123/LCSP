@@ -1,4 +1,17 @@
+import { randomUUID } from "node:crypto";
+
 import { EmailAddress } from "../value-objects/email-address.value-object.ts";
+
+type UserInput = {
+  email: string;
+  passwordHash: string;
+  emailVerified: boolean;
+  failedLoginCount?: number;
+  lockUntil?: number | null;
+  displayName?: string | null;
+  recoveryEmail?: string | null;
+  mfaRequired?: boolean;
+};
 
 export class User {
   readonly id: string;
@@ -11,18 +24,8 @@ export class User {
   recoveryEmail: string | null;
   mfaRequired: boolean;
 
-  constructor(input: {
-    id: string;
-    email: string;
-    passwordHash: string;
-    emailVerified: boolean;
-    failedLoginCount?: number;
-    lockUntil?: number | null;
-    displayName?: string | null;
-    recoveryEmail?: string | null;
-    mfaRequired?: boolean;
-  }) {
-    this.id = input.id;
+  constructor(input: UserInput) {
+    this.id = randomUUID();
     this.email = EmailAddress.create(input.email);
     this.passwordHash = input.passwordHash;
     this.emailVerified = input.emailVerified;
@@ -31,6 +34,12 @@ export class User {
     this.displayName = input.displayName ?? null;
     this.recoveryEmail = input.recoveryEmail ?? null;
     this.mfaRequired = input.mfaRequired ?? false;
+  }
+
+  static rehydrate(input: UserInput & { id: string }): User {
+    const entity = new User(input);
+    Object.assign(entity, { id: input.id });
+    return entity;
   }
 
   isLocked(now: number): boolean {

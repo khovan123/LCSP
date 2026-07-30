@@ -21,7 +21,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import type { AssessmentListDto } from "../src/modules/assessment/application/contracts/assessment/assessment-list.contract.js";
@@ -33,8 +33,6 @@ import {
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
-
-type ErrorResponseBody = { error_code: string; correlation_id: string };
 
 describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
   let app: INestApplication;
@@ -68,7 +66,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    managerToken = (signIn.body as SignInSuccess)?.session_token ?? "";
+    managerToken = successBody<SignInSuccess>(signIn).session_token ?? "";
   });
 
   afterAll(async () => {
@@ -91,7 +89,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
     const result = await httpRequest(app)
       .get("/assessments")
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = result.body as AssessmentListDto;
+    const body = successBody<AssessmentListDto>(result);
 
     assert.equal(result.status, 200);
     assert.equal(body.assessments.length, 2);
@@ -112,7 +110,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
     const result = await httpRequest(app)
       .get("/assessments")
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = result.body as AssessmentListDto;
+    const body = successBody<AssessmentListDto>(result);
 
     assert.equal(result.status, 200);
     assert.deepEqual(body.assessments, []);
@@ -129,7 +127,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       .get("/assessments")
       .query({ page_size: 5 })
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = result.body as AssessmentListDto;
+    const body = successBody<AssessmentListDto>(result);
 
     assert.equal(body.assessments.length, 5);
     assert.equal(body.total, 8);
@@ -144,7 +142,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       .get("/assessments")
       .query({ status: ASSESSMENT_STATUS_CODES.wizardInProgress })
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = result.body as AssessmentListDto;
+    const body = successBody<AssessmentListDto>(result);
 
     assert.equal(result.status, 200);
     assert.ok(body.assessments.length >= 1);
@@ -158,10 +156,9 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       .get("/assessments")
       .query({ status: "NOT_A_REAL_STATUS" })
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 422);
-    assert.equal(body.error_code, ASSESSMENT_ERROR_CODES.invalidRequest);
+    assert.equal(problemCode(result), ASSESSMENT_ERROR_CODES.invalidRequest);
   });
 
   // T05
@@ -203,16 +200,16 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    const restrictedToken = (signIn.body as SignInSuccess)?.session_token ?? "";
+    const restrictedToken =
+      successBody<SignInSuccess>(signIn).session_token ?? "";
     assert.ok(restrictedToken, "sign-in must succeed for restricted fixture");
 
     const result = await httpRequest(app)
       .get("/assessments")
       .set("Authorization", `Bearer ${restrictedToken}`);
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 403);
-    assert.equal(body.error_code, PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
   });
 
   // T06
@@ -270,13 +267,13 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       password: "DevPassword123!",
       organization_id: orgId,
     });
-    const devToken = (signIn.body as SignInSuccess)?.session_token ?? "";
+    const devToken = successBody<SignInSuccess>(signIn).session_token ?? "";
     assert.ok(devToken, "sign-in must succeed for developer fixture");
 
     const result = await httpRequest(app)
       .get("/assessments")
       .set("Authorization", `Bearer ${devToken}`);
-    const body = result.body as AssessmentListDto;
+    const body = successBody<AssessmentListDto>(result);
 
     assert.equal(result.status, 200);
     assert.equal(body.assessments.length, 1);
@@ -323,13 +320,13 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       password: "DevPassword123!",
       organization_id: orgId,
     });
-    const devToken = (signIn.body as SignInSuccess)?.session_token ?? "";
+    const devToken = successBody<SignInSuccess>(signIn).session_token ?? "";
     assert.ok(devToken, "sign-in must succeed for developer fixture");
 
     const result = await httpRequest(app)
       .get("/assessments")
       .set("Authorization", `Bearer ${devToken}`);
-    const body = result.body as AssessmentListDto;
+    const body = successBody<AssessmentListDto>(result);
 
     assert.equal(result.status, 200);
     assert.deepEqual(body.assessments, []);
@@ -341,7 +338,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       .get("/assessments")
       .query({ page_size: 500 })
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = result.body as AssessmentListDto;
+    const body = successBody<AssessmentListDto>(result);
 
     assert.equal(result.status, 200);
     assert.equal(body.page_size, 100);

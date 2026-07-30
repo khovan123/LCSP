@@ -154,9 +154,12 @@ describe("GitHubAppCallbackHandler", () => {
       );
       throw new Error("expected rejection");
     } catch (error) {
-      expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
-        correlation_id: "corr-1",
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
+          correlationId: "corr-1",
+        },
       });
     }
     expect(save).not.toHaveBeenCalled();
@@ -181,9 +184,12 @@ describe("GitHubAppCallbackHandler", () => {
       );
       throw new Error("expected rejection");
     } catch (error) {
-      expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
-        correlation_id: "corr-1",
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
+          correlationId: "corr-1",
+        },
       });
     }
     expect(deleteById).toHaveBeenCalledWith("install-state-1");
@@ -205,9 +211,12 @@ describe("GitHubAppCallbackHandler", () => {
       );
       throw new Error("expected rejection");
     } catch (error) {
-      expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
-        correlation_id: "corr-1",
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
+          correlationId: "corr-1",
+        },
       });
     }
     expect(save).not.toHaveBeenCalled();
@@ -230,9 +239,12 @@ describe("GitHubAppCallbackHandler", () => {
       );
       throw new Error("expected rejection");
     } catch (error) {
-      expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
-        correlation_id: "corr-1",
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
+          correlationId: "corr-1",
+        },
       });
     }
     expect(save).not.toHaveBeenCalled();

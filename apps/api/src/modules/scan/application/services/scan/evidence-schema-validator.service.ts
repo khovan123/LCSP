@@ -1,4 +1,4 @@
-import { Injectable, UnprocessableEntityException } from "@nestjs/common";
+import { HttpStatus, Injectable } from "@nestjs/common";
 import {
   SCAN_CALLBACK_STATUSES,
   SCAN_ERROR_CODES,
@@ -6,6 +6,7 @@ import {
 } from "@lcsp/contracts/scan";
 
 import type { ScanCallbackRequest } from "../../contracts/scan/scan-callback.contract.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 
 const FORBIDDEN_EVIDENCE_KEYS = new Set([
   "codesnippet",
@@ -58,9 +59,8 @@ export class EvidenceSchemaValidatorService {
   }
 
   private invalid(errorCode: string, correlationId: string): never {
-    throw new UnprocessableEntityException({
-      error_code: errorCode,
-      correlation_id: correlationId,
+    throw problemException(errorCode, correlationId, {
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
     });
   }
 }

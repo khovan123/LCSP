@@ -1,6 +1,7 @@
 import * as crypto from "node:crypto";
 
 import {
+  HttpStatus,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -9,8 +10,15 @@ import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
   buildAuditEventInput,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_IDS,
+  AUDIT_ACTOR_TYPES,
+  type AuditResourceType,
 } from "@lcsp/contracts/audit";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import {
   AI_USAGE_FLOW_STATUSES,
   CONFLICT_DETECTION_SCHEMA_VERSIONS,
@@ -20,7 +28,15 @@ import {
 } from "@lcsp/contracts/scan";
 import { Prisma } from "@prisma/client";
 
+import {
+  toPrismaAuditResourceType,
+  toPrismaAuthDecision,
+  toPrismaConflictRecordStatus,
+  toPrismaEvidenceAcceptanceStatus,
+  toPrismaOutboxAggregateType,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemResult } from "../../../../../platform/problems/problem-factory.js";
 import type {
   ConflictDetectionCallbackDto,
   ConflictInputRequest,
@@ -28,7 +44,7 @@ import type {
 } from "../../contracts/reconciliation/conflict-detection-callback.contract.js";
 import { AcceptConflictCommand } from "./accept-conflict.command.js";
 
-const RECONCILIATION_WORKER_ACTOR_ID = "conflict-detection-worker";
+const RECONCILIATION_WORKER_ACTOR_ID = AUDIT_ACTOR_IDS.conflictDetectionWorker;
 const CONFLICT_TYPES = new Set<ConflictType>([
   "evidence_contradiction",
   "scope_mismatch",
@@ -67,7 +83,9 @@ export class AcceptConflictHandler implements ICommandHandler<AcceptConflictComm
       where: {
         id: payload.ai_usage_flow_id,
         assessmentId: payload.assessment_id,
-        status: AI_USAGE_FLOW_STATUSES.accepted,
+        status: toPrismaEvidenceAcceptanceStatus(
+          AI_USAGE_FLOW_STATUSES.accepted,
+        ),
       },
       select: {
         id: true,
@@ -96,7 +114,9 @@ export class AcceptConflictHandler implements ICommandHandler<AcceptConflictComm
               conflictScore: conflict.conflict_score,
               scoreExplanation: conflict.score_explanation,
               evidenceRefs: conflict.evidence_refs,
-              status: CONFLICT_RECORD_STATUSES.pending,
+              status: toPrismaConflictRecordStatus(
+                CONFLICT_RECORD_STATUSES.pending,
+              ),
             },
           }),
         ),
@@ -112,14 +132,17 @@ export class AcceptConflictHandler implements ICommandHandler<AcceptConflictComm
           : SCAN_EVENT_TYPES.noConflictsDetectedAudit;
 
       const outboxEvent = buildOutboxMessageInput({
-        aggregateType: "AIUsageFlow",
+        aggregateType: OUTBOX_AGGREGATE_TYPES.aiUsageFlow,
         aggregateId: aiUsageFlow.id,
         eventType,
         organizationId: aiUsageFlow.organizationId,
         assessmentId: aiUsageFlow.assessmentId,
         correlationId: command.correlationId,
         causationId: aiUsageFlow.id,
-        actor: { id: RECONCILIATION_WORKER_ACTOR_ID, type: "service" },
+        actor: {
+          id: RECONCILIATION_WORKER_ACTOR_ID,
+          type: AUDIT_ACTOR_TYPES.service,
+        },
         result: auditType,
         redactionStatus: AUDIT_REDACTION_STATUSES.none,
         idempotencyKey: `${aiUsageFlow.id}:${eventType}:${command.correlationId}`,
@@ -133,7 +156,9 @@ export class AcceptConflictHandler implements ICommandHandler<AcceptConflictComm
       await tx.outboxMessage.create({
         data: {
           id: crypto.randomUUID(),
-          aggregateType: outboxEvent.aggregateType,
+          aggregateType: toPrismaOutboxAggregateType(
+            outboxEvent.aggregateType,
+          ),
           aggregateId: outboxEvent.aggregateId,
           eventType: outboxEvent.eventType,
           payload: outboxEvent.payload as Prisma.InputJsonValue,
@@ -144,7 +169,7 @@ export class AcceptConflictHandler implements ICommandHandler<AcceptConflictComm
         await this.createAudit(tx, {
           eventType: SCAN_EVENT_TYPES.noConflictsDetectedAudit,
           resourceId: aiUsageFlow.id,
-          resourceType: "AIUsageFlow",
+          resourceType: AUDIT_RESOURCE_TYPES.aiUsageFlow,
           organizationId: aiUsageFlow.organizationId,
           assessmentId: aiUsageFlow.assessmentId,
           correlationId: command.correlationId,
@@ -164,7 +189,7 @@ export class AcceptConflictHandler implements ICommandHandler<AcceptConflictComm
           this.createAudit(tx, {
             eventType: SCAN_EVENT_TYPES.conflictDetectedAudit,
             resourceId: conflictIds[index],
-            resourceType: "ConflictRecord",
+            resourceType: AUDIT_RESOURCE_TYPES.conflictRecord,
             organizationId: aiUsageFlow.organizationId,
             assessmentId: aiUsageFlow.assessmentId,
             correlationId: command.correlationId,
@@ -240,7 +265,7 @@ export class AcceptConflictHandler implements ICommandHandler<AcceptConflictComm
     tx: Prisma.TransactionClient,
     input: {
       eventType: string;
-      resourceType: string;
+      resourceType: AuditResourceType;
       resourceId: string;
       organizationId: string;
       assessmentId: string;
@@ -261,7 +286,10 @@ export class AcceptConflictHandler implements ICommandHandler<AcceptConflictComm
       decision: AUDIT_DECISIONS.allow,
       result: input.eventType,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
-      actor: { id: RECONCILIATION_WORKER_ACTOR_ID, type: "service" },
+      actor: {
+        id: RECONCILIATION_WORKER_ACTOR_ID,
+        type: AUDIT_ACTOR_TYPES.service,
+      },
       payload: input.payload,
     });
     await tx.authAuditEvent.create({
@@ -270,21 +298,24 @@ export class AcceptConflictHandler implements ICommandHandler<AcceptConflictComm
         eventType: auditEvent.eventType,
         actorId: auditEvent.actorId,
         organizationId: auditEvent.organizationId,
-        resourceType: auditEvent.resourceType ?? null,
+        resourceType: auditEvent.resourceType
+          ? toPrismaAuditResourceType(auditEvent.resourceType)
+          : null,
         resourceId: auditEvent.resourceId ?? null,
         correlationId: auditEvent.correlationId,
         reasonCode: auditEvent.reasonCode ?? null,
-        decision: auditEvent.decision,
+        decision: auditEvent.decision
+          ? toPrismaAuthDecision(auditEvent.decision)
+          : null,
         payload: auditEvent.payload as Prisma.InputJsonValue,
       },
     });
   }
 
   private errorBody(command: AcceptConflictCommand, errorCode: string) {
-    return {
-      error_code: errorCode,
-      correlation_id: command.correlationId,
-    };
+    return problemResult(errorCode, command.correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+    });
   }
 }
 

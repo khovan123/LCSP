@@ -1,22 +1,27 @@
-import { ConflictException, NotFoundException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import * as crypto from "node:crypto";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   DOCUMENT_ERROR_CODES,
   DOCUMENT_EVENT_TYPES,
   DOCUMENT_REQUEST_STATUSES,
   DOCUMENT_TYPES,
 } from "@lcsp/contracts/document";
+import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
+import { CLASSIFICATION_GUARDRAIL_STATUSES } from "@lcsp/contracts/scan";
 
+import {
+  fromPrismaClassificationGuardrailStatus,
+  toPrismaDocumentRequestStatus,
+  toPrismaDocumentType,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { RequestGapAnalysisCommand } from "./request-gap-analysis.command.js";
 
-const CLASSIFICATION_GUARDRAIL_STATUS_PASSED = "passed";
-const ASSESSMENT_RESOURCE_TYPE = "Assessment";
-const DOCUMENT_REQUEST_RESOURCE_TYPE = "DocumentRequest";
 const DOCUMENT_REQUEST_LOCK_PREFIX = "document-gap-analysis";
 
 @CommandHandler(RequestGapAnalysisCommand)
@@ -39,10 +44,11 @@ export class RequestGapAnalysisHandler implements ICommandHandler<RequestGapAnal
     });
 
     if (!assessment || assessment.organizationId !== command.organizationId) {
-      throw new NotFoundException({
-        error_code: DOCUMENT_ERROR_CODES.assessmentNotFound,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        DOCUMENT_ERROR_CODES.assessmentNotFound,
+        command.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
     const classificationResult =
@@ -59,17 +65,19 @@ export class RequestGapAnalysisHandler implements ICommandHandler<RequestGapAnal
       });
 
     if (!classificationResult) {
-      throw new ConflictException({
-        error_code: DOCUMENT_ERROR_CODES.classificationRequired,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        DOCUMENT_ERROR_CODES.classificationRequired,
+        command.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
     }
 
     if (!hasPassedGuardrail(classificationResult.guardrailStatus)) {
-      throw new ConflictException({
-        error_code: DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed,
+        command.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
     }
 
     const documentRequestId = await this.prisma.$transaction(async (tx) => {
@@ -87,11 +95,13 @@ export class RequestGapAnalysisHandler implements ICommandHandler<RequestGapAnal
         where: {
           assessmentId: command.assessmentId,
           organizationId: command.organizationId,
-          documentType: DOCUMENT_TYPES.gapAnalysis,
+          documentType: toPrismaDocumentType(DOCUMENT_TYPES.gapAnalysis),
           status: {
             in: [
-              DOCUMENT_REQUEST_STATUSES.queued,
-              DOCUMENT_REQUEST_STATUSES.generating,
+              toPrismaDocumentRequestStatus(DOCUMENT_REQUEST_STATUSES.queued),
+              toPrismaDocumentRequestStatus(
+                DOCUMENT_REQUEST_STATUSES.generating,
+              ),
             ],
           },
         },
@@ -99,10 +109,11 @@ export class RequestGapAnalysisHandler implements ICommandHandler<RequestGapAnal
       });
 
       if (existingRequest) {
-        throw new ConflictException({
-          error_code: DOCUMENT_ERROR_CODES.alreadyQueued,
-          correlation_id: command.correlationId,
-        });
+        throw problemException(
+          DOCUMENT_ERROR_CODES.alreadyQueued,
+          command.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
       }
 
       const created = await tx.documentRequest.create({
@@ -112,8 +123,10 @@ export class RequestGapAnalysisHandler implements ICommandHandler<RequestGapAnal
           organizationId: command.organizationId,
           requestedById: command.requestedById,
           classificationResultId: classificationResult.id,
-          documentType: DOCUMENT_TYPES.gapAnalysis,
-          status: DOCUMENT_REQUEST_STATUSES.queued,
+          documentType: toPrismaDocumentType(DOCUMENT_TYPES.gapAnalysis),
+          status: toPrismaDocumentRequestStatus(
+            DOCUMENT_REQUEST_STATUSES.queued,
+          ),
           correlationId: command.correlationId,
         },
         select: { id: true },
@@ -123,7 +136,7 @@ export class RequestGapAnalysisHandler implements ICommandHandler<RequestGapAnal
     });
 
     await this.outboxRepository.enqueue({
-      aggregateType: DOCUMENT_REQUEST_RESOURCE_TYPE,
+      aggregateType: OUTBOX_AGGREGATE_TYPES.documentRequest,
       aggregateId: documentRequestId,
       eventType: DOCUMENT_EVENT_TYPES.gapAnalysisRequested,
       payload: {
@@ -138,7 +151,7 @@ export class RequestGapAnalysisHandler implements ICommandHandler<RequestGapAnal
       eventType: DOCUMENT_EVENT_TYPES.gapAnalysisRequestedAudit,
       actorId: command.requestedById,
       organizationId: command.organizationId,
-      resourceType: DOCUMENT_REQUEST_RESOURCE_TYPE,
+      resourceType: AUDIT_RESOURCE_TYPES.documentRequest,
       resourceId: documentRequestId,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,
@@ -154,7 +167,7 @@ export class RequestGapAnalysisHandler implements ICommandHandler<RequestGapAnal
       eventType: DOCUMENT_EVENT_TYPES.gapAnalysisRequestedAudit,
       actorId: command.requestedById,
       organizationId: command.organizationId,
-      resourceType: ASSESSMENT_RESOURCE_TYPE,
+      resourceType: AUDIT_RESOURCE_TYPES.assessment,
       resourceId: command.assessmentId,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,
@@ -174,6 +187,11 @@ export class RequestGapAnalysisHandler implements ICommandHandler<RequestGapAnal
   }
 }
 
-function hasPassedGuardrail(status: string): boolean {
-  return status.trim().toLowerCase() === CLASSIFICATION_GUARDRAIL_STATUS_PASSED;
+function hasPassedGuardrail(
+  status: Parameters<typeof fromPrismaClassificationGuardrailStatus>[0],
+): boolean {
+  return (
+    fromPrismaClassificationGuardrailStatus(status) ===
+    CLASSIFICATION_GUARDRAIL_STATUSES.passed
+  );
 }

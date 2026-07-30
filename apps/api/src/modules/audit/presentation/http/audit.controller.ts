@@ -1,9 +1,9 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -19,6 +19,7 @@ import type { Response } from "express";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import type { AuditExportArtifact } from "../../application/contracts/audit/audit-export.contract.js";
 import { ExportAuditTrailCommand } from "../../application/commands/export-audit-trail/export-audit-trail.command.js";
@@ -127,10 +128,13 @@ export class AuditController {
     @Query("token") token: string | undefined,
     @Res() response: Response,
   ): Promise<void> {
+    const correlationId = crypto.randomUUID();
     if (!token) {
-      throw new BadRequestException({
-        error_code: AUDIT_ERROR_CODES.downloadUrlInvalid,
-      });
+      throw problemException(
+        AUDIT_ERROR_CODES.downloadUrlInvalid,
+        correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     const payload = this.storage.verifySignedDownloadToken(
@@ -139,9 +143,11 @@ export class AuditController {
       exportRequestId,
     );
     if (!payload) {
-      throw new BadRequestException({
-        error_code: AUDIT_ERROR_CODES.downloadUrlInvalid,
-      });
+      throw problemException(
+        AUDIT_ERROR_CODES.downloadUrlInvalid,
+        correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     const artifact: AuditExportArtifact = await this.queryBus.execute(
