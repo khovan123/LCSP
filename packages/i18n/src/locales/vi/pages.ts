@@ -239,7 +239,8 @@ export const viPages = {
     modules: {
       wizard: "Khai báo bối cảnh nghiệp vụ và cách hệ thống AI được sử dụng.",
       readiness: "Kiểm tra các điều kiện đã sẵn sàng và evidence còn thiếu.",
-      classification: "Xem trạng thái phân loại và các hành động có thể tiếp tục.",
+      classification:
+        "Xem trạng thái phân loại và các hành động có thể tiếp tục.",
       documents: "Tạo, theo dõi và tải các tài liệu assessment.",
       conflicts: "Xem xét và ghi nhận quyết định cho các xung đột đang chờ.",
     },
@@ -257,7 +258,18 @@ export const viPages = {
     submit: "Tạo và bắt đầu Wizard",
     submitting: "Đang tạo assessment",
   },
-  developerManagement: { pageTitle: "Quản lý Developer", pageDescription: "Cấp và thu hồi quyền Developer theo phạm vi assessment hiện tại.", inviteTitle: "Mời Developer", emailLabel: "Email công việc", invite: "Gửi lời mời", membersTitle: "Developer đã cấp quyền", scopeLabel: "Phạm vi assessment", revoke: "Thu hồi quyền", empty: "Chưa có Developer nào được cấp quyền cho assessment này." },
+  developerManagement: {
+    pageTitle: "Quản lý Developer",
+    pageDescription:
+      "Cấp và thu hồi quyền Developer theo phạm vi assessment hiện tại.",
+    inviteTitle: "Mời Developer",
+    emailLabel: "Email công việc",
+    invite: "Gửi lời mời",
+    membersTitle: "Developer đã cấp quyền",
+    scopeLabel: "Phạm vi assessment",
+    revoke: "Thu hồi quyền",
+    empty: "Chưa có Developer nào được cấp quyền cho assessment này.",
+  },
   wizard: {
     metadataTitle: "Wizard Assessment | LCSP",
     metadataDescription:
@@ -293,6 +305,7 @@ export const viPages = {
     summaryTitle: "Tóm tắt bản nháp",
     summaryDescription:
       "Dùng phần này để kiểm tra lại thông tin đã được ghi nhận trong phiên trình duyệt hiện tại.",
+    clearForm: "Xóa toàn bộ",
     helperTitle: "Giải thích thêm",
     helperDescription: "Ví dụ và giải thích ngắn gọn cho câu hỏi hiện tại.",
     actions: {

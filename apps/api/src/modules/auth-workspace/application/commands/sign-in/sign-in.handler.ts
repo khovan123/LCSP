@@ -42,7 +42,12 @@ export class SignInHandler {
 
     const email = payload.email as string;
     const password = payload.password as string;
-    const organizationId = payload.organization_id as string;
+    let organizationId =
+      typeof payload.organization_id === "string" &&
+      payload.organization_id.trim().length > 0
+        ? payload.organization_id.trim()
+        : null;
+
     const user = await repositories.users.findByEmail(email.toLowerCase());
     if (!user) {
       // Run the same scrypt-based comparison as the found-user path so the
@@ -117,10 +122,19 @@ export class SignInHandler {
       );
     }
 
+    if (!organizationId) {
+      const activeMemberships =
+        await repositories.memberships.findActiveByUserId(user.id);
+      if (activeMemberships.length > 0) {
+        organizationId = activeMemberships[0].organizationId;
+      }
+    }
+
+    const targetOrgId = organizationId ?? "";
     const membership = await this.support.findMembership(
       repositories,
       user.id,
-      organizationId,
+      targetOrgId,
     );
     if (!membership) {
       await this.support.recordAudit(repositories, {
@@ -141,7 +155,7 @@ export class SignInHandler {
       await this.support.recordAudit(repositories, {
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginFailed,
         actor_id: user.id,
-        organization_id: organizationId,
+        organization_id: targetOrgId,
         decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.invalidInviteState,
         correlation_id: correlationId,
@@ -155,13 +169,13 @@ export class SignInHandler {
     const sessionState = await this.support.createSession(
       repositories,
       user,
-      organizationId,
+      targetOrgId,
       correlationId,
     );
     await this.support.recordAudit(repositories, {
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
       actor_id: user.id,
-      organization_id: organizationId,
+      organization_id: targetOrgId,
       decision: AUDIT_DECISIONS.allow,
       correlation_id: correlationId,
     });
@@ -172,7 +186,7 @@ export class SignInHandler {
     );
     const organization = await this.support.resolveOrganizationById(
       repositories,
-      organizationId,
+      targetOrgId,
     );
     const mfaRequired = this.support.isMfaRequired(
       user,
@@ -184,7 +198,7 @@ export class SignInHandler {
       ok: true,
       correlation_id: correlationId,
       session_token: sessionState.token,
-      user: this.support.safeUserProjection(user, organizationId, membership),
+      user: this.support.safeUserProjection(user, targetOrgId, membership),
       ...(mfaRequired ? { mfa_required: true } : {}),
     };
   }

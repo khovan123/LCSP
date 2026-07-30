@@ -18,6 +18,8 @@ import { AuditWriterService } from "../../../../../platform/audit/audit-writer.s
 import {
   ASSESSMENT_ERROR_CODES,
   ASSESSMENT_EVENT_TYPES,
+  ASSESSMENT_NAME_MAX_LENGTH,
+  ASSESSMENT_DESCRIPTION_MAX_LENGTH,
 } from "@lcsp/contracts/assessment";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
@@ -30,9 +32,6 @@ import {
 } from "../../ports/persistence/assessment.repository.js";
 import type { CreateAssessmentDto } from "../../contracts/assessment/create-assessment.contract.js";
 import { CreateAssessmentCommand } from "./create-assessment.command.js";
-
-const NAME_MAX_LENGTH = 200;
-const DESCRIPTION_MAX_LENGTH = 1000;
 
 @CommandHandler(CreateAssessmentCommand)
 export class CreateAssessmentHandler implements ICommandHandler<CreateAssessmentCommand> {
@@ -143,12 +142,18 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
   }
 
   private assertValid(command: CreateAssessmentCommand): void {
-    const name = command.name?.trim() ?? "";
-    const nameInvalid = name.length === 0 || name.length > NAME_MAX_LENGTH;
-    const descriptionInvalid =
-      (command.description?.length ?? 0) > DESCRIPTION_MAX_LENGTH;
+    const isNameValid =
+      typeof command.name === "string" &&
+      command.name.trim().length > 0 &&
+      command.name.trim().length <= ASSESSMENT_NAME_MAX_LENGTH;
 
-    if (nameInvalid || descriptionInvalid) {
+    const isDescriptionValid =
+      command.description === undefined ||
+      command.description === null ||
+      (typeof command.description === "string" &&
+        command.description.length <= ASSESSMENT_DESCRIPTION_MAX_LENGTH);
+
+    if (!isNameValid || !isDescriptionValid) {
       throw problemException(
         ASSESSMENT_ERROR_CODES.invalidRequest,
         command.correlationId,

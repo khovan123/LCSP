@@ -16,6 +16,13 @@
 - Put schemas, types, and static configuration in sibling `schemas/`, `types/`, and `config/` directories, never inline in a component.
 - All customer-facing copy, including labels, helper text, validation messages, alerts, metadata, and accessible labels, must be represented by keys and resolved from `@lcsp/i18n`; never hardcode display strings in `apps/web`.
 
+## Frontend form architecture
+
+- In `apps/web`, non-trivial forms must use `react-hook-form` for form state and `zod` for validation. Do not build new forms around ad hoc `useState` field state plus manual error maps when the UI is a real form.
+- Form schemas must live in feature-local sibling `schemas/` files; do not inline `z.object(...)` definitions inside page or component files.
+- Reusable field molecules and organisms should bind through `react-hook-form` context (`FormProvider`, `useFormContext`, `Controller`) instead of receiving parallel `value`/`error`/`setError` plumbing from every parent.
+- Keep draft-saving, submit orchestration, and step navigation in the form container, but keep field rendering and field-level wiring in atomic components.
+
 <!-- Source: .ruler/AGENTS.md -->
 
 # AGENTS.md

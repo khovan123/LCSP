@@ -156,8 +156,7 @@ export class AuthWorkspaceSupportService {
   ): AuthProblemResult | null {
     if (
       !this.requireString(payload?.email) ||
-      !this.requireString(payload?.password) ||
-      !this.requireString(payload?.organization_id)
+      !this.requireString(payload?.password)
     ) {
       return createProblemResult(
         AUTH_ERROR_CODES.validationFailed,

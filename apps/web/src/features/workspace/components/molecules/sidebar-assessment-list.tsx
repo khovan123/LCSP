@@ -26,6 +26,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
+import { getAssessmentActiveHref } from "@/lib/api/workspace-client";
 import { useAssessmentsQuery } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 
@@ -59,13 +60,14 @@ export function SidebarAssessmentList() {
       <SidebarGroupContent>
         <SidebarMenu>
           {visibleAssessments.map((assessment) => {
-            const href = `/assessments/${encodeURIComponent(assessment.id)}`;
-            const active = pathname.startsWith(href);
+            const baseHref = `/assessments/${encodeURIComponent(assessment.id)}`;
+            const activeHref = getAssessmentActiveHref(assessment);
+            const active = pathname.startsWith(baseHref);
 
             return (
               <SidebarMenuItem key={assessment.id}>
                 <SidebarMenuButton
-                  render={<Link href={href} />}
+                  render={<Link href={activeHref} />}
                   isActive={active}
                   tooltip={assessment.name}
                 >
@@ -118,7 +120,7 @@ export function SidebarAssessmentList() {
                 </div>
                 <div className="space-y-1">
                   {filteredAssessments.map((assessment) => {
-                    const href = `/assessments/${encodeURIComponent(assessment.id)}`;
+                    const href = getAssessmentActiveHref(assessment);
 
                     return (
                       <Link

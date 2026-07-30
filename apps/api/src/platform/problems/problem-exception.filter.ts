@@ -1,4 +1,4 @@
-import { Catch, HttpException, HttpStatus } from "@nestjs/common";
+import { Catch, HttpException, HttpStatus, Logger } from "@nestjs/common";
 import type { ArgumentsHost, ExceptionFilter } from "@nestjs/common";
 import type { ProblemResult } from "@lcsp/contracts/auth";
 import { randomUUID } from "node:crypto";
@@ -12,11 +12,15 @@ type HttpResponse = {
 };
 
 type HttpRequest = {
+  method?: string;
+  url?: string;
   headers?: Record<string, string | string[] | undefined>;
 };
 
 @Catch()
 export class ProblemExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ProblemExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     const context = host.switchToHttp();
     const response = context.getResponse<HttpResponse>();
@@ -25,7 +29,42 @@ export class ProblemExceptionFilter implements ExceptionFilter {
     const body = getExceptionBody(exception);
     const correlationId = getCorrelationId(body, request);
 
+    if (status >= 500) {
+      this.logger.error(
+        `[${correlationId}] ${request.method ?? "HTTP"} ${request.url ?? ""} ${status} - Internal Server Error`,
+        exception instanceof Error
+          ? exception.stack
+          : formatExceptionBody(exception),
+      );
+    } else if (status >= 400) {
+      this.logger.warn(
+        `[${correlationId}] ${request.method ?? "HTTP"} ${request.url ?? ""} ${status} - ${formatExceptionBody(body)}`,
+      );
+    }
+
     response.status(status).json(toProblemResult(body, correlationId, status));
+  }
+}
+
+function formatExceptionBody(body: unknown): string {
+  if (body === null || body === undefined) {
+    return "null";
+  }
+  if (typeof body === "string") {
+    return body;
+  }
+  if (
+    typeof body === "number" ||
+    typeof body === "boolean" ||
+    typeof body === "bigint" ||
+    typeof body === "symbol"
+  ) {
+    return String(body);
+  }
+  try {
+    return JSON.stringify(body);
+  } catch (error) {
+    return error instanceof Error ? error.message : "unserializable_body";
   }
 }
 

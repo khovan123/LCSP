@@ -379,6 +379,7 @@ export type PagesMessages = {
     readOnlyEmpty: string;
     summaryTitle: string;
     summaryDescription: string;
+    clearForm: string;
     helperTitle: string;
     helperDescription: string;
     actions: {

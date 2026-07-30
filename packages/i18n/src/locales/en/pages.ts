@@ -241,7 +241,8 @@ export const enPages = {
     modules: {
       wizard: "Describe the business context and how the AI system is used.",
       readiness: "Review completed conditions and the evidence still needed.",
-      classification: "Review the classification state and available next actions.",
+      classification:
+        "Review the classification state and available next actions.",
       documents: "Generate, track, and download assessment documents.",
       conflicts: "Review and record decisions for pending conflicts.",
     },
@@ -259,7 +260,18 @@ export const enPages = {
     submit: "Create and start Wizard",
     submitting: "Creating assessment",
   },
-  developerManagement: { pageTitle: "Manage developers", pageDescription: "Grant and revoke Developer access for the current assessment scope.", inviteTitle: "Invite developer", emailLabel: "Work email", invite: "Send invitation", membersTitle: "Granted developers", scopeLabel: "Assessment scope", revoke: "Revoke access", empty: "No developers have been granted access to this assessment." },
+  developerManagement: {
+    pageTitle: "Manage developers",
+    pageDescription:
+      "Grant and revoke Developer access for the current assessment scope.",
+    inviteTitle: "Invite developer",
+    emailLabel: "Work email",
+    invite: "Send invitation",
+    membersTitle: "Granted developers",
+    scopeLabel: "Assessment scope",
+    revoke: "Revoke access",
+    empty: "No developers have been granted access to this assessment.",
+  },
   wizard: {
     metadataTitle: "Assessment Wizard | LCSP",
     metadataDescription:
@@ -295,6 +307,7 @@ export const enPages = {
     summaryTitle: "Draft summary",
     summaryDescription:
       "Use this view to confirm what has been captured in the current browser session.",
+    clearForm: "Clear form",
     helperTitle: "Guidance",
     helperDescription:
       "Examples and plain-language explanations for the current question.",

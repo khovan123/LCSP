@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import {
   canCreateAssessment,
+  getAssessmentActiveHref,
   getAssessmentStatusLabelKey,
 } from "@/lib/api/workspace-client";
 import {
@@ -165,7 +166,7 @@ function WorkspaceOverview({
             recent.map((assessment) => (
               <Link
                 key={assessment.id}
-                href={`/assessments/${assessment.id}`}
+                href={getAssessmentActiveHref(assessment)}
                 className="flex items-center justify-between gap-4 rounded-lg border p-3 transition-colors hover:bg-muted"
               >
                 <span className="font-medium">{assessment.name}</span>

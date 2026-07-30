@@ -64,17 +64,23 @@ async function main() {
       },
     });
 
+    const adminPassword = process.env.ADMIN_SEED_PASSWORD ?? "Admin@123";
+
     for (const email of ADMIN_EMAILS) {
       const user = await prisma.authUser.upsert({
         where: { email },
         create: {
           id: randomUUID(),
           email,
-          passwordHash: hashSecret(randomUUID()),
+          passwordHash: hashSecret(adminPassword),
           emailVerified: true,
           failedLoginCount: 0,
         },
-        update: { emailVerified: true },
+        update: {
+          emailVerified: true,
+          passwordHash: hashSecret(adminPassword),
+          failedLoginCount: 0,
+        },
       });
       await prisma.authMembership.upsert({
         where: {

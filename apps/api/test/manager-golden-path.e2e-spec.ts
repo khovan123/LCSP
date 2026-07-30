@@ -87,7 +87,7 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       password: "DeveloperPass123!",
       organization_id: "org-1",
     });
-    assert.equal(signIn.status, 201);
+    assert.equal(signIn.status, 200);
     const token = successBody<{ session_token: string }>(signIn).session_token;
     assert.ok(token);
     assert.doesNotMatch(
