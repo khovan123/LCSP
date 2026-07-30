@@ -101,7 +101,10 @@ export class OutboxRepository {
   ): Promise<void> {
     await tx.outboxMessage.update({
       where: { id },
-      data: { status: toPrismaOutboxStatus(OUTBOX_STATUSES.published), publishedAt },
+      data: {
+        status: toPrismaOutboxStatus(OUTBOX_STATUSES.published),
+        publishedAt,
+      },
     });
   }
 

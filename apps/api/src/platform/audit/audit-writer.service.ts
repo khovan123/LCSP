@@ -75,7 +75,9 @@ export class AuditWriterService {
           sessionId: event.sessionId ?? null,
           policyId: event.policyId ?? null,
           policyVersion: event.policyVersion ?? null,
-          decision: event.decision ? toPrismaAuthDecision(event.decision) : null,
+          decision: event.decision
+            ? toPrismaAuthDecision(event.decision)
+            : null,
           payload: payloadWithEnvelope as unknown as Prisma.InputJsonValue,
           createdAt: new Date(),
         },

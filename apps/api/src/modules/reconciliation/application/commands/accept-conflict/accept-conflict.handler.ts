@@ -156,9 +156,7 @@ export class AcceptConflictHandler implements ICommandHandler<AcceptConflictComm
       await tx.outboxMessage.create({
         data: {
           id: crypto.randomUUID(),
-          aggregateType: toPrismaOutboxAggregateType(
-            outboxEvent.aggregateType,
-          ),
+          aggregateType: toPrismaOutboxAggregateType(outboxEvent.aggregateType),
           aggregateId: outboxEvent.aggregateId,
           eventType: outboxEvent.eventType,
           payload: outboxEvent.payload as Prisma.InputJsonValue,

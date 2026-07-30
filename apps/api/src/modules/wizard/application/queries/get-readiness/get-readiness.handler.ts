@@ -64,10 +64,9 @@ export class GetReadinessHandler implements IQueryHandler<
       }),
     ]);
 
-    const wizardStatus =
-      wizardProfile
-        ? fromPrismaWizardStatus(wizardProfile.status)
-        : WIZARD_STATUS_CODES.notStarted;
+    const wizardStatus = wizardProfile
+      ? fromPrismaWizardStatus(wizardProfile.status)
+      : WIZARD_STATUS_CODES.notStarted;
 
     // Evaluate readiness logic
     const evaluation = this.readinessEvaluator.evaluate({

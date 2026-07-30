@@ -97,7 +97,9 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
           ? toBusinessBlockedReason(documentRequest.blockedReason)
           : null,
       guardrail_status: classification
-        ? fromPrismaClassificationGuardrailStatus(classification.guardrailStatus)
+        ? fromPrismaClassificationGuardrailStatus(
+            classification.guardrailStatus,
+          )
         : null,
       download_url: download?.url ?? null,
       download_url_expires_at: download?.expiresAt ?? null,

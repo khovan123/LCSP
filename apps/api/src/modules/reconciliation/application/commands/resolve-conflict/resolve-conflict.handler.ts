@@ -110,7 +110,9 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
         where: {
           assessmentId: command.assessmentId,
           organizationId: command.organizationId,
-          status: toPrismaConflictRecordStatus(CONFLICT_RECORD_STATUSES.pending),
+          status: toPrismaConflictRecordStatus(
+            CONFLICT_RECORD_STATUSES.pending,
+          ),
         },
       });
       const allConflictsResolved = remainingPending === 0;

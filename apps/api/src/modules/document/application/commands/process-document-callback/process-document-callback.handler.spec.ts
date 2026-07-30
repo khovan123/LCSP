@@ -50,7 +50,10 @@ describe("ProcessDocumentCallbackHandler", () => {
   it("throws NotFoundException when document request missing", async () => {
     const { handler } = buildHandler({ request: null });
     const command = new ProcessDocumentCallbackCommand(
-      { document_request_id: "missing", status: DOCUMENT_REQUEST_STATUSES.ready },
+      {
+        document_request_id: "missing",
+        status: DOCUMENT_REQUEST_STATUSES.ready,
+      },
       "corr-1",
     );
 

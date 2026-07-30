@@ -147,7 +147,9 @@ describe("AcceptClassificationHandler", () => {
     const result = await handler.execute(command);
 
     expect(result.accepted).toBe(true);
-    expect(result.guardrail_status).toBe(CLASSIFICATION_GUARDRAIL_STATUSES.passed);
+    expect(result.guardrail_status).toBe(
+      CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+    );
     expect(result.correlation_id).toBe("corr-123");
 
     expect(mockCreateClassificationResult).toHaveBeenCalledWith(

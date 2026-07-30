@@ -116,10 +116,7 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
     });
 
     return new Map(
-      rows.map((row) => [
-        row.assessmentId,
-        fromPrismaWizardStatus(row.status),
-      ]),
+      rows.map((row) => [row.assessmentId, fromPrismaWizardStatus(row.status)]),
     );
   }
 }
