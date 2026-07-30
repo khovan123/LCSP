@@ -13,7 +13,6 @@ import type {
   AssessmentRepository,
 } from "../../application/ports/persistence/assessment.repository.js";
 import { Assessment } from "../../domain/entities/assessment.entity.js";
-import type { AssessmentStatus } from "../../domain/entities/assessment.entity.js";
 
 type AssessmentRecord = {
   id: string;
