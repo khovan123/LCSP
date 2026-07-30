@@ -1,22 +1,24 @@
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from "@nestjs/common";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { HttpStatus } from "@nestjs/common";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import {
   LEGAL_RULE_EVENT_TYPES,
   LEGAL_RULE_ERROR_CODES,
+  LEGAL_RULE_LIFECYCLE_STATUSES,
 } from "@lcsp/contracts/legal-rule-catalog";
 
 import { DraftLegalRuleCommand } from "./draft-legal-rule.command.js";
 import type { DraftLegalRuleResponse } from "../../contracts/draft-legal-rule.contract.js";
+import {
+  fromPrismaLegalRuleLifecycleStatus,
+  toPrismaLegalRuleLifecycleStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { Prisma } from "@prisma/client";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { CitationLocatorValidatorService } from "../../services/citation-locator-validator.service.js";
 
 @CommandHandler(DraftLegalRuleCommand)
@@ -40,17 +42,22 @@ export class DraftLegalRuleHandler implements ICommandHandler<
     });
 
     if (!version) {
-      throw new NotFoundException({
-        error_code: "CATALOG_VERSION_NOT_FOUND",
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        LEGAL_RULE_ERROR_CODES.catalogVersionNotFound,
+        command.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
-    if (version.status !== "DRAFT") {
-      throw new ConflictException({
-        error_code: LEGAL_RULE_ERROR_CODES.catalogVersionAlreadyApproved,
-        correlation_id: command.correlationId,
-      });
+    if (
+      fromPrismaLegalRuleLifecycleStatus(version.status) !==
+      LEGAL_RULE_LIFECYCLE_STATUSES.draft
+    ) {
+      throw problemException(
+        LEGAL_RULE_ERROR_CODES.catalogVersionAlreadyApproved,
+        command.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
     }
 
     // Validate citations - throws UnprocessableEntityException on failure
@@ -73,7 +80,9 @@ export class DraftLegalRuleHandler implements ICommandHandler<
           unknownFactPolicy: command.unknownFactPolicy,
           citationLocatorRefs:
             command.citationLocatorRefs as unknown as Prisma.InputJsonValue,
-          status: "DRAFT",
+          status: toPrismaLegalRuleLifecycleStatus(
+            LEGAL_RULE_LIFECYCLE_STATUSES.draft,
+          ),
           authoredBy: command.authoredBy,
         },
       });
@@ -84,7 +93,7 @@ export class DraftLegalRuleHandler implements ICommandHandler<
           eventType: LEGAL_RULE_EVENT_TYPES.drafted,
           actorId: command.authoredBy,
           organizationId: null, // Legal catalog is system-wide, no org id.
-          resourceType: "legal_rule",
+          resourceType: AUDIT_RESOURCE_TYPES.legalRule,
           resourceId: legalRule.id,
           decision: AUDIT_DECISIONS.allow,
           policyId: command.authorization.policyId,
@@ -105,7 +114,7 @@ export class DraftLegalRuleHandler implements ICommandHandler<
     return {
       id: createdId,
       legalRuleId: command.legalRuleId,
-      status: "DRAFT",
+      status: LEGAL_RULE_LIFECYCLE_STATUSES.draft,
     };
   }
 
@@ -124,7 +133,7 @@ export class DraftLegalRuleHandler implements ICommandHandler<
       eventType: LEGAL_RULE_EVENT_TYPES.drafted,
       actorId: command.authoredBy,
       organizationId: null,
-      resourceType: "legal_rule",
+      resourceType: AUDIT_RESOURCE_TYPES.legalRule,
       resourceId: null,
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.pbacDenied,
@@ -138,9 +147,8 @@ export class DraftLegalRuleHandler implements ICommandHandler<
       },
     });
 
-    throw new ForbiddenException({
-      error_code: AUTH_ERROR_CODES.pbacDenied,
-      correlation_id: command.correlationId,
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 }

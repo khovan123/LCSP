@@ -1,22 +1,46 @@
 import {
   ACCEPT_INVITATION_ERROR_CODES,
   AUTH_ERROR_CODES,
-  type ProblemCodeEnvelope,
+  PROBLEM_KEYS,
 } from "@lcsp/contracts/auth";
 
 import type {
   MfaVerifyOutcome,
   MfaVerifyRequest,
 } from "./types/mfa-verify.types";
+import { apiRequest } from "./api-request.ts";
+import { API_OUTCOME_KINDS } from "./outcome-kinds.ts";
+import { getProblemCode } from "./problem-envelope.ts";
 
 export type { MfaVerifyOutcome } from "./types/mfa-verify.types";
 
+const SIGN_IN_ERROR_TITLE_KEYS = {
+  invalidCredentials: PROBLEM_KEYS.invalidCredentialsTitle,
+  temporaryLock: PROBLEM_KEYS.temporaryLockTitle,
+} as const;
+
+const SIGN_IN_ERROR_DETAIL_KEYS = {
+  invalidCredentials: PROBLEM_KEYS.invalidCredentialsDetail,
+  temporaryLock: PROBLEM_KEYS.temporaryLockDetail,
+} as const;
+
+type SignInErrorTitleKey =
+  (typeof SIGN_IN_ERROR_TITLE_KEYS)[keyof typeof SIGN_IN_ERROR_TITLE_KEYS];
+
+type SignInErrorDetailKey =
+  (typeof SIGN_IN_ERROR_DETAIL_KEYS)[keyof typeof SIGN_IN_ERROR_DETAIL_KEYS];
+
+export const INVITATION_SCOPE_TYPES = {
+  assessment: "assessment",
+  organization: "organization",
+} as const;
+
 export type InvitationScope =
   | {
-      type: "assessment";
+      type: typeof INVITATION_SCOPE_TYPES.assessment;
       assessment: { id: string; name: string };
     }
-  | { type: "organization"; assessment: null };
+  | { type: typeof INVITATION_SCOPE_TYPES.organization; assessment: null };
 
 export type InvitationPreview = {
   organization: { id: string; name: string };
@@ -26,9 +50,9 @@ export type InvitationPreview = {
 };
 
 export type InvitationPreviewOutcome =
-  | { kind: "loaded"; preview: InvitationPreview }
-  | { kind: "invitation_invalid" }
-  | { kind: "error" };
+  | { kind: typeof API_OUTCOME_KINDS.loaded; preview: InvitationPreview }
+  | { kind: typeof API_OUTCOME_KINDS.invitationInvalid }
+  | { kind: typeof API_OUTCOME_KINDS.error };
 
 export type AcceptInvitationRequest = {
   invitation_token: string;
@@ -37,132 +61,145 @@ export type AcceptInvitationRequest = {
 };
 
 export type AcceptInvitationOutcome =
-  | { kind: "invitation_accepted"; location: string }
-  | { kind: "invitation_invalid" }
-  | { kind: "email_already_exists" }
-  | { kind: "password_too_short" }
-  | { kind: "error" };
+  | { kind: typeof API_OUTCOME_KINDS.invitationAccepted; location: string }
+  | { kind: typeof API_OUTCOME_KINDS.invitationInvalid }
+  | { kind: typeof API_OUTCOME_KINDS.emailAlreadyExists }
+  | { kind: typeof API_OUTCOME_KINDS.passwordTooShort }
+  | { kind: typeof API_OUTCOME_KINDS.error };
 
 export type SignInRequest = {
   email: string;
   password: string;
 };
 
+export type SignInWorkspaceOption = {
+  id: string;
+  name: string;
+};
+
 export type SignInOutcome =
-  | { kind: "authenticated" }
-  | { kind: "mfa_required" }
+  | { kind: typeof API_OUTCOME_KINDS.authenticated }
   | {
-      kind: "error";
-      titleKey:
-        | "auth.errors.invalidCredentials.title"
-        | "auth.errors.temporaryLock.title";
-      detailKey:
-        | "auth.errors.invalidCredentials.detail"
-        | "auth.errors.temporaryLock.detail";
+      kind: typeof API_OUTCOME_KINDS.workspaceSelectionRequired;
+      workspaces: SignInWorkspaceOption[];
+    }
+  | { kind: typeof API_OUTCOME_KINDS.mfaRequired }
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: SignInErrorTitleKey;
+      detailKey: SignInErrorDetailKey;
     };
 
-export function toSignInOutcome(payload: unknown, ok: boolean): SignInOutcome {
+export function toSignInOutcome(
+  payload: unknown,
+  ok: boolean,
+  problemCode = getProblemCode(payload),
+): SignInOutcome {
   if (ok && isSignInSuccess(payload)) {
+    if (payload.workspace_selection_required) {
+      return {
+        kind: API_OUTCOME_KINDS.workspaceSelectionRequired,
+        workspaces: payload.workspaces ?? [],
+      };
+    }
     return payload.mfa_required
-      ? { kind: "mfa_required" }
-      : { kind: "authenticated" };
+      ? { kind: API_OUTCOME_KINDS.mfaRequired }
+      : { kind: API_OUTCOME_KINDS.authenticated };
   }
 
-  const code = getProblemCode(payload);
-  if (code === AUTH_ERROR_CODES.temporaryLock) {
+  if (problemCode === AUTH_ERROR_CODES.temporaryLock) {
     return {
-      kind: "error",
-      titleKey: "auth.errors.temporaryLock.title",
-      detailKey: "auth.errors.temporaryLock.detail",
+      kind: API_OUTCOME_KINDS.error,
+      titleKey: SIGN_IN_ERROR_TITLE_KEYS.temporaryLock,
+      detailKey: SIGN_IN_ERROR_DETAIL_KEYS.temporaryLock,
     };
   }
 
   return {
-    kind: "error",
-    titleKey: "auth.errors.invalidCredentials.title",
-    detailKey: "auth.errors.invalidCredentials.detail",
+    kind: API_OUTCOME_KINDS.error,
+    titleKey: SIGN_IN_ERROR_TITLE_KEYS.invalidCredentials,
+    detailKey: SIGN_IN_ERROR_DETAIL_KEYS.invalidCredentials,
   };
 }
 
 export async function signIn(
   credentials: SignInRequest,
 ): Promise<SignInOutcome> {
-  const response = await fetch("/api/auth/sign-in", {
+  const { payload, ok, problemCode } = await apiRequest("/api/auth/sign-in", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    credentials: "same-origin",
     body: JSON.stringify(credentials),
   });
 
-  const payload: unknown = await response.json().catch(() => null);
-  return toSignInOutcome(payload, response.ok);
+  return toSignInOutcome(payload, ok, problemCode);
 }
 
 export async function previewInvitation(
   invitationToken: string,
 ): Promise<InvitationPreviewOutcome> {
-  const response = await fetch("/api/auth/invitations/preview", {
+  const { payload, ok, problemCode } = await apiRequest("/api/auth/invitations/preview", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    credentials: "same-origin",
     body: JSON.stringify({ invitation_token: invitationToken }),
   });
-  const payload: unknown = await response.json().catch(() => null);
 
-  return toInvitationPreviewOutcome(payload, response.ok);
+  return toInvitationPreviewOutcome(payload, ok, problemCode);
 }
 
 export async function acceptInvitation(
   request: AcceptInvitationRequest,
 ): Promise<AcceptInvitationOutcome> {
-  const response = await fetch("/api/auth/accept-invitation", {
+  const { payload, ok, problemCode } = await apiRequest("/api/auth/accept-invitation", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    credentials: "same-origin",
     body: JSON.stringify(request),
   });
-  const payload: unknown = await response.json().catch(() => null);
 
-  return toAcceptInvitationOutcome(payload, response.ok);
+  return toAcceptInvitationOutcome(payload, ok, problemCode);
 }
 
 export function toInvitationPreviewOutcome(
   payload: unknown,
   ok: boolean,
+  problemCode = getProblemCode(payload),
 ): InvitationPreviewOutcome {
   if (ok && isInvitationPreview(payload)) {
-    return { kind: "loaded", preview: payload };
+    return { kind: API_OUTCOME_KINDS.loaded, preview: payload };
   }
 
-  return getProblemCode(payload) ===
-    ACCEPT_INVITATION_ERROR_CODES.invitationInvalid
-    ? { kind: "invitation_invalid" }
-    : { kind: "error" };
+  return problemCode === ACCEPT_INVITATION_ERROR_CODES.invitationInvalid
+    ? { kind: API_OUTCOME_KINDS.invitationInvalid }
+    : { kind: API_OUTCOME_KINDS.error };
 }
 
 export function toAcceptInvitationOutcome(
   payload: unknown,
   ok: boolean,
+  problemCode = getProblemCode(payload),
 ): AcceptInvitationOutcome {
   if (ok && isAcceptedInvitation(payload)) {
-    return { kind: "invitation_accepted", location: payload.location };
+    return {
+      kind: API_OUTCOME_KINDS.invitationAccepted,
+      location: payload.location,
+    };
   }
 
-  switch (getProblemCode(payload)) {
+  switch (problemCode) {
     case ACCEPT_INVITATION_ERROR_CODES.invitationInvalid:
-      return { kind: "invitation_invalid" };
+      return { kind: API_OUTCOME_KINDS.invitationInvalid };
     case ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists:
-      return { kind: "email_already_exists" };
+      return { kind: API_OUTCOME_KINDS.emailAlreadyExists };
     case ACCEPT_INVITATION_ERROR_CODES.passwordTooShort:
-      return { kind: "password_too_short" };
+      return { kind: API_OUTCOME_KINDS.passwordTooShort };
     default:
-      return { kind: "error" };
+      return { kind: API_OUTCOME_KINDS.error };
   }
 }
 
 export function toMfaVerifyOutcome(
   payload: unknown,
   ok: boolean,
+  problemCode = getProblemCode(payload),
 ): MfaVerifyOutcome {
   if (
     ok &&
@@ -170,30 +207,29 @@ export function toMfaVerifyOutcome(
     payload !== null &&
     (payload as { verified?: unknown }).verified === true
   ) {
-    return { kind: "verified" };
+    return { kind: API_OUTCOME_KINDS.verified };
   }
 
-  const code = getProblemCode(payload);
-  if (code === AUTH_ERROR_CODES.sessionInvalid) {
-    return { kind: "session_invalid" };
+  if (problemCode === AUTH_ERROR_CODES.sessionInvalid) {
+    return { kind: API_OUTCOME_KINDS.sessionInvalid };
   }
-  if (code === AUTH_ERROR_CODES.mfaRateLimited) {
+  if (problemCode === AUTH_ERROR_CODES.mfaRateLimited) {
     return {
-      kind: "rate_limited",
+      kind: API_OUTCOME_KINDS.rateLimited,
       titleKey: "auth.errors.mfaRateLimited.title",
       detailKey: "auth.errors.mfaRateLimited.detail",
     };
   }
-  if (code === AUTH_ERROR_CODES.mfaInvalid) {
+  if (problemCode === AUTH_ERROR_CODES.mfaInvalid) {
     return {
-      kind: "invalid",
+      kind: API_OUTCOME_KINDS.invalid,
       titleKey: "auth.errors.mfaInvalid.title",
       detailKey: "auth.errors.mfaInvalid.detail",
     };
   }
 
   return {
-    kind: "error",
+    kind: API_OUTCOME_KINDS.error,
     titleKey: "pages.mfaVerify.errors.requestFailedTitle",
     detailKey: "pages.mfaVerify.errors.requestFailedDetail",
   };
@@ -202,20 +238,29 @@ export function toMfaVerifyOutcome(
 export async function verifyMfaOtp(
   request: MfaVerifyRequest,
 ): Promise<MfaVerifyOutcome> {
-  const response = await fetch("/api/auth/mfa/verify-otp", {
+  const { payload, ok, problemCode } = await apiRequest("/api/auth/mfa/verify-otp", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    credentials: "same-origin",
     body: JSON.stringify(request),
   });
 
-  const payload: unknown = await response.json().catch(() => null);
-  return toMfaVerifyOutcome(payload, response.ok);
+  return toMfaVerifyOutcome(payload, ok, problemCode);
+}
+
+export async function signOut(): Promise<void> {
+  await apiRequest("/api/auth/sign-out", {
+    method: "POST",
+  }).catch(() => null);
 }
 
 function isSignInSuccess(
   payload: unknown,
-): payload is { ok: true; mfa_required?: boolean } {
+): payload is {
+  ok: true;
+  mfa_required?: boolean;
+  workspace_selection_required?: boolean;
+  workspaces?: SignInWorkspaceOption[];
+} {
   return (
     typeof payload === "object" &&
     payload !== null &&
@@ -230,9 +275,9 @@ function isInvitationPreview(payload: unknown): payload is InvitationPreview {
 
   const candidate = payload as InvitationPreview;
   const scopeIsValid =
-    candidate.scope?.type === "organization"
+    candidate.scope?.type === INVITATION_SCOPE_TYPES.organization
       ? candidate.scope.assessment === null
-      : candidate.scope?.type === "assessment" &&
+      : candidate.scope?.type === INVITATION_SCOPE_TYPES.assessment &&
         typeof candidate.scope.assessment?.id === "string" &&
         typeof candidate.scope.assessment.name === "string";
 
@@ -255,20 +300,4 @@ function isAcceptedInvitation(
     (payload as { ok?: unknown }).ok === true &&
     typeof (payload as { location?: unknown }).location === "string"
   );
-}
-
-function getProblemCode(payload: unknown): string | undefined {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-
-  const problem = payload as ProblemCodeEnvelope;
-  if ("problem" in problem && problem.problem) {
-    return (
-      problem.problem.code ??
-      ("error_code" in problem.problem ? problem.problem.error_code : undefined)
-    );
-  }
-
-  return "code" in problem ? (problem.code ?? problem.error_code) : undefined;
 }

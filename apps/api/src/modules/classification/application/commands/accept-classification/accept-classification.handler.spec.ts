@@ -5,7 +5,14 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
-import { SCAN_ERROR_CODES, SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
+import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
+import {
+  CLASSIFICATION_GUARDRAIL_STATUSES,
+  CLASSIFICATION_RESULT_STATUSES,
+  LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
+  SCAN_ERROR_CODES,
+  SCAN_EVENT_TYPES,
+} from "@lcsp/contracts/scan";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -60,7 +67,7 @@ describe("AcceptClassificationHandler", () => {
       risk_level: "HIGH",
       citation_basis: ["chunk-1"],
     },
-    guardrail_status: "passed",
+    guardrail_status: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
   };
 
   beforeEach(() => {
@@ -140,7 +147,9 @@ describe("AcceptClassificationHandler", () => {
     const result = await handler.execute(command);
 
     expect(result.accepted).toBe(true);
-    expect(result.guardrail_status).toBe("passed");
+    expect(result.guardrail_status).toBe(
+      CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+    );
     expect(result.correlation_id).toBe("corr-123");
 
     expect(mockCreateClassificationResult).toHaveBeenCalledWith(
@@ -155,9 +164,9 @@ describe("AcceptClassificationHandler", () => {
             system_type: "HIGH_IMPACT_AI",
             risk_level: "HIGH",
           }),
-          guardrailStatus: "passed",
+          guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
           blockedReason: null,
-          status: "accepted",
+          status: CLASSIFICATION_RESULT_STATUSES.accepted,
         }),
       }),
     );
@@ -165,7 +174,7 @@ describe("AcceptClassificationHandler", () => {
     expect(mockEnqueueOutbox).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: SCAN_EVENT_TYPES.classificationResultReady,
-        aggregateType: "ClassificationResult",
+        aggregateType: OUTBOX_AGGREGATE_TYPES.classificationResult,
       }),
       prisma,
     );
@@ -182,7 +191,7 @@ describe("AcceptClassificationHandler", () => {
   it("T02: accepts degraded guardrail_status", async () => {
     const degradedPayload: AcceptClassificationDto = {
       ...validPayload,
-      guardrail_status: "degraded",
+      guardrail_status: CLASSIFICATION_GUARDRAIL_STATUSES.degraded,
     };
     const command = new AcceptClassificationCommand(
       degradedPayload,
@@ -191,13 +200,15 @@ describe("AcceptClassificationHandler", () => {
     const result = await handler.execute(command);
 
     expect(result.accepted).toBe(true);
-    expect(result.guardrail_status).toBe("degraded");
+    expect(result.guardrail_status).toBe(
+      CLASSIFICATION_GUARDRAIL_STATUSES.degraded,
+    );
   });
 
   it("T03: accepts blocked guardrail_status with blocked audit decision", async () => {
     const blockedPayload: AcceptClassificationDto = {
       ...validPayload,
-      guardrail_status: "blocked",
+      guardrail_status: CLASSIFICATION_GUARDRAIL_STATUSES.blocked,
     };
     const command = new AcceptClassificationCommand(
       blockedPayload,
@@ -206,7 +217,9 @@ describe("AcceptClassificationHandler", () => {
     const result = await handler.execute(command);
 
     expect(result.accepted).toBe(true);
-    expect(result.guardrail_status).toBe("blocked");
+    expect(result.guardrail_status).toBe(
+      CLASSIFICATION_GUARDRAIL_STATUSES.blocked,
+    );
 
     expect(mockWriteAuditInTx).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -236,9 +249,9 @@ describe("AcceptClassificationHandler", () => {
     } catch (err: unknown) {
       expect(err).toBeInstanceOf(UnprocessableEntityException);
       const res = (err as UnprocessableEntityException).getResponse() as {
-        error_code: string;
+        problem: { code: string };
       };
-      expect(res.error_code).toBe(SCAN_ERROR_CODES.classificationOverclaim);
+      expect(res.problem.code).toBe(SCAN_ERROR_CODES.classificationOverclaim);
     }
   });
 
@@ -246,7 +259,7 @@ describe("AcceptClassificationHandler", () => {
     mockFindFirstLegalRuleMatch.mockResolvedValue({
       id: "lrm-123",
       assessmentId: "asm-123",
-      guardrailStatus: "blocked",
+      guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.blocked,
     });
 
     const command = new AcceptClassificationCommand(
@@ -278,9 +291,9 @@ describe("AcceptClassificationHandler", () => {
     } catch (err: unknown) {
       expect(err).toBeInstanceOf(ConflictException);
       const res = (err as ConflictException).getResponse() as {
-        error_code: string;
+        problem: { code: string };
       };
-      expect(res.error_code).toBe(SCAN_ERROR_CODES.resultAlreadyExists);
+      expect(res.problem.code).toBe(SCAN_ERROR_CODES.resultAlreadyExists);
     }
   });
 
@@ -298,9 +311,9 @@ describe("AcceptClassificationHandler", () => {
     } catch (err: unknown) {
       expect(err).toBeInstanceOf(NotFoundException);
       const res = (err as NotFoundException).getResponse() as {
-        error_code: string;
+        problem: { code: string };
       };
-      expect(res.error_code).toBe(SCAN_ERROR_CODES.legalRuleMatchNotFound);
+      expect(res.problem.code).toBe(SCAN_ERROR_CODES.legalRuleMatchNotFound);
     }
   });
 
@@ -318,9 +331,9 @@ describe("AcceptClassificationHandler", () => {
     } catch (err: unknown) {
       expect(err).toBeInstanceOf(NotFoundException);
       const res = (err as NotFoundException).getResponse() as {
-        error_code: string;
+        problem: { code: string };
       };
-      expect(res.error_code).toBe(SCAN_ERROR_CODES.verifiedProfileNotFound);
+      expect(res.problem.code).toBe(SCAN_ERROR_CODES.verifiedProfileNotFound);
     }
   });
 });

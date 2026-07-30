@@ -1,8 +1,8 @@
 import {
-  BadRequestException,
   Controller,
   Get,
   HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -18,10 +18,9 @@ import type { AuthenticatedRequest } from "../../../../common/interfaces/authent
 import { RequireAnyAction } from "../../../../platform/pbac/decorators/require-any-action.decorator.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
-import type { FinalReportRequestDto } from "../../application/contracts/document/final-report-request.contract.js";
-import type { DocumentStatusDto } from "../../application/contracts/document/document-status.contract.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { RequestFinalReportCommand } from "../../application/commands/request-final-report/request-final-report.command.js";
-import type { FinalReportRequestDto as GapAnalysisRequestDto } from "../../application/contracts/document/final-report-request.contract.js";
 import { RequestGapAnalysisCommand } from "../../application/commands/request-gap-analysis/request-gap-analysis.command.js";
 import { GetDocumentQuery } from "../../application/queries/get-document/get-document.query.js";
 import { ListDocumentsQuery } from "../../application/queries/list-documents/list-documents.query.js";
@@ -42,18 +41,20 @@ export class DocumentController {
   async requestFinalReport(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
-  ): Promise<FinalReportRequestDto> {
+  ) {
     const correlationId =
       typeof request.correlationId === "string"
         ? request.correlationId
         : crypto.randomUUID();
 
-    return this.commandBus.execute(
-      new RequestFinalReportCommand(
-        assessmentId,
-        request.pbacContext.organizationId,
-        request.pbacContext.userId,
-        correlationId,
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new RequestFinalReportCommand(
+          assessmentId,
+          request.pbacContext.organizationId,
+          request.pbacContext.userId,
+          correlationId,
+        ),
       ),
     );
   }
@@ -65,18 +66,20 @@ export class DocumentController {
   async requestGapAnalysis(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
-  ): Promise<GapAnalysisRequestDto> {
+  ) {
     const correlationId =
       typeof request.correlationId === "string"
         ? request.correlationId
         : crypto.randomUUID();
 
-    return this.commandBus.execute(
-      new RequestGapAnalysisCommand(
-        assessmentId,
-        request.pbacContext.organizationId,
-        request.pbacContext.userId,
-        correlationId,
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new RequestGapAnalysisCommand(
+          assessmentId,
+          request.pbacContext.organizationId,
+          request.pbacContext.userId,
+          correlationId,
+        ),
       ),
     );
   }
@@ -91,16 +94,18 @@ export class DocumentController {
     @Param("assessmentId") assessmentId: string,
     @Param("documentRequestId") documentRequestId: string,
     @Req() request: AuthenticatedRequest,
-  ): Promise<DocumentStatusDto> {
+  ) {
     const context = request.pbacContext;
-    return this.queryBus.execute(
-      new GetDocumentQuery(
-        assessmentId,
-        documentRequestId,
-        context.organizationId,
-        context.scope,
-        context.selectedAction,
-        request.correlationId as string,
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetDocumentQuery(
+          assessmentId,
+          documentRequestId,
+          context.organizationId,
+          context.scope,
+          context.selectedAction,
+          request.correlationId as string,
+        ),
       ),
     );
   }
@@ -116,13 +121,15 @@ export class DocumentController {
     @Req() request: AuthenticatedRequest,
   ) {
     const context = request.pbacContext;
-    return this.queryBus.execute(
-      new ListDocumentsQuery(
-        assessmentId,
-        context.organizationId,
-        context.scope,
-        context.selectedAction,
-        request.correlationId as string,
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new ListDocumentsQuery(
+          assessmentId,
+          context.organizationId,
+          context.scope,
+          context.selectedAction,
+          request.correlationId as string,
+        ),
       ),
     );
   }
@@ -134,10 +141,13 @@ export class DocumentController {
     @Param("documentRequestId") documentRequestId: string,
     @Query("token") token?: string,
   ): { url: string } {
+    const correlationId = crypto.randomUUID();
     if (!token) {
-      throw new BadRequestException({
-        error_code: DOCUMENT_ERROR_CODES.downloadUrlInvalid,
-      });
+      throw problemException(
+        DOCUMENT_ERROR_CODES.downloadUrlInvalid,
+        correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     const payload = this.storage.verifySignedDownloadToken(
@@ -146,9 +156,11 @@ export class DocumentController {
       documentRequestId,
     );
     if (!payload) {
-      throw new BadRequestException({
-        error_code: DOCUMENT_ERROR_CODES.downloadUrlInvalid,
-      });
+      throw problemException(
+        DOCUMENT_ERROR_CODES.downloadUrlInvalid,
+        correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     return { url: payload.documentUrl };

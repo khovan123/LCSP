@@ -1,3 +1,14 @@
+import { randomUUID } from "node:crypto";
+
+type SessionInput = {
+  userId: string;
+  organizationId: string;
+  tokenHash: string;
+  expiresAt: number;
+  revokedAt?: number | null;
+  mfaVerifiedAt?: number | null;
+};
+
 export class Session {
   readonly id: string;
   readonly userId: string;
@@ -7,22 +18,20 @@ export class Session {
   revokedAt: number | null;
   mfaVerifiedAt: number | null;
 
-  constructor(input: {
-    id: string;
-    userId: string;
-    organizationId: string;
-    tokenHash: string;
-    expiresAt: number;
-    revokedAt?: number | null;
-    mfaVerifiedAt?: number | null;
-  }) {
-    this.id = input.id;
+  constructor(input: SessionInput) {
+    this.id = randomUUID();
     this.userId = input.userId;
     this.organizationId = input.organizationId;
     this.tokenHash = input.tokenHash;
     this.expiresAt = input.expiresAt;
     this.revokedAt = input.revokedAt ?? null;
     this.mfaVerifiedAt = input.mfaVerifiedAt ?? null;
+  }
+
+  static rehydrate(input: SessionInput & { id: string }): Session {
+    const entity = new Session(input);
+    Object.assign(entity, { id: input.id });
+    return entity;
   }
 
   isActive(now: number): boolean {

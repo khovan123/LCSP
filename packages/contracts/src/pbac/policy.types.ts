@@ -9,12 +9,20 @@ export const SUBJECT_ROLES = {
 } as const;
 
 export const PBAC_STATE_GATES = {
-  membershipActive: "membership_active",
+  membershipActive: "MEMBERSHIP_ACTIVE",
+} as const;
+
+export const PBAC_METADATA_TYPES = {
+  action: "ACTION",
+  actionAny: "ACTION_ANY",
+  session: "SESSION",
 } as const;
 
 export type SubjectRole = (typeof SUBJECT_ROLES)[keyof typeof SUBJECT_ROLES];
 export type StateGate =
   (typeof PBAC_STATE_GATES)[keyof typeof PBAC_STATE_GATES];
+export type PbacMetadataType =
+  (typeof PBAC_METADATA_TYPES)[keyof typeof PBAC_METADATA_TYPES];
 export type PbacDecision = (typeof PBAC_DECISION)[keyof typeof PBAC_DECISION];
 
 export interface PolicyDocument {
@@ -42,6 +50,6 @@ export interface PbacEvaluationContext {
 export interface PbacDecisionResult {
   decision: PbacDecision;
   reasonCode?: PbacReasonCode;
-  policyId: string;
-  policyVersion: string;
+  policyId: string | null;
+  policyVersion: string | null;
 }

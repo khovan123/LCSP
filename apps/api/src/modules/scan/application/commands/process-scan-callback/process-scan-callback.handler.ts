@@ -3,6 +3,7 @@ import * as crypto from "node:crypto";
 import {
   ConflictException,
   HttpException,
+  HttpStatus,
   NotFoundException,
 } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
@@ -11,9 +12,15 @@ import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
   buildAuditEventInput,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_IDS,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import {
   SCAN_CALLBACK_STATUSES,
   SCAN_ERROR_CODES,
@@ -21,13 +28,22 @@ import {
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
 } from "@lcsp/contracts/scan";
 
+import {
+  fromPrismaRepositoryScanJobStatus,
+  toPrismaAuditResourceType,
+  toPrismaAuthDecision,
+  toPrismaEvidenceAcceptanceStatus,
+  toPrismaOutboxAggregateType,
+  toPrismaRepositoryScanJobStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemResult } from "../../../../../platform/problems/problem-factory.js";
 import type { ScanCallbackDto } from "../../contracts/scan/scan-callback.contract.js";
 import { EvidenceSchemaValidatorService } from "../../services/scan/evidence-schema-validator.service.js";
 import { ProcessScanCallbackCommand } from "./process-scan-callback.command.js";
 
-const SCANNER_WORKER_ACTOR_ID = "scanner-worker";
+const SCANNER_WORKER_ACTOR_ID = AUDIT_ACTOR_IDS.scannerWorker;
 
 @CommandHandler(ProcessScanCallbackCommand)
 export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCallbackCommand> {
@@ -53,7 +69,10 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
         this.errorBody(command, SCAN_ERROR_CODES.jobNotFound),
       );
     }
-    if (job.status !== REPOSITORY_SCAN_JOB_STATUSES.running) {
+    if (
+      fromPrismaRepositoryScanJobStatus(job.status) !==
+      REPOSITORY_SCAN_JOB_STATUSES.running
+    ) {
       throw new ConflictException(
         this.errorBody(command, SCAN_ERROR_CODES.jobWrongState),
       );
@@ -75,7 +94,7 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
     const reportStatus = isRejected
       ? TECHNICAL_EVIDENCE_REPORT_STATUSES.rejected
       : TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted;
-    const jobStatus = isRejected
+    const nextJobStatus = isRejected
       ? REPOSITORY_SCAN_JOB_STATUSES.failed
       : REPOSITORY_SCAN_JOB_STATUSES.completed;
     const auditEventType = isRejected
@@ -89,9 +108,11 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
       const transition = await tx.repositoryScanJob.updateMany({
         where: {
           id: job.id,
-          status: REPOSITORY_SCAN_JOB_STATUSES.running,
+          status: toPrismaRepositoryScanJobStatus(
+            REPOSITORY_SCAN_JOB_STATUSES.running,
+          ),
         },
-        data: { status: jobStatus },
+        data: { status: toPrismaRepositoryScanJobStatus(nextJobStatus) },
       });
       if (transition.count !== 1) {
         throw new ConflictException(
@@ -112,21 +133,24 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
             .evidence_payload as Prisma.InputJsonValue,
           privacyFlags: command.payload.privacy_flags as Prisma.InputJsonValue,
           schemaVersion: command.payload.schema_version,
-          status: reportStatus,
+          status: toPrismaEvidenceAcceptanceStatus(reportStatus),
           rejectionReason,
         },
       });
 
       if (!isRejected) {
         const event = buildOutboxMessageInput({
-          aggregateType: "TechnicalEvidenceReport",
+          aggregateType: OUTBOX_AGGREGATE_TYPES.technicalEvidenceReport,
           aggregateId: reportId,
           eventType: SCAN_EVENT_TYPES.evidenceAccepted,
           organizationId: job.organizationId,
           assessmentId: job.assessmentId,
           correlationId: command.correlationId,
           causationId: job.id,
-          actor: { id: SCANNER_WORKER_ACTOR_ID, type: "service" },
+          actor: {
+            id: SCANNER_WORKER_ACTOR_ID,
+            type: AUDIT_ACTOR_TYPES.service,
+          },
           result: SCAN_EVENT_TYPES.evidenceAcceptedAudit,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
           idempotencyKey: `${reportId}:${SCAN_EVENT_TYPES.evidenceAccepted}`,
@@ -140,7 +164,7 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
         await tx.outboxMessage.create({
           data: {
             id: crypto.randomUUID(),
-            aggregateType: event.aggregateType,
+            aggregateType: toPrismaOutboxAggregateType(event.aggregateType),
             aggregateId: event.aggregateId,
             eventType: event.eventType,
             payload: event.payload as Prisma.InputJsonValue,
@@ -153,7 +177,7 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
         actorId: SCANNER_WORKER_ACTOR_ID,
         organizationId: job.organizationId,
         assessmentId: job.assessmentId,
-        resourceType: "TechnicalEvidenceReport",
+        resourceType: AUDIT_RESOURCE_TYPES.technicalEvidenceReport,
         resourceId: reportId,
         correlationId: command.correlationId,
         causationId: job.id,
@@ -161,7 +185,7 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
         decision: isRejected ? AUDIT_DECISIONS.deny : AUDIT_DECISIONS.allow,
         result: auditEventType,
         redactionStatus: AUDIT_REDACTION_STATUSES.none,
-        actor: { id: SCANNER_WORKER_ACTOR_ID, type: "service" },
+        actor: { id: SCANNER_WORKER_ACTOR_ID, type: AUDIT_ACTOR_TYPES.service },
         payload: {
           evidenceReportId: reportId,
           assessmentId: job.assessmentId,
@@ -176,11 +200,15 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
           eventType: auditEvent.eventType,
           actorId: auditEvent.actorId,
           organizationId: auditEvent.organizationId,
-          resourceType: auditEvent.resourceType ?? null,
+          resourceType: auditEvent.resourceType
+            ? toPrismaAuditResourceType(auditEvent.resourceType)
+            : null,
           resourceId: auditEvent.resourceId ?? null,
           correlationId: auditEvent.correlationId,
           reasonCode: auditEvent.reasonCode ?? null,
-          decision: auditEvent.decision,
+          decision: auditEvent.decision
+            ? toPrismaAuthDecision(auditEvent.decision)
+            : null,
           payload: auditEvent.payload as Prisma.InputJsonValue,
         },
       });
@@ -209,7 +237,7 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
         actorId: SCANNER_WORKER_ACTOR_ID,
         organizationId: job.organizationId,
         assessmentId: job.assessmentId,
-        resourceType: "RepositoryScanJob",
+        resourceType: AUDIT_RESOURCE_TYPES.repositoryScanJob,
         resourceId: job.id,
         correlationId: command.correlationId,
         causationId: job.id,
@@ -217,7 +245,7 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
         decision: AUDIT_DECISIONS.deny,
         result: SCAN_EVENT_TYPES.evidenceRejectedAudit,
         redactionStatus: AUDIT_REDACTION_STATUSES.none,
-        actor: { id: SCANNER_WORKER_ACTOR_ID, type: "service" },
+        actor: { id: SCANNER_WORKER_ACTOR_ID, type: AUDIT_ACTOR_TYPES.service },
         payload: {
           assessmentId: job.assessmentId,
           scanJobId: job.id,
@@ -228,14 +256,10 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
     );
   }
 
-  private errorBody(
-    command: ProcessScanCallbackCommand,
-    errorCode: string,
-  ): { error_code: string; correlation_id: string } {
-    return {
-      error_code: errorCode,
-      correlation_id: command.correlationId,
-    };
+  private errorBody(command: ProcessScanCallbackCommand, errorCode: string) {
+    return problemResult(errorCode, command.correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+    });
   }
 }
 

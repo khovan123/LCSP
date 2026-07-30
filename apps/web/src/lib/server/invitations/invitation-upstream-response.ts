@@ -1,6 +1,7 @@
 import { ACCEPT_INVITATION_ERROR_CODES } from "@lcsp/contracts/auth";
+import { SHARED_ERROR_CODES } from "@lcsp/contracts/shared";
 
-import type { AcceptedInvitationScope } from "./invitation-routing.ts";
+import type { AcceptedInvitationScope } from "./accepted-invitation-location.ts";
 
 export type AcceptInvitationApiSuccess = {
   session_token: string;
@@ -31,22 +32,23 @@ export function safeAcceptInvitationErrorCode(payload: unknown): string {
     code === ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists ||
     code === ACCEPT_INVITATION_ERROR_CODES.passwordTooShort
     ? code
-    : "UPSTREAM_RESPONSE_INVALID";
+    : SHARED_ERROR_CODES.upstreamResponseInvalid;
 }
 
 export function safeInvitationPreviewErrorCode(payload: unknown): string {
   return getProblemCode(payload) ===
     ACCEPT_INVITATION_ERROR_CODES.invitationInvalid
     ? ACCEPT_INVITATION_ERROR_CODES.invitationInvalid
-    : "UPSTREAM_RESPONSE_INVALID";
+    : SHARED_ERROR_CODES.upstreamResponseInvalid;
 }
 
 function getProblemCode(payload: unknown): string | undefined {
   if (typeof payload !== "object" || payload === null) return undefined;
   const candidate = payload as {
-    code?: unknown;
+    ok?: unknown;
     problem?: { code?: unknown };
   };
-  const code = candidate.problem?.code ?? candidate.code;
-  return typeof code === "string" ? code : undefined;
+  return candidate.ok === false && typeof candidate.problem?.code === "string"
+    ? candidate.problem.code
+    : undefined;
 }

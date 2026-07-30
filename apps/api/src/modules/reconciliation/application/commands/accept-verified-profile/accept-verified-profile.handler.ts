@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 
 import {
   ConflictException,
+  HttpStatus,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -9,8 +10,14 @@ import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_IDS,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import {
   AI_USAGE_FLOW_STATUSES,
   CONFLICT_RECORD_STATUSES,
@@ -21,13 +28,19 @@ import {
 } from "@lcsp/contracts/scan";
 import { Prisma } from "@prisma/client";
 
+import {
+  toPrismaConflictRecordStatus,
+  toPrismaEvidenceAcceptanceStatus,
+  toPrismaVerifiedProfileStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { problemResult } from "../../../../../platform/problems/problem-factory.js";
 import type { VerifiedProfileCallbackDto } from "../../contracts/reconciliation/verified-profile-callback.contract.js";
 import { AcceptVerifiedProfileCommand } from "./accept-verified-profile.command.js";
 
-const VERIFIED_PROFILE_WORKER_ACTOR_ID = "verified-profile-worker";
+const VERIFIED_PROFILE_WORKER_ACTOR_ID = AUDIT_ACTOR_IDS.verifiedProfileWorker;
 
 @CommandHandler(AcceptVerifiedProfileCommand)
 export class AcceptVerifiedProfileHandler implements ICommandHandler<AcceptVerifiedProfileCommand> {
@@ -47,7 +60,9 @@ export class AcceptVerifiedProfileHandler implements ICommandHandler<AcceptVerif
       where: {
         id: payload.ai_usage_flow_id,
         assessmentId: payload.assessment_id,
-        status: AI_USAGE_FLOW_STATUSES.accepted,
+        status: toPrismaEvidenceAcceptanceStatus(
+          AI_USAGE_FLOW_STATUSES.accepted,
+        ),
       },
       select: {
         id: true,
@@ -66,7 +81,7 @@ export class AcceptVerifiedProfileHandler implements ICommandHandler<AcceptVerif
       where: {
         assessmentId: aiUsageFlow.assessmentId,
         organizationId: aiUsageFlow.organizationId,
-        status: CONFLICT_RECORD_STATUSES.pending,
+        status: toPrismaConflictRecordStatus(CONFLICT_RECORD_STATUSES.pending),
       },
     });
     if (pendingConflicts > 0) {
@@ -99,7 +114,7 @@ export class AcceptVerifiedProfileHandler implements ICommandHandler<AcceptVerif
             providerVersion: payload.provider_version,
             profileData: payload.profile_data as Prisma.InputJsonValue,
             gatesPassedAt: payload.gates_passed_at as Prisma.InputJsonValue,
-            status,
+            status: toPrismaVerifiedProfileStatus(status),
           },
         });
 
@@ -169,14 +184,17 @@ export class AcceptVerifiedProfileHandler implements ICommandHandler<AcceptVerif
     status: string,
   ): Promise<void> {
     const outboxEvent = buildOutboxMessageInput({
-      aggregateType: "VerifiedProfile",
+      aggregateType: OUTBOX_AGGREGATE_TYPES.verifiedProfile,
       aggregateId: verifiedProfileId,
       eventType: SCAN_EVENT_TYPES.verifiedProfileReady,
       organizationId: aiUsageFlow.organizationId,
       assessmentId: aiUsageFlow.assessmentId,
       correlationId: command.correlationId,
       causationId: aiUsageFlow.id,
-      actor: { id: VERIFIED_PROFILE_WORKER_ACTOR_ID, type: "service" },
+      actor: {
+        id: VERIFIED_PROFILE_WORKER_ACTOR_ID,
+        type: AUDIT_ACTOR_TYPES.service,
+      },
       result: SCAN_EVENT_TYPES.verifiedProfileAcceptedAudit,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       idempotencyKey: `${verifiedProfileId}:${SCAN_EVENT_TYPES.verifiedProfileReady}`,
@@ -207,14 +225,17 @@ export class AcceptVerifiedProfileHandler implements ICommandHandler<AcceptVerif
         actorId: VERIFIED_PROFILE_WORKER_ACTOR_ID,
         organizationId: aiUsageFlow.organizationId,
         assessmentId: aiUsageFlow.assessmentId,
-        resourceType: "VerifiedProfile",
+        resourceType: AUDIT_RESOURCE_TYPES.verifiedProfile,
         resourceId: verifiedProfileId,
         correlationId: command.correlationId,
         causationId: aiUsageFlow.id,
         decision: AUDIT_DECISIONS.allow,
         result: SCAN_EVENT_TYPES.verifiedProfileAcceptedAudit,
         redactionStatus: AUDIT_REDACTION_STATUSES.none,
-        actor: { id: VERIFIED_PROFILE_WORKER_ACTOR_ID, type: "service" },
+        actor: {
+          id: VERIFIED_PROFILE_WORKER_ACTOR_ID,
+          type: AUDIT_ACTOR_TYPES.service,
+        },
         // Keep detailed evidence out of audit logs; the profile record is the source of truth.
         payload: {
           verifiedProfileId,
@@ -229,10 +250,9 @@ export class AcceptVerifiedProfileHandler implements ICommandHandler<AcceptVerif
   }
 
   private errorBody(command: AcceptVerifiedProfileCommand, errorCode: string) {
-    return {
-      error_code: errorCode,
-      correlation_id: command.correlationId,
-    };
+    return problemResult(errorCode, command.correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+    });
   }
 }
 

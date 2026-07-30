@@ -1,5 +1,5 @@
 import { AUDIT_ERROR_CODES } from "@lcsp/contracts/audit";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { PBAC_ACTIONS, PBAC_METADATA_TYPES } from "@lcsp/contracts/pbac";
 import { jest } from "@jest/globals";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
 import type { Response } from "express";
@@ -22,7 +22,7 @@ describe("AuditController", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: "action",
+      type: PBAC_METADATA_TYPES.action,
       action: PBAC_ACTIONS.auditRead,
     });
   });
@@ -72,7 +72,7 @@ describe("AuditController", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: "action",
+      type: PBAC_METADATA_TYPES.action,
       action: PBAC_ACTIONS.auditExport,
     });
   });
@@ -142,7 +142,8 @@ describe("AuditController", () => {
       ),
     ).rejects.toMatchObject({
       response: {
-        error_code: AUDIT_ERROR_CODES.downloadUrlInvalid,
+        ok: false,
+        problem: { code: AUDIT_ERROR_CODES.downloadUrlInvalid },
       },
     });
   });

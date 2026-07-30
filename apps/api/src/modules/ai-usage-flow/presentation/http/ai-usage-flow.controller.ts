@@ -11,11 +11,9 @@ import {
 import { CommandBus } from "@nestjs/cqrs";
 
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { AcceptAIUsageFlowCommand } from "../../application/commands/accept-ai-usage-flow/accept-ai-usage-flow.command.js";
-import type {
-  AIUsageFlowCallbackDto,
-  AIUsageFlowCallbackRequest,
-} from "../../application/contracts/ai-usage-flow/ai-usage-flow-callback.contract.js";
+import type { AIUsageFlowCallbackRequest } from "../../application/contracts/ai-usage-flow/ai-usage-flow-callback.contract.js";
 
 @Controller("internal/ai-usage-flow")
 export class InternalAIUsageFlowController {
@@ -27,11 +25,13 @@ export class InternalAIUsageFlowController {
   async acceptAIUsageFlow(
     @Body() payload: AIUsageFlowCallbackRequest,
     @Headers("x-correlation-id") correlationId?: string,
-  ): Promise<AIUsageFlowCallbackDto> {
-    return this.commandBus.execute(
-      new AcceptAIUsageFlowCommand(
-        payload,
-        correlationId?.trim() || randomUUID(),
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new AcceptAIUsageFlowCommand(
+          payload,
+          correlationId?.trim() || randomUUID(),
+        ),
       ),
     );
   }

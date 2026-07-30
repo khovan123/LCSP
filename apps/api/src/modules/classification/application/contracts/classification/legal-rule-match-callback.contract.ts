@@ -1,13 +1,19 @@
+import type {
+  LegalMatchType,
+  LegalRuleMatchGuardrailStatus,
+  OverallCoverageStatus,
+} from "@lcsp/contracts/scan";
+
 export interface LegalRuleMatchItemDto {
   match_id: string;
   rule_id: string;
   legal_rule_catalog_version_id: string;
   article_ref: string;
   clause_ref: string;
-  match_type: "PRIMARY_MATCH" | "PARENT_CONTEXT" | "REFERENCED_CONTEXT";
+  match_type: LegalMatchType;
   citation_chunk_ids: string[];
   confidence: number;
-  coverage_status: "NO_CITATION" | "PARTIAL_CITATION" | "COMPLETE_CITATION";
+  coverage_status: OverallCoverageStatus;
   usage_claim_ref: string;
   legal_status?: string;
 }
@@ -20,13 +26,12 @@ export interface AcceptLegalRuleMatchDto {
   schema_version: string;
   matches: LegalRuleMatchItemDto[];
   citation_allowlist: string[];
-  overall_coverage_status:
-    "NO_CITATION" | "PARTIAL_CITATION" | "COMPLETE_CITATION";
+  overall_coverage_status: OverallCoverageStatus;
 }
 
 export interface LegalRuleMatchCallbackResponseDto {
   accepted: boolean;
   legal_rule_match_id: string;
-  guardrail_status: "passed" | "blocked";
+  guardrail_status: LegalRuleMatchGuardrailStatus;
   correlation_id?: string;
 }

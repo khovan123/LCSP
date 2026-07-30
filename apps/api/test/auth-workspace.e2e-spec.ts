@@ -15,9 +15,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 import { AUTH_ERROR_CODES, type ProblemResult } from "@lcsp/contracts/auth";
+import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { AppModule } from "../src/app.module.js";
@@ -45,11 +46,6 @@ import {
   seedMfaEnrollment,
   totpForTime,
 } from "./support/auth-workspace-test-helpers.js";
-
-type HttpErrorBody = {
-  error_code?: string;
-  correlation_id?: string;
-};
 
 describe("Auth workspace (e2e)", () => {
   let app: INestApplication;
@@ -99,7 +95,7 @@ describe("Auth workspace (e2e)", () => {
         organization_id: fixture.organizationId,
       })
       .expect(201);
-    const body = result.body as SignInSuccess;
+    const body = successBody<SignInSuccess>(result);
 
     assert.equal(body.user.organization_id, fixture.organizationId);
     assert.equal(typeof body.session_token, "string");
@@ -115,7 +111,7 @@ describe("Auth workspace (e2e)", () => {
       .expect(201);
 
     assert.equal(
-      (result.body as RegisterSuccess).user.email,
+      successBody<RegisterSuccess>(result).user.email,
       "invitee@acme.test",
     );
     const invite = await prisma.authInvitation.findUnique({
@@ -139,9 +135,9 @@ describe("Auth workspace (e2e)", () => {
         invite_id: "invite-approved",
         password: "ApprovedInvite123!",
       })
-      .expect(201);
+      .expect(403);
 
-    assert.equal((first.body as RegisterSuccess).ok, true);
+    assert.equal(successBody<RegisterSuccess>(first).ok, true);
     const failure = expectFailure(replay.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidInviteState);
   });
@@ -154,7 +150,7 @@ describe("Auth workspace (e2e)", () => {
         password: "WrongPassword123!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(401);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidCredentials);
@@ -172,7 +168,7 @@ describe("Auth workspace (e2e)", () => {
         invite_id: "invite-pending",
         password: "SomePassword123!",
       })
-      .expect(201);
+      .expect(403);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidInviteState);
@@ -186,7 +182,7 @@ describe("Auth workspace (e2e)", () => {
         invite_id: "invite-unverified",
         password: "SomePassword123!",
       })
-      .expect(201);
+      .expect(403);
 
     const failure = expectFailure(result.body);
     assert.equal(
@@ -202,7 +198,7 @@ describe("Auth workspace (e2e)", () => {
         invite_id: "invite-not-active",
         password: "SomePassword123!",
       })
-      .expect(201);
+      .expect(403);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidInviteState);
@@ -216,7 +212,7 @@ describe("Auth workspace (e2e)", () => {
         password: "VerifyMe123!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(403);
 
     const failure = expectFailure(result.body);
     assert.equal(
@@ -233,7 +229,7 @@ describe("Auth workspace (e2e)", () => {
         password: "NoMembership123!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(403);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.membershipMissing);
@@ -246,10 +242,7 @@ describe("Auth workspace (e2e)", () => {
       .set("x-correlation-id", "corr-workspace-no-session")
       .expect(401);
 
-    assert.equal(
-      (result.body as HttpErrorBody).error_code,
-      AUTH_ERROR_CODES.sessionInvalid,
-    );
+    assert.equal(problemCode(result), AUTH_ERROR_CODES.sessionInvalid);
     assert.equal("workspace" in result.body, false);
 
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
@@ -265,7 +258,7 @@ describe("Auth workspace (e2e)", () => {
       .get("/workspace")
       .query({ organization_id: "org-2" })
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .expect(200);
+      .expect(403);
 
     const failure = expectFailure(result.body);
     assert.equal(
@@ -281,10 +274,7 @@ describe("Auth workspace (e2e)", () => {
       .set("Authorization", "Bearer revoked-session-token")
       .expect(401);
 
-    assert.equal(
-      (result.body as HttpErrorBody).error_code,
-      AUTH_ERROR_CODES.sessionInvalid,
-    );
+    assert.equal(problemCode(result), AUTH_ERROR_CODES.sessionInvalid);
   });
 
   it("deny-by-default blocks workspace access when subject attributes are incomplete", async () => {
@@ -308,10 +298,7 @@ describe("Auth workspace (e2e)", () => {
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .expect(403);
 
-    assert.equal(
-      (result.body as HttpErrorBody).error_code,
-      AUTH_ERROR_CODES.pbacDenied,
-    );
+    assert.equal(problemCode(result), AUTH_ERROR_CODES.pbacDenied);
   });
 
   it("deny-by-default blocks workspace access when policy state gate is not satisfied", async () => {
@@ -340,7 +327,7 @@ describe("Auth workspace (e2e)", () => {
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .expect(200);
+      .expect(403);
 
     const failure = expectFailure(result.body);
     assert.equal(
@@ -359,7 +346,9 @@ describe("Auth workspace (e2e)", () => {
       .set("x-correlation-id", "corr-manager-workspace-context")
       .expect(200);
 
-    const body = result.body as WorkspaceSuccess & Record<string, unknown>;
+    const body = successBody<WorkspaceSuccess & Record<string, unknown>>(
+      result,
+    );
     assert.equal(body.organization_id, fixture.organizationId);
     assert.equal(body.organization_name, "Acme Legal");
     assert.equal(body.user_id, fixture.approvedUser.id);
@@ -390,11 +379,11 @@ describe("Auth workspace (e2e)", () => {
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: {
         correlationId: "corr-manager-workspace-context",
-        resourceType: "Workspace",
+        resourceType: AUDIT_RESOURCE_TYPES.workspace,
       },
     });
     assert.equal(decision.organizationId, fixture.organizationId);
-    assert.equal(decision.resourceType, "Workspace");
+    assert.equal(decision.resourceType, AUDIT_RESOURCE_TYPES.workspace);
     assert.equal(decision.resourceId, "workspace-home");
     assert.equal(decision.action, PBAC_ACTIONS.workspaceRead);
     assert.equal(decision.decision, PBAC_DECISION.allow);
@@ -411,7 +400,7 @@ describe("Auth workspace (e2e)", () => {
         password: "WrongPassword123!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(401);
 
     await httpRequest(app)
       .post("/auth/sign-in")
@@ -420,7 +409,7 @@ describe("Auth workspace (e2e)", () => {
         password: "WrongPassword123!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(401);
 
     const locked = await httpRequest(app)
       .post("/auth/sign-in")
@@ -429,7 +418,7 @@ describe("Auth workspace (e2e)", () => {
         password: "WrongPassword123!",
         organization_id: fixture.organizationId,
       })
-      .expect(201);
+      .expect(429);
 
     const failure = expectFailure(locked.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.temporaryLock);
@@ -479,7 +468,7 @@ describe("Auth workspace (e2e)", () => {
       .send({ session_token: signIn.session_token })
       .expect(201);
 
-    const body = result.body as EnrollMfaSuccess;
+    const body = successBody<EnrollMfaSuccess>(result);
     assert.equal(body.ok, true);
     assert.match(body.totp_uri, /^otpauth:\/\/totp\//);
   });
@@ -494,10 +483,7 @@ describe("Auth workspace (e2e)", () => {
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .expect(401);
 
-    assert.equal(
-      (result.body as HttpErrorBody).error_code,
-      AUTH_ERROR_CODES.mfaRequired,
-    );
+    assert.equal(problemCode(result), AUTH_ERROR_CODES.mfaRequired);
   });
 
   it("sign-in response includes mfa_required flag when MFA is enrolled", async () => {
@@ -511,7 +497,7 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(201);
 
-    const body = result.body as SignInSuccess;
+    const body = successBody<SignInSuccess>(result);
     assert.equal(body.ok, true);
     assert.equal(body.mfa_required, true);
   });
@@ -525,14 +511,14 @@ describe("Auth workspace (e2e)", () => {
       .post("/auth/mfa/verify-otp")
       .send({ session_token: signIn.session_token, otp })
       .expect(201);
-    assert.equal((verify.body as VerifyMfaOtpSuccess).ok, true);
+    assert.equal(successBody<VerifyMfaOtpSuccess>(verify).ok, true);
 
     const workspace = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .expect(200);
-    assert.equal((workspace.body as WorkspaceSuccess).ok, true);
+    assert.equal(successBody<WorkspaceSuccess>(workspace).ok, true);
   });
 
   it("invalid OTP is rejected and audit event is recorded", async () => {
@@ -542,7 +528,7 @@ describe("Auth workspace (e2e)", () => {
     const result = await httpRequest(app)
       .post("/auth/mfa/verify-otp")
       .send({ session_token: signIn.session_token, otp: "000000" })
-      .expect(201);
+      .expect(403);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaInvalid);
@@ -570,7 +556,7 @@ describe("Auth workspace (e2e)", () => {
     const replay = await httpRequest(app)
       .post("/auth/mfa/verify-otp")
       .send({ session_token: signIn2.session_token, otp })
-      .expect(201);
+      .expect(403);
 
     const failure = expectFailure(replay.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaInvalid);
@@ -584,13 +570,13 @@ describe("Auth workspace (e2e)", () => {
       await httpRequest(app)
         .post("/auth/mfa/verify-otp")
         .send({ session_token: signIn.session_token, otp: "000000" })
-        .expect(201);
+        .expect(403);
     }
 
     const locked = await httpRequest(app)
       .post("/auth/mfa/verify-otp")
       .send({ session_token: signIn.session_token, otp: "000001" })
-      .expect(201);
+      .expect(429);
 
     const failure = expectFailure(locked.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaRateLimited);
@@ -620,10 +606,7 @@ describe("Auth workspace (e2e)", () => {
       .set("Authorization", `Bearer ${expiredToken}`)
       .expect(401);
 
-    assert.equal(
-      (result.body as HttpErrorBody).error_code,
-      AUTH_ERROR_CODES.sessionInvalid,
-    );
+    assert.equal(problemCode(result), AUTH_ERROR_CODES.sessionInvalid);
   });
 
   it("revoke-session records audit event and blocks subsequent workspace access", async () => {
@@ -640,10 +623,7 @@ describe("Auth workspace (e2e)", () => {
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .expect(401);
 
-    assert.equal(
-      (workspace.body as HttpErrorBody).error_code,
-      AUTH_ERROR_CODES.sessionInvalid,
-    );
+    assert.equal(problemCode(workspace), AUTH_ERROR_CODES.sessionInvalid);
 
     const auditEvents = await prisma.authAuditEvent.findMany();
     const revoked = auditEvents.find(
@@ -668,7 +648,7 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(200);
 
-    const body = result.body as UpdateProfileSuccess;
+    const body = successBody<UpdateProfileSuccess>(result);
     assert.equal(body.ok, true);
     assert.ok(Array.isArray(body.updated_fields));
     assert.ok(body.updated_fields.includes("display_name"));
@@ -719,10 +699,7 @@ describe("Auth workspace (e2e)", () => {
       .send({ session_token: signIn.session_token })
       .expect(401);
 
-    assert.equal(
-      (reEnroll.body as HttpErrorBody).error_code,
-      AUTH_ERROR_CODES.mfaRequired,
-    );
+    assert.equal(problemCode(reEnroll), AUTH_ERROR_CODES.mfaRequired);
   });
 
   it("profile update is blocked when MFA is enrolled but not yet verified", async () => {
@@ -735,10 +712,7 @@ describe("Auth workspace (e2e)", () => {
       .send({ session_token: signIn.session_token, display_name: "Blocked" })
       .expect(401);
 
-    assert.equal(
-      (result.body as HttpErrorBody).error_code,
-      AUTH_ERROR_CODES.mfaRequired,
-    );
+    assert.equal(problemCode(result), AUTH_ERROR_CODES.mfaRequired);
   });
 
   it("profile update rejects a malformed recovery_email", async () => {
@@ -750,7 +724,7 @@ describe("Auth workspace (e2e)", () => {
         session_token: signIn.session_token,
         recovery_email: "not-an-email",
       })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
@@ -769,7 +743,7 @@ describe("Auth workspace (e2e)", () => {
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .expect(200);
+      .expect(403);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaRequired);
@@ -785,9 +759,9 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(201);
 
-    const success = expectSuccess(result.body) as {
+    const success = successBody<{
       user: { subject_attributes: Record<string, string> };
-    };
+    }>(result);
     assert.equal(success.user.subject_attributes.role, SUBJECT_ROLES.manager);
     assert.equal("department" in success.user.subject_attributes, false);
   });
@@ -803,8 +777,8 @@ describe("Auth workspace (e2e)", () => {
       .send({ email: "nobody-here@acme.test" })
       .expect(201);
 
-    const knownBody = known.body as RequestRecoverySuccess;
-    const unknownBody = unknown.body as RequestRecoverySuccess;
+    const knownBody = successBody<RequestRecoverySuccess>(known);
+    const unknownBody = successBody<RequestRecoverySuccess>(unknown);
     assert.equal(knownBody.ok, true);
     assert.equal(unknownBody.ok, true);
     assert.deepEqual(Object.keys(knownBody), Object.keys(unknownBody));
@@ -825,17 +799,14 @@ describe("Auth workspace (e2e)", () => {
       .post("/auth/recovery/confirm")
       .send({ token, new_password: "BrandNewPassword456!" })
       .expect(201);
-    assert.equal((confirm.body as ConfirmRecoverySuccess).ok, true);
+    assert.equal(successBody<ConfirmRecoverySuccess>(confirm).ok, true);
 
     const oldSessionCheck = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .expect(401);
-    assert.equal(
-      (oldSessionCheck.body as HttpErrorBody).error_code,
-      AUTH_ERROR_CODES.sessionInvalid,
-    );
+    assert.equal(problemCode(oldSessionCheck), AUTH_ERROR_CODES.sessionInvalid);
 
     const newSignIn = await httpRequest(app)
       .post("/auth/sign-in")
@@ -845,14 +816,14 @@ describe("Auth workspace (e2e)", () => {
         organization_id: fixture.organizationId,
       })
       .expect(201);
-    assert.equal((newSignIn.body as SignInSuccess).ok, true);
+    assert.equal(successBody<SignInSuccess>(newSignIn).ok, true);
   });
 
   it("password recovery confirm rejects an invalid or expired token", async () => {
     const result = await httpRequest(app)
       .post("/auth/recovery/confirm")
       .send({ token: "not-a-real-token", new_password: "SomethingNew123!" })
-      .expect(201);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.recoveryInvalid);
@@ -868,7 +839,7 @@ describe("Auth workspace (e2e)", () => {
       })
       .expect(201);
 
-    return expectSuccess(result.body as SignInSuccess);
+    return successBody<SignInSuccess>(result);
   }
 });
 
@@ -880,12 +851,4 @@ function expectFailure<T extends object>(
   }
 
   throw new Error("expected failure");
-}
-
-function expectSuccess<T extends object>(result: T | ProblemResult): T {
-  if (!("problem" in result)) {
-    return result;
-  }
-
-  throw new Error(`expected success, got ${result.problem.code}`);
 }

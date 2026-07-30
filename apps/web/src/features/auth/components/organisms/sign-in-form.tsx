@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FormProvider, useForm } from "react-hook-form";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
 
@@ -11,7 +12,10 @@ import { FieldGroup } from "@/components/ui/field";
 import { LabeledSeparator } from "@/components/molecules/labeled-separator";
 import { FormCard } from "@/components/organisms/form-card";
 import { Spinner } from "@/components/ui/spinner";
-import { signIn } from "@/lib/api/auth-client";
+import { useSignInMutation } from "@/lib/api/auth-queries";
+import { API_OUTCOME_KINDS, API_REDIRECT_LOCATIONS } from "@/lib/api/outcome-kinds";
+import githubIcon from "@/public/assets/icons/github.svg";
+import googleIcon from "@/public/assets/icons/google.svg";
 
 import { signInFields } from "../../config/sign-in-fields";
 import { appLocale } from "@/lib/locale";
@@ -21,6 +25,7 @@ import { CredentialField } from "../molecules/credential-field";
 
 export function SignInForm() {
   const router = useRouter();
+  const signInMutation = useSignInMutation();
   const form = useForm<SignInFormValues>({
     resolver: zodResolver(signInSchema),
     defaultValues: { email: "", password: "" },
@@ -30,19 +35,23 @@ export function SignInForm() {
     | undefined;
 
   async function onSubmit(values: SignInFormValues) {
-    const outcome = await signIn(values).catch(() => ({
-      kind: "error" as const,
+    const outcome = await signInMutation.mutateAsync(values).catch(() => ({
+      kind: API_OUTCOME_KINDS.error,
       titleKey: "pages.signIn.errors.requestFailedTitle" as const,
       detailKey: "pages.signIn.errors.requestFailedDetail" as const,
     }));
     form.reset();
 
-    if (outcome.kind === "authenticated") {
+    if (outcome.kind === API_OUTCOME_KINDS.authenticated) {
       router.replace("/workspace");
       return;
     }
-    if (outcome.kind === "mfa_required") {
-      router.replace("/mfa/verify");
+    if (outcome.kind === API_OUTCOME_KINDS.workspaceSelectionRequired) {
+      router.replace("/workspace/select");
+      return;
+    }
+    if (outcome.kind === API_OUTCOME_KINDS.mfaRequired) {
+      router.replace(API_REDIRECT_LOCATIONS.mfaVerify);
       return;
     }
     form.setError("root", { message: outcome.detailKey });
@@ -51,7 +60,6 @@ export function SignInForm() {
   return (
     <FormProvider {...form}>
       <FormCard
-        eyebrow={resolveMessage(appLocale, "pages.signIn.formEyebrow")}
         title={resolveMessage(appLocale, "pages.signIn.formTitle")}
         description={resolveMessage(appLocale, "pages.signIn.formDescription")}
         footer={
@@ -73,14 +81,14 @@ export function SignInForm() {
             <LabeledSeparator
               label={resolveMessage(appLocale, "pages.signIn.divider")}
             />
-            <Button
-              className="w-full"
-              variant="outline"
-              nativeButton={false}
-              render={<a href="/api/auth/oauth/start?provider=github" />}
-            >
-              {resolveMessage(appLocale, "pages.signIn.oauthGitHub")}
-            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <OAuthButton provider="google" icon={<GoogleIcon />}>
+                {resolveMessage(appLocale, "pages.signIn.oauthGoogle")}
+              </OAuthButton>
+              <OAuthButton provider="github" icon={<GitHubIcon />}>
+                {resolveMessage(appLocale, "pages.signIn.oauthGitHub")}
+              </OAuthButton>
+            </div>
             <p className="text-center text-xs leading-relaxed text-muted-foreground">
               {resolveMessage(appLocale, "pages.signIn.accessHelp")}
             </p>
@@ -113,5 +121,44 @@ export function SignInForm() {
         </form>
       </FormCard>
     </FormProvider>
+  );
+}
+
+function OAuthButton({
+  provider,
+  icon,
+  children,
+}: {
+  provider: "google" | "github";
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      className="w-full"
+      variant="outline"
+      nativeButton={false}
+      render={<a href={`/api/auth/oauth/start?provider=${provider}`} />}
+    >
+      {icon}
+      {children}
+    </Button>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <Image src={googleIcon} alt="" className="size-4" aria-hidden="true" />
+  );
+}
+
+function GitHubIcon() {
+  return (
+    <Image
+      src={githubIcon}
+      alt=""
+      className="size-4 dark:invert"
+      aria-hidden="true"
+    />
   );
 }

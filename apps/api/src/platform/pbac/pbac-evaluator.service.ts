@@ -25,8 +25,8 @@ export class PbacEvaluatorService {
       return {
         decision: PBAC_DECISION.deny,
         reasonCode: PBAC_REASON_CODE.policyNotFound,
-        policyId: ctx?.policy?.id ?? "",
-        policyVersion: ctx?.policy?.version ?? "",
+        policyId: ctx?.policy?.id ?? null,
+        policyVersion: ctx?.policy?.version ?? null,
       };
     }
   }
@@ -38,8 +38,8 @@ export class PbacEvaluatorService {
       return {
         decision: PBAC_DECISION.deny,
         reasonCode: PBAC_REASON_CODE.policyNotFound,
-        policyId: "",
-        policyVersion: "",
+        policyId: null,
+        policyVersion: null,
       };
     }
 

@@ -1,6 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import type { AssessmentStatus as PrismaAssessmentStatus } from "@prisma/client";
 
+import {
+  fromPrismaAssessmentStatus,
+  toPrismaAssessmentStatus,
+} from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type {
   AssessmentListCriteria,
@@ -8,7 +13,6 @@ import type {
   AssessmentRepository,
 } from "../../application/ports/persistence/assessment.repository.js";
 import { Assessment } from "../../domain/entities/assessment.entity.js";
-import type { AssessmentStatus } from "../../domain/entities/assessment.entity.js";
 
 type AssessmentRecord = {
   id: string;
@@ -16,7 +20,7 @@ type AssessmentRecord = {
   ownerId: string;
   name: string;
   description: string | null;
-  status: string;
+  status: PrismaAssessmentStatus;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -48,14 +52,14 @@ export class PrismaAssessmentRepository implements AssessmentRepository {
         ownerId: assessment.ownerId,
         name: assessment.name,
         description: assessment.description,
-        status: assessment.status,
+        status: toPrismaAssessmentStatus(assessment.status),
         createdAt: assessment.createdAt,
         updatedAt: assessment.updatedAt,
       },
       update: {
         name: assessment.name,
         description: assessment.description,
-        status: assessment.status,
+        status: toPrismaAssessmentStatus(assessment.status),
       },
     });
   }
@@ -73,7 +77,9 @@ export class PrismaAssessmentRepository implements AssessmentRepository {
       organizationId: criteria.organizationId,
       ...(criteria.ownerId ? { ownerId: criteria.ownerId } : {}),
       ...(criteria.assessmentId ? { id: criteria.assessmentId } : {}),
-      ...(criteria.status ? { status: criteria.status } : {}),
+      ...(criteria.status
+        ? { status: toPrismaAssessmentStatus(criteria.status) }
+        : {}),
     };
 
     const [records, total] = await Promise.all([
@@ -99,7 +105,7 @@ export class PrismaAssessmentRepository implements AssessmentRepository {
       ownerId: record.ownerId,
       name: record.name,
       description: record.description,
-      status: record.status as AssessmentStatus,
+      status: fromPrismaAssessmentStatus(record.status),
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     });

@@ -18,6 +18,7 @@ import { createCorrelationId } from "../../../auth-workspace/infrastructure/secu
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { GitHubAppCallbackCommand } from "../../application/commands/github-app-callback/github-app-callback.command.js";
 import { GitHubAppStartCommand } from "../../application/commands/github-app-start/github-app-start.command.js";
 import { PinSnapshotCommand } from "../../application/commands/pin-snapshot/pin-snapshot.command.js";
@@ -50,13 +51,15 @@ export class GitHubIntegrationController {
   ) {
     const pbacContext = request.pbacContext as PbacRequestContext;
 
-    return this.commandBus.execute(
-      new GitHubAppStartCommand(
-        pbacContext.organizationId,
-        pbacContext.userId,
-        redirectUri,
-        assessmentId,
-        request.correlationId as string,
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new GitHubAppStartCommand(
+          pbacContext.organizationId,
+          pbacContext.userId,
+          redirectUri,
+          assessmentId,
+          request.correlationId as string,
+        ),
       ),
     );
   }
@@ -68,12 +71,14 @@ export class GitHubIntegrationController {
     @Query("state") state: string,
     @Headers("x-correlation-id") correlationId: string | undefined,
   ) {
-    return this.commandBus.execute(
-      new GitHubAppCallbackCommand(
-        installationId,
-        code,
-        state,
-        correlationId ?? createCorrelationId(),
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new GitHubAppCallbackCommand(
+          installationId,
+          code,
+          state,
+          correlationId ?? createCorrelationId(),
+        ),
       ),
     );
   }
@@ -85,20 +90,22 @@ export class GitHubIntegrationController {
     @Param("assessmentId") assessmentId: string,
     @Body() body: PinSnapshotRequest,
     @Req() request: GitHubIntegrationRequest,
-  ): Promise<PinSnapshotDto> {
+  ) {
     const context = request.pbacContext as PbacRequestContext;
-    return this.commandBus.execute<PinSnapshotCommand, PinSnapshotDto>(
-      new PinSnapshotCommand(
-        assessmentId,
-        context.organizationId,
-        context.userId,
-        context.subjectRole,
-        context.scope ?? undefined,
-        body.connection_id,
-        body.branch,
-        body.ref,
-        body.commit_sha,
-        request.correlationId as string,
+    return resultEnvelope(
+      await this.commandBus.execute<PinSnapshotCommand, PinSnapshotDto>(
+        new PinSnapshotCommand(
+          assessmentId,
+          context.organizationId,
+          context.userId,
+          context.subjectRole,
+          context.scope ?? undefined,
+          body.connection_id,
+          body.branch,
+          body.ref,
+          body.commit_sha,
+          request.correlationId as string,
+        ),
       ),
     );
   }
@@ -111,7 +118,7 @@ export class GitHubIntegrationController {
     @Body() body: TriggerScanRequest,
     @Req() request: GitHubIntegrationRequest,
     @Res({ passthrough: true }) response: Response,
-  ): Promise<TriggerScanDto> {
+  ) {
     const context = request.pbacContext;
     const result = await this.commandBus.execute<
       TriggerScanCommand,
@@ -130,6 +137,6 @@ export class GitHubIntegrationController {
       ),
     );
     response.status(result.is_new ? 201 : 200);
-    return result;
+    return resultEnvelope(result);
   }
 }

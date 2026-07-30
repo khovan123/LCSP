@@ -1,17 +1,17 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import type { Prisma } from "@prisma/client";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import {
   CONFLICT_RECORD_STATUSES,
@@ -19,9 +19,14 @@ import {
   SCAN_EVENT_TYPES,
 } from "@lcsp/contracts/scan";
 
+import {
+  fromPrismaConflictRecordStatus,
+  toPrismaConflictRecordStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { ResolveConflictCommand } from "./resolve-conflict.command.js";
 
 const RESOLUTION_NOTE_MAX_LENGTH = 2000;
@@ -46,10 +51,14 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
 
   async execute(command: ResolveConflictCommand): Promise<ResolveConflictDto> {
     this.assertManagerOnly(command);
-    const resolution = parseResolution(command.resolution);
+    const resolution = parseResolution(
+      command.resolution,
+      command.correlationId,
+    );
     const resolutionNote = parseResolutionNote(
       command.resolutionNote,
       resolution,
+      command.correlationId,
     );
     const resolvedAt = new Date();
 
@@ -69,21 +78,28 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
       });
 
       if (!conflict) {
-        throw new NotFoundException(
-          this.errorBody(command, SCAN_ERROR_CODES.conflictNotFound),
+        throw problemException(
+          SCAN_ERROR_CODES.conflictNotFound,
+          command.correlationId,
+          { status: HttpStatus.NOT_FOUND },
         );
       }
 
-      if (conflict.status !== CONFLICT_RECORD_STATUSES.pending) {
-        throw new ConflictException(
-          this.errorBody(command, SCAN_ERROR_CODES.conflictAlreadyResolved),
+      if (
+        fromPrismaConflictRecordStatus(conflict.status) !==
+        CONFLICT_RECORD_STATUSES.pending
+      ) {
+        throw problemException(
+          SCAN_ERROR_CODES.conflictAlreadyResolved,
+          command.correlationId,
+          { status: HttpStatus.CONFLICT },
         );
       }
 
       await tx.conflictRecord.update({
         where: { id: conflict.id },
         data: {
-          status: resolution,
+          status: toPrismaConflictRecordStatus(resolution),
           resolvedAt,
           resolvedById: command.resolvedById,
           resolutionNote,
@@ -94,7 +110,9 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
         where: {
           assessmentId: command.assessmentId,
           organizationId: command.organizationId,
-          status: CONFLICT_RECORD_STATUSES.pending,
+          status: toPrismaConflictRecordStatus(
+            CONFLICT_RECORD_STATUSES.pending,
+          ),
         },
       });
       const allConflictsResolved = remainingPending === 0;
@@ -108,7 +126,7 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
           actorId: command.resolvedById,
           organizationId: command.organizationId,
           assessmentId: command.assessmentId,
-          resourceType: "ConflictRecord",
+          resourceType: AUDIT_RESOURCE_TYPES.conflictRecord,
           resourceId: conflict.id,
           correlationId: command.correlationId,
           causationId: conflict.id,
@@ -153,9 +171,8 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
 
     if (allowed) return;
 
-    throw new ForbiddenException({
-      error_code: AUTH_ERROR_CODES.pbacDenied,
-      correlation_id: command.correlationId,
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 
@@ -164,14 +181,14 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
     tx: Prisma.TransactionClient,
   ): Promise<void> {
     const outboxEvent = buildOutboxMessageInput({
-      aggregateType: "Assessment",
+      aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
       aggregateId: command.assessmentId,
       eventType: SCAN_EVENT_TYPES.reconciliationAllConflictsResolved,
       organizationId: command.organizationId,
       assessmentId: command.assessmentId,
       correlationId: command.correlationId,
       causationId: command.conflictId,
-      actor: { id: command.resolvedById, type: "user" },
+      actor: { id: command.resolvedById, type: AUDIT_ACTOR_TYPES.user },
       result: SCAN_EVENT_TYPES.reconciliationAllConflictsResolved,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       idempotencyKey: `${command.assessmentId}:${SCAN_EVENT_TYPES.reconciliationAllConflictsResolved}:${command.correlationId}`,
@@ -183,17 +200,11 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
     });
     await this.outboxRepository.enqueue(outboxEvent, tx);
   }
-
-  private errorBody(command: ResolveConflictCommand, errorCode: string) {
-    return {
-      error_code: errorCode,
-      correlation_id: command.correlationId,
-    };
-  }
 }
 
 function parseResolution(
   value: unknown,
+  correlationId: string,
 ):
   | typeof CONFLICT_RECORD_STATUSES.resolved
   | typeof CONFLICT_RECORD_STATUSES.dismissed {
@@ -204,9 +215,13 @@ function parseResolution(
     return value;
   }
 
-  throw new UnprocessableEntityException({
-    error_code: SCAN_ERROR_CODES.conflictSchemaInvalid,
-  });
+  throw problemException(
+    SCAN_ERROR_CODES.conflictSchemaInvalid,
+    correlationId,
+    {
+      status: HttpStatus.UNPROCESSABLE_ENTITY,
+    },
+  );
 }
 
 function parseResolutionNote(
@@ -214,6 +229,7 @@ function parseResolutionNote(
   resolution:
     | typeof CONFLICT_RECORD_STATUSES.resolved
     | typeof CONFLICT_RECORD_STATUSES.dismissed,
+  correlationId: string,
 ): string | null {
   if (resolution === CONFLICT_RECORD_STATUSES.dismissed) {
     if (
@@ -221,18 +237,24 @@ function parseResolutionNote(
       value.trim().length === 0 ||
       value.length > RESOLUTION_NOTE_MAX_LENGTH
     ) {
-      throw new UnprocessableEntityException({
-        error_code: SCAN_ERROR_CODES.conflictSchemaInvalid,
-      });
+      throw problemException(
+        SCAN_ERROR_CODES.conflictSchemaInvalid,
+        correlationId,
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
+      );
     }
     return value;
   }
 
   if (value === undefined || value === null) return null;
   if (typeof value !== "string" || value.length > RESOLUTION_NOTE_MAX_LENGTH) {
-    throw new UnprocessableEntityException({
-      error_code: SCAN_ERROR_CODES.conflictSchemaInvalid,
-    });
+    throw problemException(
+      SCAN_ERROR_CODES.conflictSchemaInvalid,
+      correlationId,
+      {
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+      },
+    );
   }
   return value;
 }

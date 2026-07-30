@@ -6,7 +6,10 @@ import { DocumentsPageClient } from "@/features/document/pages/documents-page-cl
 
 export const metadata: Metadata = {
   title: resolveMessage(appLocale, "pages.classification.metadataTitle"),
-  description: resolveMessage(appLocale, "pages.classification.metadataDescription"),
+  description: resolveMessage(
+    appLocale,
+    "pages.classification.metadataDescription",
+  ),
 };
 
 export default async function AssessmentDocumentsPage({
@@ -23,7 +26,10 @@ export default async function AssessmentDocumentsPage({
           {resolveMessage(appLocale, "pages.classification.documentList.title")}
         </h1>
         <p className="text-sm text-muted-foreground">
-          {resolveMessage(appLocale, "pages.classification.documentList.description")}
+          {resolveMessage(
+            appLocale,
+            "pages.classification.documentList.description",
+          )}
         </p>
       </header>
 

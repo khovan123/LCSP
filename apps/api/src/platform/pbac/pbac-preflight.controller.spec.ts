@@ -80,9 +80,12 @@ describe("PbacPreflightController", () => {
     );
 
     expect(response).toEqual({
-      decision: PBAC_DECISION.allow,
-      reason_code: null,
-      correlation_id: "corr-1",
+      ok: true,
+      data: {
+        decision: PBAC_DECISION.allow,
+        reason_code: null,
+        correlation_id: "corr-1",
+      },
     });
   });
 
@@ -102,9 +105,12 @@ describe("PbacPreflightController", () => {
     );
 
     expect(response).toEqual({
-      decision: PBAC_DECISION.deny,
-      reason_code: PBAC_REASON_CODE.actionNotGranted,
-      correlation_id: "corr-1",
+      ok: true,
+      data: {
+        decision: PBAC_DECISION.deny,
+        reason_code: PBAC_REASON_CODE.actionNotGranted,
+        correlation_id: "corr-1",
+      },
     });
   });
 });

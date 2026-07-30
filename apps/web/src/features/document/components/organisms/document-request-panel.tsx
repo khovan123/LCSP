@@ -6,11 +6,16 @@ import { resolveMessage } from "@lcsp/i18n";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { requestFinalReport, requestGapAnalysis } from "@/lib/api/document-client";
+import {
+  useRequestFinalReportMutation,
+  useRequestGapAnalysisMutation,
+} from "@/lib/api/assessment-queries";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
 export function DocumentRequestPanel({ assessmentId }: { assessmentId: string }) {
+  const finalReportMutation = useRequestFinalReportMutation(assessmentId);
+  const gapAnalysisMutation = useRequestGapAnalysisMutation(assessmentId);
   const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [messageKey, setMessageKey] = useState<MessageKey | null>(null);
 
@@ -18,7 +23,7 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
     setStatus("loading");
     setMessageKey(null);
 
-    const outcome = await requestFinalReport(assessmentId);
+    const outcome = await finalReportMutation.mutateAsync();
 
     if (outcome.kind === "requested") {
       setStatus("done");
@@ -45,7 +50,7 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
     setStatus("loading");
     setMessageKey(null);
 
-    const outcome = await requestGapAnalysis(assessmentId);
+    const outcome = await gapAnalysisMutation.mutateAsync();
 
     if (outcome.kind === "requested") {
       setStatus("done");
@@ -69,7 +74,7 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">
           {resolveMessage(appLocale, "pages.classification.generateFinalReport")}

@@ -13,7 +13,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import type { AssessmentDetailDto } from "../src/modules/assessment/application/contracts/assessment/assessment-detail.contract.js";
@@ -56,7 +56,7 @@ describe("Assessment creation and wizard readiness (e2e) [AC-001, AC-003]", () =
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    managerToken = (signIn.body as SignInSuccess)?.session_token ?? "";
+    managerToken = successBody<SignInSuccess>(signIn).session_token ?? "";
   });
 
   afterAll(async () => {
@@ -71,7 +71,7 @@ describe("Assessment creation and wizard readiness (e2e) [AC-001, AC-003]", () =
       .post("/assessments")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ name: "My AI System Assessment", organization_id: orgId });
-    const body = result.body as CreateAssessmentDto;
+    const body = successBody<CreateAssessmentDto>(result);
 
     assert.equal(result.status, 201);
     assert.ok(body.assessment_id, "Response must include assessment ID");
@@ -147,7 +147,7 @@ describe("Assessment creation and wizard readiness (e2e) [AC-001, AC-003]", () =
     const detail = await httpRequest(app)
       .get(`/assessments/${assessmentId}`)
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = detail.body as AssessmentDetailDto;
+    const body = successBody<AssessmentDetailDto>(detail);
 
     assert.ok(
       body.readiness_state.classification_locked === true,

@@ -1,56 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { DocumentRequestStatus, DocumentType } from "@lcsp/contracts/document";
 import { DocumentListView } from "@/features/document/components/organisms/document-list-view";
+import { useDocumentsQuery } from "@/lib/api/assessment-queries";
+import { DOCUMENT_TYPES } from "@lcsp/contracts/document";
 
-type DocumentStatusItem = {
-  document_request_id: string;
-  document_type: DocumentType;
-  status: DocumentRequestStatus;
-  blocked_reason: string | null;
-  guardrail_status: string | null;
-  download_url: string | null;
-  download_url_expires_at: string | null;
-  requested_at: string;
-  completed_at: string | null;
-  correlation_id: string;
-};
+export function DocumentsPageClient({
+  assessmentId,
+}: {
+  assessmentId: string;
+}) {
+  const documentsQuery = useDocumentsQuery(assessmentId);
+  const documents = documentsQuery.data ?? [];
 
-export function DocumentsPageClient({ assessmentId }: { assessmentId: string }) {
-  const [documents, setDocuments] = useState<DocumentStatusItem[] | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    async function load() {
-      try {
-        const res = await fetch(`/api/assessments/${encodeURIComponent(assessmentId)}/documents`, {
-          cache: "no-store",
-        });
-        if (!mounted) return;
-        if (res.ok) {
-          const body = await res.json();
-          setDocuments(body as DocumentStatusItem[]);
-          return;
-        }
-        setDocuments([]);
-      } catch (e) {
-        setDocuments([]);
-      }
-    }
-
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [assessmentId]);
-
-  if (documents === null) {
-    // Loading: render DocumentListView with empty list to show placeholders
-    return <DocumentListView assessmentId={assessmentId} documents={[]} canDownloadFinalReport={false} />;
+  if (documentsQuery.isLoading) {
+    return (
+      <DocumentListView
+        assessmentId={assessmentId}
+        documents={[]}
+        canDownloadFinalReport={false}
+      />
+    );
   }
 
-  const canDownloadFinalReport = documents.some((d) => d.document_type === "FinalReport");
+  const canDownloadFinalReport = documents.some(
+    (d) => d.document_type === DOCUMENT_TYPES.finalReport,
+  );
 
-  return <DocumentListView assessmentId={assessmentId} documents={documents} canDownloadFinalReport={canDownloadFinalReport} />;
+  return (
+    <DocumentListView
+      assessmentId={assessmentId}
+      documents={documents}
+      canDownloadFinalReport={canDownloadFinalReport}
+    />
+  );
 }

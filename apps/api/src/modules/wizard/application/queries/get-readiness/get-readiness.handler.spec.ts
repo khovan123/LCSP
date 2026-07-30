@@ -18,6 +18,7 @@ import type {
   WizardProfile,
   RepositoryConnection,
 } from "@prisma/client";
+import { WizardProfileStatus as PrismaWizardProfileStatus } from "@prisma/client";
 import { jest } from "@jest/globals";
 
 describe("GetReadinessHandler", () => {
@@ -112,7 +113,7 @@ describe("GetReadinessHandler", () => {
       id: "assessment-123",
     } as Assessment);
     prismaService.wizardProfile.findUnique.mockResolvedValue({
-      status: WIZARD_STATUS_CODES.submitted,
+      status: PrismaWizardProfileStatus.SUBMITTED,
     } as WizardProfile);
     prismaService.repositoryConnection.findFirst.mockResolvedValue({
       id: "repo-1",

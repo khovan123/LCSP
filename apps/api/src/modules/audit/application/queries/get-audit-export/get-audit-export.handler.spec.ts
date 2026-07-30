@@ -82,8 +82,11 @@ describe("GetAuditExportHandler", () => {
 
     await expect(handler.execute(query)).rejects.toMatchObject({
       response: {
-        error_code: AUDIT_ERROR_CODES.exportNotFound,
-        correlation_id: "corr-1",
+        ok: false,
+        problem: {
+          code: AUDIT_ERROR_CODES.exportNotFound,
+          correlationId: "corr-1",
+        },
       },
     });
   });

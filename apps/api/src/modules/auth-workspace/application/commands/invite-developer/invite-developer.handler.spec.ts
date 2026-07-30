@@ -27,7 +27,7 @@ import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-
 import { InviteDeveloperCommand } from "./invite-developer.command.ts";
 import { InviteDeveloperHandler } from "./invite-developer.handler.ts";
 
-const DEVELOPER_POLICY = new Policy({
+const DEVELOPER_POLICY = Policy.rehydrate({
   id: "policy-developer",
   version: "2026-06-26",
   actions: DEVELOPER_ALLOWED_ACTIONS,
@@ -103,8 +103,9 @@ describe("InviteDeveloperHandler", () => {
       }),
     );
 
+    const invitation = savedInvitations[0];
     expect(result).toEqual({
-      invitation_id: "invite-1",
+      invitation_id: invitation.id,
       email: "developer@example.test",
       expires_at: "2023-11-21T22:13:20.000Z",
       allowed_actions: [
@@ -114,7 +115,6 @@ describe("InviteDeveloperHandler", () => {
       correlation_id: "corr-1",
     });
 
-    const invitation = savedInvitations[0];
     expect(invitation.state).toBe(AUTH_INVITATION_STATES.approved);
     expect(invitation.emailVerified).toBe(false);
     expect(invitation.membershipStatus).toBe(AUTH_MEMBERSHIP_STATUSES.active);

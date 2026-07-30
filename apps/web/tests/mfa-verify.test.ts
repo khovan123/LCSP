@@ -10,6 +10,21 @@ import {
 import { mfaVerifySchema } from "../src/features/auth/schemas/mfa-verify.schema.ts";
 import { buildMfaVerifyApiBody } from "../src/app/api/auth/mfa/verify-otp/mfa-verify-proxy.ts";
 
+function problem(code: string, status: number) {
+  return {
+    ok: false,
+    problem: {
+      type: `test/${code.toLowerCase().replaceAll("_", "-")}`,
+      status,
+      code,
+      titleKey: "auth.errors.validationFailed.title",
+      detailKey: "auth.errors.validationFailed.detail",
+      requiredAction: "none",
+      correlationId: "test-correlation",
+    },
+  };
+}
+
 test("MFA verification accepts only a six-digit numeric OTP", () => {
   assert.equal(mfaVerifySchema.safeParse({ otp: "012345" }).success, true);
   assert.equal(mfaVerifySchema.safeParse({ otp: "12345" }).success, false);
@@ -32,7 +47,7 @@ test("invalid OTP responses use the shared non-leaking error contract", () => {
 
   assert.deepEqual(
     toMfaVerifyOutcome(
-      { problem: { code: AUTH_ERROR_CODES.mfaInvalid } },
+      problem(AUTH_ERROR_CODES.mfaInvalid, 403),
       false,
     ),
     expected,
@@ -42,7 +57,7 @@ test("invalid OTP responses use the shared non-leaking error contract", () => {
 test("MFA rate limiting returns a locked outcome", () => {
   assert.deepEqual(
     toMfaVerifyOutcome(
-      { problem: { code: AUTH_ERROR_CODES.mfaRateLimited } },
+      problem(AUTH_ERROR_CODES.mfaRateLimited, 429),
       false,
     ),
     {
@@ -56,7 +71,7 @@ test("MFA rate limiting returns a locked outcome", () => {
 test("invalid or expired pending sessions return a sign-in outcome", () => {
   assert.deepEqual(
     toMfaVerifyOutcome(
-      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
+      problem(AUTH_ERROR_CODES.sessionInvalid, 401),
       false,
     ),
     { kind: "session_invalid" },

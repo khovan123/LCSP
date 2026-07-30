@@ -1,11 +1,18 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import {
+  type OutboxAggregateType,
   OUTBOX_STATUSES,
   type OutboxMessageInput,
   type OutboxStatus,
 } from "@lcsp/contracts/outbox";
 
+import {
+  fromPrismaOutboxAggregateType,
+  fromPrismaOutboxStatus,
+  toPrismaOutboxAggregateType,
+  toPrismaOutboxStatus,
+} from "../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import { OutboxMessageEntity } from "./outbox-message.entity.js";
 
@@ -33,16 +40,16 @@ export class OutboxRepository {
     tx?: Prisma.TransactionClient,
   ): Promise<void> {
     const client = tx ?? this.prisma;
-    const message = OutboxMessageEntity.create(crypto.randomUUID(), input);
+    const message = OutboxMessageEntity.create(input);
 
     await client.outboxMessage.create({
       data: {
         id: message.id,
-        aggregateType: message.aggregateType,
+        aggregateType: toPrismaOutboxAggregateType(message.aggregateType),
         aggregateId: message.aggregateId,
         eventType: message.eventType,
         payload: message.payload as Prisma.InputJsonValue,
-        status: message.status,
+        status: toPrismaOutboxStatus(message.status),
         attempts: message.attempts,
         createdAt: message.createdAt,
       },
@@ -77,6 +84,7 @@ export class OutboxRepository {
       const messages = rows.map((row) =>
         OutboxMessageEntity.fromPersistence({
           ...row,
+          aggregateType: row.aggregateType as OutboxAggregateType,
           payload: row.payload as Record<string, unknown>,
           status: row.status as OutboxStatus,
         }),
@@ -93,7 +101,10 @@ export class OutboxRepository {
   ): Promise<void> {
     await tx.outboxMessage.update({
       where: { id },
-      data: { status: OUTBOX_STATUSES.published, publishedAt },
+      data: {
+        status: toPrismaOutboxStatus(OUTBOX_STATUSES.published),
+        publishedAt,
+      },
     });
   }
 
@@ -111,7 +122,7 @@ export class OutboxRepository {
     await tx.outboxMessage.update({
       where: { id },
       data: {
-        status,
+        status: toPrismaOutboxStatus(status),
         attempts,
         lastAttemptAt: now,
         errorMessage: errorMessage.slice(0, 500),
@@ -121,14 +132,15 @@ export class OutboxRepository {
 
   async findDlqMessages(): Promise<OutboxMessageEntity[]> {
     const rows = await this.prisma.outboxMessage.findMany({
-      where: { status: OUTBOX_STATUSES.dlq },
+      where: { status: toPrismaOutboxStatus(OUTBOX_STATUSES.dlq) },
       orderBy: { createdAt: "desc" },
     });
     return rows.map((row) =>
       OutboxMessageEntity.fromPersistence({
         ...row,
+        aggregateType: fromPrismaOutboxAggregateType(row.aggregateType),
         payload: row.payload as Record<string, unknown>,
-        status: row.status as OutboxStatus,
+        status: fromPrismaOutboxStatus(row.status),
       }),
     );
   }
@@ -140,8 +152,9 @@ export class OutboxRepository {
     if (!row) return null;
     return OutboxMessageEntity.fromPersistence({
       ...row,
+      aggregateType: fromPrismaOutboxAggregateType(row.aggregateType),
       payload: row.payload as Record<string, unknown>,
-      status: row.status as OutboxStatus,
+      status: fromPrismaOutboxStatus(row.status),
     });
   }
 
@@ -149,7 +162,7 @@ export class OutboxRepository {
     await this.prisma.outboxMessage.update({
       where: { id },
       data: {
-        status: OUTBOX_STATUSES.pending,
+        status: toPrismaOutboxStatus(OUTBOX_STATUSES.pending),
         attempts: 0,
         errorMessage: null,
       },

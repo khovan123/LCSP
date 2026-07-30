@@ -8,8 +8,14 @@ type UserProps = {
   createdAt: Date;
 };
 
+type NewUserProps = Omit<UserProps, "id">;
+
 export class User {
-  private constructor(private readonly props: UserProps) {}
+  private readonly props: UserProps;
+
+  private constructor(props: NewUserProps, id = UserId.generate()) {
+    this.props = { ...props, id };
+  }
 
   static register(input: { email: string; displayName: string }): User {
     const displayName = input.displayName.trim();
@@ -19,7 +25,6 @@ export class User {
     }
 
     return new User({
-      id: UserId.generate(),
       email: UserEmail.create(input.email),
       displayName,
       createdAt: new Date(),
@@ -27,7 +32,7 @@ export class User {
   }
 
   static rehydrate(props: UserProps): User {
-    return new User(props);
+    return new User(props, props.id);
   }
 
   get id(): UserId {

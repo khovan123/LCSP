@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 
 import {
   ConflictException,
+  HttpStatus,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -10,8 +11,14 @@ import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
   buildAuditEventInput,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_IDS,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import {
   AI_USAGE_FLOW_SCHEMA_VERSIONS,
   AI_USAGE_FLOW_STATUSES,
@@ -21,14 +28,21 @@ import {
 } from "@lcsp/contracts/scan";
 import { Prisma } from "@prisma/client";
 
+import {
+  toPrismaAuditResourceType,
+  toPrismaAuthDecision,
+  toPrismaEvidenceAcceptanceStatus,
+  toPrismaOutboxAggregateType,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemResult } from "../../../../../platform/problems/problem-factory.js";
 import type {
   AIUsageFlowCallbackDto,
   AIUsageFlowClaimRequest,
 } from "../../contracts/ai-usage-flow/ai-usage-flow-callback.contract.js";
 import { AcceptAIUsageFlowCommand } from "./accept-ai-usage-flow.command.js";
 
-const AI_USAGE_FLOW_WORKER_ACTOR_ID = "ai-usage-flow-worker";
+const AI_USAGE_FLOW_WORKER_ACTOR_ID = AUDIT_ACTOR_IDS.aiUsageFlowWorker;
 const FORBIDDEN_PAYLOAD_KEYS = new Set([
   "codesnippet",
   "filecontent",
@@ -62,7 +76,9 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
       where: {
         id: payload.technical_profile_id,
         assessmentId: payload.assessment_id,
-        status: TECHNICAL_PROFILE_STATUSES.accepted,
+        status: toPrismaEvidenceAcceptanceStatus(
+          TECHNICAL_PROFILE_STATUSES.accepted,
+        ),
       },
       select: {
         id: true,
@@ -101,19 +117,24 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
             unknownUsages:
               payload.unknown_usages as unknown as Prisma.InputJsonValue,
             privacyFlags: payload.privacy_flags as Prisma.InputJsonValue,
-            status: AI_USAGE_FLOW_STATUSES.accepted,
+            status: toPrismaEvidenceAcceptanceStatus(
+              AI_USAGE_FLOW_STATUSES.accepted,
+            ),
           },
         });
 
         const outboxEvent = buildOutboxMessageInput({
-          aggregateType: "AIUsageFlow",
+          aggregateType: OUTBOX_AGGREGATE_TYPES.aiUsageFlow,
           aggregateId: aiUsageFlowId,
           eventType: SCAN_EVENT_TYPES.aiUsageFlowReady,
           organizationId: technicalProfile.organizationId,
           assessmentId: technicalProfile.assessmentId,
           correlationId: command.correlationId,
           causationId: technicalProfile.id,
-          actor: { id: AI_USAGE_FLOW_WORKER_ACTOR_ID, type: "service" },
+          actor: {
+            id: AI_USAGE_FLOW_WORKER_ACTOR_ID,
+            type: AUDIT_ACTOR_TYPES.service,
+          },
           result: SCAN_EVENT_TYPES.aiUsageFlowAcceptedAudit,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
           idempotencyKey: `${aiUsageFlowId}:${SCAN_EVENT_TYPES.aiUsageFlowReady}`,
@@ -127,7 +148,9 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
         await tx.outboxMessage.create({
           data: {
             id: crypto.randomUUID(),
-            aggregateType: outboxEvent.aggregateType,
+            aggregateType: toPrismaOutboxAggregateType(
+              outboxEvent.aggregateType,
+            ),
             aggregateId: outboxEvent.aggregateId,
             eventType: outboxEvent.eventType,
             payload: outboxEvent.payload as Prisma.InputJsonValue,
@@ -139,14 +162,17 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
           actorId: AI_USAGE_FLOW_WORKER_ACTOR_ID,
           organizationId: technicalProfile.organizationId,
           assessmentId: technicalProfile.assessmentId,
-          resourceType: "AIUsageFlow",
+          resourceType: AUDIT_RESOURCE_TYPES.aiUsageFlow,
           resourceId: aiUsageFlowId,
           correlationId: command.correlationId,
           causationId: technicalProfile.id,
           decision: AUDIT_DECISIONS.allow,
           result: SCAN_EVENT_TYPES.aiUsageFlowAcceptedAudit,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
-          actor: { id: AI_USAGE_FLOW_WORKER_ACTOR_ID, type: "service" },
+          actor: {
+            id: AI_USAGE_FLOW_WORKER_ACTOR_ID,
+            type: AUDIT_ACTOR_TYPES.service,
+          },
           payload: {
             aiUsageFlowId,
             assessmentId: technicalProfile.assessmentId,
@@ -160,11 +186,15 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
             eventType: auditEvent.eventType,
             actorId: auditEvent.actorId,
             organizationId: auditEvent.organizationId,
-            resourceType: auditEvent.resourceType ?? null,
+            resourceType: auditEvent.resourceType
+              ? toPrismaAuditResourceType(auditEvent.resourceType)
+              : null,
             resourceId: auditEvent.resourceId ?? null,
             correlationId: auditEvent.correlationId,
             reasonCode: auditEvent.reasonCode ?? null,
-            decision: auditEvent.decision,
+            decision: auditEvent.decision
+              ? toPrismaAuthDecision(auditEvent.decision)
+              : null,
             payload: auditEvent.payload as Prisma.InputJsonValue,
           },
         });
@@ -228,10 +258,9 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
   }
 
   private errorBody(command: AcceptAIUsageFlowCommand, errorCode: string) {
-    return {
-      error_code: errorCode,
-      correlation_id: command.correlationId,
-    };
+    return problemResult(errorCode, command.correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+    });
   }
 }
 

@@ -4,6 +4,7 @@ import {
   ORGANIZATION_SCOPE_ERROR_CODES,
   REVOKE_MEMBERSHIP_ERROR_CODES,
 } from "@lcsp/contracts/auth";
+import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   PBAC_ACTIONS,
   PBAC_DECISION,
@@ -17,7 +18,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
@@ -37,11 +38,6 @@ type RevokeMembershipBody = {
   revoked: boolean;
   affected_sessions: number;
   correlation_id: string;
-};
-
-type ErrorBody = {
-  code?: string;
-  error_code?: string;
 };
 
 describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
@@ -78,14 +74,14 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: fixture.organizationId,
     });
-    managerToken = (managerSignIn.body as SignInSuccess).session_token;
+    managerToken = successBody<SignInSuccess>(managerSignIn).session_token;
 
     const developerSignIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "developer-revoke@acme.test",
       password: "DevPassword123!",
       organization_id: fixture.organizationId,
     });
-    developerToken = (developerSignIn.body as SignInSuccess).session_token;
+    developerToken = successBody<SignInSuccess>(developerSignIn).session_token;
     await seedSecondDeveloperSession(prisma, fixture.organizationId);
   });
 
@@ -103,7 +99,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("x-correlation-id", "corr-revoke-1");
 
     assert.equal(result.status, 200);
-    const body = result.body as RevokeMembershipBody;
+    const body = successBody<RevokeMembershipBody>(result);
     assert.equal(body.revoked, true);
     assert.equal(body.affected_sessions, 2);
     assert.equal(body.correlation_id, "corr-revoke-1");
@@ -136,7 +132,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
         decision: PBAC_DECISION.allow,
       },
     });
-    assert.equal(decision.resourceType, "HttpRoute");
+    assert.equal(decision.resourceType, AUDIT_RESOURCE_TYPES.httpRoute);
   });
 
   it("T02 returns PBAC_DENIED and writes AuthDecisionLog when Manager lacks revoke action", async () => {
@@ -145,10 +141,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     assert.equal(result.status, 403);
-    assert.equal(
-      (result.body as ErrorBody).error_code,
-      PBAC_REASON_CODE.denied,
-    );
+    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
 
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: {
@@ -157,7 +150,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       },
       orderBy: { createdAt: "desc" },
     });
-    assert.equal(decision.resourceType, "HttpRoute");
+    assert.equal(decision.resourceType, AUDIT_RESOURCE_TYPES.httpRoute);
   });
 
   it("T03 returns MEMBERSHIP_NOT_FOUND when target has no active Developer membership", async () => {
@@ -171,7 +164,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
 
     assert.equal(result.status, 404);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       REVOKE_MEMBERSHIP_ERROR_CODES.membershipNotFound,
     );
   });
@@ -187,7 +180,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
 
     assert.equal(result.status, 400);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       REVOKE_MEMBERSHIP_ERROR_CODES.cannotSelfRevoke,
     );
   });
@@ -200,10 +193,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     assert.equal(result.status, 400);
-    assert.equal(
-      (result.body as ErrorBody).error_code,
-      ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
-    );
+    assert.equal(problemCode(result), ORGANIZATION_SCOPE_ERROR_CODES.mismatch);
   });
 
   it("T06 Developer active session is invalid immediately after revoke", async () => {
@@ -219,10 +209,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
       .set("Authorization", `Bearer ${developerToken}`);
 
     assert.equal(result.status, 401);
-    assert.equal(
-      (result.body as ErrorBody).error_code,
-      PBAC_REASON_CODE.sessionInvalid,
-    );
+    assert.equal(problemCode(result), PBAC_REASON_CODE.sessionInvalid);
   });
 
   it("T08 writes clean audit payload without session token material", async () => {
@@ -275,7 +262,7 @@ describe("Revoke Developer Membership endpoint (e2e) [MW-auth-012]", () => {
 
     assert.equal(result.status, 404);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       REVOKE_MEMBERSHIP_ERROR_CODES.membershipNotFound,
     );
   });

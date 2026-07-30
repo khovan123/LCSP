@@ -1,11 +1,51 @@
 import type { PagesMessages } from "../../types.ts";
 export const viPages = {
+  appShell: {
+    productName: "LCSP",
+    productTagline: "Vận hành tuân thủ",
+    mobileTitle: "Workspace LCSP",
+    mobileDescription: "Điều hướng assessment và quy trình tuân thủ.",
+    sidebarToggle: "Ẩn hiện điều hướng workspace",
+    headerEyebrow: "Workspace tuân thủ",
+    workspaceTitle: "Tổng quan workspace",
+    assessmentTitle: "Quy trình assessment",
+    developerTitle: "Tác vụ Developer",
+    workspaceNavigation: "Workspace",
+    assessmentNavigation: "Assessment hiện tại",
+    chooseAssessmentToView: "Chọn assessment để xem",
+    selectAssessmentFirst: "Vui lòng chọn assessment của bạn trước.",
+    developerNavigation: "Developer",
+    overview: "Tổng quan",
+    assessments: "Assessment",
+    recentAssessments: "Assessment gần đây",
+    moreAssessments: "Thêm assessment",
+    allAssessments: "Tất cả assessment",
+    searchAssessments: "Tìm assessment",
+    noAssessmentMatches: "Không tìm thấy assessment phù hợp.",
+    wizard: "Wizard intake",
+    readiness: "Readiness",
+    classification: "Classification",
+    documents: "Tài liệu",
+    conflicts: "Xử lý xung đột",
+    developer: "Phát hiện kỹ thuật",
+    developers: "Developer",
+    secureWorkspace: "Workspace tổ chức được bảo vệ",
+    signOut: "Đăng xuất",
+    switchWorkspace: "Đổi workspace",
+    currentWorkspace: "Workspace hiện tại",
+    switchingWorkspace: "Đang chuyển workspace",
+    workspaceMenuTitle: "Chuyển workspace",
+    authEyebrow: "Quản trị rõ ràng, không phỏng đoán",
+    authTitle: "Đưa mọi assessment AI tiến về phía trước bằng evidence.",
+    authDescription:
+      "LCSP tập trung intake, readiness, classification và review trong một workspace được kiểm soát.",
+  },
   signIn: {
     metadataTitle: "Đăng nhập | LCSP",
     metadataDescription: "Truy cập không gian làm việc tuân thủ LCSP.",
-    homeAriaLabel: "Trang chủ LCSP",
+    homeAriaLabel: "Trang chủ",
     formEyebrow: "Truy cập an toàn",
-    formTitle: "Đăng nhập LCSP",
+    formTitle: "Đăng nhập",
     formDescription: "Dùng tài khoản tổ chức đã được phê duyệt của bạn.",
     emailLabel: "Email công việc",
     emailDescription: "Nhập địa chỉ email được liên kết với tổ chức của bạn.",
@@ -14,8 +54,9 @@ export const viPages = {
       "Không lưu mật khẩu này trên trình duyệt khi dùng thiết bị dùng chung.",
     submit: "Đăng nhập",
     submitting: "Đang kiểm tra quyền truy cập",
-    divider: "hoặc",
-    oauthGitHub: "Tiếp tục với GitHub",
+    divider: "Khác",
+    oauthGoogle: "Google",
+    oauthGitHub: "GitHub",
     accessHelp: "Cần quyền truy cập? Hãy liên hệ chủ sở hữu tổ chức.",
     errors: {
       emailRequired: "Nhập email công việc của bạn.",
@@ -28,7 +69,7 @@ export const viPages = {
   mfaVerify: {
     metadataTitle: "Xác minh danh tính | LCSP",
     metadataDescription: "Hoàn tất xác minh đa yếu tố để tiếp tục.",
-    homeAriaLabel: "Trang chủ LCSP",
+    homeAriaLabel: "Trang chủ",
     formEyebrow: "Xác minh bảo mật",
     formTitle: "Nhập mã xác minh",
     formDescription: "Dùng mã sáu chữ số từ ứng dụng xác thực của bạn.",
@@ -46,7 +87,8 @@ export const viPages = {
   },
   acceptInvitation: {
     metadataTitle: "Chấp nhận lời mời Developer | LCSP",
-    metadataDescription: "Xem và chấp nhận lời mời Developer có giới hạn phạm vi.",
+    metadataDescription:
+      "Xem và chấp nhận lời mời Developer có giới hạn phạm vi.",
     eyebrow: "Quyền truy cập Developer",
     title: "Chấp nhận lời mời của bạn",
     description: "Kiểm tra quyền được cấp trước khi tạo tài khoản.",
@@ -82,9 +124,11 @@ export const viPages = {
     navigationLabel: "Tác vụ Developer",
     taskNav: "Phát hiện kỹ thuật",
     pageTitle: "Workspace tác vụ theo phạm vi",
-    pageDescription: "Xem các phát hiện kỹ thuật đã ẩn dữ liệu được giao cho bạn.",
+    pageDescription:
+      "Xem các phát hiện kỹ thuật đã ẩn dữ liệu được giao cho bạn.",
     selectionTitle: "Chọn assessment",
-    selectionDescription: "Mở assessment trong phạm vi tổ chức hiện tại của bạn.",
+    selectionDescription:
+      "Mở assessment trong phạm vi tổ chức hiện tại của bạn.",
     openAssessment: "Mở phát hiện kỹ thuật",
     loading: "Đang tải tác vụ",
     scopeTitle: "Phạm vi truy cập của bạn",
@@ -97,7 +141,8 @@ export const viPages = {
     hiddenBoundary:
       "Bạn không thể xem: mã nguồn, đường dẫn tệp, số dòng hoặc hành động chỉ dành cho Manager.",
     findingsTitle: "Phát hiện kỹ thuật đã ẩn dữ liệu",
-    findingsDescription: "Chỉ các chi tiết được phạm vi hiện tại cho phép mới được hiển thị.",
+    findingsDescription:
+      "Chỉ các chi tiết được phạm vi hiện tại cho phép mới được hiển thị.",
     emptyTitle: "Chưa có phát hiện kỹ thuật cho assessment này.",
     emptyDescription: "Hãy quay lại sau khi bằng chứng kỹ thuật được xử lý.",
     revokedTitle: "Quyền truy cập đã bị thu hồi",
@@ -115,7 +160,7 @@ export const viPages = {
   },
   workspace: {
     metadataTitle: "Workspace | LCSP",
-    metadataDescription: "Quản lý workspace tổ chức đang hoạt động trong LCSP.",
+    metadataDescription: "Quản lý workspace tổ chức đang hoạt động.",
     productName: "LCSP",
     sidebarTitle: "Workspace",
     sidebarDescription: "Điều hướng workspace",
@@ -130,16 +175,30 @@ export const viPages = {
     assessmentsNav: "Assessment",
     documentsNav: "Tài liệu",
     createAssessment: "Tạo Assessment",
+    newAssessmentName: "Assessment mới",
     openConflictResolution: "Mở xử lý xung đột",
+    openWizard: "Mở Wizard",
     assessmentsTitle: "Assessment",
     assessmentsDescription:
       "Theo dõi tiến độ assessment từ wizard intake đến review.",
+    overviewAssessmentsTitle: "Quản lý assessment",
+    overviewAssessmentsDescription:
+      "Mở danh sách đầy đủ để theo dõi tiến độ và tiếp tục từng assessment.",
+    openAssessments: "Mở danh sách assessment",
+    insightsTitle: "Tổng quan assessment",
+    totalAssessments: "Tổng số assessment",
+    needsAttention: "Cần tiếp tục xử lý",
+    readyForReview: "Sẵn sàng review",
+    recentAssessmentsTitle: "Assessment gần đây",
+    recentAssessmentsDescription:
+      "Mở nhanh các assessment được tạo gần đây hoặc xem toàn bộ danh sách.",
     emptyTitle: "Chưa có assessment",
     emptyDescription: "Tạo assessment đầu tiên của bạn.",
     loadingAssessments: "Đang tải assessment",
     statusLabel: "Trạng thái",
     wizardStatusLabel: "Trạng thái wizard",
     createdAtLabel: "Ngày tạo",
+    progressLabel: "Tiến độ assessment",
     statuses: {
       WIZARD_IN_PROGRESS: "Đang thực hiện",
       WIZARD_SUBMITTED: "Wizard hoàn tất",
@@ -165,7 +224,293 @@ export const viPages = {
       workspaceUnavailableDetail: "Hiện không thể tải ngữ cảnh workspace.",
       assessmentsUnavailableTitle: "Assessment chưa khả dụng",
       assessmentsUnavailableDetail: "Hiện không thể tải danh sách assessment.",
+      createAssessmentTitle: "Không thể tạo assessment",
+      createAssessmentDetail: "Vui lòng thử lại.",
     },
+  },
+  assessment: {
+    eyebrow: "Quy trình assessment",
+    pageTitle: "Tổng quan assessment",
+    pageDescription:
+      "Mở đúng bước trong quy trình để hoàn thiện intake, kiểm tra readiness, phân loại và hồ sơ tuân thủ.",
+    openOverview: "Mở tổng quan assessment",
+    moduleNavigation: "Các bước assessment",
+    openModule: "Mở bước này",
+    modules: {
+      wizard: "Khai báo bối cảnh nghiệp vụ và cách hệ thống AI được sử dụng.",
+      readiness: "Kiểm tra các điều kiện đã sẵn sàng và evidence còn thiếu.",
+      classification: "Xem trạng thái phân loại và các hành động có thể tiếp tục.",
+      documents: "Tạo, theo dõi và tải các tài liệu assessment.",
+      conflicts: "Xem xét và ghi nhận quyết định cho các xung đột đang chờ.",
+    },
+  },
+  assessmentForm: {
+    pageTitle: "Tạo assessment",
+    pageDescription: "Nhập thông tin cơ bản trước khi bắt đầu Wizard intake.",
+    formTitle: "Thông tin assessment",
+    formDescription: "Bạn có thể bổ sung chi tiết trong các bước tiếp theo.",
+    nameLabel: "Tên assessment",
+    namePlaceholder: "Ví dụ: Trợ lý hỗ trợ khách hàng AI",
+    descriptionLabel: "Mô tả",
+    descriptionPlaceholder: "Mô tả ngắn về hệ thống AI cần đánh giá.",
+    cancel: "Hủy",
+    submit: "Tạo và bắt đầu Wizard",
+    submitting: "Đang tạo assessment",
+  },
+  developerManagement: { pageTitle: "Quản lý Developer", pageDescription: "Cấp và thu hồi quyền Developer theo phạm vi assessment hiện tại.", inviteTitle: "Mời Developer", emailLabel: "Email công việc", invite: "Gửi lời mời", membersTitle: "Developer đã cấp quyền", scopeLabel: "Phạm vi assessment", revoke: "Thu hồi quyền", empty: "Chưa có Developer nào được cấp quyền cho assessment này." },
+  wizard: {
+    metadataTitle: "Wizard Assessment | LCSP",
+    metadataDescription:
+      "Khai báo bối cảnh nghiệp vụ của hệ thống AI theo từng bước có hướng dẫn.",
+    pageTitle: "Wizard Assessment",
+    pageDescription:
+      "Mô tả cách hệ thống AI này được sử dụng trước khi bằng chứng kỹ thuật được xem xét.",
+    loading: "Đang tải Wizard",
+    loadingDetail: "Đang kiểm tra trạng thái assessment hiện tại.",
+    preScreenBadge: "Phân luồng nhanh",
+    detailedBadge: "Khai báo chi tiết",
+    progressLabel: "Tiến độ",
+    draftSaved: "Đã lưu bản nháp",
+    draftSaving: "Đang lưu bản nháp",
+    draftDirty: "Bản nháp còn thay đổi chưa lưu",
+    helperButton: "Vì sao LCSP hỏi câu này?",
+    helperClose: "Đóng phần trợ giúp",
+    readOnlyBadge: "Chỉ xem",
+    landingTitle: "Bắt đầu từ bối cảnh nghiệp vụ",
+    landingDescription:
+      "Bước này ghi nhận thông tin tự khai bằng ngôn ngữ nghiệp vụ. Đây chưa phải là kết luận pháp lý cuối cùng.",
+    timeEstimate: "Thời gian ước tính: khoảng 10 phút",
+    readinessOnlyHint:
+      "Sau khi gửi, assessment sẽ vẫn ở trạng thái readiness-only cho tới khi có bằng chứng kỹ thuật.",
+    preScreenTitle: "Phân luồng nhanh",
+    preScreenDescription:
+      "Các câu hỏi mở đầu giúp LCSP hiển thị đúng phần khai báo chi tiết tiếp theo.",
+    readOnlyTitle: "Wizard này đã được gửi",
+    readOnlyDescription:
+      "Wizard đã gửi không thể chỉnh sửa trên trang này. Bạn có thể xem lại phần tóm tắt đã lưu trên trình duyệt này hoặc chuyển sang bước tiếp theo của assessment.",
+    readOnlyEmpty:
+      "Thiết bị này không có sẵn bản tóm tắt cục bộ. Wizard đã gửi vẫn đang ở chế độ khóa chỉnh sửa.",
+    summaryTitle: "Tóm tắt bản nháp",
+    summaryDescription:
+      "Dùng phần này để kiểm tra lại thông tin đã được ghi nhận trong phiên trình duyệt hiện tại.",
+    helperTitle: "Giải thích thêm",
+    helperDescription: "Ví dụ và giải thích ngắn gọn cho câu hỏi hiện tại.",
+    actions: {
+      backToWorkspace: "Quay lại workspace",
+      previous: "Quay lại",
+      saveAndContinue: "Lưu và tiếp tục",
+      continueToDetailed: "Sang phần khai báo chi tiết",
+      submit: "Gửi Wizard",
+      openClassification: "Mở bước tiếp theo",
+    },
+    sections: {
+      purpose: "Mục đích hệ thống",
+      dataUsers: "Dữ liệu và người bị ảnh hưởng",
+      decision: "Vai trò trong quyết định",
+      provider: "Sử dụng AI bên ngoài",
+      risk: "Tín hiệu cần lưu ý thêm",
+    },
+    fields: {
+      preAiScopeLabel:
+        "Hệ thống này có dùng AI hoặc tạo gợi ý, nội dung bằng AI không?",
+      preAiScopeDescription:
+        "Chọn phương án gần nhất với vai trò của AI trong quy trình hiện tại.",
+      preAffectedPeopleLabel:
+        "Kết quả có thể ảnh hưởng tới khách hàng, nhân sự, ứng viên, học sinh, bệnh nhân hoặc người khác không?",
+      preAffectedPeopleDescription:
+        "Câu này giúp LCSP hiểu nhóm người có thể bị tác động trực tiếp.",
+      prePersonalDataLabel:
+        "Hệ thống có xử lý dữ liệu cá nhân, dữ liệu nhạy cảm hoặc dữ liệu sinh trắc học không?",
+      prePersonalDataDescription:
+        "Nếu chưa chắc, hãy chọn phương án giữ việc xem xét ở mức thận trọng.",
+      preDecisionImportanceLabel:
+        "Kết quả AI có thể ảnh hưởng tới một quyết định quan trọng về một người không?",
+      preDecisionImportanceDescription:
+        "Ví dụ: tuyển dụng, tiếp cận dịch vụ, đủ điều kiện, định giá hoặc kết quả phục vụ.",
+      purposeLabel: "Hệ thống này đang hỗ trợ mục đích nghiệp vụ nào?",
+      purposeDescription:
+        "Mô tả nhiệm vụ chính bằng ngôn ngữ công việc hằng ngày.",
+      purposePlaceholder:
+        "Ví dụ: Hỗ trợ nhóm chăm sóc khách hàng soạn phản hồi cho yêu cầu hỗ trợ.",
+      sectorLabel: "Bối cảnh nghiệp vụ nào phù hợp nhất với hệ thống này?",
+      sectorDescription: "Chọn bối cảnh chính gần nhất cho assessment này.",
+      dataTypeLabel: "Hệ thống dùng hoặc phân tích những loại dữ liệu nào?",
+      dataTypeDescription:
+        "Chọn tất cả nhóm dữ liệu có liên quan tới luồng AI này.",
+      userGroupLabel: "Nhóm nào bị ảnh hưởng trực tiếp bởi kết quả?",
+      userGroupDescription:
+        "Chọn nhóm người bị tác động trực tiếp nhất bởi kết quả của hệ thống.",
+      userGroupPlaceholder: "Thêm ghi chú ngắn nếu còn nhóm bị ảnh hưởng khác.",
+      userImpactLabel: "Mức độ ảnh hưởng tới những người đó là bao nhiêu?",
+      userImpactDescription:
+        "Hãy nghĩ tới việc kết quả có thay đổi quyền truy cập, cơ hội, cách phục vụ hoặc cách đối xử hay không.",
+      decisionRoleLabel:
+        "Kết quả AI đóng vai trò gì trong quyết định cuối cùng?",
+      decisionRoleDescription:
+        "Chọn phương án phản ánh đúng nhất mức độ ảnh hưởng của kết quả tới đầu ra cuối cùng.",
+      decisionRoleExamples:
+        "Ví dụ: một gợi ý để nhân sự xem lại khác với một kết quả tự quyết định đầu ra.",
+      humanOversightLabel:
+        "Con người kiểm tra ở đâu trước khi kết quả có hiệu lực?",
+      humanOversightDescription:
+        "Câu hỏi này xuất hiện khi kết quả AI vượt quá vai trò hỗ trợ nền.",
+      externalLlmUsageLabel:
+        "Hệ thống có gọi dịch vụ AI bên ngoài như OpenAI, Anthropic, Google hoặc nhà cung cấp khác không?",
+      externalLlmUsageDescription:
+        "Chọn có nếu prompt hoặc nội dung rời khỏi môi trường của bạn để tới nhà cung cấp bên ngoài.",
+      biometricIndicatorLabel:
+        "Hệ thống có dùng dữ liệu sinh trắc học để nhận diện, xác minh hoặc chấm điểm không?",
+      biometricIndicatorDescription:
+        "Ví dụ: khuôn mặt, giọng nói, vân tay hoặc tín hiệu định danh tương tự.",
+      highImpactIndicatorLabel:
+        "Luồng này có liên quan tới tuyển dụng, giáo dục, tín dụng, y tế, dịch vụ công hoặc một bối cảnh quan trọng tương tự không?",
+      highImpactIndicatorDescription:
+        "Thông tin này giúp LCSP gắn cờ các luồng cần được theo dõi kỹ hơn ở bước sau.",
+    },
+    options: {
+      yes: "Có",
+      no: "Không",
+      unknown: "Tôi chưa rõ",
+      sectorGeneral: "Vận hành kinh doanh chung",
+      sectorHr: "Nhân sự hoặc tuyển dụng",
+      sectorFinance: "Tài chính, tín dụng hoặc bảo hiểm",
+      sectorEducation: "Giáo dục hoặc đào tạo",
+      sectorHealthcare: "Y tế hoặc chăm sóc sức khỏe",
+      sectorPublicServices: "Dịch vụ công hoặc quyền truy cập có điều kiện",
+      dataTypePersonal: "Dữ liệu hồ sơ cá nhân",
+      dataTypeSensitive: "Dữ liệu nhạy cảm hoặc đặc biệt",
+      dataTypeBiometric: "Dữ liệu sinh trắc học",
+      dataTypeBehavioral: "Dữ liệu hành vi hoặc sử dụng",
+      dataTypeOperational: "Dữ liệu vận hành hoặc sản phẩm",
+      userGroupCustomers: "Khách hàng hoặc người dùng cuối",
+      userGroupEmployees: "Nhân viên hoặc nội bộ",
+      userGroupApplicants: "Ứng viên",
+      userGroupStudents: "Học sinh, sinh viên",
+      userGroupPatients: "Bệnh nhân hoặc người được chăm sóc",
+      userImpactLow: "Ảnh hưởng thấp",
+      userImpactModerate: "Ảnh hưởng vừa",
+      userImpactSignificant: "Ảnh hưởng đáng kể",
+      decisionRoleNoAutonomousDecision:
+        "Chỉ hỗ trợ công việc nền và không định hình quyết định cuối cùng",
+      decisionRoleSupportsDecision:
+        "Hỗ trợ một người đưa ra quyết định cuối cùng",
+      decisionRoleRecommendsOutcome:
+        "Đề xuất một kết quả mà con người thường làm theo",
+      decisionRoleDirectlyDrivesOutcome:
+        "Gần như trực tiếp quyết định đầu ra với rất ít hoặc không có kiểm tra lại",
+      humanOversightPresent:
+        "Có người kiểm tra và có thể thay đổi kết quả trước khi áp dụng",
+      humanOversightLimited:
+        "Có người kiểm tra một số trường hợp nhưng không phải mọi kết quả",
+      humanOversightAbsent:
+        "Kết quả thường có hiệu lực mà không có bước kiểm tra thực chất",
+      humanOversightNotApplicable:
+        "Không áp dụng vì AI không ảnh hưởng tới quyết định cuối cùng",
+    },
+    helpers: {
+      decisionTitle: "Cách trả lời câu hỏi về vai trò trong quyết định",
+      decisionBody:
+        "Hãy chọn mô tả mạnh nhất nhưng vẫn đúng với thực tế. Nếu kết quả AI có thể phê duyệt, từ chối, xếp hạng hoặc chặn một người với rất ít bước xem lại, hãy chọn mức ảnh hưởng cao hơn.",
+      humanOversightTitle: "Khi nào được xem là có kiểm tra lại thực chất",
+      humanOversightBody:
+        "Một bước kiểm tra thực chất phải xảy ra trước khi kết quả có hiệu lực và người kiểm tra phải có quyền thật sự để chất vấn, thay đổi hoặc dừng kết quả đó.",
+      providerTitle: "Khi nào cần tính là dùng nhà cung cấp bên ngoài",
+      providerBody:
+        "Chọn có khi nhóm của bạn gửi prompt, tài liệu hoặc nội dung người dùng tới một dịch vụ AI của bên thứ ba nằm ngoài môi trường bạn kiểm soát.",
+    },
+    errors: {
+      loadTitle: "Không thể tải Wizard này",
+      loadDetail: "Hiện chưa thể tải trạng thái assessment.",
+      saveFailed: "Không thể lưu bản nháp. Vui lòng thử lại.",
+      submitFailed:
+        "Không thể gửi Wizard. Hãy kiểm tra lại các câu trả lời đang được đánh dấu rồi thử lại.",
+      alreadySubmitted: "Wizard này đã được gửi và hiện ở chế độ chỉ xem.",
+      purposeRequired: "Hãy mô tả mục đích nghiệp vụ chính trước khi tiếp tục.",
+      sectorRequired: "Hãy chọn bối cảnh nghiệp vụ chính trước khi tiếp tục.",
+      dataTypeRequired: "Hãy chọn ít nhất một nhóm dữ liệu trước khi tiếp tục.",
+      userGroupRequired:
+        "Hãy chọn nhóm bị ảnh hưởng trực tiếp trước khi tiếp tục.",
+      userImpactRequired: "Hãy chọn mức độ ảnh hưởng trước khi tiếp tục.",
+      decisionRoleRequired:
+        "Hãy chọn mức độ ảnh hưởng của kết quả AI tới quyết định cuối cùng.",
+      humanOversightRequired:
+        "Hãy mô tả nơi con người kiểm tra kết quả trước khi tiếp tục.",
+      externalProviderRequired:
+        "Hãy xác nhận hệ thống có dùng nhà cung cấp AI bên ngoài hay không trước khi tiếp tục.",
+    },
+  },
+  readiness: {
+    metadataTitle: "Trạng thái readiness | LCSP",
+    metadataDescription: "Xem handoff readiness-only sau khi Wizard được gửi.",
+    pageTitle: "Trạng thái readiness",
+    pageDescription:
+      "Màn hình này cho biết điều gì đã sẵn sàng, điều gì còn thiếu và bước an toàn tiếp theo trước khi phân loại có thể tiếp tục.",
+    loading: "Đang tải trạng thái readiness",
+    loadingDetail:
+      "Đang kiểm tra trạng thái mới nhất của Wizard và bằng chứng kỹ thuật.",
+    errorTitle: "Không thể tải trạng thái readiness",
+    errorDetail: "Vui lòng thử lại sau ít phút.",
+    badgeReadinessOnly: "Readiness only",
+    badgeLocked: "Đang khóa",
+    badgeReady: "Sẵn sàng cho cổng tiếp theo",
+    summaryTitle: "Handoff hiện tại",
+    summaryDescription:
+      "Wizard đã hoàn tất, nhưng LCSP vẫn giữ assessment này ở trạng thái readiness-only cho tới khi có bằng chứng kỹ thuật.",
+    completedTitle: "Các bước đã hoàn tất",
+    missingTitle: "Những gì còn thiếu",
+    nextActionTitle: "Bước tiếp theo",
+    updatedAtLabel: "Cập nhật",
+    noMissingEvidence: "Hiện không còn mục readiness nào bị thiếu.",
+    noCompletedSteps: "Chưa có mốc readiness nào được xác nhận.",
+    completedSteps: {
+      wizardProfile: "Đã gửi Wizard profile",
+      repositoryConnected: "Đã kết nối repository",
+      technicalEvidenceAccepted: "Đã chấp nhận bằng chứng kỹ thuật",
+    },
+    missingEvidence: {
+      repositoryConnection:
+        "Kết nối repository đang được dùng cho hệ thống này.",
+      technicalEvidence:
+        "Chờ repository scan tạo ra bằng chứng kỹ thuật đã được chấp nhận.",
+    },
+    actions: {
+      backToWorkspace: "Quay lại workspace",
+      openClassification: "Mở trạng thái phân loại",
+      openDocuments: "Mở tài liệu",
+    },
+  },
+  workspaceSelector: {
+    metadataTitle: "Chọn workspace | LCSP",
+    metadataDescription: "Chọn workspace tổ chức để tiếp tục.",
+    eyebrow: "Tài khoản Developer",
+    title: "Chọn workspace",
+    description:
+      "Tài khoản của bạn có thể được liên kết với nhiều workspace do từng Manager quản lý.",
+    welcomeBackTitle: "Chào mừng bạn quay lại!",
+    welcomeBackDescription: "Chọn một workspace hiện có để tiếp tục.",
+    continueExistingWorkspaces: "HOẶC tiếp tục với workspace hiện có",
+    readyToLaunch: "Sẵn sàng khởi chạy",
+    missingSomething: "Thiếu workspace?",
+    signInAnotherAccount: "Đăng nhập bằng tài khoản khác",
+    members: "thành viên",
+    lastSignIn: "Đăng nhập lần cuối",
+    daysAgo: "ngày trước",
+    dayAgo: "ngày trước",
+    signedInAs: "Đang đăng nhập bằng",
+    workspaceListLabel: "Workspace bạn có thể truy cập",
+    loading: "Đang tải workspace",
+    submit: "Tiếp tục",
+    selected: "Đang chọn",
+    openWorkspace: "Mở workspace",
+    signOut: "Đăng xuất khỏi tài khoản này",
+    noWorkspacesTitle: "Chưa có workspace",
+    noWorkspacesDetail:
+      "Tài khoản demo này chưa được liên kết với workspace nào.",
+    errorTitle: "Không thể tải workspace",
+    errorDetail: "Vui lòng đăng nhập lại hoặc thử lại sau.",
+    privacyTerms: "Quyền riêng tư & Điều khoản",
+    contactUs: "Liên hệ",
+    changeRegion: "Đổi khu vực",
   },
   reconciliation: {
     metadataTitle: "Xử lý xung đột | LCSP",
@@ -188,8 +533,7 @@ export const viPages = {
     submitAction: "Gửi kết quả xử lý",
     submitting: "Đang gửi",
     allResolvedTitle: "Tất cả xung đột đã được xử lý",
-    allResolvedDetail:
-      "Hiện không còn xung đột đang chờ cho assessment này.",
+    allResolvedDetail: "Hiện không còn xung đột đang chờ cho assessment này.",
     nextStepHint: "Bạn có thể tiếp tục quy trình assessment.",
     nextStepAction: "Quay lại danh sách assessment",
     accessRevokedTitle: "Không còn quyền truy cập",
@@ -209,15 +553,16 @@ export const viPages = {
         "Xung đột này đã được xử lý trước đó. Danh sách đã được làm mới.",
       conflictNotFound:
         "Không còn tìm thấy xung đột này. Danh sách đã được làm mới.",
-      resolveFailed:
-        "Không thể hoàn tất yêu cầu xử lý. Vui lòng thử lại.",
+      resolveFailed: "Không thể hoàn tất yêu cầu xử lý. Vui lòng thử lại.",
     },
   },
   classification: {
     metadataTitle: "Trạng thái phân loại | LCSP",
-    metadataDescription: "Xem trạng thái phân loại hiện tại cho assessment này.",
+    metadataDescription:
+      "Xem trạng thái phân loại hiện tại cho assessment này.",
     pageTitle: "Trạng thái phân loại",
-    pageDescription: "Theo dõi tiến trình phân loại hiện tại và bước tiếp theo cho assessment này.",
+    pageDescription:
+      "Theo dõi tiến trình phân loại hiện tại và bước tiếp theo cho assessment này.",
     loading: "Đang tải trạng thái phân loại",
     summaryLabel: "Tóm tắt",
     referencesLabel: "Tham chiếu pháp lý áp dụng",
@@ -228,32 +573,45 @@ export const viPages = {
     states: {
       lockedTitle: "Phân loại đã bị khóa",
       lockedBadge: "Đã khóa",
-      lockedDescription: "Vẫn cần bằng chứng kỹ thuật trước khi phân loại có thể tiếp tục.",
-      lockedNextSteps: "Cung cấp thêm bằng chứng kỹ thuật bị thiếu để quá trình phân loại tiếp tục và bước tiếp theo có thể được chuẩn bị.",
+      lockedDescription:
+        "Vẫn cần bằng chứng kỹ thuật trước khi phân loại có thể tiếp tục.",
+      lockedNextSteps:
+        "Cung cấp thêm bằng chứng kỹ thuật bị thiếu để quá trình phân loại tiếp tục và bước tiếp theo có thể được chuẩn bị.",
       processingTitle: "Đang phân loại",
       processingBadge: "Đang xử lý",
       processingDescription: "Quá trình phân loại vẫn đang được chuẩn bị.",
       passedTitle: "Phân loại đã sẵn sàng",
       passedBadge: "Sẵn sàng",
-      passedDescription: "Các tham chiếu pháp lý có sẵn đã được xác minh và phân loại có thể tiếp tục.",
-      passedSummary: "Các tham chiếu pháp lý phù hợp đã sẵn sàng cho bước tiếp theo.",
+      passedDescription:
+        "Các tham chiếu pháp lý có sẵn đã được xác minh và phân loại có thể tiếp tục.",
+      passedSummary:
+        "Các tham chiếu pháp lý phù hợp đã sẵn sàng cho bước tiếp theo.",
       degradedTitle: "Phân loại cần xem xét",
       degradedBadge: "Cần xem xét",
-      degradedDescription: "Một số tham chiếu pháp lý chưa thể xác minh đầy đủ.",
-      degradedSummary: "Phân loại đã có sẵn, nhưng một số tham chiếu cần được xem xét thêm.",
+      degradedDescription:
+        "Một số tham chiếu pháp lý chưa thể xác minh đầy đủ.",
+      degradedSummary:
+        "Phân loại đã có sẵn, nhưng một số tham chiếu cần được xem xét thêm.",
       blockedTitle: "Không thể hoàn tất phân loại",
       blockedBadge: "Bị chặn",
-      blockedDescription: "Phân loại không thể hoàn tất vì thiếu căn cứ trích dẫn.",
-      blockedSummary: "Cần có căn cứ trích dẫn hợp lệ trước khi bước tiếp theo có thể tiến hành.",
+      blockedDescription:
+        "Phân loại không thể hoàn tất vì thiếu căn cứ trích dẫn.",
+      blockedSummary:
+        "Cần có căn cứ trích dẫn hợp lệ trước khi bước tiếp theo có thể tiến hành.",
     },
     finalReportRequestedTitle: "Yêu cầu báo cáo cuối cùng đã được gửi",
-    finalReportRequestedDetail: "Yêu cầu báo cáo cuối cùng đã được xếp vào hàng. Bạn có thể quay lại sau khi quá trình xử lý hoàn tất để tải về.",
-    documentsPageDescription: "Yêu cầu báo cáo cuối cùng và xem trạng thái đầu ra cho assessment này.",
-    finalReportPageHint: "Yêu cầu báo cáo cuối cùng được bảo hộ. Chỉ khả dụng khi guardrail phân loại đã được vượt qua.",
+    finalReportRequestedDetail:
+      "Yêu cầu báo cáo cuối cùng đã được xếp vào hàng. Bạn có thể quay lại sau khi quá trình xử lý hoàn tất để tải về.",
+    documentsPageDescription:
+      "Yêu cầu báo cáo cuối cùng và xem trạng thái đầu ra cho assessment này.",
+    finalReportPageHint:
+      "Yêu cầu báo cáo cuối cùng được bảo hộ. Chỉ khả dụng khi guardrail phân loại đã được vượt qua.",
     requestFinalReportButton: "Yêu cầu Báo cáo Cuối cùng",
     gapAnalysisLabel: "Phân tích khoảng trống",
-    gapAnalysisPendingMessage: "Phân tích khoảng trống sẽ được tạo bởi bước worker tiếp theo sau phân loại. Nó sẽ khả dụng khi đường ống tài liệu sẵn sàng.",
-    documentGuardrailBlocked: "Không thể tạo báo cáo cuối cùng vì guardrail phân loại chưa được vượt qua.",
+    gapAnalysisPendingMessage:
+      "Phân tích khoảng trống sẽ được tạo bởi bước worker tiếp theo sau phân loại. Nó sẽ khả dụng khi đường ống tài liệu sẵn sàng.",
+    documentGuardrailBlocked:
+      "Không thể tạo báo cáo cuối cùng vì guardrail phân loại chưa được vượt qua.",
     documentList: {
       title: "Tài liệu assessment",
       description: "Theo dõi trạng thái tạo các tài liệu assessment có sẵn.",

@@ -11,6 +11,9 @@ export interface AuthConfig {
 export interface OAuthConfig {
   githubClientId: string;
   githubClientSecret: string;
+  googleClientId: string;
+  googleClientSecret: string;
+  allowedRedirectOrigins: string[];
   allowedRedirectUris: string[];
 }
 

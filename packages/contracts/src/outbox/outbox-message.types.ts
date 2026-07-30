@@ -6,15 +6,19 @@ import {
 } from "../audit/audit-event.types.ts";
 
 export const OUTBOX_STATUSES = {
-  pending: "pending",
-  published: "published",
-  failed: "failed",
-  dlq: "dlq",
+  pending: "PENDING",
+  published: "PUBLISHED",
+  failed: "FAILED",
+  dlq: "DLQ",
 } as const;
 
 export const OUTBOX_AUDIT_EVENT_TYPES = {
   dlqReplayed: "OUTBOX_DLQ_REPLAYED",
   dlqDiscarded: "OUTBOX_DLQ_DISCARDED",
+} as const;
+
+export const OUTBOX_ERROR_CODES = {
+  dlqMessageNotFound: "OUTBOX_DLQ_MESSAGE_NOT_FOUND",
 } as const;
 
 export const OUTBOX_MESSAGE_SCHEMA_VERSION = "outbox.message.v1";
@@ -24,11 +28,29 @@ export const OUTBOX_EVENT_EXCHANGES = {
   events: "lcsp.events.v1",
 } as const;
 
+export const OUTBOX_AGGREGATE_TYPES = {
+  aiUsageFlow: "AI_USAGE_FLOW",
+  assessment: "ASSESSMENT",
+  authUser: "AUTH_USER",
+  classificationResult: "CLASSIFICATION_RESULT",
+  documentRequest: "DOCUMENT_REQUEST",
+  legalRuleMatch: "LEGAL_RULE_MATCH",
+  repositoryScanJob: "REPOSITORY_SCAN_JOB",
+  repositorySnapshot: "REPOSITORY_SNAPSHOT",
+  technicalEvidenceReport: "TECHNICAL_EVIDENCE_REPORT",
+  technicalProfile: "TECHNICAL_PROFILE",
+  verifiedProfile: "VERIFIED_PROFILE",
+  wizardProfile: "WIZARD_PROFILE",
+} as const;
+
 export type OutboxStatus =
   (typeof OUTBOX_STATUSES)[keyof typeof OUTBOX_STATUSES];
 
+export type OutboxAggregateType =
+  (typeof OUTBOX_AGGREGATE_TYPES)[keyof typeof OUTBOX_AGGREGATE_TYPES];
+
 export interface OutboxMessageInput {
-  aggregateType: string;
+  aggregateType: OutboxAggregateType;
   aggregateId: string;
   eventType: string;
   schemaVersion?: string;
@@ -67,7 +89,8 @@ export type MaterialOutboxMessageInput = Omit<
   payload?: Record<string, unknown>;
 };
 
-const CANONICAL_OUTBOX_EVENT_PATTERN = /^(command|event)\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\.v1$/;
+const CANONICAL_OUTBOX_EVENT_PATTERN =
+  /^(command|event)\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\.v1$/;
 
 export function isCanonicalOutboxEventName(eventType: string): boolean {
   return CANONICAL_OUTBOX_EVENT_PATTERN.test(eventType);

@@ -1,12 +1,25 @@
 import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
+import { QueryProvider } from "@/components/providers/query-provider";
 
 import "./globals.css";
 
+const geistSans = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist-sans",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+});
+
 export const metadata: Metadata = {
-  title: "LCSP Web",
-  description: "Next.js web application for LCSP",
+  title: "LCSP",
+  description: "Legal Compliance Support Platform",
 };
 
 export default function RootLayout({
@@ -15,9 +28,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="font-sans">
-      <body>
-        <TooltipProvider>{children}</TooltipProvider>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className="font-sans">
+        <QueryProvider>
+          <TooltipProvider>
+            {children}
+            <Toaster />
+          </TooltipProvider>
+        </QueryProvider>
       </body>
     </html>
   );

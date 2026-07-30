@@ -6,7 +6,10 @@ import { appLocale } from "@/lib/locale";
 
 export const metadata: Metadata = {
   title: resolveMessage(appLocale, "pages.reconciliation.metadataTitle"),
-  description: resolveMessage(appLocale, "pages.reconciliation.metadataDescription"),
+  description: resolveMessage(
+    appLocale,
+    "pages.reconciliation.metadataDescription",
+  ),
 };
 
 export default async function AssessmentConflictsPage({

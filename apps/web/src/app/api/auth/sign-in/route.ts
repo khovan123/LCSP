@@ -1,46 +1,86 @@
-import { NextResponse } from "next/server";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { isMockModeEnabled, readMockJson } from "@/lib/server/fixtures/response";
+import {
+  MOCK_WORKSPACE_COOKIE_NAME,
+  type MockDeveloperAccount,
+  type MockManagerAccount,
+} from "@/lib/server/fixtures/workspace";
 
 import {
   SESSION_COOKIE_NAME,
   sessionCookieOptions,
 } from "@/lib/session/session-store";
+import { problemJson, successJson } from "@/lib/server/problem-json";
+import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 
 type SignInApiSuccess = {
-  ok: true;
   mfa_required?: boolean;
   session_token: string;
 };
 
-const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
-
 export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
+  if (isMockModeEnabled()) {
+    const developerAccount = await readMockJson<MockDeveloperAccount>(
+      "developer-account.json",
+    );
+    const managerAccount = await readMockJson<MockManagerAccount>(
+      "manager-account.json",
+    );
+    const credentials = body as { email?: unknown; password?: unknown };
+    if (
+      credentials.email === managerAccount.email &&
+      credentials.password === managerAccount.password
+    ) {
+      const response = successJson({ mfa_required: false });
+      response.cookies.set(
+        SESSION_COOKIE_NAME,
+        "mock-session:manager",
+        sessionCookieOptions,
+      );
+      response.cookies.delete(MOCK_WORKSPACE_COOKIE_NAME);
+      return response;
+    }
 
-  const apiResponse = await fetch(`${apiBaseUrl}/auth/sign-in`, {
+    if (
+      credentials.email === developerAccount.email &&
+      credentials.password === developerAccount.password
+    ) {
+      const response = successJson({
+        workspace_selection_required: true,
+        workspaces: developerAccount.workspaces,
+      });
+      response.cookies.set(
+        SESSION_COOKIE_NAME,
+        "mock-session:workspace-selection",
+        sessionCookieOptions,
+      );
+      return response;
+    }
+
+    return problemJson(AUTH_ERROR_CODES.invalidCredentials, { status: 401 });
+  }
+
+  const upstream = await upstreamRequest("/auth/sign-in", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
-    cache: "no-store",
   });
-  const payload: unknown = await apiResponse.json().catch(() => null);
 
-  if (!isSignInApiSuccess(payload)) {
-    return NextResponse.json(
-      payload ?? { code: AUTH_ERROR_CODES.invalidCredentials },
-      {
-        status: apiResponse.ok ? 401 : apiResponse.status,
-      },
-    );
+  if (!upstream.ok) {
+    return upstreamJson(upstream);
   }
 
-  const response = NextResponse.json({
-    ok: true,
-    mfa_required: payload.mfa_required === true,
+  if (!isSignInApiSuccess(upstream.data)) {
+    return problemJson(AUTH_ERROR_CODES.invalidCredentials, { status: 502 });
+  }
+
+  const response = successJson({
+    mfa_required: upstream.data.mfa_required === true,
   });
   response.cookies.set(
     SESSION_COOKIE_NAME,
-    payload.session_token,
+    upstream.data.session_token,
     sessionCookieOptions,
   );
   return response;

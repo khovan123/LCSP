@@ -1,24 +1,29 @@
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
-import {
-  ConflictException,
-  ForbiddenException,
-  Inject,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { HttpStatus, Inject } from "@nestjs/common";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import {
   ASSESSMENT_STATUS_CODES,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
+import { WIZARD_ERROR_CODES } from "@lcsp/contracts/wizard";
 
 import { SubmitWizardCommand } from "./submit-wizard.command.js";
+import {
+  toPrismaAssessmentStatus,
+  toPrismaWizardStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import type { SubmitWizardResponse } from "../../contracts/wizard/wizard-submit.contract.js";
 import {
   WIZARD_PROFILE_REPOSITORY,
@@ -28,6 +33,7 @@ import { AssessmentNotFoundException } from "../../../domain/exceptions/wizard.e
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { WizardValidatorService } from "../../services/wizard/wizard-validator.service.js";
 
 @CommandHandler(SubmitWizardCommand)
@@ -57,17 +63,20 @@ export class SubmitWizardHandler implements ICommandHandler<
       ownerId,
     );
     if (!isOwned) {
-      throw new AssessmentNotFoundException();
+      throw new AssessmentNotFoundException(correlationId);
     }
 
     // 2. Fetch existing profile
     const profile =
       await this.wizardRepository.findByAssessmentId(assessmentId);
     if (profile && profile.status === WIZARD_STATUS_CODES.submitted) {
-      throw new ConflictException({
-        error_code: "WIZARD_ALREADY_SUBMITTED",
-        correlation_id: correlationId,
-      });
+      throw problemException(
+        WIZARD_ERROR_CODES.alreadySubmitted,
+        correlationId,
+        {
+          status: HttpStatus.CONFLICT,
+        },
+      );
     }
 
     // 3. Merge answers and validate
@@ -77,11 +86,14 @@ export class SubmitWizardHandler implements ICommandHandler<
 
     const validationErrors = this.wizardValidator.validate(mergedAnswers);
     if (validationErrors.length > 0) {
-      throw new UnprocessableEntityException({
-        error_code: "WIZARD_VALIDATION_FAILED",
-        message: validationErrors.map((e) => e.message).join(", "),
-        correlation_id: correlationId,
-      });
+      throw problemException(
+        WIZARD_ERROR_CODES.validationFailed,
+        correlationId,
+        {
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          meta: { message: validationErrors.map((e) => e.message).join(", ") },
+        },
+      );
     }
 
     const version = profile ? profile.version + 1 : 1;
@@ -94,7 +106,7 @@ export class SubmitWizardHandler implements ICommandHandler<
       await tx.wizardProfile.upsert({
         where: { assessmentId },
         update: {
-          status: WIZARD_STATUS_CODES.submitted,
+          status: toPrismaWizardStatus(WIZARD_STATUS_CODES.submitted),
           submittedAt,
           answers: mergedAnswers,
           version,
@@ -105,7 +117,7 @@ export class SubmitWizardHandler implements ICommandHandler<
           organizationId,
           ownerId,
           version,
-          status: WIZARD_STATUS_CODES.submitted,
+          status: toPrismaWizardStatus(WIZARD_STATUS_CODES.submitted),
           answers: mergedAnswers,
           submittedAt,
         },
@@ -114,7 +126,11 @@ export class SubmitWizardHandler implements ICommandHandler<
       // Transition Assessment Status
       await tx.assessment.update({
         where: { id: assessmentId },
-        data: { status: ASSESSMENT_STATUS_CODES.wizardSubmitted },
+        data: {
+          status: toPrismaAssessmentStatus(
+            ASSESSMENT_STATUS_CODES.wizardSubmitted,
+          ),
+        },
       });
 
       // Audit log (no answers payload)
@@ -123,7 +139,7 @@ export class SubmitWizardHandler implements ICommandHandler<
           eventType: WIZARD_EVENT_TYPES.submitted,
           actorId: ownerId,
           organizationId,
-          resourceType: "wizard_profile",
+          resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
           resourceId: profileId,
           decision: AUDIT_DECISIONS.allow,
           policyId: command.authorization.policyId,
@@ -141,14 +157,14 @@ export class SubmitWizardHandler implements ICommandHandler<
 
       // Outbox event
       const outboxEvent = buildOutboxMessageInput({
-        aggregateType: "WizardProfile",
+        aggregateType: OUTBOX_AGGREGATE_TYPES.wizardProfile,
         aggregateId: profileId,
         eventType: WIZARD_EVENT_TYPES.submittedOutbox,
         organizationId,
         assessmentId,
         correlationId,
         causationId: correlationId,
-        actor: { id: ownerId, type: "user" },
+        actor: { id: ownerId, type: AUDIT_ACTOR_TYPES.user },
         result: WIZARD_EVENT_TYPES.submitted,
         redactionStatus: AUDIT_REDACTION_STATUSES.none,
         idempotencyKey: `${profileId}:${WIZARD_EVENT_TYPES.submittedOutbox}:${version}`,
@@ -187,7 +203,7 @@ export class SubmitWizardHandler implements ICommandHandler<
       eventType: WIZARD_EVENT_TYPES.submitted,
       actorId: command.ownerId,
       organizationId: command.organizationId,
-      resourceType: "wizard_profile",
+      resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
       resourceId: null,
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.pbacDenied,
@@ -201,9 +217,8 @@ export class SubmitWizardHandler implements ICommandHandler<
       },
     });
 
-    throw new ForbiddenException({
-      error_code: AUTH_ERROR_CODES.pbacDenied,
-      correlation_id: command.correlationId,
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 }

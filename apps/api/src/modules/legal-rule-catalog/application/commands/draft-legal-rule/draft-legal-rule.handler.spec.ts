@@ -13,7 +13,11 @@ import { AuditWriterService } from "../../../../../platform/audit/audit-writer.s
 import { CitationLocatorValidatorService } from "../../services/citation-locator-validator.service.js";
 import { DraftLegalRuleCommand } from "./draft-legal-rule.command.js";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
-import { LEGAL_RULE_ERROR_CODES } from "@lcsp/contracts/legal-rule-catalog";
+import {
+  LEGAL_RULE_ERROR_CODES,
+  LEGAL_RULE_LIFECYCLE_STATUSES,
+} from "@lcsp/contracts/legal-rule-catalog";
+import { toPrismaLegalRuleLifecycleStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 
 describe("DraftLegalRuleHandler", () => {
   let handler: DraftLegalRuleHandler;
@@ -60,7 +64,7 @@ describe("DraftLegalRuleHandler", () => {
       { fact1: true },
       null,
       null,
-      "DENY",
+      "BLOCK_ON_UNKNOWN",
       [{ legalCorpusVersionId: "v1", documentId: "d1", locator: "loc1" }],
       "user123",
       "version-uuid",
@@ -79,7 +83,9 @@ describe("DraftLegalRuleHandler", () => {
 
     (prisma.legalRuleCatalogVersion.findUnique as any).mockResolvedValue({
       id: "version-uuid",
-      status: "DRAFT",
+      status: toPrismaLegalRuleLifecycleStatus(
+        LEGAL_RULE_LIFECYCLE_STATUSES.draft,
+      ),
     } as any);
 
     validator.validateAll.mockResolvedValue(undefined);
@@ -93,7 +99,7 @@ describe("DraftLegalRuleHandler", () => {
     expect(result).toEqual({
       id: "new-rule-id",
       legalRuleId: "LR-001",
-      status: "DRAFT",
+      status: LEGAL_RULE_LIFECYCLE_STATUSES.draft,
     });
 
     expect(validator.validateAll).toHaveBeenCalledWith(
@@ -108,7 +114,9 @@ describe("DraftLegalRuleHandler", () => {
 
     (prisma.legalRuleCatalogVersion.findUnique as any).mockResolvedValue({
       id: "version-uuid",
-      status: "DRAFT",
+      status: toPrismaLegalRuleLifecycleStatus(
+        LEGAL_RULE_LIFECYCLE_STATUSES.draft,
+      ),
     } as any);
 
     validator.validateAll.mockRejectedValue(
@@ -125,7 +133,9 @@ describe("DraftLegalRuleHandler", () => {
 
     (prisma.legalRuleCatalogVersion.findUnique as any).mockResolvedValue({
       id: "version-uuid",
-      status: "DRAFT",
+      status: toPrismaLegalRuleLifecycleStatus(
+        LEGAL_RULE_LIFECYCLE_STATUSES.draft,
+      ),
     } as any);
 
     validator.validateAll.mockRejectedValue(
@@ -152,7 +162,9 @@ describe("DraftLegalRuleHandler", () => {
 
     (prisma.legalRuleCatalogVersion.findUnique as any).mockResolvedValue({
       id: "version-uuid",
-      status: "APPROVED",
+      status: toPrismaLegalRuleLifecycleStatus(
+        LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+      ),
     } as any);
 
     await expect(handler.execute(command)).rejects.toThrow(ConflictException);
@@ -176,7 +188,9 @@ describe("DraftLegalRuleHandler", () => {
     const command = createCommand();
     (prisma.legalRuleCatalogVersion.findUnique as any).mockResolvedValue({
       id: "version-uuid",
-      status: "DRAFT",
+      status: toPrismaLegalRuleLifecycleStatus(
+        LEGAL_RULE_LIFECYCLE_STATUSES.draft,
+      ),
     } as any);
     validator.validateAll.mockResolvedValue(undefined);
     (prisma.legalRule.create as any).mockResolvedValue({

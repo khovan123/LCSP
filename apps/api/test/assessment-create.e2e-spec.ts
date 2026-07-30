@@ -29,14 +29,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
-import type { AuthErrorCode } from "@lcsp/contracts/auth";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
-import type {
-  AssessmentErrorCode,
-  CreateAssessmentDto,
-} from "../src/modules/assessment/application/contracts/assessment/create-assessment.contract.js";
+import type { CreateAssessmentDto } from "../src/modules/assessment/application/contracts/assessment/create-assessment.contract.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import {
   TEST_DATABASE_URL,
@@ -44,11 +40,6 @@ import {
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
-
-type ErrorResponseBody = {
-  error_code: AuthErrorCode | AssessmentErrorCode;
-  correlation_id: string;
-};
 
 describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
   let app: INestApplication;
@@ -81,7 +72,7 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    const signInBody = signIn.body as SignInSuccess;
+    const signInBody = successBody<SignInSuccess>(signIn);
     managerToken = signInBody?.session_token ?? "";
   });
 
@@ -98,7 +89,7 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
       .post("/assessments")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ name: "My AI System Assessment" });
-    const body = result.body as CreateAssessmentDto;
+    const body = successBody<CreateAssessmentDto>(result);
 
     assert.equal(result.status, 201);
     assert.ok(body.assessment_id);
@@ -152,17 +143,17 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    const restrictedToken = (signIn.body as SignInSuccess)?.session_token ?? "";
+    const restrictedToken =
+      successBody<SignInSuccess>(signIn).session_token ?? "";
     assert.ok(restrictedToken, "sign-in must succeed for restricted fixture");
 
     const result = await httpRequest(app)
       .post("/assessments")
       .set("Authorization", `Bearer ${restrictedToken}`)
       .send({ name: "Should Be Denied" });
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 403);
-    assert.equal(body.error_code, PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
   });
 
   // T03
@@ -171,10 +162,9 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
       .post("/assessments")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({});
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 422);
-    assert.equal(body.error_code, ASSESSMENT_ERROR_CODES.invalidRequest);
+    assert.equal(problemCode(result), ASSESSMENT_ERROR_CODES.invalidRequest);
   });
 
   // T04, T05, T06
@@ -183,7 +173,7 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
       .post("/assessments")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ name: "DB Verification Test" });
-    const body = result.body as CreateAssessmentDto;
+    const body = successBody<CreateAssessmentDto>(result);
 
     const row = await prisma.assessment.findUnique({
       where: { id: body.assessment_id },
@@ -247,7 +237,7 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
       .post("/assessments")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({ name: "Outbox Test" });
-    const body = result.body as CreateAssessmentDto;
+    const body = successBody<CreateAssessmentDto>(result);
 
     const outbox = await prisma.outboxMessage.findFirst({
       where: {

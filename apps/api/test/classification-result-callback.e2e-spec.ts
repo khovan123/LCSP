@@ -14,15 +14,18 @@ import {
 import { OUTBOX_MESSAGE_SCHEMA_VERSION } from "@lcsp/contracts/outbox";
 import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
+  CLASSIFICATION_RESULT_STATUSES,
   CLASSIFICATION_RESULT_SCHEMA_VERSIONS,
   LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
   LEGAL_RULE_MATCH_STATUSES,
+  OVERALL_COVERAGE_STATUSES,
   SCAN_ERROR_CODES,
   SCAN_EVENT_TYPES,
   VERIFIED_PROFILE_STATUSES,
 } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
+import { toPrismaOverallCoverageStatus } from "../src/infrastructure/prisma/prisma-enum-mappers.js";
 import type {
   AcceptClassificationDto,
   ClassificationResultCallbackResponseDto,
@@ -33,7 +36,7 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
 
@@ -75,7 +78,7 @@ describe("Classification Result Callback Endpoint (e2e) [MW-cls-002]", () => {
 
   it("T01/T07 accepts valid classification result, emits ready event and audit log", async () => {
     const response = await callback(app, validPayload());
-    const body = response.body as ClassificationResultCallbackResponseDto;
+    const body = successBody<ClassificationResultCallbackResponseDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -115,7 +118,7 @@ describe("Classification Result Callback Endpoint (e2e) [MW-cls-002]", () => {
       CLASSIFICATION_GUARDRAIL_STATUSES.passed,
     );
     assert.equal(clsResult?.blockedReason, null);
-    assert.equal(clsResult?.status, "accepted");
+    assert.equal(clsResult?.status, CLASSIFICATION_RESULT_STATUSES.accepted);
     assert.equal(outbox?.aggregateId, body.classification_result_id);
     assert.equal(
       (outbox?.payload as { schemaVersion?: string }).schemaVersion,
@@ -139,7 +142,7 @@ describe("Classification Result Callback Endpoint (e2e) [MW-cls-002]", () => {
     };
 
     const response = await callback(app, degradedPayload);
-    const body = response.body as ClassificationResultCallbackResponseDto;
+    const body = successBody<ClassificationResultCallbackResponseDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -164,7 +167,7 @@ describe("Classification Result Callback Endpoint (e2e) [MW-cls-002]", () => {
     };
 
     const response = await callback(app, blockedPayload);
-    const body = response.body as ClassificationResultCallbackResponseDto;
+    const body = successBody<ClassificationResultCallbackResponseDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -352,7 +355,9 @@ async function seedAssessmentVerifiedProfileAndMatch(
       schemaVersion: "1.0.0",
       matches: [],
       citationAllowlist: ["chunk-1"],
-      overallCoverageStatus: "COMPLETE_CITATION",
+      overallCoverageStatus: toPrismaOverallCoverageStatus(
+        OVERALL_COVERAGE_STATUSES.completeCitation,
+      ),
       guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
       status: LEGAL_RULE_MATCH_STATUSES.accepted,
     },
@@ -366,9 +371,5 @@ function assertError(
   expectedCode: string,
 ): void {
   assert.equal(actualStatus, expectedStatus);
-  const rec = (body && typeof body === "object" ? body : {}) as Record<
-    string,
-    unknown
-  >;
-  assert.equal(rec.error_code, expectedCode);
+  assert.equal(problemCode(body), expectedCode);
 }

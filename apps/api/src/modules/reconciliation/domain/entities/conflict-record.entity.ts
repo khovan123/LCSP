@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
+
 import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
 
 export class ConflictRecordEntity {
+  readonly id: string = randomUUID();
+
   private constructor(
-    readonly id: string,
     readonly aiUsageFlowId: string,
     readonly assessmentId: string,
     readonly organizationId: string,
@@ -15,7 +18,6 @@ export class ConflictRecordEntity {
   ) {}
 
   static pending(fields: {
-    id: string;
     aiUsageFlowId: string;
     assessmentId: string;
     organizationId: string;
@@ -26,7 +28,6 @@ export class ConflictRecordEntity {
     createdAt?: Date;
   }): ConflictRecordEntity {
     return new ConflictRecordEntity(
-      fields.id,
       fields.aiUsageFlowId,
       fields.assessmentId,
       fields.organizationId,

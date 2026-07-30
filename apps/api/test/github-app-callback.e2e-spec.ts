@@ -15,7 +15,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import type { GitHubAppCallbackDto } from "../src/modules/github-integration/application/contracts/github-integration/github-app-callback.contract.js";
@@ -27,11 +27,6 @@ import {
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
-
-type ErrorResponseBody = {
-  error_code: string;
-  correlation_id: string;
-};
 
 type FakeFetchResponse = { ok: boolean; json: () => Promise<unknown> };
 
@@ -81,7 +76,7 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    const signInBody = signIn.body as SignInSuccess;
+    const signInBody = successBody<SignInSuccess>(signIn);
     managerToken = signInBody?.session_token ?? "";
   });
 
@@ -103,7 +98,7 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
       .get("/github/app/start")
       .query({ redirect_uri: ALLOWED_REDIRECT_URI })
       .set("Authorization", `Bearer ${managerToken}`);
-    const body = start.body as GitHubAppStartDto;
+    const body = successBody<GitHubAppStartDto>(start);
     const url = new URL(body.installation_url);
     const state = url.searchParams.get("state");
     assert.ok(state, "expected a state param on the installation url");
@@ -160,7 +155,7 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     const result = await httpRequest(app)
       .get("/github/app/callback")
       .query({ installation_id: INSTALLATION_ID, code: "good-code", state });
-    const body = result.body as GitHubAppCallbackDto;
+    const body = successBody<GitHubAppCallbackDto>(result);
 
     assert.equal(result.status, 200);
     assert.equal(body.repository_full_name, "acme/example-repo");
@@ -184,11 +179,10 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
       code: "good-code",
       state: "unknown-state",
     });
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
     assert.equal(
-      body.error_code,
+      problemCode(result),
       GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
     );
   });
@@ -205,11 +199,10 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     const result = await httpRequest(app)
       .get("/github/app/callback")
       .query({ installation_id: INSTALLATION_ID, code: "good-code", state });
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
     assert.equal(
-      body.error_code,
+      problemCode(result),
       GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
     );
   });
@@ -222,11 +215,10 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     const result = await httpRequest(app)
       .get("/github/app/callback")
       .query({ installation_id: INSTALLATION_ID, code: "bad-code", state });
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
     assert.equal(
-      body.error_code,
+      problemCode(result),
       GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
     );
   });
@@ -239,11 +231,10 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     const result = await httpRequest(app)
       .get("/github/app/callback")
       .query({ installation_id: INSTALLATION_ID, code: "good-code", state });
-    const body = result.body as ErrorResponseBody;
 
     assert.equal(result.status, 400);
     assert.equal(
-      body.error_code,
+      problemCode(result),
       GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
     );
   });

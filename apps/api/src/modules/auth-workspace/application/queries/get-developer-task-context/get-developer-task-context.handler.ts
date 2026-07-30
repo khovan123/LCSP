@@ -1,19 +1,18 @@
-import {
-  ForbiddenException,
-  NotFoundException,
-  UnauthorizedException,
-} from "@nestjs/common";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { HttpStatus } from "@nestjs/common";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   AUTH_AUDIT_EVENT_TYPES,
   AUTH_MEMBERSHIP_STATUSES,
 } from "@lcsp/contracts/auth";
+import type { AuditResourceType } from "@lcsp/contracts/audit";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
+import { fromPrismaAuthMembershipStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import type { AssessmentScopeRepository } from "../../ports/persistence/assessment-scope.repository.ts";
 import type { DeveloperTaskContextResponse } from "../../contracts/auth-workspace/developer-task-context.contract.ts";
 import { DEVELOPER_TASK_CONTEXT_ERROR_CODES } from "../../contracts/auth-workspace/developer-task-context.contract.ts";
 import { AuthAuditService } from "../../services/auth-workspace/auth-audit.service.ts";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import {
   invitationAssessmentId,
   projectInvitationScope,
@@ -59,11 +58,10 @@ export class GetDeveloperTaskContextHandler {
         query,
         DEVELOPER_TASK_CONTEXT_ERROR_CODES.sessionInvalid,
       );
-      throw new UnauthorizedException(
-        errorBody(
-          DEVELOPER_TASK_CONTEXT_ERROR_CODES.sessionInvalid,
-          correlationId,
-        ),
+      throw problemException(
+        DEVELOPER_TASK_CONTEXT_ERROR_CODES.sessionInvalid,
+        correlationId,
+        { status: HttpStatus.UNAUTHORIZED },
       );
     }
 
@@ -83,7 +81,11 @@ export class GetDeveloperTaskContextHandler {
         },
       })
       .catch(() => this.deny(query));
-    if (!membership || membership.status !== AUTH_MEMBERSHIP_STATUSES.active) {
+    if (
+      !membership ||
+      fromPrismaAuthMembershipStatus(membership.status) !==
+        AUTH_MEMBERSHIP_STATUSES.active
+    ) {
       return this.deny(query);
     }
 
@@ -130,14 +132,13 @@ export class GetDeveloperTaskContextHandler {
         DEVELOPER_TASK_CONTEXT_ERROR_CODES.taskScopeNotFound,
         policy.id,
         policy.version,
-        "Assessment",
+        AUDIT_RESOURCE_TYPES.assessment,
         assessmentId,
       );
-      throw new NotFoundException(
-        errorBody(
-          DEVELOPER_TASK_CONTEXT_ERROR_CODES.taskScopeNotFound,
-          correlationId,
-        ),
+      throw problemException(
+        DEVELOPER_TASK_CONTEXT_ERROR_CODES.taskScopeNotFound,
+        correlationId,
+        { status: HttpStatus.NOT_FOUND },
       );
     }
 
@@ -157,8 +158,8 @@ export class GetDeveloperTaskContextHandler {
 
     const resourceType =
       projection.scope.type === "assessment"
-        ? "Assessment"
-        : "AuthOrganization";
+        ? AUDIT_RESOURCE_TYPES.assessment
+        : AUDIT_RESOURCE_TYPES.authOrganization;
     const resourceId =
       projection.scope.type === "assessment"
         ? projection.scope.assessmentId
@@ -210,11 +211,10 @@ export class GetDeveloperTaskContextHandler {
       policyId,
       policyVersion,
     );
-    throw new ForbiddenException(
-      errorBody(
-        DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
-        query.correlationId,
-      ),
+    throw problemException(
+      DEVELOPER_TASK_CONTEXT_ERROR_CODES.pbacDenied,
+      query.correlationId,
+      { status: HttpStatus.FORBIDDEN },
     );
   }
 
@@ -223,7 +223,7 @@ export class GetDeveloperTaskContextHandler {
     reasonCode: string,
     policyId: string | null = query.context.policyId,
     policyVersion: string | null = query.context.policyVersion,
-    resourceType: string | null = null,
+    resourceType: AuditResourceType | null = null,
     resourceId: string | null = null,
   ): Promise<void> {
     await this.authAudit.write({
@@ -241,14 +241,6 @@ export class GetDeveloperTaskContextHandler {
       payload: { action: CONTEXT_ACTION, reason_code: reasonCode },
     });
   }
-}
-
-function errorBody(errorCode: string, correlationId: string) {
-  return {
-    error_code: errorCode,
-    code: errorCode,
-    correlation_id: correlationId,
-  };
 }
 
 function isNonEmptyString(value: unknown): value is string {

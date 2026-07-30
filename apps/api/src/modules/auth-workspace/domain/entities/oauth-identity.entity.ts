@@ -1,3 +1,12 @@
+import { randomUUID } from "node:crypto";
+
+type OAuthIdentityInput = {
+  userId: string;
+  provider: string;
+  providerAccountId: string;
+  createdAt: number;
+};
+
 export class OAuthIdentity {
   readonly id: string;
   readonly userId: string;
@@ -5,17 +14,17 @@ export class OAuthIdentity {
   readonly providerAccountId: string;
   readonly createdAt: number;
 
-  constructor(input: {
-    id: string;
-    userId: string;
-    provider: string;
-    providerAccountId: string;
-    createdAt: number;
-  }) {
-    this.id = input.id;
+  constructor(input: OAuthIdentityInput) {
+    this.id = randomUUID();
     this.userId = input.userId;
     this.provider = input.provider;
     this.providerAccountId = input.providerAccountId;
     this.createdAt = input.createdAt;
+  }
+
+  static rehydrate(input: OAuthIdentityInput & { id: string }): OAuthIdentity {
+    const entity = new OAuthIdentity(input);
+    Object.assign(entity, { id: input.id });
+    return entity;
   }
 }

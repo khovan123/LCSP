@@ -2,8 +2,25 @@ import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import type { MessageKey } from "@lcsp/i18n";
 
 import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
+import { apiRequest } from "./api-request.ts";
+import { getProblemCode } from "./problem-envelope.ts";
 
-export type ClassificationStatusState = "locked" | "processing" | "passed" | "degraded" | "blocked";
+export const CLASSIFICATION_STATUS_STATES = {
+  locked: "locked",
+  processing: "processing",
+  passed: "passed",
+  degraded: "degraded",
+  blocked: "blocked",
+} as const;
+
+const CLASSIFICATION_STATUS_OUTCOME_KINDS = {
+  loaded: "loaded",
+  redirect: "redirect",
+  error: "error",
+} as const;
+
+export type ClassificationStatusState =
+  (typeof CLASSIFICATION_STATUS_STATES)[keyof typeof CLASSIFICATION_STATUS_STATES];
 
 export type ClassificationStatusViewModel = {
   state: ClassificationStatusState;
@@ -21,15 +38,22 @@ export type ClassificationActionVisibility = {
 };
 
 type ClassificationStatusOutcome =
-  | { kind: "loaded"; data: ClassificationStatusViewModel }
-  | { kind: "redirect"; location: string }
-  | { kind: "error"; titleKey: MessageKey; detailKey: MessageKey };
+  | {
+      kind: typeof CLASSIFICATION_STATUS_OUTCOME_KINDS.loaded;
+      data: ClassificationStatusViewModel;
+    }
+  | { kind: typeof CLASSIFICATION_STATUS_OUTCOME_KINDS.redirect; location: string }
+  | {
+      kind: typeof CLASSIFICATION_STATUS_OUTCOME_KINDS.error;
+      titleKey: MessageKey;
+      detailKey: MessageKey;
+    };
 
 export function getClassificationActionVisibility(
   viewModel: Pick<ClassificationStatusViewModel, "state" | "hasClassification">,
 ): ClassificationActionVisibility {
   return {
-    showFinalReport: viewModel.state === "passed",
+    showFinalReport: viewModel.state === CLASSIFICATION_STATUS_STATES.passed,
     showGapAnalysis: viewModel.hasClassification,
   };
 }
@@ -37,16 +61,14 @@ export function getClassificationActionVisibility(
 export async function getClassificationStatus(
   assessmentId: string,
 ): Promise<ClassificationStatusOutcome> {
-  const response = await fetch(
+  const { payload, ok, status, problemCode } = await apiRequest(
     `/api/assessments/${encodeURIComponent(assessmentId)}`,
     {
-      credentials: "same-origin",
       cache: "no-store",
     },
   );
 
-  const payload = await response.json().catch(() => null);
-  return toClassificationStatusOutcome(payload, response.ok, response.status);
+  return toClassificationStatusOutcome(payload, ok, status, problemCode);
 }
 
 export function sanitizeAssessmentDetailPayload(
@@ -57,6 +79,9 @@ export function sanitizeAssessmentDetailPayload(
   }
 
   const candidate = payload as {
+    assessment_id?: unknown;
+    name?: unknown;
+    wizard_status?: unknown;
     readiness_state?: unknown;
     guardrail_status?: unknown;
   };
@@ -86,36 +111,57 @@ export function sanitizeAssessmentDetailPayload(
     return null;
   }
 
-  return {
-    readiness_state:
-      readiness === undefined
-        ? undefined
-        : { classification_locked: locked },
-    guardrail_status: guardrailStatus as string | null | undefined,
-  };
+  const sanitized: AssessmentDetailPayload = {};
+
+  if (typeof candidate.assessment_id === "string") {
+    sanitized.assessment_id = candidate.assessment_id;
+  }
+
+  if (typeof candidate.name === "string") {
+    sanitized.name = candidate.name;
+  }
+
+  if (typeof candidate.wizard_status === "string") {
+    sanitized.wizard_status = candidate.wizard_status;
+  }
+
+  if (readiness !== undefined) {
+    sanitized.readiness_state = locked === undefined
+      ? {}
+      : { classification_locked: locked };
+  }
+
+  if (guardrailStatus !== undefined) {
+    sanitized.guardrail_status = guardrailStatus as string | null;
+  }
+
+  return sanitized;
 }
 
 export function toClassificationStatusOutcome(
   payload: unknown,
   ok: boolean,
   status?: number,
+  problemCode = getProblemCode(payload),
 ): ClassificationStatusOutcome {
   if (ok && isAssessmentDetailPayload(payload)) {
     const viewModel = toClassificationStatusViewModel(payload);
-    return { kind: "loaded", data: viewModel };
+    return { kind: CLASSIFICATION_STATUS_OUTCOME_KINDS.loaded, data: viewModel };
   }
 
-  const code = getProblemCode(payload);
   if (
     status === 401 ||
-    code === AUTH_ERROR_CODES.authRequired ||
-    code === AUTH_ERROR_CODES.sessionInvalid
+    problemCode === AUTH_ERROR_CODES.authRequired ||
+    problemCode === AUTH_ERROR_CODES.sessionInvalid
   ) {
-    return { kind: "redirect", location: PUBLIC_ENTRY_ROUTES.signIn };
+    return {
+      kind: CLASSIFICATION_STATUS_OUTCOME_KINDS.redirect,
+      location: PUBLIC_ENTRY_ROUTES.signIn,
+    };
   }
 
   return {
-    kind: "error",
+    kind: CLASSIFICATION_STATUS_OUTCOME_KINDS.error,
     titleKey: "pages.classification.errorTitle",
     detailKey: "pages.classification.errorDetail",
   };
@@ -170,7 +216,7 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
   }
 
   return {
-    state: "processing",
+    state: CLASSIFICATION_STATUS_STATES.processing,
     titleKey: "pages.classification.states.processingTitle",
     badgeKey: "pages.classification.states.processingBadge",
     descriptionKey: "pages.classification.states.processingDescription",
@@ -179,6 +225,9 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
 }
 
 type AssessmentDetailPayload = {
+  assessment_id?: string;
+  name?: string;
+  wizard_status?: string;
   readiness_state?: {
     classification_locked?: boolean;
   };
@@ -192,13 +241,4 @@ function isAssessmentDetailPayload(payload: unknown): payload is AssessmentDetai
 
   const candidate = payload as AssessmentDetailPayload;
   return typeof candidate.readiness_state?.classification_locked === "boolean" || "guardrail_status" in candidate;
-}
-
-function getProblemCode(payload: unknown): string | undefined {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-
-  const problem = payload as { problem?: { code?: string; error_code?: string }; code?: string; error_code?: string };
-  return problem.problem?.code ?? problem.problem?.error_code ?? problem.code ?? problem.error_code;
 }

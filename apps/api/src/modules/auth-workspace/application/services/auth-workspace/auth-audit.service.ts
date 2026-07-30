@@ -1,6 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import type { AuditDecision, AuditEventInput } from "@lcsp/contracts/audit";
+import type {
+  AuditDecision,
+  AuditEventInput,
+  AuditResourceType,
+} from "@lcsp/contracts/audit";
 import {
   authAuditReadDecision,
   authAuditReadNullableString,
@@ -20,7 +24,7 @@ export type AuthAuditEventInput = {
   organizationId: string | null;
   correlationId: string;
   decision: AuditDecision | null;
-  resourceType?: string | null;
+  resourceType?: AuditResourceType | null;
   resourceId?: string | null;
   reasonCode?: string | null;
   sessionId?: string | null;
@@ -104,7 +108,7 @@ export class AuthAuditService {
       eventType: normalizeLegacyAuthAuditEventType(eventType),
       actorId: authAuditReadNullableString(event, "actor_id"),
       organizationId: authAuditReadNullableString(event, "organization_id"),
-      resourceType: authAuditReadNullableString(event, "resource_type"),
+      resourceType: event.resource_type ?? null,
       resourceId: authAuditReadNullableString(event, "resource_id"),
       reasonCode: authAuditReadNullableString(event, "reason_code"),
       correlationId: authAuditReadRequiredString(event, "correlation_id"),

@@ -1,11 +1,16 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import {
+  AUDIT_ACTOR_TYPES,
   AUDIT_EVENT_SCHEMA_VERSION,
   AUDIT_REDACTION_STATUSES,
   type AuditEventInput,
 } from "@lcsp/contracts/audit";
 
+import {
+  toPrismaAuditResourceType,
+  toPrismaAuthDecision,
+} from "../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import { AuditSanitizer } from "./audit-sanitizer.js";
 
@@ -38,7 +43,7 @@ export class AuditWriterService {
         : AUDIT_REDACTION_STATUSES.none);
     const actor = event.actor ?? {
       id: event.actorId,
-      type: event.actorId ? "user" : "system",
+      type: event.actorId ? AUDIT_ACTOR_TYPES.user : AUDIT_ACTOR_TYPES.system,
     };
     const payloadWithEnvelope = {
       ...(payload ?? {}),
@@ -61,14 +66,18 @@ export class AuditWriterService {
           eventType: event.eventType,
           actorId: event.actorId,
           organizationId: event.organizationId,
-          resourceType: event.resourceType ?? null,
+          resourceType: event.resourceType
+            ? toPrismaAuditResourceType(event.resourceType)
+            : null,
           resourceId: event.resourceId ?? null,
           reasonCode: event.reasonCode ?? null,
           correlationId: event.correlationId,
           sessionId: event.sessionId ?? null,
           policyId: event.policyId ?? null,
           policyVersion: event.policyVersion ?? null,
-          decision: event.decision,
+          decision: event.decision
+            ? toPrismaAuthDecision(event.decision)
+            : null,
           payload: payloadWithEnvelope as unknown as Prisma.InputJsonValue,
           createdAt: new Date(),
         },

@@ -11,8 +11,14 @@ type GitHubAppInstallStateProps = {
   createdAt: Date;
 };
 
+type NewGitHubAppInstallStateProps = Omit<GitHubAppInstallStateProps, "id">;
+
 export class GitHubAppInstallState {
-  private constructor(private readonly props: GitHubAppInstallStateProps) {}
+  private props: GitHubAppInstallStateProps;
+
+  private constructor(props: NewGitHubAppInstallStateProps) {
+    this.props = { ...props, id: randomUUID() };
+  }
 
   static create(input: {
     organizationId: string;
@@ -24,7 +30,6 @@ export class GitHubAppInstallState {
     const now = new Date();
 
     return new GitHubAppInstallState({
-      id: randomUUID(),
       state: randomBytes(32).toString("hex"),
       assessmentId: input.assessmentId ?? null,
       organizationId: input.organizationId,
@@ -36,7 +41,9 @@ export class GitHubAppInstallState {
   }
 
   static rehydrate(props: GitHubAppInstallStateProps): GitHubAppInstallState {
-    return new GitHubAppInstallState(props);
+    const entity = new GitHubAppInstallState(props);
+    entity.props = props;
+    return entity;
   }
 
   get id(): string {

@@ -22,6 +22,7 @@ import {
   SCAN_EVENT_TYPES,
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
   TECHNICAL_PROFILE_STATUSES,
+  type ConflictRecordStatus,
 } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
@@ -33,12 +34,11 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
-type ErrorResponse = { error_code?: string };
 type ResolveConflictDto = {
   conflict_id: string;
-  status: string;
+  status: ConflictRecordStatus;
   resolved_at: string;
   all_conflicts_resolved: boolean;
   correlation_id: string;
@@ -88,7 +88,7 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
       resolution: CONFLICT_RECORD_STATUSES.resolved,
       resolution_note: "Manager accepts the technical evidence basis.",
     });
-    const body = response.body as ResolveConflictDto;
+    const body = successBody<ResolveConflictDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.conflict_id, "conflict-1");
@@ -122,7 +122,7 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
       resolution: CONFLICT_RECORD_STATUSES.dismissed,
       resolution_note: "Manager determined this conflict is not material.",
     });
-    const body = response.body as ResolveConflictDto;
+    const body = successBody<ResolveConflictDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.status, CONFLICT_RECORD_STATUSES.dismissed);
@@ -151,7 +151,7 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     const response = await resolveConflict(app, managerToken, "conflict-2", {
       resolution: CONFLICT_RECORD_STATUSES.resolved,
     });
-    const body = response.body as ResolveConflictDto;
+    const body = successBody<ResolveConflictDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.all_conflicts_resolved, true);
@@ -396,7 +396,7 @@ async function seedConflicts(
   prisma: PrismaClient,
   assessmentId: string,
   organizationId: string,
-  conflicts: Array<{ id: string; status: string }>,
+  conflicts: Array<{ id: string; status: ConflictRecordStatus }>,
 ): Promise<void> {
   await prisma.conflictRecord.createMany({
     data: conflicts.map((conflict, index) => ({
@@ -430,7 +430,7 @@ async function signIn(
     password,
     organization_id: organizationId,
   });
-  return (response.body as SignInSuccess).session_token ?? "";
+  return successBody<SignInSuccess>(response).session_token ?? "";
 }
 
 function resolveConflict(
@@ -452,5 +452,5 @@ function assertError(
   expectedCode: string,
 ): void {
   assert.equal(actualStatus, expectedStatus);
-  assert.equal((body as ErrorResponse).error_code, expectedCode);
+  assert.equal(problemCode(body), expectedCode);
 }

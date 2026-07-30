@@ -1,3 +1,12 @@
+import { randomUUID } from "node:crypto";
+
+type RecoveryRequestInput = {
+  userId: string;
+  tokenHash: string;
+  expiresAt: number;
+  consumedAt?: number | null;
+};
+
 export class RecoveryRequest {
   readonly id: string;
   readonly userId: string;
@@ -5,18 +14,20 @@ export class RecoveryRequest {
   readonly expiresAt: number;
   consumedAt: number | null;
 
-  constructor(input: {
-    id: string;
-    userId: string;
-    tokenHash: string;
-    expiresAt: number;
-    consumedAt?: number | null;
-  }) {
-    this.id = input.id;
+  constructor(input: RecoveryRequestInput) {
+    this.id = randomUUID();
     this.userId = input.userId;
     this.tokenHash = input.tokenHash;
     this.expiresAt = input.expiresAt;
     this.consumedAt = input.consumedAt ?? null;
+  }
+
+  static rehydrate(
+    input: RecoveryRequestInput & { id: string },
+  ): RecoveryRequest {
+    const entity = new RecoveryRequest(input);
+    Object.assign(entity, { id: input.id });
+    return entity;
   }
 
   isValid(now: number): boolean {

@@ -1,20 +1,23 @@
 import {
   type CanActivate,
   type ExecutionContext,
-  ForbiddenException,
+  HttpStatus,
   Inject,
   Injectable,
   Logger,
-  UnauthorizedException,
+  type HttpException,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   PBAC_DECISION,
   PBAC_ACTIONS,
+  PBAC_METADATA_TYPES,
   PBAC_REASON_CODE,
   type PbacDecisionValue,
+  type PbacReasonCode,
 } from "@lcsp/contracts/pbac";
+import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 
 import { PrismaAuthorizationDecisionRepository } from "../../modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.repositories.js";
 import { createCorrelationId } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
@@ -35,8 +38,9 @@ import type {
 } from "./pbac.types.js";
 
 import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
+import { problemException } from "../problems/problem-factory.js";
 
-const DECISION_LOG_RESOURCE_TYPE = "HttpRoute";
+const DECISION_LOG_RESOURCE_TYPE = AUDIT_RESOURCE_TYPES.httpRoute;
 
 @Injectable()
 export class PbacGuard implements CanActivate {
@@ -75,9 +79,9 @@ export class PbacGuard implements CanActivate {
     }
 
     const candidateActions =
-      metadata.type === "action"
+      metadata.type === PBAC_METADATA_TYPES.action
         ? [metadata.action]
-        : metadata.type === "action_any"
+        : metadata.type === PBAC_METADATA_TYPES.actionAny
           ? metadata.actions
           : [];
     const action = candidateActions[0] ?? PBAC_ACTIONS.sessionVerify;
@@ -93,9 +97,8 @@ export class PbacGuard implements CanActivate {
         policyVersion: null,
         correlationId,
       });
-      throw new UnauthorizedException({
-        error_code: AUTH_ERROR_CODES.sessionInvalid,
-        correlation_id: correlationId,
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId, {
+        status: HttpStatus.UNAUTHORIZED,
       });
     }
 
@@ -133,7 +136,7 @@ export class PbacGuard implements CanActivate {
       throw this.pbacDenied(correlationId);
     }
 
-    if (metadata.type === "session") {
+    if (metadata.type === PBAC_METADATA_TYPES.session) {
       // @RequireSession() — session + active membership only, no PBAC action gate.
       request.pbacContext = {
         userId: session.userId,
@@ -260,36 +263,40 @@ export class PbacGuard implements CanActivate {
     reason: PbacContextDenialReason,
     correlationId: string,
     membershipMissingAsPbacDenied = false,
-  ): UnauthorizedException | ForbiddenException {
+  ): HttpException {
     switch (reason) {
       case PBAC_REASON_CODE.sessionInvalid:
-        return new UnauthorizedException({
-          error_code: AUTH_ERROR_CODES.sessionInvalid,
-          correlation_id: correlationId,
-        });
+        return problemException(
+          AUTH_ERROR_CODES.sessionInvalid,
+          correlationId,
+          {
+            status: HttpStatus.UNAUTHORIZED,
+          },
+        );
       case PBAC_REASON_CODE.mfaRequired:
-        return new UnauthorizedException({
-          error_code: AUTH_ERROR_CODES.mfaRequired,
-          correlation_id: correlationId,
+        return problemException(AUTH_ERROR_CODES.mfaRequired, correlationId, {
+          status: HttpStatus.UNAUTHORIZED,
         });
       case PBAC_REASON_CODE.membershipMissing:
         if (membershipMissingAsPbacDenied) {
           return this.pbacDenied(correlationId);
         }
-        return new ForbiddenException({
-          error_code: AUTH_ERROR_CODES.membershipMissing,
-          correlation_id: correlationId,
-        });
+        return problemException(
+          AUTH_ERROR_CODES.membershipMissing,
+          correlationId,
+          {
+            status: HttpStatus.FORBIDDEN,
+          },
+        );
       case PBAC_REASON_CODE.policyNotFound:
       case PBAC_REASON_CODE.loadError:
         return this.pbacDenied(correlationId);
     }
   }
 
-  private pbacDenied(correlationId: string): ForbiddenException {
-    return new ForbiddenException({
-      error_code: AUTH_ERROR_CODES.pbacDenied,
-      correlation_id: correlationId,
+  private pbacDenied(correlationId: string): HttpException {
+    return problemException(AUTH_ERROR_CODES.pbacDenied, correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 
@@ -298,7 +305,7 @@ export class PbacGuard implements CanActivate {
     organizationId: string | null;
     action: string;
     decision: PbacDecisionValue;
-    reasonCode: string;
+    reasonCode: PbacReasonCode;
     policyId: string | null;
     policyVersion: string | null;
     correlationId: string;

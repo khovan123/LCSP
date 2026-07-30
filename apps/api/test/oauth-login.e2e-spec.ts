@@ -11,7 +11,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, successBody } from "./support/http.js";
 
 import { AUTH_ERROR_CODES, type ProblemResult } from "@lcsp/contracts/auth";
 
@@ -94,7 +94,7 @@ describe("OAuth login (e2e)", () => {
       .query({ provider: "github", redirect_uri: ALLOWED_REDIRECT_URI })
       .expect(200);
 
-    const success = expectSuccess(result.body as OAuthStartSuccess);
+    const success = successBody<OAuthStartSuccess>(result);
     const url = new URL(success.authorization_url);
     assert.ok(url.searchParams.get("state"));
     assert.equal(typeof success.correlation_id, "string");
@@ -104,7 +104,7 @@ describe("OAuth login (e2e)", () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ provider: "gitlab", redirect_uri: ALLOWED_REDIRECT_URI })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.unsupportedProvider);
@@ -114,7 +114,7 @@ describe("OAuth login (e2e)", () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ provider: "github", redirect_uri: "http://evil.test/callback" })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidRedirectUri);
@@ -124,7 +124,7 @@ describe("OAuth login (e2e)", () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ provider: "github" })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
@@ -134,7 +134,7 @@ describe("OAuth login (e2e)", () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/start")
       .query({ redirect_uri: ALLOWED_REDIRECT_URI })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
@@ -146,7 +146,7 @@ describe("OAuth login (e2e)", () => {
       .query({ provider: "github", redirect_uri: ALLOWED_REDIRECT_URI })
       .expect(200);
 
-    const success = expectSuccess(result.body as OAuthStartSuccess);
+    const success = successBody<OAuthStartSuccess>(result);
     assert.equal("state" in success, false);
     assert.equal("nonce" in success, false);
 
@@ -171,7 +171,7 @@ describe("OAuth login (e2e)", () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ state: "some-state", provider: "github" })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
@@ -181,7 +181,7 @@ describe("OAuth login (e2e)", () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", provider: "github" })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
@@ -190,12 +190,12 @@ describe("OAuth login (e2e)", () => {
   it("successful OAuth login does not create any RepositoryConnection as side effect", async () => {
     await seedLinkedUser({
       emailVerified: true,
-      providerAccountId: "side-effect-test",
+      providerAccountId: "888",
       membershipStatus: AUTH_MEMBERSHIP_STATUSES.active,
     });
     const before = await prisma.repositoryConnection.count();
     const state = await startOAuthFlow();
-    mockGithubFetch("side-effect-test");
+    mockGithubFetch("888");
 
     await httpRequest(app)
       .get("/auth/oauth/callback")
@@ -220,7 +220,7 @@ describe("OAuth login (e2e)", () => {
       .query({ code: "good-code", state, provider: "github" })
       .expect(200);
 
-    const success = expectSuccess(result.body as OAuthCallbackSuccess);
+    const success = successBody<OAuthCallbackSuccess>(result);
     assert.equal(typeof success.session_token, "string");
     assert.equal(success.organization_id, organizationId);
     assert.equal(success.mfa_required, false);
@@ -241,7 +241,7 @@ describe("OAuth login (e2e)", () => {
         state: "not-a-real-state",
         provider: "github",
       })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.oauthStateInvalid);
@@ -267,7 +267,7 @@ describe("OAuth login (e2e)", () => {
         state: "expired-state-value",
         provider: "github",
       })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.oauthStateInvalid);
@@ -290,7 +290,7 @@ describe("OAuth login (e2e)", () => {
     const replay = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(replay.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.oauthStateInvalid);
@@ -306,7 +306,7 @@ describe("OAuth login (e2e)", () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "bad-code", state, provider: "github" })
-      .expect(200);
+      .expect(400);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.oauthCallbackInvalid);
@@ -326,7 +326,7 @@ describe("OAuth login (e2e)", () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
-      .expect(200);
+      .expect(404);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.accountNotFound);
@@ -344,7 +344,7 @@ describe("OAuth login (e2e)", () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
-      .expect(200);
+      .expect(404);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.accountNotFound);
@@ -362,7 +362,7 @@ describe("OAuth login (e2e)", () => {
     const result = await httpRequest(app)
       .get("/auth/oauth/callback")
       .query({ code: "good-code", state, provider: "github" })
-      .expect(200);
+      .expect(403);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.membershipMissing);
@@ -393,7 +393,7 @@ describe("OAuth login (e2e)", () => {
       .get("/auth/oauth/start")
       .query({ provider: "github", redirect_uri: ALLOWED_REDIRECT_URI })
       .expect(200);
-    const success = expectSuccess(start.body as OAuthStartSuccess);
+    const success = successBody<OAuthStartSuccess>(start);
     const url = new URL(success.authorization_url);
     const state = url.searchParams.get("state");
     assert.ok(state, "expected a state param on the authorization URL");
@@ -480,12 +480,4 @@ function expectFailure<T extends object>(
   }
 
   throw new Error("expected failure");
-}
-
-function expectSuccess<T extends object>(result: T | ProblemResult): T {
-  if (!("problem" in result)) {
-    return result;
-  }
-
-  throw new Error(`expected success, got ${result.problem.code}`);
 }

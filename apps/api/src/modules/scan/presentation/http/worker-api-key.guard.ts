@@ -1,13 +1,16 @@
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 
 import {
   type CanActivate,
   type ExecutionContext,
+  HttpStatus,
   Injectable,
-  UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import type { Request } from "express";
+
+import { problemException } from "../../../../platform/problems/problem-factory.js";
 
 @Injectable()
 export class WorkerApiKeyGuard implements CanActivate {
@@ -16,10 +19,14 @@ export class WorkerApiKeyGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
     const provided = headerString(request.headers["x-worker-api-key"]);
+    const correlationId =
+      headerString(request.headers["x-correlation-id"]) ?? randomUUID();
     const expected = this.configService.get<string>("worker.apiKey", "");
 
     if (!provided || !expected || !secureEqual(provided, expected)) {
-      throw new UnauthorizedException();
+      throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId, {
+        status: HttpStatus.UNAUTHORIZED,
+      });
     }
     return true;
   }

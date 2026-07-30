@@ -13,6 +13,21 @@ import {
   toResolveConflictOutcome,
 } from "../src/lib/api/conflict-client.ts";
 
+function problem(code: string, status: number) {
+  return {
+    ok: false,
+    problem: {
+      type: `test/${code.toLowerCase().replaceAll("_", "-")}`,
+      status,
+      code,
+      titleKey: "auth.errors.validationFailed.title",
+      detailKey: "auth.errors.validationFailed.detail",
+      requiredAction: "none",
+      correlationId: "test-correlation",
+    },
+  };
+}
+
 test("conflict list payload sanitizer accepts valid shape", () => {
   const payload = {
     conflicts: [
@@ -38,7 +53,7 @@ test("conflict list payload sanitizer accepts valid shape", () => {
 test("conflict list outcome maps 403 to access_revoked", () => {
   assert.deepEqual(
     toConflictListOutcome(
-      { problem: { code: AUTH_ERROR_CODES.pbacDenied } },
+      problem(AUTH_ERROR_CODES.pbacDenied, 403),
       false,
       403,
     ),
@@ -49,7 +64,7 @@ test("conflict list outcome maps 403 to access_revoked", () => {
 test("conflict list outcome maps MFA-required to MFA redirect", () => {
   assert.deepEqual(
     toConflictListOutcome(
-      { problem: { code: AUTH_ERROR_CODES.mfaRequired } },
+      problem(AUTH_ERROR_CODES.mfaRequired, 401),
       false,
       401,
     ),
@@ -60,7 +75,7 @@ test("conflict list outcome maps MFA-required to MFA redirect", () => {
 test("conflict list outcome maps unauthenticated to sign-in redirect", () => {
   assert.deepEqual(
     toConflictListOutcome(
-      { problem: { code: AUTH_ERROR_CODES.sessionInvalid } },
+      problem(AUTH_ERROR_CODES.sessionInvalid, 401),
       false,
       401,
     ),
@@ -71,7 +86,7 @@ test("conflict list outcome maps unauthenticated to sign-in redirect", () => {
 test("conflict list outcome maps assessment not found to empty", () => {
   assert.deepEqual(
     toConflictListOutcome(
-      { problem: { code: ASSESSMENT_ERROR_CODES.notFound } },
+      problem(ASSESSMENT_ERROR_CODES.notFound, 404),
       false,
       404,
     ),
@@ -110,7 +125,7 @@ test("resolve payload sanitizer accepts valid shape", () => {
 test("resolve outcome maps 409 conflict-already-resolved", () => {
   assert.deepEqual(
     toResolveConflictOutcome(
-      { problem: { code: SCAN_ERROR_CODES.conflictAlreadyResolved } },
+      problem(SCAN_ERROR_CODES.conflictAlreadyResolved, 409),
       false,
       409,
     ),
@@ -121,7 +136,7 @@ test("resolve outcome maps 409 conflict-already-resolved", () => {
 test("resolve outcome maps PBAC denial to access_revoked", () => {
   assert.deepEqual(
     toResolveConflictOutcome(
-      { problem: { code: AUTH_ERROR_CODES.pbacDenied } },
+      problem(AUTH_ERROR_CODES.pbacDenied, 403),
       false,
       403,
     ),

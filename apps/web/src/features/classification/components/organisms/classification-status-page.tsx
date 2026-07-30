@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
 
@@ -10,9 +10,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { ClassificationStatusCard } from "@/components/ui/classification-status-card";
 import {
   getClassificationActionVisibility,
-  getClassificationStatus,
-  type ClassificationStatusViewModel,
 } from "@/lib/api/classification-client";
+import { useClassificationStatusQuery } from "@/lib/api/assessment-queries";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
@@ -22,54 +21,24 @@ export function ClassificationStatusPage({
   assessmentId: string;
 }) {
   const router = useRouter();
-  const [viewModel, setViewModel] = useState<ClassificationStatusViewModel | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const statusQuery = useClassificationStatusQuery(assessmentId);
 
   useEffect(() => {
-    let isActive = true;
-
-    async function load() {
-      setIsLoading(true);
-      setError(null);
-      const outcome = await getClassificationStatus(assessmentId);
-
-      if (!isActive) {
-        return;
-      }
-
-      if (outcome.kind === "redirect") {
-        router.replace(outcome.location);
-        return;
-      }
-
-      if (outcome.kind === "error") {
-        setError(resolveMessage(appLocale, outcome.titleKey));
-        setIsLoading(false);
-        return;
-      }
-
-      setViewModel(outcome.data);
-      setIsLoading(false);
+    if (statusQuery.data?.kind === "redirect") {
+      router.replace(statusQuery.data.location);
     }
-
-    void load();
-
-    return () => {
-      isActive = false;
-    };
-  }, [assessmentId, router]);
+  }, [router, statusQuery.data]);
 
   const headingDescription = useMemo(
     () => resolveMessage(appLocale, "pages.classification.pageDescription"),
     [],
   );
 
-  if (isLoading) {
+  if (statusQuery.isLoading) {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
         <header className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight">
             {resolveMessage(appLocale, "pages.classification.pageTitle")}
           </h1>
           <p className="text-sm text-muted-foreground">{headingDescription}</p>
@@ -88,11 +57,18 @@ export function ClassificationStatusPage({
     );
   }
 
+  const viewModel =
+    statusQuery.data?.kind === "loaded" ? statusQuery.data.data : null;
+  const error =
+    statusQuery.data?.kind === "error"
+      ? resolveMessage(appLocale, statusQuery.data.titleKey)
+      : null;
+
   if (error || !viewModel) {
     return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
         <header className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className="font-heading text-3xl font-semibold tracking-tight">
             {resolveMessage(appLocale, "pages.classification.pageTitle")}
           </h1>
           <p className="text-sm text-muted-foreground">{headingDescription}</p>
@@ -113,9 +89,9 @@ export function ClassificationStatusPage({
   const showGapAnalysis = actionVisibility.showGapAnalysis;
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
       <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">
+        <h1 className="font-heading text-3xl font-semibold tracking-tight">
           {resolveMessage(appLocale, "pages.classification.pageTitle")}
         </h1>
         <p className="text-sm text-muted-foreground">{headingDescription}</p>

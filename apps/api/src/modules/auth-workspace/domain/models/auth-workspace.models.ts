@@ -1,3 +1,7 @@
+import type { AuditResourceType } from "@lcsp/contracts/audit";
+import type { AuthErrorCode } from "@lcsp/contracts/auth";
+import type { PbacDecisionValue, PbacReasonCode } from "@lcsp/contracts/pbac";
+
 export { Organization } from "../entities/organization.entity.ts";
 export { User } from "../entities/user.entity.ts";
 export { Membership } from "../entities/membership.entity.ts";
@@ -15,15 +19,16 @@ export type { SubjectAttributesRecord as SubjectAttributes } from "../value-obje
 
 export type AuthorizationDecision = {
   organization_id: string | null;
-  resource_type: string;
+  resource_type: AuditResourceType;
   resource_id: string;
   action: string;
   decision: PbacDecisionValue;
-  reason_code: string;
+  reason_code: AuthErrorCode | PbacReasonCode;
   policy_id: string | null;
   policy_version: string | null;
   correlation_id: string;
 };
 
-export type AuditEvent = Record<string, unknown>;
-import type { PbacDecisionValue } from "@lcsp/contracts/pbac";
+export type AuditEvent = Record<string, unknown> & {
+  resource_type?: AuditResourceType | null;
+};

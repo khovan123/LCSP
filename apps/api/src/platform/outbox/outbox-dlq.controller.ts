@@ -3,6 +3,7 @@ import { Controller, Get, Post, Delete, Param, Req } from "@nestjs/common";
 import { OutboxDlqService } from "./outbox-dlq.service.js";
 
 import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
+import { resultEnvelope } from "../problems/result-envelope.js";
 
 @Controller("internal/outbox/dlq")
 export class OutboxDlqController {
@@ -10,7 +11,7 @@ export class OutboxDlqController {
 
   @Get()
   async getDlqMessages() {
-    return this.dlqService.getDlqMessages();
+    return resultEnvelope(await this.dlqService.getDlqMessages());
   }
 
   @Post(":id/replay")
@@ -23,7 +24,10 @@ export class OutboxDlqController {
     // chưa có guard nên tạm thời gán admin
     const actorId = req.user?.id || "system-admin";
     await this.dlqService.replayMessage(id, actorId);
-    return { success: true, message: `Message ${id} queued for replay` };
+    return resultEnvelope({
+      success: true,
+      message: `Message ${id} queued for replay`,
+    });
   }
 
   @Delete(":id")
@@ -33,6 +37,9 @@ export class OutboxDlqController {
   ) {
     const actorId = req.user?.id || "system-admin";
     await this.dlqService.deleteMessage(id, actorId);
-    return { success: true, message: `Message ${id} permanently deleted` };
+    return resultEnvelope({
+      success: true,
+      message: `Message ${id} permanently deleted`,
+    });
   }
 }

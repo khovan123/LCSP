@@ -11,6 +11,7 @@ import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
+  type RepositoryScanJobStatus,
 } from "@lcsp/contracts/github-integration";
 import {
   PBAC_ACTIONS,
@@ -30,10 +31,9 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
-type ErrorResponse = { error_code?: string };
 
 describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
   let app: INestApplication;
@@ -76,7 +76,7 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: "org-1",
     });
-    managerToken = (signIn.body as SignInSuccess).session_token;
+    managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
 
   afterAll(async () => {
@@ -88,7 +88,7 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
     await createJob(prisma, REPOSITORY_SCAN_JOB_STATUSES.queued);
 
     const response = await getStatus(app, managerToken);
-    const body = response.body as ScanJobStatusDto;
+    const body = successBody<ScanJobStatusDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.scan_job_id, "scan-job-1");
@@ -112,7 +112,7 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
     await createJob(prisma, REPOSITORY_SCAN_JOB_STATUSES.completed);
 
     const response = await getStatus(app, managerToken);
-    const body = response.body as ScanJobStatusDto;
+    const body = successBody<ScanJobStatusDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.status, REPOSITORY_SCAN_JOB_STATUSES.completed);
@@ -128,7 +128,7 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
     );
 
     const response = await getStatus(app, managerToken);
-    const body = response.body as ScanJobStatusDto;
+    const body = successBody<ScanJobStatusDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.blocked_reason, SCAN_JOB_GUIDANCE.blockedReason);
@@ -144,10 +144,7 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
     const response = await getStatus(app, managerToken);
 
     assert.equal(response.status, 404);
-    assert.equal(
-      (response.body as ErrorResponse).error_code,
-      SCAN_ERROR_CODES.jobNotFound,
-    );
+    assert.equal(problemCode(response), SCAN_ERROR_CODES.jobNotFound);
   });
 
   it("T05 denies an actor without scan:read", async () => {
@@ -165,10 +162,7 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
     const response = await getStatus(app, managerToken);
 
     assert.equal(response.status, 403);
-    assert.equal(
-      (response.body as ErrorResponse).error_code,
-      PBAC_REASON_CODE.denied,
-    );
+    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
   });
 
   it("allows only a Developer scoped to the requested assessment", async () => {
@@ -179,7 +173,7 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
       password: "DeveloperPass123!",
       organization_id: "org-1",
     });
-    const token = (signIn.body as SignInSuccess).session_token;
+    const token = successBody<SignInSuccess>(signIn).session_token;
 
     const allowed = await getStatus(app, token);
     assert.equal(allowed.status, 200);
@@ -201,10 +195,7 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
 
     const hidden = await getStatus(app, token);
     assert.equal(hidden.status, 404);
-    assert.equal(
-      (hidden.body as ErrorResponse).error_code,
-      SCAN_ERROR_CODES.jobNotFound,
-    );
+    assert.equal(problemCode(hidden), SCAN_ERROR_CODES.jobNotFound);
   });
 });
 
@@ -216,7 +207,7 @@ function getStatus(app: INestApplication, token: string) {
 
 async function createJob(
   prisma: PrismaClient,
-  status: string,
+  status: RepositoryScanJobStatus,
   blockedReason: string | null = null,
   overrides: { organizationId?: string } = {},
 ) {

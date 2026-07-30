@@ -11,14 +11,8 @@ import {
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
-import type {
-  DraftLegalRuleRequest,
-  DraftLegalRuleResponse,
-} from "../../application/contracts/draft-legal-rule.contract.js";
-import type {
-  ApproveRuleCatalogVersionRequest,
-  ApproveRuleCatalogVersionResponse,
-} from "../../application/contracts/approve-catalog-version.contract.js";
+import type { DraftLegalRuleRequest } from "../../application/contracts/draft-legal-rule.contract.js";
+import type { ApproveRuleCatalogVersionRequest } from "../../application/contracts/approve-catalog-version.contract.js";
 
 import { DraftLegalRuleCommand } from "../../application/commands/draft-legal-rule/draft-legal-rule.command.js";
 import { ApproveRuleCatalogVersionCommand } from "../../application/commands/approve-rule-catalog-version/approve-rule-catalog-version.command.js";
@@ -28,6 +22,7 @@ import { GetActiveLegalCorpusQuery } from "../../application/queries/get-active-
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 
@@ -45,29 +40,31 @@ export class LegalRuleCatalogController {
   async draftRule(
     @Body() body: DraftLegalRuleRequest,
     @Req() req: AuthenticatedRequest,
-  ): Promise<DraftLegalRuleResponse> {
+  ) {
     const { userId } = req.pbacContext;
     const pbacContext = req.pbacContext;
     const correlationId = req.correlationId || randomUUID();
 
-    return this.commandBus.execute(
-      new DraftLegalRuleCommand(
-        body.legalRuleId,
-        body.ruleFamily,
-        body.requiredFacts,
-        body.optionalFacts,
-        body.blockingFacts,
-        body.unknownFactPolicy,
-        body.citationLocatorRefs,
-        userId,
-        body.legalRuleCatalogVersionId,
-        {
-          subjectRole: pbacContext.subjectRole,
-          selectedAction: pbacContext.selectedAction,
-          policyId: pbacContext.policyId,
-          policyVersion: pbacContext.policyVersion,
-        },
-        correlationId,
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new DraftLegalRuleCommand(
+          body.legalRuleId,
+          body.ruleFamily,
+          body.requiredFacts,
+          body.optionalFacts,
+          body.blockingFacts,
+          body.unknownFactPolicy,
+          body.citationLocatorRefs,
+          userId,
+          body.legalRuleCatalogVersionId,
+          {
+            subjectRole: pbacContext.subjectRole,
+            selectedAction: pbacContext.selectedAction,
+            policyId: pbacContext.policyId,
+            policyVersion: pbacContext.policyVersion,
+          },
+          correlationId,
+        ),
       ),
     );
   }
@@ -75,15 +72,19 @@ export class LegalRuleCatalogController {
   @Get("active")
   @HttpCode(200)
   @UseGuards(WorkerApiKeyGuard)
-  async getActiveCatalog(): Promise<unknown> {
-    return this.queryBus.execute(new GetActiveRuleCatalogQuery());
+  async getActiveCatalog() {
+    return resultEnvelope(
+      await this.queryBus.execute(new GetActiveRuleCatalogQuery()),
+    );
   }
 
   @Get("corpus/active")
   @HttpCode(200)
   @UseGuards(WorkerApiKeyGuard)
-  async getActiveCorpus(): Promise<unknown> {
-    return this.queryBus.execute(new GetActiveLegalCorpusQuery());
+  async getActiveCorpus() {
+    return resultEnvelope(
+      await this.queryBus.execute(new GetActiveLegalCorpusQuery()),
+    );
   }
 
   @Post("versions/:versionId/approve")
@@ -94,25 +95,27 @@ export class LegalRuleCatalogController {
     @Param("versionId") versionId: string,
     @Body() body: ApproveRuleCatalogVersionRequest,
     @Req() req: AuthenticatedRequest,
-  ): Promise<ApproveRuleCatalogVersionResponse> {
+  ) {
     const { userId } = req.pbacContext;
     const pbacContext = req.pbacContext;
     const correlationId = req.correlationId || randomUUID();
 
     // Passing some default values for scopeDescription since they are not in the contract body
-    return this.commandBus.execute(
-      new ApproveRuleCatalogVersionCommand(
-        versionId,
-        "Approved via API", // default scopeDescription
-        null, // no comments provided in the basic API body yet
-        userId,
-        {
-          subjectRole: pbacContext.subjectRole,
-          selectedAction: pbacContext.selectedAction,
-          policyId: pbacContext.policyId,
-          policyVersion: pbacContext.policyVersion,
-        },
-        correlationId,
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ApproveRuleCatalogVersionCommand(
+          versionId,
+          "Approved via API", // default scopeDescription
+          null, // no comments provided in the basic API body yet
+          userId,
+          {
+            subjectRole: pbacContext.subjectRole,
+            selectedAction: pbacContext.selectedAction,
+            policyId: pbacContext.policyId,
+            policyVersion: pbacContext.policyVersion,
+          },
+          correlationId,
+        ),
       ),
     );
   }

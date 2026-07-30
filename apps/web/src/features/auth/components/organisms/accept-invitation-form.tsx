@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,21 +22,53 @@ import { FormCard } from "@/components/organisms/form-card";
 import { getVisibleDeveloperActions } from "@/features/developer-task/config/action-labels";
 import { appLocale } from "@/lib/locale";
 import {
-  acceptInvitation,
-  previewInvitation,
+  INVITATION_SCOPE_TYPES,
   type InvitationPreviewOutcome,
 } from "@/lib/api/auth-client";
+import {
+  useAcceptInvitationMutation,
+  useInvitationPreviewQuery,
+} from "@/lib/api/auth-queries";
+import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
 
 import {
   acceptInvitationSchema,
   type AcceptInvitationFormValues,
 } from "../../schemas/accept-invitation.schema";
 
+const ACCEPT_INVITATION_SUBMISSION_ERRORS = {
+  invitationInvalid: API_OUTCOME_KINDS.invitationInvalid,
+  emailAlreadyExists: API_OUTCOME_KINDS.emailAlreadyExists,
+  requestFailed: "request_failed",
+} as const;
+
+const ACCEPT_INVITATION_FIELD_TYPES = {
+  text: "text",
+  password: "password",
+} as const;
+
+const ACCEPT_INVITATION_FIELD_LABEL_KEYS = {
+  displayName: "pages.acceptInvitation.displayNameLabel",
+  password: "pages.acceptInvitation.passwordLabel",
+} as const;
+
+const ACCEPT_INVITATION_FIELD_DESCRIPTION_KEYS = {
+  displayName: "pages.acceptInvitation.displayNameDescription",
+  password: "pages.acceptInvitation.passwordDescription",
+} as const;
+
 type SubmissionError =
-  | "invitation_invalid"
-  | "email_already_exists"
-  | "request_failed"
+  | (typeof ACCEPT_INVITATION_SUBMISSION_ERRORS)[keyof typeof ACCEPT_INVITATION_SUBMISSION_ERRORS]
   | null;
+
+type InvitationFieldType =
+  (typeof ACCEPT_INVITATION_FIELD_TYPES)[keyof typeof ACCEPT_INVITATION_FIELD_TYPES];
+
+type InvitationFieldLabelKey =
+  (typeof ACCEPT_INVITATION_FIELD_LABEL_KEYS)[keyof typeof ACCEPT_INVITATION_FIELD_LABEL_KEYS];
+
+type InvitationFieldDescriptionKey =
+  (typeof ACCEPT_INVITATION_FIELD_DESCRIPTION_KEYS)[keyof typeof ACCEPT_INVITATION_FIELD_DESCRIPTION_KEYS];
 
 export function AcceptInvitationForm({
   invitationToken,
@@ -44,9 +76,8 @@ export function AcceptInvitationForm({
   invitationToken: string;
 }) {
   const router = useRouter();
-  const [preview, setPreview] = useState<InvitationPreviewOutcome | null>(
-    invitationToken ? null : { kind: "invitation_invalid" },
-  );
+  const previewQuery = useInvitationPreviewQuery(invitationToken);
+  const acceptInvitationMutation = useAcceptInvitationMutation();
   const [submissionError, setSubmissionError] =
     useState<SubmissionError>(null);
   const form = useForm<AcceptInvitationFormValues>({
@@ -54,55 +85,42 @@ export function AcceptInvitationForm({
     defaultValues: { display_name: "", password: "" },
   });
 
-  useEffect(() => {
-    let isActive = true;
-    if (!invitationToken) {
-      return () => {
-        isActive = false;
-      };
-    }
-
-    void previewInvitation(invitationToken)
-      .then((outcome) => {
-        if (isActive) setPreview(outcome);
-      })
-      .catch(() => {
-        if (isActive) setPreview({ kind: "error" });
-      });
-
-    return () => {
-      isActive = false;
-    };
-  }, [invitationToken]);
-
   async function onSubmit(values: AcceptInvitationFormValues) {
     setSubmissionError(null);
-    const outcome = await acceptInvitation({
+    const outcome = await acceptInvitationMutation.mutateAsync({
       invitation_token: invitationToken,
       display_name: values.display_name.trim(),
       password: values.password,
-    }).catch(() => ({ kind: "error" as const }));
+    }).catch(() => ({ kind: API_OUTCOME_KINDS.error }));
 
-    if (outcome.kind === "invitation_accepted") {
+    if (outcome.kind === API_OUTCOME_KINDS.invitationAccepted) {
       form.reset();
       router.replace(outcome.location);
       return;
     }
-    if (outcome.kind === "password_too_short") {
+    if (outcome.kind === API_OUTCOME_KINDS.passwordTooShort) {
       form.setError("password", {
         message: "pages.acceptInvitation.errors.passwordTooShort",
       });
       return;
     }
     setSubmissionError(
-      outcome.kind === "error" ? "request_failed" : outcome.kind,
+      outcome.kind === API_OUTCOME_KINDS.error
+        ? ACCEPT_INVITATION_SUBMISSION_ERRORS.requestFailed
+        : outcome.kind,
     );
   }
 
+  const preview: InvitationPreviewOutcome | null = !invitationToken
+    ? { kind: API_OUTCOME_KINDS.invitationInvalid }
+    : previewQuery.isError
+      ? { kind: API_OUTCOME_KINDS.error }
+      : previewQuery.data ?? null;
   const invalidInvitation =
-    preview?.kind === "invitation_invalid" ||
-    submissionError === "invitation_invalid";
-  const canSubmit = preview?.kind === "loaded" && !invalidInvitation;
+    preview?.kind === API_OUTCOME_KINDS.invitationInvalid ||
+    submissionError === ACCEPT_INVITATION_SUBMISSION_ERRORS.invitationInvalid;
+  const canSubmit =
+    preview?.kind === API_OUTCOME_KINDS.loaded && !invalidInvitation;
 
   return (
     <FormProvider {...form}>
@@ -143,7 +161,7 @@ export function AcceptInvitationForm({
               </p>
             ) : null}
 
-            {preview?.kind === "loaded" ? (
+            {preview?.kind === API_OUTCOME_KINDS.loaded ? (
               <InvitationPreviewSummary preview={preview.preview} />
             ) : null}
 
@@ -164,7 +182,8 @@ export function AcceptInvitationForm({
               </Alert>
             ) : null}
 
-            {submissionError === "email_already_exists" ? (
+            {submissionError ===
+            ACCEPT_INVITATION_SUBMISSION_ERRORS.emailAlreadyExists ? (
               <Alert variant="destructive">
                 <AlertTitle>
                   {resolveMessage(
@@ -187,8 +206,9 @@ export function AcceptInvitationForm({
               </Alert>
             ) : null}
 
-            {(preview?.kind === "error" ||
-              submissionError === "request_failed") &&
+            {(preview?.kind === API_OUTCOME_KINDS.error ||
+              submissionError ===
+                ACCEPT_INVITATION_SUBMISSION_ERRORS.requestFailed) &&
             !invalidInvitation ? (
               <Alert variant="destructive">
                 <AlertTitle>
@@ -208,17 +228,17 @@ export function AcceptInvitationForm({
 
             <InvitationField
               name="display_name"
-              type="text"
+              type={ACCEPT_INVITATION_FIELD_TYPES.text}
               autoComplete="name"
-              labelKey="pages.acceptInvitation.displayNameLabel"
-              descriptionKey="pages.acceptInvitation.displayNameDescription"
+              labelKey={ACCEPT_INVITATION_FIELD_LABEL_KEYS.displayName}
+              descriptionKey={ACCEPT_INVITATION_FIELD_DESCRIPTION_KEYS.displayName}
             />
             <InvitationField
               name="password"
-              type="password"
+              type={ACCEPT_INVITATION_FIELD_TYPES.password}
               autoComplete="new-password"
-              labelKey="pages.acceptInvitation.passwordLabel"
-              descriptionKey="pages.acceptInvitation.passwordDescription"
+              labelKey={ACCEPT_INVITATION_FIELD_LABEL_KEYS.password}
+              descriptionKey={ACCEPT_INVITATION_FIELD_DESCRIPTION_KEYS.password}
             />
           </FieldGroup>
         </form>
@@ -230,7 +250,10 @@ export function AcceptInvitationForm({
 function InvitationPreviewSummary({
   preview,
 }: {
-  preview: Extract<InvitationPreviewOutcome, { kind: "loaded" }>["preview"];
+  preview: Extract<
+    InvitationPreviewOutcome,
+    { kind: typeof API_OUTCOME_KINDS.loaded }
+  >["preview"];
 }) {
   const visibleActions = getVisibleDeveloperActions(preview.allowed_actions);
 
@@ -238,7 +261,7 @@ function InvitationPreviewSummary({
     <div className="space-y-3 rounded-lg border bg-muted/30 p-4 text-sm">
       <p className="font-medium">{preview.organization.name}</p>
       <p className="text-muted-foreground">
-        {preview.scope.type === "assessment"
+        {preview.scope.type === INVITATION_SCOPE_TYPES.assessment
           ? preview.scope.assessment.name
           : resolveMessage(appLocale, "pages.acceptInvitation.organizationScope")}
       </p>
@@ -263,14 +286,10 @@ function InvitationField({
   descriptionKey,
 }: {
   name: keyof AcceptInvitationFormValues;
-  type: "text" | "password";
+  type: InvitationFieldType;
   autoComplete: string;
-  labelKey:
-    | "pages.acceptInvitation.displayNameLabel"
-    | "pages.acceptInvitation.passwordLabel";
-  descriptionKey:
-    | "pages.acceptInvitation.displayNameDescription"
-    | "pages.acceptInvitation.passwordDescription";
+  labelKey: InvitationFieldLabelKey;
+  descriptionKey: InvitationFieldDescriptionKey;
 }) {
   const { formState, register } = useFormContext<AcceptInvitationFormValues>();
   const error = formState.errors[name]?.message;

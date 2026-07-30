@@ -11,7 +11,15 @@ import {
   DOCUMENT_ERROR_CODES,
   DOCUMENT_REQUEST_STATUSES,
   DOCUMENT_TYPES,
+  type DocumentRequestStatus,
+  type DocumentType,
 } from "@lcsp/contracts/document";
+import {
+  CLASSIFICATION_GUARDRAIL_STATUSES,
+  CLASSIFICATION_RESULT_STATUSES,
+  LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
+  OVERALL_COVERAGE_STATUSES,
+} from "@lcsp/contracts/scan";
 import {
   PBAC_ACTIONS,
   PBAC_REASON_CODE,
@@ -20,6 +28,11 @@ import {
 } from "@lcsp/contracts/pbac";
 
 import { AppModule } from "../src/app.module.js";
+import {
+  toPrismaDocumentRequestStatus,
+  toPrismaDocumentType,
+  toPrismaOverallCoverageStatus,
+} from "../src/infrastructure/prisma/prisma-enum-mappers.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
 import {
@@ -28,9 +41,8 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
-type ErrorResponse = { error_code?: string };
 type SuccessResponse = {
   document_request_id: string;
   document_type: string;
@@ -90,7 +102,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: "org-1",
     });
-    managerToken = (signIn.body as SignInSuccess).session_token;
+    managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
 
   afterAll(async () => {
@@ -107,7 +119,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     });
 
     const response = await getDocumentStatus(app, managerToken, "doc-ready-1");
-    const body = response.body as SuccessResponse;
+    const body = successBody<SuccessResponse>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.status, DOCUMENT_REQUEST_STATUSES.ready);
@@ -136,7 +148,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     });
 
     const response = await getDocumentStatus(app, managerToken, "doc-queued-1");
-    const body = response.body as SuccessResponse;
+    const body = successBody<SuccessResponse>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.status, DOCUMENT_REQUEST_STATUSES.queued);
@@ -159,7 +171,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
       managerToken,
       "doc-blocked-1",
     );
-    const body = response.body as SuccessResponse;
+    const body = successBody<SuccessResponse>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.status, DOCUMENT_REQUEST_STATUSES.blocked);
@@ -190,10 +202,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     const response = await getDocumentStatus(app, managerToken, "doc-denied-1");
 
     assert.equal(response.status, 403);
-    assert.equal(
-      (response.body as ErrorResponse).error_code,
-      PBAC_REASON_CODE.denied,
-    );
+    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
   });
 
   it("T06 hides a document outside the session organization", async () => {
@@ -211,10 +220,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     );
 
     assert.equal(response.status, 404);
-    assert.equal(
-      (response.body as ErrorResponse).error_code,
-      DOCUMENT_ERROR_CODES.documentNotFound,
-    );
+    assert.equal(problemCode(response), DOCUMENT_ERROR_CODES.documentNotFound);
   });
 
   it("T07 denies a Developer with redacted read when accessing FinalReport", async () => {
@@ -231,7 +237,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
       password: "DeveloperPass123!",
       organization_id: "org-1",
     });
-    const developerToken = (signIn.body as SignInSuccess).session_token;
+    const developerToken = successBody<SignInSuccess>(signIn).session_token;
 
     const response = await getDocumentStatus(
       app,
@@ -240,10 +246,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     );
 
     assert.equal(response.status, 403);
-    assert.equal(
-      (response.body as ErrorResponse).error_code,
-      PBAC_REASON_CODE.denied,
-    );
+    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
   });
 
   it("allows a scoped Developer with redacted read to view GapAnalysis and download it", async () => {
@@ -260,14 +263,14 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
       password: "DeveloperPass123!",
       organization_id: "org-1",
     });
-    const developerToken = (signIn.body as SignInSuccess).session_token;
+    const developerToken = successBody<SignInSuccess>(signIn).session_token;
 
     const response = await getDocumentStatus(
       app,
       developerToken,
       "doc-gap-redacted-1",
     );
-    const body = response.body as SuccessResponse;
+    const body = successBody<SuccessResponse>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.document_type, DOCUMENT_TYPES.gapAnalysis);
@@ -346,8 +349,8 @@ async function seedDocumentRequest(
   prisma: PrismaClient,
   input: {
     id: string;
-    status: string;
-    documentType: string;
+    status: DocumentRequestStatus;
+    documentType: DocumentType;
     organizationId?: string;
     documentUrl?: string;
     blockedReason?: string;
@@ -368,9 +371,11 @@ async function seedDocumentRequest(
       schemaVersion: "1.0.0",
       matches: [],
       citationAllowlist: ["chunk-1"],
-      overallCoverageStatus: "COMPLETE_CITATION",
-      guardrailStatus: "passed",
-      status: "accepted",
+      overallCoverageStatus: toPrismaOverallCoverageStatus(
+        OVERALL_COVERAGE_STATUSES.completeCitation,
+      ),
+      guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
+      status: CLASSIFICATION_RESULT_STATUSES.accepted,
     },
   });
 
@@ -387,9 +392,9 @@ async function seedDocumentRequest(
         risk_level: "HIGH",
         citation_basis: ["chunk-1"],
       },
-      guardrailStatus: "passed",
+      guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
       blockedReason: null,
-      status: "accepted",
+      status: CLASSIFICATION_RESULT_STATUSES.accepted,
     },
   });
 
@@ -400,8 +405,8 @@ async function seedDocumentRequest(
       organizationId,
       requestedById: "user-1",
       classificationResultId,
-      documentType: input.documentType,
-      status: input.status,
+      documentType: toPrismaDocumentType(input.documentType),
+      status: toPrismaDocumentRequestStatus(input.status),
       documentUrl: input.documentUrl,
       blockedReason: input.blockedReason,
       correlationId: `${input.id}-corr`,

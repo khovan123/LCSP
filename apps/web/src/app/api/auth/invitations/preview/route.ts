@@ -1,40 +1,34 @@
-import { NextResponse } from "next/server";
 import { ACCEPT_INVITATION_ERROR_CODES } from "@lcsp/contracts/auth";
 
-import { safeInvitationPreviewErrorCode } from "@/lib/api/invitation-proxy";
-
-const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
+import { safeInvitationPreviewErrorCode } from "@/lib/server/invitations/invitation-upstream-response";
+import {
+  problemJson,
+  successJson,
+} from "@/lib/server/problem-json";
+import { upstreamRequest } from "@/lib/server/upstream-request";
 
 export async function POST(request: Request) {
   const body: unknown = await request.json().catch(() => null);
-  const apiResponse = await fetch(`${apiBaseUrl}/auth/invitations/preview`, {
+  const upstream = await upstreamRequest("/auth/invitations/preview", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
-    cache: "no-store",
   });
-  const payload: unknown = await apiResponse.json().catch(() => null);
 
-  if (!apiResponse.ok) {
-    return NextResponse.json(
-      { problem: { code: safeInvitationPreviewErrorCode(payload) } },
-      { status: apiResponse.status },
-    );
+  if (!upstream.ok) {
+    return problemJson(safeInvitationPreviewErrorCode(upstream.result), {
+      status: upstream.status,
+    });
   }
 
-  const preview = toDisplaySafePreview(payload);
+  const preview = toDisplaySafePreview(upstream.data);
   if (!preview) {
-    return NextResponse.json(
-      {
-        problem: {
-          code: ACCEPT_INVITATION_ERROR_CODES.invitationInvalid,
-        },
-      },
-      { status: 502 },
-    );
+    return problemJson(ACCEPT_INVITATION_ERROR_CODES.invitationInvalid, {
+      status: 502,
+    });
   }
 
-  return NextResponse.json(preview);
+  return successJson(preview);
 }
 
 function toDisplaySafePreview(payload: unknown) {

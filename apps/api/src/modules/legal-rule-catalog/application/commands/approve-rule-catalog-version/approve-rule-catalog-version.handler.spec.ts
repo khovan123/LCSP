@@ -11,6 +11,8 @@ import { PrismaService } from "../../../../../infrastructure/prisma/prisma.servi
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { ApproveRuleCatalogVersionCommand } from "./approve-rule-catalog-version.command.js";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { LEGAL_RULE_LIFECYCLE_STATUSES } from "@lcsp/contracts/legal-rule-catalog";
+import { toPrismaLegalRuleLifecycleStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 
 describe("ApproveRuleCatalogVersionHandler", () => {
   let handler: ApproveRuleCatalogVersionHandler;
@@ -72,7 +74,9 @@ describe("ApproveRuleCatalogVersionHandler", () => {
     (prisma.legalRuleCatalogVersion.findUnique as any).mockResolvedValue({
       id: "version-uuid",
       version: "1.0",
-      status: "DRAFT",
+      status: toPrismaLegalRuleLifecycleStatus(
+        LEGAL_RULE_LIFECYCLE_STATUSES.draft,
+      ),
     } as any);
 
     const result = await handler.execute(command);
@@ -80,7 +84,7 @@ describe("ApproveRuleCatalogVersionHandler", () => {
     expect(result).toEqual({
       id: "version-uuid",
       version: "1.0",
-      status: "APPROVED",
+      status: LEGAL_RULE_LIFECYCLE_STATUSES.approved,
       approvedAt: expect.any(String),
     });
 
@@ -95,7 +99,9 @@ describe("ApproveRuleCatalogVersionHandler", () => {
 
     (prisma.legalRuleCatalogVersion.findUnique as any).mockResolvedValue({
       id: "version-uuid",
-      status: "APPROVED",
+      status: toPrismaLegalRuleLifecycleStatus(
+        LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+      ),
     } as any);
 
     await expect(handler.execute(command)).rejects.toThrow(ConflictException);
@@ -124,7 +130,9 @@ describe("ApproveRuleCatalogVersionHandler", () => {
     (prisma.legalRuleCatalogVersion.findUnique as any).mockResolvedValue({
       id: "version-uuid",
       version: "1.0",
-      status: "DRAFT",
+      status: toPrismaLegalRuleLifecycleStatus(
+        LEGAL_RULE_LIFECYCLE_STATUSES.draft,
+      ),
     } as any);
 
     await handler.execute(command);

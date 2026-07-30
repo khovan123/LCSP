@@ -127,9 +127,12 @@ describe("GitHubAppStartHandler", () => {
         ),
       );
     } catch (error) {
-      expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.invalidRedirectUri,
-        correlation_id: "corr-1",
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: GITHUB_INTEGRATION_ERROR_CODES.invalidRedirectUri,
+          correlationId: "corr-1",
+        },
       });
     }
     expect(save).not.toHaveBeenCalled();
@@ -181,9 +184,12 @@ describe("GitHubAppStartHandler", () => {
         ),
       );
     } catch (error) {
-      expect((error as BadRequestException).getResponse()).toEqual({
-        error_code: ASSESSMENT_ERROR_CODES.notFound,
-        correlation_id: "corr-1",
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: ASSESSMENT_ERROR_CODES.notFound,
+          correlationId: "corr-1",
+        },
       });
     }
     expect(save).not.toHaveBeenCalled();

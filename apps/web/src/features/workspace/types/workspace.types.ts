@@ -5,6 +5,8 @@ import type {
 } from "@lcsp/contracts/assessment";
 import type { MessageKey } from "@lcsp/i18n";
 
+import { API_OUTCOME_KINDS } from "../../../lib/api/outcome-kinds.ts";
+
 export type WorkspaceAction = AssessmentAction | (string & {});
 
 export type WorkspaceContext = {
@@ -29,17 +31,17 @@ export type AssessmentSummary = {
 };
 
 export type WorkspaceRedirectOutcome = {
-  kind: "redirect";
+  kind: typeof API_OUTCOME_KINDS.redirect;
   location: string;
 };
 
 export type WorkspaceLoadedOutcome = {
-  kind: "loaded";
+  kind: typeof API_OUTCOME_KINDS.loaded;
   workspace: WorkspaceContext;
 };
 
 export type WorkspaceErrorOutcome = {
-  kind: "error";
+  kind: typeof API_OUTCOME_KINDS.error;
   titleKey: MessageKey;
   detailKey: MessageKey;
 };
@@ -49,7 +51,7 @@ export type WorkspaceOutcome =
 
 export type AssessmentsOutcome =
   | {
-      kind: "loaded";
+      kind: typeof API_OUTCOME_KINDS.loaded;
       assessments: AssessmentSummary[];
     }
   | WorkspaceErrorOutcome;

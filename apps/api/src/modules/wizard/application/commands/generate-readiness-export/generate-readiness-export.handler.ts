@@ -1,14 +1,11 @@
 import * as crypto from "node:crypto";
 
-import {
-  ConflictException,
-  ForbiddenException,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
@@ -21,8 +18,14 @@ import {
 } from "@lcsp/contracts/wizard";
 import { Prisma } from "@prisma/client";
 
+import {
+  fromPrismaWizardStatus,
+  toPrismaEvidenceAcceptanceStatus,
+  toPrismaReadinessExportStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { AssessmentNotFoundException } from "../../../domain/exceptions/wizard.exceptions.js";
 import type {
   ReadinessExportContent,
@@ -64,7 +67,7 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       },
     });
     if (!assessment) {
-      throw new AssessmentNotFoundException();
+      throw new AssessmentNotFoundException(command.correlationId);
     }
 
     const [wizardProfile, repositoryConnection, technicalEvidence, latest] =
@@ -86,7 +89,9 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
           where: {
             assessmentId: command.assessmentId,
             organizationId: command.organizationId,
-            status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+            status: toPrismaEvidenceAcceptanceStatus(
+              TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+            ),
           },
           select: { id: true },
         }),
@@ -97,18 +102,28 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
         }),
       ]);
 
-    if (wizardProfile?.status !== WIZARD_STATUS_CODES.submitted) {
-      throw new UnprocessableEntityException({
-        error_code: READINESS_EXPORT_ERROR_CODES.wizardNotSubmitted,
-        correlation_id: command.correlationId,
-      });
+    if (!wizardProfile) {
+      throw problemException(
+        READINESS_EXPORT_ERROR_CODES.wizardNotSubmitted,
+        command.correlationId,
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
+      );
+    }
+    const wizardStatus = fromPrismaWizardStatus(wizardProfile.status);
+    if (wizardStatus !== WIZARD_STATUS_CODES.submitted) {
+      throw problemException(
+        READINESS_EXPORT_ERROR_CODES.wizardNotSubmitted,
+        command.correlationId,
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
+      );
     }
 
     if (technicalEvidence) {
-      throw new ConflictException({
-        error_code: READINESS_EXPORT_ERROR_CODES.requiresLockedClassification,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        READINESS_EXPORT_ERROR_CODES.requiresLockedClassification,
+        command.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
     }
 
     const version = (latest?.version ?? 0) + 1;
@@ -116,7 +131,7 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
     const readiness = this.readinessEvaluator.evaluate({
       hasRepositoryConnection: !!repositoryConnection,
       hasAcceptedTechnicalEvidence: false,
-      wizardStatus: wizardProfile.status,
+      wizardStatus,
     });
     const content = this.buildContent(
       command,
@@ -141,7 +156,7 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
           organizationId: command.organizationId,
           ownerId: command.ownerId,
           version,
-          status,
+          status: toPrismaReadinessExportStatus(status),
           contentJson: guardrailResult.passed
             ? (content as unknown as Prisma.InputJsonValue)
             : undefined,
@@ -157,7 +172,7 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
             : WIZARD_EVENT_TYPES.readinessExportBlocked,
           actorId: command.ownerId,
           organizationId: command.organizationId,
-          resourceType: "readiness_export",
+          resourceType: AUDIT_RESOURCE_TYPES.readinessExport,
           resourceId: exportId,
           assessmentId: command.assessmentId,
           decision: guardrailResult.passed
@@ -276,7 +291,7 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       eventType: WIZARD_EVENT_TYPES.readinessExportGenerated,
       actorId: command.ownerId,
       organizationId: command.organizationId,
-      resourceType: "readiness_export",
+      resourceType: AUDIT_RESOURCE_TYPES.readinessExport,
       resourceId: null,
       assessmentId: command.assessmentId,
       decision: AUDIT_DECISIONS.deny,
@@ -291,9 +306,8 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       },
     });
 
-    throw new ForbiddenException({
-      error_code: AUTH_ERROR_CODES.pbacDenied,
-      correlation_id: command.correlationId,
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 }

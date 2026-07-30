@@ -11,16 +11,11 @@ import {
 import { CommandBus } from "@nestjs/cqrs";
 
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { AcceptClassificationCommand } from "../../application/commands/accept-classification/accept-classification.command.js";
 import { AcceptLegalRuleMatchCommand } from "../../application/commands/accept-legal-rule-match/accept-legal-rule-match.command.js";
-import type {
-  AcceptClassificationDto,
-  ClassificationResultCallbackResponseDto,
-} from "../../application/contracts/classification/classification-result-callback.contract.js";
-import type {
-  AcceptLegalRuleMatchDto,
-  LegalRuleMatchCallbackResponseDto,
-} from "../../application/contracts/classification/legal-rule-match-callback.contract.js";
+import type { AcceptClassificationDto } from "../../application/contracts/classification/classification-result-callback.contract.js";
+import type { AcceptLegalRuleMatchDto } from "../../application/contracts/classification/legal-rule-match-callback.contract.js";
 
 @Controller("internal/classification")
 export class ClassificationController {
@@ -32,11 +27,13 @@ export class ClassificationController {
   async acceptLegalRuleMatch(
     @Body() payload: AcceptLegalRuleMatchDto,
     @Headers("x-correlation-id") correlationId?: string,
-  ): Promise<LegalRuleMatchCallbackResponseDto> {
-    return this.commandBus.execute(
-      new AcceptLegalRuleMatchCommand(
-        payload,
-        correlationId?.trim() || randomUUID(),
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new AcceptLegalRuleMatchCommand(
+          payload,
+          correlationId?.trim() || randomUUID(),
+        ),
       ),
     );
   }
@@ -47,11 +44,13 @@ export class ClassificationController {
   async acceptClassificationResult(
     @Body() payload: AcceptClassificationDto,
     @Headers("x-correlation-id") correlationId?: string,
-  ): Promise<ClassificationResultCallbackResponseDto> {
-    return this.commandBus.execute(
-      new AcceptClassificationCommand(
-        payload,
-        correlationId?.trim() || randomUUID(),
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new AcceptClassificationCommand(
+          payload,
+          correlationId?.trim() || randomUUID(),
+        ),
       ),
     );
   }

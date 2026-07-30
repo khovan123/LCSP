@@ -1,12 +1,13 @@
-import { BadRequestException, Inject } from "@nestjs/common";
+import { HttpStatus, Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   GITHUB_INTEGRATION_EVENT_TYPES,
   GITHUB_REPOSITORY_PERMISSION_LEVELS,
 } from "@lcsp/contracts/github-integration";
 
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { RepositoryConnection } from "../../../domain/entities/repository-connection.entity.js";
 import {
   GITHUB_APP_INSTALL_STATE_REPOSITORY,
@@ -39,19 +40,21 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
       command.state,
     );
     if (!installState) {
-      throw new BadRequestException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     await this.installStateRepository.deleteById(installState.id);
 
     if (installState.expiresAt.getTime() < Date.now()) {
-      throw new BadRequestException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     let accessToken: string;
@@ -60,10 +63,11 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
         command.code,
       );
     } catch {
-      throw new BadRequestException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     let metadata: Awaited<
@@ -75,19 +79,21 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
         accessToken,
       });
     } catch {
-      throw new BadRequestException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     if (
       metadata.permissions.contents !== GITHUB_REPOSITORY_PERMISSION_LEVELS.read
     ) {
-      throw new BadRequestException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     const connection = RepositoryConnection.create({
@@ -107,7 +113,7 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.appConnected,
       actorId: installState.userId,
       organizationId: installState.organizationId,
-      resourceType: "RepositoryConnection",
+      resourceType: AUDIT_RESOURCE_TYPES.repositoryConnection,
       resourceId: connection.id,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.allow,

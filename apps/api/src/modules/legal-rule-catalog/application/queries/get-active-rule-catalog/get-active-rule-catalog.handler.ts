@@ -1,4 +1,9 @@
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
+import { LEGAL_RULE_LIFECYCLE_STATUSES } from "@lcsp/contracts/legal-rule-catalog";
+import {
+  fromPrismaLegalRuleLifecycleStatus,
+  toPrismaLegalRuleLifecycleStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { GetActiveRuleCatalogQuery } from "./get-active-rule-catalog.query.js";
 
@@ -23,7 +28,11 @@ export class GetActiveRuleCatalogHandler implements IQueryHandler<GetActiveRuleC
 
   async execute(): Promise<ActiveRuleCatalogResponse> {
     const version = await this.prisma.legalRuleCatalogVersion.findFirst({
-      where: { status: "APPROVED" },
+      where: {
+        status: toPrismaLegalRuleLifecycleStatus(
+          LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+        ),
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -32,14 +41,19 @@ export class GetActiveRuleCatalogHandler implements IQueryHandler<GetActiveRuleC
     }
 
     const rules = await this.prisma.legalRule.findMany({
-      where: { legalRuleCatalogVersionId: version.id, status: "APPROVED" },
+      where: {
+        legalRuleCatalogVersionId: version.id,
+        status: toPrismaLegalRuleLifecycleStatus(
+          LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+        ),
+      },
       orderBy: { legalRuleId: "asc" },
     });
 
     return {
       versionId: version.id,
       version: version.version,
-      status: version.status,
+      status: fromPrismaLegalRuleLifecycleStatus(version.status),
       rules: rules.map((rule) => ({
         legalRuleId: rule.legalRuleId,
         requiredFacts: rule.requiredFacts,

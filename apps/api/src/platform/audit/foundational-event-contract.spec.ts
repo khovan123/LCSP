@@ -3,6 +3,8 @@ import {
   AUDIT_EVENT_SCHEMA_VERSION,
   AUDIT_REDACTION_STATUSES,
   buildAuditEventInput,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
 import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
 import { AUTH_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
@@ -10,6 +12,7 @@ import {
   OUTBOX_MESSAGE_SCHEMA_VERSION,
   buildOutboxMessageInput,
   isCanonicalOutboxEventName,
+  OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
 
 describe("Foundational audit/outbox event contract", () => {
@@ -19,7 +22,7 @@ describe("Foundational audit/outbox event contract", () => {
       actorId: "manager-1",
       organizationId: "org-1",
       assessmentId: "assessment-1",
-      resourceType: "AuthSession",
+      resourceType: AUDIT_RESOURCE_TYPES.authSession,
       resourceId: "session-1",
       correlationId: "corr-1",
       causationId: "command-1",
@@ -34,7 +37,7 @@ describe("Foundational audit/outbox event contract", () => {
 
     expect(event.payload).toEqual({
       schemaVersion: AUDIT_EVENT_SCHEMA_VERSION,
-      actor: { id: "manager-1", type: "user" },
+      actor: { id: "manager-1", type: AUDIT_ACTOR_TYPES.user },
       assessmentId: "assessment-1",
       causationId: "command-1",
       redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
@@ -50,14 +53,14 @@ describe("Foundational audit/outbox event contract", () => {
     expect(isCanonicalOutboxEventName("assessment.created")).toBe(false);
 
     const message = buildOutboxMessageInput({
-      aggregateType: "Assessment",
+      aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
       aggregateId: "assessment-1",
       eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
       organizationId: "org-1",
       assessmentId: "assessment-1",
       correlationId: "corr-1",
       causationId: "command-1",
-      actor: { id: "manager-1", type: "user" },
+      actor: { id: "manager-1", type: AUDIT_ACTOR_TYPES.user },
       result: ASSESSMENT_EVENT_TYPES.created,
       redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
       idempotencyKey: `assessment-1:${ASSESSMENT_EVENT_TYPES.createdOutbox}`,
@@ -74,7 +77,7 @@ describe("Foundational audit/outbox event contract", () => {
       assessmentId: "assessment-1",
       correlationId: "corr-1",
       causationId: "command-1",
-      actor: { id: "manager-1", type: "user" },
+      actor: { id: "manager-1", type: AUDIT_ACTOR_TYPES.user },
       result: ASSESSMENT_EVENT_TYPES.created,
       redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
       idempotencyKey: `assessment-1:${ASSESSMENT_EVENT_TYPES.createdOutbox}`,

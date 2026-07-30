@@ -1,5 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import type { PersistedWizardStatusCode } from "@lcsp/contracts/assessment";
+import {
+  fromPrismaWizardStatus,
+  toPrismaWizardStatus,
+} from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { WizardProfileRepository } from "../../application/ports/persistence/wizard-profile.repository.js";
 import { WizardProfileEntity } from "../../domain/entities/wizard-profile.entity.js";
@@ -30,13 +34,13 @@ export class PrismaWizardRepository implements WizardProfileRepository {
       where: { assessmentId },
     });
     if (!data) return null;
-    return new WizardProfileEntity({
+    return WizardProfileEntity.rehydrate({
       id: data.id,
       assessmentId: data.assessmentId,
       organizationId: data.organizationId,
       ownerId: data.ownerId,
       version: data.version,
-      status: data.status as PersistedWizardStatusCode,
+      status: fromPrismaWizardStatus(data.status) as PersistedWizardStatusCode,
       answers: data.answers as Record<string, any>,
       submittedAt: data.submittedAt,
       createdAt: data.createdAt,
@@ -52,7 +56,7 @@ export class PrismaWizardRepository implements WizardProfileRepository {
       update: {
         answers: profile.answers ?? {},
         version: profile.version,
-        status: profile.status,
+        status: toPrismaWizardStatus(profile.status),
       },
       create: {
         id: profile.id, // Or let DB generate UUID if omitted, but Prisma upsert requires ID or will generate if it's in the schema. Assuming schema provides @default(uuid()).
@@ -60,18 +64,18 @@ export class PrismaWizardRepository implements WizardProfileRepository {
         organizationId: profile.organizationId,
         ownerId: profile.ownerId,
         version: profile.version,
-        status: profile.status,
+        status: toPrismaWizardStatus(profile.status),
         answers: profile.answers ?? {},
       },
     });
 
-    return new WizardProfileEntity({
+    return WizardProfileEntity.rehydrate({
       id: data.id,
       assessmentId: data.assessmentId,
       organizationId: data.organizationId,
       ownerId: data.ownerId,
       version: data.version,
-      status: data.status as PersistedWizardStatusCode,
+      status: fromPrismaWizardStatus(data.status) as PersistedWizardStatusCode,
       answers: data.answers as Record<string, any>,
       submittedAt: data.submittedAt,
       createdAt: data.createdAt,

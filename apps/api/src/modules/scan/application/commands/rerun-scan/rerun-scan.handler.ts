@@ -1,16 +1,13 @@
 import { randomUUID } from "node:crypto";
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
@@ -19,13 +16,23 @@ import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
 
+import {
+  fromPrismaAssessmentStatus,
+  fromPrismaRepositoryScanJobStatus,
+  toPrismaRepositoryScanJobStatus,
+  toPrismaRepositoryScanTriggerSource,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type { RerunScanResponseDto } from "../../contracts/scan/rerun-scan.contract.js";
 import { RerunScanCommand } from "./rerun-scan.command.js";
 
@@ -42,10 +49,11 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
     // Basic org validation and PBAC was handled by the guard, but we still ensure assessment belongs to org
 
     if (!command.idempotencyKey) {
-      throw new BadRequestException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyKeyRequired,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyKeyRequired,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     const existing = await this.prisma.repositoryScanJob.findUnique({
@@ -58,14 +66,15 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
         existing.snapshotId !== command.snapshotId ||
         existing.organizationId !== pbac.organizationId
       ) {
-        throw new ConflictException({
-          error_code: GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyConflict,
-          correlation_id: command.correlationId,
-        });
+        throw problemException(
+          GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyConflict,
+          command.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
       }
       return this.toDto(
         existing.id,
-        existing.status,
+        fromPrismaRepositoryScanJobStatus(existing.status),
         undefined,
         command.correlationId,
       );
@@ -85,10 +94,11 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
       snapshot.organizationId !== pbac.organizationId ||
       snapshot.assessmentId !== command.assessmentId
     ) {
-      throw new NotFoundException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
+        command.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
     const assessment = await this.prisma.assessment.findUnique({
@@ -97,10 +107,11 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
     });
 
     if (!assessment || assessment.organizationId !== pbac.organizationId) {
-      throw new NotFoundException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
+        command.correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
     const isManagerOwner =
@@ -108,20 +119,25 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
       pbac.userId === assessment.ownerId;
 
     if (!isManagerOwner) {
-      throw new ForbiddenException({
-        error_code: AUTH_ERROR_CODES.pbacDenied,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        AUTH_ERROR_CODES.pbacDenied,
+        command.correlationId,
+        {
+          status: HttpStatus.FORBIDDEN,
+        },
+      );
     }
 
+    const assessmentStatus = fromPrismaAssessmentStatus(assessment.status);
     if (
-      assessment.status !== ASSESSMENT_STATUS_CODES.wizardSubmitted &&
-      assessment.status !== ASSESSMENT_STATUS_CODES.readyForReview
+      assessmentStatus !== ASSESSMENT_STATUS_CODES.wizardSubmitted &&
+      assessmentStatus !== ASSESSMENT_STATUS_CODES.readyForReview
     ) {
-      throw new ConflictException({
-        error_code: GITHUB_INTEGRATION_ERROR_CODES.assessmentStateInvalid,
-        correlation_id: command.correlationId,
-      });
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.assessmentStateInvalid,
+        command.correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
     }
 
     // Find prior job to keep track
@@ -135,14 +151,14 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
     const status = REPOSITORY_SCAN_JOB_STATUSES.queued;
 
     const event = buildOutboxMessageInput({
-      aggregateType: "RepositoryScanJob",
+      aggregateType: OUTBOX_AGGREGATE_TYPES.repositoryScanJob,
       aggregateId: newScanJobId,
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered,
       organizationId: pbac.organizationId,
       assessmentId: command.assessmentId,
       correlationId: command.correlationId,
       causationId: command.correlationId,
-      actor: { id: pbac.userId, type: "user" },
+      actor: { id: pbac.userId, type: AUDIT_ACTOR_TYPES.user },
       result: SCAN_EVENT_TYPES.scanRerunTriggeredAudit,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       idempotencyKey: command.idempotencyKey,
@@ -167,8 +183,8 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
             snapshotId: command.snapshotId,
             organizationId: pbac.organizationId,
             idempotencyKey: command.idempotencyKey,
-            triggerSource,
-            status,
+            triggerSource: toPrismaRepositoryScanTriggerSource(triggerSource),
+            status: toPrismaRepositoryScanJobStatus(status),
             correlationId: command.correlationId,
           },
         });
@@ -182,7 +198,7 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
       if (raced) {
         return this.toDto(
           raced.id,
-          raced.status,
+          fromPrismaRepositoryScanJobStatus(raced.status),
           priorJob?.id,
           command.correlationId,
         );
@@ -195,7 +211,7 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
       actorId: pbac.userId,
       organizationId: pbac.organizationId,
       assessmentId: command.assessmentId,
-      resourceType: "RepositoryScanJob",
+      resourceType: AUDIT_RESOURCE_TYPES.repositoryScanJob,
       resourceId: newScanJobId,
       correlationId: command.correlationId,
       causationId: command.correlationId,

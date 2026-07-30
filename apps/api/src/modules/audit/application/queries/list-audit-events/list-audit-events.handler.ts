@@ -1,9 +1,12 @@
-import { BadRequestException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import type { Prisma } from "@prisma/client";
 import { ORGANIZATION_SCOPE_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUDIT_ERROR_CODES } from "@lcsp/contracts/audit";
 
+import { fromPrismaAuthDecision } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type {
   AuditEventListDto,
   AuditEventSummary,
@@ -52,10 +55,16 @@ export class ListAuditEventsHandler implements IQueryHandler<ListAuditEventsQuer
     if (fromDate && toDate) {
       const range = toDate.getTime() - fromDate.getTime();
       if (range < 0) {
-        this.badRequest("INVALID_DATE_RANGE", query.correlationId);
+        this.badRequest(
+          AUDIT_ERROR_CODES.invalidDateRange,
+          query.correlationId,
+        );
       }
       if (range > MAX_DATE_RANGE_MS) {
-        this.badRequest("AUDIT_DATE_RANGE_EXCEEDED", query.correlationId);
+        this.badRequest(
+          AUDIT_ERROR_CODES.dateRangeExceeded,
+          query.correlationId,
+        );
       }
     }
 
@@ -97,7 +106,7 @@ export class ListAuditEventsHandler implements IQueryHandler<ListAuditEventsQuer
       event_type: row.eventType,
       actor_id: row.actorId,
       organization_id: row.organizationId ?? query.organizationId,
-      decision: row.decision,
+      decision: row.decision ? fromPrismaAuthDecision(row.decision) : null,
       payload: this.redactor.redact(row.payload),
       occurred_at: row.createdAt.toISOString(),
     }));
@@ -120,7 +129,7 @@ export class ListAuditEventsHandler implements IQueryHandler<ListAuditEventsQuer
       return fallback;
     }
     if (!Number.isInteger(value) || value < 1) {
-      this.badRequest("INVALID_AUDIT_QUERY", correlationId);
+      this.badRequest(AUDIT_ERROR_CODES.invalidQuery, correlationId);
     }
     return value;
   }
@@ -135,7 +144,7 @@ export class ListAuditEventsHandler implements IQueryHandler<ListAuditEventsQuer
     }
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) {
-      this.badRequest("INVALID_AUDIT_QUERY", correlationId, field);
+      this.badRequest(AUDIT_ERROR_CODES.invalidQuery, correlationId, field);
     }
     return date;
   }
@@ -145,10 +154,9 @@ export class ListAuditEventsHandler implements IQueryHandler<ListAuditEventsQuer
     correlationId: string,
     field?: string,
   ): never {
-    throw new BadRequestException({
-      error_code: errorCode,
-      correlation_id: correlationId,
-      ...(field ? { field } : {}),
+    throw problemException(errorCode, correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+      ...(field ? { meta: { field } } : {}),
     });
   }
 }

@@ -1,0 +1,10 @@
+{
+  "conflicts": [
+    { "conflict_id": "conflict-1", "conflict_type": "DATA_RETENTION", "conflict_score": 0.82, "score_explanation": "Retention period is absent from the submitted evidence.", "status": "PENDING", "evidence_refs": ["EV-104", "EV-119"], "created_at": "2026-07-29T09:30:00.000Z" },
+    { "conflict_id": "conflict-2", "conflict_type": "HUMAN_OVERSIGHT", "conflict_score": 0.64, "score_explanation": "Escalation ownership requires a manager decision.", "status": "PENDING", "evidence_refs": ["EV-108"], "created_at": "2026-07-29T09:45:00.000Z" }
+  ],
+  "total": 2,
+  "page": 1,
+  "page_size": 20,
+  "correlation_id": "mock-correlation-conflicts"
+}

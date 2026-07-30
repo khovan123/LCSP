@@ -4,6 +4,7 @@ import {
   AUTH_MEMBERSHIP_STATUSES,
   INVITE_DEVELOPER_ERROR_CODES,
 } from "@lcsp/contracts/auth";
+import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   PBAC_ACTIONS,
   PBAC_DECISION,
@@ -18,7 +19,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import { DEVELOPER_ALLOWED_ACTIONS } from "@lcsp/contracts/pbac";
@@ -36,11 +37,6 @@ type InviteDeveloperBody = {
   email: string;
   correlation_id: string;
   allowed_actions: string[];
-};
-
-type ErrorBody = {
-  code?: string;
-  error_code?: string;
 };
 
 describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
@@ -76,7 +72,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: fixture.organizationId,
     });
-    managerToken = (signIn.body as SignInSuccess).session_token;
+    managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
 
   afterAll(async () => {
@@ -107,7 +103,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       });
 
     assert.equal(result.status, 201);
-    const body = result.body as InviteDeveloperBody;
+    const body = successBody<InviteDeveloperBody>(result);
     assert.equal(body.email, "developer@example.test");
     assert.equal(body.correlation_id, "corr-invite-1");
     assert.deepEqual(body.allowed_actions, [
@@ -140,7 +136,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
         decision: PBAC_DECISION.allow,
       },
     });
-    assert.equal(decision.resourceType, "HttpRoute");
+    assert.equal(decision.resourceType, AUDIT_RESOURCE_TYPES.httpRoute);
   });
 
   it("T02 returns PBAC_DENIED and writes AuthDecisionLog when Manager lacks invite action", async () => {
@@ -153,10 +149,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       });
 
     assert.equal(result.status, 403);
-    assert.equal(
-      (result.body as ErrorBody).error_code,
-      PBAC_REASON_CODE.denied,
-    );
+    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
 
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: {
@@ -165,7 +158,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
       },
       orderBy: { createdAt: "desc" },
     });
-    assert.equal(decision.resourceType, "HttpRoute");
+    assert.equal(decision.resourceType, AUDIT_RESOURCE_TYPES.httpRoute);
   });
 
   it("T03 rejects Manager-only actions", async () => {
@@ -181,7 +174,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
 
     assert.equal(result.status, 400);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       INVITE_DEVELOPER_ERROR_CODES.invalidActions,
     );
   });
@@ -201,7 +194,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
 
     assert.equal(result.status, 400);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       INVITE_DEVELOPER_ERROR_CODES.assessmentNotOwned,
     );
   });
@@ -219,7 +212,7 @@ describe("Invite Developer endpoint (e2e) [MW-auth-010]", () => {
 
     assert.equal(result.status, 422);
     assert.equal(
-      (result.body as ErrorBody).error_code,
+      problemCode(result),
       INVITE_DEVELOPER_ERROR_CODES.invalidEmail,
     );
   });

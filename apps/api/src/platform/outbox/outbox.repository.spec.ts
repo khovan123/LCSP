@@ -1,5 +1,8 @@
 import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
-import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
+import {
+  OUTBOX_STATUSES,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
 
@@ -96,7 +99,7 @@ describe("OutboxRepository", () => {
       const repository = new OutboxRepository(prisma);
 
       await repository.enqueue({
-        aggregateType: "Assessment",
+        aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
         aggregateId: "assessment-1",
         eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
         payload: { assessmentId: "assessment-1" },
@@ -114,7 +117,7 @@ describe("OutboxRepository", () => {
           attempts: number;
         };
       };
-      expect(call.data.aggregateType).toBe("Assessment");
+      expect(call.data.aggregateType).toBe(OUTBOX_AGGREGATE_TYPES.assessment);
       expect(call.data.aggregateId).toBe("assessment-1");
       expect(call.data.eventType).toBe(ASSESSMENT_EVENT_TYPES.createdOutbox);
       expect(call.data.payload).toEqual({ assessmentId: "assessment-1" });
@@ -132,7 +135,7 @@ describe("OutboxRepository", () => {
 
       await repository.enqueue(
         {
-          aggregateType: "Assessment",
+          aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
           aggregateId: "assessment-1",
           eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
           payload: {},

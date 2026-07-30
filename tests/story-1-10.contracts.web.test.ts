@@ -9,7 +9,6 @@ import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   AUTH_INVITATION_STATES,
   AUTH_MEMBERSHIP_STATUSES,
-  type ProblemCodeEnvelope,
   type ProblemResult,
 } from "@lcsp/contracts/auth";
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
@@ -22,7 +21,7 @@ import {
 
 type Assert<T extends true> = T;
 type _ApiProblemIsAcceptedByWebWireContract = Assert<
-  ProblemResult extends ProblemCodeEnvelope ? true : false
+  ProblemResult extends { ok: false; problem: object } ? true : false
 >;
 
 test("shared contracts expose canonical workflow value sets", () => {
@@ -40,24 +39,24 @@ test("shared contracts expose canonical workflow value sets", () => {
     "SUBMITTED",
   ]);
   assert.deepEqual(Object.values(AUTH_MEMBERSHIP_STATUSES), [
-    "invited",
-    "active",
-    "revoked",
+    "INVITED",
+    "ACTIVE",
+    "REVOKED",
   ]);
   assert.deepEqual(Object.values(AUTH_INVITATION_STATES), [
-    "approved",
-    "pending",
-    "consumed",
+    "APPROVED",
+    "PENDING",
+    "CONSUMED",
   ]);
   assert.deepEqual(Object.values(OUTBOX_STATUSES), [
-    "pending",
-    "published",
-    "failed",
-    "dlq",
+    "PENDING",
+    "PUBLISHED",
+    "FAILED",
+    "DLQ",
   ]);
   assert.deepEqual(Object.values(REPOSITORY_CONNECTION_STATUSES), [
-    "active",
-    "revoked",
+    "ACTIVE",
+    "REVOKED",
   ]);
 });
 
@@ -68,5 +67,5 @@ test("decision, role, and state-gate contracts have one canonical source", () =>
     "Developer",
     "SystemAdmin",
   ]);
-  assert.deepEqual(Object.values(PBAC_STATE_GATES), ["membership_active"]);
+  assert.deepEqual(Object.values(PBAC_STATE_GATES), ["MEMBERSHIP_ACTIVE"]);
 });

@@ -1,6 +1,10 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import {
+  PBAC_ACTIONS,
+  PBAC_METADATA_TYPES,
+  SUBJECT_ROLES,
+} from "@lcsp/contracts/pbac";
 import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-metadata.js";
 import { GetDocumentQuery } from "../../application/queries/get-document/get-document.query.js";
 import { RequestGapAnalysisCommand } from "../../application/commands/request-gap-analysis/request-gap-analysis.command.js";
@@ -15,7 +19,7 @@ describe("DocumentController PBAC", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: "action",
+      type: PBAC_METADATA_TYPES.action,
       action: PBAC_ACTIONS.documentGenerate,
     });
   });
@@ -28,7 +32,7 @@ describe("DocumentController PBAC", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: "action",
+      type: PBAC_METADATA_TYPES.action,
       action: PBAC_ACTIONS.documentGenerate,
     });
   });
@@ -41,7 +45,7 @@ describe("DocumentController PBAC", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: "action_any",
+      type: PBAC_METADATA_TYPES.actionAny,
       actions: [PBAC_ACTIONS.documentRead, PBAC_ACTIONS.documentReadRedacted],
     });
   });

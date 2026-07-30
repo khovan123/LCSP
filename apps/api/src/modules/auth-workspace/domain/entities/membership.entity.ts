@@ -1,9 +1,20 @@
+import { randomUUID } from "node:crypto";
+
 import {
   SubjectAttributes,
   type SubjectAttributesRecord,
 } from "../value-objects/subject-attributes.value-object.ts";
 
 export type MembershipStatus = AuthMembershipStatus;
+
+type MembershipInput = {
+  userId: string;
+  organizationId: string;
+  status: MembershipStatus;
+  subjectAttributes?: SubjectAttributesRecord;
+  policyId: string;
+  policyVersion: string;
+};
 
 export class Membership {
   readonly id: string;
@@ -14,16 +25,8 @@ export class Membership {
   readonly policyId: string;
   readonly policyVersion: string;
 
-  constructor(input: {
-    id: string;
-    userId: string;
-    organizationId: string;
-    status: MembershipStatus;
-    subjectAttributes?: SubjectAttributesRecord;
-    policyId: string;
-    policyVersion: string;
-  }) {
-    this.id = input.id;
+  constructor(input: MembershipInput) {
+    this.id = randomUUID();
     this.userId = input.userId;
     this.organizationId = input.organizationId;
     this.status = input.status;
@@ -32,6 +35,12 @@ export class Membership {
     );
     this.policyId = input.policyId;
     this.policyVersion = input.policyVersion;
+  }
+
+  static rehydrate(input: MembershipInput & { id: string }): Membership {
+    const entity = new Membership(input);
+    Object.assign(entity, { id: input.id });
+    return entity;
   }
 
   get subjectAttributes(): SubjectAttributesRecord {

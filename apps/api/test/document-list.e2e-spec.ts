@@ -9,18 +9,31 @@ import { Test, type TestingModule } from "@nestjs/testing";
 import {
   DOCUMENT_REQUEST_STATUSES,
   DOCUMENT_TYPES,
+  type DocumentRequestStatus,
+  type DocumentType,
 } from "@lcsp/contracts/document";
+import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import {
+  CLASSIFICATION_GUARDRAIL_STATUSES,
+  CLASSIFICATION_RESULT_STATUSES,
+  LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
+  OVERALL_COVERAGE_STATUSES,
+} from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
+import {
+  toPrismaDocumentRequestStatus,
+  toPrismaDocumentType,
+  toPrismaOverallCoverageStatus,
+} from "../src/infrastructure/prisma/prisma-enum-mappers.js";
 import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, successBody } from "./support/http.js";
 
-type SignInResponseBody = { session_token?: string };
 type DocumentListRow = {
   document_request_id: string;
   status: string;
@@ -71,7 +84,7 @@ describe("Document List Endpoint (e2e)", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: "org-1",
     });
-    const signInBody = signIn.body as SignInResponseBody;
+    const signInBody = successBody<{ session_token?: string }>(signIn);
     managerToken = signInBody.session_token ?? "";
   });
 
@@ -100,7 +113,7 @@ describe("Document List Endpoint (e2e)", () => {
       .set("X-Correlation-Id", "list-corr-1");
 
     assert.equal(res.status, 200);
-    const body = res.body as DocumentListRow[];
+    const body = successBody<DocumentListRow[]>(res);
     assert.ok(Array.isArray(body));
 
     const ready = body.find((row) => row.document_request_id === "doc-ready-1");
@@ -132,7 +145,11 @@ async function enableManagerDocumentRead(prisma: PrismaClient) {
       },
     },
     data: {
-      actions: ["workspace:read", "document:generate", "document:read"],
+      actions: [
+        PBAC_ACTIONS.workspaceRead,
+        PBAC_ACTIONS.documentGenerate,
+        PBAC_ACTIONS.documentRead,
+      ],
     },
   });
 }
@@ -141,8 +158,8 @@ async function seedDocumentRequest(
   prisma: PrismaClient,
   input: {
     id: string;
-    status: string;
-    documentType: string;
+    status: DocumentRequestStatus;
+    documentType: DocumentType;
     organizationId?: string;
     documentUrl?: string;
     blockedReason?: string;
@@ -163,9 +180,11 @@ async function seedDocumentRequest(
       schemaVersion: "1.0.0",
       matches: [],
       citationAllowlist: ["chunk-1"],
-      overallCoverageStatus: "COMPLETE_CITATION",
-      guardrailStatus: "passed",
-      status: "accepted",
+      overallCoverageStatus: toPrismaOverallCoverageStatus(
+        OVERALL_COVERAGE_STATUSES.completeCitation,
+      ),
+      guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
+      status: CLASSIFICATION_RESULT_STATUSES.accepted,
     },
   });
 
@@ -182,9 +201,9 @@ async function seedDocumentRequest(
         risk_level: "HIGH",
         citation_basis: ["chunk-1"],
       },
-      guardrailStatus: "passed",
+      guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
       blockedReason: null,
-      status: "accepted",
+      status: CLASSIFICATION_RESULT_STATUSES.accepted,
     },
   });
 
@@ -195,8 +214,8 @@ async function seedDocumentRequest(
       organizationId,
       requestedById: "user-1",
       classificationResultId,
-      documentType: input.documentType,
-      status: input.status,
+      documentType: toPrismaDocumentType(input.documentType),
+      status: toPrismaDocumentRequestStatus(input.status),
       documentUrl: input.documentUrl,
       blockedReason: input.blockedReason,
       correlationId: `${input.id}-corr`,

@@ -1,4 +1,5 @@
 import { GITHUB_INTEGRATION_EVENT_TYPES } from "@lcsp/contracts/github-integration";
+import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
 import { describe, expect, it, jest } from "@jest/globals";
 
 import type { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
@@ -40,7 +41,7 @@ describe("PrismaRepositorySnapshotRepository", () => {
       actorId: "manager-1",
     });
     const event = {
-      aggregateType: "RepositorySnapshot",
+      aggregateType: OUTBOX_AGGREGATE_TYPES.repositorySnapshot,
       aggregateId: snapshot.id,
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated,
       payload: { snapshotId: snapshot.id },

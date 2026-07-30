@@ -174,7 +174,7 @@ describe("SubmitWizardHandler", () => {
   it("T04: Already submitted -> 409 WIZARD_ALREADY_SUBMITTED", async () => {
     wizardRepository.verifyAssessmentOwnership.mockResolvedValue(true);
     wizardRepository.findByAssessmentId.mockResolvedValue(
-      new WizardProfileEntity({
+      WizardProfileEntity.rehydrate({
         id: "wizard-id-1",
         assessmentId: "assessment-123",
         status: WIZARD_STATUS_CODES.submitted,

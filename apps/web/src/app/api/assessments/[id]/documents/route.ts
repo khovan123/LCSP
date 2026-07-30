@@ -1,20 +1,22 @@
-import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
+import { NextRequest } from "next/server";
 
-const apiBaseUrl = process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
+import { mockJsonResponse } from "@/lib/server/fixtures/response";
+import { requireSessionToken } from "@/lib/server/session-token";
+import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (!sessionToken) {
-    return NextResponse.json({ problem: { code: "SESSION_INVALID" } }, { status: 401 });
-  }
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const mock = await mockJsonResponse("documents.json");
+  if (mock) return mock;
+  const session = requireSessionToken(request);
+  if (!session.ok) return session.response;
 
   const { id } = await params;
-  const apiResponse = await fetch(`${apiBaseUrl}/assessments/${encodeURIComponent(id)}/documents`, {
-    headers: { authorization: `Bearer ${sessionToken}` },
-    cache: "no-store",
-  });
-
-  const payload: unknown = await apiResponse.json().catch(() => null);
-  return NextResponse.json(payload, { status: apiResponse.status });
+  const upstream = await upstreamRequest(
+    `/assessments/${encodeURIComponent(id)}/documents`,
+    { bearerToken: session.token },
+  );
+  return upstreamJson(upstream);
 }

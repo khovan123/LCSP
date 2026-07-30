@@ -26,7 +26,10 @@ describe("AppController", () => {
 
   describe("root", () => {
     it("should return Hello World!", async () => {
-      await expect(appController.getHello()).resolves.toBe("Hello World!");
+      await expect(appController.getHello()).resolves.toEqual({
+        ok: true,
+        data: "Hello World!",
+      });
     });
   });
 });

@@ -1,5 +1,7 @@
 import type { MessageKey } from "@lcsp/i18n";
 
+import { API_OUTCOME_KINDS } from "../outcome-kinds.ts";
+
 export type MfaVerifyRequest = {
   otp: string;
 };
@@ -10,8 +12,8 @@ export type MfaVerifyError = {
 };
 
 export type MfaVerifyOutcome =
-  | { kind: "verified" }
-  | { kind: "session_invalid" }
-  | ({ kind: "invalid" } & MfaVerifyError)
-  | ({ kind: "rate_limited" } & MfaVerifyError)
-  | ({ kind: "error" } & MfaVerifyError);
+  | { kind: typeof API_OUTCOME_KINDS.verified }
+  | { kind: typeof API_OUTCOME_KINDS.sessionInvalid }
+  | ({ kind: typeof API_OUTCOME_KINDS.invalid } & MfaVerifyError)
+  | ({ kind: typeof API_OUTCOME_KINDS.rateLimited } & MfaVerifyError)
+  | ({ kind: typeof API_OUTCOME_KINDS.error } & MfaVerifyError);

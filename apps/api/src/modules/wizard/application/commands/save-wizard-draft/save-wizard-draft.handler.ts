@@ -1,8 +1,7 @@
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
-import { ForbiddenException, Inject } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { HttpStatus, Inject } from "@nestjs/common";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
@@ -16,6 +15,7 @@ import {
 } from "../../../domain/exceptions/wizard.exceptions.js";
 import { WizardProfileEntity } from "../../../domain/entities/wizard-profile.entity.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 
 @CommandHandler(SaveWizardDraftCommand)
@@ -43,7 +43,7 @@ export class SaveWizardDraftHandler implements ICommandHandler<
       ownerId,
     );
     if (!isOwned) {
-      throw new AssessmentNotFoundException();
+      throw new AssessmentNotFoundException(correlationId);
     }
 
     // 2. Fetch existing profile or prepare a new one
@@ -51,13 +51,12 @@ export class SaveWizardDraftHandler implements ICommandHandler<
 
     if (profile) {
       if (profile.status === WIZARD_STATUS_CODES.submitted) {
-        throw new WizardAlreadySubmittedException();
+        throw new WizardAlreadySubmittedException(correlationId);
       }
       profile.answers = { ...profile.answers, ...answers };
       profile.version += 1;
     } else {
       profile = new WizardProfileEntity({
-        id: randomUUID(),
         assessmentId,
         organizationId,
         ownerId,
@@ -75,7 +74,7 @@ export class SaveWizardDraftHandler implements ICommandHandler<
       eventType: WIZARD_EVENT_TYPES.draftSaved,
       actorId: ownerId,
       organizationId,
-      resourceType: "wizard_profile",
+      resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
       resourceId: savedProfile.id,
       decision: AUDIT_DECISIONS.allow,
       policyId: command.authorization.policyId,
@@ -113,7 +112,7 @@ export class SaveWizardDraftHandler implements ICommandHandler<
       eventType: WIZARD_EVENT_TYPES.draftSaved,
       actorId: command.ownerId,
       organizationId: command.organizationId,
-      resourceType: "wizard_profile",
+      resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
       resourceId: null,
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.pbacDenied,
@@ -127,9 +126,8 @@ export class SaveWizardDraftHandler implements ICommandHandler<
       },
     });
 
-    throw new ForbiddenException({
-      error_code: AUTH_ERROR_CODES.pbacDenied,
-      correlation_id: command.correlationId,
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 }

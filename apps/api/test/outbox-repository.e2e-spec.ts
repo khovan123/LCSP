@@ -1,5 +1,8 @@
 import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
-import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
+import {
+  OUTBOX_AGGREGATE_TYPES,
+  OUTBOX_STATUSES,
+} from "@lcsp/contracts/outbox";
 import { randomUUID } from "node:crypto";
 
 import { PrismaService } from "../src/infrastructure/prisma/prisma.service.js";
@@ -36,7 +39,7 @@ describe("OutboxRepository (e2e, real Postgres)", () => {
     return prisma.outboxMessage.create({
       data: {
         id: randomUUID(),
-        aggregateType: "Assessment",
+        aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
         aggregateId: randomUUID(),
         eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
         payload: { foo: "bar" },

@@ -1,202 +1,216 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { resolveMessage } from "@lcsp/i18n";
+import Link from "next/link";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   canCreateAssessment,
-  getAssessments,
-  getWorkspace,
+  getAssessmentStatusLabelKey,
 } from "@/lib/api/workspace-client";
+import {
+  useAssessmentsQuery,
+  useWorkspaceQuery,
+} from "@/lib/api/workspace-queries";
 
 import { appLocale } from "@/lib/locale";
-import { workspaceNavigationItems } from "../../config/navigation";
 import type {
   AssessmentSummary,
-  WorkspaceContext,
   WorkspaceErrorOutcome,
 } from "../../types/workspace.types";
 import { WorkspaceHeader } from "../molecules/workspace-header";
-import { AssessmentList } from "./assessment-list";
-import { WorkspaceSidebar } from "./workspace-sidebar";
 
 export function WorkspaceDashboard() {
   const router = useRouter();
-  const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
-  const [assessments, setAssessments] = useState<AssessmentSummary[]>([]);
-  const [isLoadingAssessments, setIsLoadingAssessments] = useState(true);
-  const [error, setError] = useState<WorkspaceErrorOutcome | null>(null);
+  const workspaceQuery = useWorkspaceQuery();
+  const assessmentsQuery = useAssessmentsQuery();
 
   useEffect(() => {
-    let isActive = true;
-
-    async function loadWorkspace() {
-      const workspaceOutcome = await getWorkspace();
-      if (!isActive) {
-        return;
-      }
-
-      if (workspaceOutcome.kind === "redirect") {
-        router.replace(workspaceOutcome.location);
-        return;
-      }
-
-      if (workspaceOutcome.kind === "error") {
-        setError(workspaceOutcome);
-        setIsLoadingAssessments(false);
-        return;
-      }
-
-      setWorkspace(workspaceOutcome.workspace);
-      const assessmentsOutcome = await getAssessments();
-      if (!isActive) {
-        return;
-      }
-
-      if (assessmentsOutcome.kind === "error") {
-        setError(assessmentsOutcome);
-        setIsLoadingAssessments(false);
-        return;
-      }
-
-      setAssessments(assessmentsOutcome.assessments);
-      setIsLoadingAssessments(false);
+    if (workspaceQuery.data?.kind === "redirect") {
+      router.replace(workspaceQuery.data.location);
     }
+  }, [router, workspaceQuery.data]);
 
-    void loadWorkspace();
-
-    return () => {
-      isActive = false;
-    };
-  }, [router]);
-
-  const navigationItems = workspaceNavigationItems.map((item) => ({
-    href: item.href,
-    label: resolveMessage(appLocale, item.labelKey),
-    icon: item.icon,
-  }));
-  const navigationLabel = resolveMessage(
-    appLocale,
-    "pages.workspace.navigationLabel",
-  );
-  const sidebarToggleLabel = resolveMessage(
-    appLocale,
-    "pages.workspace.sidebarToggle",
-  );
+  const workspace =
+    workspaceQuery.data?.kind === "loaded"
+      ? workspaceQuery.data.workspace
+      : null;
+  const assessments =
+    assessmentsQuery.data?.kind === "loaded"
+      ? assessmentsQuery.data.assessments
+      : [];
+  const workspaceError = isWorkspaceErrorOutcome(workspaceQuery.data)
+    ? workspaceQuery.data
+    : null;
+  const assessmentsError = isWorkspaceErrorOutcome(assessmentsQuery.data)
+    ? assessmentsQuery.data
+    : null;
+  const error = workspaceError ?? assessmentsError;
 
   return (
-    <SidebarProvider>
-      <WorkspaceSidebar
-        productName={resolveMessage(appLocale, "pages.workspace.productName")}
-        navigationLabel={navigationLabel}
-        mobileTitle={resolveMessage(appLocale, "pages.workspace.sidebarTitle")}
-        mobileDescription={resolveMessage(
-          appLocale,
-          "pages.workspace.sidebarDescription",
-        )}
-        items={navigationItems}
-      />
-      <SidebarInset>
-        <div className="flex min-h-dvh flex-col gap-6 bg-background px-6 py-8 text-foreground">
-          <div className="mx-auto flex w-full max-w-6xl items-center gap-3">
-            <SidebarTrigger label={sidebarToggleLabel} />
-            <span className="text-sm text-muted-foreground">
-              {navigationLabel}
-            </span>
-          </div>
+    <main className="flex flex-1 flex-col gap-6 px-4 py-6 text-foreground lg:px-6">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        {error ? (
+          <Alert variant="destructive">
+            <AlertTitle>{resolveMessage(appLocale, error.titleKey)}</AlertTitle>
+            <AlertDescription>
+              {resolveMessage(appLocale, error.detailKey)}
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-            {error ? (
-              <Alert variant="destructive">
-                <AlertTitle>
-                  {resolveMessage(appLocale, error.titleKey)}
-                </AlertTitle>
-                <AlertDescription>
-                  {resolveMessage(appLocale, error.detailKey)}
-                </AlertDescription>
-              </Alert>
-            ) : null}
+        {workspace ? (
+          <WorkspaceHeader
+            title={resolveMessage(appLocale, "pages.workspace.pageTitle")}
+            description={resolveMessage(
+              appLocale,
+              "pages.workspace.pageDescription",
+            )}
+            organizationLabel={resolveMessage(
+              appLocale,
+              "pages.workspace.organizationLabel",
+            )}
+            organizationName={workspace.organization.name}
+            membershipRoleLabel={resolveMessage(
+              appLocale,
+              "pages.workspace.membershipRoleLabel",
+            )}
+            membershipRole={workspace.membership.role}
+            createAssessmentLabel={resolveMessage(
+              appLocale,
+              "pages.workspace.createAssessment",
+            )}
+            showCreateAssessment={canCreateAssessment(
+              workspace.granted_actions,
+            )}
+            onCreateAssessment={() => router.push("/assessments/new")}
+          />
+        ) : null}
 
-            {workspace ? (
-              <WorkspaceHeader
-                title={resolveMessage(appLocale, "pages.workspace.pageTitle")}
-                description={resolveMessage(
-                  appLocale,
-                  "pages.workspace.pageDescription",
-                )}
-                organizationLabel={resolveMessage(
-                  appLocale,
-                  "pages.workspace.organizationLabel",
-                )}
-                organizationName={workspace.organization.name}
-                membershipRoleLabel={resolveMessage(
-                  appLocale,
-                  "pages.workspace.membershipRoleLabel",
-                )}
-                membershipRole={workspace.membership.role}
-                createAssessmentLabel={resolveMessage(
-                  appLocale,
-                  "pages.workspace.createAssessment",
-                )}
-                showCreateAssessment={canCreateAssessment(
-                  workspace.granted_actions,
-                )}
-              />
-            ) : null}
+        <WorkspaceOverview assessments={assessments} />
+      </div>
+    </main>
+  );
+}
 
-            <AssessmentList
-              assessments={assessments}
-              isLoading={isLoadingAssessments}
-              title={resolveMessage(
-                appLocale,
-                "pages.workspace.assessmentsTitle",
-              )}
-              description={resolveMessage(
-                appLocale,
-                "pages.workspace.assessmentsDescription",
-              )}
-              emptyTitle={resolveMessage(
-                appLocale,
-                "pages.workspace.emptyTitle",
-              )}
-              emptyDescription={resolveMessage(
-                appLocale,
-                "pages.workspace.emptyDescription",
-              )}
-              loadingLabel={resolveMessage(
-                appLocale,
-                "pages.workspace.loadingAssessments",
-              )}
-              statusLabel={resolveMessage(
-                appLocale,
-                "pages.workspace.statusLabel",
-              )}
-              wizardStatusLabel={resolveMessage(
-                appLocale,
-                "pages.workspace.wizardStatusLabel",
-              )}
-              createdAtLabel={resolveMessage(
-                appLocale,
-                "pages.workspace.createdAtLabel",
-              )}
-              getAssessmentHref={(assessment) =>
-                `/assessments/${assessment.id}/conflicts`
-              }
-              openAssessmentLabel={resolveMessage(
-                appLocale,
-                "pages.workspace.openConflictResolution",
-              )}
-            />
-          </div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+function WorkspaceOverview({
+  assessments,
+}: {
+  assessments: AssessmentSummary[];
+}) {
+  const attention = assessments.filter(
+    (assessment) => assessment.status !== ASSESSMENT_STATUS_CODES.readyForReview,
+  ).length;
+  const ready = assessments.filter(
+    (assessment) => assessment.status === ASSESSMENT_STATUS_CODES.readyForReview,
+  ).length;
+  const recent = [...assessments]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 3);
+
+  return (
+    <>
+      <section
+        className="grid gap-4 sm:grid-cols-3"
+        aria-label={resolveMessage(appLocale, "pages.workspace.insightsTitle")}
+      >
+        <OverviewMetric
+          labelKey="pages.workspace.totalAssessments"
+          value={assessments.length}
+        />
+        <OverviewMetric
+          labelKey="pages.workspace.needsAttention"
+          value={attention}
+        />
+        <OverviewMetric
+          labelKey="pages.workspace.readyForReview"
+          value={ready}
+        />
+      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {resolveMessage(
+              appLocale,
+              "pages.workspace.recentAssessmentsTitle",
+            )}
+          </CardTitle>
+          <CardDescription>
+            {resolveMessage(
+              appLocale,
+              "pages.workspace.recentAssessmentsDescription",
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Link
+            className={buttonVariants({ variant: "outline" })}
+            href="/assessments"
+          >
+            {resolveMessage(appLocale, "pages.workspace.openAssessments")}
+          </Link>
+          {recent.length ? (
+            recent.map((assessment) => (
+              <Link
+                key={assessment.id}
+                href={`/assessments/${assessment.id}`}
+                className="flex items-center justify-between gap-4 rounded-lg border p-3 transition-colors hover:bg-muted"
+              >
+                <span className="font-medium">{assessment.name}</span>
+                <Badge variant="outline">
+                  {resolveMessage(
+                    appLocale,
+                    getAssessmentStatusLabelKey(assessment.status),
+                  )}
+                </Badge>
+              </Link>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {resolveMessage(appLocale, "pages.workspace.emptyDescription")}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+function isWorkspaceErrorOutcome(
+  outcome: unknown,
+): outcome is WorkspaceErrorOutcome {
+  return (
+    typeof outcome === "object" &&
+    outcome !== null &&
+    (outcome as { kind?: unknown }).kind === "error"
+  );
+}
+
+function OverviewMetric({
+  labelKey,
+  value,
+}: {
+  labelKey: Parameters<typeof resolveMessage>[1];
+  value: number;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>{resolveMessage(appLocale, labelKey)}</CardDescription>
+        <CardTitle className="text-3xl">{value}</CardTitle>
+      </CardHeader>
+    </Card>
   );
 }

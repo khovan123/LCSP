@@ -24,6 +24,7 @@ import {
 } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
+import { fromPrismaOverallCoverageStatus } from "../src/infrastructure/prisma/prisma-enum-mappers.js";
 import type {
   AcceptLegalRuleMatchDto,
   LegalRuleMatchCallbackResponseDto,
@@ -34,7 +35,7 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
 
@@ -75,7 +76,7 @@ describe("LegalRuleMatch Callback Endpoint (e2e) [MW-cls-001]", () => {
 
   it("T01/T07 accepts valid matches with allowlisted citations, emits ready event and audit log", async () => {
     const response = await callback(app, validPayload());
-    const body = response.body as LegalRuleMatchCallbackResponseDto;
+    const body = successBody<LegalRuleMatchCallbackResponseDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -105,7 +106,9 @@ describe("LegalRuleMatch Callback Endpoint (e2e) [MW-cls-001]", () => {
       LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
     );
     assert.equal(
-      ruleMatch?.overallCoverageStatus,
+      ruleMatch?.overallCoverageStatus
+        ? fromPrismaOverallCoverageStatus(ruleMatch.overallCoverageStatus)
+        : null,
       OVERALL_COVERAGE_STATUSES.completeCitation,
     );
     assert.equal(outbox?.aggregateId, body.legal_rule_match_id);
@@ -132,7 +135,7 @@ describe("LegalRuleMatch Callback Endpoint (e2e) [MW-cls-001]", () => {
     };
 
     const response = await callback(app, emptyPayload);
-    const body = response.body as LegalRuleMatchCallbackResponseDto;
+    const body = successBody<LegalRuleMatchCallbackResponseDto>(response);
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
@@ -217,12 +220,13 @@ describe("LegalRuleMatch Callback Endpoint (e2e) [MW-cls-001]", () => {
 
   it("T05 preserves distinct PRIMARY_MATCH and REFERENCED_CONTEXT match types", async () => {
     const response = await callback(app, validPayload());
-    const body = response.body as LegalRuleMatchCallbackResponseDto;
+    const body = successBody<LegalRuleMatchCallbackResponseDto>(response);
 
     const ruleMatch = await prisma.legalRuleMatch.findUnique({
       where: { id: body.legal_rule_match_id },
     });
-    const matches = ruleMatch?.matches as AcceptLegalRuleMatchDto["matches"];
+    const matches =
+      ruleMatch?.matches as unknown as AcceptLegalRuleMatchDto["matches"];
 
     assert.equal(matches.length, 2);
     assert.equal(matches[0]?.match_type, "PRIMARY_MATCH");
@@ -348,9 +352,5 @@ function assertError(
   expectedCode: string,
 ): void {
   assert.equal(actualStatus, expectedStatus);
-  const rec = (body && typeof body === "object" ? body : {}) as Record<
-    string,
-    unknown
-  >;
-  assert.equal(rec.error_code, expectedCode);
+  assert.equal(problemCode(body), expectedCode);
 }

@@ -4,25 +4,28 @@ import type {
   DeveloperTaskContext,
   DeveloperTaskContextOutcome,
 } from "../../features/developer-task/types/developer-task.types.ts";
+import { DEVELOPER_TASK_SCOPE_TYPES } from "../../features/developer-task/types/developer-task.types.ts";
+import { apiRequest } from "./api-request.ts";
+import { API_OUTCOME_KINDS, API_REDIRECT_LOCATIONS } from "./outcome-kinds.ts";
+import { getProblemCode } from "./problem-envelope.ts";
 
 export async function getDeveloperTaskContext(): Promise<DeveloperTaskContextOutcome> {
-  const response = await fetch("/api/workspace/developer-task", {
-    credentials: "same-origin",
+  const { payload, ok, status, problemCode } = await apiRequest("/api/workspace/developer-task", {
     cache: "no-store",
   });
-  const payload: unknown = await response.json().catch(() => null);
 
-  return toDeveloperTaskContextOutcome(payload, response.ok, response.status);
+  return toDeveloperTaskContextOutcome(payload, ok, status, problemCode);
 }
 
 export function toDeveloperTaskContextOutcome(
   payload: unknown,
   ok: boolean,
   status: number,
+  problemCode = getProblemCode(payload),
 ): DeveloperTaskContextOutcome {
   if (ok && isDeveloperTaskContext(payload)) {
     return {
-      kind: "loaded",
+      kind: API_OUTCOME_KINDS.loaded,
       context: {
         organization: payload.organization,
         scope: payload.scope,
@@ -31,18 +34,23 @@ export function toDeveloperTaskContextOutcome(
     };
   }
 
-  const code = getProblemCode(payload);
-  if (code === AUTH_ERROR_CODES.mfaRequired) {
-    return { kind: "redirect", location: "/mfa/verify" };
+  if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
+    return {
+      kind: API_OUTCOME_KINDS.redirect,
+      location: API_REDIRECT_LOCATIONS.mfaVerify,
+    };
   }
-  if (status === 401 || code === AUTH_ERROR_CODES.sessionInvalid) {
-    return { kind: "redirect", location: "/sign-in" };
+  if (status === 401 || problemCode === AUTH_ERROR_CODES.sessionInvalid) {
+    return {
+      kind: API_OUTCOME_KINDS.redirect,
+      location: API_REDIRECT_LOCATIONS.signIn,
+    };
   }
-  if (status === 403 || code === AUTH_ERROR_CODES.pbacDenied) {
-    return { kind: "access_revoked" };
+  if (status === 403 || problemCode === AUTH_ERROR_CODES.pbacDenied) {
+    return { kind: API_OUTCOME_KINDS.accessRevoked };
   }
 
-  return { kind: "error" };
+  return { kind: API_OUTCOME_KINDS.error };
 }
 
 function isDeveloperTaskContext(
@@ -54,9 +62,9 @@ function isDeveloperTaskContext(
 
   const candidate = payload as DeveloperTaskContext;
   const scopeIsValid =
-    candidate.scope?.type === "organization"
+    candidate.scope?.type === DEVELOPER_TASK_SCOPE_TYPES.organization
       ? candidate.scope.assessment === null
-      : candidate.scope?.type === "assessment" &&
+      : candidate.scope?.type === DEVELOPER_TASK_SCOPE_TYPES.assessment &&
         typeof candidate.scope.assessment?.id === "string" &&
         typeof candidate.scope.assessment.name === "string";
 
@@ -66,23 +74,5 @@ function isDeveloperTaskContext(
     scopeIsValid &&
     Array.isArray(candidate.granted_actions) &&
     candidate.granted_actions.every((action) => typeof action === "string")
-  );
-}
-
-function getProblemCode(payload: unknown): string | undefined {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-
-  const candidate = payload as {
-    code?: string;
-    error_code?: string;
-    problem?: { code?: string; error_code?: string };
-  };
-  return (
-    candidate.problem?.code ??
-    candidate.problem?.error_code ??
-    candidate.code ??
-    candidate.error_code
   );
 }

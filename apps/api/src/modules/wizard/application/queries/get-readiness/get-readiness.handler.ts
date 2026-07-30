@@ -1,16 +1,22 @@
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
-import { ForbiddenException } from "@nestjs/common";
+import { HttpStatus } from "@nestjs/common";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
+import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { GetReadinessQuery } from "./get-readiness.query.js";
 import type { ReadinessResponse } from "../../contracts/wizard/readiness.contract.js";
 import { AssessmentNotFoundException } from "../../../domain/exceptions/wizard.exceptions.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { ReadinessEvaluatorService } from "../../services/wizard/readiness-evaluator.service.js";
+import {
+  fromPrismaWizardStatus,
+  toPrismaEvidenceAcceptanceStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 
 @QueryHandler(GetReadinessQuery)
 export class GetReadinessHandler implements IQueryHandler<
@@ -37,7 +43,7 @@ export class GetReadinessHandler implements IQueryHandler<
     });
 
     if (!assessment) {
-      throw new AssessmentNotFoundException();
+      throw new AssessmentNotFoundException(query.correlationId);
     }
 
     // Run parallel checks for related states
@@ -51,13 +57,16 @@ export class GetReadinessHandler implements IQueryHandler<
       this.prisma.technicalEvidenceReport.findFirst({
         where: {
           assessmentId,
-          status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+          status: toPrismaEvidenceAcceptanceStatus(
+            TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+          ),
         },
       }),
     ]);
 
-    const wizardStatus =
-      wizardProfile?.status ?? WIZARD_STATUS_CODES.notStarted;
+    const wizardStatus = wizardProfile
+      ? fromPrismaWizardStatus(wizardProfile.status)
+      : WIZARD_STATUS_CODES.notStarted;
 
     // Evaluate readiness logic
     const evaluation = this.readinessEvaluator.evaluate({
@@ -95,10 +104,10 @@ export class GetReadinessHandler implements IQueryHandler<
 
     // Write audit log on denial
     await this.auditWriter.write({
-      eventType: "assessment_readiness.read",
+      eventType: WIZARD_EVENT_TYPES.readinessRead,
       actorId: query.userId,
       organizationId: query.organizationId,
-      resourceType: "assessment",
+      resourceType: AUDIT_RESOURCE_TYPES.assessmentRecord,
       resourceId: query.assessmentId,
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.pbacDenied,
@@ -112,9 +121,8 @@ export class GetReadinessHandler implements IQueryHandler<
       },
     });
 
-    throw new ForbiddenException({
-      error_code: AUTH_ERROR_CODES.pbacDenied,
-      correlation_id: query.correlationId,
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, query.correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 }

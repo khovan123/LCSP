@@ -20,6 +20,9 @@ export type OAuthCallbackInput = {
  */
 export type OAuthCallbackClaims = {
   providerAccountId: string;
+  /** A provider-verified email, when the provider exposes one. */
+  email?: string | null;
+  emailVerified?: boolean;
   nonce: string | null;
   issuer: string | null;
   audience: string | null;

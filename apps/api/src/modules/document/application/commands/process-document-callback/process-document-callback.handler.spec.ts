@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { NotFoundException } from "@nestjs/common";
+import { DOCUMENT_REQUEST_STATUSES } from "@lcsp/contracts/document";
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { ProcessDocumentCallbackHandler } from "./process-document-callback.handler.js";
@@ -49,7 +50,10 @@ describe("ProcessDocumentCallbackHandler", () => {
   it("throws NotFoundException when document request missing", async () => {
     const { handler } = buildHandler({ request: null });
     const command = new ProcessDocumentCallbackCommand(
-      { document_request_id: "missing", status: "READY" },
+      {
+        document_request_id: "missing",
+        status: DOCUMENT_REQUEST_STATUSES.ready,
+      },
       "corr-1",
     );
 
@@ -61,7 +65,7 @@ describe("ProcessDocumentCallbackHandler", () => {
     const command = new ProcessDocumentCallbackCommand(
       {
         document_request_id: "dr-1",
-        status: "READY",
+        status: DOCUMENT_REQUEST_STATUSES.ready,
         document_url: "https://obj/store/1",
       },
       "corr-1",

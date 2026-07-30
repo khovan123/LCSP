@@ -1,26 +1,35 @@
 export const SCAN_CALLBACK_STATUSES = {
-  success: "success",
-  partial: "partial",
-  failed: "failed",
+  success: "SUCCESS",
+  partial: "PARTIAL",
+  failed: "FAILED",
 } as const;
 
 export type ScanCallbackStatus =
   (typeof SCAN_CALLBACK_STATUSES)[keyof typeof SCAN_CALLBACK_STATUSES];
 
 export const TECHNICAL_EVIDENCE_REPORT_STATUSES = {
-  accepted: "accepted",
-  rejected: "rejected",
+  accepted: "ACCEPTED",
+  rejected: "REJECTED",
 } as const;
+
+export type TechnicalEvidenceReportStatus =
+  (typeof TECHNICAL_EVIDENCE_REPORT_STATUSES)[keyof typeof TECHNICAL_EVIDENCE_REPORT_STATUSES];
 
 export const TECHNICAL_PROFILE_STATUSES = {
-  accepted: "accepted",
-  rejected: "rejected",
+  accepted: "ACCEPTED",
+  rejected: "REJECTED",
 } as const;
 
+export type TechnicalProfileStatus =
+  (typeof TECHNICAL_PROFILE_STATUSES)[keyof typeof TECHNICAL_PROFILE_STATUSES];
+
 export const AI_USAGE_FLOW_STATUSES = {
-  accepted: "accepted",
-  rejected: "rejected",
+  accepted: "ACCEPTED",
+  rejected: "REJECTED",
 } as const;
+
+export type AIUsageFlowStatus =
+  (typeof AI_USAGE_FLOW_STATUSES)[keyof typeof AI_USAGE_FLOW_STATUSES];
 
 export const CONFLICT_RECORD_STATUSES = {
   pending: "PENDING",
@@ -28,32 +37,50 @@ export const CONFLICT_RECORD_STATUSES = {
   dismissed: "DISMISSED",
 } as const;
 
+export type ConflictRecordStatus =
+  (typeof CONFLICT_RECORD_STATUSES)[keyof typeof CONFLICT_RECORD_STATUSES];
+
 export const VERIFIED_PROFILE_STATUSES = {
-  pendingApproval: "pending_approval",
-  approved: "approved",
-  autoApproved: "auto_approved",
+  pendingApproval: "PENDING_APPROVAL",
+  approved: "APPROVED",
+  autoApproved: "AUTO_APPROVED",
 } as const;
+
+export type VerifiedProfileStatus =
+  (typeof VERIFIED_PROFILE_STATUSES)[keyof typeof VERIFIED_PROFILE_STATUSES];
 
 export const LEGAL_RULE_MATCH_STATUSES = {
-  accepted: "accepted",
-  rejected: "rejected",
+  accepted: "ACCEPTED",
+  rejected: "REJECTED",
 } as const;
+
+export type LegalRuleMatchStatus =
+  (typeof LEGAL_RULE_MATCH_STATUSES)[keyof typeof LEGAL_RULE_MATCH_STATUSES];
 
 export const LEGAL_RULE_MATCH_GUARDRAIL_STATUSES = {
-  passed: "passed",
-  blocked: "blocked",
+  passed: "PASSED",
+  blocked: "BLOCKED",
 } as const;
+
+export type LegalRuleMatchGuardrailStatus =
+  (typeof LEGAL_RULE_MATCH_GUARDRAIL_STATUSES)[keyof typeof LEGAL_RULE_MATCH_GUARDRAIL_STATUSES];
 
 export const CLASSIFICATION_RESULT_STATUSES = {
-  accepted: "accepted",
-  rejected: "rejected",
+  accepted: "ACCEPTED",
+  rejected: "REJECTED",
 } as const;
 
+export type ClassificationResultStatus =
+  (typeof CLASSIFICATION_RESULT_STATUSES)[keyof typeof CLASSIFICATION_RESULT_STATUSES];
+
 export const CLASSIFICATION_GUARDRAIL_STATUSES = {
-  passed: "passed",
-  degraded: "degraded",
-  blocked: "blocked",
+  passed: "PASSED",
+  degraded: "DEGRADED",
+  blocked: "BLOCKED",
 } as const;
+
+export type ClassificationGuardrailStatus =
+  (typeof CLASSIFICATION_GUARDRAIL_STATUSES)[keyof typeof CLASSIFICATION_GUARDRAIL_STATUSES];
 
 export const OVERALL_COVERAGE_STATUSES = {
   noCitation: "NO_CITATION",
@@ -61,11 +88,17 @@ export const OVERALL_COVERAGE_STATUSES = {
   completeCitation: "COMPLETE_CITATION",
 } as const;
 
+export type OverallCoverageStatus =
+  (typeof OVERALL_COVERAGE_STATUSES)[keyof typeof OVERALL_COVERAGE_STATUSES];
+
 export const LEGAL_MATCH_TYPES = {
   primaryMatch: "PRIMARY_MATCH",
   parentContext: "PARENT_CONTEXT",
   referencedContext: "REFERENCED_CONTEXT",
 } as const;
+
+export type LegalMatchType =
+  (typeof LEGAL_MATCH_TYPES)[keyof typeof LEGAL_MATCH_TYPES];
 
 export const APPROVED_CORPUS_VERSIONS = [
   "LCSP-LEGAL-CORPUS-v0.1.0",

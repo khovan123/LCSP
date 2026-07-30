@@ -33,11 +33,10 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
 const IDEMPOTENCY_KEY = "scan-request:assessment-1:snapshot-1:1";
-type ErrorResponse = { error_code?: string };
 
 describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
   let app: INestApplication;
@@ -84,7 +83,7 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: "org-1",
     });
-    managerToken = (signIn.body as SignInSuccess).session_token;
+    managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
 
   afterAll(async () => {
@@ -94,7 +93,7 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
 
   it("T01/T06: creates a durable queued job, outbox command, and audit", async () => {
     const response = await triggerManual(app, managerToken);
-    const body = response.body as TriggerScanDto;
+    const body = successBody<TriggerScanDto>(response);
 
     assert.equal(response.status, 201);
     assert.equal(body.status, REPOSITORY_SCAN_JOB_STATUSES.queued);
@@ -144,13 +143,13 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
 
   it("T02: duplicate delivery returns the existing job with no new outbox", async () => {
     const first = await triggerManual(app, managerToken);
-    const firstBody = first.body as TriggerScanDto;
+    const firstBody = successBody<TriggerScanDto>(first);
     await prisma.assessment.update({
       where: { id: "assessment-1" },
       data: { status: ASSESSMENT_STATUS_CODES.scanInProgress },
     });
     const second = await triggerManual(app, managerToken);
-    const secondBody = second.body as TriggerScanDto;
+    const secondBody = successBody<TriggerScanDto>(second);
 
     assert.equal(second.status, 200);
     assert.equal(secondBody.is_new, false);
@@ -174,7 +173,7 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
 
     assert.equal(response.status, 409);
     assert.equal(
-      (response.body as ErrorResponse).error_code,
+      problemCode(response),
       GITHUB_INTEGRATION_ERROR_CODES.assessmentStateInvalid,
     );
     assert.equal(await prisma.repositoryScanJob.count(), 0);
@@ -195,7 +194,7 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
 
     assert.equal(response.status, 409);
     assert.equal(
-      (response.body as ErrorResponse).error_code,
+      problemCode(response),
       GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyConflict,
     );
     assert.equal(await prisma.repositoryScanJob.count(), 1);
@@ -211,7 +210,7 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
 
     assert.equal(response.status, 404);
     assert.equal(
-      (response.body as ErrorResponse).error_code,
+      problemCode(response),
       GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
     );
   });
@@ -230,10 +229,7 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
     const response = await triggerManual(app, managerToken);
 
     assert.equal(response.status, 403);
-    assert.equal(
-      (response.body as ErrorResponse).error_code,
-      PBAC_REASON_CODE.denied,
-    );
+    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
     assert.equal(await prisma.repositoryScanJob.count(), 0);
   });
 
@@ -248,11 +244,11 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
       });
 
     assert.equal(response.status, 201);
-    assert.equal((response.body as TriggerScanDto).is_new, true);
+    assert.equal(successBody<TriggerScanDto>(response).is_new, true);
     assert.equal(
       (
         await prisma.repositoryScanJob.findUniqueOrThrow({
-          where: { id: (response.body as TriggerScanDto).scan_job_id },
+          where: { id: successBody<TriggerScanDto>(response).scan_job_id },
         })
       ).triggerSource,
       REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
@@ -269,7 +265,7 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
 
     assert.equal(response.status, 400);
     assert.equal(
-      (response.body as ErrorResponse).error_code,
+      problemCode(response),
       GITHUB_INTEGRATION_ERROR_CODES.scanBlockedMapping,
     );
     assert.equal(await prisma.repositoryScanJob.count(), 0);

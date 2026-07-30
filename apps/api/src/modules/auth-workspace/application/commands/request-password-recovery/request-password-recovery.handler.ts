@@ -65,7 +65,6 @@ export class RequestPasswordRecoveryHandler {
     const now = this.support.now();
     const token = issueOpaqueToken();
     const recoveryRequest = new RecoveryRequest({
-      id: repositories.recoveryRequests.nextId(),
       userId: user.id,
       tokenHash: hashSecret(token),
       expiresAt: now + RECOVERY_TOKEN_TTL_MS,

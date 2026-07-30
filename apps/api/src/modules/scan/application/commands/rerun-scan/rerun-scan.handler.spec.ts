@@ -7,8 +7,9 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -29,7 +30,7 @@ describe("RerunScanHandler", () => {
     subjectRole: SUBJECT_ROLES.manager,
     scope: "assessment-1",
     grantedActions: [],
-    selectedAction: "scan:trigger",
+    selectedAction: PBAC_ACTIONS.scanTrigger,
     policyId: "pol",
     policyVersion: "1",
   };
@@ -103,7 +104,7 @@ describe("RerunScanHandler", () => {
       prisma.repositoryScanJob.findUnique as jest.Mock<any>
     ).mockResolvedValueOnce({
       id: "job-1",
-      status: "QUEUED",
+      status: REPOSITORY_SCAN_JOB_STATUSES.queued,
       assessmentId: "assessment-1",
       snapshotId: "snapshot-1",
       organizationId: "org-1",
@@ -111,7 +112,7 @@ describe("RerunScanHandler", () => {
 
     const result = await handler.execute(defaultCommand);
     expect(result.scan_job_id).toBe("job-1");
-    expect(result.status).toBe("QUEUED");
+    expect(result.status).toBe(REPOSITORY_SCAN_JOB_STATUSES.queued);
   });
 
   it("throws ConflictException if idempotencyKey exists but fields mismatch", async () => {
@@ -175,7 +176,7 @@ describe("RerunScanHandler", () => {
       id: "assessment-1",
       organizationId: "org-1",
       ownerId: "other-user",
-      status: "WIZARD_SUBMITTED",
+      status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
 
     await expect(handler.execute(defaultCommand)).rejects.toThrow(
@@ -221,7 +222,7 @@ describe("RerunScanHandler", () => {
       id: "assessment-1",
       organizationId: "org-1",
       ownerId: "user-1",
-      status: "WIZARD_SUBMITTED",
+      status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
 
     (

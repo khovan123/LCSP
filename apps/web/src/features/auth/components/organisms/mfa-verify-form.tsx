@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/input-otp";
 import { FormCard } from "@/components/organisms/form-card";
 import { Spinner } from "@/components/ui/spinner";
-import { verifyMfaOtp } from "@/lib/api/auth-client";
+import { useMfaVerifyMutation } from "@/lib/api/auth-queries";
+import { API_OUTCOME_KINDS, API_REDIRECT_LOCATIONS } from "@/lib/api/outcome-kinds";
 import type { MfaVerifyError } from "@/lib/api/types/mfa-verify.types";
 
 import { appLocale } from "@/lib/locale";
@@ -35,6 +36,7 @@ import {
 
 export function MfaVerifyForm() {
   const router = useRouter();
+  const mfaVerifyMutation = useMfaVerifyMutation();
   const [error, setError] = useState<MfaVerifyError>();
   const [isLocked, setIsLocked] = useState(false);
   const form = useForm<MfaVerifyFormValues>({
@@ -45,22 +47,22 @@ export function MfaVerifyForm() {
 
   async function onSubmit(values: MfaVerifyFormValues) {
     setError(undefined);
-    const outcome = await verifyMfaOtp(values).catch(() => ({
-      kind: "error" as const,
+    const outcome = await mfaVerifyMutation.mutateAsync(values).catch(() => ({
+      kind: API_OUTCOME_KINDS.error,
       titleKey: "pages.mfaVerify.errors.requestFailedTitle" as const,
       detailKey: "pages.mfaVerify.errors.requestFailedDetail" as const,
     }));
     form.resetField("otp");
 
-    if (outcome.kind === "verified") {
+    if (outcome.kind === API_OUTCOME_KINDS.verified) {
       router.replace("/workspace");
       return;
     }
-    if (outcome.kind === "session_invalid") {
-      router.replace("/sign-in");
+    if (outcome.kind === API_OUTCOME_KINDS.sessionInvalid) {
+      router.replace(API_REDIRECT_LOCATIONS.signIn);
       return;
     }
-    if (outcome.kind === "rate_limited") {
+    if (outcome.kind === API_OUTCOME_KINDS.rateLimited) {
       setIsLocked(true);
     }
     setError(outcome);

@@ -15,6 +15,21 @@ import {
   parseWorkspaceNavigationTarget,
 } from "@lcsp/web";
 
+function problem(code: string, status: number) {
+  return {
+    ok: false,
+    problem: {
+      type: `test/${code.toLowerCase().replaceAll("_", "-")}`,
+      status,
+      code,
+      titleKey: "auth.errors.validationFailed.title",
+      detailKey: "auth.errors.validationFailed.detail",
+      requiredAction: "none",
+      correlationId: "test-correlation",
+    },
+  };
+}
+
 test("workspace action projection shows create assessment only when backend grants it", () => {
   assert.equal(canCreateAssessment(["assessment:create"]), true);
   assert.equal(canCreateAssessment(["assessment:read"]), false);
@@ -23,11 +38,7 @@ test("workspace action projection shows create assessment only when backend gran
 test("workspace redirects auth and mfa failures to safe routes", () => {
   assert.deepEqual(
     toWorkspaceOutcome(
-      {
-        problem: {
-          code: AUTH_ERROR_CODES.authRequired,
-        },
-      },
+      problem(AUTH_ERROR_CODES.authRequired, 401),
       false,
       401,
     ),
@@ -36,11 +47,7 @@ test("workspace redirects auth and mfa failures to safe routes", () => {
 
   assert.deepEqual(
     toWorkspaceOutcome(
-      {
-        problem: {
-          code: AUTH_ERROR_CODES.mfaRequired,
-        },
-      },
+      problem(AUTH_ERROR_CODES.mfaRequired, 403),
       false,
       403,
     ),

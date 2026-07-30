@@ -135,8 +135,11 @@ describe("GetScanJobHandler", () => {
 
     await expect(handler.execute(query())).rejects.toMatchObject({
       response: {
-        error_code: SCAN_ERROR_CODES.jobNotFound,
-        correlation_id: "request-corr-1",
+        ok: false,
+        problem: {
+          code: SCAN_ERROR_CODES.jobNotFound,
+          correlationId: "request-corr-1",
+        },
       },
     });
   });

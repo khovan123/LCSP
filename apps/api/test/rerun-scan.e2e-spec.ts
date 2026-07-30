@@ -25,10 +25,9 @@ import {
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 const IDEMPOTENCY_KEY = "rerun-scan-request:assessment-1:snapshot-1:1";
-type ErrorResponse = { error_code?: string };
 
 describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
   let app: INestApplication;
@@ -74,7 +73,7 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: "org-1",
     });
-    managerToken = (signIn.body as SignInSuccess).session_token;
+    managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
 
   afterAll(async () => {
@@ -102,7 +101,7 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
     });
 
     const response = await triggerRerun(app, managerToken);
-    const body = response.body as RerunScanResponseDto;
+    const body = successBody<RerunScanResponseDto>(response);
 
     assert.equal(response.status, 201);
     assert.equal(body.status, REPOSITORY_SCAN_JOB_STATUSES.queued);
@@ -144,10 +143,10 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
 
   it("T02: Same idempotency_key returns existing re-run job", async () => {
     const first = await triggerRerun(app, managerToken);
-    const firstBody = first.body as RerunScanResponseDto;
+    const firstBody = successBody<RerunScanResponseDto>(first);
 
     const second = await triggerRerun(app, managerToken);
-    const secondBody = second.body as RerunScanResponseDto;
+    const secondBody = successBody<RerunScanResponseDto>(second);
 
     assert.equal(second.status, 201); // Returns 201 for idempotency too by NestJS default if HttpCode(201) is used unless we modify response, which is fine
     assert.equal(secondBody.scan_job_id, firstBody.scan_job_id);
@@ -168,10 +167,7 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
     const response = await triggerRerun(app, managerToken);
 
     assert.equal(response.status, 403);
-    assert.equal(
-      (response.body as ErrorResponse).error_code,
-      PBAC_REASON_CODE.denied,
-    );
+    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
   });
 
   it("T05: Snapshot not in org returns 404", async () => {
@@ -184,7 +180,7 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
 
     assert.equal(response.status, 404);
     assert.equal(
-      (response.body as ErrorResponse).error_code,
+      problemCode(response),
       GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
     );
   });

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type {
   AuditDecision,
   AuditEvent as AuditEventProps,
@@ -5,8 +7,9 @@ import type {
 } from "@lcsp/contracts/audit";
 
 export class AuditEventEntity implements AuditEventProps {
+  readonly id: string = randomUUID();
+
   private constructor(
-    readonly id: string,
     readonly eventType: string,
     readonly actorId: string | null,
     readonly organizationId: string | null,
@@ -17,12 +20,10 @@ export class AuditEventEntity implements AuditEventProps {
   ) {}
 
   static create(
-    id: string,
     input: AuditEventInput,
     occurredAt: Date = new Date(),
   ): AuditEventEntity {
     return new AuditEventEntity(
-      id,
       input.eventType,
       input.actorId,
       input.organizationId,
@@ -34,8 +35,7 @@ export class AuditEventEntity implements AuditEventProps {
   }
 
   static fromPersistence(fields: AuditEventProps): AuditEventEntity {
-    return new AuditEventEntity(
-      fields.id,
+    const entity = new AuditEventEntity(
       fields.eventType,
       fields.actorId,
       fields.organizationId,
@@ -44,5 +44,7 @@ export class AuditEventEntity implements AuditEventProps {
       fields.payload,
       fields.occurredAt,
     );
+    Object.assign(entity, { id: fields.id });
+    return entity;
   }
 }

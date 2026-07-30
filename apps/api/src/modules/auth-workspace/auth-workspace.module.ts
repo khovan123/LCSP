@@ -32,6 +32,7 @@ import { AuthWorkspaceSupportService } from "./application/services/auth-workspa
 import { AuthWorkspaceFacade } from "./application/services/auth-workspace/auth-workspace.facade.ts";
 import { NoopRecoveryNotifierService } from "./infrastructure/notification/noop-recovery-notifier.service.ts";
 import { GitHubOAuthProvider } from "./infrastructure/oauth/github-oauth.provider.ts";
+import { GoogleOAuthProvider } from "./infrastructure/oauth/google-oauth.provider.ts";
 import { OAuthProviderRegistry } from "./infrastructure/oauth/oauth-provider.registry.ts";
 import {
   PrismaAuditEventRepository,
@@ -140,6 +141,7 @@ function handlerProvider<T>(
       useClass: NoopRecoveryNotifierService,
     },
     GitHubOAuthProvider,
+    GoogleOAuthProvider,
     OAuthProviderRegistry,
     AuthAuditService,
     handlerProvider(RegisterApprovedPathHandler),

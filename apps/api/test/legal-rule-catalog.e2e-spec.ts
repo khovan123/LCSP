@@ -3,7 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import {
@@ -19,6 +19,7 @@ import {
   SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
+import { LEGAL_RULE_LIFECYCLE_STATUSES } from "@lcsp/contracts/legal-rule-catalog";
 
 describe("Legal Rule Catalog Endpoints (e2e)", () => {
   let app: INestApplication;
@@ -96,7 +97,7 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       organization_id: orgId,
     });
     authorToken = String(
-      (signInAuthor.body as { session_token?: string })?.session_token ?? "",
+      successBody<{ session_token?: string }>(signInAuthor).session_token ?? "",
     );
 
     // 2. Setup Approver User
@@ -138,7 +139,8 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       organization_id: orgId,
     });
     approverToken = String(
-      (signInApprover.body as { session_token?: string })?.session_token ?? "",
+      successBody<{ session_token?: string }>(signInApprover).session_token ??
+        "",
     );
 
     // 3. Setup Restricted User (no rights)
@@ -189,7 +191,7 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       organization_id: orgId,
     });
     restrictedToken = String(
-      (signInRestricted.body as { session_token?: string })?.session_token ??
+      successBody<{ session_token?: string }>(signInRestricted).session_token ??
         "",
     );
   });
@@ -216,11 +218,11 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         .send(payload);
 
       assert.equal(response.status, 201);
-      assert.equal(
-        (response.body as { legalRuleId?: string }).legalRuleId,
-        "RULE-TEST-001",
+      const body = successBody<{ legalRuleId: string; status: string }>(
+        response,
       );
-      assert.equal((response.body as { status?: string }).status, "DRAFT");
+      assert.equal(body.legalRuleId, "RULE-TEST-001");
+      assert.equal(body.status, "DRAFT");
     });
 
     it("T06: Returns 403 when called by restricted user", async () => {
@@ -270,7 +272,10 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         });
 
       assert.equal(response.status, 200);
-      assert.equal((response.body as { status?: string }).status, "APPROVED");
+      assert.equal(
+        successBody<{ status: string }>(response).status,
+        LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+      );
     });
 
     it("T06: Returns 403 when called by restricted user", async () => {

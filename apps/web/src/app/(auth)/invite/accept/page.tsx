@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
+import { resolveMessage } from "@lcsp/i18n";
 
-import { BrandMark } from "@/components/atoms/brand-mark";
 import { AcceptInvitationForm } from "@/features/auth/components/organisms/accept-invitation-form";
+import { AuthShell } from "@/features/auth/components/organisms/auth-shell";
+import { appLocale } from "@/lib/locale";
 
 export const metadata: Metadata = {
-  title: "Accept developer invitation | LCSP",
-  description: "Review and accept your scoped LCSP developer invitation.",
+  title: resolveMessage(appLocale, "pages.acceptInvitation.metadataTitle"),
+  description: resolveMessage(
+    appLocale,
+    "pages.acceptInvitation.metadataDescription",
+  ),
 };
 
 export default async function AcceptInvitationPage({
@@ -17,9 +22,10 @@ export default async function AcceptInvitationPage({
   const token = typeof params.token === "string" ? params.token : "";
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-background px-6 py-12 text-foreground">
-      <BrandMark homeLabel="LCSP home" />
+    <AuthShell
+      homeLabel={resolveMessage(appLocale, "pages.signIn.homeAriaLabel")}
+    >
       <AcceptInvitationForm key={token} invitationToken={token} />
-    </main>
+    </AuthShell>
   );
 }

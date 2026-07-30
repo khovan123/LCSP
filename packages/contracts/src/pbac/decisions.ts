@@ -1,6 +1,6 @@
 export const PBAC_DECISION = {
-  allow: "allow",
-  deny: "deny",
+  allow: "ALLOW",
+  deny: "DENY",
 } as const;
 
 export const PBAC_REASON_CODE = {

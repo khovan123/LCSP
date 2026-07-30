@@ -1,28 +1,18 @@
 import * as crypto from "node:crypto";
 
-import {
-  Body,
-  Controller,
-  Headers,
-  Post,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { Body, Controller, Headers, HttpStatus, Post } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import type { PbacDecisionValue } from "@lcsp/contracts/pbac";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import { PbacPreflightService } from "./pbac-preflight.service.js";
+import { problemException } from "../problems/problem-factory.js";
+import { resultEnvelope } from "../problems/result-envelope.js";
 
 interface PreflightRequestBody {
   user_id?: string;
   organization_id?: string;
   action?: string;
   correlation_id?: string;
-}
-
-interface PreflightResponseBody {
-  decision: PbacDecisionValue;
-  reason_code: string | null;
-  correlation_id: string;
 }
 
 @Controller("internal/pbac")
@@ -36,7 +26,7 @@ export class PbacPreflightController {
   async preflight(
     @Body() body: PreflightRequestBody,
     @Headers("x-worker-api-key") apiKey?: string,
-  ): Promise<PreflightResponseBody> {
+  ) {
     this.assertWorkerApiKey(apiKey);
 
     const result = await this.preflightService.evaluate({
@@ -46,18 +36,24 @@ export class PbacPreflightController {
       correlationId: body.correlation_id ?? "",
     });
 
-    return {
+    return resultEnvelope({
       decision: result.decision,
       reason_code: result.reasonCode,
       correlation_id: result.correlationId,
-    };
+    });
   }
 
   private assertWorkerApiKey(provided?: string): void {
     const expected = this.configService.get<string>("worker.apiKey", "");
 
     if (!expected || !provided || !timingSafeEqual(provided, expected)) {
-      throw new UnauthorizedException();
+      throw problemException(
+        AUTH_ERROR_CODES.sessionInvalid,
+        crypto.randomUUID(),
+        {
+          status: HttpStatus.UNAUTHORIZED,
+        },
+      );
     }
   }
 }

@@ -4,7 +4,9 @@ import {
   DOCUMENT_ERROR_CODES,
   DOCUMENT_EVENT_TYPES,
   DOCUMENT_REQUEST_STATUSES,
+  DOCUMENT_TYPES,
 } from "@lcsp/contracts/document";
+import { CLASSIFICATION_GUARDRAIL_STATUSES } from "@lcsp/contracts/scan";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -28,7 +30,10 @@ function buildHandler(options?: {
       : options.assessment;
   const evidence: ClassificationResultRecord | null =
     options?.evidence === undefined
-      ? { id: "classification-1", guardrailStatus: "passed" }
+      ? {
+          id: "classification-1",
+          guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+        }
       : options.evidence;
   const existing: { id: string } | null =
     options?.existing === undefined ? null : options.existing;
@@ -98,7 +103,7 @@ describe("RequestFinalReportHandler", () => {
     const result = await handler.execute(command);
 
     expect(result.status).toBe(DOCUMENT_REQUEST_STATUSES.queued);
-    expect(result.document_type).toBe("FinalReport");
+    expect(result.document_type).toBe(DOCUMENT_TYPES.finalReport);
     expect(result.correlation_id).toBe("corr-1");
     expect(result.document_request_id).toBeTruthy();
     expect(transaction).toHaveBeenCalledTimes(1);
@@ -113,16 +118,22 @@ describe("RequestFinalReportHandler", () => {
       throw new Error("Expected NotFoundException");
     } catch (error) {
       expect(error).toBeInstanceOf(NotFoundException);
-      expect((error as NotFoundException).getResponse()).toEqual({
-        error_code: DOCUMENT_ERROR_CODES.assessmentNotFound,
-        correlation_id: "corr-1",
+      expect((error as NotFoundException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: DOCUMENT_ERROR_CODES.assessmentNotFound,
+          correlationId: "corr-1",
+        },
       });
     }
   });
 
   it("throws CLASSIFICATION_GUARDRAIL_NOT_PASSED when guardrail is degraded", async () => {
     const { handler, command } = buildHandler({
-      evidence: { id: "classification-1", guardrailStatus: "degraded" },
+      evidence: {
+        id: "classification-1",
+        guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.degraded,
+      },
     });
 
     try {
@@ -130,16 +141,22 @@ describe("RequestFinalReportHandler", () => {
       throw new Error("Expected ConflictException");
     } catch (error) {
       expect(error).toBeInstanceOf(ConflictException);
-      expect((error as ConflictException).getResponse()).toEqual({
-        error_code: DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed,
-        correlation_id: "corr-1",
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed,
+          correlationId: "corr-1",
+        },
       });
     }
   });
 
   it("throws CLASSIFICATION_GUARDRAIL_NOT_PASSED when guardrail is blocked", async () => {
     const { handler, command } = buildHandler({
-      evidence: { id: "classification-1", guardrailStatus: "blocked" },
+      evidence: {
+        id: "classification-1",
+        guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.blocked,
+      },
     });
 
     await expect(handler.execute(command)).rejects.toThrow(ConflictException);
@@ -153,9 +170,12 @@ describe("RequestFinalReportHandler", () => {
       throw new Error("Expected ConflictException");
     } catch (error) {
       expect(error).toBeInstanceOf(ConflictException);
-      expect((error as ConflictException).getResponse()).toEqual({
-        error_code: DOCUMENT_ERROR_CODES.alreadyQueued,
-        correlation_id: "corr-1",
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: DOCUMENT_ERROR_CODES.alreadyQueued,
+          correlationId: "corr-1",
+        },
       });
     }
   });

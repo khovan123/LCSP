@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /** MW-qa-003: Manager-only golden path across the API boundary. */
 
 import * as assert from "node:assert/strict";
@@ -11,20 +10,36 @@ import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUTH_INVITATION_STATES } from "@lcsp/contracts/auth";
 import { DOCUMENT_REQUEST_STATUSES } from "@lcsp/contracts/document";
 import {
+  REPOSITORY_CONNECTION_STATUSES,
+  REPOSITORY_SNAPSHOT_STATUSES,
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
-import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
+import {
+  AI_USAGE_FLOW_STATUSES,
+  CLASSIFICATION_GUARDRAIL_STATUSES,
+  CONFLICT_RECORD_STATUSES,
+  LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
+  LEGAL_RULE_MATCH_STATUSES,
+  OVERALL_COVERAGE_STATUSES,
+  SCAN_CALLBACK_STATUSES,
+  TECHNICAL_PROFILE_STATUSES,
+  VERIFIED_PROFILE_STATUSES,
+} from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
+import {
+  toPrismaDocumentRequestStatus,
+  toPrismaOverallCoverageStatus,
+} from "../src/infrastructure/prisma/prisma-enum-mappers.js";
 import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
-import { httpRequest } from "./support/http.js";
+import { httpRequest, successBody } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
 
@@ -73,7 +88,7 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       organization_id: "org-1",
     });
     assert.equal(signIn.status, 201);
-    const token = (signIn.body as { session_token: string }).session_token;
+    const token = successBody<{ session_token: string }>(signIn).session_token;
     assert.ok(token);
     assert.doesNotMatch(
       JSON.stringify(signIn.body),
@@ -85,10 +100,14 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       .set("Authorization", `Bearer ${token}`)
       .send({ name: "Manager-only assessment" });
     assert.equal(created.status, 201);
-    const assessmentId = (created.body as { assessment_id: string })
-      .assessment_id;
+    const assessmentId = successBody<{ assessment_id: string }>(
+      created,
+    ).assessment_id;
     assert.ok(assessmentId);
-    assert.doesNotMatch(JSON.stringify(created.body), /developer/i);
+    assert.doesNotMatch(
+      JSON.stringify(successBody<object>(created)),
+      /developer/i,
+    );
 
     const wizard = await httpRequest(app)
       .post(`/assessments/${assessmentId}/wizard/submit`)
@@ -96,7 +115,7 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       .send({ answers: validWizardAnswers });
     assert.equal(wizard.status, 200);
     assert.equal(
-      wizard.body.assessment_status,
+      successBody<{ assessment_status: string }>(wizard).assessment_status,
       ASSESSMENT_STATUS_CODES.wizardSubmitted,
     );
 
@@ -110,7 +129,7 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
         idempotency_key: "manager-golden-path-scan",
       });
     assert.equal(scan.status, 201);
-    const scanJobId = (scan.body as { scan_job_id: string }).scan_job_id;
+    const scanJobId = successBody<{ scan_job_id: string }>(scan).scan_job_id;
     await prisma.repositoryScanJob.update({
       where: { id: scanJobId },
       data: { status: REPOSITORY_SCAN_JOB_STATUSES.running },
@@ -126,10 +145,10 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
         evidence_payload: { findings: [{ finding_id: "golden-finding" }] },
         privacy_flags: { containsSourceCode: false, secretsRedacted: true },
         schema_version: "1.0.0",
-        status: "success",
+        status: SCAN_CALLBACK_STATUSES.success,
       });
     assert.equal(evidence.status, 200);
-    assert.equal((evidence.body as { accepted: boolean }).accepted, true);
+    assert.equal(successBody<{ accepted: boolean }>(evidence).accepted, true);
 
     const acceptedEvidence =
       await prisma.technicalEvidenceReport.findUniqueOrThrow({
@@ -160,16 +179,20 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       .get(`/assessments/${assessmentId}/conflicts`)
       .set("Authorization", `Bearer ${token}`);
     assert.equal(conflicts.status, 200);
-    const conflictId = (
-      conflicts.body as { conflicts: Array<{ conflict_id: string }> }
-    ).conflicts[0]?.conflict_id;
+    const conflictId = successBody<{
+      conflicts: Array<{ conflict_id: string }>;
+    }>(conflicts).conflicts[0]?.conflict_id;
     assert.ok(conflictId);
     const resolved = await httpRequest(app)
       .patch(`/assessments/${assessmentId}/conflicts/${conflictId}/resolve`)
       .set("Authorization", `Bearer ${token}`)
       .send({ resolution: CONFLICT_RECORD_STATUSES.resolved });
     assert.equal(resolved.status, 200);
-    assert.equal(resolved.body.all_conflicts_resolved, true);
+    assert.equal(
+      successBody<{ all_conflicts_resolved: boolean }>(resolved)
+        .all_conflicts_resolved,
+      true,
+    );
 
     await seedClassificationInputs(prisma, assessmentId);
     const classified = await httpRequest(app)
@@ -184,7 +207,7 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
           system_type: "AI_SYSTEM",
           citation_basis: ["chunk-1"],
         },
-        guardrail_status: "passed",
+        guardrail_status: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
       });
     assert.equal(classified.status, 200);
 
@@ -193,12 +216,13 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       .set("Authorization", `Bearer ${token}`)
       .send({});
     assert.equal(report.status, 202);
-    const documentRequestId = (report.body as { document_request_id: string })
-      .document_request_id;
+    const documentRequestId = successBody<{ document_request_id: string }>(
+      report,
+    ).document_request_id;
     await prisma.documentRequest.update({
       where: { id: documentRequestId },
       data: {
-        status: DOCUMENT_REQUEST_STATUSES.ready,
+        status: toPrismaDocumentRequestStatus(DOCUMENT_REQUEST_STATUSES.ready),
         documentUrl: "https://example.test/files/manager-final-report.pdf",
       },
     });
@@ -206,7 +230,9 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       .get(`/assessments/${assessmentId}/documents/${documentRequestId}`)
       .set("Authorization", `Bearer ${token}`);
     assert.equal(ready.status, 200);
-    const downloadUrl = (ready.body as { download_url: string }).download_url;
+    const downloadUrl = successBody<{ download_url: string }>(
+      ready,
+    ).download_url;
     assert.ok(downloadUrl);
     assert.doesNotMatch(downloadUrl, /session_token/i);
     const download = await httpRequest(app).get(downloadUrl);
@@ -280,7 +306,7 @@ async function seedRepositorySnapshot(
       repositoryFullName: "acme/example-repo",
       defaultBranch: "main",
       permissions: { contents: "read" },
-      status: "ACTIVE",
+      status: REPOSITORY_CONNECTION_STATUSES.active,
     },
   });
   await prisma.repositorySnapshot.create({
@@ -295,7 +321,7 @@ async function seedRepositorySnapshot(
       commitSha: "a".repeat(40),
       providerMetadata: { requestedRevision: "main" },
       actorId: "user-1",
-      status: "READY",
+      status: REPOSITORY_SNAPSHOT_STATUSES.ready,
     },
   });
 }
@@ -315,7 +341,7 @@ async function seedAcceptedFlow(
       providerVersion: "test",
       profileData: {},
       privacyFlags: { containsSourceCode: false, secretsRedacted: true },
-      status: "accepted",
+      status: TECHNICAL_PROFILE_STATUSES.accepted,
     },
   });
   await prisma.aIUsageFlow.create({
@@ -329,7 +355,7 @@ async function seedAcceptedFlow(
       claims: [],
       unknownUsages: [],
       privacyFlags: { containsSourceCode: false, secretsRedacted: true },
-      status: "accepted",
+      status: AI_USAGE_FLOW_STATUSES.accepted,
     },
   });
 }
@@ -348,7 +374,7 @@ async function seedClassificationInputs(
       providerVersion: "test",
       profileData: {},
       gatesPassedAt: {},
-      status: "pending_approval",
+      status: VERIFIED_PROFILE_STATUSES.pendingApproval,
     },
   });
   await prisma.legalRuleMatch.create({
@@ -362,9 +388,11 @@ async function seedClassificationInputs(
       schemaVersion: "1.0.0",
       matches: [],
       citationAllowlist: ["chunk-1"],
-      overallCoverageStatus: "COMPLETE_CITATION",
-      guardrailStatus: "passed",
-      status: "accepted",
+      overallCoverageStatus: toPrismaOverallCoverageStatus(
+        OVERALL_COVERAGE_STATUSES.completeCitation,
+      ),
+      guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
+      status: LEGAL_RULE_MATCH_STATUSES.accepted,
     },
   });
 }

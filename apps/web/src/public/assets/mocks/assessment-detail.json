@@ -1,0 +1,7 @@
+{
+  "assessment_id": "assessment-demo",
+  "name": "Customer Support Assistant",
+  "wizard_status": "SUBMITTED",
+  "readiness_state": { "classification_locked": false },
+  "guardrail_status": "passed"
+}

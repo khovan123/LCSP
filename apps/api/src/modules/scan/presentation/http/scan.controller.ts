@@ -17,19 +17,13 @@ import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
-import type { ScanJobStatusDto } from "../../application/contracts/scan/scan-job-status.contract.js";
-import type {
-  ScanCallbackDto,
-  ScanCallbackRequest,
-} from "../../application/contracts/scan/scan-callback.contract.js";
+import type { ScanCallbackRequest } from "../../application/contracts/scan/scan-callback.contract.js";
 import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
 import { RerunScanCommand } from "../../application/commands/rerun-scan/rerun-scan.command.js";
-import type {
-  RerunScanRequestDto,
-  RerunScanResponseDto,
-} from "../../application/contracts/scan/rerun-scan.contract.js";
+import type { RerunScanRequestDto } from "../../application/contracts/scan/rerun-scan.contract.js";
 import { WorkerApiKeyGuard } from "./worker-api-key.guard.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 
 interface ScanStatusRequest {
   pbacContext: PbacRequestContext;
@@ -50,16 +44,18 @@ export class ScanController {
     @Param("assessmentId") assessmentId: string,
     @Param("scanJobId") scanJobId: string,
     @Req() request: ScanStatusRequest,
-  ): Promise<ScanJobStatusDto> {
+  ) {
     const context = request.pbacContext;
-    return this.queryBus.execute(
-      new GetScanJobQuery(
-        assessmentId,
-        scanJobId,
-        context.organizationId,
-        context.subjectRole,
-        context.scope,
-        request.correlationId,
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetScanJobQuery(
+          assessmentId,
+          scanJobId,
+          context.organizationId,
+          context.subjectRole,
+          context.scope,
+          request.correlationId,
+        ),
       ),
     );
   }
@@ -72,15 +68,17 @@ export class ScanController {
     @Param("assessmentId") assessmentId: string,
     @Body() payload: RerunScanRequestDto,
     @Req() request: ScanStatusRequest,
-  ): Promise<RerunScanResponseDto> {
-    return this.commandBus.execute(
-      new RerunScanCommand(
-        assessmentId,
-        payload.snapshot_id,
-        payload.idempotency_key,
-        request.pbacContext,
-        request.correlationId,
-        payload.reason,
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new RerunScanCommand(
+          assessmentId,
+          payload.snapshot_id,
+          payload.idempotency_key,
+          request.pbacContext,
+          request.correlationId,
+          payload.reason,
+        ),
       ),
     );
   }
@@ -97,12 +95,14 @@ export class InternalScanController {
     @Param("scanJobId") scanJobId: string,
     @Body() payload: ScanCallbackRequest,
     @Headers("x-correlation-id") correlationId?: string,
-  ): Promise<ScanCallbackDto> {
-    return this.commandBus.execute(
-      new ProcessScanCallbackCommand(
-        scanJobId,
-        payload,
-        correlationId?.trim() || randomUUID(),
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ProcessScanCallbackCommand(
+          scanJobId,
+          payload,
+          correlationId?.trim() || randomUUID(),
+        ),
       ),
     );
   }

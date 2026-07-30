@@ -19,9 +19,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { httpRequest } from "./support/http.js";
-
-import type { AuthErrorCode } from "@lcsp/contracts/auth";
+import { httpRequest, problemCode, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
@@ -33,12 +31,6 @@ import {
   seedAuthWorkspaceFixture,
   type AuthFixture,
 } from "./support/auth-workspace-test-helpers.js";
-
-type ErrorResponseBody = {
-  error_code: AuthErrorCode;
-  code: AuthErrorCode;
-  correlation_id: string;
-};
 
 describe("Developer PBAC enforcement (e2e) [AC-024, AC-025]", () => {
   let app: INestApplication;
@@ -75,14 +67,15 @@ describe("Developer PBAC enforcement (e2e) [AC-024, AC-025]", () => {
       password: "DevPassword123!",
       organization_id: fixture.organizationId,
     });
-    developerToken = (devSignIn.body as SignInSuccess)?.session_token ?? "";
+    developerToken = successBody<SignInSuccess>(devSignIn).session_token ?? "";
 
     const managerSignIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "manager@acme.test",
       password: "CorrectHorseBatteryStaple!",
       organization_id: fixture.organizationId,
     });
-    managerToken = (managerSignIn.body as SignInSuccess)?.session_token ?? "";
+    managerToken =
+      successBody<SignInSuccess>(managerSignIn).session_token ?? "";
   });
 
   afterAll(async () => {
@@ -104,7 +97,7 @@ describe("Developer PBAC enforcement (e2e) [AC-024, AC-025]", () => {
       "Developer must be denied assessment creation",
     );
     assert.ok(
-      (result.body as ErrorResponseBody).error_code,
+      problemCode(result),
       "Error response must have machine-readable code",
     );
     assert.doesNotMatch(
@@ -124,10 +117,7 @@ describe("Developer PBAC enforcement (e2e) [AC-024, AC-025]", () => {
       .send({ answers: { businessPurpose: "Attempted edit" } });
 
     assert.equal(result.status, 403);
-    assert.equal(
-      (result.body as ErrorResponseBody).error_code,
-      PBAC_REASON_CODE.denied,
-    );
+    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
     assert.doesNotMatch(JSON.stringify(result.body), /policyId|actions/i);
 
     const decisionLog = await prisma.authDecisionLog.findFirst({

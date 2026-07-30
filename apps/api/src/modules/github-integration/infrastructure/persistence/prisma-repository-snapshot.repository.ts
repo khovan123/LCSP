@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 
 import type { OutboxMessageInput } from "@lcsp/contracts/outbox";
 
+import { toPrismaRepositorySnapshotStatus } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
 import type { RepositorySnapshotRepository } from "../../application/ports/persistence/repository-snapshot.repository.js";
@@ -32,7 +33,7 @@ export class PrismaRepositorySnapshotRepository implements RepositorySnapshotRep
           commitSha: snapshot.commitSha,
           providerMetadata: snapshot.providerMetadata,
           actorId: snapshot.actorId,
-          status: snapshot.status,
+          status: toPrismaRepositorySnapshotStatus(snapshot.status),
           createdAt: snapshot.createdAt,
         },
       });

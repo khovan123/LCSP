@@ -3,7 +3,9 @@ import {
   PBAC_DECISION,
   PBAC_REASON_CODE,
   type PbacDecisionValue,
+  type PbacReasonCode,
 } from "@lcsp/contracts/pbac";
+import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 
 import {
   PrismaAuthorizationDecisionRepository,
@@ -25,11 +27,11 @@ export interface PbacPreflightInput {
 
 export interface PbacPreflightResult {
   decision: PbacDecisionValue;
-  reasonCode: string | null;
+  reasonCode: PbacReasonCode | null;
   correlationId: string;
 }
 
-const DECISION_LOG_RESOURCE_TYPE = "WorkerTask";
+const DECISION_LOG_RESOURCE_TYPE = AUDIT_RESOURCE_TYPES.workerTask;
 
 /**
  * Re-evaluates PBAC for a Python worker task, on the worker's behalf, right
@@ -128,7 +130,7 @@ export class PbacPreflightService {
 
   private async deny(
     input: PbacPreflightInput,
-    reasonCode: string,
+    reasonCode: PbacReasonCode,
   ): Promise<PbacPreflightResult> {
     await this.recordDecision(
       input,
@@ -148,7 +150,7 @@ export class PbacPreflightService {
   private async recordDecision(
     input: PbacPreflightInput,
     decision: PbacDecisionValue,
-    reasonCode: string,
+    reasonCode: PbacReasonCode,
     policyId: string | null,
     policyVersion: string | null,
   ): Promise<void> {

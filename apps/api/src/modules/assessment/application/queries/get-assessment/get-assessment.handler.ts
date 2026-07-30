@@ -1,4 +1,4 @@
-import { Inject, NotFoundException } from "@nestjs/common";
+import { HttpStatus, Inject } from "@nestjs/common";
 import { QueryHandler } from "@nestjs/cqrs";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import type { IQueryHandler } from "@nestjs/cqrs";
@@ -11,7 +11,9 @@ import {
   WIZARD_STATUS_CODES,
   type AssessmentNextActionKey,
 } from "@lcsp/contracts/assessment";
+import { fromPrismaWizardStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import {
   ASSESSMENT_REPOSITORY,
   type AssessmentRepository,
@@ -51,7 +53,7 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       where: { assessmentId: assessment.id },
     });
     const wizardStatus: WizardStatus = wizardProfile
-      ? (wizardProfile.status as WizardStatus)
+      ? fromPrismaWizardStatus(wizardProfile.status)
       : WIZARD_STATUS_CODES.notStarted;
 
     // classification_locked is unconditionally true until MW-evid-001 (Get Technical
@@ -81,9 +83,8 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
   }
 
   private throwNotFound(correlationId: string): never {
-    throw new NotFoundException({
-      error_code: ASSESSMENT_ERROR_CODES.notFound,
-      correlation_id: correlationId,
+    throw problemException(ASSESSMENT_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
     });
   }
 }

@@ -13,22 +13,26 @@ export function FormCard({
   eyebrow,
   title,
   description,
+  leading,
   children,
   footer,
 }: FormCardProps) {
   return (
-    <Card className="w-full max-w-md motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-500">
+    <Card className="w-full max-w-sm">
       <CardHeader>
-        <p className="font-mono text-xs font-semibold uppercase tracking-[0.13em] text-primary">
-          {eyebrow}
-        </p>
-        <CardTitle className="text-3xl tracking-tight sm:text-4xl">
-          {title}
-        </CardTitle>
+        {eyebrow ? (
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.13em] text-primary">
+            {eyebrow}
+          </p>
+        ) : null}
+        <CardTitle className="text-xl">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent>{children}</CardContent>
-      <CardFooter className="flex-col gap-5">{footer}</CardFooter>
+      <CardContent className="flex flex-col gap-6">
+        {leading}
+        {children}
+      </CardContent>
+      <CardFooter className="flex-col gap-2">{footer}</CardFooter>
     </Card>
   );
 }

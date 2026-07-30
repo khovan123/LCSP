@@ -1,5 +1,5 @@
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, WORKSPACE_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   canUseManagerOnlyAction,
   PBAC_ACTIONS,
@@ -16,32 +16,41 @@ import type {
   AssessmentSummary,
   AssessmentsOutcome,
   WorkspaceContext,
+  WorkspaceErrorOutcome,
   WorkspaceOutcome,
 } from "../../features/workspace/types/workspace.types.ts";
+import { apiRequest } from "./api-request.ts";
+import { API_OUTCOME_KINDS } from "./outcome-kinds.ts";
+import { getProblemCode } from "./problem-envelope.ts";
 
 export const WORKSPACE_ROUTES = Object.freeze({
   mfaVerify: "/mfa/verify",
+  workspaceSelect: "/workspace/select",
 });
 
 const workspaceApiPaths = Object.freeze({
-  workspace: "/workspace",
-  assessments: "/assessments",
+  workspace: "/api/workspace",
+  assessments: "/api/assessments",
 });
-
-type ApiProblemPayload = {
-  code?: string;
-  error_code?: string;
-  problem?: {
-    code?: string;
-    error_code?: string;
-  };
-};
 
 type WorkspaceApiPayload = {
   organization_id: string;
   organization_name: string;
   subject_role: string;
   granted_actions: string[];
+};
+
+export type WorkspaceSelectionOption = {
+  id: string;
+  name: string;
+  member_count?: number;
+  last_sign_in_days_ago?: number;
+};
+
+export type WorkspaceSelectionPayload = {
+  email?: string;
+  workspaces: WorkspaceSelectionOption[];
+  selected_workspace_id?: string;
 };
 
 export function canCreateAssessment(grantedActions: readonly string[]) {
@@ -64,51 +73,132 @@ export function getWizardStatusLabelKey(
 }
 
 export async function getWorkspace(): Promise<WorkspaceOutcome> {
-  const response = await fetch(workspaceApiPaths.workspace, {
-    credentials: "same-origin",
-  });
-  const payload: unknown = await response.json().catch(() => null);
+  const { payload, ok, status, problemCode } = await apiRequest(
+    workspaceApiPaths.workspace,
+  );
 
-  return toWorkspaceOutcome(payload, response.ok, response.status);
+  return toWorkspaceOutcome(payload, ok, status, problemCode);
 }
 
 export async function getAssessments(): Promise<AssessmentsOutcome> {
-  const response = await fetch(workspaceApiPaths.assessments, {
-    credentials: "same-origin",
-  });
-  const payload: unknown = await response.json().catch(() => null);
+  const { payload, ok } = await apiRequest(workspaceApiPaths.assessments);
 
-  return toAssessmentsOutcome(payload, response.ok);
+  return toAssessmentsOutcome(payload, ok);
+}
+
+export async function createAssessment(
+  name: string,
+  description?: string,
+): Promise<
+  | { kind: typeof API_OUTCOME_KINDS.created; assessmentId: string }
+  | WorkspaceErrorOutcome
+> {
+  const { payload, ok } = await apiRequest(workspaceApiPaths.assessments, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name, description }),
+  });
+
+  if (ok && isCreatedAssessmentPayload(payload)) {
+    return {
+      kind: API_OUTCOME_KINDS.created,
+      assessmentId: payload.assessment_id,
+    };
+  }
+
+  return {
+    kind: API_OUTCOME_KINDS.error,
+    titleKey: "pages.workspace.errors.createAssessmentTitle",
+    detailKey: "pages.workspace.errors.createAssessmentDetail",
+  };
+}
+
+export async function getWorkspaceSelection(): Promise<WorkspaceSelectionPayload> {
+  const { payload, ok } = await apiRequest("/api/mock/workspace-selection");
+
+  if (!ok) {
+    throw new Error("workspace-selection-load-failed");
+  }
+
+  const candidate = payload as WorkspaceSelectionPayload;
+  return {
+    email: typeof candidate.email === "string" ? candidate.email : undefined,
+    workspaces: Array.isArray(candidate.workspaces)
+      ? candidate.workspaces
+      : [],
+    selected_workspace_id:
+      typeof candidate.selected_workspace_id === "string"
+        ? candidate.selected_workspace_id
+        : undefined,
+  };
+}
+
+export async function persistWorkspaceSelection(
+  workspaceId: string,
+): Promise<WorkspaceSelectionOption> {
+  const { payload, ok } = await apiRequest("/api/mock/workspace-selection", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ workspace_id: workspaceId }),
+  });
+  const candidate = payload as {
+    selected_workspace?: WorkspaceSelectionOption;
+  } | null;
+
+  if (!ok || !candidate?.selected_workspace) {
+    throw new Error("workspace-selection-save-failed");
+  }
+
+  return candidate.selected_workspace;
 }
 
 export function toWorkspaceOutcome(
   payload: unknown,
   ok: boolean,
   status?: number,
+  problemCode = getProblemCode(payload),
 ): WorkspaceOutcome {
   if (ok && isWorkspaceContextPayload(payload)) {
-    return { kind: "loaded", workspace: normalizeWorkspacePayload(payload) };
+    return {
+      kind: API_OUTCOME_KINDS.loaded,
+      workspace: normalizeWorkspacePayload(payload),
+    };
   }
 
   if (ok && isWorkspaceApiPayload(payload)) {
-    return { kind: "loaded", workspace: normalizeWorkspaceApiPayload(payload) };
+    return {
+      kind: API_OUTCOME_KINDS.loaded,
+      workspace: normalizeWorkspaceApiPayload(payload),
+    };
   }
 
-  const code = getProblemCode(payload);
   if (
     status === 401 ||
-    code === AUTH_ERROR_CODES.authRequired ||
-    code === AUTH_ERROR_CODES.sessionInvalid
+    problemCode === AUTH_ERROR_CODES.authRequired ||
+    problemCode === AUTH_ERROR_CODES.sessionInvalid
   ) {
-    return { kind: "redirect", location: PUBLIC_ENTRY_ROUTES.signIn };
+    return {
+      kind: API_OUTCOME_KINDS.redirect,
+      location: PUBLIC_ENTRY_ROUTES.signIn,
+    };
   }
 
-  if (code === AUTH_ERROR_CODES.mfaRequired) {
-    return { kind: "redirect", location: WORKSPACE_ROUTES.mfaVerify };
+  if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
+    return {
+      kind: API_OUTCOME_KINDS.redirect,
+      location: WORKSPACE_ROUTES.mfaVerify,
+    };
+  }
+
+  if (problemCode === WORKSPACE_ERROR_CODES.selectionRequired) {
+    return {
+      kind: API_OUTCOME_KINDS.redirect,
+      location: WORKSPACE_ROUTES.workspaceSelect,
+    };
   }
 
   return {
-    kind: "error",
+    kind: API_OUTCOME_KINDS.error,
     titleKey: "pages.workspace.errors.workspaceUnavailableTitle",
     detailKey: "pages.workspace.errors.workspaceUnavailableDetail",
   };
@@ -119,11 +209,14 @@ export function toAssessmentsOutcome(
   ok: boolean,
 ): AssessmentsOutcome {
   if (ok && isAssessmentsPayload(payload)) {
-    return { kind: "loaded", assessments: payload.assessments };
+    return {
+      kind: API_OUTCOME_KINDS.loaded,
+      assessments: payload.assessments,
+    };
   }
 
   return {
-    kind: "error",
+    kind: API_OUTCOME_KINDS.error,
     titleKey: "pages.workspace.errors.assessmentsUnavailableTitle",
     detailKey: "pages.workspace.errors.assessmentsUnavailableDetail",
   };
@@ -217,6 +310,16 @@ function isAssessmentSummary(payload: unknown): payload is AssessmentSummary {
   );
 }
 
+function isCreatedAssessmentPayload(
+  payload: unknown,
+): payload is { assessment_id: string } {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    typeof (payload as { assessment_id?: unknown }).assessment_id === "string"
+  );
+}
+
 function isWizardStatus(status: unknown): boolean {
   return (
     typeof status === "string" &&
@@ -230,19 +333,5 @@ function isAssessmentStatus(status: unknown): status is AssessmentStatus {
   return (
     typeof status === "string" &&
     Object.hasOwn(assessmentStatusLabelKeys, status)
-  );
-}
-
-function getProblemCode(payload: unknown): string | undefined {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-
-  const problem = payload as ApiProblemPayload;
-  return (
-    problem.problem?.code ??
-    problem.problem?.error_code ??
-    problem.code ??
-    problem.error_code
   );
 }

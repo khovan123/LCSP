@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
+import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   AI_USAGE_FLOW_STATUSES,
   CONFLICT_RECORD_STATUSES,
@@ -131,7 +132,7 @@ describe("AcceptVerifiedProfileHandler", () => {
     expect(writeInTx).toHaveBeenCalledTimes(1);
     expect(writeInTx.mock.calls[0][0]).toMatchObject({
       eventType: SCAN_EVENT_TYPES.verifiedProfileAcceptedAudit,
-      resourceType: "VerifiedProfile",
+      resourceType: AUDIT_RESOURCE_TYPES.verifiedProfile,
       resourceId: result.verified_profile_id,
     });
   });
@@ -144,9 +145,12 @@ describe("AcceptVerifiedProfileHandler", () => {
       throw new Error("Expected NotFoundException");
     } catch (error) {
       expect(error).toBeInstanceOf(NotFoundException);
-      expect((error as NotFoundException).getResponse()).toEqual({
-        error_code: SCAN_ERROR_CODES.aiUsageFlowNotFound,
-        correlation_id: "corr-1",
+      expect((error as NotFoundException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: SCAN_ERROR_CODES.aiUsageFlowNotFound,
+          correlationId: "corr-1",
+        },
       });
     }
   });
@@ -161,9 +165,12 @@ describe("AcceptVerifiedProfileHandler", () => {
       throw new Error("Expected ConflictException");
     } catch (error) {
       expect(error).toBeInstanceOf(ConflictException);
-      expect((error as ConflictException).getResponse()).toEqual({
-        error_code: SCAN_ERROR_CODES.pendingConflictsExist,
-        correlation_id: "corr-1",
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: SCAN_ERROR_CODES.pendingConflictsExist,
+          correlationId: "corr-1",
+        },
       });
       expect(createVerifiedProfile).not.toHaveBeenCalled();
     }
@@ -189,9 +196,14 @@ describe("AcceptVerifiedProfileHandler", () => {
       throw new Error("Expected UnprocessableEntityException");
     } catch (error) {
       expect(error).toBeInstanceOf(UnprocessableEntityException);
-      expect((error as UnprocessableEntityException).getResponse()).toEqual({
-        error_code: SCAN_ERROR_CODES.verifiedProfileSchemaInvalid,
-        correlation_id: "corr-1",
+      expect(
+        (error as UnprocessableEntityException).getResponse(),
+      ).toMatchObject({
+        ok: false,
+        problem: {
+          code: SCAN_ERROR_CODES.verifiedProfileSchemaInvalid,
+          correlationId: "corr-1",
+        },
       });
     }
   });

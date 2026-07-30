@@ -1,6 +1,7 @@
 import * as crypto from "node:crypto";
 
 import {
+  HttpStatus,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -8,8 +9,14 @@ import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import {
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+  AUDIT_ACTOR_IDS,
+  AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
-import { buildOutboxMessageInput } from "@lcsp/contracts/outbox";
+import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
 import {
   APPROVED_CORPUS_VERSIONS,
   APPROVED_LEGAL_RULE_CATALOG_VERSIONS,
@@ -22,14 +29,20 @@ import {
 } from "@lcsp/contracts/scan";
 import { Prisma } from "@prisma/client";
 
+import {
+  toPrismaEvidenceAcceptanceStatus,
+  toPrismaLegalRuleMatchGuardrailStatus,
+  toPrismaOverallCoverageStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
+import { problemResult } from "../../../../../platform/problems/problem-factory.js";
 import type { LegalRuleMatchCallbackResponseDto } from "../../contracts/classification/legal-rule-match-callback.contract.js";
 import { CitationGuardrailService } from "../../services/classification/citation-guardrail.service.js";
 import { AcceptLegalRuleMatchCommand } from "./accept-legal-rule-match.command.js";
 
-const LEGAL_WORKER_ACTOR_ID = "legal-rule-match-worker";
+const LEGAL_WORKER_ACTOR_ID = AUDIT_ACTOR_IDS.legalRuleMatchWorker;
 
 @CommandHandler(AcceptLegalRuleMatchCommand)
 export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalRuleMatchCommand> {
@@ -106,10 +119,15 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
           schemaVersion: payload.schema_version,
           matches: payload.matches as unknown as Prisma.InputJsonValue,
           citationAllowlist: payload.citation_allowlist,
-          overallCoverageStatus,
-          guardrailStatus,
+          overallCoverageStatus: toPrismaOverallCoverageStatus(
+            overallCoverageStatus,
+          ),
+          guardrailStatus:
+            toPrismaLegalRuleMatchGuardrailStatus(guardrailStatus),
           blockedReason,
-          status: LEGAL_RULE_MATCH_STATUSES.accepted,
+          status: toPrismaEvidenceAcceptanceStatus(
+            LEGAL_RULE_MATCH_STATUSES.accepted,
+          ),
         },
       });
 
@@ -178,14 +196,14 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
       : SCAN_EVENT_TYPES.legalRuleMatchBlockedAudit;
 
     const outboxEvent = buildOutboxMessageInput({
-      aggregateType: "LegalRuleMatch",
+      aggregateType: OUTBOX_AGGREGATE_TYPES.legalRuleMatch,
       aggregateId: legalRuleMatchId,
       eventType: SCAN_EVENT_TYPES.legalRuleMatchReady,
       organizationId: verifiedProfile.organizationId,
       assessmentId: verifiedProfile.assessmentId,
       correlationId: command.correlationId,
       causationId: verifiedProfile.id,
-      actor: { id: LEGAL_WORKER_ACTOR_ID, type: "service" },
+      actor: { id: LEGAL_WORKER_ACTOR_ID, type: AUDIT_ACTOR_TYPES.service },
       result: auditResult,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       idempotencyKey: `${legalRuleMatchId}:${SCAN_EVENT_TYPES.legalRuleMatchReady}`,
@@ -221,14 +239,14 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
           actorId: LEGAL_WORKER_ACTOR_ID,
           organizationId: verifiedProfile.organizationId,
           assessmentId: verifiedProfile.assessmentId,
-          resourceType: "LegalRuleMatch",
+          resourceType: AUDIT_RESOURCE_TYPES.legalRuleMatch,
           resourceId: legalRuleMatchId,
           correlationId: command.correlationId,
           causationId: verifiedProfile.id,
           decision: AUDIT_DECISIONS.allow,
           result: SCAN_EVENT_TYPES.legalRuleMatchAcceptedAudit,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
-          actor: { id: LEGAL_WORKER_ACTOR_ID, type: "service" },
+          actor: { id: LEGAL_WORKER_ACTOR_ID, type: AUDIT_ACTOR_TYPES.service },
           payload: {
             legalRuleMatchId,
             assessmentId: verifiedProfile.assessmentId,
@@ -245,14 +263,14 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
           actorId: LEGAL_WORKER_ACTOR_ID,
           organizationId: verifiedProfile.organizationId,
           assessmentId: verifiedProfile.assessmentId,
-          resourceType: "LegalRuleMatch",
+          resourceType: AUDIT_RESOURCE_TYPES.legalRuleMatch,
           resourceId: legalRuleMatchId,
           correlationId: command.correlationId,
           causationId: verifiedProfile.id,
           decision: AUDIT_DECISIONS.deny,
           result: SCAN_EVENT_TYPES.legalRuleMatchBlockedAudit,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
-          actor: { id: LEGAL_WORKER_ACTOR_ID, type: "service" },
+          actor: { id: LEGAL_WORKER_ACTOR_ID, type: AUDIT_ACTOR_TYPES.service },
           payload: {
             assessmentId: verifiedProfile.assessmentId,
             guardrailStatus,
@@ -266,10 +284,9 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
   }
 
   private errorBody(command: AcceptLegalRuleMatchCommand, errorCode: string) {
-    return {
-      error_code: String(errorCode),
-      correlation_id: command.correlationId,
-    };
+    return problemResult(String(errorCode), command.correlationId, {
+      status: HttpStatus.BAD_REQUEST,
+    });
   }
 }
 
