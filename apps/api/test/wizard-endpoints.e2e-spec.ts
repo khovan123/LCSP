@@ -365,7 +365,9 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         where: { assessmentId },
       });
       const answers = profile?.answers as any;
-      const bpAnswer = answers.find((a: any) => a.questionId === "businessProcess");
+      const bpAnswer = answers.find(
+        (a: any) => a.questionId === "businessProcess",
+      );
       const aipAnswer = answers.find((a: any) => a.questionId === "aiPurpose");
       assert.equal(bpAnswer.value, "Original purpose");
       assert.equal(aipAnswer.value, "Finance");
@@ -466,7 +468,9 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
     });
 
     it("T02 & T03: Missing critical fields -> 422 WIZARD_VALIDATION_FAILED", async () => {
-      const invalidAnswers = validAnswers.filter((a) => a.questionId !== "businessProcess");
+      const invalidAnswers = validAnswers.filter(
+        (a) => a.questionId !== "businessProcess",
+      );
 
       const res = await httpRequest(app)
         .post(`/assessments/${assessmentId}/wizard/submit`)

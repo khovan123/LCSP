@@ -63,7 +63,8 @@ describe("WizardValidatorService", () => {
     const errors = service.validate([]);
     expect(errors).toContainEqual({
       field: "businessProcess",
-      message: "Please describe the primary business process of your AI system.",
+      message:
+        "Please describe the primary business process of your AI system.",
     });
   });
 
@@ -79,7 +80,8 @@ describe("WizardValidatorService", () => {
     const errorsMissing = service.validate([]);
     expect(errorsMissing).toContainEqual({
       field: "dataTypes",
-      message: "Please specify at least one type of data your AI system processes.",
+      message:
+        "Please specify at least one type of data your AI system processes.",
     });
 
     const errorsEmpty = service.validate([
@@ -92,7 +94,8 @@ describe("WizardValidatorService", () => {
     ]);
     expect(errorsEmpty).toContainEqual({
       field: "dataTypes",
-      message: "Please specify at least one type of data your AI system processes.",
+      message:
+        "Please specify at least one type of data your AI system processes.",
     });
   });
 
@@ -100,7 +103,8 @@ describe("WizardValidatorService", () => {
     const errors = service.validate([]);
     expect(errors).toContainEqual({
       field: "affectedSubjects",
-      message: "Please describe the group of subjects affected by your AI system.",
+      message:
+        "Please describe the group of subjects affected by your AI system.",
     });
   });
 
@@ -108,7 +112,8 @@ describe("WizardValidatorService", () => {
     const errors = service.validate([]);
     expect(errors).toContainEqual({
       field: "decisionRole",
-      message: "Please indicate whether your AI system makes autonomous decisions. Unknown is not permitted for this field.",
+      message:
+        "Please indicate whether your AI system makes autonomous decisions. Unknown is not permitted for this field.",
     });
   });
 
@@ -124,7 +129,8 @@ describe("WizardValidatorService", () => {
     const errors = service.validate([]);
     expect(errors).toContainEqual({
       field: "externalLlmUsage",
-      message: "Please indicate whether your AI system uses an external AI provider.",
+      message:
+        "Please indicate whether your AI system uses an external AI provider.",
     });
   });
 
