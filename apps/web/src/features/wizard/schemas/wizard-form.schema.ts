@@ -2,28 +2,34 @@ import { z } from "zod";
 
 const textField = z.string().optional();
 const arrayField = z.array(z.string()).optional();
-const booleanField = z.boolean().optional();
 
-const requiredText = (message: string) => z.string().trim().min(1, { message });
+
+const requiredText = (message: string) =>
+  z.string({ message }).trim().min(1, { message });
 
 const requiredArray = (message: string) =>
-  z.array(z.string()).min(1, { message });
+  z.array(z.string(), { message }).min(1, { message });
 
 export const wizardDraftSchema = z.object({
   ps_001_ai_scope: textField,
   ps_002_affected_people: arrayField,
   ps_003_personal_or_sensitive_data: textField,
   ps_004_decision_importance: textField,
-  purpose: textField,
+  businessProcess: textField,
+  aiPurpose: textField,
   sector: textField,
-  data_type: arrayField,
-  user_group: textField,
-  user_impact: textField,
-  decision_role: textField,
-  human_oversight: textField,
-  external_llm_usage: booleanField,
-  biometric_indicator: textField,
-  high_impact_indicator: textField,
+  dataTypes: arrayField,
+  affectedSubjects: arrayField,
+  userImpact: textField,
+  decisionRole: textField,
+  humanReview: textField,
+  externalLlmUsage: textField,
+  specialCategoryData: textField,
+  biometricData: textField,
+  highImpactIndicators: arrayField,
+  transparencyIndicators: arrayField,
+  prohibitedRiskSignals: arrayField,
+  deploymentContext: arrayField,
 });
 
 export const wizardPreScreenSchema = z.object({
@@ -41,41 +47,44 @@ export const wizardPreScreenSchema = z.object({
 
 export const wizardStepSchemas = [
   z.object({
-    purpose: requiredText("pages.wizard.errors.purposeRequired"),
+    businessProcess: requiredText("pages.wizard.errors.businessProcessRequired"),
+    aiPurpose: requiredText("pages.wizard.errors.aiPurposeRequired"),
     sector: requiredText("pages.wizard.errors.sectorRequired"),
   }),
   z.object({
-    data_type: requiredArray("pages.wizard.errors.dataTypeRequired"),
-    user_group: requiredText("pages.wizard.errors.userGroupRequired"),
-    user_impact: requiredText("pages.wizard.errors.userImpactRequired"),
+    dataTypes: requiredArray("pages.wizard.errors.dataTypesRequired"),
+    affectedSubjects: requiredArray("pages.wizard.errors.affectedSubjectsRequired"),
+    userImpact: requiredText("pages.wizard.errors.userImpactRequired"),
   }),
   z
     .object({
-      decision_role: requiredText("pages.wizard.errors.decisionRoleRequired"),
-      human_oversight: textField,
+      decisionRole: requiredText("pages.wizard.errors.decisionRoleRequired"),
+      humanReview: textField,
     })
     .superRefine((value, ctx) => {
       if (
-        value.decision_role !== "NO_AUTONOMOUS_DECISION" &&
-        (!value.human_oversight || value.human_oversight.trim().length === 0)
+        value.decisionRole !== "NO_DECISION_SUPPORT" &&
+        (!value.humanReview || value.humanReview.trim().length === 0)
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ["human_oversight"],
-          message: "pages.wizard.errors.humanOversightRequired",
+          path: ["humanReview"],
+          message: "pages.wizard.errors.humanReviewRequired",
         });
       }
     }),
   z.object({
-    external_llm_usage: z.boolean({
-      message: "pages.wizard.errors.externalProviderRequired",
-    }),
+    externalLlmUsage: requiredText("pages.wizard.errors.externalLlmUsageRequired"),
   }),
   z.object({
-    biometric_indicator: requiredText("pages.wizard.errors.biometricRequired"),
-    high_impact_indicator: requiredText(
-      "pages.wizard.errors.highImpactRequired",
-    ),
+    deploymentContext: requiredArray("pages.wizard.errors.deploymentContextRequired"),
+  }),
+  z.object({
+    specialCategoryData: requiredText("pages.wizard.errors.specialCategoryDataRequired"),
+    biometricData: requiredText("pages.wizard.errors.biometricDataRequired"),
+    highImpactIndicators: requiredArray("pages.wizard.errors.highImpactIndicatorsRequired"),
+    transparencyIndicators: arrayField,
+    prohibitedRiskSignals: requiredArray("pages.wizard.errors.prohibitedRiskSignalsRequired"),
   }),
 ] as const;
 
@@ -84,21 +93,22 @@ export const wizardSubmitSchema = wizardPreScreenSchema
   .merge(wizardStepSchemas[1])
   .merge(
     z.object({
-      decision_role: requiredText("pages.wizard.errors.decisionRoleRequired"),
-      human_oversight: textField,
+      decisionRole: requiredText("pages.wizard.errors.decisionRoleRequired"),
+      humanReview: textField,
     }),
   )
   .merge(wizardStepSchemas[3])
   .merge(wizardStepSchemas[4])
+  .merge(wizardStepSchemas[5])
   .superRefine((value, ctx) => {
     if (
-      value.decision_role !== "NO_AUTONOMOUS_DECISION" &&
-      (!value.human_oversight || value.human_oversight.trim().length === 0)
+      value.decisionRole !== "NO_DECISION_SUPPORT" &&
+      (!value.humanReview || value.humanReview.trim().length === 0)
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["human_oversight"],
-        message: "pages.wizard.errors.humanOversightRequired",
+        path: ["humanReview"],
+        message: "pages.wizard.errors.humanReviewRequired",
       });
     }
   });

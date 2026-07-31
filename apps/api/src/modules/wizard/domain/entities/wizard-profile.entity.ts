@@ -2,13 +2,15 @@ import { randomUUID } from "node:crypto";
 
 import type { PersistedWizardStatusCode } from "@lcsp/contracts/assessment";
 
+import type { WizardAnswer } from "@lcsp/contracts/wizard";
+
 type WizardProfileEntityInput = {
   assessmentId: string;
   organizationId?: string;
   ownerId?: string;
   version?: number;
   status?: PersistedWizardStatusCode;
-  answers?: Record<string, any>;
+  answers?: WizardAnswer[];
   submittedAt?: Date | null;
   createdAt?: Date;
   updatedAt?: Date;
@@ -21,7 +23,7 @@ export class WizardProfileEntity {
   ownerId: string;
   version: number;
   status: PersistedWizardStatusCode;
-  answers: Record<string, any>;
+  answers: WizardAnswer[];
   submittedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;

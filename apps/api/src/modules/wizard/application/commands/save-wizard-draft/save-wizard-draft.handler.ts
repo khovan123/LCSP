@@ -53,7 +53,13 @@ export class SaveWizardDraftHandler implements ICommandHandler<
       if (profile.status === WIZARD_STATUS_CODES.submitted) {
         throw new WizardAlreadySubmittedException(correlationId);
       }
-      profile.answers = { ...profile.answers, ...answers };
+      const existingAnswersMap = new Map(
+        profile.answers.map((a) => [a.questionId, a]),
+      );
+      for (const answer of answers) {
+        existingAnswersMap.set(answer.questionId, answer);
+      }
+      profile.answers = Array.from(existingAnswersMap.values());
       profile.version += 1;
     } else {
       profile = new WizardProfileEntity({

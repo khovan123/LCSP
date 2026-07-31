@@ -4,9 +4,11 @@ import {
   fromPrismaWizardStatus,
   toPrismaWizardStatus,
 } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { WizardProfileRepository } from "../../application/ports/persistence/wizard-profile.repository.js";
 import { WizardProfileEntity } from "../../domain/entities/wizard-profile.entity.js";
+import type { WizardAnswer } from "@lcsp/contracts/wizard";
 
 @Injectable()
 export class PrismaWizardRepository implements WizardProfileRepository {
@@ -41,7 +43,7 @@ export class PrismaWizardRepository implements WizardProfileRepository {
       ownerId: data.ownerId,
       version: data.version,
       status: fromPrismaWizardStatus(data.status) as PersistedWizardStatusCode,
-      answers: data.answers as Record<string, any>,
+      answers: data.answers as unknown as WizardAnswer[],
       submittedAt: data.submittedAt,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
@@ -54,7 +56,7 @@ export class PrismaWizardRepository implements WizardProfileRepository {
     const data = await this.prisma.wizardProfile.upsert({
       where: { assessmentId: profile.assessmentId },
       update: {
-        answers: profile.answers ?? {},
+        answers: (profile.answers as unknown as Prisma.InputJsonArray) ?? [],
         version: profile.version,
         status: toPrismaWizardStatus(profile.status),
       },
@@ -65,7 +67,7 @@ export class PrismaWizardRepository implements WizardProfileRepository {
         ownerId: profile.ownerId,
         version: profile.version,
         status: toPrismaWizardStatus(profile.status),
-        answers: profile.answers ?? {},
+        answers: (profile.answers as unknown as Prisma.InputJsonArray) ?? [],
       },
     });
 
@@ -76,7 +78,7 @@ export class PrismaWizardRepository implements WizardProfileRepository {
       ownerId: data.ownerId,
       version: data.version,
       status: fromPrismaWizardStatus(data.status) as PersistedWizardStatusCode,
-      answers: data.answers as Record<string, any>,
+      answers: data.answers as unknown as WizardAnswer[],
       submittedAt: data.submittedAt,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,

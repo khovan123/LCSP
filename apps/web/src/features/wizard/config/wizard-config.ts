@@ -15,6 +15,26 @@ export const checkboxOptions = {
     "pages.wizard.options.dataTypeBehavioral",
     "pages.wizard.options.dataTypeOperational",
   ] as const,
+  deploymentContext: [
+    "pages.wizard.options.deploymentInternal",
+    "pages.wizard.options.deploymentExternal",
+  ] as const,
+  highImpactIndicators: [
+    "pages.wizard.options.highImpactRecruiting",
+    "pages.wizard.options.highImpactCredit",
+    "pages.wizard.options.highImpactEducation",
+    "pages.wizard.options.highImpactHealthcare",
+  ] as const,
+  transparencyIndicators: [
+    "pages.wizard.options.transparencyDirectInteraction",
+    "pages.wizard.options.transparencyContentGeneration",
+  ] as const,
+  prohibitedRiskSignals: [
+    "pages.wizard.options.prohibitedTracking",
+    "pages.wizard.options.prohibitedManipulation",
+    "pages.wizard.options.prohibitedScoring",
+    "pages.wizard.options.prohibitedSensitiveInference",
+  ] as const,
 };
 
 export const selectOptions = {
@@ -45,15 +65,20 @@ export const selectOptions = {
     { value: "LOW", labelKey: "pages.wizard.options.userImpactLow" },
     { value: "MODERATE", labelKey: "pages.wizard.options.userImpactModerate" },
     { value: "SIGNIFICANT", labelKey: "pages.wizard.options.userImpactSignificant" },
+    { value: "UNKNOWN", labelKey: "pages.wizard.options.unknown" },
   ] as const,
   decisionRole: [
     {
-      value: "NO_AUTONOMOUS_DECISION",
+      value: "NO_DECISION_SUPPORT",
       labelKey: "pages.wizard.options.decisionRoleNoAutonomousDecision",
     },
     {
-      value: "SUPPORTS_DECISION",
+      value: "ASSISTS_DECISION",
       labelKey: "pages.wizard.options.decisionRoleSupportsDecision",
+    },
+    {
+      value: "INFORMS_DECISION",
+      labelKey: "pages.wizard.options.decisionRoleInformsDecision",
     },
     {
       value: "RECOMMENDS_OUTCOME",
@@ -68,14 +93,17 @@ export const selectOptions = {
     { value: "PRESENT", labelKey: "pages.wizard.options.humanOversightPresent" },
     { value: "LIMITED", labelKey: "pages.wizard.options.humanOversightLimited" },
     { value: "ABSENT", labelKey: "pages.wizard.options.humanOversightAbsent" },
+    { value: "UNCLEAR", labelKey: "pages.wizard.options.unknown" },
     {
       value: "NOT_APPLICABLE",
       labelKey: "pages.wizard.options.humanOversightNotApplicable",
     },
   ] as const,
   externalProvider: [
-    { value: "yes", labelKey: "pages.wizard.options.yes" },
-    { value: "no", labelKey: "pages.wizard.options.no" },
+    { value: "NONE", labelKey: "pages.wizard.options.externalNone" },
+    { value: "POSSIBLE", labelKey: "pages.wizard.options.externalPossible" },
+    { value: "CONFIRMED", labelKey: "pages.wizard.options.externalConfirmed" },
+    { value: "UNKNOWN", labelKey: "pages.wizard.options.unknown" },
   ] as const,
 };
 
@@ -83,26 +111,31 @@ export const wizardSteps = [
   {
     id: "purpose",
     titleKey: "pages.wizard.sections.purpose",
-    fields: ["purpose", "sector"] as const,
+    fields: ["businessProcess", "aiPurpose", "sector"] as const,
   },
   {
     id: "data-users",
     titleKey: "pages.wizard.sections.dataUsers",
-    fields: ["data_type", "user_group", "user_impact"] as const,
+    fields: ["dataTypes", "affectedSubjects", "userImpact"] as const,
   },
   {
     id: "decision",
     titleKey: "pages.wizard.sections.decision",
-    fields: ["decision_role", "human_oversight"] as const,
+    fields: ["decisionRole", "humanReview"] as const,
   },
   {
     id: "provider",
     titleKey: "pages.wizard.sections.provider",
-    fields: ["external_llm_usage"] as const,
+    fields: ["externalLlmUsage"] as const,
+  },
+  {
+    id: "deployment",
+    titleKey: "pages.wizard.sections.deployment",
+    fields: ["deploymentContext"] as const,
   },
   {
     id: "risk",
     titleKey: "pages.wizard.sections.risk",
-    fields: ["biometric_indicator", "high_impact_indicator"] as const,
+    fields: ["specialCategoryData", "biometricData", "highImpactIndicators", "transparencyIndicators", "prohibitedRiskSignals"] as const,
   },
 ] as const;

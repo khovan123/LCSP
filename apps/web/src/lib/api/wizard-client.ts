@@ -4,11 +4,11 @@ import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
 import { apiRequest } from "./api-request.ts";
 import { API_OUTCOME_KINDS } from "./outcome-kinds.ts";
 import type {
-  WizardAnswers,
   WizardPageOutcome,
   WizardSaveOutcome,
   WizardSubmitOutcome,
 } from "@/features/wizard/types/wizard.types";
+import type { WizardAnswer } from "@lcsp/contracts/wizard";
 
 type AssessmentDetailPayload = {
   assessment_id?: unknown;
@@ -57,7 +57,7 @@ export async function getWizardAssessment(
 
 export async function saveWizardDraft(
   assessmentId: string,
-  answers: WizardAnswers,
+  answers: WizardAnswer[],
 ): Promise<WizardSaveOutcome> {
   const { ok, status, problemCode } = await apiRequest(
     `/api/assessments/${encodeURIComponent(assessmentId)}/wizard/draft`,
@@ -80,7 +80,7 @@ export async function saveWizardDraft(
 
 export async function submitWizard(
   assessmentId: string,
-  answers: WizardAnswers,
+  answers: WizardAnswer[],
 ): Promise<WizardSubmitOutcome> {
   const { ok, status, problemCode } = await apiRequest(
     `/api/assessments/${encodeURIComponent(assessmentId)}/wizard/submit`,

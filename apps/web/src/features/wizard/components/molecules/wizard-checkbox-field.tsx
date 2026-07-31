@@ -6,8 +6,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { t } from "@/features/wizard/lib/wizard-i18n";
 import type { WizardAnswers } from "@/features/wizard/types/wizard.types";
 
-type WizardCheckboxFieldProps = {
-  name: "ps_002_affected_people" | "data_type";
+type WizardCheckboxFieldProps = Omit<
+  React.ComponentProps<typeof Checkbox>,
+  "name" | "onBlur"
+> & {
+  name: Extract<
+    {
+      [K in keyof WizardAnswers]: NonNullable<WizardAnswers[K]> extends unknown[] ? K : never;
+    }[keyof WizardAnswers],
+    string
+  >;
   labelKey: string;
   descriptionKey: string;
   disabled?: boolean;

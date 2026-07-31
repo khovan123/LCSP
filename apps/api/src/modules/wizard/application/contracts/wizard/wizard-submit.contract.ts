@@ -1,5 +1,7 @@
+import type { WizardAnswer } from "@lcsp/contracts/wizard";
+
 export interface SubmitWizardRequest {
-  answers: Record<string, any>;
+  answers: WizardAnswer[];
 }
 
 export interface SubmitWizardResponse {
