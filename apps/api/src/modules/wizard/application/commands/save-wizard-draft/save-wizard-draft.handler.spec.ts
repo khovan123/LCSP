@@ -54,7 +54,14 @@ describe("SaveWizardDraftHandler", () => {
       "assessment-123",
       "org-1",
       "owner-1",
-      [{ questionId: "question1", value: "answer1", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" }],
+      [
+        {
+          questionId: "question1",
+          value: "answer1",
+          answerState: "ANSWERED",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        },
+      ],
       "corr-id-1",
       {
         subjectRole: SUBJECT_ROLES.manager,
@@ -94,7 +101,14 @@ describe("SaveWizardDraftHandler", () => {
       const upsertArg = wizardRepository.upsertDraft.mock.calls[0][0];
       expect(upsertArg.version).toBe(1);
       expect(upsertArg.status).toBe(WIZARD_STATUS_CODES.inProgress);
-      expect(upsertArg.answers).toEqual([{ questionId: "question1", value: "answer1", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" }]);
+      expect(upsertArg.answers).toEqual([
+        {
+          questionId: "question1",
+          value: "answer1",
+          answerState: "ANSWERED",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        },
+      ]);
 
       expect(auditWriter.write).toHaveBeenCalledWith({
         eventType: WIZARD_EVENT_TYPES.draftSaved,
@@ -129,7 +143,14 @@ describe("SaveWizardDraftHandler", () => {
           ownerId: "owner-1",
           version: 2,
           status: WIZARD_STATUS_CODES.inProgress,
-          answers: [{ questionId: "oldQuestion", value: "oldAnswer", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" }],
+          answers: [
+            {
+              questionId: "oldQuestion",
+              value: "oldAnswer",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
         }),
       );
       wizardRepository.upsertDraft.mockImplementation((p) =>
@@ -148,8 +169,18 @@ describe("SaveWizardDraftHandler", () => {
       expect(upsertArg.version).toBe(3); // Bumped from 2
       // T07: Partial save preserves existing answers
       expect(upsertArg.answers).toEqual([
-        { questionId: "oldQuestion", value: "oldAnswer", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-        { questionId: "question1", value: "answer1", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" }
+        {
+          questionId: "oldQuestion",
+          value: "oldAnswer",
+          answerState: "ANSWERED",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        },
+        {
+          questionId: "question1",
+          value: "answer1",
+          answerState: "ANSWERED",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        },
       ]);
       expect(result.version).toBe(3);
     });
@@ -212,7 +243,14 @@ describe("SaveWizardDraftHandler", () => {
             "assessment-123",
             "org-1",
             "developer-1",
-            [{ questionId: "question1", value: "answer1", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" }],
+            [
+              {
+                questionId: "question1",
+                value: "answer1",
+                answerState: "ANSWERED",
+                updatedAt: "2026-07-31T00:00:00.000Z",
+              },
+            ],
             "corr-deny",
             {
               subjectRole: SUBJECT_ROLES.developer,

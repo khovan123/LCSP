@@ -93,14 +93,54 @@ describe("SubmitWizardHandler", () => {
   });
 
   const validAnswers = [
-    { questionId: "purpose", value: "Purpose", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "sector", value: "Sector", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "data_type", value: ["Type"], answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "user_group", value: "Group", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "user_impact", value: "Impact", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "decision_role", value: "Role", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "human_oversight", value: "Oversight", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "external_llm_usage", value: false, answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+    {
+      questionId: "purpose",
+      value: "Purpose",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "sector",
+      value: "Sector",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "data_type",
+      value: ["Type"],
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "user_group",
+      value: "Group",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "user_impact",
+      value: "Impact",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "decision_role",
+      value: "Role",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "human_oversight",
+      value: "Oversight",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "external_llm_usage",
+      value: false,
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
   ] as WizardAnswer[];
 
   const command = new SubmitWizardCommand(
@@ -143,7 +183,15 @@ describe("SubmitWizardHandler", () => {
       command.assessmentId,
       command.organizationId,
       command.ownerId,
-      [...validAnswers.filter(a => a.questionId !== "purpose"), { questionId: "purpose", value: "", answerState: "ANSWERED" as any, updatedAt: "2026-07-31T00:00:00.000Z" }],
+      [
+        ...validAnswers.filter((a) => a.questionId !== "purpose"),
+        {
+          questionId: "purpose",
+          value: "",
+          answerState: "ANSWERED",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        },
+      ],
       command.correlationId,
       command.authorization,
     );
@@ -161,7 +209,15 @@ describe("SubmitWizardHandler", () => {
       command.assessmentId,
       command.organizationId,
       command.ownerId,
-      [...validAnswers.filter(a => a.questionId !== "human_oversight"), { questionId: "human_oversight", value: "", answerState: "ANSWERED" as any, updatedAt: "2026-07-31T00:00:00.000Z" }],
+      [
+        ...validAnswers.filter((a) => a.questionId !== "human_oversight"),
+        {
+          questionId: "human_oversight",
+          value: "",
+          answerState: "ANSWERED",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        },
+      ],
       command.correlationId,
       command.authorization,
     );

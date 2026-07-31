@@ -10,15 +10,60 @@ describe("WizardValidatorService", () => {
 
   it("T01: should return no errors when all critical fields are valid", () => {
     const answers = [
-      { questionId: "purpose", value: "Customer support chatbot", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-      { questionId: "sector", value: "technology", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-      { questionId: "data_type", value: ["customer_messages"], answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-      { questionId: "user_group", value: "Internal employees", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-      { questionId: "user_impact", value: "Faster response times", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-      { questionId: "decision_role", value: "advisory", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-      { questionId: "human_oversight", value: "Human in the loop", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-      { questionId: "external_llm_usage", value: true, answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-      { questionId: "biometric_indicator", value: false, answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+      {
+        questionId: "purpose",
+        value: "Customer support chatbot",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "sector",
+        value: "technology",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "data_type",
+        value: ["customer_messages"],
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "user_group",
+        value: "Internal employees",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "user_impact",
+        value: "Faster response times",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "decision_role",
+        value: "advisory",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "human_oversight",
+        value: "Human in the loop",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "external_llm_usage",
+        value: true,
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "biometric_indicator",
+        value: false,
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
     ] as WizardAnswer[];
 
     const errors = service.validate(answers);
@@ -50,7 +95,14 @@ describe("WizardValidatorService", () => {
         "Please specify at least one type of data your AI system processes.",
     });
 
-    const errorsEmpty = service.validate([{ questionId: "data_type", value: [], answerState: "ANSWERED" as any, updatedAt: "2026-07-31T00:00:00.000Z" }]);
+    const errorsEmpty = service.validate([
+      {
+        questionId: "data_type",
+        value: [],
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+    ]);
     expect(errorsEmpty).toContainEqual({
       field: "data_type",
       message:

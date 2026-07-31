@@ -37,7 +37,6 @@ import { problemException } from "../../../../../platform/problems/problem-facto
 import { Prisma } from "@prisma/client";
 import { WizardValidatorService } from "../../services/wizard/wizard-validator.service.js";
 
-
 @CommandHandler(SubmitWizardCommand)
 export class SubmitWizardHandler implements ICommandHandler<
   SubmitWizardCommand,
