@@ -364,13 +364,14 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       const profile = await prisma.wizardProfile.findUnique({
         where: { assessmentId },
       });
-      const answers = profile?.answers as any;
-      const bpAnswer = answers.find(
-        (a: any) => a.questionId === "businessProcess",
-      );
-      const aipAnswer = answers.find((a: any) => a.questionId === "aiPurpose");
-      assert.equal(bpAnswer.value, "Original purpose");
-      assert.equal(aipAnswer.value, "Finance");
+      const answers = profile?.answers as Array<{
+        questionId: string;
+        value: any;
+      }>;
+      const bpAnswer = answers.find((a) => a.questionId === "businessProcess");
+      const aipAnswer = answers.find((a) => a.questionId === "aiPurpose");
+      assert.equal(bpAnswer?.value, "Original purpose");
+      assert.equal(aipAnswer?.value, "Finance");
     });
 
     it("T08: WIZARD_DRAFT_SAVED audit event has no answer content", async () => {
