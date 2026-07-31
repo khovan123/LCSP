@@ -76,9 +76,10 @@ export class RequestPasswordRecoveryHandler {
 
     await this.notifier.notify({
       userId: user.id,
-      email: user.email.toString(),
+      email: user.recoveryEmail ?? user.email.toString(),
       token,
       correlationId,
+      appOrigin: requestMeta.app_origin,
     });
 
     await this.support.recordAudit(repositories, {

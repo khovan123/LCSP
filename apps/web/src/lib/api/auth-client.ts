@@ -1,8 +1,10 @@
 import {
   ACCEPT_INVITATION_ERROR_CODES,
   AUTH_ERROR_CODES,
+  type ProblemMeta,
   PROBLEM_KEYS,
 } from "@lcsp/contracts/auth";
+import type { MessageKey } from "@lcsp/i18n";
 
 import type {
   MfaVerifyOutcome,
@@ -10,7 +12,11 @@ import type {
 } from "./types/mfa-verify.types";
 import { apiRequest } from "./api-request.ts";
 import { API_OUTCOME_KINDS } from "./outcome-kinds.ts";
-import { getProblemCode } from "./problem-envelope.ts";
+import {
+  getProblemCode,
+  getProblemMessageKeys,
+  getProblemMeta,
+} from "./problem-envelope.ts";
 
 export type { MfaVerifyOutcome } from "./types/mfa-verify.types";
 
@@ -77,6 +83,113 @@ export type SignInWorkspaceOption = {
   name: string;
 };
 
+export type EnrollMfaOutcome =
+  | { kind: typeof API_OUTCOME_KINDS.loaded; totpUri: string }
+  | { kind: typeof API_OUTCOME_KINDS.mfaRequired }
+  | { kind: typeof API_OUTCOME_KINDS.sessionInvalid }
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: MessageKey;
+      detailKey: MessageKey;
+    };
+
+export type DisableMfaOutcome =
+  | { kind: typeof API_OUTCOME_KINDS.disabled }
+  | { kind: typeof API_OUTCOME_KINDS.mfaRequired }
+  | { kind: typeof API_OUTCOME_KINDS.sessionInvalid }
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: MessageKey;
+      detailKey: MessageKey;
+    };
+
+export type RequestRecoveryRequest = {
+  email: string;
+};
+
+export type RequestRecoveryOutcome =
+  | { kind: typeof API_OUTCOME_KINDS.requested }
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: MessageKey;
+      detailKey: MessageKey;
+    };
+
+export type ConfirmRecoveryRequest = {
+  token: string;
+  new_password: string;
+};
+
+export type ConfirmRecoveryOutcome =
+  | { kind: typeof API_OUTCOME_KINDS.verified }
+  | { kind: typeof API_OUTCOME_KINDS.invalid }
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: MessageKey;
+      detailKey: MessageKey;
+    };
+
+export type UpdateProfileRequest = {
+  recovery_email: string;
+};
+
+export type UpdateProfileOutcome =
+  | { kind: typeof API_OUTCOME_KINDS.saved }
+  | { kind: typeof API_OUTCOME_KINDS.mfaRequired }
+  | { kind: typeof API_OUTCOME_KINDS.sessionInvalid }
+  | {
+      kind: typeof API_OUTCOME_KINDS.validationError;
+      titleKey: MessageKey;
+      detailKey: MessageKey;
+    }
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: MessageKey;
+      detailKey: MessageKey;
+    };
+
+export type AuthSettingsProfile = {
+  user_id: string;
+  email: string;
+  email_verified: boolean;
+  display_name: string | null;
+  recovery_email: string | null;
+  created_at: string;
+  updated_at: string;
+  membership_role: string;
+  organization_id: string;
+  mfa_enrolled: boolean;
+  mfa_enrolled_at: string | null;
+  mfa_verified: boolean;
+  mfa_verified_at: string | null;
+  current_session_id: string;
+  current_session_created_at: string;
+  current_session_updated_at: string;
+  current_session_expires_at: string;
+};
+
+export type AuthSessionSummary = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  revoked_at: string | null;
+  mfa_verified_at: string | null;
+  is_current: boolean;
+};
+
+export type AuthRepositorySummary = {
+  id: string;
+  repository_name: string;
+  repository_full_name: string;
+  default_branch: string;
+  status: string;
+  connected_at: string;
+  revoked_at: string | null;
+  assessment_id: string | null;
+  assessment_name: string | null;
+};
+
 export type SignInOutcome =
   | { kind: typeof API_OUTCOME_KINDS.authenticated }
   | {
@@ -84,10 +197,13 @@ export type SignInOutcome =
       workspaces: SignInWorkspaceOption[];
     }
   | { kind: typeof API_OUTCOME_KINDS.mfaRequired }
+  | { kind: typeof API_OUTCOME_KINDS.mfaEnrollmentRequired }
   | {
       kind: typeof API_OUTCOME_KINDS.error;
       titleKey: SignInErrorTitleKey;
       detailKey: SignInErrorDetailKey;
+      lockedUntil?: string;
+      retryAfterSeconds?: number;
     };
 
 export function toSignInOutcome(
@@ -102,6 +218,9 @@ export function toSignInOutcome(
         workspaces: payload.workspaces ?? [],
       };
     }
+    if (payload.mfa_required && payload.mfa_enrolled !== true) {
+      return { kind: API_OUTCOME_KINDS.mfaEnrollmentRequired };
+    }
     return payload.mfa_required
       ? { kind: API_OUTCOME_KINDS.mfaRequired }
       : { kind: API_OUTCOME_KINDS.authenticated };
@@ -112,6 +231,7 @@ export function toSignInOutcome(
       kind: API_OUTCOME_KINDS.error,
       titleKey: SIGN_IN_ERROR_TITLE_KEYS.temporaryLock,
       detailKey: SIGN_IN_ERROR_DETAIL_KEYS.temporaryLock,
+      ...readTemporaryLockMetadata(getProblemMeta(payload)),
     };
   }
 
@@ -119,6 +239,20 @@ export function toSignInOutcome(
     kind: API_OUTCOME_KINDS.error,
     titleKey: SIGN_IN_ERROR_TITLE_KEYS.invalidCredentials,
     detailKey: SIGN_IN_ERROR_DETAIL_KEYS.invalidCredentials,
+  };
+}
+
+function readTemporaryLockMetadata(meta: ProblemMeta | undefined) {
+  const lockedUntil =
+    typeof meta?.lockedUntil === "string" ? meta.lockedUntil : undefined;
+  const retryAfterSeconds =
+    typeof meta?.retryAfterSeconds === "number"
+      ? meta.retryAfterSeconds
+      : undefined;
+
+  return {
+    ...(lockedUntil ? { lockedUntil } : {}),
+    ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
   };
 }
 
@@ -207,12 +341,7 @@ export function toMfaVerifyOutcome(
   ok: boolean,
   problemCode = getProblemCode(payload),
 ): MfaVerifyOutcome {
-  if (
-    ok &&
-    typeof payload === "object" &&
-    payload !== null &&
-    (payload as { verified?: unknown }).verified === true
-  ) {
+  if (ok) {
     return { kind: API_OUTCOME_KINDS.verified };
   }
 
@@ -256,6 +385,252 @@ export async function verifyMfaOtp(
   return toMfaVerifyOutcome(payload, ok, problemCode);
 }
 
+export function toEnrollMfaOutcome(
+  payload: unknown,
+  ok: boolean,
+  problemCode = getProblemCode(payload),
+): EnrollMfaOutcome {
+  if (
+    ok &&
+    typeof payload === "object" &&
+    payload !== null &&
+    typeof (payload as { totp_uri?: unknown }).totp_uri === "string"
+  ) {
+    return {
+      kind: API_OUTCOME_KINDS.loaded,
+      totpUri: (payload as { totp_uri: string }).totp_uri,
+    };
+  }
+
+  if (
+    problemCode === AUTH_ERROR_CODES.authRequired ||
+    problemCode === AUTH_ERROR_CODES.sessionInvalid
+  ) {
+    return { kind: API_OUTCOME_KINDS.sessionInvalid };
+  }
+
+  if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
+    return { kind: API_OUTCOME_KINDS.mfaRequired };
+  }
+
+  const problemKeys = getProblemMessageKeys(payload);
+  if (problemKeys) {
+    return {
+      kind: API_OUTCOME_KINDS.error,
+      titleKey: problemKeys.titleKey,
+      detailKey: problemKeys.detailKey,
+    };
+  }
+
+  return {
+    kind: API_OUTCOME_KINDS.error,
+    titleKey: "pages.mfaEnroll.errors.requestFailedTitle",
+    detailKey: "pages.mfaEnroll.errors.requestFailedDetail",
+  };
+}
+
+export async function enrollMfa(): Promise<EnrollMfaOutcome> {
+  const { payload, ok, problemCode } = await apiRequest("/api/auth/mfa/enroll", {
+    method: "POST",
+  });
+
+  return toEnrollMfaOutcome(payload, ok, problemCode);
+}
+
+export function toDisableMfaOutcome(
+  payload: unknown,
+  ok: boolean,
+  problemCode = getProblemCode(payload),
+): DisableMfaOutcome {
+  if (ok) {
+    return { kind: API_OUTCOME_KINDS.disabled };
+  }
+
+  if (problemCode === AUTH_ERROR_CODES.sessionInvalid) {
+    return { kind: API_OUTCOME_KINDS.sessionInvalid };
+  }
+
+  if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
+    return { kind: API_OUTCOME_KINDS.mfaRequired };
+  }
+
+  const problemKeys = getProblemMessageKeys(payload);
+  if (problemKeys) {
+    return {
+      kind: API_OUTCOME_KINDS.error,
+      titleKey: problemKeys.titleKey,
+      detailKey: problemKeys.detailKey,
+    };
+  }
+
+  return {
+    kind: API_OUTCOME_KINDS.error,
+    titleKey: "pages.workspace.settingsHub.password.disableFailedTitle",
+    detailKey: "pages.workspace.settingsHub.password.disableFailedDescription",
+  };
+}
+
+export async function disableMfa(): Promise<DisableMfaOutcome> {
+  const { payload, ok, problemCode } = await apiRequest("/api/auth/mfa", {
+    method: "DELETE",
+  });
+
+  return toDisableMfaOutcome(payload, ok, problemCode);
+}
+
+export function toRequestRecoveryOutcome(
+  payload: unknown,
+  ok: boolean,
+): RequestRecoveryOutcome {
+  if (ok) {
+    return { kind: API_OUTCOME_KINDS.requested };
+  }
+
+  return {
+    kind: API_OUTCOME_KINDS.error,
+    titleKey: "pages.recoveryRequest.errors.requestFailedTitle",
+    detailKey: "pages.recoveryRequest.errors.requestFailedDetail",
+  };
+}
+
+export async function requestPasswordRecovery(
+  request: RequestRecoveryRequest,
+): Promise<RequestRecoveryOutcome> {
+  const { payload, ok } = await apiRequest("/api/auth/recovery/request", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  return toRequestRecoveryOutcome(payload, ok);
+}
+
+export function toConfirmRecoveryOutcome(
+  payload: unknown,
+  ok: boolean,
+  problemCode = getProblemCode(payload),
+): ConfirmRecoveryOutcome {
+  if (ok) {
+    return { kind: API_OUTCOME_KINDS.verified };
+  }
+
+  if (problemCode === AUTH_ERROR_CODES.recoveryInvalid) {
+    return {
+      kind: API_OUTCOME_KINDS.invalid,
+    };
+  }
+
+  return {
+    kind: API_OUTCOME_KINDS.error,
+    titleKey: "pages.recoveryConfirm.errors.requestFailedTitle",
+    detailKey: "pages.recoveryConfirm.errors.requestFailedDetail",
+  };
+}
+
+export async function confirmPasswordRecovery(
+  request: ConfirmRecoveryRequest,
+): Promise<ConfirmRecoveryOutcome> {
+  const { payload, ok, problemCode } = await apiRequest(
+    "/api/auth/recovery/confirm",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    },
+  );
+
+  return toConfirmRecoveryOutcome(payload, ok, problemCode);
+}
+
+export function toUpdateProfileOutcome(
+  payload: unknown,
+  ok: boolean,
+  problemCode = getProblemCode(payload),
+): UpdateProfileOutcome {
+  if (ok) {
+    return { kind: API_OUTCOME_KINDS.saved };
+  }
+
+  if (problemCode === AUTH_ERROR_CODES.sessionInvalid) {
+    return { kind: API_OUTCOME_KINDS.sessionInvalid };
+  }
+
+  if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
+    return { kind: API_OUTCOME_KINDS.mfaRequired };
+  }
+
+  if (problemCode === AUTH_ERROR_CODES.validationFailed) {
+    return {
+      kind: API_OUTCOME_KINDS.validationError,
+      titleKey: "auth.errors.validationFailed.title",
+      detailKey: "auth.errors.validationFailed.detail",
+    };
+  }
+
+  return {
+    kind: API_OUTCOME_KINDS.error,
+    titleKey: "pages.workspace.security.errors.requestFailedTitle",
+    detailKey: "pages.workspace.security.errors.requestFailedDetail",
+  };
+}
+
+export async function updateProfile(
+  request: UpdateProfileRequest,
+): Promise<UpdateProfileOutcome> {
+  const { payload, ok, problemCode } = await apiRequest("/api/auth/profile", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  return toUpdateProfileOutcome(payload, ok, problemCode);
+}
+
+export async function getAuthSettingsProfile(): Promise<AuthSettingsProfile> {
+  const { payload, ok } = await apiRequest("/api/auth/profile");
+  if (!ok || !isAuthSettingsProfile(payload)) {
+    throw new Error("auth-settings-profile-load-failed");
+  }
+
+  return payload;
+}
+
+export async function getAuthSessions(): Promise<AuthSessionSummary[]> {
+  const { payload, ok } = await apiRequest("/api/auth/sessions");
+  if (!ok || !isAuthSessionsPayload(payload)) {
+    throw new Error("auth-sessions-load-failed");
+  }
+
+  return payload.sessions;
+}
+
+export async function revokeAuthSession(sessionId: string): Promise<void> {
+  const { payload, ok } = await apiRequest(
+    `/api/auth/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+  if (
+    !ok ||
+    typeof payload !== "object" ||
+    payload === null ||
+    typeof (payload as { revoked_session_id?: unknown }).revoked_session_id !==
+      "string"
+  ) {
+    throw new Error("auth-session-revoke-failed");
+  }
+}
+
+export async function getAuthRepositories(): Promise<AuthRepositorySummary[]> {
+  const { payload, ok } = await apiRequest("/api/auth/repositories");
+  if (!ok || !isAuthRepositoriesPayload(payload)) {
+    throw new Error("auth-repositories-load-failed");
+  }
+
+  return payload.repositories;
+}
+
 export async function signOut(): Promise<void> {
   await apiRequest("/api/auth/sign-out", {
     method: "POST",
@@ -265,6 +640,7 @@ export async function signOut(): Promise<void> {
 function isSignInSuccess(payload: unknown): payload is {
   ok?: true;
   mfa_required?: boolean;
+  mfa_enrolled?: boolean;
   workspace_selection_required?: boolean;
   workspaces?: SignInWorkspaceOption[];
 } {
@@ -306,5 +682,103 @@ function isAcceptedInvitation(
     payload !== null &&
     (payload as { ok?: unknown }).ok === true &&
     typeof (payload as { location?: unknown }).location === "string"
+  );
+}
+
+function isAuthSettingsProfile(
+  payload: unknown,
+): payload is AuthSettingsProfile {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  return (
+    typeof candidate.user_id === "string" &&
+    typeof candidate.email === "string" &&
+    typeof candidate.email_verified === "boolean" &&
+    (typeof candidate.display_name === "string" ||
+      candidate.display_name === null) &&
+    (typeof candidate.recovery_email === "string" ||
+      candidate.recovery_email === null) &&
+    typeof candidate.created_at === "string" &&
+    typeof candidate.updated_at === "string" &&
+    typeof candidate.membership_role === "string" &&
+    typeof candidate.organization_id === "string" &&
+    typeof candidate.mfa_enrolled === "boolean" &&
+    (typeof candidate.mfa_enrolled_at === "string" ||
+      candidate.mfa_enrolled_at === null) &&
+    typeof candidate.mfa_verified === "boolean" &&
+    (typeof candidate.mfa_verified_at === "string" ||
+      candidate.mfa_verified_at === null) &&
+    typeof candidate.current_session_id === "string" &&
+    typeof candidate.current_session_created_at === "string" &&
+    typeof candidate.current_session_updated_at === "string" &&
+    typeof candidate.current_session_expires_at === "string"
+  );
+}
+
+function isAuthSessionsPayload(
+  payload: unknown,
+): payload is { sessions: AuthSessionSummary[] } {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const sessions = (payload as { sessions?: unknown }).sessions;
+  return (
+    Array.isArray(sessions) &&
+    sessions.every((session) => {
+      if (typeof session !== "object" || session === null) {
+        return false;
+      }
+
+      const candidate = session as Record<string, unknown>;
+      return (
+        typeof candidate.id === "string" &&
+        typeof candidate.created_at === "string" &&
+        typeof candidate.updated_at === "string" &&
+        typeof candidate.expires_at === "string" &&
+        (typeof candidate.revoked_at === "string" ||
+          candidate.revoked_at === null) &&
+        (typeof candidate.mfa_verified_at === "string" ||
+          candidate.mfa_verified_at === null) &&
+        typeof candidate.is_current === "boolean"
+      );
+    })
+  );
+}
+
+function isAuthRepositoriesPayload(
+  payload: unknown,
+): payload is { repositories: AuthRepositorySummary[] } {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const repositories = (payload as { repositories?: unknown }).repositories;
+  return (
+    Array.isArray(repositories) &&
+    repositories.every((repository) => {
+      if (typeof repository !== "object" || repository === null) {
+        return false;
+      }
+
+      const candidate = repository as Record<string, unknown>;
+      return (
+        typeof candidate.id === "string" &&
+        typeof candidate.repository_name === "string" &&
+        typeof candidate.repository_full_name === "string" &&
+        typeof candidate.default_branch === "string" &&
+        typeof candidate.status === "string" &&
+        typeof candidate.connected_at === "string" &&
+        (typeof candidate.revoked_at === "string" ||
+          candidate.revoked_at === null) &&
+        (typeof candidate.assessment_id === "string" ||
+          candidate.assessment_id === null) &&
+        (typeof candidate.assessment_name === "string" ||
+          candidate.assessment_name === null)
+      );
+    })
   );
 }

@@ -6,6 +6,7 @@ import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import { AuditModule } from "../../platform/audit/audit.module.js";
 import { AcceptInvitationHandler } from "./application/commands/accept-invitation/accept-invitation.handler.ts";
 import { ConfirmPasswordRecoveryHandler } from "./application/commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
+import { DisableMfaHandler } from "./application/commands/disable-mfa/disable-mfa.handler.ts";
 import { EnrollMfaHandler } from "./application/commands/enroll-mfa/enroll-mfa.handler.ts";
 import { InviteDeveloperHandler } from "./application/commands/invite-developer/invite-developer.handler.ts";
 import { OAuthCallbackHandler } from "./application/commands/oauth-callback/oauth-callback.handler.ts";
@@ -13,12 +14,16 @@ import { OAuthStartHandler } from "./application/commands/oauth-start/oauth-star
 import { RegisterApprovedPathHandler } from "./application/commands/register-approved-path/register-approved-path.handler.ts";
 import { RevokeMembershipHandler } from "./application/commands/revoke-membership/revoke-membership.handler.ts";
 import { RequestPasswordRecoveryHandler } from "./application/commands/request-password-recovery/request-password-recovery.handler.ts";
+import { RevokeOwnedSessionHandler } from "./application/commands/revoke-owned-session/revoke-owned-session.handler.ts";
 import { RevokeSessionHandler } from "./application/commands/revoke-session/revoke-session.handler.ts";
 import { SignInHandler } from "./application/commands/sign-in/sign-in.handler.ts";
 import { UpdateProfileHandler } from "./application/commands/update-profile/update-profile.handler.ts";
 import { VerifyMfaOtpHandler } from "./application/commands/verify-mfa-otp/verify-mfa-otp.handler.ts";
 import { GetWorkspaceHandler } from "./application/queries/get-workspace/get-workspace.handler.ts";
+import { GetAuthProfileHandler } from "./application/queries/get-auth-profile/get-auth-profile.handler.ts";
 import { GetDeveloperTaskContextHandler } from "./application/queries/get-developer-task-context/get-developer-task-context.handler.ts";
+import { ListAuthRepositoriesHandler } from "./application/queries/list-auth-repositories/list-auth-repositories.handler.ts";
+import { ListAuthSessionsHandler } from "./application/queries/list-auth-sessions/list-auth-sessions.handler.ts";
 import { PreviewInvitationHandler } from "./application/queries/preview-invitation/preview-invitation.handler.ts";
 import {
   AUTH_WORKSPACE_RECOVERY_NOTIFIER,
@@ -30,7 +35,7 @@ import type { AuthWorkspaceRepositories } from "./application/ports/persistence/
 import { AuthAuditService } from "./application/services/auth-workspace/auth-audit.service.ts";
 import { AuthWorkspaceSupportService } from "./application/services/auth-workspace/auth-workspace-support.service.ts";
 import { AuthWorkspaceFacade } from "./application/services/auth-workspace/auth-workspace.facade.ts";
-import { NoopRecoveryNotifierService } from "./infrastructure/notification/noop-recovery-notifier.service.ts";
+import { RecoveryEmailNotifierService } from "./infrastructure/notification/recovery-email-notifier.service.ts";
 import { GitHubOAuthProvider } from "./infrastructure/oauth/github-oauth.provider.ts";
 import { GoogleOAuthProvider } from "./infrastructure/oauth/google-oauth.provider.ts";
 import { OAuthProviderRegistry } from "./infrastructure/oauth/oauth-provider.registry.ts";
@@ -138,7 +143,7 @@ function handlerProvider<T>(
     },
     {
       provide: AUTH_WORKSPACE_RECOVERY_NOTIFIER,
-      useClass: NoopRecoveryNotifierService,
+      useClass: RecoveryEmailNotifierService,
     },
     GitHubOAuthProvider,
     GoogleOAuthProvider,
@@ -183,7 +188,32 @@ function handlerProvider<T>(
     },
     handlerProvider(SignInHandler),
     handlerProvider(RevokeSessionHandler),
+    {
+      provide: RevokeOwnedSessionHandler,
+      inject: [PrismaService, AuthWorkspaceSupportService],
+      useFactory: (
+        prisma: PrismaService,
+        support: AuthWorkspaceSupportService,
+      ) => new RevokeOwnedSessionHandler(prisma, support),
+    },
+    {
+      provide: GetAuthProfileHandler,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new GetAuthProfileHandler(prisma),
+    },
+    {
+      provide: ListAuthSessionsHandler,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) => new ListAuthSessionsHandler(prisma),
+    },
+    {
+      provide: ListAuthRepositoriesHandler,
+      inject: [PrismaService],
+      useFactory: (prisma: PrismaService) =>
+        new ListAuthRepositoriesHandler(prisma),
+    },
     handlerProvider(GetWorkspaceHandler),
+    handlerProvider(DisableMfaHandler),
     handlerProvider(EnrollMfaHandler),
     handlerProvider(VerifyMfaOtpHandler),
     handlerProvider(UpdateProfileHandler),
@@ -254,7 +284,12 @@ function handlerProvider<T>(
         RegisterApprovedPathHandler,
         SignInHandler,
         RevokeSessionHandler,
+        RevokeOwnedSessionHandler,
+        GetAuthProfileHandler,
+        ListAuthSessionsHandler,
+        ListAuthRepositoriesHandler,
         GetWorkspaceHandler,
+        DisableMfaHandler,
         EnrollMfaHandler,
         VerifyMfaOtpHandler,
         UpdateProfileHandler,
@@ -272,7 +307,12 @@ function handlerProvider<T>(
         registerApprovedPathHandler: RegisterApprovedPathHandler,
         signInHandler: SignInHandler,
         revokeSessionHandler: RevokeSessionHandler,
+        revokeOwnedSessionHandler: RevokeOwnedSessionHandler,
+        getAuthProfileHandler: GetAuthProfileHandler,
+        listAuthSessionsHandler: ListAuthSessionsHandler,
+        listAuthRepositoriesHandler: ListAuthRepositoriesHandler,
         getWorkspaceHandler: GetWorkspaceHandler,
+        disableMfaHandler: DisableMfaHandler,
         enrollMfaHandler: EnrollMfaHandler,
         verifyMfaOtpHandler: VerifyMfaOtpHandler,
         updateProfileHandler: UpdateProfileHandler,
@@ -290,7 +330,12 @@ function handlerProvider<T>(
           registerApprovedPathHandler,
           signInHandler,
           revokeSessionHandler,
+          revokeOwnedSessionHandler,
+          getAuthProfileHandler,
+          listAuthSessionsHandler,
+          listAuthRepositoriesHandler,
           getWorkspaceHandler,
+          disableMfaHandler,
           enrollMfaHandler,
           verifyMfaOtpHandler,
           updateProfileHandler,

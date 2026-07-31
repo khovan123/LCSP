@@ -89,11 +89,13 @@ export class AuthWorkspaceSupportService {
     organization: Organization | null,
     mfaEnrollment: MfaEnrollment | null,
   ): boolean {
-    return (
-      mfaEnrollment !== null ||
-      user.mfaRequired ||
-      (organization?.mfaRequired ?? false)
-    );
+    void user;
+    void organization;
+    void mfaEnrollment;
+    // MFA is mandatory for every authenticated session. Enrollment only
+    // changes whether the client must bootstrap MFA or verify an existing
+    // factor before accessing protected routes.
+    return true;
   }
 
   recordAudit(repositories: unknown, event: AuditEvent): Promise<void> {

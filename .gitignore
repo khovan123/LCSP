@@ -35,3 +35,5 @@ _bmad/
 !.agents/rules/antigravity-project-rules.md
 **/.env
 .ua/
+**/.codebase-memory/
+**/.codex/

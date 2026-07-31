@@ -12,6 +12,7 @@ const oauthProviders = new Set(["google", "github"]);
 type OAuthCallbackSuccess = {
   session_token: string;
   mfa_required?: boolean;
+  mfa_enrolled?: boolean;
 };
 
 export async function GET(
@@ -41,7 +42,11 @@ export async function GET(
     );
   }
 
-  const destination = upstream.data.mfa_required ? "/mfa/verify" : "/workspace";
+  const destination = upstream.data.mfa_required
+    ? upstream.data.mfa_enrolled
+      ? "/mfa/verify"
+      : "/mfa/enroll"
+    : "/workspace";
   const response = NextResponse.redirect(new URL(destination, publicOrigin));
   response.cookies.set(
     SESSION_COOKIE_NAME,

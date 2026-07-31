@@ -2,12 +2,22 @@
 
 import { resolveMessage } from "@lcsp/i18n";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
-import { LogOutIcon, ShieldCheckIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  LogOutIcon,
+  SettingsIcon,
+  ShieldCheckIcon,
+} from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Sidebar,
   SidebarContent,
@@ -19,6 +29,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { useSignOutMutation } from "@/lib/api/auth-queries";
 import {
@@ -26,6 +39,11 @@ import {
   useWorkspaceQuery,
 } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
+import { settingsNavigationItems } from "@/features/settings/config/settings-navigation";
+import {
+  SETTINGS_SECTION_IDS,
+  type SettingsSectionId,
+} from "@/features/settings/types/settings.types";
 
 import type { AppShellNavigationSection } from "../../types/app-shell.types";
 import type { AssessmentSummary } from "../../types/workspace.types";
@@ -38,6 +56,7 @@ export function AppSidebar({
   sections: AppShellNavigationSection[];
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [currentHash, setCurrentHash] = useState("");
   const signOutMutation = useSignOutMutation();
   const workspaceQuery = useWorkspaceQuery();
@@ -50,6 +69,15 @@ export function AppSidebar({
     assessmentsQuery.data?.kind === "loaded"
       ? assessmentsQuery.data.assessments
       : undefined;
+  const isSettingsRoute = pathname === "/workspace/settings";
+  const requestedSettingsSection = searchParams.get("section");
+  const activeSettingsSection = isSettingsSectionId(requestedSettingsSection)
+    ? requestedSettingsSection
+    : SETTINGS_SECTION_IDS.passwordAndAuthentication;
+  const [settingsOpenOverride, setSettingsOpenOverride] = useState<
+    boolean | null
+  >(null);
+  const settingsOpen = settingsOpenOverride ?? isSettingsRoute;
 
   async function handleSignOut() {
     await signOutMutation.mutateAsync();
@@ -157,6 +185,55 @@ export function AppSidebar({
             {index === 0 ? <SidebarAssessmentList /> : null}
           </Fragment>
         ))}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <Collapsible
+                open={settingsOpen}
+                onOpenChange={setSettingsOpenOverride}
+              >
+                <SidebarMenuItem>
+                  <CollapsibleTrigger
+                    render={
+                      <SidebarMenuButton
+                        isActive={isSettingsRoute}
+                        tooltip={t("pages.appShell.settings")}
+                      />
+                    }
+                  >
+                    <SettingsIcon />
+                    <span>{t("pages.appShell.settings")}</span>
+                    <ChevronDownIcon
+                      className={`ml-auto size-4 transition-transform ${
+                        settingsOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {settingsNavigationItems.map((item) => (
+                        <SidebarMenuSubItem key={item.id}>
+                          <SidebarMenuSubButton
+                            isActive={activeSettingsSection === item.id}
+                            render={
+                              <Link
+                                href={`/workspace/settings?section=${item.id}`}
+                              />
+                            }
+                          >
+                            <span>
+                              {resolveMessage(appLocale, item.labelKey)}
+                            </span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </SidebarMenuItem>
+              </Collapsible>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border/70">
@@ -204,5 +281,12 @@ function resolveSectionLabel(
   return (
     assessments?.find((assessment) => assessment.id === section.assessmentId)
       ?.name ?? section.label
+  );
+}
+
+function isSettingsSectionId(value: string | null): value is SettingsSectionId {
+  return (
+    value !== null &&
+    (Object.values(SETTINGS_SECTION_IDS) as string[]).includes(value)
   );
 }

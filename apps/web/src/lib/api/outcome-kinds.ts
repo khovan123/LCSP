@@ -5,6 +5,7 @@ export const API_OUTCOME_KINDS = {
   authenticated: "authenticated",
   blocked: "blocked",
   created: "created",
+  disabled: "disabled",
   emailAlreadyExists: "email_already_exists",
   empty: "empty",
   error: "error",
@@ -13,6 +14,7 @@ export const API_OUTCOME_KINDS = {
   invitationInvalid: "invitation_invalid",
   loaded: "loaded",
   mfaRequired: "mfa_required",
+  mfaEnrollmentRequired: "mfa_enrollment_required",
   notFound: "not_found",
   passwordTooShort: "password_too_short",
   rateLimited: "rate_limited",
@@ -33,5 +35,7 @@ export const API_VALIDATION_REASONS = {
 
 export const API_REDIRECT_LOCATIONS = {
   mfaVerify: "/mfa/verify",
+  mfaEnroll: "/mfa/enroll",
+  recoveryRequest: "/recovery/request",
   signIn: "/sign-in",
 } as const;

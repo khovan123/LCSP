@@ -15,6 +15,7 @@ import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 
 type SignInApiSuccess = {
   mfa_required?: boolean;
+  mfa_enrolled?: boolean;
   session_token: string;
 };
 
@@ -32,10 +33,13 @@ export async function POST(request: Request) {
       credentials.email === managerAccount.email &&
       credentials.password === managerAccount.password
     ) {
-      const response = successJson({ mfa_required: false });
+      const response = successJson({
+        mfa_required: true,
+        mfa_enrolled: false,
+      });
       response.cookies.set(
         SESSION_COOKIE_NAME,
-        "mock-session:manager",
+        "mock-session:mfa-pending",
         sessionCookieOptions,
       );
       response.cookies.delete(MOCK_WORKSPACE_COOKIE_NAME);
@@ -77,6 +81,7 @@ export async function POST(request: Request) {
 
   const response = successJson({
     mfa_required: upstream.data.mfa_required === true,
+    mfa_enrolled: upstream.data.mfa_enrolled === true,
   });
   response.cookies.set(
     SESSION_COOKIE_NAME,
@@ -90,7 +95,6 @@ function isSignInApiSuccess(payload: unknown): payload is SignInApiSuccess {
   return (
     typeof payload === "object" &&
     payload !== null &&
-    (payload as { ok?: unknown }).ok === true &&
     typeof (payload as { session_token?: unknown }).session_token === "string"
   );
 }

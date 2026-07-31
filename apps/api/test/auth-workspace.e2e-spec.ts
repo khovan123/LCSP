@@ -99,6 +99,8 @@ describe("Auth workspace (e2e)", () => {
 
     assert.equal(body.user.organization_id, fixture.organizationId);
     assert.equal(typeof body.session_token, "string");
+    assert.equal(body.mfa_required, true);
+    assert.equal(body.mfa_enrolled, false);
   });
 
   it("approved sign-in without organization_id auto-resolves active organization", async () => {
@@ -113,6 +115,8 @@ describe("Auth workspace (e2e)", () => {
 
     assert.equal(body.user.organization_id, fixture.organizationId);
     assert.equal(typeof body.session_token, "string");
+    assert.equal(body.mfa_required, true);
+    assert.equal(body.mfa_enrolled, false);
   });
 
   it("approved invitation registration creates session through approved path", async () => {
@@ -266,7 +270,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("workspace access fails closed when request organization does not match session scope", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
 
     const result = await httpRequest(app)
       .get("/workspace")
@@ -292,7 +296,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("deny-by-default blocks workspace access when subject attributes are incomplete", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
 
     await prisma.authMembership.update({
       where: {
@@ -316,7 +320,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("deny-by-default blocks workspace access when policy state gate is not satisfied", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
 
     await prisma.authOrganization.create({
       data: {
@@ -351,7 +355,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("returns the active Manager organization context and safe PBAC action projection", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
 
     const result = await httpRequest(app)
       .get("/workspace")
@@ -383,7 +387,7 @@ describe("Auth workspace (e2e)", () => {
       PBAC_ACTIONS.wizardSubmit,
       PBAC_ACTIONS.wizardExport,
     ]);
-    assert.equal(body.mfa_verified, false);
+    assert.equal(body.mfa_verified, true);
     assert.equal(body.correlation_id, "corr-manager-workspace-context");
     assert.equal(Number.isNaN(Date.parse(body.session_expires_at)), false);
     assert.equal("policyId" in body, false);
@@ -439,7 +443,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("audit trail records allow/deny events without leaking secrets", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
 
     await httpRequest(app)
       .get("/workspace")
@@ -500,8 +504,7 @@ describe("Auth workspace (e2e)", () => {
     assert.equal(problemCode(result), AUTH_ERROR_CODES.mfaRequired);
   });
 
-  it("sign-in response includes mfa_required flag when MFA is enrolled", async () => {
-    await seedMfaEnrollment(prisma, fixture.approvedUser.id);
+  it("sign-in response includes mfa_required and mfa_enrolled flags before MFA bootstrap", async () => {
     const result = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
@@ -514,6 +517,7 @@ describe("Auth workspace (e2e)", () => {
     const body = successBody<SignInSuccess>(result);
     assert.equal(body.ok, true);
     assert.equal(body.mfa_required, true);
+    assert.equal(body.mfa_enrolled, false);
   });
 
   it("valid OTP verifies MFA and grants workspace access", async () => {
@@ -651,7 +655,7 @@ describe("Auth workspace (e2e)", () => {
   // AC3: Profile update safety
 
   it("profile update succeeds and returns updated_fields without secret values", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
     const result = await httpRequest(app)
       .patch("/auth/profile")
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -671,7 +675,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("profile update audit event records field names not values", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
     await httpRequest(app)
       .patch("/auth/profile")
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -711,7 +715,7 @@ describe("Auth workspace (e2e)", () => {
       .post("/auth/mfa/enroll")
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .send({ session_token: signIn.session_token })
-      .expect(401);
+      .expect(403);
 
     assert.equal(problemCode(reEnroll), AUTH_ERROR_CODES.mfaRequired);
   });
@@ -730,7 +734,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("profile update rejects a malformed recovery_email", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
     const result = await httpRequest(app)
       .patch("/auth/profile")
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -752,12 +756,13 @@ describe("Auth workspace (e2e)", () => {
 
     const signIn = await signInApprovedUser();
     assert.equal(signIn.mfa_required, true);
+    assert.equal(signIn.mfa_enrolled, false);
 
     const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .expect(403);
+      .expect(401);
 
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaRequired);
@@ -796,6 +801,35 @@ describe("Auth workspace (e2e)", () => {
     assert.equal(knownBody.ok, true);
     assert.equal(unknownBody.ok, true);
     assert.deepEqual(Object.keys(knownBody), Object.keys(unknownBody));
+  });
+
+  it("password recovery delivers to the configured recovery email when present", async () => {
+    const signIn = await signInAndVerifyApprovedUser();
+    await httpRequest(app)
+      .patch("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .send({
+        session_token: signIn.session_token,
+        recovery_email: "recovery@safe.test",
+      })
+      .expect(200);
+
+    await httpRequest(app)
+      .post("/auth/recovery/request")
+      .send({ email: fixture.approvedUser.email })
+      .expect(201);
+
+    assert.equal(recoveryNotifier.lastEmail, "recovery@safe.test");
+  });
+
+  it("password recovery forwards the app origin for recovery links", async () => {
+    await httpRequest(app)
+      .post("/auth/recovery/request")
+      .set("x-app-origin", "https://workspace.lcsp.test")
+      .send({ email: fixture.approvedUser.email })
+      .expect(201);
+
+    assert.equal(recoveryNotifier.lastAppOrigin, "https://workspace.lcsp.test");
   });
 
   it("password recovery confirm resets the password and revokes existing sessions", async () => {
@@ -854,6 +888,22 @@ describe("Auth workspace (e2e)", () => {
       .expect(200);
 
     return successBody<SignInSuccess>(result);
+  }
+
+  async function signInAndVerifyApprovedUser() {
+    await prisma.authUserMfa.deleteMany({
+      where: { userId: fixture.approvedUser.id },
+    });
+    const signIn = await signInApprovedUser();
+    const mfa = await seedMfaEnrollment(prisma, fixture.approvedUser.id);
+    const otp = totpForTime(mfa.totpSecret, Date.now());
+
+    await httpRequest(app)
+      .post("/auth/mfa/verify-otp")
+      .send({ session_token: signIn.session_token, otp })
+      .expect(201);
+
+    return signIn;
   }
 });
 

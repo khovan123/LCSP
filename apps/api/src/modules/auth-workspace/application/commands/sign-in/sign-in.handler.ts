@@ -76,7 +76,7 @@ export class SignInHandler {
         reason_code: AUTH_ERROR_CODES.temporaryLock,
         correlation_id: correlationId,
       });
-      return createProblemResult(AUTH_ERROR_CODES.temporaryLock, correlationId);
+      return createTemporaryLockProblem(user.lockUntil, correlationId);
     }
 
     if (!verifySecret(password, user.passwordHash)) {
@@ -101,6 +101,9 @@ export class SignInHandler {
           ? AUTH_ERROR_CODES.temporaryLock
           : AUTH_ERROR_CODES.invalidCredentials,
         correlationId,
+        user.lockUntil
+          ? temporaryLockProblemOverrides(user.lockUntil, this.support.now())
+          : undefined,
       );
     }
 
@@ -199,7 +202,32 @@ export class SignInHandler {
       correlation_id: correlationId,
       session_token: sessionState.token,
       user: this.support.safeUserProjection(user, targetOrgId, membership),
+      mfa_enrolled: mfaEnrollment !== null,
       ...(mfaRequired ? { mfa_required: true } : {}),
     };
   }
+}
+
+function createTemporaryLockProblem(
+  lockUntil: number | null,
+  correlationId: string,
+): AuthProblemResult {
+  return createProblemResult(
+    AUTH_ERROR_CODES.temporaryLock,
+    correlationId,
+    temporaryLockProblemOverrides(lockUntil, Date.now()),
+  );
+}
+
+function temporaryLockProblemOverrides(lockUntil: number | null, now: number) {
+  if (lockUntil === null) {
+    return undefined;
+  }
+
+  return {
+    meta: {
+      lockedUntil: new Date(lockUntil).toISOString(),
+      retryAfterSeconds: Math.max(0, Math.ceil((lockUntil - now) / 1000)),
+    },
+  };
 }

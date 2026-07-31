@@ -12,4 +12,5 @@ export type SignInSuccess = {
   session_token: string;
   user: SafeUserProjection;
   mfa_required?: boolean;
+  mfa_enrolled?: boolean;
 };

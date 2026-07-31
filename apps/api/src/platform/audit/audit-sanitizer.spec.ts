@@ -64,4 +64,18 @@ describe("AuditSanitizer", () => {
       "details.attempts[0].recoveryCode",
     ]);
   });
+
+  it("retains audit reason code fields while still stripping other code secrets", () => {
+    const result = AuditSanitizer.sanitize({
+      reason_code: "INVALID_CREDENTIALS",
+      reasonCode: "INVALID_CREDENTIALS",
+      verificationCode: "123456",
+    });
+
+    expect(result.payload).toEqual({
+      reason_code: "INVALID_CREDENTIALS",
+      reasonCode: "INVALID_CREDENTIALS",
+    });
+    expect(result.removedKeys).toEqual(["verificationCode"]);
+  });
 });

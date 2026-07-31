@@ -1,6 +1,8 @@
 import { Injectable, Logger, type NestMiddleware } from "@nestjs/common";
 import type { Request, Response, NextFunction } from "express";
 
+import { readProblemResponseMetadata } from "../problems/problem-response-metadata.js";
+
 @Injectable()
 export class HttpLoggerMiddleware implements NestMiddleware {
   private readonly logger = new Logger("HTTP");
@@ -12,7 +14,13 @@ export class HttpLoggerMiddleware implements NestMiddleware {
     response.on("finish", () => {
       const { statusCode } = response;
       const duration = Date.now() - startTime;
-      const message = `${method} ${originalUrl} ${statusCode} +${duration}ms`;
+      const message = formatHttpLogMessage(
+        method,
+        originalUrl,
+        statusCode,
+        duration,
+        response,
+      );
 
       if (statusCode >= 500) {
         this.logger.error(message);
@@ -25,4 +33,20 @@ export class HttpLoggerMiddleware implements NestMiddleware {
 
     next();
   }
+}
+
+function formatHttpLogMessage(
+  method: string,
+  originalUrl: string,
+  statusCode: number,
+  duration: number,
+  response: Response,
+): string {
+  const baseMessage = `${method} ${originalUrl} ${statusCode} +${duration}ms`;
+  const problem = readProblemResponseMetadata(response);
+  if (!problem) {
+    return baseMessage;
+  }
+
+  return `${baseMessage} code=${problem.code} requiredAction=${problem.requiredAction} correlationId=${problem.correlationId}`;
 }

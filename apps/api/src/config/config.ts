@@ -34,6 +34,15 @@ export const configValidationSchema = Joi.object({
       "string.pattern.base":
         '"MFA_SECRET_ENCRYPTION_KEY" must be exactly 64 hex characters (32 bytes)',
     }),
+  SMTP_HOST: Joi.string().trim().allow("").default(""),
+  SMTP_PORT: Joi.number().integer().positive().default(587),
+  SMTP_SECURE: Joi.boolean().default(false),
+  SMTP_USER: Joi.string().trim().allow("").default(""),
+  SMTP_PASS: Joi.string().trim().allow("").default(""),
+  SMTP_FROM: Joi.string().trim().allow("").default("").messages({
+    "string.smtpFrom":
+      '"SMTP_FROM" must be a valid email or display-name address like "LCSP <noreply@lcsp.com>"',
+  }),
   PYTHON_WORKER_BASE_URL: Joi.string().required(),
   WORKER_API_KEY: Joi.string().min(32).required(),
 }).unknown(true);
@@ -112,6 +121,14 @@ export function config(): AppConfig {
     },
     internal: {
       apiToken: env.INTERNAL_API_TOKEN ?? "test-internal-token",
+    },
+    email: {
+      smtpHost: env.SMTP_HOST?.trim() ?? "",
+      smtpPort: Number(env.SMTP_PORT ?? 587),
+      smtpSecure: (env.SMTP_SECURE ?? "false").toLowerCase() === "true",
+      smtpUser: env.SMTP_USER?.trim() ?? "",
+      smtpPass: env.SMTP_PASS?.trim() ?? "",
+      smtpFrom: env.SMTP_FROM?.trim() ?? "",
     },
   };
 }

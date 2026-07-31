@@ -22,6 +22,7 @@ export const viPages = {
     allAssessments: "Tất cả assessment",
     searchAssessments: "Tìm assessment",
     noAssessmentMatches: "Không tìm thấy assessment phù hợp.",
+    settings: "Cài đặt",
     wizard: "Wizard intake",
     readiness: "Readiness",
     classification: "Classification",
@@ -58,12 +59,14 @@ export const viPages = {
     oauthGoogle: "Google",
     oauthGitHub: "GitHub",
     accessHelp: "Cần quyền truy cập? Hãy liên hệ chủ sở hữu tổ chức.",
+    forgotPassword: "Quên mật khẩu?",
     errors: {
       emailRequired: "Nhập email công việc của bạn.",
       emailInvalid: "Nhập email công việc hợp lệ.",
       passwordRequired: "Nhập mật khẩu của bạn.",
       requestFailedTitle: "Không thể đăng nhập",
       requestFailedDetail: "Không thể đăng nhập. Vui lòng thử lại.",
+      retryAtLabel: "Bạn có thể thử lại lúc",
     },
   },
   mfaVerify: {
@@ -78,11 +81,84 @@ export const viPages = {
     submit: "Xác minh mã",
     submitting: "Đang xác minh mã",
     accessHelp: "Cần trợ giúp? Hãy liên hệ chủ sở hữu tổ chức.",
+    useRecovery: "Không dùng được ứng dụng xác thực? Khôi phục quyền truy cập.",
     errors: {
       otpRequired: "Nhập mã xác minh của bạn.",
       otpInvalidFormat: "Nhập mã xác minh gồm sáu chữ số.",
       requestFailedTitle: "Không thể xác minh",
       requestFailedDetail: "Không thể xác minh mã. Vui lòng thử lại.",
+    },
+  },
+  mfaEnroll: {
+    metadataTitle: "Thiết lập MFA | LCSP",
+    metadataDescription: "Thiết lập ứng dụng xác thực trước khi vào workspace.",
+    homeAriaLabel: "Trang chủ",
+    formEyebrow: "Thiết lập bảo mật",
+    formTitle: "Bật xác thực hai bước",
+    formDescription:
+      "Tạo cấu hình ứng dụng xác thực rồi quay lại bước xác minh mã.",
+    submit: "Tạo cấu hình MFA",
+    submitting: "Đang tạo cấu hình MFA",
+    goToVerify: "Tôi đã có mã, chuyển sang xác minh",
+    accessHelp:
+      "Luồng này không thay đổi quyền truy cập của bạn, chỉ hoàn tất lớp bảo vệ bắt buộc.",
+    successTitle: "Đã tạo cấu hình MFA",
+    successDetail:
+      "Mở URI này bằng ứng dụng xác thực của bạn, sau đó tiếp tục sang bước xác minh mã.",
+    openAuthenticator: "Mở trong ứng dụng xác thực",
+    qrTitle: "Quét mã QR này bằng ứng dụng xác thực",
+    qrHint:
+      "Nếu thiết bị này không mở được ứng dụng xác thực, hãy dùng điện thoại để quét mã QR này.",
+    qrAlt: "Mã QR để thiết lập ứng dụng xác thực MFA cho LCSP",
+    qrLoading: "Đang tạo mã QR cho ứng dụng xác thực.",
+    errors: {
+      requestFailedTitle: "Không thể thiết lập MFA",
+      requestFailedDetail: "Không thể tạo cấu hình MFA lúc này.",
+    },
+  },
+  recoveryRequest: {
+    metadataTitle: "Khôi phục mật khẩu | LCSP",
+    metadataDescription: "Yêu cầu liên kết khôi phục mật khẩu an toàn.",
+    homeAriaLabel: "Trang chủ",
+    formEyebrow: "Khôi phục truy cập",
+    formTitle: "Yêu cầu khôi phục mật khẩu",
+    formDescription:
+      "Nhập email công việc của bạn để bắt đầu luồng khôi phục an toàn.",
+    emailLabel: "Email công việc",
+    emailDescription: "Sử dụng email đã liên kết với tài khoản LCSP của bạn.",
+    submit: "Gửi yêu cầu khôi phục",
+    submitting: "Đang gửi yêu cầu khôi phục",
+    backToSignIn: "Quay lại đăng nhập",
+    successTitle: "Yêu cầu đã được ghi nhận",
+    successDetail:
+      "Nếu email tồn tại trong hệ thống, hướng dẫn khôi phục sẽ được gửi qua kênh phù hợp.",
+    errors: {
+      emailRequired: "Nhập email công việc của bạn.",
+      emailInvalid: "Nhập email công việc hợp lệ.",
+      requestFailedTitle: "Không thể gửi yêu cầu",
+      requestFailedDetail: "Không thể gửi yêu cầu khôi phục lúc này.",
+    },
+  },
+  recoveryConfirm: {
+    metadataTitle: "Đặt lại mật khẩu | LCSP",
+    metadataDescription: "Xác nhận yêu cầu khôi phục và đặt mật khẩu mới.",
+    homeAriaLabel: "Trang chủ",
+    formEyebrow: "Hoàn tất khôi phục",
+    formTitle: "Đặt mật khẩu mới",
+    formDescription:
+      "Dùng token khôi phục hợp lệ để đặt lại mật khẩu và thu hồi các phiên cũ.",
+    tokenLabel: "Token khôi phục",
+    tokenDescription: "Dán token hoặc liên kết khôi phục đã nhận.",
+    passwordLabel: "Mật khẩu mới",
+    passwordDescription: "Sử dụng ít nhất 12 ký tự.",
+    submit: "Xác nhận khôi phục",
+    submitting: "Đang cập nhật mật khẩu",
+    requestAnother: "Yêu cầu liên kết khôi phục khác",
+    errors: {
+      tokenRequired: "Nhập token khôi phục.",
+      passwordTooShort: "Mật khẩu phải có ít nhất 12 ký tự.",
+      requestFailedTitle: "Không thể khôi phục mật khẩu",
+      requestFailedDetail: "Không thể hoàn tất khôi phục lúc này.",
     },
   },
   acceptInvitation: {
@@ -192,6 +268,9 @@ export const viPages = {
     recentAssessmentsTitle: "Assessment gần đây",
     recentAssessmentsDescription:
       "Mở nhanh các assessment được tạo gần đây hoặc xem toàn bộ danh sách.",
+    settingsTitle: "Cài đặt tài khoản",
+    settingsDescription:
+      "Quản lý MFA, khôi phục truy cập và luồng bảo vệ tài khoản bên ngoài màn tổng quan workspace.",
     emptyTitle: "Chưa có assessment",
     emptyDescription: "Tạo assessment đầu tiên của bạn.",
     loadingAssessments: "Đang tải assessment",
@@ -218,6 +297,164 @@ export const viPages = {
       wizardInProgress: "Tiếp tục Wizard để hoàn thành assessment.",
       wizardSubmitted:
         "Đang chờ bằng chứng kỹ thuật trước khi có thể phân loại.",
+    },
+    security: {
+      title: "Bảo vệ tài khoản",
+      description:
+        "Thiết lập MFA, cập nhật email khôi phục và dùng đúng các luồng an toàn đã được backend hỗ trợ.",
+      openMfaEnroll: "Thiết lập MFA",
+      openRecovery: "Mở khôi phục mật khẩu",
+      recoveryEmailLabel: "Email khôi phục",
+      recoveryEmailDescription:
+        "Thêm hoặc thay đổi email khôi phục mà không hiển thị secret trong UI.",
+      submit: "Lưu cài đặt khôi phục",
+      submitting: "Đang lưu cài đặt khôi phục",
+      successTitle: "Đã cập nhật cài đặt an toàn",
+      successDetail:
+        "Thông tin khôi phục đã được lưu và audit theo flow bảo mật hiện tại.",
+      errors: {
+        recoveryEmailInvalid: "Nhập email khôi phục hợp lệ hoặc để trống.",
+        requestFailedTitle: "Không thể cập nhật cài đặt",
+        requestFailedDetail:
+          "Không thể cập nhật cài đặt an toàn lúc này. Vui lòng thử lại.",
+      },
+    },
+    settingsHub: {
+      description:
+        "Quản lý định danh tài khoản, MFA, khôi phục, phiên đăng nhập và repository đã liên kết theo đúng flow bảo mật hiện tại của LCSP.",
+      sections: {
+        account: "Tài khoản",
+        appearance: "Giao diện",
+        notifications: "Thông báo",
+        emails: "Email",
+        passwordAndAuthentication: "Mật khẩu và xác thực",
+        sessions: "Phiên đăng nhập",
+        repositories: "Repository",
+      },
+      labels: {
+        account: "Tài khoản",
+        displayName: "Tên hiển thị",
+        primaryEmail: "Email chính",
+        organization: "Tổ chức",
+        membershipRole: "Vai trò thành viên",
+        createdAt: "Ngày tạo",
+        updatedAt: "Cập nhật",
+        recoveryEmail: "Email khôi phục",
+        lastActiveAt: "Hoạt động gần nhất",
+        expiresAt: "Hết hạn",
+        defaultBranch: "Nhánh mặc định",
+        linkedAssessment: "Assessment liên kết",
+        connectedAt: "Đã liên kết",
+      },
+      badges: {
+        verified: "Đã xác minh",
+        unverified: "Chưa xác minh",
+        mfaEnabled: "MFA đã bật",
+        mfaPending: "MFA đang chờ",
+        configured: "Đã cấu hình",
+        primary: "Chính",
+        active: "Đang hoạt động",
+        revoked: "Đã thu hồi",
+      },
+      states: {
+        notConfigured: "Chưa cấu hình",
+        noRecoveryEmail: "Chưa có email khôi phục",
+        currentSession: "Phiên hiện tại",
+        noSessions: "Không có phiên đăng nhập.",
+        noRepositories: "Chưa có repository liên kết.",
+        noAssessmentLinked: "Chưa liên kết assessment",
+      },
+      actions: {
+        edit: "Chỉnh sửa",
+        setUp: "Thiết lập",
+        turnOn: "Bật MFA",
+        turnOff: "Tắt MFA",
+        generateSetup: "Tạo cấu hình",
+        verifyAndSave: "Xác minh và lưu",
+        sendRecovery: "Gửi hướng dẫn khôi phục",
+        revoke: "Thu hồi",
+      },
+      account: {
+        title: "Tài khoản",
+        description:
+          "Xem định danh và ngữ cảnh workspace gắn với phiên LCSP hiện tại.",
+      },
+      appearance: {
+        title: "Giao diện",
+        description:
+          "Giữ bố cục kiểu GitHub nhưng vẫn dùng hệ giao diện hiện tại của LCSP.",
+        shellTitle: "Shell hiện tại",
+        shellDescription:
+          "Giao diện đang bám theo shell workspace hiện tại của LCSP. Tùy chọn theme theo tài khoản chưa được lưu riêng.",
+      },
+      notifications: {
+        title: "Thông báo",
+        description:
+          "Xem các email nào đang nhận thông báo khôi phục và bảo mật trong hệ thống hiện tại.",
+        emailRoutingTitle: "Điều hướng email",
+        emailRoutingDescription:
+          "Thông báo khôi phục và bảo mật dùng email chính cùng email khôi phục tùy chọn ở bên dưới.",
+      },
+      emails: {
+        title: "Email",
+        description: "Quản lý email dùng để đăng nhập và khôi phục tài khoản.",
+        primaryTitle: "Email chính",
+        primaryDescription:
+          "Email chính được dùng để đăng nhập và nhận thông báo bảo mật.",
+      },
+      password: {
+        title: "Mật khẩu và xác thực",
+        description:
+          "Quản lý phương thức đăng nhập, MFA bằng ứng dụng xác thực và luồng khôi phục hiện được LCSP hỗ trợ.",
+        signInMethodsTitle: "Phương thức đăng nhập",
+        emailMethod: "Email",
+        passwordMethod: "Mật khẩu",
+        mfaTitle: "Xác thực hai bước",
+        mfaDescription:
+          "Thiết lập ứng dụng xác thực là bắt buộc trước khi vào workspace được bảo vệ.",
+        authenticatorApp: "Ứng dụng xác thực",
+        authenticatorConfigured:
+          "Tài khoản này đã cấu hình ứng dụng xác thực TOTP.",
+        authenticatorPending:
+          "Hãy tạo cấu hình mới và xác minh một mã để hoàn tất enroll.",
+        inlineSetupTitle: "Thiết lập ứng dụng xác thực",
+        inlineSetupDescription:
+          "Tạo mã QR, quét bằng ứng dụng xác thực rồi xác minh ngay một mã hiện tại.",
+        mfaVerifiedTitle: "Đã xác minh xác thực hai bước",
+        mfaDisabledTitle: "Đã tắt xác thực hai bước",
+        disableFailedTitle: "Không thể tắt xác thực hai bước",
+        disableFailedDescription:
+          "Phiên hiện tại chưa thể tắt MFA lúc này. Hãy xác thực lại rồi thử lại.",
+        recoveryTitle: "Tùy chọn khôi phục",
+        recoveryDescription:
+          "Gửi hướng dẫn khôi phục theo đúng luồng khôi phục mật khẩu hiện tại của LCSP khi cần đặt lại truy cập.",
+      },
+      sessions: {
+        title: "Phiên đăng nhập",
+        description:
+          "Xem các phiên đã xác thực trong phạm vi workspace hiện tại.",
+        activeTitle: "Phiên web",
+        activeDescription:
+          "Thu hồi các phiên bạn không còn nhận ra mà không thay đổi layout workspace hiện tại.",
+        summary: "Phiên đang hoạt động",
+        revokedTitle: "Đã thu hồi phiên",
+      },
+      repositories: {
+        title: "Repository",
+        description:
+          "Xem các repository đã liên kết với tài khoản này thông qua tích hợp GitHub hiện tại của LCSP.",
+        listTitle: "Repository đã liên kết",
+        listDescription:
+          "Mỗi repository được hiển thị cạnh assessment đang sử dụng nó.",
+        summary: "Repository đã liên kết",
+      },
+      errors: {
+        profileLoadTitle: "Không thể tải cài đặt",
+        profileLoadDetail:
+          "Hiện không thể tải dữ liệu cài đặt tài khoản. Vui lòng thử lại.",
+        sessionActionDetail:
+          "Không thể hoàn tất thao tác với phiên lúc này. Vui lòng thử lại.",
+      },
     },
     errors: {
       workspaceUnavailableTitle: "Workspace chưa khả dụng",

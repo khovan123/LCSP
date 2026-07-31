@@ -8,8 +8,11 @@ import type { ProblemResult } from "@lcsp/contracts/auth";
 import type { Observable } from "rxjs";
 import { map } from "rxjs/operators";
 
+import { setProblemResponseMetadata } from "./problem-response-metadata.js";
+
 type HttpResponse = {
   status: (statusCode: number) => unknown;
+  locals?: Record<string, unknown>;
 };
 
 @Injectable()
@@ -21,6 +24,7 @@ export class ProblemStatusInterceptor implements NestInterceptor {
       map((body: unknown) => {
         const status = getProblemStatus(body);
         if (status !== undefined) {
+          setProblemResponseMetadata(response, body);
           response.status(status);
         }
 

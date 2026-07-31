@@ -22,6 +22,7 @@ export const enPages = {
     allAssessments: "All assessments",
     searchAssessments: "Search assessments",
     noAssessmentMatches: "No matching assessments found.",
+    settings: "Settings",
     wizard: "Intake wizard",
     readiness: "Readiness",
     classification: "Classification",
@@ -58,12 +59,14 @@ export const enPages = {
     oauthGoogle: "Google",
     oauthGitHub: "GitHub",
     accessHelp: "Need access? Contact your organization owner.",
+    forgotPassword: "Forgot password?",
     errors: {
       emailRequired: "Enter your work email.",
       emailInvalid: "Enter a valid work email.",
       passwordRequired: "Enter your password.",
       requestFailedTitle: "Unable to sign in",
       requestFailedDetail: "Unable to sign in. Please try again.",
+      retryAtLabel: "You can try again at",
     },
   },
   mfaVerify: {
@@ -78,11 +81,86 @@ export const enPages = {
     submit: "Verify code",
     submitting: "Verifying code",
     accessHelp: "Need help? Contact your organization owner.",
+    useRecovery: "Lost access to your authenticator? Recover access instead.",
     errors: {
       otpRequired: "Enter your verification code.",
       otpInvalidFormat: "Enter a six-digit verification code.",
       requestFailedTitle: "Unable to verify",
       requestFailedDetail: "Unable to verify the code. Please try again.",
+    },
+  },
+  mfaEnroll: {
+    metadataTitle: "Set up MFA | LCSP",
+    metadataDescription:
+      "Set up your authenticator app before entering the workspace.",
+    homeAriaLabel: "LCSP home",
+    formEyebrow: "Security setup",
+    formTitle: "Enable multi-factor authentication",
+    formDescription:
+      "Generate your authenticator app configuration, then continue to code verification.",
+    submit: "Generate MFA setup",
+    submitting: "Generating MFA setup",
+    goToVerify: "I already have a code",
+    accessHelp:
+      "This does not change your access process. It completes the required protection step.",
+    successTitle: "MFA setup generated",
+    successDetail:
+      "Open this URI in your authenticator app, then continue to code verification.",
+    openAuthenticator: "Open in authenticator",
+    qrTitle: "Scan this QR code in your authenticator app",
+    qrHint:
+      "If opening the authenticator app is unavailable on this device, scan this QR code from your phone instead.",
+    qrAlt: "QR code for the LCSP MFA authenticator setup",
+    qrLoading: "Preparing a QR code for your authenticator app.",
+    errors: {
+      requestFailedTitle: "Unable to set up MFA",
+      requestFailedDetail: "The MFA setup could not be generated right now.",
+    },
+  },
+  recoveryRequest: {
+    metadataTitle: "Recover password | LCSP",
+    metadataDescription: "Request a safe password recovery link.",
+    homeAriaLabel: "LCSP home",
+    formEyebrow: "Recover access",
+    formTitle: "Request password recovery",
+    formDescription:
+      "Enter your work email to start the safe recovery flow.",
+    emailLabel: "Work email",
+    emailDescription: "Use the email linked to your LCSP account.",
+    submit: "Send recovery request",
+    submitting: "Sending recovery request",
+    backToSignIn: "Back to sign in",
+    successTitle: "Request received",
+    successDetail:
+      "If the email exists in the system, recovery instructions will be sent through the appropriate channel.",
+    errors: {
+      emailRequired: "Enter your work email.",
+      emailInvalid: "Enter a valid work email.",
+      requestFailedTitle: "Unable to send request",
+      requestFailedDetail: "The recovery request could not be sent right now.",
+    },
+  },
+  recoveryConfirm: {
+    metadataTitle: "Reset password | LCSP",
+    metadataDescription:
+      "Confirm your recovery request and set a new password.",
+    homeAriaLabel: "LCSP home",
+    formEyebrow: "Complete recovery",
+    formTitle: "Set a new password",
+    formDescription:
+      "Use a valid recovery token to reset your password and revoke older sessions.",
+    tokenLabel: "Recovery token",
+    tokenDescription: "Paste the token or recovery link value you received.",
+    passwordLabel: "New password",
+    passwordDescription: "Use at least 12 characters.",
+    submit: "Confirm recovery",
+    submitting: "Updating password",
+    requestAnother: "Request another recovery link",
+    errors: {
+      tokenRequired: "Enter the recovery token.",
+      passwordTooShort: "Password must be at least 12 characters.",
+      requestFailedTitle: "Unable to recover password",
+      requestFailedDetail: "Password recovery could not be completed right now.",
     },
   },
   acceptInvitation: {
@@ -192,6 +270,9 @@ export const enPages = {
     recentAssessmentsTitle: "Recent assessments",
     recentAssessmentsDescription:
       "Quickly open recently created assessments or view the full list.",
+    settingsTitle: "Account settings",
+    settingsDescription:
+      "Manage MFA, recovery access, and account protection outside the dashboard overview.",
     emptyTitle: "No assessments yet",
     emptyDescription: "Create your first assessment.",
     loadingAssessments: "Loading assessments",
@@ -218,6 +299,165 @@ export const enPages = {
       wizardInProgress: "Continue the Wizard to complete your assessment.",
       wizardSubmitted:
         "Waiting for technical evidence before classification can proceed.",
+    },
+    security: {
+      title: "Account protection",
+      description:
+        "Set up MFA, update recovery email, and use the existing safe flows already supported by the backend.",
+      openMfaEnroll: "Set up MFA",
+      openRecovery: "Open password recovery",
+      recoveryEmailLabel: "Recovery email",
+      recoveryEmailDescription:
+        "Add or change the recovery email without exposing secrets in the UI.",
+      submit: "Save recovery settings",
+      submitting: "Saving recovery settings",
+      successTitle: "Security settings updated",
+      successDetail:
+        "Recovery settings were saved and audited through the current security flow.",
+      errors: {
+        recoveryEmailInvalid: "Enter a valid recovery email or leave it blank.",
+        requestFailedTitle: "Unable to update settings",
+        requestFailedDetail:
+          "Security settings could not be updated right now. Please try again.",
+      },
+    },
+    settingsHub: {
+      description:
+        "Manage account identity, MFA, recovery, sessions, and linked repositories with the current LCSP security flow.",
+      sections: {
+        account: "Account",
+        appearance: "Appearance",
+        notifications: "Notifications",
+        emails: "Emails",
+        passwordAndAuthentication: "Password and authentication",
+        sessions: "Sessions",
+        repositories: "Repositories",
+      },
+      labels: {
+        account: "Account",
+        displayName: "Display name",
+        primaryEmail: "Primary email",
+        organization: "Organization",
+        membershipRole: "Membership role",
+        createdAt: "Created",
+        updatedAt: "Updated",
+        recoveryEmail: "Recovery email",
+        lastActiveAt: "Last active",
+        expiresAt: "Expires",
+        defaultBranch: "Default branch",
+        linkedAssessment: "Linked assessment",
+        connectedAt: "Connected",
+      },
+      badges: {
+        verified: "Verified",
+        unverified: "Unverified",
+        mfaEnabled: "MFA enabled",
+        mfaPending: "MFA pending",
+        configured: "Configured",
+        primary: "Primary",
+        active: "Active",
+        revoked: "Revoked",
+      },
+      states: {
+        notConfigured: "Not configured",
+        noRecoveryEmail: "No recovery email set",
+        currentSession: "Current session",
+        noSessions: "No sessions found.",
+        noRepositories: "No linked repositories found.",
+        noAssessmentLinked: "No assessment linked",
+      },
+      actions: {
+        edit: "Edit",
+        setUp: "Set up",
+        turnOn: "Turn on MFA",
+        turnOff: "Turn off MFA",
+        generateSetup: "Generate setup",
+        verifyAndSave: "Verify and save",
+        sendRecovery: "Send recovery instructions",
+        revoke: "Revoke",
+      },
+      account: {
+        title: "Account",
+        description:
+          "Review the identity and workspace context attached to this LCSP session.",
+      },
+      appearance: {
+        title: "Appearance",
+        description:
+          "Keep the GitHub-style structure while staying inside the existing LCSP visual system.",
+        shellTitle: "Current shell",
+        shellDescription:
+          "Appearance follows the active LCSP workspace shell. Account-level theme preferences are not persisted yet.",
+      },
+      notifications: {
+        title: "Notifications",
+        description:
+          "Review which account emails receive recovery and security notices in the current system.",
+        emailRoutingTitle: "Email routing",
+        emailRoutingDescription:
+          "Recovery and security messages use your primary email and the optional recovery email configured below.",
+      },
+      emails: {
+        title: "Emails",
+        description:
+          "Manage the email addresses used for sign-in and account recovery.",
+        primaryTitle: "Primary email",
+        primaryDescription:
+          "Your primary email is used to sign in and receive security messages.",
+      },
+      password: {
+        title: "Password and authentication",
+        description:
+          "Manage sign-in methods, authenticator-based MFA, and the recovery flow supported by LCSP today.",
+        signInMethodsTitle: "Sign in methods",
+        emailMethod: "Email",
+        passwordMethod: "Password",
+        mfaTitle: "Two-factor authentication",
+        mfaDescription:
+          "Authenticator app setup is required before accessing the protected workspace.",
+        authenticatorApp: "Authenticator app",
+        authenticatorConfigured:
+          "A TOTP authenticator is configured for this account.",
+        authenticatorPending:
+          "Generate a new authenticator setup and verify one code to finish enrollment.",
+        inlineSetupTitle: "Authenticator setup",
+        inlineSetupDescription:
+          "Generate a QR code, scan it with your authenticator app, then verify one current code inline.",
+        mfaVerifiedTitle: "Two-factor authentication verified",
+        mfaDisabledTitle: "Two-factor authentication disabled",
+        disableFailedTitle: "Unable to disable two-factor authentication",
+        disableFailedDescription:
+          "The current session could not disable MFA right now. Re-authenticate and try again.",
+        recoveryTitle: "Recovery options",
+        recoveryDescription:
+          "Send recovery instructions through the current LCSP password recovery flow when you need to reset access.",
+      },
+      sessions: {
+        title: "Sessions",
+        description:
+          "Review active and prior authenticated sessions for the current workspace scope.",
+        activeTitle: "Web sessions",
+        activeDescription:
+          "Revoke sessions you no longer recognize without changing the current workspace layout.",
+        summary: "Active sessions",
+        revokedTitle: "Session revoked",
+      },
+      repositories: {
+        title: "Repositories",
+        description:
+          "Review repositories linked to this account through the current LCSP GitHub integration.",
+        listTitle: "Linked repositories",
+        listDescription:
+          "Each linked repository is shown beside the assessment that currently uses it.",
+        summary: "Linked repositories",
+      },
+      errors: {
+        profileLoadTitle: "Unable to load settings",
+        profileLoadDetail:
+          "The account settings data could not be loaded right now. Please try again.",
+        sessionActionDetail:
+          "The session action could not be completed right now. Please try again.",
+      },
     },
     errors: {
       workspaceUnavailableTitle: "Workspace unavailable",

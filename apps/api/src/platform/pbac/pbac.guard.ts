@@ -26,6 +26,7 @@ import {
   PBAC_METADATA_KEY,
   type PbacMetadata,
 } from "./decorators/pbac-metadata.js";
+import { ALLOW_PENDING_MFA_METADATA_KEY } from "./decorators/allow-pending-mfa.decorator.js";
 import {
   PbacContextLoader,
   type PbacContextDenialReason,
@@ -60,6 +61,11 @@ export class PbacGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const allowPendingMfa =
+      this.reflector.getAllAndOverride<boolean | undefined>(
+        ALLOW_PENDING_MFA_METADATA_KEY,
+        [context.getHandler(), context.getClass()],
+      ) === true;
     const correlationId =
       headerString(request.headers?.["x-correlation-id"]) ??
       createCorrelationId();
@@ -102,26 +108,28 @@ export class PbacGuard implements CanActivate {
       });
     }
 
-    const result = await this.loader.load(token, Date.now());
+    const loaderResult = await this.loader.load(token, Date.now(), {
+      allowPendingMfa,
+    });
 
-    if (!result.ok) {
+    if (!loaderResult.ok) {
       await this.recordDecision({
         organizationId: null,
         action,
         decision: PBAC_DECISION.deny,
-        reasonCode: result.reason,
+        reasonCode: loaderResult.reason,
         policyId: null,
         policyVersion: null,
         correlationId,
       });
       throw this.exceptionFor(
-        result.reason,
+        loaderResult,
         correlationId,
         metadata.membershipMissingAsPbacDenied === true,
       );
     }
 
-    const { session, membership, policy } = result;
+    const { session, membership, policy } = loaderResult;
     const subjectRole = membership.role();
     if (!subjectRole) {
       await this.recordDecision({
@@ -260,10 +268,13 @@ export class PbacGuard implements CanActivate {
   }
 
   private exceptionFor(
-    reason: PbacContextDenialReason,
+    denial:
+      | { reason: PbacContextDenialReason; mfaEnrolled?: boolean }
+      | PbacContextDenialReason,
     correlationId: string,
     membershipMissingAsPbacDenied = false,
   ): HttpException {
+    const reason = typeof denial === "string" ? denial : denial.reason;
     switch (reason) {
       case PBAC_REASON_CODE.sessionInvalid:
         return problemException(
@@ -275,6 +286,12 @@ export class PbacGuard implements CanActivate {
         );
       case PBAC_REASON_CODE.mfaRequired:
         return problemException(AUTH_ERROR_CODES.mfaRequired, correlationId, {
+          meta:
+            typeof denial === "string"
+              ? undefined
+              : {
+                  mfaEnrolled: denial.mfaEnrolled === true,
+                },
           status: HttpStatus.UNAUTHORIZED,
         });
       case PBAC_REASON_CODE.membershipMissing:

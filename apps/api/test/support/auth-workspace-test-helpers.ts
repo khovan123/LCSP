@@ -48,17 +48,20 @@ export { generateTotpSecret, encryptMfaSecret, totpForTime };
 export class CapturingRecoveryNotifier {
   public lastToken: string | null = null;
   public lastEmail: string | null = null;
+  public lastAppOrigin: string | null = null;
 
   notify(input: {
     userId: string;
     email: string;
     token: string;
     correlationId: string;
+    appOrigin?: string;
   }): Promise<void> {
     void input.userId;
     void input.correlationId;
     this.lastToken = input.token;
     this.lastEmail = input.email;
+    this.lastAppOrigin = input.appOrigin ?? null;
     return Promise.resolve();
   }
 }

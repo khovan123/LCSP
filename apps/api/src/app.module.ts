@@ -26,6 +26,7 @@ import { LegalRuleCatalogModule } from "./modules/legal-rule-catalog/legal-rule-
 import { OutboxModule } from "./platform/outbox/outbox.module.js";
 import { PbacModule } from "./platform/pbac/pbac.module.js";
 import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.module.js";
+import { MailModule } from "./platform/mail/mail.module.js";
 import { HttpLoggerMiddleware } from "./platform/logging/http-logger.middleware.js";
 import { ProblemExceptionFilter } from "./platform/problems/problem-exception.filter.js";
 import { ProblemStatusInterceptor } from "./platform/problems/problem-status.interceptor.js";
@@ -41,6 +42,7 @@ import { ProblemStatusInterceptor } from "./platform/problems/problem-status.int
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
     AuditPlatformModule,
+    MailModule,
     OutboxModule,
     PbacModule,
     AIUsageFlowModule,

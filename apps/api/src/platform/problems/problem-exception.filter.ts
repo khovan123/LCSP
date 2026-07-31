@@ -4,8 +4,10 @@ import type { ProblemResult } from "@lcsp/contracts/auth";
 import { randomUUID } from "node:crypto";
 
 import { internalServerProblem } from "./problem-factory.js";
+import { setProblemResponseMetadata } from "./problem-response-metadata.js";
 
 type HttpResponse = {
+  locals?: Record<string, unknown>;
   status: (statusCode: number) => {
     json: (body: unknown) => void;
   };
@@ -42,7 +44,9 @@ export class ProblemExceptionFilter implements ExceptionFilter {
       );
     }
 
-    response.status(status).json(toProblemResult(body, correlationId, status));
+    const problemResult = toProblemResult(body, correlationId, status);
+    setProblemResponseMetadata(response, problemResult);
+    response.status(status).json(problemResult);
   }
 }
 

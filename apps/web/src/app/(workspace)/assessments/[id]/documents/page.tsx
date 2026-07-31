@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { appLocale } from "@/lib/locale";
-import { DocumentsPageClient } from "@/features/document/pages/documents-page-client";
+import { DocumentsPageClient } from "@/features/document/components/organisms/documents-page-client";
 
 export const metadata: Metadata = {
   title: resolveMessage(appLocale, "pages.classification.metadataTitle"),
