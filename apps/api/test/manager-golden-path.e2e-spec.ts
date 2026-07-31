@@ -258,16 +258,50 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
   });
 });
 
-const validWizardAnswers = {
-  purpose: "Assess an internal AI system",
-  sector: "Finance",
-  data_type: ["PII"],
-  user_group: "Internal employees",
-  user_impact: "Low",
-  decision_role: "Advisory",
-  human_oversight: "Manager review",
-  external_llm_usage: false,
-};
+const validWizardAnswers = [
+  {
+    questionId: "businessProcess",
+    value: "Assess an internal AI system",
+    answerState: "ANSWERED",
+    updatedAt: "2026-07-31T00:00:00.000Z",
+  },
+  {
+    questionId: "aiPurpose",
+    value: "Finance",
+    answerState: "ANSWERED",
+    updatedAt: "2026-07-31T00:00:00.000Z",
+  },
+  {
+    questionId: "dataTypes",
+    value: ["PII"],
+    answerState: "ANSWERED",
+    updatedAt: "2026-07-31T00:00:00.000Z",
+  },
+  {
+    questionId: "affectedSubjects",
+    value: ["Internal employees"],
+    answerState: "ANSWERED",
+    updatedAt: "2026-07-31T00:00:00.000Z",
+  },
+  {
+    questionId: "decisionRole",
+    value: "Advisory",
+    answerState: "ANSWERED",
+    updatedAt: "2026-07-31T00:00:00.000Z",
+  },
+  {
+    questionId: "humanReview",
+    value: "Manager review",
+    answerState: "ANSWERED",
+    updatedAt: "2026-07-31T00:00:00.000Z",
+  },
+  {
+    questionId: "externalLlmUsage",
+    value: "no",
+    answerState: "ANSWERED",
+    updatedAt: "2026-07-31T00:00:00.000Z",
+  },
+];
 
 async function grantGoldenPathActions(prisma: PrismaClient): Promise<void> {
   const policy = await prisma.authPolicy.findUniqueOrThrow({
