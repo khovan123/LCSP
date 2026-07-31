@@ -94,50 +94,44 @@ describe("SubmitWizardHandler", () => {
 
   const validAnswers = [
     {
-      questionId: "purpose",
+      questionId: "businessProcess",
+      value: "Process",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "aiPurpose",
       value: "Purpose",
       answerState: "ANSWERED",
       updatedAt: "2026-07-31T00:00:00.000Z",
     },
     {
-      questionId: "sector",
-      value: "Sector",
-      answerState: "ANSWERED",
-      updatedAt: "2026-07-31T00:00:00.000Z",
-    },
-    {
-      questionId: "data_type",
+      questionId: "dataTypes",
       value: ["Type"],
       answerState: "ANSWERED",
       updatedAt: "2026-07-31T00:00:00.000Z",
     },
     {
-      questionId: "user_group",
-      value: "Group",
+      questionId: "affectedSubjects",
+      value: ["Group"],
       answerState: "ANSWERED",
       updatedAt: "2026-07-31T00:00:00.000Z",
     },
     {
-      questionId: "user_impact",
-      value: "Impact",
-      answerState: "ANSWERED",
-      updatedAt: "2026-07-31T00:00:00.000Z",
-    },
-    {
-      questionId: "decision_role",
+      questionId: "decisionRole",
       value: "Role",
       answerState: "ANSWERED",
       updatedAt: "2026-07-31T00:00:00.000Z",
     },
     {
-      questionId: "human_oversight",
+      questionId: "humanReview",
       value: "Oversight",
       answerState: "ANSWERED",
       updatedAt: "2026-07-31T00:00:00.000Z",
     },
     {
-      questionId: "external_llm_usage",
-      value: false,
+      questionId: "externalLlmUsage",
+      value: "no",
       answerState: "ANSWERED",
       updatedAt: "2026-07-31T00:00:00.000Z",
     },
@@ -175,7 +169,7 @@ describe("SubmitWizardHandler", () => {
     expect(result.correlation_id).toBe("corr-id-1");
   });
 
-  it("T02: Missing purpose -> 422 WIZARD_VALIDATION_FAILED", async () => {
+  it("T02: Missing businessProcess -> 422 WIZARD_VALIDATION_FAILED", async () => {
     wizardRepository.verifyAssessmentOwnership.mockResolvedValue(true);
     wizardRepository.findByAssessmentId.mockResolvedValue(null);
 
@@ -184,9 +178,9 @@ describe("SubmitWizardHandler", () => {
       command.organizationId,
       command.ownerId,
       [
-        ...validAnswers.filter((a) => a.questionId !== "purpose"),
+        ...validAnswers.filter((a) => a.questionId !== "businessProcess"),
         {
-          questionId: "purpose",
+          questionId: "businessProcess",
           value: "",
           answerState: "ANSWERED",
           updatedAt: "2026-07-31T00:00:00.000Z",
@@ -201,7 +195,7 @@ describe("SubmitWizardHandler", () => {
     );
   });
 
-  it("T03: Missing human_oversight -> 422 WIZARD_VALIDATION_FAILED", async () => {
+  it("T03: Missing humanReview -> 422 WIZARD_VALIDATION_FAILED", async () => {
     wizardRepository.verifyAssessmentOwnership.mockResolvedValue(true);
     wizardRepository.findByAssessmentId.mockResolvedValue(null);
 
@@ -210,9 +204,9 @@ describe("SubmitWizardHandler", () => {
       command.organizationId,
       command.ownerId,
       [
-        ...validAnswers.filter((a) => a.questionId !== "human_oversight"),
+        ...validAnswers.filter((a) => a.questionId !== "humanReview"),
         {
-          questionId: "human_oversight",
+          questionId: "humanReview",
           value: "",
           answerState: "ANSWERED",
           updatedAt: "2026-07-31T00:00:00.000Z",

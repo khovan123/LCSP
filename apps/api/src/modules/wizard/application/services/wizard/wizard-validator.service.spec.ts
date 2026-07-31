@@ -1,5 +1,6 @@
 import { WizardValidatorService } from "./wizard-validator.service.js";
 import type { WizardAnswer } from "@lcsp/contracts/wizard";
+import { ANSWER_STATES } from "@lcsp/contracts/wizard";
 
 describe("WizardValidatorService", () => {
   let service: WizardValidatorService;
@@ -11,57 +12,45 @@ describe("WizardValidatorService", () => {
   it("T01: should return no errors when all critical fields are valid", () => {
     const answers = [
       {
-        questionId: "purpose",
+        questionId: "businessProcess",
         value: "Customer support chatbot",
-        answerState: "ANSWERED",
+        answerState: ANSWER_STATES.answered,
         updatedAt: "2026-07-31T00:00:00.000Z",
       },
       {
-        questionId: "sector",
+        questionId: "aiPurpose",
         value: "technology",
-        answerState: "ANSWERED",
+        answerState: ANSWER_STATES.answered,
         updatedAt: "2026-07-31T00:00:00.000Z",
       },
       {
-        questionId: "data_type",
+        questionId: "dataTypes",
         value: ["customer_messages"],
-        answerState: "ANSWERED",
+        answerState: ANSWER_STATES.answered,
         updatedAt: "2026-07-31T00:00:00.000Z",
       },
       {
-        questionId: "user_group",
-        value: "Internal employees",
-        answerState: "ANSWERED",
+        questionId: "affectedSubjects",
+        value: ["employees"],
+        answerState: ANSWER_STATES.answered,
         updatedAt: "2026-07-31T00:00:00.000Z",
       },
       {
-        questionId: "user_impact",
-        value: "Faster response times",
-        answerState: "ANSWERED",
-        updatedAt: "2026-07-31T00:00:00.000Z",
-      },
-      {
-        questionId: "decision_role",
+        questionId: "decisionRole",
         value: "advisory",
-        answerState: "ANSWERED",
+        answerState: ANSWER_STATES.answered,
         updatedAt: "2026-07-31T00:00:00.000Z",
       },
       {
-        questionId: "human_oversight",
+        questionId: "humanReview",
         value: "Human in the loop",
-        answerState: "ANSWERED",
+        answerState: ANSWER_STATES.answered,
         updatedAt: "2026-07-31T00:00:00.000Z",
       },
       {
-        questionId: "external_llm_usage",
-        value: true,
-        answerState: "ANSWERED",
-        updatedAt: "2026-07-31T00:00:00.000Z",
-      },
-      {
-        questionId: "biometric_indicator",
-        value: false,
-        answerState: "ANSWERED",
+        questionId: "externalLlmUsage",
+        value: "yes",
+        answerState: ANSWER_STATES.answered,
         updatedAt: "2026-07-31T00:00:00.000Z",
       },
     ] as WizardAnswer[];
@@ -70,90 +59,77 @@ describe("WizardValidatorService", () => {
     expect(errors).toHaveLength(0);
   });
 
-  it("T02: should return error for missing purpose", () => {
+  it("T02: should return error for missing businessProcess", () => {
     const errors = service.validate([]);
     expect(errors).toContainEqual({
-      field: "purpose",
-      message:
-        "Please describe the primary business purpose of your AI system.",
+      field: "businessProcess",
+      message: "Please describe the primary business process of your AI system.",
     });
   });
 
-  it("T09: should return error for missing sector", () => {
+  it("T09: should return error for missing aiPurpose", () => {
     const errors = service.validate([]);
     expect(errors).toContainEqual({
-      field: "sector",
-      message: "Please select the regulated sector your AI system operates in.",
+      field: "aiPurpose",
+      message: "Please describe the primary purpose of your AI system.",
     });
   });
 
-  it("T09: should return error for missing or empty data_type", () => {
+  it("T09: should return error for missing or empty dataTypes", () => {
     const errorsMissing = service.validate([]);
     expect(errorsMissing).toContainEqual({
-      field: "data_type",
-      message:
-        "Please specify at least one type of data your AI system processes.",
+      field: "dataTypes",
+      message: "Please specify at least one type of data your AI system processes.",
     });
 
     const errorsEmpty = service.validate([
       {
-        questionId: "data_type",
+        questionId: "dataTypes",
         value: [],
-        answerState: "ANSWERED",
+        answerState: ANSWER_STATES.answered,
         updatedAt: "2026-07-31T00:00:00.000Z",
       },
     ]);
     expect(errorsEmpty).toContainEqual({
-      field: "data_type",
-      message:
-        "Please specify at least one type of data your AI system processes.",
+      field: "dataTypes",
+      message: "Please specify at least one type of data your AI system processes.",
     });
   });
 
-  it("T09: should return error for missing user_group", () => {
+  it("T09: should return error for missing affectedSubjects", () => {
     const errors = service.validate([]);
     expect(errors).toContainEqual({
-      field: "user_group",
-      message: "Please describe the group of users affected by your AI system.",
+      field: "affectedSubjects",
+      message: "Please describe the group of subjects affected by your AI system.",
     });
   });
 
-  it("T09: should return error for missing user_impact", () => {
+  it("T09: should return error for missing decisionRole", () => {
     const errors = service.validate([]);
     expect(errors).toContainEqual({
-      field: "user_impact",
-      message: "Please describe how your AI system impacts those users.",
+      field: "decisionRole",
+      message: "Please indicate whether your AI system makes autonomous decisions. Unknown is not permitted for this field.",
     });
   });
 
-  it("T09: should return error for missing decision_role", () => {
+  it("T03: should return error for missing humanReview", () => {
     const errors = service.validate([]);
     expect(errors).toContainEqual({
-      field: "decision_role",
-      message:
-        "Please indicate whether your AI system makes autonomous decisions.",
-    });
-  });
-
-  it("T03: should return error for missing human_oversight", () => {
-    const errors = service.validate([]);
-    expect(errors).toContainEqual({
-      field: "human_oversight",
+      field: "humanReview",
       message: "Please describe the human oversight mechanism in place.",
     });
   });
 
-  it("T09: should return error for missing external_llm_usage", () => {
+  it("T09: should return error for missing externalLlmUsage", () => {
     const errors = service.validate([]);
     expect(errors).toContainEqual({
-      field: "external_llm_usage",
-      message:
-        "Please indicate whether your AI system uses an external AI provider.",
+      field: "externalLlmUsage",
+      message: "Please indicate whether your AI system uses an external AI provider.",
     });
   });
 
   it("T09: should return all errors when everything is missing", () => {
     const errors = service.validate([]);
-    expect(errors).toHaveLength(8);
+    expect(errors).toHaveLength(7);
   });
 });

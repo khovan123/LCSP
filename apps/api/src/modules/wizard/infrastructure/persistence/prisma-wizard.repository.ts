@@ -8,6 +8,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { WizardProfileRepository } from "../../application/ports/persistence/wizard-profile.repository.js";
 import { WizardProfileEntity } from "../../domain/entities/wizard-profile.entity.js";
+import type { WizardAnswer } from "@lcsp/contracts/wizard";
 
 @Injectable()
 export class PrismaWizardRepository implements WizardProfileRepository {
@@ -42,7 +43,7 @@ export class PrismaWizardRepository implements WizardProfileRepository {
       ownerId: data.ownerId,
       version: data.version,
       status: fromPrismaWizardStatus(data.status) as PersistedWizardStatusCode,
-      answers: data.answers as any,
+      answers: data.answers as unknown as WizardAnswer[],
       submittedAt: data.submittedAt,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
@@ -77,10 +78,11 @@ export class PrismaWizardRepository implements WizardProfileRepository {
       ownerId: data.ownerId,
       version: data.version,
       status: fromPrismaWizardStatus(data.status) as PersistedWizardStatusCode,
-      answers: data.answers as any,
+      answers: data.answers as unknown as WizardAnswer[],
       submittedAt: data.submittedAt,
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
     });
   }
 }
+

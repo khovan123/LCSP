@@ -151,7 +151,16 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       const res1 = await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
-        .send({ answers: { purpose: "Test purpose" } });
+        .send({
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Test purpose",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
 
       assert.equal(res1.status, 200);
       let body = successBody<any>(res1);
@@ -164,16 +173,50 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
         .send({
-          answers: {
-            purpose: "Updated purpose",
-            sector: "Finance",
-            data_type: ["PII"],
-            user_group: "Internal employees",
-            user_impact: "Low",
-            decision_role: "Advisory",
-            human_oversight: "Manager review",
-            external_llm_usage: false,
-          },
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Updated purpose",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+            {
+              questionId: "aiPurpose",
+              value: "Finance",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+            {
+              questionId: "dataTypes",
+              value: ["PII"],
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+            {
+              questionId: "affectedSubjects",
+              value: ["Internal employees"],
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+            {
+              questionId: "decisionRole",
+              value: "Advisory",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+            {
+              questionId: "humanReview",
+              value: "Manager review",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+            {
+              questionId: "externalLlmUsage",
+              value: "no",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
         });
 
       assert.equal(res2.status, 200);
@@ -186,14 +229,32 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       const res1 = await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
-        .send({ answers: { purpose: "Draft 1" } });
+        .send({
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Draft 1",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
       assert.equal(res1.status, 200);
       assert.equal(successBody<any>(res1).version, 1);
 
       const res2 = await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
-        .send({ answers: { purpose: "Draft 2" } });
+        .send({
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Draft 2",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
       assert.equal(res2.status, 200);
       assert.equal(successBody<any>(res2).version, 2);
     });
@@ -215,7 +276,16 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       const res = await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
-        .send({ answers: { purpose: "Draft" } });
+        .send({
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Draft",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
       assert.equal(res.status, 409);
       assert.equal(problemCode(res), WIZARD_ERROR_CODES.alreadySubmitted);
     });
@@ -224,7 +294,16 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       const res = await httpRequest(app)
         .put(`/assessments/invalid-id/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
-        .send({ answers: { purpose: "Draft" } });
+        .send({
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Draft",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
       assert.equal(res.status, 404);
       assert.equal(problemCode(res), ASSESSMENT_ERROR_CODES.notFound);
     });
@@ -233,7 +312,16 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       const res = await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${restrictedToken}`)
-        .send({ answers: { purpose: "Draft" } });
+        .send({
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Draft",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
       assert.equal(res.status, 403);
       assert.equal(problemCode(res), AUTH_ERROR_CODES.pbacDenied);
     });
@@ -243,27 +331,60 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
         .send({
-          answers: { purpose: "Original purpose", sector: "Healthcare" },
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Original purpose",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+            {
+              questionId: "aiPurpose",
+              value: "Healthcare",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
         });
 
       await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
-        .send({ answers: { sector: "Finance" } });
+        .send({
+          answers: [
+            {
+              questionId: "aiPurpose",
+              value: "Finance",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
 
       const profile = await prisma.wizardProfile.findUnique({
         where: { assessmentId },
       });
       const answers = profile?.answers as any;
-      assert.equal(answers.purpose, "Original purpose");
-      assert.equal(answers.sector, "Finance");
+      const bpAnswer = answers.find((a: any) => a.questionId === "businessProcess");
+      const aipAnswer = answers.find((a: any) => a.questionId === "aiPurpose");
+      assert.equal(bpAnswer.value, "Original purpose");
+      assert.equal(aipAnswer.value, "Finance");
     });
 
     it("T08: WIZARD_DRAFT_SAVED audit event has no answer content", async () => {
       await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
-        .send({ answers: { purpose: "Super secret answers" } });
+        .send({
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Super secret answers",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
 
       const audit = await prisma.authAuditEvent.findFirst({
         where: { eventType: WIZARD_EVENT_TYPES.draftSaved },
@@ -283,16 +404,50 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       await createAssessment();
     });
 
-    const validAnswers = {
-      purpose: "Test purpose",
-      sector: "Finance",
-      data_type: ["PII"],
-      user_group: "Internal employees",
-      user_impact: "Low",
-      decision_role: "Advisory",
-      human_oversight: "Manager review",
-      external_llm_usage: false,
-    };
+    const validAnswers = [
+      {
+        questionId: "businessProcess",
+        value: "Test purpose",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "aiPurpose",
+        value: "Finance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "dataTypes",
+        value: ["PII"],
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "affectedSubjects",
+        value: ["Internal employees"],
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "decisionRole",
+        value: "Advisory",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "humanReview",
+        value: "Manager review",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "externalLlmUsage",
+        value: "no",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+    ];
 
     it("T01: All critical fields present -> 200, status SUBMITTED", async () => {
       const res = await httpRequest(app)
@@ -311,8 +466,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
     });
 
     it("T02 & T03: Missing critical fields -> 422 WIZARD_VALIDATION_FAILED", async () => {
-      const invalidAnswers = { ...validAnswers };
-      delete (invalidAnswers as any).purpose;
+      const invalidAnswers = validAnswers.filter((a) => a.questionId !== "businessProcess");
 
       const res = await httpRequest(app)
         .post(`/assessments/${assessmentId}/wizard/submit`)
@@ -396,7 +550,16 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       const res = await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)
-        .send({ answers: { purpose: "Edited" } });
+        .send({
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Edited",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
 
       assert.equal(res.status, 409);
       assert.equal(problemCode(res), WIZARD_ERROR_CODES.alreadySubmitted);
