@@ -324,6 +324,7 @@ export const enPages = {
       dataUsers: "Data and affected people",
       decision: "Decision making",
       provider: "External AI usage",
+      deployment: "Deployment context",
       risk: "Special risk signals",
     },
     fields: {
@@ -343,21 +344,21 @@ export const enPages = {
         "Could the AI result influence an important decision about a person?",
       preDecisionImportanceDescription:
         "For example: hiring, access, eligibility, pricing, or service outcomes.",
-      purposeLabel: "What business purpose does this system support?",
-      purposeDescription:
-        "Describe the main task in everyday business language.",
-      purposePlaceholder:
-        "Example: Help a support team draft replies for customer requests.",
+      businessProcessLabel: "What business process does this system support?",
+      businessProcessDescription: "Describe the main task in everyday business language.",
+      businessProcessPlaceholder: "Example: Help a support team draft replies for customer requests.",
+      aiPurposeLabel: "What role does the AI play in this process?",
+      aiPurposeDescription: "Describe the specific role of the AI system in the process mentioned above.",
+      aiPurposePlaceholder: "Example: Summarize chat history and suggest 3 draft replies.",
       sectorLabel: "Which business context fits this system best?",
       sectorDescription:
         "Choose the closest primary context for this assessment.",
       dataTypeLabel: "What kinds of data does the system use or analyze?",
       dataTypeDescription:
         "Select every category that applies to the AI workflow.",
-      userGroupLabel: "Who is directly affected by the result?",
-      userGroupDescription:
+      affectedSubjectsLabel: "Who is directly affected by the result?",
+      affectedSubjectsDescription:
         "Choose the group most directly affected by the system outcome.",
-      userGroupPlaceholder: "Add a short note if another group is affected.",
       userImpactLabel: "How strong is the impact on those people?",
       userImpactDescription:
         "Think about whether the output changes access, treatment, opportunities, or service quality.",
@@ -367,9 +368,9 @@ export const enPages = {
         "Choose the option that best reflects how much the result influences the outcome.",
       decisionRoleExamples:
         "Example: a suggestion for staff review is different from an output that directly determines an outcome.",
-      humanOversightLabel:
+      humanReviewLabel:
         "Where does a person review the result before it takes effect?",
-      humanOversightDescription:
+      humanReviewDescription:
         "This question appears when the AI output goes beyond simple background support.",
       externalLlmUsageLabel:
         "Does the system call an external AI provider such as OpenAI, Anthropic, Google, or another vendor?",
@@ -383,6 +384,14 @@ export const enPages = {
         "Does this workflow relate to hiring, education, credit, healthcare, public services, or another important life context?",
       highImpactIndicatorDescription:
         "This helps LCSP flag workflows that may need closer follow-up later.",
+      deploymentContextLabel: "Who is the intended audience for this application?",
+      deploymentContextDescription: "Identify whether the application is used internally or provided externally to other users.",
+      specialCategoryDataLabel: "Does the data contain particularly sensitive special categories?",
+      specialCategoryDataDescription: "For example: political opinions, religious beliefs, trade union membership, etc.",
+      transparencyIndicatorsLabel: "Are there direct interactions or AI-generated content?",
+      transparencyIndicatorsDescription: "Indicate if users know they are interacting with AI or AI-generated content.",
+      prohibitedRiskSignalsLabel: "Are there any unacceptable risk signals?",
+      prohibitedRiskSignalsDescription: "Social scoring, subliminal manipulation, or inferring sensitive traits are prohibited.",
     },
     options: {
       yes: "Yes",
@@ -423,6 +432,21 @@ export const enPages = {
         "The result usually takes effect without meaningful review",
       humanOversightNotApplicable:
         "Not applicable because the AI does not influence a final decision",
+      externalNone: "No external calls",
+      externalPossible: "Possible external service calls",
+      externalConfirmed: "Confirmed external AI usage",
+      deploymentInternal: "Internal use",
+      deploymentExternal: "External deployment",
+      highImpactRecruiting: "Recruiting and HR",
+      highImpactCredit: "Credit and finance",
+      highImpactEducation: "Education",
+      highImpactHealthcare: "Healthcare",
+      transparencyDirectInteraction: "Direct interaction (Chatbots, etc.)",
+      transparencyContentGeneration: "Content generation (Text, Images, etc.)",
+      prohibitedTracking: "Non-transparent tracking",
+      prohibitedManipulation: "Behavioral manipulation",
+      prohibitedScoring: "Social scoring",
+      prohibitedSensitiveInference: "Inferring sensitive traits",
     },
     helpers: {
       decisionTitle: "How to answer the decision question",
@@ -443,17 +467,27 @@ export const enPages = {
         "The Wizard could not be submitted. Review the highlighted answers and try again.",
       alreadySubmitted:
         "This Wizard has already been submitted and is now read-only.",
-      purposeRequired: "Describe the main business purpose before continuing.",
+      preAiScopeRequired: "Please indicate whether this system uses AI before continuing.",
+      preAffectedPeopleRequired: "Please select who might be affected before continuing.",
+      prePersonalDataRequired: "Please indicate whether personal data is processed before continuing.",
+      preDecisionImportanceRequired: "Please indicate whether the AI output affects an important decision before continuing.",
+      businessProcessRequired: "Describe the main business process before continuing.",
+      aiPurposeRequired: "Describe the AI purpose before continuing.",
       sectorRequired: "Choose the primary business context before continuing.",
-      dataTypeRequired: "Select at least one data category before continuing.",
-      userGroupRequired: "Choose who is directly affected before continuing.",
+      dataTypesRequired: "Select at least one data category before continuing.",
+      affectedSubjectsRequired: "Choose who is directly affected before continuing.",
       userImpactRequired: "Choose the level of impact before continuing.",
       decisionRoleRequired:
         "Choose how strongly the AI output affects the final decision.",
-      humanOversightRequired:
+      humanReviewRequired:
         "Describe where a person reviews the result before continuing.",
-      externalProviderRequired:
+      externalLlmUsageRequired:
         "Confirm whether the system uses an external AI provider before continuing.",
+      deploymentContextRequired: "Select the intended audience before continuing.",
+      specialCategoryDataRequired: "Indicate whether special category data is processed before continuing.",
+      biometricDataRequired: "Indicate whether biometric data is processed before continuing.",
+      highImpactIndicatorsRequired: "Select any high impact indicators before continuing.",
+      prohibitedRiskSignalsRequired: "Select any prohibited risk signals before continuing.",
     },
   },
   readiness: {

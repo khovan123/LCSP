@@ -3,6 +3,7 @@
 import { LoaderCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { wizardSteps } from "@/features/wizard/config/wizard-config";
 import { t } from "@/features/wizard/lib/wizard-i18n";
 
 type WizardNavigationActionsProps = {
@@ -51,7 +52,7 @@ export function WizardNavigationActions({
           <Button onClick={onContinueToDetailed}>
             {t("pages.wizard.actions.continueToDetailed")}
           </Button>
-        ) : currentStep < 5 ? (
+        ) : currentStep < wizardSteps.length ? (
           <Button onClick={onSaveAndContinue}>
             {t("pages.wizard.actions.saveAndContinue")}
           </Button>

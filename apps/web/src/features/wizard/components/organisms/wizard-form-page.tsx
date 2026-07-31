@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
+import type { WizardAnswer } from "@lcsp/contracts/wizard";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -69,7 +70,7 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
   );
   const latestAnswersRef = useRef<WizardAnswers>(initialAnswers);
 
-  async function saveDraftEvent(draftAnswers: WizardAnswers) {
+  async function saveDraftEvent(draftAnswers: WizardAnswer[]) {
     const serialized = JSON.stringify(draftAnswers);
     if (serialized === lastSavedAnswersRef.current) {
       return;
@@ -147,15 +148,15 @@ export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
 
   useEffect(() => {
     if (
-      answers.decision_role === "NO_AUTONOMOUS_DECISION" &&
-      answers.human_oversight !== "NOT_APPLICABLE"
+      answers.decisionRole === "NO_DECISION_SUPPORT" &&
+      answers.humanReview !== "NOT_APPLICABLE"
     ) {
-      form.setValue("human_oversight", "NOT_APPLICABLE", {
+      form.setValue("humanReview", "NOT_APPLICABLE", {
         shouldDirty: true,
       });
-      form.clearErrors("human_oversight");
+      form.clearErrors("humanReview");
     }
-  }, [answers.decision_role, answers.human_oversight, form]);
+  }, [answers.decisionRole, answers.humanReview, form]);
 
   function handleFieldBlur() {
     if (!assessment || effectiveIsReadOnly) {

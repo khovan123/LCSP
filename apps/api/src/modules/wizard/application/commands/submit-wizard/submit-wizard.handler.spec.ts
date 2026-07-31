@@ -8,7 +8,7 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
-import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
+import { WIZARD_EVENT_TYPES, type WizardAnswer } from "@lcsp/contracts/wizard";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import {
   ASSESSMENT_STATUS_CODES,
@@ -92,16 +92,16 @@ describe("SubmitWizardHandler", () => {
     handler = module.get<SubmitWizardHandler>(SubmitWizardHandler);
   });
 
-  const validAnswers = {
-    purpose: "Purpose",
-    sector: "Sector",
-    data_type: ["Type"],
-    user_group: "Group",
-    user_impact: "Impact",
-    decision_role: "Role",
-    human_oversight: "Oversight",
-    external_llm_usage: false,
-  };
+  const validAnswers = [
+    { questionId: "purpose", value: "Purpose", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+    { questionId: "sector", value: "Sector", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+    { questionId: "data_type", value: ["Type"], answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+    { questionId: "user_group", value: "Group", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+    { questionId: "user_impact", value: "Impact", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+    { questionId: "decision_role", value: "Role", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+    { questionId: "human_oversight", value: "Oversight", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+    { questionId: "external_llm_usage", value: false, answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+  ] as WizardAnswer[];
 
   const command = new SubmitWizardCommand(
     "assessment-123",
@@ -143,7 +143,7 @@ describe("SubmitWizardHandler", () => {
       command.assessmentId,
       command.organizationId,
       command.ownerId,
-      { ...validAnswers, purpose: "" },
+      [...validAnswers.filter(a => a.questionId !== "purpose"), { questionId: "purpose", value: "", answerState: "ANSWERED" as any, updatedAt: "2026-07-31T00:00:00.000Z" }],
       command.correlationId,
       command.authorization,
     );
@@ -161,7 +161,7 @@ describe("SubmitWizardHandler", () => {
       command.assessmentId,
       command.organizationId,
       command.ownerId,
-      { ...validAnswers, human_oversight: "" },
+      [...validAnswers.filter(a => a.questionId !== "human_oversight"), { questionId: "human_oversight", value: "", answerState: "ANSWERED" as any, updatedAt: "2026-07-31T00:00:00.000Z" }],
       command.correlationId,
       command.authorization,
     );

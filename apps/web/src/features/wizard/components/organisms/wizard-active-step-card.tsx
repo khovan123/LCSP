@@ -19,7 +19,6 @@ import {
 } from "@/features/wizard/config/wizard-config";
 import {
   sectionCardClassName,
-  toBooleanSelectValue,
 } from "@/features/wizard/lib/wizard-form";
 import { t } from "@/features/wizard/lib/wizard-i18n";
 import type { WizardHelperKey } from "@/features/wizard/types/wizard-form.types";
@@ -124,11 +123,20 @@ export function WizardActiveStepCard({
         {currentStep === 1 ? (
           <>
             <WizardTextareaField
-              name="purpose"
+              name="businessProcess"
               disabled={effectiveIsReadOnly}
-              labelKey="pages.wizard.fields.purposeLabel"
-              descriptionKey="pages.wizard.fields.purposeDescription"
-              placeholderKey="pages.wizard.fields.purposePlaceholder"
+              labelKey="pages.wizard.fields.businessProcessLabel"
+              descriptionKey="pages.wizard.fields.businessProcessDescription"
+              placeholderKey="pages.wizard.fields.businessProcessPlaceholder"
+              onBlur={onFieldBlur}
+              onValueChange={onFieldChange}
+            />
+            <WizardTextareaField
+              name="aiPurpose"
+              disabled={effectiveIsReadOnly}
+              labelKey="pages.wizard.fields.aiPurposeLabel"
+              descriptionKey="pages.wizard.fields.aiPurposeDescription"
+              placeholderKey="pages.wizard.fields.aiPurposePlaceholder"
               onBlur={onFieldBlur}
               onValueChange={onFieldChange}
             />
@@ -147,7 +155,7 @@ export function WizardActiveStepCard({
         {currentStep === 2 ? (
           <>
             <WizardCheckboxField
-              name="data_type"
+              name="dataTypes"
               disabled={effectiveIsReadOnly}
               labelKey="pages.wizard.fields.dataTypeLabel"
               descriptionKey="pages.wizard.fields.dataTypeDescription"
@@ -155,17 +163,17 @@ export function WizardActiveStepCard({
               onBlur={onFieldBlur}
               onValueChange={onFieldChange}
             />
-            <WizardSelectField
-              name="user_group"
+            <WizardCheckboxField
+              name="affectedSubjects"
               disabled={effectiveIsReadOnly}
-              labelKey="pages.wizard.fields.userGroupLabel"
-              descriptionKey="pages.wizard.fields.userGroupDescription"
+              labelKey="pages.wizard.fields.affectedSubjectsLabel"
+              descriptionKey="pages.wizard.fields.affectedSubjectsDescription"
               onBlur={onFieldBlur}
               onValueChange={onFieldChange}
-              options={selectOptions.userGroup}
+              options={checkboxOptions.affectedPeople}
             />
             <WizardSelectField
-              name="user_impact"
+              name="userImpact"
               disabled={effectiveIsReadOnly}
               labelKey="pages.wizard.fields.userImpactLabel"
               descriptionKey="pages.wizard.fields.userImpactDescription"
@@ -180,7 +188,7 @@ export function WizardActiveStepCard({
           <>
             <div className="space-y-3">
               <WizardSelectField
-                name="decision_role"
+                name="decisionRole"
                 disabled={effectiveIsReadOnly}
                 labelKey="pages.wizard.fields.decisionRoleLabel"
                 descriptionKey="pages.wizard.fields.decisionRoleDescription"
@@ -191,13 +199,13 @@ export function WizardActiveStepCard({
               />
               <WizardHelperButton onClick={() => onHelperOpen("decision")} />
             </div>
-            {answers.decision_role !== "NO_AUTONOMOUS_DECISION" ? (
+            {answers.decisionRole !== "NO_DECISION_SUPPORT" ? (
               <div className="space-y-3">
                 <WizardSelectField
-                  name="human_oversight"
+                  name="humanReview"
                   disabled={effectiveIsReadOnly}
-                  labelKey="pages.wizard.fields.humanOversightLabel"
-                  descriptionKey="pages.wizard.fields.humanOversightDescription"
+                  labelKey="pages.wizard.fields.humanReviewLabel"
+                  descriptionKey="pages.wizard.fields.humanReviewDescription"
                   onBlur={onFieldBlur}
                   onValueChange={onFieldChange}
                   options={selectOptions.humanOversight}
@@ -211,18 +219,12 @@ export function WizardActiveStepCard({
         {currentStep === 4 ? (
           <div className="space-y-3">
             <WizardSelectField
-              name="external_llm_usage"
+              name="externalLlmUsage"
               disabled={effectiveIsReadOnly}
               labelKey="pages.wizard.fields.externalLlmUsageLabel"
               descriptionKey="pages.wizard.fields.externalLlmUsageDescription"
               onBlur={onFieldBlur}
               onValueChange={onFieldChange}
-              fromInputValue={(value) => value === "yes"}
-              toInputValue={(value) =>
-                toBooleanSelectValue(
-                  typeof value === "boolean" ? value : undefined,
-                )
-              }
               options={selectOptions.externalProvider}
             />
             <WizardHelperButton onClick={() => onHelperOpen("provider")} />
@@ -230,25 +232,82 @@ export function WizardActiveStepCard({
         ) : null}
 
         {currentStep === 5 ? (
+          <div className="space-y-3">
+            <WizardCheckboxField
+              name="deploymentContext"
+              disabled={effectiveIsReadOnly}
+              labelKey="pages.wizard.fields.deploymentContextLabel"
+              descriptionKey="pages.wizard.fields.deploymentContextDescription"
+              onBlur={onFieldBlur}
+              onValueChange={onFieldChange}
+              options={checkboxOptions.deploymentContext}
+            />
+            <WizardHelperButton onClick={() => onHelperOpen("deployment")} />
+          </div>
+        ) : null}
+
+        {currentStep === 6 ? (
           <>
-            <WizardSelectField
-              name="biometric_indicator"
-              disabled={effectiveIsReadOnly}
-              labelKey="pages.wizard.fields.biometricIndicatorLabel"
-              descriptionKey="pages.wizard.fields.biometricIndicatorDescription"
-              onBlur={onFieldBlur}
-              onValueChange={onFieldChange}
-              options={selectOptions.yesNoUnknown}
-            />
-            <WizardSelectField
-              name="high_impact_indicator"
-              disabled={effectiveIsReadOnly}
-              labelKey="pages.wizard.fields.highImpactIndicatorLabel"
-              descriptionKey="pages.wizard.fields.highImpactIndicatorDescription"
-              onBlur={onFieldBlur}
-              onValueChange={onFieldChange}
-              options={selectOptions.yesNoUnknown}
-            />
+            <div className="space-y-3">
+              <WizardSelectField
+                name="specialCategoryData"
+                disabled={effectiveIsReadOnly}
+                labelKey="pages.wizard.fields.specialCategoryDataLabel"
+                descriptionKey="pages.wizard.fields.specialCategoryDataDescription"
+                onBlur={onFieldBlur}
+                onValueChange={onFieldChange}
+                options={selectOptions.yesNoUnknown}
+              />
+              <WizardHelperButton onClick={() => onHelperOpen("specialCategory")} />
+            </div>
+            <div className="space-y-3">
+              <WizardSelectField
+                name="biometricData"
+                disabled={effectiveIsReadOnly}
+                labelKey="pages.wizard.fields.biometricIndicatorLabel"
+                descriptionKey="pages.wizard.fields.biometricIndicatorDescription"
+                onBlur={onFieldBlur}
+                onValueChange={onFieldChange}
+                options={selectOptions.yesNoUnknown}
+              />
+              <WizardHelperButton onClick={() => onHelperOpen("biometric")} />
+            </div>
+            <div className="space-y-3">
+              <WizardCheckboxField
+                name="highImpactIndicators"
+                disabled={effectiveIsReadOnly}
+                labelKey="pages.wizard.fields.highImpactIndicatorLabel"
+                descriptionKey="pages.wizard.fields.highImpactIndicatorDescription"
+                onBlur={onFieldBlur}
+                onValueChange={onFieldChange}
+                options={checkboxOptions.highImpactIndicators}
+              />
+              <WizardHelperButton onClick={() => onHelperOpen("highImpact")} />
+            </div>
+            <div className="space-y-3">
+              <WizardCheckboxField
+                name="transparencyIndicators"
+                disabled={effectiveIsReadOnly}
+                labelKey="pages.wizard.fields.transparencyIndicatorsLabel"
+                descriptionKey="pages.wizard.fields.transparencyIndicatorsDescription"
+                onBlur={onFieldBlur}
+                onValueChange={onFieldChange}
+                options={checkboxOptions.transparencyIndicators}
+              />
+              <WizardHelperButton onClick={() => onHelperOpen("transparency")} />
+            </div>
+            <div className="space-y-3">
+              <WizardCheckboxField
+                name="prohibitedRiskSignals"
+                disabled={effectiveIsReadOnly}
+                labelKey="pages.wizard.fields.prohibitedRiskSignalsLabel"
+                descriptionKey="pages.wizard.fields.prohibitedRiskSignalsDescription"
+                onBlur={onFieldBlur}
+                onValueChange={onFieldChange}
+                options={checkboxOptions.prohibitedRiskSignals}
+              />
+              <WizardHelperButton onClick={() => onHelperOpen("prohibited")} />
+            </div>
           </>
         ) : null}
       </CardContent>

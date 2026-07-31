@@ -22,7 +22,7 @@ import {
   submitWizard,
 } from "./wizard-client";
 import { apiQueryKeys } from "./query-keys";
-import type { WizardAnswers } from "@/features/wizard/types/wizard.types";
+import type { WizardAnswer } from "@lcsp/contracts/wizard";
 
 export function useClassificationStatusQuery(assessmentId: string) {
   return useQuery({
@@ -50,13 +50,13 @@ export function useWizardAssessmentQuery(assessmentId: string) {
 
 export function useSaveWizardDraftMutation(assessmentId: string) {
   return useMutation({
-    mutationFn: (answers: WizardAnswers) => saveWizardDraft(assessmentId, answers),
+    mutationFn: (answers: WizardAnswer[]) => saveWizardDraft(assessmentId, answers),
   });
 }
 
 export function useSubmitWizardMutation(assessmentId: string) {
   return useMutation({
-    mutationFn: (answers: WizardAnswers) => submitWizard(assessmentId, answers),
+    mutationFn: (answers: WizardAnswer[]) => submitWizard(assessmentId, answers),
   });
 }
 

@@ -34,7 +34,9 @@ import { AuditWriterService } from "../../../../../platform/audit/audit-writer.s
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import { Prisma } from "@prisma/client";
 import { WizardValidatorService } from "../../services/wizard/wizard-validator.service.js";
+
 
 @CommandHandler(SubmitWizardCommand)
 export class SubmitWizardHandler implements ICommandHandler<
@@ -80,9 +82,13 @@ export class SubmitWizardHandler implements ICommandHandler<
     }
 
     // 3. Merge answers and validate
-    const mergedAnswers = profile
-      ? { ...profile.answers, ...answers }
-      : answers;
+    const existingAnswersMap = new Map(
+      (profile?.answers ?? []).map((a) => [a.questionId, a]),
+    );
+    for (const answer of answers) {
+      existingAnswersMap.set(answer.questionId, answer);
+    }
+    const mergedAnswers = Array.from(existingAnswersMap.values());
 
     const validationErrors = this.wizardValidator.validate(mergedAnswers);
     if (validationErrors.length > 0) {
@@ -108,7 +114,7 @@ export class SubmitWizardHandler implements ICommandHandler<
         update: {
           status: toPrismaWizardStatus(WIZARD_STATUS_CODES.submitted),
           submittedAt,
-          answers: mergedAnswers,
+          answers: mergedAnswers as unknown as Prisma.InputJsonArray,
           version,
         },
         create: {
@@ -118,7 +124,7 @@ export class SubmitWizardHandler implements ICommandHandler<
           ownerId,
           version,
           status: toPrismaWizardStatus(WIZARD_STATUS_CODES.submitted),
-          answers: mergedAnswers,
+          answers: mergedAnswers as unknown as Prisma.InputJsonArray,
           submittedAt,
         },
       });

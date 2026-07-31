@@ -321,6 +321,7 @@ export const viPages = {
       dataUsers: "Dữ liệu và người bị ảnh hưởng",
       decision: "Vai trò trong quyết định",
       provider: "Sử dụng AI bên ngoài",
+      deployment: "Môi trường triển khai",
       risk: "Tín hiệu cần lưu ý thêm",
     },
     fields: {
@@ -340,20 +341,24 @@ export const viPages = {
         "Kết quả AI có thể ảnh hưởng tới một quyết định quan trọng về một người không?",
       preDecisionImportanceDescription:
         "Ví dụ: tuyển dụng, tiếp cận dịch vụ, đủ điều kiện, định giá hoặc kết quả phục vụ.",
-      purposeLabel: "Hệ thống này đang hỗ trợ mục đích nghiệp vụ nào?",
-      purposeDescription:
-        "Mô tả nhiệm vụ chính bằng ngôn ngữ công việc hằng ngày.",
-      purposePlaceholder:
+      businessProcessLabel: "Hệ thống này đang hỗ trợ quy trình nghiệp vụ nào?",
+      businessProcessDescription:
+        "Mô tả quy trình nghiệp vụ chính bằng ngôn ngữ công việc hằng ngày.",
+      businessProcessPlaceholder:
         "Ví dụ: Hỗ trợ nhóm chăm sóc khách hàng soạn phản hồi cho yêu cầu hỗ trợ.",
+      aiPurposeLabel: "AI đóng vai trò gì trong quy trình này?",
+      aiPurposeDescription:
+        "Mô tả vai trò cụ thể của hệ thống AI trong quy trình được nêu ở trên.",
+      aiPurposePlaceholder:
+        "Ví dụ: Tóm tắt lịch sử hội thoại và đề xuất 3 câu trả lời dự kiến.",
       sectorLabel: "Bối cảnh nghiệp vụ nào phù hợp nhất với hệ thống này?",
       sectorDescription: "Chọn bối cảnh chính gần nhất cho assessment này.",
       dataTypeLabel: "Hệ thống dùng hoặc phân tích những loại dữ liệu nào?",
       dataTypeDescription:
         "Chọn tất cả nhóm dữ liệu có liên quan tới luồng AI này.",
-      userGroupLabel: "Nhóm nào bị ảnh hưởng trực tiếp bởi kết quả?",
-      userGroupDescription:
+      affectedSubjectsLabel: "Nhóm nào bị ảnh hưởng trực tiếp bởi kết quả?",
+      affectedSubjectsDescription:
         "Chọn nhóm người bị tác động trực tiếp nhất bởi kết quả của hệ thống.",
-      userGroupPlaceholder: "Thêm ghi chú ngắn nếu còn nhóm bị ảnh hưởng khác.",
       userImpactLabel: "Mức độ ảnh hưởng tới những người đó là bao nhiêu?",
       userImpactDescription:
         "Hãy nghĩ tới việc kết quả có thay đổi quyền truy cập, cơ hội, cách phục vụ hoặc cách đối xử hay không.",
@@ -363,9 +368,9 @@ export const viPages = {
         "Chọn phương án phản ánh đúng nhất mức độ ảnh hưởng của kết quả tới đầu ra cuối cùng.",
       decisionRoleExamples:
         "Ví dụ: một gợi ý để nhân sự xem lại khác với một kết quả tự quyết định đầu ra.",
-      humanOversightLabel:
+      humanReviewLabel:
         "Con người kiểm tra ở đâu trước khi kết quả có hiệu lực?",
-      humanOversightDescription:
+      humanReviewDescription:
         "Câu hỏi này xuất hiện khi kết quả AI vượt quá vai trò hỗ trợ nền.",
       externalLlmUsageLabel:
         "Hệ thống có gọi dịch vụ AI bên ngoài như OpenAI, Anthropic, Google hoặc nhà cung cấp khác không?",
@@ -379,6 +384,14 @@ export const viPages = {
         "Luồng này có liên quan tới tuyển dụng, giáo dục, tín dụng, y tế, dịch vụ công hoặc một bối cảnh quan trọng tương tự không?",
       highImpactIndicatorDescription:
         "Thông tin này giúp LCSP gắn cờ các luồng cần được theo dõi kỹ hơn ở bước sau.",
+      deploymentContextLabel: "Ứng dụng này hướng tới ai sử dụng?",
+      deploymentContextDescription: "Xác định xem ứng dụng được sử dụng nội bộ hay cung cấp ra ngoài cho người dùng khác.",
+      specialCategoryDataLabel: "Dữ liệu có chứa các danh mục đặc biệt nhạy cảm không?",
+      specialCategoryDataDescription: "Ví dụ: quan điểm chính trị, tôn giáo, thông tin công đoàn, v.v.",
+      transparencyIndicatorsLabel: "Có tương tác trực tiếp hoặc tạo ra nội dung AI không?",
+      transparencyIndicatorsDescription: "Cho biết người dùng có biết họ đang tương tác với AI hay nội dung do AI tạo ra không.",
+      prohibitedRiskSignalsLabel: "Có dấu hiệu rủi ro không thể chấp nhận không?",
+      prohibitedRiskSignalsDescription: "Các hệ thống đánh giá xã hội, thao túng tiềm thức hoặc suy diễn đặc điểm nhạy cảm bị cấm.",
     },
     options: {
       yes: "Có",
@@ -419,6 +432,21 @@ export const viPages = {
         "Kết quả thường có hiệu lực mà không có bước kiểm tra thực chất",
       humanOversightNotApplicable:
         "Không áp dụng vì AI không ảnh hưởng tới quyết định cuối cùng",
+      externalNone: "Không gọi dịch vụ ngoài",
+      externalPossible: "Có khả năng gọi dịch vụ ngoài",
+      externalConfirmed: "Xác nhận có dùng AI bên ngoài",
+      deploymentInternal: "Sử dụng nội bộ",
+      deploymentExternal: "Triển khai ra bên ngoài",
+      highImpactRecruiting: "Tuyển dụng và nhân sự",
+      highImpactCredit: "Tín dụng và tài chính",
+      highImpactEducation: "Giáo dục",
+      highImpactHealthcare: "Chăm sóc sức khỏe",
+      transparencyDirectInteraction: "Tương tác trực tiếp (Chatbot, v.v.)",
+      transparencyContentGeneration: "Tạo nội dung (Văn bản, Hình ảnh, v.v.)",
+      prohibitedTracking: "Theo dõi không minh bạch",
+      prohibitedManipulation: "Thao túng hành vi người dùng",
+      prohibitedScoring: "Chấm điểm xã hội",
+      prohibitedSensitiveInference: "Suy diễn các đặc điểm nhạy cảm",
     },
     helpers: {
       decisionTitle: "Cách trả lời câu hỏi về vai trò trong quyết định",
@@ -438,18 +466,28 @@ export const viPages = {
       submitFailed:
         "Không thể gửi Wizard. Hãy kiểm tra lại các câu trả lời đang được đánh dấu rồi thử lại.",
       alreadySubmitted: "Wizard này đã được gửi và hiện ở chế độ chỉ xem.",
-      purposeRequired: "Hãy mô tả mục đích nghiệp vụ chính trước khi tiếp tục.",
+      preAiScopeRequired: "Vui lòng cho biết hệ thống này có dùng AI hay không trước khi tiếp tục.",
+      preAffectedPeopleRequired: "Vui lòng chọn đối tượng có thể bị ảnh hưởng trước khi tiếp tục.",
+      prePersonalDataRequired: "Vui lòng cho biết có xử lý dữ liệu cá nhân hay không trước khi tiếp tục.",
+      preDecisionImportanceRequired: "Vui lòng cho biết kết quả AI có ảnh hưởng tới quyết định quan trọng không trước khi tiếp tục.",
+      businessProcessRequired: "Hãy mô tả quy trình nghiệp vụ chính trước khi tiếp tục.",
+      aiPurposeRequired: "Hãy mô tả mục đích của hệ thống AI trước khi tiếp tục.",
       sectorRequired: "Hãy chọn bối cảnh nghiệp vụ chính trước khi tiếp tục.",
-      dataTypeRequired: "Hãy chọn ít nhất một nhóm dữ liệu trước khi tiếp tục.",
-      userGroupRequired:
+      dataTypesRequired: "Hãy chọn ít nhất một nhóm dữ liệu trước khi tiếp tục.",
+      affectedSubjectsRequired:
         "Hãy chọn nhóm bị ảnh hưởng trực tiếp trước khi tiếp tục.",
       userImpactRequired: "Hãy chọn mức độ ảnh hưởng trước khi tiếp tục.",
       decisionRoleRequired:
         "Hãy chọn mức độ ảnh hưởng của kết quả AI tới quyết định cuối cùng.",
-      humanOversightRequired:
+      humanReviewRequired:
         "Hãy mô tả nơi con người kiểm tra kết quả trước khi tiếp tục.",
-      externalProviderRequired:
+      externalLlmUsageRequired:
         "Hãy xác nhận hệ thống có dùng nhà cung cấp AI bên ngoài hay không trước khi tiếp tục.",
+      deploymentContextRequired: "Hãy chọn đối tượng sử dụng ứng dụng trước khi tiếp tục.",
+      specialCategoryDataRequired: "Hãy xác nhận có xử lý dữ liệu nhạy cảm đặc biệt hay không trước khi tiếp tục.",
+      biometricDataRequired: "Hãy xác nhận có xử lý dữ liệu sinh trắc học hay không trước khi tiếp tục.",
+      highImpactIndicatorsRequired: "Hãy chọn các nhóm rủi ro cao nếu có trước khi tiếp tục.",
+      prohibitedRiskSignalsRequired: "Hãy chọn các nhóm rủi ro bị cấm nếu có trước khi tiếp tục.",
     },
   },
   readiness: {

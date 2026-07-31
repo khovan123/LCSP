@@ -1,4 +1,6 @@
 import type { ZodError } from "zod";
+import { ANSWER_STATES } from "@lcsp/contracts/wizard";
+import type { WizardAnswer, AnswerState } from "@lcsp/contracts/wizard";
 
 import {
   selectOptions,
@@ -32,6 +34,36 @@ export function getHelperCopy(helperKey: WizardHelperKey) {
       return {
         titleKey: "pages.wizard.helpers.providerTitle" as const,
         bodyKey: "pages.wizard.helpers.providerBody" as const,
+      };
+    case "biometric":
+      return {
+        titleKey: "pages.wizard.helpers.biometricTitle" as const,
+        bodyKey: "pages.wizard.helpers.biometricBody" as const,
+      };
+    case "specialCategory":
+      return {
+        titleKey: "pages.wizard.helpers.specialCategoryTitle" as const,
+        bodyKey: "pages.wizard.helpers.specialCategoryBody" as const,
+      };
+    case "highImpact":
+      return {
+        titleKey: "pages.wizard.helpers.highImpactTitle" as const,
+        bodyKey: "pages.wizard.helpers.highImpactBody" as const,
+      };
+    case "prohibited":
+      return {
+        titleKey: "pages.wizard.helpers.prohibitedTitle" as const,
+        bodyKey: "pages.wizard.helpers.prohibitedBody" as const,
+      };
+    case "transparency":
+      return {
+        titleKey: "pages.wizard.helpers.transparencyTitle" as const,
+        bodyKey: "pages.wizard.helpers.transparencyBody" as const,
+      };
+    case "deployment":
+      return {
+        titleKey: "pages.wizard.helpers.deploymentTitle" as const,
+        bodyKey: "pages.wizard.helpers.deploymentBody" as const,
       };
     default:
       return {
@@ -130,21 +162,63 @@ export function clearLocalDraft(assessmentId: string) {
 export function normalizeAnswers(answers: WizardAnswers): WizardAnswers {
   return {
     ...answers,
-    data_type: Array.isArray(answers.data_type) ? answers.data_type : [],
+    dataTypes: Array.isArray(answers.dataTypes) ? answers.dataTypes : [],
+    affectedSubjects: Array.isArray(answers.affectedSubjects) ? answers.affectedSubjects : [],
+    highImpactIndicators: Array.isArray(answers.highImpactIndicators) ? answers.highImpactIndicators : [],
+    transparencyIndicators: Array.isArray(answers.transparencyIndicators) ? answers.transparencyIndicators : [],
+    prohibitedRiskSignals: Array.isArray(answers.prohibitedRiskSignals) ? answers.prohibitedRiskSignals : [],
+    deploymentContext: Array.isArray(answers.deploymentContext) ? answers.deploymentContext : [],
     ps_002_affected_people: Array.isArray(answers.ps_002_affected_people)
       ? answers.ps_002_affected_people
       : [],
   };
 }
 
-export function serializeAnswers(answers: WizardAnswers): WizardAnswers {
-  return {
-    ...answers,
-    human_oversight:
-      answers.decision_role === "NO_AUTONOMOUS_DECISION"
-        ? "NOT_APPLICABLE"
-        : answers.human_oversight,
-  };
+export function serializeAnswers(answers: WizardAnswers): WizardAnswer[] {
+  const serialized: WizardAnswer[] = [];
+  const now = new Date().toISOString();
+
+  // Iterate over all answers and convert to WizardAnswer
+  Object.entries(answers).forEach(([key, value]) => {
+    if (value === undefined) return;
+
+    if (key === "decisionRole" && value === "NO_DECISION_SUPPORT") {
+      serialized.push({
+        questionId: key,
+        value,
+        answerState: ANSWER_STATES.answered,
+        updatedAt: now,
+      });
+      serialized.push({
+        questionId: "humanReview",
+        value: "NOT_APPLICABLE",
+        answerState: ANSWER_STATES.answered,
+        updatedAt: now,
+      });
+    } else if (key === "humanReview" && answers.decisionRole === "NO_DECISION_SUPPORT") {
+      // Handled above
+      return;
+    } else {
+      let state: AnswerState = ANSWER_STATES.answered;
+      const finalValue = value;
+      if (value === "unknown") {
+        state = ANSWER_STATES.explicitUnknown;
+      } else if (Array.isArray(value) && value.includes("unknown")) {
+        // if array includes unknown, the whole array might just be unknown, but the contract says value is unknown.
+        // Actually, if it's an array and user selects unknown, WIZARD-MAPPING says value: "unknown" or value: ["unknown"]?
+        // Let's keep it simple: if "unknown" is in the array, it's explicitUnknown
+        state = ANSWER_STATES.explicitUnknown;
+      }
+      serialized.push({
+        questionId: key,
+        value: finalValue,
+        answerState: state,
+        updatedAt: now,
+      });
+    }
+  });
+
+  return serialized;
 }
 
 export function toBooleanSelectValue(value: boolean | undefined) {
@@ -162,10 +236,10 @@ export function toBooleanSelectValue(value: boolean | undefined) {
 export function getSummaryItems(answers: WizardAnswers) {
   const items: Array<{ label: string; value: string }> = [];
 
-  if (answers.purpose) {
+  if (answers.businessProcess) {
     items.push({
-      label: t("pages.wizard.fields.purposeLabel"),
-      value: answers.purpose,
+      label: t("pages.wizard.fields.businessProcessLabel"),
+      value: answers.businessProcess,
     });
   }
   if (answers.sector) {
@@ -174,70 +248,67 @@ export function getSummaryItems(answers: WizardAnswers) {
       value: getOptionDisplayLabel(selectOptions.sector, answers.sector),
     });
   }
-  if (answers.data_type?.length) {
+  if (answers.dataTypes?.length) {
     items.push({
       label: t("pages.wizard.fields.dataTypeLabel"),
-      value: answers.data_type.join(", "),
+      value: answers.dataTypes.join(", "),
     });
   }
-  if (answers.user_group) {
+  if (answers.affectedSubjects?.length) {
     items.push({
-      label: t("pages.wizard.fields.userGroupLabel"),
-      value: getOptionDisplayLabel(selectOptions.userGroup, answers.user_group),
+      label: t("pages.wizard.fields.affectedSubjectsLabel"),
+      value: answers.affectedSubjects.join(", "),
     });
   }
-  if (answers.user_impact) {
+  if (answers.userImpact) {
     items.push({
       label: t("pages.wizard.fields.userImpactLabel"),
       value: getOptionDisplayLabel(
         selectOptions.userImpact,
-        answers.user_impact,
+        answers.userImpact,
       ),
     });
   }
-  if (answers.decision_role) {
+  if (answers.decisionRole) {
     items.push({
       label: t("pages.wizard.fields.decisionRoleLabel"),
       value: getOptionDisplayLabel(
         selectOptions.decisionRole,
-        answers.decision_role,
+        answers.decisionRole,
       ),
     });
   }
-  if (answers.human_oversight) {
+  if (answers.humanReview) {
     items.push({
-      label: t("pages.wizard.fields.humanOversightLabel"),
+      label: t("pages.wizard.fields.humanReviewLabel"),
       value: getOptionDisplayLabel(
         selectOptions.humanOversight,
-        answers.human_oversight,
+        answers.humanReview,
       ),
     });
   }
-  if (typeof answers.external_llm_usage === "boolean") {
+  if (answers.externalLlmUsage) {
     items.push({
       label: t("pages.wizard.fields.externalLlmUsageLabel"),
       value: getOptionDisplayLabel(
         selectOptions.externalProvider,
-        toBooleanSelectValue(answers.external_llm_usage),
+        answers.externalLlmUsage,
       ),
     });
   }
-  if (answers.biometric_indicator) {
+  if (answers.biometricData) {
     items.push({
       label: t("pages.wizard.fields.biometricIndicatorLabel"),
       value: getOptionDisplayLabel(
         selectOptions.yesNoUnknown,
-        answers.biometric_indicator,
+        answers.biometricData,
       ),
     });
   }
-  if (answers.high_impact_indicator) {
+  if (answers.highImpactIndicators?.length) {
     items.push({
       label: t("pages.wizard.fields.highImpactIndicatorLabel"),
-      value: getOptionDisplayLabel(
-        selectOptions.yesNoUnknown,
-        answers.high_impact_indicator,
-      ),
+      value: answers.highImpactIndicators.join(", "),
     });
   }
 

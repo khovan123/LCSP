@@ -1,4 +1,6 @@
 import { Injectable } from "@nestjs/common";
+import type { WizardAnswer } from "@lcsp/contracts/wizard";
+import { ANSWER_STATES } from "@lcsp/contracts/wizard";
 
 export interface ValidationError {
   field: string;
@@ -7,66 +9,72 @@ export interface ValidationError {
 
 @Injectable()
 export class WizardValidatorService {
-  validate(answers: Record<string, any>): ValidationError[] {
+  validate(answers: WizardAnswer[]): ValidationError[] {
     const errors: ValidationError[] = [];
 
-    if (!this.isValidString(answers.purpose)) {
+    const getAnswer = (questionId: string) =>
+      answers.find((a) => a.questionId === questionId);
+
+    const businessProcess = getAnswer("businessProcess");
+    if (!this.isValidStringOrUnknown(businessProcess)) {
       errors.push({
-        field: "purpose",
+        field: "businessProcess",
         message:
-          "Please describe the primary business purpose of your AI system.",
+          "Please describe the primary business process of your AI system.",
       });
     }
 
-    if (!this.isValidString(answers.sector)) {
+    const aiPurpose = getAnswer("aiPurpose");
+    if (!this.isValidStringOrUnknown(aiPurpose)) {
       errors.push({
-        field: "sector",
-        message:
-          "Please select the regulated sector your AI system operates in.",
+        field: "aiPurpose",
+        message: "Please describe the primary purpose of your AI system.",
       });
     }
 
-    if (!this.isValidArray(answers.data_type)) {
+    const dataTypes = getAnswer("dataTypes");
+    if (!this.isValidArrayOrUnknown(dataTypes)) {
       errors.push({
-        field: "data_type",
+        field: "dataTypes",
         message:
           "Please specify at least one type of data your AI system processes.",
       });
     }
 
-    if (!this.isValidString(answers.user_group)) {
+    const affectedSubjects = getAnswer("affectedSubjects");
+    if (!this.isValidArrayOrUnknown(affectedSubjects)) {
       errors.push({
-        field: "user_group",
+        field: "affectedSubjects",
         message:
-          "Please describe the group of users affected by your AI system.",
+          "Please describe the group of subjects affected by your AI system.",
       });
     }
 
-    if (!this.isValidString(answers.user_impact)) {
+    const decisionRole = getAnswer("decisionRole");
+    if (
+      !decisionRole ||
+      decisionRole.answerState === ANSWER_STATES.explicitUnknown ||
+      !this.isValidString(decisionRole.value)
+    ) {
       errors.push({
-        field: "user_impact",
-        message: "Please describe how your AI system impacts those users.",
-      });
-    }
-
-    if (!this.isValidString(answers.decision_role)) {
-      errors.push({
-        field: "decision_role",
+        field: "decisionRole",
         message:
-          "Please indicate whether your AI system makes autonomous decisions.",
+          "Please indicate whether your AI system makes autonomous decisions. Unknown is not permitted for this field.",
       });
     }
 
-    if (!this.isValidString(answers.human_oversight)) {
+    const humanReview = getAnswer("humanReview");
+    if (!this.isValidStringOrUnknown(humanReview)) {
       errors.push({
-        field: "human_oversight",
+        field: "humanReview",
         message: "Please describe the human oversight mechanism in place.",
       });
     }
 
-    if (!this.isValidBoolean(answers.external_llm_usage)) {
+    const externalLlmUsage = getAnswer("externalLlmUsage");
+    if (!this.isValidStringOrUnknown(externalLlmUsage)) {
       errors.push({
-        field: "external_llm_usage",
+        field: "externalLlmUsage",
         message:
           "Please indicate whether your AI system uses an external AI provider.",
       });
@@ -75,15 +83,23 @@ export class WizardValidatorService {
     return errors;
   }
 
+  private isValidStringOrUnknown(answer?: WizardAnswer): boolean {
+    if (!answer) return false;
+    if (answer.answerState === ANSWER_STATES.explicitUnknown) return true;
+    return this.isValidString(answer.value);
+  }
+
+  private isValidArrayOrUnknown(answer?: WizardAnswer): boolean {
+    if (!answer) return false;
+    if (answer.answerState === ANSWER_STATES.explicitUnknown) return true;
+    return this.isValidArray(answer.value);
+  }
+
   private isValidString(value: any): boolean {
     return typeof value === "string" && value.trim().length > 0;
   }
 
   private isValidArray(value: any): boolean {
     return Array.isArray(value) && value.length > 0;
-  }
-
-  private isValidBoolean(value: any): boolean {
-    return typeof value === "boolean";
   }
 }
