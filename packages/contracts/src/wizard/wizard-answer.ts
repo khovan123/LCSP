@@ -3,6 +3,11 @@ export const ANSWER_STATES = {
   explicitUnknown: "EXPLICIT_UNKNOWN",
 } as const;
 
+export const WIZARD_UNKNOWN_SENTINELS = {
+  unclear: "UNCLEAR",
+  unknown: "UNKNOWN",
+} as const;
+
 export type AnswerState = (typeof ANSWER_STATES)[keyof typeof ANSWER_STATES];
 
 export type WizardAnswer = {

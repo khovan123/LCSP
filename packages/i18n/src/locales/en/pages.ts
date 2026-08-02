@@ -501,6 +501,19 @@ export const enPages = {
     loadingDetail: "Checking the latest Wizard and evidence state.",
     errorTitle: "Unable to load readiness status",
     errorDetail: "Please try again in a moment.",
+    exportGeneratedTitle: "Wizard Readiness Export is ready",
+    exportGeneratedDetail:
+      "Readiness-only export version {version} was generated.",
+    exportBlockedTitle: "Readiness export blocked",
+    exportBlockedDetail:
+      "LCSP stopped this export because its content could imply a legal conclusion.",
+    exportErrorTitle: "Unable to generate readiness export",
+    exportErrorDetail: "Please review the readiness state and try again.",
+    exportHistoryTitle: "Wizard Readiness Export history",
+    exportHistoryLoading: "Loading readiness-only artifacts",
+    exportHistoryEmpty: "No readiness export has been generated yet.",
+    exportVersionLabel: "Version {version}",
+    exportUnavailable: "Download blocked",
     badgeReadinessOnly: "Readiness only",
     badgeLocked: "Locked",
     badgeReady: "Ready for the next gate",
@@ -513,6 +526,8 @@ export const enPages = {
     updatedAtLabel: "Updated",
     noMissingEvidence: "There are no missing readiness items at the moment.",
     noCompletedSteps: "No readiness milestones have been confirmed yet.",
+    unresolvedUnknownsTitle: "Information requiring verification",
+    noUnresolvedUnknowns: "No explicit unknown items are currently recorded.",
     completedSteps: {
       wizardProfile: "Wizard profile submitted",
       repositoryConnected: "Repository connected",
@@ -524,6 +539,9 @@ export const enPages = {
         "Wait for the repository scan to produce accepted technical evidence.",
     },
     actions: {
+      generateExport: "Generate readiness export",
+      generatingExport: "Generating export",
+      downloadExport: "Download PDF",
       backToWorkspace: "Back to workspace",
       openClassification: "Open classification status",
       openDocuments: "Open documents",

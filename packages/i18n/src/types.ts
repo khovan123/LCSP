@@ -351,7 +351,17 @@ export type PagesMessages = {
     submit: string;
     submitting: string;
   };
-  developerManagement: { pageTitle: string; pageDescription: string; inviteTitle: string; emailLabel: string; invite: string; membersTitle: string; scopeLabel: string; revoke: string; empty: string; };
+  developerManagement: {
+    pageTitle: string;
+    pageDescription: string;
+    inviteTitle: string;
+    emailLabel: string;
+    invite: string;
+    membersTitle: string;
+    scopeLabel: string;
+    revoke: string;
+    empty: string;
+  };
   wizard: {
     metadataTitle: string;
     metadataDescription: string;
@@ -531,6 +541,17 @@ export type PagesMessages = {
     loadingDetail: string;
     errorTitle: string;
     errorDetail: string;
+    exportGeneratedTitle: string;
+    exportGeneratedDetail: string;
+    exportBlockedTitle: string;
+    exportBlockedDetail: string;
+    exportErrorTitle: string;
+    exportErrorDetail: string;
+    exportHistoryTitle: string;
+    exportHistoryLoading: string;
+    exportHistoryEmpty: string;
+    exportVersionLabel: string;
+    exportUnavailable: string;
     badgeReadinessOnly: string;
     badgeLocked: string;
     badgeReady: string;
@@ -542,6 +563,8 @@ export type PagesMessages = {
     updatedAtLabel: string;
     noMissingEvidence: string;
     noCompletedSteps: string;
+    unresolvedUnknownsTitle: string;
+    noUnresolvedUnknowns: string;
     completedSteps: {
       wizardProfile: string;
       repositoryConnected: string;
@@ -552,6 +575,9 @@ export type PagesMessages = {
       technicalEvidence: string;
     };
     actions: {
+      generateExport: string;
+      generatingExport: string;
+      downloadExport: string;
       backToWorkspace: string;
       openClassification: string;
       openDocuments: string;

@@ -12,9 +12,15 @@ import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import {
+  READINESS_CLASSIFICATION_STATUSES,
+  READINESS_EXPORT_ARTIFACT_TYPES,
+  READINESS_EXPORT_BADGES,
+  READINESS_EXPORT_DOWNLOAD_STATES,
   READINESS_EXPORT_ERROR_CODES,
+  READINESS_EXPORT_LABELS,
   READINESS_EXPORT_STATUSES,
   WIZARD_EVENT_TYPES,
+  type WizardAnswer,
 } from "@lcsp/contracts/wizard";
 import { Prisma } from "@prisma/client";
 
@@ -34,8 +40,6 @@ import type {
 import { ReadinessEvaluatorService } from "../../services/wizard/readiness-evaluator.service.js";
 import { ReadinessExportGuardrailService } from "../../services/wizard/readiness-export-guardrail.service.js";
 import { GenerateReadinessExportCommand } from "./generate-readiness-export.command.js";
-
-const READINESS_EXPORT_LABEL = "Wizard Readiness Export";
 
 @CommandHandler(GenerateReadinessExportCommand)
 export class GenerateReadinessExportHandler implements ICommandHandler<
@@ -132,6 +136,9 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       hasRepositoryConnection: !!repositoryConnection,
       hasAcceptedTechnicalEvidence: false,
       wizardStatus,
+      wizardAnswers: Array.isArray(wizardProfile.answers)
+        ? (wizardProfile.answers as unknown as WizardAnswer[])
+        : [],
     });
     const content = this.buildContent(
       command,
@@ -139,13 +146,24 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       version,
       generatedAt,
       readiness.missing_evidence,
-      this.extractUnknowns(wizardProfile.answers),
+      readiness.unresolved_unknown_items,
       readiness.next_action,
     );
     const guardrailResult = this.guardrail.check(content);
     const status = guardrailResult.passed
       ? READINESS_EXPORT_STATUSES.generated
       : READINESS_EXPORT_STATUSES.blocked;
+    const responseContent = guardrailResult.passed
+      ? content
+      : this.buildContent(
+          command,
+          wizardProfile.version,
+          version,
+          generatedAt,
+          [],
+          [],
+          "Review the readiness information and retry the export.",
+        );
     const exportId = crypto.randomUUID();
 
     await this.prisma.$transaction(async (tx) => {
@@ -199,22 +217,41 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
     });
 
     return {
+      artifact_type: responseContent.artifact_type,
       export_id: exportId,
       assessment_id: command.assessmentId,
       owner_id: command.ownerId,
       status,
-      label: READINESS_EXPORT_LABEL,
+      label: responseContent.label,
+      badge: responseContent.badge,
+      title: responseContent.title,
+      preview: responseContent.preview,
+      metadata: responseContent.metadata,
+      readiness_only: true,
+      classification_status:
+        READINESS_CLASSIFICATION_STATUSES.lockedEvidenceRequired,
       classification_locked: true,
-      missing_evidence: content.missing_evidence,
-      unresolved_unknowns: content.unresolved_unknowns,
-      preparation_guidance: content.preparation_guidance,
+      missing_evidence: responseContent.missing_evidence,
+      unresolved_unknown_items: responseContent.unresolved_unknown_items,
+      preparation_guidance: responseContent.preparation_guidance,
+      next_steps: responseContent.next_steps,
       generated_at: generatedAt.toISOString(),
       version,
       correlation_id: command.correlationId,
+      download_state: guardrailResult.passed
+        ? READINESS_EXPORT_DOWNLOAD_STATES.ready
+        : READINESS_EXPORT_DOWNLOAD_STATES.blocked,
+      download_url: guardrailResult.passed
+        ? this.downloadUrl(command.assessmentId, exportId)
+        : null,
       ...(guardrailResult.blockedReason
         ? { blocked_reason: guardrailResult.blockedReason }
         : {}),
     };
+  }
+
+  private downloadUrl(assessmentId: string, exportId: string): string {
+    return `/assessments/${encodeURIComponent(assessmentId)}/wizard/readiness-exports/${encodeURIComponent(exportId)}/download`;
   }
 
   private buildContent(
@@ -223,26 +260,30 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
     version: number,
     generatedAt: Date,
     missingEvidence: ReadinessExportContent["missing_evidence"],
-    unresolvedUnknowns: string[],
+    unresolvedUnknowns: ReadinessExportContent["unresolved_unknown_items"],
     nextAction: string,
   ): ReadinessExportContent {
     return {
-      label: READINESS_EXPORT_LABEL,
-      badge: "READINESS_ONLY",
-      title: READINESS_EXPORT_LABEL,
+      artifact_type: READINESS_EXPORT_ARTIFACT_TYPES.wizardReadinessExport,
+      label: READINESS_EXPORT_LABELS.wizardReadinessExport,
+      badge: READINESS_EXPORT_BADGES.readinessOnly,
+      title: READINESS_EXPORT_LABELS.wizardReadinessExport,
       preview:
         "Readiness-only preparation summary for evidence collection and next steps.",
       metadata: {
-        label: READINESS_EXPORT_LABEL,
+        artifact_type: READINESS_EXPORT_ARTIFACT_TYPES.wizardReadinessExport,
+        label: READINESS_EXPORT_LABELS.wizardReadinessExport,
         readiness_only: true,
+        classification_status:
+          READINESS_CLASSIFICATION_STATUSES.lockedEvidenceRequired,
         assessment_id: command.assessmentId,
         wizard_profile_version: wizardProfileVersion,
-        owner_id: command.ownerId,
+        generated_by: command.ownerId,
         version,
         generated_at: generatedAt.toISOString(),
       },
       missing_evidence: missingEvidence,
-      unresolved_unknowns: unresolvedUnknowns,
+      unresolved_unknown_items: unresolvedUnknowns,
       preparation_guidance: [
         "Keep the wizard answers current while technical evidence is collected.",
         "Resolve unknown items before requesting downstream evaluation.",
@@ -254,26 +295,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
         "Review unresolved unknown items with the assessment owner.",
       ],
     };
-  }
-
-  private extractUnknowns(value: unknown, path = "answers"): string[] {
-    if (typeof value === "string") {
-      return /unknown|chưa rõ/i.test(value) ? [`${path}: ${value}`] : [];
-    }
-
-    if (Array.isArray(value)) {
-      return value.flatMap((item, index) =>
-        this.extractUnknowns(item, `${path}[${index}]`),
-      );
-    }
-
-    if (value !== null && typeof value === "object") {
-      return Object.entries(value as Record<string, unknown>).flatMap(
-        ([key, nested]) => this.extractUnknowns(nested, `${path}.${key}`),
-      );
-    }
-
-    return [];
   }
 
   private async assertManagerExportAction(

@@ -11,6 +11,10 @@ export type ReadinessStatusViewModel = {
     label: string;
     description: string;
   }>;
+  unresolvedUnknownItems: Array<{
+    questionId: string;
+    label: string;
+  }>;
   completedSteps: string[];
   nextAction: string;
   updatedAt: string;
@@ -28,6 +32,7 @@ type ReadinessStatusOutcome =
 type ReadinessPayload = {
   classification_locked?: unknown;
   missing_evidence?: unknown;
+  unresolved_unknown_items?: unknown;
   completed_steps?: unknown;
   next_action?: unknown;
   updated_at?: unknown;
@@ -49,6 +54,12 @@ export async function getReadinessStatus(
       data: {
         classificationLocked: payload.classification_locked,
         missingEvidence: payload.missing_evidence,
+        unresolvedUnknownItems: payload.unresolved_unknown_items.map(
+          (item) => ({
+            questionId: item.question_id,
+            label: item.label,
+          }),
+        ),
         completedSteps: payload.completed_steps,
         nextAction: payload.next_action,
         updatedAt: payload.updated_at,
@@ -74,14 +85,17 @@ export async function getReadinessStatus(
   };
 }
 
-function isReadinessPayload(
-  payload: unknown,
-): payload is {
+function isReadinessPayload(payload: unknown): payload is {
   classification_locked: boolean;
   missing_evidence: Array<{
     type: string;
     label: string;
     description: string;
+  }>;
+  unresolved_unknown_items: Array<{
+    question_id: string;
+    label: string;
+    answer_state: string;
   }>;
   completed_steps: string[];
   next_action: string;
@@ -102,6 +116,15 @@ function isReadinessPayload(
         typeof (item as { type?: unknown }).type === "string" &&
         typeof (item as { label?: unknown }).label === "string" &&
         typeof (item as { description?: unknown }).description === "string",
+    ) &&
+    Array.isArray(candidate.unresolved_unknown_items) &&
+    candidate.unresolved_unknown_items.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as { question_id?: unknown }).question_id === "string" &&
+        typeof (item as { label?: unknown }).label === "string" &&
+        typeof (item as { answer_state?: unknown }).answer_state === "string",
     ) &&
     Array.isArray(candidate.completed_steps) &&
     candidate.completed_steps.every((item) => typeof item === "string") &&

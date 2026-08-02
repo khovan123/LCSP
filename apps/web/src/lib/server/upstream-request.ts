@@ -24,6 +24,16 @@ export type UpstreamRequestResult = {
   problemCode?: string;
 };
 
+export type UpstreamBinaryRequestResult = {
+  bytes: Uint8Array | null;
+  contentDisposition: string | null;
+  contentType: string | null;
+  result: AppResult | null;
+  ok: boolean;
+  status: number;
+  problemCode?: string;
+};
+
 export function upstreamUrl(path: string): URL {
   return new URL(path, upstreamBaseUrl);
 }
@@ -32,20 +42,7 @@ export async function upstreamRequest(
   path: string | URL,
   init: UpstreamRequestInit = {},
 ): Promise<UpstreamRequestResult> {
-  const { bearerToken, headers, ...fetchInit } = init;
-  const requestHeaders = new Headers(headers);
-  if (bearerToken) {
-    requestHeaders.set("authorization", `Bearer ${bearerToken}`);
-  }
-
-  const response = await fetch(
-    typeof path === "string" ? upstreamUrl(path) : path,
-    {
-      cache: "no-store",
-      ...fetchInit,
-      headers: requestHeaders,
-    },
-  );
+  const response = await fetchUpstream(path, init);
   const result = toAppResult(await response.json().catch(() => null));
 
   return {
@@ -57,9 +54,42 @@ export async function upstreamRequest(
   };
 }
 
+export async function upstreamBinaryRequest(
+  path: string | URL,
+  init: UpstreamRequestInit = {},
+): Promise<UpstreamBinaryRequestResult> {
+  const response = await fetchUpstream(path, init);
+  if (!response.ok) {
+    const result = toAppResult(await response.json().catch(() => null));
+    return {
+      bytes: null,
+      contentDisposition: null,
+      contentType: response.headers.get("content-type"),
+      result,
+      ok: false,
+      status: response.status,
+      problemCode: getProblemCode(result),
+    };
+  }
+
+  return {
+    bytes: new Uint8Array(await response.arrayBuffer()),
+    contentDisposition: response.headers.get("content-disposition"),
+    contentType: response.headers.get("content-type"),
+    result: null,
+    ok: true,
+    status: response.status,
+  };
+}
+
 export function upstreamJson(
   upstream: Pick<UpstreamRequestResult, "result" | "status">,
 ) {
+  if (upstream.result === null) {
+    return problemJson(SHARED_ERROR_CODES.upstreamResponseInvalid, {
+      status: 502,
+    });
+  }
   return resultJson(upstream.result, { status: upstream.status });
 }
 
@@ -86,4 +116,21 @@ function toAppResult(payload: unknown): AppResult | null {
   return result.ok === true || result.ok === false
     ? (payload as AppResult)
     : null;
+}
+
+async function fetchUpstream(
+  path: string | URL,
+  init: UpstreamRequestInit,
+): Promise<Response> {
+  const { bearerToken, headers, ...fetchInit } = init;
+  const requestHeaders = new Headers(headers);
+  if (bearerToken) {
+    requestHeaders.set("authorization", `Bearer ${bearerToken}`);
+  }
+
+  return fetch(typeof path === "string" ? upstreamUrl(path) : path, {
+    cache: "no-store",
+    ...fetchInit,
+    headers: requestHeaders,
+  });
 }

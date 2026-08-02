@@ -1,5 +1,5 @@
 # generated: 2026-06-26T10:24:37+07:00
-# last_updated: 2026-07-26T02:05:08Z
+# last_updated: 2026-08-01T08:19:32Z
 # project: LCSP — Legal Compliance Support Platform
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-06-26T10:24:37+07:00"
-last_updated: "2026-07-26T02:05:08Z"
+last_updated: "2026-08-01T08:19:32Z"
 project: "LCSP — Legal Compliance Support Platform"
 project_key: "NOKEY"
 tracking_system: "file-system"

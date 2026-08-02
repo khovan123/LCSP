@@ -1,0 +1,30 @@
+[
+  {
+    "artifact_type": "WIZARD_READINESS_EXPORT",
+    "export_id": "mock-readiness-export-1",
+    "assessment_id": "assessment-1",
+    "owner_id": "manager-1",
+    "status": "GENERATED",
+    "label": "Wizard Readiness Export",
+    "badge": "READINESS_ONLY",
+    "title": "Wizard Readiness Export",
+    "preview": "Readiness-only preparation summary for evidence collection and next steps.",
+    "readiness_only": true,
+    "classification_status": "LOCKED_EVIDENCE_REQUIRED",
+    "metadata": {
+      "artifact_type": "WIZARD_READINESS_EXPORT",
+      "label": "Wizard Readiness Export",
+      "readiness_only": true,
+      "classification_status": "LOCKED_EVIDENCE_REQUIRED",
+      "wizard_profile_version": 3,
+      "assessment_id": "assessment-1",
+      "generated_by": "manager-1",
+      "version": 1,
+      "generated_at": "2026-08-01T00:00:00.000Z"
+    },
+    "generated_at": "2026-08-01T00:00:00.000Z",
+    "version": 1,
+    "download_state": "READY",
+    "download_url": "/assessments/assessment-1/wizard/readiness-exports/mock-readiness-export-1/download"
+  }
+]

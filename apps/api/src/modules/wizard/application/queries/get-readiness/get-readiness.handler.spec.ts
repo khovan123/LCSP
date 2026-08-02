@@ -44,6 +44,7 @@ describe("GetReadinessHandler", () => {
         classification_locked: true,
         lock_reason: ASSESSMENT_LOCK_REASONS.evidenceRequired,
         missing_evidence: [],
+        unresolved_unknown_items: [],
         completed_steps: [],
         next_action: "Some next action",
       }),
@@ -114,7 +115,8 @@ describe("GetReadinessHandler", () => {
     } as Assessment);
     prismaService.wizardProfile.findUnique.mockResolvedValue({
       status: PrismaWizardProfileStatus.SUBMITTED,
-    } as WizardProfile);
+      answers: [],
+    } as unknown as WizardProfile);
     prismaService.repositoryConnection.findFirst.mockResolvedValue({
       id: "repo-1",
     } as RepositoryConnection);
@@ -127,6 +129,7 @@ describe("GetReadinessHandler", () => {
       hasRepositoryConnection: true,
       hasAcceptedTechnicalEvidence: false,
       wizardStatus: WIZARD_STATUS_CODES.submitted,
+      wizardAnswers: [],
     });
 
     expect(result.assessment_id).toBe("assessment-123");

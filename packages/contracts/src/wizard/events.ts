@@ -16,6 +16,7 @@ export type ReadinessExportStatus =
   (typeof READINESS_EXPORT_STATUSES)[keyof typeof READINESS_EXPORT_STATUSES];
 
 export const READINESS_EXPORT_ERROR_CODES = {
+  notDownloadable: "READINESS_EXPORT_NOT_DOWNLOADABLE",
   requiresLockedClassification: "EXPORT_REQUIRES_LOCKED_CLASSIFICATION",
   wizardNotSubmitted: "WIZARD_NOT_SUBMITTED",
 } as const;

@@ -168,6 +168,12 @@ As a Manager, I want to generate a Wizard Readiness Export before technical evid
 
 GPT-5 Codex
 
+### Implementation Plan
+
+- Restore Story 2.4 definition-of-done coverage with failing tests for the Manager export entry point, canonical readiness-only metadata, guarded content, immutable artifact history, and download state.
+- Centralize unresolved-unknown projection so readiness UI and exports consume the same structured projection instead of independently parsing raw Wizard answers.
+- Add the minimal API/BFF/client/UI seams needed to generate, preview, list, and download readiness-only artifacts, then run focused and full regression validation.
+
 ### Debug Log References
 
 - Batch `bmad-create-story` run on 2026-07-02T22:01:26+07:00.
@@ -176,6 +182,7 @@ GPT-5 Codex
 - Captured baseline commit `a56969fdf6ea7616b8f12fcad37d32659549e15f` before implementation.
 - Added failing e2e coverage for readiness export generation, blocked preconditions, PBAC denial, and immutable versioning before implementation.
 - Validation passed: focused guardrail unit, focused readiness export e2e, full API unit, full API e2e, root lint/typecheck contract checks, web tests, API build, and `git diff --check`.
+- 2026-08-01 completion audit reopened the story after finding missing canonical metadata, raw-answer re-derivation, absent Manager export/history/download UI seams, and untested guardrail-blocked persistence/audit behavior.
 
 ### Completion Notes List
 
@@ -186,23 +193,44 @@ GPT-5 Codex
 - Added readiness-only export contracts, guardrail service, append-only persistence, versioning, and safe audit events for generated/blocked export outcomes.
 - Export content now carries readiness-only labels, missing evidence checklist, unresolved unknown items, preparation guidance, version, timestamp, owner, assessment ID, and wizard profile version without final risk/classification/legal conclusion wording.
 - Updated PBAC/action and wizard event contracts so Manager policy and existing auth/readiness tests include the new export action and event types.
+- Added the Manager-facing readiness export action, validated BFF proxy, typed client outcome mapping, localized generated/blocked/error states, and mock response. Focused Story 2.4 tests, the 68-test web suite, and the 400-test API unit suite pass.
+- Added canonical shared readiness-export artifact, label, badge, classification-status, metadata, and guardrail contracts. Guardrails now fail closed on label/metadata drift as well as forbidden overclaim wording, with covered safe blocked persistence and audit behavior.
+- Added owner/org-scoped artifact history and guarded JSON download endpoints, canonical READY/BLOCKED download state, a database uniqueness invariant for assessment/version, and localized Manager history/download UI. Focused e2e, 402 API unit tests, and 70 web tests pass.
+- Centralized mapping-critical unresolved unknowns in the shared readiness evaluator so the readiness page, generated artifact, history, and download all consume one structured projection without exposing raw Wizard answers.
+- Closed the blocked-response overclaim leak by returning canonical safe content whenever the guardrail rejects generated text; blocked persistence and audit assertions now cover the same response path.
+- Final validation passed: import and contract-literal policies, API/web ESLint, root TypeScript project build, 69 API unit suites (402 passed, 1 todo), 71 web tests, 5 focused Story 2.4 e2e tests, API build, and web production build.
+- Added a server-side PDF renderer over the immutable guarded JSON artifact, including provenance, readiness-only metadata, readable sections, neutral empty states, automatic wrapping, pagination, and page numbers without a browser runtime or embedded font asset.
+- Changed the protected API and BFF download path to stream validated PDF bytes with safe versioned filenames and private no-store headers; blocked, drifted, cross-owner, cross-organization, and PBAC-denied records still disclose no artifact bytes.
+- Strengthened download-time guardrail validation for the complete persisted content structure and localized the Manager action as `Download PDF` / `Tải PDF` while retaining JSON as the audit source of truth.
+- Independent review hardened underscore-separated overclaim detection, persisted provenance binding, bounded render input, safe malformed-upstream handling, PDF end-marker validation, and protected download coverage across blocked, missing, cross-owner, cross-organization, and PBAC-denied states.
+- Final PDF validation passed: 8 focused renderer/guardrail unit tests, 70 API unit suites (407 passed, 1 todo), 71 web tests, 6 protected API e2e tests, API/web lint, root TypeScript, import/contract policies, and both production builds.
 
 ### File List
 
+- apps/api/package.json
 - apps/api/prisma/migrations/20260726014847_add_readiness_export/migration.sql
+- apps/api/prisma/migrations/20260801080000_readiness_export_version_invariant/migration.sql
 - apps/api/prisma/schema.prisma
 - apps/api/src/modules/document/application/commands/process-document-callback/process-document-callback.handler.spec.ts
 - apps/api/src/modules/wizard/application/commands/generate-readiness-export/generate-readiness-export.command.ts
+- apps/api/src/modules/wizard/application/commands/generate-readiness-export/generate-readiness-export.handler.spec.ts
 - apps/api/src/modules/wizard/application/commands/generate-readiness-export/generate-readiness-export.handler.ts
 - apps/api/src/modules/wizard/application/contracts/wizard/readiness-export.contract.ts
+- apps/api/src/modules/wizard/application/contracts/wizard/readiness.contract.ts
 - apps/api/src/modules/wizard/application/queries/get-readiness/get-readiness.handler.spec.ts
 - apps/api/src/modules/wizard/application/queries/get-readiness/get-readiness.handler.ts
+- apps/api/src/modules/wizard/application/queries/get-readiness-export/get-readiness-export.handler.ts
+- apps/api/src/modules/wizard/application/queries/get-readiness-export/get-readiness-export.query.ts
+- apps/api/src/modules/wizard/application/queries/list-readiness-exports/list-readiness-exports.handler.ts
+- apps/api/src/modules/wizard/application/queries/list-readiness-exports/list-readiness-exports.query.ts
 - apps/api/src/modules/wizard/application/services/wizard/readiness-evaluator.service.spec.ts
 - apps/api/src/modules/wizard/application/services/wizard/readiness-evaluator.service.ts
 - apps/api/src/modules/wizard/application/services/wizard/readiness-export-guardrail.service.spec.ts
 - apps/api/src/modules/wizard/application/services/wizard/readiness-export-guardrail.service.ts
 - apps/api/src/modules/wizard/domain/entities/readiness-export.entity.ts
 - apps/api/src/modules/wizard/domain/exceptions/wizard.exceptions.ts
+- apps/api/src/modules/wizard/infrastructure/pdf/readiness-export-pdf.service.spec.ts
+- apps/api/src/modules/wizard/infrastructure/pdf/readiness-export-pdf.service.ts
 - apps/api/src/modules/wizard/presentation/http/wizard.controller.ts
 - apps/api/src/modules/wizard/wizard.module.ts
 - apps/api/test/auth-workspace.e2e-spec.ts
@@ -210,14 +238,40 @@ GPT-5 Codex
 - apps/api/test/support/auth-workspace-test-helpers.ts
 - apps/api/test/wizard-endpoints.e2e-spec.ts
 - apps/api/test/wizard-readiness-export.e2e-spec.ts
+- apps/web/src/app/api/assessments/[id]/wizard/readiness-export/route.ts
+- apps/web/src/app/api/assessments/[id]/wizard/readiness-exports/[exportId]/download/route.ts
+- apps/web/src/app/api/assessments/[id]/wizard/readiness-exports/route.ts
+- apps/web/src/features/readiness/components/organisms/readiness-status-page.tsx
+- apps/web/src/lib/api/assessment-queries.ts
+- apps/web/src/lib/api/query-keys.ts
+- apps/web/src/lib/api/readiness-export-client.ts
+- apps/web/src/lib/api/readiness-client.ts
+- apps/web/src/public/assets/mocks/readiness.json
+- apps/web/src/public/assets/mocks/readiness-export.json
+- apps/web/src/public/assets/mocks/readiness-export-history.json
+- apps/web/src/public/assets/mocks/readiness-export-pdf.json
+- apps/web/tests/readiness-export-client.test.ts
 - apps/web/src/features/document/components/organisms/document-request-panel.tsx
 - docs/implementation-artifacts/2-4-wizard-readiness-export.md
+- docs/implementation-artifacts/deferred-work.md
+- docs/implementation-artifacts/epic-2-context.md
+- docs/implementation-artifacts/spec-2-4-readiness-export-pdf.md
 - docs/implementation-artifacts/sprint-status.yaml
 - packages/contracts/src/pbac/actions.ts
 - packages/contracts/src/pbac/manager-policy.ts
 - packages/contracts/src/wizard/events.ts
+- packages/contracts/src/wizard/index.ts
+- packages/contracts/src/wizard/readiness-export.ts
+- packages/contracts/src/wizard/wizard-answer.ts
+- packages/i18n/src/locales/en/pages.ts
+- packages/i18n/src/locales/vi/pages.ts
+- packages/i18n/src/types.ts
+- pnpm-lock.yaml
+- tests/story-2-4.web.test.ts
 - tests/story-1-6.web.test.ts
 
 ### Change Log
 
 - 2026-07-26: Implemented Wizard Readiness Export API slice with readiness-only contracts, guardrails, persistence, audit events, PBAC wiring, and focused/full validation coverage.
+- 2026-08-01: Completed the Manager generation/history/download experience, canonical metadata and unresolved-unknown projection, concurrency invariant, safe blocked response, and full regression/build validation; moved story to review.
+- 2026-08-02: Added guarded, owner/org/PBAC-scoped PDF download rendering and binary BFF proxying while preserving immutable JSON as the audit source; covered layout, versioned headers, guardrail drift, and access-denial paths.

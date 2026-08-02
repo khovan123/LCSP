@@ -1,5 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import {
+  ANSWER_STATES,
+  READINESS_UNKNOWN_QUESTIONS,
+  WIZARD_UNKNOWN_SENTINELS,
+  type ReadinessUnresolvedUnknownItem,
+  type WizardAnswer,
+} from "@lcsp/contracts/wizard";
+import {
   ASSESSMENT_LOCK_REASONS,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
@@ -9,12 +16,14 @@ export interface ReadinessEvaluationInput {
   hasRepositoryConnection: boolean;
   hasAcceptedTechnicalEvidence: boolean;
   wizardStatus: string | null;
+  wizardAnswers?: WizardAnswer[];
 }
 
 export interface ReadinessEvaluationResult {
   classification_locked: boolean;
   lock_reason: string | null;
   missing_evidence: MissingEvidenceItem[];
+  unresolved_unknown_items: ReadinessUnresolvedUnknownItem[];
   completed_steps: string[];
   next_action: string;
 }
@@ -76,8 +85,47 @@ export class ReadinessEvaluatorService {
       classification_locked: classificationLocked,
       lock_reason: lockReason,
       missing_evidence: missingEvidence,
+      unresolved_unknown_items: this.projectUnknowns(input.wizardAnswers ?? []),
       completed_steps: completedSteps,
       next_action: nextAction,
     };
+  }
+
+  private projectUnknowns(
+    answers: WizardAnswer[],
+  ): ReadinessUnresolvedUnknownItem[] {
+    return Object.values(READINESS_UNKNOWN_QUESTIONS).flatMap((question) => {
+      const answer = answers.find(
+        (candidate) => candidate.questionId === question.questionId,
+      );
+      if (!answer || !this.isUnknown(answer)) return [];
+
+      return [
+        {
+          question_id: question.questionId,
+          label: question.label,
+          answer_state: ANSWER_STATES.explicitUnknown,
+        },
+      ];
+    });
+  }
+
+  private isUnknown(answer: WizardAnswer): boolean {
+    return (
+      answer.answerState === ANSWER_STATES.explicitUnknown ||
+      this.containsUnknownSentinel(answer.value)
+    );
+  }
+
+  private containsUnknownSentinel(value: unknown): boolean {
+    if (typeof value === "string") {
+      const normalized = value.trim().toUpperCase();
+      return Object.values(WIZARD_UNKNOWN_SENTINELS).some(
+        (sentinel) => sentinel === normalized,
+      );
+    }
+    return Array.isArray(value)
+      ? value.some((item) => this.containsUnknownSentinel(item))
+      : false;
   }
 }

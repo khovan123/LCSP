@@ -283,7 +283,7 @@ model ReadinessExport {
 
   @@index([assessmentId])
   @@index([organizationId])
-  @@index([assessmentId, version])
+  @@unique([assessmentId, version])
 }
 
 model AuditExportRequest {

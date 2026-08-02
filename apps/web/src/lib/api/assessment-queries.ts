@@ -17,6 +17,10 @@ import {
 import { getTechnicalEvidence } from "./evidence-client";
 import { getReadinessStatus } from "./readiness-client";
 import {
+  getReadinessExportHistory,
+  requestReadinessExport,
+} from "./readiness-export-client";
+import {
   getWizardAssessment,
   saveWizardDraft,
   submitWizard,
@@ -40,6 +44,26 @@ export function useReadinessStatusQuery(assessmentId: string) {
   });
 }
 
+export function useGenerateReadinessExportMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => requestReadinessExport(assessmentId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: apiQueryKeys.assessment.readinessExports(assessmentId),
+      });
+    },
+  });
+}
+
+export function useReadinessExportHistoryQuery(assessmentId: string) {
+  return useQuery({
+    queryKey: apiQueryKeys.assessment.readinessExports(assessmentId),
+    queryFn: () => getReadinessExportHistory(assessmentId),
+    enabled: assessmentId.length > 0,
+  });
+}
+
 export function useWizardAssessmentQuery(assessmentId: string) {
   return useQuery({
     queryKey: apiQueryKeys.assessment.wizard(assessmentId),
@@ -50,13 +74,15 @@ export function useWizardAssessmentQuery(assessmentId: string) {
 
 export function useSaveWizardDraftMutation(assessmentId: string) {
   return useMutation({
-    mutationFn: (answers: WizardAnswer[]) => saveWizardDraft(assessmentId, answers),
+    mutationFn: (answers: WizardAnswer[]) =>
+      saveWizardDraft(assessmentId, answers),
   });
 }
 
 export function useSubmitWizardMutation(assessmentId: string) {
   return useMutation({
-    mutationFn: (answers: WizardAnswer[]) => submitWizard(assessmentId, answers),
+    mutationFn: (answers: WizardAnswer[]) =>
+      submitWizard(assessmentId, answers),
   });
 }
 

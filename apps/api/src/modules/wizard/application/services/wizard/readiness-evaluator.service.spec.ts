@@ -3,6 +3,7 @@ import {
   ASSESSMENT_LOCK_REASONS,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
+import { ANSWER_STATES } from "@lcsp/contracts/wizard";
 
 describe("ReadinessEvaluatorService", () => {
   let service: ReadinessEvaluatorService;
@@ -101,6 +102,42 @@ describe("ReadinessEvaluatorService", () => {
 
     expect(result.next_action).toBe(
       "Connect a code repository to begin analysis.",
+    );
+  });
+
+  it("projects explicit unknown answers without exposing raw values", () => {
+    const result = service.evaluate({
+      hasRepositoryConnection: false,
+      hasAcceptedTechnicalEvidence: false,
+      wizardStatus: WIZARD_STATUS_CODES.submitted,
+      wizardAnswers: [
+        {
+          questionId: "dataTypes",
+          value: "raw-sensitive-value-must-not-leak",
+          answerState: ANSWER_STATES.explicitUnknown,
+          updatedAt: "2026-08-01T00:00:00.000Z",
+        },
+        {
+          questionId: "humanReview",
+          value: "UNCLEAR",
+          answerState: ANSWER_STATES.answered,
+          updatedAt: "2026-08-01T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(result.unresolved_unknown_items).toEqual([
+      expect.objectContaining({
+        question_id: "dataTypes",
+        answer_state: ANSWER_STATES.explicitUnknown,
+      }),
+      expect.objectContaining({
+        question_id: "humanReview",
+        answer_state: ANSWER_STATES.explicitUnknown,
+      }),
+    ]);
+    expect(JSON.stringify(result.unresolved_unknown_items)).not.toContain(
+      "raw-sensitive-value-must-not-leak",
     );
   });
 });
