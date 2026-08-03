@@ -4,6 +4,9 @@ export const apiQueryKeys = {
   auth: {
     invitationPreview: (invitationToken: string) =>
       ["auth", "invitation-preview", invitationToken] as const,
+    settingsProfile: () => ["auth", "settings-profile"] as const,
+    sessions: () => ["auth", "sessions"] as const,
+    repositories: () => ["auth", "repositories"] as const,
   },
   workspace: {
     detail: () => ["workspace"] as const,

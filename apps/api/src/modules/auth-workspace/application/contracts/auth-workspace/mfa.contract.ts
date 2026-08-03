@@ -8,3 +8,8 @@ export type VerifyMfaOtpSuccess = {
   ok: true;
   correlation_id: string;
 };
+
+export type DisableMfaSuccess = {
+  ok: true;
+  correlation_id: string;
+};

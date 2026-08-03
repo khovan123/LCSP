@@ -8,6 +8,7 @@ export const AUTH_AUDIT_EVENT_TYPES = {
   authSignInFailed: "AUTH_SIGN_IN_FAILED",
   authSessionRevoked: "AUTH_SESSION_REVOKED",
   authMfaEnrolled: "AUTH_MFA_ENROLLED",
+  authMfaDisabled: "AUTH_MFA_DISABLED",
   authMfaOtpVerified: "AUTH_MFA_OTP_VERIFIED",
   authMfaOtpFailed: "AUTH_MFA_OTP_FAILED",
   authProfileUpdated: "AUTH_PROFILE_UPDATED",
@@ -34,6 +35,7 @@ export const AUTH_LEGACY_AUDIT_EVENT_TYPES = {
   registerSucceeded: "auth.register.succeeded",
   registerFailed: "auth.register.failed",
   mfaEnrolled: "auth.mfa.enrolled",
+  mfaDisabled: "auth.mfa.disabled",
   mfaVerified: "auth.mfa.verified",
   mfaFailed: "auth.mfa.failed",
   mfaRateLimited: "auth.mfa.rate_limited",
@@ -57,6 +59,8 @@ export const LEGACY_AUTH_AUDIT_EVENT_TYPE_ALIASES: Record<string, string> = {
     AUTH_AUDIT_EVENT_TYPES.authSessionRevoked,
   [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaEnrolled]:
     AUTH_AUDIT_EVENT_TYPES.authMfaEnrolled,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaDisabled]:
+    AUTH_AUDIT_EVENT_TYPES.authMfaDisabled,
   [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaVerified]:
     AUTH_AUDIT_EVENT_TYPES.authMfaOtpVerified,
   [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed]:

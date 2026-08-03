@@ -3,36 +3,46 @@
 import { useState } from "react";
 import type { MessageKey } from "@lcsp/i18n";
 import { resolveMessage } from "@lcsp/i18n";
+import { FileTextIcon } from "lucide-react";
 
-import { buttonVariants } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { SectionHeading } from "@/components/molecules/section-heading";
 import {
   useRequestFinalReportMutation,
   useRequestGapAnalysisMutation,
 } from "@/lib/api/assessment-queries";
 import { appLocale } from "@/lib/locale";
-import { cn } from "@/lib/utils";
+import {
+  DOCUMENT_REQUEST_PANEL_STATUSES,
+  type DocumentRequestPanelProps,
+  type DocumentRequestPanelStatus,
+} from "../../types/document-request-panel.types";
+import { DocumentRequestActionCard } from "../molecules/document-request-action-card";
 
-export function DocumentRequestPanel({ assessmentId }: { assessmentId: string }) {
+export function DocumentRequestPanel({
+  assessmentId,
+}: DocumentRequestPanelProps) {
   const finalReportMutation = useRequestFinalReportMutation(assessmentId);
   const gapAnalysisMutation = useRequestGapAnalysisMutation(assessmentId);
-  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [status, setStatus] = useState<DocumentRequestPanelStatus>(
+    DOCUMENT_REQUEST_PANEL_STATUSES.idle,
+  );
   const [messageKey, setMessageKey] = useState<MessageKey | null>(null);
 
   async function onRequestFinalReport() {
-    setStatus("loading");
+    setStatus(DOCUMENT_REQUEST_PANEL_STATUSES.loading);
     setMessageKey(null);
 
     const outcome = await finalReportMutation.mutateAsync();
 
     if (outcome.kind === "requested") {
-      setStatus("done");
+      setStatus(DOCUMENT_REQUEST_PANEL_STATUSES.done);
       setMessageKey("pages.classification.finalReportRequestedDetail");
       return;
     }
 
     if (outcome.kind === "blocked") {
-      setStatus("error");
+      setStatus(DOCUMENT_REQUEST_PANEL_STATUSES.error);
       setMessageKey(outcome.detailKey);
       return;
     }
@@ -42,24 +52,24 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
       return;
     }
 
-    setStatus("error");
+    setStatus(DOCUMENT_REQUEST_PANEL_STATUSES.error);
     setMessageKey(outcome.detailKey);
   }
 
   async function onRequestGapAnalysis() {
-    setStatus("loading");
+    setStatus(DOCUMENT_REQUEST_PANEL_STATUSES.loading);
     setMessageKey(null);
 
     const outcome = await gapAnalysisMutation.mutateAsync();
 
     if (outcome.kind === "requested") {
-      setStatus("done");
+      setStatus(DOCUMENT_REQUEST_PANEL_STATUSES.done);
       setMessageKey("pages.classification.finalReportRequestedDetail");
       return;
     }
 
     if (outcome.kind === "blocked") {
-      setStatus("error");
+      setStatus(DOCUMENT_REQUEST_PANEL_STATUSES.error);
       setMessageKey(outcome.detailKey);
       return;
     }
@@ -69,65 +79,84 @@ export function DocumentRequestPanel({ assessmentId }: { assessmentId: string })
       return;
     }
 
-    setStatus("error");
+    setStatus(DOCUMENT_REQUEST_PANEL_STATUSES.error);
     setMessageKey(outcome.detailKey);
   }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          {resolveMessage(appLocale, "pages.classification.generateFinalReport")}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {resolveMessage(appLocale, "pages.classification.documentsPageDescription")}
-        </p>
-      </header>
+      <SectionHeading
+        title={resolveMessage(
+          appLocale,
+          "pages.classification.generateFinalReport",
+        )}
+        description={resolveMessage(
+          appLocale,
+          "pages.classification.documentsPageDescription",
+        )}
+        icon={<FileTextIcon className="size-4" />}
+      />
 
       <div className="grid gap-6">
-        <div className="rounded-2xl border p-6 shadow-sm">
-          <p className="text-sm text-muted-foreground">
-            {resolveMessage(appLocale, "pages.classification.finalReportPageHint")}
-          </p>
-          <button
-            type="button"
-            className={cn(buttonVariants({ variant: "default" }), "mt-4")}
-            onClick={onRequestFinalReport}
-            disabled={status === "loading"}
-          >
-            {resolveMessage(appLocale, "pages.classification.requestFinalReportButton")}
-          </button>
-        </div>
+        <DocumentRequestActionCard
+          title={resolveMessage(
+            appLocale,
+            "pages.classification.generateFinalReport",
+          )}
+          description={resolveMessage(
+            appLocale,
+            "pages.classification.finalReportPageHint",
+          )}
+          actionLabel={resolveMessage(
+            appLocale,
+            "pages.classification.requestFinalReportButton",
+          )}
+          disabled={status === DOCUMENT_REQUEST_PANEL_STATUSES.loading}
+          onAction={() => {
+            void onRequestFinalReport();
+          }}
+        />
 
-        <div className="rounded-2xl border p-6 bg-muted/50">
-          <p className="text-sm font-medium">
-            {resolveMessage(appLocale, "pages.classification.gapAnalysisLabel")}
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {resolveMessage(appLocale, "pages.classification.gapAnalysisPendingMessage")}
-          </p>
-          <button
-            type="button"
-            className={cn(buttonVariants({ variant: "secondary" }), "mt-4")}
-            onClick={onRequestGapAnalysis}
-            disabled={status === "loading"}
-          >
-            {resolveMessage(appLocale, "pages.classification.generateGapAnalysis")}
-          </button>
-        </div>
+        <DocumentRequestActionCard
+          title={resolveMessage(
+            appLocale,
+            "pages.classification.gapAnalysisLabel",
+          )}
+          description={resolveMessage(
+            appLocale,
+            "pages.classification.gapAnalysisPendingMessage",
+          )}
+          actionLabel={resolveMessage(
+            appLocale,
+            "pages.classification.generateGapAnalysis",
+          )}
+          actionVariant="secondary"
+          highlighted
+          disabled={status === DOCUMENT_REQUEST_PANEL_STATUSES.loading}
+          onAction={() => {
+            void onRequestGapAnalysis();
+          }}
+        />
 
-        {status === "done" && messageKey ? (
+        {status === DOCUMENT_REQUEST_PANEL_STATUSES.done && messageKey ? (
           <Alert>
-            <AlertTitle>{resolveMessage(appLocale, "pages.classification.finalReportRequestedTitle")}</AlertTitle>
+            <AlertTitle>
+              {resolveMessage(
+                appLocale,
+                "pages.classification.finalReportRequestedTitle",
+              )}
+            </AlertTitle>
             <AlertDescription>
               {resolveMessage(appLocale, messageKey)}
             </AlertDescription>
           </Alert>
         ) : null}
 
-        {status === "error" && messageKey ? (
+        {status === DOCUMENT_REQUEST_PANEL_STATUSES.error && messageKey ? (
           <Alert variant="destructive">
-            <AlertTitle>{resolveMessage(appLocale, "pages.classification.errorTitle")}</AlertTitle>
+            <AlertTitle>
+              {resolveMessage(appLocale, "pages.classification.errorTitle")}
+            </AlertTitle>
             <AlertDescription>
               {resolveMessage(appLocale, messageKey)}
             </AlertDescription>

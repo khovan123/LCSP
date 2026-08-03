@@ -9,4 +9,6 @@ export type PbacMetadata = (
       type: typeof PBAC_METADATA_TYPES.actionAny;
       actions: readonly [string, ...string[]];
     }
-) & { membershipMissingAsPbacDenied?: boolean };
+) & {
+  membershipMissingAsPbacDenied?: boolean;
+};

@@ -11,6 +11,7 @@ export type SafeUserProjection = {
 
 export type RequestMeta = {
   correlation_id?: string;
+  app_origin?: string;
 };
 
 export type AuthProblemResult = ProblemResult;

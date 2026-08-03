@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "atomic-design",
+  "owner": "jwilger",
+  "repo": "agent-skills",
+  "path": "skills/atomic-design",
+  "branch": "forgejo/workflow-migration",
+  "sha": "068fc36d4267c1d9d9b0f3e806d44403db8ef92f",
+  "source": "manual"
+}

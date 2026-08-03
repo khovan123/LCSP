@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
 import { resolveMessage } from "@lcsp/i18n";
+import { ScaleIcon } from "lucide-react";
 
+import { SectionHeading } from "@/components/molecules/section-heading";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Empty,
@@ -29,23 +31,24 @@ import { appLocale } from "@/lib/locale";
 import { ConflictCard } from "../molecules/conflict-card";
 import {
   CONFLICT_RESOLUTION_VIEW_STATES,
+  type ConflictResolutionDraftMap,
+  type ConflictResolutionErrorMap,
+  type ConflictResolutionNoteMap,
+  type ConflictResolutionPageProps,
+  type ConflictResolutionStatusMap,
   type ConflictResolutionViewState,
 } from "../../types/conflict.types";
 
-export function ConflictResolutionPage({ assessmentId }: { assessmentId: string }) {
+export function ConflictResolutionPage({
+  assessmentId,
+}: ConflictResolutionPageProps) {
   const router = useRouter();
   const [viewStateOverride, setViewStateOverride] =
     useState<ConflictResolutionViewState | null>(null);
-  const [submittingIds, setSubmittingIds] = useState<Record<string, boolean>>({});
-  const [resolutions, setResolutions] = useState<
-    Record<
-      string,
-      | typeof CONFLICT_RECORD_STATUSES.resolved
-      | typeof CONFLICT_RECORD_STATUSES.dismissed
-    >
-  >({});
-  const [resolutionNotes, setResolutionNotes] = useState<Record<string, string>>({});
-  const [formErrors, setFormErrors] = useState<Record<string, string | null>>({});
+  const [submittingIds, setSubmittingIds] = useState<ConflictResolutionDraftMap>({});
+  const [resolutions, setResolutions] = useState<ConflictResolutionStatusMap>({});
+  const [resolutionNotes, setResolutionNotes] = useState<ConflictResolutionNoteMap>({});
+  const [formErrors, setFormErrors] = useState<ConflictResolutionErrorMap>({});
   const conflictsQuery = usePendingConflictsQuery(assessmentId);
   const resolveConflictMutation = useResolveConflictMutation(assessmentId);
   const workspaceQuery = useWorkspaceQuery();
@@ -193,12 +196,11 @@ export function ConflictResolutionPage({ assessmentId }: { assessmentId: string 
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-      <header className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          {resolveMessage(appLocale, "pages.reconciliation.pageTitle")}
-        </h1>
-        <p className="text-sm text-muted-foreground">{headingDescription}</p>
-      </header>
+      <SectionHeading
+        title={resolveMessage(appLocale, "pages.reconciliation.pageTitle")}
+        description={headingDescription}
+        icon={<ScaleIcon className="size-4" />}
+      />
 
       {conflictsQuery.isLoading ||
       viewState === CONFLICT_RESOLUTION_VIEW_STATES.loading ? (

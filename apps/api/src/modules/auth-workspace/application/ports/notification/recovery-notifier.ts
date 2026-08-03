@@ -8,5 +8,6 @@ export interface RecoveryNotifier {
     email: string;
     token: string;
     correlationId: string;
+    appOrigin?: string;
   }): Promise<void>;
 }

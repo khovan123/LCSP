@@ -1,5 +1,6 @@
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
+  AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_ERROR_CODES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
   createProblemResult,
@@ -46,7 +47,7 @@ export class RequestPasswordRecoveryHandler {
     }
 
     const email = payload.email.trim().toLowerCase();
-    const user = await repositories.users.findByEmail(email);
+    const user = await repositories.users.findByPrimaryEmail(email);
 
     if (!user) {
       // Do the same shape of work as the found-user path so response
@@ -76,9 +77,10 @@ export class RequestPasswordRecoveryHandler {
 
     await this.notifier.notify({
       userId: user.id,
-      email: user.email.toString(),
+      email: this.resolveRecoveryDestination(user),
       token,
       correlationId,
+      appOrigin: requestMeta.app_origin,
     });
 
     await this.support.recordAudit(repositories, {
@@ -90,5 +92,20 @@ export class RequestPasswordRecoveryHandler {
     });
 
     return { ok: true, correlation_id: correlationId };
+  }
+
+  private resolveRecoveryDestination(user: {
+    recoveryEmail: string | null;
+    email: { toString(): string };
+    backupEmailPolicy: string;
+  }) {
+    if (
+      user.backupEmailPolicy === AUTH_BACKUP_EMAIL_POLICIES.recoveryEmail &&
+      user.recoveryEmail
+    ) {
+      return user.recoveryEmail;
+    }
+
+    return user.email.toString();
   }
 }

@@ -2,6 +2,30 @@ import Joi from "joi";
 
 import type { AppConfig, NodeEnv } from "./config.types.js";
 
+const SMTP_MAILBOX_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+const SMTP_DISPLAY_NAME_PATTERN = /^([^<>]+)<\s*([^<>]+)\s*>$/;
+
+function isValidSmtpFrom(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return true;
+  }
+
+  if (SMTP_MAILBOX_PATTERN.test(trimmed)) {
+    return true;
+  }
+
+  const displayNameMatch = SMTP_DISPLAY_NAME_PATTERN.exec(trimmed);
+  if (!displayNameMatch) {
+    return false;
+  }
+
+  const [, displayName, mailbox] = displayNameMatch;
+  return (
+    displayName.trim().length > 0 && SMTP_MAILBOX_PATTERN.test(mailbox.trim())
+  );
+}
+
 export const configValidationSchema = Joi.object({
   NODE_ENV: Joi.string()
     .valid("development", "production", "test")
@@ -33,6 +57,26 @@ export const configValidationSchema = Joi.object({
     .messages({
       "string.pattern.base":
         '"MFA_SECRET_ENCRYPTION_KEY" must be exactly 64 hex characters (32 bytes)',
+    }),
+  SMTP_HOST: Joi.string().trim().allow("").default(""),
+  SMTP_PORT: Joi.number().integer().positive().default(587),
+  SMTP_SECURE: Joi.boolean().default(false),
+  SMTP_USER: Joi.string().trim().allow("").default(""),
+  SMTP_PASS: Joi.string().trim().allow("").default(""),
+  SMTP_FROM: Joi.string()
+    .trim()
+    .allow("")
+    .default("")
+    .custom((value: string, helpers): string => {
+      if (isValidSmtpFrom(value)) {
+        return value;
+      }
+
+      return helpers.error("string.smtpFrom") as unknown as string;
+    })
+    .messages({
+      "string.smtpFrom":
+        '"SMTP_FROM" must be a valid email or display-name address like "LCSP <noreply@lcsp.com>"',
     }),
   PYTHON_WORKER_BASE_URL: Joi.string().required(),
   WORKER_API_KEY: Joi.string().min(32).required(),
@@ -112,6 +156,14 @@ export function config(): AppConfig {
     },
     internal: {
       apiToken: env.INTERNAL_API_TOKEN ?? "test-internal-token",
+    },
+    email: {
+      smtpHost: env.SMTP_HOST?.trim() ?? "",
+      smtpPort: Number(env.SMTP_PORT ?? 587),
+      smtpSecure: (env.SMTP_SECURE ?? "false").toLowerCase() === "true",
+      smtpUser: env.SMTP_USER?.trim() ?? "",
+      smtpPass: env.SMTP_PASS?.trim() ?? "",
+      smtpFrom: env.SMTP_FROM?.trim() ?? "",
     },
   };
 }

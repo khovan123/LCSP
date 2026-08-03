@@ -18,18 +18,7 @@ import {
   sectionCardClassName,
 } from "@/features/wizard/lib/wizard-form";
 import { t } from "@/features/wizard/lib/wizard-i18n";
-import type { WizardAnswers } from "@/features/wizard/types/wizard.types";
-
-type WizardProgressSidebarProps = {
-  assessmentName: string | null;
-  answers: WizardAnswers;
-  currentStep: number;
-  effectiveIsReadOnly: boolean;
-  effectiveStatusKey: string | null;
-  isDraftComplete: boolean;
-  onSetCurrentStep: (step: number) => void;
-  onClearForm: () => void;
-};
+import type { WizardProgressSidebarProps } from "@/features/wizard/types/component-props.types";
 
 export function WizardProgressSidebar({
   assessmentName,
@@ -111,7 +100,7 @@ export function WizardProgressSidebar({
             {t("pages.wizard.landingDescription")}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
+        <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
           <p>{t("pages.wizard.timeEstimate")}</p>
           <p>{t("pages.wizard.readinessOnlyHint")}</p>
         </CardContent>

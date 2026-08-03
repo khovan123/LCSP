@@ -1,4 +1,5 @@
 import type { REQUIRED_ACTIONS } from "./actions.ts";
+import type { AUTH_BACKUP_EMAIL_POLICIES } from "./backup-email-policy.ts";
 import type {
   ACCEPT_INVITATION_ERROR_CODES,
   AUTH_ERROR_CODES,
@@ -10,6 +11,7 @@ import type {
   AUTH_MEMBERSHIP_STATUSES,
   WORKSPACE_CAPABILITY_SOURCES,
 } from "./states.ts";
+import type { AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES } from "./primary-email-address-policy.ts";
 
 export type RequiredAction =
   (typeof REQUIRED_ACTIONS)[keyof typeof REQUIRED_ACTIONS];
@@ -34,3 +36,9 @@ export type AuthInvitationState =
 
 export type WorkspaceCapabilitySource =
   (typeof WORKSPACE_CAPABILITY_SOURCES)[keyof typeof WORKSPACE_CAPABILITY_SOURCES];
+
+export type AuthBackupEmailPolicy =
+  (typeof AUTH_BACKUP_EMAIL_POLICIES)[keyof typeof AUTH_BACKUP_EMAIL_POLICIES];
+
+export type AuthPrimaryEmailAddressPolicy =
+  (typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES)[keyof typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES];

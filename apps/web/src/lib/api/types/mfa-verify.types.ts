@@ -13,6 +13,7 @@ export type MfaVerifyError = {
 
 export type MfaVerifyOutcome =
   | { kind: typeof API_OUTCOME_KINDS.verified }
+  | { kind: typeof API_OUTCOME_KINDS.mfaRequired }
   | { kind: typeof API_OUTCOME_KINDS.sessionInvalid }
   | ({ kind: typeof API_OUTCOME_KINDS.invalid } & MfaVerifyError)
   | ({ kind: typeof API_OUTCOME_KINDS.rateLimited } & MfaVerifyError)

@@ -24,6 +24,12 @@ const VALID_ENV = {
   OUTBOX_BATCH_SIZE: "50",
   OUTBOX_MAX_ATTEMPTS: "5",
   MFA_SECRET_ENCRYPTION_KEY: "0123456789abcdef".repeat(4),
+  SMTP_HOST: "smtp.example.test",
+  SMTP_PORT: "587",
+  SMTP_SECURE: "false",
+  SMTP_USER: "smtp-user",
+  SMTP_PASS: "smtp-pass",
+  SMTP_FROM: "lcsp@example.com",
   PYTHON_WORKER_BASE_URL: "http://localhost:8000",
   WORKER_API_KEY: "w".repeat(32),
 };
@@ -88,6 +94,43 @@ describe("configValidationSchema", () => {
 
     expect(error?.message).toContain("AUTH_BCRYPT_COST");
   });
+
+  it("allows SMTP_FROM to be blank or whitespace when SMTP is disabled", () => {
+    const blank = validate({ ...VALID_ENV, SMTP_FROM: "" });
+    const whitespace = validate({ ...VALID_ENV, SMTP_FROM: "   " });
+
+    expect(blank.error).toBeUndefined();
+    expect(whitespace.error).toBeUndefined();
+  });
+
+  it('allows SMTP_FROM in display-name format like "LCSP <noreply@lcsp.com>"', () => {
+    const result = validate({
+      ...VALID_ENV,
+      SMTP_FROM: "LCSP <noreply@lcsp.com>",
+    });
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it("rejects malformed SMTP_FROM display-name values", () => {
+    const result = validate({
+      ...VALID_ENV,
+      SMTP_FROM: "LCSP <noreply>@lcsp.com>",
+    });
+
+    expect(result.error?.message).toContain("SMTP_FROM");
+  });
+
+  it("allows SMTP_HOST, SMTP_USER, and SMTP_PASS to be blank or whitespace", () => {
+    const result = validate({
+      ...VALID_ENV,
+      SMTP_HOST: "   ",
+      SMTP_USER: "   ",
+      SMTP_PASS: "   ",
+    });
+
+    expect(result.error).toBeUndefined();
+  });
 });
 
 describe("config()", () => {
@@ -111,6 +154,22 @@ describe("config()", () => {
     process.env.OAUTH_ALLOWED_REDIRECT_URIS = " a , b ,,c ";
 
     expect(config().oauth.allowedRedirectUris).toEqual(["a", "b", "c"]);
+  });
+
+  it("trims SMTP string values in config output", () => {
+    process.env.SMTP_HOST = " smtp.example.test ";
+    process.env.SMTP_USER = " smtp-user ";
+    process.env.SMTP_PASS = " smtp-pass ";
+    process.env.SMTP_FROM = " lcsp@example.com ";
+
+    expect(config().email).toEqual({
+      smtpHost: "smtp.example.test",
+      smtpPort: 587,
+      smtpSecure: false,
+      smtpUser: "smtp-user",
+      smtpPass: "smtp-pass",
+      smtpFrom: "lcsp@example.com",
+    });
   });
 
   it("maps every env var to its typed config group", () => {
@@ -150,6 +209,14 @@ describe("config()", () => {
         maxAttempts: 5,
       },
       crypto: { mfaSecretEncryptionKey: VALID_ENV.MFA_SECRET_ENCRYPTION_KEY },
+      email: {
+        smtpHost: VALID_ENV.SMTP_HOST,
+        smtpPort: 587,
+        smtpSecure: false,
+        smtpUser: VALID_ENV.SMTP_USER,
+        smtpPass: VALID_ENV.SMTP_PASS,
+        smtpFrom: VALID_ENV.SMTP_FROM,
+      },
       pythonWorker: { baseUrl: VALID_ENV.PYTHON_WORKER_BASE_URL },
       worker: { apiKey: VALID_ENV.WORKER_API_KEY },
       internal: { apiToken: "test-internal-token" },

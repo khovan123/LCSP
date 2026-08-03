@@ -62,6 +62,7 @@ export type PagesMessages = {
     allAssessments: string;
     searchAssessments: string;
     noAssessmentMatches: string;
+    settings: string;
     wizard: string;
     readiness: string;
     classification: string;
@@ -96,12 +97,14 @@ export type PagesMessages = {
     oauthGoogle: string;
     oauthGitHub: string;
     accessHelp: string;
+    forgotPassword: string;
     errors: {
       emailRequired: string;
       emailInvalid: string;
       passwordRequired: string;
       requestFailedTitle: string;
       requestFailedDetail: string;
+      retryAtLabel: string;
     };
   };
   mfaVerify: {
@@ -116,9 +119,75 @@ export type PagesMessages = {
     submit: string;
     submitting: string;
     accessHelp: string;
+    useRecovery: string;
     errors: {
       otpRequired: string;
       otpInvalidFormat: string;
+      requestFailedTitle: string;
+      requestFailedDetail: string;
+    };
+  };
+  mfaEnroll: {
+    metadataTitle: string;
+    metadataDescription: string;
+    homeAriaLabel: string;
+    formEyebrow: string;
+    formTitle: string;
+    formDescription: string;
+    submit: string;
+    submitting: string;
+    goToVerify: string;
+    accessHelp: string;
+    successTitle: string;
+    successDetail: string;
+    openAuthenticator: string;
+    qrTitle: string;
+    qrHint: string;
+    qrAlt: string;
+    qrLoading: string;
+    errors: {
+      requestFailedTitle: string;
+      requestFailedDetail: string;
+    };
+  };
+  recoveryRequest: {
+    metadataTitle: string;
+    metadataDescription: string;
+    homeAriaLabel: string;
+    formEyebrow: string;
+    formTitle: string;
+    formDescription: string;
+    emailLabel: string;
+    emailDescription: string;
+    submit: string;
+    submitting: string;
+    backToSignIn: string;
+    successTitle: string;
+    successDetail: string;
+    errors: {
+      emailRequired: string;
+      emailInvalid: string;
+      requestFailedTitle: string;
+      requestFailedDetail: string;
+    };
+  };
+  recoveryConfirm: {
+    metadataTitle: string;
+    metadataDescription: string;
+    homeAriaLabel: string;
+    formEyebrow: string;
+    formTitle: string;
+    formDescription: string;
+    tokenLabel: string;
+    tokenDescription: string;
+    passwordLabel: string;
+    passwordDescription: string;
+    submit: string;
+    submitting: string;
+    requestAnother: string;
+    errors: {
+      tokenRequired: string;
+      passwordTooShort: string;
       requestFailedTitle: string;
       requestFailedDetail: string;
     };
@@ -220,6 +289,8 @@ export type PagesMessages = {
     readyForReview: string;
     recentAssessmentsTitle: string;
     recentAssessmentsDescription: string;
+    settingsTitle: string;
+    settingsDescription: string;
     emptyTitle: string;
     emptyDescription: string;
     loadingAssessments: string;
@@ -244,6 +315,187 @@ export type PagesMessages = {
       wizardNotStarted: string;
       wizardInProgress: string;
       wizardSubmitted: string;
+    };
+    security: {
+      title: string;
+      description: string;
+      openMfaEnroll: string;
+      openRecovery: string;
+      recoveryEmailLabel: string;
+      recoveryEmailDescription: string;
+      submit: string;
+      submitting: string;
+      successTitle: string;
+      successDetail: string;
+      errors: {
+        recoveryEmailInvalid: string;
+        requestFailedTitle: string;
+        requestFailedDetail: string;
+      };
+    };
+    settingsHub: {
+      description: string;
+      sections: {
+        account: string;
+        appearance: string;
+        notifications: string;
+        emails: string;
+        passwordAndAuthentication: string;
+        sessions: string;
+        repositories: string;
+      };
+      labels: {
+        account: string;
+        displayName: string;
+        primaryEmail: string;
+        organization: string;
+        membershipRole: string;
+        createdAt: string;
+        updatedAt: string;
+        recoveryEmail: string;
+        lastActiveAt: string;
+        expiresAt: string;
+        defaultBranch: string;
+        linkedAssessment: string;
+        connectedAt: string;
+      };
+      badges: {
+        verified: string;
+        unverified: string;
+        mfaEnabled: string;
+        mfaPending: string;
+        configured: string;
+        primary: string;
+        backup: string;
+        active: string;
+        revoked: string;
+      };
+      states: {
+        notConfigured: string;
+        noRecoveryEmail: string;
+        enabled: string;
+        disabled: string;
+        currentSession: string;
+        noSessions: string;
+        noRepositories: string;
+        noAssessmentLinked: string;
+      };
+      actions: {
+        edit: string;
+        manage: string;
+        setUp: string;
+        hide: string;
+        changePassword: string;
+        turnOn: string;
+        turnOff: string;
+        generateSetup: string;
+        verifyAndSave: string;
+        cancel: string;
+        sendRecovery: string;
+        updatePassword: string;
+        revoke: string;
+      };
+      account: {
+        title: string;
+        description: string;
+      };
+      appearance: {
+        title: string;
+        description: string;
+        shellTitle: string;
+        shellDescription: string;
+      };
+      notifications: {
+        title: string;
+        description: string;
+        emailRoutingTitle: string;
+        emailRoutingDescription: string;
+      };
+      emails: {
+        title: string;
+        description: string;
+        addressListTitle: string;
+        addressListDescription: string;
+        primaryTitle: string;
+        primaryDescription: string;
+        primaryRowDescription: string;
+        recoveryRowDescription: string;
+        primaryMenuLabel: string;
+        recoveryMenuLabel: string;
+        addEmailTitle: string;
+        addEmailInputLabel: string;
+        addEmailPlaceholder: string;
+        addEmailAction: string;
+        addEmailDescription: string;
+        primaryPreferenceTitle: string;
+        primaryPreferenceDescription: string;
+        backupPreferenceTitle: string;
+        backupPreferenceDescription: string;
+        backupAllVerifiedOption: string;
+      };
+      reauth: {
+        title: string;
+        description: string;
+        accountLabel: string;
+        passwordPlaceholder: string;
+        otpPlaceholder: string;
+        confirm: string;
+        confirming: string;
+        verify: string;
+        verifying: string;
+        supportTitle: string;
+        useAuthenticator: string;
+        usePassword: string;
+        setUpMfa: string;
+        close: string;
+      };
+      password: {
+        title: string;
+        description: string;
+        signInMethodsTitle: string;
+        emailMethod: string;
+        emailMethodDescription: string;
+        passwordMethod: string;
+        passwordMethodDescription: string;
+        currentPasswordLabel: string;
+        newPasswordLabel: string;
+        confirmNewPasswordLabel: string;
+        passwordPolicyHint: string;
+        learnMoreLink: string;
+        mfaTitle: string;
+        mfaDescription: string;
+        authenticatorApp: string;
+        authenticatorConfigured: string;
+        authenticatorPending: string;
+        inlineSetupTitle: string;
+        inlineSetupDescription: string;
+        mfaVerifiedTitle: string;
+        mfaDisabledTitle: string;
+        disableFailedTitle: string;
+        disableFailedDescription: string;
+        recoveryTitle: string;
+        recoveryDescription: string;
+      };
+      sessions: {
+        title: string;
+        description: string;
+        activeTitle: string;
+        activeDescription: string;
+        summary: string;
+        revokedTitle: string;
+      };
+      repositories: {
+        title: string;
+        description: string;
+        listTitle: string;
+        listDescription: string;
+        summary: string;
+      };
+      errors: {
+        profileLoadTitle: string;
+        profileLoadDetail: string;
+        sessionActionDetail: string;
+      };
     };
     errors: {
       workspaceUnavailableTitle: string;

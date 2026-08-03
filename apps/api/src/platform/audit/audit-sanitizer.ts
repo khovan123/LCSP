@@ -1,3 +1,4 @@
+const SAFE_CODE_KEYS = new Set(["reason_code", "reasonCode"]);
 const SENSITIVE_KEY_PATTERN = /password|token|secret|key|nonce|code|hash/i;
 
 export interface SanitizeResult {
@@ -27,6 +28,9 @@ function sanitizeRecord(
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, child]) => {
       const path = parentPath ? `${parentPath}.${key}` : key;
+      if (SAFE_CODE_KEYS.has(key)) {
+        return [[key, sanitizeValue(child, path, removedKeys)]];
+      }
       if (SENSITIVE_KEY_PATTERN.test(key)) {
         removedKeys.push(path);
         return [];

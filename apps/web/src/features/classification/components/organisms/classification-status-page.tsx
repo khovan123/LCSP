@@ -6,20 +6,18 @@ import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { buttonVariants } from "@/components/ui/button";
-import { ClassificationStatusCard } from "@/components/ui/classification-status-card";
+import { Button } from "@/components/ui/button";
+import { StatusCard } from "@/components/organisms/status-card";
 import {
   getClassificationActionVisibility,
 } from "@/lib/api/classification-client";
 import { useClassificationStatusQuery } from "@/lib/api/assessment-queries";
 import { appLocale } from "@/lib/locale";
-import { cn } from "@/lib/utils";
+import type { ClassificationStatusPageProps } from "../../types/component-props.types";
 
 export function ClassificationStatusPage({
   assessmentId,
-}: {
-  assessmentId: string;
-}) {
+}: ClassificationStatusPageProps) {
   const router = useRouter();
   const statusQuery = useClassificationStatusQuery(assessmentId);
 
@@ -37,13 +35,13 @@ export function ClassificationStatusPage({
   if (statusQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-        <header className="space-y-2">
+        <header className="flex flex-col gap-2">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">
             {resolveMessage(appLocale, "pages.classification.pageTitle")}
           </h1>
           <p className="text-sm text-muted-foreground">{headingDescription}</p>
         </header>
-        <ClassificationStatusCard
+        <StatusCard
           title={resolveMessage(appLocale, "pages.classification.pageTitle")}
           description={resolveMessage(appLocale, "pages.classification.loading")}
           badgeLabel={resolveMessage(appLocale, "pages.classification.states.processingBadge")}
@@ -52,7 +50,7 @@ export function ClassificationStatusPage({
           <div className="py-2 text-sm text-muted-foreground">
             {resolveMessage(appLocale, "pages.classification.loading")}
           </div>
-        </ClassificationStatusCard>
+        </StatusCard>
       </div>
     );
   }
@@ -67,7 +65,7 @@ export function ClassificationStatusPage({
   if (error || !viewModel) {
     return (
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-        <header className="space-y-2">
+        <header className="flex flex-col gap-2">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">
             {resolveMessage(appLocale, "pages.classification.pageTitle")}
           </h1>
@@ -90,14 +88,14 @@ export function ClassificationStatusPage({
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-      <header className="space-y-2">
+      <header className="flex flex-col gap-2">
         <h1 className="font-heading text-3xl font-semibold tracking-tight">
           {resolveMessage(appLocale, "pages.classification.pageTitle")}
         </h1>
         <p className="text-sm text-muted-foreground">{headingDescription}</p>
       </header>
 
-      <ClassificationStatusCard
+      <StatusCard
         title={resolveMessage(appLocale, viewModel.titleKey)}
         description={resolveMessage(appLocale, viewModel.descriptionKey)}
         badgeLabel={resolveMessage(appLocale, viewModel.badgeKey)}
@@ -113,11 +111,11 @@ export function ClassificationStatusPage({
         ) : null}
 
         {viewModel.references?.length ? (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <p className="text-sm font-medium">
               {resolveMessage(appLocale, "pages.classification.referencesLabel")}
             </p>
-            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+            <ul className="flex list-disc flex-col gap-1 pl-5 text-sm text-muted-foreground">
               {viewModel.references.map((reference) => (
                 <li key={reference}>{reference}</li>
               ))}
@@ -133,23 +131,22 @@ export function ClassificationStatusPage({
 
         <div className="flex flex-wrap gap-3">
           {showFinalReport ? (
-            <Link
-              className={cn(buttonVariants({ variant: "default" }))}
-              href={`/assessments/${assessmentId}/documents`}
+            <Button
+              render={<Link href={`/assessments/${assessmentId}/documents`} />}
             >
               {resolveMessage(appLocale, "pages.classification.generateFinalReport")}
-            </Link>
+            </Button>
           ) : null}
           {showGapAnalysis ? (
-            <Link
-              className={cn(buttonVariants({ variant: "outline" }))}
-              href={`/assessments/${assessmentId}/documents`}
+            <Button
+              render={<Link href={`/assessments/${assessmentId}/documents`} />}
+              variant="outline"
             >
               {resolveMessage(appLocale, "pages.classification.generateGapAnalysis")}
-            </Link>
+            </Button>
           ) : null}
         </div>
-      </ClassificationStatusCard>
+      </StatusCard>
     </div>
   );
 }

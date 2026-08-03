@@ -32,7 +32,8 @@
     "src/**/*.ts",
     "src/**/*.json",
     "test/**/*.ts",
-    "scripts/**/*.ts"
+    "scripts/**/*.ts",
+    "src/**/**/**/*.html"
   ],
   "references": [
     { "path": "../../packages/contracts" },

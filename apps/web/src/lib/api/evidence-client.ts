@@ -10,7 +10,7 @@ import type {
 } from "../../features/developer-task/types/developer-task.types.ts";
 import { apiRequest } from "./api-request.ts";
 import { API_OUTCOME_KINDS, API_REDIRECT_LOCATIONS } from "./outcome-kinds.ts";
-import { getProblemCode } from "./problem-envelope.ts";
+import { getMfaRedirectLocation, getProblemCode } from "./problem-envelope.ts";
 
 export async function getTechnicalEvidence(
   assessmentId: string,
@@ -39,7 +39,7 @@ export function toEvidenceOutcome(
   if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
     return {
       kind: API_OUTCOME_KINDS.redirect,
-      location: API_REDIRECT_LOCATIONS.mfaVerify,
+      location: getMfaRedirectLocation(payload),
     };
   }
   if (status === 401 || problemCode === AUTH_ERROR_CODES.sessionInvalid) {

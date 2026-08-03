@@ -38,6 +38,15 @@ test("successful MFA verification returns a workspace redirect outcome", () => {
   });
 });
 
+test("successful MFA verification accepts the API success envelope payload", () => {
+  assert.deepEqual(
+    toMfaVerifyOutcome({ correlation_id: "corr-verified" }, true),
+    {
+      kind: "verified",
+    },
+  );
+});
+
 test("invalid OTP responses use the shared non-leaking error contract", () => {
   const expected: MfaVerifyOutcome = {
     kind: "invalid",
@@ -65,6 +74,16 @@ test("MFA rate limiting returns a locked outcome", () => {
       titleKey: "auth.errors.mfaRateLimited.title",
       detailKey: "auth.errors.mfaRateLimited.detail",
     },
+  );
+});
+
+test("undecryptable MFA enrollment redirects back to setup", () => {
+  assert.deepEqual(
+    toMfaVerifyOutcome(
+      problem(AUTH_ERROR_CODES.mfaRequired, 403),
+      false,
+    ),
+    { kind: "mfa_required" },
   );
 });
 

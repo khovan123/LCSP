@@ -12,6 +12,7 @@ const oauthProviders = new Set(["google", "github"]);
 type OAuthCallbackSuccess = {
   session_token: string;
   mfa_required?: boolean;
+  mfa_enrolled?: boolean;
 };
 
 export async function GET(

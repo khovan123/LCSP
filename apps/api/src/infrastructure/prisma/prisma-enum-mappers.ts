@@ -2,9 +2,11 @@ import {
   AssessmentStatus as PrismaAssessmentStatus,
   AuditExportStatus as PrismaAuditExportStatus,
   AuditResourceType as PrismaAuditResourceType,
+  AuthBackupEmailPolicy as PrismaAuthBackupEmailPolicy,
   AuthDecision as PrismaAuthDecision,
   AuthInvitationState as PrismaAuthInvitationState,
   AuthMembershipStatus as PrismaAuthMembershipStatus,
+  AuthPrimaryEmailAddressPolicy as PrismaAuthPrimaryEmailAddressPolicy,
   AuthStateGate as PrismaAuthStateGate,
   AuthorizationReasonCode as PrismaAuthorizationReasonCode,
   ClassificationGuardrailStatus as PrismaClassificationGuardrailStatus,
@@ -41,12 +43,16 @@ import {
   type AuditResourceType,
 } from "@lcsp/contracts/audit";
 import {
+  AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_ERROR_CODES,
   AUTH_INVITATION_STATES,
   AUTH_MEMBERSHIP_STATUSES,
+  AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
+  type AuthBackupEmailPolicy,
   type AuthErrorCode,
   type AuthInvitationState,
   type AuthMembershipStatus,
+  type AuthPrimaryEmailAddressPolicy,
 } from "@lcsp/contracts/auth";
 import {
   DOCUMENT_REQUEST_STATUSES,
@@ -132,6 +138,40 @@ const PRISMA_AUTH_INVITATION_STATE_TO_CONTRACT = {
   [PrismaAuthInvitationState.PENDING]: AUTH_INVITATION_STATES.pending,
   [PrismaAuthInvitationState.CONSUMED]: AUTH_INVITATION_STATES.consumed,
 } as const satisfies Record<PrismaAuthInvitationState, AuthInvitationState>;
+
+const AUTH_BACKUP_EMAIL_POLICY_TO_PRISMA = {
+  [AUTH_BACKUP_EMAIL_POLICIES.allVerified]:
+    PrismaAuthBackupEmailPolicy.ALL_VERIFIED,
+  [AUTH_BACKUP_EMAIL_POLICIES.recoveryEmail]:
+    PrismaAuthBackupEmailPolicy.RECOVERY_EMAIL,
+} as const satisfies Record<AuthBackupEmailPolicy, PrismaAuthBackupEmailPolicy>;
+
+const PRISMA_AUTH_BACKUP_EMAIL_POLICY_TO_CONTRACT = {
+  [PrismaAuthBackupEmailPolicy.ALL_VERIFIED]:
+    AUTH_BACKUP_EMAIL_POLICIES.allVerified,
+  [PrismaAuthBackupEmailPolicy.RECOVERY_EMAIL]:
+    AUTH_BACKUP_EMAIL_POLICIES.recoveryEmail,
+} as const satisfies Record<PrismaAuthBackupEmailPolicy, AuthBackupEmailPolicy>;
+
+const AUTH_PRIMARY_EMAIL_ADDRESS_POLICY_TO_PRISMA = {
+  [AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.accountEmail]:
+    PrismaAuthPrimaryEmailAddressPolicy.ACCOUNT_EMAIL,
+  [AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.recoveryEmail]:
+    PrismaAuthPrimaryEmailAddressPolicy.RECOVERY_EMAIL,
+} as const satisfies Record<
+  AuthPrimaryEmailAddressPolicy,
+  PrismaAuthPrimaryEmailAddressPolicy
+>;
+
+const PRISMA_AUTH_PRIMARY_EMAIL_ADDRESS_POLICY_TO_CONTRACT = {
+  [PrismaAuthPrimaryEmailAddressPolicy.ACCOUNT_EMAIL]:
+    AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.accountEmail,
+  [PrismaAuthPrimaryEmailAddressPolicy.RECOVERY_EMAIL]:
+    AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.recoveryEmail,
+} as const satisfies Record<
+  PrismaAuthPrimaryEmailAddressPolicy,
+  AuthPrimaryEmailAddressPolicy
+>;
 
 const AUTH_DECISION_TO_PRISMA = {
   [AUDIT_DECISIONS.allow]: PrismaAuthDecision.ALLOW,
@@ -945,6 +985,30 @@ export function fromPrismaAuthMembershipStatus(
   status: PrismaAuthMembershipStatus,
 ): AuthMembershipStatus {
   return PRISMA_AUTH_MEMBERSHIP_STATUS_TO_CONTRACT[status];
+}
+
+export function toPrismaAuthBackupEmailPolicy(
+  policy: AuthBackupEmailPolicy,
+): PrismaAuthBackupEmailPolicy {
+  return AUTH_BACKUP_EMAIL_POLICY_TO_PRISMA[policy];
+}
+
+export function fromPrismaAuthBackupEmailPolicy(
+  policy: PrismaAuthBackupEmailPolicy,
+): AuthBackupEmailPolicy {
+  return PRISMA_AUTH_BACKUP_EMAIL_POLICY_TO_CONTRACT[policy];
+}
+
+export function toPrismaAuthPrimaryEmailAddressPolicy(
+  policy: AuthPrimaryEmailAddressPolicy,
+): PrismaAuthPrimaryEmailAddressPolicy {
+  return AUTH_PRIMARY_EMAIL_ADDRESS_POLICY_TO_PRISMA[policy];
+}
+
+export function fromPrismaAuthPrimaryEmailAddressPolicy(
+  policy: PrismaAuthPrimaryEmailAddressPolicy,
+): AuthPrimaryEmailAddressPolicy {
+  return PRISMA_AUTH_PRIMARY_EMAIL_ADDRESS_POLICY_TO_CONTRACT[policy];
 }
 
 export function toPrismaAuthInvitationState(

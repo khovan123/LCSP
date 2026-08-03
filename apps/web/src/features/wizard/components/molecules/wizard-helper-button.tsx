@@ -4,10 +4,7 @@ import { CircleHelp } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { t } from "@/features/wizard/lib/wizard-i18n";
-
-type WizardHelperButtonProps = {
-  onClick: () => void;
-};
+import type { WizardHelperButtonProps } from "../../types/component-props.types";
 
 export function WizardHelperButton({ onClick }: WizardHelperButtonProps) {
   return (

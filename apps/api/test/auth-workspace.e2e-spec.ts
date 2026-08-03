@@ -1,7 +1,9 @@
 import {
+  AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_INVITATION_STATES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
   AUTH_MEMBERSHIP_STATUSES,
+  AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
   REQUIRED_ACTIONS,
 } from "@lcsp/contracts/auth";
 import {
@@ -32,6 +34,7 @@ import type {
   ConfirmRecoverySuccess,
   RequestRecoverySuccess,
 } from "../src/modules/auth-workspace/application/contracts/auth-workspace/recovery.contract.js";
+import type { PasswordReauthSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/password-reauth.contract.js";
 import type { RegisterSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/register-approved-path.contract.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import type { WorkspaceSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/workspace.contract.js";
@@ -99,6 +102,8 @@ describe("Auth workspace (e2e)", () => {
 
     assert.equal(body.user.organization_id, fixture.organizationId);
     assert.equal(typeof body.session_token, "string");
+    assert.equal(body.mfa_required, undefined);
+    assert.equal(body.mfa_enrolled, false);
   });
 
   it("approved sign-in without organization_id auto-resolves active organization", async () => {
@@ -113,6 +118,8 @@ describe("Auth workspace (e2e)", () => {
 
     assert.equal(body.user.organization_id, fixture.organizationId);
     assert.equal(typeof body.session_token, "string");
+    assert.equal(body.mfa_required, undefined);
+    assert.equal(body.mfa_enrolled, false);
   });
 
   it("approved invitation registration creates session through approved path", async () => {
@@ -172,6 +179,57 @@ describe("Auth workspace (e2e)", () => {
       resolveMessage("vi", failure.problem.detailKey),
       "Email hoặc mật khẩu không hợp lệ.",
     );
+    assert.doesNotMatch(JSON.stringify(failure), /WrongPassword123!/);
+  });
+
+  it("password re-auth verifies the current session password", async () => {
+    const signIn = await httpRequest(app)
+      .post("/auth/sign-in")
+      .send({
+        email: fixture.approvedUser.email,
+        password: "CorrectHorseBatteryStaple!",
+        organization_id: fixture.organizationId,
+      })
+      .expect(200);
+
+    const sessionToken = successBody<SignInSuccess>(signIn).session_token;
+
+    const result = await httpRequest(app)
+      .post("/auth/re-auth/password")
+      .set("Authorization", `Bearer ${sessionToken}`)
+      .send({
+        session_token: sessionToken,
+        password: "CorrectHorseBatteryStaple!",
+      })
+      .expect(201);
+
+    const body = successBody<PasswordReauthSuccess>(result);
+    assert.equal(body.verified, true);
+  });
+
+  it("password re-auth rejects an invalid current password without leaking it", async () => {
+    const signIn = await httpRequest(app)
+      .post("/auth/sign-in")
+      .send({
+        email: fixture.approvedUser.email,
+        password: "CorrectHorseBatteryStaple!",
+        organization_id: fixture.organizationId,
+      })
+      .expect(200);
+
+    const sessionToken = successBody<SignInSuccess>(signIn).session_token;
+
+    const result = await httpRequest(app)
+      .post("/auth/re-auth/password")
+      .set("Authorization", `Bearer ${sessionToken}`)
+      .send({
+        session_token: sessionToken,
+        password: "WrongPassword123!",
+      })
+      .expect(401);
+
+    const failure = expectFailure(result.body);
+    assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidCredentials);
     assert.doesNotMatch(JSON.stringify(failure), /WrongPassword123!/);
   });
 
@@ -266,7 +324,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("workspace access fails closed when request organization does not match session scope", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
 
     const result = await httpRequest(app)
       .get("/workspace")
@@ -292,7 +350,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("deny-by-default blocks workspace access when subject attributes are incomplete", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
 
     await prisma.authMembership.update({
       where: {
@@ -316,7 +374,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("deny-by-default blocks workspace access when policy state gate is not satisfied", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
 
     await prisma.authOrganization.create({
       data: {
@@ -351,7 +409,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("returns the active Manager organization context and safe PBAC action projection", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
 
     const result = await httpRequest(app)
       .get("/workspace")
@@ -383,7 +441,7 @@ describe("Auth workspace (e2e)", () => {
       PBAC_ACTIONS.wizardSubmit,
       PBAC_ACTIONS.wizardExport,
     ]);
-    assert.equal(body.mfa_verified, false);
+    assert.equal(body.mfa_verified, true);
     assert.equal(body.correlation_id, "corr-manager-workspace-context");
     assert.equal(Number.isNaN(Date.parse(body.session_expires_at)), false);
     assert.equal("policyId" in body, false);
@@ -439,7 +497,7 @@ describe("Auth workspace (e2e)", () => {
   });
 
   it("audit trail records allow/deny events without leaking secrets", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
 
     await httpRequest(app)
       .get("/workspace")
@@ -487,21 +545,48 @@ describe("Auth workspace (e2e)", () => {
     assert.match(body.totp_uri, /^otpauth:\/\/totp\//);
   });
 
-  it("workspace access is blocked when MFA is enrolled but not yet verified", async () => {
+  it("MFA enrollment labels the TOTP URI with the effective primary email address", async () => {
+    await prisma.authUser.update({
+      where: { id: fixture.approvedUser.id },
+      data: {
+        recoveryEmail: "security@acme.test",
+        primaryEmailAddressPolicy:
+          AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.recoveryEmail,
+      },
+    });
+
+    const signIn = await signInApprovedUser();
+    const result = await httpRequest(app)
+      .post("/auth/mfa/enroll")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .send({ session_token: signIn.session_token })
+      .expect(201);
+
+    const body = successBody<EnrollMfaSuccess>(result);
+    assert.match(
+      body.totp_uri,
+      /^otpauth:\/\/totp\/LCSP%3Asecurity%40acme\.test\?/,
+    );
+  });
+
+  it("pending MFA setup does not count as enrolled before OTP verification", async () => {
     const signIn = await signInApprovedUser();
     await seedMfaEnrollment(prisma, fixture.approvedUser.id);
+
+    const secondSignIn = await signInApprovedUser();
+    assert.equal(secondSignIn.mfa_required, undefined);
+    assert.equal(secondSignIn.mfa_enrolled, false);
 
     const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .expect(401);
+      .expect(200);
 
-    assert.equal(problemCode(result), AUTH_ERROR_CODES.mfaRequired);
+    assert.equal(successBody<WorkspaceSuccess>(result).ok, true);
   });
 
-  it("sign-in response includes mfa_required flag when MFA is enrolled", async () => {
-    await seedMfaEnrollment(prisma, fixture.approvedUser.id);
+  it("sign-in response keeps MFA optional until enrollment exists", async () => {
     const result = await httpRequest(app)
       .post("/auth/sign-in")
       .send({
@@ -513,7 +598,8 @@ describe("Auth workspace (e2e)", () => {
 
     const body = successBody<SignInSuccess>(result);
     assert.equal(body.ok, true);
-    assert.equal(body.mfa_required, true);
+    assert.equal(body.mfa_required, undefined);
+    assert.equal(body.mfa_enrolled, false);
   });
 
   it("valid OTP verifies MFA and grants workspace access", async () => {
@@ -554,6 +640,10 @@ describe("Auth workspace (e2e)", () => {
         AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed,
     );
     assert.ok(mfaFailed, "auth.mfa.failed audit event should be recorded");
+    assert.equal(
+      (mfaFailed.payload as Record<string, unknown>).otp_failure_reason,
+      "invalid",
+    );
   });
 
   it("replayed OTP is rejected after first successful use", async () => {
@@ -574,6 +664,22 @@ describe("Auth workspace (e2e)", () => {
 
     const failure = expectFailure(replay.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaInvalid);
+
+    const auditEvents = await prisma.authAuditEvent.findMany({
+      orderBy: { createdAt: "asc" },
+    });
+    const replayFailed = [...auditEvents]
+      .reverse()
+      .find(
+        (event) =>
+          (event.payload as Record<string, unknown>)["event_type"] ===
+          AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed,
+      );
+    assert.equal(
+      (replayFailed?.payload as Record<string, unknown> | undefined)
+        ?.otp_failure_reason,
+      "replayed",
+    );
   });
 
   it("rate limiting blocks after 5 consecutive failed OTP attempts", async () => {
@@ -594,6 +700,51 @@ describe("Auth workspace (e2e)", () => {
 
     const failure = expectFailure(locked.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaRateLimited);
+  });
+
+  it("undecryptable MFA secrets redirect verification back to enrollment", async () => {
+    const originalKey = process.env.MFA_ENCRYPTION_KEY;
+    process.env.MFA_ENCRYPTION_KEY = "mfa-key-before-rotation";
+    const signIn = await signInApprovedUser();
+    const mfa = await seedMfaEnrollment(prisma, fixture.approvedUser.id);
+    const otp = totpForTime(mfa.totpSecret, Date.now());
+
+    process.env.MFA_ENCRYPTION_KEY = "mfa-key-after-rotation";
+
+    try {
+      const result = await httpRequest(app)
+        .post("/auth/mfa/verify-otp")
+        .send({ session_token: signIn.session_token, otp })
+        .expect(403);
+
+      const failure = expectFailure(result.body);
+      assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaRequired);
+    } finally {
+      process.env.MFA_ENCRYPTION_KEY = originalKey;
+    }
+  });
+
+  it("MFA enrollment can replace an undecryptable stale secret", async () => {
+    const originalKey = process.env.MFA_ENCRYPTION_KEY;
+    process.env.MFA_ENCRYPTION_KEY = "mfa-key-before-rotation";
+    const signIn = await signInApprovedUser();
+    await seedMfaEnrollment(prisma, fixture.approvedUser.id);
+
+    process.env.MFA_ENCRYPTION_KEY = "mfa-key-after-rotation";
+
+    try {
+      const result = await httpRequest(app)
+        .post("/auth/mfa/enroll")
+        .set("Authorization", `Bearer ${signIn.session_token}`)
+        .send({ session_token: signIn.session_token })
+        .expect(201);
+
+      const body = successBody<EnrollMfaSuccess>(result);
+      assert.equal(body.ok, true);
+      assert.match(body.totp_uri, /^otpauth:\/\/totp\//);
+    } finally {
+      process.env.MFA_ENCRYPTION_KEY = originalKey;
+    }
   });
 
   // AC2: Session expiry/revocation with audit trail
@@ -651,7 +802,7 @@ describe("Auth workspace (e2e)", () => {
   // AC3: Profile update safety
 
   it("profile update succeeds and returns updated_fields without secret values", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
     const result = await httpRequest(app)
       .patch("/auth/profile")
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -668,10 +819,24 @@ describe("Auth workspace (e2e)", () => {
     assert.ok(body.updated_fields.includes("display_name"));
     assert.ok(body.updated_fields.includes("recovery_email"));
     assert.doesNotMatch(JSON.stringify(result.body), /recovery@safe\.test/);
+
+    const profile = await httpRequest(app)
+      .get("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .expect(200);
+    const profileBody = successBody<{
+      backup_recovery_email_policy: string;
+      recovery_email: string | null;
+    }>(profile);
+    assert.equal(
+      profileBody.backup_recovery_email_policy,
+      AUTH_BACKUP_EMAIL_POLICIES.recoveryEmail,
+    );
+    assert.equal(profileBody.recovery_email, "recovery@safe.test");
   });
 
   it("profile update audit event records field names not values", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
     await httpRequest(app)
       .patch("/auth/profile")
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -711,26 +876,26 @@ describe("Auth workspace (e2e)", () => {
       .post("/auth/mfa/enroll")
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .send({ session_token: signIn.session_token })
-      .expect(401);
+      .expect(403);
 
     assert.equal(problemCode(reEnroll), AUTH_ERROR_CODES.mfaRequired);
   });
 
-  it("profile update is blocked when MFA is enrolled but not yet verified", async () => {
+  it("profile update remains allowed while MFA setup is still pending first verification", async () => {
     const signIn = await signInApprovedUser();
     await seedMfaEnrollment(prisma, fixture.approvedUser.id);
 
     const result = await httpRequest(app)
       .patch("/auth/profile")
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .send({ session_token: signIn.session_token, display_name: "Blocked" })
-      .expect(401);
+      .send({ session_token: signIn.session_token, display_name: "Pending OK" })
+      .expect(200);
 
-    assert.equal(problemCode(result), AUTH_ERROR_CODES.mfaRequired);
+    assert.equal(successBody<UpdateProfileSuccess>(result).ok, true);
   });
 
   it("profile update rejects a malformed recovery_email", async () => {
-    const signIn = await signInApprovedUser();
+    const signIn = await signInAndVerifyApprovedUser();
     const result = await httpRequest(app)
       .patch("/auth/profile")
       .set("Authorization", `Bearer ${signIn.session_token}`)
@@ -751,16 +916,16 @@ describe("Auth workspace (e2e)", () => {
     });
 
     const signIn = await signInApprovedUser();
-    assert.equal(signIn.mfa_required, true);
+    assert.equal(signIn.mfa_required, undefined);
+    assert.equal(signIn.mfa_enrolled, false);
 
     const result = await httpRequest(app)
       .get("/workspace")
       .query({ organization_id: fixture.organizationId })
       .set("Authorization", `Bearer ${signIn.session_token}`)
-      .expect(403);
+      .expect(200);
 
-    const failure = expectFailure(result.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.mfaRequired);
+    assert.equal(successBody<WorkspaceSuccess>(result).ok, true);
   });
 
   it("client-facing user projection only exposes role, not other PBAC subject attributes", async () => {
@@ -796,6 +961,118 @@ describe("Auth workspace (e2e)", () => {
     assert.equal(knownBody.ok, true);
     assert.equal(unknownBody.ok, true);
     assert.deepEqual(Object.keys(knownBody), Object.keys(unknownBody));
+  });
+
+  it("password recovery delivers to the configured recovery email when present", async () => {
+    const signIn = await signInAndVerifyApprovedUser();
+    await httpRequest(app)
+      .patch("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .send({
+        session_token: signIn.session_token,
+        recovery_email: "recovery@safe.test",
+      })
+      .expect(200);
+
+    await httpRequest(app)
+      .post("/auth/recovery/request")
+      .send({ email: fixture.approvedUser.email })
+      .expect(201);
+
+    assert.equal(recoveryNotifier.lastEmail, "recovery@safe.test");
+  });
+
+  it("password recovery falls back to the primary verified email when backup policy allows all verified emails", async () => {
+    const signIn = await signInAndVerifyApprovedUser();
+    await httpRequest(app)
+      .patch("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .send({
+        session_token: signIn.session_token,
+        recovery_email: "recovery@safe.test",
+        backup_recovery_email_policy: AUTH_BACKUP_EMAIL_POLICIES.allVerified,
+      })
+      .expect(200);
+
+    await httpRequest(app)
+      .post("/auth/recovery/request")
+      .send({ email: fixture.approvedUser.email })
+      .expect(201);
+
+    assert.equal(recoveryNotifier.lastEmail, fixture.approvedUser.email);
+  });
+
+  it("primary email address can be switched to the recovery email for sign-in", async () => {
+    const signIn = await signInAndVerifyApprovedUser();
+    await httpRequest(app)
+      .patch("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .send({
+        session_token: signIn.session_token,
+        recovery_email: "recovery-primary@safe.test",
+        primary_email_address_policy:
+          AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.recoveryEmail,
+      })
+      .expect(200);
+
+    const recoveryEmailSignIn = await httpRequest(app)
+      .post("/auth/sign-in")
+      .send({
+        email: "recovery-primary@safe.test",
+        password: "CorrectHorseBatteryStaple!",
+        organization_id: fixture.organizationId,
+      })
+      .expect(200);
+
+    const body = successBody<SignInSuccess>(recoveryEmailSignIn);
+    assert.equal(body.ok, true);
+    assert.equal(body.user.email, fixture.approvedUser.email);
+  });
+
+  it("password recovery request accepts the configured primary recovery email", async () => {
+    const signIn = await signInAndVerifyApprovedUser();
+    await httpRequest(app)
+      .patch("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .send({
+        session_token: signIn.session_token,
+        recovery_email: "recovery-primary@safe.test",
+        primary_email_address_policy:
+          AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.recoveryEmail,
+      })
+      .expect(200);
+
+    await httpRequest(app)
+      .post("/auth/recovery/request")
+      .send({ email: "recovery-primary@safe.test" })
+      .expect(201);
+
+    assert.equal(recoveryNotifier.lastEmail, "recovery-primary@safe.test");
+  });
+
+  it("profile update rejects an invalid backup recovery email policy", async () => {
+    const signIn = await signInAndVerifyApprovedUser();
+    const result = await httpRequest(app)
+      .patch("/auth/profile")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .send({
+        session_token: signIn.session_token,
+        backup_recovery_email_policy: "NOT_A_POLICY",
+      })
+      .expect(400);
+
+    const failure = expectFailure(result.body);
+    assert.equal(failure.problem.code, AUTH_ERROR_CODES.validationFailed);
+  });
+
+  it("password recovery forwards the app origin for recovery links", async () => {
+    await httpRequest(app)
+      .post("/auth/recovery/request")
+      .set("x-app-origin", "https://workspace.lcsp.test")
+      .send({ email: fixture.approvedUser.email })
+      .expect(201);
+
+    assert.equal(recoveryNotifier.lastAppOrigin, "https://workspace.lcsp.test");
   });
 
   it("password recovery confirm resets the password and revokes existing sessions", async () => {
@@ -854,6 +1131,22 @@ describe("Auth workspace (e2e)", () => {
       .expect(200);
 
     return successBody<SignInSuccess>(result);
+  }
+
+  async function signInAndVerifyApprovedUser() {
+    await prisma.authUserMfa.deleteMany({
+      where: { userId: fixture.approvedUser.id },
+    });
+    const signIn = await signInApprovedUser();
+    const mfa = await seedMfaEnrollment(prisma, fixture.approvedUser.id);
+    const otp = totpForTime(mfa.totpSecret, Date.now());
+
+    await httpRequest(app)
+      .post("/auth/mfa/verify-otp")
+      .send({ session_token: signIn.session_token, otp })
+      .expect(201);
+
+    return signIn;
   }
 });
 

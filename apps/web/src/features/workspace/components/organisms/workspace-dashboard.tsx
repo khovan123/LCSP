@@ -2,24 +2,11 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { resolveMessage } from "@lcsp/i18n";
-import Link from "next/link";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   canCreateAssessment,
-  getAssessmentActiveHref,
-  getAssessmentStatusLabelKey,
 } from "@/lib/api/workspace-client";
 import {
   useAssessmentsQuery,
@@ -28,10 +15,10 @@ import {
 
 import { appLocale } from "@/lib/locale";
 import type {
-  AssessmentSummary,
   WorkspaceErrorOutcome,
 } from "../../types/workspace.types";
 import { WorkspaceHeader } from "../molecules/workspace-header";
+import { WorkspaceOverview } from "./workspace-overview";
 
 export function WorkspaceDashboard() {
   const router = useRouter();
@@ -106,89 +93,6 @@ export function WorkspaceDashboard() {
   );
 }
 
-function WorkspaceOverview({
-  assessments,
-}: {
-  assessments: AssessmentSummary[];
-}) {
-  const attention = assessments.filter(
-    (assessment) => assessment.status !== ASSESSMENT_STATUS_CODES.readyForReview,
-  ).length;
-  const ready = assessments.filter(
-    (assessment) => assessment.status === ASSESSMENT_STATUS_CODES.readyForReview,
-  ).length;
-  const recent = [...assessments]
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .slice(0, 3);
-
-  return (
-    <>
-      <section
-        className="grid gap-4 sm:grid-cols-3"
-        aria-label={resolveMessage(appLocale, "pages.workspace.insightsTitle")}
-      >
-        <OverviewMetric
-          labelKey="pages.workspace.totalAssessments"
-          value={assessments.length}
-        />
-        <OverviewMetric
-          labelKey="pages.workspace.needsAttention"
-          value={attention}
-        />
-        <OverviewMetric
-          labelKey="pages.workspace.readyForReview"
-          value={ready}
-        />
-      </section>
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {resolveMessage(
-              appLocale,
-              "pages.workspace.recentAssessmentsTitle",
-            )}
-          </CardTitle>
-          <CardDescription>
-            {resolveMessage(
-              appLocale,
-              "pages.workspace.recentAssessmentsDescription",
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Link
-            className={buttonVariants({ variant: "outline" })}
-            href="/assessments"
-          >
-            {resolveMessage(appLocale, "pages.workspace.openAssessments")}
-          </Link>
-          {recent.length ? (
-            recent.map((assessment) => (
-              <Link
-                key={assessment.id}
-                href={getAssessmentActiveHref(assessment)}
-                className="flex items-center justify-between gap-4 rounded-lg border p-3 transition-colors hover:bg-muted"
-              >
-                <span className="font-medium">{assessment.name}</span>
-                <Badge variant="outline">
-                  {resolveMessage(
-                    appLocale,
-                    getAssessmentStatusLabelKey(assessment.status),
-                  )}
-                </Badge>
-              </Link>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {resolveMessage(appLocale, "pages.workspace.emptyDescription")}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-    </>
-  );
-}
-
 function isWorkspaceErrorOutcome(
   outcome: unknown,
 ): outcome is WorkspaceErrorOutcome {
@@ -196,22 +100,5 @@ function isWorkspaceErrorOutcome(
     typeof outcome === "object" &&
     outcome !== null &&
     (outcome as { kind?: unknown }).kind === "error"
-  );
-}
-
-function OverviewMetric({
-  labelKey,
-  value,
-}: {
-  labelKey: Parameters<typeof resolveMessage>[1];
-  value: number;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{resolveMessage(appLocale, labelKey)}</CardDescription>
-        <CardTitle className="text-3xl">{value}</CardTitle>
-      </CardHeader>
-    </Card>
   );
 }

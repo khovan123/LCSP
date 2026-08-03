@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { WORKSPACE_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, WORKSPACE_ERROR_CODES } from "@lcsp/contracts/auth";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { isMockModeEnabled, readMockJson } from "@/lib/server/fixtures/response";
@@ -17,6 +17,11 @@ import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 export async function GET(request: NextRequest) {
   if (isMockModeEnabled()) {
     const sessionToken = readSessionToken(request);
+    if (sessionToken === "mock-session:mfa-verify-pending") {
+      return problemJson(AUTH_ERROR_CODES.mfaRequired, {
+        status: 403,
+      });
+    }
     if (sessionToken === "mock-session:manager") {
       return successJson(await readMockJson("workspace.json"));
     }

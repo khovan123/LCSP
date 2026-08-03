@@ -16,8 +16,10 @@ import type {
 } from "@prisma/client";
 
 import {
+  fromPrismaAuthBackupEmailPolicy,
   fromPrismaAuthInvitationState,
   fromPrismaAuthMembershipStatus,
+  fromPrismaAuthPrimaryEmailAddressPolicy,
   fromPrismaAuthStateGate,
 } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import {
@@ -56,6 +58,12 @@ export function mapUserRecord(record: AuthUser): User {
     lockUntil: record.lockUntil?.getTime() ?? null,
     displayName: record.displayName ?? null,
     recoveryEmail: record.recoveryEmail ?? null,
+    primaryEmailAddressPolicy: fromPrismaAuthPrimaryEmailAddressPolicy(
+      record.primaryEmailAddressPolicy,
+    ),
+    backupEmailPolicy: fromPrismaAuthBackupEmailPolicy(
+      record.backupEmailPolicy,
+    ),
     mfaRequired: record.mfaRequired,
   });
 }
@@ -116,6 +124,7 @@ export function mapMfaEnrollmentRecord(record: AuthUserMfa): MfaEnrollment {
     userId: record.userId,
     encryptedSecret: record.encryptedSecret,
     enrolledAt: record.enrolledAt.getTime(),
+    verifiedAt: record.verifiedAt?.getTime() ?? null,
   });
 }
 

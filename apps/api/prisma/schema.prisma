@@ -30,6 +30,8 @@ model AuthUser {
   lockUntil        DateTime?
   displayName      String?
   recoveryEmail    String?
+  primaryEmailAddressPolicy AuthPrimaryEmailAddressPolicy @default(ACCOUNT_EMAIL)
+  backupEmailPolicy AuthBackupEmailPolicy @default(RECOVERY_EMAIL)
   mfaRequired      Boolean               @default(false)
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
@@ -119,7 +121,18 @@ model AuthUserMfa {
   userId          String   @id
   encryptedSecret String
   enrolledAt      DateTime @default(now())
+  verifiedAt      DateTime?
   user            AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum AuthBackupEmailPolicy {
+  ALL_VERIFIED
+  RECOVERY_EMAIL
+}
+
+enum AuthPrimaryEmailAddressPolicy {
+  ACCOUNT_EMAIL
+  RECOVERY_EMAIL
 }
 
 model AuthMfaOtpUsed {

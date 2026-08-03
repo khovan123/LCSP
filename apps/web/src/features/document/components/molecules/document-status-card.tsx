@@ -6,12 +6,12 @@ import type { DocumentRequestStatus, DocumentType } from "@lcsp/contracts/docume
 import { DOCUMENT_REQUEST_STATUSES, DOCUMENT_TYPES } from "@lcsp/contracts/document";
 import { resolveMessage, type MessageKey } from "@lcsp/i18n";
 
-import { buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { getDocumentStatus } from "@/lib/api/document-client";
 import { appLocale } from "@/lib/locale";
-import { cn } from "@/lib/utils";
 
 type DocumentStatusCardProps = {
   assessmentId: string;
@@ -147,12 +147,18 @@ export function DocumentStatusCard({
               {resolveMessage(appLocale, "pages.classification.documentMeta.requestedAt")} {initialRequestedAt}
             </CardDescription>
           </div>
-          <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium", status === DOCUMENT_REQUEST_STATUSES.ready ? "border-emerald-600/30 bg-emerald-50 text-emerald-700" : status === DOCUMENT_REQUEST_STATUSES.failed ? "border-red-600/30 bg-red-50 text-red-700" : status === DOCUMENT_REQUEST_STATUSES.blocked ? "border-amber-600/30 bg-amber-50 text-amber-700" : "border-slate-300 bg-slate-50 text-slate-700")}> 
+          <Badge
+            variant={
+              status === DOCUMENT_REQUEST_STATUSES.failed
+                ? "destructive"
+                : "secondary"
+            }
+          >
             {resolveMessage(appLocale, statusMessageKey)}
-          </span>
+          </Badge>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-col gap-3">
         {shouldShowSpinner ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner className="size-4" />
@@ -182,14 +188,14 @@ export function DocumentStatusCard({
       </CardContent>
       <CardFooter className="flex justify-end gap-2">
         {showDownloadButton ? (
-          <button
+          <Button
             type="button"
-            className={cn(buttonVariants({ variant: "default" }), "inline-flex items-center gap-2")}
+            className="inline-flex items-center gap-2"
             onClick={onDownload}
           >
             <Download className="size-4" />
             {resolveMessage(appLocale, "pages.classification.documentActions.download")}
-          </button>
+          </Button>
         ) : null}
       </CardFooter>
     </Card>

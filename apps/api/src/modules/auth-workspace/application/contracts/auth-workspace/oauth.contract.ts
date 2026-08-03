@@ -21,5 +21,6 @@ export type OAuthCallbackSuccess = {
   session_token: string;
   expires_at: number;
   mfa_required: boolean;
+  mfa_enrolled: boolean;
   organization_id: string;
 };

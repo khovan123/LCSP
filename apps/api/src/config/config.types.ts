@@ -53,6 +53,15 @@ export interface InternalConfig {
   apiToken: string;
 }
 
+export interface EmailConfig {
+  smtpHost: string;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser: string;
+  smtpPass: string;
+  smtpFrom: string;
+}
+
 export type NodeEnv = "development" | "production" | "test";
 
 export interface AppConfig {
@@ -67,4 +76,5 @@ export interface AppConfig {
   pythonWorker: PythonWorkerConfig;
   worker: WorkerConfig;
   internal: InternalConfig;
+  email: EmailConfig;
 }

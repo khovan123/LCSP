@@ -1,16 +1,13 @@
 import { resolveMessage } from "@lcsp/i18n";
-import type { ReactNode } from "react";
 
 import { BrandMark } from "@/components/atoms/brand-mark";
 import { appLocale } from "@/lib/locale";
+import type { AuthShellProps } from "../../types/auth-shell.types";
 
 export function AuthShell({
   children,
   homeLabel,
-}: {
-  children: ReactNode;
-  homeLabel: string;
-}) {
+}: AuthShellProps) {
   return (
     <main className="grid min-h-svh bg-background text-foreground lg:grid-cols-2">
       <div className="flex flex-col gap-8 p-6 md:p-10">
@@ -33,7 +30,7 @@ export function AuthShell({
         <div className="absolute inset-12 rounded-3xl border border-white/20 bg-white/10 shadow-2xl backdrop-blur-sm" />
         <div className="absolute right-20 bottom-20 left-20 rounded-2xl border border-white/25 bg-black/10 p-8">
           <div className="mb-6 h-2 w-24 rounded-full bg-white/60" />
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             <div className="h-3 w-full rounded-full bg-white/25" />
             <div className="h-3 w-4/5 rounded-full bg-white/25" />
             <div className="h-3 w-3/5 rounded-full bg-white/25" />

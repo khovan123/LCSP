@@ -1,7 +1,9 @@
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
+  AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_ERROR_CODES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
+  AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
@@ -73,6 +75,30 @@ export class UpdateProfileHandler {
       }
     }
 
+    if (
+      typeof payload.backup_recovery_email_policy === "string" &&
+      !Object.values(AUTH_BACKUP_EMAIL_POLICIES).includes(
+        payload.backup_recovery_email_policy,
+      )
+    ) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.validationFailed,
+        correlationId,
+      );
+    }
+
+    if (
+      typeof payload.primary_email_address_policy === "string" &&
+      !Object.values(AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES).includes(
+        payload.primary_email_address_policy,
+      )
+    ) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.validationFailed,
+        correlationId,
+      );
+    }
+
     const user = await this.support.resolveUserById(
       this.repositories,
       session.userId,
@@ -101,6 +127,46 @@ export class UpdateProfileHandler {
       return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
 
+    const nextRecoveryEmail =
+      typeof payload.recovery_email === "string"
+        ? payload.recovery_email.trim().toLowerCase() || null
+        : user.recoveryEmail;
+    const nextPrimaryEmailPolicy =
+      typeof payload.primary_email_address_policy === "string"
+        ? payload.primary_email_address_policy
+        : user.primaryEmailAddressPolicy;
+
+    if (
+      nextPrimaryEmailPolicy ===
+        AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.recoveryEmail &&
+      !nextRecoveryEmail
+    ) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.validationFailed,
+        correlationId,
+      );
+    }
+
+    if (nextRecoveryEmail) {
+      const userByEmail =
+        await this.repositories.users.findByEmail(nextRecoveryEmail);
+      if (userByEmail && userByEmail.id !== user.id) {
+        return createProblemResult(
+          AUTH_ERROR_CODES.validationFailed,
+          correlationId,
+        );
+      }
+
+      const userByRecoveryEmail =
+        await this.repositories.users.findByRecoveryEmail(nextRecoveryEmail);
+      if (userByRecoveryEmail && userByRecoveryEmail.id !== user.id) {
+        return createProblemResult(
+          AUTH_ERROR_CODES.validationFailed,
+          correlationId,
+        );
+      }
+    }
+
     const updatedFields: string[] = [];
 
     if (typeof payload.display_name === "string") {
@@ -109,8 +175,18 @@ export class UpdateProfileHandler {
     }
 
     if (typeof payload.recovery_email === "string") {
-      user.recoveryEmail = payload.recovery_email.trim().toLowerCase() || null;
+      user.recoveryEmail = nextRecoveryEmail;
       updatedFields.push("recovery_email");
+    }
+
+    if (typeof payload.primary_email_address_policy === "string") {
+      user.primaryEmailAddressPolicy = payload.primary_email_address_policy;
+      updatedFields.push("primary_email_address_policy");
+    }
+
+    if (typeof payload.backup_recovery_email_policy === "string") {
+      user.backupEmailPolicy = payload.backup_recovery_email_policy;
+      updatedFields.push("backup_recovery_email_policy");
     }
 
     await this.repositories.users.save(user);
@@ -134,7 +210,9 @@ export class UpdateProfileHandler {
   private hasUpdateField(payload: UpdateProfilePayload): boolean {
     return (
       typeof payload.display_name === "string" ||
-      typeof payload.recovery_email === "string"
+      typeof payload.recovery_email === "string" ||
+      typeof payload.primary_email_address_policy === "string" ||
+      typeof payload.backup_recovery_email_policy === "string"
     );
   }
 }

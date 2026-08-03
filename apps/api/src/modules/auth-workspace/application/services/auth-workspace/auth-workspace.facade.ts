@@ -21,6 +21,7 @@ import type {
   ConfirmRecoveryPayload,
   RequestRecoveryPayload,
 } from "../../contracts/auth-workspace/recovery.contract.ts";
+import type { PasswordReauthPayload } from "../../contracts/auth-workspace/password-reauth.contract.ts";
 import type { CredentialPayload } from "../../contracts/auth-workspace/sign-in.contract.ts";
 import type { WorkspaceRequest } from "../../contracts/auth-workspace/workspace.contract.ts";
 import type { UpdateProfilePayload } from "../../commands/update-profile/update-profile.command.ts";
@@ -28,6 +29,8 @@ import { ConfirmPasswordRecoveryCommand } from "../../commands/confirm-password-
 import { ConfirmPasswordRecoveryHandler } from "../../commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
 import { AcceptInvitationCommand } from "../../commands/accept-invitation/accept-invitation.command.ts";
 import { AcceptInvitationHandler } from "../../commands/accept-invitation/accept-invitation.handler.ts";
+import { DisableMfaCommand } from "../../commands/disable-mfa/disable-mfa.command.ts";
+import { DisableMfaHandler } from "../../commands/disable-mfa/disable-mfa.handler.ts";
 import { EnrollMfaCommand } from "../../commands/enroll-mfa/enroll-mfa.command.ts";
 import { EnrollMfaHandler } from "../../commands/enroll-mfa/enroll-mfa.handler.ts";
 import { InviteDeveloperCommand } from "../../commands/invite-developer/invite-developer.command.ts";
@@ -42,6 +45,10 @@ import { RevokeMembershipCommand } from "../../commands/revoke-membership/revoke
 import { RevokeMembershipHandler } from "../../commands/revoke-membership/revoke-membership.handler.ts";
 import { RequestPasswordRecoveryCommand } from "../../commands/request-password-recovery/request-password-recovery.command.ts";
 import { RequestPasswordRecoveryHandler } from "../../commands/request-password-recovery/request-password-recovery.handler.ts";
+import { ReauthenticatePasswordCommand } from "../../commands/reauthenticate-password/reauthenticate-password.command.ts";
+import { ReauthenticatePasswordHandler } from "../../commands/reauthenticate-password/reauthenticate-password.handler.ts";
+import { RevokeOwnedSessionCommand } from "../../commands/revoke-owned-session/revoke-owned-session.command.ts";
+import { RevokeOwnedSessionHandler } from "../../commands/revoke-owned-session/revoke-owned-session.handler.ts";
 import { RevokeSessionCommand } from "../../commands/revoke-session/revoke-session.command.ts";
 import { RevokeSessionHandler } from "../../commands/revoke-session/revoke-session.handler.ts";
 import { SignInCommand } from "../../commands/sign-in/sign-in.command.ts";
@@ -50,6 +57,12 @@ import { UpdateProfileCommand } from "../../commands/update-profile/update-profi
 import { UpdateProfileHandler } from "../../commands/update-profile/update-profile.handler.ts";
 import { VerifyMfaOtpCommand } from "../../commands/verify-mfa-otp/verify-mfa-otp.command.ts";
 import { VerifyMfaOtpHandler } from "../../commands/verify-mfa-otp/verify-mfa-otp.handler.ts";
+import { GetAuthProfileHandler } from "../../queries/get-auth-profile/get-auth-profile.handler.ts";
+import { GetAuthProfileQuery } from "../../queries/get-auth-profile/get-auth-profile.query.ts";
+import { ListAuthRepositoriesHandler } from "../../queries/list-auth-repositories/list-auth-repositories.handler.ts";
+import { ListAuthRepositoriesQuery } from "../../queries/list-auth-repositories/list-auth-repositories.query.ts";
+import { ListAuthSessionsHandler } from "../../queries/list-auth-sessions/list-auth-sessions.handler.ts";
+import { ListAuthSessionsQuery } from "../../queries/list-auth-sessions/list-auth-sessions.query.ts";
 import { GetWorkspaceHandler } from "../../queries/get-workspace/get-workspace.handler.ts";
 import { GetWorkspaceQuery } from "../../queries/get-workspace/get-workspace.query.ts";
 import { GetDeveloperTaskContextHandler } from "../../queries/get-developer-task-context/get-developer-task-context.handler.ts";
@@ -64,12 +77,18 @@ export class AuthWorkspaceFacade {
     private readonly registerApprovedPathHandler: RegisterApprovedPathHandler,
     private readonly signInHandler: SignInHandler,
     private readonly revokeSessionHandler: RevokeSessionHandler,
+    private readonly revokeOwnedSessionHandler: RevokeOwnedSessionHandler,
+    private readonly getAuthProfileHandler: GetAuthProfileHandler,
+    private readonly listAuthSessionsHandler: ListAuthSessionsHandler,
+    private readonly listAuthRepositoriesHandler: ListAuthRepositoriesHandler,
     private readonly getWorkspaceHandler: GetWorkspaceHandler,
+    private readonly disableMfaHandler: DisableMfaHandler,
     private readonly enrollMfaHandler: EnrollMfaHandler,
     private readonly verifyMfaOtpHandler: VerifyMfaOtpHandler,
     private readonly updateProfileHandler: UpdateProfileHandler,
     private readonly requestPasswordRecoveryHandler: RequestPasswordRecoveryHandler,
     private readonly confirmPasswordRecoveryHandler: ConfirmPasswordRecoveryHandler,
+    private readonly reauthenticatePasswordHandler: ReauthenticatePasswordHandler,
     private readonly oauthStartHandler: OAuthStartHandler,
     private readonly oauthCallbackHandler: OAuthCallbackHandler,
     private readonly inviteDeveloperHandler: InviteDeveloperHandler,
@@ -95,6 +114,40 @@ export class AuthWorkspaceFacade {
   revokeSession(sessionToken: string, requestMeta: RequestMeta = {}) {
     return this.revokeSessionHandler.execute(
       new RevokeSessionCommand(sessionToken, requestMeta),
+    );
+  }
+
+  revokeOwnedSession(
+    sessionId: string,
+    context: PbacRequestContext,
+    requestMeta: RequestMeta = {},
+  ) {
+    return this.revokeOwnedSessionHandler.execute(
+      new RevokeOwnedSessionCommand(sessionId, context, requestMeta),
+    );
+  }
+
+  getProfile(context: PbacRequestContext, correlationId: string) {
+    return this.getAuthProfileHandler.execute(
+      new GetAuthProfileQuery(context, correlationId),
+    );
+  }
+
+  listSessions(context: PbacRequestContext) {
+    return this.listAuthSessionsHandler.execute(
+      new ListAuthSessionsQuery(context),
+    );
+  }
+
+  listRepositories(context: PbacRequestContext) {
+    return this.listAuthRepositoriesHandler.execute(
+      new ListAuthRepositoriesQuery(context),
+    );
+  }
+
+  disableMfa(sessionToken: string, requestMeta: RequestMeta = {}) {
+    return this.disableMfaHandler.execute(
+      new DisableMfaCommand(sessionToken, requestMeta),
     );
   }
 
@@ -155,6 +208,15 @@ export class AuthWorkspaceFacade {
   ) {
     return this.confirmPasswordRecoveryHandler.execute(
       new ConfirmPasswordRecoveryCommand(payload, requestMeta),
+    );
+  }
+
+  reauthenticatePassword(
+    payload: PasswordReauthPayload,
+    requestMeta: RequestMeta = {},
+  ) {
+    return this.reauthenticatePasswordHandler.execute(
+      new ReauthenticatePasswordCommand(payload, requestMeta),
     );
   }
 

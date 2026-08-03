@@ -14,6 +14,7 @@ import {
 
 import { RedactedFindingsList } from "./redacted-findings-list";
 import { ScopeSummaryCard } from "./scope-summary-card";
+import type { DeveloperTaskWorkspaceProps } from "../../types/component-props.types";
 import { DEVELOPER_TASK_SCOPE_TYPES } from "../../types/developer-task.types";
 
 const DEVELOPER_TASK_PAGE_STATES = {
@@ -27,7 +28,9 @@ const DEVELOPER_TASK_PAGE_STATES = {
 type PageState =
   (typeof DEVELOPER_TASK_PAGE_STATES)[keyof typeof DEVELOPER_TASK_PAGE_STATES];
 
-export function DeveloperTaskWorkspace({ assessmentId }: { assessmentId: string }) {
+export function DeveloperTaskWorkspace({
+  assessmentId,
+}: DeveloperTaskWorkspaceProps) {
   const router = useRouter();
   const contextQuery = useDeveloperTaskContextQuery();
   const evidenceQuery = useTechnicalEvidenceQuery(assessmentId);

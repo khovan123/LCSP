@@ -34,6 +34,7 @@ import type {
   ConfirmRecoveryPayload,
   RequestRecoveryPayload,
 } from "../../application/contracts/auth-workspace/recovery.contract.ts";
+import type { PasswordReauthPayload } from "../../application/contracts/auth-workspace/password-reauth.contract.ts";
 import type { CredentialPayload } from "../../application/contracts/auth-workspace/sign-in.contract.ts";
 import type { WorkspaceRequest } from "../../application/contracts/auth-workspace/workspace.contract.ts";
 import type { UpdateProfilePayload } from "../../application/commands/update-profile/update-profile.command.ts";
@@ -43,6 +44,7 @@ import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { RequireAnyActionAsPbac } from "../../../../platform/pbac/decorators/require-any-action-as-pbac.decorator.js";
 import { RequireSession } from "../../../../platform/pbac/decorators/require-session.decorator.js";
+import { AllowPendingMfa } from "../../../../platform/pbac/decorators/allow-pending-mfa.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
@@ -312,6 +314,7 @@ export class AuthWorkspaceController {
   @Post("auth/mfa/enroll")
   @UseGuards(PbacGuard)
   @RequireSession()
+  @AllowPendingMfa()
   async enrollMfa(
     @Body() body: { session_token?: string },
     @Headers("authorization") authorization: string | undefined,
@@ -319,6 +322,22 @@ export class AuthWorkspaceController {
   ) {
     return resultEnvelope(
       await this.authWorkspaceFacade.enrollMfa(
+        bearerToken(authorization) ?? body.session_token ?? "",
+        requestMeta(request.correlationId),
+      ),
+    );
+  }
+
+  @Delete("auth/mfa")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  async disableMfa(
+    @Body() body: { session_token?: string },
+    @Headers("authorization") authorization: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.authWorkspaceFacade.disableMfa(
         bearerToken(authorization) ?? body.session_token ?? "",
         requestMeta(request.correlationId),
       ),
@@ -335,6 +354,26 @@ export class AuthWorkspaceController {
         body.session_token ?? "",
         body.otp ?? "",
         requestMeta(correlationId),
+      ),
+    );
+  }
+
+  @Post("auth/re-auth/password")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  @AllowPendingMfa()
+  async reauthenticatePassword(
+    @Body() body: PasswordReauthPayload,
+    @Headers("authorization") authorization: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.authWorkspaceFacade.reauthenticatePassword(
+        {
+          session_token: bearerToken(authorization) ?? body.session_token ?? "",
+          password: body.password,
+        },
+        requestMeta(request.correlationId),
       ),
     );
   }
@@ -357,15 +396,62 @@ export class AuthWorkspaceController {
     );
   }
 
+  @Get("auth/profile")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  async getProfile(@Req() request: AuthenticatedRequest) {
+    return resultEnvelope(
+      await this.authWorkspaceFacade.getProfile(
+        request.pbacContext,
+        request.correlationId!,
+      ),
+    );
+  }
+
+  @Get("auth/sessions")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  async listSessions(@Req() request: AuthenticatedRequest) {
+    return resultEnvelope(
+      await this.authWorkspaceFacade.listSessions(request.pbacContext),
+    );
+  }
+
+  @Delete("auth/sessions/:sessionId")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  async revokeOwnedSession(
+    @Param("sessionId") sessionId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.authWorkspaceFacade.revokeOwnedSession(
+        sessionId,
+        request.pbacContext,
+        requestMeta(request.correlationId),
+      ),
+    );
+  }
+
+  @Get("auth/repositories")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  async listRepositories(@Req() request: AuthenticatedRequest) {
+    return resultEnvelope(
+      await this.authWorkspaceFacade.listRepositories(request.pbacContext),
+    );
+  }
+
   @Post("auth/recovery/request")
   async requestPasswordRecovery(
     @Body() payload: RequestRecoveryPayload,
     @Headers("x-correlation-id") correlationId?: string,
+    @Headers("x-app-origin") appOrigin?: string,
   ) {
     return resultEnvelope(
       await this.authWorkspaceFacade.requestPasswordRecovery(
         payload,
-        requestMeta(correlationId),
+        requestMeta(correlationId, appOrigin),
       ),
     );
   }
@@ -418,8 +504,11 @@ export class AuthWorkspaceController {
   }
 }
 
-function requestMeta(correlationId?: string): RequestMeta {
-  return correlationId ? { correlation_id: correlationId } : {};
+function requestMeta(correlationId?: string, appOrigin?: string): RequestMeta {
+  return {
+    ...(correlationId ? { correlation_id: correlationId } : {}),
+    ...(appOrigin ? { app_origin: appOrigin } : {}),
+  };
 }
 
 function bearerToken(authorization?: string): string | undefined {

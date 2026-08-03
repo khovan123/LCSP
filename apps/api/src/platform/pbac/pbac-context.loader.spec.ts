@@ -123,7 +123,9 @@ function makeLoader(
 describe("PbacContextLoader", () => {
   it("resolves session, membership, and policy on the happy path", async () => {
     const loader = makeLoader();
-    const result = await loader.load("raw-token", NOW);
+    const result = await loader.load("raw-token", NOW, {
+      allowPendingMfa: true,
+    });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -203,7 +205,7 @@ describe("PbacContextLoader", () => {
     });
   });
 
-  it("MFA_REQUIRED when MFA is enrolled but the session has not verified it", async () => {
+  it("pending MFA setup does not require verification before first success", async () => {
     const loader = makeLoader({
       mfaEnrollments: {
         findByUserId: jest
@@ -220,7 +222,32 @@ describe("PbacContextLoader", () => {
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: PBAC_REASON_CODE.mfaRequired });
+    expect(result.ok).toBe(true);
+  });
+
+  it("MFA_REQUIRED when MFA has been verified previously but the session has not re-verified it", async () => {
+    const loader = makeLoader({
+      mfaEnrollments: {
+        findByUserId: jest
+          .fn<MfaEnrollmentRepository["findByUserId"]>()
+          .mockResolvedValue(
+            new MfaEnrollment({
+              userId: "user-1",
+              encryptedSecret: "enc",
+              enrolledAt: NOW,
+              verifiedAt: NOW - 1000,
+            }),
+          ),
+      },
+    });
+
+    const result = await loader.load("raw-token", NOW);
+
+    expect(result).toEqual({
+      ok: false,
+      reason: PBAC_REASON_CODE.mfaRequired,
+      mfaEnrolled: true,
+    });
   });
 
   it("allows when MFA is enrolled and the session has verified it", async () => {
@@ -238,20 +265,33 @@ describe("PbacContextLoader", () => {
               userId: "user-1",
               encryptedSecret: "enc",
               enrolledAt: NOW,
+              verifiedAt: NOW - 1000,
             }),
           ),
       },
     });
+
+    const result = await loader.load("raw-token", NOW, {
+      allowPendingMfa: true,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("allows active sessions when the user has not enrolled MFA", async () => {
+    const loader = makeLoader();
 
     const result = await loader.load("raw-token", NOW);
 
     expect(result.ok).toBe(true);
   });
 
-  it("allows when MFA is not enrolled, regardless of mfaVerifiedAt", async () => {
+  it("allows bootstrap routes to use a valid session before MFA is verified", async () => {
     const loader = makeLoader();
 
-    const result = await loader.load("raw-token", NOW);
+    const result = await loader.load("raw-token", NOW, {
+      allowPendingMfa: true,
+    });
 
     expect(result.ok).toBe(true);
   });
@@ -265,7 +305,9 @@ describe("PbacContextLoader", () => {
       },
     });
 
-    const result = await loader.load("raw-token", NOW);
+    const result = await loader.load("raw-token", NOW, {
+      allowPendingMfa: true,
+    });
 
     expect(result).toEqual({
       ok: false,
@@ -284,7 +326,9 @@ describe("PbacContextLoader", () => {
       },
     });
 
-    const result = await loader.load("raw-token", NOW);
+    const result = await loader.load("raw-token", NOW, {
+      allowPendingMfa: true,
+    });
 
     expect(result).toEqual({
       ok: false,
@@ -301,7 +345,9 @@ describe("PbacContextLoader", () => {
       },
     });
 
-    const result = await loader.load("raw-token", NOW);
+    const result = await loader.load("raw-token", NOW, {
+      allowPendingMfa: true,
+    });
 
     expect(result).toEqual({
       ok: false,

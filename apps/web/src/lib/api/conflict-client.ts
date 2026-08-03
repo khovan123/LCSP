@@ -4,7 +4,7 @@ import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
 import { SCAN_ERROR_CODES } from "@lcsp/contracts/scan/codes";
 import { apiRequest } from "./api-request.ts";
 import { API_OUTCOME_KINDS, API_VALIDATION_REASONS } from "./outcome-kinds.ts";
-import { getProblemCode } from "./problem-envelope.ts";
+import { getMfaRedirectLocation, getProblemCode } from "./problem-envelope.ts";
 
 export type ConflictStatus =
   | (typeof CONFLICT_RECORD_STATUSES)[keyof typeof CONFLICT_RECORD_STATUSES]
@@ -125,7 +125,10 @@ export function toConflictListOutcome(
   }
 
   if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
-    return { kind: API_OUTCOME_KINDS.redirect, location: "/mfa/verify" };
+    return {
+      kind: API_OUTCOME_KINDS.redirect,
+      location: getMfaRedirectLocation(payload),
+    };
   }
   if (status === 401 || problemCode === AUTH_ERROR_CODES.sessionInvalid) {
     return { kind: API_OUTCOME_KINDS.redirect, location: "/sign-in" };
@@ -160,7 +163,10 @@ export function toResolveConflictOutcome(
     };
   }
   if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
-    return { kind: API_OUTCOME_KINDS.redirect, location: "/mfa/verify" };
+    return {
+      kind: API_OUTCOME_KINDS.redirect,
+      location: getMfaRedirectLocation(payload),
+    };
   }
   if (status === 401 || problemCode === AUTH_ERROR_CODES.sessionInvalid) {
     return { kind: API_OUTCOME_KINDS.redirect, location: "/sign-in" };

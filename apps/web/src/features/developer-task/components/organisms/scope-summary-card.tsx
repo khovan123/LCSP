@@ -11,13 +11,11 @@ import {
 import { appLocale } from "@/lib/locale";
 
 import { getVisibleDeveloperActions } from "../../config/action-labels";
-import type { DeveloperTaskContext } from "../../types/developer-task.types";
+import type { ScopeSummaryCardProps } from "../../types/component-props.types";
 
 export function ScopeSummaryCard({
   context,
-}: {
-  context: DeveloperTaskContext;
-}) {
+}: ScopeSummaryCardProps) {
   const visibleActions = getVisibleDeveloperActions(context.granted_actions);
   const assessmentLabel =
     context.scope.type === "assessment"
@@ -34,7 +32,7 @@ export function ScopeSummaryCard({
           {resolveMessage(appLocale, "pages.developerTask.scopeDescription")}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="flex flex-col gap-6">
         <dl className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-lg border bg-muted/30 p-4">
             <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

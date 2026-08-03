@@ -2,7 +2,7 @@
 
 import { resolveMessage } from "@lcsp/i18n";
 import { usePathname } from "next/navigation";
-import type { CSSProperties, ReactNode } from "react";
+import { Suspense, type CSSProperties } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { appLocale } from "@/lib/locale";
@@ -13,13 +13,14 @@ import {
   primaryNavigation,
 } from "../../config/app-shell-navigation";
 import type {
+  AppShellProps,
   AppShellNavigationItem,
   AppShellNavigationSection,
 } from "../../types/app-shell.types";
 import { AppHeader } from "../molecules/app-header";
 import { AppSidebar } from "./app-sidebar";
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const candidateAssessmentId = pathname.match(/^\/assessments\/([^/]+)/)?.[1];
   const assessmentId =
@@ -56,7 +57,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         } as CSSProperties
       }
     >
-      <AppSidebar sections={sections} />
+      <Suspense fallback={null}>
+        <AppSidebar sections={sections} />
+      </Suspense>
       <SidebarInset>
         <AppHeader />
         <div className="@container/main flex min-h-0 flex-1 flex-col">

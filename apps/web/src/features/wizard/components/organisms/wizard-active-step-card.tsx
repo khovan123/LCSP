@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { WizardCheckboxField } from "@/features/wizard/components/molecules/wizard-checkbox-field";
-import { WizardHelperButton } from "@/features/wizard/components/molecules/wizard-helper-button";
+import { WizardFieldWithHelper } from "@/features/wizard/components/molecules/wizard-field-with-helper";
 import { WizardSelectField } from "@/features/wizard/components/molecules/wizard-select-field";
 import { WizardTextareaField } from "@/features/wizard/components/molecules/wizard-textarea-field";
 import {
@@ -21,17 +21,7 @@ import {
   sectionCardClassName,
 } from "@/features/wizard/lib/wizard-form";
 import { t } from "@/features/wizard/lib/wizard-i18n";
-import type { WizardHelperKey } from "@/features/wizard/types/wizard-form.types";
-import type { WizardAnswers } from "@/features/wizard/types/wizard.types";
-
-type WizardActiveStepCardProps = {
-  currentStep: number;
-  effectiveIsReadOnly: boolean;
-  answers: WizardAnswers;
-  onFieldBlur: () => void;
-  onFieldChange: (name: keyof WizardAnswers) => void;
-  onHelperOpen: (helperKey: Exclude<WizardHelperKey, null>) => void;
-};
+import type { WizardActiveStepCardProps } from "@/features/wizard/types/component-props.types";
 
 export function WizardActiveStepCard({
   currentStep,
@@ -186,7 +176,9 @@ export function WizardActiveStepCard({
 
         {currentStep === 3 ? (
           <>
-            <div className="space-y-3">
+            <WizardFieldWithHelper
+              onHelperClick={() => onHelperOpen("decision")}
+            >
               <WizardSelectField
                 name="decisionRole"
                 disabled={effectiveIsReadOnly}
@@ -197,10 +189,11 @@ export function WizardActiveStepCard({
                 onValueChange={onFieldChange}
                 options={selectOptions.decisionRole}
               />
-              <WizardHelperButton onClick={() => onHelperOpen("decision")} />
-            </div>
+            </WizardFieldWithHelper>
             {answers.decisionRole !== "NO_DECISION_SUPPORT" ? (
-              <div className="space-y-3">
+              <WizardFieldWithHelper
+                onHelperClick={() => onHelperOpen("oversight")}
+              >
                 <WizardSelectField
                   name="humanReview"
                   disabled={effectiveIsReadOnly}
@@ -210,14 +203,15 @@ export function WizardActiveStepCard({
                   onValueChange={onFieldChange}
                   options={selectOptions.humanOversight}
                 />
-                <WizardHelperButton onClick={() => onHelperOpen("oversight")} />
-              </div>
+              </WizardFieldWithHelper>
             ) : null}
           </>
         ) : null}
 
         {currentStep === 4 ? (
-          <div className="space-y-3">
+          <WizardFieldWithHelper
+            onHelperClick={() => onHelperOpen("provider")}
+          >
             <WizardSelectField
               name="externalLlmUsage"
               disabled={effectiveIsReadOnly}
@@ -227,12 +221,13 @@ export function WizardActiveStepCard({
               onValueChange={onFieldChange}
               options={selectOptions.externalProvider}
             />
-            <WizardHelperButton onClick={() => onHelperOpen("provider")} />
-          </div>
+          </WizardFieldWithHelper>
         ) : null}
 
         {currentStep === 5 ? (
-          <div className="space-y-3">
+          <WizardFieldWithHelper
+            onHelperClick={() => onHelperOpen("deployment")}
+          >
             <WizardCheckboxField
               name="deploymentContext"
               disabled={effectiveIsReadOnly}
@@ -242,13 +237,14 @@ export function WizardActiveStepCard({
               onValueChange={onFieldChange}
               options={checkboxOptions.deploymentContext}
             />
-            <WizardHelperButton onClick={() => onHelperOpen("deployment")} />
-          </div>
+          </WizardFieldWithHelper>
         ) : null}
 
         {currentStep === 6 ? (
           <>
-            <div className="space-y-3">
+            <WizardFieldWithHelper
+              onHelperClick={() => onHelperOpen("specialCategory")}
+            >
               <WizardSelectField
                 name="specialCategoryData"
                 disabled={effectiveIsReadOnly}
@@ -258,9 +254,10 @@ export function WizardActiveStepCard({
                 onValueChange={onFieldChange}
                 options={selectOptions.yesNoUnknown}
               />
-              <WizardHelperButton onClick={() => onHelperOpen("specialCategory")} />
-            </div>
-            <div className="space-y-3">
+            </WizardFieldWithHelper>
+            <WizardFieldWithHelper
+              onHelperClick={() => onHelperOpen("biometric")}
+            >
               <WizardSelectField
                 name="biometricData"
                 disabled={effectiveIsReadOnly}
@@ -270,9 +267,10 @@ export function WizardActiveStepCard({
                 onValueChange={onFieldChange}
                 options={selectOptions.yesNoUnknown}
               />
-              <WizardHelperButton onClick={() => onHelperOpen("biometric")} />
-            </div>
-            <div className="space-y-3">
+            </WizardFieldWithHelper>
+            <WizardFieldWithHelper
+              onHelperClick={() => onHelperOpen("highImpact")}
+            >
               <WizardCheckboxField
                 name="highImpactIndicators"
                 disabled={effectiveIsReadOnly}
@@ -282,9 +280,10 @@ export function WizardActiveStepCard({
                 onValueChange={onFieldChange}
                 options={checkboxOptions.highImpactIndicators}
               />
-              <WizardHelperButton onClick={() => onHelperOpen("highImpact")} />
-            </div>
-            <div className="space-y-3">
+            </WizardFieldWithHelper>
+            <WizardFieldWithHelper
+              onHelperClick={() => onHelperOpen("transparency")}
+            >
               <WizardCheckboxField
                 name="transparencyIndicators"
                 disabled={effectiveIsReadOnly}
@@ -294,9 +293,10 @@ export function WizardActiveStepCard({
                 onValueChange={onFieldChange}
                 options={checkboxOptions.transparencyIndicators}
               />
-              <WizardHelperButton onClick={() => onHelperOpen("transparency")} />
-            </div>
-            <div className="space-y-3">
+            </WizardFieldWithHelper>
+            <WizardFieldWithHelper
+              onHelperClick={() => onHelperOpen("prohibited")}
+            >
               <WizardCheckboxField
                 name="prohibitedRiskSignals"
                 disabled={effectiveIsReadOnly}
@@ -306,8 +306,7 @@ export function WizardActiveStepCard({
                 onValueChange={onFieldChange}
                 options={checkboxOptions.prohibitedRiskSignals}
               />
-              <WizardHelperButton onClick={() => onHelperOpen("prohibited")} />
-            </div>
+            </WizardFieldWithHelper>
           </>
         ) : null}
       </CardContent>

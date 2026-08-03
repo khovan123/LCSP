@@ -167,6 +167,10 @@ describe("AuthAuditService", () => {
 
   it("normalizes legacy auth-workspace snake_case audit events and preserves legacy payload shape", async () => {
     const { service, write } = makeService();
+    const warnSpy = jest.spyOn(
+      Reflect.get(service, "logger") as { warn: (msg: string) => void },
+      "warn",
+    );
 
     await service.write({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
@@ -200,11 +204,15 @@ describe("AuthAuditService", () => {
         organization_id: "org-1",
         decision: PBAC_DECISION.allow,
         correlation_id: "corr-1",
+        reason_code: PBAC_REASON_CODE.authorized,
         session_id: "session-1",
         policy_id: "policy-1",
         policy_version: "v1",
         email_domain: "example.test",
       },
     });
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("reason_code"),
+    );
   });
 });

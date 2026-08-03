@@ -23,7 +23,7 @@ export async function mockJsonResponse(
 
 export async function readMockJson<T = unknown>(filename: string): Promise<T> {
   const filePath = path.join(
-    process.cwd(),
+    /* turbopackIgnore: true */ process.cwd(),
     ...MOCK_ASSET_PATH_SEGMENTS,
     filename,
   );

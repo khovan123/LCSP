@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { resolveMessage } from "@lcsp/i18n";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { useState } from "react";
+import Link from "next/link";
 import { Controller, useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 
@@ -62,6 +63,10 @@ export function MfaVerifyForm() {
       router.replace(API_REDIRECT_LOCATIONS.signIn);
       return;
     }
+    if (outcome.kind === API_OUTCOME_KINDS.mfaRequired) {
+      router.replace(API_REDIRECT_LOCATIONS.mfaEnroll);
+      return;
+    }
     if (outcome.kind === API_OUTCOME_KINDS.rateLimited) {
       setIsLocked(true);
     }
@@ -91,6 +96,14 @@ export function MfaVerifyForm() {
           </Button>
           <p className="text-center text-xs leading-relaxed text-muted-foreground">
             {resolveMessage(appLocale, "pages.mfaVerify.accessHelp")}
+          </p>
+          <p className="text-center text-xs">
+            <Link
+              className="text-primary underline-offset-4 hover:underline"
+              href={API_REDIRECT_LOCATIONS.recoveryRequest}
+            >
+              {resolveMessage(appLocale, "pages.mfaVerify.useRecovery")}
+            </Link>
           </p>
         </>
       }

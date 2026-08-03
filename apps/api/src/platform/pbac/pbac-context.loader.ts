@@ -29,7 +29,11 @@ export type PbacContextDenialReason =
 
 export type PbacContextResult =
   | { ok: true; session: Session; membership: Membership; policy: Policy }
-  | { ok: false; reason: PbacContextDenialReason };
+  | {
+      ok: false;
+      reason: PbacContextDenialReason;
+      mfaEnrolled?: boolean;
+    };
 
 /**
  * Orchestrates the guard's DB reads (session -> MFA -> membership -> policy),
@@ -49,7 +53,11 @@ export class PbacContextLoader {
     private readonly mfaEnrollments: MfaEnrollmentRepository,
   ) {}
 
-  async load(token: string, now: number): Promise<PbacContextResult> {
+  async load(
+    token: string,
+    now: number,
+    options: { allowPendingMfa?: boolean } = {},
+  ): Promise<PbacContextResult> {
     try {
       const fingerprint = fingerprintToken(token);
       const session = await this.sessions.findByFingerprint(fingerprint);
@@ -64,8 +72,17 @@ export class PbacContextLoader {
       const mfaEnrollment = await this.mfaEnrollments.findByUserId(
         session.userId,
       );
-      if (mfaEnrollment && !session.isMfaVerified()) {
-        return { ok: false, reason: PBAC_REASON_CODE.mfaRequired };
+      if (
+        !options.allowPendingMfa &&
+        mfaEnrollment !== null &&
+        mfaEnrollment.verifiedAt !== null &&
+        !session.isMfaVerified()
+      ) {
+        return {
+          ok: false,
+          reason: PBAC_REASON_CODE.mfaRequired,
+          mfaEnrolled: true,
+        };
       }
 
       const membership = await this.memberships.findByUserAndOrganization(

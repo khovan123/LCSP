@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
 
+import {
+  AUTH_BACKUP_EMAIL_POLICIES,
+  AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
+  type AuthBackupEmailPolicy,
+  type AuthPrimaryEmailAddressPolicy,
+} from "@lcsp/contracts/auth";
+
 import { EmailAddress } from "../value-objects/email-address.value-object.ts";
 
 type UserInput = {
@@ -10,6 +17,8 @@ type UserInput = {
   lockUntil?: number | null;
   displayName?: string | null;
   recoveryEmail?: string | null;
+  primaryEmailAddressPolicy?: AuthPrimaryEmailAddressPolicy;
+  backupEmailPolicy?: AuthBackupEmailPolicy;
   mfaRequired?: boolean;
 };
 
@@ -22,6 +31,8 @@ export class User {
   lockUntil: number | null;
   displayName: string | null;
   recoveryEmail: string | null;
+  primaryEmailAddressPolicy: AuthPrimaryEmailAddressPolicy;
+  backupEmailPolicy: AuthBackupEmailPolicy;
   mfaRequired: boolean;
 
   constructor(input: UserInput) {
@@ -33,6 +44,11 @@ export class User {
     this.lockUntil = input.lockUntil ?? null;
     this.displayName = input.displayName ?? null;
     this.recoveryEmail = input.recoveryEmail ?? null;
+    this.primaryEmailAddressPolicy =
+      input.primaryEmailAddressPolicy ??
+      AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.accountEmail;
+    this.backupEmailPolicy =
+      input.backupEmailPolicy ?? AUTH_BACKUP_EMAIL_POLICIES.recoveryEmail;
     this.mfaRequired = input.mfaRequired ?? false;
   }
 
@@ -66,5 +82,17 @@ export class User {
   clearFailedLogins(): void {
     this.failedLoginCount = 0;
     this.lockUntil = null;
+  }
+
+  primaryEmailAddress(): string {
+    if (
+      this.primaryEmailAddressPolicy ===
+        AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.recoveryEmail &&
+      this.recoveryEmail
+    ) {
+      return this.recoveryEmail;
+    }
+
+    return this.email.toString();
   }
 }

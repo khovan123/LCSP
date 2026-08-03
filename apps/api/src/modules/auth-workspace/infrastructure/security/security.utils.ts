@@ -50,6 +50,7 @@ export function createCorrelationId(): string {
 // ─── TOTP (RFC 6238) ──────────────────────────────────────────────
 
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const TOTP_WINDOW_STEPS = 2;
 
 function base32Decode(input: string): Buffer {
   const str = input.toUpperCase().replace(/=+$/, "");
@@ -136,7 +137,10 @@ export function verifyTotpOtp(
   const secretBytes = base32Decode(secret);
   const step = Math.floor(nowMs / 1000 / 30);
   let matched = false;
-  for (let i = -1; i <= 1; i++) {
+  // Allow modest client clock skew beyond +/-30s. In practice authenticator
+  // devices can drift by more than one window even when the user enters the
+  // currently displayed code immediately.
+  for (let i = -TOTP_WINDOW_STEPS; i <= TOTP_WINDOW_STEPS; i++) {
     if (timingSafeEqualStrings(hotp(secretBytes, BigInt(step + i)), otp)) {
       matched = true;
     }

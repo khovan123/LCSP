@@ -89,11 +89,16 @@ export class AuthWorkspaceSupportService {
     organization: Organization | null,
     mfaEnrollment: MfaEnrollment | null,
   ): boolean {
-    return (
-      mfaEnrollment !== null ||
-      user.mfaRequired ||
-      (organization?.mfaRequired ?? false)
-    );
+    if (user.mfaRequired) {
+      return true;
+    }
+
+    void organization;
+    return mfaEnrollment !== null && mfaEnrollment.verifiedAt !== null;
+  }
+
+  isMfaEnrolled(mfaEnrollment: MfaEnrollment | null): boolean {
+    return mfaEnrollment !== null && mfaEnrollment.verifiedAt !== null;
   }
 
   recordAudit(repositories: unknown, event: AuditEvent): Promise<void> {

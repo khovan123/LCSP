@@ -47,8 +47,8 @@ export function WizardCheckboxField({
             : undefined;
 
         return (
-          <div className="space-y-3">
-            <div className="space-y-1">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
               <p className="text-sm font-medium text-foreground">
                 {t(labelKey)}
               </p>

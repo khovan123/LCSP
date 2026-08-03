@@ -22,7 +22,7 @@ import type {
 } from "../../features/workspace/types/workspace.types.ts";
 import { apiRequest } from "./api-request.ts";
 import { API_OUTCOME_KINDS } from "./outcome-kinds.ts";
-import { getProblemCode } from "./problem-envelope.ts";
+import { getMfaRedirectLocation, getProblemCode } from "./problem-envelope.ts";
 
 export const WORKSPACE_ROUTES = Object.freeze({
   mfaVerify: "/mfa/verify",
@@ -215,7 +215,7 @@ export function toWorkspaceOutcome(
   if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
     return {
       kind: API_OUTCOME_KINDS.redirect,
-      location: WORKSPACE_ROUTES.mfaVerify,
+      location: getMfaRedirectLocation(payload),
     };
   }
 

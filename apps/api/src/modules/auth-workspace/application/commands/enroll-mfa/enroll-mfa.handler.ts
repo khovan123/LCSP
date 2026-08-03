@@ -6,6 +6,7 @@ import {
 } from "@lcsp/contracts/auth";
 
 import {
+  decryptMfaSecret,
   encryptMfaSecret,
   generateTotpSecret,
 } from "../../../infrastructure/security/security.utils.ts";
@@ -43,9 +44,20 @@ export class EnrollMfaHandler {
     const existingEnrollment =
       await this.repositories.mfaEnrollments.findByUserId(session.userId);
     if (existingEnrollment && !session.isMfaVerified()) {
-      // A valid-but-unverified session must not be able to silently replace
-      // an existing TOTP secret (would let a stolen pre-MFA session hijack MFA).
-      return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
+      let hasRecoverableSecretFailure = false;
+      try {
+        decryptMfaSecret(existingEnrollment.encryptedSecret);
+      } catch {
+        // A stale ciphertext encrypted under an old key cannot be verified.
+        // Allow issuing a replacement enrollment so the user can recover MFA.
+        hasRecoverableSecretFailure = true;
+      }
+
+      if (!hasRecoverableSecretFailure) {
+        // A valid-but-unverified session must not be able to silently replace
+        // an existing TOTP secret (would let a stolen pre-MFA session hijack MFA).
+        return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
+      }
     }
 
     const user = await this.support.resolveUserById(
@@ -65,8 +77,11 @@ export class EnrollMfaHandler {
       userId: session.userId,
       encryptedSecret,
       enrolledAt: this.support.now(),
+      verifiedAt: null,
     });
     await this.repositories.mfaEnrollments.save(enrollment);
+    await this.repositories.mfaOtpUsed.deleteByUserId(session.userId);
+    await this.repositories.mfaRateLimits.resetByUserId(session.userId);
 
     await this.support.recordAudit(this.repositories, {
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaEnrolled,
@@ -79,7 +94,7 @@ export class EnrollMfaHandler {
     return {
       ok: true,
       correlation_id: correlationId,
-      totp_uri: buildTotpUri(plainSecret, user.email.toString()),
+      totp_uri: buildTotpUri(plainSecret, user.primaryEmailAddress()),
     };
   }
 }

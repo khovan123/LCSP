@@ -1,5 +1,6 @@
 import {
   REQUIRED_ACTIONS,
+  type ProblemMeta,
   type ProblemKey,
   type ProblemResult,
 } from "@lcsp/contracts/auth";
@@ -31,5 +32,50 @@ export function getProblemCode(payload: unknown): string | undefined {
   const result = payload as Partial<ProblemResult<string>>;
   return result.ok === false && typeof result.problem?.code === "string"
     ? result.problem.code
+    : undefined;
+}
+
+export function getProblemMeta(payload: unknown): ProblemMeta | undefined {
+  if (typeof payload !== "object" || payload === null) {
+    return undefined;
+  }
+
+  const result = payload as Partial<ProblemResult<string>>;
+  return result.ok === false &&
+    typeof result.problem === "object" &&
+    result.problem !== null &&
+    typeof result.problem.meta === "object" &&
+    result.problem.meta !== null
+    ? result.problem.meta
+    : undefined;
+}
+
+export function getMfaRedirectLocation(
+  payload: unknown,
+): "/mfa/verify" {
+  void payload;
+  return "/mfa/verify";
+}
+
+export function getProblemMessageKeys(
+  payload: unknown,
+):
+  | {
+      titleKey: ProblemKey;
+      detailKey: ProblemKey;
+    }
+  | undefined {
+  if (typeof payload !== "object" || payload === null) {
+    return undefined;
+  }
+
+  const result = payload as Partial<ProblemResult<string>>;
+  return result.ok === false &&
+    typeof result.problem?.titleKey === "string" &&
+    typeof result.problem?.detailKey === "string"
+    ? {
+        titleKey: result.problem.titleKey,
+        detailKey: result.problem.detailKey,
+      }
     : undefined;
 }

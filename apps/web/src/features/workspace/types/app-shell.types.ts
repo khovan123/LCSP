@@ -1,4 +1,9 @@
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
+
+export type AppShellProps = {
+  children: ReactNode;
+};
 
 export type AppShellNavigationItem = {
   href: string;
