@@ -12,6 +12,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./auth-entry": "./src/auth-entry.ts",
+    "./workspace-route-middleware": "./src/workspace-route-middleware.ts",
     "./workspace-routes": "./src/workspace-routes.ts"
   },
   "dependencies": {
