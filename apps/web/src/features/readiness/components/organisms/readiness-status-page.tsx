@@ -7,24 +7,15 @@ import { resolveMessage } from "@lcsp/i18n";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-<<<<<<< HEAD
 import { Button } from "@/components/ui/button";
 import { StatusCard } from "@/components/organisms/status-card";
 import { appLocale } from "@/lib/locale";
-import { useReadinessStatusQuery } from "@/lib/api/assessment-queries";
-import type { ReadinessStatusPageProps } from "../../types/component-props.types";
-=======
-import { Button, buttonVariants } from "@/components/ui/button";
-import { ClassificationStatusCard } from "@/components/ui/classification-status-card";
-import { appLocale } from "@/lib/locale";
-import { cn } from "@/lib/utils";
 import {
   useReadinessStatusQuery,
   useMockProvideEvidenceMutation,
 } from "@/lib/api/assessment-queries";
-
+import type { ReadinessStatusPageProps } from "../../types/component-props.types";
 import { UnresolvedUnknownPanel } from "../molecules/unresolved-unknown-panel";
->>>>>>> 35bfb89 (feat: LCSP-36 wizard-only readiness without risk level)
 
 export function ReadinessStatusPage({
   assessmentId,
