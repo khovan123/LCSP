@@ -205,7 +205,8 @@ function handlerProvider<T>(
     {
       provide: ListAuthSessionsHandler,
       inject: [PrismaService],
-      useFactory: (prisma: PrismaService) => new ListAuthSessionsHandler(prisma),
+      useFactory: (prisma: PrismaService) =>
+        new ListAuthSessionsHandler(prisma),
     },
     {
       provide: ListAuthRepositoriesHandler,

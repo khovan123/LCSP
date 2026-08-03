@@ -41,7 +41,7 @@ export class ListAuthRepositoriesHandler {
         revoked_at: connection.revokedAt?.toISOString() ?? null,
         assessment_id: connection.assessmentId,
         assessment_name: connection.assessmentId
-          ? assessmentNameById.get(connection.assessmentId) ?? null
+          ? (assessmentNameById.get(connection.assessmentId) ?? null)
           : null,
       })),
     };

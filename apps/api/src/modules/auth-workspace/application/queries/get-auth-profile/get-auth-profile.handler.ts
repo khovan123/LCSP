@@ -58,7 +58,7 @@ export class GetAuthProfileHandler {
     const mfaEnrolled =
       user.mfaEnrollment !== null && user.mfaEnrollment.verifiedAt !== null;
     const mfaEnrolledAt = mfaEnrolled
-      ? user.mfaEnrollment?.verifiedAt?.toISOString() ?? null
+      ? (user.mfaEnrollment?.verifiedAt?.toISOString() ?? null)
       : null;
 
     return {

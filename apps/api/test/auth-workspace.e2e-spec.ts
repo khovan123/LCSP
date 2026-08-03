@@ -550,7 +550,8 @@ describe("Auth workspace (e2e)", () => {
       where: { id: fixture.approvedUser.id },
       data: {
         recoveryEmail: "security@acme.test",
-        primaryEmailAddressPolicy: AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.recoveryEmail,
+        primaryEmailAddressPolicy:
+          AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.recoveryEmail,
       },
     });
 
@@ -667,11 +668,13 @@ describe("Auth workspace (e2e)", () => {
     const auditEvents = await prisma.authAuditEvent.findMany({
       orderBy: { createdAt: "asc" },
     });
-    const replayFailed = [...auditEvents].reverse().find(
-      (event) =>
-        (event.payload as Record<string, unknown>)["event_type"] ===
-        AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed,
-    );
+    const replayFailed = [...auditEvents]
+      .reverse()
+      .find(
+        (event) =>
+          (event.payload as Record<string, unknown>)["event_type"] ===
+          AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed,
+      );
     assert.equal(
       (replayFailed?.payload as Record<string, unknown> | undefined)
         ?.otp_failure_reason,
