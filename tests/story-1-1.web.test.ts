@@ -7,6 +7,44 @@ import {
 } from "@lcsp/web/auth-entry";
 import { resolveProtectedWorkspaceRoute } from "@lcsp/web/workspace-routes";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import {
+  getWorkspaceRouteRedirectPath,
+  isProtectedWorkspacePath,
+} from "@lcsp/web/workspace-route-middleware";
+
+test("server-side route middleware redirects unauthenticated workspace routes before render", () => {
+  const redirectPath = getWorkspaceRouteRedirectPath({
+    pathname: "/workspace",
+    search: "?organization_id=org-1",
+    hasSession: false,
+  });
+
+  assert.equal(isProtectedWorkspacePath("/workspace/settings"), true);
+  assert.equal(isProtectedWorkspacePath("/assessments/new"), true);
+  assert.equal(
+    redirectPath,
+    `${PUBLIC_ENTRY_ROUTES.signIn}?next=%2Fworkspace%3Forganization_id%3Dorg-1`,
+  );
+});
+
+test("server-side route middleware allows protected routes only when session cookie exists", () => {
+  assert.equal(
+    getWorkspaceRouteRedirectPath({
+      pathname: "/workspace",
+      search: "",
+      hasSession: true,
+    }),
+    null,
+  );
+  assert.equal(
+    getWorkspaceRouteRedirectPath({
+      pathname: "/sign-in",
+      search: "",
+      hasSession: false,
+    }),
+    null,
+  );
+});
 
 test("protected web route redirects to sign-in and renders no workspace data", () => {
   const route = resolveProtectedWorkspaceRoute({

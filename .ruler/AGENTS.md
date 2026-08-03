@@ -42,6 +42,7 @@ Ruler concatenates all .md files in this directory (and subdirectories), startin
 ## Web BFF and API client layer
 
 - Keep Next route handlers as BFF/proxy code. They should use shared server helpers for upstream calls, bearer/session handling, query param normalization, result JSON, and payload validation. Do not repeat `fetch(apiBaseUrl...)`, `response.json()`, credential/session cookie guards, or pagination parsing in every route.
+- When a web business rule depends on server-side routing behavior such as auth gates, tenant/workspace entry, redirects before render, locale routing, or route-level access control, prefer a Next server-side route proxy (`apps/web/src/proxy.ts` with `export function proxy`) over client-side redirects or component-level guards. Do not add the deprecated `middleware.ts` convention for Next 16+; use Proxy naming, matcher coverage, and focused tests for the protected route set. Proxy is an early routing guard only; backend API/PBAC enforcement remains the source of truth.
 - `LCSP_API_BASE_URL` must be read in one shared upstream helper, not repeatedly inside `apps/web/src/app/api` or client modules.
 - Shared upstream server logic belongs under `apps/web/src/lib/server` such as `upstream-request.ts`; do not keep Next BFF proxy code in `apps/web/src/lib/api`.
 - Shared session/cookie guards, repeated query param normalization, and repeated success/problem forwarding must be centralized in helpers instead of copied across route handlers.
