@@ -163,6 +163,7 @@ export class WizardController {
     @Req() req: AuthenticatedRequest,
   ) {
     const { userId, organizationId } = req.pbacContext;
+    const pbacContext = req.pbacContext;
     const correlationId = req.correlationId || randomUUID();
 
     return resultEnvelope(
@@ -172,6 +173,12 @@ export class WizardController {
           organizationId,
           userId,
           correlationId,
+          {
+            subjectRole: pbacContext.subjectRole,
+            selectedAction: pbacContext.selectedAction,
+            policyId: pbacContext.policyId,
+            policyVersion: pbacContext.policyVersion,
+          },
         ),
       ),
     );

@@ -1,20 +1,33 @@
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
+import { HttpStatus } from "@nestjs/common";
 import { MockEvidenceCommand } from "./mock-evidence.command.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AssessmentNotFoundException } from "../../../domain/exceptions/wizard.exceptions.js";
 import { randomUUID } from "node:crypto";
-import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import {
+  SCAN_EVENT_TYPES,
+  TECHNICAL_EVIDENCE_REPORT_STATUSES,
+} from "@lcsp/contracts/scan";
 import { toPrismaEvidenceAcceptanceStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { problemException } from "../../../../../platform/problems/problem-factory.js";
 
 @CommandHandler(MockEvidenceCommand)
 export class MockEvidenceHandler implements ICommandHandler<
   MockEvidenceCommand,
   void
 > {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditWriter: AuditWriterService,
+  ) {}
 
   async execute(command: MockEvidenceCommand): Promise<void> {
     const { assessmentId, organizationId, userId } = command;
+    await this.assertManagerOnlyAction(command);
 
     const assessment = await this.prisma.assessment.findFirst({
       where: { id: assessmentId, organizationId },
@@ -91,6 +104,41 @@ export class MockEvidenceHandler implements ICommandHandler<
           TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
         ),
       },
+    });
+  }
+
+  private async assertManagerOnlyAction(
+    command: MockEvidenceCommand,
+  ): Promise<void> {
+    const allowed =
+      command.authorization.subjectRole === SUBJECT_ROLES.manager &&
+      command.authorization.selectedAction === PBAC_ACTIONS.wizardWrite &&
+      command.authorization.policyId !== null &&
+      command.authorization.policyVersion !== null;
+
+    if (allowed) return;
+
+    await this.auditWriter.write({
+      eventType: SCAN_EVENT_TYPES.evidenceAcceptedAudit,
+      actorId: command.userId,
+      organizationId: command.organizationId,
+      resourceType: AUDIT_RESOURCE_TYPES.technicalEvidenceReport,
+      resourceId: null,
+      assessmentId: command.assessmentId,
+      decision: AUDIT_DECISIONS.deny,
+      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      correlationId: command.correlationId,
+      policyId: command.authorization.policyId,
+      policyVersion: command.authorization.policyVersion,
+      payload: {
+        assessmentId: command.assessmentId,
+        action: PBAC_ACTIONS.wizardWrite,
+        result: AUDIT_DECISIONS.deny,
+      },
+    });
+
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+      status: HttpStatus.FORBIDDEN,
     });
   }
 }
