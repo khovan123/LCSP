@@ -396,13 +396,7 @@ function requestResourceId(
   request: AuthenticatedRequest,
   fallbackAction: string,
 ): string {
-  const requestLike = request as AuthenticatedRequest & {
-    method?: unknown;
-    originalUrl?: unknown;
-    route?: { path?: unknown };
-    params?: Record<string, unknown>;
-  };
-  const params = requestLike.params ?? {};
+  const params = request.params;
   const assessmentId = readStringAttribute(params.assessmentId);
   const conflictId = readStringAttribute(params.conflictId);
   const userId = readStringAttribute(params.userId);
@@ -415,11 +409,11 @@ function requestResourceId(
   if (userId) return `user:${userId}`;
   if (orgId) return `organization:${orgId}`;
 
-  const method = readStringAttribute(requestLike.method);
-  const routePath = readStringAttribute(requestLike.route?.path);
+  const method = request.method;
+  const routePath = readStringAttribute(request.route?.path);
   if (method && routePath) return `${method} ${routePath}`;
 
-  const originalUrl = readStringAttribute(requestLike.originalUrl);
+  const originalUrl = request.originalUrl;
   if (method && originalUrl) return `${method} ${originalUrl.split("?")[0]}`;
 
   return fallbackAction;
