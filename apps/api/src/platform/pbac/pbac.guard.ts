@@ -73,7 +73,10 @@ export class PbacGuard implements CanActivate {
 
     if (!metadata) {
       await this.recordDecision({
+        actorId: null,
+        sessionId: null,
         organizationId: null,
+        resourceId: requestResourceId(request, PBAC_ACTIONS.metadataCheck),
         action: PBAC_ACTIONS.metadataCheck,
         decision: PBAC_DECISION.deny,
         reasonCode: PBAC_REASON_CODE.metadataMissing,
@@ -91,11 +94,15 @@ export class PbacGuard implements CanActivate {
           ? metadata.actions
           : [];
     const action = candidateActions[0] ?? PBAC_ACTIONS.sessionVerify;
+    const resourceId = requestResourceId(request, action);
 
     const token = this.extractToken(request);
     if (!token) {
       await this.recordDecision({
+        actorId: null,
+        sessionId: null,
         organizationId: null,
+        resourceId,
         action,
         decision: PBAC_DECISION.deny,
         reasonCode: PBAC_REASON_CODE.sessionInvalid,
@@ -114,7 +121,10 @@ export class PbacGuard implements CanActivate {
 
     if (!loaderResult.ok) {
       await this.recordDecision({
+        actorId: null,
+        sessionId: null,
         organizationId: null,
+        resourceId,
         action,
         decision: PBAC_DECISION.deny,
         reasonCode: loaderResult.reason,
@@ -133,7 +143,10 @@ export class PbacGuard implements CanActivate {
     const subjectRole = membership.role();
     if (!subjectRole) {
       await this.recordDecision({
+        actorId: session.userId,
+        sessionId: session.id,
         organizationId: session.organizationId,
+        resourceId,
         action,
         decision: PBAC_DECISION.deny,
         reasonCode: PBAC_REASON_CODE.subjectAttributeMissing,
@@ -158,7 +171,10 @@ export class PbacGuard implements CanActivate {
         policyVersion: policy.version,
       };
       await this.recordDecision({
+        actorId: session.userId,
+        sessionId: session.id,
         organizationId: session.organizationId,
+        resourceId,
         action,
         decision: PBAC_DECISION.allow,
         reasonCode: PBAC_REASON_CODE.authorized,
@@ -177,6 +193,7 @@ export class PbacGuard implements CanActivate {
 
     for (const candidateAction of candidateActions) {
       const evaluationContext: PbacEvaluationContext = {
+        organizationId: session.organizationId,
         action: candidateAction,
         subject: {
           role: subjectRole as SubjectRole,
@@ -201,7 +218,10 @@ export class PbacGuard implements CanActivate {
           `PBAC evaluator threw — defaulting to deny: ${(error as Error).message}`,
         );
         await this.recordDecision({
+          actorId: session.userId,
+          sessionId: session.id,
           organizationId: session.organizationId,
+          resourceId,
           action: candidateAction,
           decision: PBAC_DECISION.deny,
           reasonCode: PBAC_REASON_CODE.evaluatorError,
@@ -222,7 +242,10 @@ export class PbacGuard implements CanActivate {
     if (!allowed) {
       for (const denied of deniedDecisions) {
         await this.recordDecision({
+          actorId: session.userId,
+          sessionId: session.id,
           organizationId: session.organizationId,
+          resourceId,
           action: denied.action,
           decision: PBAC_DECISION.deny,
           reasonCode: denied.decision.reasonCode ?? PBAC_REASON_CODE.denied,
@@ -247,7 +270,10 @@ export class PbacGuard implements CanActivate {
     };
 
     await this.recordDecision({
+      actorId: session.userId,
+      sessionId: session.id,
       organizationId: session.organizationId,
+      resourceId,
       action: allowed.action,
       decision: PBAC_DECISION.allow,
       reasonCode: PBAC_REASON_CODE.authorized,
@@ -319,7 +345,10 @@ export class PbacGuard implements CanActivate {
 
   /** Never throws — a decision-log write failure must not change the allow/deny outcome. */
   private async recordDecision(input: {
+    actorId: string | null;
+    sessionId: string | null;
     organizationId: string | null;
+    resourceId: string;
     action: string;
     decision: PbacDecisionValue;
     reasonCode: PbacReasonCode;
@@ -329,9 +358,11 @@ export class PbacGuard implements CanActivate {
   }): Promise<void> {
     try {
       await this.decisions.append({
+        actor_id: input.actorId,
+        session_id: input.sessionId,
         organization_id: input.organizationId,
         resource_type: DECISION_LOG_RESOURCE_TYPE,
-        resource_id: input.action,
+        resource_id: input.resourceId,
         action: input.action,
         decision: input.decision,
         reason_code: input.reasonCode,
@@ -359,4 +390,35 @@ function headerString(value: string | string[] | undefined): string | null {
     return value[0];
   }
   return null;
+}
+
+function requestResourceId(
+  request: AuthenticatedRequest,
+  fallbackAction: string,
+): string {
+  const requestLike = request as AuthenticatedRequest & {
+    method?: unknown;
+    originalUrl?: unknown;
+    route?: { path?: unknown };
+    params?: Record<string, unknown>;
+  };
+  const params = requestLike.params ?? {};
+  const assessmentId = readStringAttribute(params.assessmentId);
+  const conflictId = readStringAttribute(params.conflictId);
+  const userId = readStringAttribute(params.userId);
+  const orgId = readStringAttribute(params.orgId) ?? readStringAttribute(params.id);
+
+  if (assessmentId && conflictId) return `assessment:${assessmentId}:conflict:${conflictId}`;
+  if (assessmentId) return `assessment:${assessmentId}`;
+  if (userId) return `user:${userId}`;
+  if (orgId) return `organization:${orgId}`;
+
+  const method = readStringAttribute(requestLike.method);
+  const routePath = readStringAttribute(requestLike.route?.path);
+  if (method && routePath) return `${method} ${routePath}`;
+
+  const originalUrl = readStringAttribute(requestLike.originalUrl);
+  if (method && originalUrl) return `${method} ${originalUrl.split("?")[0]}`;
+
+  return fallbackAction;
 }

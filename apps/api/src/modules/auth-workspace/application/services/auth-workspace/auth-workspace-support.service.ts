@@ -267,6 +267,8 @@ export class AuthWorkspaceSupportService {
         : domainDecision.code;
       const denied = createProblemResult(denialCode, correlationId);
       await this.recordDecision(repositories, {
+        actor_id: membership?.userId ?? null,
+        session_id: null,
         organization_id: membership?.organizationId ?? null,
         resource_type: AUDIT_RESOURCE_TYPES.workspace,
         resource_id: resourceId,
@@ -281,6 +283,8 @@ export class AuthWorkspaceSupportService {
     }
 
     const allowed: AuthorizationDecision = {
+      actor_id: membership.userId,
+      session_id: null,
       organization_id: organizationId,
       resource_type: AUDIT_RESOURCE_TYPES.workspace,
       resource_id: resourceId,

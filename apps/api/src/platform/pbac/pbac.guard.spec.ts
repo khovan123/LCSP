@@ -50,11 +50,15 @@ class DummyController {
 function makeContext(options: {
   handler: () => void;
   authorization?: string;
+  params?: Record<string, string>;
 }): { context: ExecutionContext; request: Record<string, unknown> } {
   const request: Record<string, unknown> = {
     headers: options.authorization
       ? { authorization: options.authorization }
       : {},
+    method: "POST",
+    params: options.params ?? {},
+    route: { path: "/assessments/:assessmentId/conflicts/:conflictId/resolve" },
   };
   const context = {
     switchToHttp: () => ({ getRequest: () => request }),
@@ -149,6 +153,10 @@ describe("PbacGuard", () => {
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
+        actor_id: "user-1",
+        session_id: "session-1",
+        organization_id: "org-1",
+        resource_id: "POST /assessments/:assessmentId/conflicts/:conflictId/resolve",
         decision: PBAC_DECISION.allow,
         action: PBAC_ACTIONS.inviteDeveloper,
       }),
@@ -554,6 +562,25 @@ describe("PbacGuard", () => {
     expect(append).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ action: PBAC_ACTIONS.evidenceReadRedacted }),
+    );
+  });
+
+  it("records a domain resource id from route params when present", async () => {
+    const { guard, append } = makeGuard();
+    const { context } = makeContext({
+      handler: DummyController.prototype.inviteDeveloper,
+      authorization: "Bearer token",
+      params: { assessmentId: "assessment-1", conflictId: "conflict-1" },
+    });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+
+    expect(append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor_id: "user-1",
+        session_id: "session-1",
+        resource_id: "assessment:assessment-1:conflict:conflict-1",
+      }),
     );
   });
 });

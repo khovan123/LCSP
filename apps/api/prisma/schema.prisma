@@ -212,6 +212,8 @@ model AuthAuditEvent {
 
 model AuthDecisionLog {
   id             String                  @id
+  actorId        String?
+  sessionId      String?
   organizationId String?
   resourceType   AuditResourceType
   resourceId     String
@@ -226,6 +228,7 @@ model AuthDecisionLog {
   organization   AuthOrganization?       @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
+  @@index([actorId])
   @@index([correlationId])
 }
 
@@ -390,6 +393,7 @@ enum AuthorizationReasonCode {
   MFA_RATE_LIMITED
   OAUTH_CALLBACK_INVALID
   OAUTH_STATE_INVALID
+  ORGANIZATION_MISMATCH
   PBAC_DENIED
   PBAC_METADATA_MISSING
   POLICY_NOT_FOUND

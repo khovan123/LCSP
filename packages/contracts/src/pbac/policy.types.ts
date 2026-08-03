@@ -41,6 +41,7 @@ export interface SubjectAttributes {
 }
 
 export interface PbacEvaluationContext {
+  organizationId: string;
   action: string;
   subject: SubjectAttributes;
   policy: PolicyDocument;
