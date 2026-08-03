@@ -41,10 +41,7 @@ import {
   ACCEPT_INVITATION_FIELD_TYPES,
   ACCEPT_INVITATION_SUBMISSION_ERRORS,
   type AcceptInvitationFormProps,
-  type InvitationFieldDescriptionKey,
-  type InvitationFieldLabelKey,
   type InvitationFieldProps,
-  type InvitationFieldType,
   type InvitationPreviewSummaryProps,
   type SubmissionError,
 } from "../../types/accept-invitation.types";

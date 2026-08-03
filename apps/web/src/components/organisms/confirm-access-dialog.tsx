@@ -4,7 +4,7 @@ import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { resolveMessage } from "@lcsp/i18n";
 import { LockIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { ConfirmAccessSupportLinks } from "@/components/molecules/confirm-access-support-links";
@@ -46,6 +46,22 @@ import { appLocale } from "@/lib/locale";
 export function ConfirmAccessDialog({
   open,
   onOpenChange,
+  ...props
+}: ConfirmAccessDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open ? (
+        <ConfirmAccessDialogContent
+          onOpenChange={onOpenChange}
+          {...props}
+        />
+      ) : null}
+    </Dialog>
+  );
+}
+
+function ConfirmAccessDialogContent({
+  onOpenChange,
   onPasswordSubmit,
   accountLabelKey,
   accountHandle,
@@ -65,7 +81,7 @@ export function ConfirmAccessDialog({
   errorTitleKey,
   errorKey,
   mfa,
-}: ConfirmAccessDialogProps) {
+}: Omit<ConfirmAccessDialogProps, "open">) {
   const [method, setMethod] = useState<ConfirmAccessMethod>(
     CONFIRM_ACCESS_METHODS.password,
   );
@@ -77,14 +93,6 @@ export function ConfirmAccessDialog({
     resolver: zodResolver(confirmAccessOtpSchema),
     defaultValues: { otp: "" },
   });
-
-  useEffect(() => {
-    if (!open) {
-      passwordForm.reset();
-      otpForm.reset();
-      setMethod(CONFIRM_ACCESS_METHODS.password);
-    }
-  }, [open, otpForm, passwordForm]);
 
   async function handlePasswordSubmit(values: ConfirmAccessPasswordValues) {
     await onPasswordSubmit(values);
@@ -152,8 +160,7 @@ export function ConfirmAccessDialog({
     });
   }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent closeLabel={resolveMessage(appLocale, closeLabelKey)}>
+    <DialogContent closeLabel={resolveMessage(appLocale, closeLabelKey)}>
         <DialogHeader>
           <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/12 text-primary">
             <LockIcon className="size-5" />
@@ -338,6 +345,5 @@ export function ConfirmAccessDialog({
           ) : null}
         </DialogBody>
       </DialogContent>
-    </Dialog>
   );
 }

@@ -2,6 +2,30 @@ import Joi from "joi";
 
 import type { AppConfig, NodeEnv } from "./config.types.js";
 
+const SMTP_MAILBOX_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+const SMTP_DISPLAY_NAME_PATTERN = /^([^<>]+)<\s*([^<>]+)\s*>$/;
+
+function isValidSmtpFrom(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return true;
+  }
+
+  if (SMTP_MAILBOX_PATTERN.test(trimmed)) {
+    return true;
+  }
+
+  const displayNameMatch = SMTP_DISPLAY_NAME_PATTERN.exec(trimmed);
+  if (!displayNameMatch) {
+    return false;
+  }
+
+  const [, displayName, mailbox] = displayNameMatch;
+  return (
+    displayName.trim().length > 0 && SMTP_MAILBOX_PATTERN.test(mailbox.trim())
+  );
+}
+
 export const configValidationSchema = Joi.object({
   NODE_ENV: Joi.string()
     .valid("development", "production", "test")
@@ -39,10 +63,21 @@ export const configValidationSchema = Joi.object({
   SMTP_SECURE: Joi.boolean().default(false),
   SMTP_USER: Joi.string().trim().allow("").default(""),
   SMTP_PASS: Joi.string().trim().allow("").default(""),
-  SMTP_FROM: Joi.string().trim().allow("").default("").messages({
-    "string.smtpFrom":
-      '"SMTP_FROM" must be a valid email or display-name address like "LCSP <noreply@lcsp.com>"',
-  }),
+  SMTP_FROM: Joi.string()
+    .trim()
+    .allow("")
+    .default("")
+    .custom((value: string, helpers): string => {
+      if (isValidSmtpFrom(value)) {
+        return value;
+      }
+
+      return helpers.error("string.smtpFrom") as unknown as string;
+    })
+    .messages({
+      "string.smtpFrom":
+        '"SMTP_FROM" must be a valid email or display-name address like "LCSP <noreply@lcsp.com>"',
+    }),
   PYTHON_WORKER_BASE_URL: Joi.string().required(),
   WORKER_API_KEY: Joi.string().min(32).required(),
 }).unknown(true);

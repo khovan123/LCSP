@@ -1,4 +1,3 @@
-import { resolveMessage } from "@lcsp/i18n";
 import {
   Card,
   CardContent,
@@ -11,7 +10,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { appLocale } from "@/lib/locale";
 import type { AssessmentSummary } from "../../types/workspace.types";
 import { AssessmentSummaryCard } from "../molecules/assessment-summary-card";
 
