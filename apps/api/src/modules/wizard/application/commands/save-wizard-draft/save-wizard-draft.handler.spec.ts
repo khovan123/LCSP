@@ -18,6 +18,7 @@ import {
   WizardAlreadySubmittedException,
 } from "../../../domain/exceptions/wizard.exceptions.js";
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 
 import { jest } from "@jest/globals";
 
@@ -25,6 +26,7 @@ describe("SaveWizardDraftHandler", () => {
   let handler: SaveWizardDraftHandler;
   let wizardRepository: jest.Mocked<WizardProfileRepository>;
   let auditWriter: jest.Mocked<AuditWriterService>;
+  let prismaService: jest.Mocked<PrismaService>;
 
   beforeEach(async () => {
     wizardRepository = {
@@ -38,11 +40,18 @@ describe("SaveWizardDraftHandler", () => {
       write: jest.fn<AuditWriterService["write"]>(),
     } as unknown as jest.Mocked<AuditWriterService>;
 
+    prismaService = {
+      repositoryConnection: {
+        findFirst: jest.fn(),
+      },
+    } as unknown as jest.Mocked<PrismaService>;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SaveWizardDraftHandler,
         { provide: WIZARD_PROFILE_REPOSITORY, useValue: wizardRepository },
         { provide: AuditWriterService, useValue: auditWriter },
+        { provide: PrismaService, useValue: prismaService },
       ],
     }).compile();
 
@@ -194,6 +203,7 @@ describe("SaveWizardDraftHandler", () => {
           status: WIZARD_STATUS_CODES.submitted,
         }),
       );
+      prismaService.repositoryConnection.findFirst.mockResolvedValue({ id: "repo-1" } as any);
 
       await expect(handler.execute(command)).rejects.toThrow(
         WizardAlreadySubmittedException,
