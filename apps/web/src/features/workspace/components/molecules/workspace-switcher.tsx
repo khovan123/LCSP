@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { resolveMessage } from "@lcsp/i18n";
-import { Building2Icon, CheckIcon, ChevronsUpDownIcon } from "lucide-react";
+import { Building2Icon, ChevronsUpDownIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -13,15 +13,14 @@ import {
 } from "@/components/ui/collapsible";
 import { Spinner } from "@/components/ui/spinner";
 import { useWorkspaceUiStore } from "@/features/workspace/stores/workspace-ui-store";
-import type { WorkspaceSelectionOption } from "@/lib/api/workspace-client";
 import {
   usePersistWorkspaceSelectionMutation,
   useWorkspaceSelectionQuery,
 } from "@/lib/api/workspace-queries";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
-
-type WorkspaceOption = WorkspaceSelectionOption;
+import { WorkspaceMenuRow } from "./workspace-menu-row";
+import { WORKSPACE_MENU_ROW_STATES } from "../../types/workspace-menu-row.types";
 
 export function WorkspaceSwitcher({
   placement,
@@ -139,11 +138,11 @@ export function WorkspaceSwitcher({
             {t("pages.workspaceSelector.loading")}
           </div>
         ) : null}
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           {selectedWorkspace ? (
             <WorkspaceMenuRow
               workspace={selectedWorkspace}
-              state="current"
+              state={WORKSPACE_MENU_ROW_STATES.current}
               pending={switchWorkspace.isPending}
               onSelect={() => undefined}
             />
@@ -156,8 +155,8 @@ export function WorkspaceSwitcher({
                 workspace={workspace}
                 state={
                   switchWorkspace.variables === workspace.id
-                    ? "pending"
-                    : "default"
+                    ? WORKSPACE_MENU_ROW_STATES.pending
+                    : WORKSPACE_MENU_ROW_STATES.default
                 }
                 pending={
                   switchWorkspace.isPending &&
@@ -172,43 +171,6 @@ export function WorkspaceSwitcher({
         </div>
       </CollapsibleContent>
     </Collapsible>
-  );
-}
-
-function WorkspaceMenuRow({
-  workspace,
-  state,
-  pending,
-  onSelect,
-}: {
-  workspace: WorkspaceOption;
-  state: "current" | "default" | "pending";
-  pending: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      disabled={pending || state === "current"}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition",
-        state === "current"
-          ? "bg-accent text-accent-foreground"
-          : "hover:bg-accent hover:text-accent-foreground",
-        state === "pending" ? "bg-accent/70" : null,
-      )}
-    >
-      <Building2Icon className="size-4 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">
-        {workspace.name}
-      </span>
-      {pending ? (
-        <Spinner data-icon="inline-start" />
-      ) : state === "current" ? (
-        <CheckIcon className="size-4 shrink-0 text-primary" />
-      ) : null}
-    </button>
   );
 }
 

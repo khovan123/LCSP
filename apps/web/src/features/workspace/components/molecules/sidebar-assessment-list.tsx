@@ -12,6 +12,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -56,7 +62,9 @@ export function SidebarAssessmentList() {
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{t("pages.appShell.recentAssessments")}</SidebarGroupLabel>
+      <SidebarGroupLabel>
+        {t("pages.appShell.recentAssessments")}
+      </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {visibleAssessments.map((assessment) => {
@@ -118,7 +126,7 @@ export function SidebarAssessmentList() {
                     className="h-8 pl-8"
                   />
                 </div>
-                <div className="space-y-1">
+                <div className="flex flex-col gap-1">
                   {filteredAssessments.map((assessment) => {
                     const href = getAssessmentActiveHref(assessment);
 
@@ -135,9 +143,16 @@ export function SidebarAssessmentList() {
                     );
                   })}
                   {filteredAssessments.length === 0 ? (
-                    <p className="px-2 py-3 text-sm text-muted-foreground">
-                      {t("pages.appShell.noAssessmentMatches")}
-                    </p>
+                    <Empty className="rounded-md border px-2 py-4">
+                      <EmptyHeader>
+                        <EmptyTitle>
+                          {t("pages.appShell.moreAssessments")}
+                        </EmptyTitle>
+                        <EmptyDescription>
+                          {t("pages.appShell.noAssessmentMatches")}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
                   ) : null}
                   <Link
                     href="/assessments"

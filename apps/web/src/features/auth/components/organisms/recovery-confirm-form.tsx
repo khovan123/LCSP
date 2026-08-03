@@ -7,7 +7,7 @@ import { resolveMessage } from "@lcsp/i18n";
 import { FormProvider, useForm } from "react-hook-form";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldDescription,
@@ -28,8 +28,9 @@ import {
   recoveryConfirmSchema,
   type RecoveryConfirmFormValues,
 } from "../../schemas/recovery-confirm.schema";
+import type { RecoveryConfirmFormProps } from "../../types/recovery-confirm.types";
 
-export function RecoveryConfirmForm({ token }: { token: string }) {
+export function RecoveryConfirmForm({ token }: RecoveryConfirmFormProps) {
   const router = useRouter();
   const confirmMutation = useConfirmRecoveryMutation();
   const form = useForm<RecoveryConfirmFormValues>({
@@ -88,15 +89,15 @@ export function RecoveryConfirmForm({ token }: { token: string }) {
                   : "pages.recoveryConfirm.submit",
               )}
             </Button>
-            <Link
-              className={buttonVariants({ variant: "ghost" })}
-              href={API_REDIRECT_LOCATIONS.recoveryRequest}
+            <Button
+              render={<Link href={API_REDIRECT_LOCATIONS.recoveryRequest} />}
+              variant="ghost"
             >
               {resolveMessage(
                 appLocale,
                 "pages.recoveryConfirm.requestAnother",
               )}
-            </Link>
+            </Button>
           </>
         }
       >

@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   acceptInvitation,
+  type AuthSessionSummary,
+  type AuthSettingsProfile,
   confirmPasswordRecovery,
   disableMfa,
   enrollMfa,
@@ -11,6 +13,7 @@ import {
   getAuthSessions,
   getAuthSettingsProfile,
   previewInvitation,
+  reauthenticateWithPassword,
   revokeAuthSession,
   requestPasswordRecovery,
   signIn,
@@ -63,6 +66,10 @@ export function useMfaVerifyMutation() {
   return useMutation({ mutationFn: verifyMfaOtp });
 }
 
+export function usePasswordReauthMutation() {
+  return useMutation({ mutationFn: reauthenticateWithPassword });
+}
+
 export function useMfaEnrollMutation() {
   return useMutation({ mutationFn: enrollMfa });
 }
@@ -75,6 +82,36 @@ export function useDisableMfaMutation() {
     onSuccess: async (outcome) => {
       if (outcome.kind !== API_OUTCOME_KINDS.disabled) {
         return;
+      }
+
+      const currentProfile = queryClient.getQueryData<AuthSettingsProfile>(
+        apiQueryKeys.auth.settingsProfile(),
+      );
+      if (currentProfile) {
+        queryClient.setQueryData<AuthSettingsProfile>(
+          apiQueryKeys.auth.settingsProfile(),
+          {
+            ...currentProfile,
+            mfa_enrolled: false,
+            mfa_enrolled_at: null,
+            mfa_verified: false,
+            mfa_verified_at: null,
+          },
+        );
+      }
+
+      const currentSessions = queryClient.getQueryData<AuthSessionSummary[]>(
+        apiQueryKeys.auth.sessions(),
+      );
+      if (currentSessions) {
+        queryClient.setQueryData<AuthSessionSummary[]>(
+          apiQueryKeys.auth.sessions(),
+          currentSessions.map((session) =>
+            session.is_current
+              ? { ...session, mfa_verified_at: null }
+              : session,
+          ),
+        );
       }
 
       await Promise.all([

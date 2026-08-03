@@ -74,6 +74,8 @@ function buildRepositories(input: {
       findById: (id: string) =>
         Promise.resolve(input.user && input.user.id === id ? input.user : null),
       findByEmail: () => Promise.resolve(null),
+      findByRecoveryEmail: () => Promise.resolve(null),
+      findByPrimaryEmail: () => Promise.resolve(null),
     },
     memberships: {
       nextId: () => "unused",
@@ -114,6 +116,7 @@ function buildRepositories(input: {
     mfaRateLimits: {
       findByUserId: () => Promise.resolve(null),
       save: () => Promise.resolve(),
+      resetByUserId: () => Promise.resolve(),
       recordFailedAttempt: () => {
         throw new Error("not used in this test");
       },
@@ -121,6 +124,7 @@ function buildRepositories(input: {
     mfaOtpUsed: {
       isUsed: () => Promise.resolve(false),
       tryMarkUsed: () => Promise.resolve(true),
+      deleteByUserId: () => Promise.resolve(),
       pruneOlderThan: () => Promise.resolve(),
     },
     recoveryRequests: {

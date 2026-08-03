@@ -355,12 +355,15 @@ export const enPages = {
         mfaPending: "MFA pending",
         configured: "Configured",
         primary: "Primary",
+        backup: "Backup",
         active: "Active",
         revoked: "Revoked",
       },
       states: {
         notConfigured: "Not configured",
         noRecoveryEmail: "No recovery email set",
+        enabled: "On",
+        disabled: "Off",
         currentSession: "Current session",
         noSessions: "No sessions found.",
         noRepositories: "No linked repositories found.",
@@ -368,12 +371,17 @@ export const enPages = {
       },
       actions: {
         edit: "Edit",
+        manage: "Manage",
         setUp: "Set up",
+        hide: "Hide",
+        changePassword: "Change password",
         turnOn: "Turn on MFA",
         turnOff: "Turn off MFA",
         generateSetup: "Generate setup",
         verifyAndSave: "Verify and save",
+        cancel: "Cancel",
         sendRecovery: "Send recovery instructions",
+        updatePassword: "Update password",
         revoke: "Revoke",
       },
       account: {
@@ -400,10 +408,49 @@ export const enPages = {
       emails: {
         title: "Emails",
         description:
-          "Manage the email addresses used for sign-in and account recovery.",
+          "Manage the email addresses used to sign in, receive notifications, and recover access.",
+        addressListTitle: "Emails you can use",
+        addressListDescription:
+          "Verified emails can be used for sign-in and security-related delivery in the current LCSP flow.",
         primaryTitle: "Primary email",
         primaryDescription:
           "Your primary email is used to sign in and receive security messages.",
+        primaryRowDescription:
+          "This address is the default destination for sign-in and account security activity.",
+        recoveryRowDescription:
+          "This address is stored as the current backup destination for recovery-related messages.",
+        primaryMenuLabel: "Open primary email actions",
+        recoveryMenuLabel: "Open backup email actions",
+        addEmailTitle: "Add email address",
+        addEmailInputLabel: "Email address",
+        addEmailPlaceholder: "Email address",
+        addEmailAction: "Add",
+        addEmailDescription:
+          "LCSP currently stores one additional recovery email for account recovery and security notifications.",
+        primaryPreferenceTitle: "Primary email address",
+        primaryPreferenceDescription:
+          "Select the email used for account-related notifications and the default recovery identity.",
+        backupPreferenceTitle: "Backup email address",
+        backupPreferenceDescription:
+          "Choose how backup delivery should behave for recovery and security events.",
+        backupAllVerifiedOption: "Allow all verified emails",
+      },
+      reauth: {
+        title: "Confirm access",
+        description:
+          "Confirm this sensitive settings change before continuing.",
+        accountLabel: "Signed in as",
+        passwordPlaceholder: "Password",
+        otpPlaceholder: "XXXXXX",
+        confirm: "Confirm",
+        confirming: "Confirming",
+        verify: "Verify",
+        verifying: "Verifying",
+        supportTitle: "Having problems?",
+        useAuthenticator: "Use your authenticator app",
+        usePassword: "Use your password",
+        setUpMfa: "Set up MFA",
+        close: "Close dialog",
       },
       password: {
         title: "Password and authentication",
@@ -411,7 +458,15 @@ export const enPages = {
           "Manage sign-in methods, authenticator-based MFA, and the recovery flow supported by LCSP today.",
         signInMethodsTitle: "Sign in methods",
         emailMethod: "Email",
+        emailMethodDescription: "2 verified emails configured",
         passwordMethod: "Password",
+        passwordMethodDescription: "Configured",
+        currentPasswordLabel: "Old password",
+        newPasswordLabel: "New password",
+        confirmNewPasswordLabel: "Confirm new password",
+        passwordPolicyHint:
+          "Make sure it's at least 15 characters OR at least 8 characters including a number and a lowercase letter.",
+        learnMoreLink: "Learn more",
         mfaTitle: "Two-factor authentication",
         mfaDescription:
           "Authenticator app setup is required before accessing the protected workspace.",

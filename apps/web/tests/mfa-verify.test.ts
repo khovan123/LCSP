@@ -77,6 +77,16 @@ test("MFA rate limiting returns a locked outcome", () => {
   );
 });
 
+test("undecryptable MFA enrollment redirects back to setup", () => {
+  assert.deepEqual(
+    toMfaVerifyOutcome(
+      problem(AUTH_ERROR_CODES.mfaRequired, 403),
+      false,
+    ),
+    { kind: "mfa_required" },
+  );
+});
+
 test("invalid or expired pending sessions return a sign-in outcome", () => {
   assert.deepEqual(
     toMfaVerifyOutcome(

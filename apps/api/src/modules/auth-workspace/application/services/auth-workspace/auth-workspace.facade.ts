@@ -21,6 +21,7 @@ import type {
   ConfirmRecoveryPayload,
   RequestRecoveryPayload,
 } from "../../contracts/auth-workspace/recovery.contract.ts";
+import type { PasswordReauthPayload } from "../../contracts/auth-workspace/password-reauth.contract.ts";
 import type { CredentialPayload } from "../../contracts/auth-workspace/sign-in.contract.ts";
 import type { WorkspaceRequest } from "../../contracts/auth-workspace/workspace.contract.ts";
 import type { UpdateProfilePayload } from "../../commands/update-profile/update-profile.command.ts";
@@ -44,6 +45,8 @@ import { RevokeMembershipCommand } from "../../commands/revoke-membership/revoke
 import { RevokeMembershipHandler } from "../../commands/revoke-membership/revoke-membership.handler.ts";
 import { RequestPasswordRecoveryCommand } from "../../commands/request-password-recovery/request-password-recovery.command.ts";
 import { RequestPasswordRecoveryHandler } from "../../commands/request-password-recovery/request-password-recovery.handler.ts";
+import { ReauthenticatePasswordCommand } from "../../commands/reauthenticate-password/reauthenticate-password.command.ts";
+import { ReauthenticatePasswordHandler } from "../../commands/reauthenticate-password/reauthenticate-password.handler.ts";
 import { RevokeOwnedSessionCommand } from "../../commands/revoke-owned-session/revoke-owned-session.command.ts";
 import { RevokeOwnedSessionHandler } from "../../commands/revoke-owned-session/revoke-owned-session.handler.ts";
 import { RevokeSessionCommand } from "../../commands/revoke-session/revoke-session.command.ts";
@@ -85,6 +88,7 @@ export class AuthWorkspaceFacade {
     private readonly updateProfileHandler: UpdateProfileHandler,
     private readonly requestPasswordRecoveryHandler: RequestPasswordRecoveryHandler,
     private readonly confirmPasswordRecoveryHandler: ConfirmPasswordRecoveryHandler,
+    private readonly reauthenticatePasswordHandler: ReauthenticatePasswordHandler,
     private readonly oauthStartHandler: OAuthStartHandler,
     private readonly oauthCallbackHandler: OAuthCallbackHandler,
     private readonly inviteDeveloperHandler: InviteDeveloperHandler,
@@ -204,6 +208,15 @@ export class AuthWorkspaceFacade {
   ) {
     return this.confirmPasswordRecoveryHandler.execute(
       new ConfirmPasswordRecoveryCommand(payload, requestMeta),
+    );
+  }
+
+  reauthenticatePassword(
+    payload: PasswordReauthPayload,
+    requestMeta: RequestMeta = {},
+  ) {
+    return this.reauthenticatePasswordHandler.execute(
+      new ReauthenticatePasswordCommand(payload, requestMeta),
     );
   }
 

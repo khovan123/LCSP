@@ -7,7 +7,7 @@ import { resolveMessage } from "@lcsp/i18n";
 import { FormProvider, useForm } from "react-hook-form";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldDescription,
@@ -85,12 +85,12 @@ export function RecoveryRequestForm() {
                   : "pages.recoveryRequest.submit",
               )}
             </Button>
-            <Link
-              className={buttonVariants({ variant: "ghost" })}
-              href={API_REDIRECT_LOCATIONS.signIn}
+            <Button
+              render={<Link href={API_REDIRECT_LOCATIONS.signIn} />}
+              variant="ghost"
             >
               {resolveMessage(appLocale, "pages.recoveryRequest.backToSignIn")}
-            </Link>
+            </Button>
           </>
         }
       >

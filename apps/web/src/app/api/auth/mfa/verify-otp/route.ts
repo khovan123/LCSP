@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       typeof body === "object" && body !== null
         ? (body as { otp?: unknown }).otp
         : undefined;
-    if (session.token !== "mock-session:mfa-pending") {
+    if (session.token !== "mock-session:mfa-verify-pending") {
       return problemJson(AUTH_ERROR_CODES.sessionInvalid, { status: 401 });
     }
     if (otp !== "123456") {

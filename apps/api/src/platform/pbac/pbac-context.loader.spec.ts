@@ -205,7 +205,7 @@ describe("PbacContextLoader", () => {
     });
   });
 
-  it("MFA_REQUIRED when MFA is enrolled but the session has not verified it", async () => {
+  it("pending MFA setup does not require verification before first success", async () => {
     const loader = makeLoader({
       mfaEnrollments: {
         findByUserId: jest
@@ -215,6 +215,27 @@ describe("PbacContextLoader", () => {
               userId: "user-1",
               encryptedSecret: "enc",
               enrolledAt: NOW,
+            }),
+          ),
+      },
+    });
+
+    const result = await loader.load("raw-token", NOW);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("MFA_REQUIRED when MFA has been verified previously but the session has not re-verified it", async () => {
+    const loader = makeLoader({
+      mfaEnrollments: {
+        findByUserId: jest
+          .fn<MfaEnrollmentRepository["findByUserId"]>()
+          .mockResolvedValue(
+            new MfaEnrollment({
+              userId: "user-1",
+              encryptedSecret: "enc",
+              enrolledAt: NOW,
+              verifiedAt: NOW - 1000,
             }),
           ),
       },
@@ -244,6 +265,7 @@ describe("PbacContextLoader", () => {
               userId: "user-1",
               encryptedSecret: "enc",
               enrolledAt: NOW,
+              verifiedAt: NOW - 1000,
             }),
           ),
       },
@@ -256,16 +278,12 @@ describe("PbacContextLoader", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("requires MFA even when the user has not enrolled yet", async () => {
+  it("allows active sessions when the user has not enrolled MFA", async () => {
     const loader = makeLoader();
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({
-      ok: false,
-      reason: PBAC_REASON_CODE.mfaRequired,
-      mfaEnrolled: false,
-    });
+    expect(result.ok).toBe(true);
   });
 
   it("allows bootstrap routes to use a valid session before MFA is verified", async () => {

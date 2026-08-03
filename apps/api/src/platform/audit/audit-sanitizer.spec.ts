@@ -1,3 +1,4 @@
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { AuditSanitizer } from "./audit-sanitizer.js";
 
 describe("AuditSanitizer", () => {
@@ -67,14 +68,14 @@ describe("AuditSanitizer", () => {
 
   it("retains audit reason code fields while still stripping other code secrets", () => {
     const result = AuditSanitizer.sanitize({
-      reason_code: "INVALID_CREDENTIALS",
-      reasonCode: "INVALID_CREDENTIALS",
+      reason_code: AUTH_ERROR_CODES.invalidCredentials,
+      reasonCode: AUTH_ERROR_CODES.invalidCredentials,
       verificationCode: "123456",
     });
 
     expect(result.payload).toEqual({
-      reason_code: "INVALID_CREDENTIALS",
-      reasonCode: "INVALID_CREDENTIALS",
+      reason_code: AUTH_ERROR_CODES.invalidCredentials,
+      reasonCode: AUTH_ERROR_CODES.invalidCredentials,
     });
     expect(result.removedKeys).toEqual(["verificationCode"]);
   });

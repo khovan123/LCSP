@@ -1,4 +1,8 @@
 import { NextRequest } from "next/server";
+import {
+  AUTH_BACKUP_EMAIL_POLICIES,
+  AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
+} from "@lcsp/contracts/auth";
 
 import { isMockModeEnabled } from "@/lib/server/fixtures/response";
 import { successJson } from "@/lib/server/problem-json";
@@ -20,6 +24,10 @@ export async function GET(request: NextRequest) {
       email_verified: true,
       display_name: "Phan Nguyen Quoc Minh",
       recovery_email: "minhpnq1807@gmail.com",
+      primary_email_address_policy:
+        AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.accountEmail,
+      backup_recovery_email_policy:
+        AUTH_BACKUP_EMAIL_POLICIES.recoveryEmail,
       created_at: new Date("2026-07-01T08:00:00.000Z").toISOString(),
       updated_at: new Date("2026-07-31T20:00:00.000Z").toISOString(),
       membership_role: "MANAGER",
@@ -53,11 +61,24 @@ export async function PATCH(request: NextRequest) {
 
   if (isMockModeEnabled()) {
     const body = (await request.json().catch(() => null)) as
-      | { recovery_email?: unknown }
+      | {
+          recovery_email?: unknown;
+          primary_email_address_policy?: unknown;
+          backup_recovery_email_policy?: unknown;
+        }
       | null;
+    const updated_fields: string[] = [];
+    if (typeof body?.recovery_email === "string") {
+      updated_fields.push("recovery_email");
+    }
+    if (typeof body?.primary_email_address_policy === "string") {
+      updated_fields.push("primary_email_address_policy");
+    }
+    if (typeof body?.backup_recovery_email_policy === "string") {
+      updated_fields.push("backup_recovery_email_policy");
+    }
     return successJson({
-      updated_fields:
-        typeof body?.recovery_email === "string" ? ["recovery_email"] : [],
+      updated_fields,
     });
   }
 
@@ -85,6 +106,8 @@ function sanitizeProfilePayload(data: unknown) {
       candidate.display_name === null) &&
     (typeof candidate.recovery_email === "string" ||
       candidate.recovery_email === null) &&
+    typeof candidate.primary_email_address_policy === "string" &&
+    typeof candidate.backup_recovery_email_policy === "string" &&
     typeof candidate.created_at === "string" &&
     typeof candidate.updated_at === "string" &&
     typeof candidate.membership_role === "string" &&

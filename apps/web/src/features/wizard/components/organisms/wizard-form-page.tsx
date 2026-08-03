@@ -36,6 +36,7 @@ import { t } from "@/features/wizard/lib/wizard-i18n";
 import { wizardDraftSchema } from "@/features/wizard/schemas/wizard-form.schema";
 import type { WizardFormValues } from "@/features/wizard/schemas/wizard-form.schema";
 import type { WizardHelperKey } from "@/features/wizard/types/wizard-form.types";
+import type { WizardFormPageProps } from "@/features/wizard/types/component-props.types";
 import type { WizardAnswers } from "@/features/wizard/types/wizard.types";
 import {
   useSaveWizardDraftMutation,
@@ -43,7 +44,7 @@ import {
   useWizardAssessmentQuery,
 } from "@/lib/api/assessment-queries";
 
-export function WizardFormPage({ assessmentId }: { assessmentId: string }) {
+export function WizardFormPage({ assessmentId }: WizardFormPageProps) {
   const router = useRouter();
   const assessmentQuery = useWizardAssessmentQuery(assessmentId);
   const saveDraftMutation = useSaveWizardDraftMutation(assessmentId);

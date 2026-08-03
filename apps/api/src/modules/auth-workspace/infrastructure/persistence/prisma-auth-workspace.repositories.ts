@@ -12,8 +12,10 @@ import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 
 import {
+  toPrismaAuthBackupEmailPolicy,
   toPrismaAuthInvitationState,
   toPrismaAuthMembershipStatus,
+  toPrismaAuthPrimaryEmailAddressPolicy,
   toPrismaAuditResourceType,
   toPrismaAuthorizationReasonCode,
   toPrismaAuthDecision,
@@ -119,6 +121,12 @@ export class PrismaUserRepository implements UserRepository {
           lockUntil: dateFromEpochMs(user.lockUntil),
           displayName: user.displayName,
           recoveryEmail: user.recoveryEmail,
+          primaryEmailAddressPolicy: toPrismaAuthPrimaryEmailAddressPolicy(
+            user.primaryEmailAddressPolicy,
+          ),
+          backupEmailPolicy: toPrismaAuthBackupEmailPolicy(
+            user.backupEmailPolicy,
+          ),
           mfaRequired: user.mfaRequired,
         },
         update: {
@@ -129,6 +137,12 @@ export class PrismaUserRepository implements UserRepository {
           lockUntil: dateFromEpochMs(user.lockUntil),
           displayName: user.displayName,
           recoveryEmail: user.recoveryEmail,
+          primaryEmailAddressPolicy: toPrismaAuthPrimaryEmailAddressPolicy(
+            user.primaryEmailAddressPolicy,
+          ),
+          backupEmailPolicy: toPrismaAuthBackupEmailPolicy(
+            user.backupEmailPolicy,
+          ),
           mfaRequired: user.mfaRequired,
         },
       });
@@ -149,6 +163,31 @@ export class PrismaUserRepository implements UserRepository {
   async findByEmail(email: string): Promise<User | null> {
     const record = await this.prisma.authUser.findUnique({
       where: { email: email.trim().toLowerCase() },
+    });
+
+    return record ? mapUserRecord(record) : null;
+  }
+
+  async findByRecoveryEmail(email: string): Promise<User | null> {
+    const record = await this.prisma.authUser.findFirst({
+      where: { recoveryEmail: email.trim().toLowerCase() },
+    });
+
+    return record ? mapUserRecord(record) : null;
+  }
+
+  async findByPrimaryEmail(email: string): Promise<User | null> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const record = await this.prisma.authUser.findFirst({
+      where: {
+        OR: [
+          { email: normalizedEmail },
+          {
+            recoveryEmail: normalizedEmail,
+            primaryEmailAddressPolicy: "RECOVERY_EMAIL",
+          },
+        ],
+      },
     });
 
     return record ? mapUserRecord(record) : null;
@@ -434,10 +473,12 @@ export class PrismaMfaEnrollmentRepository implements MfaEnrollmentRepository {
         userId: enrollment.userId,
         encryptedSecret: enrollment.encryptedSecret,
         enrolledAt: new Date(enrollment.enrolledAt),
+        verifiedAt: dateFromEpochMs(enrollment.verifiedAt),
       },
       update: {
         encryptedSecret: enrollment.encryptedSecret,
         enrolledAt: new Date(enrollment.enrolledAt),
+        verifiedAt: dateFromEpochMs(enrollment.verifiedAt),
       },
     });
   }
@@ -470,6 +511,12 @@ export class PrismaMfaRateLimitRepository implements MfaRateLimitRepository {
         failedCount: rateLimit.failedCount,
         lockedUntil: dateFromEpochMs(rateLimit.lockedUntil),
       },
+    });
+  }
+
+  async resetByUserId(userId: string): Promise<void> {
+    await this.prisma.authMfaRateLimit.deleteMany({
+      where: { userId },
     });
   }
 
@@ -531,6 +578,12 @@ export class PrismaMfaOtpUsedRepository implements MfaOtpUsedRepository {
       }
       throw error;
     }
+  }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    await this.prisma.authMfaOtpUsed.deleteMany({
+      where: { userId },
+    });
   }
 
   async pruneOlderThan(cutoffMs: number): Promise<void> {

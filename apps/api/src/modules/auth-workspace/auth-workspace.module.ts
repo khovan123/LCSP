@@ -14,6 +14,7 @@ import { OAuthStartHandler } from "./application/commands/oauth-start/oauth-star
 import { RegisterApprovedPathHandler } from "./application/commands/register-approved-path/register-approved-path.handler.ts";
 import { RevokeMembershipHandler } from "./application/commands/revoke-membership/revoke-membership.handler.ts";
 import { RequestPasswordRecoveryHandler } from "./application/commands/request-password-recovery/request-password-recovery.handler.ts";
+import { ReauthenticatePasswordHandler } from "./application/commands/reauthenticate-password/reauthenticate-password.handler.ts";
 import { RevokeOwnedSessionHandler } from "./application/commands/revoke-owned-session/revoke-owned-session.handler.ts";
 import { RevokeSessionHandler } from "./application/commands/revoke-session/revoke-session.handler.ts";
 import { SignInHandler } from "./application/commands/sign-in/sign-in.handler.ts";
@@ -217,6 +218,7 @@ function handlerProvider<T>(
     handlerProvider(EnrollMfaHandler),
     handlerProvider(VerifyMfaOtpHandler),
     handlerProvider(UpdateProfileHandler),
+    handlerProvider(ReauthenticatePasswordHandler),
     {
       provide: InviteDeveloperHandler,
       inject: [
@@ -295,6 +297,7 @@ function handlerProvider<T>(
         UpdateProfileHandler,
         RequestPasswordRecoveryHandler,
         ConfirmPasswordRecoveryHandler,
+        ReauthenticatePasswordHandler,
         OAuthStartHandler,
         OAuthCallbackHandler,
         InviteDeveloperHandler,
@@ -318,6 +321,7 @@ function handlerProvider<T>(
         updateProfileHandler: UpdateProfileHandler,
         requestPasswordRecoveryHandler: RequestPasswordRecoveryHandler,
         confirmPasswordRecoveryHandler: ConfirmPasswordRecoveryHandler,
+        reauthenticatePasswordHandler: ReauthenticatePasswordHandler,
         oauthStartHandler: OAuthStartHandler,
         oauthCallbackHandler: OAuthCallbackHandler,
         inviteDeveloperHandler: InviteDeveloperHandler,
@@ -341,6 +345,7 @@ function handlerProvider<T>(
           updateProfileHandler,
           requestPasswordRecoveryHandler,
           confirmPasswordRecoveryHandler,
+          reauthenticatePasswordHandler,
           oauthStartHandler,
           oauthCallbackHandler,
           inviteDeveloperHandler,

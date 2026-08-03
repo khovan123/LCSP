@@ -35,46 +35,23 @@ import {
   acceptInvitationSchema,
   type AcceptInvitationFormValues,
 } from "../../schemas/accept-invitation.schema";
-
-const ACCEPT_INVITATION_SUBMISSION_ERRORS = {
-  invitationInvalid: API_OUTCOME_KINDS.invitationInvalid,
-  emailAlreadyExists: API_OUTCOME_KINDS.emailAlreadyExists,
-  requestFailed: "request_failed",
-} as const;
-
-const ACCEPT_INVITATION_FIELD_TYPES = {
-  text: "text",
-  password: "password",
-} as const;
-
-const ACCEPT_INVITATION_FIELD_LABEL_KEYS = {
-  displayName: "pages.acceptInvitation.displayNameLabel",
-  password: "pages.acceptInvitation.passwordLabel",
-} as const;
-
-const ACCEPT_INVITATION_FIELD_DESCRIPTION_KEYS = {
-  displayName: "pages.acceptInvitation.displayNameDescription",
-  password: "pages.acceptInvitation.passwordDescription",
-} as const;
-
-type SubmissionError =
-  | (typeof ACCEPT_INVITATION_SUBMISSION_ERRORS)[keyof typeof ACCEPT_INVITATION_SUBMISSION_ERRORS]
-  | null;
-
-type InvitationFieldType =
-  (typeof ACCEPT_INVITATION_FIELD_TYPES)[keyof typeof ACCEPT_INVITATION_FIELD_TYPES];
-
-type InvitationFieldLabelKey =
-  (typeof ACCEPT_INVITATION_FIELD_LABEL_KEYS)[keyof typeof ACCEPT_INVITATION_FIELD_LABEL_KEYS];
-
-type InvitationFieldDescriptionKey =
-  (typeof ACCEPT_INVITATION_FIELD_DESCRIPTION_KEYS)[keyof typeof ACCEPT_INVITATION_FIELD_DESCRIPTION_KEYS];
+import {
+  ACCEPT_INVITATION_FIELD_DESCRIPTION_KEYS,
+  ACCEPT_INVITATION_FIELD_LABEL_KEYS,
+  ACCEPT_INVITATION_FIELD_TYPES,
+  ACCEPT_INVITATION_SUBMISSION_ERRORS,
+  type AcceptInvitationFormProps,
+  type InvitationFieldDescriptionKey,
+  type InvitationFieldLabelKey,
+  type InvitationFieldProps,
+  type InvitationFieldType,
+  type InvitationPreviewSummaryProps,
+  type SubmissionError,
+} from "../../types/accept-invitation.types";
 
 export function AcceptInvitationForm({
   invitationToken,
-}: {
-  invitationToken: string;
-}) {
+}: AcceptInvitationFormProps) {
   const router = useRouter();
   const previewQuery = useInvitationPreviewQuery(invitationToken);
   const acceptInvitationMutation = useAcceptInvitationMutation();
@@ -249,29 +226,24 @@ export function AcceptInvitationForm({
 
 function InvitationPreviewSummary({
   preview,
-}: {
-  preview: Extract<
-    InvitationPreviewOutcome,
-    { kind: typeof API_OUTCOME_KINDS.loaded }
-  >["preview"];
-}) {
+}: InvitationPreviewSummaryProps) {
   const visibleActions = getVisibleDeveloperActions(preview.allowed_actions);
 
   return (
-    <div className="space-y-3 rounded-lg border bg-muted/30 p-4 text-sm">
+    <div className="flex flex-col gap-3 rounded-lg border bg-muted/30 p-4 text-sm">
       <p className="font-medium">{preview.organization.name}</p>
       <p className="text-muted-foreground">
         {preview.scope.type === INVITATION_SCOPE_TYPES.assessment
           ? preview.scope.assessment.name
           : resolveMessage(appLocale, "pages.acceptInvitation.organizationScope")}
       </p>
-      <ul className="list-disc space-y-1 pl-5">
+      <ul className="flex list-disc flex-col gap-1 pl-5">
         {visibleActions.map(({ action, labelKey }) => (
           <li key={action}>{resolveMessage(appLocale, labelKey)}</li>
         ))}
       </ul>
       <p className="text-xs text-muted-foreground">
-        {resolveMessage(appLocale, "pages.acceptInvitation.expiresLabel")}: {" "}
+        {resolveMessage(appLocale, "pages.acceptInvitation.expiresLabel")}:{" "}
         <time dateTime={preview.expires_at}>{preview.expires_at}</time>
       </p>
     </div>
@@ -284,13 +256,7 @@ function InvitationField({
   autoComplete,
   labelKey,
   descriptionKey,
-}: {
-  name: keyof AcceptInvitationFormValues;
-  type: InvitationFieldType;
-  autoComplete: string;
-  labelKey: InvitationFieldLabelKey;
-  descriptionKey: InvitationFieldDescriptionKey;
-}) {
+}: InvitationFieldProps) {
   const { formState, register } = useFormContext<AcceptInvitationFormValues>();
   const error = formState.errors[name]?.message;
   return (

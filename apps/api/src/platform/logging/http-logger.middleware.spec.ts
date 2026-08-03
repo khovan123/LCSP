@@ -1,3 +1,4 @@
+import { AUTH_ERROR_CODES, REQUIRED_ACTIONS } from "@lcsp/contracts/auth";
 import { jest } from "@jest/globals";
 
 import { HttpLoggerMiddleware } from "./http-logger.middleware.js";
@@ -18,8 +19,8 @@ describe("HttpLoggerMiddleware", () => {
       statusCode: 401,
       locals: {
         problemResponse: {
-          code: "INVALID_CREDENTIALS",
-          requiredAction: "RETRY_AUTH",
+          code: AUTH_ERROR_CODES.invalidCredentials,
+          requiredAction: REQUIRED_ACTIONS.signIn,
           correlationId: "corr-401",
         },
       },
@@ -38,10 +39,10 @@ describe("HttpLoggerMiddleware", () => {
 
     expect(next).toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("code=INVALID_CREDENTIALS"),
+      expect.stringContaining(`code=${AUTH_ERROR_CODES.invalidCredentials}`),
     );
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("requiredAction=RETRY_AUTH"),
+      expect.stringContaining(`requiredAction=${REQUIRED_ACTIONS.signIn}`),
     );
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("correlationId=corr-401"),

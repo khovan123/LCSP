@@ -217,7 +217,7 @@ export class OAuthCallbackHandler {
       session_token: sessionState.token,
       expires_at: sessionState.session.expiresAt,
       mfa_required: mfaRequired,
-      mfa_enrolled: mfaEnrollment !== null,
+      mfa_enrolled: this.support.isMfaEnrolled(mfaEnrollment),
       organization_id: organizationId,
     };
   }

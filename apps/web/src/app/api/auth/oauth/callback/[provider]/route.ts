@@ -42,11 +42,7 @@ export async function GET(
     );
   }
 
-  const destination = upstream.data.mfa_required
-    ? upstream.data.mfa_enrolled
-      ? "/mfa/verify"
-      : "/mfa/enroll"
-    : "/workspace";
+  const destination = upstream.data.mfa_required ? "/mfa/verify" : "/workspace";
   const response = NextResponse.redirect(new URL(destination, publicOrigin));
   response.cookies.set(
     SESSION_COOKIE_NAME,

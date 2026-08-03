@@ -69,12 +69,19 @@ export class PbacContextLoader {
         return { ok: false, reason: PBAC_REASON_CODE.sessionInvalid };
       }
 
-      const mfaEnrollment = await this.mfaEnrollments.findByUserId(session.userId);
-      if (!options.allowPendingMfa && !session.isMfaVerified()) {
+      const mfaEnrollment = await this.mfaEnrollments.findByUserId(
+        session.userId,
+      );
+      if (
+        !options.allowPendingMfa &&
+        mfaEnrollment !== null &&
+        mfaEnrollment.verifiedAt !== null &&
+        !session.isMfaVerified()
+      ) {
         return {
           ok: false,
           reason: PBAC_REASON_CODE.mfaRequired,
-          mfaEnrolled: mfaEnrollment !== null,
+          mfaEnrolled: true,
         };
       }
 

@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   AUTH_ERROR_CODES,
@@ -22,6 +23,8 @@ const MFA_LOCK_WINDOW_MS = 15 * 60_000;
 const OTP_USED_RETENTION_MS = 5 * 60_000;
 
 export class VerifyMfaOtpHandler {
+  private readonly logger = new Logger(VerifyMfaOtpHandler.name);
+
   constructor(
     private readonly support: AuthWorkspaceSupportService,
     private readonly repositories: AuthWorkspaceRepositories,
@@ -98,7 +101,7 @@ export class VerifyMfaOtpHandler {
         correlationId,
         "decrypt_error",
       );
-      return createProblemResult(AUTH_ERROR_CODES.mfaInvalid, correlationId);
+      return createProblemResult(AUTH_ERROR_CODES.mfaRequired, correlationId);
     }
 
     const valid = verifyTotpOtp(plaintextSecret, otp, now);
@@ -132,8 +135,23 @@ export class VerifyMfaOtpHandler {
       now - OTP_USED_RETENTION_MS,
     );
 
+    enrollment.verifiedAt = now;
+    await this.repositories.mfaEnrollments.save(enrollment);
     session.markMfaVerified(now);
     await this.repositories.sessions.save(session);
+
+    const user = await this.support.resolveUserById(
+      this.repositories,
+      session.userId,
+    );
+    if (!user) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
+    }
+    user.mfaRequired = true;
+    await this.repositories.users.save(user);
 
     const existingRateLimit =
       rateLimit ?? new MfaRateLimit({ userId: session.userId });
@@ -174,5 +192,9 @@ export class VerifyMfaOtpHandler {
       otp_failure_reason: reason,
       correlation_id: correlationId,
     });
+
+    this.logger.warn(
+      `MFA OTP verify failed userId=${userId} organizationId=${organizationId} reason=${reason} correlationId=${correlationId}`,
+    );
   }
 }

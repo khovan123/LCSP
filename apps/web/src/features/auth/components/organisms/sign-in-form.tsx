@@ -15,8 +15,10 @@ import { LabeledSeparator } from "@/components/molecules/labeled-separator";
 import { FormCard } from "@/components/organisms/form-card";
 import { Spinner } from "@/components/ui/spinner";
 import { useSignInMutation } from "@/lib/api/auth-queries";
-import { API_OUTCOME_KINDS, API_REDIRECT_LOCATIONS } from "@/lib/api/outcome-kinds";
-import type { SignInOutcome } from "@/lib/api/auth-client";
+import {
+  API_OUTCOME_KINDS,
+  API_REDIRECT_LOCATIONS,
+} from "@/lib/api/outcome-kinds";
 import githubIcon from "@/public/assets/icons/github.svg";
 import googleIcon from "@/public/assets/icons/google.svg";
 
@@ -70,7 +72,9 @@ export function SignInForm() {
       router.replace(API_REDIRECT_LOCATIONS.mfaEnroll);
       return;
     }
-    setSignInError(outcome);
+    if (outcome.kind === API_OUTCOME_KINDS.error) {
+      setSignInError(outcome);
+    }
   }
 
   return (

@@ -52,9 +52,9 @@ export function getProblemMeta(payload: unknown): ProblemMeta | undefined {
 
 export function getMfaRedirectLocation(
   payload: unknown,
-): "/mfa/enroll" | "/mfa/verify" {
-  const meta = getProblemMeta(payload);
-  return meta?.mfaEnrolled === false ? "/mfa/enroll" : "/mfa/verify";
+): "/mfa/verify" {
+  void payload;
+  return "/mfa/verify";
 }
 
 export function getProblemMessageKeys(

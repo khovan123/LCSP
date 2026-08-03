@@ -7,17 +7,15 @@ import { resolveMessage } from "@lcsp/i18n";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
-import { ClassificationStatusCard } from "@/components/ui/classification-status-card";
+import { Button } from "@/components/ui/button";
+import { StatusCard } from "@/components/organisms/status-card";
 import { appLocale } from "@/lib/locale";
-import { cn } from "@/lib/utils";
 import { useReadinessStatusQuery } from "@/lib/api/assessment-queries";
+import type { ReadinessStatusPageProps } from "../../types/component-props.types";
 
 export function ReadinessStatusPage({
   assessmentId,
-}: {
-  assessmentId: string;
-}) {
+}: ReadinessStatusPageProps) {
   const router = useRouter();
   const readinessQuery = useReadinessStatusQuery(assessmentId);
 
@@ -35,13 +33,13 @@ export function ReadinessStatusPage({
   if (readinessQuery.isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-        <header className="space-y-2">
+        <header className="flex flex-col gap-2">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">
             {t("pages.readiness.pageTitle")}
           </h1>
           <p className="text-sm text-muted-foreground">{headingDescription}</p>
         </header>
-        <ClassificationStatusCard
+        <StatusCard
           title={t("pages.readiness.pageTitle")}
           description={t("pages.readiness.loadingDetail")}
           badgeLabel={t("pages.readiness.badgeReadinessOnly")}
@@ -50,7 +48,7 @@ export function ReadinessStatusPage({
           <div className="py-2 text-sm text-muted-foreground">
             {t("pages.readiness.loading")}
           </div>
-        </ClassificationStatusCard>
+        </StatusCard>
       </div>
     );
   }
@@ -65,7 +63,7 @@ export function ReadinessStatusPage({
   if (error || !viewModel) {
     return (
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-        <header className="space-y-2">
+        <header className="flex flex-col gap-2">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">
             {t("pages.readiness.pageTitle")}
           </h1>
@@ -83,14 +81,14 @@ export function ReadinessStatusPage({
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-      <header className="space-y-2">
+      <header className="flex flex-col gap-2">
         <h1 className="font-heading text-3xl font-semibold tracking-tight">
           {t("pages.readiness.pageTitle")}
         </h1>
         <p className="text-sm text-muted-foreground">{headingDescription}</p>
       </header>
 
-      <ClassificationStatusCard
+      <StatusCard
         title={t("pages.readiness.summaryTitle")}
         description={t("pages.readiness.summaryDescription")}
         badgeLabel={
@@ -113,7 +111,7 @@ export function ReadinessStatusPage({
               {t("pages.readiness.completedTitle")}
             </h2>
             {viewModel.completedSteps.length > 0 ? (
-              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <ul className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground">
                 {viewModel.completedSteps.map((step) => (
                   <li key={step}>• {mapCompletedStep(step)}</li>
                 ))}
@@ -130,7 +128,7 @@ export function ReadinessStatusPage({
               {t("pages.readiness.missingTitle")}
             </h2>
             {viewModel.missingEvidence.length > 0 ? (
-              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <ul className="mt-3 flex flex-col gap-2 text-sm text-muted-foreground">
                 {viewModel.missingEvidence.map((item) => (
                   <li key={item.type}>
                     <p className="font-medium text-foreground">{item.label}</p>
@@ -156,26 +154,22 @@ export function ReadinessStatusPage({
         </section>
 
         <div className="flex flex-wrap gap-3">
-          <Link
-            className={cn(buttonVariants({ variant: "outline" }))}
-            href="/workspace"
-          >
+          <Button render={<Link href="/workspace" />} variant="outline">
             {t("pages.readiness.actions.backToWorkspace")}
-          </Link>
-          <Link
-            className={cn(buttonVariants({ variant: "default" }))}
-            href={`/assessments/${assessmentId}/classification`}
+          </Button>
+          <Button
+            render={<Link href={`/assessments/${assessmentId}/classification`} />}
           >
             {t("pages.readiness.actions.openClassification")}
-          </Link>
-          <Link
-            className={cn(buttonVariants({ variant: "outline" }))}
-            href={`/assessments/${assessmentId}/documents`}
+          </Button>
+          <Button
+            render={<Link href={`/assessments/${assessmentId}/documents`} />}
+            variant="outline"
           >
             {t("pages.readiness.actions.openDocuments")}
-          </Link>
+          </Button>
         </div>
-      </ClassificationStatusCard>
+      </StatusCard>
     </div>
   );
 }

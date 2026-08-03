@@ -17,7 +17,7 @@ import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 export async function GET(request: NextRequest) {
   if (isMockModeEnabled()) {
     const sessionToken = readSessionToken(request);
-    if (sessionToken === "mock-session:mfa-pending") {
+    if (sessionToken === "mock-session:mfa-verify-pending") {
       return problemJson(AUTH_ERROR_CODES.mfaRequired, {
         status: 403,
       });

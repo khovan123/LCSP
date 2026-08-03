@@ -34,6 +34,7 @@ import type {
   ConfirmRecoveryPayload,
   RequestRecoveryPayload,
 } from "../../application/contracts/auth-workspace/recovery.contract.ts";
+import type { PasswordReauthPayload } from "../../application/contracts/auth-workspace/password-reauth.contract.ts";
 import type { CredentialPayload } from "../../application/contracts/auth-workspace/sign-in.contract.ts";
 import type { WorkspaceRequest } from "../../application/contracts/auth-workspace/workspace.contract.ts";
 import type { UpdateProfilePayload } from "../../application/commands/update-profile/update-profile.command.ts";
@@ -353,6 +354,26 @@ export class AuthWorkspaceController {
         body.session_token ?? "",
         body.otp ?? "",
         requestMeta(correlationId),
+      ),
+    );
+  }
+
+  @Post("auth/re-auth/password")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  @AllowPendingMfa()
+  async reauthenticatePassword(
+    @Body() body: PasswordReauthPayload,
+    @Headers("authorization") authorization: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.authWorkspaceFacade.reauthenticatePassword(
+        {
+          session_token: bearerToken(authorization) ?? body.session_token ?? "",
+          password: body.password,
+        },
+        requestMeta(request.correlationId),
       ),
     );
   }

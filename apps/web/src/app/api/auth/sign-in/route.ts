@@ -34,12 +34,11 @@ export async function POST(request: Request) {
       credentials.password === managerAccount.password
     ) {
       const response = successJson({
-        mfa_required: true,
         mfa_enrolled: false,
       });
       response.cookies.set(
         SESSION_COOKIE_NAME,
-        "mock-session:mfa-pending",
+        "mock-session:manager",
         sessionCookieOptions,
       );
       response.cookies.delete(MOCK_WORKSPACE_COOKIE_NAME);

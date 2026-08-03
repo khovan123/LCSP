@@ -1,3 +1,4 @@
+import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
 import { NextRequest } from "next/server";
 
 import { isMockModeEnabled } from "@/lib/server/fixtures/response";
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
           repository_name: "lcsp-platform",
           repository_full_name: "khovan123/LCSP",
           default_branch: "main",
-          status: "ACTIVE",
+          status: REPOSITORY_CONNECTION_STATUSES.active,
           connected_at: new Date("2026-07-28T09:00:00.000Z").toISOString(),
           revoked_at: null,
           assessment_id: "assessment-1",
@@ -59,7 +60,8 @@ function sanitizeRepositoriesPayload(data: unknown) {
       typeof candidate.default_branch === "string" &&
       typeof candidate.status === "string" &&
       typeof candidate.connected_at === "string" &&
-      (typeof candidate.revoked_at === "string" || candidate.revoked_at === null) &&
+      (typeof candidate.revoked_at === "string" ||
+        candidate.revoked_at === null) &&
       (typeof candidate.assessment_id === "string" ||
         candidate.assessment_id === null) &&
       (typeof candidate.assessment_name === "string" ||

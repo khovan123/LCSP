@@ -5,6 +5,7 @@ import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   toConfirmRecoveryOutcome,
   toEnrollMfaOutcome,
+  toPasswordReauthOutcome,
   toRequestRecoveryOutcome,
   toSignInOutcome,
   toUpdateProfileOutcome,
@@ -102,6 +103,16 @@ test("profile update maps validation failures to field-safe outcomes", () => {
       titleKey: "auth.errors.validationFailed.title",
       detailKey: "auth.errors.validationFailed.detail",
     },
+  );
+});
+
+test("password re-auth maps invalid credentials to a safe invalid outcome", () => {
+  assert.deepEqual(
+    toPasswordReauthOutcome(
+      problem(AUTH_ERROR_CODES.invalidCredentials, 401),
+      false,
+    ),
+    { kind: "invalid" },
   );
 });
 

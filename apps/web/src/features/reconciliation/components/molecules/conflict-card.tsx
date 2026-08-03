@@ -1,4 +1,5 @@
 import { resolveMessage } from "@lcsp/i18n";
+import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,21 +11,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { appLocale } from "@/lib/locale";
 
 import { getConflictTypeLabelKey } from "../../config/conflict-labels";
-import type { ConflictCardModel } from "../../types/conflict.types";
-
-type ConflictCardProps = {
-  conflict: ConflictCardModel;
-  resolution: "RESOLVED" | "DISMISSED";
-  resolutionNote: string;
-  isSubmitting: boolean;
-  formError: string | null;
-  onResolutionChange: (resolution: "RESOLVED" | "DISMISSED") => void;
-  onResolutionNoteChange: (note: string) => void;
-  onSubmit: () => void;
-};
+import {
+  CONFLICT_RESOLUTION_OPTIONS,
+  type ConflictCardProps,
+} from "../../types/conflict-card.types";
 
 export function ConflictCard({
   conflict,
@@ -36,9 +45,16 @@ export function ConflictCard({
   onResolutionNoteChange,
   onSubmit,
 }: ConflictCardProps) {
-  const scorePercent = Math.max(0, Math.min(100, Math.round(conflict.conflict_score * 100)));
-  const scoreTone =
-    scorePercent <= 40 ? "bg-green-500" : scorePercent <= 70 ? "bg-amber-500" : "bg-red-500";
+  const scorePercent = Math.max(
+    0,
+    Math.min(100, Math.round(conflict.conflict_score * 100)),
+  );
+  const progressTone =
+    scorePercent <= 40
+      ? "bg-emerald-500"
+      : scorePercent <= 70
+        ? "bg-amber-500"
+        : "bg-destructive";
 
   return (
     <Card>
@@ -49,8 +65,8 @@ export function ConflictCard({
         </div>
         <CardDescription>{conflict.score_explanation}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-4 text-sm">
             <span className="text-muted-foreground">
               {resolveMessage(appLocale, "pages.reconciliation.scoreLabel")}
@@ -66,13 +82,13 @@ export function ConflictCard({
             aria-valuenow={scorePercent}
           >
             <div
-              className={`h-full ${scoreTone}`}
+              className={progressTone}
               style={{ width: `${scorePercent}%` }}
             />
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <p className="text-sm font-medium">
             {resolveMessage(appLocale, "pages.reconciliation.evidenceRefsLabel")}
           </p>
@@ -85,50 +101,63 @@ export function ConflictCard({
           </div>
         </div>
 
-        <div className="grid gap-3">
-          <label className="text-sm font-medium" htmlFor={`resolution-${conflict.conflict_id}`}>
-            {resolveMessage(appLocale, "pages.reconciliation.resolutionLabel")}
-          </label>
-          <select
-            id={`resolution-${conflict.conflict_id}`}
-            value={resolution}
-            disabled={isSubmitting}
-            onChange={(event) => onResolutionChange(event.target.value as "RESOLVED" | "DISMISSED")}
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-          >
-            <option value="RESOLVED">
-              {resolveMessage(appLocale, "pages.reconciliation.resolutionResolved")}
-            </option>
-            <option value="DISMISSED">
-              {resolveMessage(appLocale, "pages.reconciliation.resolutionDismissed")}
-            </option>
-          </select>
-
-          <label className="text-sm font-medium" htmlFor={`note-${conflict.conflict_id}`}>
-            {resolveMessage(appLocale, "pages.reconciliation.resolutionNoteLabel")}
-          </label>
-          <textarea
-            id={`note-${conflict.conflict_id}`}
-            value={resolutionNote}
-            disabled={isSubmitting}
-            aria-invalid={Boolean(formError)}
-            aria-describedby={formError ? `conflict-error-${conflict.conflict_id}` : undefined}
-            maxLength={2000}
-            placeholder={resolveMessage(appLocale, "pages.reconciliation.resolutionNotePlaceholder")}
-            onChange={(event) => onResolutionNoteChange(event.target.value)}
-            className="min-h-24 rounded-md border bg-background px-3 py-2 text-sm"
-          />
-
-          {formError ? (
-            <p
-              id={`conflict-error-${conflict.conflict_id}`}
-              role="alert"
-              className="text-sm text-destructive"
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor={`resolution-${conflict.conflict_id}`}>
+              {resolveMessage(appLocale, "pages.reconciliation.resolutionLabel")}
+            </FieldLabel>
+            <Select
+              value={resolution}
+              disabled={isSubmitting}
+              onValueChange={(value) => {
+                if (
+                  value === CONFLICT_RECORD_STATUSES.resolved ||
+                  value === CONFLICT_RECORD_STATUSES.dismissed
+                ) {
+                  onResolutionChange(value);
+                }
+              }}
             >
-              {formError}
-            </p>
-          ) : null}
-        </div>
+              <SelectTrigger
+                id={`resolution-${conflict.conflict_id}`}
+                className="w-full bg-background"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {CONFLICT_RESOLUTION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {resolveMessage(appLocale, option.labelKey)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field data-invalid={Boolean(formError) || undefined}>
+            <FieldLabel htmlFor={`note-${conflict.conflict_id}`}>
+              {resolveMessage(appLocale, "pages.reconciliation.resolutionNoteLabel")}
+            </FieldLabel>
+            <FieldDescription>
+              {resolveMessage(appLocale, "pages.reconciliation.resolutionNotePlaceholder")}
+            </FieldDescription>
+            <Textarea
+              id={`note-${conflict.conflict_id}`}
+              value={resolutionNote}
+              disabled={isSubmitting}
+              aria-invalid={Boolean(formError)}
+              maxLength={2000}
+              className="min-h-24 bg-background"
+              placeholder={resolveMessage(
+                appLocale,
+                "pages.reconciliation.resolutionNotePlaceholder",
+              )}
+              onChange={(event) => onResolutionNoteChange(event.target.value)}
+            />
+            <FieldError>{formError}</FieldError>
+          </Field>
+        </FieldGroup>
       </CardContent>
       <CardFooter className="justify-end">
         <Button type="button" onClick={onSubmit} disabled={isSubmitting}>

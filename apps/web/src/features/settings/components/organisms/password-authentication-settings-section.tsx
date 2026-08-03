@@ -1,17 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { resolveMessage } from "@lcsp/i18n";
-import { REGEXP_ONLY_DIGITS } from "input-otp";
-import { KeyRoundIcon, RefreshCwIcon } from "lucide-react";
-import { Controller } from "react-hook-form";
+import { KeyRoundIcon, MailIcon, RefreshCwIcon } from "lucide-react";
 
-import { LabeledStatusRow, LabeledValueRow } from "@/components/molecules/labeled-value-row";
+import { LabeledValueRow } from "@/components/molecules/labeled-value-row";
 import { SectionHeading } from "@/components/molecules/section-heading";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -28,12 +27,7 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@/components/ui/field";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSeparator,
-  InputOTPSlot,
-} from "@/components/ui/input-otp";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { appLocale } from "@/lib/locale";
 import type { PasswordAuthenticationSectionProps } from "../../types/settings-page.types";
@@ -54,10 +48,15 @@ export function PasswordAuthenticationSettingsSection({
   recoveryRequestSent,
   requestRecoveryPending,
 }: PasswordAuthenticationSectionProps) {
+  const [passwordEditorOpen, setPasswordEditorOpen] = useState(false);
+
   return (
     <section className="flex flex-col gap-4">
       <SectionHeading
-        title={resolveMessage(appLocale, "pages.workspace.settingsHub.password.title")}
+        title={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.password.title",
+        )}
         description={resolveMessage(
           appLocale,
           "pages.workspace.settingsHub.password.description",
@@ -74,27 +73,157 @@ export function PasswordAuthenticationSettingsSection({
             )}
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <LabeledStatusRow
-            label={resolveMessage(
-              appLocale,
-              "pages.workspace.settingsHub.password.emailMethod",
-            )}
-            status={resolveMessage(
-              appLocale,
-              "pages.workspace.settingsHub.badges.configured",
-            )}
-          />
-          <LabeledStatusRow
-            label={resolveMessage(
-              appLocale,
-              "pages.workspace.settingsHub.password.passwordMethod",
-            )}
-            status={resolveMessage(
-              appLocale,
-              "pages.workspace.settingsHub.badges.configured",
-            )}
-          />
+        <CardContent className="overflow-hidden rounded-xl border border-border/70 p-0">
+          <div className="flex items-center justify-between gap-4 border-b border-border/70 px-5 py-5">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="flex size-9 items-center justify-center text-foreground">
+                <MailIcon className="size-6" />
+              </div>
+              <div className="flex min-w-0 flex-col gap-1">
+                <p className="font-medium">
+                  {resolveMessage(
+                    appLocale,
+                    "pages.workspace.settingsHub.password.emailMethod",
+                  )}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {resolveMessage(
+                    appLocale,
+                    "pages.workspace.settingsHub.password.emailMethodDescription",
+                  )}
+                </p>
+              </div>
+            </div>
+            <Button
+              render={<Link href="?section=emails" />}
+              nativeButton={false}
+              type="button"
+              variant="outline"
+              size="sm"
+            >
+              {resolveMessage(
+                appLocale,
+                "pages.workspace.settingsHub.actions.manage",
+              )}
+            </Button>
+          </div>
+
+          <div className="px-5 py-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex min-w-0 items-start gap-4">
+                <div className="flex size-9 items-center justify-center text-foreground">
+                  <KeyRoundIcon className="size-6" />
+                </div>
+                <div className="flex min-w-0 flex-col gap-1">
+                  <p className="font-medium">
+                    {resolveMessage(
+                      appLocale,
+                      "pages.workspace.settingsHub.password.passwordMethod",
+                    )}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {resolveMessage(
+                      appLocale,
+                      "pages.workspace.settingsHub.password.passwordMethodDescription",
+                    )}
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPasswordEditorOpen((current) => !current);
+                }}
+              >
+                {resolveMessage(
+                  appLocale,
+                  passwordEditorOpen
+                    ? "pages.workspace.settingsHub.actions.hide"
+                    : "pages.workspace.settingsHub.actions.changePassword",
+                )}
+              </Button>
+            </div>
+
+            {passwordEditorOpen ? (
+              <div className="mt-6 max-w-xl">
+                <form className="flex flex-col gap-5" noValidate>
+                  <FieldGroup>
+                    <Field>
+                      <FieldLabel htmlFor="current-password">
+                        {resolveMessage(
+                          appLocale,
+                          "pages.workspace.settingsHub.password.currentPasswordLabel",
+                        )}
+                      </FieldLabel>
+                      <Input
+                        id="current-password"
+                        type="password"
+                        autoComplete="current-password"
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="new-password">
+                        {resolveMessage(
+                          appLocale,
+                          "pages.workspace.settingsHub.password.newPasswordLabel",
+                        )}
+                      </FieldLabel>
+                      <Input
+                        id="new-password"
+                        type="password"
+                        autoComplete="new-password"
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="confirm-new-password">
+                        {resolveMessage(
+                          appLocale,
+                          "pages.workspace.settingsHub.password.confirmNewPasswordLabel",
+                        )}
+                      </FieldLabel>
+                      <Input
+                        id="confirm-new-password"
+                        type="password"
+                        autoComplete="new-password"
+                      />
+                    </Field>
+                  </FieldGroup>
+                  <p className="text-sm text-muted-foreground">
+                    {resolveMessage(
+                      appLocale,
+                      "pages.workspace.settingsHub.password.passwordPolicyHint",
+                    )}{" "}
+                    <Link
+                      className="text-primary underline-offset-4 hover:underline"
+                      href="/recovery/request"
+                    >
+                      {resolveMessage(
+                        appLocale,
+                        "pages.workspace.settingsHub.password.learnMoreLink",
+                      )}
+                    </Link>
+                    .
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button type="button" variant="outline">
+                      {resolveMessage(
+                        appLocale,
+                        "pages.workspace.settingsHub.actions.updatePassword",
+                      )}
+                    </Button>
+                    <Link
+                      className="text-sm text-primary underline-offset-4 hover:underline"
+                      href="/recovery/request"
+                    >
+                      {resolveMessage(appLocale, "pages.signIn.forgotPassword")}
+                    </Link>
+                  </div>
+                </form>
+              </div>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 
@@ -192,19 +321,21 @@ export function PasswordAuthenticationSettingsSection({
                     )}
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  onClick={() => void onGenerateMfaSetup()}
-                  disabled={enrollPending}
-                >
-                  {enrollPending ? (
-                    <RefreshCwIcon className="mr-2 size-4 animate-spin" />
-                  ) : null}
-                  {resolveMessage(
-                    appLocale,
-                    "pages.workspace.settingsHub.actions.generateSetup",
-                  )}
-                </Button>
+                {!qrCode ? (
+                  <Button
+                    type="button"
+                    onClick={() => void onGenerateMfaSetup()}
+                    disabled={enrollPending}
+                  >
+                    {enrollPending ? (
+                      <RefreshCwIcon className="mr-2 size-4 animate-spin" />
+                    ) : null}
+                    {resolveMessage(
+                      appLocale,
+                      "pages.workspace.settingsHub.actions.generateSetup",
+                    )}
+                  </Button>
+                ) : null}
               </div>
 
               {mfaError ? (
@@ -219,21 +350,23 @@ export function PasswordAuthenticationSettingsSection({
               ) : null}
 
               {qrCode ? (
-                <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-                  <div className="rounded-xl border bg-white p-3">
-                    <Image
-                      src={qrCode}
-                      alt={resolveMessage(appLocale, "pages.mfaEnroll.qrAlt")}
-                      className="size-60 max-w-full"
-                      width={240}
-                      height={240}
-                      unoptimized
-                    />
-                  </div>
+                <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,320px)] lg:items-start">
                   <div className="flex flex-col gap-4">
-                    <div className="rounded-lg border px-4 py-3 text-sm text-muted-foreground">
-                      {resolveMessage(appLocale, "pages.mfaEnroll.qrHint")}
+                    <div className="rounded-xl border bg-white p-3 shadow-sm">
+                      <Image
+                        src={qrCode}
+                        alt={resolveMessage(appLocale, "pages.mfaEnroll.qrAlt")}
+                        className="size-56 max-w-full sm:size-60"
+                        width={240}
+                        height={240}
+                        unoptimized
+                      />
                     </div>
+                    <p className="text-sm text-muted-foreground">
+                      {resolveMessage(appLocale, "pages.mfaEnroll.qrHint")}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-4 pt-1">
                     <form
                       onSubmit={verifyForm.handleSubmit(onVerifyOtp)}
                       className="flex flex-col gap-4"
@@ -252,32 +385,14 @@ export function PasswordAuthenticationSettingsSection({
                               "pages.mfaVerify.otpLabel",
                             )}
                           </FieldLabel>
-                          <Controller
-                            control={verifyForm.control}
-                            name="otp"
-                            render={({ field }) => (
-                              <InputOTP
-                                id="otp"
-                                maxLength={6}
-                                pattern={REGEXP_ONLY_DIGITS}
-                                autoComplete="one-time-code"
-                                containerClassName="justify-start"
-                                disabled={verifyForm.formState.isSubmitting}
-                                {...field}
-                              >
-                                <InputOTPGroup>
-                                  <InputOTPSlot index={0} />
-                                  <InputOTPSlot index={1} />
-                                  <InputOTPSlot index={2} />
-                                </InputOTPGroup>
-                                <InputOTPSeparator />
-                                <InputOTPGroup>
-                                  <InputOTPSlot index={3} />
-                                  <InputOTPSlot index={4} />
-                                  <InputOTPSlot index={5} />
-                                </InputOTPGroup>
-                              </InputOTP>
-                            )}
+                          <Input
+                            id="otp"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            maxLength={6}
+                            placeholder="XXXXXX"
+                            disabled={verifyForm.formState.isSubmitting}
+                            {...verifyForm.register("otp")}
                           />
                           {verifyForm.formState.errors.otp?.message ? (
                             <FieldError>
@@ -299,17 +414,32 @@ export function PasswordAuthenticationSettingsSection({
                           )}
                         </Field>
                       </FieldGroup>
-                      <Button
-                        type="submit"
-                        disabled={verifyForm.formState.isSubmitting}
-                      >
-                        {resolveMessage(
-                          appLocale,
-                          verifyForm.formState.isSubmitting
-                            ? "pages.mfaVerify.submitting"
-                            : "pages.workspace.settingsHub.actions.verifyAndSave",
-                        )}
-                      </Button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="submit"
+                          disabled={verifyForm.formState.isSubmitting}
+                        >
+                          {resolveMessage(
+                            appLocale,
+                            verifyForm.formState.isSubmitting
+                              ? "pages.mfaVerify.submitting"
+                              : "pages.workspace.settingsHub.actions.verifyAndSave",
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            verifyForm.reset();
+                            setMfaEditorOpen(false);
+                          }}
+                        >
+                          {resolveMessage(
+                            appLocale,
+                            "pages.workspace.settingsHub.actions.cancel",
+                          )}
+                        </Button>
+                      </div>
                     </form>
                   </div>
                 </div>
@@ -360,15 +490,16 @@ export function PasswordAuthenticationSettingsSection({
                 "pages.workspace.settingsHub.actions.sendRecovery",
               )}
             </Button>
-            <Link
-              className={buttonVariants({ variant: "ghost" })}
-              href="/recovery/request"
+            <Button
+              render={<Link href="/recovery/request" />}
+              nativeButton={false}
+              variant="ghost"
             >
               {resolveMessage(
                 appLocale,
                 "pages.workspace.security.openRecovery",
               )}
-            </Link>
+            </Button>
           </div>
           {recoveryRequestSent ? (
             <Alert>

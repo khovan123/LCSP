@@ -1,5 +1,9 @@
 import {
   ACCEPT_INVITATION_ERROR_CODES,
+  AUTH_BACKUP_EMAIL_POLICIES,
+  AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
+  type AuthBackupEmailPolicy,
+  type AuthPrimaryEmailAddressPolicy,
   AUTH_ERROR_CODES,
   type ProblemMeta,
   PROBLEM_KEYS,
@@ -103,6 +107,20 @@ export type DisableMfaOutcome =
       detailKey: MessageKey;
     };
 
+export type PasswordReauthRequest = {
+  password: string;
+};
+
+export type PasswordReauthOutcome =
+  | { kind: typeof API_OUTCOME_KINDS.verified }
+  | { kind: typeof API_OUTCOME_KINDS.invalid }
+  | { kind: typeof API_OUTCOME_KINDS.sessionInvalid }
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: MessageKey;
+      detailKey: MessageKey;
+    };
+
 export type RequestRecoveryRequest = {
   email: string;
 };
@@ -130,7 +148,9 @@ export type ConfirmRecoveryOutcome =
     };
 
 export type UpdateProfileRequest = {
-  recovery_email: string;
+  recovery_email?: string;
+  primary_email_address_policy?: AuthPrimaryEmailAddressPolicy;
+  backup_recovery_email_policy?: AuthBackupEmailPolicy;
 };
 
 export type UpdateProfileOutcome =
@@ -154,6 +174,8 @@ export type AuthSettingsProfile = {
   email_verified: boolean;
   display_name: string | null;
   recovery_email: string | null;
+  primary_email_address_policy: AuthPrimaryEmailAddressPolicy;
+  backup_recovery_email_policy: AuthBackupEmailPolicy;
   created_at: string;
   updated_at: string;
   membership_role: string;
@@ -218,12 +240,12 @@ export function toSignInOutcome(
         workspaces: payload.workspaces ?? [],
       };
     }
-    if (payload.mfa_required && payload.mfa_enrolled !== true) {
-      return { kind: API_OUTCOME_KINDS.mfaEnrollmentRequired };
+    if (payload.mfa_required) {
+      return payload.mfa_enrolled === false
+        ? { kind: API_OUTCOME_KINDS.mfaEnrollmentRequired }
+        : { kind: API_OUTCOME_KINDS.mfaRequired };
     }
-    return payload.mfa_required
-      ? { kind: API_OUTCOME_KINDS.mfaRequired }
-      : { kind: API_OUTCOME_KINDS.authenticated };
+    return { kind: API_OUTCOME_KINDS.authenticated };
   }
 
   if (problemCode === AUTH_ERROR_CODES.temporaryLock) {
@@ -355,6 +377,9 @@ export function toMfaVerifyOutcome(
       detailKey: "auth.errors.mfaRateLimited.detail",
     };
   }
+  if (problemCode === AUTH_ERROR_CODES.mfaRequired) {
+    return { kind: API_OUTCOME_KINDS.mfaRequired };
+  }
   if (problemCode === AUTH_ERROR_CODES.mfaInvalid) {
     return {
       kind: API_OUTCOME_KINDS.invalid,
@@ -430,9 +455,12 @@ export function toEnrollMfaOutcome(
 }
 
 export async function enrollMfa(): Promise<EnrollMfaOutcome> {
-  const { payload, ok, problemCode } = await apiRequest("/api/auth/mfa/enroll", {
-    method: "POST",
-  });
+  const { payload, ok, problemCode } = await apiRequest(
+    "/api/auth/mfa/enroll",
+    {
+      method: "POST",
+    },
+  );
 
   return toEnrollMfaOutcome(payload, ok, problemCode);
 }
@@ -476,6 +504,54 @@ export async function disableMfa(): Promise<DisableMfaOutcome> {
   });
 
   return toDisableMfaOutcome(payload, ok, problemCode);
+}
+
+export function toPasswordReauthOutcome(
+  payload: unknown,
+  ok: boolean,
+  problemCode = getProblemCode(payload),
+): PasswordReauthOutcome {
+  if (ok) {
+    return { kind: API_OUTCOME_KINDS.verified };
+  }
+
+  if (problemCode === AUTH_ERROR_CODES.sessionInvalid) {
+    return { kind: API_OUTCOME_KINDS.sessionInvalid };
+  }
+
+  if (problemCode === AUTH_ERROR_CODES.invalidCredentials) {
+    return { kind: API_OUTCOME_KINDS.invalid };
+  }
+
+  const problemKeys = getProblemMessageKeys(payload);
+  if (problemKeys) {
+    return {
+      kind: API_OUTCOME_KINDS.error,
+      titleKey: problemKeys.titleKey,
+      detailKey: problemKeys.detailKey,
+    };
+  }
+
+  return {
+    kind: API_OUTCOME_KINDS.error,
+    titleKey: "pages.signIn.errors.requestFailedTitle",
+    detailKey: "pages.signIn.errors.requestFailedDetail",
+  };
+}
+
+export async function reauthenticateWithPassword(
+  request: PasswordReauthRequest,
+): Promise<PasswordReauthOutcome> {
+  const { payload, ok, problemCode } = await apiRequest(
+    "/api/auth/re-auth/password",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    },
+  );
+
+  return toPasswordReauthOutcome(payload, ok, problemCode);
 }
 
 export function toRequestRecoveryOutcome(
@@ -701,6 +777,12 @@ function isAuthSettingsProfile(
       candidate.display_name === null) &&
     (typeof candidate.recovery_email === "string" ||
       candidate.recovery_email === null) &&
+    Object.values(AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES).includes(
+      candidate.primary_email_address_policy as AuthPrimaryEmailAddressPolicy,
+    ) &&
+    Object.values(AUTH_BACKUP_EMAIL_POLICIES).includes(
+      candidate.backup_recovery_email_policy as AuthBackupEmailPolicy,
+    ) &&
     typeof candidate.created_at === "string" &&
     typeof candidate.updated_at === "string" &&
     typeof candidate.membership_role === "string" &&

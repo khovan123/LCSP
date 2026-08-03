@@ -87,26 +87,20 @@ export function ProfileSafetyCard() {
           {resolveMessage(appLocale, "pages.workspace.security.description")}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-2">
-          <Link
-            className={buttonVariants({ variant: "outline" })}
-            href={API_REDIRECT_LOCATIONS.mfaEnroll}
-          >
+          <Button render={<Link href={API_REDIRECT_LOCATIONS.mfaEnroll} />} variant="outline">
             {resolveMessage(
               appLocale,
               "pages.workspace.security.openMfaEnroll",
             )}
-          </Link>
-          <Link
-            className={buttonVariants({ variant: "ghost" })}
-            href={API_REDIRECT_LOCATIONS.recoveryRequest}
-          >
+          </Button>
+          <Button render={<Link href={API_REDIRECT_LOCATIONS.recoveryRequest} />} variant="ghost">
             {resolveMessage(appLocale, "pages.workspace.security.openRecovery")}
-          </Link>
+          </Button>
         </div>
         <form
-          className="space-y-4"
+          className="flex flex-col gap-4"
           onSubmit={form.handleSubmit(onSubmit)}
           noValidate
         >

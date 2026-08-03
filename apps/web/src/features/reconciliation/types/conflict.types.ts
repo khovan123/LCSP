@@ -5,6 +5,7 @@ import type {
   ResolveConflictPayload,
 } from "@/lib/api/conflict-client";
 import { API_OUTCOME_KINDS } from "../../../lib/api/outcome-kinds.ts";
+import type { ConflictResolutionValue } from "./conflict-card.types";
 
 export const CONFLICT_RESOLUTION_VIEW_STATES = {
   loading: "loading",
@@ -22,3 +23,18 @@ export type ConflictCardModel = ConflictSummary;
 export type ConflictResolutionAction = ResolveConflictPayload;
 
 export type ConflictTypeLabelMap = Record<string, MessageKey>;
+
+export type ConflictResolutionPageProps = {
+  assessmentId: string;
+};
+
+export type ConflictResolutionDraftMap = Record<string, boolean>;
+
+export type ConflictResolutionStatusMap = Record<
+  string,
+  ConflictResolutionValue
+>;
+
+export type ConflictResolutionNoteMap = Record<string, string>;
+
+export type ConflictResolutionErrorMap = Record<string, string | null>;

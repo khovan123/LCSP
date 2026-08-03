@@ -353,12 +353,15 @@ export const viPages = {
         mfaPending: "MFA đang chờ",
         configured: "Đã cấu hình",
         primary: "Chính",
+        backup: "Dự phòng",
         active: "Đang hoạt động",
         revoked: "Đã thu hồi",
       },
       states: {
         notConfigured: "Chưa cấu hình",
         noRecoveryEmail: "Chưa có email khôi phục",
+        enabled: "Bật",
+        disabled: "Tắt",
         currentSession: "Phiên hiện tại",
         noSessions: "Không có phiên đăng nhập.",
         noRepositories: "Chưa có repository liên kết.",
@@ -366,12 +369,17 @@ export const viPages = {
       },
       actions: {
         edit: "Chỉnh sửa",
+        manage: "Quản lý",
         setUp: "Thiết lập",
+        hide: "Ẩn",
+        changePassword: "Đổi mật khẩu",
         turnOn: "Bật MFA",
         turnOff: "Tắt MFA",
         generateSetup: "Tạo cấu hình",
         verifyAndSave: "Xác minh và lưu",
+        cancel: "Hủy",
         sendRecovery: "Gửi hướng dẫn khôi phục",
+        updatePassword: "Cập nhật mật khẩu",
         revoke: "Thu hồi",
       },
       account: {
@@ -397,10 +405,50 @@ export const viPages = {
       },
       emails: {
         title: "Email",
-        description: "Quản lý email dùng để đăng nhập và khôi phục tài khoản.",
+        description:
+          "Quản lý các email dùng để đăng nhập, nhận thông báo và khôi phục truy cập.",
+        addressListTitle: "Các email có thể sử dụng",
+        addressListDescription:
+          "Các email đã xác minh có thể dùng để đăng nhập và nhận thông báo bảo mật trong flow LCSP hiện tại.",
         primaryTitle: "Email chính",
         primaryDescription:
           "Email chính được dùng để đăng nhập và nhận thông báo bảo mật.",
+        primaryRowDescription:
+          "Địa chỉ này là đích mặc định cho đăng nhập và các hoạt động bảo mật tài khoản.",
+        recoveryRowDescription:
+          "Địa chỉ này hiện được lưu làm email dự phòng cho khôi phục và thông báo bảo mật.",
+        primaryMenuLabel: "Mở hành động cho email chính",
+        recoveryMenuLabel: "Mở hành động cho email dự phòng",
+        addEmailTitle: "Thêm địa chỉ email",
+        addEmailInputLabel: "Địa chỉ email",
+        addEmailPlaceholder: "Địa chỉ email",
+        addEmailAction: "Thêm",
+        addEmailDescription:
+          "LCSP hiện lưu một email khôi phục bổ sung để phục vụ khôi phục tài khoản và thông báo bảo mật.",
+        primaryPreferenceTitle: "Địa chỉ email chính",
+        primaryPreferenceDescription:
+          "Chọn email dùng cho thông báo liên quan tới tài khoản và làm định danh khôi phục mặc định.",
+        backupPreferenceTitle: "Địa chỉ email dự phòng",
+        backupPreferenceDescription:
+          "Chọn cách email dự phòng được dùng cho các sự kiện khôi phục và bảo mật.",
+        backupAllVerifiedOption: "Cho phép tất cả email đã xác minh",
+      },
+      reauth: {
+        title: "Xác nhận truy cập",
+        description:
+          "Xác nhận thay đổi cài đặt nhạy cảm này trước khi tiếp tục.",
+        accountLabel: "Đăng nhập với",
+        passwordPlaceholder: "Mật khẩu",
+        otpPlaceholder: "XXXXXX",
+        confirm: "Xác nhận",
+        confirming: "Đang xác nhận",
+        verify: "Xác minh",
+        verifying: "Đang xác minh",
+        supportTitle: "Gặp sự cố?",
+        useAuthenticator: "Dùng ứng dụng xác thực",
+        usePassword: "Dùng mật khẩu",
+        setUpMfa: "Thiết lập MFA",
+        close: "Đóng hộp thoại",
       },
       password: {
         title: "Mật khẩu và xác thực",
@@ -408,7 +456,15 @@ export const viPages = {
           "Quản lý phương thức đăng nhập, MFA bằng ứng dụng xác thực và luồng khôi phục hiện được LCSP hỗ trợ.",
         signInMethodsTitle: "Phương thức đăng nhập",
         emailMethod: "Email",
+        emailMethodDescription: "Đã cấu hình 2 email xác minh",
         passwordMethod: "Mật khẩu",
+        passwordMethodDescription: "Đã cấu hình",
+        currentPasswordLabel: "Mật khẩu cũ",
+        newPasswordLabel: "Mật khẩu mới",
+        confirmNewPasswordLabel: "Xác nhận mật khẩu mới",
+        passwordPolicyHint:
+          "Đảm bảo mật khẩu có ít nhất 15 ký tự HOẶC ít nhất 8 ký tự bao gồm một số và một chữ cái viết thường.",
+        learnMoreLink: "Tìm hiểu thêm",
         mfaTitle: "Xác thực hai bước",
         mfaDescription:
           "Thiết lập ứng dụng xác thực là bắt buộc trước khi vào workspace được bảo vệ.",

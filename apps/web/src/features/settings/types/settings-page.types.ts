@@ -1,3 +1,5 @@
+import type { AuthBackupEmailPolicy } from "@lcsp/contracts/auth";
+import type { AuthPrimaryEmailAddressPolicy } from "@lcsp/contracts/auth";
 import type { MessageKey } from "@lcsp/i18n";
 import type { UseFormReturn } from "react-hook-form";
 
@@ -23,12 +25,16 @@ export type SettingsSectionSharedProps = {
 };
 
 export type EmailSettingsSectionProps = SettingsSectionSharedProps & {
-  recoveryEmailEditorOpen: boolean;
-  setRecoveryEmailEditorOpen: (
-    value: boolean | ((current: boolean) => boolean),
-  ) => void;
   recoveryForm: UseFormReturn<RecoveryEmailFormValues>;
   onSubmit: (values: RecoveryEmailFormValues) => void | Promise<void>;
+  onPrimaryEmailPolicyChange: (
+    policy: AuthPrimaryEmailAddressPolicy,
+  ) => Promise<boolean> | boolean;
+  onBackupPolicyChange: (
+    policy: AuthBackupEmailPolicy,
+  ) => Promise<boolean> | boolean;
+  primaryPolicySaving: boolean;
+  backupPolicySaving: boolean;
 };
 
 export type PasswordAuthenticationSectionProps = SettingsSectionSharedProps & {

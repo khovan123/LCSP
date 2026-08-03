@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/card";
 import { appLocale } from "@/lib/locale";
 
+import type { AssessmentOverviewProps } from "../../types/assessment-overview.types";
+
 const modules = [
   {
     segment: "wizard",
@@ -50,12 +52,14 @@ const modules = [
   },
 ] as const;
 
-export function AssessmentOverview({ assessmentId }: { assessmentId: string }) {
+export function AssessmentOverview({
+  assessmentId,
+}: AssessmentOverviewProps) {
   const basePath = `/assessments/${encodeURIComponent(assessmentId)}`;
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
-      <header className="space-y-2">
+      <header className="flex flex-col gap-2">
         <p className="text-sm font-medium text-primary">
           {resolveMessage(appLocale, "pages.assessment.eyebrow")}
         </p>

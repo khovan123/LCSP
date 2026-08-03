@@ -17,6 +17,7 @@ export interface MfaEnrollmentRepository {
 export interface MfaRateLimitRepository {
   findByUserId(userId: string): Promise<MfaRateLimit | null>;
   save(rateLimit: MfaRateLimit): Promise<void>;
+  resetByUserId(userId: string): Promise<void>;
   /** Atomically increments the failure counter (resetting first if the previous lock has expired) and applies lockout. */
   recordFailedAttempt(
     userId: string,
@@ -30,6 +31,7 @@ export interface MfaOtpUsedRepository {
   isUsed(userId: string, otpCode: string): Promise<boolean>;
   /** Atomically marks the OTP as used; returns false if it was already used (unique-constraint race). */
   tryMarkUsed(userId: string, otpCode: string): Promise<boolean>;
+  deleteByUserId(userId: string): Promise<void>;
   /** Deletes used-OTP records older than the given epoch-ms cutoff, since they can no longer be replayed. */
   pruneOlderThan(cutoffMs: number): Promise<void>;
 }

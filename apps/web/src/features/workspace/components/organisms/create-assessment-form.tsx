@@ -14,7 +14,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ASSESSMENT_NAME_MAX_LENGTH,
   ASSESSMENT_DESCRIPTION_MAX_LENGTH,
@@ -46,7 +48,7 @@ export function CreateAssessmentForm() {
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6 lg:px-6">
-      <header className="space-y-2">
+      <header className="flex flex-col gap-2">
         <h1 className="font-heading text-3xl font-semibold tracking-tight">
           {t("pages.assessmentForm.pageTitle")}
         </h1>
@@ -72,35 +74,35 @@ export function CreateAssessmentForm() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <label
-              className="grid gap-2 text-sm font-medium"
-              htmlFor="assessment-name"
-            >
-              {t("pages.assessmentForm.nameLabel")}
-              <Input
-                id="assessment-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder={t("pages.assessmentForm.namePlaceholder")}
-                required
-                maxLength={ASSESSMENT_NAME_MAX_LENGTH}
-              />
-            </label>
-            <label
-              className="grid gap-2 text-sm font-medium"
-              htmlFor="assessment-description"
-            >
-              {t("pages.assessmentForm.descriptionLabel")}
-              <textarea
-                id="assessment-description"
-                className="min-h-24 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                placeholder={t("pages.assessmentForm.descriptionPlaceholder")}
-                maxLength={ASSESSMENT_DESCRIPTION_MAX_LENGTH}
-              />
-            </label>
+          <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="assessment-name">
+                  {t("pages.assessmentForm.nameLabel")}
+                </FieldLabel>
+                <Input
+                  id="assessment-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder={t("pages.assessmentForm.namePlaceholder")}
+                  required
+                  maxLength={ASSESSMENT_NAME_MAX_LENGTH}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="assessment-description">
+                  {t("pages.assessmentForm.descriptionLabel")}
+                </FieldLabel>
+                <Textarea
+                  id="assessment-description"
+                  className="min-h-24"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder={t("pages.assessmentForm.descriptionPlaceholder")}
+                  maxLength={ASSESSMENT_DESCRIPTION_MAX_LENGTH}
+                />
+              </Field>
+            </FieldGroup>
             <div className="flex flex-wrap justify-end gap-3">
               <Button
                 type="button"

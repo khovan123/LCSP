@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { resolveMessage } from "@lcsp/i18n";
-import { toDataURL } from "qrcode";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { FormCard } from "@/components/organisms/form-card";
 import { appLocale } from "@/lib/locale";
 import { useMfaEnrollMutation } from "@/lib/api/auth-queries";
@@ -16,15 +14,14 @@ import {
   API_OUTCOME_KINDS,
   API_REDIRECT_LOCATIONS,
 } from "@/lib/api/outcome-kinds";
+import { MfaQrPreview } from "../molecules/mfa-qr-preview";
+import type { MfaEnrollErrorState } from "../../types/mfa-enroll.types";
 
 export function MfaEnrollForm() {
   const router = useRouter();
   const enrollMutation = useMfaEnrollMutation();
   const [totpUri, setTotpUri] = useState<string | null>(null);
-  const [error, setError] = useState<{
-    titleKey: Parameters<typeof resolveMessage>[1];
-    detailKey: Parameters<typeof resolveMessage>[1];
-  } | null>(null);
+  const [error, setError] = useState<MfaEnrollErrorState>(null);
 
   async function handleEnroll() {
     setError(null);
@@ -73,12 +70,9 @@ export function MfaEnrollForm() {
                 : "pages.mfaEnroll.submit",
             )}
           </Button>
-          <Link
-            className={buttonVariants({ variant: "ghost" })}
-            href={API_REDIRECT_LOCATIONS.mfaVerify}
-          >
+          <Button render={<Link href={API_REDIRECT_LOCATIONS.mfaVerify} />} variant="ghost">
             {resolveMessage(appLocale, "pages.mfaEnroll.goToVerify")}
-          </Link>
+          </Button>
         </>
       }
       leading={
@@ -87,7 +81,7 @@ export function MfaEnrollForm() {
         </p>
       }
     >
-      <div className="space-y-4">
+      <div className="flex flex-col gap-4">
         {error ? (
           <Alert variant="destructive">
             <AlertTitle>{resolveMessage(appLocale, error.titleKey)}</AlertTitle>
@@ -102,7 +96,7 @@ export function MfaEnrollForm() {
             <AlertTitle>
               {resolveMessage(appLocale, "pages.mfaEnroll.successTitle")}
             </AlertTitle>
-            <AlertDescription className="space-y-3">
+            <AlertDescription className="flex flex-col gap-3">
               <p>
                 {resolveMessage(appLocale, "pages.mfaEnroll.successDetail")}
               </p>
@@ -112,56 +106,5 @@ export function MfaEnrollForm() {
         ) : null}
       </div>
     </FormCard>
-  );
-}
-
-function MfaQrPreview({ totpUri }: { totpUri: string }) {
-  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void toDataURL(totpUri, {
-      errorCorrectionLevel: "medium",
-      margin: 1,
-      width: 240,
-    }).then((dataUrl: string) => {
-      if (!cancelled) {
-        setQrCodeDataUrl(dataUrl);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [totpUri]);
-
-  if (!qrCodeDataUrl) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        {resolveMessage(appLocale, "pages.mfaEnroll.qrLoading")}
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <p className="text-sm font-medium">
-        {resolveMessage(appLocale, "pages.mfaEnroll.qrTitle")}
-      </p>
-      <div className="inline-flex rounded-xl border bg-white p-3">
-        <Image
-          src={qrCodeDataUrl}
-          alt={resolveMessage(appLocale, "pages.mfaEnroll.qrAlt")}
-          className="size-60 max-w-full"
-          width={240}
-          height={240}
-          unoptimized
-        />
-      </div>
-      <p className="text-sm text-muted-foreground">
-        {resolveMessage(appLocale, "pages.mfaEnroll.qrHint")}
-      </p>
-    </div>
   );
 }

@@ -46,7 +46,20 @@ export class DisableMfaHandler {
       return { ok: true, correlation_id: correlationId };
     }
 
+    const user = await this.support.resolveUserById(
+      this.repositories,
+      session.userId,
+    );
+    if (!user) {
+      return createProblemResult(
+        AUTH_ERROR_CODES.sessionInvalid,
+        correlationId,
+      );
+    }
+
     await this.repositories.mfaEnrollments.deleteByUserId(session.userId);
+    user.mfaRequired = false;
+    await this.repositories.users.save(user);
     session.mfaVerifiedAt = null;
     await this.repositories.sessions.save(session);
 

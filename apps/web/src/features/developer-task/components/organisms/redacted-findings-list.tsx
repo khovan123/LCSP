@@ -15,14 +15,11 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { appLocale } from "@/lib/locale";
-
-import type { DeveloperFinding } from "../../types/developer-task.types";
+import type { RedactedFindingsListProps } from "../../types/component-props.types";
 
 export function RedactedFindingsList({
   findings,
-}: {
-  findings: DeveloperFinding[];
-}) {
+}: RedactedFindingsListProps) {
   if (findings.length === 0) {
     return (
       <Empty className="rounded-xl border bg-card">
@@ -39,7 +36,10 @@ export function RedactedFindingsList({
   }
 
   return (
-    <section aria-labelledby="technical-findings-title" className="space-y-4">
+    <section
+      aria-labelledby="technical-findings-title"
+      className="flex flex-col gap-4"
+    >
       <div>
         <h2 id="technical-findings-title" className="text-xl font-semibold">
           {resolveMessage(appLocale, "pages.developerTask.findingsTitle")}

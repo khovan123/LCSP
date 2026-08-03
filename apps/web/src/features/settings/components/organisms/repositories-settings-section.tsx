@@ -12,6 +12,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { appLocale } from "@/lib/locale";
 import type { RepositoriesSettingsSectionProps } from "../../types/settings-page.types";
 import { formatDateTime } from "../../utils/settings-page.utils";
@@ -23,7 +30,10 @@ export function RepositoriesSettingsSection({
   return (
     <section className="flex flex-col gap-4">
       <SectionHeading
-        title={resolveMessage(appLocale, "pages.workspace.settingsHub.repositories.title")}
+        title={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.repositories.title",
+        )}
         description={resolveMessage(
           appLocale,
           "pages.workspace.settingsHub.repositories.description",
@@ -54,12 +64,25 @@ export function RepositoriesSettingsSection({
             : {repositoryCount}
           </div>
           {repositories.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {resolveMessage(
-                appLocale,
-                "pages.workspace.settingsHub.states.noRepositories",
-              )}
-            </p>
+            <Empty className="rounded-xl border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <RefreshCwIcon className="size-4" />
+                </EmptyMedia>
+                <EmptyTitle>
+                  {resolveMessage(
+                    appLocale,
+                    "pages.workspace.settingsHub.repositories.listTitle",
+                  )}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {resolveMessage(
+                    appLocale,
+                    "pages.workspace.settingsHub.states.noRepositories",
+                  )}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <div className="flex flex-col gap-3">
               {repositories.map((repository) => (

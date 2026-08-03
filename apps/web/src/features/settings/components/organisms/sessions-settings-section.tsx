@@ -13,6 +13,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { appLocale } from "@/lib/locale";
 import type { SessionsSettingsSectionProps } from "../../types/settings-page.types";
 import { formatDateTime } from "../../utils/settings-page.utils";
@@ -60,12 +67,25 @@ export function SessionsSettingsSection({
             </span>
           </div>
           {sessions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {resolveMessage(
-                appLocale,
-                "pages.workspace.settingsHub.states.noSessions",
-              )}
-            </p>
+            <Empty className="rounded-xl border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <ShieldCheckIcon className="size-4" />
+                </EmptyMedia>
+                <EmptyTitle>
+                  {resolveMessage(
+                    appLocale,
+                    "pages.workspace.settingsHub.sessions.activeTitle",
+                  )}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {resolveMessage(
+                    appLocale,
+                    "pages.workspace.settingsHub.states.noSessions",
+                  )}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <div className="flex flex-col gap-3">
               {sessions.map((session) => (

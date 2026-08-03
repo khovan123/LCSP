@@ -63,6 +63,10 @@ export function MfaVerifyForm() {
       router.replace(API_REDIRECT_LOCATIONS.signIn);
       return;
     }
+    if (outcome.kind === API_OUTCOME_KINDS.mfaRequired) {
+      router.replace(API_REDIRECT_LOCATIONS.mfaEnroll);
+      return;
+    }
     if (outcome.kind === API_OUTCOME_KINDS.rateLimited) {
       setIsLocked(true);
     }

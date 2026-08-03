@@ -48,7 +48,9 @@ export class SignInHandler {
         ? payload.organization_id.trim()
         : null;
 
-    const user = await repositories.users.findByEmail(email.toLowerCase());
+    const user = await repositories.users.findByPrimaryEmail(
+      email.toLowerCase(),
+    );
     if (!user) {
       // Run the same scrypt-based comparison as the found-user path so the
       // response latency doesn't reveal whether the email is registered.
@@ -202,7 +204,7 @@ export class SignInHandler {
       correlation_id: correlationId,
       session_token: sessionState.token,
       user: this.support.safeUserProjection(user, targetOrgId, membership),
-      mfa_enrolled: mfaEnrollment !== null,
+      mfa_enrolled: this.support.isMfaEnrolled(mfaEnrollment),
       ...(mfaRequired ? { mfa_required: true } : {}),
     };
   }

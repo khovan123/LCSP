@@ -14,13 +14,7 @@ import {
   sectionCardClassName,
 } from "@/features/wizard/lib/wizard-form";
 import { t } from "@/features/wizard/lib/wizard-i18n";
-import type { WizardAnswers } from "@/features/wizard/types/wizard.types";
-
-type WizardReadOnlySummaryProps = {
-  answers: WizardAnswers;
-  onBack: () => void;
-  onNext: () => void;
-};
+import type { WizardReadOnlySummaryProps } from "@/features/wizard/types/component-props.types";
 
 export function WizardReadOnlySummary({
   answers,
@@ -49,7 +43,7 @@ export function WizardReadOnlySummary({
             {t("pages.wizard.summaryDescription")}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="flex flex-col gap-4">
           {summaryItems.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {t("pages.wizard.readOnlyEmpty")}

@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import type {
+  AuthBackupEmailPolicy,
+  AuthPrimaryEmailAddressPolicy,
+} from "@lcsp/contracts/auth";
 import { resolveMessage } from "@lcsp/i18n";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
+import { ConfirmAccessDialog } from "@/components/organisms/confirm-access-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,11 +22,15 @@ import {
   useAuthSettingsProfileQuery,
   useMfaEnrollMutation,
   useMfaVerifyMutation,
+  usePasswordReauthMutation,
   useRequestRecoveryMutation,
   useRevokeAuthSessionMutation,
   useUpdateProfileMutation,
 } from "@/lib/api/auth-queries";
-import { API_OUTCOME_KINDS } from "@/lib/api/outcome-kinds";
+import {
+  API_OUTCOME_KINDS,
+  API_REDIRECT_LOCATIONS,
+} from "@/lib/api/outcome-kinds";
 import { profileSafetySchema } from "@/features/auth/schemas/profile-safety.schema";
 import {
   mfaVerifySchema,
@@ -44,7 +53,44 @@ import type {
 } from "../../types/settings-page.types";
 import { isSettingsSectionId } from "../../utils/settings-page.utils";
 
+const SETTINGS_SENSITIVE_ACTIONS = {
+  enableMfa: "enable_mfa",
+  saveRecoveryEmail: "save_recovery_email",
+  saveBackupPolicy: "save_backup_policy",
+  savePrimaryEmailPolicy: "save_primary_email_policy",
+  disableMfa: "disable_mfa",
+  revokeSession: "revoke_session",
+} as const;
+
+type SettingsSensitiveAction = {
+  resolveResult?: (success: boolean) => void;
+} & (
+  | {
+      kind: typeof SETTINGS_SENSITIVE_ACTIONS.enableMfa;
+    }
+  | {
+      kind: typeof SETTINGS_SENSITIVE_ACTIONS.saveRecoveryEmail;
+      values: RecoveryEmailFormValues;
+    }
+  | {
+      kind: typeof SETTINGS_SENSITIVE_ACTIONS.saveBackupPolicy;
+      policy: AuthBackupEmailPolicy;
+    }
+  | {
+      kind: typeof SETTINGS_SENSITIVE_ACTIONS.savePrimaryEmailPolicy;
+      policy: AuthPrimaryEmailAddressPolicy;
+    }
+  | {
+      kind: typeof SETTINGS_SENSITIVE_ACTIONS.disableMfa;
+    }
+  | {
+      kind: typeof SETTINGS_SENSITIVE_ACTIONS.revokeSession;
+      sessionId: string;
+    }
+);
+
 export function SettingsPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const requestedSection = searchParams.get("section");
   const activeSection = isSettingsSectionId(requestedSection)
@@ -58,14 +104,21 @@ export function SettingsPage() {
   const enrollMutation = useMfaEnrollMutation();
   const disableMfaMutation = useDisableMfaMutation();
   const verifyMutation = useMfaVerifyMutation();
+  const passwordReauthMutation = usePasswordReauthMutation();
   const revokeSessionMutation = useRevokeAuthSessionMutation();
   const requestRecoveryMutation = useRequestRecoveryMutation();
 
   const [totpUri, setTotpUri] = useState<string | null>(null);
   const [mfaEditorOpen, setMfaEditorOpen] = useState(false);
-  const [recoveryEmailEditorOpen, setRecoveryEmailEditorOpen] = useState(false);
   const [mfaError, setMfaError] = useState<SettingsAlertMessage | null>(null);
   const [recoveryRequestSent, setRecoveryRequestSent] = useState(false);
+  const [confirmAccessOpen, setConfirmAccessOpen] = useState(false);
+  const [pendingSensitiveAction, setPendingSensitiveAction] =
+    useState<SettingsSensitiveAction | null>(null);
+  const [confirmAccessMfaError, setConfirmAccessMfaError] =
+    useState<SettingsAlertMessage | null>(null);
+  const [confirmAccessPasswordError, setConfirmAccessPasswordError] =
+    useState<SettingsAlertMessage | null>(null);
 
   const recoveryForm = useForm<RecoveryEmailFormValues>({
     resolver: zodResolver(profileSafetySchema),
@@ -80,13 +133,6 @@ export function SettingsPage() {
   const sessions = sessionsQuery.data ?? [];
   const repositories = repositoriesQuery.data ?? [];
 
-  useEffect(() => {
-    if (profile) {
-      recoveryForm.reset({
-        recovery_email: profile.recovery_email ?? "",
-      });
-    }
-  }, [profile, recoveryForm]);
 
   const repositoryCount = repositories.length;
   const activeSessionsCount = sessions.filter(
@@ -99,7 +145,24 @@ export function SettingsPage() {
   const profileLoadFailed =
     profileQuery.isError || sessionsQuery.isError || repositoriesQuery.isError;
 
-  async function handleSaveRecoveryEmail(values: RecoveryEmailFormValues) {
+  function openSensitiveAction(action: SettingsSensitiveAction) {
+    setConfirmAccessMfaError(null);
+    setConfirmAccessPasswordError(null);
+    setPendingSensitiveAction(action);
+    setConfirmAccessOpen(true);
+  }
+
+  function closeConfirmAccessDialog(cancelled = true) {
+    if (cancelled) {
+      pendingSensitiveAction?.resolveResult?.(false);
+    }
+    setConfirmAccessOpen(false);
+    setPendingSensitiveAction(null);
+    setConfirmAccessMfaError(null);
+    setConfirmAccessPasswordError(null);
+  }
+
+  async function executeSaveRecoveryEmail(values: RecoveryEmailFormValues) {
     const outcome = await updateProfileMutation
       .mutateAsync(values)
       .catch(() => ({
@@ -112,18 +175,18 @@ export function SettingsPage() {
 
     if (outcome.kind === API_OUTCOME_KINDS.saved) {
       await profileQuery.refetch();
-      setRecoveryEmailEditorOpen(false);
+      recoveryForm.reset({ recovery_email: "" });
       toast.success(
         resolveMessage(appLocale, "pages.workspace.security.successTitle"),
       );
-      return;
+      return true;
     }
 
     if (outcome.kind === API_OUTCOME_KINDS.validationError) {
       recoveryForm.setError("recovery_email", {
         message: outcome.detailKey,
       });
-      return;
+      return false;
     }
 
     recoveryForm.setError("root", {
@@ -134,9 +197,266 @@ export function SettingsPage() {
             ? "auth.errors.mfaRequired.detail"
             : outcome.detailKey,
     });
+    return false;
   }
 
-  async function handleGenerateMfaSetup() {
+  async function executeSaveBackupPolicy(policy: AuthBackupEmailPolicy) {
+    const outcome = await updateProfileMutation
+      .mutateAsync({
+        backup_recovery_email_policy: policy,
+      })
+      .catch(() => ({
+        kind: API_OUTCOME_KINDS.error,
+        titleKey:
+          "pages.workspace.settingsHub.errors.profileLoadTitle" as const,
+        detailKey:
+          "pages.workspace.settingsHub.errors.profileLoadDetail" as const,
+      }));
+
+    if (outcome.kind === API_OUTCOME_KINDS.saved) {
+      await profileQuery.refetch();
+      return true;
+    }
+
+    toast.error(
+      resolveMessage(
+        appLocale,
+        outcome.kind === API_OUTCOME_KINDS.validationError
+          ? outcome.detailKey
+          : "pages.workspace.settingsHub.errors.profileLoadDetail",
+      ),
+    );
+    return false;
+  }
+
+  async function executeSavePrimaryEmailPolicy(
+    policy: AuthPrimaryEmailAddressPolicy,
+  ) {
+    const outcome = await updateProfileMutation
+      .mutateAsync({
+        primary_email_address_policy: policy,
+      })
+      .catch(() => ({
+        kind: API_OUTCOME_KINDS.error,
+        titleKey:
+          "pages.workspace.settingsHub.errors.profileLoadTitle" as const,
+        detailKey:
+          "pages.workspace.settingsHub.errors.profileLoadDetail" as const,
+      }));
+
+    if (outcome.kind === API_OUTCOME_KINDS.saved) {
+      await profileQuery.refetch();
+      return true;
+    }
+
+    toast.error(
+      resolveMessage(
+        appLocale,
+        outcome.kind === API_OUTCOME_KINDS.validationError
+          ? outcome.detailKey
+          : "pages.workspace.settingsHub.errors.profileLoadDetail",
+      ),
+    );
+    return false;
+  }
+
+  async function executeDisableMfa() {
+    const outcome = await disableMfaMutation.mutateAsync().catch(() => ({
+      kind: API_OUTCOME_KINDS.error,
+      titleKey:
+        "pages.workspace.settingsHub.password.disableFailedTitle" as const,
+      detailKey:
+        "pages.workspace.settingsHub.password.disableFailedDescription" as const,
+    }));
+
+    if (outcome.kind === API_OUTCOME_KINDS.disabled) {
+      setTotpUri(null);
+      setMfaEditorOpen(false);
+      setRecoveryRequestSent(false);
+      verifyForm.reset();
+      await Promise.all([profileQuery.refetch(), sessionsQuery.refetch()]);
+      toast.success(
+        resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.password.mfaDisabledTitle",
+        ),
+      );
+      return true;
+    }
+
+    setMfaError(
+      outcome.kind === API_OUTCOME_KINDS.sessionInvalid
+        ? {
+            titleKey: "auth.errors.sessionInvalid.title",
+            detailKey: "auth.errors.sessionInvalid.detail",
+          }
+        : outcome.kind === API_OUTCOME_KINDS.mfaRequired
+          ? {
+              titleKey: "auth.errors.mfaRequired.title",
+              detailKey: "auth.errors.mfaRequired.detail",
+            }
+          : {
+              titleKey: outcome.titleKey,
+              detailKey: outcome.detailKey,
+            },
+    );
+    return false;
+  }
+
+  async function executeRevokeSession(sessionId: string) {
+    try {
+      await revokeSessionMutation.mutateAsync(sessionId);
+      toast.success(
+        resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.sessions.revokedTitle",
+        ),
+      );
+      return true;
+    } catch {
+      toast.error(
+        resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.errors.sessionActionDetail",
+        ),
+      );
+      return false;
+    }
+  }
+
+  async function executeSensitiveAction(
+    action: SettingsSensitiveAction,
+  ): Promise<boolean> {
+    switch (action.kind) {
+      case SETTINGS_SENSITIVE_ACTIONS.enableMfa:
+        return handleGenerateMfaSetup();
+      case SETTINGS_SENSITIVE_ACTIONS.saveRecoveryEmail:
+        return executeSaveRecoveryEmail(action.values);
+      case SETTINGS_SENSITIVE_ACTIONS.saveBackupPolicy:
+        return executeSaveBackupPolicy(action.policy);
+      case SETTINGS_SENSITIVE_ACTIONS.savePrimaryEmailPolicy:
+        return executeSavePrimaryEmailPolicy(action.policy);
+      case SETTINGS_SENSITIVE_ACTIONS.disableMfa:
+        return executeDisableMfa();
+      case SETTINGS_SENSITIVE_ACTIONS.revokeSession:
+        return executeRevokeSession(action.sessionId);
+      default:
+        return false;
+    }
+  }
+
+  async function handleConfirmAccessPasswordSubmit(values: {
+    password: string;
+  }) {
+    if (!pendingSensitiveAction) {
+      return;
+    }
+
+    setConfirmAccessPasswordError(null);
+    const outcome = await passwordReauthMutation
+      .mutateAsync(values)
+      .catch(() => ({
+        kind: API_OUTCOME_KINDS.error,
+        titleKey: "pages.signIn.errors.requestFailedTitle" as const,
+        detailKey: "pages.signIn.errors.requestFailedDetail" as const,
+      }));
+
+    if (outcome.kind === API_OUTCOME_KINDS.invalid) {
+      setConfirmAccessPasswordError({
+        titleKey: "auth.errors.invalidCredentials.title",
+        detailKey: "auth.errors.invalidCredentials.detail",
+      });
+      return;
+    }
+
+    if (outcome.kind === API_OUTCOME_KINDS.sessionInvalid) {
+      setConfirmAccessPasswordError({
+        titleKey: "auth.errors.sessionInvalid.title",
+        detailKey: "auth.errors.sessionInvalid.detail",
+      });
+      return;
+    }
+
+    if (outcome.kind === API_OUTCOME_KINDS.error) {
+      setConfirmAccessPasswordError({
+        titleKey: outcome.titleKey,
+        detailKey: outcome.detailKey,
+      });
+      return;
+    }
+
+    const success = await executeSensitiveAction(pendingSensitiveAction);
+    pendingSensitiveAction.resolveResult?.(success);
+    closeConfirmAccessDialog(false);
+  }
+
+  async function handleConfirmAccessOtpSubmit(values: MfaVerifyFormValues) {
+    setConfirmAccessMfaError(null);
+    const outcome = await verifyMutation.mutateAsync(values).catch(() => ({
+      kind: API_OUTCOME_KINDS.error,
+      titleKey: "pages.mfaVerify.errors.requestFailedTitle" as const,
+      detailKey: "pages.mfaVerify.errors.requestFailedDetail" as const,
+    }));
+
+    if (outcome.kind === API_OUTCOME_KINDS.verified) {
+      await Promise.all([profileQuery.refetch(), sessionsQuery.refetch()]);
+      if (!pendingSensitiveAction) {
+        closeConfirmAccessDialog(false);
+        return;
+      }
+
+      const success = await executeSensitiveAction(pendingSensitiveAction);
+      pendingSensitiveAction.resolveResult?.(success);
+      closeConfirmAccessDialog(false);
+      return;
+    }
+
+    setConfirmAccessMfaError(
+      outcome.kind === API_OUTCOME_KINDS.sessionInvalid
+        ? {
+            titleKey: "auth.errors.sessionInvalid.title",
+            detailKey: "auth.errors.sessionInvalid.detail",
+          }
+        : outcome.kind === API_OUTCOME_KINDS.mfaRequired
+          ? {
+              titleKey: "auth.errors.mfaRequired.title",
+              detailKey: "auth.errors.mfaRequired.detail",
+            }
+        : {
+            titleKey: outcome.titleKey,
+            detailKey: outcome.detailKey,
+          },
+    );
+  }
+
+  async function handleSaveRecoveryEmail(values: RecoveryEmailFormValues) {
+    openSensitiveAction({
+      kind: SETTINGS_SENSITIVE_ACTIONS.saveRecoveryEmail,
+      values,
+    });
+  }
+
+  function handleSaveBackupPolicy(policy: AuthBackupEmailPolicy) {
+    return new Promise<boolean>((resolve) => {
+      openSensitiveAction({
+        kind: SETTINGS_SENSITIVE_ACTIONS.saveBackupPolicy,
+        policy,
+        resolveResult: resolve,
+      });
+    });
+  }
+
+  function handleSavePrimaryEmailPolicy(policy: AuthPrimaryEmailAddressPolicy) {
+    return new Promise<boolean>((resolve) => {
+      openSensitiveAction({
+        kind: SETTINGS_SENSITIVE_ACTIONS.savePrimaryEmailPolicy,
+        policy,
+        resolveResult: resolve,
+      });
+    });
+  }
+
+  async function handleGenerateMfaSetup(): Promise<boolean> {
     setMfaError(null);
     setRecoveryRequestSent(false);
     const outcome = await enrollMutation.mutateAsync().catch(() => ({
@@ -148,7 +468,7 @@ export function SettingsPage() {
     if (outcome.kind === API_OUTCOME_KINDS.loaded) {
       setTotpUri(outcome.totpUri);
       setMfaEditorOpen(true);
-      return;
+      return true;
     }
 
     if (outcome.kind === API_OUTCOME_KINDS.sessionInvalid) {
@@ -156,7 +476,7 @@ export function SettingsPage() {
         titleKey: "auth.errors.sessionInvalid.title",
         detailKey: "auth.errors.sessionInvalid.detail",
       });
-      return;
+      return false;
     }
 
     if (outcome.kind === API_OUTCOME_KINDS.mfaRequired) {
@@ -164,13 +484,14 @@ export function SettingsPage() {
         titleKey: "auth.errors.mfaRequired.title",
         detailKey: "auth.errors.mfaRequired.detail",
       });
-      return;
+      return false;
     }
 
     setMfaError({
       titleKey: outcome.titleKey,
       detailKey: outcome.detailKey,
     });
+    return false;
   }
 
   async function handleVerifyOtp(values: MfaVerifyFormValues) {
@@ -209,6 +530,11 @@ export function SettingsPage() {
             titleKey: "auth.errors.sessionInvalid.title",
             detailKey: "auth.errors.sessionInvalid.detail",
           }
+        : outcome.kind === API_OUTCOME_KINDS.mfaRequired
+          ? {
+              titleKey: "auth.errors.mfaRequired.title",
+              detailKey: "auth.errors.mfaRequired.detail",
+            }
         : {
             titleKey: outcome.titleKey,
             detailKey: outcome.detailKey,
@@ -224,52 +550,16 @@ export function SettingsPage() {
     setMfaError(null);
 
     if (nextEnabled) {
-      setMfaEditorOpen(true);
-      if (!totpUri) {
-        await handleGenerateMfaSetup();
-      }
-      return;
-    }
-
-    const outcome = await disableMfaMutation.mutateAsync().catch(() => ({
-      kind: API_OUTCOME_KINDS.error,
-      titleKey:
-        "pages.workspace.settingsHub.password.disableFailedTitle" as const,
-      detailKey:
-        "pages.workspace.settingsHub.password.disableFailedDescription" as const,
-    }));
-
-    if (outcome.kind === API_OUTCOME_KINDS.disabled) {
-      setTotpUri(null);
       setMfaEditorOpen(false);
-      setRecoveryRequestSent(false);
-      verifyForm.reset();
-      await Promise.all([profileQuery.refetch(), sessionsQuery.refetch()]);
-      toast.success(
-        resolveMessage(
-          appLocale,
-          "pages.workspace.settingsHub.password.mfaDisabledTitle",
-        ),
-      );
+      openSensitiveAction({
+        kind: SETTINGS_SENSITIVE_ACTIONS.enableMfa,
+      });
       return;
     }
 
-    setMfaError(
-      outcome.kind === API_OUTCOME_KINDS.sessionInvalid
-        ? {
-            titleKey: "auth.errors.sessionInvalid.title",
-            detailKey: "auth.errors.sessionInvalid.detail",
-          }
-        : outcome.kind === API_OUTCOME_KINDS.mfaRequired
-          ? {
-              titleKey: "auth.errors.mfaRequired.title",
-              detailKey: "auth.errors.mfaRequired.detail",
-            }
-          : {
-              titleKey: outcome.titleKey,
-              detailKey: outcome.detailKey,
-            },
-    );
+    openSensitiveAction({
+      kind: SETTINGS_SENSITIVE_ACTIONS.disableMfa,
+    });
   }
 
   async function handleSendRecoveryInstructions() {
@@ -292,23 +582,18 @@ export function SettingsPage() {
     setMfaError(outcome);
   }
 
+  function handleRequestMfaSetup() {
+    setMfaEditorOpen(false);
+    openSensitiveAction({
+      kind: SETTINGS_SENSITIVE_ACTIONS.enableMfa,
+    });
+  }
+
   async function handleRevokeSession(sessionId: string) {
-    try {
-      await revokeSessionMutation.mutateAsync(sessionId);
-      toast.success(
-        resolveMessage(
-          appLocale,
-          "pages.workspace.settingsHub.sessions.revokedTitle",
-        ),
-      );
-    } catch {
-      toast.error(
-        resolveMessage(
-          appLocale,
-          "pages.workspace.settingsHub.errors.sessionActionDetail",
-        ),
-      );
-    }
+    openSensitiveAction({
+      kind: SETTINGS_SENSITIVE_ACTIONS.revokeSession,
+      sessionId,
+    });
   }
 
   const qrCode = useQrCode(totpUri);
@@ -350,6 +635,55 @@ export function SettingsPage() {
         ) : null}
 
         <div className="flex flex-col gap-6">
+          {profile ? (
+            <ConfirmAccessDialog
+              open={confirmAccessOpen}
+              onOpenChange={(open) => {
+                if (open) {
+                  setConfirmAccessOpen(true);
+                  return;
+                }
+                closeConfirmAccessDialog(true);
+              }}
+              onPasswordSubmit={handleConfirmAccessPasswordSubmit}
+              accountLabelKey="pages.workspace.settingsHub.reauth.accountLabel"
+              accountHandle={profile.email}
+              avatarFallback={profile.email.slice(0, 1).toUpperCase()}
+              titleKey="pages.workspace.settingsHub.reauth.title"
+              descriptionKey="pages.workspace.settingsHub.reauth.description"
+              passwordLabelKey="pages.signIn.passwordLabel"
+              passwordPlaceholderKey="pages.workspace.settingsHub.reauth.passwordPlaceholder"
+              forgotPasswordHref={API_REDIRECT_LOCATIONS.recoveryRequest}
+              forgotPasswordLabelKey="pages.signIn.forgotPassword"
+              supportTitleKey="pages.workspace.settingsHub.reauth.supportTitle"
+              confirmLabelKey="pages.workspace.settingsHub.reauth.confirm"
+              confirmingLabelKey="pages.workspace.settingsHub.reauth.confirming"
+              closeLabelKey="pages.workspace.settingsHub.reauth.close"
+              errorTitleKey={confirmAccessPasswordError?.titleKey}
+              errorKey={confirmAccessPasswordError?.detailKey ?? null}
+              mfa={{
+                isEnabled: profile.mfa_enrolled,
+                isConfigured: profile.mfa_enrolled,
+                onSubmit: handleConfirmAccessOtpSubmit,
+                otpLabelKey: "pages.mfaVerify.otpLabel",
+                otpDescriptionKey: "pages.mfaVerify.otpDescription",
+                otpPlaceholderKey: "pages.workspace.settingsHub.reauth.otpPlaceholder",
+                verifyLabelKey: "pages.workspace.settingsHub.reauth.verify",
+                verifyingLabelKey: "pages.workspace.settingsHub.reauth.verifying",
+                switchToMfaLabelKey: profile.mfa_enrolled
+                  ? "pages.workspace.settingsHub.reauth.useAuthenticator"
+                  : "pages.workspace.settingsHub.reauth.setUpMfa",
+                switchToPasswordLabelKey:
+                  "pages.workspace.settingsHub.reauth.usePassword",
+                onSetupRequest: () => {
+                  router.push(API_REDIRECT_LOCATIONS.mfaEnroll);
+                },
+                errorTitleKey: confirmAccessMfaError?.titleKey,
+                errorKey: confirmAccessMfaError?.detailKey ?? null,
+              }}
+            />
+          ) : null}
+
           <Card className="border-border/70">
             <CardContent className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
               <div className="flex flex-col gap-1">
@@ -407,10 +741,12 @@ export function SettingsPage() {
             <EmailSettingsSection
               profile={profile}
               primaryEmailBadgeKey={primaryEmailBadgeKey}
-              recoveryEmailEditorOpen={recoveryEmailEditorOpen}
-              setRecoveryEmailEditorOpen={setRecoveryEmailEditorOpen}
               recoveryForm={recoveryForm}
               onSubmit={handleSaveRecoveryEmail}
+              onPrimaryEmailPolicyChange={handleSavePrimaryEmailPolicy}
+              onBackupPolicyChange={handleSaveBackupPolicy}
+              primaryPolicySaving={updateProfileMutation.isPending}
+              backupPolicySaving={updateProfileMutation.isPending}
             />
           ) : null}
 
@@ -424,7 +760,7 @@ export function SettingsPage() {
               mfaError={mfaError}
               qrCode={qrCode}
               onToggleMfa={handleToggleMfa}
-              onGenerateMfaSetup={handleGenerateMfaSetup}
+              onGenerateMfaSetup={handleRequestMfaSetup}
               enrollPending={enrollMutation.isPending}
               verifyForm={verifyForm}
               onVerifyOtp={handleVerifyOtp}

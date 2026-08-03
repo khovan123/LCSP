@@ -366,12 +366,15 @@ export type PagesMessages = {
         mfaPending: string;
         configured: string;
         primary: string;
+        backup: string;
         active: string;
         revoked: string;
       };
       states: {
         notConfigured: string;
         noRecoveryEmail: string;
+        enabled: string;
+        disabled: string;
         currentSession: string;
         noSessions: string;
         noRepositories: string;
@@ -379,12 +382,17 @@ export type PagesMessages = {
       };
       actions: {
         edit: string;
+        manage: string;
         setUp: string;
+        hide: string;
+        changePassword: string;
         turnOn: string;
         turnOff: string;
         generateSetup: string;
         verifyAndSave: string;
+        cancel: string;
         sendRecovery: string;
+        updatePassword: string;
         revoke: string;
       };
       account: {
@@ -406,15 +414,54 @@ export type PagesMessages = {
       emails: {
         title: string;
         description: string;
+        addressListTitle: string;
+        addressListDescription: string;
         primaryTitle: string;
         primaryDescription: string;
+        primaryRowDescription: string;
+        recoveryRowDescription: string;
+        primaryMenuLabel: string;
+        recoveryMenuLabel: string;
+        addEmailTitle: string;
+        addEmailInputLabel: string;
+        addEmailPlaceholder: string;
+        addEmailAction: string;
+        addEmailDescription: string;
+        primaryPreferenceTitle: string;
+        primaryPreferenceDescription: string;
+        backupPreferenceTitle: string;
+        backupPreferenceDescription: string;
+        backupAllVerifiedOption: string;
+      };
+      reauth: {
+        title: string;
+        description: string;
+        accountLabel: string;
+        passwordPlaceholder: string;
+        otpPlaceholder: string;
+        confirm: string;
+        confirming: string;
+        verify: string;
+        verifying: string;
+        supportTitle: string;
+        useAuthenticator: string;
+        usePassword: string;
+        setUpMfa: string;
+        close: string;
       };
       password: {
         title: string;
         description: string;
         signInMethodsTitle: string;
         emailMethod: string;
+        emailMethodDescription: string;
         passwordMethod: string;
+        passwordMethodDescription: string;
+        currentPasswordLabel: string;
+        newPasswordLabel: string;
+        confirmNewPasswordLabel: string;
+        passwordPolicyHint: string;
+        learnMoreLink: string;
         mfaTitle: string;
         mfaDescription: string;
         authenticatorApp: string;
