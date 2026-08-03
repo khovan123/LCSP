@@ -16,6 +16,7 @@ import {
 import { WizardProfileEntity } from "../../../domain/entities/wizard-profile.entity.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 
 @CommandHandler(SaveWizardDraftCommand)
@@ -27,6 +28,7 @@ export class SaveWizardDraftHandler implements ICommandHandler<
     @Inject(WIZARD_PROFILE_REPOSITORY)
     private readonly wizardRepository: WizardProfileRepository,
     private readonly auditWriter: AuditWriterService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async execute(
@@ -51,7 +53,12 @@ export class SaveWizardDraftHandler implements ICommandHandler<
 
     if (profile) {
       if (profile.status === WIZARD_STATUS_CODES.submitted) {
-        throw new WizardAlreadySubmittedException(correlationId);
+        const repoConn = await this.prisma.repositoryConnection.findFirst({
+          where: { assessmentId },
+        });
+        if (repoConn) {
+          throw new WizardAlreadySubmittedException(correlationId);
+        }
       }
       const existingAnswersMap = new Map(
         profile.answers.map((a) => [a.questionId, a]),

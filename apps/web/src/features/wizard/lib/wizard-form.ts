@@ -201,7 +201,11 @@ export function serializeAnswers(answers: WizardAnswers): WizardAnswer[] {
     } else {
       let state: AnswerState = ANSWER_STATES.answered;
       const finalValue = value;
-      if (value === "unknown") {
+      if (
+        value === "unknown" ||
+        value === "UNKNOWN" ||
+        value === "UNCLEAR"
+      ) {
         state = ANSWER_STATES.explicitUnknown;
       } else if (Array.isArray(value) && value.includes("unknown")) {
         // if array includes unknown, the whole array might just be unknown, but the contract says value is unknown.

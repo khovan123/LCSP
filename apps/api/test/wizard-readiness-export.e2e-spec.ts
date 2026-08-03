@@ -88,7 +88,7 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
     assert.ok(body.missing_evidence.length >= 1);
     assert.ok(body.preparation_guidance.length >= 1);
     assert.ok(
-      body.unresolved_unknowns.some((item) => item.includes("unknown")),
+      body.unresolved_unknowns.some((item) => item.includes("dataTypes")),
       "unknown wizard answers must remain explicit unresolved context",
     );
     assert.doesNotMatch(serialized, /\b(HIGH|MEDIUM|LOW)\b/);
@@ -224,17 +224,32 @@ async function seedSubmittedWizard(prisma: PrismaClient): Promise<void> {
       version: 3,
       status: WIZARD_STATUS_CODES.submitted,
       submittedAt: new Date("2026-07-26T00:00:00.000Z"),
-      answers: {
-        purpose: "Route support requests to the right operations team.",
-        sector: "customer-support",
-        data_type: ["support-ticket", "unknown-data-category"],
-        user_group: "internal-operators",
-        user_impact: "unknown-impact",
-        decision_role: "recommendation",
-        human_oversight: "human-review",
-        external_llm_usage: "unknown-external-provider",
-        prohibitedRiskSignals: ["unknown"],
-      },
+      answers: [
+        {
+          questionId: "purpose",
+          answerState: "ANSWERED",
+          value: "Route support requests to the right operations team.",
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          questionId: "sector",
+          answerState: "ANSWERED",
+          value: "customer-support",
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          questionId: "dataTypes",
+          answerState: "EXPLICIT_UNKNOWN",
+          value: null,
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          questionId: "prohibitedRiskSignals",
+          answerState: "EXPLICIT_UNKNOWN",
+          value: null,
+          updatedAt: new Date().toISOString(),
+        },
+      ],
     },
   });
 }

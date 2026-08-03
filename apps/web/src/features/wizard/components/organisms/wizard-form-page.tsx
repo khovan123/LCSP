@@ -42,11 +42,13 @@ import {
   useSaveWizardDraftMutation,
   useSubmitWizardMutation,
   useWizardAssessmentQuery,
+  useReadinessStatusQuery,
 } from "@/lib/api/assessment-queries";
 
 export function WizardFormPage({ assessmentId }: WizardFormPageProps) {
   const router = useRouter();
   const assessmentQuery = useWizardAssessmentQuery(assessmentId);
+  const readinessQuery = useReadinessStatusQuery(assessmentId);
   const saveDraftMutation = useSaveWizardDraftMutation(assessmentId);
   const submitWizardMutation = useSubmitWizardMutation(assessmentId);
   const [initialAnswers] = useState<WizardFormValues>(() =>
@@ -106,12 +108,24 @@ export function WizardFormPage({ assessmentId }: WizardFormPageProps) {
     assessmentQuery.data?.kind === "loaded"
       ? assessmentQuery.data.assessment
       : null;
+  const readinessViewModel =
+    readinessQuery.data?.kind === "loaded"
+      ? readinessQuery.data.data
+      : null;
+  const isRepoConnected = readinessViewModel
+    ? !readinessViewModel.missingEvidence.some(
+        (e) => e.type === "repository_connection",
+      )
+    : true;
+
   const queryErrorKey =
     assessmentQuery.data?.kind === "error"
       ? assessmentQuery.data.detailKey
       : null;
   const effectiveIsReadOnly =
-    isReadOnly || assessment?.wizardStatus === WIZARD_STATUS_CODES.submitted;
+    isReadOnly ||
+    (assessment?.wizardStatus === WIZARD_STATUS_CODES.submitted &&
+      isRepoConnected);
   const effectiveStatusKey =
     statusKey ??
     (assessment && !effectiveIsReadOnly ? "pages.wizard.draftSaved" : null);
@@ -266,7 +280,7 @@ export function WizardFormPage({ assessmentId }: WizardFormPageProps) {
     router.replace(`/assessments/${assessmentId}/readiness`);
   }
 
-  if (assessmentQuery.isLoading) {
+  if (assessmentQuery.isLoading || readinessQuery.isLoading) {
     return (
       <div className="mx-auto flex min-h-72 w-full max-w-6xl items-center justify-center px-4 py-10 lg:px-6">
         <Card className="w-full max-w-lg">

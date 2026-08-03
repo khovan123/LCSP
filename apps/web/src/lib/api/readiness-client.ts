@@ -11,6 +11,12 @@ export type ReadinessStatusViewModel = {
     label: string;
     description: string;
   }>;
+  unresolvedUnknowns: Array<{
+    questionId: string;
+    label: string;
+    answerState: string;
+  }>;
+  readinessMode: string | null;
   completedSteps: string[];
   nextAction: string;
   updatedAt: string;
@@ -28,6 +34,8 @@ type ReadinessStatusOutcome =
 type ReadinessPayload = {
   classification_locked?: unknown;
   missing_evidence?: unknown;
+  unresolved_unknown_items?: unknown;
+  readiness_mode?: unknown;
   completed_steps?: unknown;
   next_action?: unknown;
   updated_at?: unknown;
@@ -49,6 +57,8 @@ export async function getReadinessStatus(
       data: {
         classificationLocked: payload.classification_locked,
         missingEvidence: payload.missing_evidence,
+        unresolvedUnknowns: payload.unresolved_unknown_items,
+        readinessMode: payload.readiness_mode,
         completedSteps: payload.completed_steps,
         nextAction: payload.next_action,
         updatedAt: payload.updated_at,
@@ -83,6 +93,12 @@ function isReadinessPayload(
     label: string;
     description: string;
   }>;
+  unresolved_unknown_items: Array<{
+    questionId: string;
+    label: string;
+    answerState: string;
+  }>;
+  readiness_mode: string | null;
   completed_steps: string[];
   next_action: string;
   updated_at: string;
@@ -103,9 +119,30 @@ function isReadinessPayload(
         typeof (item as { label?: unknown }).label === "string" &&
         typeof (item as { description?: unknown }).description === "string",
     ) &&
+    Array.isArray(candidate.unresolved_unknown_items) &&
+    candidate.unresolved_unknown_items.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as { questionId?: unknown }).questionId === "string" &&
+        typeof (item as { label?: unknown }).label === "string" &&
+        typeof (item as { answerState?: unknown }).answerState === "string",
+    ) &&
+    (typeof candidate.readiness_mode === "string" || candidate.readiness_mode === null) &&
     Array.isArray(candidate.completed_steps) &&
     candidate.completed_steps.every((item) => typeof item === "string") &&
     typeof candidate.next_action === "string" &&
     typeof candidate.updated_at === "string"
   );
 }
+
+export async function mockProvideEvidence(assessmentId: string): Promise<boolean> {
+  const { ok } = await apiRequest(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/mock-evidence`,
+    {
+      method: "POST",
+    },
+  );
+  return ok;
+}
+

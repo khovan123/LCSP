@@ -15,6 +15,7 @@ import {
   READINESS_EXPORT_ERROR_CODES,
   READINESS_EXPORT_STATUSES,
   WIZARD_EVENT_TYPES,
+  type WizardAnswer,
 } from "@lcsp/contracts/wizard";
 import { Prisma } from "@prisma/client";
 
@@ -132,6 +133,9 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       hasRepositoryConnection: !!repositoryConnection,
       hasAcceptedTechnicalEvidence: false,
       wizardStatus,
+      wizardAnswers: Array.isArray(wizardProfile.answers)
+        ? (wizardProfile.answers as WizardAnswer[])
+        : [],
     });
     const content = this.buildContent(
       command,
@@ -139,7 +143,7 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       version,
       generatedAt,
       readiness.missing_evidence,
-      this.extractUnknowns(wizardProfile.answers),
+      readiness.unresolved_unknown_items.map((item) => item.label),
       readiness.next_action,
     );
     const guardrailResult = this.guardrail.check(content);
@@ -256,25 +260,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
     };
   }
 
-  private extractUnknowns(value: unknown, path = "answers"): string[] {
-    if (typeof value === "string") {
-      return /unknown|chưa rõ/i.test(value) ? [`${path}: ${value}`] : [];
-    }
-
-    if (Array.isArray(value)) {
-      return value.flatMap((item, index) =>
-        this.extractUnknowns(item, `${path}[${index}]`),
-      );
-    }
-
-    if (value !== null && typeof value === "object") {
-      return Object.entries(value as Record<string, unknown>).flatMap(
-        ([key, nested]) => this.extractUnknowns(nested, `${path}.${key}`),
-      );
-    }
-
-    return [];
-  }
 
   private async assertManagerExportAction(
     command: GenerateReadinessExportCommand,

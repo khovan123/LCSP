@@ -12,6 +12,10 @@ export const ASSESSMENT_NEXT_ACTION_KEYS = {
   wizardSubmitted: "pages.workspace.nextActions.wizardSubmitted",
 } as const;
 
+export const READINESS_MODES = {
+  selfDeclared: "SELF_DECLARED_READINESS",
+} as const;
+
 export type AssessmentLockReason =
   (typeof ASSESSMENT_LOCK_REASONS)[keyof typeof ASSESSMENT_LOCK_REASONS];
 
@@ -20,3 +24,6 @@ export type AssessmentMissingEvidenceCode =
 
 export type AssessmentNextActionKey =
   (typeof ASSESSMENT_NEXT_ACTION_KEYS)[keyof typeof ASSESSMENT_NEXT_ACTION_KEYS];
+
+export type ReadinessMode =
+  (typeof READINESS_MODES)[keyof typeof READINESS_MODES];
