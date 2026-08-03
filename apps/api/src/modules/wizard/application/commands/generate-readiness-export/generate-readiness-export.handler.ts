@@ -260,7 +260,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
     };
   }
 
-
   private async assertManagerExportAction(
     command: GenerateReadinessExportCommand,
   ): Promise<void> {

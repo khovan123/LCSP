@@ -7,9 +7,10 @@ import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { toPrismaEvidenceAcceptanceStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 
 @CommandHandler(MockEvidenceCommand)
-export class MockEvidenceHandler
-  implements ICommandHandler<MockEvidenceCommand, void>
-{
+export class MockEvidenceHandler implements ICommandHandler<
+  MockEvidenceCommand,
+  void
+> {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(command: MockEvidenceCommand): Promise<void> {

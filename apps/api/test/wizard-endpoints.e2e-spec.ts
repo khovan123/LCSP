@@ -322,7 +322,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
 
       // First, clean up the repo connection
       await prisma.repositoryConnection.deleteMany();
-      
+
       const res = await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${managerToken}`)

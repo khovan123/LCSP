@@ -57,7 +57,7 @@ export class ReadinessEvaluatorService {
         ) {
           unresolvedUnknowns.push({
             questionId: answer.questionId,
-            label: CRITICAL_FIELDS[answer.questionId]!,
+            label: CRITICAL_FIELDS[answer.questionId],
             answerState: "EXPLICIT_UNKNOWN",
           });
         }
