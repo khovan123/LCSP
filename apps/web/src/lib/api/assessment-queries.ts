@@ -15,7 +15,7 @@ import {
   requestGapAnalysis,
 } from "./document-client";
 import { getTechnicalEvidence } from "./evidence-client";
-import { getReadinessStatus } from "./readiness-client";
+import { getReadinessStatus, mockProvideEvidence } from "./readiness-client";
 import {
   getWizardAssessment,
   saveWizardDraft,
@@ -140,6 +140,19 @@ export function useRequestGapAnalysisMutation(assessmentId: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: apiQueryKeys.assessment.documents(assessmentId),
+      });
+    },
+  });
+}
+
+export function useMockProvideEvidenceMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => mockProvideEvidence(assessmentId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: apiQueryKeys.assessment.readiness(assessmentId),
       });
     },
   });

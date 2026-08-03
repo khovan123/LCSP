@@ -10,14 +10,19 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatusCard } from "@/components/organisms/status-card";
 import { appLocale } from "@/lib/locale";
-import { useReadinessStatusQuery } from "@/lib/api/assessment-queries";
+import {
+  useReadinessStatusQuery,
+  useMockProvideEvidenceMutation,
+} from "@/lib/api/assessment-queries";
 import type { ReadinessStatusPageProps } from "../../types/component-props.types";
+import { UnresolvedUnknownPanel } from "../molecules/unresolved-unknown-panel";
 
 export function ReadinessStatusPage({
   assessmentId,
 }: ReadinessStatusPageProps) {
   const router = useRouter();
   const readinessQuery = useReadinessStatusQuery(assessmentId);
+  const mockEvidenceMutation = useMockProvideEvidenceMutation(assessmentId);
 
   useEffect(() => {
     if (readinessQuery.data?.kind === "redirect") {
@@ -144,6 +149,10 @@ export function ReadinessStatusPage({
           </section>
         </div>
 
+        {viewModel.unresolvedUnknowns.length > 0 && (
+          <UnresolvedUnknownPanel items={viewModel.unresolvedUnknowns} />
+        )}
+
         <section className="rounded-lg border border-dashed p-4">
           <h2 className="text-sm font-medium">
             {t("pages.readiness.nextActionTitle")}
@@ -157,11 +166,44 @@ export function ReadinessStatusPage({
           <Button render={<Link href="/workspace" />} variant="outline">
             {t("pages.readiness.actions.backToWorkspace")}
           </Button>
-          <Button
-            render={<Link href={`/assessments/${assessmentId}/classification`} />}
-          >
-            {t("pages.readiness.actions.openClassification")}
-          </Button>
+
+          {viewModel.missingEvidence.some(
+            (e) => e.type === "repository_connection",
+          ) && (
+            <Button
+              render={<Link href={`/assessments/${assessmentId}/wizard`} />}
+              variant="outline"
+            >
+              {t("pages.readiness.actions.editWizard")}
+            </Button>
+          )}
+
+          {viewModel.missingEvidence.some(
+            (e) =>
+              e.type === "repository_connection" ||
+              e.type === "technical_evidence",
+          ) && (
+            <Button
+              variant="outline"
+              onClick={() => mockEvidenceMutation.mutate()}
+              disabled={mockEvidenceMutation.isPending}
+            >
+              {mockEvidenceMutation.isPending ? "Mocking..." : "Mock Connect Repository"}
+            </Button>
+          )}
+
+          {viewModel.classificationLocked ? (
+            <div className="flex items-center rounded-md border border-dashed px-4 py-2 text-sm text-muted-foreground">
+              {t("pages.readiness.classificationLockedReason")}
+            </div>
+          ) : (
+            <Button
+              render={<Link href={`/assessments/${assessmentId}/classification`} />}
+            >
+              {t("pages.readiness.actions.openClassification")}
+            </Button>
+          )}
+
           <Button
             render={<Link href={`/assessments/${assessmentId}/documents`} />}
             variant="outline"

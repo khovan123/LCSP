@@ -3,18 +3,24 @@ import {
   ASSESSMENT_LOCK_REASONS,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import type { MissingEvidenceItem } from "../../contracts/wizard/readiness.contract.js";
+import type {
+  MissingEvidenceItem,
+  UnresolvedUnknownItem,
+} from "../../contracts/wizard/readiness.contract.js";
+import { ANSWER_STATES, type WizardAnswer } from "@lcsp/contracts/wizard";
 
 export interface ReadinessEvaluationInput {
   hasRepositoryConnection: boolean;
   hasAcceptedTechnicalEvidence: boolean;
   wizardStatus: string | null;
+  wizardAnswers?: WizardAnswer[];
 }
 
 export interface ReadinessEvaluationResult {
   classification_locked: boolean;
   lock_reason: string | null;
   missing_evidence: MissingEvidenceItem[];
+  unresolved_unknown_items: UnresolvedUnknownItem[];
   completed_steps: string[];
   next_action: string;
 }
@@ -28,7 +34,35 @@ export class ReadinessEvaluatorService {
       : null;
 
     const missingEvidence: MissingEvidenceItem[] = [];
+    const unresolvedUnknowns: UnresolvedUnknownItem[] = [];
     const completedSteps: string[] = [];
+
+    // Extract EXPLICIT_UNKNOWN fields
+    if (input.wizardAnswers) {
+      const CRITICAL_FIELDS: Record<string, string> = {
+        affectedSubjects: "affectedSubjects",
+        dataTypes: "dataTypes",
+        specialCategoryData: "specialCategoryData",
+        biometricData: "biometricData",
+        humanReview: "humanReview",
+        externalLlmUsage: "externalLlmUsage",
+        highImpactIndicators: "highImpactIndicators",
+        prohibitedRiskSignals: "prohibitedRiskSignals",
+      };
+
+      for (const answer of input.wizardAnswers) {
+        if (
+          answer.answerState === ANSWER_STATES.explicitUnknown &&
+          answer.questionId in CRITICAL_FIELDS
+        ) {
+          unresolvedUnknowns.push({
+            questionId: answer.questionId,
+            label: CRITICAL_FIELDS[answer.questionId],
+            answerState: "EXPLICIT_UNKNOWN",
+          });
+        }
+      }
+    }
 
     // 1. Wizard Status
     if (input.wizardStatus === WIZARD_STATUS_CODES.submitted) {
@@ -76,6 +110,7 @@ export class ReadinessEvaluatorService {
       classification_locked: classificationLocked,
       lock_reason: lockReason,
       missing_evidence: missingEvidence,
+      unresolved_unknown_items: unresolvedUnknowns,
       completed_steps: completedSteps,
       next_action: nextAction,
     };

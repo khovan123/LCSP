@@ -267,9 +267,25 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
           organizationId: orgId,
           ownerId: "user-1",
           status: WIZARD_STATUS_CODES.submitted,
-          answers: {},
+          answers: [],
           version: 1,
           submittedAt: new Date(),
+        },
+      });
+
+      await prisma.repositoryConnection.create({
+        data: {
+          id: "repo-conn-1",
+          assessmentId,
+          organizationId: orgId,
+          userId: "user-1",
+          installationId: "123",
+          repositoryId: "gh-1",
+          repositoryName: "repo",
+          repositoryFullName: "acme/repo",
+          defaultBranch: "main",
+          permissions: {},
+          status: REPOSITORY_CONNECTION_STATUSES.active,
         },
       });
 
@@ -288,6 +304,40 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         });
       assert.equal(res.status, 409);
       assert.equal(problemCode(res), WIZARD_ERROR_CODES.alreadySubmitted);
+    });
+
+    it("T04b: Attempt to save when already submitted BUT no repo connected -> 200", async () => {
+      await prisma.wizardProfile.create({
+        data: {
+          id: "wp-4",
+          assessmentId,
+          organizationId: orgId,
+          ownerId: "user-1",
+          status: WIZARD_STATUS_CODES.submitted,
+          answers: [],
+          version: 1,
+          submittedAt: new Date(),
+        },
+      });
+
+      // First, clean up the repo connection
+      await prisma.repositoryConnection.deleteMany();
+
+      const res = await httpRequest(app)
+        .put(`/assessments/${assessmentId}/wizard/draft`)
+        .set("Authorization", `Bearer ${managerToken}`)
+        .send({
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Draft",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
+      assert.equal(res.status, 200);
+      assert.equal(successBody<any>(res).status, WIZARD_STATUS_CODES.submitted);
     });
 
     it("T05: Invalid/missing assessment -> 404", async () => {
@@ -492,6 +542,22 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .set("Authorization", `Bearer ${managerToken}`)
         .send({ answers: validAnswers });
 
+      await prisma.repositoryConnection.create({
+        data: {
+          id: "repo-conn-2",
+          assessmentId,
+          organizationId: orgId,
+          userId: "user-1",
+          installationId: "123",
+          repositoryId: "gh-1",
+          repositoryName: "repo",
+          repositoryFullName: "acme/repo",
+          defaultBranch: "main",
+          permissions: {},
+          status: REPOSITORY_CONNECTION_STATUSES.active,
+        },
+      });
+
       const res = await httpRequest(app)
         .post(`/assessments/${assessmentId}/wizard/submit`)
         .set("Authorization", `Bearer ${managerToken}`)
@@ -499,6 +565,37 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
 
       assert.equal(res.status, 409);
       assert.equal(problemCode(res), WIZARD_ERROR_CODES.alreadySubmitted);
+    });
+
+    it("T04b: Attempt to submit when already submitted BUT no repo connected -> 200", async () => {
+      await httpRequest(app)
+        .post(`/assessments/${assessmentId}/wizard/submit`)
+        .set("Authorization", `Bearer ${managerToken}`)
+        .send({ answers: validAnswers });
+
+      await prisma.repositoryConnection.deleteMany();
+
+      const res = await httpRequest(app)
+        .post(`/assessments/${assessmentId}/wizard/submit`)
+        .set("Authorization", `Bearer ${managerToken}`)
+        .send({
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "Updated Submitted",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+            {
+              questionId: "decisionImportance",
+              value: "HIGH",
+              answerState: "ANSWERED",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+        });
+      assert.equal(res.status, 200);
+      assert.equal(successBody<any>(res).status, WIZARD_STATUS_CODES.submitted);
     });
 
     it("T05: Assessment not found -> 404", async () => {
@@ -551,6 +648,22 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         .post(`/assessments/${assessmentId}/wizard/submit`)
         .set("Authorization", `Bearer ${managerToken}`)
         .send({ answers: validAnswers });
+
+      await prisma.repositoryConnection.create({
+        data: {
+          id: "repo-conn-3",
+          assessmentId,
+          organizationId: orgId,
+          userId: "user-1",
+          installationId: "123",
+          repositoryId: "gh-1",
+          repositoryName: "repo",
+          repositoryFullName: "acme/repo",
+          defaultBranch: "main",
+          permissions: {},
+          status: REPOSITORY_CONNECTION_STATUSES.active,
+        },
+      });
 
       const res = await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
@@ -727,6 +840,86 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
 
       assert.equal(res.status, 404);
       assert.equal(problemCode(res), ASSESSMENT_ERROR_CODES.notFound);
+    });
+    it("T08: GET readiness with EXPLICIT_UNKNOWN answers returns unresolved_unknown_items", async () => {
+      await prisma.wizardProfile.create({
+        data: {
+          id: "wp-unknowns",
+          assessmentId,
+          organizationId: orgId,
+          ownerId: "user-1",
+          status: WIZARD_STATUS_CODES.submitted,
+          answers: [
+            {
+              questionId: "dataTypes",
+              value: null,
+              answerState: "EXPLICIT_UNKNOWN",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+          version: 1,
+          submittedAt: new Date(),
+        },
+      });
+
+      const res = await httpRequest(app)
+        .get(`/assessments/${assessmentId}/readiness`)
+        .set("Authorization", `Bearer ${managerToken}`);
+
+      assert.equal(res.status, 200);
+      const body = successBody<any>(res);
+      assert.equal(body.classification_locked, true);
+      assert.equal(body.unresolved_unknown_items.length, 1);
+      assert.equal(body.unresolved_unknown_items[0].questionId, "dataTypes");
+      assert.equal(body.unresolved_unknown_items[0].label, "dataTypes");
+    });
+
+    it("T09: After technical evidence, unresolved_unknown_items are still returned and classification is unlocked", async () => {
+      await prisma.wizardProfile.create({
+        data: {
+          id: "wp-unknowns-unlocked",
+          assessmentId,
+          organizationId: orgId,
+          ownerId: "user-1",
+          status: WIZARD_STATUS_CODES.submitted,
+          answers: [
+            {
+              questionId: "humanReview",
+              value: null,
+              answerState: "EXPLICIT_UNKNOWN",
+              updatedAt: "2026-07-31T00:00:00.000Z",
+            },
+          ],
+          version: 1,
+          submittedAt: new Date(),
+        },
+      });
+
+      await prisma.technicalEvidenceReport.create({
+        data: {
+          id: "ter-unlocked",
+          scanJobId: "job-2",
+          organizationId: orgId,
+          snapshotId: "snap-2",
+          toolsVersion: {},
+          configHash: {},
+          evidencePayload: {},
+          privacyFlags: {},
+          schemaVersion: "1.0",
+          assessmentId,
+          status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+        },
+      });
+
+      const res = await httpRequest(app)
+        .get(`/assessments/${assessmentId}/readiness`)
+        .set("Authorization", `Bearer ${managerToken}`);
+
+      assert.equal(res.status, 200);
+      const body = successBody<any>(res);
+      assert.equal(body.classification_locked, false);
+      assert.equal(body.unresolved_unknown_items.length, 1);
+      assert.equal(body.unresolved_unknown_items[0].questionId, "humanReview");
     });
   });
 });

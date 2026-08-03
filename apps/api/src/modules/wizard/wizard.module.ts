@@ -9,6 +9,7 @@ import { SaveWizardDraftHandler } from "./application/commands/save-wizard-draft
 import { SubmitWizardHandler } from "./application/commands/submit-wizard/submit-wizard.handler.js";
 import { GenerateReadinessExportHandler } from "./application/commands/generate-readiness-export/generate-readiness-export.handler.js";
 import { GetReadinessHandler } from "./application/queries/get-readiness/get-readiness.handler.js";
+import { MockEvidenceHandler } from "./application/commands/mock-evidence/mock-evidence.handler.js";
 import { WizardValidatorService } from "./application/services/wizard/wizard-validator.service.js";
 import { ReadinessEvaluatorService } from "./application/services/wizard/readiness-evaluator.service.js";
 import { ReadinessExportGuardrailService } from "./application/services/wizard/readiness-export-guardrail.service.js";
@@ -22,6 +23,7 @@ import { WizardController } from "./presentation/http/wizard.controller.js";
     SubmitWizardHandler,
     GenerateReadinessExportHandler,
     GetReadinessHandler,
+    MockEvidenceHandler,
     WizardValidatorService,
     ReadinessEvaluatorService,
     ReadinessExportGuardrailService,

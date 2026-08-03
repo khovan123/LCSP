@@ -4,7 +4,7 @@ import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
-import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
+import { WIZARD_EVENT_TYPES, type WizardAnswer } from "@lcsp/contracts/wizard";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { GetReadinessQuery } from "./get-readiness.query.js";
 import type { ReadinessResponse } from "../../contracts/wizard/readiness.contract.js";
@@ -73,14 +73,19 @@ export class GetReadinessHandler implements IQueryHandler<
       hasRepositoryConnection: !!repoConnection,
       hasAcceptedTechnicalEvidence: !!evidenceReport,
       wizardStatus,
+      wizardAnswers: Array.isArray(wizardProfile?.answers)
+        ? (wizardProfile?.answers as WizardAnswer[])
+        : [],
     });
 
     return {
       assessment_id: assessmentId,
       wizard_status: wizardStatus,
+      readiness_mode: null,
       classification_locked: evaluation.classification_locked,
       lock_reason: evaluation.lock_reason,
       missing_evidence: evaluation.missing_evidence,
+      unresolved_unknown_items: evaluation.unresolved_unknown_items,
       completed_steps: evaluation.completed_steps,
       next_action: evaluation.next_action,
       updated_at: new Date().toISOString(),

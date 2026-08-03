@@ -794,6 +794,20 @@ export type PagesMessages = {
     updatedAtLabel: string;
     noMissingEvidence: string;
     noCompletedSteps: string;
+    unresolvedTitle: string;
+    unresolvedDescription: string;
+    noUnresolvedItems: string;
+    unresolvedItemLabels: {
+      affectedSubjects: string;
+      dataTypes: string;
+      specialCategoryData: string;
+      biometricData: string;
+      humanReview: string;
+      externalLlmUsage: string;
+      highImpactIndicators: string;
+      prohibitedRiskSignals: string;
+    };
+    classificationLockedReason: string;
     completedSteps: {
       wizardProfile: string;
       repositoryConnected: string;
@@ -807,6 +821,8 @@ export type PagesMessages = {
       backToWorkspace: string;
       openClassification: string;
       openDocuments: string;
+      connectRepository: string;
+      editWizard: string;
     };
   };
   classification: {

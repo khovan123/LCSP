@@ -808,6 +808,22 @@ export const enPages = {
     updatedAtLabel: "Updated",
     noMissingEvidence: "There are no missing readiness items at the moment.",
     noCompletedSteps: "No readiness milestones have been confirmed yet.",
+    unresolvedTitle: "Unresolved Business Context",
+    unresolvedDescription:
+      "These items need further clarification before classification can proceed.",
+    noUnresolvedItems: "No unresolved items.",
+    unresolvedItemLabels: {
+      affectedSubjects: "Affected subjects not yet confirmed",
+      dataTypes: "Data types not yet confirmed",
+      specialCategoryData: "Special category data status unclear",
+      biometricData: "Biometric data usage unclear",
+      humanReview: "Human review oversight unclear",
+      externalLlmUsage: "External LLM usage unclear",
+      highImpactIndicators: "High-impact context not yet confirmed",
+      prohibitedRiskSignals: "Prohibited risk signals not yet assessed",
+    },
+    classificationLockedReason:
+      "Repository evidence is required before classification can be performed.",
     completedSteps: {
       wizardProfile: "Wizard profile submitted",
       repositoryConnected: "Repository connected",
@@ -822,6 +838,8 @@ export const enPages = {
       backToWorkspace: "Back to workspace",
       openClassification: "Open classification status",
       openDocuments: "Open documents",
+      connectRepository: "Connect Repository",
+      editWizard: "Update Wizard",
     },
   },
   workspaceSelector: {

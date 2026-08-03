@@ -806,6 +806,22 @@ export const viPages = {
     updatedAtLabel: "Cập nhật",
     noMissingEvidence: "Hiện không còn mục readiness nào bị thiếu.",
     noCompletedSteps: "Chưa có mốc readiness nào được xác nhận.",
+    unresolvedTitle: "Bối cảnh nghiệp vụ chưa rõ",
+    unresolvedDescription:
+      "Những mục này cần được làm rõ thêm trước khi có thể phân loại.",
+    noUnresolvedItems: "Không có mục nào chưa rõ.",
+    unresolvedItemLabels: {
+      affectedSubjects: "Chưa xác nhận đối tượng bị ảnh hưởng",
+      dataTypes: "Chưa xác nhận loại dữ liệu",
+      specialCategoryData: "Chưa rõ tình trạng dữ liệu đặc biệt",
+      biometricData: "Chưa rõ việc sử dụng dữ liệu sinh trắc học",
+      humanReview: "Chưa rõ quy trình kiểm tra của con người",
+      externalLlmUsage: "Chưa rõ việc sử dụng AI bên ngoài",
+      highImpactIndicators: "Chưa xác nhận bối cảnh ảnh hưởng cao",
+      prohibitedRiskSignals: "Chưa đánh giá tín hiệu rủi ro bị cấm",
+    },
+    classificationLockedReason:
+      "Cần có bằng chứng repository trước khi có thể thực hiện phân loại.",
     completedSteps: {
       wizardProfile: "Đã gửi Wizard profile",
       repositoryConnected: "Đã kết nối repository",
@@ -821,6 +837,8 @@ export const viPages = {
       backToWorkspace: "Quay lại workspace",
       openClassification: "Mở trạng thái phân loại",
       openDocuments: "Mở tài liệu",
+      connectRepository: "Kết nối Repository",
+      editWizard: "Cập nhật Wizard",
     },
   },
   workspaceSelector: {

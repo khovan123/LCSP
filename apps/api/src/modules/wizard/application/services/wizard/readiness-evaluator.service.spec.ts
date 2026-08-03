@@ -103,4 +103,75 @@ describe("ReadinessEvaluatorService", () => {
       "Connect a code repository to begin analysis.",
     );
   });
+
+  it("T07: EXPLICIT_UNKNOWN in critical fields adds to unresolved_unknown_items", () => {
+    const result = service.evaluate({
+      hasRepositoryConnection: true,
+      hasAcceptedTechnicalEvidence: true,
+      wizardStatus: WIZARD_STATUS_CODES.submitted,
+      wizardAnswers: [
+        {
+          questionId: "dataTypes",
+          value: null,
+          answerState: "EXPLICIT_UNKNOWN",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        },
+        {
+          questionId: "externalLlmUsage",
+          value: null,
+          answerState: "EXPLICIT_UNKNOWN",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(result.unresolved_unknown_items).toEqual([
+      {
+        questionId: "dataTypes",
+        label: "dataTypes",
+        answerState: "EXPLICIT_UNKNOWN",
+      },
+      {
+        questionId: "externalLlmUsage",
+        label: "externalLlmUsage",
+        answerState: "EXPLICIT_UNKNOWN",
+      },
+    ]);
+  });
+
+  it("T08: EXPLICIT_UNKNOWN in non-critical fields is ignored", () => {
+    const result = service.evaluate({
+      hasRepositoryConnection: true,
+      hasAcceptedTechnicalEvidence: true,
+      wizardStatus: WIZARD_STATUS_CODES.submitted,
+      wizardAnswers: [
+        {
+          questionId: "businessProcess",
+          value: null,
+          answerState: "EXPLICIT_UNKNOWN",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(result.unresolved_unknown_items).toHaveLength(0);
+  });
+
+  it("T09: ANSWERED state in critical fields is ignored", () => {
+    const result = service.evaluate({
+      hasRepositoryConnection: true,
+      hasAcceptedTechnicalEvidence: true,
+      wizardStatus: WIZARD_STATUS_CODES.submitted,
+      wizardAnswers: [
+        {
+          questionId: "dataTypes",
+          value: ["PII"],
+          answerState: "ANSWERED",
+          updatedAt: "2026-07-31T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(result.unresolved_unknown_items).toHaveLength(0);
+  });
 });

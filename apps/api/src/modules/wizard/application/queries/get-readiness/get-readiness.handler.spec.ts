@@ -127,6 +127,7 @@ describe("GetReadinessHandler", () => {
       hasRepositoryConnection: true,
       hasAcceptedTechnicalEvidence: false,
       wizardStatus: WIZARD_STATUS_CODES.submitted,
+      wizardAnswers: [],
     });
 
     expect(result.assessment_id).toBe("assessment-123");
