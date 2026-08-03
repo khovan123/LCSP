@@ -203,7 +203,9 @@ describe("SaveWizardDraftHandler", () => {
           status: WIZARD_STATUS_CODES.submitted,
         }),
       );
-      prismaService.repositoryConnection.findFirst.mockResolvedValue({ id: "repo-1" } as any);
+      prismaService.repositoryConnection.findFirst.mockResolvedValue({
+        id: "repo-1",
+      } as any);
 
       await expect(handler.execute(command)).rejects.toThrow(
         WizardAlreadySubmittedException,
