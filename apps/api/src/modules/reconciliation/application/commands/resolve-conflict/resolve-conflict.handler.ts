@@ -50,7 +50,7 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
   ) {}
 
   async execute(command: ResolveConflictCommand): Promise<ResolveConflictDto> {
-    this.assertManagerOnly(command);
+    await this.assertManagerOnly(command);
     const resolution = parseResolution(
       command.resolution,
       command.correlationId,
@@ -162,7 +162,7 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
     };
   }
 
-  private assertManagerOnly(command: ResolveConflictCommand): void {
+  private async assertManagerOnly(command: ResolveConflictCommand): Promise<void> {
     const allowed =
       command.subjectRole === SUBJECT_ROLES.manager &&
       command.authorization.selectedAction === PBAC_ACTIONS.conflictResolve &&
@@ -170,6 +170,26 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
       command.authorization.policyVersion !== null;
 
     if (allowed) return;
+
+    await this.auditWriter.write({
+      eventType: SCAN_EVENT_TYPES.conflictResolvedAudit,
+      actorId: command.resolvedById,
+      organizationId: command.organizationId,
+      assessmentId: command.assessmentId,
+      resourceType: AUDIT_RESOURCE_TYPES.conflictRecord,
+      resourceId: command.conflictId,
+      correlationId: command.correlationId,
+      decision: AUDIT_DECISIONS.deny,
+      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      policyId: command.authorization.policyId,
+      policyVersion: command.authorization.policyVersion,
+      payload: {
+        assessmentId: command.assessmentId,
+        conflictId: command.conflictId,
+        action: PBAC_ACTIONS.conflictResolve,
+        result: AUDIT_DECISIONS.deny,
+      },
+    });
 
     throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
       status: HttpStatus.FORBIDDEN,
