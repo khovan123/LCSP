@@ -297,6 +297,8 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
     PrismaAuthorizationReasonCode.OAUTH_CALLBACK_INVALID,
   [AUTH_ERROR_CODES.oauthStateInvalid]:
     PrismaAuthorizationReasonCode.OAUTH_STATE_INVALID,
+  [PBAC_REASON_CODE.organizationMismatch]:
+    PrismaAuthorizationReasonCode.ORGANIZATION_MISMATCH,
   [PBAC_REASON_CODE.denied]: PrismaAuthorizationReasonCode.PBAC_DENIED,
   [PBAC_REASON_CODE.metadataMissing]:
     PrismaAuthorizationReasonCode.PBAC_METADATA_MISSING,
@@ -361,6 +363,8 @@ const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
     AUTH_ERROR_CODES.oauthCallbackInvalid,
   [PrismaAuthorizationReasonCode.OAUTH_STATE_INVALID]:
     AUTH_ERROR_CODES.oauthStateInvalid,
+  [PrismaAuthorizationReasonCode.ORGANIZATION_MISMATCH]:
+    PBAC_REASON_CODE.organizationMismatch,
   [PrismaAuthorizationReasonCode.PBAC_DENIED]: PBAC_REASON_CODE.denied,
   [PrismaAuthorizationReasonCode.PBAC_METADATA_MISSING]:
     PBAC_REASON_CODE.metadataMissing,

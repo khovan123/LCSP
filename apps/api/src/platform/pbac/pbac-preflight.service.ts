@@ -74,6 +74,7 @@ export class PbacPreflightService {
       }
 
       const evaluationContext: PbacEvaluationContext = {
+        organizationId: input.organizationId,
         action: input.action,
         subject: {
           role: membership.role() as SubjectRole,
@@ -156,6 +157,8 @@ export class PbacPreflightService {
   ): Promise<void> {
     try {
       await this.decisions.append({
+        actor_id: input.userId,
+        session_id: null,
         organization_id: input.organizationId,
         resource_type: DECISION_LOG_RESOURCE_TYPE,
         resource_id: input.action,

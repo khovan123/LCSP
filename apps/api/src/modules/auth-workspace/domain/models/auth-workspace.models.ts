@@ -18,6 +18,8 @@ export { OAuthIdentity } from "../entities/oauth-identity.entity.ts";
 export type { SubjectAttributesRecord as SubjectAttributes } from "../value-objects/subject-attributes.value-object.ts";
 
 export type AuthorizationDecision = {
+  actor_id?: string | null;
+  session_id?: string | null;
   organization_id: string | null;
   resource_type: AuditResourceType;
   resource_id: string;

@@ -121,6 +121,10 @@ describe("PbacPreflightService", () => {
     });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
+        actor_id: "user-1",
+        session_id: null,
+        organization_id: "org-1",
+        resource_id: PBAC_ACTIONS.scanTrigger,
         decision: PBAC_DECISION.allow,
         reason_code: PBAC_REASON_CODE.authorized,
         action: PBAC_ACTIONS.scanTrigger,
@@ -223,6 +227,30 @@ describe("PbacPreflightService", () => {
       reasonCode: PBAC_REASON_CODE.loadError,
       correlationId: "corr-1",
     });
+  });
+
+  it("denies when the membership points at a policy from another organization", async () => {
+    const { service, append } = makeService({
+      policy: makePolicy({ organizationId: "org-2" }),
+    });
+
+    const result = await service.evaluate(
+      makeInput({ organizationId: "org-1" }),
+    );
+
+    expect(result).toEqual({
+      decision: PBAC_DECISION.deny,
+      reasonCode: PBAC_REASON_CODE.organizationMismatch,
+      correlationId: "corr-1",
+    });
+    expect(append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor_id: "user-1",
+        organization_id: "org-1",
+        policy_id: "policy-1",
+        policy_version: "v1",
+      }),
+    );
   });
 
   it("does not throw when the decision-log write itself fails", async () => {

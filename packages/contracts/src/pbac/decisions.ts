@@ -12,6 +12,7 @@ export const PBAC_REASON_CODE = {
   membershipMissing: "MEMBERSHIP_MISSING",
   metadataMissing: "PBAC_METADATA_MISSING",
   mfaRequired: "MFA_REQUIRED",
+  organizationMismatch: "ORGANIZATION_MISMATCH",
   policyNotFound: "POLICY_NOT_FOUND",
   sessionInvalid: "SESSION_INVALID",
   stateGateFailed: "STATE_GATE_FAILED",

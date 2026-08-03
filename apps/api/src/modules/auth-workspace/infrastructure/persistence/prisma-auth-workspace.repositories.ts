@@ -440,6 +440,8 @@ export class PrismaAuthorizationDecisionRepository implements AuthorizationDecis
     await this.prisma.authDecisionLog.create({
       data: {
         id: crypto.randomUUID(),
+        actorId: decision.actor_id ?? null,
+        sessionId: decision.session_id ?? null,
         organizationId: decision.organization_id,
         resourceType: toPrismaAuditResourceType(decision.resource_type),
         resourceId: decision.resource_id,

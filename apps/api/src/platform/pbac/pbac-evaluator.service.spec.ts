@@ -24,6 +24,7 @@ function buildContext(
   overrides: Partial<PbacEvaluationContext> = {},
 ): PbacEvaluationContext {
   return {
+    organizationId: "org-1",
     action: "assessment.create",
     subject: { role: SUBJECT_ROLES.manager },
     policy: buildPolicy(),
@@ -114,5 +115,19 @@ describe("PbacEvaluatorService", () => {
 
     expect(result.decision).toBe(PBAC_DECISION.deny);
     expect(result.reasonCode).toBe(PBAC_REASON_CODE.actionNotGranted);
+  });
+
+  it("denies when the policy belongs to a different organization", () => {
+    const result = service.evaluate(
+      buildContext({
+        organizationId: "org-2",
+        policy: buildPolicy({ organizationId: "org-1" }),
+      }),
+    );
+
+    expect(result.decision).toBe(PBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(PBAC_REASON_CODE.organizationMismatch);
+    expect(result.policyId).toBe("policy-1");
+    expect(result.policyVersion).toBe("1");
   });
 });

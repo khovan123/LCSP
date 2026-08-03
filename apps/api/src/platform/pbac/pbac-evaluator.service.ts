@@ -43,6 +43,15 @@ export class PbacEvaluatorService {
       };
     }
 
+    if (ctx.organizationId !== policy.organizationId) {
+      return {
+        decision: PBAC_DECISION.deny,
+        reasonCode: PBAC_REASON_CODE.organizationMismatch,
+        policyId: policy.id,
+        policyVersion: policy.version,
+      };
+    }
+
     if (
       policy.stateGate === PBAC_STATE_GATES.membershipActive &&
       ctx.membershipStatus !== AUTH_MEMBERSHIP_STATUSES.active
