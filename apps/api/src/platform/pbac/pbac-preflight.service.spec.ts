@@ -234,7 +234,9 @@ describe("PbacPreflightService", () => {
       policy: makePolicy({ organizationId: "org-2" }),
     });
 
-    const result = await service.evaluate(makeInput({ organizationId: "org-1" }));
+    const result = await service.evaluate(
+      makeInput({ organizationId: "org-1" }),
+    );
 
     expect(result).toEqual({
       decision: PBAC_DECISION.deny,

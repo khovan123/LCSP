@@ -156,7 +156,8 @@ describe("PbacGuard", () => {
         actor_id: "user-1",
         session_id: "session-1",
         organization_id: "org-1",
-        resource_id: "POST /assessments/:assessmentId/conflicts/:conflictId/resolve",
+        resource_id:
+          "POST /assessments/:assessmentId/conflicts/:conflictId/resolve",
         decision: PBAC_DECISION.allow,
         action: PBAC_ACTIONS.inviteDeveloper,
       }),

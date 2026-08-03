@@ -43,9 +43,7 @@ export class PbacEvaluatorService {
       };
     }
 
-    if (
-      ctx.organizationId !== policy.organizationId
-    ) {
+    if (ctx.organizationId !== policy.organizationId) {
       return {
         decision: PBAC_DECISION.deny,
         reasonCode: PBAC_REASON_CODE.organizationMismatch,

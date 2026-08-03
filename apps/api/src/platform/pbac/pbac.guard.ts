@@ -406,9 +406,11 @@ function requestResourceId(
   const assessmentId = readStringAttribute(params.assessmentId);
   const conflictId = readStringAttribute(params.conflictId);
   const userId = readStringAttribute(params.userId);
-  const orgId = readStringAttribute(params.orgId) ?? readStringAttribute(params.id);
+  const orgId =
+    readStringAttribute(params.orgId) ?? readStringAttribute(params.id);
 
-  if (assessmentId && conflictId) return `assessment:${assessmentId}:conflict:${conflictId}`;
+  if (assessmentId && conflictId)
+    return `assessment:${assessmentId}:conflict:${conflictId}`;
   if (assessmentId) return `assessment:${assessmentId}`;
   if (userId) return `user:${userId}`;
   if (orgId) return `organization:${orgId}`;
