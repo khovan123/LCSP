@@ -162,7 +162,9 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
     };
   }
 
-  private async assertManagerOnly(command: ResolveConflictCommand): Promise<void> {
+  private async assertManagerOnly(
+    command: ResolveConflictCommand,
+  ): Promise<void> {
     const allowed =
       command.subjectRole === SUBJECT_ROLES.manager &&
       command.authorization.selectedAction === PBAC_ACTIONS.conflictResolve &&
