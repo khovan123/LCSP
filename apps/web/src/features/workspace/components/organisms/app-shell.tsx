@@ -2,7 +2,7 @@
 
 import { resolveMessage } from "@lcsp/i18n";
 import { usePathname } from "next/navigation";
-import type { CSSProperties } from "react";
+import { Suspense, type CSSProperties } from "react";
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { appLocale } from "@/lib/locale";
@@ -57,7 +57,9 @@ export function AppShell({ children }: AppShellProps) {
         } as CSSProperties
       }
     >
-      <AppSidebar sections={sections} />
+      <Suspense fallback={null}>
+        <AppSidebar sections={sections} />
+      </Suspense>
       <SidebarInset>
         <AppHeader />
         <div className="@container/main flex min-h-0 flex-1 flex-col">
