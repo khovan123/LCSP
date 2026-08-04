@@ -27,6 +27,8 @@ import { AppModule } from "../src/app.module.js";
 import { AUTH_WORKSPACE_RECOVERY_NOTIFIER } from "../src/modules/auth-workspace/application/ports/notification/recovery-notifier.js";
 import type {
   EnrollMfaSuccess,
+  GenerateMfaRecoveryCodesSuccess,
+  VerifyMfaRecoveryCodeSuccess,
   VerifyMfaOtpSuccess,
 } from "../src/modules/auth-workspace/application/contracts/auth-workspace/mfa.contract.js";
 import type { UpdateProfileSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/profile.contract.js";
@@ -194,6 +196,21 @@ describe("Auth workspace (e2e)", () => {
 
     const sessionToken = successBody<SignInSuccess>(signIn).session_token;
 
+    const beforeCheck = await httpRequest(app)
+      .post("/auth/sensitive-route/check")
+      .set("Authorization", `Bearer ${sessionToken}`)
+      .send({ method: "GET", path: "/api/github/app/start" })
+      .expect(200);
+    assert.equal(
+      (beforeCheck.body as { data?: { reauth_required?: unknown } }).data
+        ?.reauth_required,
+      true,
+    );
+    assert.equal(
+      (beforeCheck.body as { data?: { route_id?: unknown } }).data?.route_id,
+      "GITHUB_APP_START",
+    );
+
     const result = await httpRequest(app)
       .post("/auth/re-auth/password")
       .set("Authorization", `Bearer ${sessionToken}`)
@@ -205,6 +222,30 @@ describe("Auth workspace (e2e)", () => {
 
     const body = successBody<PasswordReauthSuccess>(result);
     assert.equal(body.verified, true);
+
+    const session = await prisma.authSession.findFirst({
+      where: {
+        userId: fixture.approvedUser.id,
+        organizationId: fixture.organizationId,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    assert.ok(session?.sensitiveActionVerifiedAt);
+
+    const afterCheck = await httpRequest(app)
+      .post("/auth/sensitive-route/check")
+      .set("Authorization", `Bearer ${sessionToken}`)
+      .send({ method: "GET", path: "/api/github/app/start?installation_id=1" })
+      .expect(200);
+    assert.equal(
+      (afterCheck.body as { data?: { reauth_required?: unknown } }).data
+        ?.reauth_required,
+      false,
+    );
+    assert.equal(
+      (afterCheck.body as { data?: { route_id?: unknown } }).data?.route_id,
+      "GITHUB_APP_START",
+    );
   });
 
   it("password re-auth rejects an invalid current password without leaking it", async () => {
@@ -543,6 +584,86 @@ describe("Auth workspace (e2e)", () => {
     const body = successBody<EnrollMfaSuccess>(result);
     assert.equal(body.ok, true);
     assert.match(body.totp_uri, /^otpauth:\/\/totp\//);
+    assert.equal(body.recovery_codes.length, 10);
+    assert.equal(new Set(body.recovery_codes).size, 10);
+  });
+
+  it("MFA recovery code verifies MFA once and rejects replay", async () => {
+    const signIn = await signInApprovedUser();
+    const enrollment = await httpRequest(app)
+      .post("/auth/mfa/enroll")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .send({ session_token: signIn.session_token })
+      .expect(201);
+    const recoveryCode =
+      successBody<EnrollMfaSuccess>(enrollment).recovery_codes[0];
+
+    const verify = await httpRequest(app)
+      .post("/auth/mfa/recovery-code/verify")
+      .send({ session_token: signIn.session_token, code: recoveryCode })
+      .expect(201);
+    assert.equal(successBody<VerifyMfaRecoveryCodeSuccess>(verify).ok, true);
+
+    const replay = await httpRequest(app)
+      .post("/auth/mfa/recovery-code/verify")
+      .send({ session_token: signIn.session_token, code: recoveryCode })
+      .expect(403);
+    assert.equal(problemCode(replay), AUTH_ERROR_CODES.mfaInvalid);
+
+    const usedCodes = await prisma.authMfaRecoveryCode.findMany({
+      where: { userId: fixture.approvedUser.id, usedAt: { not: null } },
+    });
+    assert.equal(usedCodes.length, 1);
+  });
+
+  it("generating a new MFA recovery code set invalidates the old set", async () => {
+    const signIn = await signInApprovedUser();
+    const enrollment = await httpRequest(app)
+      .post("/auth/mfa/enroll")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .send({ session_token: signIn.session_token })
+      .expect(201);
+    const enrollmentBody = successBody<EnrollMfaSuccess>(enrollment);
+    const oldRecoveryCode = enrollmentBody.recovery_codes[0];
+
+    const otp = totpForTime(
+      totpSecretFromUri(enrollmentBody.totp_uri),
+      Date.now(),
+    );
+    await httpRequest(app)
+      .post("/auth/mfa/verify-otp")
+      .send({ session_token: signIn.session_token, otp })
+      .expect(201);
+
+    const generated = await httpRequest(app)
+      .post("/auth/mfa/recovery-codes")
+      .set("Authorization", `Bearer ${signIn.session_token}`)
+      .send({ session_token: signIn.session_token })
+      .expect(201);
+    const newRecoveryCode =
+      successBody<GenerateMfaRecoveryCodesSuccess>(generated).recovery_codes[0];
+
+    const pendingMfaSignIn = await signInApprovedUser();
+    const oldAttempt = await httpRequest(app)
+      .post("/auth/mfa/recovery-code/verify")
+      .send({
+        session_token: pendingMfaSignIn.session_token,
+        code: oldRecoveryCode,
+      })
+      .expect(403);
+    assert.equal(problemCode(oldAttempt), AUTH_ERROR_CODES.mfaInvalid);
+
+    const newAttempt = await httpRequest(app)
+      .post("/auth/mfa/recovery-code/verify")
+      .send({
+        session_token: pendingMfaSignIn.session_token,
+        code: newRecoveryCode,
+      })
+      .expect(201);
+    assert.equal(
+      successBody<VerifyMfaRecoveryCodeSuccess>(newAttempt).ok,
+      true,
+    );
   });
 
   it("MFA enrollment labels the TOTP URI with the effective primary email address", async () => {
@@ -1158,4 +1279,11 @@ function expectFailure<T extends object>(
   }
 
   throw new Error("expected failure");
+}
+
+function totpSecretFromUri(totpUri: string): string {
+  const parsed = new URL(totpUri);
+  const secret = parsed.searchParams.get("secret");
+  assert.ok(secret, "TOTP URI must include a secret query parameter");
+  return secret;
 }

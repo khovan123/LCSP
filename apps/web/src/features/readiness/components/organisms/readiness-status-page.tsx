@@ -163,7 +163,11 @@ export function ReadinessStatusPage({
         </section>
 
         <div className="flex flex-wrap gap-3">
-          <Button render={<Link href="/workspace" />} variant="outline">
+          <Button
+            render={<Link href="/workspace" />}
+            variant="outline"
+            nativeButton={false}
+          >
             {t("pages.readiness.actions.backToWorkspace")}
           </Button>
 
@@ -173,6 +177,7 @@ export function ReadinessStatusPage({
             <Button
               render={<Link href={`/assessments/${assessmentId}/wizard`} />}
               variant="outline"
+              nativeButton={false}
             >
               {t("pages.readiness.actions.editWizard")}
             </Button>
@@ -199,6 +204,7 @@ export function ReadinessStatusPage({
           ) : (
             <Button
               render={<Link href={`/assessments/${assessmentId}/classification`} />}
+              nativeButton={false}
             >
               {t("pages.readiness.actions.openClassification")}
             </Button>
@@ -207,6 +213,7 @@ export function ReadinessStatusPage({
           <Button
             render={<Link href={`/assessments/${assessmentId}/documents`} />}
             variant="outline"
+            nativeButton={false}
           >
             {t("pages.readiness.actions.openDocuments")}
           </Button>

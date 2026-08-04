@@ -31,6 +31,8 @@ export const PROBLEM_KEYS = {
   authzEvaluatorFailureDetail: "auth.errors.authzEvaluatorFailure.detail",
   validationFailedTitle: "auth.errors.validationFailed.title",
   validationFailedDetail: "auth.errors.validationFailed.detail",
+  reauthRequiredTitle: "auth.errors.reauthRequired.title",
+  reauthRequiredDetail: "auth.errors.reauthRequired.detail",
   mfaRequiredTitle: "auth.errors.mfaRequired.title",
   mfaRequiredDetail: "auth.errors.mfaRequired.detail",
   mfaInvalidTitle: "auth.errors.mfaInvalid.title",

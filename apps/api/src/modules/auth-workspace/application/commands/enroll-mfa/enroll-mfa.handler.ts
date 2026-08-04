@@ -1,10 +1,14 @@
-import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   AUTH_ERROR_CODES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
   createProblemResult,
 } from "@lcsp/contracts/auth";
 
+import {
+  generateMfaRecoveryCodes,
+  hashMfaRecoveryCode,
+} from "../../../infrastructure/security/mfa-recovery-code.utils.ts";
 import {
   decryptMfaSecret,
   encryptMfaSecret,
@@ -71,17 +75,59 @@ export class EnrollMfaHandler {
       );
     }
 
+    const now = this.support.now();
     const plainSecret = generateTotpSecret();
     const encryptedSecret = encryptMfaSecret(plainSecret);
     const enrollment = new MfaEnrollment({
       userId: session.userId,
       encryptedSecret,
-      enrolledAt: this.support.now(),
+      enrolledAt: now,
       verifiedAt: null,
     });
     await this.repositories.mfaEnrollments.save(enrollment);
     await this.repositories.mfaOtpUsed.deleteByUserId(session.userId);
     await this.repositories.mfaRateLimits.resetByUserId(session.userId);
+
+    let recoveryCodes: string[] = [];
+    const hasActiveRecoveryCodes =
+      await this.repositories.mfaRecoveryCodes.hasActiveForUser(session.userId);
+    if (!hasActiveRecoveryCodes) {
+      recoveryCodes = generateMfaRecoveryCodes();
+      const batchId = this.repositories.mfaRecoveryCodes.nextBatchId();
+      await this.repositories.mfaRecoveryCodes.replaceForUser(
+        session.userId,
+        recoveryCodes.map((code) => ({
+          id: this.repositories.mfaRecoveryCodes.nextId(),
+          codeHash: hashMfaRecoveryCode(code),
+        })),
+        batchId,
+        now,
+      );
+
+      await this.support.recordAudit(this.repositories, {
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodesGenerated,
+        actor_id: session.userId,
+        organization_id: session.organizationId,
+        resource_type: AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,
+        resource_id: batchId,
+        decision: AUDIT_DECISIONS.allow,
+        correlation_id: correlationId,
+        session_id: session.id,
+        batch_id: batchId,
+        code_count: recoveryCodes.length,
+      });
+      await this.support.recordAudit(this.repositories, {
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeViewed,
+        actor_id: session.userId,
+        organization_id: session.organizationId,
+        resource_type: AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,
+        resource_id: batchId,
+        decision: AUDIT_DECISIONS.allow,
+        correlation_id: correlationId,
+        session_id: session.id,
+        batch_id: batchId,
+      });
+    }
 
     await this.support.recordAudit(this.repositories, {
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaEnrolled,
@@ -95,6 +141,7 @@ export class EnrollMfaHandler {
       ok: true,
       correlation_id: correlationId,
       totp_uri: buildTotpUri(plainSecret, user.primaryEmailAddress()),
+      recovery_codes: recoveryCodes,
     };
   }
 }

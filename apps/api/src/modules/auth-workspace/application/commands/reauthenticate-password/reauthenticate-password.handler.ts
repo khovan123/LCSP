@@ -80,6 +80,9 @@ export class ReauthenticatePasswordHandler {
       );
     }
 
+    session.markSensitiveActionVerified(this.support.now());
+    await this.repositories.sessions.save(session);
+
     await this.support.recordAudit(this.repositories, {
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
       actor_id: user.id,

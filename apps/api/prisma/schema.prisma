@@ -22,25 +22,26 @@ model AuthOrganization {
 }
 
 model AuthUser {
-  id               String                @id
-  email            String                @unique
-  passwordHash     String
-  emailVerified    Boolean
-  failedLoginCount Int
-  lockUntil        DateTime?
-  displayName      String?
-  recoveryEmail    String?
+  id                        String                        @id
+  email                     String                        @unique
+  passwordHash              String
+  emailVerified             Boolean
+  failedLoginCount          Int
+  lockUntil                 DateTime?
+  displayName               String?
+  recoveryEmail             String?
   primaryEmailAddressPolicy AuthPrimaryEmailAddressPolicy @default(ACCOUNT_EMAIL)
-  backupEmailPolicy AuthBackupEmailPolicy @default(RECOVERY_EMAIL)
-  mfaRequired      Boolean               @default(false)
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  memberships      AuthMembership[]
-  mfaRateLimit     AuthMfaRateLimit?
-  recoveryRequests AuthRecoveryRequest[]
-  sessions         AuthSession[]
-  mfaEnrollment    AuthUserMfa?
-  oauthIdentities  AuthOAuthIdentity[]
+  backupEmailPolicy         AuthBackupEmailPolicy         @default(RECOVERY_EMAIL)
+  mfaRequired               Boolean                       @default(false)
+  createdAt                 DateTime                      @default(now())
+  updatedAt                 DateTime                      @updatedAt
+  memberships               AuthMembership[]
+  mfaRateLimit              AuthMfaRateLimit?
+  mfaRecoveryCodes          AuthMfaRecoveryCode[]
+  recoveryRequests          AuthRecoveryRequest[]
+  sessions                  AuthSession[]
+  mfaEnrollment             AuthUserMfa?
+  oauthIdentities           AuthOAuthIdentity[]
 }
 
 model AuthPolicy {
@@ -101,28 +102,29 @@ model AuthInvitation {
 }
 
 model AuthSession {
-  id               String           @id
-  userId           String
-  organizationId   String
-  tokenHash        String
-  tokenFingerprint String           @unique
-  expiresAt        DateTime
-  revokedAt        DateTime?
-  mfaVerifiedAt    DateTime?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  organization     AuthOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user             AuthUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                        String           @id
+  userId                    String
+  organizationId            String
+  tokenHash                 String
+  tokenFingerprint          String           @unique
+  expiresAt                 DateTime
+  revokedAt                 DateTime?
+  mfaVerifiedAt             DateTime?
+  sensitiveActionVerifiedAt DateTime?
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+  organization              AuthOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                      AuthUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
 }
 
 model AuthUserMfa {
-  userId          String   @id
+  userId          String    @id
   encryptedSecret String
-  enrolledAt      DateTime @default(now())
+  enrolledAt      DateTime  @default(now())
   verifiedAt      DateTime?
-  user            AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum AuthBackupEmailPolicy {
@@ -150,6 +152,21 @@ model AuthMfaRateLimit {
   lockedUntil DateTime?
   updatedAt   DateTime  @updatedAt
   user        AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuthMfaRecoveryCode {
+  id          String    @id
+  userId      String
+  codeHash    String
+  batchId     String
+  generatedAt DateTime  @default(now())
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  user        AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, codeHash])
+  @@index([userId, batchId])
+  @@index([userId, revokedAt, usedAt])
 }
 
 model AuthRecoveryRequest {
@@ -352,6 +369,7 @@ enum AuditResourceType {
   AUDIT_EXPORT_REQUEST
   AUTH_INVITATION
   AUTH_MEMBERSHIP
+  AUTH_MFA_RECOVERY_CODE
   AUTH_ORGANIZATION
   AUTH_SESSION
   CLASSIFICATION_RESULT
@@ -401,6 +419,7 @@ enum AuthorizationReasonCode {
   PBAC_DENIED
   PBAC_METADATA_MISSING
   POLICY_NOT_FOUND
+  REAUTH_REQUIRED
   RECOVERY_INVALID
   SESSION_INVALID
   STATE_GATE_FAILED

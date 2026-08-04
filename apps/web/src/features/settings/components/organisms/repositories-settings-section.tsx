@@ -5,6 +5,7 @@ import { RefreshCwIcon } from "lucide-react";
 
 import { SectionHeading } from "@/components/molecules/section-heading";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -20,12 +21,16 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { appLocale } from "@/lib/locale";
+import { GitHubRepositoryConnectCard } from "../molecules/github-repository-connect-card";
 import type { RepositoriesSettingsSectionProps } from "../../types/settings-page.types";
 import { formatDateTime } from "../../utils/settings-page.utils";
 
 export function RepositoriesSettingsSection({
   repositories,
   repositoryCount,
+  githubConnectionStatus,
+  onConnectGitHub,
+  onManageGitHubInstallation,
 }: RepositoriesSettingsSectionProps) {
   return (
     <section className="flex flex-col gap-4">
@@ -39,6 +44,38 @@ export function RepositoriesSettingsSection({
           "pages.workspace.settingsHub.repositories.description",
         )}
         icon={<RefreshCwIcon className="size-4" />}
+      />
+      <GitHubRepositoryConnectCard
+        title={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.repositories.connectTitle",
+        )}
+        description={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.repositories.connectDescription",
+        )}
+        actionLabel={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.actions.connectGitHubRepository",
+        )}
+        successTitle={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.repositories.connectSuccessTitle",
+        )}
+        successDescription={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.repositories.connectSuccessDescription",
+        )}
+        failedTitle={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.repositories.connectFailedTitle",
+        )}
+        failedDescription={resolveMessage(
+          appLocale,
+          "pages.workspace.settingsHub.repositories.connectFailedDescription",
+        )}
+        status={githubConnectionStatus}
+        onConnect={onConnectGitHub}
       />
       <Card>
         <CardHeader>
@@ -134,6 +171,19 @@ export function RepositoriesSettingsSection({
                         </span>
                       </div>
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        onManageGitHubInstallation(repository.installation_id)
+                      }
+                    >
+                      {resolveMessage(
+                        appLocale,
+                        "pages.workspace.settingsHub.actions.manageGitHubRepositoryAccess",
+                      )}
+                    </Button>
                   </div>
                 </div>
               ))}

@@ -75,7 +75,11 @@ export function WorkspaceOverview({ assessments }: WorkspaceOverviewProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <Button render={<Link href="/assessments" />} variant="outline">
+          <Button
+            render={<Link href="/assessments" />}
+            variant="outline"
+            nativeButton={false}
+          >
             {resolveMessage(appLocale, "pages.workspace.openAssessments")}
           </Button>
           {recent.length ? (

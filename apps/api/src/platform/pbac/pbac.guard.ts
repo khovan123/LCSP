@@ -9,6 +9,7 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import type { AuthErrorCode } from "@lcsp/contracts/auth";
 import {
   PBAC_DECISION,
   PBAC_ACTIONS,
@@ -40,6 +41,8 @@ import type {
 
 import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
 import { problemException } from "../problems/problem-factory.js";
+import { RE_AUTH_FOR_SENSITIVE_ROUTE_METADATA_KEY } from "../security/decorators/re-auth-for-sensitive-route.decorator.js";
+import { isSensitiveActionVerificationFresh } from "../security/sensitive-route-policy.js";
 
 const DECISION_LOG_RESOURCE_TYPE = AUDIT_RESOURCE_TYPES.httpRoute;
 
@@ -64,6 +67,11 @@ export class PbacGuard implements CanActivate {
     const allowPendingMfa =
       this.reflector.getAllAndOverride<boolean | undefined>(
         ALLOW_PENDING_MFA_METADATA_KEY,
+        [context.getHandler(), context.getClass()],
+      ) === true;
+    const requiresSensitiveReauth =
+      this.reflector.getAllAndOverride<boolean | undefined>(
+        RE_AUTH_FOR_SENSITIVE_ROUTE_METADATA_KEY,
         [context.getHandler(), context.getClass()],
       ) === true;
     const correlationId =
@@ -159,6 +167,15 @@ export class PbacGuard implements CanActivate {
 
     if (metadata.type === PBAC_METADATA_TYPES.session) {
       // @RequireSession() — session + active membership only, no PBAC action gate.
+      await this.enforceSensitiveReauth({
+        required: requiresSensitiveReauth,
+        session,
+        resourceId,
+        action,
+        policyId: policy.id,
+        policyVersion: policy.version,
+        correlationId,
+      });
       request.pbacContext = {
         userId: session.userId,
         sessionId: session.id,
@@ -257,6 +274,16 @@ export class PbacGuard implements CanActivate {
       throw this.pbacDenied(correlationId);
     }
 
+    await this.enforceSensitiveReauth({
+      required: requiresSensitiveReauth,
+      session,
+      resourceId,
+      action: allowed.action,
+      policyId: allowed.decision.policyId ?? policy.id,
+      policyVersion: allowed.decision.policyVersion ?? policy.version,
+      correlationId,
+    });
+
     request.pbacContext = {
       userId: session.userId,
       sessionId: session.id,
@@ -291,6 +318,51 @@ export class PbacGuard implements CanActivate {
     const [scheme, token] = header.split(" ");
     if (scheme !== "Bearer" || !token) return null;
     return token;
+  }
+
+  private async enforceSensitiveReauth(input: {
+    required: boolean;
+    session: {
+      id: string;
+      userId: string;
+      organizationId: string;
+      sensitiveActionVerifiedAt: number | null;
+    };
+    resourceId: string;
+    action: string;
+    policyId: string | null;
+    policyVersion: string | null;
+    correlationId: string;
+  }): Promise<void> {
+    if (
+      !input.required ||
+      isSensitiveActionVerificationFresh(
+        input.session.sensitiveActionVerifiedAt,
+        Date.now(),
+      )
+    ) {
+      return;
+    }
+
+    await this.recordDecision({
+      actorId: input.session.userId,
+      sessionId: input.session.id,
+      organizationId: input.session.organizationId,
+      resourceId: input.resourceId,
+      action: input.action,
+      decision: PBAC_DECISION.deny,
+      reasonCode: AUTH_ERROR_CODES.reauthRequired,
+      policyId: input.policyId,
+      policyVersion: input.policyVersion,
+      correlationId: input.correlationId,
+    });
+    throw problemException(
+      AUTH_ERROR_CODES.reauthRequired,
+      input.correlationId,
+      {
+        status: HttpStatus.FORBIDDEN,
+      },
+    );
   }
 
   private exceptionFor(
@@ -351,7 +423,7 @@ export class PbacGuard implements CanActivate {
     resourceId: string;
     action: string;
     decision: PbacDecisionValue;
-    reasonCode: PbacReasonCode;
+    reasonCode: AuthErrorCode | PbacReasonCode;
     policyId: string | null;
     policyVersion: string | null;
     correlationId: string;

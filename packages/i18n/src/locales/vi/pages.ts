@@ -78,6 +78,15 @@ export const viPages = {
     formDescription: "Dùng mã sáu chữ số từ ứng dụng xác thực của bạn.",
     otpLabel: "Mã xác minh",
     otpDescription: "Nhập mã sáu chữ số hiện tại.",
+    moreOptions: "Tùy chọn khác",
+    useAuthenticator: "Dùng ứng dụng xác thực",
+    recoveryCodeTitle: "Nhập mã khôi phục",
+    recoveryCodeDescription:
+      "Dùng một mã khôi phục chưa sử dụng trong bộ mã MFA đã lưu.",
+    recoveryCodeLabel: "Mã khôi phục",
+    recoveryCodePlaceholder: "ABCD-EFGH-IJKL",
+    recoveryCodeHelp: "Mỗi mã khôi phục chỉ dùng được một lần.",
+    recoveryCodeSubmit: "Xác minh mã khôi phục",
     submit: "Xác minh mã",
     submitting: "Đang xác minh mã",
     accessHelp: "Cần trợ giúp? Hãy liên hệ chủ sở hữu tổ chức.",
@@ -85,6 +94,8 @@ export const viPages = {
     errors: {
       otpRequired: "Nhập mã xác minh của bạn.",
       otpInvalidFormat: "Nhập mã xác minh gồm sáu chữ số.",
+      recoveryCodeRequired: "Nhập mã khôi phục.",
+      recoveryCodeInvalidFormat: "Nhập mã khôi phục hợp lệ.",
       requestFailedTitle: "Không thể xác minh",
       requestFailedDetail: "Không thể xác minh mã. Vui lòng thử lại.",
     },
@@ -105,6 +116,9 @@ export const viPages = {
     successTitle: "Đã tạo cấu hình MFA",
     successDetail:
       "Mở URI này bằng ứng dụng xác thực của bạn, sau đó tiếp tục sang bước xác minh mã.",
+    copyCodes: "Sao chép",
+    downloadCodes: "Tải xuống",
+    printCodes: "In",
     openAuthenticator: "Mở trong ứng dụng xác thực",
     qrTitle: "Quét mã QR này bằng ứng dụng xác thực",
     qrHint:
@@ -383,6 +397,8 @@ export const viPages = {
         revoke: "Thu hồi",
         linkGitHub: "Liên kết GitHub",
         linkGoogle: "Liên kết Google",
+        connectGitHubRepository: "Kết nối GitHub repository",
+        manageGitHubRepositoryAccess: "Quản lý quyền",
       },
       account: {
         title: "Tài khoản",
@@ -510,6 +526,15 @@ export const viPages = {
         title: "Repository",
         description:
           "Xem các repository đã liên kết với tài khoản này thông qua tích hợp GitHub hiện tại của LCSP.",
+        connectTitle: "Kết nối GitHub App",
+        connectDescription:
+          "Bắt đầu flow GitHub App read-only và chọn repository được ủy quyền cho bằng chứng scan tin cậy.",
+        connectSuccessTitle: "Đã kết nối repository",
+        connectSuccessDescription:
+          "LCSP đã lưu metadata repository mà không lưu raw GitHub token.",
+        connectFailedTitle: "Kết nối repository thất bại",
+        connectFailedDescription:
+          "Không thể hoàn tất ủy quyền GitHub App cho workspace này.",
         listTitle: "Repository đã liên kết",
         listDescription:
           "Mỗi repository được hiển thị cạnh assessment đang sử dụng nó.",

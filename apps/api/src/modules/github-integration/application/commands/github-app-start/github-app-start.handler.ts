@@ -49,9 +49,32 @@ export class GitHubAppStartHandler implements ICommandHandler<GitHubAppStartComm
       );
     }
 
-    if (command.assessmentId) {
+    const existingConnection = command.installationId
+      ? await this.prisma.repositoryConnection.findFirst({
+          where: {
+            installationId: command.installationId,
+            organizationId: command.organizationId,
+            userId: command.userId,
+            revokedAt: null,
+          },
+          select: { assessmentId: true },
+        })
+      : null;
+
+    if (command.installationId && !existingConnection) {
+      throw problemException(
+        GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
+        command.correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
+    }
+
+    const assessmentId =
+      command.assessmentId ?? existingConnection?.assessmentId;
+
+    if (assessmentId) {
       const assessment = await this.prisma.assessment.findUnique({
-        where: { id: command.assessmentId },
+        where: { id: assessmentId },
       });
 
       if (!assessment || assessment.organizationId !== command.organizationId) {
@@ -67,7 +90,7 @@ export class GitHubAppStartHandler implements ICommandHandler<GitHubAppStartComm
       organizationId: command.organizationId,
       userId: command.userId,
       redirectUri,
-      assessmentId: command.assessmentId ?? null,
+      assessmentId: assessmentId ?? null,
       ttlMs: INSTALL_STATE_TTL_MS,
     });
     await this.installStateRepository.save(installState);
@@ -84,11 +107,13 @@ export class GitHubAppStartHandler implements ICommandHandler<GitHubAppStartComm
       resourceType: AUDIT_RESOURCE_TYPES.githubAppInstallState,
       resourceId: installState.id,
       correlationId: command.correlationId,
+      sessionId: command.sessionId,
       decision: AUDIT_DECISIONS.allow,
       payload: {
         userId: command.userId,
         organizationId: command.organizationId,
-        assessmentId: command.assessmentId ?? null,
+        assessmentId: assessmentId ?? null,
+        installationId: command.installationId ?? null,
         correlationId: command.correlationId,
       },
     });

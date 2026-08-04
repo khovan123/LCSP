@@ -30,7 +30,7 @@ As a Manager or scoped Developer, I want to connect an authorized GitHub reposit
 
 ## Tasks / Subtasks
 
-- [ ] Implement GitHub App connection flow with read-only permissions and authorized repo selection. (AC: 1)
+- [ ] Implement GitHub App connection and managed installation update flow with read-only permissions and authorized repo selection. (AC: 1)
 - [ ] Persist RepositoryConnection metadata without exposing raw tokens. (AC: 2)
 - [ ] Separate OAuth identity login from repository authorization and audit denial paths. (AC: 3)
 
@@ -55,13 +55,13 @@ As a Manager or scoped Developer, I want to connect an authorized GitHub reposit
 
 ### Story-Specific Implementation Tasks
 
-- Implement GitHub App connection flow with read-only permissions and authorized repo selection.
+- Implement GitHub App connection and managed installation update flow with read-only permissions and authorized repo selection.
 - Persist RepositoryConnection metadata without exposing raw tokens.
 - Separate OAuth identity login from repository authorization and audit denial paths.
 
 ### Task to Acceptance Criteria Traceability
 
-- `AC1`: Implement GitHub App connection flow with read-only permissions and authorized repo selection.
+- `AC1`: Implement GitHub App connection/update flow with read-only permissions and authorized repo selection.
 - `AC2`: Persist RepositoryConnection metadata without exposing raw tokens.
 - `AC3`: Separate OAuth identity login from repository authorization and audit denial paths.
 

@@ -12,6 +12,11 @@ export async function POST(request: NextRequest) {
   if (isMockModeEnabled()) {
     return successJson({
       totp_uri: "otpauth://totp/LCSP:minhpnq1807%40gmail.com?secret=JBSWY3DPEHPK3PXP&issuer=LCSP",
+      recovery_codes: [
+        "ABCD-EFGH-IJKL",
+        "MNPR-STUV-WXYZ",
+        "2345-6789-ABCD",
+      ],
     });
   }
 

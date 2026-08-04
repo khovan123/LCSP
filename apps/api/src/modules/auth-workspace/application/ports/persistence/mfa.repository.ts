@@ -7,6 +7,13 @@ export const AUTH_WORKSPACE_MFA_RATE_LIMIT_REPOSITORY =
   "AUTH_WORKSPACE_MFA_RATE_LIMIT_REPOSITORY";
 export const AUTH_WORKSPACE_MFA_OTP_USED_REPOSITORY =
   "AUTH_WORKSPACE_MFA_OTP_USED_REPOSITORY";
+export const AUTH_WORKSPACE_MFA_RECOVERY_CODE_REPOSITORY =
+  "AUTH_WORKSPACE_MFA_RECOVERY_CODE_REPOSITORY";
+
+export type MfaRecoveryCodeCreateInput = {
+  id: string;
+  codeHash: string;
+};
 
 export interface MfaEnrollmentRepository {
   findByUserId(userId: string): Promise<MfaEnrollment | null>;
@@ -34,4 +41,18 @@ export interface MfaOtpUsedRepository {
   deleteByUserId(userId: string): Promise<void>;
   /** Deletes used-OTP records older than the given epoch-ms cutoff, since they can no longer be replayed. */
   pruneOlderThan(cutoffMs: number): Promise<void>;
+}
+
+export interface MfaRecoveryCodeRepository {
+  nextId(): string;
+  nextBatchId(): string;
+  hasActiveForUser(userId: string): Promise<boolean>;
+  replaceForUser(
+    userId: string,
+    codeRecords: readonly MfaRecoveryCodeCreateInput[],
+    batchId: string,
+    now: number,
+  ): Promise<void>;
+  revokeActiveForUser(userId: string, now: number): Promise<void>;
+  tryConsume(userId: string, codeHash: string, now: number): Promise<boolean>;
 }

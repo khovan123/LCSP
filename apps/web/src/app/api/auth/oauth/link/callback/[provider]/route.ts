@@ -50,7 +50,10 @@ function copySearchParam(source: URL, destination: URL, name: string) {
 
 function redirectToSettings(publicOrigin: string, result: string) {
   return NextResponse.redirect(
-    new URL(`/settings?section=account&oauth_link=${result}`, publicOrigin),
+    new URL(
+      `/workspace/settings?section=account&oauth_link=${result}`,
+      publicOrigin,
+    ),
   );
 }
 

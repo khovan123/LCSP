@@ -54,7 +54,6 @@ export function SignInForm() {
       titleKey: "pages.signIn.errors.requestFailedTitle" as const,
       detailKey: "pages.signIn.errors.requestFailedDetail" as const,
     }));
-    form.reset();
 
     if (outcome.kind === API_OUTCOME_KINDS.authenticated) {
       router.replace("/workspace");

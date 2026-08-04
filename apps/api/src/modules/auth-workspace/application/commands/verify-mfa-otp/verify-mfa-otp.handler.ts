@@ -138,6 +138,7 @@ export class VerifyMfaOtpHandler {
     enrollment.verifiedAt = now;
     await this.repositories.mfaEnrollments.save(enrollment);
     session.markMfaVerified(now);
+    session.markSensitiveActionVerified(now);
     await this.repositories.sessions.save(session);
 
     const user = await this.support.resolveUserById(

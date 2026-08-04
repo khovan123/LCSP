@@ -33,6 +33,7 @@ export class ListAuthRepositoriesHandler {
       ok: true,
       repositories: connections.map((connection) => ({
         id: connection.id,
+        installation_id: connection.installationId,
         repository_name: connection.repositoryName,
         repository_full_name: connection.repositoryFullName,
         default_branch: connection.defaultBranch,

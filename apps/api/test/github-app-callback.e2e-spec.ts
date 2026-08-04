@@ -30,7 +30,7 @@ import {
 
 type FakeFetchResponse = { ok: boolean; json: () => Promise<unknown> };
 
-const ALLOWED_REDIRECT_URI = "http://localhost:3000/github/callback";
+const ALLOWED_REDIRECT_URI = "http://localhost:3000/api/github/app/callback";
 const LEAKED_TOKEN_MARKER = "ghs_should_never_leak_this_value";
 const INSTALLATION_ID = "installation-42";
 
@@ -78,6 +78,10 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     });
     const signInBody = successBody<SignInSuccess>(signIn);
     managerToken = signInBody?.session_token ?? "";
+    await prisma.authSession.updateMany({
+      where: { userId: "user-1", organizationId: orgId },
+      data: { sensitiveActionVerifiedAt: new Date() },
+    });
   });
 
   afterEach(() => {
@@ -109,6 +113,19 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     permissions: Record<string, string> = {
       contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read,
     },
+    repositories: Array<{
+      id: number;
+      name: string;
+      full_name: string;
+      default_branch: string;
+    }> = [
+      {
+        id: 555,
+        name: "example-repo",
+        full_name: "acme/example-repo",
+        default_branch: "main",
+      },
+    ],
   ): void {
     globalThis.fetch = ((input: string | URL) => {
       const urlStr = input.toString();
@@ -117,22 +134,19 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
           fakeResponse(200, { access_token: LEAKED_TOKEN_MARKER }),
         );
       }
-      if (urlStr.endsWith(`/user/installations/${INSTALLATION_ID}`)) {
-        return Promise.resolve(fakeResponse(200, { permissions }));
+      if (urlStr.endsWith("/user/installations?per_page=100")) {
+        return Promise.resolve(
+          fakeResponse(200, {
+            installations: [{ id: INSTALLATION_ID, permissions }],
+          }),
+        );
       }
       if (
         urlStr.endsWith(`/user/installations/${INSTALLATION_ID}/repositories`)
       ) {
         return Promise.resolve(
           fakeResponse(200, {
-            repositories: [
-              {
-                id: 555,
-                name: "example-repo",
-                full_name: "acme/example-repo",
-                default_branch: "main",
-              },
-            ],
+            repositories,
           }),
         );
       }
@@ -239,6 +253,82 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     );
   });
 
+  it("rejects installations that include extra non-required permissions", async () => {
+    const state = await startInstallFlow();
+    mockGithubAppFetch({
+      contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read,
+      pull_requests: "WRITE",
+    });
+
+    const result = await httpRequest(app)
+      .get("/github/app/callback")
+      .query({ installation_id: INSTALLATION_ID, code: "good-code", state });
+
+    assert.equal(result.status, 400);
+    assert.equal(
+      problemCode(result),
+      GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
+    );
+  });
+
+  it("rejects multiple authorized repositories unless repository_id is selected", async () => {
+    const state = await startInstallFlow();
+    mockGithubAppFetch({ contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read }, [
+      {
+        id: 555,
+        name: "example-repo",
+        full_name: "acme/example-repo",
+        default_branch: "main",
+      },
+      {
+        id: 777,
+        name: "selected-repo",
+        full_name: "acme/selected-repo",
+        default_branch: "trunk",
+      },
+    ]);
+
+    const result = await httpRequest(app)
+      .get("/github/app/callback")
+      .query({ installation_id: INSTALLATION_ID, code: "good-code", state });
+
+    assert.equal(result.status, 400);
+    assert.equal(
+      problemCode(result),
+      GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
+    );
+  });
+
+  it("uses selected repository_id when multiple authorized repositories exist", async () => {
+    const state = await startInstallFlow();
+    mockGithubAppFetch({ contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read }, [
+      {
+        id: 555,
+        name: "example-repo",
+        full_name: "acme/example-repo",
+        default_branch: "main",
+      },
+      {
+        id: 777,
+        name: "selected-repo",
+        full_name: "acme/selected-repo",
+        default_branch: "trunk",
+      },
+    ]);
+
+    const result = await httpRequest(app).get("/github/app/callback").query({
+      installation_id: INSTALLATION_ID,
+      code: "good-code",
+      state,
+      repository_id: "777",
+    });
+    const body = successBody<GitHubAppCallbackDto>(result);
+
+    assert.equal(result.status, 200);
+    assert.equal(body.repository_full_name, "acme/selected-repo");
+    assert.equal(body.default_branch, "trunk");
+  });
+
   // T06
   it("T06: raw token is not stored in DB or returned in response", async () => {
     const state = await startInstallFlow();
@@ -304,6 +394,35 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     });
 
     assert.ok(audit, "GITHUB_APP_CONNECTED audit event must be written");
+    assert.doesNotMatch(
+      JSON.stringify(audit.payload),
+      new RegExp(LEAKED_TOKEN_MARKER),
+    );
+  });
+
+  it("audits callback denial without leaking token", async () => {
+    const state = await startInstallFlow();
+    mockGithubAppFetch({ contents: "WRITE" });
+
+    await httpRequest(app)
+      .get("/github/app/callback")
+      .query({ installation_id: INSTALLATION_ID, code: "good-code", state });
+
+    const audit = await prisma.authAuditEvent.findFirst({
+      where: {
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.appConnectionRejected,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    assert.ok(
+      audit,
+      "GITHUB_APP_CONNECTION_REJECTED audit event must be written",
+    );
+    assert.equal(
+      audit.reasonCode,
+      GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
+    );
     assert.doesNotMatch(
       JSON.stringify(audit.payload),
       new RegExp(LEAKED_TOKEN_MARKER),

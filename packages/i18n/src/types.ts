@@ -13,6 +13,7 @@ export type AuthMessages = {
     authzStateGateBlocked: { title: string; detail: string };
     authzEvaluatorFailure: { title: string; detail: string };
     validationFailed: { title: string; detail: string };
+    reauthRequired: { title: string; detail: string };
     mfaRequired: { title: string; detail: string };
     mfaInvalid: { title: string; detail: string };
     mfaRateLimited: { title: string; detail: string };
@@ -33,6 +34,7 @@ export type CommonMessages = {
     acceptInvite: string;
     contactOwner: string;
     waitAndRetry: string;
+    reauthenticate: string;
     verifyMfa: string;
     retryRecovery: string;
     none: string;
@@ -116,6 +118,14 @@ export type PagesMessages = {
     formDescription: string;
     otpLabel: string;
     otpDescription: string;
+    moreOptions: string;
+    useAuthenticator: string;
+    recoveryCodeTitle: string;
+    recoveryCodeDescription: string;
+    recoveryCodeLabel: string;
+    recoveryCodePlaceholder: string;
+    recoveryCodeHelp: string;
+    recoveryCodeSubmit: string;
     submit: string;
     submitting: string;
     accessHelp: string;
@@ -123,6 +133,8 @@ export type PagesMessages = {
     errors: {
       otpRequired: string;
       otpInvalidFormat: string;
+      recoveryCodeRequired: string;
+      recoveryCodeInvalidFormat: string;
       requestFailedTitle: string;
       requestFailedDetail: string;
     };
@@ -140,6 +152,9 @@ export type PagesMessages = {
     accessHelp: string;
     successTitle: string;
     successDetail: string;
+    copyCodes: string;
+    downloadCodes: string;
+    printCodes: string;
     openAuthenticator: string;
     qrTitle: string;
     qrHint: string;
@@ -396,6 +411,8 @@ export type PagesMessages = {
         revoke: string;
         linkGitHub: string;
         linkGoogle: string;
+        connectGitHubRepository: string;
+        manageGitHubRepositoryAccess: string;
       };
       account: {
         title: string;
@@ -495,6 +512,12 @@ export type PagesMessages = {
       repositories: {
         title: string;
         description: string;
+        connectTitle: string;
+        connectDescription: string;
+        connectSuccessTitle: string;
+        connectSuccessDescription: string;
+        connectFailedTitle: string;
+        connectFailedDescription: string;
         listTitle: string;
         listDescription: string;
         summary: string;

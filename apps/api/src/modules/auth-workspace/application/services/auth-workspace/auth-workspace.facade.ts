@@ -35,6 +35,8 @@ import { DisableMfaCommand } from "../../commands/disable-mfa/disable-mfa.comman
 import { DisableMfaHandler } from "../../commands/disable-mfa/disable-mfa.handler.ts";
 import { EnrollMfaCommand } from "../../commands/enroll-mfa/enroll-mfa.command.ts";
 import { EnrollMfaHandler } from "../../commands/enroll-mfa/enroll-mfa.handler.ts";
+import { GenerateMfaRecoveryCodesCommand } from "../../commands/generate-mfa-recovery-codes/generate-mfa-recovery-codes.command.ts";
+import { GenerateMfaRecoveryCodesHandler } from "../../commands/generate-mfa-recovery-codes/generate-mfa-recovery-codes.handler.ts";
 import { InviteDeveloperCommand } from "../../commands/invite-developer/invite-developer.command.ts";
 import { InviteDeveloperHandler } from "../../commands/invite-developer/invite-developer.handler.ts";
 import { OAuthCallbackCommand } from "../../commands/oauth-callback/oauth-callback.command.ts";
@@ -47,6 +49,8 @@ import { OAuthStartCommand } from "../../commands/oauth-start/oauth-start.comman
 import { OAuthStartHandler } from "../../commands/oauth-start/oauth-start.handler.ts";
 import { RegisterApprovedPathCommand } from "../../commands/register-approved-path/register-approved-path.command.ts";
 import { RegisterApprovedPathHandler } from "../../commands/register-approved-path/register-approved-path.handler.ts";
+import { RecordMfaRecoveryCodeAccessCommand } from "../../commands/record-mfa-recovery-code-access/record-mfa-recovery-code-access.command.ts";
+import { RecordMfaRecoveryCodeAccessHandler } from "../../commands/record-mfa-recovery-code-access/record-mfa-recovery-code-access.handler.ts";
 import { RevokeMembershipCommand } from "../../commands/revoke-membership/revoke-membership.command.ts";
 import { RevokeMembershipHandler } from "../../commands/revoke-membership/revoke-membership.handler.ts";
 import { RequestPasswordRecoveryCommand } from "../../commands/request-password-recovery/request-password-recovery.command.ts";
@@ -63,6 +67,8 @@ import { UpdateProfileCommand } from "../../commands/update-profile/update-profi
 import { UpdateProfileHandler } from "../../commands/update-profile/update-profile.handler.ts";
 import { VerifyMfaOtpCommand } from "../../commands/verify-mfa-otp/verify-mfa-otp.command.ts";
 import { VerifyMfaOtpHandler } from "../../commands/verify-mfa-otp/verify-mfa-otp.handler.ts";
+import { VerifyMfaRecoveryCodeCommand } from "../../commands/verify-mfa-recovery-code/verify-mfa-recovery-code.command.ts";
+import { VerifyMfaRecoveryCodeHandler } from "../../commands/verify-mfa-recovery-code/verify-mfa-recovery-code.handler.ts";
 import { GetAuthProfileHandler } from "../../queries/get-auth-profile/get-auth-profile.handler.ts";
 import { GetAuthProfileQuery } from "../../queries/get-auth-profile/get-auth-profile.query.ts";
 import { ListAuthRepositoriesHandler } from "../../queries/list-auth-repositories/list-auth-repositories.handler.ts";
@@ -77,6 +83,7 @@ import { PreviewInvitationHandler } from "../../queries/preview-invitation/previ
 import { PreviewInvitationQuery } from "../../queries/preview-invitation/preview-invitation.query.ts";
 import type { PbacRequestContext } from "../../../../../platform/pbac/interfaces/pbac-request.interface.ts";
 import type { DeveloperTaskContextResponse } from "../../contracts/auth-workspace/developer-task-context.contract.ts";
+import type { MfaRecoveryCodeAccessAction } from "../../contracts/auth-workspace/mfa.contract.ts";
 
 export class AuthWorkspaceFacade {
   constructor(
@@ -91,6 +98,9 @@ export class AuthWorkspaceFacade {
     private readonly disableMfaHandler: DisableMfaHandler,
     private readonly enrollMfaHandler: EnrollMfaHandler,
     private readonly verifyMfaOtpHandler: VerifyMfaOtpHandler,
+    private readonly verifyMfaRecoveryCodeHandler: VerifyMfaRecoveryCodeHandler,
+    private readonly generateMfaRecoveryCodesHandler: GenerateMfaRecoveryCodesHandler,
+    private readonly recordMfaRecoveryCodeAccessHandler: RecordMfaRecoveryCodeAccessHandler,
     private readonly updateProfileHandler: UpdateProfileHandler,
     private readonly requestPasswordRecoveryHandler: RequestPasswordRecoveryHandler,
     private readonly confirmPasswordRecoveryHandler: ConfirmPasswordRecoveryHandler,
@@ -185,6 +195,35 @@ export class AuthWorkspaceFacade {
   ) {
     return this.verifyMfaOtpHandler.execute(
       new VerifyMfaOtpCommand(sessionToken, otp, requestMeta),
+    );
+  }
+
+  verifyMfaRecoveryCode(
+    sessionToken: string,
+    code: string,
+    requestMeta: RequestMeta = {},
+  ) {
+    return this.verifyMfaRecoveryCodeHandler.execute(
+      new VerifyMfaRecoveryCodeCommand(sessionToken, code, requestMeta),
+    );
+  }
+
+  generateMfaRecoveryCodes(
+    sessionToken: string,
+    requestMeta: RequestMeta = {},
+  ) {
+    return this.generateMfaRecoveryCodesHandler.execute(
+      new GenerateMfaRecoveryCodesCommand(sessionToken, requestMeta),
+    );
+  }
+
+  recordMfaRecoveryCodeAccess(
+    sessionToken: string,
+    action: MfaRecoveryCodeAccessAction,
+    requestMeta: RequestMeta = {},
+  ) {
+    return this.recordMfaRecoveryCodeAccessHandler.execute(
+      new RecordMfaRecoveryCodeAccessCommand(sessionToken, action, requestMeta),
     );
   }
 

@@ -39,7 +39,7 @@ test("sign-in routes required MFA without enrollment to the setup flow", () => {
 test("MFA enrollment success returns the provisioning URI", () => {
   assert.deepEqual(
     toEnrollMfaOutcome({ ok: true, totp_uri: "otpauth://totp/LCSP:test" }, true),
-    { kind: "loaded", totpUri: "otpauth://totp/LCSP:test" },
+    { kind: "loaded", totpUri: "otpauth://totp/LCSP:test", recoveryCodes: [] },
   );
 });
 

@@ -4,6 +4,7 @@ import {
   GITHUB_REPOSITORY_PERMISSION_LEVELS,
   REPOSITORY_CONNECTION_STATUSES,
 } from "@lcsp/contracts/github-integration";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { describe, it, expect, jest } from "@jest/globals";
 import { BadRequestException } from "@nestjs/common";
 
@@ -26,7 +27,7 @@ function buildInstallState(overrides?: {
     assessmentId: null,
     organizationId: "org-1",
     userId: "user-1",
-    redirectUri: "http://localhost:3000/github/callback",
+    redirectUri: "http://localhost:3000/api/github/app/callback",
     expiresAt: overrides?.expiresAt ?? new Date(Date.now() + 60_000),
     createdAt: new Date(),
   });
@@ -35,9 +36,23 @@ function buildInstallState(overrides?: {
 function buildHandler(options?: {
   installState?: GitHubAppInstallState | null;
   permissions?: Record<string, string>;
+  repositories?: Array<{
+    id: string;
+    name: string;
+    fullName: string;
+    defaultBranch: string;
+  }>;
   exchangeError?: boolean;
   metadataError?: boolean;
 }) {
+  const repositories = options?.repositories ?? [
+    {
+      id: "repo-1",
+      name: "example-repo",
+      fullName: "acme/example-repo",
+      defaultBranch: "main",
+    },
+  ];
   const findByState = jest
     .fn<GitHubAppInstallStateRepository["findByState"]>()
     .mockResolvedValue(
@@ -82,12 +97,8 @@ function buildHandler(options?: {
             permissions: options?.permissions ?? {
               contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read,
             },
-            repository: {
-              id: "repo-1",
-              name: "example-repo",
-              fullName: "acme/example-repo",
-              defaultBranch: "main",
-            },
+            repositories,
+            repository: repositories[0],
           }),
     );
   const githubAppClient = {
@@ -141,7 +152,7 @@ describe("GitHubAppCallbackHandler", () => {
 
   // T02
   it("throws BadRequestException with GITHUB_STATE_INVALID when state is not found", async () => {
-    const { handler, save } = buildHandler({ installState: null });
+    const { handler, save, write } = buildHandler({ installState: null });
 
     try {
       await handler.execute(
@@ -163,6 +174,13 @@ describe("GitHubAppCallbackHandler", () => {
       });
     }
     expect(save).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.appConnectionRejected,
+        decision: AUDIT_DECISIONS.deny,
+        reasonCode: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
+      }),
+    );
   });
 
   // T03
@@ -224,7 +242,7 @@ describe("GitHubAppCallbackHandler", () => {
 
   // T05
   it("throws BadRequestException with PERMISSIONS_INSUFFICIENT when installation has write permissions", async () => {
-    const { handler, save } = buildHandler({
+    const { handler, save, write } = buildHandler({
       permissions: { contents: "write" },
     });
 
@@ -248,6 +266,90 @@ describe("GitHubAppCallbackHandler", () => {
       });
     }
     expect(save).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.appConnectionRejected,
+        reasonCode: GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
+      }),
+    );
+  });
+
+  it("accepts read-only contents plus implicit metadata permission", async () => {
+    const { handler } = buildHandler({
+      permissions: {
+        contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read,
+        metadata: GITHUB_REPOSITORY_PERMISSION_LEVELS.read,
+      },
+    });
+
+    const result = await handler.execute(
+      new GitHubAppCallbackCommand(
+        "installation-1",
+        "code-1",
+        "state-token-1",
+        "corr-1",
+      ),
+    );
+
+    expect(result.repository_full_name).toBe("acme/example-repo");
+  });
+
+  it("throws BadRequestException with PERMISSIONS_INSUFFICIENT when installation includes non-implicit extra permissions", async () => {
+    const { handler, save } = buildHandler({
+      permissions: {
+        contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read,
+        pull_requests: "WRITE",
+      },
+    });
+
+    try {
+      await handler.execute(
+        new GitHubAppCallbackCommand(
+          "installation-1",
+          "code-1",
+          "state-token-1",
+          "corr-1",
+        ),
+      );
+      throw new Error("expected rejection");
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
+          correlationId: "corr-1",
+        },
+      });
+    }
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("passes selected repository_id to metadata lookup", async () => {
+    const { handler, fetchInstallationMetadata } = buildHandler({
+      repositories: [
+        {
+          id: "repo-2",
+          name: "chosen-repo",
+          fullName: "acme/chosen-repo",
+          defaultBranch: "trunk",
+        },
+      ],
+    });
+
+    const result = await handler.execute(
+      new GitHubAppCallbackCommand(
+        "installation-1",
+        "code-1",
+        "state-token-1",
+        "corr-1",
+        "repo-2",
+      ),
+    );
+
+    expect(fetchInstallationMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({ repositoryId: "repo-2" }),
+    );
+    expect(result.repository_full_name).toBe("acme/chosen-repo");
   });
 
   // T08

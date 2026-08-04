@@ -1,0 +1,194 @@
+model {
+  extend lcsp.database {
+    // ----------------------------------------------------
+    // 1. AUTH & PBAC DOMAIN ENTITIES
+    // ----------------------------------------------------
+    authOrganizationEntity = entity 'AuthOrganization' {
+      description 'Tenant organization unit owning assessments, memberships, and PBAC policies.'
+    }
+
+    authUserEntity = entity 'AuthUser' {
+      description 'Authenticated user account (Manager or Developer).'
+    }
+
+    authPolicyEntity = entity 'AuthPolicy' {
+      description 'Versioned PBAC policy rules specifying actions, roles, and state gates.'
+    }
+
+    authMembershipEntity = entity 'AuthMembership' {
+      description 'User membership binding AuthUser to AuthOrganization with PBAC policy.'
+    }
+
+    authSessionEntity = entity 'AuthSession' {
+      description 'Active user session bound to user, tenant organization, and MFA state.'
+    }
+
+    authAuditEventEntity = entity 'AuthAuditEvent' {
+      description 'Immutable audit log recording state-changing & auth events.'
+    }
+
+    // ----------------------------------------------------
+    // 2. ASSESSMENT & WIZARD DOMAIN ENTITIES
+    // ----------------------------------------------------
+    assessmentEntity = entity 'Assessment' {
+      description 'Compliance assessment entity tracking lifecycle status (DRAFT to COMPLETED).'
+    }
+
+    wizardProfileEntity = entity 'WizardProfile' {
+      description 'Business declarations captured from Manager Wizard (purpose, sector, data, AI usage).'
+    }
+
+    readinessExportEntity = entity 'ReadinessExport' {
+      description 'Readiness gap assessment report generated prior to full evidence scanning.'
+    }
+
+    // ----------------------------------------------------
+    // 3. REPOSITORY SCANNER DOMAIN ENTITIES
+    // ----------------------------------------------------
+    repositoryConnectionEntity = entity 'RepositoryConnection' {
+      description 'Authorized read-only GitHub repository link via GitHub App installation.'
+    }
+
+    repositorySnapshotEntity = entity 'RepositorySnapshot' {
+      description 'Immutable commit-pinned repository snapshot (commit SHA & tree hash).'
+    }
+
+    repositoryScanJobEntity = entity 'RepositoryScanJob' {
+      description 'Asynchronous scan task tracking execution, idempotency, and status.'
+    }
+
+    technicalEvidenceReportEntity = entity 'TechnicalEvidenceReport' {
+      description 'Metadata-only static analysis technical evidence (Syft, Knip, Semgrep).'
+    }
+
+    // ----------------------------------------------------
+    // 4. RECONCILIATION & CLAIMS DOMAIN ENTITIES
+    // ----------------------------------------------------
+    technicalProfileEntity = entity 'TechnicalProfile' {
+      description 'Aggregated technical dimensions derived from static evidence report.'
+    }
+
+    aiUsageFlowEntity = entity 'AIUsageFlow' {
+      description 'Inferred business usage claims with confidence ratings & uncertainty flags.'
+    }
+
+    conflictRecordEntity = entity 'ConflictRecord' {
+      description 'Material mismatches between Wizard declarations and scanner evidence.'
+    }
+
+    verifiedProfileEntity = entity 'VerifiedProfile' {
+      description 'Reconciled and Manager-approved basis required for legal matching.'
+    }
+
+    // ----------------------------------------------------
+    // 5. LEGAL CORPUS & RAG DOMAIN ENTITIES
+    // ----------------------------------------------------
+    legalRuleCatalogVersionEntity = entity 'LegalRuleCatalogVersion' {
+      description 'Versioned legal rule catalog approved by Legal Operator.'
+    }
+
+    legalRuleEntity = entity 'LegalRule' {
+      description 'Structured legal rule specification referencing citation locators.'
+    }
+
+    legalRuleMatchEntity = entity 'LegalRuleMatch' {
+      description 'Citation-backed legal rule matches bound to VerifiedProfile claims.'
+    }
+
+    // ----------------------------------------------------
+    // 6. CLASSIFICATION & DOCUMENT DOMAIN ENTITIES
+    // ----------------------------------------------------
+    classificationResultEntity = entity 'ClassificationResult' {
+      description 'Risk & regulatory classification outcome with legal citations allowlist.'
+    }
+
+    documentRequestEntity = entity 'DocumentRequest' {
+      description 'Regulatory PDF compliance report generation request & S3 document URL.'
+    }
+
+    outboxMessageEntity = entity 'OutboxMessage' {
+      description 'Transactional outbox event store for asynchronous message publishing.'
+    }
+  }
+
+  // ----------------------------------------------------
+  // ERD RELATIONSHIPS
+  // ----------------------------------------------------
+  lcsp.database.authOrganizationEntity -> lcsp.database.authMembershipEntity '1:N Memberships'
+  lcsp.database.authUserEntity -> lcsp.database.authMembershipEntity '1:N Memberships'
+  lcsp.database.authPolicyEntity -> lcsp.database.authMembershipEntity '1:N Applied Policies'
+  lcsp.database.authOrganizationEntity -> lcsp.database.authSessionEntity '1:N Active Sessions'
+  lcsp.database.authUserEntity -> lcsp.database.authSessionEntity '1:N Active Sessions'
+  lcsp.database.authOrganizationEntity -> lcsp.database.authAuditEventEntity '1:N Audit Events'
+
+  lcsp.database.authOrganizationEntity -> lcsp.database.assessmentEntity '1:N Assessments'
+  lcsp.database.assessmentEntity -> lcsp.database.wizardProfileEntity '1:1 Wizard Profile'
+  lcsp.database.assessmentEntity -> lcsp.database.readinessExportEntity '1:N Readiness Exports'
+
+  lcsp.database.assessmentEntity -> lcsp.database.repositoryConnectionEntity '1:N Repository Connections'
+  lcsp.database.repositoryConnectionEntity -> lcsp.database.repositorySnapshotEntity '1:N Commit Snapshots'
+  lcsp.database.repositorySnapshotEntity -> lcsp.database.repositoryScanJobEntity '1:N Scan Jobs'
+  lcsp.database.repositoryScanJobEntity -> lcsp.database.technicalEvidenceReportEntity '1:1 Evidence Report'
+
+  lcsp.database.technicalEvidenceReportEntity -> lcsp.database.technicalProfileEntity '1:1 Technical Profile'
+  lcsp.database.technicalProfileEntity -> lcsp.database.aiUsageFlowEntity '1:1 AI Usage Flow'
+  lcsp.database.aiUsageFlowEntity -> lcsp.database.conflictRecordEntity '1:N Conflict Records'
+  lcsp.database.aiUsageFlowEntity -> lcsp.database.verifiedProfileEntity '1:1 Verified Profile'
+
+  lcsp.database.legalRuleCatalogVersionEntity -> lcsp.database.legalRuleEntity '1:N Legal Rules'
+  lcsp.database.verifiedProfileEntity -> lcsp.database.legalRuleMatchEntity '1:N Legal Rule Matches'
+  lcsp.database.legalRuleMatchEntity -> lcsp.database.classificationResultEntity '1:1 Risk Classification'
+  lcsp.database.classificationResultEntity -> lcsp.database.documentRequestEntity '1:N Document Requests'
+  lcsp.database.assessmentEntity -> lcsp.database.outboxMessageEntity '1:N Outbox Events'
+}
+
+views {
+  // ----------------------------------------------------
+  // ERD VIEWS
+  // ----------------------------------------------------
+  view erd_overview of lcsp.database {
+    title 'LCSP Master Database Entity Relationship Diagram (ERD)'
+    description 'Comprehensive ERD showing relational models, bounded context domains, and foreign key relationships.'
+    include *
+  }
+
+  view erd_auth_domain of lcsp.database {
+    title 'ERD - Auth & PBAC Authorization Domain'
+    description 'AuthOrganization, AuthUser, AuthPolicy, AuthMembership, AuthSession, and AuthAuditEvent entities.'
+    include
+      lcsp.database.authOrganizationEntity,
+      lcsp.database.authUserEntity,
+      lcsp.database.authPolicyEntity,
+      lcsp.database.authMembershipEntity,
+      lcsp.database.authSessionEntity,
+      lcsp.database.authAuditEventEntity
+  }
+
+  view erd_assessment_evidence_domain of lcsp.database {
+    title 'ERD - Assessment & Technical Evidence Domain'
+    description 'Assessment, WizardProfile, RepositoryConnection, RepositorySnapshot, RepositoryScanJob, and TechnicalEvidenceReport.'
+    include
+      lcsp.database.assessmentEntity,
+      lcsp.database.wizardProfileEntity,
+      lcsp.database.repositoryConnectionEntity,
+      lcsp.database.repositorySnapshotEntity,
+      lcsp.database.repositoryScanJobEntity,
+      lcsp.database.technicalEvidenceReportEntity
+  }
+
+  view erd_reconciliation_legal_domain of lcsp.database {
+    title 'ERD - Reconciliation, Legal RAG & Document Domain'
+    description 'TechnicalProfile, AIUsageFlow, ConflictRecord, VerifiedProfile, LegalRuleMatch, ClassificationResult, and DocumentRequest.'
+    include
+      lcsp.database.technicalProfileEntity,
+      lcsp.database.aiUsageFlowEntity,
+      lcsp.database.conflictRecordEntity,
+      lcsp.database.verifiedProfileEntity,
+      lcsp.database.legalRuleCatalogVersionEntity,
+      lcsp.database.legalRuleEntity,
+      lcsp.database.legalRuleMatchEntity,
+      lcsp.database.classificationResultEntity,
+      lcsp.database.documentRequestEntity,
+      lcsp.database.outboxMessageEntity
+  }
+}

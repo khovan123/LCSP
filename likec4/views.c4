@@ -1,0 +1,49 @@
+views {
+  view index {
+    title 'LCSP System Landscape'
+    description 'High-level overview of LCSP Platform, actors, and external system integrations.'
+    include *
+  }
+
+  view containers of lcsp {
+    title 'LCSP System Containers'
+    description 'Containers inside LCSP: Web Frontend, NestJS API, Python Workers, Database, ChromaDB, Queue, and Object Storage.'
+    include *
+  }
+
+  view pythonWorkersView of lcsp.pythonWorkers {
+    title 'Python Worker Platform Architecture'
+    description 'Bounded asynchronous worker services for scanning, reconciliation, legal ingestion, ChromaDB vectorless RAG, and document generation.'
+    include *
+  }
+
+  view evidenceScanFlow {
+    title 'Evidence Scan to Verified Profile Flow'
+    description 'Workflow from GitHub App repository trigger to Scanner Worker evidence collection and Reconciliation Worker VerifiedProfile.'
+    include
+      githubApp,
+      lcsp.web,
+      lcsp.api,
+      lcsp.queue,
+      lcsp.pythonWorkers.scannerWorker,
+      lcsp.pythonWorkers.aiUsageWorker,
+      lcsp.pythonWorkers.reconciliationWorker,
+      lcsp.database
+  }
+
+  view legalRetrievalFlow {
+    title 'Legal Ingestion & ChromaDB Vectorless RAG Flow'
+    description 'Vectorless legal retrieval pipeline using ChromaDB, Clause/Article context expansion, and citation guardrails.'
+    include
+      officialLegalPortals,
+      lcsp.pythonWorkers.legalIngestionWorker,
+      lcsp.objectStore,
+      lcsp.pythonWorkers.chromaIndexer,
+      lcsp.chromaDB,
+      lcsp.pythonWorkers.chromaRetriever,
+      lcsp.pythonWorkers.legalMatchingWorker,
+      lcsp.pythonWorkers.classificationWorker,
+      lcsp.pythonWorkers.gapAnalysisWorker,
+      lcsp.pythonWorkers.documentWorker
+  }
+}

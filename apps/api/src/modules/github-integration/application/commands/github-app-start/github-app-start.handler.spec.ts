@@ -15,10 +15,11 @@ import type { GitHubAppInstallStateRepository } from "../../ports/persistence/gi
 import { GitHubAppStartCommand } from "./github-app-start.command.js";
 import { GitHubAppStartHandler } from "./github-app-start.handler.js";
 
-const ALLOWED_REDIRECT_URI = "http://localhost:3000/github/callback";
+const ALLOWED_REDIRECT_URI = "http://localhost:3000/api/github/app/callback";
 
 function buildHandler(options?: {
   assessment?: { id: string; organizationId: string } | null;
+  repositoryConnection?: { assessmentId: string | null } | null;
 }) {
   const save = jest
     .fn<GitHubAppInstallStateRepository["save"]>()
@@ -62,8 +63,16 @@ function buildHandler(options?: {
     .mockResolvedValue(
       options?.assessment === undefined ? null : options.assessment,
     );
+  const findFirst = jest
+    .fn<(args: unknown) => Promise<{ assessmentId: string | null } | null>>()
+    .mockResolvedValue(
+      options?.repositoryConnection === undefined
+        ? null
+        : options.repositoryConnection,
+    );
   const prisma = {
     assessment: { findUnique },
+    repositoryConnection: { findFirst },
   } as unknown as PrismaService;
 
   const handler = new GitHubAppStartHandler(
@@ -74,7 +83,7 @@ function buildHandler(options?: {
     prisma,
   );
 
-  return { handler, save, write, buildInstallationUrl, findUnique };
+  return { handler, save, write, buildInstallationUrl, findUnique, findFirst };
 }
 
 describe("GitHubAppStartHandler", () => {
@@ -89,6 +98,7 @@ describe("GitHubAppStartHandler", () => {
         ALLOWED_REDIRECT_URI,
         undefined,
         "corr-1",
+        "session-1",
       ),
     );
 
@@ -112,6 +122,7 @@ describe("GitHubAppStartHandler", () => {
           "https://evil.example/callback",
           undefined,
           "corr-1",
+          "session-1",
         ),
       ),
     ).rejects.toThrow(BadRequestException);
@@ -124,6 +135,7 @@ describe("GitHubAppStartHandler", () => {
           "https://evil.example/callback",
           undefined,
           "corr-1",
+          "session-1",
         ),
       );
     } catch (error) {
@@ -149,6 +161,7 @@ describe("GitHubAppStartHandler", () => {
           undefined,
           undefined,
           "corr-1",
+          "session-1",
         ),
       ),
     ).rejects.toThrow(BadRequestException);
@@ -169,6 +182,7 @@ describe("GitHubAppStartHandler", () => {
           ALLOWED_REDIRECT_URI,
           "assessment-1",
           "corr-1",
+          "session-1",
         ),
       ),
     ).rejects.toThrow(BadRequestException);
@@ -181,6 +195,7 @@ describe("GitHubAppStartHandler", () => {
           ALLOWED_REDIRECT_URI,
           "assessment-1",
           "corr-1",
+          "session-1",
         ),
       );
     } catch (error) {
@@ -207,6 +222,7 @@ describe("GitHubAppStartHandler", () => {
         ALLOWED_REDIRECT_URI,
         undefined,
         "corr-1",
+        "session-1",
       ),
     );
 
@@ -217,6 +233,77 @@ describe("GitHubAppStartHandler", () => {
     const ttlMs = savedState.expiresAt.getTime() - before;
     expect(ttlMs).toBeGreaterThan(9 * 60_000);
     expect(ttlMs).toBeLessThanOrEqual(10 * 60_000 + 1000);
+  });
+
+  it("starts a managed installation update when installation belongs to the actor workspace", async () => {
+    const { handler, save, findFirst } = buildHandler({
+      repositoryConnection: { assessmentId: "assessment-1" },
+      assessment: { id: "assessment-1", organizationId: "org-1" },
+    });
+
+    await handler.execute(
+      new GitHubAppStartCommand(
+        "org-1",
+        "user-1",
+        ALLOWED_REDIRECT_URI,
+        undefined,
+        "corr-1",
+        "session-1",
+        "installation-1",
+      ),
+    );
+
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        installationId: "installation-1",
+        organizationId: "org-1",
+        userId: "user-1",
+        revokedAt: null,
+      },
+      select: { assessmentId: true },
+    });
+    expect(save.mock.calls[0][0].assessmentId).toBe("assessment-1");
+  });
+
+  it("rejects a managed installation update when installation is outside the actor workspace", async () => {
+    const { handler, save } = buildHandler({ repositoryConnection: null });
+
+    await expect(
+      handler.execute(
+        new GitHubAppStartCommand(
+          "org-1",
+          "user-1",
+          ALLOWED_REDIRECT_URI,
+          undefined,
+          "corr-1",
+          "session-1",
+          "installation-other",
+        ),
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    try {
+      await handler.execute(
+        new GitHubAppStartCommand(
+          "org-1",
+          "user-1",
+          ALLOWED_REDIRECT_URI,
+          undefined,
+          "corr-1",
+          "session-1",
+          "installation-other",
+        ),
+      );
+    } catch (error) {
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        ok: false,
+        problem: {
+          code: GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
+          correlationId: "corr-1",
+        },
+      });
+    }
+    expect(save).not.toHaveBeenCalled();
   });
 
   // T06
@@ -230,6 +317,7 @@ describe("GitHubAppStartHandler", () => {
         ALLOWED_REDIRECT_URI,
         undefined,
         "corr-1",
+        "session-1",
       ),
     );
 
@@ -247,6 +335,7 @@ describe("GitHubAppStartHandler", () => {
         ALLOWED_REDIRECT_URI,
         undefined,
         "corr-1",
+        "session-1",
       ),
     );
 

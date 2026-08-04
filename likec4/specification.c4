@@ -1,0 +1,140 @@
+specification {
+  element system {
+    style {
+      shape rectangle
+      color primary
+    }
+  }
+
+  element actor {
+    style {
+      shape person
+      color amber
+    }
+  }
+
+  element webApp {
+    style {
+      shape browser
+      color blue
+    }
+  }
+
+  element frontendPage {
+    style {
+      shape browser
+      color blue
+    }
+  }
+
+  element frontendComponent {
+    style {
+      shape component
+      color blue
+    }
+  }
+
+  element nextRoute {
+    style {
+      shape component
+      color primary
+    }
+  }
+
+  element apiService {
+    style {
+      shape component
+      color blue
+    }
+  }
+
+  element workerService {
+    style {
+      shape component
+      color green
+    }
+  }
+
+  element database {
+    style {
+      shape storage
+      color secondary
+    }
+  }
+
+  element vectorStore {
+    style {
+      shape storage
+      color secondary
+    }
+  }
+
+  element messageQueue {
+    style {
+      shape queue
+      color slate
+    }
+  }
+
+  element objectStore {
+    style {
+      shape storage
+      color secondary
+    }
+  }
+
+  element externalSystem {
+    style {
+      shape rectangle
+      color gray
+    }
+  }
+
+  element entity {
+    style {
+      shape storage
+      color secondary
+    }
+  }
+
+  element controller {
+    style {
+      shape component
+      color blue
+    }
+  }
+
+  element handler {
+    style {
+      shape component
+      color primary
+    }
+  }
+
+  element service {
+    style {
+      shape component
+      color primary
+    }
+  }
+
+  element repository {
+    style {
+      shape storage
+      color secondary
+    }
+  }
+
+  element queueChannel {
+    style {
+      shape queue
+      color slate
+    }
+  }
+
+  tag async
+  tag sync
+  tag vectorless
+  tag pbac
+  tag guardrail
+}

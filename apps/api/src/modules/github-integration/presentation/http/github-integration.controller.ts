@@ -19,6 +19,8 @@ import { RequireAction } from "../../../../platform/pbac/decorators/require-acti
 import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
+import { ReAuthForSensitiveRoute } from "../../../../platform/security/decorators/re-auth-for-sensitive-route.decorator.js";
+import { SENSITIVE_ROUTE_IDS } from "../../../../platform/security/sensitive-route-policy.js";
 import { GitHubAppCallbackCommand } from "../../application/commands/github-app-callback/github-app-callback.command.js";
 import { GitHubAppStartCommand } from "../../application/commands/github-app-start/github-app-start.command.js";
 import { PinSnapshotCommand } from "../../application/commands/pin-snapshot/pin-snapshot.command.js";
@@ -44,9 +46,16 @@ export class GitHubIntegrationController {
   @Get("github/app/start")
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.githubConnect)
+  @ReAuthForSensitiveRoute({
+    routeId: SENSITIVE_ROUTE_IDS.githubAppStart,
+    method: "GET",
+    pathTemplate: "/github/app/start",
+    aliases: [{ method: "GET", pathTemplate: "/api/github/app/start" }],
+  })
   async startAppInstallation(
     @Query("redirect_uri") redirectUri: string | undefined,
     @Query("assessment_id") assessmentId: string | undefined,
+    @Query("installation_id") installationId: string | undefined,
     @Req() request: GitHubIntegrationRequest,
   ) {
     const pbacContext = request.pbacContext as PbacRequestContext;
@@ -59,6 +68,8 @@ export class GitHubIntegrationController {
           redirectUri,
           assessmentId,
           request.correlationId as string,
+          pbacContext.sessionId,
+          installationId,
         ),
       ),
     );
@@ -69,6 +80,7 @@ export class GitHubIntegrationController {
     @Query("installation_id") installationId: string,
     @Query("code") code: string,
     @Query("state") state: string,
+    @Query("repository_id") repositoryId: string | undefined,
     @Headers("x-correlation-id") correlationId: string | undefined,
   ) {
     return resultEnvelope(
@@ -78,6 +90,7 @@ export class GitHubIntegrationController {
           code,
           state,
           correlationId ?? createCorrelationId(),
+          repositoryId,
         ),
       ),
     );

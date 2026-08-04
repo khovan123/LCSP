@@ -12,6 +12,7 @@ export const AUTH_ERROR_CODES = {
   authzStateGateBlocked: "AUTHZ_STATE_GATE_BLOCKED",
   authzEvaluatorFailure: "AUTHZ_EVALUATOR_FAILURE",
   validationFailed: "VALIDATION_FAILED",
+  reauthRequired: "REAUTH_REQUIRED",
   mfaRequired: "MFA_REQUIRED",
   mfaInvalid: "MFA_INVALID",
   mfaRateLimited: "MFA_RATE_LIMITED",

@@ -1,12 +1,16 @@
 import { NextRequest } from "next/server";
 import {
+  AUTH_ERROR_CODES,
   AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
+  REQUIRED_ACTIONS,
 } from "@lcsp/contracts/auth";
 
+import { getProblemRequiredAction } from "@/lib/api/problem-envelope";
 import { isMockModeEnabled } from "@/lib/server/fixtures/response";
 import { successJson } from "@/lib/server/problem-json";
 import { requireSessionToken } from "@/lib/server/session-token";
+import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
 import {
   upstreamJson,
   upstreamRequest,
@@ -52,6 +56,14 @@ export async function GET(request: NextRequest) {
   const upstream = await upstreamRequest("/auth/profile", {
     bearerToken: session.token,
   });
+  if (
+    upstream.problemCode === AUTH_ERROR_CODES.pbacDenied &&
+    getProblemRequiredAction(upstream.result) === REQUIRED_ACTIONS.contactOwner
+  ) {
+    const response = upstreamJson(upstream);
+    response.cookies.delete(SESSION_COOKIE_NAME);
+    return response;
+  }
   return validatedUpstreamJson(upstream, sanitizeProfilePayload);
 }
 

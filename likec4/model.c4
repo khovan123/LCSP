@@ -1,0 +1,165 @@
+model {
+  complianceManager = actor 'Compliance Manager' {
+    description 'Compliance officer conducting AI evidence collection, resolution, risk classification, and document generation.'
+  }
+
+  legalOperator = actor 'Legal Operator' {
+    description 'Internal operator responsible for legal corpus ingestion review and version approval.'
+  }
+
+  developer = actor 'Developer' {
+    description 'Optional technical contact for delegated technical evidence clarification.'
+  }
+
+  githubApp = externalSystem 'GitHub App / Repository API' {
+    description 'Authorizes read-only repository access and triggers automatic static scans.'
+  }
+
+  officialLegalPortals = externalSystem 'Official Legal Portals' {
+    description 'Official government legal source portals for law and regulatory documents.'
+  }
+
+  llmProviders = externalSystem 'LLM Providers' {
+    description 'External GenAI providers (OpenAI, Anthropic, Gemini) invoked via LLM Gateway.'
+  }
+
+  lcsp = system 'LCSP Compliance Platform' {
+    description 'Evidence-first AI legal compliance platform.'
+
+    web = webApp 'Web Frontend' {
+      technology 'Next.js 16, React, Tailwind, TanStack Query, Zustand, RHF+Zod'
+      description 'Manager workspace for assessments, repo connections, conflicts resolution, and document exports.'
+    }
+
+    api = apiService 'Backend API' {
+      technology 'NestJS, Prisma ORM, TypeScript'
+      description 'Synchronous control plane, PBAC boundary, assessment state machine, and trigger creation.'
+    }
+
+    contracts = apiService 'Shared Contracts & i18n' {
+      technology 'TypeScript packages (@lcsp/contracts, @lcsp/i18n)'
+      description 'Shared Screaming Snake Case constants, problem envelopes, and localization keys.'
+    }
+
+    pythonWorkers = system 'Python Worker Platform' {
+      description 'Bounded asynchronous Python worker services owning heavy domain workloads.'
+
+      scannerWorker = workerService 'Scanner Worker' {
+        technology 'Python, Syft, Knip, Semgrep, AST, TS/JS Analyzer'
+        description 'Collects static-analysis technical evidence from commit-pinned repository snapshots.'
+      }
+
+      aiUsageWorker = workerService 'AIUsageFlow Worker' {
+        technology 'Python'
+        description 'Converts technical evidence & Wizard declarations into business usage claims.'
+      }
+
+      reconciliationWorker = workerService 'Reconciliation Worker' {
+        technology 'Python'
+        description 'Compares declarations vs scanner evidence, handles resolution -> VerifiedProfile.'
+      }
+
+      legalIngestionWorker = workerService 'Legal Ingestion Worker' {
+        technology 'Python, PyPDF2/BeautifulSoup'
+        description 'Fetches official legal sources, snapshots raw PDF/HTML into object storage, normalizes legal structure.'
+      }
+
+      chromaIndexer = workerService 'ChromaDB Legal Indexer' {
+        technology 'Python, ChromaDB Client'
+        description 'Builds structure-first vectorless index for approved legal corpus versions (Clause/Article hierarchy).'
+      }
+
+      chromaRetriever = workerService 'ChromaDB Legal Retriever' {
+        technology 'Python, ChromaDB Client'
+        description 'Retrieves citation-backed legal rules using metadata filtering, direct chunk lookup, and context expansion.'
+      }
+
+      legalMatchingWorker = workerService 'Legal Matching Worker' {
+        technology 'Python'
+        description 'Matches citation-backed legal rules to verified profile claims.'
+      }
+
+      classificationWorker = workerService 'Classification Worker' {
+        technology 'Python'
+        description 'Classifies risk & compliance based only on VerifiedProfile and citation-backed legal matches.'
+      }
+
+      gapAnalysisWorker = workerService 'Gap Analysis Worker' {
+        technology 'Python'
+        description 'Converts RiskClassification + legal matches into compliance gaps and remediation priorities.'
+      }
+
+      documentWorker = workerService 'Document Worker' {
+        technology 'Python, ReportLab/WeasyPrint'
+        description 'Generates regulatory compliance report documents after all guardrail checks pass.'
+      }
+
+      llmGateway = workerService 'LLM Gateway' {
+        technology 'Python, Central Provider Proxy'
+        description 'Central boundary for real LLM calls, template versions, cost/privacy controls, and audit.'
+      }
+    }
+
+    database = database 'PostgreSQL Database' {
+      technology 'PostgreSQL, Prisma ORM'
+      description 'Primary relational store for user, workspace, assessment, PBAC, evidence, and compliance entities.'
+    }
+
+    chromaDB = vectorStore 'ChromaDB Legal Index' {
+      technology 'ChromaDB (Vectorless Mode)'
+      description 'Structure-first vectorless index storing document/chunk records, stable hierarchical IDs, and legal graph metadata.'
+    }
+
+    queue = messageQueue 'RabbitMQ Message Bus' {
+      technology 'RabbitMQ'
+      description 'Asynchronous event bus and work queue connecting Backend API and Python Workers.'
+    }
+
+    objectStore = objectStore 'Object Storage (S3)' {
+      technology 'MinIO / AWS S3'
+      description 'Immutable storage for raw legal PDF/HTML snapshots and generated document reports.'
+    }
+  }
+
+  // Relationships
+  complianceManager -> web 'Uses workspace, manages assessments, resolves conflicts, downloads reports'
+  legalOperator -> web 'Reviews legal corpus snapshots and approves corpus versions'
+  developer -> web 'Provides delegated technical evidence clarification (Optional)'
+
+  web -> api 'Sends REST requests (BFF proxy), receives standard success/problem envelopes' #sync #pbac
+  api -> contracts 'Imports shared domain constants and envelope schemas'
+  web -> contracts 'Imports UI constants and i18n keys'
+
+  api -> database 'Persists state machine, workspace, PBAC, and assessment records' #sync
+  api -> queue 'Dispatches asynchronous scan, ingestion, and calculation jobs' #async
+  api -> githubApp 'Triggers automatic trusted repository scans' #sync
+
+  githubApp -> scannerWorker 'Provides commit-pinned repository snapshot read access'
+
+  scannerWorker -> queue 'Consumes scan trigger jobs' #async
+  scannerWorker -> database 'Persists static-analysis technical evidence'
+  scannerWorker -> aiUsageWorker 'Triggers usage claim processing' #async
+
+  aiUsageWorker -> reconciliationWorker 'Sends claims for reconciliation'
+  reconciliationWorker -> database 'Persists VerifiedProfile'
+
+  officialLegalPortals -> legalIngestionWorker 'Fetched by ingestion worker'
+  legalIngestionWorker -> objectStore 'Saves raw PDF/HTML snapshots'
+  legalIngestionWorker -> database 'Persists legal structure metadata'
+  legalIngestionWorker -> queue 'Triggers indexing upon operator approval' #async
+
+  chromaIndexer -> chromaDB 'Indexes approved legal corpus chunks with hierarchical IDs' #vectorless
+  chromaRetriever -> chromaDB 'Queries vectorless index by direct ID, metadata filter, and context graph' #vectorless
+
+  legalMatchingWorker -> chromaRetriever 'Retrieves citation-backed rules for verified claims' #guardrail
+  legalMatchingWorker -> llmGateway 'Calls LLM for rule candidate analysis'
+
+  classificationWorker -> database 'Reads VerifiedProfile and citation-backed legal matches' #guardrail
+  classificationWorker -> gapAnalysisWorker 'Sends RiskClassification to gap analysis'
+
+  gapAnalysisWorker -> documentWorker 'Triggers document generation when no citation gaps remain' #guardrail
+  documentWorker -> objectStore 'Saves generated PDF compliance reports'
+  documentWorker -> database 'Records report document metadata'
+
+  llmGateway -> llmProviders 'Makes real provider calls with cost & privacy controls'
+}

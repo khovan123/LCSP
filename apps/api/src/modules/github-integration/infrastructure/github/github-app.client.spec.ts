@@ -2,6 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import type { ConfigService } from "@nestjs/config";
+import { GITHUB_REPOSITORY_PERMISSION_LEVELS } from "@lcsp/contracts/github-integration";
 
 import { GitHubAppClient } from "./github-app.client.js";
 
@@ -102,5 +103,97 @@ describe("GitHubAppClient.resolveCommit", () => {
         revision: "main",
       }),
     ).rejects.toThrow("github_commit_resolution_failed");
+  });
+});
+
+describe("GitHubAppClient.fetchInstallationMetadata", () => {
+  it("normalizes GitHub permission values and selects the requested authorized repository", async () => {
+    const fetchMock = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({
+          installations: [
+            { id: 1, permissions: { contents: "write" } },
+            { id: 2, permissions: { contents: "read" } },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          repositories: [
+            {
+              id: 111,
+              name: "first-repo",
+              full_name: "acme/first-repo",
+              default_branch: "main",
+            },
+            {
+              id: 222,
+              name: "selected-repo",
+              full_name: "acme/selected-repo",
+              default_branch: "trunk",
+            },
+          ],
+        }),
+      );
+
+    const result = await client().fetchInstallationMetadata({
+      installationId: "2",
+      accessToken: "user-token",
+      repositoryId: "222",
+    });
+
+    expect(result.permissions).toEqual({
+      contents: GITHUB_REPOSITORY_PERMISSION_LEVELS.read,
+    });
+    expect(result.repository).toMatchObject({
+      id: "222",
+      fullName: "acme/selected-repo",
+      defaultBranch: "trunk",
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://api.github.com/user/installations?per_page=100",
+    );
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      headers: expect.objectContaining({
+        accept: "application/vnd.github+json",
+        "x-github-api-version": "2026-03-10",
+      }),
+    });
+  });
+
+  it("rejects ambiguous multi-repository installations without a selected repository", async () => {
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({
+          installations: [{ id: 1, permissions: { contents: "read" } }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          repositories: [
+            {
+              id: 111,
+              name: "first-repo",
+              full_name: "acme/first-repo",
+              default_branch: "main",
+            },
+            {
+              id: 222,
+              name: "second-repo",
+              full_name: "acme/second-repo",
+              default_branch: "trunk",
+            },
+          ],
+        }),
+      );
+
+    await expect(
+      client().fetchInstallationMetadata({
+        installationId: "1",
+        accessToken: "user-token",
+      }),
+    ).rejects.toThrow("github_app_repository_selection_failed");
   });
 });

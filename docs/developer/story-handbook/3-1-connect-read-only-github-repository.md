@@ -47,13 +47,13 @@ As a Manager or scoped Developer, I want to connect an authorized GitHub reposit
 
 ### Story-Specific Implementation Tasks
 
-- Implement GitHub App connection flow with read-only permissions and authorized repo selection.
+- Implement GitHub App connection and managed installation update flow with read-only permissions and authorized repo selection.
 - Persist RepositoryConnection metadata without exposing raw tokens.
 - Separate OAuth identity login from repository authorization and audit denial paths.
 
 ### Task to Acceptance Criteria Traceability
 
-- `AC1`: Implement GitHub App connection flow with read-only permissions and authorized repo selection.
+- `AC1`: Implement GitHub App connection/update flow with read-only permissions and authorized repo selection.
 - `AC2`: Persist RepositoryConnection metadata without exposing raw tokens.
 - `AC3`: Separate OAuth identity login from repository authorization and audit denial paths.
 
@@ -73,6 +73,7 @@ As a Manager or scoped Developer, I want to connect an authorized GitHub reposit
 - Raw token leakage in logs/UI.
 - Wrong-organization repo selected.
 - Identity login accidentally grants repository scope.
+- GitHub installation update redirects without LCSP-generated state; supported UX must start from LCSP Manage so state can be validated.
 
 ### Architecture Compliance
 

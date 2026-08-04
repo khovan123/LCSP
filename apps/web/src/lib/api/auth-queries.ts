@@ -13,12 +13,14 @@ import {
   getAuthSessions,
   getAuthSettingsProfile,
   previewInvitation,
+  recordMfaRecoveryCodeAccess,
   reauthenticateWithPassword,
   revokeAuthSession,
   requestPasswordRecovery,
   signIn,
   signOut,
   updateProfile,
+  verifyMfaRecoveryCode,
   verifyMfaOtp,
 } from "./auth-client";
 import { API_OUTCOME_KINDS } from "./outcome-kinds";
@@ -66,12 +68,20 @@ export function useMfaVerifyMutation() {
   return useMutation({ mutationFn: verifyMfaOtp });
 }
 
+export function useMfaRecoveryCodeVerifyMutation() {
+  return useMutation({ mutationFn: verifyMfaRecoveryCode });
+}
+
 export function usePasswordReauthMutation() {
   return useMutation({ mutationFn: reauthenticateWithPassword });
 }
 
 export function useMfaEnrollMutation() {
   return useMutation({ mutationFn: enrollMfa });
+}
+
+export function useMfaRecoveryCodeAccessMutation() {
+  return useMutation({ mutationFn: recordMfaRecoveryCodeAccess });
 }
 
 export function useDisableMfaMutation() {

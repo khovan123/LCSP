@@ -45,6 +45,7 @@ export type AuthRepositoriesSuccess = {
   ok: true;
   repositories: Array<{
     id: string;
+    installation_id: string;
     repository_name: string;
     repository_full_name: string;
     default_branch: string;
