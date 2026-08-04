@@ -1,0 +1,85 @@
+DO $$
+BEGIN
+  IF to_regtype('"AuditResourceType"') IS NULL THEN
+    CREATE TYPE "AuditResourceType" AS ENUM (
+      'AI_USAGE_FLOW',
+      'ASSESSMENT',
+      'ASSESSMENT_RECORD',
+      'AUDIT_EXPORT_REQUEST',
+      'AUTH_INVITATION',
+      'AUTH_MEMBERSHIP',
+      'AUTH_ORGANIZATION',
+      'AUTH_SESSION',
+      'CLASSIFICATION_RESULT',
+      'CONFLICT_RECORD',
+      'DOCUMENT_REQUEST',
+      'GITHUB_APP_INSTALL_STATE',
+      'HTTP_ROUTE',
+      'LEGAL_RULE',
+      'LEGAL_RULE_CATALOG_VERSION',
+      'LEGAL_RULE_MATCH',
+      'OUTBOX',
+      'READINESS_EXPORT',
+      'REPOSITORY_CONNECTION',
+      'REPOSITORY_SCAN_JOB',
+      'REPOSITORY_SNAPSHOT',
+      'TECHNICAL_EVIDENCE_REPORT',
+      'TECHNICAL_PROFILE',
+      'VERIFIED_PROFILE',
+      'WORKER_TASK',
+      'WORKSPACE',
+      'WIZARD_PROFILE'
+    );
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF to_regtype('"AuthorizationReasonCode"') IS NULL THEN
+    CREATE TYPE "AuthorizationReasonCode" AS ENUM (
+      'ACTION_NOT_GRANTED',
+      'ACCOUNT_NOT_FOUND',
+      'AUTHORIZED',
+      'AUTHZ_EVALUATOR_FAILURE',
+      'AUTHZ_POLICY_UNAVAILABLE',
+      'AUTHZ_STATE_GATE_BLOCKED',
+      'AUTHZ_SUBJECT_INCOMPLETE',
+      'AUTHZ_TENANT_SCOPE_MISMATCH',
+      'AUTH_REQUIRED',
+      'EMAIL_VERIFICATION_REQUIRED',
+      'EVALUATOR_ERROR',
+      'INVALID_CREDENTIALS',
+      'INVALID_INVITE_STATE',
+      'INVALID_REDIRECT_URI',
+      'LOAD_ERROR',
+      'MEMBERSHIP_MISSING',
+      'MFA_REQUIRED',
+      'MFA_INVALID',
+      'MFA_RATE_LIMITED',
+      'OAUTH_CALLBACK_INVALID',
+      'OAUTH_STATE_INVALID',
+      'ORGANIZATION_MISMATCH',
+      'PBAC_DENIED',
+      'PBAC_METADATA_MISSING',
+      'POLICY_NOT_FOUND',
+      'RECOVERY_INVALID',
+      'SESSION_INVALID',
+      'STATE_GATE_FAILED',
+      'SUBJECT_ROLE_MISMATCH',
+      'SUBJECT_ATTRIBUTE_MISSING',
+      'TEMPORARY_LOCKED',
+      'UNSUPPORTED_PROVIDER',
+      'VALIDATION_FAILED'
+    );
+  END IF;
+END $$;
+
+ALTER TABLE "AuthAuditEvent"
+ALTER COLUMN "resourceType" TYPE "AuditResourceType"
+USING "resourceType"::"AuditResourceType";
+
+ALTER TABLE "AuthDecisionLog"
+ALTER COLUMN "resourceType" TYPE "AuditResourceType"
+USING "resourceType"::"AuditResourceType",
+ALTER COLUMN "reasonCode" TYPE "AuthorizationReasonCode"
+USING "reasonCode"::"AuthorizationReasonCode";

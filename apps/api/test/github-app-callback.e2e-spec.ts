@@ -78,6 +78,10 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     });
     const signInBody = successBody<SignInSuccess>(signIn);
     managerToken = signInBody?.session_token ?? "";
+    await prisma.authSession.updateMany({
+      where: { userId: "user-1", organizationId: orgId },
+      data: { sensitiveActionVerifiedAt: new Date() },
+    });
   });
 
   afterEach(() => {
@@ -130,8 +134,12 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
           fakeResponse(200, { access_token: LEAKED_TOKEN_MARKER }),
         );
       }
-      if (urlStr.endsWith(`/user/installations/${INSTALLATION_ID}`)) {
-        return Promise.resolve(fakeResponse(200, { permissions }));
+      if (urlStr.endsWith("/user/installations?per_page=100")) {
+        return Promise.resolve(
+          fakeResponse(200, {
+            installations: [{ id: INSTALLATION_ID, permissions }],
+          }),
+        );
       }
       if (
         urlStr.endsWith(`/user/installations/${INSTALLATION_ID}/repositories`)
