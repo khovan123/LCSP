@@ -93,6 +93,7 @@ export function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedSection = searchParams.get("section");
+  const oauthLinkStatus = searchParams.get("oauth_link");
   const activeSection = isSettingsSectionId(requestedSection)
     ? requestedSection
     : SETTINGS_SECTION_IDS.passwordAndAuthentication;
@@ -720,10 +721,11 @@ export function SettingsPage() {
           </Card>
 
           {activeSection === SETTINGS_SECTION_IDS.account ? (
-            <AccountSettingsSection
-              profile={profile}
-              primaryEmailBadgeKey={primaryEmailBadgeKey}
-            />
+                  <AccountSettingsSection
+                    profile={profile}
+                    primaryEmailBadgeKey={primaryEmailBadgeKey}
+                    oauthLinkStatus={oauthLinkStatus}
+                  />
           ) : null}
 
           {activeSection === SETTINGS_SECTION_IDS.appearance ? (

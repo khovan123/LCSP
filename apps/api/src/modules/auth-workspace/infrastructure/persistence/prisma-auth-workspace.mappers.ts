@@ -155,6 +155,8 @@ export function mapOAuthStateRecord(record: AuthOAuthState): OAuthState {
     provider: record.provider,
     redirectUri: record.redirectUri,
     expiresAt: record.expiresAt.getTime(),
+    userId: record.userId,
+    sessionId: record.sessionId,
   });
 }
 

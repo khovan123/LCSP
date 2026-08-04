@@ -172,7 +172,11 @@ model AuthOAuthState {
   provider    String
   redirectUri String
   expiresAt   DateTime
+  userId      String?
+  sessionId   String?
   createdAt   DateTime @default(now())
+
+  @@index([userId, sessionId])
 }
 
 model AuthOAuthIdentity {

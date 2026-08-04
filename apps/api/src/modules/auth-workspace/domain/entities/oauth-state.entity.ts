@@ -6,6 +6,8 @@ type OAuthStateInput = {
   provider: string;
   redirectUri: string;
   expiresAt: number;
+  userId?: string | null;
+  sessionId?: string | null;
 };
 
 export class OAuthState {
@@ -15,6 +17,8 @@ export class OAuthState {
   readonly provider: string;
   readonly redirectUri: string;
   readonly expiresAt: number;
+  readonly userId: string | null;
+  readonly sessionId: string | null;
 
   constructor(input: OAuthStateInput) {
     this.id = randomUUID();
@@ -23,6 +27,8 @@ export class OAuthState {
     this.provider = input.provider;
     this.redirectUri = input.redirectUri;
     this.expiresAt = input.expiresAt;
+    this.userId = input.userId ?? null;
+    this.sessionId = input.sessionId ?? null;
   }
 
   static rehydrate(input: OAuthStateInput & { id: string }): OAuthState {
@@ -33,5 +39,9 @@ export class OAuthState {
 
   isExpired(now: number): boolean {
     return this.expiresAt <= now;
+  }
+
+  isLinkState(): boolean {
+    return this.userId !== null || this.sessionId !== null;
   }
 }

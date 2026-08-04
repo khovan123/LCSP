@@ -381,11 +381,22 @@ export const viPages = {
         sendRecovery: "Gửi hướng dẫn khôi phục",
         updatePassword: "Cập nhật mật khẩu",
         revoke: "Thu hồi",
+        linkGitHub: "Liên kết GitHub",
+        linkGoogle: "Liên kết Google",
       },
       account: {
         title: "Tài khoản",
         description:
           "Xem định danh và ngữ cảnh workspace gắn với phiên LCSP hiện tại.",
+        oauthTitle: "Nhà cung cấp OAuth",
+        oauthDescription:
+          "Chỉ thêm phương thức đăng nhập OAuth sau khi phiên hiện tại đã xác thực hợp lệ.",
+        oauthLinkSuccessTitle: "Đã liên kết provider",
+        oauthLinkSuccessDescription:
+          "Provider OAuth này có thể dùng cho các lần đăng nhập LCSP sau.",
+        oauthLinkFailedTitle: "Chưa liên kết provider",
+        oauthLinkFailedDescription:
+          "Không thể liên kết provider OAuth với tài khoản này.",
       },
       appearance: {
         title: "Giao diện",

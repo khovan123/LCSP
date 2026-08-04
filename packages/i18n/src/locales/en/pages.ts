@@ -383,11 +383,22 @@ export const enPages = {
         sendRecovery: "Send recovery instructions",
         updatePassword: "Update password",
         revoke: "Revoke",
+        linkGitHub: "Link GitHub",
+        linkGoogle: "Link Google",
       },
       account: {
         title: "Account",
         description:
           "Review the identity and workspace context attached to this LCSP session.",
+        oauthTitle: "OAuth providers",
+        oauthDescription:
+          "Add an OAuth sign-in method only after this session is already authenticated.",
+        oauthLinkSuccessTitle: "Provider linked",
+        oauthLinkSuccessDescription:
+          "This OAuth provider can now be used for future LCSP sign-ins.",
+        oauthLinkFailedTitle: "Provider not linked",
+        oauthLinkFailedDescription:
+          "The OAuth provider could not be linked to this account.",
       },
       appearance: {
         title: "Appearance",

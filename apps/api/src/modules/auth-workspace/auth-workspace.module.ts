@@ -10,6 +10,8 @@ import { DisableMfaHandler } from "./application/commands/disable-mfa/disable-mf
 import { EnrollMfaHandler } from "./application/commands/enroll-mfa/enroll-mfa.handler.ts";
 import { InviteDeveloperHandler } from "./application/commands/invite-developer/invite-developer.handler.ts";
 import { OAuthCallbackHandler } from "./application/commands/oauth-callback/oauth-callback.handler.ts";
+import { OAuthLinkCallbackHandler } from "./application/commands/oauth-link-callback/oauth-link-callback.handler.ts";
+import { OAuthLinkStartHandler } from "./application/commands/oauth-link-start/oauth-link-start.handler.ts";
 import { OAuthStartHandler } from "./application/commands/oauth-start/oauth-start.handler.ts";
 import { RegisterApprovedPathHandler } from "./application/commands/register-approved-path/register-approved-path.handler.ts";
 import { RevokeMembershipHandler } from "./application/commands/revoke-membership/revoke-membership.handler.ts";
@@ -282,6 +284,41 @@ function handlerProvider<T>(
       ) => new OAuthCallbackHandler(support, repositories, providerRegistry),
     },
     {
+      provide: OAuthLinkStartHandler,
+      inject: [
+        AuthWorkspaceSupportService,
+        AUTH_WORKSPACE_REPOSITORIES_BAG,
+        OAuthProviderRegistry,
+        ConfigService,
+      ],
+      useFactory: (
+        support: AuthWorkspaceSupportService,
+        repositories: AuthWorkspaceRepositories,
+        providerRegistry: OAuthProviderRegistry,
+        configService: ConfigService,
+      ) =>
+        new OAuthLinkStartHandler(
+          support,
+          repositories,
+          providerRegistry,
+          configService,
+        ),
+    },
+    {
+      provide: OAuthLinkCallbackHandler,
+      inject: [
+        AuthWorkspaceSupportService,
+        AUTH_WORKSPACE_REPOSITORIES_BAG,
+        OAuthProviderRegistry,
+      ],
+      useFactory: (
+        support: AuthWorkspaceSupportService,
+        repositories: AuthWorkspaceRepositories,
+        providerRegistry: OAuthProviderRegistry,
+      ) =>
+        new OAuthLinkCallbackHandler(support, repositories, providerRegistry),
+    },
+    {
       provide: AuthWorkspaceFacade,
       inject: [
         RegisterApprovedPathHandler,
@@ -301,6 +338,8 @@ function handlerProvider<T>(
         ReauthenticatePasswordHandler,
         OAuthStartHandler,
         OAuthCallbackHandler,
+        OAuthLinkStartHandler,
+        OAuthLinkCallbackHandler,
         InviteDeveloperHandler,
         AcceptInvitationHandler,
         PreviewInvitationHandler,
@@ -325,6 +364,8 @@ function handlerProvider<T>(
         reauthenticatePasswordHandler: ReauthenticatePasswordHandler,
         oauthStartHandler: OAuthStartHandler,
         oauthCallbackHandler: OAuthCallbackHandler,
+        oauthLinkStartHandler: OAuthLinkStartHandler,
+        oauthLinkCallbackHandler: OAuthLinkCallbackHandler,
         inviteDeveloperHandler: InviteDeveloperHandler,
         acceptInvitationHandler: AcceptInvitationHandler,
         previewInvitationHandler: PreviewInvitationHandler,
@@ -349,6 +390,8 @@ function handlerProvider<T>(
           reauthenticatePasswordHandler,
           oauthStartHandler,
           oauthCallbackHandler,
+          oauthLinkStartHandler,
+          oauthLinkCallbackHandler,
           inviteDeveloperHandler,
           acceptInvitationHandler,
           previewInvitationHandler,

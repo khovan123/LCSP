@@ -22,6 +22,8 @@ import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-wor
 import { AuthWorkspaceSupportService } from "../../services/auth-workspace/auth-workspace-support.service.ts";
 import { OAuthCallbackCommand } from "./oauth-callback.command.ts";
 import { OAuthCallbackHandler } from "./oauth-callback.handler.ts";
+import { OAuthLinkCallbackCommand } from "../oauth-link-callback/oauth-link-callback.command.ts";
+import { OAuthLinkCallbackHandler } from "../oauth-link-callback/oauth-link-callback.handler.ts";
 
 const EXPECTED_ISSUER = "https://issuer.example";
 const EXPECTED_AUDIENCE = "expected-audience";
@@ -485,7 +487,21 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     );
   });
 
-  it("links a verified provider email to an existing verified user", async () => {
+  it("rejects a link-flow state on the public login callback", async () => {
+    oauthState = OAuthState.rehydrate({
+      ...oauthState,
+      userId: user.id,
+      sessionId: "session-1",
+    });
+
+    const result = await execute();
+
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthStateInvalid,
+    );
+  });
+
+  it("does not link a verified provider email during login callback", async () => {
     identity = null as unknown as OAuthIdentity;
     provider.claims = {
       ...provider.claims,
@@ -519,12 +535,10 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
       }),
     );
 
-    expect("ok" in result && result.ok).toBe(true);
-    expect(linkToUser).toHaveBeenCalledWith(
-      provider.name,
-      provider.claims.providerAccountId,
-      user.id,
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.accountNotFound,
     );
+    expect(linkToUser).not.toHaveBeenCalled();
   });
 
   it("U09 - unverified email returns ACCOUNT_NOT_FOUND", async () => {
@@ -587,5 +601,167 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     );
     const auditPayload = recordAuditSpy.mock.calls[0][1];
     expect(JSON.stringify(auditPayload)).not.toContain("LEAKED_TOKEN_MARKER");
+  });
+});
+
+describe("OAuthLinkCallbackHandler", () => {
+  let support: AuthWorkspaceSupportService;
+  let registry: OAuthProviderRegistry;
+  let provider: StubOidcProvider;
+  let oauthState: OAuthState;
+  let user: User;
+  let membership: Membership;
+  let identity: OAuthIdentity | null;
+  let recordAuditSpy: jest.SpiedFunction<typeof support.recordAudit>;
+
+  beforeEach(() => {
+    support = new AuthWorkspaceSupportService();
+    recordAuditSpy = jest
+      .spyOn(support, "recordAudit")
+      .mockImplementation(async () => {});
+
+    provider = new StubOidcProvider();
+    registry = {
+      resolve: (name: string) => (name === provider.name ? provider : null),
+    } as unknown as OAuthProviderRegistry;
+
+    user = User.rehydrate({
+      id: "user-1",
+      email: "oidc-user@acme.test",
+      passwordHash: "unused",
+      emailVerified: true,
+    });
+
+    membership = Membership.rehydrate({
+      id: "membership-1",
+      userId: user.id,
+      organizationId: "org-1",
+      status: AUTH_MEMBERSHIP_STATUSES.active,
+      subjectAttributes: { role: SUBJECT_ROLES.manager },
+      policyId: "policy-1",
+      policyVersion: "v1",
+    });
+
+    oauthState = OAuthState.rehydrate({
+      id: "state-1",
+      state: "state-value",
+      nonce: CORRECT_NONCE,
+      provider: provider.name,
+      redirectUri: "https://app.example/api/auth/oauth/link/callback/stub-oidc",
+      expiresAt: Date.now() + 60_000,
+      userId: user.id,
+      sessionId: "session-1",
+    });
+
+    identity = null;
+  });
+
+  function buildLinkHandler() {
+    const repositories = buildRepositories({
+      oauthState,
+      identity,
+      user,
+      activeMemberships: [membership],
+    });
+    return {
+      repositories,
+      handler: new OAuthLinkCallbackHandler(support, repositories, registry),
+    };
+  }
+
+  function execute() {
+    const { handler } = buildLinkHandler();
+    return handler.execute(
+      new OAuthLinkCallbackCommand(
+        {
+          code: "good-code",
+          state: oauthState.state,
+          provider: provider.name,
+        },
+        user.id,
+        "session-1",
+        membership.organizationId,
+      ),
+    );
+  }
+
+  it("links a verified provider account for the authenticated user", async () => {
+    const { handler, repositories } = buildLinkHandler();
+    const linkToUser = jest.spyOn(repositories.oauthIdentities, "linkToUser");
+
+    const result = await handler.execute(
+      new OAuthLinkCallbackCommand(
+        {
+          code: "good-code",
+          state: oauthState.state,
+          provider: provider.name,
+        },
+        user.id,
+        "session-1",
+        membership.organizationId,
+      ),
+    );
+
+    expect("ok" in result && result.ok).toBe(true);
+    expect(linkToUser).toHaveBeenCalledWith(provider.name, "acct-1", user.id);
+    expect(recordAuditSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        decision: PBAC_DECISION.allow,
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLinkSucceeded,
+        actor_id: user.id,
+      }),
+    );
+  });
+
+  it("rejects a link state bound to another session", async () => {
+    const result = await new OAuthLinkCallbackHandler(
+      support,
+      buildRepositories({
+        oauthState,
+        identity,
+        user,
+        activeMemberships: [membership],
+      }),
+      registry,
+    ).execute(
+      new OAuthLinkCallbackCommand(
+        {
+          code: "good-code",
+          state: oauthState.state,
+          provider: provider.name,
+        },
+        user.id,
+        "different-session",
+        membership.organizationId,
+      ),
+    );
+
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthStateInvalid,
+    );
+    expect(recordAuditSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        decision: PBAC_DECISION.deny,
+        event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLinkFailed,
+      }),
+    );
+  });
+
+  it("rejects a provider account already linked to another user", async () => {
+    identity = OAuthIdentity.rehydrate({
+      id: "identity-1",
+      userId: "other-user",
+      provider: provider.name,
+      providerAccountId: "acct-1",
+      createdAt: Date.now(),
+    });
+
+    const result = await execute();
+
+    expect("problem" in result && result.problem.code).toBe(
+      AUTH_ERROR_CODES.oauthCallbackInvalid,
+    );
   });
 });

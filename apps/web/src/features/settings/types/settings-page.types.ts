@@ -22,6 +22,7 @@ export type SettingsAlertMessage = {
 export type SettingsSectionSharedProps = {
   profile: AuthSettingsProfile | undefined;
   primaryEmailBadgeKey: MessageKey;
+  oauthLinkStatus?: string | null;
 };
 
 export type EmailSettingsSectionProps = SettingsSectionSharedProps & {

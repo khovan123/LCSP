@@ -14,6 +14,8 @@ import type {
 import type { RevokeMembershipResponse } from "../../contracts/auth-workspace/revoke-membership.contract.ts";
 import type {
   OAuthCallbackPayload,
+  OAuthLinkCallbackPayload,
+  OAuthLinkStartPayload,
   OAuthStartPayload,
 } from "../../contracts/auth-workspace/oauth.contract.ts";
 import type { RegisterPayload } from "../../contracts/auth-workspace/register-approved-path.contract.ts";
@@ -37,6 +39,10 @@ import { InviteDeveloperCommand } from "../../commands/invite-developer/invite-d
 import { InviteDeveloperHandler } from "../../commands/invite-developer/invite-developer.handler.ts";
 import { OAuthCallbackCommand } from "../../commands/oauth-callback/oauth-callback.command.ts";
 import { OAuthCallbackHandler } from "../../commands/oauth-callback/oauth-callback.handler.ts";
+import { OAuthLinkCallbackCommand } from "../../commands/oauth-link-callback/oauth-link-callback.command.ts";
+import { OAuthLinkCallbackHandler } from "../../commands/oauth-link-callback/oauth-link-callback.handler.ts";
+import { OAuthLinkStartCommand } from "../../commands/oauth-link-start/oauth-link-start.command.ts";
+import { OAuthLinkStartHandler } from "../../commands/oauth-link-start/oauth-link-start.handler.ts";
 import { OAuthStartCommand } from "../../commands/oauth-start/oauth-start.command.ts";
 import { OAuthStartHandler } from "../../commands/oauth-start/oauth-start.handler.ts";
 import { RegisterApprovedPathCommand } from "../../commands/register-approved-path/register-approved-path.command.ts";
@@ -91,6 +97,8 @@ export class AuthWorkspaceFacade {
     private readonly reauthenticatePasswordHandler: ReauthenticatePasswordHandler,
     private readonly oauthStartHandler: OAuthStartHandler,
     private readonly oauthCallbackHandler: OAuthCallbackHandler,
+    private readonly oauthLinkStartHandler: OAuthLinkStartHandler,
+    private readonly oauthLinkCallbackHandler: OAuthLinkCallbackHandler,
     private readonly inviteDeveloperHandler: InviteDeveloperHandler,
     private readonly acceptInvitationHandler: AcceptInvitationHandler,
     private readonly previewInvitationHandler: PreviewInvitationHandler,
@@ -229,6 +237,37 @@ export class AuthWorkspaceFacade {
   oauthCallback(payload: OAuthCallbackPayload, requestMeta: RequestMeta = {}) {
     return this.oauthCallbackHandler.execute(
       new OAuthCallbackCommand(payload, requestMeta),
+    );
+  }
+
+  oauthLinkStart(
+    payload: OAuthLinkStartPayload,
+    context: PbacRequestContext,
+    requestMeta: RequestMeta = {},
+  ) {
+    return this.oauthLinkStartHandler.execute(
+      new OAuthLinkStartCommand(
+        payload,
+        context.userId,
+        context.sessionId,
+        requestMeta,
+      ),
+    );
+  }
+
+  oauthLinkCallback(
+    payload: OAuthLinkCallbackPayload,
+    context: PbacRequestContext,
+    requestMeta: RequestMeta = {},
+  ) {
+    return this.oauthLinkCallbackHandler.execute(
+      new OAuthLinkCallbackCommand(
+        payload,
+        context.userId,
+        context.sessionId,
+        context.organizationId,
+        requestMeta,
+      ),
     );
   }
 

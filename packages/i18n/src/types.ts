@@ -394,10 +394,18 @@ export type PagesMessages = {
         sendRecovery: string;
         updatePassword: string;
         revoke: string;
+        linkGitHub: string;
+        linkGoogle: string;
       };
       account: {
         title: string;
         description: string;
+        oauthTitle: string;
+        oauthDescription: string;
+        oauthLinkSuccessTitle: string;
+        oauthLinkSuccessDescription: string;
+        oauthLinkFailedTitle: string;
+        oauthLinkFailedDescription: string;
       };
       appearance: {
         title: string;

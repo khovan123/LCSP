@@ -24,3 +24,16 @@ export type OAuthCallbackSuccess = {
   mfa_enrolled: boolean;
   organization_id: string;
 };
+
+export type OAuthLinkStartPayload = OAuthStartPayload;
+
+export type OAuthLinkStartSuccess = OAuthStartSuccess;
+
+export type OAuthLinkCallbackPayload = OAuthCallbackPayload;
+
+export type OAuthLinkCallbackSuccess = {
+  ok: true;
+  correlation_id: string;
+  provider: string;
+  linked: boolean;
+};
