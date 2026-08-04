@@ -30,6 +30,8 @@ import type {
   MfaEnrollmentRepository,
   MfaOtpUsedRepository,
   MfaRateLimitRepository,
+  MfaRecoveryCodeRepository,
+  MfaRecoveryCodeCreateInput,
 } from "../../application/ports/persistence/mfa.repository.ts";
 import type { OAuthIdentityRepository } from "../../application/ports/persistence/oauth-identity.repository.ts";
 import type { OAuthStateRepository } from "../../application/ports/persistence/oauth-state.repository.ts";
@@ -343,6 +345,9 @@ export class PrismaSessionRepository implements SessionRepository {
         expiresAt: dateFromEpochMsRequired(session.expiresAt),
         revokedAt: dateFromEpochMs(session.revokedAt),
         mfaVerifiedAt: dateFromEpochMs(session.mfaVerifiedAt),
+        sensitiveActionVerifiedAt: dateFromEpochMs(
+          session.sensitiveActionVerifiedAt,
+        ),
       },
       update: {
         userId: session.userId,
@@ -352,6 +357,9 @@ export class PrismaSessionRepository implements SessionRepository {
         expiresAt: dateFromEpochMsRequired(session.expiresAt),
         revokedAt: dateFromEpochMs(session.revokedAt),
         mfaVerifiedAt: dateFromEpochMs(session.mfaVerifiedAt),
+        sensitiveActionVerifiedAt: dateFromEpochMs(
+          session.sensitiveActionVerifiedAt,
+        ),
       },
     });
   }
@@ -592,6 +600,78 @@ export class PrismaMfaOtpUsedRepository implements MfaOtpUsedRepository {
     await this.prisma.authMfaOtpUsed.deleteMany({
       where: { usedAt: { lt: new Date(cutoffMs) } },
     });
+  }
+}
+
+@Injectable()
+export class PrismaMfaRecoveryCodeRepository implements MfaRecoveryCodeRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
+  nextId(): string {
+    return crypto.randomUUID();
+  }
+
+  nextBatchId(): string {
+    return crypto.randomUUID();
+  }
+
+  async hasActiveForUser(userId: string): Promise<boolean> {
+    const count = await this.prisma.authMfaRecoveryCode.count({
+      where: {
+        userId,
+        usedAt: null,
+        revokedAt: null,
+      },
+    });
+    return count > 0;
+  }
+
+  async replaceForUser(
+    userId: string,
+    codeRecords: readonly MfaRecoveryCodeCreateInput[],
+    batchId: string,
+    now: number,
+  ): Promise<void> {
+    const nowDate = new Date(now);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.authMfaRecoveryCode.updateMany({
+        where: { userId, revokedAt: null, usedAt: null },
+        data: { revokedAt: nowDate },
+      });
+      await tx.authMfaRecoveryCode.createMany({
+        data: codeRecords.map((record) => ({
+          id: record.id,
+          userId,
+          codeHash: record.codeHash,
+          batchId,
+          generatedAt: nowDate,
+        })),
+      });
+    });
+  }
+
+  async revokeActiveForUser(userId: string, now: number): Promise<void> {
+    await this.prisma.authMfaRecoveryCode.updateMany({
+      where: { userId, revokedAt: null, usedAt: null },
+      data: { revokedAt: new Date(now) },
+    });
+  }
+
+  async tryConsume(
+    userId: string,
+    codeHash: string,
+    now: number,
+  ): Promise<boolean> {
+    const result = await this.prisma.authMfaRecoveryCode.updateMany({
+      where: {
+        userId,
+        codeHash,
+        usedAt: null,
+        revokedAt: null,
+      },
+      data: { usedAt: new Date(now) },
+    });
+    return result.count === 1;
   }
 }
 

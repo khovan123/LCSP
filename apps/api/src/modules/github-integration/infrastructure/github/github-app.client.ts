@@ -17,13 +17,28 @@ export class GitHubAppClientError extends Error {}
 
 export interface GitHubAppInstallationMetadata {
   permissions: Record<string, string>;
-  repository: {
-    id: string;
-    name: string;
-    fullName: string;
-    defaultBranch: string;
-  };
+  repositories: GitHubRepositoryMetadata[];
+  repository: GitHubRepositoryMetadata;
 }
+
+export interface GitHubRepositoryMetadata {
+  id: string;
+  name: string;
+  fullName: string;
+  defaultBranch: string;
+}
+
+type GitHubRepositoryApiResponse = {
+  id?: unknown;
+  name?: unknown;
+  full_name?: unknown;
+  default_branch?: unknown;
+};
+
+type GitHubUserInstallationApiResponse = {
+  id?: unknown;
+  permissions?: unknown;
+};
 
 export interface GitHubResolvedCommit {
   sha: string;
@@ -96,12 +111,16 @@ export class GitHubAppClient {
   async fetchInstallationMetadata(input: {
     installationId: string;
     accessToken: string;
+    repositoryId?: string;
   }): Promise<GitHubAppInstallationMetadata> {
-    const installation = await this.getJson<{
-      permissions?: unknown;
+    const installations = await this.getJson<{
+      installations?: GitHubUserInstallationApiResponse[];
     }>(
-      `${GITHUB_API_BASE_URL}/user/installations/${input.installationId}`,
+      `${GITHUB_API_BASE_URL}/user/installations?per_page=100`,
       input.accessToken,
+    );
+    const installation = installations?.installations?.find(
+      (candidate) => String(candidate.id) === input.installationId,
     );
 
     if (
@@ -113,36 +132,34 @@ export class GitHubAppClient {
     }
 
     const repositories = await this.getJson<{
-      repositories?: Array<{
-        id?: unknown;
-        name?: unknown;
-        full_name?: unknown;
-        default_branch?: unknown;
-      }>;
+      repositories?: GitHubRepositoryApiResponse[];
     }>(
       `${GITHUB_API_BASE_URL}/user/installations/${input.installationId}/repositories`,
       input.accessToken,
     );
 
-    const repository = repositories?.repositories?.[0];
-    if (
-      !repository ||
-      typeof repository.id !== "number" ||
-      typeof repository.name !== "string" ||
-      typeof repository.full_name !== "string" ||
-      typeof repository.default_branch !== "string"
-    ) {
-      throw new GitHubAppClientError("github_app_repository_fetch_failed");
+    const repositoryOptions =
+      repositories?.repositories
+        ?.map(toRepositoryMetadata)
+        .filter((repository): repository is GitHubRepositoryMetadata =>
+          Boolean(repository),
+        ) ?? [];
+    const repository = input.repositoryId
+      ? repositoryOptions.find(
+          (candidate) => candidate.id === input.repositoryId,
+        )
+      : repositoryOptions.length === 1
+        ? repositoryOptions[0]
+        : null;
+
+    if (repositoryOptions.length === 0 || !repository) {
+      throw new GitHubAppClientError("github_app_repository_selection_failed");
     }
 
     return {
-      permissions: installation.permissions as Record<string, string>,
-      repository: {
-        id: String(repository.id),
-        name: repository.name,
-        fullName: repository.full_name,
-        defaultBranch: repository.default_branch,
-      },
+      permissions: normalizePermissionRecord(installation.permissions),
+      repositories: repositoryOptions,
+      repository,
     };
   }
 
@@ -287,7 +304,8 @@ export class GitHubAppClient {
       response = await fetch(url, {
         headers: {
           authorization: `Bearer ${accessToken}`,
-          accept: "application/json",
+          accept: "application/vnd.github+json",
+          "x-github-api-version": "2026-03-10",
           "user-agent": "lcsp-api",
         },
       });
@@ -337,4 +355,29 @@ function encodeJwtPart(value: Record<string, string | number>): string {
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function normalizePermissionRecord(value: object): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(value).map(([key, permission]) => [
+      key,
+      typeof permission === "string" ? permission.toUpperCase() : "",
+    ]),
+  );
+}
+
+function toRepositoryMetadata(
+  repository: GitHubRepositoryApiResponse,
+): GitHubRepositoryMetadata | null {
+  return typeof repository.id === "number" &&
+    typeof repository.name === "string" &&
+    typeof repository.full_name === "string" &&
+    typeof repository.default_branch === "string"
+    ? {
+        id: String(repository.id),
+        name: repository.name,
+        fullName: repository.full_name,
+        defaultBranch: repository.default_branch,
+      }
+    : null;
 }

@@ -129,6 +129,14 @@ function buildRepositories(input: {
       deleteByUserId: () => Promise.resolve(),
       pruneOlderThan: () => Promise.resolve(),
     },
+    mfaRecoveryCodes: {
+      nextId: () => "unused",
+      nextBatchId: () => "unused",
+      hasActiveForUser: () => Promise.resolve(false),
+      replaceForUser: () => Promise.resolve(),
+      revokeActiveForUser: () => Promise.resolve(),
+      tryConsume: () => Promise.resolve(false),
+    },
     recoveryRequests: {
       nextId: () => "unused",
       save: () => Promise.resolve(),

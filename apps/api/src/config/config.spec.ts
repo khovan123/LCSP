@@ -15,11 +15,13 @@ const VALID_ENV = {
   GITHUB_APP_SLUG: "lcsp-app",
   GITHUB_APP_ID: "123456",
   GITHUB_APP_PRIVATE_KEY: "test-private-key",
-  GITHUB_APP_ALLOWED_REDIRECT_URIS: "http://localhost:3000/github/callback",
+  GITHUB_APP_ALLOWED_REDIRECT_URIS:
+    "http://localhost:3000/api/github/app/callback",
   GITHUB_APP_CLIENT_ID: "gh-app-client-id",
   GITHUB_APP_CLIENT_SECRET: "gh-app-client-secret",
   RABBITMQ_URL: "amqp://guest:guest@localhost:5672",
   RABBITMQ_EXCHANGE: "lcsp.events",
+  OUTBOX_ENABLED: "true",
   OUTBOX_POLL_INTERVAL_MS: "1000",
   OUTBOX_BATCH_SIZE: "50",
   OUTBOX_MAX_ATTEMPTS: "5",
@@ -204,6 +206,7 @@ describe("config()", () => {
         exchange: VALID_ENV.RABBITMQ_EXCHANGE,
       },
       outbox: {
+        enabled: true,
         pollIntervalMs: 1000,
         batchSize: 50,
         maxAttempts: 5,

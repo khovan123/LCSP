@@ -3,6 +3,7 @@ import {
   type ProblemMeta,
   type ProblemKey,
   type ProblemResult,
+  type RequiredAction,
 } from "@lcsp/contracts/auth";
 
 export function problemEnvelope(
@@ -32,6 +33,19 @@ export function getProblemCode(payload: unknown): string | undefined {
   const result = payload as Partial<ProblemResult<string>>;
   return result.ok === false && typeof result.problem?.code === "string"
     ? result.problem.code
+    : undefined;
+}
+
+export function getProblemRequiredAction(
+  payload: unknown,
+): RequiredAction | undefined {
+  if (typeof payload !== "object" || payload === null) {
+    return undefined;
+  }
+
+  const result = payload as Partial<ProblemResult<string>>;
+  return result.ok === false && typeof result.problem?.requiredAction === "string"
+    ? (result.problem.requiredAction as RequiredAction)
     : undefined;
 }
 

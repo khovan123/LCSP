@@ -295,6 +295,8 @@ Trusted trigger received from verified webhook, scheduler, backend trigger, or a
 - Manager initiates GitHub App connection from LCSP where PBAC allows.
 - API records installation metadata and selected repository access reference.
 - Repository access must be least privilege and scoped to selected repositories.
+- Existing installation repository access changes must be initiated from LCSP Manage so the API can generate and validate a one-time `state`; do not trust bare GitHub update redirects with only `installation_id`.
+- GitHub App start is a sensitive route. Sensitive-route membership is declared at the route owner with `@ReAuthForSensitiveRoute(...)`, which both enables guard enforcement and registers route IDs/path templates for frontend preflight. UI may call `POST /auth/sensitive-route/check` with the target `{ method, path }` to decide whether to show the re-auth modal, but `GET /github/app/start` must independently enforce recent session verification and return `REAUTH_REQUIRED` on direct requests without a fresh proof.
 - Branch and commit selection must be pinned before scan.
 - Scan authorization must verify PBAC policy, tenant scope, trusted source identity and valid GitHub App installation.
 
@@ -669,6 +671,10 @@ Use configuration categories only: database, queue, object storage, OAuth/OIDC, 
 ## Local OAuth Callback Strategy
 
 Use a configured local callback URL or mocked provider. Validate state, nonce, issuer, audience and expiry even in local mode.
+
+## Local GitHub App Setup Strategy
+
+For local repository connection, create a real GitHub App, not an OAuth App. Use `http://localhost:3000/api/github/app/callback` as the user authorization callback URL, enable "Request user authorization (OAuth) during installation", and grant repository `Contents: Read-only`; GitHub's implicit `Metadata: Read-only` is allowed. Disable webhook `Active` unless a reachable webhook URL and secret are configured. "Redirect on update" may be enabled only for the LCSP-managed update UX; users should start repository access changes from the LCSP Manage action so state validation is present.
 
 ## GitHub App Testing Strategy
 

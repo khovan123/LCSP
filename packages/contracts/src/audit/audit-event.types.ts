@@ -45,6 +45,7 @@ export const AUDIT_RESOURCE_TYPES = {
   auditExportRequest: "AUDIT_EXPORT_REQUEST",
   authInvitation: "AUTH_INVITATION",
   authMembership: "AUTH_MEMBERSHIP",
+  authMfaRecoveryCode: "AUTH_MFA_RECOVERY_CODE",
   authOrganization: "AUTH_ORGANIZATION",
   authSession: "AUTH_SESSION",
   classificationResult: "CLASSIFICATION_RESULT",

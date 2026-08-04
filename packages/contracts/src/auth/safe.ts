@@ -23,6 +23,7 @@ export const PROBLEM_REQUIRED_ACTIONS: Record<AuthErrorCode, RequiredAction> = {
   [AUTH_ERROR_CODES.authzStateGateBlocked]: REQUIRED_ACTIONS.contactOwner,
   [AUTH_ERROR_CODES.authzEvaluatorFailure]: REQUIRED_ACTIONS.contactOwner,
   [AUTH_ERROR_CODES.validationFailed]: REQUIRED_ACTIONS.signIn,
+  [AUTH_ERROR_CODES.reauthRequired]: REQUIRED_ACTIONS.reauthenticate,
   [AUTH_ERROR_CODES.mfaRequired]: REQUIRED_ACTIONS.verifyMfa,
   [AUTH_ERROR_CODES.mfaInvalid]: REQUIRED_ACTIONS.verifyMfa,
   [AUTH_ERROR_CODES.mfaRateLimited]: REQUIRED_ACTIONS.waitAndRetry,
@@ -120,6 +121,12 @@ export const PROBLEM_DEFAULTS: Record<AuthErrorCode, ProblemDefaults> = {
     status: 400,
     titleKey: "auth.errors.validationFailed.title",
     detailKey: "auth.errors.validationFailed.detail"
+  },
+  [AUTH_ERROR_CODES.reauthRequired]: {
+    type: "auth/reauth-required",
+    status: 403,
+    titleKey: "auth.errors.reauthRequired.title",
+    detailKey: "auth.errors.reauthRequired.detail"
   },
   [AUTH_ERROR_CODES.mfaRequired]: {
     type: "auth/mfa-required",

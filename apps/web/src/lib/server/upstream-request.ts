@@ -2,6 +2,7 @@ import type { AppResult } from "@lcsp/contracts/auth";
 import { SHARED_ERROR_CODES } from "@lcsp/contracts/shared";
 
 import { getProblemCode } from "@/lib/api/problem-envelope";
+import { problemEnvelope } from "@/lib/api/problem-envelope";
 import {
   problemJson,
   readResultData,
@@ -12,12 +13,14 @@ import {
 const upstreamBaseUrl =
   process.env.LCSP_API_BASE_URL ?? "http://localhost:3001";
 
+type WebAppResult = AppResult<unknown, string>;
+
 export type UpstreamRequestInit = RequestInit & {
   bearerToken?: string;
 };
 
 export type UpstreamRequestResult = {
-  result: AppResult | null;
+  result: WebAppResult | null;
   data: unknown;
   ok: boolean;
   status: number;
@@ -45,7 +48,19 @@ export async function upstreamRequest(
       ...fetchInit,
       headers: requestHeaders,
     },
-  );
+  ).catch(() => null);
+
+  if (response === null) {
+    const result = problemEnvelope(SHARED_ERROR_CODES.upstreamUnavailable, 503);
+    return {
+      result,
+      data: readResultData(result),
+      ok: false,
+      status: 503,
+      problemCode: SHARED_ERROR_CODES.upstreamUnavailable,
+    };
+  }
+
   const result = toAppResult(await response.json().catch(() => null));
 
   return {
@@ -77,13 +92,13 @@ export function validatedUpstreamJson<TData>(
     : successJson(sanitized, { status: upstream.status });
 }
 
-function toAppResult(payload: unknown): AppResult | null {
+function toAppResult(payload: unknown): WebAppResult | null {
   if (typeof payload !== "object" || payload === null) {
     return null;
   }
 
   const result = payload as Partial<AppResult>;
   return result.ok === true || result.ok === false
-    ? (payload as AppResult)
+    ? (payload as WebAppResult)
     : null;
 }

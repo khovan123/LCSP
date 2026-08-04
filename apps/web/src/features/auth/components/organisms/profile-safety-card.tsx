@@ -89,13 +89,21 @@ export function ProfileSafetyCard() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-2">
-          <Button render={<Link href={API_REDIRECT_LOCATIONS.mfaEnroll} />} variant="outline">
+          <Button
+            render={<Link href={API_REDIRECT_LOCATIONS.mfaEnroll} />}
+            variant="outline"
+            nativeButton={false}
+          >
             {resolveMessage(
               appLocale,
               "pages.workspace.security.openMfaEnroll",
             )}
           </Button>
-          <Button render={<Link href={API_REDIRECT_LOCATIONS.recoveryRequest} />} variant="ghost">
+          <Button
+            render={<Link href={API_REDIRECT_LOCATIONS.recoveryRequest} />}
+            variant="ghost"
+            nativeButton={false}
+          >
             {resolveMessage(appLocale, "pages.workspace.security.openRecovery")}
           </Button>
         </div>

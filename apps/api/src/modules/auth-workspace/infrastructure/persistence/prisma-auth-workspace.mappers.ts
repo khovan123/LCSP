@@ -116,6 +116,8 @@ export function mapSessionRecord(record: AuthSession): Session {
     expiresAt: record.expiresAt.getTime(),
     revokedAt: record.revokedAt?.getTime() ?? null,
     mfaVerifiedAt: record.mfaVerifiedAt?.getTime() ?? null,
+    sensitiveActionVerifiedAt:
+      record.sensitiveActionVerifiedAt?.getTime() ?? null,
   });
 }
 

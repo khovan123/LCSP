@@ -12,7 +12,10 @@ import {
   PBAC_STATE_GATES,
   SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
-import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_MEMBERSHIP_STATUSES,
+} from "@lcsp/contracts/auth";
 /**
  * MW-gh-001: GitHub App OAuth Start Endpoint.
  * Test cases T01-T08 from docs/implementation/tasks/modules/github-integration/01-github-app-oauth-start-endpoint.md
@@ -36,7 +39,7 @@ import {
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
 
-const ALLOWED_REDIRECT_URI = "http://localhost:3000/github/callback";
+const ALLOWED_REDIRECT_URI = "http://localhost:3000/api/github/app/callback";
 
 describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
   let app: INestApplication;
@@ -61,6 +64,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
 
   beforeEach(async () => {
     await prisma.gitHubAppInstallState.deleteMany();
+    await prisma.repositoryConnection.deleteMany();
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
@@ -72,6 +76,10 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
     });
     const signInBody = successBody<SignInSuccess>(signIn);
     managerToken = signInBody?.session_token ?? "";
+    await prisma.authSession.updateMany({
+      where: { userId: "user-1", organizationId: orgId },
+      data: { sensitiveActionVerifiedAt: new Date() },
+    });
   });
 
   afterAll(async () => {
@@ -167,6 +175,21 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
     );
   });
 
+  it("rejects a direct GitHub App start request without recent re-authentication", async () => {
+    await prisma.authSession.updateMany({
+      where: { userId: "user-1", organizationId: orgId },
+      data: { sensitiveActionVerifiedAt: null },
+    });
+
+    const result = await httpRequest(app)
+      .get("/github/app/start")
+      .query({ redirect_uri: ALLOWED_REDIRECT_URI })
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    assert.equal(result.status, 403);
+    assert.equal(problemCode(result), AUTH_ERROR_CODES.reauthRequired);
+  });
+
   // T04
   it("T04: assessment_id not in org -> 400 ASSESSMENT_NOT_FOUND", async () => {
     await prisma.assessment.create({
@@ -256,6 +279,52 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
     assert.doesNotMatch(
       JSON.stringify(audit.payload),
       new RegExp(installState.state),
+    );
+  });
+
+  it("starts a managed installation update for an existing repository connection", async () => {
+    await prisma.repositoryConnection.create({
+      data: {
+        id: "repo-connection-manage",
+        assessmentId: null,
+        organizationId: orgId,
+        userId: "user-1",
+        installationId: "installation-manage",
+        repositoryId: "repo-1",
+        repositoryName: "lcsp",
+        repositoryFullName: "khovan123/LCSP",
+        defaultBranch: "main",
+        permissions: { contents: "READ" },
+      },
+    });
+
+    const result = await httpRequest(app)
+      .get("/github/app/start")
+      .query({
+        redirect_uri: ALLOWED_REDIRECT_URI,
+        installation_id: "installation-manage",
+      })
+      .set("Authorization", `Bearer ${managerToken}`);
+    const body = successBody<GitHubAppStartDto>(result);
+
+    assert.equal(result.status, 200);
+    assert.match(body.installation_url, /state=/);
+    assert.match(body.installation_url, /redirect_uri=/);
+  });
+
+  it("rejects a managed installation update outside the current workspace", async () => {
+    const result = await httpRequest(app)
+      .get("/github/app/start")
+      .query({
+        redirect_uri: ALLOWED_REDIRECT_URI,
+        installation_id: "installation-other",
+      })
+      .set("Authorization", `Bearer ${managerToken}`);
+
+    assert.equal(result.status, 400);
+    assert.equal(
+      problemCode(result),
+      GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
     );
   });
 });

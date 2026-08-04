@@ -114,6 +114,20 @@ describe("OutboxPublisherService", () => {
     jest.useRealTimers();
   });
 
+  it("does not start the poll timer when outbox publishing is disabled", () => {
+    jest.useFakeTimers();
+    const setIntervalSpy = jest.spyOn(globalThis, "setInterval");
+    const service = new OutboxPublisherService(
+      makeOutboxRepository({}),
+      makeRabbitMqClient({}),
+      makeConfigService({ "outbox.enabled": false }),
+    );
+
+    service.onModuleInit();
+
+    expect(setIntervalSpy).not.toHaveBeenCalled();
+  });
+
   it("T01: publishes a pending message and marks it published", async () => {
     const message = makeMessage();
     const markPublished = jest

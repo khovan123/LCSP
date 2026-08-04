@@ -13,8 +13,13 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
+import { QueryBus } from "@nestjs/cqrs";
 
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import {
+  AUTH_ERROR_CODES,
+  MFA_RECOVERY_CODE_ACCESS_ACTIONS,
+  type MfaRecoveryCodeAccessAction,
+} from "@lcsp/contracts/auth";
 import {
   DEVELOPER_ALLOWED_ACTION_VALUES,
   PBAC_ACTIONS,
@@ -50,14 +55,34 @@ import { AllowPendingMfa } from "../../../../platform/pbac/decorators/allow-pend
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
+import { ReAuthForSensitiveRoute } from "../../../../platform/security/decorators/re-auth-for-sensitive-route.decorator.js";
+import { SENSITIVE_ROUTE_IDS } from "../../../../platform/security/sensitive-route-policy.js";
+import type { SensitiveRouteCheckDto } from "../../application/contracts/auth-workspace/sensitive-route.contract.ts";
+import { CheckSensitiveRouteQuery } from "../../application/queries/check-sensitive-route/check-sensitive-route.query.ts";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
+
+type SensitiveRouteCheckPayload = {
+  method?: unknown;
+  path?: unknown;
+  route?: unknown;
+};
+
+type MfaRecoveryCodeAccessPayload = {
+  action?: unknown;
+  session_token?: string;
+};
+
+const MFA_RECOVERY_CODE_ACCESS_ACTION_VALUES = Object.values(
+  MFA_RECOVERY_CODE_ACCESS_ACTIONS,
+);
 
 @Controller()
 export class AuthWorkspaceController {
   constructor(
     private readonly authWorkspaceFacade: AuthWorkspaceFacade,
     private readonly prisma: PrismaService,
+    private readonly queryBus: QueryBus,
   ) {}
 
   @Get("workspace/developers")
@@ -360,6 +385,75 @@ export class AuthWorkspaceController {
     );
   }
 
+  @Post("auth/mfa/recovery-code/verify")
+  async verifyMfaRecoveryCode(
+    @Body() body: { session_token?: string; code?: string },
+    @Headers("x-correlation-id") correlationId?: string,
+  ) {
+    return resultEnvelope(
+      await this.authWorkspaceFacade.verifyMfaRecoveryCode(
+        body.session_token ?? "",
+        body.code ?? "",
+        requestMeta(correlationId),
+      ),
+    );
+  }
+
+  @Post("auth/mfa/recovery-codes")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  @ReAuthForSensitiveRoute({
+    routeId: SENSITIVE_ROUTE_IDS.mfaRecoveryCodesGenerate,
+    method: "POST",
+    pathTemplate: "/auth/mfa/recovery-codes",
+    aliases: [{ method: "POST", pathTemplate: "/api/auth/mfa/recovery-codes" }],
+  })
+  async generateMfaRecoveryCodes(
+    @Body() body: { session_token?: string },
+    @Headers("authorization") authorization: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.authWorkspaceFacade.generateMfaRecoveryCodes(
+        bearerToken(authorization) ?? body.session_token ?? "",
+        requestMeta(request.correlationId),
+      ),
+    );
+  }
+
+  @Post("auth/mfa/recovery-codes/access")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  async recordMfaRecoveryCodeAccess(
+    @Body() body: MfaRecoveryCodeAccessPayload,
+    @Headers("authorization") authorization: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const action =
+      typeof body.action === "string" &&
+      MFA_RECOVERY_CODE_ACCESS_ACTION_VALUES.includes(
+        body.action as MfaRecoveryCodeAccessAction,
+      )
+        ? (body.action as MfaRecoveryCodeAccessAction)
+        : null;
+
+    if (!action) {
+      throw problemException(
+        AUTH_ERROR_CODES.validationFailed,
+        request.correlationId!,
+        { status: HttpStatus.BAD_REQUEST },
+      );
+    }
+
+    return resultEnvelope(
+      await this.authWorkspaceFacade.recordMfaRecoveryCodeAccess(
+        bearerToken(authorization) ?? body.session_token ?? "",
+        action,
+        requestMeta(request.correlationId),
+      ),
+    );
+  }
+
   @Post("auth/re-auth/password")
   @UseGuards(PbacGuard)
   @RequireSession()
@@ -376,6 +470,45 @@ export class AuthWorkspaceController {
           password: body.password,
         },
         requestMeta(request.correlationId),
+      ),
+    );
+  }
+
+  @Post("auth/sensitive-route/check")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  @AllowPendingMfa()
+  async checkSensitiveRoute(
+    @Body() body: SensitiveRouteCheckPayload,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const method = typeof body.method === "string" ? body.method : "";
+    const route =
+      typeof body.path === "string"
+        ? body.path
+        : typeof body.route === "string"
+          ? body.route
+          : "";
+
+    if (method.trim().length === 0 || route.trim().length === 0) {
+      throw problemException(
+        AUTH_ERROR_CODES.validationFailed,
+        request.correlationId!,
+        { status: HttpStatus.BAD_REQUEST },
+      );
+    }
+
+    return resultEnvelope(
+      await this.queryBus.execute<
+        CheckSensitiveRouteQuery,
+        SensitiveRouteCheckDto
+      >(
+        new CheckSensitiveRouteQuery(
+          request.pbacContext.sessionId,
+          method,
+          route,
+        ),
       ),
     );
   }

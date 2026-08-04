@@ -32,6 +32,7 @@ export interface RabbitMqConfig {
 }
 
 export interface OutboxConfig {
+  enabled: boolean;
   pollIntervalMs: number;
   batchSize: number;
   maxAttempts: number;

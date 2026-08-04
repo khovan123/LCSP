@@ -304,6 +304,8 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
     PrismaAuthorizationReasonCode.PBAC_METADATA_MISSING,
   [PBAC_REASON_CODE.policyNotFound]:
     PrismaAuthorizationReasonCode.POLICY_NOT_FOUND,
+  [AUTH_ERROR_CODES.reauthRequired]:
+    PrismaAuthorizationReasonCode.REAUTH_REQUIRED,
   [AUTH_ERROR_CODES.recoveryInvalid]:
     PrismaAuthorizationReasonCode.RECOVERY_INVALID,
   [PBAC_REASON_CODE.sessionInvalid]:
@@ -370,6 +372,8 @@ const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
     PBAC_REASON_CODE.metadataMissing,
   [PrismaAuthorizationReasonCode.POLICY_NOT_FOUND]:
     PBAC_REASON_CODE.policyNotFound,
+  [PrismaAuthorizationReasonCode.REAUTH_REQUIRED]:
+    AUTH_ERROR_CODES.reauthRequired,
   [PrismaAuthorizationReasonCode.RECOVERY_INVALID]:
     AUTH_ERROR_CODES.recoveryInvalid,
   [PrismaAuthorizationReasonCode.SESSION_INVALID]:
@@ -402,6 +406,8 @@ const AUDIT_RESOURCE_TYPE_TO_PRISMA = {
     PrismaAuditResourceType.AUTH_INVITATION,
   [AUDIT_RESOURCE_TYPES.authMembership]:
     PrismaAuditResourceType.AUTH_MEMBERSHIP,
+  [AUDIT_RESOURCE_TYPES.authMfaRecoveryCode]:
+    PrismaAuditResourceType.AUTH_MFA_RECOVERY_CODE,
   [AUDIT_RESOURCE_TYPES.authOrganization]:
     PrismaAuditResourceType.AUTH_ORGANIZATION,
   [AUDIT_RESOURCE_TYPES.authSession]: PrismaAuditResourceType.AUTH_SESSION,
@@ -450,6 +456,8 @@ const PRISMA_AUDIT_RESOURCE_TYPE_TO_CONTRACT = {
     AUDIT_RESOURCE_TYPES.authInvitation,
   [PrismaAuditResourceType.AUTH_MEMBERSHIP]:
     AUDIT_RESOURCE_TYPES.authMembership,
+  [PrismaAuditResourceType.AUTH_MFA_RECOVERY_CODE]:
+    AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,
   [PrismaAuditResourceType.AUTH_ORGANIZATION]:
     AUDIT_RESOURCE_TYPES.authOrganization,
   [PrismaAuditResourceType.AUTH_SESSION]: AUDIT_RESOURCE_TYPES.authSession,

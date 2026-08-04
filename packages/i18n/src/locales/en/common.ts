@@ -7,6 +7,7 @@ export const enCommon = {
     acceptInvite: "Accept invite",
     contactOwner: "Contact organization owner",
     waitAndRetry: "Wait and retry",
+    reauthenticate: "Confirm access",
     verifyMfa: "Verify two-factor code",
     retryRecovery: "Request a new recovery link",
     none: "No action required"

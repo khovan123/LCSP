@@ -14,7 +14,7 @@ depends_on:
 
 ## Outcome
 
-Handle the GitHub App installation callback. Validate `state`, exchange installation code for GitHub App access token, store `RepositoryConnection` metadata (never raw tokens in API responses or logs), and create the installation record scoped to org and assessment.
+Handle the GitHub App installation callback. Validate `state`, exchange installation code for GitHub App access token, store `RepositoryConnection` metadata (never raw tokens in API responses or logs), and create or refresh the selected installation record scoped to org and assessment.
 
 ## Module Files
 
@@ -41,7 +41,7 @@ model RepositoryConnection {
   repositoryName    String
   repositoryFullName String
   defaultBranch     String
-  permissions       Json                             // { contents: 'read' } only
+    permissions       Json                             // contents read-only; metadata read is allowed as GitHub implicit access
   status            String   @default("active")     // 'active' | 'revoked'
   connectedAt       DateTime @default(now())
   revokedAt         DateTime?
@@ -64,6 +64,7 @@ model RepositoryConnection {
 | `installation_id` | string | Yes | GitHub App installation ID |
 | `code` | string | Yes | Authorization code |
 | `state` | string | Yes | Must match server-stored state |
+| `repository_id` | string | No | Required when GitHub returns multiple authorized repositories and LCSP must choose one deterministically |
 
 **Success response (200):**
 
@@ -90,8 +91,8 @@ model RepositoryConnection {
 2. Delete `GitHubAppInstallState` (one-time use).
 3. Exchange `code` for installation access token via GitHub API.
 4. Fetch installation and repository metadata via GitHub API.
-5. Validate `permissions.contents = 'read'` only. If write or admin → `PERMISSIONS_INSUFFICIENT`.
-6. Create `RepositoryConnection` — store metadata only. Raw installation token must NOT be stored in `RepositoryConnection` table or returned in API response.
+5. Validate `permissions.contents = 'read'` and allow GitHub implicit `metadata = 'read'`. Any write/admin or non-implicit extra permission → `PERMISSIONS_INSUFFICIENT`.
+6. Create or refresh `RepositoryConnection` metadata for the selected repository. Raw installation token must NOT be stored in `RepositoryConnection` table or returned in API response.
 7. Raw GitHub access token is used only for this request's metadata fetch, then discarded.
 8. This endpoint must NOT create any LCSP identity session or `AuthOAuthIdentity`.
 9. Audit event `GITHUB_APP_CONNECTED` — no token in payload.
@@ -116,11 +117,13 @@ model RepositoryConnection {
 | T07 | No LCSP session created | No `AuthSession` side effect |
 | T08 | `GitHubAppInstallState` deleted after use | DB verified |
 | T09 | Audit event has no token | Clean payload |
+| T10 | Multiple repositories and no `repository_id` | 400 `GITHUB_CALLBACK_INVALID` |
+| T11 | Multiple repositories with selected `repository_id` | 200 connection created/refreshed for selected repository |
 
 ## Definition of Done
 
 - `RepositoryConnection` created with metadata only (no raw tokens stored or returned).
 - GitHub App flow strictly separate from OAuth/OIDC login.
-- Only `contents: read` permission accepted.
+- Only `contents: read` plus GitHub implicit `metadata: read` permission accepted.
 - `GitHubAppInstallState` one-time use (deleted after callback).
 - No LCSP session created as side effect.

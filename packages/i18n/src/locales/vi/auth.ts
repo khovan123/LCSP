@@ -54,6 +54,10 @@ export const viAuth = {
       title: "Yêu cầu không hợp lệ",
       detail: "Yêu cầu không hợp lệ."
     },
+    reauthRequired: {
+      title: "Cần xác nhận lại quyền truy cập",
+      detail: "Vui lòng xác nhận lại phiên đăng nhập trước khi thực hiện hành động này."
+    },
     mfaRequired: {
       title: "Cần xác thực hai bước",
       detail: "Bạn cần xác thực hai bước trước khi truy cập workspace."

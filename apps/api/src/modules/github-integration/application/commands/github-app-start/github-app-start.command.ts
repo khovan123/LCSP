@@ -9,6 +9,8 @@ export class GitHubAppStartCommand extends Command<GitHubAppStartDto> {
     public readonly redirectUri: string | undefined,
     public readonly assessmentId: string | undefined,
     public readonly correlationId: string,
+    public readonly sessionId: string,
+    public readonly installationId?: string,
   ) {
     super();
   }

@@ -27,6 +27,7 @@ import {
   useRevokeAuthSessionMutation,
   useUpdateProfileMutation,
 } from "@/lib/api/auth-queries";
+import { runSensitiveRouteAction } from "@/lib/api/sensitive-route-action";
 import {
   API_OUTCOME_KINDS,
   API_REDIRECT_LOCATIONS,
@@ -51,6 +52,7 @@ import type {
   RecoveryEmailFormValues,
   SettingsAlertMessage,
 } from "../../types/settings-page.types";
+import { GITHUB_CONNECTION_STATUSES } from "../../types/settings-page.types";
 import { isSettingsSectionId } from "../../utils/settings-page.utils";
 
 const SETTINGS_SENSITIVE_ACTIONS = {
@@ -60,6 +62,8 @@ const SETTINGS_SENSITIVE_ACTIONS = {
   savePrimaryEmailPolicy: "save_primary_email_policy",
   disableMfa: "disable_mfa",
   revokeSession: "revoke_session",
+  connectGitHubRepository: "connect_github_repository",
+  manageGitHubInstallation: "manage_github_installation",
 } as const;
 
 type SettingsSensitiveAction = {
@@ -87,6 +91,13 @@ type SettingsSensitiveAction = {
       kind: typeof SETTINGS_SENSITIVE_ACTIONS.revokeSession;
       sessionId: string;
     }
+  | {
+      kind: typeof SETTINGS_SENSITIVE_ACTIONS.connectGitHubRepository;
+    }
+  | {
+      kind: typeof SETTINGS_SENSITIVE_ACTIONS.manageGitHubInstallation;
+      installationId: string;
+    }
 );
 
 export function SettingsPage() {
@@ -94,6 +105,12 @@ export function SettingsPage() {
   const searchParams = useSearchParams();
   const requestedSection = searchParams.get("section");
   const oauthLinkStatus = searchParams.get("oauth_link");
+  const githubConnectionParam = searchParams.get("github_connection");
+  const githubConnectionStatus =
+    githubConnectionParam === GITHUB_CONNECTION_STATUSES.success ||
+    githubConnectionParam === GITHUB_CONNECTION_STATUSES.failed
+      ? githubConnectionParam
+      : null;
   const activeSection = isSettingsSectionId(requestedSection)
     ? requestedSection
     : SETTINGS_SECTION_IDS.passwordAndAuthentication;
@@ -133,7 +150,6 @@ export function SettingsPage() {
   const profile = profileQuery.data;
   const sessions = sessionsQuery.data ?? [];
   const repositories = repositoriesQuery.data ?? [];
-
 
   const repositoryCount = repositories.length;
   const activeSessionsCount = sessions.filter(
@@ -325,6 +341,48 @@ export function SettingsPage() {
     }
   }
 
+  function redirectToGitHubAppStart(installationId?: string) {
+    const startUrl = installationId
+      ? `/api/github/app/start?installation_id=${encodeURIComponent(
+          installationId,
+        )}`
+      : "/api/github/app/start";
+
+    window.location.href = startUrl;
+  }
+
+  async function confirmSensitiveRouteBeforeRedirect(
+    path: string,
+    action: SettingsSensitiveAction,
+  ) {
+    await runSensitiveRouteAction({
+      method: "GET",
+      path,
+      onReauthRequired: () => {
+        openSensitiveAction(action);
+      },
+      onAllowed: async () => {
+        await executeSensitiveAction(action);
+      },
+    });
+  }
+
+  function handleConnectGitHubRepository() {
+    void confirmSensitiveRouteBeforeRedirect("/api/github/app/start", {
+      kind: SETTINGS_SENSITIVE_ACTIONS.connectGitHubRepository,
+    });
+  }
+
+  function handleManageGitHubInstallation(installationId: string) {
+    const startPath = `/api/github/app/start?installation_id=${encodeURIComponent(
+      installationId,
+    )}`;
+    void confirmSensitiveRouteBeforeRedirect(startPath, {
+      kind: SETTINGS_SENSITIVE_ACTIONS.manageGitHubInstallation,
+      installationId,
+    });
+  }
+
   async function executeSensitiveAction(
     action: SettingsSensitiveAction,
   ): Promise<boolean> {
@@ -341,6 +399,12 @@ export function SettingsPage() {
         return executeDisableMfa();
       case SETTINGS_SENSITIVE_ACTIONS.revokeSession:
         return executeRevokeSession(action.sessionId);
+      case SETTINGS_SENSITIVE_ACTIONS.connectGitHubRepository:
+        redirectToGitHubAppStart();
+        return true;
+      case SETTINGS_SENSITIVE_ACTIONS.manageGitHubInstallation:
+        redirectToGitHubAppStart(action.installationId);
+        return true;
       default:
         return false;
     }
@@ -423,10 +487,10 @@ export function SettingsPage() {
               titleKey: "auth.errors.mfaRequired.title",
               detailKey: "auth.errors.mfaRequired.detail",
             }
-        : {
-            titleKey: outcome.titleKey,
-            detailKey: outcome.detailKey,
-          },
+          : {
+              titleKey: outcome.titleKey,
+              detailKey: outcome.detailKey,
+            },
     );
   }
 
@@ -536,10 +600,10 @@ export function SettingsPage() {
               titleKey: "auth.errors.mfaRequired.title",
               detailKey: "auth.errors.mfaRequired.detail",
             }
-        : {
-            titleKey: outcome.titleKey,
-            detailKey: outcome.detailKey,
-          },
+          : {
+              titleKey: outcome.titleKey,
+              detailKey: outcome.detailKey,
+            },
     );
   }
 
@@ -668,9 +732,11 @@ export function SettingsPage() {
                 onSubmit: handleConfirmAccessOtpSubmit,
                 otpLabelKey: "pages.mfaVerify.otpLabel",
                 otpDescriptionKey: "pages.mfaVerify.otpDescription",
-                otpPlaceholderKey: "pages.workspace.settingsHub.reauth.otpPlaceholder",
+                otpPlaceholderKey:
+                  "pages.workspace.settingsHub.reauth.otpPlaceholder",
                 verifyLabelKey: "pages.workspace.settingsHub.reauth.verify",
-                verifyingLabelKey: "pages.workspace.settingsHub.reauth.verifying",
+                verifyingLabelKey:
+                  "pages.workspace.settingsHub.reauth.verifying",
                 switchToMfaLabelKey: profile.mfa_enrolled
                   ? "pages.workspace.settingsHub.reauth.useAuthenticator"
                   : "pages.workspace.settingsHub.reauth.setUpMfa",
@@ -721,11 +787,11 @@ export function SettingsPage() {
           </Card>
 
           {activeSection === SETTINGS_SECTION_IDS.account ? (
-                  <AccountSettingsSection
-                    profile={profile}
-                    primaryEmailBadgeKey={primaryEmailBadgeKey}
-                    oauthLinkStatus={oauthLinkStatus}
-                  />
+            <AccountSettingsSection
+              profile={profile}
+              primaryEmailBadgeKey={primaryEmailBadgeKey}
+              oauthLinkStatus={oauthLinkStatus}
+            />
           ) : null}
 
           {activeSection === SETTINGS_SECTION_IDS.appearance ? (
@@ -785,6 +851,9 @@ export function SettingsPage() {
             <RepositoriesSettingsSection
               repositories={repositories}
               repositoryCount={repositoryCount}
+              githubConnectionStatus={githubConnectionStatus}
+              onConnectGitHub={handleConnectGitHubRepository}
+              onManageGitHubInstallation={handleManageGitHubInstallation}
             />
           ) : null}
         </div>

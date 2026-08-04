@@ -7,6 +7,7 @@ export const viCommon = {
     acceptInvite: "Chấp nhận lời mời",
     contactOwner: "Liên hệ chủ tổ chức",
     waitAndRetry: "Chờ và thử lại",
+    reauthenticate: "Xác nhận lại quyền truy cập",
     verifyMfa: "Xác thực mã hai bước",
     retryRecovery: "Yêu cầu liên kết khôi phục mới",
     none: "Không cần hành động"

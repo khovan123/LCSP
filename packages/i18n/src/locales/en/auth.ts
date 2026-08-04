@@ -54,6 +54,10 @@ export const enAuth = {
       title: "Request invalid",
       detail: "The request is invalid."
     },
+    reauthRequired: {
+      title: "Confirm access required",
+      detail: "Please confirm your signed-in session before performing this action."
+    },
     mfaRequired: {
       title: "MFA verification required",
       detail: "Two-factor authentication is required before workspace access."

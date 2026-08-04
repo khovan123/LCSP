@@ -7,6 +7,7 @@ type SessionInput = {
   expiresAt: number;
   revokedAt?: number | null;
   mfaVerifiedAt?: number | null;
+  sensitiveActionVerifiedAt?: number | null;
 };
 
 export class Session {
@@ -17,6 +18,7 @@ export class Session {
   readonly expiresAt: number;
   revokedAt: number | null;
   mfaVerifiedAt: number | null;
+  sensitiveActionVerifiedAt: number | null;
 
   constructor(input: SessionInput) {
     this.id = randomUUID();
@@ -26,6 +28,7 @@ export class Session {
     this.expiresAt = input.expiresAt;
     this.revokedAt = input.revokedAt ?? null;
     this.mfaVerifiedAt = input.mfaVerifiedAt ?? null;
+    this.sensitiveActionVerifiedAt = input.sensitiveActionVerifiedAt ?? null;
   }
 
   static rehydrate(input: SessionInput & { id: string }): Session {
@@ -48,5 +51,9 @@ export class Session {
 
   markMfaVerified(now: number): void {
     this.mfaVerifiedAt = now;
+  }
+
+  markSensitiveActionVerified(now: number): void {
+    this.sensitiveActionVerifiedAt = now;
   }
 }

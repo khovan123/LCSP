@@ -19,6 +19,14 @@ export type SettingsAlertMessage = {
   detailKey: MessageKey;
 };
 
+export const GITHUB_CONNECTION_STATUSES = {
+  success: "success",
+  failed: "failed",
+} as const;
+
+export type GitHubConnectionStatus =
+  (typeof GITHUB_CONNECTION_STATUSES)[keyof typeof GITHUB_CONNECTION_STATUSES];
+
 export type SettingsSectionSharedProps = {
   profile: AuthSettingsProfile | undefined;
   primaryEmailBadgeKey: MessageKey;
@@ -64,4 +72,7 @@ export type SessionsSettingsSectionProps = {
 export type RepositoriesSettingsSectionProps = {
   repositories: AuthRepositorySummary[];
   repositoryCount: number;
+  githubConnectionStatus: GitHubConnectionStatus | null;
+  onConnectGitHub: () => void;
+  onManageGitHubInstallation: (installationId: string) => void;
 };

@@ -8,6 +8,7 @@ export class GitHubAppCallbackCommand extends Command<GitHubAppCallbackDto> {
     public readonly code: string,
     public readonly state: string,
     public readonly correlationId: string,
+    public readonly repositoryId?: string,
   ) {
     super();
   }

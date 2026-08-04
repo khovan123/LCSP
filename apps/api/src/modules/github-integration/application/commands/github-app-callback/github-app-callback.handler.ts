@@ -1,4 +1,4 @@
-import { HttpStatus, Inject } from "@nestjs/common";
+import { HttpStatus, Inject, Logger } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
@@ -22,8 +22,15 @@ import type { GitHubAppCallbackDto } from "../../contracts/github-integration/gi
 import { GitHubAppClient } from "../../../infrastructure/github/github-app.client.js";
 import { GitHubAppCallbackCommand } from "./github-app-callback.command.js";
 
+const GITHUB_REPOSITORY_PERMISSION_KEYS = {
+  contents: "contents",
+  metadata: "metadata",
+} as const;
+
 @CommandHandler(GitHubAppCallbackCommand)
 export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallbackCommand> {
+  private readonly logger = new Logger(GitHubAppCallbackHandler.name);
+
   constructor(
     @Inject(GITHUB_APP_INSTALL_STATE_REPOSITORY)
     private readonly installStateRepository: GitHubAppInstallStateRepository,
@@ -40,6 +47,10 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
       command.state,
     );
     if (!installState) {
+      await this.recordConnectionRejected({
+        command,
+        reasonCode: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
+      });
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
         command.correlationId,
@@ -50,6 +61,11 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
     await this.installStateRepository.deleteById(installState.id);
 
     if (installState.expiresAt.getTime() < Date.now()) {
+      await this.recordConnectionRejected({
+        command,
+        installState,
+        reasonCode: GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
+      });
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.githubStateInvalid,
         command.correlationId,
@@ -62,7 +78,15 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
       accessToken = await this.githubAppClient.exchangeCodeForAccessToken(
         command.code,
       );
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        `GitHub App token exchange failed: ${safeGitHubCallbackFailureReason(error)}`,
+      );
+      await this.recordConnectionRejected({
+        command,
+        installState,
+        reasonCode: GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
+      });
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
         command.correlationId,
@@ -77,8 +101,17 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
       metadata = await this.githubAppClient.fetchInstallationMetadata({
         installationId: command.installationId,
         accessToken,
+        repositoryId: command.repositoryId,
       });
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        `GitHub App metadata fetch failed: ${safeGitHubCallbackFailureReason(error)}`,
+      );
+      await this.recordConnectionRejected({
+        command,
+        installState,
+        reasonCode: GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
+      });
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.githubCallbackInvalid,
         command.correlationId,
@@ -86,9 +119,12 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
       );
     }
 
-    if (
-      metadata.permissions.contents !== GITHUB_REPOSITORY_PERMISSION_LEVELS.read
-    ) {
+    if (!hasOnlyRequiredReadPermissions(metadata.permissions)) {
+      await this.recordConnectionRejected({
+        command,
+        installState,
+        reasonCode: GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
+      });
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.permissionsInsufficient,
         command.correlationId,
@@ -135,4 +171,63 @@ export class GitHubAppCallbackHandler implements ICommandHandler<GitHubAppCallba
       correlation_id: command.correlationId,
     };
   }
+
+  private async recordConnectionRejected(input: {
+    command: GitHubAppCallbackCommand;
+    installState?: {
+      id: string;
+      userId: string;
+      organizationId: string;
+      assessmentId: string | null;
+    };
+    reasonCode: string;
+  }): Promise<void> {
+    await this.auditWriter.write({
+      eventType: GITHUB_INTEGRATION_EVENT_TYPES.appConnectionRejected,
+      actorId: input.installState?.userId ?? null,
+      organizationId: input.installState?.organizationId ?? null,
+      assessmentId: input.installState?.assessmentId ?? null,
+      resourceType: AUDIT_RESOURCE_TYPES.githubAppInstallState,
+      resourceId: input.installState?.id ?? null,
+      reasonCode: input.reasonCode,
+      correlationId: input.command.correlationId,
+      decision: AUDIT_DECISIONS.deny,
+      payload: {
+        installationId: input.command.installationId,
+        organizationId: input.installState?.organizationId ?? null,
+        userId: input.installState?.userId ?? null,
+        assessmentId: input.installState?.assessmentId ?? null,
+        reasonCode: input.reasonCode,
+        correlationId: input.command.correlationId,
+      },
+    });
+  }
+}
+
+function hasOnlyRequiredReadPermissions(
+  permissions: Record<string, string>,
+): boolean {
+  if (
+    permissions[GITHUB_REPOSITORY_PERMISSION_KEYS.contents] !==
+    GITHUB_REPOSITORY_PERMISSION_LEVELS.read
+  ) {
+    return false;
+  }
+
+  return Object.entries(permissions).every(([key, value]) => {
+    if (key === GITHUB_REPOSITORY_PERMISSION_KEYS.contents) {
+      return value === GITHUB_REPOSITORY_PERMISSION_LEVELS.read;
+    }
+
+    return (
+      key === GITHUB_REPOSITORY_PERMISSION_KEYS.metadata &&
+      value === GITHUB_REPOSITORY_PERMISSION_LEVELS.read
+    );
+  });
+}
+
+function safeGitHubCallbackFailureReason(error: unknown): string {
+  return error instanceof Error && error.message
+    ? error.message
+    : "github_app_callback_failed";
 }

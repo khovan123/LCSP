@@ -78,6 +78,15 @@ export const enPages = {
     formDescription: "Use the six-digit code from your authenticator app.",
     otpLabel: "Verification code",
     otpDescription: "Enter the current six-digit code.",
+    moreOptions: "More options",
+    useAuthenticator: "Use authenticator app",
+    recoveryCodeTitle: "Enter a recovery code",
+    recoveryCodeDescription:
+      "Use one unused recovery code from your saved MFA recovery set.",
+    recoveryCodeLabel: "Recovery code",
+    recoveryCodePlaceholder: "ABCD-EFGH-IJKL",
+    recoveryCodeHelp: "Each recovery code can be used once.",
+    recoveryCodeSubmit: "Verify recovery code",
     submit: "Verify code",
     submitting: "Verifying code",
     accessHelp: "Need help? Contact your organization owner.",
@@ -85,6 +94,8 @@ export const enPages = {
     errors: {
       otpRequired: "Enter your verification code.",
       otpInvalidFormat: "Enter a six-digit verification code.",
+      recoveryCodeRequired: "Enter a recovery code.",
+      recoveryCodeInvalidFormat: "Enter a valid recovery code.",
       requestFailedTitle: "Unable to verify",
       requestFailedDetail: "Unable to verify the code. Please try again.",
     },
@@ -106,6 +117,9 @@ export const enPages = {
     successTitle: "MFA setup generated",
     successDetail:
       "Open this URI in your authenticator app, then continue to code verification.",
+    copyCodes: "Copy",
+    downloadCodes: "Download",
+    printCodes: "Print",
     openAuthenticator: "Open in authenticator",
     qrTitle: "Scan this QR code in your authenticator app",
     qrHint:
@@ -385,6 +399,8 @@ export const enPages = {
         revoke: "Revoke",
         linkGitHub: "Link GitHub",
         linkGoogle: "Link Google",
+        connectGitHubRepository: "Connect GitHub repository",
+        manageGitHubRepositoryAccess: "Manage access",
       },
       account: {
         title: "Account",
@@ -512,6 +528,15 @@ export const enPages = {
         title: "Repositories",
         description:
           "Review repositories linked to this account through the current LCSP GitHub integration.",
+        connectTitle: "GitHub App connection",
+        connectDescription:
+          "Start the read-only GitHub App flow and select repositories authorized for trusted scan evidence.",
+        connectSuccessTitle: "Repository connected",
+        connectSuccessDescription:
+          "LCSP stored the repository metadata without storing raw GitHub tokens.",
+        connectFailedTitle: "Repository connection failed",
+        connectFailedDescription:
+          "The GitHub App authorization could not be completed for this workspace.",
         listTitle: "Linked repositories",
         listDescription:
           "Each linked repository is shown beside the assessment that currently uses it.",

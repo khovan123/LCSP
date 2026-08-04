@@ -5,12 +5,15 @@ import {
   type AuthBackupEmailPolicy,
   type AuthPrimaryEmailAddressPolicy,
   AUTH_ERROR_CODES,
+  MFA_RECOVERY_CODE_ACCESS_ACTIONS,
+  type MfaRecoveryCodeAccessAction,
   type ProblemMeta,
   PROBLEM_KEYS,
 } from "@lcsp/contracts/auth";
 import type { MessageKey } from "@lcsp/i18n";
 
 import type {
+  MfaRecoveryCodeVerifyRequest,
   MfaVerifyOutcome,
   MfaVerifyRequest,
 } from "./types/mfa-verify.types";
@@ -88,9 +91,21 @@ export type SignInWorkspaceOption = {
 };
 
 export type EnrollMfaOutcome =
-  | { kind: typeof API_OUTCOME_KINDS.loaded; totpUri: string }
+  | {
+      kind: typeof API_OUTCOME_KINDS.loaded;
+      totpUri: string;
+      recoveryCodes: string[];
+    }
   | { kind: typeof API_OUTCOME_KINDS.mfaRequired }
   | { kind: typeof API_OUTCOME_KINDS.sessionInvalid }
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: MessageKey;
+      detailKey: MessageKey;
+    };
+
+export type MfaRecoveryCodeAccessOutcome =
+  | { kind: typeof API_OUTCOME_KINDS.saved }
   | {
       kind: typeof API_OUTCOME_KINDS.error;
       titleKey: MessageKey;
@@ -109,6 +124,19 @@ export type DisableMfaOutcome =
 
 export type PasswordReauthRequest = {
   password: string;
+};
+
+export type SensitiveRouteCheckRequest = {
+  method: string;
+  path: string;
+};
+
+export type SensitiveRouteCheck = {
+  is_sensitive: boolean;
+  route_id: string | null;
+  reauth_required: boolean;
+  verified_at: string | null;
+  expires_at: string | null;
 };
 
 export type PasswordReauthOutcome =
@@ -202,6 +230,7 @@ export type AuthSessionSummary = {
 
 export type AuthRepositorySummary = {
   id: string;
+  installation_id: string;
   repository_name: string;
   repository_full_name: string;
   default_branch: string;
@@ -410,6 +439,21 @@ export async function verifyMfaOtp(
   return toMfaVerifyOutcome(payload, ok, problemCode);
 }
 
+export async function verifyMfaRecoveryCode(
+  request: MfaRecoveryCodeVerifyRequest,
+): Promise<MfaVerifyOutcome> {
+  const { payload, ok, problemCode } = await apiRequest(
+    "/api/auth/mfa/recovery-code/verify",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    },
+  );
+
+  return toMfaVerifyOutcome(payload, ok, problemCode);
+}
+
 export function toEnrollMfaOutcome(
   payload: unknown,
   ok: boolean,
@@ -424,6 +468,13 @@ export function toEnrollMfaOutcome(
     return {
       kind: API_OUTCOME_KINDS.loaded,
       totpUri: (payload as { totp_uri: string }).totp_uri,
+      recoveryCodes: Array.isArray(
+        (payload as { recovery_codes?: unknown }).recovery_codes,
+      )
+        ? (payload as { recovery_codes: unknown[] }).recovery_codes.filter(
+            (code): code is string => typeof code === "string",
+          )
+        : [],
     };
   }
 
@@ -464,6 +515,34 @@ export async function enrollMfa(): Promise<EnrollMfaOutcome> {
 
   return toEnrollMfaOutcome(payload, ok, problemCode);
 }
+
+export async function recordMfaRecoveryCodeAccess(
+  action: MfaRecoveryCodeAccessAction,
+): Promise<MfaRecoveryCodeAccessOutcome> {
+  const { payload, ok } = await apiRequest(
+    "/api/auth/mfa/recovery-codes/access",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action }),
+    },
+  );
+
+  if (ok) {
+    return { kind: API_OUTCOME_KINDS.saved };
+  }
+
+  const problemKeys = getProblemMessageKeys(payload);
+  return {
+    kind: API_OUTCOME_KINDS.error,
+    titleKey:
+      problemKeys?.titleKey ?? "pages.mfaEnroll.errors.requestFailedTitle",
+    detailKey:
+      problemKeys?.detailKey ?? "pages.mfaEnroll.errors.requestFailedDetail",
+  };
+}
+
+export { MFA_RECOVERY_CODE_ACCESS_ACTIONS };
 
 export function toDisableMfaOutcome(
   payload: unknown,
@@ -552,6 +631,45 @@ export async function reauthenticateWithPassword(
   );
 
   return toPasswordReauthOutcome(payload, ok, problemCode);
+}
+
+export async function checkSensitiveRoute(
+  request: SensitiveRouteCheckRequest,
+): Promise<SensitiveRouteCheck> {
+  const { payload, ok } = await apiRequest("/api/auth/sensitive-route/check", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  return ok && isSensitiveRouteCheck(payload)
+    ? payload
+    : {
+        is_sensitive: true,
+        route_id: null,
+        reauth_required: true,
+        verified_at: null,
+        expires_at: null,
+      };
+}
+
+function isSensitiveRouteCheck(payload: unknown): payload is SensitiveRouteCheck {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+
+  const value = payload as Partial<SensitiveRouteCheck>;
+  return (
+    typeof value.is_sensitive === "boolean" &&
+    isNullableString(value.route_id) &&
+    typeof value.reauth_required === "boolean" &&
+    isNullableString(value.verified_at) &&
+    isNullableString(value.expires_at)
+  );
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
 }
 
 export function toRequestRecoveryOutcome(
@@ -849,6 +967,7 @@ function isAuthRepositoriesPayload(
       const candidate = repository as Record<string, unknown>;
       return (
         typeof candidate.id === "string" &&
+        typeof candidate.installation_id === "string" &&
         typeof candidate.repository_name === "string" &&
         typeof candidate.repository_full_name === "string" &&
         typeof candidate.default_branch === "string" &&

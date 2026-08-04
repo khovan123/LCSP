@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { CqrsModule } from "@nestjs/cqrs";
 
 import { PrismaModule } from "../../infrastructure/prisma/prisma.module.js";
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
@@ -8,6 +9,7 @@ import { AcceptInvitationHandler } from "./application/commands/accept-invitatio
 import { ConfirmPasswordRecoveryHandler } from "./application/commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
 import { DisableMfaHandler } from "./application/commands/disable-mfa/disable-mfa.handler.ts";
 import { EnrollMfaHandler } from "./application/commands/enroll-mfa/enroll-mfa.handler.ts";
+import { GenerateMfaRecoveryCodesHandler } from "./application/commands/generate-mfa-recovery-codes/generate-mfa-recovery-codes.handler.ts";
 import { InviteDeveloperHandler } from "./application/commands/invite-developer/invite-developer.handler.ts";
 import { OAuthCallbackHandler } from "./application/commands/oauth-callback/oauth-callback.handler.ts";
 import { OAuthLinkCallbackHandler } from "./application/commands/oauth-link-callback/oauth-link-callback.handler.ts";
@@ -17,11 +19,14 @@ import { RegisterApprovedPathHandler } from "./application/commands/register-app
 import { RevokeMembershipHandler } from "./application/commands/revoke-membership/revoke-membership.handler.ts";
 import { RequestPasswordRecoveryHandler } from "./application/commands/request-password-recovery/request-password-recovery.handler.ts";
 import { ReauthenticatePasswordHandler } from "./application/commands/reauthenticate-password/reauthenticate-password.handler.ts";
+import { RecordMfaRecoveryCodeAccessHandler } from "./application/commands/record-mfa-recovery-code-access/record-mfa-recovery-code-access.handler.ts";
 import { RevokeOwnedSessionHandler } from "./application/commands/revoke-owned-session/revoke-owned-session.handler.ts";
 import { RevokeSessionHandler } from "./application/commands/revoke-session/revoke-session.handler.ts";
 import { SignInHandler } from "./application/commands/sign-in/sign-in.handler.ts";
 import { UpdateProfileHandler } from "./application/commands/update-profile/update-profile.handler.ts";
 import { VerifyMfaOtpHandler } from "./application/commands/verify-mfa-otp/verify-mfa-otp.handler.ts";
+import { VerifyMfaRecoveryCodeHandler } from "./application/commands/verify-mfa-recovery-code/verify-mfa-recovery-code.handler.ts";
+import { CheckSensitiveRouteHandler } from "./application/queries/check-sensitive-route/check-sensitive-route.handler.ts";
 import { GetWorkspaceHandler } from "./application/queries/get-workspace/get-workspace.handler.ts";
 import { GetAuthProfileHandler } from "./application/queries/get-auth-profile/get-auth-profile.handler.ts";
 import { GetDeveloperTaskContextHandler } from "./application/queries/get-developer-task-context/get-developer-task-context.handler.ts";
@@ -50,6 +55,7 @@ import {
   PrismaMfaEnrollmentRepository,
   PrismaMfaOtpUsedRepository,
   PrismaMfaRateLimitRepository,
+  PrismaMfaRecoveryCodeRepository,
   PrismaOAuthIdentityRepository,
   PrismaOAuthStateRepository,
   PrismaOrganizationRepository,
@@ -73,6 +79,7 @@ const REPOSITORY_PROVIDERS = [
   PrismaMfaEnrollmentRepository,
   PrismaMfaRateLimitRepository,
   PrismaMfaOtpUsedRepository,
+  PrismaMfaRecoveryCodeRepository,
   PrismaRecoveryRequestRepository,
   PrismaOAuthStateRepository,
   PrismaOAuthIdentityRepository,
@@ -99,7 +106,7 @@ function handlerProvider<T>(
 }
 
 @Module({
-  imports: [PrismaModule, AuditModule],
+  imports: [PrismaModule, AuditModule, CqrsModule],
   controllers: [AuthWorkspaceController],
   providers: [
     ...REPOSITORY_PROVIDERS,
@@ -118,6 +125,7 @@ function handlerProvider<T>(
         mfaEnrollments: PrismaMfaEnrollmentRepository,
         mfaRateLimits: PrismaMfaRateLimitRepository,
         mfaOtpUsed: PrismaMfaOtpUsedRepository,
+        mfaRecoveryCodes: PrismaMfaRecoveryCodeRepository,
         recoveryRequests: PrismaRecoveryRequestRepository,
         oauthStates: PrismaOAuthStateRepository,
         oauthIdentities: PrismaOAuthIdentityRepository,
@@ -133,6 +141,7 @@ function handlerProvider<T>(
         mfaEnrollments,
         mfaRateLimits,
         mfaOtpUsed,
+        mfaRecoveryCodes,
         recoveryRequests,
         oauthStates,
         oauthIdentities,
@@ -216,10 +225,14 @@ function handlerProvider<T>(
       useFactory: (prisma: PrismaService) =>
         new ListAuthRepositoriesHandler(prisma),
     },
+    CheckSensitiveRouteHandler,
     handlerProvider(GetWorkspaceHandler),
     handlerProvider(DisableMfaHandler),
     handlerProvider(EnrollMfaHandler),
     handlerProvider(VerifyMfaOtpHandler),
+    handlerProvider(VerifyMfaRecoveryCodeHandler),
+    handlerProvider(GenerateMfaRecoveryCodesHandler),
+    handlerProvider(RecordMfaRecoveryCodeAccessHandler),
     handlerProvider(UpdateProfileHandler),
     handlerProvider(ReauthenticatePasswordHandler),
     {
@@ -332,6 +345,9 @@ function handlerProvider<T>(
         DisableMfaHandler,
         EnrollMfaHandler,
         VerifyMfaOtpHandler,
+        VerifyMfaRecoveryCodeHandler,
+        GenerateMfaRecoveryCodesHandler,
+        RecordMfaRecoveryCodeAccessHandler,
         UpdateProfileHandler,
         RequestPasswordRecoveryHandler,
         ConfirmPasswordRecoveryHandler,
@@ -358,6 +374,9 @@ function handlerProvider<T>(
         disableMfaHandler: DisableMfaHandler,
         enrollMfaHandler: EnrollMfaHandler,
         verifyMfaOtpHandler: VerifyMfaOtpHandler,
+        verifyMfaRecoveryCodeHandler: VerifyMfaRecoveryCodeHandler,
+        generateMfaRecoveryCodesHandler: GenerateMfaRecoveryCodesHandler,
+        recordMfaRecoveryCodeAccessHandler: RecordMfaRecoveryCodeAccessHandler,
         updateProfileHandler: UpdateProfileHandler,
         requestPasswordRecoveryHandler: RequestPasswordRecoveryHandler,
         confirmPasswordRecoveryHandler: ConfirmPasswordRecoveryHandler,
@@ -384,6 +403,9 @@ function handlerProvider<T>(
           disableMfaHandler,
           enrollMfaHandler,
           verifyMfaOtpHandler,
+          verifyMfaRecoveryCodeHandler,
+          generateMfaRecoveryCodesHandler,
+          recordMfaRecoveryCodeAccessHandler,
           updateProfileHandler,
           requestPasswordRecoveryHandler,
           confirmPasswordRecoveryHandler,

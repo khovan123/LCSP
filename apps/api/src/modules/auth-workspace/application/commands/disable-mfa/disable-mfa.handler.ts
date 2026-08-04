@@ -57,7 +57,12 @@ export class DisableMfaHandler {
       );
     }
 
+    const now = this.support.now();
     await this.repositories.mfaEnrollments.deleteByUserId(session.userId);
+    await this.repositories.mfaRecoveryCodes.revokeActiveForUser(
+      session.userId,
+      now,
+    );
     user.mfaRequired = false;
     await this.repositories.users.save(user);
     session.mfaVerifiedAt = null;

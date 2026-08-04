@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
   if (!isOAuthLinkStartSuccess(upstream.data)) {
     return NextResponse.redirect(
       new URL(
-        "/settings?section=account&oauth_link=failed",
+        "/workspace/settings?section=account&oauth_link=failed",
         publicOrigin,
       ),
     );

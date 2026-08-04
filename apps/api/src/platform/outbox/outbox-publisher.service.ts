@@ -22,6 +22,12 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
+    const enabled = this.configService.get<boolean>("outbox.enabled", true);
+    if (!enabled) {
+      this.logger.log("Outbox publisher disabled by configuration.");
+      return;
+    }
+
     const pollIntervalMs = this.configService.get<number>(
       "outbox.pollIntervalMs",
       1000,

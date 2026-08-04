@@ -11,6 +11,12 @@ export const AUTH_AUDIT_EVENT_TYPES = {
   authMfaDisabled: "AUTH_MFA_DISABLED",
   authMfaOtpVerified: "AUTH_MFA_OTP_VERIFIED",
   authMfaOtpFailed: "AUTH_MFA_OTP_FAILED",
+  authMfaRecoveryCodesGenerated: "AUTH_MFA_RECOVERY_CODES_GENERATED",
+  authMfaRecoveryCodeViewed: "AUTH_MFA_RECOVERY_CODE_VIEWED",
+  authMfaRecoveryCodeDownloaded: "AUTH_MFA_RECOVERY_CODE_DOWNLOADED",
+  authMfaRecoveryCodePrinted: "AUTH_MFA_RECOVERY_CODE_PRINTED",
+  authMfaRecoveryCodeCopied: "AUTH_MFA_RECOVERY_CODE_COPIED",
+  authMfaRecoveryCodeUsed: "AUTH_MFA_RECOVERY_CODE_USED",
   authProfileUpdated: "AUTH_PROFILE_UPDATED",
   authOauthStart: "AUTH_OAUTH_START",
   authOauthLoginSuccess: "AUTH_OAUTH_LOGIN_SUCCESS",
@@ -39,6 +45,12 @@ export const AUTH_LEGACY_AUDIT_EVENT_TYPES = {
   mfaVerified: "auth.mfa.verified",
   mfaFailed: "auth.mfa.failed",
   mfaRateLimited: "auth.mfa.rate_limited",
+  mfaRecoveryCodesGenerated: "auth.mfa.recovery_codes.generated",
+  mfaRecoveryCodeViewed: "auth.mfa.recovery_code.viewed",
+  mfaRecoveryCodeDownloaded: "auth.mfa.recovery_code.downloaded",
+  mfaRecoveryCodePrinted: "auth.mfa.recovery_code.printed",
+  mfaRecoveryCodeCopied: "auth.mfa.recovery_code.copied",
+  mfaRecoveryCodeUsed: "auth.mfa.recovery_code.used",
   profileUpdated: "auth.profile.updated",
   recoveryRequested: "auth.recovery.requested",
   recoveryConfirmed: "auth.recovery.confirmed",
@@ -67,6 +79,18 @@ export const LEGACY_AUTH_AUDIT_EVENT_TYPE_ALIASES: Record<string, string> = {
     AUTH_AUDIT_EVENT_TYPES.authMfaOtpVerified,
   [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaFailed]:
     AUTH_AUDIT_EVENT_TYPES.authMfaOtpFailed,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodesGenerated]:
+    AUTH_AUDIT_EVENT_TYPES.authMfaRecoveryCodesGenerated,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeViewed]:
+    AUTH_AUDIT_EVENT_TYPES.authMfaRecoveryCodeViewed,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeDownloaded]:
+    AUTH_AUDIT_EVENT_TYPES.authMfaRecoveryCodeDownloaded,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodePrinted]:
+    AUTH_AUDIT_EVENT_TYPES.authMfaRecoveryCodePrinted,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeCopied]:
+    AUTH_AUDIT_EVENT_TYPES.authMfaRecoveryCodeCopied,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.mfaRecoveryCodeUsed]:
+    AUTH_AUDIT_EVENT_TYPES.authMfaRecoveryCodeUsed,
   [AUTH_LEGACY_AUDIT_EVENT_TYPES.profileUpdated]:
     AUTH_AUDIT_EVENT_TYPES.authProfileUpdated,
   [AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartSucceeded]:

@@ -6,6 +6,10 @@ export type MfaVerifyRequest = {
   otp: string;
 };
 
+export type MfaRecoveryCodeVerifyRequest = {
+  code: string;
+};
+
 export type MfaVerifyError = {
   titleKey: MessageKey;
   detailKey: MessageKey;

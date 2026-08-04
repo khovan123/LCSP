@@ -11,6 +11,10 @@
     "check:commit-message": "node scripts/check-commit-message.mjs",
     "compute:build:api": "pnpm dlx @prisma/cli@latest app build api",
     "compute:deploy:api": "pnpm dlx @prisma/cli@latest app deploy api --no-db",
+    "likec4:build": "likec4 build likec4 -o dist/likec4",
+    "likec4:check": "likec4 check likec4",
+    "likec4:dev": "likec4 dev likec4 --open false",
+    "likec4:export": "likec4 export png likec4 -o dist/likec4-export",
     "lint": "pnpm run check:imports && pnpm run check:contracts && pnpm run typecheck",
     "prepare": "husky",
     "test": "pnpm run test:web && pnpm --filter @lcsp/api test:e2e",
@@ -27,6 +31,7 @@
     "@typescript-eslint/parser": "^8.65.0",
     "eslint": "^10.8.0",
     "husky": "^9.1.7",
+    "likec4": "^1.49.0",
     "typescript": "^5.8.0"
   }
 }

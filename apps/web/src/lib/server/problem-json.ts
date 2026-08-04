@@ -1,18 +1,27 @@
 import { NextResponse } from "next/server";
-import { createSuccessResult, type AppResult } from "@lcsp/contracts/auth";
+import {
+  AUTH_ERROR_CODES,
+  createSuccessResult,
+  type AppResult,
+} from "@lcsp/contracts/auth";
 
-import { problemEnvelope } from "@/lib/api/problem-envelope";
+import { getProblemCode, problemEnvelope } from "@/lib/api/problem-envelope";
+import { SESSION_COOKIE_NAME } from "@/lib/session/session-store";
+
+type WebAppResult = AppResult<unknown, string>;
 
 export function problemJson(
   code: string,
   init: { status: number; correlationId?: string },
 ) {
-  return NextResponse.json(
+  const response = NextResponse.json(
     problemEnvelope(code, init.status, init.correlationId),
     {
       status: init.status,
     },
   );
+  clearSessionCookieOnAuthFailure(response, code);
+  return response;
 }
 
 export function successJson<TData>(
@@ -24,8 +33,10 @@ export function successJson<TData>(
   });
 }
 
-export function resultJson(result: AppResult | null, init: { status: number }) {
-  return NextResponse.json(result, { status: init.status });
+export function resultJson(result: WebAppResult | null, init: { status: number }) {
+  const response = NextResponse.json(result, { status: init.status });
+  clearSessionCookieOnAuthFailure(response, getProblemCode(result));
+  return response;
 }
 
 export function readResultData(payload: unknown): unknown {
@@ -35,4 +46,16 @@ export function readResultData(payload: unknown): unknown {
 
   const result = payload as Partial<AppResult>;
   return result.ok === true ? result.data : payload;
+}
+
+function clearSessionCookieOnAuthFailure(
+  response: NextResponse,
+  problemCode?: string,
+) {
+  if (
+    problemCode === AUTH_ERROR_CODES.authRequired ||
+    problemCode === AUTH_ERROR_CODES.sessionInvalid
+  ) {
+    response.cookies.delete(SESSION_COOKIE_NAME);
+  }
 }
