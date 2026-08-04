@@ -47,6 +47,8 @@ export const AUTH_LEGACY_AUDIT_EVENT_TYPES = {
   oauthStartFailed: "auth.oauth.start.failed",
   oauthLoginSucceeded: "auth.oauth.login.succeeded",
   oauthLoginFailed: "auth.oauth.login.failed",
+  oauthLinkSucceeded: "auth.oauth.link.succeeded",
+  oauthLinkFailed: "auth.oauth.link.failed",
   workspaceAccessAllowed: "workspace.access.allowed",
   workspaceAccessDenied: "workspace.access.denied",
 } as const;
@@ -74,6 +76,10 @@ export const LEGACY_AUTH_AUDIT_EVENT_TYPE_ALIASES: Record<string, string> = {
   [AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginSucceeded]:
     AUTH_AUDIT_EVENT_TYPES.authOauthLoginSuccess,
   [AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed]:
+    AUTH_AUDIT_EVENT_TYPES.authOauthLoginFailed,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLinkSucceeded]:
+    AUTH_AUDIT_EVENT_TYPES.authOauthLoginSuccess,
+  [AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLinkFailed]:
     AUTH_AUDIT_EVENT_TYPES.authOauthLoginFailed,
 };
 

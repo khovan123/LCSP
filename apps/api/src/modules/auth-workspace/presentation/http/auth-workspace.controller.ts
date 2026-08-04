@@ -27,6 +27,8 @@ import type { InvitationPreviewRequest } from "../../application/contracts/auth-
 import type { InviteDeveloperRequest } from "../../application/contracts/auth-workspace/invitation.contract.ts";
 import type {
   OAuthCallbackPayload,
+  OAuthLinkCallbackPayload,
+  OAuthLinkStartPayload,
   OAuthStartPayload,
 } from "../../application/contracts/auth-workspace/oauth.contract.ts";
 import type { RegisterPayload } from "../../application/contracts/auth-workspace/register-approved-path.contract.ts";
@@ -498,6 +500,48 @@ export class AuthWorkspaceController {
     return resultEnvelope(
       await this.authWorkspaceFacade.oauthCallback(
         payload,
+        requestMeta(correlationId),
+      ),
+    );
+  }
+
+  @Get("auth/oauth/link/start")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  async oauthLinkStart(
+    @Req() request: AuthenticatedRequest,
+    @Query("provider") provider?: string,
+    @Query("redirect_uri") redirectUri?: string,
+    @Headers("x-correlation-id") correlationId?: string,
+  ) {
+    const payload: OAuthLinkStartPayload = {
+      provider,
+      redirect_uri: redirectUri,
+    };
+    return resultEnvelope(
+      await this.authWorkspaceFacade.oauthLinkStart(
+        payload,
+        request.pbacContext,
+        requestMeta(correlationId),
+      ),
+    );
+  }
+
+  @Get("auth/oauth/link/callback")
+  @UseGuards(PbacGuard)
+  @RequireSession()
+  async oauthLinkCallback(
+    @Req() request: AuthenticatedRequest,
+    @Query("code") code?: string,
+    @Query("state") state?: string,
+    @Query("provider") provider?: string,
+    @Headers("x-correlation-id") correlationId?: string,
+  ) {
+    const payload: OAuthLinkCallbackPayload = { code, state, provider };
+    return resultEnvelope(
+      await this.authWorkspaceFacade.oauthLinkCallback(
+        payload,
+        request.pbacContext,
         requestMeta(correlationId),
       ),
     );

@@ -667,6 +667,8 @@ export class PrismaOAuthStateRepository implements OAuthStateRepository {
         provider: state.provider,
         redirectUri: state.redirectUri,
         expiresAt: dateFromEpochMsRequired(state.expiresAt),
+        userId: state.userId,
+        sessionId: state.sessionId,
       },
     });
   }
