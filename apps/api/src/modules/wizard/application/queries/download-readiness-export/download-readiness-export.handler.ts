@@ -49,6 +49,7 @@ export class DownloadReadinessExportHandler implements IQueryHandler<
       query.locale,
     );
     return {
+      pdf: rendered.buffer,
       document: rendered.buffer,
       mediaType: rendered.mediaType,
       extension: rendered.extension,
