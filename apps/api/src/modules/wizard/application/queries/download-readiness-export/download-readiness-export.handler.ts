@@ -7,7 +7,7 @@ import {
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
-import { ReadinessExportPdfService } from "../../services/wizard/readiness-export-pdf.service.js";
+import { ReadinessExportDocumentService } from "../../services/wizard/readiness-export-document.service.js";
 import { DownloadReadinessExportQuery } from "./download-readiness-export.query.js";
 import type { ReadinessExportDownload } from "./download-readiness-export.query.js";
 import type { ReadinessExportContent } from "../../contracts/wizard/readiness-export.contract.js";
@@ -19,7 +19,7 @@ export class DownloadReadinessExportHandler implements IQueryHandler<
 > {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly pdf: ReadinessExportPdfService,
+    private readonly documents: ReadinessExportDocumentService,
   ) {}
 
   async execute(
@@ -42,10 +42,17 @@ export class DownloadReadinessExportHandler implements IQueryHandler<
         { status: HttpStatus.NOT_FOUND },
       );
     }
+
+    const rendered = this.documents.render(
+      record.contentJson as unknown as ReadinessExportContent,
+      query.format,
+      query.locale,
+    );
     return {
-      pdf: this.pdf.render(
-        record.contentJson as unknown as ReadinessExportContent,
-      ),
+      document: rendered.buffer,
+      mediaType: rendered.mediaType,
+      extension: rendered.extension,
+      locale: query.locale,
       version: record.version,
     };
   }
