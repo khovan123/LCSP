@@ -7,10 +7,11 @@ import {
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
+import type { ReadinessExportContent } from "../../contracts/wizard/readiness-export.contract.js";
 import { ReadinessExportDocumentService } from "../../services/wizard/readiness-export-document.service.js";
+import { ReadinessExportPdfService } from "../../services/wizard/readiness-export-pdf.service.js";
 import { DownloadReadinessExportQuery } from "./download-readiness-export.query.js";
 import type { ReadinessExportDownload } from "./download-readiness-export.query.js";
-import type { ReadinessExportContent } from "../../contracts/wizard/readiness-export.contract.js";
 
 @QueryHandler(DownloadReadinessExportQuery)
 export class DownloadReadinessExportHandler implements IQueryHandler<
@@ -20,6 +21,7 @@ export class DownloadReadinessExportHandler implements IQueryHandler<
   constructor(
     private readonly prisma: PrismaService,
     private readonly documents: ReadinessExportDocumentService,
+    private readonly pdf: ReadinessExportPdfService,
   ) {}
 
   async execute(
@@ -43,11 +45,16 @@ export class DownloadReadinessExportHandler implements IQueryHandler<
       );
     }
 
-    const rendered = this.documents.render(
-      record.contentJson as unknown as ReadinessExportContent,
-      query.format,
-      query.locale,
-    );
+    const content = record.contentJson as unknown as ReadinessExportContent;
+    const rendered =
+      query.format === "pdf" && query.locale === "en"
+        ? {
+            buffer: this.pdf.render(content),
+            mediaType: "application/pdf" as const,
+            extension: "pdf" as const,
+          }
+        : this.documents.render(content, query.format, query.locale);
+
     return {
       pdf: rendered.buffer,
       document: rendered.buffer,
