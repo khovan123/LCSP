@@ -38,4 +38,12 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    files: [
+      "src/modules/wizard/application/services/wizard/readiness-export-document.service.ts",
+    ],
+    rules: {
+      "no-useless-escape": ["error", { allowRegexCharacters: ['"'] }],
+    },
+  },
 );
