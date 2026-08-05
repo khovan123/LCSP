@@ -6,6 +6,8 @@ import type {
 } from "../../services/wizard/readiness-export-document.service.js";
 
 export interface ReadinessExportDownload {
+  /** Backward-compatible alias used by the original PDF-only controller. */
+  pdf: Buffer;
   document: Buffer;
   mediaType:
     | "application/pdf"
@@ -22,8 +24,8 @@ export class DownloadReadinessExportQuery extends Query<ReadinessExportDownload>
     public readonly organizationId: string,
     public readonly ownerId: string,
     public readonly correlationId: string,
-    public readonly format: ReadinessExportFormat,
-    public readonly locale: ReadinessExportLocale,
+    public readonly format: ReadinessExportFormat = "pdf",
+    public readonly locale: ReadinessExportLocale = "en",
   ) {
     super();
   }
