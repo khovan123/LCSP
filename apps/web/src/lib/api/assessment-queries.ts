@@ -15,7 +15,11 @@ import {
   requestGapAnalysis,
 } from "./document-client";
 import { getTechnicalEvidence } from "./evidence-client";
-import { getReadinessStatus, mockProvideEvidence } from "./readiness-client";
+import {
+  generateReadinessExport,
+  getReadinessStatus,
+  mockProvideEvidence,
+} from "./readiness-client";
 import {
   getWizardAssessment,
   saveWizardDraft,
@@ -40,6 +44,12 @@ export function useReadinessStatusQuery(assessmentId: string) {
   });
 }
 
+export function useGenerateReadinessExportMutation(assessmentId: string) {
+  return useMutation({
+    mutationFn: () => generateReadinessExport(assessmentId),
+  });
+}
+
 export function useWizardAssessmentQuery(assessmentId: string) {
   return useQuery({
     queryKey: apiQueryKeys.assessment.wizard(assessmentId),
@@ -50,13 +60,15 @@ export function useWizardAssessmentQuery(assessmentId: string) {
 
 export function useSaveWizardDraftMutation(assessmentId: string) {
   return useMutation({
-    mutationFn: (answers: WizardAnswer[]) => saveWizardDraft(assessmentId, answers),
+    mutationFn: (answers: WizardAnswer[]) =>
+      saveWizardDraft(assessmentId, answers),
   });
 }
 
 export function useSubmitWizardMutation(assessmentId: string) {
   return useMutation({
-    mutationFn: (answers: WizardAnswer[]) => submitWizard(assessmentId, answers),
+    mutationFn: (answers: WizardAnswer[]) =>
+      submitWizard(assessmentId, answers),
   });
 }
 

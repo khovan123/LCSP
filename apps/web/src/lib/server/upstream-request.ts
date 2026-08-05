@@ -27,6 +27,15 @@ export type UpstreamRequestResult = {
   problemCode?: string;
 };
 
+export type UpstreamBinaryResult = {
+  body: ArrayBuffer | null;
+  result: WebAppResult | null;
+  ok: boolean;
+  status: number;
+  contentType?: string;
+  contentDisposition?: string;
+};
+
 export function upstreamUrl(path: string): URL {
   return new URL(path, upstreamBaseUrl);
 }
@@ -69,6 +78,50 @@ export async function upstreamRequest(
     ok: response.ok && result?.ok === true,
     status: response.status,
     problemCode: getProblemCode(result),
+  };
+}
+
+export async function upstreamBinaryRequest(
+  path: string | URL,
+  init: UpstreamRequestInit = {},
+): Promise<UpstreamBinaryResult> {
+  const { bearerToken, headers, ...fetchInit } = init;
+  const requestHeaders = new Headers(headers);
+  if (bearerToken) {
+    requestHeaders.set("authorization", `Bearer ${bearerToken}`);
+  }
+
+  const response = await fetch(
+    typeof path === "string" ? upstreamUrl(path) : path,
+    { cache: "no-store", ...fetchInit, headers: requestHeaders },
+  ).catch(() => null);
+
+  if (response === null) {
+    return {
+      body: null,
+      result: problemEnvelope(SHARED_ERROR_CODES.upstreamUnavailable, 503),
+      ok: false,
+      status: 503,
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      body: null,
+      result: toAppResult(await response.json().catch(() => null)),
+      ok: false,
+      status: response.status,
+    };
+  }
+
+  return {
+    body: await response.arrayBuffer(),
+    result: null,
+    ok: true,
+    status: response.status,
+    contentType: response.headers.get("content-type") ?? undefined,
+    contentDisposition:
+      response.headers.get("content-disposition") ?? undefined,
   };
 }
 

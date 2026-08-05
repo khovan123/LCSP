@@ -7,6 +7,8 @@
       "description": "Confirm the source and retention period for support transcripts."
     }
   ],
+  "unresolved_unknown_items": [],
+  "readiness_mode": "READINESS_ONLY",
   "completed_steps": [
     "Wizard submitted",
     "Technical profile reviewed",

@@ -176,6 +176,13 @@ GPT-5 Codex
 - Captured baseline commit `a56969fdf6ea7616b8f12fcad37d32659549e15f` before implementation.
 - Added failing e2e coverage for readiness export generation, blocked preconditions, PBAC denial, and immutable versioning before implementation.
 - Validation passed: focused guardrail unit, focused readiness export e2e, full API unit, full API e2e, root lint/typecheck contract checks, web tests, API build, and `git diff --check`.
+- PDF follow-up validation: `git diff --check` and contract value-set scan passed; automated test/typecheck could not run because `pnpm` attempted to recreate `node_modules` and registry access was unavailable in the sandbox.
+- Completion re-audit on 2026-08-05 found and closed the missing Manager-facing web entry point, authenticated BFF PDF proxy, canonical export metadata, safe blocked-response contract, and misleading unlocked-readiness copy.
+- Re-audit validation passed: API unit `430 passed` (`1 todo`), focused Wizard/PDF unit `15 passed`, web `87 passed`, TypeScript project build, API ESLint (0 errors), API build, and `git diff --check`.
+- Environment-limited validation: focused API e2e could not start because Docker Desktop/Postgres was unavailable; web production build reached compilation but Google Fonts fetch was blocked by restricted network access. Root contract check remains blocked by pre-existing raw constants in `mock-evidence.handler.ts` and `github-app-start.e2e-spec.ts` outside Story 2.4.
+- Template-alignment follow-up used `Copy of LCSP_Wizard_Export_Template_Legal_Business.docx` as the structural reference and passed the focused PDF renderer test with Watchman disabled for the sandbox.
+- Fixed the PDF demo validator and download e2e expectations to use the template-aligned section names; focused demo assertions now pass.
+- The real Docker-backed demo remains environment-blocked when the Docker socket is inaccessible (`permission denied` for `~/.docker/run/docker.sock`).
 
 ### Completion Notes List
 
@@ -186,38 +193,73 @@ GPT-5 Codex
 - Added readiness-only export contracts, guardrail service, append-only persistence, versioning, and safe audit events for generated/blocked export outcomes.
 - Export content now carries readiness-only labels, missing evidence checklist, unresolved unknown items, preparation guidance, version, timestamp, owner, assessment ID, and wizard profile version without final risk/classification/legal conclusion wording.
 - Updated PBAC/action and wizard event contracts so Manager policy and existing auth/readiness tests include the new export action and event types.
+- Added versioned PDF download metadata and a protected download endpoint that renders the persisted readiness snapshot as `application/pdf` without adding a runtime dependency.
+- Refined the dependency-free PDF into an institutional readiness brief with a clear metadata grid, printable section cards, page continuation, and readiness-only guardrail copy.
+- Added a Docker-backed demo command that exercises real sign-in, generation, binary download, and PDF-content validation before writing `output/readiness-export-demo.pdf`.
+- Added e2e assertions for PDF headers, filename, PDF signature, readiness-only sections, and prohibited wording.
+- Added the readiness-page PDF action, web API generation route, and authenticated binary download proxy so a Manager can complete the real browser flow without exposing the bearer token.
+- Aligned persisted/exported metadata with `WIZARD-MAPPING.md`: artifact type, readiness-only flag, locked-evidence classification status, Wizard profile version, assessment, generator, timestamp, and version.
+- Blocked guardrail results no longer expose unsafe content or advertise a download URL, and the readiness page no longer displays readiness-only copy after technical evidence unlocks the next gate.
+- Aligned the generated PDF with the supplied legal/business template: numbered sections 1-8, profile identification, preliminary screening, business context, data subjects, oversight, provider scope, review indicators, consolidated record status/actions, and an export-time declaration while preserving readiness-only guardrails.
+- Removed the dark institutional card format and rebuilt the PDF as the supplied DOCX-style administrative form with A4 margins, Times fonts, bordered tables, vector checkboxes, section 1-9 hierarchy, signature placeholders, and `Page N / total` footers.
+- Closed the DOCX review findings: checkbox state now follows `answer_state`, arrays and additional fields remain visible, long rows paginate safely, Unicode survives export, and demo validation rejects malformed PDFs.
+- Final validation passed: API unit `432 passed` (`1 todo`), focused PDF `3 passed`, API ESLint, TypeScript project build, contract value-set scan, and `git diff --check`; Docker-backed demo remains sandbox-blocked by Docker socket permissions.
 
 ### File List
 
 - apps/api/prisma/migrations/20260726014847_add_readiness_export/migration.sql
 - apps/api/prisma/schema.prisma
+- apps/api/scripts/demo-readiness-export-pdf.ts
+- apps/api/scripts/readiness-export-pdf-demo.helpers.ts
 - apps/api/src/modules/document/application/commands/process-document-callback/process-document-callback.handler.spec.ts
 - apps/api/src/modules/wizard/application/commands/generate-readiness-export/generate-readiness-export.command.ts
 - apps/api/src/modules/wizard/application/commands/generate-readiness-export/generate-readiness-export.handler.ts
 - apps/api/src/modules/wizard/application/contracts/wizard/readiness-export.contract.ts
 - apps/api/src/modules/wizard/application/queries/get-readiness/get-readiness.handler.spec.ts
 - apps/api/src/modules/wizard/application/queries/get-readiness/get-readiness.handler.ts
+- apps/api/src/modules/wizard/application/queries/download-readiness-export/download-readiness-export.handler.ts
+- apps/api/src/modules/wizard/application/queries/download-readiness-export/download-readiness-export.query.ts
 - apps/api/src/modules/wizard/application/services/wizard/readiness-evaluator.service.spec.ts
 - apps/api/src/modules/wizard/application/services/wizard/readiness-evaluator.service.ts
 - apps/api/src/modules/wizard/application/services/wizard/readiness-export-guardrail.service.spec.ts
 - apps/api/src/modules/wizard/application/services/wizard/readiness-export-guardrail.service.ts
+- apps/api/src/modules/wizard/application/services/wizard/readiness-export-pdf.service.ts
+- apps/api/src/modules/wizard/application/services/wizard/readiness-export-pdf.service.spec.ts
 - apps/api/src/modules/wizard/domain/entities/readiness-export.entity.ts
 - apps/api/src/modules/wizard/domain/exceptions/wizard.exceptions.ts
 - apps/api/src/modules/wizard/presentation/http/wizard.controller.ts
 - apps/api/src/modules/wizard/wizard.module.ts
 - apps/api/test/auth-workspace.e2e-spec.ts
 - apps/api/test/document-gap-analysis.e2e-spec.ts
+- apps/api/test/readiness-export-pdf-demo.spec.ts
 - apps/api/test/support/auth-workspace-test-helpers.ts
 - apps/api/test/wizard-endpoints.e2e-spec.ts
 - apps/api/test/wizard-readiness-export.e2e-spec.ts
 - apps/web/src/features/document/components/organisms/document-request-panel.tsx
+- apps/web/src/app/api/assessments/[id]/wizard/readiness-export/route.ts
+- apps/web/src/app/api/assessments/[id]/wizard/readiness-exports/[exportId]/download/route.ts
+- apps/web/src/features/readiness/components/organisms/readiness-status-page.tsx
+- apps/web/src/lib/api/assessment-queries.ts
+- apps/web/src/lib/api/readiness-client.ts
+- apps/web/src/lib/server/upstream-request.ts
+- apps/web/src/public/assets/mocks/readiness.json
+- apps/web/tests/readiness-client.test.ts
 - docs/implementation-artifacts/2-4-wizard-readiness-export.md
 - docs/implementation-artifacts/sprint-status.yaml
 - packages/contracts/src/pbac/actions.ts
 - packages/contracts/src/pbac/manager-policy.ts
 - packages/contracts/src/wizard/events.ts
+- packages/i18n/src/locales/en/pages.ts
+- packages/i18n/src/locales/vi/pages.ts
+- packages/i18n/src/types.ts
 - tests/story-1-6.web.test.ts
 
 ### Change Log
 
 - 2026-07-26: Implemented Wizard Readiness Export API slice with readiness-only contracts, guardrails, persistence, audit events, PBAC wiring, and focused/full validation coverage.
+- 2026-08-04: Added immutable Wizard Readiness Export PDF download generation and e2e coverage.
+- 2026-08-05: Closed Story 2.4 browser-flow and guardrail completion gaps; added BFF generation/download routes, readiness-page PDF action, canonical metadata, safe blocked responses, and expanded validation.
+- 2026-08-05: Refined the generated PDF into an institutional readiness brief and added a real API-to-PDF demo command with focused content checks.
+- 2026-08-05: Aligned the readiness PDF structure and section hierarchy with the supplied Legal/Business DOCX template without importing prohibited classification or legal-outcome semantics.
+- 2026-08-05: Replaced the prior card-based PDF renderer with an A4 administrative form modeled on `output/readiness_template.docx`, including Times typography, form tables, checkbox marks, approval cells, repeated headers, and page footers.
+- 2026-08-05: Remediated blind/edge review findings for checkbox semantics, snapshot fidelity, additional answers, Unicode, pagination, PDF structure validation, and reproducible focused tests.

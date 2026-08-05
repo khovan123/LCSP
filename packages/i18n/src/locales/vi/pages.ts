@@ -714,13 +714,20 @@ export const viPages = {
       highImpactIndicatorDescription:
         "Thông tin này giúp LCSP gắn cờ các luồng cần được theo dõi kỹ hơn ở bước sau.",
       deploymentContextLabel: "Ứng dụng này hướng tới ai sử dụng?",
-      deploymentContextDescription: "Xác định xem ứng dụng được sử dụng nội bộ hay cung cấp ra ngoài cho người dùng khác.",
-      specialCategoryDataLabel: "Dữ liệu có chứa các danh mục đặc biệt nhạy cảm không?",
-      specialCategoryDataDescription: "Ví dụ: quan điểm chính trị, tôn giáo, thông tin công đoàn, v.v.",
-      transparencyIndicatorsLabel: "Có tương tác trực tiếp hoặc tạo ra nội dung AI không?",
-      transparencyIndicatorsDescription: "Cho biết người dùng có biết họ đang tương tác với AI hay nội dung do AI tạo ra không.",
-      prohibitedRiskSignalsLabel: "Có dấu hiệu rủi ro không thể chấp nhận không?",
-      prohibitedRiskSignalsDescription: "Các hệ thống đánh giá xã hội, thao túng tiềm thức hoặc suy diễn đặc điểm nhạy cảm bị cấm.",
+      deploymentContextDescription:
+        "Xác định xem ứng dụng được sử dụng nội bộ hay cung cấp ra ngoài cho người dùng khác.",
+      specialCategoryDataLabel:
+        "Dữ liệu có chứa các danh mục đặc biệt nhạy cảm không?",
+      specialCategoryDataDescription:
+        "Ví dụ: quan điểm chính trị, tôn giáo, thông tin công đoàn, v.v.",
+      transparencyIndicatorsLabel:
+        "Có tương tác trực tiếp hoặc tạo ra nội dung AI không?",
+      transparencyIndicatorsDescription:
+        "Cho biết người dùng có biết họ đang tương tác với AI hay nội dung do AI tạo ra không.",
+      prohibitedRiskSignalsLabel:
+        "Có dấu hiệu rủi ro không thể chấp nhận không?",
+      prohibitedRiskSignalsDescription:
+        "Các hệ thống đánh giá xã hội, thao túng tiềm thức hoặc suy diễn đặc điểm nhạy cảm bị cấm.",
     },
     options: {
       yes: "Có",
@@ -795,14 +802,21 @@ export const viPages = {
       submitFailed:
         "Không thể gửi Wizard. Hãy kiểm tra lại các câu trả lời đang được đánh dấu rồi thử lại.",
       alreadySubmitted: "Wizard này đã được gửi và hiện ở chế độ chỉ xem.",
-      preAiScopeRequired: "Vui lòng cho biết hệ thống này có dùng AI hay không trước khi tiếp tục.",
-      preAffectedPeopleRequired: "Vui lòng chọn đối tượng có thể bị ảnh hưởng trước khi tiếp tục.",
-      prePersonalDataRequired: "Vui lòng cho biết có xử lý dữ liệu cá nhân hay không trước khi tiếp tục.",
-      preDecisionImportanceRequired: "Vui lòng cho biết kết quả AI có ảnh hưởng tới quyết định quan trọng không trước khi tiếp tục.",
-      businessProcessRequired: "Hãy mô tả quy trình nghiệp vụ chính trước khi tiếp tục.",
-      aiPurposeRequired: "Hãy mô tả mục đích của hệ thống AI trước khi tiếp tục.",
+      preAiScopeRequired:
+        "Vui lòng cho biết hệ thống này có dùng AI hay không trước khi tiếp tục.",
+      preAffectedPeopleRequired:
+        "Vui lòng chọn đối tượng có thể bị ảnh hưởng trước khi tiếp tục.",
+      prePersonalDataRequired:
+        "Vui lòng cho biết có xử lý dữ liệu cá nhân hay không trước khi tiếp tục.",
+      preDecisionImportanceRequired:
+        "Vui lòng cho biết kết quả AI có ảnh hưởng tới quyết định quan trọng không trước khi tiếp tục.",
+      businessProcessRequired:
+        "Hãy mô tả quy trình nghiệp vụ chính trước khi tiếp tục.",
+      aiPurposeRequired:
+        "Hãy mô tả mục đích của hệ thống AI trước khi tiếp tục.",
       sectorRequired: "Hãy chọn bối cảnh nghiệp vụ chính trước khi tiếp tục.",
-      dataTypesRequired: "Hãy chọn ít nhất một nhóm dữ liệu trước khi tiếp tục.",
+      dataTypesRequired:
+        "Hãy chọn ít nhất một nhóm dữ liệu trước khi tiếp tục.",
       affectedSubjectsRequired:
         "Hãy chọn nhóm bị ảnh hưởng trực tiếp trước khi tiếp tục.",
       userImpactRequired: "Hãy chọn mức độ ảnh hưởng trước khi tiếp tục.",
@@ -812,11 +826,16 @@ export const viPages = {
         "Hãy mô tả nơi con người kiểm tra kết quả trước khi tiếp tục.",
       externalLlmUsageRequired:
         "Hãy xác nhận hệ thống có dùng nhà cung cấp AI bên ngoài hay không trước khi tiếp tục.",
-      deploymentContextRequired: "Hãy chọn đối tượng sử dụng ứng dụng trước khi tiếp tục.",
-      specialCategoryDataRequired: "Hãy xác nhận có xử lý dữ liệu nhạy cảm đặc biệt hay không trước khi tiếp tục.",
-      biometricDataRequired: "Hãy xác nhận có xử lý dữ liệu sinh trắc học hay không trước khi tiếp tục.",
-      highImpactIndicatorsRequired: "Hãy chọn các nhóm rủi ro cao nếu có trước khi tiếp tục.",
-      prohibitedRiskSignalsRequired: "Hãy chọn các nhóm rủi ro bị cấm nếu có trước khi tiếp tục.",
+      deploymentContextRequired:
+        "Hãy chọn đối tượng sử dụng ứng dụng trước khi tiếp tục.",
+      specialCategoryDataRequired:
+        "Hãy xác nhận có xử lý dữ liệu nhạy cảm đặc biệt hay không trước khi tiếp tục.",
+      biometricDataRequired:
+        "Hãy xác nhận có xử lý dữ liệu sinh trắc học hay không trước khi tiếp tục.",
+      highImpactIndicatorsRequired:
+        "Hãy chọn các nhóm rủi ro cao nếu có trước khi tiếp tục.",
+      prohibitedRiskSignalsRequired:
+        "Hãy chọn các nhóm rủi ro bị cấm nếu có trước khi tiếp tục.",
     },
   },
   readiness: {
@@ -836,6 +855,11 @@ export const viPages = {
     summaryTitle: "Handoff hiện tại",
     summaryDescription:
       "Wizard đã hoàn tất, nhưng LCSP vẫn giữ assessment này ở trạng thái readiness-only cho tới khi có bằng chứng kỹ thuật.",
+    summaryDescriptionReady:
+      "Bằng chứng kỹ thuật cần thiết đã có và assessment có thể chuyển sang cổng kiểm soát tiếp theo.",
+    exportErrorTitle: "Không thể tạo readiness export",
+    exportErrorDetail:
+      "Không thể tạo file PDF. Hãy kiểm tra Wizard đã được gửi và bằng chứng kỹ thuật vẫn chưa có.",
     completedTitle: "Các bước đã hoàn tất",
     missingTitle: "Những gì còn thiếu",
     nextActionTitle: "Bước tiếp theo",
@@ -875,6 +899,8 @@ export const viPages = {
       openDocuments: "Mở tài liệu",
       connectRepository: "Kết nối Repository",
       editWizard: "Cập nhật Wizard",
+      downloadPdf: "Tải Wizard Readiness PDF",
+      exportingPdf: "Đang chuẩn bị PDF...",
     },
   },
   workspaceSelector: {

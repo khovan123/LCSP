@@ -8,6 +8,7 @@ import {
   UseGuards,
   Req,
   HttpCode,
+  Res,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
@@ -19,12 +20,14 @@ import { SubmitWizardCommand } from "../../application/commands/submit-wizard/su
 import { GenerateReadinessExportCommand } from "../../application/commands/generate-readiness-export/generate-readiness-export.command.js";
 import { MockEvidenceCommand } from "../../application/commands/mock-evidence/mock-evidence.command.js";
 import { GetReadinessQuery } from "../../application/queries/get-readiness/get-readiness.query.js";
+import { DownloadReadinessExportQuery } from "../../application/queries/download-readiness-export/download-readiness-export.query.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { randomUUID } from "node:crypto";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
+import type { Response } from "express";
 
 @Controller("assessments")
 export class WizardController {
@@ -152,6 +155,34 @@ export class WizardController {
         ),
       ),
     );
+  }
+
+  @Get(":assessmentId/wizard/readiness-exports/:exportId/download")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.wizardExport)
+  async downloadReadinessExport(
+    @Param("assessmentId") assessmentId: string,
+    @Param("exportId") exportId: string,
+    @Req() req: AuthenticatedRequest,
+    @Res() response: Response,
+  ) {
+    const { userId, organizationId } = req.pbacContext;
+    const download = await this.queryBus.execute(
+      new DownloadReadinessExportQuery(
+        assessmentId,
+        exportId,
+        organizationId,
+        userId,
+        req.correlationId || randomUUID(),
+      ),
+    );
+    response.setHeader("Content-Type", "application/pdf");
+    response.setHeader(
+      "Content-Disposition",
+      `attachment; filename="wizard-readiness-export-v${download.version}.pdf"`,
+    );
+    response.setHeader("Cache-Control", "private, no-store");
+    response.end(download.pdf);
   }
 
   @Post(":assessmentId/mock-evidence")
