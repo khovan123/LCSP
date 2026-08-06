@@ -183,11 +183,7 @@ export function renderReadinessExportDocx(
 
   const provider = requiredSection(sectionById, "provider");
   const deployment = requiredSection(sectionById, "deployment");
-  body.push(
-    sectionHeading(
-      `6. ${provider.title} / ${deployment.title}`,
-    ),
-  );
+  body.push(sectionHeading(`6. ${provider.title} / ${deployment.title}`));
   body.push(...renderFields(content, provider, 6, locale, 0));
   body.push(
     ...renderFields(content, deployment, 6, locale, provider.fields.length),
