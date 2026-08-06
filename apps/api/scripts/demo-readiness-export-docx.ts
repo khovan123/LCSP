@@ -9,6 +9,7 @@ import {
   READINESS_EXPORT_ARTIFACT_TYPES,
   WIZARD_EXPORT_SECTIONS,
   WIZARD_FIELD_CONTROLS,
+  type WizardExportSectionDefinition,
 } from "@lcsp/contracts/wizard";
 import { enPages, viPages } from "@lcsp/i18n";
 
@@ -25,6 +26,8 @@ import {
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(scriptDir, "../../..");
 const outputDirectory = resolve(projectRoot, "output");
+const EXPORT_SECTIONS =
+  WIZARD_EXPORT_SECTIONS as readonly WizardExportSectionDefinition[];
 
 const EXPECTED_PACKAGE_ENTRIES = [
   "[Content_Types].xml",
@@ -248,7 +251,7 @@ function buildPersistedExportFixture(): ReadinessExportContent {
     ],
   };
 
-  const sections = WIZARD_EXPORT_SECTIONS.map((section) => ({
+  const sections = EXPORT_SECTIONS.map((section) => ({
     title: section.id,
     answers: section.fields.map((field) =>
       persistedAnswer(
