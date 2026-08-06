@@ -464,7 +464,8 @@ function statusSection(
 function signatureTable(locale: ReadinessExportLocale): string {
   const copy = COPY[locale];
   const width = Math.floor(CONTENT_WIDTH / 3);
-  const cells = copy.signatures.map((signature) =>
+  const signatures: readonly string[] = copy.signatures;
+  const cells = signatures.map((signature: string) =>
     tableCell(
       [
         paragraph(signature, { bold: true, align: "center", after: 140 }),
@@ -606,7 +607,14 @@ function sectionHeading(value: string): string {
 }
 
 function paragraph(value: string, options: ParagraphOptions = {}): string {
-  return paragraphRuns([{ text: value, ...options }], options);
+  const runOptions: RunOptions = {
+    text: value,
+    bold: options.bold,
+    italic: options.italic,
+    underline: options.underline,
+    size: options.size,
+  };
+  return paragraphRuns([runOptions], options);
 }
 
 function paragraphRuns(
@@ -618,7 +626,7 @@ function paragraphRuns(
     .join("")}</w:p>`;
 }
 
-function run(value: string, options: RunOptions = {}): string {
+function run(value: string, options: RunStyleOptions = {}): string {
   return `<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="Times New Roman" w:cs="Times New Roman"/>${
     options.bold ? "<w:b/><w:bCs/>" : ""
   }${options.italic ? "<w:i/><w:iCs/>" : ""}${
@@ -712,22 +720,21 @@ function xml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-type ParagraphOptions = {
-  align?: "left" | "center" | "right";
-  before?: number;
-  after?: number;
+type RunStyleOptions = {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
   size?: number;
 };
 
-type RunOptions = {
+type ParagraphOptions = RunStyleOptions & {
+  align?: "left" | "center" | "right";
+  before?: number;
+  after?: number;
+};
+
+type RunOptions = RunStyleOptions & {
   text: string;
-  bold?: boolean;
-  italic?: boolean;
-  underline?: boolean;
-  size?: number;
 };
 
 type CellOptions = {
