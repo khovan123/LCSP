@@ -175,7 +175,8 @@ function resolveOptions(
       readonly SelectOption[]
     >;
     const options = sets[optionSet];
-    if (!options) throw new Error(`Unknown Wizard select option set: ${optionSet}`);
+    if (!options)
+      throw new Error(`Unknown Wizard select option set: ${optionSet}`);
     return options.map((option) => {
       const enLabel = wizardMessage("en", option.labelKey);
       const viLabel = wizardMessage("vi", option.labelKey);
@@ -213,7 +214,9 @@ function resolveOptions(
   });
 }
 
-function selectedAnswerValues(answer: ReadinessExportWizardAnswer): Set<string> {
+function selectedAnswerValues(
+  answer: ReadinessExportWizardAnswer,
+): Set<string> {
   return new Set(rawAnswerValues(answer).map(normalize));
 }
 

@@ -112,11 +112,7 @@ const COPY = {
     approvalTitle: "DECLARATION AND APPROVAL",
     declaration:
       "I confirm that this record reflects the information declared in the Wizard at the time of export. I understand that the information may need to be updated when the system scope, data, model, provider, deployment, or business process changes.",
-    signatures: [
-      "DECLARED BY",
-      "COMPLIANCE REVIEW",
-      "APPROVAL REPRESENTATIVE",
-    ],
+    signatures: ["DECLARED BY", "COMPLIANCE REVIEW", "APPROVAL REPRESENTATIVE"],
     name: "Name",
     role: "Role",
     date: "Date",
@@ -138,7 +134,9 @@ export function renderReadinessExportDocx(
   const sectionById = new Map(sections.map((section) => [section.id, section]));
   const body: string[] = [];
 
-  body.push(paragraph(copy.reference, { bold: true, align: "right", size: 20 }));
+  body.push(
+    paragraph(copy.reference, { bold: true, align: "right", size: 20 }),
+  );
   body.push(paragraph(copy.title, { bold: true, align: "center", size: 30 }));
   body.push(
     paragraph(`(${copy.subtitle})`, {
@@ -191,11 +189,20 @@ export function renderReadinessExportDocx(
     ),
   );
   body.push(...renderFields(content, provider, 6, locale, 0));
-  body.push(...renderFields(content, deployment, 6, locale, provider.fields.length));
+  body.push(
+    ...renderFields(content, deployment, 6, locale, provider.fields.length),
+  );
 
   const risk = requiredSection(sectionById, "risk");
   body.push(sectionHeading(`7. ${risk.title.toUpperCase()}`));
-  body.push(...renderFields(content, { ...risk, fields: risk.fields.slice(0, 2) }, 7, locale));
+  body.push(
+    ...renderFields(
+      content,
+      { ...risk, fields: risk.fields.slice(0, 2) },
+      7,
+      locale,
+    ),
+  );
   body.push(pageBreak());
   body.push(
     ...renderFields(
@@ -321,7 +328,10 @@ function checkboxTable(
     ]),
   );
 
-  return tableXml(rows, Array.from({ length: columns }, () => width));
+  return tableXml(
+    rows,
+    Array.from({ length: columns }, () => width),
+  );
 }
 
 function generalInformationBox(
@@ -360,7 +370,12 @@ function identificationTable(
   const copy = COPY[locale];
   const widths = [1700, 2835, 1700, 2835];
   const rows = [
-    [copy.recordId, content.metadata.assessment_id, copy.status, copy.completed],
+    [
+      copy.recordId,
+      content.metadata.assessment_id,
+      copy.status,
+      copy.completed,
+    ],
     [
       copy.assessment,
       content.metadata.assessment_name ?? copy.notProvided,
@@ -391,9 +406,13 @@ function identificationTable(
     rows.map((row) =>
       tableRow(
         row.map((value, column) =>
-          tableCell(paragraph(value, { bold: column % 2 === 0, after: 0 }), widths[column], {
-            shade: column % 2 === 0 ? LABEL_SHADE : undefined,
-          }),
+          tableCell(
+            paragraph(value, { bold: column % 2 === 0, after: 0 }),
+            widths[column],
+            {
+              shade: column % 2 === 0 ? LABEL_SHADE : undefined,
+            },
+          ),
         ),
       ),
     ),
@@ -476,9 +495,7 @@ function headerXml(
 ): string {
   const organization =
     content.metadata.organization_name ??
-    (locale === "vi"
-      ? "[TÊN DOANH NGHIỆP / TỔ CHỨC]"
-      : "[ORGANIZATION NAME]");
+    (locale === "vi" ? "[TÊN DOANH NGHIỆP / TỔ CHỨC]" : "[ORGANIZATION NAME]");
   const left = [
     paragraph(organization.toUpperCase(), {
       bold: true,
@@ -556,10 +573,7 @@ function noticeBox(value: string): string {
       tableRow([
         tableCell(
           paragraphRuns(
-            [
-              { text: "Lưu ý / Notice: ", bold: true },
-              { text: value },
-            ],
+            [{ text: "Lưu ý / Notice: ", bold: true }, { text: value }],
             { after: 0 },
           ),
           CONTENT_WIDTH,
@@ -573,23 +587,15 @@ function noticeBox(value: string): string {
 
 function valueBox(value: string): string {
   return tableXml(
-    [
-      tableRow([
-        tableCell(paragraph(value, { after: 0 }), CONTENT_WIDTH),
-      ]),
-    ],
+    [tableRow([tableCell(paragraph(value, { after: 0 }), CONTENT_WIDTH)])],
     [CONTENT_WIDTH],
   );
 }
 
 function labelValueParagraph(label: string, value: string): string {
-  return paragraphRuns(
-    [
-      { text: `${label}: `, bold: true },
-      { text: value },
-    ],
-    { after: 100 },
-  );
+  return paragraphRuns([{ text: `${label}: `, bold: true }, { text: value }], {
+    after: 100,
+  });
 }
 
 function sectionHeading(value: string): string {
@@ -599,10 +605,7 @@ function sectionHeading(value: string): string {
   )}</w:p>`;
 }
 
-function paragraph(
-  value: string,
-  options: ParagraphOptions = {},
-): string {
+function paragraph(value: string, options: ParagraphOptions = {}): string {
   return paragraphRuns([{ text: value, ...options }], options);
 }
 
@@ -625,11 +628,7 @@ function run(value: string, options: RunOptions = {}): string {
   }"/></w:rPr><w:t xml:space="preserve">${xml(value)}</w:t></w:r>`;
 }
 
-function tableXml(
-  rows: string[],
-  widths: number[],
-  borders = true,
-): string {
+function tableXml(rows: string[], widths: number[], borders = true): string {
   return `<w:tbl><w:tblPr><w:tblW w:w="${CONTENT_WIDTH}" w:type="dxa"/><w:tblLayout w:type="fixed"/>${
     borders ? tableBorders() : ""
   }</w:tblPr><w:tblGrid>${widths
@@ -653,9 +652,7 @@ function tableCell(
   return `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${
     options.gridSpan ? `<w:gridSpan w:val="${options.gridSpan}"/>` : ""
   }${options.shade ? `<w:shd w:fill="${options.shade}"/>` : ""}${
-    options.verticalAlign
-      ? `<w:vAlign w:val="${options.verticalAlign}"/>`
-      : ""
+    options.verticalAlign ? `<w:vAlign w:val="${options.verticalAlign}"/>` : ""
   }${options.border === false ? noCellBorders() : ""}<w:tcMar><w:top w:w="70" w:type="dxa"/><w:left w:w="90" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:right w:w="90" w:type="dxa"/></w:tcMar></w:tcPr>${content}</w:tc>`;
 }
 

@@ -132,7 +132,11 @@ function assertDocxMatchesFrontendDatabaseAndTemplate(
     (field) => field.control !== WIZARD_FIELD_CONTROLS.textarea,
   );
 
-  assert.equal(resolvedFields.length, 19, "Frontend Wizard must expose 19 fields");
+  assert.equal(
+    resolvedFields.length,
+    19,
+    "Frontend Wizard must expose 19 fields",
+  );
   assert.equal(
     new Set(resolvedFields.map((field) => field.questionId)).size,
     19,
