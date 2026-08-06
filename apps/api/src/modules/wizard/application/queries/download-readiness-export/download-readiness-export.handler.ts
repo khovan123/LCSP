@@ -9,6 +9,7 @@ import { PrismaService } from "../../../../../infrastructure/prisma/prisma.servi
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import type { ReadinessExportContent } from "../../contracts/wizard/readiness-export.contract.js";
 import { ReadinessExportDocumentService } from "../../services/wizard/readiness-export-document.service.js";
+import { renderReadinessExportDocx } from "../../services/wizard/readiness-export-docx-template.js";
 import { ReadinessExportPdfService } from "../../services/wizard/readiness-export-pdf.service.js";
 import { DownloadReadinessExportQuery } from "./download-readiness-export.query.js";
 import type { ReadinessExportDownload } from "./download-readiness-export.query.js";
@@ -47,13 +48,20 @@ export class DownloadReadinessExportHandler implements IQueryHandler<
 
     const content = record.contentJson as unknown as ReadinessExportContent;
     const rendered =
-      query.format === "pdf" && query.locale === "en"
+      query.format === "docx"
         ? {
-            buffer: this.pdf.render(content),
-            mediaType: "application/pdf" as const,
-            extension: "pdf" as const,
+            buffer: renderReadinessExportDocx(content, query.locale),
+            mediaType:
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document" as const,
+            extension: "docx" as const,
           }
-        : this.documents.render(content, query.format, query.locale);
+        : query.locale === "en"
+          ? {
+              buffer: this.pdf.render(content),
+              mediaType: "application/pdf" as const,
+              extension: "pdf" as const,
+            }
+          : this.documents.render(content, "pdf", query.locale);
 
     return {
       pdf: rendered.buffer,
