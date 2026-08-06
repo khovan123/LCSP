@@ -109,9 +109,7 @@ function assertDocxMatchesTemplate(
     );
     assert.ok(documentXml.includes("THÔNG TIN NHẬN DIỆN HỒ SƠ"));
     assert.ok(documentXml.includes("Quy ước hiển thị"));
-    assert.ok(
-      documentXml.includes("TÌNH TRẠNG HỒ SƠ VÀ HÀNH ĐỘNG TIẾP THEO"),
-    );
+    assert.ok(documentXml.includes("TÌNH TRẠNG HỒ SƠ VÀ HÀNH ĐỘNG TIẾP THEO"));
     assert.ok(documentXml.includes("XÁC NHẬN VÀ PHÊ DUYỆT"));
     assert.ok(documentXml.includes("NGƯỜI KHAI BÁO"));
     assert.ok(documentXml.includes("PHÁP CHẾ/TUÂN THỦ RÀ SOÁT"));
@@ -144,7 +142,11 @@ function readStoredZipEntries(archive: Buffer): Map<string, string> {
   while (offset + 4 <= archive.length) {
     const signature = archive.readUInt32LE(offset);
     if (signature === 0x02014b50 || signature === 0x06054b50) break;
-    assert.equal(signature, 0x04034b50, `Unexpected ZIP signature at ${offset}`);
+    assert.equal(
+      signature,
+      0x04034b50,
+      `Unexpected ZIP signature at ${offset}`,
+    );
 
     const compressionMethod = archive.readUInt16LE(offset + 8);
     assert.equal(compressionMethod, 0, "DOCX demo expects stored ZIP entries");
@@ -160,7 +162,10 @@ function readStoredZipEntries(archive: Buffer): Map<string, string> {
     const fileName = archive
       .subarray(fileNameStart, fileNameStart + fileNameLength)
       .toString("utf8");
-    entries.set(fileName, archive.subarray(dataStart, dataEnd).toString("utf8"));
+    entries.set(
+      fileName,
+      archive.subarray(dataStart, dataEnd).toString("utf8"),
+    );
     offset = dataEnd;
   }
 
@@ -288,11 +293,7 @@ function buildFixture(locale: ReadinessExportLocale): ReadinessExportContent {
                   "Quy trình nghiệp vụ",
                   "Tiếp nhận hồ sơ, trích xuất dữ liệu, xếp hạng sơ bộ và rà soát bởi chuyên viên.",
                 ),
-                answer(
-                  "sector",
-                  "Lĩnh vực áp dụng",
-                  "Nhân sự hoặc tuyển dụng",
-                ),
+                answer("sector", "Lĩnh vực áp dụng", "Nhân sự hoặc tuyển dụng"),
               ],
             },
             {
@@ -302,10 +303,7 @@ function buildFixture(locale: ReadinessExportLocale): ReadinessExportContent {
                   "dataTypes",
                   "Loại dữ liệu được sử dụng hoặc tạo ra",
                   "Dữ liệu hồ sơ cá nhân, Dữ liệu nhạy cảm hoặc đặc biệt",
-                  [
-                    "Dữ liệu hồ sơ cá nhân",
-                    "Dữ liệu nhạy cảm hoặc đặc biệt",
-                  ],
+                  ["Dữ liệu hồ sơ cá nhân", "Dữ liệu nhạy cảm hoặc đặc biệt"],
                 ),
                 answer(
                   "affectedSubjects",
@@ -374,11 +372,7 @@ function buildFixture(locale: ReadinessExportLocale): ReadinessExportContent {
                   "System / solution name",
                   "Applicant screening and ranking support system",
                 ),
-                answer(
-                  "deploymentStage",
-                  "Current deployment stage",
-                  "Pilot",
-                ),
+                answer("deploymentStage", "Current deployment stage", "Pilot"),
               ],
             },
             {
@@ -411,7 +405,11 @@ function buildFixture(locale: ReadinessExportLocale): ReadinessExportContent {
                   "Business process",
                   "Receive applications, extract data, rank candidates and perform human review.",
                 ),
-                answer("sector", "Applicable sector", "Employment and recruitment"),
+                answer(
+                  "sector",
+                  "Applicable sector",
+                  "Employment and recruitment",
+                ),
               ],
             },
             {
