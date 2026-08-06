@@ -762,6 +762,8 @@ export const enPages = {
         "It supports background work only and does not shape a final decision",
       decisionRoleSupportsDecision:
         "It supports a person who still decides the outcome",
+      decisionRoleInformsDecision:
+        "It informs a person who still decides the outcome",
       decisionRoleRecommendsOutcome:
         "It recommends an outcome that people usually follow",
       decisionRoleDirectlyDrivesOutcome:

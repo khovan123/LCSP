@@ -774,6 +774,7 @@ export type PagesMessages = {
       userImpactSignificant: string;
       decisionRoleNoAutonomousDecision: string;
       decisionRoleSupportsDecision: string;
+      decisionRoleInformsDecision: string;
       decisionRoleRecommendsOutcome: string;
       decisionRoleDirectlyDrivesOutcome: string;
       humanOversightPresent: string;

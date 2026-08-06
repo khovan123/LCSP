@@ -164,28 +164,28 @@ export function renderReadinessExportDocx(
   body.push(generalInformationBox(content, locale));
 
   const preScreen = requiredSection(sectionById, "pre-screen");
-  body.push(sectionHeading(`2. ${preScreen.title.toUpperCase()}`));
+  body.push(sectionHeading(`2. ${preScreen.title}`));
   body.push(...renderFields(content, preScreen, 2, locale));
   body.push(pageBreak());
 
   const purpose = requiredSection(sectionById, "purpose");
-  body.push(sectionHeading(`3. ${purpose.title.toUpperCase()}`));
+  body.push(sectionHeading(`3. ${purpose.title}`));
   body.push(...renderFields(content, purpose, 3, locale));
 
   const dataUsers = requiredSection(sectionById, "data-users");
-  body.push(sectionHeading(`4. ${dataUsers.title.toUpperCase()}`));
+  body.push(sectionHeading(`4. ${dataUsers.title}`));
   body.push(...renderFields(content, dataUsers, 4, locale));
   body.push(pageBreak());
 
   const decision = requiredSection(sectionById, "decision");
-  body.push(sectionHeading(`5. ${decision.title.toUpperCase()}`));
+  body.push(sectionHeading(`5. ${decision.title}`));
   body.push(...renderFields(content, decision, 5, locale));
 
   const provider = requiredSection(sectionById, "provider");
   const deployment = requiredSection(sectionById, "deployment");
   body.push(
     sectionHeading(
-      `6. ${provider.title.toUpperCase()} / ${deployment.title.toUpperCase()}`,
+      `6. ${provider.title} / ${deployment.title}`,
     ),
   );
   body.push(...renderFields(content, provider, 6, locale, 0));
@@ -194,7 +194,7 @@ export function renderReadinessExportDocx(
   );
 
   const risk = requiredSection(sectionById, "risk");
-  body.push(sectionHeading(`7. ${risk.title.toUpperCase()}`));
+  body.push(sectionHeading(`7. ${risk.title}`));
   body.push(
     ...renderFields(
       content,

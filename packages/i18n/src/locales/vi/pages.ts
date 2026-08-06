@@ -756,6 +756,8 @@ export const viPages = {
         "Chỉ hỗ trợ công việc nền và không định hình quyết định cuối cùng",
       decisionRoleSupportsDecision:
         "Hỗ trợ một người đưa ra quyết định cuối cùng",
+      decisionRoleInformsDecision:
+        "Cung cấp thông tin cho người vẫn đưa ra quyết định cuối cùng",
       decisionRoleRecommendsOutcome:
         "Đề xuất một kết quả mà con người thường làm theo",
       decisionRoleDirectlyDrivesOutcome:
