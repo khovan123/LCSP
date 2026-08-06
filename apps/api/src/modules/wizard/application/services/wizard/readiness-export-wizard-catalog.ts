@@ -3,6 +3,7 @@ import {
   WIZARD_EXPORT_SECTIONS,
   WIZARD_FIELD_CONTROLS,
   WIZARD_SELECT_OPTIONS,
+  type WizardExportSectionDefinition,
   type WizardFieldControl,
 } from "@lcsp/contracts/wizard";
 import { enPages, viPages } from "@lcsp/i18n";
@@ -43,6 +44,9 @@ const PAGE_MESSAGES = {
   vi: viPages,
 } as const;
 
+const EXPORT_SECTIONS =
+  WIZARD_EXPORT_SECTIONS as readonly WizardExportSectionDefinition[];
+
 const LEGACY_SELECT_LABELS: Record<string, string[]> = {
   yes: ["Yes"],
   no: ["No"],
@@ -75,7 +79,7 @@ const LEGACY_SELECT_LABELS: Record<string, string[]> = {
 export function resolveWizardSections(
   locale: WizardCatalogLocale,
 ): ResolvedWizardSection[] {
-  return WIZARD_EXPORT_SECTIONS.map((section) => ({
+  return EXPORT_SECTIONS.map((section) => ({
     id: section.id,
     titleKey: section.titleKey,
     title: wizardMessage(locale, section.titleKey),
@@ -175,8 +179,9 @@ function resolveOptions(
       readonly SelectOption[]
     >;
     const options = sets[optionSet];
-    if (!options)
+    if (!options) {
       throw new Error(`Unknown Wizard select option set: ${optionSet}`);
+    }
     return options.map((option) => {
       const enLabel = wizardMessage("en", option.labelKey);
       const viLabel = wizardMessage("vi", option.labelKey);
