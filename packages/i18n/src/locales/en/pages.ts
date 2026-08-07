@@ -137,8 +137,7 @@ export const enPages = {
     homeAriaLabel: "LCSP home",
     formEyebrow: "Recover access",
     formTitle: "Request password recovery",
-    formDescription:
-      "Enter your work email to start the safe recovery flow.",
+    formDescription: "Enter your work email to start the safe recovery flow.",
     emailLabel: "Work email",
     emailDescription: "Use the email linked to your LCSP account.",
     submit: "Send recovery request",
@@ -174,7 +173,8 @@ export const enPages = {
       tokenRequired: "Enter the recovery token.",
       passwordTooShort: "Password must be at least 12 characters.",
       requestFailedTitle: "Unable to recover password",
-      requestFailedDetail: "Password recovery could not be completed right now.",
+      requestFailedDetail:
+        "Password recovery could not be completed right now.",
     },
   },
   acceptInvitation: {
@@ -676,11 +676,15 @@ export const enPages = {
       preDecisionImportanceDescription:
         "For example: hiring, access, eligibility, pricing, or service outcomes.",
       businessProcessLabel: "What business process does this system support?",
-      businessProcessDescription: "Describe the main task in everyday business language.",
-      businessProcessPlaceholder: "Example: Help a support team draft replies for customer requests.",
+      businessProcessDescription:
+        "Describe the main task in everyday business language.",
+      businessProcessPlaceholder:
+        "Example: Help a support team draft replies for customer requests.",
       aiPurposeLabel: "What role does the AI play in this process?",
-      aiPurposeDescription: "Describe the specific role of the AI system in the process mentioned above.",
-      aiPurposePlaceholder: "Example: Summarize chat history and suggest 3 draft replies.",
+      aiPurposeDescription:
+        "Describe the specific role of the AI system in the process mentioned above.",
+      aiPurposePlaceholder:
+        "Example: Summarize chat history and suggest 3 draft replies.",
       sectorLabel: "Which business context fits this system best?",
       sectorDescription:
         "Choose the closest primary context for this assessment.",
@@ -715,14 +719,21 @@ export const enPages = {
         "Does this workflow relate to hiring, education, credit, healthcare, public services, or another important life context?",
       highImpactIndicatorDescription:
         "This helps LCSP flag workflows that may need closer follow-up later.",
-      deploymentContextLabel: "Who is the intended audience for this application?",
-      deploymentContextDescription: "Identify whether the application is used internally or provided externally to other users.",
-      specialCategoryDataLabel: "Does the data contain particularly sensitive special categories?",
-      specialCategoryDataDescription: "For example: political opinions, religious beliefs, trade union membership, etc.",
-      transparencyIndicatorsLabel: "Are there direct interactions or AI-generated content?",
-      transparencyIndicatorsDescription: "Indicate if users know they are interacting with AI or AI-generated content.",
+      deploymentContextLabel:
+        "Who is the intended audience for this application?",
+      deploymentContextDescription:
+        "Identify whether the application is used internally or provided externally to other users.",
+      specialCategoryDataLabel:
+        "Does the data contain particularly sensitive special categories?",
+      specialCategoryDataDescription:
+        "For example: political opinions, religious beliefs, trade union membership, etc.",
+      transparencyIndicatorsLabel:
+        "Are there direct interactions or AI-generated content?",
+      transparencyIndicatorsDescription:
+        "Indicate if users know they are interacting with AI or AI-generated content.",
       prohibitedRiskSignalsLabel: "Are there any unacceptable risk signals?",
-      prohibitedRiskSignalsDescription: "Social scoring, subliminal manipulation, or inferring sensitive traits are prohibited.",
+      prohibitedRiskSignalsDescription:
+        "Social scoring, subliminal manipulation, or inferring sensitive traits are prohibited.",
     },
     options: {
       yes: "Yes",
@@ -751,6 +762,8 @@ export const enPages = {
         "It supports background work only and does not shape a final decision",
       decisionRoleSupportsDecision:
         "It supports a person who still decides the outcome",
+      decisionRoleInformsDecision:
+        "It informs a person who still decides the outcome",
       decisionRoleRecommendsOutcome:
         "It recommends an outcome that people usually follow",
       decisionRoleDirectlyDrivesOutcome:
@@ -798,15 +811,21 @@ export const enPages = {
         "The Wizard could not be submitted. Review the highlighted answers and try again.",
       alreadySubmitted:
         "This Wizard has already been submitted and is now read-only.",
-      preAiScopeRequired: "Please indicate whether this system uses AI before continuing.",
-      preAffectedPeopleRequired: "Please select who might be affected before continuing.",
-      prePersonalDataRequired: "Please indicate whether personal data is processed before continuing.",
-      preDecisionImportanceRequired: "Please indicate whether the AI output affects an important decision before continuing.",
-      businessProcessRequired: "Describe the main business process before continuing.",
+      preAiScopeRequired:
+        "Please indicate whether this system uses AI before continuing.",
+      preAffectedPeopleRequired:
+        "Please select who might be affected before continuing.",
+      prePersonalDataRequired:
+        "Please indicate whether personal data is processed before continuing.",
+      preDecisionImportanceRequired:
+        "Please indicate whether the AI output affects an important decision before continuing.",
+      businessProcessRequired:
+        "Describe the main business process before continuing.",
       aiPurposeRequired: "Describe the AI purpose before continuing.",
       sectorRequired: "Choose the primary business context before continuing.",
       dataTypesRequired: "Select at least one data category before continuing.",
-      affectedSubjectsRequired: "Choose who is directly affected before continuing.",
+      affectedSubjectsRequired:
+        "Choose who is directly affected before continuing.",
       userImpactRequired: "Choose the level of impact before continuing.",
       decisionRoleRequired:
         "Choose how strongly the AI output affects the final decision.",
@@ -814,11 +833,16 @@ export const enPages = {
         "Describe where a person reviews the result before continuing.",
       externalLlmUsageRequired:
         "Confirm whether the system uses an external AI provider before continuing.",
-      deploymentContextRequired: "Select the intended audience before continuing.",
-      specialCategoryDataRequired: "Indicate whether special category data is processed before continuing.",
-      biometricDataRequired: "Indicate whether biometric data is processed before continuing.",
-      highImpactIndicatorsRequired: "Select any high impact indicators before continuing.",
-      prohibitedRiskSignalsRequired: "Select any prohibited risk signals before continuing.",
+      deploymentContextRequired:
+        "Select the intended audience before continuing.",
+      specialCategoryDataRequired:
+        "Indicate whether special category data is processed before continuing.",
+      biometricDataRequired:
+        "Indicate whether biometric data is processed before continuing.",
+      highImpactIndicatorsRequired:
+        "Select any high impact indicators before continuing.",
+      prohibitedRiskSignalsRequired:
+        "Select any prohibited risk signals before continuing.",
     },
   },
   readiness: {
@@ -838,6 +862,11 @@ export const enPages = {
     summaryTitle: "Current handoff",
     summaryDescription:
       "The Wizard is complete, but LCSP still treats this assessment as readiness-only until technical evidence is available.",
+    summaryDescriptionReady:
+      "The required technical evidence is available and this assessment can proceed to the next controlled gate.",
+    exportErrorTitle: "Unable to generate readiness export",
+    exportErrorDetail:
+      "The PDF could not be generated. Confirm that the Wizard is submitted and technical evidence is still unavailable.",
     completedTitle: "Completed steps",
     missingTitle: "Still missing",
     nextActionTitle: "Next action",
@@ -876,6 +905,8 @@ export const enPages = {
       openDocuments: "Open documents",
       connectRepository: "Connect Repository",
       editWizard: "Update Wizard",
+      downloadPdf: "Download Wizard Readiness PDF",
+      exportingPdf: "Preparing PDF...",
     },
   },
   workspaceSelector: {

@@ -634,7 +634,17 @@ export type PagesMessages = {
     submit: string;
     submitting: string;
   };
-  developerManagement: { pageTitle: string; pageDescription: string; inviteTitle: string; emailLabel: string; invite: string; membersTitle: string; scopeLabel: string; revoke: string; empty: string; };
+  developerManagement: {
+    pageTitle: string;
+    pageDescription: string;
+    inviteTitle: string;
+    emailLabel: string;
+    invite: string;
+    membersTitle: string;
+    scopeLabel: string;
+    revoke: string;
+    empty: string;
+  };
   wizard: {
     metadataTitle: string;
     metadataDescription: string;
@@ -764,6 +774,7 @@ export type PagesMessages = {
       userImpactSignificant: string;
       decisionRoleNoAutonomousDecision: string;
       decisionRoleSupportsDecision: string;
+      decisionRoleInformsDecision: string;
       decisionRoleRecommendsOutcome: string;
       decisionRoleDirectlyDrivesOutcome: string;
       humanOversightPresent: string;
@@ -819,6 +830,9 @@ export type PagesMessages = {
     badgeReady: string;
     summaryTitle: string;
     summaryDescription: string;
+    summaryDescriptionReady: string;
+    exportErrorTitle: string;
+    exportErrorDetail: string;
     completedTitle: string;
     missingTitle: string;
     nextActionTitle: string;
@@ -854,6 +868,8 @@ export type PagesMessages = {
       openDocuments: string;
       connectRepository: string;
       editWizard: string;
+      downloadPdf: string;
+      exportingPdf: string;
     };
   };
   classification: {

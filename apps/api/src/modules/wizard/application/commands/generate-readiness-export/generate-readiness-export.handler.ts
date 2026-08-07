@@ -12,6 +12,8 @@ import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import {
+  READINESS_CLASSIFICATION_STATUSES,
+  READINESS_EXPORT_ARTIFACT_TYPES,
   READINESS_EXPORT_ERROR_CODES,
   READINESS_EXPORT_STATUSES,
   WIZARD_EVENT_TYPES,
@@ -65,43 +67,59 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
         id: true,
         organizationId: true,
         ownerId: true,
+        name: true,
+        description: true,
       },
     });
     if (!assessment) {
       throw new AssessmentNotFoundException(command.correlationId);
     }
 
-    const [wizardProfile, repositoryConnection, technicalEvidence, latest] =
-      await Promise.all([
-        this.prisma.wizardProfile.findUnique({
-          where: { assessmentId: command.assessmentId },
-          select: {
-            id: true,
-            version: true,
-            status: true,
-            answers: true,
-          },
-        }),
-        this.prisma.repositoryConnection.findFirst({
-          where: { assessmentId: command.assessmentId },
-          select: { id: true },
-        }),
-        this.prisma.technicalEvidenceReport.findFirst({
-          where: {
-            assessmentId: command.assessmentId,
-            organizationId: command.organizationId,
-            status: toPrismaEvidenceAcceptanceStatus(
-              TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
-            ),
-          },
-          select: { id: true },
-        }),
-        this.prisma.readinessExport.findFirst({
-          where: { assessmentId: command.assessmentId },
-          orderBy: { version: "desc" },
-          select: { version: true },
-        }),
-      ]);
+    const [
+      wizardProfile,
+      repositoryConnection,
+      technicalEvidence,
+      latest,
+      organization,
+      owner,
+    ] = await Promise.all([
+      this.prisma.wizardProfile.findUnique({
+        where: { assessmentId: command.assessmentId },
+        select: {
+          id: true,
+          version: true,
+          status: true,
+          answers: true,
+        },
+      }),
+      this.prisma.repositoryConnection.findFirst({
+        where: { assessmentId: command.assessmentId },
+        select: { id: true },
+      }),
+      this.prisma.technicalEvidenceReport.findFirst({
+        where: {
+          assessmentId: command.assessmentId,
+          organizationId: command.organizationId,
+          status: toPrismaEvidenceAcceptanceStatus(
+            TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+          ),
+        },
+        select: { id: true },
+      }),
+      this.prisma.readinessExport.findFirst({
+        where: { assessmentId: command.assessmentId },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      }),
+      this.prisma.authOrganization.findUnique({
+        where: { id: command.organizationId },
+        select: { name: true },
+      }),
+      this.prisma.authUser.findUnique({
+        where: { id: command.ownerId },
+        select: { displayName: true, email: true },
+      }),
+    ]);
 
     if (!wizardProfile) {
       throw problemException(
@@ -137,14 +155,22 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
         ? (wizardProfile.answers as WizardAnswer[])
         : [],
     });
+    const wizardAnswers = Array.isArray(wizardProfile.answers)
+      ? (wizardProfile.answers as WizardAnswer[])
+      : [];
     const content = this.buildContent(
       command,
       wizardProfile.version,
       version,
       generatedAt,
+      wizardAnswers,
       readiness.missing_evidence,
       readiness.unresolved_unknown_items.map((item) => item.label),
       readiness.next_action,
+      assessment.name,
+      assessment.description,
+      organization?.name,
+      owner?.displayName ?? owner?.email,
     );
     const guardrailResult = this.guardrail.check(content);
     const status = guardrailResult.passed
@@ -208,13 +234,24 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       owner_id: command.ownerId,
       status,
       label: READINESS_EXPORT_LABEL,
+      artifact_type: READINESS_EXPORT_ARTIFACT_TYPES.wizardReadinessExport,
+      readiness_only: true,
+      classification_status:
+        READINESS_CLASSIFICATION_STATUSES.lockedEvidenceRequired,
       classification_locked: true,
-      missing_evidence: content.missing_evidence,
-      unresolved_unknowns: content.unresolved_unknowns,
-      preparation_guidance: content.preparation_guidance,
       generated_at: generatedAt.toISOString(),
       version,
       correlation_id: command.correlationId,
+      ...(guardrailResult.passed
+        ? {
+            missing_evidence: content.missing_evidence,
+            unresolved_unknowns: content.unresolved_unknowns,
+            preparation_guidance: content.preparation_guidance,
+            media_type: "application/pdf" as const,
+            file_name: `wizard-readiness-export-v${version}.pdf`,
+            download_url: `/assessments/${command.assessmentId}/wizard/readiness-exports/${exportId}/download`,
+          }
+        : {}),
       ...(guardrailResult.blockedReason
         ? { blocked_reason: guardrailResult.blockedReason }
         : {}),
@@ -226,9 +263,14 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
     wizardProfileVersion: number,
     version: number,
     generatedAt: Date,
+    wizardAnswers: WizardAnswer[],
     missingEvidence: ReadinessExportContent["missing_evidence"],
     unresolvedUnknowns: string[],
     nextAction: string,
+    assessmentName: string,
+    assessmentDescription: string | null,
+    organizationName: string | undefined,
+    ownerDisplayName: string | undefined,
   ): ReadinessExportContent {
     return {
       label: READINESS_EXPORT_LABEL,
@@ -237,16 +279,29 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       preview:
         "Readiness-only preparation summary for evidence collection and next steps.",
       metadata: {
+        artifact_type: READINESS_EXPORT_ARTIFACT_TYPES.wizardReadinessExport,
         label: READINESS_EXPORT_LABEL,
         readiness_only: true,
+        classification_status:
+          READINESS_CLASSIFICATION_STATUSES.lockedEvidenceRequired,
         assessment_id: command.assessmentId,
+        assessment_name: assessmentName,
+        ...(assessmentDescription
+          ? { assessment_description: assessmentDescription }
+          : {}),
+        ...(organizationName ? { organization_name: organizationName } : {}),
+        ...(ownerDisplayName ? { owner_display_name: ownerDisplayName } : {}),
         wizard_profile_version: wizardProfileVersion,
         owner_id: command.ownerId,
+        generated_by: command.ownerId,
         version,
         generated_at: generatedAt.toISOString(),
       },
       missing_evidence: missingEvidence,
       unresolved_unknowns: unresolvedUnknowns,
+      wizard_profile: {
+        sections: buildWizardProfileSections(wizardAnswers),
+      },
       preparation_guidance: [
         "Keep the wizard answers current while technical evidence is collected.",
         "Resolve unknown items before requesting downstream evaluation.",
@@ -294,4 +349,195 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       status: HttpStatus.FORBIDDEN,
     });
   }
+}
+
+type WizardSectionDefinition = {
+  title: string;
+  fields: Array<readonly [questionId: string, label: string]>;
+};
+
+const WIZARD_SECTION_DEFINITIONS: WizardSectionDefinition[] = [
+  {
+    title: "Pre-screen",
+    fields: [
+      ["ps_001_ai_scope", "AI system scope"],
+      ["ps_002_affected_people", "Affected people"],
+      ["ps_003_personal_or_sensitive_data", "Personal or sensitive data"],
+      ["ps_004_decision_importance", "Decision importance"],
+    ],
+  },
+  {
+    title: "Purpose and context",
+    fields: [
+      ["businessProcess", "Business process"],
+      ["aiPurpose", "AI purpose"],
+      ["purpose", "Purpose"],
+      ["sector", "Sector"],
+    ],
+  },
+  {
+    title: "Data and affected groups",
+    fields: [
+      ["dataTypes", "Data types"],
+      ["affectedSubjects", "Affected subjects"],
+      ["userImpact", "User impact"],
+    ],
+  },
+  {
+    title: "Decision support and oversight",
+    fields: [
+      ["decisionRole", "Decision support role"],
+      ["humanReview", "Human review"],
+    ],
+  },
+  {
+    title: "Provider and deployment",
+    fields: [
+      ["externalLlmUsage", "External provider usage"],
+      ["deploymentContext", "Deployment context"],
+    ],
+  },
+  {
+    title: "Signal review",
+    fields: [
+      ["specialCategoryData", "Special-category data"],
+      ["biometricData", "Biometric data"],
+      ["highImpactIndicators", "Impact indicators"],
+      ["transparencyIndicators", "Transparency indicators"],
+      ["prohibitedRiskSignals", "Prohibited signals"],
+    ],
+  },
+];
+
+const VALUE_LABELS = new Map<string, string>([
+  ["yes", "Yes"],
+  ["no", "No"],
+  ["unknown", "Unknown"],
+  ["UNKNOWN", "Unknown"],
+  ["UNCLEAR", "Unclear"],
+  ["GENERAL_BUSINESS", "General business"],
+  ["EMPLOYMENT_HR", "Employment and HR"],
+  ["FINANCE_CREDIT", "Finance and credit"],
+  ["EDUCATION", "Education"],
+  ["HEALTHCARE", "Healthcare"],
+  ["PUBLIC_SERVICES", "Public services"],
+  ["CUSTOMERS", "Customers"],
+  ["EMPLOYEES", "Employees"],
+  ["APPLICANTS", "Applicants"],
+  ["STUDENTS", "Students"],
+  ["PATIENTS", "Patients"],
+  ["LOW", "Limited impact"],
+  ["MODERATE", "Moderate impact"],
+  ["SIGNIFICANT", "Significant impact"],
+  ["NO_DECISION_SUPPORT", "No decision support"],
+  ["ASSISTS_DECISION", "Assists a decision"],
+  ["INFORMS_DECISION", "Informs a decision"],
+  ["RECOMMENDS_OUTCOME", "Recommends an outcome"],
+  ["DIRECTLY_DRIVES_OUTCOME", "Directly drives an outcome"],
+  ["PRESENT", "Present"],
+  ["LIMITED", "Limited"],
+  ["ABSENT", "Absent"],
+  ["NOT_APPLICABLE", "Not applicable"],
+  ["NONE", "None"],
+  ["POSSIBLE", "Possible"],
+  ["CONFIRMED", "Confirmed"],
+]);
+
+function buildWizardProfileSections(
+  answers: WizardAnswer[],
+): ReadinessExportContent["wizard_profile"]["sections"] {
+  const answerByQuestionId = new Map<string, WizardAnswer>(
+    answers.map((answer) => [answer.questionId, answer]),
+  );
+
+  const knownQuestionIds = new Set<string>();
+  const sections: ReadinessExportContent["wizard_profile"]["sections"] =
+    WIZARD_SECTION_DEFINITIONS.map((section) => {
+      const renderedAnswers = section.fields.map((field) => {
+        const [questionId, label] = field;
+        knownQuestionIds.add(questionId);
+        const answer = answerByQuestionId.get(questionId);
+        return renderWizardAnswer(questionId, label, answer);
+      });
+
+      return {
+        title: section.title,
+        answers: renderedAnswers,
+      };
+    });
+
+  const additionalAnswers = answers
+    .filter((answer) => !knownQuestionIds.has(answer.questionId))
+    .map((answer) =>
+      renderWizardAnswer(
+        answer.questionId,
+        humanizeQuestionId(answer.questionId),
+        answer,
+      ),
+    );
+
+  if (additionalAnswers.length > 0) {
+    sections.push({
+      title: "Additional wizard answers",
+      answers: additionalAnswers,
+    });
+  }
+
+  return sections;
+}
+
+function renderWizardAnswer(
+  questionId: string,
+  label: string,
+  answer: WizardAnswer | undefined,
+): ReadinessExportContent["wizard_profile"]["sections"][number]["answers"][number] {
+  return {
+    question_id: questionId,
+    label,
+    value: answer ? formatAnswerValue(answer.value) : "Not answered",
+    answer_state: answer?.answerState ?? "NOT_ANSWERED",
+    selected_values: answer ? formatAnswerValues(answer.value) : [],
+    updated_at: answer?.updatedAt ?? "",
+  };
+}
+
+function formatAnswerValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(formatAnswerValue);
+  }
+  if (value === null || value === undefined || value === "") {
+    return [];
+  }
+  return [formatAnswerValue(value)];
+}
+
+function formatAnswerValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "Unknown";
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map(formatAnswerValue).join(", ") : "None";
+  }
+
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  if (typeof value === "string") {
+    return VALUE_LABELS.get(value) ?? value;
+  }
+
+  return JSON.stringify(value);
+}
+
+function humanizeQuestionId(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }

@@ -23,6 +23,8 @@ _bmad/
 **/.next/
 **/next-env.d.ts
 **/out/
+/output/*
+!/output/readiness_template.docx
 **/coverage/
 **/build/
 **.log

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { StatusCard } from "@/components/organisms/status-card";
 import { appLocale } from "@/lib/locale";
 import {
+  useGenerateReadinessExportMutation,
   useReadinessStatusQuery,
   useMockProvideEvidenceMutation,
 } from "@/lib/api/assessment-queries";
@@ -22,6 +23,7 @@ export function ReadinessStatusPage({
 }: ReadinessStatusPageProps) {
   const router = useRouter();
   const readinessQuery = useReadinessStatusQuery(assessmentId);
+  const exportMutation = useGenerateReadinessExportMutation(assessmentId);
   const mockEvidenceMutation = useMockProvideEvidenceMutation(assessmentId);
 
   useEffect(() => {
@@ -29,6 +31,15 @@ export function ReadinessStatusPage({
       router.replace(readinessQuery.data.location);
     }
   }, [readinessQuery.data, router]);
+
+  useEffect(() => {
+    if (exportMutation.data?.kind === "redirect") {
+      router.replace(exportMutation.data.location);
+    }
+    if (exportMutation.data?.kind === "created") {
+      window.location.assign(exportMutation.data.data.downloadUrl);
+    }
+  }, [exportMutation.data, router]);
 
   const headingDescription = useMemo(
     () => t("pages.readiness.pageDescription"),
@@ -64,6 +75,10 @@ export function ReadinessStatusPage({
     readinessQuery.data?.kind === "error"
       ? t(readinessQuery.data.titleKey)
       : null;
+  const exportError =
+    exportMutation.data?.kind === "error"
+      ? t(exportMutation.data.detailKey)
+      : null;
 
   if (error || !viewModel) {
     return (
@@ -95,7 +110,11 @@ export function ReadinessStatusPage({
 
       <StatusCard
         title={t("pages.readiness.summaryTitle")}
-        description={t("pages.readiness.summaryDescription")}
+        description={t(
+          viewModel.classificationLocked
+            ? "pages.readiness.summaryDescription"
+            : "pages.readiness.summaryDescriptionReady",
+        )}
         badgeLabel={
           viewModel.classificationLocked
             ? t("pages.readiness.badgeLocked")
@@ -104,9 +123,14 @@ export function ReadinessStatusPage({
         badgeVariant={viewModel.classificationLocked ? "secondary" : "default"}
       >
         <div className="flex flex-wrap gap-2">
-          <Badge variant="outline">{t("pages.readiness.badgeReadinessOnly")}</Badge>
+          {viewModel.classificationLocked && (
+            <Badge variant="outline">
+              {t("pages.readiness.badgeReadinessOnly")}
+            </Badge>
+          )}
           <span className="text-sm text-muted-foreground">
-            {t("pages.readiness.updatedAtLabel")}: {formatDate(viewModel.updatedAt)}
+            {t("pages.readiness.updatedAtLabel")}:{" "}
+            {formatDate(viewModel.updatedAt)}
           </span>
         </div>
 
@@ -163,6 +187,17 @@ export function ReadinessStatusPage({
         </section>
 
         <div className="flex flex-wrap gap-3">
+          {viewModel.classificationLocked && (
+            <Button
+              type="button"
+              disabled={exportMutation.isPending}
+              onClick={() => exportMutation.mutate()}
+            >
+              {exportMutation.isPending
+                ? t("pages.readiness.actions.exportingPdf")
+                : t("pages.readiness.actions.downloadPdf")}
+            </Button>
+          )}
           <Button
             render={<Link href="/workspace" />}
             variant="outline"
@@ -193,7 +228,9 @@ export function ReadinessStatusPage({
               onClick={() => mockEvidenceMutation.mutate()}
               disabled={mockEvidenceMutation.isPending}
             >
-              {mockEvidenceMutation.isPending ? "Mocking..." : "Mock Connect Repository"}
+              {mockEvidenceMutation.isPending
+                ? "Mocking..."
+                : "Mock Connect Repository"}
             </Button>
           )}
 
@@ -203,7 +240,9 @@ export function ReadinessStatusPage({
             </div>
           ) : (
             <Button
-              render={<Link href={`/assessments/${assessmentId}/classification`} />}
+              render={
+                <Link href={`/assessments/${assessmentId}/classification`} />
+              }
               nativeButton={false}
             >
               {t("pages.readiness.actions.openClassification")}
@@ -218,6 +257,13 @@ export function ReadinessStatusPage({
             {t("pages.readiness.actions.openDocuments")}
           </Button>
         </div>
+
+        {exportError && (
+          <Alert variant="destructive">
+            <AlertTitle>{t("pages.readiness.exportErrorTitle")}</AlertTitle>
+            <AlertDescription>{exportError}</AlertDescription>
+          </Alert>
+        )}
       </StatusCard>
     </div>
   );

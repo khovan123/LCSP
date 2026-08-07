@@ -15,6 +15,8 @@ import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import {
+  READINESS_CLASSIFICATION_STATUSES,
+  READINESS_EXPORT_ARTIFACT_TYPES,
   READINESS_EXPORT_ERROR_CODES,
   READINESS_EXPORT_STATUSES,
 } from "@lcsp/contracts/wizard";
@@ -79,12 +81,30 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
     assert.equal(response.status, 201);
     assert.equal(body.status, READINESS_EXPORT_STATUSES.generated);
     assert.equal(body.label, "Wizard Readiness Export");
+    assert.equal(
+      body.artifact_type,
+      READINESS_EXPORT_ARTIFACT_TYPES.wizardReadinessExport,
+    );
+    assert.equal(body.readiness_only, true);
+    assert.equal(
+      body.classification_status,
+      READINESS_CLASSIFICATION_STATUSES.lockedEvidenceRequired,
+    );
     assert.equal(body.classification_locked, true);
     assert.equal(body.assessment_id, "assessment-1");
     assert.equal(body.owner_id, "user-1");
     assert.equal(body.version, 1);
     assert.ok(body.generated_at);
     assert.ok(body.export_id);
+    assert.equal(body.media_type, "application/pdf");
+    assert.equal(body.file_name, "wizard-readiness-export-v1.pdf");
+    assert.equal(
+      body.download_url,
+      `/assessments/assessment-1/wizard/readiness-exports/${body.export_id}/download`,
+    );
+    assert.ok(body.missing_evidence);
+    assert.ok(body.preparation_guidance);
+    assert.ok(body.unresolved_unknowns);
     assert.ok(body.missing_evidence.length >= 1);
     assert.ok(body.preparation_guidance.length >= 1);
     assert.ok(
@@ -110,8 +130,88 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
     assert.equal(exportRecord?.ownerId, "user-1");
     assert.equal(exportRecord?.version, 1);
     assert.equal(exportRecord?.status, READINESS_EXPORT_STATUSES.generated);
+    const exportContent = exportRecord?.contentJson as {
+      wizard_profile?: {
+        sections?: Array<{
+          title: string;
+          answers: Array<{ label: string; value: string }>;
+        }>;
+      };
+    } | null;
+    const wizardAnswers = exportContent?.wizard_profile?.sections?.flatMap(
+      (section) => section.answers,
+    );
+    assert.ok(wizardAnswers?.some((answer) => answer.label === "Purpose"));
+    assert.ok(
+      wizardAnswers?.some((answer) =>
+        answer.value.includes("Route support requests"),
+      ),
+    );
+    assert.ok(
+      wizardAnswers?.some(
+        (answer) => answer.label === "Data types" && answer.value === "Unknown",
+      ),
+    );
+    assert.ok(
+      wizardAnswers?.some(
+        (answer) =>
+          answer.label === "User impact" && answer.value === "Limited impact",
+      ),
+    );
+    assert.doesNotMatch(JSON.stringify(exportContent), /\b(HIGH|MEDIUM|LOW)\b/);
+    assert.doesNotMatch(JSON.stringify(exportContent), /\brisk\b/i);
     assert.equal(audit?.resourceId, body.export_id);
     assert.doesNotMatch(JSON.stringify(audit?.payload), /answers|purpose/i);
+
+    const download = await httpRequest(app)
+      .get(body.download_url)
+      .set("Authorization", `Bearer ${managerToken}`)
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk: Buffer) => chunks.push(chunk));
+        response.on("end", () => callback(null, Buffer.concat(chunks)));
+      });
+
+    assert.equal(download.status, 200);
+    assert.match(download.headers["content-type"], /^application\/pdf/);
+    assert.equal(
+      download.headers["content-disposition"],
+      'attachment; filename="wizard-readiness-export-v1.pdf"',
+    );
+    assert.ok(Buffer.isBuffer(download.body));
+    assert.equal(download.body.subarray(0, 5).toString("ascii"), "%PDF-");
+    const pdfText = download.body.toString("latin1");
+    assert.match(pdfText, /AI SYSTEM DECLARATION AND INFORMATION RECORD/);
+    assert.match(pdfText, /READINESS-ONLY RECORD/);
+    assert.match(pdfText, /PROFILE IDENTIFICATION INFORMATION/);
+    assert.match(pdfText, /SOCIALIST REPUBLIC OF VIET NAM/);
+    assert.match(pdfText, /1\. GENERAL SYSTEM INFORMATION/);
+    assert.match(pdfText, /2\. PRELIMINARY SCREENING/);
+    assert.match(pdfText, /3\. BUSINESS CONTEXT AND PURPOSE/);
+    assert.match(pdfText, /4\. DATA AND AFFECTED SUBJECTS/);
+    assert.match(pdfText, /5\. DECISION ROLE AND HUMAN OVERSIGHT/);
+    assert.match(pdfText, /6\. PROVIDER AND DEPLOYMENT SCOPE/);
+    assert.match(pdfText, /7\. INDICATORS REQUIRING REVIEW/);
+    assert.match(pdfText, /FIELD/);
+    assert.match(pdfText, /RESPONSE/);
+    assert.match(
+      pdfText,
+      /\(PURPOSE\) Tj[\s\S]{0,400}% CHECKBOX_CHECKED[\s\S]{0,400}\(Route support requests/,
+    );
+    assert.match(
+      pdfText,
+      /\(DATA TYPES\) Tj[\s\S]{0,400}% CHECKBOX_UNCHECKED[\s\S]{0,400}\(Unknown\) Tj/,
+    );
+    assert.match(pdfText, /8\. RECORD STATUS AND NEXT ACTIONS/);
+    assert.match(pdfText, /MISSING TECHNICAL EVIDENCE/);
+    assert.match(pdfText, /INFORMATION REQUIRING VERIFICATION/);
+    assert.match(pdfText, /9\. DECLARATION AND APPROVAL/);
+    assert.match(pdfText, /DECLARED BY/);
+    assert.match(pdfText, /COMPLIANCE REVIEW/);
+    assert.match(pdfText, /APPROVAL REPRESENTATIVE/);
+    assert.doesNotMatch(pdfText, /\b(HIGH|MEDIUM|LOW)\b/);
+    assert.doesNotMatch(pdfText, /\bnon-compliant\b/i);
   });
 
   it("T02 rejects readiness export when accepted technical evidence already exists", async () => {
@@ -241,6 +341,18 @@ async function seedSubmittedWizard(prisma: PrismaClient): Promise<void> {
           questionId: "dataTypes",
           answerState: "EXPLICIT_UNKNOWN",
           value: null,
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          questionId: "userImpact",
+          answerState: "ANSWERED",
+          value: "LOW",
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          questionId: "highImpactIndicators",
+          answerState: "ANSWERED",
+          value: ["Recruiting workflow indicator"],
           updatedAt: new Date().toISOString(),
         },
         {
