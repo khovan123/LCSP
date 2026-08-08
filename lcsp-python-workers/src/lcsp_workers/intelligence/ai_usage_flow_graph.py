@@ -7,7 +7,11 @@ from lcsp_workers.platform.callback_schemas import AIUsageFlowCallbackPayload
 from lcsp_workers.platform.graph_runtime import GraphNodeContext, GraphRunState
 
 from .ai_usage_flow_proposer import AIUsageFlowModelAssistedProposer
-from .ai_usage_flow_rule_engine import AIUsageFlow, AIUsageFlowRuleEngine
+from .ai_usage_flow_rule_engine import (
+    AIUsageFlow,
+    AIUsageFlowClaim,
+    AIUsageFlowRuleEngine,
+)
 
 
 @dataclass(frozen=True)
@@ -100,7 +104,9 @@ class AIUsageFlowGraph:
         return self._app
 
     def _node_load_inputs(self, state: AIUsageFlowLangGraphState):
-        technical_profile = self._api_client.get_accepted_technical_profile(state["technical_profile_id"])
+        technical_profile = self._api_client.get_accepted_technical_profile(
+            state["technical_profile_id"]
+        )
         evidence_report_id = (
             state["message"].get("evidenceReportId")
             or state["message"].get("evidence_report_id")
@@ -109,10 +115,18 @@ class AIUsageFlowGraph:
         )
         if not evidence_report_id:
             raise ValueError("missing evidenceReportId")
-        state["graph_state"].input_versions["technical_profile_id"] = state["technical_profile_id"]
-        state["graph_state"].input_versions["evidence_report_id"] = str(evidence_report_id)
-        evidence_report = self._api_client.get_accepted_technical_evidence_report(str(evidence_report_id))
-        wizard_profile = self._api_client.get_wizard_profile_for_assessment(state["assessment_id"])
+        state["graph_state"].input_versions["technical_profile_id"] = state[
+            "technical_profile_id"
+        ]
+        state["graph_state"].input_versions["evidence_report_id"] = str(
+            evidence_report_id
+        )
+        evidence_report = self._api_client.get_accepted_technical_evidence_report(
+            str(evidence_report_id)
+        )
+        wizard_profile = self._api_client.get_wizard_profile_for_assessment(
+            state["assessment_id"]
+        )
         return {
             "technical_profile": technical_profile,
             "evidence_report_id": str(evidence_report_id),
@@ -134,7 +148,9 @@ class AIUsageFlowGraph:
         return {"flow": flow}
 
     @staticmethod
-    def workflow_run_id(message: dict[str, Any], correlation_id: str, technical_profile_id: str) -> str:
+    def workflow_run_id(
+        message: dict[str, Any], correlation_id: str, technical_profile_id: str
+    ) -> str:
         explicit = message.get("workflow_run_id")
         if explicit:
             return str(explicit)
@@ -164,7 +180,9 @@ class AIUsageFlowGraph:
             )
             return {}
         validated_claims = [
-            claim.to_dict() for claim in flow.claims if claim.lifecycle_state == "VALIDATED"
+            claim.to_dict()
+            for claim in flow.claims
+            if claim.lifecycle_state == "VALIDATED"
         ]
         proposer_context = GraphNodeContext(
             workflow_run_id=state["workflow_run_id"],
@@ -220,7 +238,7 @@ class AIUsageFlowGraph:
             assessment_id=flow.assessment_id,
             schema_version=flow.schema_version,
             provider_version=flow.provider_version,
-            claims=[claim.to_dict() for claim in flow.claims],
+            claims=[self._to_callback_claim(claim) for claim in flow.claims],
             unknown_usages=[{"reason": reason} for reason in flow.uncertainty_reasons],
             privacy_flags=flow.privacy_flags,
             flow_data=flow.to_dict(),
@@ -231,6 +249,35 @@ class AIUsageFlowGraph:
             metadata={"status": flow.status},
         )
         return {"callback_payload": callback_payload}
+
+    @staticmethod
+    def _to_callback_claim(claim: AIUsageFlowClaim) -> dict[str, Any]:
+        if claim.confidence >= 0.75:
+            confidence = "high"
+        elif claim.confidence >= 0.40:
+            confidence = "medium"
+        else:
+            confidence = "low"
+
+        uncertainty_reason = (
+            "; ".join(claim.uncertainty_reasons)
+            if claim.uncertainty_reasons
+            else None
+        )
+        is_material = (
+            claim.lifecycle_state == "VALIDATED"
+            and bool(claim.evidence_refs)
+            and claim.confidence >= 0.65
+        )
+        return {
+            "claim_id": claim.claim_id,
+            "claim_type": claim.claim_category,
+            "confidence": confidence,
+            "evidence_refs": list(claim.evidence_refs),
+            "uncertainty_reason": uncertainty_reason,
+            "description": f"{claim.claim_category}: {claim.claim_field}",
+            "is_material": is_material,
+        }
 
     @staticmethod
     def summary_updates_match_authority(
