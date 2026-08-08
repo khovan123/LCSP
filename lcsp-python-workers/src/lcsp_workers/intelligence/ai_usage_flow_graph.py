@@ -100,11 +100,13 @@ class AIUsageFlowGraph:
         graph.add_node("rule_engine", self._node_rule_engine)
         graph.add_node("summary_proposal", self._node_summary_proposal)
         graph.add_node("finalize", self._node_finalize)
+        graph.add_node("persist", self._node_persist)
         graph.add_edge(START, "load_inputs")
         graph.add_edge("load_inputs", "rule_engine")
         graph.add_edge("rule_engine", "summary_proposal")
         graph.add_edge("summary_proposal", "finalize")
-        graph.add_edge("finalize", END)
+        graph.add_edge("finalize", "persist")
+        graph.add_edge("persist", END)
         return graph.compile()
 
     def _get_app(self):
@@ -143,10 +145,6 @@ class AIUsageFlowGraph:
             graph_state.record_input_version(
                 "wizard_profile_id", str(wizard_profile["id"])
             )
-        graph_state.record_node(
-            node_name="ai_usage_flow.load_inputs",
-            status="completed",
-        )
         return {
             "technical_profile": technical_profile,
             "evidence_report_id": str(evidence_report_id),
@@ -286,6 +284,22 @@ class AIUsageFlowGraph:
             metadata={"status": flow.status},
         )
         return {"callback_payload": callback_payload}
+
+    def _node_persist(self, state: AIUsageFlowLangGraphState):
+        payload = state["callback_payload"]
+        if payload.privacy_flags.get("containsSourceCode") is not False:
+            raise ValueError("AIUsageFlow callback privacy flag is unsafe")
+        response = self._api_client.post_ai_usage_flow_callback(payload)
+        artifact_id = getattr(response, "ai_usage_flow_id", None)
+        state["graph_state"].record_node(
+            node_name="ai_usage_flow.persist",
+            status="completed",
+            metadata={
+                "accepted": bool(getattr(response, "accepted", True)),
+                "artifact_id": artifact_id,
+            },
+        )
+        return {}
 
     @staticmethod
     def _to_callback_claim(claim: AIUsageFlowClaim) -> dict[str, Any]:
