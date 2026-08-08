@@ -75,7 +75,9 @@ describe("PinSnapshotHandler repository linking", () => {
     } as unknown as PrismaService;
 
     const auditWriter = {
-      write: jest.fn<AuditWriterService["write"]>().mockResolvedValue(undefined),
+      write: jest
+        .fn<AuditWriterService["write"]>()
+        .mockResolvedValue(undefined),
     } as unknown as AuditWriterService;
 
     const handler = new PinSnapshotHandler(
