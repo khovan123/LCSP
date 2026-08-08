@@ -38,20 +38,20 @@ class AIUsageFlowConsumer(ConsumerBase):
         self._graph = AIUsageFlowGraph(
             api_client=self._api_client,
             rule_engine=self._rule_engine,
-            proposer=AIUsageFlowModelAssistedProposer(llm_client) if llm_client else None,
+            proposer=AIUsageFlowModelAssistedProposer(llm_client)
+            if llm_client
+            else None,
             logger=logger,
         )
 
     def handle(self, message: dict, correlation_id: str) -> None:
         result = self._graph.run(message=message, correlation_id=correlation_id)
-        if result.callback_payload.privacy_flags.get("containsSourceCode") is not False:
-            raise ValueError("AIUsageFlow callback privacy flag is unsafe")
-        self._api_client.post_ai_usage_flow_callback(result.callback_payload)
         logger.info(
             "AI_USAGE_FLOW_CALLBACK_SUBMITTED",
             technical_profile_id=result.flow.technical_profile_id,
             assessment_id=result.flow.assessment_id,
             status=result.flow.status,
+            workflow_run_id=result.workflow_run_id,
             correlation_id=correlation_id,
         )
 
