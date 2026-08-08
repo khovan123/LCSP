@@ -213,8 +213,7 @@ describe("Worker runtime input endpoints (e2e) [LCSP-155]", () => {
     const legalRuleMatch = await workerGet(
       "/internal/classification/runtime/legal-rule-matches/match-runtime-1",
     );
-    const legalRuleMatchBody =
-      legalRuleMatch.body as LegalRuleMatchRuntimeBody;
+    const legalRuleMatchBody = legalRuleMatch.body as LegalRuleMatchRuntimeBody;
     assert.equal(legalRuleMatch.status, 200);
     assert.equal(legalRuleMatchBody.legal_rule_match_id, "match-runtime-1");
     assert.equal(legalRuleMatchBody.verified_profile_id, "verified-runtime-1");
