@@ -89,6 +89,9 @@ class ConsumerBase:
 
         try:
             message = json.loads(body)
+            if not isinstance(message, dict):
+                raise ValueError("worker message must be a JSON object")
+            message.setdefault("_delivery_attempt", attempts)
             self.handle(message, cid)
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except Exception as exc:
