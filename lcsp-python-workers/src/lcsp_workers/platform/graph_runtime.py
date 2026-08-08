@@ -31,8 +31,26 @@ class GraphRunState:
     artifact_id: str | None = None
     correlation_id: str | None = None
     input_versions: dict[str, str] = field(default_factory=dict)
+    attempt: int = 0
+    current_node: str | None = None
+    sanitized_inputs: dict[str, Any] = field(default_factory=dict)
+    guardrail_status: str | None = None
+    llm_run_refs: list[str] = field(default_factory=list)
+    blocked_or_degraded_reason: str | None = None
     node_results: list[GraphNodeResult] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def artifact_versions(self) -> dict[str, str]:
+        """Alias retained for the authoritative runtime state contract."""
+        return self.input_versions
+
+    def record_input_version(self, name: str, value: str) -> None:
+        self.input_versions[name] = value
+
+    def record_guardrail(self, status: str, reason: str | None = None) -> None:
+        self.guardrail_status = status
+        self.blocked_or_degraded_reason = reason if status in {"blocked", "degraded"} else None
 
     def record_node(
         self,
@@ -42,6 +60,9 @@ class GraphRunState:
         request_id: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
+        self.current_node = node_name
+        if request_id and request_id not in self.llm_run_refs:
+            self.llm_run_refs.append(request_id)
         self.node_results.append(
             GraphNodeResult(
                 node_name=node_name,
@@ -50,6 +71,32 @@ class GraphRunState:
                 metadata=metadata or {},
             )
         )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "graph_name": self.graph_name,
+            "workflow_run_id": self.workflow_run_id,
+            "assessment_id": self.assessment_id,
+            "artifact_id": self.artifact_id,
+            "correlation_id": self.correlation_id,
+            "artifact_versions": dict(self.input_versions),
+            "attempt": self.attempt,
+            "node_name": self.current_node,
+            "sanitized_inputs": dict(self.sanitized_inputs),
+            "guardrail_status": self.guardrail_status,
+            "llm_run_refs": list(self.llm_run_refs),
+            "blocked_or_degraded_reason": self.blocked_or_degraded_reason,
+            "node_results": [
+                {
+                    "node_name": result.node_name,
+                    "status": result.status,
+                    "request_id": result.request_id,
+                    "metadata": dict(result.metadata),
+                }
+                for result in self.node_results
+            ],
+            "metadata": dict(self.metadata),
+        }
 
 
 @dataclass(frozen=True)
