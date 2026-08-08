@@ -9,9 +9,12 @@ from lcsp_workers.platform.logging import get_logger
 
 logger = get_logger(__name__)
 
+_RETRY_HEADER = "x-lcsp-retry-count"
+
+
 class ConsumerBase:
-    queue_name: str       # Override in subclass
-    routing_key: str      # Override in subclass
+    queue_name: str  # Override in subclass
+    routing_key: str  # Override in subclass
     requires_pbac: bool = True  # Override to False for system-only workers
 
     def __init__(self, config, pbac_client=None):
@@ -60,7 +63,6 @@ class ConsumerBase:
         set_correlation_id(cid)
         attempts = self._get_attempt_count(headers)
 
-        # PBAC preflight
         if self.requires_pbac:
             try:
                 decision = self._pbac.check(
@@ -70,8 +72,14 @@ class ConsumerBase:
                     correlation_id=cid,
                 )
             except ConnectionError:
-                logger.warning("PBAC_PREFLIGHT_UNREACHABLE", reason="preflight_retry")
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+                logger.warning(
+                    "PBAC_PREFLIGHT_UNREACHABLE",
+                    reason="preflight_retry",
+                    attempts=attempts,
+                )
+                self._retry_or_dead_letter(
+                    ch, method, properties, body, attempts=attempts
+                )
                 return
 
             if decision == "deny":
@@ -79,28 +87,89 @@ class ConsumerBase:
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
                 return
 
-        # Execute domain handler
         try:
             message = json.loads(body)
             self.handle(message, cid)
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except Exception as exc:
             logger.error("HANDLER_ERROR", error=str(exc), attempts=attempts)
-            if attempts < self._config.max_retries:
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
-            else:
-                # Send to DLQ (handled by RabbitMQ policies, we just nack without requeue)
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            self._retry_or_dead_letter(
+                ch, method, properties, body, attempts=attempts
+            )
+
+    def _retry_or_dead_letter(
+        self,
+        ch,
+        method,
+        properties,
+        body,
+        *,
+        attempts: int,
+    ) -> None:
+        if attempts >= self._config.max_retries:
+            logger.error(
+                "HANDLER_RETRY_EXHAUSTED",
+                attempts=attempts,
+                max_retries=self._config.max_retries,
+            )
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+            return
+
+        retry_headers = dict(properties.headers or {})
+        retry_headers[_RETRY_HEADER] = attempts + 1
+        retry_properties = pika.BasicProperties(
+            content_type=self._string_property(properties, "content_type"),
+            content_encoding=self._string_property(properties, "content_encoding"),
+            headers=retry_headers,
+            delivery_mode=2,
+            correlation_id=self._string_property(properties, "correlation_id"),
+            message_id=self._string_property(properties, "message_id"),
+            type=self._string_property(properties, "type"),
+        )
+
+        try:
+            ch.basic_publish(
+                exchange="",
+                routing_key=self.queue_name,
+                body=body,
+                properties=retry_properties,
+            )
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            logger.warning(
+                "HANDLER_RETRY_SCHEDULED",
+                attempt=attempts + 1,
+                max_retries=self._config.max_retries,
+            )
+        except Exception as exc:
+            logger.error(
+                "HANDLER_RETRY_PUBLISH_FAILED",
+                error=type(exc).__name__,
+            )
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
     def _handle_sigterm(self, signum, frame) -> None:
         logger.info("SIGTERM_RECEIVED", msg="Finishing current message then stopping")
         self._shutdown = True
 
     def _get_attempt_count(self, headers: dict) -> int:
+        explicit = headers.get(_RETRY_HEADER)
+        if explicit is not None:
+            try:
+                return max(0, int(explicit))
+            except (TypeError, ValueError):
+                return 0
         x_death = headers.get("x-death", [])
         if x_death:
-            return int(x_death[0].get("count", 1))
+            try:
+                return max(0, int(x_death[0].get("count", 1)))
+            except (TypeError, ValueError, IndexError, AttributeError):
+                return 0
         return 0
+
+    @staticmethod
+    def _string_property(properties, name: str) -> str | None:
+        value = getattr(properties, name, None)
+        return value if isinstance(value, str) else None
 
     def _is_rabbitmq_connected(self) -> bool:
         channel = self._channel
