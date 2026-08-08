@@ -1,0 +1,10 @@
+services:
+  api:
+    path: apps/api
+    route: /api
+    requires:
+      - redis
+
+  web:
+    path: apps/web
+    route: /
