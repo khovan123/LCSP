@@ -40,6 +40,9 @@ class ClassificationConsumer(ConsumerBase):
             else None,
             narrator=RationaleNarrator(llm_client) if llm_client else None,
             persister=self._persist_graph_result,
+            checkpoint_url=getattr(
+                config, "langgraph_checkpoint_database_url", None
+            ),
             logger=logger,
         )
 
