@@ -1,0 +1,222 @@
+name: Fogewise Deploy
+
+on:
+  workflow_call:
+    secrets:
+      VPS_HOST:
+        required: true
+      VPS_USER:
+        required: true
+      VPS_SSH_KEY:
+        required: true
+      VPS_KNOWN_HOSTS:
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve deployment metadata
+        shell: bash
+        run: |
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          REPO_NAME="${REPO_NAME,,}"
+          GHCR_OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "REPO_NAME=$REPO_NAME" >> "$GITHUB_ENV"
+          echo "GHCR_OWNER=$GHCR_OWNER" >> "$GITHUB_ENV"
+          echo "Repository : $GITHUB_REPOSITORY"
+          echo "Runtime dir: /srv/apps/$REPO_NAME"
+          echo "Domain     : https://$REPO_NAME.fogewise.io.vn"
+          echo "Image tag  : $GITHUB_SHA"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push service images
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/fogewise-venv
+          /tmp/fogewise-venv/bin/pip install --quiet PyYAML
+
+          /tmp/fogewise-venv/bin/python - <<'PY' > /tmp/fogewise-build-groups.tsv
+          from collections import OrderedDict
+          from pathlib import Path
+          import re
+          import yaml
+
+          manifest = Path('.fogewise/deploy.yml')
+          if not manifest.is_file():
+              raise SystemExit(f'missing deploy manifest: {manifest}')
+
+          data = yaml.safe_load(manifest.read_text())
+          services = data.get('services') if isinstance(data, dict) else None
+          if not isinstance(services, dict) or not services:
+              raise SystemExit('deploy.yml services must be a non-empty mapping')
+
+          groups = OrderedDict()
+          service_pattern = re.compile(r'^[a-z0-9][a-z0-9-]*$')
+          for service_id, config in services.items():
+              if not isinstance(service_id, str) or not service_pattern.fullmatch(service_id):
+                  raise SystemExit(f'invalid service id: {service_id!r}')
+              if not isinstance(config, dict):
+                  raise SystemExit(f'{service_id}: service config must be a mapping')
+
+              raw_path = config.get('path')
+              if not isinstance(raw_path, str) or not raw_path:
+                  raise SystemExit(f'{service_id}: path must be a non-empty string')
+              path = Path(raw_path)
+              if path.is_absolute() or '..' in path.parts:
+                  raise SystemExit(f'{service_id}: path must stay inside the repository')
+
+              route = config.get('route')
+              if route is not None and (not isinstance(route, str) or not route.startswith('/')):
+                  raise SystemExit(f'{service_id}: route must start with / when present')
+
+              command = config.get('command')
+              if command is not None and (
+                  not isinstance(command, list)
+                  or not command
+                  or not all(isinstance(item, str) and item for item in command)
+              ):
+                  raise SystemExit(f'{service_id}: command must be a non-empty string list')
+
+              dockerfile = path / 'Dockerfile'
+              if not dockerfile.is_file():
+                  raise SystemExit(f'{service_id}: Dockerfile not found: {dockerfile}')
+
+              groups.setdefault(path.as_posix(), []).append(service_id)
+
+          for path, service_ids in groups.items():
+              print(f"{path}\t{','.join(service_ids)}")
+          PY
+
+          while IFS=$'\t' read -r SERVICE_PATH SERVICE_LIST; do
+            DOCKERFILE="${SERVICE_PATH%/}/Dockerfile"
+            TAG_ARGS=()
+            IFS=',' read -ra SERVICES <<< "$SERVICE_LIST"
+
+            for SERVICE in "${SERVICES[@]}"; do
+              IMAGE="ghcr.io/${GHCR_OWNER}/${REPO_NAME}-${SERVICE}"
+              TAG_ARGS+=(--tag "$IMAGE:$GITHUB_SHA" --tag "$IMAGE:latest")
+              echo "Tagging $SERVICE from shared build path $SERVICE_PATH"
+            done
+
+            docker buildx build \
+              --platform linux/amd64 \
+              --file "$DOCKERFILE" \
+              "${TAG_ARGS[@]}" \
+              --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+              --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              --push \
+              .
+          done < /tmp/fogewise-build-groups.tsv
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 700 ~/.ssh
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Authorize VPS to pull GHCR images
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          REMOTE_DOCKER_CONFIG="/run/fogewise-ghcr/$REPO_NAME"
+          ssh "$VPS_USER@$VPS_HOST" "install -d -m 700 '$REMOTE_DOCKER_CONFIG'"
+          printf '%s' "$GHCR_TOKEN" | ssh "$VPS_USER@$VPS_HOST" \
+            "DOCKER_CONFIG='$REMOTE_DOCKER_CONFIG' docker login ghcr.io -u '$GITHUB_ACTOR' --password-stdin >/dev/null"
+
+      - name: Upload deployment manifest
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh "$VPS_USER@$VPS_HOST" "
+            set -eu
+            APP_DIR='/srv/apps/$REPO_NAME'
+            FOGEWISE_DIR=\"\$APP_DIR/.fogewise\"
+            install -d -o root -g root -m 700 \"\$APP_DIR\"
+            install -d -o root -g root -m 755 \"\$FOGEWISE_DIR\"
+          "
+          rsync -az .fogewise/deploy.yml \
+            "$VPS_USER@$VPS_HOST:/srv/apps/$REPO_NAME/.fogewise/deploy.yml"
+          ssh "$VPS_USER@$VPS_HOST" "
+            set -eu
+            MANIFEST='/srv/apps/$REPO_NAME/.fogewise/deploy.yml'
+            chown root:root \"\$MANIFEST\"
+            chmod 644 \"\$MANIFEST\"
+            if [ -f '/srv/apps/$REPO_NAME/.env' ]; then
+              chown root:root '/srv/apps/$REPO_NAME/.env'
+              chmod 600 '/srv/apps/$REPO_NAME/.env'
+            fi
+          "
+
+      - name: Deploy images on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh "$VPS_USER@$VPS_HOST" \
+            "REPO_SLUG='$GITHUB_REPOSITORY' IMAGE_TAG='$GITHUB_SHA' REPO_NAME='$REPO_NAME' bash -s" <<'REMOTE'
+          set -eu
+          export DOCKER_CONFIG="/run/fogewise-ghcr/$REPO_NAME"
+          LOG_DIR='/var/log/fogewise'
+          LOG_FILE="$LOG_DIR/${REPO_NAME}-deploy.log"
+          install -d -m 700 "$LOG_DIR"
+          install -m 600 /dev/null "$LOG_FILE"
+
+          if (umask 022; /usr/local/sbin/fogewise-deploy "$REPO_SLUG" "$IMAGE_TAG") >"$LOG_FILE" 2>&1; then
+            echo 'Fogewise deploy succeeded.'
+          else
+            echo 'Fogewise deploy failed. Inspect server-side log:' "$LOG_FILE" >&2
+            exit 1
+          fi
+
+          docker compose \
+            -p "$REPO_NAME" \
+            -f "/var/lib/fogewise/apps/$REPO_NAME/compose.json" \
+            ps
+          REMOTE
+
+      - name: Remove temporary VPS registry credentials
+        if: always()
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh "$VPS_USER@$VPS_HOST" "rm -rf '/run/fogewise-ghcr/$REPO_NAME'" || true
+
+      - name: Origin health check
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh "$VPS_USER@$VPS_HOST" \
+            "curl --fail --silent --show-error --insecure --output /dev/null \
+              --retry 10 --retry-delay 3 --retry-all-errors \
+              --resolve '${REPO_NAME}.fogewise.io.vn:443:127.0.0.1' \
+              'https://${REPO_NAME}.fogewise.io.vn/'"
+          echo "Origin health check passed."

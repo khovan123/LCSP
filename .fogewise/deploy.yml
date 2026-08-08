@@ -1,7 +1,6 @@
 services:
   api:
     path: apps/api
-    route: /api
     requires:
       - redis
       - rabbitmq
@@ -9,3 +8,59 @@ services:
   web:
     path: apps/web
     route: /
+
+  scanner-worker:
+    path: lcsp-python-workers
+    command:
+      - lcsp_workers.scanner.scan_consumer:ScanConsumer
+    requires:
+      - rabbitmq
+
+  technical-profile-worker:
+    path: lcsp-python-workers
+    command:
+      - lcsp_workers.intelligence.technical_profile_consumer:TechnicalProfileConsumer
+    requires:
+      - rabbitmq
+
+  ai-usage-flow-worker:
+    path: lcsp-python-workers
+    command:
+      - lcsp_workers.intelligence.ai_usage_flow_consumer:AIUsageFlowConsumer
+    requires:
+      - rabbitmq
+
+  conflict-detection-worker:
+    path: lcsp-python-workers
+    command:
+      - lcsp_workers.intelligence.conflict_detection_consumer:ConflictDetectionConsumer
+    requires:
+      - rabbitmq
+
+  verified-profile-worker:
+    path: lcsp-python-workers
+    command:
+      - lcsp_workers.intelligence.verified_profile_consumer:VerifiedProfileConsumer
+    requires:
+      - rabbitmq
+
+  legal-retrieval-worker:
+    path: lcsp-python-workers
+    command:
+      - lcsp_workers.legal.legal_retrieval_consumer:LegalRetrievalConsumer
+    requires:
+      - rabbitmq
+
+  classification-worker:
+    path: lcsp-python-workers
+    command:
+      - lcsp_workers.classification.classification_consumer:ClassificationConsumer
+    requires:
+      - rabbitmq
+
+  gap-analysis-worker:
+    path: lcsp-python-workers
+    command:
+      - lcsp_workers.reporting.gap_analysis_consumer:GapAnalysisConsumer
+    requires:
+      - rabbitmq
