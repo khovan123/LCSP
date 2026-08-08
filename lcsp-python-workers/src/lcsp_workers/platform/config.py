@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class WorkerConfig:
     rabbitmq_url: str
@@ -9,10 +10,13 @@ class WorkerConfig:
     worker_api_key: str
     log_level: str
     max_retries: int
+    langgraph_checkpoint_database_url: str | None = None
+
 
 def load_config() -> WorkerConfig:
     missing = [
-        v for v in ["RABBITMQ_URL", "NESTJS_API_BASE_URL", "WORKER_API_KEY"]
+        v
+        for v in ["RABBITMQ_URL", "NESTJS_API_BASE_URL", "WORKER_API_KEY"]
         if not os.getenv(v)
     ]
     if missing:
@@ -25,4 +29,7 @@ def load_config() -> WorkerConfig:
         worker_api_key=os.getenv("WORKER_API_KEY"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         max_retries=int(os.getenv("MAX_RETRIES", "3")),
+        langgraph_checkpoint_database_url=os.getenv(
+            "LANGGRAPH_CHECKPOINT_DATABASE_URL"
+        ),
     )
