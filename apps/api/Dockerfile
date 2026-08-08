@@ -9,7 +9,12 @@ WORKDIR /app
 COPY . .
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @lcsp/api build
+# Prisma 7 loads prisma.config.ts during client generation and therefore requires
+# DATABASE_URL to be present even though `prisma generate` does not connect to the
+# database. Use a non-secret, build-only placeholder; production DATABASE_URL is
+# supplied later through /srv/apps/<repo>/.env by Fogewise.
+RUN DATABASE_URL='postgresql://fogewise_build:fogewise_build@127.0.0.1:5432/fogewise_build?schema=public' \
+    pnpm --filter @lcsp/api build
 
 ENV NODE_ENV=production
 ENV PORT=8080
