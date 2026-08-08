@@ -64,10 +64,3 @@ services:
       - lcsp_workers.reporting.gap_analysis_consumer:GapAnalysisConsumer
     requires:
       - rabbitmq
-
-  final-report-worker:
-    path: lcsp-python-workers
-    command:
-      - lcsp_workers.reporting.final_report_consumer:FinalReportConsumer
-    requires:
-      - rabbitmq
