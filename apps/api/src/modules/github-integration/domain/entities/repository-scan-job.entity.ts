@@ -52,6 +52,21 @@ export class RepositoryScanJob {
     });
   }
 
+  static createWithStatus(
+    input: Omit<
+      RepositoryScanJobProps,
+      "id" | "attemptCount" | "createdAt" | "updatedAt"
+    >,
+  ): RepositoryScanJob {
+    const now = new Date();
+    return new RepositoryScanJob({
+      ...input,
+      attemptCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
   static rehydrate(props: RepositoryScanJobProps): RepositoryScanJob {
     const entity = new RepositoryScanJob(props);
     entity.props = props;

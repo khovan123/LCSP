@@ -28,7 +28,7 @@ LCSP is a modular, evidence-first compliance platform. The system is intentional
 | Repository Integration | Authorizes read-only repository access separately from OAuth/OIDC login. | Backend API, GitHub. |
 | Python Worker Platform | Owns all asynchronous domain workloads through bounded consumers/modules, not a monolithic Python process. | Queue boundary, Persistence, Object Storage, LLM Gateway, Repository Integration. |
 | Python Scanner Worker | Owns Repository Scan lifecycle and produces static-analysis technical evidence from commit-pinned repository snapshots using Syft, Knip, deptry, `ast`/`libcst`, bounded `ts-morph`, tree-sitter/custom parser, and Semgrep custom rules. | Queue boundary, Persistence, Repository Integration, TS/JS analyzer CLI. |
-| Python AIUsageFlow Worker | Converts technical evidence and WizardProfile into business usage claims. | Persistence, Reconciliation. |
+| Python AIUsageFlow Worker | Converts technical evidence and WizardProfile into business usage claims through a bounded LangGraph runtime that mixes deterministic evidence transforms with controlled LLM-assisted reasoning nodes. | Persistence, Reconciliation, LLM Gateway. |
 | Python Reconciliation Worker | Compares Manager declarations and technical evidence; pauses for Manager resolution when needed; creates VerifiedProfile. | Backend API, Persistence. |
 | Python Legal Source Ingestion Worker | Fetches official legal sources, snapshots raw PDF/HTML into S3-compatible storage, normalizes legal structure, and stages corpus versions for review. | Queue boundary, Object Storage, Persistence. |
 | Corpus Review / Approval | Internal Legal Operator gate that approves corpus versions before retrieval or classification can use them. This is an internal control function, not a new customer-facing product role. | Backend API, Persistence, Audit, ChromaDB Legal Indexer. |
@@ -73,6 +73,30 @@ User action or trusted integration trigger
 ```
 
 Each major stage persists its output before the next stage runs. Hidden synchronous jumps across workflow gates are not allowed.
+
+## LangChain and LangGraph Runtime Boundary
+
+LCSP's real business runtime may use LangChain and LangGraph inside the Python Worker Platform, but only as internal orchestration libraries behind the existing system boundaries.
+
+```text
+Queue event
+-> worker-owned LangGraph state machine
+-> deterministic evidence normalization / retrieval nodes
+-> optional LLM-assisted reasoning nodes via LLM Gateway only
+-> schema validation and guardrails
+-> persisted artifact
+-> next domain event or blocked/degraded state
+```
+
+Runtime rules:
+
+- LangGraph graphs belong to bounded workers such as AIUsageFlow, Classification, and Document Generation. They do not replace the API, queue boundary, or persistence authority.
+- LangChain components may be used for prompt composition, structured output parsing, and retrieval composition, but external provider calls still route only through the LLM Gateway.
+- Deterministic evidence extraction, policy gates, citation allowlist checks, conflict gates, and artifact persistence remain authoritative outside model discretion.
+- Graph state must be checkpointable, auditable, and idempotent per workflow run so retries, replay, and DLQ recovery do not create duplicate artifacts.
+- Every model-assisted node must declare sanitized input schema, output schema, prompt/template version, retry policy, fallback behavior, and blocked/degraded semantics.
+- Raw source, full prompts, secrets, and full AST bodies remain forbidden in graph state, gateway payloads, audit logs, and long-term persistence.
+- If a graph cannot satisfy required evidence or citation gates, it must emit blocked/degraded outcomes instead of fabricating completion.
 
 ## Mandatory Architectural Invariants
 

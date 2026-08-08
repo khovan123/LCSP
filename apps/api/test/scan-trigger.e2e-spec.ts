@@ -262,13 +262,24 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
     });
 
     const response = await triggerManual(app, managerToken);
+    const body = successBody<TriggerScanDto>(response);
 
-    assert.equal(response.status, 400);
+    assert.equal(response.status, 201);
+    assert.equal(body.status, REPOSITORY_SCAN_JOB_STATUSES.pendingMapping);
+    const job = await prisma.repositoryScanJob.findUniqueOrThrow({
+      where: { id: body.scan_job_id },
+    });
+    assert.equal(job.status, REPOSITORY_SCAN_JOB_STATUSES.pendingMapping);
     assert.equal(
-      problemCode(response),
+      job.blockedReason,
       GITHUB_INTEGRATION_ERROR_CODES.scanBlockedMapping,
     );
-    assert.equal(await prisma.repositoryScanJob.count(), 0);
+    assert.equal(
+      await prisma.outboxMessage.count({
+        where: { eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered },
+      }),
+      0,
+    );
   });
 
   it("T07: rerun creates a new chain without mutating a terminal prior job", async () => {

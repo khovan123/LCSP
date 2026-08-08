@@ -7,10 +7,11 @@ import { AcceptLegalRuleMatchHandler } from "./application/commands/accept-legal
 import { CitationGuardrailService } from "./application/services/classification/citation-guardrail.service.js";
 import { OverclaimGuardrailService } from "./application/services/classification/overclaim-guardrail.service.js";
 import { ClassificationController } from "./presentation/http/classification.controller.js";
+import { ClassificationRuntimeController } from "./presentation/http/classification-runtime.controller.js";
 
 @Module({
   imports: [CqrsModule],
-  controllers: [ClassificationController],
+  controllers: [ClassificationController, ClassificationRuntimeController],
   providers: [
     AcceptLegalRuleMatchHandler,
     AcceptClassificationHandler,

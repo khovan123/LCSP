@@ -51,6 +51,7 @@ Build AIUsageFlow From Wizard and Technical Evidence
 - Load WizardProfile, TechnicalProfile and accepted TechnicalEvidenceReport refs into AIUsageFlow generation.
 - Create claim set for business process, purpose, inputs/outputs, downstream action, subjects, human review, automation and harm categories.
 - Preserve unknown/unclear material dimensions with audit trail instead of inventing claims.
+- Orchestrate the worker as a bounded LangGraph flow whose deterministic evidence gates remain authoritative and whose optional model-assisted nodes, if used, go only through the LLM Gateway.
 
 ### Task to Acceptance Criteria Traceability
 
@@ -79,7 +80,7 @@ Build AIUsageFlow From Wizard and Technical Evidence
 
 - Python Worker Platform sở hữu AIUsageFlow generation; API chỉ nên cung cấp status/read model và Manager-facing projection cần thiết.
 - TechnicalProfile, TechnicalEvidenceReport và WizardProfile là ba input khác vai trò; không collapse chúng thành một merged artifact ở epic này.
-- Nếu LLM được dùng như internal support trong pipeline, nó vẫn phải qua LLM Gateway và không override deterministic evidence.
+- Nếu LLM được dùng như internal support trong pipeline, nó vẫn phải qua LLM Gateway, nằm trong worker-owned LangGraph runtime, và không override deterministic evidence.
 
 ### Functional and Domain Requirements
 
@@ -117,6 +118,7 @@ Build AIUsageFlow From Wizard and Technical Evidence
 - Worker tests cho claim refs/confidence/uncertainty generation.
 - Negative-path coverage cho provider-only signal, low confidence material field, missing inputs.
 - Status/read-model tests cho unclear/conflict surfaces và artifact separation assertions.
+- Runtime tests phải cover graph-node guardrails, retry/idempotency behavior, và fail-closed path khi model-assisted node không đạt schema hoặc evidence gate.
 
 ### References
 
@@ -134,6 +136,7 @@ Build AIUsageFlow From Wizard and Technical Evidence
 - [Source: docs/specs/ai-usage-flow-domain-spec.md]
 - [Source: docs/implementation/python-worker-platform-implementation.md]
 - [Source: docs/implementation/llm-gateway-implementation.md]
+- [Source: docs/implementation/langgraph-runtime-implementation.md]
 - [Source: docs/implementation/tasks/modules/python-workers/intelligence/02-ai-usage-flow-worker.md]
 - [Source: docs/implementation/handoffs/HANDOFF-ai-usage-flow-and-reconciliation.md]
 - [Source: docs/implementation/readiness/state-transition-authority.md]

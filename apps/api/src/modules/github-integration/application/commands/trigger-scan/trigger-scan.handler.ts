@@ -19,6 +19,7 @@ import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
+  REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
 import {
@@ -157,17 +158,38 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
     }
 
     if (!hasCompleteMapping(snapshot)) {
-      await this.auditRejected(
-        command,
-        GITHUB_INTEGRATION_ERROR_CODES.scanBlockedMapping,
-        snapshot.organizationId,
-      );
-      throw new BadRequestException(
-        this.errorBody(
-          command,
-          GITHUB_INTEGRATION_ERROR_CODES.scanBlockedMapping,
-        ),
-      );
+      const job = RepositoryScanJob.createWithStatus({
+        assessmentId: command.assessmentId,
+        snapshotId: snapshot.id,
+        organizationId: snapshot.organizationId,
+        idempotencyKey,
+        triggerSource: command.triggerSource,
+        correlationId: command.correlationId,
+        status: REPOSITORY_SCAN_JOB_STATUSES.pendingMapping,
+        blockedReason: GITHUB_INTEGRATION_ERROR_CODES.scanBlockedMapping,
+      });
+      await this.scanJobRepository.save(job);
+      await this.auditWriter.write({
+        eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggerRejectedAudit,
+        actorId: command.actorId,
+        organizationId: snapshot.organizationId,
+        assessmentId: job.assessmentId,
+        resourceType: AUDIT_RESOURCE_TYPES.repositoryScanJob,
+        resourceId: job.id,
+        correlationId: command.correlationId,
+        reasonCode: GITHUB_INTEGRATION_ERROR_CODES.scanBlockedMapping,
+        decision: AUDIT_DECISIONS.deny,
+        payload: {
+          scanJobId: job.id,
+          assessmentId: job.assessmentId,
+          snapshotId: job.snapshotId,
+          triggerSource: job.triggerSource,
+          status: job.status,
+          reasonCode: GITHUB_INTEGRATION_ERROR_CODES.scanBlockedMapping,
+          correlationId: command.correlationId,
+        },
+      });
+      return this.toDto(job, true, command.correlationId);
     }
 
     const job = RepositoryScanJob.create({

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
 from lcsp_workers.platform.redaction import redact_string
@@ -14,6 +14,49 @@ DEFAULT_PROVIDER_VERSION = "lcsp.ai-usage-flow-worker.v1"
 TECHNICAL_ONLY = "TECHNICAL_ONLY"
 TECHNICAL_PLUS_WIZARD = "TECHNICAL_PLUS_WIZARD"
 SYNTHETIC_OUTPUT_CATEGORIES = {"audio", "image", "video", "synthetic_media"}
+DOCUMENT_OUTPUT_CATEGORIES = {
+    "document",
+    "report",
+    "pdf",
+    "docx",
+    "generated_document",
+    "document_generation",
+}
+PERSONAL_DATA_CATEGORIES = {
+    "personal_data",
+    "personal",
+    "sensitive_data",
+    "sensitive",
+    "financial",
+    "health",
+    "biometric",
+    "identity",
+    "location",
+}
+DOWNSTREAM_ACTION_SIGNALS = {
+    "AI_DECISION_FLOW_SIGNAL",
+    "STATUS_UPDATE_SIGNAL",
+    "AUTOMATED_DECISION_SIGNAL",
+    "USER_IMPACT_SIGNAL",
+    "DISPLAY_ONLY_SIGNAL",
+    "RANKING_SIGNAL",
+    "RECOMMENDATION_SIGNAL",
+}
+TRAINING_SIGNALS = {
+    "TRAINING_ACTIVITY_SIGNAL",
+    "MODEL_TRAINING_SIGNAL",
+    "FINE_TUNE_SIGNAL",
+    "FINE_TUNING_SIGNAL",
+}
+DOCUMENT_GENERATION_SIGNALS = {
+    "DOCUMENT_GENERATION_SIGNAL",
+    "REPORT_GENERATION_SIGNAL",
+}
+CONTENT_LABELING_SIGNALS = {
+    "CONTENT_LABELING_SIGNAL",
+    "LABELING_SIGNAL",
+    "WATERMARK_SIGNAL",
+}
 
 
 class PrivacyAssertionError(RuntimeError):
@@ -97,15 +140,29 @@ class AIUsageFlowRuleEngine:
 
         flow_id = self._flow_id(technical_profile)
         findings = self._findings(evidence_report)
-        coverage_limitations = self._coverage_limitations(technical_profile, evidence_report)
+        coverage_limitations = self._coverage_limitations(
+            technical_profile, evidence_report
+        )
         uncertainty_reasons = list(coverage_limitations)
         claims: list[AIUsageFlowClaim] = []
 
-        provider_refs = self._refs_for(findings, {"AI_PROVIDER_USAGE", "AI_FRAMEWORK_USAGE", "provider_integration"})
-        invocation_refs = self._refs_for(findings, {"AI_MODEL_INVOCATION", "model_call"})
-        output_refs = self._refs_for(findings, {"AI_OUTPUT_SIGNAL", "output_signal"})
+        provider_refs = self._refs_for(
+            findings,
+            {"AI_PROVIDER_USAGE", "AI_FRAMEWORK_USAGE", "provider_integration"},
+        )
+        invocation_refs = self._refs_for(
+            findings, {"AI_MODEL_INVOCATION", "model_call"}
+        )
+        output_refs = self._refs_for(
+            findings, {"AI_OUTPUT_SIGNAL", "output_signal", "MODEL_OUTPUT_PARSER_SIGNAL"}
+        )
 
-        if provider_refs or self._list_field(technical_profile, "providers") or self._list_field(technical_profile, "frameworks"):
+        if (
+            provider_refs
+            or self._list_field(technical_profile, "providers")
+            or self._list_field(technical_profile, "frameworks")
+            or self._list_field(technical_profile, "dependency_ai_packages")
+        ):
             claims.append(
                 self._claim(
                     flow_id=flow_id,
@@ -114,14 +171,23 @@ class AIUsageFlowRuleEngine:
                     claim_value={
                         "providers": self._list_field(technical_profile, "providers"),
                         "frameworks": self._list_field(technical_profile, "frameworks"),
+                        "packages": self._list_field(
+                            technical_profile, "dependency_ai_packages"
+                        ),
                     },
-                    evidence_refs=provider_refs or self._list_field(technical_profile, "evidence_refs"),
-                    optional_signal_count=1 if self._list_field(technical_profile, "providers") else 0,
+                    evidence_refs=provider_refs
+                    or self._list_field(technical_profile, "evidence_refs"),
+                    optional_signal_count=1
+                    if self._list_field(technical_profile, "providers")
+                    or self._list_field(technical_profile, "dependency_ai_packages")
+                    else 0,
                     material_coverage_limitations=len(coverage_limitations),
                 )
             )
 
-        if invocation_refs or self._has_signal(findings, {"AI_MODEL_INVOCATION", "model_call"}):
+        if invocation_refs or self._has_signal(
+            findings, {"AI_MODEL_INVOCATION", "model_call"}
+        ):
             claims.append(
                 self._claim(
                     flow_id=flow_id,
@@ -130,7 +196,8 @@ class AIUsageFlowRuleEngine:
                     claim_value={"invocationDetected": True},
                     evidence_refs=invocation_refs,
                     optional_signal_count=1
-                    if provider_refs or self._list_field(technical_profile, "providers")
+                    if provider_refs
+                    or self._list_field(technical_profile, "providers")
                     else 0,
                     material_coverage_limitations=len(coverage_limitations),
                 )
@@ -145,13 +212,109 @@ class AIUsageFlowRuleEngine:
                     claim_category="AI_GENERATED_OUTPUT",
                     claim_field="output_categories",
                     claim_value={
-                        "outputCategories": self._output_categories(technical_profile, findings)
+                        "outputCategories": self._output_categories(
+                            technical_profile, findings
+                        )
                     },
                     evidence_refs=output_refs,
+                    optional_signal_count=1
+                    if self._has_signal(findings, {"MODEL_OUTPUT_PARSER_SIGNAL"})
+                    else 0,
+                    material_coverage_limitations=len(coverage_limitations),
+                )
+            )
+
+        downstream_claim = self._downstream_action_claim(
+            flow_id=flow_id,
+            findings=findings,
+            coverage_limitations=coverage_limitations,
+        )
+        if downstream_claim:
+            claims.append(downstream_claim)
+
+        automated_claim = self._automated_decision_claim(
+            flow_id=flow_id,
+            findings=findings,
+            coverage_limitations=coverage_limitations,
+        )
+        if automated_claim:
+            claims.append(automated_claim)
+            if automated_claim.lifecycle_state == "ABSTAINED":
+                uncertainty_reasons.append("UNRESOLVED_OUTPUT_ACTION_PATH")
+
+        human_review_claim = self._human_review_claim(
+            flow_id=flow_id,
+            findings=findings,
+            automated_claim=automated_claim,
+            coverage_limitations=coverage_limitations,
+        )
+        if human_review_claim:
+            claims.append(human_review_claim)
+
+        prompt_refs = self._refs_for(
+            findings, {"SYSTEM_PROMPT_DETECTED", "DYNAMIC_SYSTEM_PROMPT_REFERENCE"}
+        )
+        if prompt_refs:
+            claims.append(
+                self._claim(
+                    flow_id=flow_id,
+                    claim_category="PROMPT_STORAGE",
+                    claim_field="prompt_configuration",
+                    claim_value={"promptReferenceDetected": True},
+                    evidence_refs=prompt_refs,
+                    optional_signal_count=1
+                    if self._has_signal(findings, {"DYNAMIC_SYSTEM_PROMPT_REFERENCE"})
+                    else 0,
+                    material_coverage_limitations=len(coverage_limitations),
+                )
+            )
+
+        personal_data_claim = self._personal_data_claim(
+            flow_id=flow_id,
+            technical_profile=technical_profile,
+            findings=findings,
+            coverage_limitations=coverage_limitations,
+        )
+        if personal_data_claim:
+            claims.append(personal_data_claim)
+
+        training_refs = self._refs_for(findings, TRAINING_SIGNALS)
+        if training_refs:
+            claims.append(
+                self._claim(
+                    flow_id=flow_id,
+                    claim_category="TRAINING_ACTIVITY",
+                    claim_field="training_activity",
+                    claim_value={"trainingActivityDetected": True},
+                    evidence_refs=training_refs,
                     optional_signal_count=0,
                     material_coverage_limitations=len(coverage_limitations),
                 )
             )
+
+        rag_refs = self._refs_for(findings, {"RAG_USAGE_SIGNAL"})
+        if rag_refs:
+            claims.append(
+                self._claim(
+                    flow_id=flow_id,
+                    claim_category="RAG_USAGE",
+                    claim_field="retrieval_augmented_generation",
+                    claim_value={"ragUsageDetected": True},
+                    evidence_refs=rag_refs,
+                    optional_signal_count=0,
+                    material_coverage_limitations=len(coverage_limitations),
+                )
+            )
+
+        document_claim = self._document_generation_claim(
+            flow_id=flow_id,
+            technical_profile=technical_profile,
+            findings=findings,
+            output_refs=output_refs,
+            coverage_limitations=coverage_limitations,
+        )
+        if document_claim:
+            claims.append(document_claim)
 
         content_labeling_claim = self._content_labeling_claim(
             flow_id=flow_id,
@@ -161,6 +324,48 @@ class AIUsageFlowRuleEngine:
         )
         if content_labeling_claim:
             claims.append(content_labeling_claim)
+
+        oversight_claim = self._control_claim(
+            flow_id=flow_id,
+            category="HUMAN_OVERSIGHT_CONTROL",
+            field_name="intervention_control",
+            present_key="interventionControlPresent",
+            signal_type="HUMAN_OVERSIGHT_CONTROL_SIGNAL",
+            findings=findings,
+            required_basis=automated_claim or downstream_claim,
+            coverage_limitations=coverage_limitations,
+        )
+        if oversight_claim:
+            claims.append(oversight_claim)
+
+        disclosure_refs = self._refs_for(
+            findings, {"AI_INTERACTION_DISCLOSURE_SIGNAL"}
+        )
+        if disclosure_refs:
+            claims.append(
+                self._claim(
+                    flow_id=flow_id,
+                    claim_category="AI_INTERACTION_DISCLOSURE",
+                    claim_field="interaction_disclosure",
+                    claim_value={"aiInteractionDisclosurePresent": "PRESENT"},
+                    evidence_refs=disclosure_refs,
+                    optional_signal_count=0,
+                    material_coverage_limitations=len(coverage_limitations),
+                )
+            )
+
+        incident_claim = self._control_claim(
+            flow_id=flow_id,
+            category="INCIDENT_HANDLING",
+            field_name="incident_handling",
+            present_key="incidentHandlingPresent",
+            signal_type="INCIDENT_HANDLING_SIGNAL",
+            findings=findings,
+            required_basis=self._claim_by_category(claims, "MODEL_INVOCATION"),
+            coverage_limitations=coverage_limitations,
+        )
+        if incident_claim:
+            claims.append(incident_claim)
 
         conflict_candidates = self._conflict_builder.build(
             technical_profile=technical_profile,
@@ -183,6 +388,7 @@ class AIUsageFlowRuleEngine:
             technical_profile=technical_profile,
             wizard_profile=wizard_profile,
             claims=claims,
+            findings=findings,
             uncertainty_reasons=uncertainty_reasons,
         )
         status = self._status(claims, uncertainty_reasons, conflict_candidates)
@@ -192,15 +398,19 @@ class AIUsageFlowRuleEngine:
             ai_usage_flow_id=flow_id,
             assessment_id=self._str_field(technical_profile, "assessment_id"),
             technical_profile_id=self._technical_profile_id(technical_profile),
-            technical_evidence_report_id=self._evidence_report_id(technical_profile, evidence_report),
+            technical_evidence_report_id=self._evidence_report_id(
+                technical_profile, evidence_report
+            ),
             schema_version=SCHEMA_VERSION,
             provider_version=self._provider_version,
             status=status,
-            verification_source=TECHNICAL_PLUS_WIZARD if wizard_profile else TECHNICAL_ONLY,
+            verification_source=TECHNICAL_PLUS_WIZARD
+            if wizard_profile
+            else TECHNICAL_ONLY,
             summary=summary,
             claims=claims,
             confidence=confidence,
-            uncertainty_reasons=uncertainty_reasons,
+            uncertainty_reasons=sorted(set(uncertainty_reasons)),
             coverage_limitations=coverage_limitations,
             conflict_candidates=conflict_candidates,
             privacy_flags=privacy_flags,
@@ -245,6 +455,195 @@ class AIUsageFlowRuleEngine:
             uncertainty_reasons=uncertainty,
         )
 
+    def _abstained_claim(
+        self,
+        *,
+        flow_id: str,
+        claim_category: str,
+        claim_field: str,
+        claim_value: object,
+        evidence_refs: list[str],
+        reason: str,
+        material_coverage_limitations: int,
+    ) -> AIUsageFlowClaim:
+        claim = self._claim(
+            flow_id=flow_id,
+            claim_category=claim_category,
+            claim_field=claim_field,
+            claim_value=claim_value,
+            evidence_refs=evidence_refs,
+            optional_signal_count=0,
+            material_coverage_limitations=material_coverage_limitations,
+        )
+        return replace(
+            claim,
+            lifecycle_state="ABSTAINED",
+            uncertainty_reasons=sorted(
+                set([*claim.uncertainty_reasons, reason])
+            ),
+        )
+
+    def _downstream_action_claim(
+        self,
+        *,
+        flow_id: str,
+        findings: list[dict[str, Any]],
+        coverage_limitations: list[str],
+    ) -> AIUsageFlowClaim | None:
+        refs = self._refs_for(findings, DOWNSTREAM_ACTION_SIGNALS)
+        if not refs:
+            return None
+        action = "DECISION_FLOW"
+        if self._has_signal(findings, {"AUTOMATED_DECISION_SIGNAL"}):
+            action = "AUTOMATED_DECISION"
+        elif self._has_signal(findings, {"USER_IMPACT_SIGNAL"}):
+            action = "USER_IMPACT"
+        elif self._has_signal(findings, {"STATUS_UPDATE_SIGNAL"}):
+            action = "STATUS_UPDATE"
+        elif self._has_signal(findings, {"RANKING_SIGNAL"}):
+            action = "RANKING"
+        elif self._has_signal(findings, {"RECOMMENDATION_SIGNAL"}):
+            action = "RECOMMENDATION"
+        elif self._has_signal(findings, {"DISPLAY_ONLY_SIGNAL"}):
+            action = "DISPLAY_ONLY"
+        return self._claim(
+            flow_id=flow_id,
+            claim_category="DOWNSTREAM_ACTION",
+            claim_field="downstream_action",
+            claim_value={"downstreamAction": action},
+            evidence_refs=refs,
+            optional_signal_count=1 if len(refs) > 1 else 0,
+            material_coverage_limitations=len(coverage_limitations),
+        )
+
+    def _automated_decision_claim(
+        self,
+        *,
+        flow_id: str,
+        findings: list[dict[str, Any]],
+        coverage_limitations: list[str],
+    ) -> AIUsageFlowClaim | None:
+        refs = self._refs_for(findings, {"AUTOMATED_DECISION_SIGNAL"})
+        if not refs:
+            return None
+        if not self._path_resolved(findings):
+            return self._abstained_claim(
+                flow_id=flow_id,
+                claim_category="AUTOMATED_DECISION",
+                claim_field="automation_level",
+                claim_value={"automationLevel": "UNKNOWN"},
+                evidence_refs=refs,
+                reason="UNRESOLVED_OUTPUT_ACTION_PATH",
+                material_coverage_limitations=len(coverage_limitations),
+            )
+        return self._claim(
+            flow_id=flow_id,
+            claim_category="AUTOMATED_DECISION",
+            claim_field="automation_level",
+            claim_value={"automationLevel": "FULLY_AUTOMATED"},
+            evidence_refs=refs,
+            optional_signal_count=1
+            if self._has_signal(
+                findings, {"STATUS_UPDATE_SIGNAL", "USER_IMPACT_SIGNAL"}
+            )
+            else 0,
+            material_coverage_limitations=len(coverage_limitations),
+        )
+
+    def _human_review_claim(
+        self,
+        *,
+        flow_id: str,
+        findings: list[dict[str, Any]],
+        automated_claim: AIUsageFlowClaim | None,
+        coverage_limitations: list[str],
+    ) -> AIUsageFlowClaim | None:
+        review_refs = self._refs_for(findings, {"HUMAN_REVIEW_SIGNAL"})
+        if review_refs:
+            return self._claim(
+                flow_id=flow_id,
+                claim_category="HUMAN_REVIEW",
+                claim_field="human_review",
+                claim_value={"humanReview": "PRESENT"},
+                evidence_refs=review_refs,
+                optional_signal_count=0,
+                material_coverage_limitations=len(coverage_limitations),
+            )
+        if (
+            automated_claim
+            and automated_claim.lifecycle_state != "ABSTAINED"
+            and self._path_resolved(findings)
+        ):
+            return self._claim(
+                flow_id=flow_id,
+                claim_category="HUMAN_REVIEW",
+                claim_field="human_review",
+                claim_value={"humanReview": "ABSENT_WITH_BOUNDED_PATH"},
+                evidence_refs=list(automated_claim.evidence_refs),
+                optional_signal_count=0,
+                material_coverage_limitations=len(coverage_limitations),
+            )
+        return None
+
+    def _personal_data_claim(
+        self,
+        *,
+        flow_id: str,
+        technical_profile: dict[str, Any],
+        findings: list[dict[str, Any]],
+        coverage_limitations: list[str],
+    ) -> AIUsageFlowClaim | None:
+        refs = self._refs_for(findings, {"SENSITIVE_DATA_SIGNAL"})
+        input_categories = self._list_field(technical_profile, "input_categories")
+        sensitive_categories = sorted(
+            category
+            for category in input_categories
+            if category.lower() in PERSONAL_DATA_CATEGORIES
+        )
+        if not refs and not sensitive_categories:
+            return None
+        evidence_refs = refs or self._list_field(technical_profile, "evidence_refs")
+        return self._claim(
+            flow_id=flow_id,
+            claim_category="PERSONAL_DATA_INPUT",
+            claim_field="personal_data_input",
+            claim_value={
+                "personalDataInput": True,
+                "categories": sensitive_categories,
+            },
+            evidence_refs=evidence_refs,
+            optional_signal_count=1 if refs and sensitive_categories else 0,
+            material_coverage_limitations=len(coverage_limitations),
+        )
+
+    def _document_generation_claim(
+        self,
+        *,
+        flow_id: str,
+        technical_profile: dict[str, Any],
+        findings: list[dict[str, Any]],
+        output_refs: list[str],
+        coverage_limitations: list[str],
+    ) -> AIUsageFlowClaim | None:
+        explicit_refs = self._refs_for(findings, DOCUMENT_GENERATION_SIGNALS)
+        output_categories = {
+            category.lower()
+            for category in self._output_categories(technical_profile, findings)
+        }
+        if not explicit_refs and not (
+            output_refs and output_categories.intersection(DOCUMENT_OUTPUT_CATEGORIES)
+        ):
+            return None
+        return self._claim(
+            flow_id=flow_id,
+            claim_category="DOCUMENT_GENERATION",
+            claim_field="document_generation",
+            claim_value={"documentGenerationDetected": True},
+            evidence_refs=explicit_refs or output_refs,
+            optional_signal_count=1 if explicit_refs and output_refs else 0,
+            material_coverage_limitations=len(coverage_limitations),
+        )
+
     def _content_labeling_claim(
         self,
         *,
@@ -253,15 +652,25 @@ class AIUsageFlowRuleEngine:
         findings: list[dict[str, Any]],
         coverage_limitations: list[str],
     ) -> AIUsageFlowClaim | None:
-        output_categories = set(self._output_categories(technical_profile, findings))
+        output_categories = set(
+            self._output_categories(technical_profile, findings)
+        )
         synthetic_output = bool(output_categories & SYNTHETIC_OUTPUT_CATEGORIES)
         if not synthetic_output:
             return None
 
-        labeling_refs = self._refs_for(findings, {"CONTENT_LABELING_SIGNAL", "LABELING_SIGNAL"})
-        output_refs = self._refs_for(findings, {"AI_OUTPUT_SIGNAL", "output_signal"})
-        path_resolved = any(bool(finding.get("path_resolved") or finding.get("pathResolved")) for finding in findings)
-        status = "PRESENT" if labeling_refs else "ABSENT" if path_resolved else "UNCLEAR"
+        labeling_refs = self._refs_for(findings, CONTENT_LABELING_SIGNALS)
+        output_refs = self._refs_for(
+            findings, {"AI_OUTPUT_SIGNAL", "output_signal"}
+        )
+        path_resolved = self._path_resolved(findings)
+        status = (
+            "PRESENT"
+            if labeling_refs
+            else "ABSENT"
+            if path_resolved
+            else "UNCLEAR"
+        )
         return self._claim(
             flow_id=flow_id,
             claim_category="CONTENT_LABELING",
@@ -271,6 +680,41 @@ class AIUsageFlowRuleEngine:
             optional_signal_count=1 if labeling_refs else 0,
             material_coverage_limitations=len(coverage_limitations),
         )
+
+    def _control_claim(
+        self,
+        *,
+        flow_id: str,
+        category: str,
+        field_name: str,
+        present_key: str,
+        signal_type: str,
+        findings: list[dict[str, Any]],
+        required_basis: AIUsageFlowClaim | None,
+        coverage_limitations: list[str],
+    ) -> AIUsageFlowClaim | None:
+        refs = self._refs_for(findings, {signal_type})
+        if refs:
+            return self._claim(
+                flow_id=flow_id,
+                claim_category=category,
+                claim_field=field_name,
+                claim_value={present_key: "PRESENT"},
+                evidence_refs=refs,
+                optional_signal_count=0,
+                material_coverage_limitations=len(coverage_limitations),
+            )
+        if required_basis and self._path_resolved(findings):
+            return self._claim(
+                flow_id=flow_id,
+                claim_category=category,
+                claim_field=field_name,
+                claim_value={present_key: "ABSENT"},
+                evidence_refs=list(required_basis.evidence_refs),
+                optional_signal_count=0,
+                material_coverage_limitations=len(coverage_limitations),
+            )
+        return None
 
     def _apply_conflict(
         self,
@@ -311,7 +755,9 @@ class AIUsageFlowRuleEngine:
             ai_usage_flow_id="blocked_ai_usage_flow",
             assessment_id=self._str_field(technical_profile, "assessment_id"),
             technical_profile_id=self._technical_profile_id(technical_profile),
-            technical_evidence_report_id=self._evidence_report_id(technical_profile, evidence_report or {}),
+            technical_evidence_report_id=self._evidence_report_id(
+                technical_profile, evidence_report or {}
+            ),
             schema_version=SCHEMA_VERSION,
             provider_version=self._provider_version,
             status="BLOCKED",
@@ -331,6 +777,7 @@ class AIUsageFlowRuleEngine:
         technical_profile: dict[str, Any],
         wizard_profile: dict[str, Any] | None,
         claims: list[AIUsageFlowClaim],
+        findings: list[dict[str, Any]],
         uncertainty_reasons: list[str],
     ) -> dict[str, Any]:
         answers = wizard_profile.get("answers") if wizard_profile else {}
@@ -342,34 +789,64 @@ class AIUsageFlowRuleEngine:
             and claim.evidence_refs
             and claim.confidence >= 0.75
         ]
-        content_labeling = next(
-            (
-                claim.claim_value.get("contentLabelingStatus")
-                for claim in claims
-                if claim.claim_category == "CONTENT_LABELING"
-                and isinstance(claim.claim_value, dict)
-            ),
+        downstream_action = self._claim_value(
+            claims, "DOWNSTREAM_ACTION", "downstreamAction", "UNKNOWN"
+        )
+        human_review = self._claim_value(
+            claims, "HUMAN_REVIEW", "humanReview", "UNCLEAR"
+        )
+        automation_level = self._claim_value(
+            claims, "AUTOMATED_DECISION", "automationLevel", "UNKNOWN"
+        )
+        content_labeling = self._claim_value(
+            claims,
+            "CONTENT_LABELING",
+            "contentLabelingStatus",
             "NOT_APPLICABLE",
         )
+        intervention_control = self._claim_value(
+            claims,
+            "HUMAN_OVERSIGHT_CONTROL",
+            "interventionControlPresent",
+            "NOT_APPLICABLE",
+        )
+        interaction_disclosure = self._claim_value(
+            claims,
+            "AI_INTERACTION_DISCLOSURE",
+            "aiInteractionDisclosurePresent",
+            "NOT_APPLICABLE",
+        )
+        incident_handling = self._claim_value(
+            claims,
+            "INCIDENT_HANDLING",
+            "incidentHandlingPresent",
+            "UNCLEAR",
+        )
+        potential_harms = (
+            ["POTENTIAL_HIGH_IMPACT"]
+            if self._has_signal(findings, {"HARM_POTENTIAL_SIGNAL"})
+            else []
+        )
         return {
-            "aiDetected": self._str_field(technical_profile, "ai_detected") or "unknown",
+            "aiDetected": self._str_field(technical_profile, "ai_detected")
+            or "unknown",
             "businessProcess": answers.get("businessProcess", "UNKNOWN"),
             "aiPurpose": answers.get("aiPurpose", "UNKNOWN"),
             "aiInputTypes": self._list_field(technical_profile, "input_categories"),
             "aiOutputTypes": self._list_field(technical_profile, "output_categories"),
-            "downstreamAction": "UNKNOWN",
+            "downstreamAction": downstream_action,
             "affectedSubjects": answers.get("affectedSubjects", "UNKNOWN"),
-            "humanReview": "UNCLEAR",
-            "automationLevel": "UNKNOWN",
-            "potentialHarmCategories": [],
+            "humanReview": human_review,
+            "automationLevel": automation_level,
+            "potentialHarmCategories": potential_harms,
             "contentLabelingStatus": content_labeling,
             "riskDocumentationEvidence": "NOT_DETERMINABLE_FROM_CODE",
             "trainingDataLawfulnessSignal": "NOT_DETERMINABLE_FROM_CODE",
-            "interventionControlPresent": "NOT_APPLICABLE",
-            "aiInteractionDisclosurePresent": "NOT_APPLICABLE",
-            "incidentHandlingPresent": "UNCLEAR",
+            "interventionControlPresent": intervention_control,
+            "aiInteractionDisclosurePresent": interaction_disclosure,
+            "incidentHandlingPresent": incident_handling,
             "materialClaimRefs": material_claim_refs,
-            "blockingReasons": list(uncertainty_reasons),
+            "blockingReasons": sorted(set(uncertainty_reasons)),
         }
 
     def _empty_summary(self, reasons: list[str]) -> dict[str, Any]:
@@ -404,6 +881,8 @@ class AIUsageFlowRuleEngine:
             return "CONFLICTED"
         if not claims or any(claim.lifecycle_state == "REJECTED" for claim in claims):
             return "UNCLEAR"
+        if any(claim.lifecycle_state == "ABSTAINED" for claim in claims):
+            return "UNCLEAR"
         if uncertainty_reasons:
             return "UNCLEAR"
         return "READY"
@@ -413,7 +892,11 @@ class AIUsageFlowRuleEngine:
         claims: list[AIUsageFlowClaim],
         uncertainty_reasons: list[str],
     ) -> float:
-        material = [claim.confidence for claim in claims if claim.evidence_refs]
+        material = [
+            claim.confidence
+            for claim in claims
+            if claim.evidence_refs and claim.lifecycle_state != "ABSTAINED"
+        ]
         if not material:
             return 0.0
         raw = sum(material) / len(material) - (0.05 * len(uncertainty_reasons))
@@ -431,12 +914,24 @@ class AIUsageFlowRuleEngine:
                     raise PrivacyAssertionError("AIUsageFlow input contains source code")
                 if privacy_flags.get("secretsRedacted") is False:
                     raise PrivacyAssertionError("AIUsageFlow input contains secrets")
-        self._assert_output_safe({"technical_profile": technical_profile, "evidence_report": evidence_report})
+        self._assert_output_safe(
+            {
+                "technical_profile": technical_profile,
+                "evidence_report": evidence_report,
+            }
+        )
 
     def _assert_output_safe(self, value: Any) -> None:
         if isinstance(value, dict):
             for key, nested_value in value.items():
-                if str(key) in {"raw_source", "rawSource", "source_code", "sourceCode", "ast_body", "astBody"}:
+                if str(key) in {
+                    "raw_source",
+                    "rawSource",
+                    "source_code",
+                    "sourceCode",
+                    "ast_body",
+                    "astBody",
+                }:
                     raise PrivacyAssertionError("AIUsageFlow contains raw source field")
                 self._assert_output_safe(nested_value)
             return
@@ -451,18 +946,47 @@ class AIUsageFlowRuleEngine:
                 raise PrivacyAssertionError("AIUsageFlow contains unredacted secret")
 
     def _findings(self, evidence_report: dict[str, Any]) -> list[dict[str, Any]]:
-        payload = evidence_report.get("evidence_payload") or evidence_report.get("evidencePayload") or {}
+        payload = (
+            evidence_report.get("evidence_payload")
+            or evidence_report.get("evidencePayload")
+            or {}
+        )
         if not isinstance(payload, dict):
             return []
-        findings = payload.get("ai_usage_signals") or payload.get("technical_findings") or payload.get("findings") or []
-        return [finding for finding in findings if isinstance(finding, dict)]
 
-    def _refs_for(self, findings: list[dict[str, Any]], signal_types: set[str]) -> list[str]:
+        merged: list[dict[str, Any]] = []
+        for key in ("ai_usage_signals", "technical_findings", "findings"):
+            entries = payload.get(key) or []
+            if not isinstance(entries, list):
+                continue
+            for raw in entries:
+                if not isinstance(raw, dict):
+                    continue
+                finding = dict(raw)
+                if not finding.get("signal_type") and finding.get("finding_type"):
+                    finding["signal_type"] = finding["finding_type"]
+                if key == "technical_findings" and not finding.get("evidence_ref"):
+                    ref = finding.get("finding_id") or finding.get("id")
+                    if ref:
+                        finding["evidence_ref"] = str(ref)
+                merged.append(finding)
+
+        deduped: dict[tuple[str, str], dict[str, Any]] = {}
+        for index, finding in enumerate(merged):
+            key = (
+                self._signal_type(finding),
+                str(finding.get("evidence_ref") or f"missing:{index}"),
+            )
+            deduped[key] = finding
+        return list(deduped.values())
+
+    def _refs_for(
+        self, findings: list[dict[str, Any]], signal_types: set[str]
+    ) -> list[str]:
         refs: list[str] = []
         normalized = {signal.lower() for signal in signal_types}
         for finding in findings:
-            signal_type = str(finding.get("signal_type") or finding.get("finding_type") or finding.get("type") or "").lower()
-            if signal_type not in normalized:
+            if self._signal_type(finding) not in normalized:
                 continue
             value = (
                 finding.get("evidence_ref")
@@ -474,17 +998,42 @@ class AIUsageFlowRuleEngine:
                 refs.append(str(value))
         return sorted(set(refs))
 
-    def _has_signal(self, findings: list[dict[str, Any]], signal_types: set[str]) -> bool:
+    def _has_signal(
+        self, findings: list[dict[str, Any]], signal_types: set[str]
+    ) -> bool:
         normalized = {signal.lower() for signal in signal_types}
-        return any(
-            str(
-                finding.get("signal_type")
-                or finding.get("finding_type")
-                or finding.get("type")
-                or ""
-            ).lower()
-            in normalized
+        return any(self._signal_type(finding) in normalized for finding in findings)
+
+    @staticmethod
+    def _signal_type(finding: dict[str, Any]) -> str:
+        return str(
+            finding.get("signal_type")
+            or finding.get("finding_type")
+            or finding.get("type")
+            or ""
+        ).lower()
+
+    def _path_resolved(self, findings: list[dict[str, Any]]) -> bool:
+        if self._has_signal(findings, {"UNSUPPORTED_DYNAMIC_FLOW"}):
+            return False
+        if any(bool(finding.get("has_dynamic_call")) for finding in findings):
+            return False
+        explicit = [
+            finding.get("path_resolved")
+            if "path_resolved" in finding
+            else finding.get("pathResolved")
             for finding in findings
+            if "path_resolved" in finding or "pathResolved" in finding
+        ]
+        if explicit:
+            return any(bool(value) for value in explicit)
+        return self._has_signal(
+            findings,
+            {
+                "AI_MODEL_INVOCATION",
+                "AI_OUTPUT_SIGNAL",
+                *DOWNSTREAM_ACTION_SIGNALS,
+            },
         )
 
     def _coverage_limitations(
@@ -493,9 +1042,16 @@ class AIUsageFlowRuleEngine:
         evidence_report: dict[str, Any],
     ) -> list[str]:
         limitations = self._list_field(technical_profile, "coverage_limitations")
-        payload = evidence_report.get("evidence_payload") or evidence_report.get("evidencePayload") or {}
+        limitations.extend(self._list_field(technical_profile, "coverage_notes"))
+        payload = (
+            evidence_report.get("evidence_payload")
+            or evidence_report.get("evidencePayload")
+            or {}
+        )
         if isinstance(payload, dict):
-            limitations.extend(str(note) for note in payload.get("coverage_notes", []) if note)
+            limitations.extend(
+                str(note) for note in payload.get("coverage_notes", []) if note
+            )
         return sorted(set(limitations))
 
     def _output_categories(
@@ -510,11 +1066,33 @@ class AIUsageFlowRuleEngine:
                 categories.add(str(category))
         return sorted(categories)
 
+    @staticmethod
+    def _claim_by_category(
+        claims: list[AIUsageFlowClaim], category: str
+    ) -> AIUsageFlowClaim | None:
+        return next((claim for claim in claims if claim.claim_category == category), None)
+
+    @staticmethod
+    def _claim_value(
+        claims: list[AIUsageFlowClaim],
+        category: str,
+        key: str,
+        default: Any,
+    ) -> Any:
+        claim = next(
+            (claim for claim in claims if claim.claim_category == category), None
+        )
+        if claim and isinstance(claim.claim_value, dict):
+            return claim.claim_value.get(key, default)
+        return default
+
     def _flow_id(self, technical_profile: dict[str, Any]) -> str:
         return f"aiuf-{self._technical_profile_id(technical_profile) or 'unknown'}"
 
     def _technical_profile_id(self, technical_profile: dict[str, Any]) -> str:
-        return self._str_field(technical_profile, "technical_profile_id") or self._str_field(technical_profile, "id")
+        return self._str_field(
+            technical_profile, "technical_profile_id"
+        ) or self._str_field(technical_profile, "id")
 
     def _evidence_report_id(
         self,
@@ -533,8 +1111,23 @@ class AIUsageFlowRuleEngine:
 
     def _list_field(self, payload: dict[str, Any], key: str) -> list[str]:
         value = payload.get(key) or payload.get(self._to_camel_case(key))
-        return [str(item) for item in value] if isinstance(value, list) else []
+        if not isinstance(value, list):
+            return []
+        normalized: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                ref = (
+                    item.get("evidence_ref_id")
+                    or item.get("evidenceRefId")
+                    or item.get("id")
+                )
+                if ref:
+                    normalized.append(str(ref))
+                continue
+            normalized.append(str(item))
+        return normalized
 
-    def _to_camel_case(self, key: str) -> str:
+    @staticmethod
+    def _to_camel_case(key: str) -> str:
         parts = key.split("_")
         return parts[0] + "".join(part.title() for part in parts[1:])

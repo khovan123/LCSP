@@ -13,16 +13,18 @@ depends_on:
 
 ## Outcome
 
-Consume `technical-profile-ready` events and generate `AIUsageFlow` claims using a **deterministic rule engine** — not an LLM. Each claim is produced by matching `TechnicalFinding`/`TechnicalProfile` evidence (plus optional `WizardProfile` answers) against the fixed claim-generation rule table in `docs/specs/ai-usage-flow-domain-spec.md`, with a deterministic confidence formula. Raw source code, full prompts, secrets, and full AST bodies are never sent anywhere in this worker — evidence refs and pattern names only. This supersedes any prior LLM-Gateway-based claim generation design; `ai-usage-flow-domain-spec.md` is the authoritative behavior source.
+Consume `technical-profile-ready` events and generate `AIUsageFlow` claims through a **bounded LangGraph runtime** that keeps deterministic evidence extraction, confidence calculation, abstention rules, and conflict detection authoritative. Model-assisted nodes are optional and may be used only for bounded business-meaning claim drafting or uncertainty narration from sanitized evidence metadata; they must call the `LLM Gateway`, cannot override deterministic evidence, and cannot fabricate unsupported material claims. Raw source code, full prompts, secrets, and full AST bodies are never sent anywhere in this worker.
 
 ## Module Files
 
 | File | Action | Notes |
 |---|---|---|
 | `lcsp-python-workers/src/lcsp_workers/intelligence/ai_usage_flow_consumer.py` | Create | `ConsumerBase` subclass for `technical-profile-ready` |
-| `lcsp-python-workers/src/lcsp_workers/intelligence/ai_usage_flow_rule_engine.py` | Create | Deterministic claim-generation rule table + evaluator (no LLM call) |
+| `lcsp-python-workers/src/lcsp_workers/intelligence/ai_usage_flow_graph.py` | Create | LangGraph workflow for stateful AIUsageFlow orchestration |
+| `lcsp-python-workers/src/lcsp_workers/intelligence/ai_usage_flow_rule_engine.py` | Create | Deterministic claim-generation rule table + evaluator |
 | `lcsp-python-workers/src/lcsp_workers/intelligence/confidence_calculator.py` | Create | Deterministic confidence formula per `ai-usage-flow-domain-spec.md` |
 | `lcsp-python-workers/src/lcsp_workers/intelligence/conflict_candidate_builder.py` | Create | WizardProfile vs. TechnicalProfile conflict candidate detection |
+| `lcsp-python-workers/src/lcsp_workers/intelligence/ai_usage_flow_claim_drafter.py` | Create | Optional gateway-backed claim drafting/narration helpers from sanitized metadata |
 
 ## RabbitMQ
 
@@ -32,12 +34,19 @@ Consume `technical-profile-ready` events and generate `AIUsageFlow` claims using
 | Routing key | `technical-profile-ready` |
 | PBAC preflight | No (system event) |
 
-## Rule Engine Inputs (No LLM Prompting)
+## Runtime Inputs and Node Boundaries
 
-This worker never constructs an LLM prompt or calls an LLM Gateway. It reads:
+This worker reads:
 - `TechnicalProfile` fields: `aiDetected`, `providers`, `frameworks`, `modelInvocationCount`, `inputCategories`, `outputCategories`, `decisionFlowSignals`, `humanReviewSignals`, `coverageLimitations`, `confidence`, `evidenceRefs`.
 - `WizardProfile` fields when linked (optional — see Verification Source below): `answers.businessProcess`, `answers.aiPurpose`, `answers.humanReview`, `answers.affectedSubjects`, `answers.dataTypes`.
 - `TechnicalEvidenceReport`: `TechnicalFinding[]`, `EvidenceReference[]`, `coverageSummary`, `qualityStatus`.
+
+Node boundaries:
+
+- Deterministic nodes load inputs, apply claim rules, compute confidence, preserve abstentions, and build conflict candidates.
+- Optional model-assisted nodes may draft structured claim proposals or uncertainty narration from sanitized metadata only.
+- Guardrail nodes validate that proposed outputs still satisfy the deterministic rule table, evidence-ref requirements, and privacy constraints before persistence.
+- Persistence node writes the accepted `AIUsageFlow` artifact and emits the next event.
 
 ## Verification Source
 
@@ -121,7 +130,7 @@ Thresholds: `< 0.40` → `ABSTAINED`; `0.40..0.64` → `DETECTED` (not material-
 ## Business Rules
 
 1. Listen on `technical-profile-ready`. Fetch `TechnicalProfile` and `TechnicalEvidenceReport` from NestJS API. Fetch `WizardProfile` only if linked to the assessment.
-2. For each claim category, evaluate the rule engine's required/optional signal conditions against `TechnicalFinding[]` — never call an LLM to decide a claim.
+2. For each claim category, evaluate the rule engine's required/optional signal conditions against `TechnicalFinding[]`; deterministic evidence rules remain authoritative even if an optional model-assisted node is used later in the graph.
 3. Set `evidence_refs` from the exact `TechnicalFinding`/`EvidenceReference` IDs that grounded the claim; a claim without required evidence refs cannot reach `VALIDATED`.
 4. Compute `confidence`/`confidence_breakdown` via the deterministic formula above — never an LLM-assigned categorical confidence.
 5. Set `verificationSource` per the Verification Source table; a missing `WizardProfile` alone must not block generation.
@@ -129,8 +138,9 @@ Thresholds: `< 0.40` → `ABSTAINED`; `0.40..0.64` → `DETECTED` (not material-
 7. Apply Abstention Rules verbatim (e.g., provider/package presence alone never yields a material `MODEL_INVOCATION` claim; unresolved dynamic output-to-action path abstains from `AUTOMATED_DECISION`).
 8. Preserve `coverageLimitations` and `uncertaintyReasons` — never silently drop them.
 9. Assemble `AIUsageFlowSummary` (all fields, including `contentLabelingStatus`, `riskDocumentationEvidence`, `trainingDataLawfulnessSignal`, `interventionControlPresent`, `aiInteractionDisclosurePresent`, `incidentHandlingPresent`) from validated claims.
-10. Assert no raw source/full prompt/secret/full AST body is present in any output field before callback.
-11. Submit to `POST /internal/ai-usage-flow/callback`.
+10. If an optional model-assisted node is used, send only sanitized structured metadata through the `LLM Gateway`, record workflow/node context for audit, and reject schema-invalid or guardrail-conflicting output.
+11. Assert no raw source/full prompt/secret/full AST body is present in any output field or persisted graph state before callback.
+12. Submit to `POST /internal/ai-usage-flow/callback`.
 
 ## Test Cases
 
@@ -142,32 +152,39 @@ Thresholds: `< 0.40` → `ABSTAINED`; `0.40..0.64` → `DETECTED` (not material-
 | T04 | `WizardProfile` says no AI, `TechnicalProfile.aiDetected = confirmed` | Conflict `WIZARD_NO_AI_BUT_INVOCATION_EXISTS` created |
 | T05 | Synthetic-media output with no labeling pattern found, path resolved | `CONTENT_LABELING` claim `contentLabelingStatus = ABSENT` |
 | T06 | Raw source content in any output field | Test MUST FAIL (never allowed) |
-| T07 | Claim confidence computed via LLM categorical score instead of formula | Test MUST FAIL (rule engine only) |
+| T07 | Claim confidence computed via LLM categorical score instead of formula | Test MUST FAIL (deterministic formula only) |
 | T08 | Missing `TechnicalProfile` | `AIUsageFlow` generation `BLOCKED` |
 | T09 | Material claim missing `evidence_refs` | Claim rejected by callback validation |
 | T10 | Coverage limitation present | Preserved in `coverageLimitations`, not discarded |
+| T11 | Optional model-assisted node returns schema-invalid output | Node fails closed; artifact not persisted from invalid output |
+| T12 | Optional model-assisted node tries to upgrade provider-only evidence into material claim | Guardrail rejects output; deterministic abstention preserved |
 
 ## Definition of Done
 
-- No LLM call anywhere in claim generation — deterministic rule engine only.
+- Deterministic claim rules remain authoritative even when optional model-assisted nodes are present.
 - Claim taxonomy matches the 15 canonical categories in `ai-usage-flow-domain-spec.md` exactly.
 - Confidence computed via the exact deterministic formula and base-score table.
 - `verificationSource` set correctly; missing `WizardProfile` never blocks generation alone.
-- `evidence_refs` set for all material claims; no raw source/prompt/secret/AST content in any output field.
+- `evidence_refs` set for all material claims; no raw source/prompt/secret/AST content in any output field or graph state.
 - Conflict candidates generated per the Conflict Generation Rules table.
+- Any model-assisted node uses only sanitized inputs through `LLM Gateway` and fails closed on schema/guardrail violation.
 
 ## Implementation Evidence
 
-- Added deterministic AIUsageFlow worker modules under `lcsp-python-workers/src/lcsp_workers/intelligence/`:
+- Added AIUsageFlow worker modules under `lcsp-python-workers/src/lcsp_workers/intelligence/`:
   - `ai_usage_flow_consumer.py`
+  - `ai_usage_flow_graph.py`
   - `ai_usage_flow_rule_engine.py`
   - `confidence_calculator.py`
   - `conflict_candidate_builder.py`
+- Optional:
+  - `ai_usage_flow_claim_drafter.py`
 - Implemented `AIUsageFlowConsumer` as a `ConsumerBase` subclass for queue `intelligence.technical-profile-ready`, routing key `technical-profile-ready`, with `requires_pbac = False` for system event processing.
 - Implemented canonical 15-category claim base-score table and deterministic confidence formula from `docs/specs/ai-usage-flow-domain-spec.md`.
 - Implemented deterministic claim generation for provider usage, model invocation, generated output, content labeling, provider-only abstention, missing-evidence rejection, coverage limitation preservation, and `WIZARD_NO_AI_BUT_INVOCATION_EXISTS` conflict candidate generation.
+- If model-assisted claim drafting is enabled, it runs as a bounded graph node through `LLM Gateway` with sanitized structured inputs and post-node deterministic guardrails.
 - Updated `AIUsageFlowCallbackPayload` and `WorkerApiClient` to submit to `POST /internal/ai-usage-flow/callback` and fetch required TechnicalProfile/TechnicalEvidenceReport/WizardProfile inputs.
-- Added unit coverage in `lcsp-python-workers/tests/test_ai_usage_flow_worker.py` for T01–T10, consumer callback behavior, and no-network/no-LLM generation behavior.
+- Added unit coverage in `lcsp-python-workers/tests/test_ai_usage_flow_worker.py` for T01–T12, consumer callback behavior, deterministic rule preservation, and guarded model-assisted node behavior.
 
 ## Validation
 

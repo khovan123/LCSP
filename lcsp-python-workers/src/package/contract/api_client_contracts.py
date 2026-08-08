@@ -11,9 +11,10 @@ class CallbackPath(StrEnum):
     AI_USAGE_FLOW = "/internal/ai-usage-flow/callback"
     RECONCILIATION_CONFLICT = "/internal/reconciliation/conflict-callback"
     VERIFIED_PROFILE = "/internal/reconciliation/verified-profile-callback"
-    LEGAL_RULE_MATCH = "/internal/callbacks/legal-rule-match"
-    CLASSIFICATION = "/internal/callbacks/classification"
+    LEGAL_RULE_MATCH = "/internal/classification/legal-rule-match-callback"
+    CLASSIFICATION = "/internal/classification/result-callback"
     AUDIT_EXPORT = "/internal/callbacks/audit-export/{export_request_id}"
+
 
 class InternalPath(StrEnum):
     AUDIT_EVENTS = "/internal/organizations/{organization_id}/audit-events"
@@ -22,6 +23,7 @@ class InternalPath(StrEnum):
     AI_USAGE_FLOW = "/internal/ai-usage-flow/{ai_usage_flow_id}"
     VERIFIED_PROFILE_CONTEXT = "/internal/reconciliation/verified-profile-context/{assessment_id}"
     WIZARD_PROFILE = "/internal/assessments/{assessment_id}/wizard-profile"
+    LEGAL_RULE_MATCH = "/internal/classification/runtime/legal-rule-matches/{legal_rule_match_id}"
 
 
 class CallbackLogEvent(StrEnum):

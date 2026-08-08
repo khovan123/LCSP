@@ -26,6 +26,7 @@ export const PBAC_ACTIONS = {
   managerDecisionChange: "manager-decision:change",
   membershipRevoke: "membership:revoke",
   metadataCheck: "pbac:metadata",
+  outboxReplay: "outbox:replay",
   sessionVerify: "session:verify",
   scanRead: "scan:read",
   scanTrigger: "scan:trigger",

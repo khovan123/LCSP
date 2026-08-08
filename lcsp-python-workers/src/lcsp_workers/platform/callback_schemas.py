@@ -1,16 +1,22 @@
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
+
 class CallbackResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     success: Optional[bool] = None
     accepted: Optional[bool] = None
     evidence_report_id: Optional[str] = None
     verified_profile_id: Optional[str] = None
+    ai_usage_flow_id: Optional[str] = None
+    legal_rule_match_id: Optional[str] = None
+    classification_result_id: Optional[str] = None
+    guardrail_status: Optional[str] = None
     status: Optional[str] = None
     correlation_id: Optional[str] = None
     message: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
+
 
 class ScanCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -24,6 +30,7 @@ class ScanCallbackPayload(BaseModel):
     error_code: Optional[str] = None
     findings: List[Dict[str, Any]] = Field(default_factory=list)
 
+
 class TechnicalProfileCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     evidence_report_id: str
@@ -33,6 +40,7 @@ class TechnicalProfileCallbackPayload(BaseModel):
     profile_data: Dict[str, Any]
     privacy_flags: Dict[str, Any]
     scan_job_id: Optional[str] = None
+
 
 class AIUsageFlowCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -45,6 +53,7 @@ class AIUsageFlowCallbackPayload(BaseModel):
     privacy_flags: Dict[str, Any]
     flow_data: Dict[str, Any] = Field(default_factory=dict)
 
+
 class ConflictDetectionCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ai_usage_flow_id: str
@@ -54,6 +63,7 @@ class ConflictDetectionCallbackPayload(BaseModel):
     conflicts: List[Dict[str, Any]] = Field(default_factory=list)
     privacy_flags: Dict[str, Any]
 
+
 class VerifiedProfileCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ai_usage_flow_id: str
@@ -62,6 +72,7 @@ class VerifiedProfileCallbackPayload(BaseModel):
     provider_version: str
     profile_data: Dict[str, Any]
     gates_passed_at: Dict[str, Any]
+
 
 class LegalRuleMatchCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -74,11 +85,16 @@ class LegalRuleMatchCallbackPayload(BaseModel):
     citation_allowlist: List[str] = Field(default_factory=list)
     overall_coverage_status: str = "NO_CITATION"
 
+
 class ClassificationCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    scan_job_id: str
-    classification_level: str
-    reasoning: Optional[str] = None
+    legal_rule_match_id: str
+    verified_profile_id: str
+    assessment_id: str
+    schema_version: str
+    classification_data: Dict[str, Any]
+    guardrail_status: str
+
 
 class AuditExportCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")

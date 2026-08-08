@@ -136,6 +136,18 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
     assert.doesNotMatch(JSON.stringify(body), /private|service\.ts|stack/i);
   });
 
+  it("returns safe guidance for the pending-mapping pre-scan state", async () => {
+    await createJob(prisma, REPOSITORY_SCAN_JOB_STATUSES.pendingMapping);
+
+    const response = await getStatus(app, managerToken);
+    const body = successBody<ScanJobStatusDto>(response);
+
+    assert.equal(response.status, 200);
+    assert.equal(body.status, REPOSITORY_SCAN_JOB_STATUSES.pendingMapping);
+    assert.equal(body.blocked_reason, SCAN_JOB_GUIDANCE.pendingMappingReason);
+    assert.equal(body.next_action, SCAN_JOB_GUIDANCE.pendingMappingNextAction);
+  });
+
   it("T04 hides a job outside the session organization", async () => {
     await createJob(prisma, REPOSITORY_SCAN_JOB_STATUSES.queued, null, {
       organizationId: "org-other",

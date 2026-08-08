@@ -40,6 +40,7 @@ export class GetScanJobHandler implements IQueryHandler<GetScanJobQuery> {
         status: true,
         triggerSource: true,
         attemptCount: true,
+        blockedReason: true,
         createdAt: true,
         updatedAt: true,
         correlationId: true,
@@ -57,10 +58,7 @@ export class GetScanJobHandler implements IQueryHandler<GetScanJobQuery> {
       status,
       trigger_source: fromPrismaRepositoryScanTriggerSource(job.triggerSource),
       attempt_count: job.attemptCount,
-      blocked_reason:
-        status === REPOSITORY_SCAN_JOB_STATUSES.blocked
-          ? SCAN_JOB_GUIDANCE.blockedReason
-          : null,
+      blocked_reason: blockedReasonFor(status, job.blockedReason),
       next_action: nextActionFor(status),
       created_at: job.createdAt.toISOString(),
       updated_at: job.updatedAt.toISOString(),
@@ -85,7 +83,35 @@ function nextActionFor(status: RepositoryScanJobStatus): string | null {
       return SCAN_JOB_GUIDANCE.failedNextAction;
     case REPOSITORY_SCAN_JOB_STATUSES.blocked:
       return SCAN_JOB_GUIDANCE.blockedNextAction;
+    case REPOSITORY_SCAN_JOB_STATUSES.pendingMapping:
+      return SCAN_JOB_GUIDANCE.pendingMappingNextAction;
+    case REPOSITORY_SCAN_JOB_STATUSES.blockedMapping:
+      return SCAN_JOB_GUIDANCE.blockedMappingNextAction;
+    case REPOSITORY_SCAN_JOB_STATUSES.waitingForContext:
+      return SCAN_JOB_GUIDANCE.waitingForContextNextAction;
+    case REPOSITORY_SCAN_JOB_STATUSES.readyToSnapshot:
+      return SCAN_JOB_GUIDANCE.readyToSnapshotNextAction;
     case REPOSITORY_SCAN_JOB_STATUSES.completed:
       return null;
+  }
+}
+
+function blockedReasonFor(
+  status: RepositoryScanJobStatus,
+  blockedReason: string | null | undefined,
+): string | null {
+  switch (status) {
+    case REPOSITORY_SCAN_JOB_STATUSES.blocked:
+      return SCAN_JOB_GUIDANCE.blockedReason;
+    case REPOSITORY_SCAN_JOB_STATUSES.pendingMapping:
+      return SCAN_JOB_GUIDANCE.pendingMappingReason;
+    case REPOSITORY_SCAN_JOB_STATUSES.blockedMapping:
+      return SCAN_JOB_GUIDANCE.blockedMappingReason;
+    case REPOSITORY_SCAN_JOB_STATUSES.waitingForContext:
+      return SCAN_JOB_GUIDANCE.waitingForContextReason;
+    case REPOSITORY_SCAN_JOB_STATUSES.readyToSnapshot:
+      return SCAN_JOB_GUIDANCE.readyToSnapshotReason;
+    default:
+      return blockedReason ?? null;
   }
 }

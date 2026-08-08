@@ -50,6 +50,7 @@ Use Real LLM Provider With Schema and Budget Guardrails
 - Invoke only configured real provider via LLM Gateway with approved prompt/template version and schema-constrained output.
 - Enforce timeout, retry and budget controls while recording provider/model/request/token metadata.
 - Return blocked/degraded state on provider failure or invalid schema beyond retry policy.
+- Carry workflow/node context for every model-assisted graph node so retries, replay and audit remain LangGraph-safe.
 
 ### Task to Acceptance Criteria Traceability
 
@@ -60,6 +61,7 @@ Use Real LLM Provider With Schema and Budget Guardrails
 ### Dependencies and Prerequisites
 
 - Story 7.2 precedence logic and LLM Gateway implementation authority.
+- LangGraph runtime authority for node contracts, retries, checkpointing and blocked/degraded semantics.
 - Real provider configuration per ADR-024.
 
 ### Explicit Non-Goals
@@ -76,7 +78,7 @@ Use Real LLM Provider With Schema and Budget Guardrails
 
 ### Architecture Compliance
 
-- Classification worker thuộc Python Worker Platform; external model invocation chỉ qua LLM Gateway.
+- Classification worker thuộc Python Worker Platform và có thể được orchestrate bằng LangGraph trong bounded runtime; external model invocation chỉ qua LLM Gateway.
 - LLM output phải schema-validated, sanitized và không override deterministic legal/citation guardrails.
 - API surface chủ yếu là status/read model và Manager-safe explanation of blocked/degraded results.
 
@@ -116,6 +118,7 @@ Use Real LLM Provider With Schema and Budget Guardrails
 - Classification worker tests cho hard-rule precedence, blocked/degraded outcomes và citation enforcement.
 - LLM Gateway contract tests cho schema validation, forbidden input rejection, timeout/retry/fail-closed behavior.
 - Status/read-model tests cho final vs blocked vs degraded presentation.
+- Runtime orchestration tests phải verify graph node context, replay-safe retries, và không có direct provider call ngoài gateway.
 
 ### References
 
@@ -133,6 +136,7 @@ Use Real LLM Provider With Schema and Budget Guardrails
 - [Source: docs/specs/legal-classification-spec.md]
 - [Source: docs/specs/legal-matching-domain-spec.md]
 - [Source: docs/implementation/llm-gateway-implementation.md]
+- [Source: docs/implementation/langgraph-runtime-implementation.md]
 - [Source: docs/architecture/adr/adr-024-real-llm-provider-mvp-requirement.md]
 - [Source: docs/implementation/readiness/state-transition-authority.md]
 

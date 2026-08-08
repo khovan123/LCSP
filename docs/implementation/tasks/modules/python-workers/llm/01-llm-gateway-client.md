@@ -42,6 +42,8 @@ class LLMGatewayClient:
     def complete(
         self,
         prompt: str,
+        workflow_run_id: str,
+        node_name: str,
         max_tokens: int | None = None,
         correlation_id: str | None = None
     ) -> LLMResponse:
@@ -54,6 +56,7 @@ class LLMResponse:
     output_tokens: int
     model: str
     provider: str
+    request_id: str | None
 ```
 
 ## Prompt Safety Rules (in `prompt_safety.py`)
@@ -81,6 +84,7 @@ If any pattern matches → raise `PromptSafetyViolation` (never send the prompt)
 5. Budget tracking uses Redis or in-process counter (resettable on first day of month). If Redis unavailable: log warning and allow (budget is soft safety, not hard blocker — hard blocker via provider billing).
 6. Response `content` passed through `redact_string()` before returning.
 7. Correlation ID injected into provider request metadata where supported.
+8. `workflow_run_id` and `node_name` are required so LangGraph-owned worker runs remain auditable, replay-safe, and attributable at node level.
 
 ## Test Cases
 
@@ -93,6 +97,7 @@ If any pattern matches → raise `PromptSafetyViolation` (never send the prompt)
 | T05 | `LLM_API_KEY` not in any log | Log inspection |
 | T06 | Response redacted | `redact_string()` applied |
 | T07 | `PromptSafetyViolation` — no API call made | Provider not contacted |
+| T08 | Missing `workflow_run_id` or `node_name` | Request rejected before provider call |
 
 ## Definition of Done
 
@@ -101,3 +106,4 @@ If any pattern matches → raise `PromptSafetyViolation` (never send the prompt)
 - `LLM_API_KEY` never in logs.
 - Response sanitized with `redact_string()`.
 - `BudgetExceeded` raised before provider call when cap hit.
+- Workflow/node context required for every provider call.

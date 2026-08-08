@@ -76,7 +76,7 @@ Reject Provider-Only or Unsupported Classification
 
 ### Architecture Compliance
 
-- Classification worker thuộc Python Worker Platform; external model invocation chỉ qua LLM Gateway.
+- Classification worker thuộc Python Worker Platform và có thể được orchestrate bằng LangGraph trong bounded runtime; external model invocation chỉ qua LLM Gateway.
 - LLM output phải schema-validated, sanitized và không override deterministic legal/citation guardrails.
 - API surface chủ yếu là status/read model và Manager-safe explanation of blocked/degraded results.
 
@@ -133,6 +133,7 @@ Reject Provider-Only or Unsupported Classification
 - [Source: docs/specs/legal-classification-spec.md]
 - [Source: docs/specs/legal-matching-domain-spec.md]
 - [Source: docs/implementation/llm-gateway-implementation.md]
+- [Source: docs/implementation/langgraph-runtime-implementation.md]
 - [Source: docs/architecture/adr/adr-024-real-llm-provider-mvp-requirement.md]
 - [Source: docs/implementation/readiness/state-transition-authority.md]
 

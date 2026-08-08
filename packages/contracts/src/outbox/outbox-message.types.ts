@@ -19,6 +19,7 @@ export const OUTBOX_AUDIT_EVENT_TYPES = {
 
 export const OUTBOX_ERROR_CODES = {
   dlqMessageNotFound: "OUTBOX_DLQ_MESSAGE_NOT_FOUND",
+  dlqReplayUnsafeTarget: "OUTBOX_DLQ_REPLAY_UNSAFE_TARGET",
 } as const;
 
 export const OUTBOX_MESSAGE_SCHEMA_VERSION = "outbox.message.v1";

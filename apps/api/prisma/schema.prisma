@@ -744,6 +744,10 @@ enum RepositoryScanJobStatus {
   COMPLETED
   FAILED
   BLOCKED
+  PENDING_MAPPING
+  BLOCKED_MAPPING
+  WAITING_FOR_CONTEXT
+  READY_TO_SNAPSHOT
 }
 
 enum RepositoryScanTriggerSource {

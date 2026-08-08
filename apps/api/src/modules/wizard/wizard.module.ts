@@ -3,6 +3,7 @@ import { CqrsModule } from "@nestjs/cqrs";
 
 import { PbacModule } from "../../platform/pbac/pbac.module.js";
 import { OutboxModule } from "../../platform/outbox/outbox.module.js";
+import { WorkerApiKeyGuard } from "../scan/presentation/http/worker-api-key.guard.js";
 import { WIZARD_PROFILE_REPOSITORY } from "./application/ports/persistence/wizard-profile.repository.js";
 import { PrismaWizardRepository } from "./infrastructure/persistence/prisma-wizard.repository.js";
 import { SaveWizardDraftHandler } from "./application/commands/save-wizard-draft/save-wizard-draft.handler.js";
@@ -17,11 +18,16 @@ import { ReadinessExportGuardrailService } from "./application/services/wizard/r
 import { ReadinessExportPdfService } from "./application/services/wizard/readiness-export-pdf.service.js";
 import { ReadinessExportDocumentService } from "./application/services/wizard/readiness-export-document.service.js";
 import { WizardController } from "./presentation/http/wizard.controller.js";
+import { InternalWizardController } from "./presentation/http/internal-wizard.controller.js";
 import { ReadinessExportDocumentController } from "./presentation/http/readiness-export-document.controller.js";
 
 @Module({
   imports: [CqrsModule, PbacModule, OutboxModule],
-  controllers: [WizardController, ReadinessExportDocumentController],
+  controllers: [
+    WizardController,
+    InternalWizardController,
+    ReadinessExportDocumentController,
+  ],
   providers: [
     SaveWizardDraftHandler,
     SubmitWizardHandler,
@@ -35,6 +41,7 @@ import { ReadinessExportDocumentController } from "./presentation/http/readiness
     ReadinessExportPdfService,
     ReadinessExportDocumentService,
     PrismaWizardRepository,
+    WorkerApiKeyGuard,
     {
       provide: WIZARD_PROFILE_REPOSITORY,
       useExisting: PrismaWizardRepository,

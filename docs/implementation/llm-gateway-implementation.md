@@ -47,6 +47,26 @@ A real configured LLM provider is mandatory for the A-to-Z MVP acceptance run pe
 | Output validator | Enforce schema and safety constraints |
 | Metadata recorder | Persist model run metadata and output hash |
 
+## Gateway and LangGraph Boundary
+
+The LLM Gateway is not the workflow orchestrator. LangGraph may orchestrate worker-local runtime state, but every model-assisted node still crosses the same gateway boundary.
+
+```text
+LangGraph node
+-> sanitized structured request
+-> LLM Gateway
+-> provider adapter
+-> schema validation
+-> metadata + output ref returned to graph state
+```
+
+Boundary rules:
+
+- Workers may use LangChain/LangGraph for prompt assembly, structured output helpers, and runtime coordination.
+- Workers may not bypass the gateway by calling provider SDKs, LangChain provider wrappers, or hosted model endpoints directly.
+- Gateway requests must include workflow and node context so graph runs remain auditable and replay-safe.
+- Gateway responses must be consumed as validated structured outputs plus metadata refs, not as raw provider payloads persisted into business artifacts.
+
 ## Required Model Run Metadata
 
 | Field | Meaning |
@@ -109,6 +129,19 @@ Controlled MVP settings:
 | Sanitized structured metadata | Schema-validated model response |
 | Node policy and prompt version | Model run metadata |
 | Provider config | Provider-normalized response or failure |
+
+## Graph Node Contract Requirements
+
+Every graph node that invokes the gateway must declare:
+
+- sanitized input schema
+- output schema
+- prompt/template version reference
+- timeout and retry policy
+- blocked/degraded fallback behavior
+- audit metadata fields to record
+
+If any requirement is missing, the node is not eligible for production or acceptance-run use.
 
 ## State / Error / Failure Handling
 

@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock
 from lcsp_workers.classification.risk_tier_calculator import calculate_risk_tier
 from lcsp_workers.classification.citation_guardrail import check_citations
+from lcsp_workers.classification.classification_graph import ClassificationGraph
 from lcsp_workers.classification.overclaim_detector import check_overclaim
 from lcsp_workers.classification.rationale_narrator import RationaleNarrator
 
@@ -41,7 +42,9 @@ def test_t08_rationale_contradicts():
     mock_llm.complete.return_value = mock_response
     
     narrator = RationaleNarrator(mock_llm)
-    rationale = narrator.generate_rationale([], [], "HIGH", "applicable")
+    rationale = narrator.generate_rationale(
+        [], [], "HIGH", "applicable", "wf-123", "classification.rationale_narrator"
+    )
     # Because it mentions LOW but risk_level is HIGH
     assert rationale is None
 
@@ -80,7 +83,9 @@ def test_t06_raw_source_in_llm_prompt():
     mock_llm.complete.side_effect = PromptSafetyViolation("Raw source detected")
     
     narrator = RationaleNarrator(mock_llm)
-    rationale = narrator.generate_rationale([], [], "HIGH", "applicable")
+    rationale = narrator.generate_rationale(
+        [], [], "HIGH", "applicable", "wf-123", "classification.rationale_narrator"
+    )
     
     # Narrator should catch exception and return None
     assert rationale is None
@@ -101,7 +106,7 @@ def test_t07_budget_exceeded():
         }
         
         # Mock check_citations so it passes and allows the flow to reach the LLM part
-        with patch('lcsp_workers.classification.classification_consumer.check_citations', return_value=("passed", "")):
+        with patch('lcsp_workers.classification.classification_graph.check_citations', return_value=("passed", "")):
             consumer.handle(message, "test-corr-id")
             
             mock_submit.assert_called_once()
@@ -111,3 +116,98 @@ def test_t07_budget_exceeded():
             assert payload["risk_level"] == "HIGH"
             # Rationale must be gracefully omitted
             assert payload["rationale"] is None
+
+def test_t10_consumer_derives_workflow_context_for_rationale_node():
+    mock_llm = MagicMock()
+    mock_response = MagicMock()
+    mock_response.content = '{"risk_level":"HIGH","applicability_assessment":"applicable","rationale":"The risk is HIGH based on the verified evidence."}'
+    mock_llm.complete.return_value = mock_response
+
+    consumer = ClassificationConsumer(config=MagicMock(), llm_client=mock_llm)
+
+    with patch.object(consumer, "_submit_callback") as mock_submit:
+        with patch("lcsp_workers.classification.classification_graph.check_citations", return_value=("passed", "")):
+            consumer.handle(
+                {
+                    "assessment_id": "asmt-1",
+                    "classification_version": "2.0",
+                    "applicable_rules": [{"confidence": 0.9, "coverage_status": "COMPLETE_CITATION"}],
+                },
+                "corr-123",
+            )
+
+    mock_llm.complete.assert_called_once()
+    kwargs = mock_llm.complete.call_args.kwargs
+    assert kwargs["workflow_run_id"] == "classification:asmt-1:2.0:corr-123"
+    assert kwargs["node_name"] == "classification.proposal"
+    assert kwargs["correlation_id"] == "corr-123"
+    assert mock_submit.called
+
+def test_t11_consumer_rejects_mismatched_model_assisted_proposal():
+    mock_llm = MagicMock()
+    proposal_response = MagicMock()
+    proposal_response.content = '{"risk_level":"LOW","applicability_assessment":"not_applicable","rationale":"The risk is LOW."}'
+    fallback_response = MagicMock()
+    fallback_response.content = "This assessment remains high risk based on the verified evidence."
+    mock_llm.complete.side_effect = [proposal_response, fallback_response]
+
+    consumer = ClassificationConsumer(config=MagicMock(), llm_client=mock_llm)
+
+    with patch.object(consumer, "_submit_callback") as mock_submit:
+        with patch("lcsp_workers.classification.classification_graph.check_citations", return_value=("passed", "")):
+            consumer.handle(
+                {
+                    "assessment_id": "asmt-2",
+                    "classification_version": "2.0",
+                    "applicable_rules": [{"confidence": 0.9, "coverage_status": "COMPLETE_CITATION"}],
+                },
+                "corr-456",
+            )
+
+    payload = mock_submit.call_args[0][0]
+    assert payload["risk_level"] == "HIGH"
+    assert payload["applicability_assessment"] == "applicable"
+    assert payload["rationale"] == "This assessment remains high risk based on the verified evidence."
+
+def test_t12_consumer_accepts_matching_model_assisted_proposal():
+    mock_llm = MagicMock()
+    proposal_response = MagicMock()
+    proposal_response.content = '{"risk_level":"HIGH","applicability_assessment":"applicable","rationale":"This assessment is high risk based on the cited evidence."}'
+    mock_llm.complete.return_value = proposal_response
+
+    consumer = ClassificationConsumer(config=MagicMock(), llm_client=mock_llm)
+
+    with patch.object(consumer, "_submit_callback") as mock_submit:
+        with patch("lcsp_workers.classification.classification_graph.check_citations", return_value=("passed", "")):
+            consumer.handle(
+                {
+                    "assessment_id": "asmt-3",
+                    "classification_version": "2.0",
+                    "applicable_rules": [{"confidence": 0.9, "coverage_status": "COMPLETE_CITATION"}],
+                    "usage_claims": [{"claim_category": "MODEL_INVOCATION"}],
+                },
+                "corr-789",
+            )
+
+    payload = mock_submit.call_args[0][0]
+    assert payload["risk_level"] == "HIGH"
+    assert payload["applicability_assessment"] == "applicable"
+    assert payload["rationale"] == "This assessment is high risk based on the cited evidence."
+
+def test_t13_classification_graph_blocks_without_valid_citations():
+    graph = ClassificationGraph()
+    result = graph.run(
+        message={
+            "classification_version": "1.0",
+            "usage_claims": [],
+            "applicable_rules": [{"citation_chunk_ids": ["ref1"]}],
+            "citation_allowlist": ["ref2"],
+        },
+        correlation_id="corr-999",
+    )
+
+    assert result.payload["risk_level"] == "BLOCKED"
+    assert result.payload["guardrail_status"] == "blocked"
+    assert result.workflow_run_id == "classification:unknown-assessment:1.0:corr-999"
+    assert result.state.graph_name == "classification"
+    assert result.state.node_results[0].node_name == "classification.citation_guardrail"
