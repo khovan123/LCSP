@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, TypedDict
 
-from lcsp_workers.platform.graph_runtime import GraphNodeContext, GraphRunState
+from lcsp_workers.platform.graph_runtime import (
+    GraphNodeContext,
+    GraphRunState,
+    checkpoint_database_url,
+    invoke_graph,
+)
 
 from .citation_guardrail import check_citations
 from .classification_proposer import ModelAssistedClassificationProposer
@@ -52,11 +57,13 @@ class ClassificationGraph:
         proposer: ModelAssistedClassificationProposer | None = None,
         narrator: RationaleNarrator | None = None,
         persister: ClassificationPersister | None = None,
+        checkpoint_url: str | None = None,
         logger=None,
     ) -> None:
         self._proposer = proposer
         self._narrator = narrator
         self._persister = persister
+        self._checkpoint_url = checkpoint_database_url(checkpoint_url)
         self._logger = logger
         self._app = None
 
@@ -99,26 +106,30 @@ class ClassificationGraph:
                 "verified_profile_id", str(message["verified_profile_id"])
             )
 
-        result_state = self._get_app().invoke(
-            ClassificationLangGraphState(
-                message=message,
-                correlation_id=correlation_id,
-                workflow_run_id=workflow_run_id,
-                graph_state=state,
-                usage_claims=message.get("usage_claims", []),
-                applicable_rules=message.get("applicable_rules", []),
-                citation_allowlist=message.get("citation_allowlist", []),
-                classification_version=classification_version,
-                rationale=None,
-            )
+        initial_state = ClassificationLangGraphState(
+            message=message,
+            correlation_id=correlation_id,
+            workflow_run_id=workflow_run_id,
+            graph_state=state,
+            usage_claims=message.get("usage_claims", []),
+            applicable_rules=message.get("applicable_rules", []),
+            citation_allowlist=message.get("citation_allowlist", []),
+            classification_version=classification_version,
+            rationale=None,
+        )
+        result_state = invoke_graph(
+            build_graph=self._runtime_app,
+            initial_state=initial_state,
+            workflow_run_id=workflow_run_id,
+            checkpoint_url=self._checkpoint_url,
         )
         return ClassificationGraphResult(
             payload=result_state["result_payload"],
             workflow_run_id=workflow_run_id,
-            state=state,
+            state=result_state["graph_state"],
         )
 
-    def _build_graph(self):
+    def _build_graph(self, checkpointer=None):
         try:
             from langgraph.graph import END, START, StateGraph
         except ImportError as exc:
@@ -149,12 +160,17 @@ class ClassificationGraph:
         graph.add_edge("overclaim_guardrail", "finalize")
         graph.add_edge("finalize", "persist")
         graph.add_edge("persist", END)
-        return graph.compile()
+        return graph.compile(checkpointer=checkpointer)
 
     def _get_app(self):
         if self._app is None:
             self._app = self._build_graph()
         return self._app
+
+    def _runtime_app(self, checkpointer):
+        if checkpointer is None:
+            return self._get_app()
+        return self._build_graph(checkpointer=checkpointer)
 
     def _node_citation_guardrail(self, state: ClassificationLangGraphState):
         citation_refs = self._citation_refs(state["applicable_rules"])
