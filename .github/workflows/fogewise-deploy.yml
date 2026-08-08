@@ -71,6 +71,7 @@ jobs:
 
           groups = OrderedDict()
           service_pattern = re.compile(r'^[a-z0-9][a-z0-9-]*$')
+
           for service_id, config in services.items():
               if not isinstance(service_id, str) or not service_pattern.fullmatch(service_id):
                   raise SystemExit(f'invalid service id: {service_id!r}')
@@ -80,6 +81,7 @@ jobs:
               raw_path = config.get('path')
               if not isinstance(raw_path, str) or not raw_path:
                   raise SystemExit(f'{service_id}: path must be a non-empty string')
+
               path = Path(raw_path)
               if path.is_absolute() or '..' in path.parts:
                   raise SystemExit(f'{service_id}: path must stay inside the repository')
@@ -114,7 +116,7 @@ jobs:
             for SERVICE in "${SERVICES[@]}"; do
               IMAGE="ghcr.io/${GHCR_OWNER}/${REPO_NAME}-${SERVICE}"
               TAG_ARGS+=(--tag "$IMAGE:$GITHUB_SHA" --tag "$IMAGE:latest")
-              echo "Tagging $SERVICE from shared build path $SERVICE_PATH"
+              echo "Tagging $SERVICE from build path $SERVICE_PATH"
             done
 
             docker buildx build \
@@ -135,8 +137,17 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
           printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<'SSH_CONFIG'
+          Host *
+            IdentitiesOnly yes
+            ServerAliveInterval 20
+            ServerAliveCountMax 15
+            TCPKeepAlive yes
+            ConnectTimeout 20
+            ConnectionAttempts 3
+          SSH_CONFIG
           chmod 700 ~/.ssh
-          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts ~/.ssh/config
 
       - name: Authorize VPS to pull GHCR images
         env:
@@ -161,8 +172,10 @@ jobs:
             install -d -o root -g root -m 700 \"\$APP_DIR\"
             install -d -o root -g root -m 755 \"\$FOGEWISE_DIR\"
           "
+
           rsync -az .fogewise/deploy.yml \
             "$VPS_USER@$VPS_HOST:/srv/apps/$REPO_NAME/.fogewise/deploy.yml"
+
           ssh "$VPS_USER@$VPS_HOST" "
             set -eu
             MANIFEST='/srv/apps/$REPO_NAME/.fogewise/deploy.yml'
@@ -188,12 +201,22 @@ jobs:
           install -d -m 700 "$LOG_DIR"
           install -m 600 /dev/null "$LOG_FILE"
 
-          if (umask 022; /usr/local/sbin/fogewise-deploy "$REPO_SLUG" "$IMAGE_TAG") >"$LOG_FILE" 2>&1; then
+          (umask 022; /usr/local/sbin/fogewise-deploy "$REPO_SLUG" "$IMAGE_TAG") >"$LOG_FILE" 2>&1 &
+          DEPLOY_PID=$!
+          trap 'kill "$DEPLOY_PID" 2>/dev/null || true' HUP INT TERM
+
+          while kill -0 "$DEPLOY_PID" 2>/dev/null; do
+            echo 'Fogewise deploy still running...'
+            sleep 30
+          done
+
+          if wait "$DEPLOY_PID"; then
             echo 'Fogewise deploy succeeded.'
           else
             echo 'Fogewise deploy failed. Inspect server-side log:' "$LOG_FILE" >&2
             exit 1
           fi
+          trap - HUP INT TERM
 
           docker compose \
             -p "$REPO_NAME" \
@@ -210,7 +233,7 @@ jobs:
           if [ -s ~/.ssh/id_ed25519 ] && [ -s ~/.ssh/known_hosts ]; then
             ssh "$VPS_USER@$VPS_HOST" "rm -rf '/run/fogewise-ghcr/$REPO_NAME'" || true
           else
-            echo 'SSH was not configured before this job failed; no remote GHCR credentials could have been created. Skipping remote cleanup.'
+            echo 'SSH was not configured before this job failed; skipping remote cleanup.'
           fi
 
       - name: Origin health check
@@ -223,4 +246,4 @@ jobs:
               --retry 10 --retry-delay 3 --retry-all-errors \
               --resolve '${REPO_NAME}.fogewise.io.vn:443:127.0.0.1' \
               'https://${REPO_NAME}.fogewise.io.vn/'"
-          echo "Origin health check passed."
+          echo 'Origin health check passed.'
