@@ -21,6 +21,35 @@ import { httpRequest } from "./support/http.js";
 
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
 
+type ReportRuntimeBody = {
+  status: string;
+  assessment_id: string;
+  evidence_payload: {
+    technical_findings: Array<{ finding_type: string }>;
+  };
+};
+
+type TechnicalProfileRuntimeBody = {
+  technical_profile_id: string;
+  evidence_report_id: string;
+  dependency_ai_packages: string[];
+};
+
+type WizardRuntimeBody = {
+  id: string;
+  answers: { businessProcess: string };
+};
+
+type LegalRuleMatchRuntimeBody = {
+  legal_rule_match_id: string;
+  verified_profile_id: string;
+  guardrail_status: string;
+  citation_allowlist: string[];
+  verified_profile_data: {
+    claims: Array<{ claim_category: string }>;
+  };
+};
+
 describe("Worker runtime input endpoints (e2e) [LCSP-155]", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -155,40 +184,45 @@ describe("Worker runtime input endpoints (e2e) [LCSP-155]", () => {
     const report = await workerGet(
       "/internal/evidence/reports/report-runtime-1",
     );
+    const reportBody = report.body as ReportRuntimeBody;
     assert.equal(report.status, 200);
-    assert.equal(report.body.status, "accepted");
-    assert.equal(report.body.assessment_id, "assessment-runtime-1");
+    assert.equal(reportBody.status, "accepted");
+    assert.equal(reportBody.assessment_id, "assessment-runtime-1");
     assert.equal(
-      report.body.evidence_payload.technical_findings[0].finding_type,
+      reportBody.evidence_payload.technical_findings[0]?.finding_type,
       "STATUS_UPDATE_SIGNAL",
     );
 
     const profile = await workerGet(
       "/internal/evidence/technical-profiles/profile-runtime-1",
     );
+    const profileBody = profile.body as TechnicalProfileRuntimeBody;
     assert.equal(profile.status, 200);
-    assert.equal(profile.body.technical_profile_id, "profile-runtime-1");
-    assert.equal(profile.body.evidence_report_id, "report-runtime-1");
-    assert.deepEqual(profile.body.dependency_ai_packages, ["openai"]);
+    assert.equal(profileBody.technical_profile_id, "profile-runtime-1");
+    assert.equal(profileBody.evidence_report_id, "report-runtime-1");
+    assert.deepEqual(profileBody.dependency_ai_packages, ["openai"]);
 
     const wizard = await workerGet(
       "/internal/assessments/assessment-runtime-1/wizard-profile",
     );
+    const wizardBody = wizard.body as WizardRuntimeBody;
     assert.equal(wizard.status, 200);
-    assert.equal(wizard.body.id, "wizard-runtime-1");
-    assert.equal(wizard.body.answers.businessProcess, "loan_approval");
+    assert.equal(wizardBody.id, "wizard-runtime-1");
+    assert.equal(wizardBody.answers.businessProcess, "loan_approval");
 
     const legalRuleMatch = await workerGet(
       "/internal/classification/runtime/legal-rule-matches/match-runtime-1",
     );
+    const legalRuleMatchBody =
+      legalRuleMatch.body as LegalRuleMatchRuntimeBody;
     assert.equal(legalRuleMatch.status, 200);
-    assert.equal(legalRuleMatch.body.legal_rule_match_id, "match-runtime-1");
-    assert.equal(legalRuleMatch.body.verified_profile_id, "verified-runtime-1");
-    assert.equal(legalRuleMatch.body.guardrail_status, "passed");
-    assert.deepEqual(legalRuleMatch.body.citation_allowlist, [
+    assert.equal(legalRuleMatchBody.legal_rule_match_id, "match-runtime-1");
+    assert.equal(legalRuleMatchBody.verified_profile_id, "verified-runtime-1");
+    assert.equal(legalRuleMatchBody.guardrail_status, "passed");
+    assert.deepEqual(legalRuleMatchBody.citation_allowlist, [
       "chunk-runtime-1",
     ]);
-    assert.deepEqual(legalRuleMatch.body.verified_profile_data.claims, [
+    assert.deepEqual(legalRuleMatchBody.verified_profile_data.claims, [
       { claim_category: "MODEL_INVOCATION" },
     ]);
   });
