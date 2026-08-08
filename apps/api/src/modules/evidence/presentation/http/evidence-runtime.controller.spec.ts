@@ -14,10 +14,7 @@ function buildController() {
   } as unknown as PrismaService;
 
   return {
-    controller: new InternalEvidenceController(
-      commandBus as never,
-      prisma,
-    ),
+    controller: new InternalEvidenceController(commandBus as never, prisma),
     technicalEvidenceReportFindUnique,
     technicalProfileFindUnique,
   };

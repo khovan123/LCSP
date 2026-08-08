@@ -1,4 +1,10 @@
-import { Controller, Get, NotFoundException, Param, UseGuards } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  UseGuards,
+} from "@nestjs/common";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
