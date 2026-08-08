@@ -4,6 +4,7 @@ services:
     route: /api
     requires:
       - redis
+      - rabbitmq
 
   web:
     path: apps/web
