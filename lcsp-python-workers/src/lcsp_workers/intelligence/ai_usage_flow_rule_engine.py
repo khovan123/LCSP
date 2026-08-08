@@ -965,22 +965,17 @@ class AIUsageFlowRuleEngine:
                 finding = dict(raw)
                 if not finding.get("signal_type") and finding.get("finding_type"):
                     finding["signal_type"] = finding["finding_type"]
-                if not finding.get("evidence_ref"):
-                    ref = (
-                        finding.get("finding_id")
-                        or finding.get("id")
-                        or finding.get("rule_id")
-                        or finding.get("matched_rule_id")
-                    )
+                if key == "technical_findings" and not finding.get("evidence_ref"):
+                    ref = finding.get("finding_id") or finding.get("id")
                     if ref:
                         finding["evidence_ref"] = str(ref)
                 merged.append(finding)
 
         deduped: dict[tuple[str, str], dict[str, Any]] = {}
-        for finding in merged:
+        for index, finding in enumerate(merged):
             key = (
                 self._signal_type(finding),
-                str(finding.get("evidence_ref") or ""),
+                str(finding.get("evidence_ref") or f"missing:{index}"),
             )
             deduped[key] = finding
         return list(deduped.values())
@@ -998,10 +993,6 @@ class AIUsageFlowRuleEngine:
                 or finding.get("evidenceRef")
                 or finding.get("evidence_ref_id")
                 or finding.get("evidenceRefId")
-                or finding.get("finding_id")
-                or finding.get("id")
-                or finding.get("rule_id")
-                or finding.get("matched_rule_id")
             )
             if value:
                 refs.append(str(value))
