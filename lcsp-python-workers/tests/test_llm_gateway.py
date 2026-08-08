@@ -228,53 +228,49 @@ def test_t08_missing_workflow_or_node_context_rejected(budget_tracker, mock_open
 
     mock_openai.chat.completions.create.assert_not_called()
 
-def test_t09_gemini_provider_integration(budget_tracker):
-    with patch("google.generativeai.configure") as mock_configure, \
-         patch("google.generativeai.GenerativeModel") as mock_model_class:
-        
-        mock_model_instance = MagicMock()
-        mock_model_class.return_value = mock_model_instance
-        
-        # Setup mock response
+def test_t09_gemini_provider_integration_uses_google_genai(budget_tracker):
+    with patch("google.genai.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
         mock_response = MagicMock()
         mock_response.text = "Here is a Gemini response."
-        mock_response.request_id = "gemini-req-999"
+        mock_response.response_id = "gemini-req-999"
         mock_response.usage_metadata.prompt_token_count = 15
         mock_response.usage_metadata.candidates_token_count = 25
-        mock_model_instance.generate_content.return_value = mock_response
-        
+        mock_client.models.generate_content.return_value = mock_response
+
         client = LLMGatewayClient(
             provider="gemini",
             api_key="AIzaSy-mock-key",
             model="gemini-1.5-flash",
             budget_tracker=budget_tracker
         )
-        
+
         res = client.complete(
             "Hello Gemini",
             workflow_run_id="wf-gemini",
             node_name="classification.rationale_narrator",
             correlation_id="corr-gemini-123"
         )
-        
+
         assert res.content == "Here is a Gemini response."
         assert res.input_tokens == 15
         assert res.output_tokens == 25
         assert res.provider == "gemini"
         assert res.request_id == "gemini-req-999"
-        
-        mock_configure.assert_called_once_with(api_key="AIzaSy-mock-key")
-        mock_model_class.assert_called_once_with("gemini-1.5-flash")
-        
-        # Verify request options headers were passed
-        mock_model_instance.generate_content.assert_called_once()
-        call_kwargs = mock_model_instance.generate_content.call_args.kwargs
-        assert "request_options" in call_kwargs
-        assert call_kwargs["request_options"] == {
-            "headers": {
-                "X-Correlation-Id": "corr-gemini-123",
-                "X-Workflow-Run-Id": "wf-gemini",
-                "X-Node-Name": "classification.rationale_narrator"
-            }
+
+        mock_client_class.assert_called_once_with(api_key="AIzaSy-mock-key")
+        mock_client.models.generate_content.assert_called_once()
+        call_kwargs = mock_client.models.generate_content.call_args.kwargs
+        assert call_kwargs["model"] == "gemini-1.5-flash"
+        assert call_kwargs["contents"] == "Hello Gemini"
+
+        config = call_kwargs["config"]
+        assert config.max_output_tokens == 4096
+        assert config.http_options.headers == {
+            "X-Correlation-Id": "corr-gemini-123",
+            "X-Workflow-Run-Id": "wf-gemini",
+            "X-Node-Name": "classification.rationale_narrator"
         }
 
