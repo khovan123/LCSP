@@ -13,9 +13,9 @@ import { appLocale } from "@/lib/locale";
 import {
   useGenerateReadinessExportMutation,
   useReadinessStatusQuery,
-  useMockProvideEvidenceMutation,
 } from "@/lib/api/assessment-queries";
 import type { ReadinessStatusPageProps } from "../../types/component-props.types";
+import { RepositoryReadinessAction } from "../molecules/repository-readiness-action";
 import { UnresolvedUnknownPanel } from "../molecules/unresolved-unknown-panel";
 
 export function ReadinessStatusPage({
@@ -24,7 +24,6 @@ export function ReadinessStatusPage({
   const router = useRouter();
   const readinessQuery = useReadinessStatusQuery(assessmentId);
   const exportMutation = useGenerateReadinessExportMutation(assessmentId);
-  const mockEvidenceMutation = useMockProvideEvidenceMutation(assessmentId);
 
   useEffect(() => {
     if (readinessQuery.data?.kind === "redirect") {
@@ -99,6 +98,10 @@ export function ReadinessStatusPage({
     );
   }
 
+  const needsRepositoryConnection = viewModel.missingEvidence.some(
+    (item) => item.type === "repository_connection",
+  );
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
       <header className="flex flex-col gap-2">
@@ -129,7 +132,7 @@ export function ReadinessStatusPage({
             </Badge>
           )}
           <span className="text-sm text-muted-foreground">
-            {t("pages.readiness.updatedAtLabel")}:{" "}
+            {t("pages.readiness.updatedAtLabel")}: {" "}
             {formatDate(viewModel.updatedAt)}
           </span>
         </div>
@@ -186,6 +189,10 @@ export function ReadinessStatusPage({
           </p>
         </section>
 
+        {needsRepositoryConnection ? (
+          <RepositoryReadinessAction assessmentId={assessmentId} />
+        ) : null}
+
         <div className="flex flex-wrap gap-3">
           {viewModel.classificationLocked && (
             <Button
@@ -206,31 +213,13 @@ export function ReadinessStatusPage({
             {t("pages.readiness.actions.backToWorkspace")}
           </Button>
 
-          {viewModel.missingEvidence.some(
-            (e) => e.type === "repository_connection",
-          ) && (
+          {needsRepositoryConnection && (
             <Button
               render={<Link href={`/assessments/${assessmentId}/wizard`} />}
               variant="outline"
               nativeButton={false}
             >
               {t("pages.readiness.actions.editWizard")}
-            </Button>
-          )}
-
-          {viewModel.missingEvidence.some(
-            (e) =>
-              e.type === "repository_connection" ||
-              e.type === "technical_evidence",
-          ) && (
-            <Button
-              variant="outline"
-              onClick={() => mockEvidenceMutation.mutate()}
-              disabled={mockEvidenceMutation.isPending}
-            >
-              {mockEvidenceMutation.isPending
-                ? "Mocking..."
-                : "Mock Connect Repository"}
             </Button>
           )}
 
