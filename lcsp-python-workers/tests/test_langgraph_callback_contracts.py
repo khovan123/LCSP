@@ -80,6 +80,10 @@ def test_ai_usage_flow_graph_maps_internal_claim_to_api_callback_contract() -> N
     }
     assert isinstance(claim["confidence"], str)
     assert isinstance(claim["is_material"], bool)
+    api_client.post_ai_usage_flow_callback.assert_called_once_with(
+        result.callback_payload
+    )
+    assert result.state.node_results[-1].node_name == "ai_usage_flow.persist"
 
 
 def test_classification_consumer_loads_persisted_match_and_posts_typed_callback() -> None:
@@ -122,3 +126,22 @@ def test_classification_consumer_loads_persisted_match_and_posts_typed_callback(
     assert payload.classification_data["risk_level"] == "HIGH"
     assert payload.classification_data["citation_basis"] == ["chunk-1"]
     assert payload.guardrail_status == "passed"
+
+
+def test_classification_consumer_does_not_start_for_blocked_legal_match_event() -> None:
+    api_client = MagicMock()
+    consumer = ClassificationConsumer(_config(), api_client=api_client)
+    consumer.graph = MagicMock()
+
+    consumer.handle(
+        {
+            "legalRuleMatchId": "lrm-blocked",
+            "assessmentId": "assessment-1",
+            "guardrailStatus": "blocked",
+        },
+        correlation_id="corr-blocked",
+    )
+
+    consumer.graph.run.assert_not_called()
+    api_client.get_legal_rule_match_by_id.assert_not_called()
+    api_client.post_classification_callback.assert_not_called()
