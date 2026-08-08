@@ -31,6 +31,8 @@ export const WIZARD_CHECKBOX_OPTIONS = {
     "pages.wizard.options.highImpactCredit",
     "pages.wizard.options.highImpactEducation",
     "pages.wizard.options.highImpactHealthcare",
+    "pages.wizard.options.no",
+    "pages.wizard.options.unknown",
   ],
   transparencyIndicators: [
     "pages.wizard.options.transparencyDirectInteraction",
@@ -41,6 +43,8 @@ export const WIZARD_CHECKBOX_OPTIONS = {
     "pages.wizard.options.prohibitedManipulation",
     "pages.wizard.options.prohibitedScoring",
     "pages.wizard.options.prohibitedSensitiveInference",
+    "pages.wizard.options.no",
+    "pages.wizard.options.unknown",
   ],
 } as const;
 
