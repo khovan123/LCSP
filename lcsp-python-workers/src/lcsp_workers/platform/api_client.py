@@ -29,6 +29,8 @@ from lcsp_workers.platform.callback_schemas import (
 
 logger = get_logger(__name__)
 
+_IDEMPOTENT_CONFLICT_CODES = {"FLOW_ALREADY_EXISTS", "RESULT_ALREADY_EXISTS"}
+
 
 class WorkerCallbackError(Exception):
     """Raised when an API callback permanently fails (after retries or due to 4xx client errors)."""
@@ -46,7 +48,7 @@ class WorkerApiClient:
     def _post_with_retry(self, path: str, payload: dict) -> dict:
         """
         Executes a POST request with exponential backoff for network and 5xx errors.
-        Fails fast on 4xx errors.
+        Fails fast on non-idempotent 4xx errors.
         """
         url = f"{self._base_url}{path}"
         cid = get_correlation_id()
@@ -65,9 +67,19 @@ class WorkerApiClient:
                     timeout=self._timeout,
                 )
 
-                # Check for 4xx errors (client error, do not retry)
                 if 400 <= resp.status_code < 500:
                     error_code = self._response_error_code(resp)
+                    if resp.status_code == 409 and error_code in _IDEMPOTENT_CONFLICT_CODES:
+                        logger.info(
+                            "API_CALLBACK_IDEMPOTENT_DUPLICATE",
+                            path=path,
+                            error_code=error_code,
+                        )
+                        return {
+                            "accepted": True,
+                            "status": "duplicate",
+                            "correlation_id": cid,
+                        }
                     logger.error(
                         CallbackLogEvent.CLIENT_ERROR,
                         path=path,
@@ -79,10 +91,9 @@ class WorkerApiClient:
                         message = f"{error_code}: {message}"
                     raise WorkerCallbackError(message)
 
-                # Check for 5xx errors (server error, retry)
                 if resp.status_code >= 500:
                     if attempt < self._max_retries - 1:
-                        backoff = 2 ** attempt
+                        backoff = 2**attempt
                         logger.warning(
                             CallbackLogEvent.SERVER_ERROR_RETRYING,
                             path=path,
@@ -92,22 +103,20 @@ class WorkerApiClient:
                         )
                         time.sleep(backoff)
                         continue
-                    else:
-                        logger.error(
-                            CallbackLogEvent.SERVER_ERROR_TERMINAL,
-                            path=path,
-                            status_code=resp.status_code,
-                        )
-                        raise WorkerCallbackError(
-                            server_error_message(self._max_retries, resp.status_code)
-                        )
+                    logger.error(
+                        CallbackLogEvent.SERVER_ERROR_TERMINAL,
+                        path=path,
+                        status_code=resp.status_code,
+                    )
+                    raise WorkerCallbackError(
+                        server_error_message(self._max_retries, resp.status_code)
+                    )
 
-                # Success
-                return resp.json()
+                return self._unwrap_result_envelope(resp.json())
 
             except httpx.RequestError as exc:
                 if attempt < self._max_retries - 1:
-                    backoff = 2 ** attempt
+                    backoff = 2**attempt
                     logger.warning(
                         CallbackLogEvent.NETWORK_ERROR_RETRYING,
                         path=path,
@@ -117,15 +126,15 @@ class WorkerApiClient:
                     )
                     time.sleep(backoff)
                     continue
-                else:
-                    logger.error(
-                        CallbackLogEvent.NETWORK_ERROR_TERMINAL,
-                        path=path,
-                        error=type(exc).__name__,
-                    )
-                    raise WorkerCallbackError(network_error_message(self._max_retries))
+                logger.error(
+                    CallbackLogEvent.NETWORK_ERROR_TERMINAL,
+                    path=path,
+                    error=type(exc).__name__,
+                )
+                raise WorkerCallbackError(
+                    network_error_message(self._max_retries)
+                ) from exc
 
-        # Should not reach here
         raise WorkerCallbackError(unexpected_error_message())
 
     def _response_error_code(self, response) -> str | None:
@@ -136,7 +145,22 @@ class WorkerApiClient:
         if not isinstance(data, dict):
             return None
         value = data.get("error_code") or data.get("errorCode")
-        return str(value) if value else None
+        if value:
+            return str(value)
+        problem = data.get("problem")
+        if isinstance(problem, dict):
+            value = problem.get("code") or problem.get("error_code")
+            if value:
+                return str(value)
+        return None
+
+    @staticmethod
+    def _unwrap_result_envelope(data):
+        if isinstance(data, dict) and data.get("ok") is True:
+            nested = data.get("data")
+            if isinstance(nested, (dict, list)):
+                return nested
+        return data
 
     def _get_with_retry(self, path: str, params: dict = None) -> dict | list:
         """
@@ -160,16 +184,21 @@ class WorkerApiClient:
                 )
 
                 if 400 <= resp.status_code < 500:
+                    error_code = self._response_error_code(resp)
                     logger.error(
                         CallbackLogEvent.CLIENT_ERROR,
                         path=path,
                         status_code=resp.status_code,
+                        error_code=error_code,
                     )
-                    raise WorkerCallbackError(client_error_message(resp.status_code))
+                    message = client_error_message(resp.status_code)
+                    if error_code:
+                        message = f"{error_code}: {message}"
+                    raise WorkerCallbackError(message)
 
                 if resp.status_code >= 500:
                     if attempt < self._max_retries - 1:
-                        backoff = 2 ** attempt
+                        backoff = 2**attempt
                         logger.warning(
                             CallbackLogEvent.SERVER_ERROR_RETRYING,
                             path=path,
@@ -179,21 +208,20 @@ class WorkerApiClient:
                         )
                         time.sleep(backoff)
                         continue
-                    else:
-                        logger.error(
-                            CallbackLogEvent.SERVER_ERROR_TERMINAL,
-                            path=path,
-                            status_code=resp.status_code,
-                        )
-                        raise WorkerCallbackError(
-                            server_error_message(self._max_retries, resp.status_code)
-                        )
+                    logger.error(
+                        CallbackLogEvent.SERVER_ERROR_TERMINAL,
+                        path=path,
+                        status_code=resp.status_code,
+                    )
+                    raise WorkerCallbackError(
+                        server_error_message(self._max_retries, resp.status_code)
+                    )
 
-                return resp.json()
+                return self._unwrap_result_envelope(resp.json())
 
             except httpx.RequestError as exc:
                 if attempt < self._max_retries - 1:
-                    backoff = 2 ** attempt
+                    backoff = 2**attempt
                     logger.warning(
                         CallbackLogEvent.NETWORK_ERROR_RETRYING,
                         path=path,
@@ -203,13 +231,14 @@ class WorkerApiClient:
                     )
                     time.sleep(backoff)
                     continue
-                else:
-                    logger.error(
-                        CallbackLogEvent.NETWORK_ERROR_TERMINAL,
-                        path=path,
-                        error=type(exc).__name__,
-                    )
-                    raise WorkerCallbackError(network_error_message(self._max_retries))
+                logger.error(
+                    CallbackLogEvent.NETWORK_ERROR_TERMINAL,
+                    path=path,
+                    error=type(exc).__name__,
+                )
+                raise WorkerCallbackError(
+                    network_error_message(self._max_retries)
+                ) from exc
 
         raise WorkerCallbackError(unexpected_error_message())
 
@@ -335,6 +364,18 @@ class WorkerApiClient:
             raise WorkerCallbackError("Verified profile response was invalid.")
         return data
 
+    def get_legal_rule_match_by_id(self, legal_rule_match_id: str) -> dict:
+        path = InternalPath.LEGAL_RULE_MATCH.format(
+            legal_rule_match_id=legal_rule_match_id
+        )
+        data = self._get_with_retry(path)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Legal rule match response was invalid.")
+        status = str(data.get("status", "")).lower()
+        if status and status != "accepted":
+            raise WorkerCallbackError("Legal rule match is not accepted.")
+        return data
+
     def get_active_legal_rule_catalog(self) -> dict:
         path = "/internal/legal-rule-catalog/active"
         data = self._get_with_retry(path)
@@ -352,7 +393,7 @@ class WorkerApiClient:
     def post_legal_rule_match_callback(
         self, payload: LegalRuleMatchCallbackPayload
     ) -> CallbackResponse:
-        path = "/internal/classification/legal-rule-match-callback"
+        path = CallbackPath.LEGAL_RULE_MATCH
         resp_data = self._post_with_retry(path, payload.model_dump())
         return CallbackResponse(**resp_data)
 
@@ -368,7 +409,10 @@ class WorkerApiClient:
     ) -> list[dict]:
         path = InternalPath.AUDIT_EVENTS.format(organization_id=organization_id)
         params = {"from_date": from_date, "to_date": to_date}
-        return self._get_with_retry(path, params=params)
+        data = self._get_with_retry(path, params=params)
+        if not isinstance(data, list):
+            raise WorkerCallbackError("Audit events response was invalid.")
+        return [entry for entry in data if isinstance(entry, dict)]
 
     def post_audit_export_callback(
         self, export_request_id: str, payload: AuditExportCallbackPayload
