@@ -60,6 +60,22 @@ Each LangGraph workflow run must carry:
 
 The state contract must be serializable for checkpoint/retry/replay and must exclude raw source, secrets, full prompts, and full AST bodies.
 
+## Durable Checkpoint and Replay Contract
+
+Production and acceptance runs that require replay-safe graph execution configure `LANGGRAPH_CHECKPOINT_DATABASE_URL` with a PostgreSQL connection string. LCSP uses LangGraph's PostgreSQL checkpointer and `workflow_run_id` as the checkpoint `thread_id`.
+
+Runtime behavior:
+
+- A new workflow run starts from the supplied sanitized state and checkpoints after graph progress.
+- A broker redelivery with the same `workflow_run_id` reads the existing thread before executing nodes.
+- An incomplete thread resumes from the last successful checkpoint instead of restarting prior LLM or deterministic nodes.
+- A completed thread returns its terminal checkpointed state and does not repeat the persistence node.
+- Callback endpoints remain idempotent as a second safety boundary when a failure occurs after the external side effect but before its checkpoint is committed.
+- `LANGGRAPH_CHECKPOINT_DATABASE_URL` may be unset for unit tests, offline CI, and isolated local component development; those runs use non-durable in-process graph execution and must not be presented as durable replay evidence.
+- Invalid non-PostgreSQL checkpoint URLs fail configuration validation instead of silently degrading durability.
+
+The checkpoint database stores graph runtime state only. Raw source code, secrets, full prompts, and full AST bodies remain forbidden from graph state and therefore from checkpoints.
+
 ## LangChain and LLM Gateway Integration
 
 - LangChain may be used for prompt templating, structured output adapters, and retrieval composition helpers.
@@ -73,12 +89,15 @@ The state contract must be serializable for checkpoint/retry/replay and must exc
 - Deterministic evidence-derived facts remain the authority for what was technically observed.
 - LLM-assisted reasoning, if used, is limited to mapping evidence-backed facts plus Wizard declarations into business-meaning claim proposals with explicit uncertainty handling.
 - Provider/framework/package presence alone must never become a material business claim without supporting evidence and guardrail approval.
+- The runtime must merge approved scanner evidence branches rather than silently dropping bounded `technical_findings` when Semgrep `ai_usage_signals` are also present.
+- All canonical AIUsageFlow claim categories remain evidence-gated; unresolved dynamic output-to-action paths must abstain rather than infer automated decision-making.
 
 ## Classification Guidance
 
 - Classification graphs consume VerifiedProfile plus approved legal retrieval results only.
 - Deterministic precedence rules and citation guardrails must run before and after any model-assisted reasoning node.
-- Provider failure, schema-invalid output, or citation gaps must end in blocked/degraded classification states.
+- A `LegalRuleMatch` with blocked guardrail status must not start the Classification graph.
+- Provider failure, schema-invalid output, or citation gaps must end in blocked/degraded classification states according to node policy.
 
 ## Document Generation Guidance
 
@@ -89,9 +108,11 @@ The state contract must be serializable for checkpoint/retry/replay and must exc
 ## Operational Requirements
 
 - Every graph needs idempotency keys tied to workflow run and artifact version inputs.
-- Retry policy must be node-specific and bounded.
+- Retry policy must be bounded and observable; broker retries carry an explicit delivery-attempt counter rather than relying on `x-death` for same-queue requeue behavior.
+- Persistence/callback is a graph lifecycle node for worker-owned LangGraph flows so successful orchestration means the output handoff completed or was idempotently accepted.
 - DLQ replay must rehydrate the same graph state contract or explicitly start a new versioned run.
-- Observability must record graph start, node transition, retry, blocked/degraded outcome, and completion without sensitive payload leakage.
+- Observability must record graph start, node transition, retry, blocked/degraded outcome, LLM request references, and completion without sensitive payload leakage.
+- Worker-only runtime read endpoints must require the worker API key and return persisted authoritative artifacts rather than trusting event payload duplication.
 
 ## Authority Notes
 
