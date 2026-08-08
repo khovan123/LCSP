@@ -185,7 +185,9 @@ describe("Worker runtime input endpoints (e2e) [LCSP-155]", () => {
     assert.equal(legalRuleMatch.body.legal_rule_match_id, "match-runtime-1");
     assert.equal(legalRuleMatch.body.verified_profile_id, "verified-runtime-1");
     assert.equal(legalRuleMatch.body.guardrail_status, "passed");
-    assert.deepEqual(legalRuleMatch.body.citation_allowlist, ["chunk-runtime-1"]);
+    assert.deepEqual(legalRuleMatch.body.citation_allowlist, [
+      "chunk-runtime-1",
+    ]);
     assert.deepEqual(legalRuleMatch.body.verified_profile_data.claims, [
       { claim_category: "MODEL_INVOCATION" },
     ]);
