@@ -4,7 +4,12 @@ from dataclasses import dataclass, replace
 from typing import Any, TypedDict
 
 from lcsp_workers.platform.callback_schemas import AIUsageFlowCallbackPayload
-from lcsp_workers.platform.graph_runtime import GraphNodeContext, GraphRunState
+from lcsp_workers.platform.graph_runtime import (
+    GraphNodeContext,
+    GraphRunState,
+    checkpoint_database_url,
+    invoke_graph,
+)
 
 from .ai_usage_flow_proposer import AIUsageFlowModelAssistedProposer
 from .ai_usage_flow_rule_engine import (
@@ -44,11 +49,13 @@ class AIUsageFlowGraph:
         api_client,
         rule_engine: AIUsageFlowRuleEngine,
         proposer: AIUsageFlowModelAssistedProposer | None = None,
+        checkpoint_url: str | None = None,
         logger=None,
     ) -> None:
         self._api_client = api_client
         self._rule_engine = rule_engine
         self._proposer = proposer
+        self._checkpoint_url = checkpoint_database_url(checkpoint_url)
         self._logger = logger
         self._app = None
 
@@ -72,24 +79,28 @@ class AIUsageFlowGraph:
                 "assessment_id": assessment_id,
             },
         )
-        result_state = self._get_app().invoke(
-            AIUsageFlowLangGraphState(
-                message=message,
-                correlation_id=correlation_id,
-                workflow_run_id=workflow_run_id,
-                graph_state=state,
-                technical_profile_id=technical_profile_id,
-                assessment_id=assessment_id,
-            )
+        initial_state = AIUsageFlowLangGraphState(
+            message=message,
+            correlation_id=correlation_id,
+            workflow_run_id=workflow_run_id,
+            graph_state=state,
+            technical_profile_id=technical_profile_id,
+            assessment_id=assessment_id,
+        )
+        result_state = invoke_graph(
+            build_graph=self._runtime_app,
+            initial_state=initial_state,
+            workflow_run_id=workflow_run_id,
+            checkpoint_url=self._checkpoint_url,
         )
         return AIUsageFlowGraphResult(
             flow=result_state["flow"],
             callback_payload=result_state["callback_payload"],
             workflow_run_id=workflow_run_id,
-            state=state,
+            state=result_state["graph_state"],
         )
 
-    def _build_graph(self):
+    def _build_graph(self, checkpointer=None):
         try:
             from langgraph.graph import END, START, StateGraph
         except ImportError as exc:
@@ -107,12 +118,17 @@ class AIUsageFlowGraph:
         graph.add_edge("summary_proposal", "finalize")
         graph.add_edge("finalize", "persist")
         graph.add_edge("persist", END)
-        return graph.compile()
+        return graph.compile(checkpointer=checkpointer)
 
     def _get_app(self):
         if self._app is None:
             self._app = self._build_graph()
         return self._app
+
+    def _runtime_app(self, checkpointer):
+        if checkpointer is None:
+            return self._get_app()
+        return self._build_graph(checkpointer=checkpointer)
 
     def _node_load_inputs(self, state: AIUsageFlowLangGraphState):
         technical_profile = self._api_client.get_accepted_technical_profile(
