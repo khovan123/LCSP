@@ -117,7 +117,7 @@ export class OutboxDlqService {
         status === REPOSITORY_SCAN_JOB_STATUSES.completed ||
         status === REPOSITORY_SCAN_JOB_STATUSES.failed
       ) {
-        throw this.unsafeReplay(correlationId);
+        this.unsafeReplay(correlationId);
       }
       return;
     }
@@ -133,7 +133,7 @@ export class OutboxDlqService {
         ? fromPrismaEvidenceAcceptanceStatus(report.status)
         : null;
       if (status === TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted) {
-        throw this.unsafeReplay(correlationId);
+        this.unsafeReplay(correlationId);
       }
       return;
     }
@@ -147,7 +147,7 @@ export class OutboxDlqService {
         ? fromPrismaEvidenceAcceptanceStatus(profile.status)
         : null;
       if (status === TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted) {
-        throw this.unsafeReplay(correlationId);
+        this.unsafeReplay(correlationId);
       }
     }
   }
