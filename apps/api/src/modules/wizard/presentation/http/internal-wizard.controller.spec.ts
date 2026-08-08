@@ -33,14 +33,21 @@ describe("InternalWizardController", () => {
 
     const result = await controller.getWizardProfile("assessment-1");
 
-    expect(wizardProfileFindUnique).toHaveBeenCalledWith({
+    expect(wizardProfileFindUnique).toHaveBeenCalledTimes(1);
+    expect(wizardProfileFindUnique.mock.calls[0]?.[0]).toEqual({
       where: { assessmentId: "assessment-1" },
-      select: expect.objectContaining({
+      select: {
         id: true,
         assessmentId: true,
-        answers: true,
+        organizationId: true,
+        ownerId: true,
+        version: true,
         status: true,
-      }),
+        answers: true,
+        submittedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
     expect(result).toEqual({
       id: "wizard-1",
