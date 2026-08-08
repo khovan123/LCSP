@@ -1,9 +1,7 @@
 name: Deploy Production
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -11,6 +9,7 @@ permissions:
 
 jobs:
   deploy:
+    if: ${{ false }} # Temporarily disabled while LCSP runs via PM2 on the VPS.
     uses: ./.github/workflows/fogewise-deploy.yml
     secrets:
       VPS_HOST: ${{ secrets.VPS_HOST }}
