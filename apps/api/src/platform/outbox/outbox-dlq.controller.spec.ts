@@ -12,7 +12,7 @@ describe("OutboxDlqController", () => {
 
   type ControllerRequest = Parameters<OutboxDlqController["replayMessage"]>[1];
 
-  beforeEach(async () => {
+  beforeEach(() => {
     getDlqMessages = jest.fn<OutboxDlqService["getDlqMessages"]>();
     replayMessage = jest.fn<OutboxDlqService["replayMessage"]>();
     deleteMessage = jest.fn<OutboxDlqService["deleteMessage"]>();
