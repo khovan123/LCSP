@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Generic, TypeVar
+from typing import Any, Callable, Generic, TypeVar
 
 
 PayloadT = TypeVar("PayloadT")
+StateT = TypeVar("StateT")
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,9 @@ class GraphRunState:
 
     def record_guardrail(self, status: str, reason: str | None = None) -> None:
         self.guardrail_status = status
-        self.blocked_or_degraded_reason = reason if status in {"blocked", "degraded"} else None
+        self.blocked_or_degraded_reason = (
+            reason if status in {"blocked", "degraded"} else None
+        )
 
     def record_node(
         self,
@@ -105,3 +108,48 @@ class GraphRunResult(Generic[PayloadT]):
     workflow_run_id: str
     state: GraphRunState
     payload: PayloadT
+
+
+def checkpoint_database_url(value: object) -> str | None:
+    """Return a configured Postgres checkpoint URL or disable checkpointing."""
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if not cleaned.startswith(("postgresql://", "postgres://")):
+        raise ValueError(
+            "LANGGRAPH_CHECKPOINT_DATABASE_URL must use postgres:// or postgresql://"
+        )
+    return cleaned
+
+
+def invoke_graph(
+    *,
+    build_graph: Callable[[Any], Any],
+    initial_state: StateT,
+    workflow_run_id: str,
+    checkpoint_url: str | None,
+) -> StateT:
+    """
+    Invoke a graph with durable Postgres checkpoint/resume when configured.
+
+    A failed thread resumes from its last successful LangGraph checkpoint. A
+    completed thread returns the checkpointed terminal state, which prevents a
+    broker redelivery from repeating optional LLM calls or persistence nodes.
+    """
+    if not checkpoint_url:
+        return build_graph(None).invoke(initial_state)
+
+    from langgraph.checkpoint.postgres import PostgresSaver
+
+    config = {"configurable": {"thread_id": workflow_run_id}}
+    with PostgresSaver.from_conn_string(checkpoint_url) as checkpointer:
+        checkpointer.setup()
+        app = build_graph(checkpointer)
+        snapshot = app.get_state(config)
+        if snapshot.next:
+            return app.invoke(None, config)
+        if snapshot.values:
+            return snapshot.values
+        return app.invoke(initial_state, config)
