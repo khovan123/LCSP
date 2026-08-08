@@ -90,10 +90,9 @@ class LLMGatewayClient:
 
             self._anthropic_client = anthropic.Anthropic(api_key=self.api_key)
         elif self.provider in ("google", "google-genai", "gemini"):
-            import google.generativeai as genai
+            from google import genai
 
-            genai.configure(api_key=self.api_key)
-            self._gemini_client = genai.GenerativeModel(self.model)
+            self._gemini_client = genai.Client(api_key=self.api_key)
         else:
             raise ValueError(f"Unsupported LLM_PROVIDER: {self.provider}")
 
@@ -165,18 +164,22 @@ class LLMGatewayClient:
             request_id = getattr(response, "id", None)
 
         elif self.provider in ("google", "google-genai", "gemini"):
-            request_options = {}
-            if extra_headers:
-                request_options["headers"] = extra_headers
-            response = self._gemini_client.generate_content(
-                safe_prompt,
-                request_options=request_options if request_options else None,
+            from google.genai import types
+
+            response = self._gemini_client.models.generate_content(
+                model=self.model,
+                contents=safe_prompt,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=max_tokens_to_use,
+                    http_options=types.HttpOptions(headers=extra_headers),
+                ),
             )
             content = response.text or ""
-            request_id = getattr(response, "request_id", None)
-            if hasattr(response, "usage_metadata") and response.usage_metadata:
-                input_tokens = response.usage_metadata.prompt_token_count
-                output_tokens = response.usage_metadata.candidates_token_count
+            request_id = getattr(response, "response_id", None)
+            usage_metadata = getattr(response, "usage_metadata", None)
+            if usage_metadata:
+                input_tokens = usage_metadata.prompt_token_count or 0
+                output_tokens = usage_metadata.candidates_token_count or 0
 
         actual_cost = estimate_cost(self.model, input_tokens, output_tokens)
         self.budget_tracker.check_budget_and_accumulate(
