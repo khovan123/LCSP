@@ -40,7 +40,7 @@ Keep credentials only in the VPS env/secret store. Do not commit production cred
 
 ## Python workers
 
-All Python worker services reuse the same `lcsp-python-workers/Dockerfile` image build. Each container supplies a different consumer target through `command`, for example:
+All enabled Python worker services reuse the same `lcsp-python-workers/Dockerfile` image build. Each container supplies a different consumer target through `command`, for example:
 
 ```yaml
 classification-worker:
@@ -55,6 +55,8 @@ The image entrypoint runs `python -m lcsp_workers.runtime <module:Class>`.
 
 Each `ConsumerBase` process exposes `/health` on port `8080` inside the container. Docker health checks use this endpoint; the port is not published publicly.
 
+`final-report-worker` is intentionally not enabled in the Fogewise manifest yet because its current constructor creates `LLMGatewayClient` without the provider/model/budget arguments required by the gateway implementation. `audit-export` also remains out of the deployment manifest because the authoritative MVP platform document defines audit export as a synchronous Backend API operation rather than an active worker.
+
 ## Fogewise deployer compatibility
 
 This manifest requires Fogewise deployer support for:
@@ -67,6 +69,8 @@ This manifest requires Fogewise deployer support for:
 6. shared external networks declared by `requires`.
 
 Do not merge/deploy this manifest against an older deployer that requires every service to have a public route.
+
+The generic VPS program at `/usr/local/sbin/fogewise-deploy` is infrastructure outside this repository. This branch prepares the LCSP side and the reusable GitHub workflow, but the VPS deployer must be upgraded to the semantics above before the branch is deployed to production.
 
 ## CI image builds
 
