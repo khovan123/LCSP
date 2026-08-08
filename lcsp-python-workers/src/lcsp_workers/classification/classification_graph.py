@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TypedDict
+from typing import Any, Callable, TypedDict
 
-from lcsp_workers.platform.graph_runtime import (
-    GraphNodeContext,
-    GraphRunState,
-)
+from lcsp_workers.platform.graph_runtime import GraphNodeContext, GraphRunState
+
 from .citation_guardrail import check_citations
 from .classification_proposer import ModelAssistedClassificationProposer
 from .overclaim_detector import check_overclaim
@@ -42,29 +40,65 @@ class ClassificationLangGraphState(TypedDict, total=False):
     result_payload: dict[str, Any]
 
 
+ClassificationPersister = Callable[
+    [dict[str, Any], ClassificationLangGraphState], None
+]
+
+
 class ClassificationGraph:
     def __init__(
         self,
         *,
         proposer: ModelAssistedClassificationProposer | None = None,
         narrator: RationaleNarrator | None = None,
+        persister: ClassificationPersister | None = None,
         logger=None,
     ) -> None:
         self._proposer = proposer
         self._narrator = narrator
+        self._persister = persister
         self._logger = logger
         self._app = None
 
-    def run(self, *, message: dict[str, Any], correlation_id: str) -> ClassificationGraphResult:
-        classification_version = message.get("classification_version", "1.0")
+    def run(
+        self, *, message: dict[str, Any], correlation_id: str
+    ) -> ClassificationGraphResult:
+        classification_version = str(
+            message.get("classification_version") or "1.0.0"
+        )
+        assessment_id = (
+            str(message.get("assessment_id"))
+            if message.get("assessment_id")
+            else None
+        )
         workflow_run_id = self.workflow_run_id(message, correlation_id)
         state = GraphRunState(
             graph_name="classification",
             workflow_run_id=workflow_run_id,
-            assessment_id=str(message.get("assessment_id")) if message.get("assessment_id") else None,
+            assessment_id=assessment_id,
+            artifact_id=self._optional_string(message.get("legal_rule_match_id")),
             correlation_id=correlation_id,
             input_versions={"classification_version": classification_version},
+            attempt=self._delivery_attempt(message),
+            sanitized_inputs={
+                "assessment_id": assessment_id,
+                "legal_rule_match_id": self._optional_string(
+                    message.get("legal_rule_match_id")
+                ),
+                "verified_profile_id": self._optional_string(
+                    message.get("verified_profile_id")
+                ),
+            },
         )
+        if message.get("legal_rule_match_id"):
+            state.record_input_version(
+                "legal_rule_match_id", str(message["legal_rule_match_id"])
+            )
+        if message.get("verified_profile_id"):
+            state.record_input_version(
+                "verified_profile_id", str(message["verified_profile_id"])
+            )
+
         result_state = self._get_app().invoke(
             ClassificationLangGraphState(
                 message=message,
@@ -97,6 +131,7 @@ class ClassificationGraph:
         graph.add_node("rationale", self._node_rationale)
         graph.add_node("overclaim_guardrail", self._node_overclaim_guardrail)
         graph.add_node("finalize", self._node_finalize)
+        graph.add_node("persist", self._node_persist)
 
         graph.add_edge(START, "citation_guardrail")
         graph.add_conditional_edges(
@@ -112,7 +147,8 @@ class ClassificationGraph:
         )
         graph.add_edge("rationale", "overclaim_guardrail")
         graph.add_edge("overclaim_guardrail", "finalize")
-        graph.add_edge("finalize", END)
+        graph.add_edge("finalize", "persist")
+        graph.add_edge("persist", END)
         return graph.compile()
 
     def _get_app(self):
@@ -126,7 +162,9 @@ class ClassificationGraph:
             citation_refs=citation_refs,
             citation_allowlist=state["citation_allowlist"],
         )
-        state["graph_state"].record_node(
+        graph_state = state["graph_state"]
+        graph_state.record_guardrail(guardrail_status, guardrail_reason)
+        graph_state.record_node(
             node_name="classification.citation_guardrail",
             status=guardrail_status,
             metadata={"citation_ref_count": len(citation_refs)},
@@ -144,6 +182,11 @@ class ClassificationGraph:
     def _node_deterministic_baseline(self, state: ClassificationLangGraphState):
         risk_level, applicability_assessment, citation_coverage = calculate_risk_tier(
             state["applicable_rules"]
+        )
+        state["graph_state"].record_node(
+            node_name="classification.deterministic_baseline",
+            status="completed",
+            metadata={"risk_level": risk_level},
         )
         return {
             "risk_level": risk_level,
@@ -169,7 +212,9 @@ class ClassificationGraph:
             usage_claims=state["usage_claims"],
             applicable_rules=state["applicable_rules"],
             baseline_risk_level=state["baseline_risk_level"],
-            baseline_applicability_assessment=state["baseline_applicability_assessment"],
+            baseline_applicability_assessment=state[
+                "baseline_applicability_assessment"
+            ],
             workflow_run_id=proposer_context.workflow_run_id,
             node_name=proposer_context.node_name,
             correlation_id=proposer_context.correlation_id,
@@ -177,7 +222,9 @@ class ClassificationGraph:
         if proposal and self.proposal_matches_baseline(
             proposal=proposal,
             baseline_risk_level=state["baseline_risk_level"],
-            baseline_applicability_assessment=state["baseline_applicability_assessment"],
+            baseline_applicability_assessment=state[
+                "baseline_applicability_assessment"
+            ],
             usage_claims=state["usage_claims"],
         ):
             state["graph_state"].record_node(
@@ -187,7 +234,9 @@ class ClassificationGraph:
             )
             return {
                 "risk_level": proposal["risk_level"],
-                "applicability_assessment": proposal["applicability_assessment"],
+                "applicability_assessment": proposal[
+                    "applicability_assessment"
+                ],
                 "rationale": proposal.get("rationale"),
             }
         if proposal:
@@ -200,9 +249,13 @@ class ClassificationGraph:
                 self._logger.warning(
                     "CLASSIFICATION_PROPOSAL_REJECTED",
                     baseline_risk_level=state["baseline_risk_level"],
-                    baseline_applicability_assessment=state["baseline_applicability_assessment"],
+                    baseline_applicability_assessment=state[
+                        "baseline_applicability_assessment"
+                    ],
                     proposed_risk_level=proposal.get("risk_level"),
-                    proposed_applicability_assessment=proposal.get("applicability_assessment"),
+                    proposed_applicability_assessment=proposal.get(
+                        "applicability_assessment"
+                    ),
                 )
         else:
             state["graph_state"].record_node(
@@ -295,13 +348,23 @@ class ClassificationGraph:
         )
         return {"result_payload": payload}
 
+    def _node_persist(self, state: ClassificationLangGraphState):
+        if not self._persister:
+            return {}
+        self._persister(state["result_payload"], state)
+        state["graph_state"].record_node(
+            node_name="classification.persist",
+            status="completed",
+        )
+        return {}
+
     @staticmethod
     def workflow_run_id(message: dict[str, Any], correlation_id: str) -> str:
         explicit = message.get("workflow_run_id")
         if explicit:
             return str(explicit)
         assessment_id = message.get("assessment_id", "unknown-assessment")
-        classification_version = message.get("classification_version", "1.0")
+        classification_version = message.get("classification_version", "1.0.0")
         return f"classification:{assessment_id}:{classification_version}:{correlation_id}"
 
     @staticmethod
@@ -320,7 +383,10 @@ class ClassificationGraph:
     ) -> bool:
         if proposal.get("risk_level") != baseline_risk_level:
             return False
-        if proposal.get("applicability_assessment") != baseline_applicability_assessment:
+        if (
+            proposal.get("applicability_assessment")
+            != baseline_applicability_assessment
+        ):
             return False
         claim_categories = {
             claim.get("claim_category")
@@ -333,3 +399,16 @@ class ClassificationGraph:
         if rationale and check_overclaim(rationale):
             return False
         return True
+
+    @staticmethod
+    def _delivery_attempt(message: dict[str, Any]) -> int:
+        try:
+            return max(0, int(message.get("_delivery_attempt", 0)))
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _optional_string(value: Any) -> str | None:
+        if value is None or value == "":
+            return None
+        return str(value)
