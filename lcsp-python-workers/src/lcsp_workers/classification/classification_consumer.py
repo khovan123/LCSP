@@ -47,6 +47,20 @@ class ClassificationConsumer(ConsumerBase):
         """Handle a legal-rule-match-ready event."""
         logger.info("PROCESSING_CLASSIFICATION", correlation_id=correlation_id)
 
+        event_guardrail = self._message_value(
+            message, "guardrail_status", "guardrailStatus"
+        )
+        if str(event_guardrail or "").lower() == "blocked":
+            logger.warning(
+                "CLASSIFICATION_NOT_STARTED",
+                reason="LEGAL_RULE_MATCH_BLOCKED",
+                legal_rule_match_id=self._message_value(
+                    message, "legal_rule_match_id", "legalRuleMatchId"
+                ),
+                correlation_id=correlation_id,
+            )
+            return
+
         legal_rule_match_id = self._message_value(
             message, "legal_rule_match_id", "legalRuleMatchId"
         )
@@ -60,6 +74,15 @@ class ClassificationConsumer(ConsumerBase):
         artifact = self._api_client.get_legal_rule_match_by_id(
             str(legal_rule_match_id)
         )
+        if str(artifact.get("guardrail_status") or "").lower() == "blocked":
+            logger.warning(
+                "CLASSIFICATION_NOT_STARTED",
+                reason="LEGAL_RULE_MATCH_BLOCKED",
+                legal_rule_match_id=legal_rule_match_id,
+                correlation_id=correlation_id,
+            )
+            return
+
         graph_message = self._graph_message_from_artifact(message, artifact)
         self.graph.run(
             message=graph_message,
