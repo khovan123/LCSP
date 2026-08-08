@@ -41,6 +41,7 @@ class AIUsageFlowConsumer(ConsumerBase):
             proposer=AIUsageFlowModelAssistedProposer(llm_client)
             if llm_client
             else None,
+            checkpoint_url=config.langgraph_checkpoint_database_url,
             logger=logger,
         )
 
