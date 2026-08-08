@@ -11,6 +11,7 @@ from lcsp_workers.platform.redaction import redact_string
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class LLMResponse:
     content: str
@@ -20,8 +21,7 @@ class LLMResponse:
     provider: str
     request_id: Optional[str] = None
 
-# Very rough estimated cost per 1M tokens (input, output) in USD for common models
-# These are illustrative and should ideally be updated regularly
+
 DEFAULT_MODEL_PRICING = {
     "gpt-4o": (5.0, 15.0),
     "gpt-4-turbo": (10.0, 30.0),
@@ -35,15 +35,20 @@ DEFAULT_MODEL_PRICING = {
     "gemini-3.1-flash-lite": (0.0375, 0.15),
 }
 
+
 def get_model_pricing() -> dict[str, tuple[float, float]]:
     pricing_env = os.environ.get("LLM_MODEL_PRICING")
     if pricing_env:
         try:
             parsed = json.loads(pricing_env)
             return {k: (float(v[0]), float(v[1])) for k, v in parsed.items()}
-        except Exception as e:
-            logger.warning("Failed to parse LLM_MODEL_PRICING env var, using defaults.", exc_info=e)
+        except Exception as exc:
+            logger.warning(
+                "Failed to parse LLM_MODEL_PRICING env var, using defaults.",
+                exc_info=exc,
+            )
     return DEFAULT_MODEL_PRICING
+
 
 def estimate_tokens(text: str) -> int:
     try:
@@ -52,11 +57,14 @@ def estimate_tokens(text: str) -> int:
     except Exception:
         return len(text) // 4
 
+
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    # Fallback to a relatively high cost if model unknown to be safe (e.g., $10/$30)
     pricing = get_model_pricing()
     in_price, out_price = pricing.get(model, (10.0, 30.0))
-    return (input_tokens / 1_000_000 * in_price) + (output_tokens / 1_000_000 * out_price)
+    return (input_tokens / 1_000_000 * in_price) + (
+        output_tokens / 1_000_000 * out_price
+    )
+
 
 class LLMGatewayClient:
     def __init__(
@@ -65,7 +73,7 @@ class LLMGatewayClient:
         api_key: str,
         model: str,
         budget_tracker: BudgetTracker,
-        max_tokens_per_call: int = 4096
+        max_tokens_per_call: int = 4096,
     ):
         self.provider = provider.lower()
         self.api_key = api_key
@@ -75,12 +83,15 @@ class LLMGatewayClient:
 
         if self.provider == "openai":
             import openai
+
             self._openai_client = openai.OpenAI(api_key=self.api_key)
         elif self.provider == "anthropic":
             import anthropic
+
             self._anthropic_client = anthropic.Anthropic(api_key=self.api_key)
         elif self.provider in ("google", "google-genai", "gemini"):
             import google.generativeai as genai
+
             genai.configure(api_key=self.api_key)
             self._gemini_client = genai.GenerativeModel(self.model)
         else:
@@ -92,29 +103,28 @@ class LLMGatewayClient:
         workflow_run_id: str,
         node_name: str,
         max_tokens: Optional[int] = None,
-        correlation_id: Optional[str] = None
+        correlation_id: Optional[str] = None,
     ) -> LLMResponse:
         if not workflow_run_id:
             raise ValueError("workflow_run_id is required")
         if not node_name:
             raise ValueError("node_name is required")
 
-        # 1. Pre-flight safety check
         check_prompt_safety(prompt)
 
-        max_tokens_to_use = max_tokens if max_tokens is not None else self.max_tokens_per_call
-
-        # Sanitize prompt before sending
+        max_tokens_to_use = (
+            max_tokens if max_tokens is not None else self.max_tokens_per_call
+        )
         safe_prompt = redact_string(prompt)
 
-        # 2. Budget pre-check (conservative estimate before calling)
         est_input = estimate_tokens(safe_prompt)
         est_cost_pre = estimate_cost(self.model, est_input, max_tokens_to_use)
-        
-        # Check budget without accumulating yet
-        self.budget_tracker.check_budget_and_accumulate(0, 0, 0.0)
+        self.budget_tracker.check_budget(
+            est_input,
+            max_tokens_to_use,
+            est_cost_pre,
+        )
 
-        # 3. Call Provider
         content = ""
         input_tokens = 0
         output_tokens = 0
@@ -131,7 +141,7 @@ class LLMGatewayClient:
                 model=self.model,
                 messages=[{"role": "user", "content": safe_prompt}],
                 max_tokens=max_tokens_to_use,
-                extra_headers=extra_headers if extra_headers else None
+                extra_headers=extra_headers if extra_headers else None,
             )
             content = response.choices[0].message.content or ""
             request_id = getattr(response, "id", None)
@@ -144,10 +154,11 @@ class LLMGatewayClient:
                 model=self.model,
                 messages=[{"role": "user", "content": safe_prompt}],
                 max_tokens=max_tokens_to_use,
-                extra_headers=extra_headers if extra_headers else None
+                extra_headers=extra_headers if extra_headers else None,
             )
-            # Text block extraction
-            text_blocks = [block.text for block in response.content if hasattr(block, "text")]
+            text_blocks = [
+                block.text for block in response.content if hasattr(block, "text")
+            ]
             content = "".join(text_blocks)
             input_tokens = response.usage.input_tokens
             output_tokens = response.usage.output_tokens
@@ -159,7 +170,7 @@ class LLMGatewayClient:
                 request_options["headers"] = extra_headers
             response = self._gemini_client.generate_content(
                 safe_prompt,
-                request_options=request_options if request_options else None
+                request_options=request_options if request_options else None,
             )
             content = response.text or ""
             request_id = getattr(response, "request_id", None)
@@ -167,11 +178,13 @@ class LLMGatewayClient:
                 input_tokens = response.usage_metadata.prompt_token_count
                 output_tokens = response.usage_metadata.candidates_token_count
 
-        # 4. Actual Budget Accumulation
         actual_cost = estimate_cost(self.model, input_tokens, output_tokens)
-        self.budget_tracker.check_budget_and_accumulate(input_tokens, output_tokens, actual_cost)
+        self.budget_tracker.check_budget_and_accumulate(
+            input_tokens,
+            output_tokens,
+            actual_cost,
+        )
 
-        # 5. Redact Response
         safe_content = redact_string(content)
 
         return LLMResponse(
@@ -180,5 +193,5 @@ class LLMGatewayClient:
             output_tokens=output_tokens,
             model=self.model,
             provider=self.provider,
-            request_id=request_id
+            request_id=request_id,
         )
