@@ -52,16 +52,25 @@ class AIUsageFlowGraph:
         self._logger = logger
         self._app = None
 
-    def run(self, *, message: dict[str, Any], correlation_id: str) -> AIUsageFlowGraphResult:
+    def run(
+        self, *, message: dict[str, Any], correlation_id: str
+    ) -> AIUsageFlowGraphResult:
         technical_profile_id = self.required_message_id(message, "technicalProfileId")
         assessment_id = self.required_message_id(message, "assessmentId")
-        workflow_run_id = self.workflow_run_id(message, correlation_id, technical_profile_id)
+        workflow_run_id = self.workflow_run_id(
+            message, correlation_id, technical_profile_id
+        )
         state = GraphRunState(
             graph_name="ai_usage_flow",
             workflow_run_id=workflow_run_id,
             assessment_id=assessment_id,
             artifact_id=technical_profile_id,
             correlation_id=correlation_id,
+            attempt=self._delivery_attempt(message),
+            sanitized_inputs={
+                "technical_profile_id": technical_profile_id,
+                "assessment_id": assessment_id,
+            },
         )
         result_state = self._get_app().invoke(
             AIUsageFlowLangGraphState(
@@ -115,17 +124,28 @@ class AIUsageFlowGraph:
         )
         if not evidence_report_id:
             raise ValueError("missing evidenceReportId")
-        state["graph_state"].input_versions["technical_profile_id"] = state[
-            "technical_profile_id"
-        ]
-        state["graph_state"].input_versions["evidence_report_id"] = str(
-            evidence_report_id
+
+        graph_state = state["graph_state"]
+        graph_state.record_input_version(
+            "technical_profile_id", state["technical_profile_id"]
         )
+        graph_state.record_input_version(
+            "evidence_report_id", str(evidence_report_id)
+        )
+
         evidence_report = self._api_client.get_accepted_technical_evidence_report(
             str(evidence_report_id)
         )
         wizard_profile = self._api_client.get_wizard_profile_for_assessment(
             state["assessment_id"]
+        )
+        if isinstance(wizard_profile, dict) and wizard_profile.get("id"):
+            graph_state.record_input_version(
+                "wizard_profile_id", str(wizard_profile["id"])
+            )
+        graph_state.record_node(
+            node_name="ai_usage_flow.load_inputs",
+            status="completed",
         )
         return {
             "technical_profile": technical_profile,
@@ -140,11 +160,19 @@ class AIUsageFlowGraph:
             evidence_report=state["evidence_report"],
             wizard_profile=state["wizard_profile"],
         )
-        state["graph_state"].record_node(
+        graph_state = state["graph_state"]
+        graph_state.record_node(
             node_name="ai_usage_flow.rule_engine",
             status=flow.status.lower(),
             metadata={"claim_count": len(flow.claims)},
         )
+        reason = flow.uncertainty_reasons[0] if flow.uncertainty_reasons else None
+        if flow.status == "BLOCKED":
+            graph_state.record_guardrail("blocked", reason)
+        elif flow.status in {"UNCLEAR", "CONFLICTED"}:
+            graph_state.record_guardrail("degraded", reason or flow.status)
+        else:
+            graph_state.record_guardrail("passed")
         return {"flow": flow}
 
     @staticmethod
@@ -165,6 +193,13 @@ class AIUsageFlowGraph:
         if not value:
             raise ValueError(f"missing {key}")
         return str(value)
+
+    @staticmethod
+    def _delivery_attempt(message: dict[str, Any]) -> int:
+        try:
+            return max(0, int(message.get("_delivery_attempt", 0)))
+        except (TypeError, ValueError):
+            return 0
 
     def _apply_summary_proposal(
         self,
@@ -243,7 +278,9 @@ class AIUsageFlowGraph:
             privacy_flags=flow.privacy_flags,
             flow_data=flow.to_dict(),
         )
-        state["graph_state"].record_node(
+        graph_state = state["graph_state"]
+        graph_state.metadata["callback_contract"] = "AIUsageFlowCallbackRequest"
+        graph_state.record_node(
             node_name="ai_usage_flow.finalize",
             status="completed",
             metadata={"status": flow.status},
