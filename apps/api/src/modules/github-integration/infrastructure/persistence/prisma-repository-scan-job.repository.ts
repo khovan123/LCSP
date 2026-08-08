@@ -39,23 +39,31 @@ export class PrismaRepositoryScanJobRepository implements RepositoryScanJobRepos
     event: OutboxMessageInput,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      await tx.repositoryScanJob.create({
-        data: {
-          id: job.id,
-          assessmentId: job.assessmentId,
-          snapshotId: job.snapshotId,
-          organizationId: job.organizationId,
-          idempotencyKey: job.idempotencyKey,
-          triggerSource: toPrismaRepositoryScanTriggerSource(job.triggerSource),
-          status: toPrismaRepositoryScanJobStatus(job.status),
-          attemptCount: job.attemptCount,
-          correlationId: job.correlationId,
-          blockedReason: job.blockedReason,
-          createdAt: job.createdAt,
-          updatedAt: job.updatedAt,
-        },
-      });
+      await tx.repositoryScanJob.create({ data: toPersistence(job) });
       await this.outbox.enqueue(event, tx);
     });
   }
+
+  async save(job: RepositoryScanJob): Promise<void> {
+    await this.prisma.repositoryScanJob.create({
+      data: toPersistence(job),
+    });
+  }
+}
+
+function toPersistence(job: RepositoryScanJob) {
+  return {
+    id: job.id,
+    assessmentId: job.assessmentId,
+    snapshotId: job.snapshotId,
+    organizationId: job.organizationId,
+    idempotencyKey: job.idempotencyKey,
+    triggerSource: toPrismaRepositoryScanTriggerSource(job.triggerSource),
+    status: toPrismaRepositoryScanJobStatus(job.status),
+    attemptCount: job.attemptCount,
+    correlationId: job.correlationId,
+    blockedReason: job.blockedReason,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
 }

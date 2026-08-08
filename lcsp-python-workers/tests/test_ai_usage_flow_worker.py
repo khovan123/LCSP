@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from lcsp_workers.intelligence.ai_usage_flow_consumer import AIUsageFlowConsumer
+from lcsp_workers.intelligence.ai_usage_flow_graph import AIUsageFlowGraph
 from lcsp_workers.intelligence.ai_usage_flow_rule_engine import (
     AIUsageFlowRuleEngine,
     PrivacyAssertionError,
@@ -334,3 +335,96 @@ def test_rule_engine_makes_no_network_or_llm_calls() -> None:
 
     http_post.assert_not_called()
     http_get.assert_not_called()
+
+
+@pytest.mark.p0
+def test_consumer_accepts_summary_proposal_that_matches_wizard_authority() -> None:
+    api_client = MagicMock()
+    api_client.get_accepted_technical_profile.return_value = _technical_profile()
+    api_client.get_accepted_technical_evidence_report.return_value = _evidence_report()
+    api_client.get_wizard_profile_for_assessment.return_value = _wizard_profile(
+        businessProcess="loan_approval",
+        aiPurpose="credit_scoring_decision_support",
+        affectedSubjects=["loan_applicant"],
+        humanReview="present",
+    )
+    llm_client = MagicMock()
+    response = MagicMock()
+    response.content = (
+        '{"summary_updates":{"businessProcess":"loan_approval","aiPurpose":"credit_scoring_decision_support",'
+        '"affectedSubjects":["loan_applicant"],"humanReview":"present"}}'
+    )
+    response.request_id = "req-1"
+    llm_client.complete.return_value = response
+    consumer = AIUsageFlowConsumer(_config(), api_client=api_client, llm_client=llm_client)
+
+    consumer.handle(
+        {
+            "technicalProfileId": "tp-1",
+            "assessmentId": "assessment-1",
+            "evidenceReportId": "ter-1",
+        },
+        correlation_id="corr-2",
+    )
+
+    payload = api_client.post_ai_usage_flow_callback.call_args.args[0]
+    assert payload.flow_data["summary"]["businessProcess"] == "loan_approval"
+    assert payload.flow_data["summary"]["aiPurpose"] == "credit_scoring_decision_support"
+    kwargs = llm_client.complete.call_args.kwargs
+    assert kwargs["workflow_run_id"] == "ai-usage-flow:tp-1:corr-2"
+    assert kwargs["node_name"] == "ai_usage_flow.summary_proposal"
+
+
+@pytest.mark.p0
+def test_consumer_rejects_summary_proposal_that_conflicts_with_wizard_authority() -> None:
+    api_client = MagicMock()
+    api_client.get_accepted_technical_profile.return_value = _technical_profile()
+    api_client.get_accepted_technical_evidence_report.return_value = _evidence_report()
+    api_client.get_wizard_profile_for_assessment.return_value = _wizard_profile(
+        businessProcess="loan_approval",
+        aiPurpose="credit_scoring_decision_support",
+        affectedSubjects=["loan_applicant"],
+        humanReview="present",
+    )
+    llm_client = MagicMock()
+    response = MagicMock()
+    response.content = '{"summary_updates":{"businessProcess":"fraud_detection"}}'
+    response.request_id = "req-2"
+    llm_client.complete.return_value = response
+    consumer = AIUsageFlowConsumer(_config(), api_client=api_client, llm_client=llm_client)
+
+    consumer.handle(
+        {
+            "technicalProfileId": "tp-1",
+            "assessmentId": "assessment-1",
+            "evidenceReportId": "ter-1",
+        },
+        correlation_id="corr-3",
+    )
+
+    payload = api_client.post_ai_usage_flow_callback.call_args.args[0]
+    assert payload.flow_data["summary"]["businessProcess"] == "loan_approval"
+
+
+@pytest.mark.p0
+def test_graph_derives_workflow_context_and_callback_payload() -> None:
+    api_client = MagicMock()
+    api_client.get_accepted_technical_profile.return_value = _technical_profile()
+    api_client.get_accepted_technical_evidence_report.return_value = _evidence_report()
+    api_client.get_wizard_profile_for_assessment.return_value = None
+    graph = AIUsageFlowGraph(api_client=api_client, rule_engine=AIUsageFlowRuleEngine())
+
+    result = graph.run(
+        message={
+            "technicalProfileId": "tp-1",
+            "assessmentId": "assessment-1",
+            "evidenceReportId": "ter-1",
+        },
+        correlation_id="corr-graph",
+    )
+
+    assert result.workflow_run_id == "ai-usage-flow:tp-1:corr-graph"
+    assert result.callback_payload.technical_profile_id == "tp-1"
+    assert result.flow.technical_profile_id == "tp-1"
+    assert result.state.graph_name == "ai_usage_flow"
+    assert result.state.node_results[0].node_name == "ai_usage_flow.rule_engine"

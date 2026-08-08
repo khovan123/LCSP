@@ -1,0 +1,252 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from typing import Any, TypedDict
+
+from lcsp_workers.platform.callback_schemas import AIUsageFlowCallbackPayload
+from lcsp_workers.platform.graph_runtime import GraphNodeContext, GraphRunState
+
+from .ai_usage_flow_proposer import AIUsageFlowModelAssistedProposer
+from .ai_usage_flow_rule_engine import AIUsageFlow, AIUsageFlowRuleEngine
+
+
+@dataclass(frozen=True)
+class AIUsageFlowGraphResult:
+    flow: AIUsageFlow
+    callback_payload: AIUsageFlowCallbackPayload
+    workflow_run_id: str
+    state: GraphRunState
+
+
+class AIUsageFlowLangGraphState(TypedDict, total=False):
+    message: dict[str, Any]
+    correlation_id: str
+    workflow_run_id: str
+    graph_state: GraphRunState
+    technical_profile_id: str
+    assessment_id: str
+    technical_profile: dict[str, Any]
+    evidence_report_id: str
+    evidence_report: dict[str, Any]
+    wizard_profile: dict[str, Any] | None
+    flow: AIUsageFlow
+    callback_payload: AIUsageFlowCallbackPayload
+
+
+class AIUsageFlowGraph:
+    def __init__(
+        self,
+        *,
+        api_client,
+        rule_engine: AIUsageFlowRuleEngine,
+        proposer: AIUsageFlowModelAssistedProposer | None = None,
+        logger=None,
+    ) -> None:
+        self._api_client = api_client
+        self._rule_engine = rule_engine
+        self._proposer = proposer
+        self._logger = logger
+        self._app = None
+
+    def run(self, *, message: dict[str, Any], correlation_id: str) -> AIUsageFlowGraphResult:
+        technical_profile_id = self.required_message_id(message, "technicalProfileId")
+        assessment_id = self.required_message_id(message, "assessmentId")
+        workflow_run_id = self.workflow_run_id(message, correlation_id, technical_profile_id)
+        state = GraphRunState(
+            graph_name="ai_usage_flow",
+            workflow_run_id=workflow_run_id,
+            assessment_id=assessment_id,
+            artifact_id=technical_profile_id,
+            correlation_id=correlation_id,
+        )
+        result_state = self._get_app().invoke(
+            AIUsageFlowLangGraphState(
+                message=message,
+                correlation_id=correlation_id,
+                workflow_run_id=workflow_run_id,
+                graph_state=state,
+                technical_profile_id=technical_profile_id,
+                assessment_id=assessment_id,
+            )
+        )
+        return AIUsageFlowGraphResult(
+            flow=result_state["flow"],
+            callback_payload=result_state["callback_payload"],
+            workflow_run_id=workflow_run_id,
+            state=state,
+        )
+
+    def _build_graph(self):
+        try:
+            from langgraph.graph import END, START, StateGraph
+        except ImportError as exc:
+            raise RuntimeError("langgraph is required for AIUsageFlowGraph") from exc
+
+        graph = StateGraph(AIUsageFlowLangGraphState)
+        graph.add_node("load_inputs", self._node_load_inputs)
+        graph.add_node("rule_engine", self._node_rule_engine)
+        graph.add_node("summary_proposal", self._node_summary_proposal)
+        graph.add_node("finalize", self._node_finalize)
+        graph.add_edge(START, "load_inputs")
+        graph.add_edge("load_inputs", "rule_engine")
+        graph.add_edge("rule_engine", "summary_proposal")
+        graph.add_edge("summary_proposal", "finalize")
+        graph.add_edge("finalize", END)
+        return graph.compile()
+
+    def _get_app(self):
+        if self._app is None:
+            self._app = self._build_graph()
+        return self._app
+
+    def _node_load_inputs(self, state: AIUsageFlowLangGraphState):
+        technical_profile = self._api_client.get_accepted_technical_profile(state["technical_profile_id"])
+        evidence_report_id = (
+            state["message"].get("evidenceReportId")
+            or state["message"].get("evidence_report_id")
+            or technical_profile.get("evidence_report_id")
+            or technical_profile.get("evidenceReportId")
+        )
+        if not evidence_report_id:
+            raise ValueError("missing evidenceReportId")
+        state["graph_state"].input_versions["technical_profile_id"] = state["technical_profile_id"]
+        state["graph_state"].input_versions["evidence_report_id"] = str(evidence_report_id)
+        evidence_report = self._api_client.get_accepted_technical_evidence_report(str(evidence_report_id))
+        wizard_profile = self._api_client.get_wizard_profile_for_assessment(state["assessment_id"])
+        return {
+            "technical_profile": technical_profile,
+            "evidence_report_id": str(evidence_report_id),
+            "evidence_report": evidence_report,
+            "wizard_profile": wizard_profile,
+        }
+
+    def _node_rule_engine(self, state: AIUsageFlowLangGraphState):
+        flow = self._rule_engine.generate(
+            technical_profile=state["technical_profile"],
+            evidence_report=state["evidence_report"],
+            wizard_profile=state["wizard_profile"],
+        )
+        state["graph_state"].record_node(
+            node_name="ai_usage_flow.rule_engine",
+            status=flow.status.lower(),
+            metadata={"claim_count": len(flow.claims)},
+        )
+        return {"flow": flow}
+
+    @staticmethod
+    def workflow_run_id(message: dict[str, Any], correlation_id: str, technical_profile_id: str) -> str:
+        explicit = message.get("workflow_run_id")
+        if explicit:
+            return str(explicit)
+        return f"ai-usage-flow:{technical_profile_id}:{correlation_id}"
+
+    @staticmethod
+    def required_message_id(message: dict[str, Any], key: str) -> str:
+        snake_key = key[0].lower() + "".join(
+            f"_{char.lower()}" if char.isupper() else char for char in key[1:]
+        )
+        value = message.get(key) or message.get(snake_key)
+        if not value:
+            raise ValueError(f"missing {key}")
+        return str(value)
+
+    def _apply_summary_proposal(
+        self,
+        *,
+        state: AIUsageFlowLangGraphState,
+    ):
+        flow = state["flow"]
+        wizard_profile = state.get("wizard_profile")
+        if not self._proposer or not wizard_profile or flow.status == "BLOCKED":
+            state["graph_state"].record_node(
+                node_name="ai_usage_flow.summary_proposal",
+                status="skipped",
+            )
+            return {}
+        validated_claims = [
+            claim.to_dict() for claim in flow.claims if claim.lifecycle_state == "VALIDATED"
+        ]
+        proposer_context = GraphNodeContext(
+            workflow_run_id=state["workflow_run_id"],
+            node_name="ai_usage_flow.summary_proposal",
+            correlation_id=state["correlation_id"],
+        )
+        proposal = self._proposer.generate_summary_proposal(
+            baseline_summary=flow.summary,
+            wizard_profile=wizard_profile,
+            validated_claims=validated_claims,
+            workflow_run_id=proposer_context.workflow_run_id,
+            node_name=proposer_context.node_name,
+            correlation_id=proposer_context.correlation_id,
+        )
+        if not proposal:
+            state["graph_state"].record_node(
+                node_name=proposer_context.node_name,
+                status="omitted",
+            )
+            return {}
+        summary_updates = proposal.get("summary_updates", {})
+        if not self.summary_updates_match_authority(summary_updates, wizard_profile):
+            state["graph_state"].record_node(
+                node_name=proposer_context.node_name,
+                status="rejected",
+                request_id=proposal.get("request_id"),
+                metadata={"proposed_keys": sorted(summary_updates.keys())},
+            )
+            if self._logger:
+                self._logger.warning(
+                    "AI_USAGE_FLOW_SUMMARY_PROPOSAL_REJECTED",
+                    workflow_run_id=state["workflow_run_id"],
+                    proposed_keys=sorted(summary_updates.keys()),
+                )
+            return {}
+        updated_summary = dict(flow.summary)
+        updated_summary.update(summary_updates)
+        state["graph_state"].record_node(
+            node_name=proposer_context.node_name,
+            status="accepted",
+            request_id=proposal.get("request_id"),
+            metadata={"proposed_keys": sorted(summary_updates.keys())},
+        )
+        return {"flow": replace(flow, summary=updated_summary)}
+
+    def _node_summary_proposal(self, state: AIUsageFlowLangGraphState):
+        return self._apply_summary_proposal(state=state)
+
+    def _node_finalize(self, state: AIUsageFlowLangGraphState):
+        flow = state["flow"]
+        callback_payload = AIUsageFlowCallbackPayload(
+            technical_profile_id=flow.technical_profile_id,
+            assessment_id=flow.assessment_id,
+            schema_version=flow.schema_version,
+            provider_version=flow.provider_version,
+            claims=[claim.to_dict() for claim in flow.claims],
+            unknown_usages=[{"reason": reason} for reason in flow.uncertainty_reasons],
+            privacy_flags=flow.privacy_flags,
+            flow_data=flow.to_dict(),
+        )
+        state["graph_state"].record_node(
+            node_name="ai_usage_flow.finalize",
+            status="completed",
+            metadata={"status": flow.status},
+        )
+        return {"callback_payload": callback_payload}
+
+    @staticmethod
+    def summary_updates_match_authority(
+        summary_updates: dict[str, Any],
+        wizard_profile: dict[str, Any],
+    ) -> bool:
+        answers = wizard_profile.get("answers")
+        if not isinstance(answers, dict):
+            return False
+        authoritative_map = {
+            "businessProcess": answers.get("businessProcess"),
+            "aiPurpose": answers.get("aiPurpose"),
+            "affectedSubjects": answers.get("affectedSubjects"),
+            "humanReview": answers.get("humanReview"),
+        }
+        for key, value in summary_updates.items():
+            if authoritative_map.get(key) != value:
+                return False
+        return True

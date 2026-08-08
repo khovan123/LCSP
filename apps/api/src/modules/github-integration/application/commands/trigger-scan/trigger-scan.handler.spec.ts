@@ -1,6 +1,5 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
@@ -64,8 +63,12 @@ function buildHandler(options?: {
   const saveWithTriggeredEvent = jest
     .fn<RepositoryScanJobRepository["saveWithTriggeredEvent"]>()
     .mockResolvedValue(undefined);
+  const save = jest
+    .fn<RepositoryScanJobRepository["save"]>()
+    .mockResolvedValue(undefined);
   const repository = {
     findByIdempotencyKey,
+    save,
     saveWithTriggeredEvent,
   } as RepositoryScanJobRepository;
 
@@ -106,6 +109,7 @@ function buildHandler(options?: {
   return {
     handler,
     findByIdempotencyKey,
+    save,
     saveWithTriggeredEvent,
     write,
   };
@@ -232,14 +236,21 @@ describe("TriggerScanHandler", () => {
     expect(saveWithTriggeredEvent).not.toHaveBeenCalled();
   });
 
-  it("blocks incomplete repository mapping before enqueue", async () => {
-    const { handler, saveWithTriggeredEvent } = buildHandler({
+  it("persists a controlled pending-mapping job before enqueue", async () => {
+    const { handler, save, saveWithTriggeredEvent } = buildHandler({
       snapshot: { ...SNAPSHOT, repositoryId: "" },
     });
 
-    await expect(handler.execute(command())).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    const result = await handler.execute(command());
+
+    expect(result).toMatchObject({
+      status: REPOSITORY_SCAN_JOB_STATUSES.pendingMapping,
+      is_new: true,
+      correlation_id: "corr-1",
+    });
+    const [job] = save.mock.calls[0] ?? [];
+    expect(job.status).toBe(REPOSITORY_SCAN_JOB_STATUSES.pendingMapping);
+    expect(job.blockedReason).toBe("SCAN_BLOCKED_MAPPING");
     expect(saveWithTriggeredEvent).not.toHaveBeenCalled();
   });
 

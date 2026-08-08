@@ -1,7 +1,8 @@
 import { jest } from "@jest/globals";
-import { Test, TestingModule } from "@nestjs/testing";
+import { PBAC_ACTIONS, PBAC_METADATA_TYPES } from "@lcsp/contracts/pbac";
 import { OutboxDlqController } from "./outbox-dlq.controller.js";
 import { OutboxDlqService } from "./outbox-dlq.service.js";
+import { PBAC_METADATA_KEY } from "../pbac/decorators/pbac-metadata.js";
 
 describe("OutboxDlqController", () => {
   let controller: OutboxDlqController;
@@ -16,18 +17,11 @@ describe("OutboxDlqController", () => {
     replayMessage = jest.fn<OutboxDlqService["replayMessage"]>();
     deleteMessage = jest.fn<OutboxDlqService["deleteMessage"]>();
 
-    const serviceMock = {
+    controller = new OutboxDlqController({
       getDlqMessages,
       replayMessage,
       deleteMessage,
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [OutboxDlqController],
-      providers: [{ provide: OutboxDlqService, useValue: serviceMock }],
-    }).compile();
-
-    controller = module.get<OutboxDlqController>(OutboxDlqController);
+    } as unknown as OutboxDlqService);
   });
 
   describe("getDlqMessages", () => {
@@ -42,11 +36,31 @@ describe("OutboxDlqController", () => {
   });
 
   describe("replayMessage", () => {
-    it("should replay message using fallback actorId", async () => {
-      const req = { user: undefined } as ControllerRequest;
+    it("requires the outbox:replay PBAC action", () => {
+      const metadata = Reflect.getMetadata(
+        PBAC_METADATA_KEY,
+        OutboxDlqController,
+      ) as unknown;
+
+      expect(metadata).toEqual({
+        type: PBAC_METADATA_TYPES.action,
+        action: PBAC_ACTIONS.outboxReplay,
+      });
+    });
+
+    it("should replay message using PBAC context", async () => {
+      const req = {
+        pbacContext: { userId: "user-123", organizationId: "org-1" },
+        correlationId: "corr-1",
+      } as ControllerRequest;
       const result = await controller.replayMessage("1", req);
 
-      expect(replayMessage).toHaveBeenCalledWith("1", "system-admin");
+      expect(replayMessage).toHaveBeenCalledWith(
+        "1",
+        "user-123",
+        "org-1",
+        "corr-1",
+      );
       expect(result).toEqual({
         ok: true,
         data: {
@@ -56,20 +70,22 @@ describe("OutboxDlqController", () => {
       });
     });
 
-    it("should replay message using user's actorId if available", async () => {
-      const req = { user: { id: "user-123" } } as ControllerRequest;
-      await controller.replayMessage("1", req);
-
-      expect(replayMessage).toHaveBeenCalledWith("1", "user-123");
-    });
   });
 
   describe("deleteMessage", () => {
-    it("should delete message using fallback actorId", async () => {
-      const req = { user: undefined } as ControllerRequest;
+    it("should delete message using PBAC context", async () => {
+      const req = {
+        pbacContext: { userId: "user-123", organizationId: "org-1" },
+        correlationId: "corr-2",
+      } as ControllerRequest;
       const result = await controller.deleteMessage("1", req);
 
-      expect(deleteMessage).toHaveBeenCalledWith("1", "system-admin");
+      expect(deleteMessage).toHaveBeenCalledWith(
+        "1",
+        "user-123",
+        "org-1",
+        "corr-2",
+      );
       expect(result).toEqual({
         ok: true,
         data: {
@@ -79,11 +95,5 @@ describe("OutboxDlqController", () => {
       });
     });
 
-    it("should delete message using user's actorId if available", async () => {
-      const req = { user: { id: "user-123" } } as ControllerRequest;
-      await controller.deleteMessage("1", req);
-
-      expect(deleteMessage).toHaveBeenCalledWith("1", "user-123");
-    });
   });
 });

@@ -23,6 +23,10 @@ export const REPOSITORY_SCAN_JOB_STATUSES = {
   completed: "COMPLETED",
   failed: "FAILED",
   blocked: "BLOCKED",
+  pendingMapping: "PENDING_MAPPING",
+  blockedMapping: "BLOCKED_MAPPING",
+  waitingForContext: "WAITING_FOR_CONTEXT",
+  readyToSnapshot: "READY_TO_SNAPSHOT",
 } as const;
 
 export type RepositoryScanJobStatus =

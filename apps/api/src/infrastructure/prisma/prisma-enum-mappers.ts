@@ -682,6 +682,14 @@ const REPOSITORY_SCAN_JOB_STATUS_TO_PRISMA = {
     PrismaRepositoryScanJobStatus.COMPLETED,
   [REPOSITORY_SCAN_JOB_STATUSES.failed]: PrismaRepositoryScanJobStatus.FAILED,
   [REPOSITORY_SCAN_JOB_STATUSES.blocked]: PrismaRepositoryScanJobStatus.BLOCKED,
+  [REPOSITORY_SCAN_JOB_STATUSES.pendingMapping]:
+    PrismaRepositoryScanJobStatus.PENDING_MAPPING,
+  [REPOSITORY_SCAN_JOB_STATUSES.blockedMapping]:
+    PrismaRepositoryScanJobStatus.BLOCKED_MAPPING,
+  [REPOSITORY_SCAN_JOB_STATUSES.waitingForContext]:
+    PrismaRepositoryScanJobStatus.WAITING_FOR_CONTEXT,
+  [REPOSITORY_SCAN_JOB_STATUSES.readyToSnapshot]:
+    PrismaRepositoryScanJobStatus.READY_TO_SNAPSHOT,
 } as const satisfies Record<
   RepositoryScanJobStatus,
   PrismaRepositoryScanJobStatus
@@ -694,6 +702,14 @@ const PRISMA_REPOSITORY_SCAN_JOB_STATUS_TO_CONTRACT = {
     REPOSITORY_SCAN_JOB_STATUSES.completed,
   [PrismaRepositoryScanJobStatus.FAILED]: REPOSITORY_SCAN_JOB_STATUSES.failed,
   [PrismaRepositoryScanJobStatus.BLOCKED]: REPOSITORY_SCAN_JOB_STATUSES.blocked,
+  [PrismaRepositoryScanJobStatus.PENDING_MAPPING]:
+    REPOSITORY_SCAN_JOB_STATUSES.pendingMapping,
+  [PrismaRepositoryScanJobStatus.BLOCKED_MAPPING]:
+    REPOSITORY_SCAN_JOB_STATUSES.blockedMapping,
+  [PrismaRepositoryScanJobStatus.WAITING_FOR_CONTEXT]:
+    REPOSITORY_SCAN_JOB_STATUSES.waitingForContext,
+  [PrismaRepositoryScanJobStatus.READY_TO_SNAPSHOT]:
+    REPOSITORY_SCAN_JOB_STATUSES.readyToSnapshot,
 } as const satisfies Record<
   PrismaRepositoryScanJobStatus,
   RepositoryScanJobStatus

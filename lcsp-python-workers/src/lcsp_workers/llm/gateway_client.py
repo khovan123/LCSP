@@ -18,6 +18,7 @@ class LLMResponse:
     output_tokens: int
     model: str
     provider: str
+    request_id: Optional[str] = None
 
 # Very rough estimated cost per 1M tokens (input, output) in USD for common models
 # These are illustrative and should ideally be updated regularly
@@ -28,6 +29,10 @@ DEFAULT_MODEL_PRICING = {
     "claude-3-opus-20240229": (15.0, 75.0),
     "claude-3-sonnet-20240229": (3.0, 15.0),
     "claude-3-haiku-20240307": (0.25, 1.25),
+    "gemini-1.5-pro": (1.25, 5.0),
+    "gemini-1.5-flash": (0.075, 0.30),
+    "gemini-3.5-flash": (0.075, 0.30),
+    "gemini-3.1-flash-lite": (0.0375, 0.15),
 }
 
 def get_model_pricing() -> dict[str, tuple[float, float]]:
@@ -74,15 +79,26 @@ class LLMGatewayClient:
         elif self.provider == "anthropic":
             import anthropic
             self._anthropic_client = anthropic.Anthropic(api_key=self.api_key)
+        elif self.provider in ("google", "google-genai", "gemini"):
+            import google.generativeai as genai
+            genai.configure(api_key=self.api_key)
+            self._gemini_client = genai.GenerativeModel(self.model)
         else:
             raise ValueError(f"Unsupported LLM_PROVIDER: {self.provider}")
 
     def complete(
         self,
         prompt: str,
+        workflow_run_id: str,
+        node_name: str,
         max_tokens: Optional[int] = None,
         correlation_id: Optional[str] = None
     ) -> LLMResponse:
+        if not workflow_run_id:
+            raise ValueError("workflow_run_id is required")
+        if not node_name:
+            raise ValueError("node_name is required")
+
         # 1. Pre-flight safety check
         check_prompt_safety(prompt)
 
@@ -102,10 +118,13 @@ class LLMGatewayClient:
         content = ""
         input_tokens = 0
         output_tokens = 0
+        request_id = None
 
         extra_headers = {}
         if correlation_id:
             extra_headers["X-Correlation-Id"] = correlation_id
+        extra_headers["X-Workflow-Run-Id"] = workflow_run_id
+        extra_headers["X-Node-Name"] = node_name
 
         if self.provider == "openai":
             response = self._openai_client.chat.completions.create(
@@ -115,6 +134,7 @@ class LLMGatewayClient:
                 extra_headers=extra_headers if extra_headers else None
             )
             content = response.choices[0].message.content or ""
+            request_id = getattr(response, "id", None)
             if response.usage:
                 input_tokens = response.usage.prompt_tokens
                 output_tokens = response.usage.completion_tokens
@@ -124,13 +144,28 @@ class LLMGatewayClient:
                 model=self.model,
                 messages=[{"role": "user", "content": safe_prompt}],
                 max_tokens=max_tokens_to_use,
-                # extra_headers unsupported directly in simple create, but could be passed to default_headers in client
+                extra_headers=extra_headers if extra_headers else None
             )
             # Text block extraction
             text_blocks = [block.text for block in response.content if hasattr(block, "text")]
             content = "".join(text_blocks)
             input_tokens = response.usage.input_tokens
             output_tokens = response.usage.output_tokens
+            request_id = getattr(response, "id", None)
+
+        elif self.provider in ("google", "google-genai", "gemini"):
+            request_options = {}
+            if extra_headers:
+                request_options["headers"] = extra_headers
+            response = self._gemini_client.generate_content(
+                safe_prompt,
+                request_options=request_options if request_options else None
+            )
+            content = response.text or ""
+            request_id = getattr(response, "request_id", None)
+            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                input_tokens = response.usage_metadata.prompt_token_count
+                output_tokens = response.usage_metadata.candidates_token_count
 
         # 4. Actual Budget Accumulation
         actual_cost = estimate_cost(self.model, input_tokens, output_tokens)
@@ -144,5 +179,6 @@ class LLMGatewayClient:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             model=self.model,
-            provider=self.provider
+            provider=self.provider,
+            request_id=request_id
         )

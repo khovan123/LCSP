@@ -8,6 +8,7 @@ export const REPOSITORY_SCAN_JOB_REPOSITORY = Symbol(
 
 export interface RepositoryScanJobRepository {
   findByIdempotencyKey(key: string): Promise<RepositoryScanJob | null>;
+  save(job: RepositoryScanJob): Promise<void>;
   saveWithTriggeredEvent(
     job: RepositoryScanJob,
     event: OutboxMessageInput,

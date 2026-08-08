@@ -9,8 +9,11 @@ class RationaleNarrator:
         usage_claims: list, 
         applicable_rules: list, 
         risk_level: str, 
-        applicability_assessment: str
-    ) -> str:
+        applicability_assessment: str,
+        workflow_run_id: str,
+        node_name: str,
+        correlation_id: str | None = None,
+    ) -> str | None:
         """
         Draft a human-readable rationale using LLM.
         Must NOT contain raw source code in the prompt.
@@ -38,7 +41,10 @@ class RationaleNarrator:
         try:
             response = self.llm_client.complete(
                 prompt=prompt,
-                max_tokens=256
+                workflow_run_id=workflow_run_id,
+                node_name=node_name,
+                max_tokens=256,
+                correlation_id=correlation_id,
             )
             
             # Simple check if LLM contradicts the computed decision
@@ -51,7 +57,7 @@ class RationaleNarrator:
                 return None
                 
             return response.content
-        except Exception as e:
+        except Exception:
             # BudgetExceeded or PromptSafetyViolation
             # Rationale is optional, so we return None and proceed
             return None

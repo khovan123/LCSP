@@ -77,6 +77,7 @@ describe("GetScanJobHandler", () => {
         status: true,
         triggerSource: true,
         attemptCount: true,
+        blockedReason: true,
         createdAt: true,
         updatedAt: true,
         correlationId: true,
@@ -180,5 +181,17 @@ describe("GetScanJobHandler", () => {
     expect(JSON.stringify(result).toLowerCase()).not.toMatch(
       /\brisk\b|\bseverity\b|stack|exception|source code/,
     );
+  });
+
+  it("returns manager-safe next action for a pending mapping state", async () => {
+    const { handler } = buildHandler(
+      job(REPOSITORY_SCAN_JOB_STATUSES.pendingMapping),
+    );
+
+    const result = await handler.execute(query());
+
+    expect(result.status).toBe(REPOSITORY_SCAN_JOB_STATUSES.pendingMapping);
+    expect(result.blocked_reason).toBe(SCAN_JOB_GUIDANCE.pendingMappingReason);
+    expect(result.next_action).toBe(SCAN_JOB_GUIDANCE.pendingMappingNextAction);
   });
 });

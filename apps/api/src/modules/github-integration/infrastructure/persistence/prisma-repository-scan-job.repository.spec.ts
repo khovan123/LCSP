@@ -87,4 +87,40 @@ describe("PrismaRepositoryScanJobRepository", () => {
     expect(result?.id).toBe("scan-job-1");
     expect(result?.status).toBe(REPOSITORY_SCAN_JOB_STATUSES.running);
   });
+
+  it("persists a controlled-state job without enqueueing an outbox command", async () => {
+    const create = jest
+      .fn<(args: { data: Record<string, unknown> }) => Promise<unknown>>()
+      .mockResolvedValue({});
+    const enqueue = jest
+      .fn<OutboxRepository["enqueue"]>()
+      .mockResolvedValue(undefined);
+    const repository = new PrismaRepositoryScanJobRepository(
+      {
+        repositoryScanJob: { create },
+      } as unknown as PrismaService,
+      { enqueue } as unknown as OutboxRepository,
+    );
+    const job = RepositoryScanJob.createWithStatus({
+      assessmentId: "assessment-1",
+      snapshotId: "snapshot-1",
+      organizationId: "org-1",
+      idempotencyKey: "scan-request:assessment-1:snapshot-1:mapping",
+      triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
+      correlationId: "corr-1",
+      status: REPOSITORY_SCAN_JOB_STATUSES.pendingMapping,
+      blockedReason: "SCAN_BLOCKED_MAPPING",
+    });
+
+    await repository.save(job);
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        id: job.id,
+        status: REPOSITORY_SCAN_JOB_STATUSES.pendingMapping,
+        blockedReason: "SCAN_BLOCKED_MAPPING",
+      }),
+    });
+    expect(enqueue).not.toHaveBeenCalled();
+  });
 });
