@@ -45,6 +45,10 @@ export function WizardCheckboxField({
           typeof fieldState.error?.message === "string"
             ? fieldState.error.message
             : undefined;
+        const neutralOptionLabels = [
+          t("pages.wizard.options.no"),
+          t("pages.wizard.options.unknown"),
+        ];
 
         return (
           <div className="flex flex-col gap-3">
@@ -78,11 +82,22 @@ export function WizardCheckboxField({
                           return;
                         }
 
-                        const nextValues = checked
-                          ? selectedValues.filter(
-                              (value) => value !== optionLabel,
-                            )
-                          : [...selectedValues, optionLabel];
+                        let nextValues: string[];
+                        if (checked) {
+                          nextValues = selectedValues.filter(
+                            (value) => value !== optionLabel,
+                          );
+                        } else if (neutralOptionLabels.includes(optionLabel)) {
+                          nextValues = [optionLabel];
+                        } else {
+                          nextValues = [
+                            ...selectedValues.filter(
+                              (value) => !neutralOptionLabels.includes(value),
+                            ),
+                            optionLabel,
+                          ];
+                        }
+
                         field.onChange(nextValues);
                         onValueChange?.(name);
                         onBlur?.();
