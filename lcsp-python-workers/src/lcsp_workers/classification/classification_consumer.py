@@ -8,7 +8,10 @@ from lcsp_workers.platform.callback_schemas import ClassificationCallbackPayload
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.platform.queue_consumer import ConsumerBase
 
-from .classification_graph import ClassificationGraph
+from .classification_graph import (
+    ClassificationGraph,
+    ClassificationLangGraphState,
+)
 from .classification_proposer import ModelAssistedClassificationProposer
 from .rationale_narrator import RationaleNarrator
 
@@ -36,6 +39,7 @@ class ClassificationConsumer(ConsumerBase):
             if llm_client
             else None,
             narrator=RationaleNarrator(llm_client) if llm_client else None,
+            persister=self._persist_graph_result,
             logger=logger,
         )
 
@@ -47,24 +51,35 @@ class ClassificationConsumer(ConsumerBase):
             message, "legal_rule_match_id", "legalRuleMatchId"
         )
         if not legal_rule_match_id:
-            # Backward-compatible rich-message mode retained for unit/offline tests.
-            result = self.graph.run(
+            self.graph.run(
                 message=self._normalize_graph_message(message),
                 correlation_id=correlation_id,
             )
-            self._submit_callback(result.payload)
             return
 
         artifact = self._api_client.get_legal_rule_match_by_id(
             str(legal_rule_match_id)
         )
         graph_message = self._graph_message_from_artifact(message, artifact)
-        result = self.graph.run(
+        self.graph.run(
             message=graph_message,
             correlation_id=correlation_id,
         )
-        callback_payload = self._build_callback_payload(artifact, result.payload)
-        self._submit_callback(callback_payload)
+
+    def _persist_graph_result(
+        self,
+        graph_payload: dict[str, Any],
+        state: ClassificationLangGraphState,
+    ) -> None:
+        context = state["message"]
+        if context.get("legal_rule_match_id"):
+            self._submit_callback(
+                self._build_callback_payload(context, graph_payload)
+            )
+            return
+
+        # Backward-compatible rich-message mode retained for unit/offline tests.
+        self._submit_callback(graph_payload)
 
     def _submit_callback(
         self, payload: ClassificationCallbackPayload | dict[str, Any]
@@ -79,7 +94,6 @@ class ClassificationConsumer(ConsumerBase):
             )
             return
 
-        # A raw graph result is only supported for patched test/offline callers.
         raise ValueError(
             "classification callback requires a persisted legal-rule-match artifact"
         )
@@ -92,15 +106,25 @@ class ClassificationConsumer(ConsumerBase):
         profile_data = artifact.get("verified_profile_data")
         usage_claims = self._usage_claims(profile_data)
         classification_version = str(
-            self._message_value(event, "classification_version", "classificationVersion")
+            self._message_value(
+                event, "classification_version", "classificationVersion"
+            )
             or "1.0.0"
         )
         assessment_id = str(artifact.get("assessment_id") or "")
+        legal_rule_match_id = str(
+            artifact.get("legal_rule_match_id") or artifact.get("id") or ""
+        )
+        verified_profile_id = str(artifact.get("verified_profile_id") or "")
         if not assessment_id:
             raise ValueError("classification artifact missing assessment_id")
+        if not legal_rule_match_id or not verified_profile_id:
+            raise ValueError("classification artifact identifiers are incomplete")
 
         return {
             "assessment_id": assessment_id,
+            "legal_rule_match_id": legal_rule_match_id,
+            "verified_profile_id": verified_profile_id,
             "classification_version": classification_version,
             "usage_claims": usage_claims,
             "applicable_rules": self._dict_list(artifact.get("matches")),
@@ -110,20 +134,19 @@ class ClassificationConsumer(ConsumerBase):
             "workflow_run_id": self._message_value(
                 event, "workflow_run_id", "workflowRunId"
             ),
+            "_delivery_attempt": event.get("_delivery_attempt", 0),
         }
 
     def _build_callback_payload(
         self,
-        artifact: dict[str, Any],
+        context: dict[str, Any],
         graph_payload: dict[str, Any],
     ) -> ClassificationCallbackPayload:
-        legal_rule_match_id = str(
-            artifact.get("legal_rule_match_id") or artifact.get("id") or ""
-        )
-        verified_profile_id = str(artifact.get("verified_profile_id") or "")
-        assessment_id = str(artifact.get("assessment_id") or "")
+        legal_rule_match_id = str(context.get("legal_rule_match_id") or "")
+        verified_profile_id = str(context.get("verified_profile_id") or "")
+        assessment_id = str(context.get("assessment_id") or "")
         if not legal_rule_match_id or not verified_profile_id or not assessment_id:
-            raise ValueError("classification artifact identifiers are incomplete")
+            raise ValueError("classification callback context is incomplete")
 
         classification_data = {
             "risk_level": graph_payload["risk_level"],
