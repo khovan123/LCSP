@@ -14,6 +14,7 @@ AI_PACKAGE_REGISTRY = {
     "openai",
     "openai-python",
     "anthropic",
+    "google-genai",
     "google-generativeai",
     "google-cloud-aiplatform",
     "vertexai",

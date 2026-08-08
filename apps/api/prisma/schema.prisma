@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Safe schema comment to force PR webhook build trigger
 }
 
 model AuthOrganization {

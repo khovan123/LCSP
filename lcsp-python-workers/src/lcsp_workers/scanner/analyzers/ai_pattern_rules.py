@@ -49,6 +49,13 @@ AI_RULE_TABLE = [
         "base_confidence": 0.85,
     },
     {
+        "rule_id": "py-google-genai-client-generate",
+        "package": "google",
+        "pattern": ["client.models.generate_content", "models.generate_content"],
+        "finding_type": "AI_PROVIDER_USAGE",
+        "base_confidence": 0.90,
+    },
+    {
         "rule_id": "py-google-genai-generate",
         "package": "google.generativeai",
         "pattern": ["model.generate_content", "GenerativeModel", "genai.GenerativeModel"],
