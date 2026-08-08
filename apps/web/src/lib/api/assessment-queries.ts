@@ -18,8 +18,11 @@ import { getTechnicalEvidence } from "./evidence-client";
 import {
   generateReadinessExport,
   getReadinessStatus,
-  mockProvideEvidence,
 } from "./readiness-client";
+import {
+  startRepositoryAnalysis,
+  type StartRepositoryAnalysisInput,
+} from "./repository-analysis-client";
 import {
   getWizardAssessment,
   saveWizardDraft,
@@ -41,6 +44,25 @@ export function useReadinessStatusQuery(assessmentId: string) {
     queryKey: apiQueryKeys.assessment.readiness(assessmentId),
     queryFn: () => getReadinessStatus(assessmentId),
     enabled: assessmentId.length > 0,
+  });
+}
+
+export function useStartRepositoryAnalysisMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: StartRepositoryAnalysisInput) =>
+      startRepositoryAnalysis(assessmentId, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.assessment.readiness(assessmentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.auth.repositories(),
+        }),
+      ]);
+    },
   });
 }
 
@@ -152,19 +174,6 @@ export function useRequestGapAnalysisMutation(assessmentId: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: apiQueryKeys.assessment.documents(assessmentId),
-      });
-    },
-  });
-}
-
-export function useMockProvideEvidenceMutation(assessmentId: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: () => mockProvideEvidence(assessmentId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: apiQueryKeys.assessment.readiness(assessmentId),
       });
     },
   });
