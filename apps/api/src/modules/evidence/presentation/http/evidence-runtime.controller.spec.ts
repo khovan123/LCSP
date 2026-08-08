@@ -41,14 +41,24 @@ describe("InternalEvidenceController runtime reads", () => {
 
     const result = await controller.getTechnicalEvidenceReport("report-1");
 
-    expect(technicalEvidenceReportFindUnique).toHaveBeenCalledWith({
+    expect(technicalEvidenceReportFindUnique).toHaveBeenCalledTimes(1);
+    expect(technicalEvidenceReportFindUnique.mock.calls[0]?.[0]).toEqual({
       where: { id: "report-1" },
-      select: expect.objectContaining({
+      select: {
         id: true,
+        scanJobId: true,
+        assessmentId: true,
+        organizationId: true,
+        snapshotId: true,
+        toolsVersion: true,
+        configHash: true,
         evidencePayload: true,
         privacyFlags: true,
+        schemaVersion: true,
         status: true,
-      }),
+        rejectionReason: true,
+        createdAt: true,
+      },
     });
     expect(result).toMatchObject({
       id: "report-1",
