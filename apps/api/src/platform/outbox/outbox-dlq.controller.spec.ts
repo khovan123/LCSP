@@ -69,7 +69,6 @@ describe("OutboxDlqController", () => {
         },
       });
     });
-
   });
 
   describe("deleteMessage", () => {
@@ -94,6 +93,5 @@ describe("OutboxDlqController", () => {
         },
       });
     });
-
   });
 });

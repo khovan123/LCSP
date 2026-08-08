@@ -55,10 +55,7 @@ export class RepositoryScanJob {
   static createWithStatus(
     input: Omit<
       RepositoryScanJobProps,
-      | "id"
-      | "attemptCount"
-      | "createdAt"
-      | "updatedAt"
+      "id" | "attemptCount" | "createdAt" | "updatedAt"
     >,
   ): RepositoryScanJob {
     const now = new Date();

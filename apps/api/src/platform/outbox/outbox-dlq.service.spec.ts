@@ -52,7 +52,9 @@ describe("OutboxDlqService", () => {
     };
     const prismaMock = {
       repositoryScanJob: { findUnique: repositoryScanJobFindUnique },
-      technicalEvidenceReport: { findUnique: technicalEvidenceReportFindUnique },
+      technicalEvidenceReport: {
+        findUnique: technicalEvidenceReportFindUnique,
+      },
       technicalProfile: { findUnique: technicalProfileFindUnique },
     };
 

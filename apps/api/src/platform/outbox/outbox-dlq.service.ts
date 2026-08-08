@@ -1,8 +1,6 @@
 import { Injectable, HttpStatus } from "@nestjs/common";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
-import {
-  REPOSITORY_SCAN_JOB_STATUSES,
-} from "@lcsp/contracts/github-integration";
+import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 import {
   OUTBOX_AUDIT_EVENT_TYPES,
   OUTBOX_AGGREGATE_TYPES,
@@ -124,7 +122,9 @@ export class OutboxDlqService {
       return;
     }
 
-    if (message.aggregateType === OUTBOX_AGGREGATE_TYPES.technicalEvidenceReport) {
+    if (
+      message.aggregateType === OUTBOX_AGGREGATE_TYPES.technicalEvidenceReport
+    ) {
       const report = await this.prisma.technicalEvidenceReport.findUnique({
         where: { id: message.aggregateId },
         select: { status: true },
@@ -153,8 +153,12 @@ export class OutboxDlqService {
   }
 
   private unsafeReplay(correlationId: string): never {
-    throw problemException(OUTBOX_ERROR_CODES.dlqReplayUnsafeTarget, correlationId, {
-      status: HttpStatus.CONFLICT,
-    });
+    throw problemException(
+      OUTBOX_ERROR_CODES.dlqReplayUnsafeTarget,
+      correlationId,
+      {
+        status: HttpStatus.CONFLICT,
+      },
+    );
   }
 }
