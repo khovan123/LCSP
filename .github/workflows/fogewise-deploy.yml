@@ -207,7 +207,11 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          ssh "$VPS_USER@$VPS_HOST" "rm -rf '/run/fogewise-ghcr/$REPO_NAME'" || true
+          if [ -s ~/.ssh/id_ed25519 ] && [ -s ~/.ssh/known_hosts ]; then
+            ssh "$VPS_USER@$VPS_HOST" "rm -rf '/run/fogewise-ghcr/$REPO_NAME'" || true
+          else
+            echo 'SSH was not configured before this job failed; no remote GHCR credentials could have been created. Skipping remote cleanup.'
+          fi
 
       - name: Origin health check
         env:
