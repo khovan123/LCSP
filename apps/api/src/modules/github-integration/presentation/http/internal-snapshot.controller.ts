@@ -10,13 +10,13 @@ import {
 import { QueryBus } from "@nestjs/cqrs";
 import type { Response } from "express";
 
-import { InternalTokenGuard } from "../../../../platform/internal-auth/internal-token.guard.js";
+import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import type { InternalSnapshotRequest } from "./dto/internal-snapshot.request.js";
 import { type SnapshotArchiveStreamResult } from "../../application/queries/stream-snapshot-archive/stream-snapshot-archive.handler.js";
 import { StreamSnapshotArchiveQuery } from "../../application/queries/stream-snapshot-archive/stream-snapshot-archive.query.js";
 
 @Controller("internal/repository-snapshots")
-@UseGuards(InternalTokenGuard)
+@UseGuards(WorkerApiKeyGuard)
 export class InternalSnapshotController {
   constructor(private readonly queryBus: QueryBus) {}
 
