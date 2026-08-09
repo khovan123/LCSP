@@ -162,7 +162,7 @@ describe("GitHubAppClient.fetchInstallationMetadata", () => {
     });
   });
 
-  it("rejects ambiguous multi-repository installations without a selected repository", async () => {
+  it("selects the first repository and returns all repository options when GitHub omits repository_id", async () => {
     jest
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
@@ -189,11 +189,15 @@ describe("GitHubAppClient.fetchInstallationMetadata", () => {
         }),
       );
 
-    await expect(
-      client().fetchInstallationMetadata({
-        installationId: "1",
-        accessToken: "user-token",
-      }),
-    ).rejects.toThrow("github_app_repository_selection_failed");
+    const result = await client().fetchInstallationMetadata({
+      installationId: "1",
+      accessToken: "user-token",
+    });
+
+    expect(result.repository).toMatchObject({
+      id: "111",
+      fullName: "acme/first-repo",
+    });
+    expect(result.repositories).toHaveLength(2);
   });
 });

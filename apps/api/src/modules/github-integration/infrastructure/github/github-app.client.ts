@@ -148,9 +148,7 @@ export class GitHubAppClient {
       ? repositoryOptions.find(
           (candidate) => candidate.id === input.repositoryId,
         )
-      : repositoryOptions.length === 1
-        ? repositoryOptions[0]
-        : null;
+      : repositoryOptions[0];
 
     if (repositoryOptions.length === 0 || !repository) {
       throw new GitHubAppClientError("github_app_repository_selection_failed");
