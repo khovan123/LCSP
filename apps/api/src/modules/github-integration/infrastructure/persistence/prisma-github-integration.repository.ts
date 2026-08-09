@@ -54,4 +54,16 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
       revokedAt: row.revokedAt,
     });
   }
+
+  async linkToAssessment(id: string, assessmentId: string): Promise<boolean> {
+    const result = await this.prisma.repositoryConnection.updateMany({
+      where: {
+        id,
+        OR: [{ assessmentId: null }, { assessmentId }],
+      },
+      data: { assessmentId },
+    });
+
+    return result.count === 1;
+  }
 }

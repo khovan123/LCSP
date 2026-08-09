@@ -141,6 +141,24 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       );
     }
 
+    if (connection.assessmentId === null) {
+      const linked = await this.connectionRepository.linkToAssessment(
+        connection.id,
+        command.assessmentId,
+      );
+      if (!linked) {
+        await this.auditDenied(
+          command,
+          GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
+        );
+        throw problemException(
+          GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
+          command.correlationId,
+          { status: HttpStatus.NOT_FOUND },
+        );
+      }
+    }
+
     const snapshot = RepositorySnapshot.create({
       assessmentId: command.assessmentId,
       organizationId: command.organizationId,
