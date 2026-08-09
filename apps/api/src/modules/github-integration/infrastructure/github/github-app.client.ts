@@ -228,7 +228,8 @@ export class GitHubAppClient {
         {
           headers: {
             authorization: `Bearer ${accessToken}`,
-            accept: "application/gzip",
+            accept: "application/vnd.github+json",
+            "x-github-api-version": "2022-11-28",
             "user-agent": "lcsp-api",
           },
         },
