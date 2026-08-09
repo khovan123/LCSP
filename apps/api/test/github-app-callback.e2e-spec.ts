@@ -218,6 +218,39 @@ describe("GitHub App Callback Endpoint (e2e) [MW-gh-002]", () => {
     );
   });
 
+  it("updates an existing repository connection when GitHub App is re-authorized", async () => {
+    await prisma.repositoryConnection.create({
+      data: {
+        id: "existing-connection-1",
+        assessmentId: null,
+        organizationId: orgId,
+        userId: "user-1",
+        installationId: INSTALLATION_ID,
+        repositoryId: "555",
+        repositoryName: "old-name",
+        repositoryFullName: "acme/old-name",
+        defaultBranch: "master",
+        permissions: { contents: "read" },
+        status: "ACTIVE",
+      },
+    });
+    const state = await startInstallFlow();
+    mockGithubAppFetch();
+
+    const result = await httpRequest(app)
+      .get("/github/app/callback")
+      .query({ installation_id: INSTALLATION_ID, code: "good-code", state });
+
+    assert.equal(result.status, 200);
+    const connections = await prisma.repositoryConnection.findMany({
+      where: { installationId: INSTALLATION_ID, repositoryId: "555" },
+    });
+    assert.equal(connections.length, 1);
+    assert.equal(connections[0]?.id, "existing-connection-1");
+    assert.equal(connections[0]?.repositoryFullName, "acme/example-repo");
+    assert.equal(connections[0]?.defaultBranch, "main");
+  });
+
   // T02
   it("T02: state not found -> 400 GITHUB_STATE_INVALID", async () => {
     mockGithubAppFetch();
