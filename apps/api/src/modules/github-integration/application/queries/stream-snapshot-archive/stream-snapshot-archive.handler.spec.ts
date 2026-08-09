@@ -35,7 +35,7 @@ describe("StreamSnapshotArchiveHandler", () => {
     id: "scan-job-1",
     snapshotId: "snapshot-1",
     organizationId: "org-1",
-    status: REPOSITORY_SCAN_JOB_STATUSES.running,
+    status: REPOSITORY_SCAN_JOB_STATUSES.queued,
   };
 
   const connection = {
@@ -55,6 +55,7 @@ describe("StreamSnapshotArchiveHandler", () => {
       stream: NodeJS.ReadableStream;
     };
     archiveError?: Error;
+    claimCount?: number;
   }) {
     const hasOption = <K extends keyof NonNullable<typeof options>>(
       key: K,
@@ -66,6 +67,9 @@ describe("StreamSnapshotArchiveHandler", () => {
         findUnique: jest
           .fn<() => Promise<typeof scanJob | null | undefined>>()
           .mockResolvedValue(hasOption("scanJob") ? options?.scanJob : scanJob),
+        updateMany: jest
+          .fn<() => Promise<{ count: number }>>()
+          .mockResolvedValue({ count: options?.claimCount ?? 1 }),
       },
       repositorySnapshot: {
         findUnique: jest
@@ -114,6 +118,26 @@ describe("StreamSnapshotArchiveHandler", () => {
     const handler = buildHandler({
       scanJob: { ...scanJob, snapshotId: "snapshot-other" },
     });
+
+    await expect(
+      handler.execute(
+        new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1"),
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("claims a queued scan job before streaming its archive", async () => {
+    const handler = buildHandler();
+
+    await expect(
+      handler.execute(
+        new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1"),
+      ),
+    ).resolves.toMatchObject({ snapshotId: "snapshot-1" });
+  });
+
+  it("rejects a queued scan job claimed by another worker", async () => {
+    const handler = buildHandler({ claimCount: 0 });
 
     await expect(
       handler.execute(

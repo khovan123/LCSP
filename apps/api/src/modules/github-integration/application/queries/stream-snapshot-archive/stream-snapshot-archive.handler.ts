@@ -10,6 +10,7 @@ import {
 import {
   fromPrismaRepositoryConnectionStatus,
   fromPrismaRepositoryScanJobStatus,
+  toPrismaRepositoryScanJobStatus,
 } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
@@ -68,6 +69,29 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
         query.correlationId,
         { status: HttpStatus.CONFLICT },
       );
+    }
+
+    if (scanJobStatus === REPOSITORY_SCAN_JOB_STATUSES.queued) {
+      const claim = await this.prisma.repositoryScanJob.updateMany({
+        where: {
+          id: scanJob.id,
+          status: toPrismaRepositoryScanJobStatus(
+            REPOSITORY_SCAN_JOB_STATUSES.queued,
+          ),
+        },
+        data: {
+          status: toPrismaRepositoryScanJobStatus(
+            REPOSITORY_SCAN_JOB_STATUSES.running,
+          ),
+        },
+      });
+      if (claim.count !== 1) {
+        throw problemException(
+          GITHUB_INTEGRATION_ERROR_CODES.snapshotScanMismatch,
+          query.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
     }
 
     const snapshot = await this.prisma.repositorySnapshot.findUnique({
