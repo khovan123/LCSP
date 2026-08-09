@@ -129,6 +129,7 @@ describe("GetReadinessHandler", () => {
       wizardStatus: WIZARD_STATUS_CODES.submitted,
       wizardAnswers: [],
     });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(prismaService.repositorySnapshot.findFirst).toHaveBeenCalledWith({
       where: { assessmentId: "assessment-123" },
     });
