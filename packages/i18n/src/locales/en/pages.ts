@@ -927,6 +927,9 @@ export const enPages = {
     evidenceReportLabel: "Evidence report",
     updatedAt: "Updated",
     createdAt: "Created",
+    rerunScan: "Run scan again",
+    rerunningScan: "Creating new scan",
+    rerunError: "Unable to create a new scan. Please try again.",
     scanStatuses: {
       queued: "Queued",
       running: "Analyzing",

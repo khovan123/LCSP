@@ -20,7 +20,9 @@ import {
   getReadinessStatus,
 } from "./readiness-client";
 import {
+  rerunRepositoryScan,
   startRepositoryAnalysis,
+  type RerunRepositoryScanInput,
   type StartRepositoryAnalysisInput,
 } from "./repository-analysis-client";
 import {
@@ -60,6 +62,25 @@ export function useStartRepositoryAnalysisMutation(assessmentId: string) {
         }),
         queryClient.invalidateQueries({
           queryKey: apiQueryKeys.auth.repositories(),
+        }),
+      ]);
+    },
+  });
+}
+
+export function useRerunRepositoryScanMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: RerunRepositoryScanInput) =>
+      rerunRepositoryScan(assessmentId, input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.assessment.readiness(assessmentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: apiQueryKeys.assessment.evidence(assessmentId),
         }),
       ]);
     },

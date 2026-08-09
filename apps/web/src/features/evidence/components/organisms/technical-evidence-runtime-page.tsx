@@ -3,9 +3,12 @@
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { resolveMessage } from "@lcsp/i18n";
+import { RotateCcwIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { appLocale } from "@/lib/locale";
+import { useRerunRepositoryScanMutation } from "@/lib/api/assessment-queries";
 import { useWorkspaceRuntime } from "@/features/workspace/components/organisms/workspace-runtime-provider";
 import {
   WORKSPACE_RUNTIME_CONNECTION_STATES,
@@ -24,6 +27,8 @@ export function TechnicalEvidenceRuntimePage({
   const reports = runtime.evidenceReports.filter(
     (report) => report.assessmentId === assessmentId,
   );
+  const latestScan = scanJobs[0];
+  const rerunMutation = useRerunRepositoryScanMutation(assessmentId);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:px-6">
@@ -51,7 +56,28 @@ export function TechnicalEvidenceRuntimePage({
               ? t("pages.technicalEvidence.awaitingEvent")
               : `${t("pages.technicalEvidence.lastUpdated")}: ${formatDate(runtime.emittedAt)}`}
           </span>
+          <Button
+            disabled={latestScan === undefined || rerunMutation.isPending}
+            onClick={() => {
+              if (latestScan !== undefined) {
+                rerunMutation.mutate({ snapshotId: latestScan.snapshotId });
+              }
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <RotateCcwIcon />
+            {rerunMutation.isPending
+              ? t("pages.technicalEvidence.rerunningScan")
+              : t("pages.technicalEvidence.rerunScan")}
+          </Button>
         </div>
+        {rerunMutation.isError && (
+          <p className="border-b px-4 py-3 text-sm text-destructive">
+            {t("pages.technicalEvidence.rerunError")}
+          </p>
+        )}
         {scanJobs.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted-foreground">
             {t("pages.technicalEvidence.noScanJobs")}

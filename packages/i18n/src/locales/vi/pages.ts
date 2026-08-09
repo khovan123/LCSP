@@ -923,6 +923,9 @@ export const viPages = {
     evidenceReportLabel: "Evidence report",
     updatedAt: "Cập nhật",
     createdAt: "Tạo lúc",
+    rerunScan: "Chạy lại scan",
+    rerunningScan: "Đang tạo scan mới",
+    rerunError: "Không thể tạo scan mới. Hãy thử lại sau.",
     scanStatuses: {
       queued: "Đang chờ chạy",
       running: "Đang phân tích",

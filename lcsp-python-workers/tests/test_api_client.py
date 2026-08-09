@@ -39,6 +39,9 @@ def test_t01_successful_callback(client, dummy_payload):
         assert response.success is True
         assert response.message == "OK"
         mock_post.assert_called_once()
+        assert mock_post.call_args.args[0] == (
+            "http://testserver/internal/scan-jobs/job123/callback"
+        )
 
 def test_t02_5xx_response(client, dummy_payload):
     """T02: 5xx response is retried 3 times then raises WorkerCallbackError."""

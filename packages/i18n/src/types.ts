@@ -889,6 +889,9 @@ export type PagesMessages = {
     evidenceReportLabel: string;
     updatedAt: string;
     createdAt: string;
+    rerunScan: string;
+    rerunningScan: string;
+    rerunError: string;
     scanStatuses: {
       queued: string;
       running: string;
