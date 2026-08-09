@@ -67,6 +67,7 @@ export type PagesMessages = {
     settings: string;
     wizard: string;
     readiness: string;
+    technicalEvidence: string;
     classification: string;
     documents: string;
     conflicts: string;
@@ -870,6 +871,35 @@ export type PagesMessages = {
       editWizard: string;
       downloadPdf: string;
       exportingPdf: string;
+    };
+  };
+  technicalEvidence: {
+    pageTitle: string;
+    pageDescription: string;
+    connectionConnecting: string;
+    connectionConnected: string;
+    connectionDisconnected: string;
+    scanJobsTitle: string;
+    evidenceReportsTitle: string;
+    awaitingEvent: string;
+    lastUpdated: string;
+    noScanJobs: string;
+    noEvidenceReports: string;
+    scanJobLabel: string;
+    evidenceReportLabel: string;
+    updatedAt: string;
+    createdAt: string;
+    scanStatuses: {
+      queued: string;
+      running: string;
+      completed: string;
+      failed: string;
+      blocked: string;
+      pending: string;
+    };
+    evidenceStatuses: {
+      accepted: string;
+      rejected: string;
     };
   };
   classification: {

@@ -126,8 +126,6 @@ export function useTechnicalEvidenceQuery(assessmentId: string) {
     queryKey: apiQueryKeys.assessment.evidence(assessmentId),
     queryFn: () => getTechnicalEvidence(assessmentId),
     enabled: assessmentId.length > 0,
-    refetchInterval: 5_000,
-    refetchIntervalInBackground: false,
   });
 }
 

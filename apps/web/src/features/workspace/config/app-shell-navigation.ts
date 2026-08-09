@@ -1,5 +1,6 @@
 import {
   ClipboardCheckIcon,
+  ActivityIcon,
   FileCheck2Icon,
   FileTextIcon,
   GaugeIcon,
@@ -72,6 +73,12 @@ export function getAssessmentNavigation(
       href: `${basePath}/readiness`,
       labelKey: "pages.appShell.readiness",
       icon: GaugeIcon,
+      disabled,
+    },
+    {
+      href: `${basePath}/technical-evidence`,
+      labelKey: "pages.appShell.technicalEvidence",
+      icon: ActivityIcon,
       disabled,
     },
     {
