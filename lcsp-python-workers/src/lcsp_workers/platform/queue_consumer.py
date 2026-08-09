@@ -30,6 +30,7 @@ class ConsumerBase:
 
     def run(self) -> None:
         signal.signal(signal.SIGTERM, self._handle_sigterm)
+        signal.signal(signal.SIGINT, self._handle_sigterm)
         conn = None
         self._health_server = HealthServer(
             worker_name=self.__class__.__name__,
@@ -48,11 +49,21 @@ class ConsumerBase:
             channel.basic_consume(self.queue_name, self._on_message)
 
             while not self._shutdown:
-                conn.process_data_events(time_limit=1)
+                try:
+                    conn.process_data_events(time_limit=1)
+                except KeyboardInterrupt:
+                    self._handle_sigterm(signal.SIGINT, None)
         finally:
             self._channel = None
             if conn is not None:
-                conn.close()
+                try:
+                    if getattr(conn, "is_open", True):
+                        conn.close()
+                except KeyboardInterrupt:
+                    logger.info(
+                        "SHUTDOWN_INTERRUPTED",
+                        msg="RabbitMQ close interrupted",
+                    )
             if self._health_server is not None:
                 self._health_server.stop()
                 self._health_server = None
