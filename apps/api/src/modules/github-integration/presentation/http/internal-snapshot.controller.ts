@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { QueryBus } from "@nestjs/cqrs";
+import { pipeline } from "node:stream/promises";
 import type { Response } from "express";
 
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
@@ -25,8 +26,8 @@ export class InternalSnapshotController {
     @Param("snapshotId") snapshotId: string,
     @Query("scanJobId") scanJobId: string,
     @Req() request: InternalSnapshotRequest,
-    @Res({ passthrough: true }) response: Response,
-  ) {
+    @Res() response: Response,
+  ): Promise<void> {
     const correlationId = readHeader(request.headers["x-correlation-id"]);
     const result = await this.queryBus.execute<
       StreamSnapshotArchiveQuery,
@@ -43,7 +44,7 @@ export class InternalSnapshotController {
     response.setHeader("x-commit-sha", result.commitSha);
     response.setHeader("x-repository-full-name", result.repositoryFullName);
     response.setHeader("x-resolved-url", result.resolvedUrl);
-    result.stream.pipe(response);
+    await pipeline(result.stream, response);
   }
 }
 
