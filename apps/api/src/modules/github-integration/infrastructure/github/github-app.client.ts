@@ -13,7 +13,14 @@ const ALLOWED_ARCHIVE_HOSTS = new Set([
   "github.com",
 ]);
 
-export class GitHubAppClientError extends Error {}
+export class GitHubAppClientError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null = null,
+  ) {
+    super(message);
+  }
+}
 
 export interface GitHubAppInstallationMetadata {
   permissions: Record<string, string>;
@@ -312,7 +319,10 @@ export class GitHubAppClient {
     }
 
     if (!response.ok) {
-      throw new GitHubAppClientError("github_app_metadata_fetch_failed");
+      throw new GitHubAppClientError(
+        "github_app_metadata_fetch_failed",
+        response.status,
+      );
     }
 
     return (await response.json().catch(() => null)) as T | null;
@@ -337,7 +347,10 @@ export class GitHubAppClient {
     }
 
     if (!response.ok) {
-      throw new GitHubAppClientError("github_app_api_request_failed");
+      throw new GitHubAppClientError(
+        "github_app_api_request_failed",
+        response.status,
+      );
     }
     return (await response.json().catch(() => null)) as T | null;
   }

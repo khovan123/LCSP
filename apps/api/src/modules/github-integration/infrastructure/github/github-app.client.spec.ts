@@ -104,6 +104,24 @@ describe("GitHubAppClient.resolveCommit", () => {
       }),
     ).rejects.toThrow("github_commit_resolution_failed");
   });
+
+  it("retains an unsuccessful GitHub response status for the caller", async () => {
+    jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ token: "installation-token" }))
+      .mockResolvedValueOnce(new Response(null, { status: 403 }));
+
+    await expect(
+      client().resolveCommit({
+        installationId: "installation-1",
+        repositoryFullName: "acme/example-repo",
+        revision: "main",
+      }),
+    ).rejects.toMatchObject({
+      message: "github_app_metadata_fetch_failed",
+      status: 403,
+    });
+  });
 });
 
 describe("GitHubAppClient.fetchInstallationMetadata", () => {
