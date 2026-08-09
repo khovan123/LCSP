@@ -25,7 +25,7 @@ class PendingConflictsExist(RuntimeError):
 
 class VerifiedProfileConsumer(ConsumerBase):
     queue_name = "intelligence.all-conflicts-resolved"
-    routing_key = "reconciliation.all-conflicts-resolved"
+    routing_key = "event.reconciliation.all-conflicts-resolved.v1"
     requires_pbac = False
 
     def __init__(

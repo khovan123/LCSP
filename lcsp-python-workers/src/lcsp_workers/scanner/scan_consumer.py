@@ -41,7 +41,7 @@ class ScanJobEnvelope:
 
 class ScanConsumer(ConsumerBase):
     queue_name = "scan.triggered"
-    routing_key = "scan.triggered"
+    routing_key = "command.scan.requested.v1"
     scan_timeout_seconds = 600
 
     def __init__(

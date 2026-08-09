@@ -45,6 +45,11 @@ class ConsumerBase:
             channel = conn.channel()
             self._channel = channel
             channel.queue_declare(queue=self.queue_name, durable=True)
+            channel.queue_bind(
+                exchange=self._config.rabbitmq_exchange,
+                queue=self.queue_name,
+                routing_key=self.routing_key,
+            )
             channel.basic_qos(prefetch_count=1)
             channel.basic_consume(self.queue_name, self._on_message)
 

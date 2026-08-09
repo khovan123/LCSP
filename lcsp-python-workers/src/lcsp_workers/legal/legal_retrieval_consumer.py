@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 class LegalRetrievalConsumer(ConsumerBase):
     queue_name = "legal.verified-profile-ready"
-    routing_key = "verified-profile-ready"
+    routing_key = "event.verified-profile.ready.v1"
     requires_pbac = False
 
     def __init__(

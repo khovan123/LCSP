@@ -184,6 +184,11 @@ def test_run_treats_keyboard_interrupt_as_shutdown(monkeypatch, config):
     consumer.run()
 
     assert consumer._shutdown is True
+    channel.queue_bind.assert_called_once_with(
+        exchange="test.events",
+        queue="test_queue",
+        routing_key="test.routing",
+    )
     connection.close.assert_called_once()
 
 
