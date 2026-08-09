@@ -39,3 +39,5 @@ _bmad/
 .ua/
 **/.codebase-memory/
 **/.codex/
+.venv
+*.env.*
