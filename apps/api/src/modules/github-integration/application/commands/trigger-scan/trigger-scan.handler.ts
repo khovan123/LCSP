@@ -26,7 +26,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 
 import { fromPrismaAssessmentStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
@@ -214,6 +214,7 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       },
       result: GITHUB_INTEGRATION_EVENT_TYPES.scanJobTriggeredAudit,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
+      authorizationAction: PBAC_ACTIONS.scanTrigger,
       idempotencyKey: job.idempotencyKey,
       payload: {
         scanJobId: job.id,

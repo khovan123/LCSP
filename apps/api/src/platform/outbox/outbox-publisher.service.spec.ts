@@ -38,6 +38,7 @@ type PublishFn = (
   exchange: string,
   routingKey: string,
   payload: Record<string, unknown>,
+  headers?: Record<string, string>,
 ) => Promise<void>;
 
 function makeConfigService(
@@ -210,6 +211,49 @@ describe("OutboxPublisherService", () => {
       5,
       "broker refused",
       expect.any(Date),
+    );
+  });
+
+  it("publishes worker authorization metadata as AMQP headers", async () => {
+    const message = makeMessage({
+      payload: {
+        actor: { id: "user-1", type: "USER" },
+        organizationId: "org-1",
+        authorizationAction: "scan:trigger",
+        correlationId: "corr-1",
+      },
+    });
+    const publish = jest.fn<PublishFn>().mockResolvedValue(undefined);
+    const service = new OutboxPublisherService(
+      makeOutboxRepository({
+        withPendingBatch: jest
+          .fn<WithPendingBatchFn>()
+          .mockImplementation(async (_batchSize, handler) =>
+            handler([message], {} as Prisma.TransactionClient),
+          ),
+        markPublished: jest.fn<MarkPublishedFn>().mockResolvedValue(undefined),
+      }),
+      makeRabbitMqClient({
+        ensureConnected: jest
+          .fn<EnsureConnectedFn>()
+          .mockResolvedValue(undefined),
+        publish,
+      }),
+      makeConfigService(),
+    );
+
+    await service.poll();
+
+    expect(publish).toHaveBeenCalledWith(
+      "lcsp.events",
+      ASSESSMENT_EVENT_TYPES.createdOutbox,
+      message.payload,
+      {
+        user_id: "user-1",
+        organization_id: "org-1",
+        action: "scan:trigger",
+        "x-correlation-id": "corr-1",
+      },
     );
   });
 

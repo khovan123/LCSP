@@ -8,6 +8,7 @@ import { ConfigService } from "@nestjs/config";
 
 import { OutboxRepository } from "./outbox.repository.js";
 import { RabbitMqClient } from "./rabbitmq.client.js";
+import type { RabbitMqMessageHeaders } from "./rabbitmq.client.js";
 
 @Injectable()
 export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
@@ -76,11 +77,21 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
             const now = new Date();
 
             try {
-              await this.rabbitMqClient.publish(
-                exchange,
-                message.eventType,
-                message.payload,
-              );
+              const headers = authorizationHeaders(message.payload);
+              if (headers) {
+                await this.rabbitMqClient.publish(
+                  exchange,
+                  message.eventType,
+                  message.payload,
+                  headers,
+                );
+              } else {
+                await this.rabbitMqClient.publish(
+                  exchange,
+                  message.eventType,
+                  message.payload,
+                );
+              }
               await this.outboxRepository.markPublished(tx, message.id, now);
             } catch (error) {
               const nextAttempts = message.attempts + 1;
@@ -109,4 +120,32 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       this.polling = false;
     }
   }
+}
+
+function authorizationHeaders(
+  payload: Record<string, unknown>,
+): RabbitMqMessageHeaders | undefined {
+  const actor = payload.actor;
+  const actorId =
+    actor && typeof actor === "object"
+      ? readString((actor as Record<string, unknown>).id)
+      : undefined;
+  const organizationId = readString(payload.organizationId);
+  const action = readString(payload.authorizationAction);
+  const correlationId = readString(payload.correlationId);
+
+  if (!actorId || !organizationId || !action || !correlationId) {
+    return undefined;
+  }
+
+  return {
+    user_id: actorId,
+    organization_id: organizationId,
+    action,
+    "x-correlation-id": correlationId,
+  };
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
