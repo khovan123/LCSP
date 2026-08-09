@@ -1,4 +1,4 @@
-import { HttpStatus } from "@nestjs/common";
+import { HttpStatus, Logger } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 
 import {
@@ -14,7 +14,10 @@ import {
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { StreamSnapshotArchiveQuery } from "./stream-snapshot-archive.query.js";
-import { GitHubAppClient } from "../../../infrastructure/github/github-app.client.js";
+import {
+  GitHubAppClient,
+  GitHubAppClientError,
+} from "../../../infrastructure/github/github-app.client.js";
 
 export type SnapshotArchiveStreamResult = {
   snapshotId: string;
@@ -27,6 +30,8 @@ export type SnapshotArchiveStreamResult = {
 
 @QueryHandler(StreamSnapshotArchiveQuery)
 export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapshotArchiveQuery> {
+  private readonly logger = new Logger(StreamSnapshotArchiveHandler.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly githubAppClient: GitHubAppClient,
@@ -124,14 +129,17 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
         stream: archive.stream,
       };
     } catch (error: unknown) {
-      const reason = error instanceof Error ? error.message : "";
-      if (reason === "github_repository_archive_redirect_rejected") {
-        throw problemException(
-          GITHUB_INTEGRATION_ERROR_CODES.snapshotRetrievalFailed,
-          query.correlationId,
-          { status: HttpStatus.BAD_GATEWAY },
-        );
-      }
+      this.logger.error(
+        `GitHub snapshot archive retrieval failed: ${archiveFailureReason(error)}`,
+        undefined,
+        {
+          correlationId: query.correlationId,
+          snapshotId: snapshot.id,
+          scanJobId: scanJob.id,
+          repositoryFullName: snapshot.repositoryFullName,
+          githubStatus: archiveFailureStatus(error),
+        },
+      );
 
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.snapshotRetrievalFailed,
@@ -140,4 +148,16 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
       );
     }
   }
+}
+
+function archiveFailureReason(error: unknown): string {
+  if (error instanceof GitHubAppClientError) {
+    return error.message;
+  }
+
+  return "github_repository_archive_unknown_failure";
+}
+
+function archiveFailureStatus(error: unknown): number | null {
+  return error instanceof GitHubAppClientError ? error.status : null;
 }

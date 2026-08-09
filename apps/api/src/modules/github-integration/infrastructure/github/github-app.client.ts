@@ -238,7 +238,10 @@ export class GitHubAppClient {
     }
 
     if (!response.ok || !response.body) {
-      throw new GitHubAppClientError("github_repository_archive_failed");
+      throw new GitHubAppClientError(
+        "github_repository_archive_failed",
+        response.status,
+      );
     }
 
     const resolvedUrl = new URL(response.url);

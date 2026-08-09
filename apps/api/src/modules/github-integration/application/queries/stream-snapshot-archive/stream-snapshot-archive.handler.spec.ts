@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from "@jest/globals";
 import {
   BadGatewayException,
   ConflictException,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { Readable } from "node:stream";
@@ -13,7 +14,10 @@ import {
 } from "@lcsp/contracts/github-integration";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import type { GitHubAppClient } from "../../../infrastructure/github/github-app.client.js";
+import {
+  GitHubAppClientError,
+  type GitHubAppClient,
+} from "../../../infrastructure/github/github-app.client.js";
 import { StreamSnapshotArchiveHandler } from "./stream-snapshot-archive.handler.js";
 import { StreamSnapshotArchiveQuery } from "./stream-snapshot-archive.query.js";
 
@@ -50,7 +54,7 @@ describe("StreamSnapshotArchiveHandler", () => {
       resolvedUrl: string;
       stream: NodeJS.ReadableStream;
     };
-    archiveError?: string;
+    archiveError?: Error;
   }) {
     const hasOption = <K extends keyof NonNullable<typeof options>>(
       key: K,
@@ -80,7 +84,7 @@ describe("StreamSnapshotArchiveHandler", () => {
     } as unknown as PrismaService;
     const githubAppClient = {
       downloadRepositoryArchive: jest.fn().mockImplementation(() => {
-        if (options?.archiveError) throw new Error(options.archiveError);
+        if (options?.archiveError) throw options.archiveError;
         return (
           options?.archive ?? {
             contentType: "application/gzip",
@@ -129,8 +133,14 @@ describe("StreamSnapshotArchiveHandler", () => {
   });
 
   it("maps archive retrieval failure to bad gateway", async () => {
+    const loggerError = jest
+      .spyOn(Logger.prototype, "error")
+      .mockImplementation(() => undefined);
     const handler = buildHandler({
-      archiveError: "github_repository_archive_unreachable",
+      archiveError: new GitHubAppClientError(
+        "github_repository_archive_failed",
+        404,
+      ),
     });
 
     await expect(
@@ -138,5 +148,18 @@ describe("StreamSnapshotArchiveHandler", () => {
         new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1"),
       ),
     ).rejects.toBeInstanceOf(BadGatewayException);
+
+    expect(loggerError).toHaveBeenCalledWith(
+      "GitHub snapshot archive retrieval failed: github_repository_archive_failed",
+      undefined,
+      expect.objectContaining({
+        correlationId: "corr-1",
+        githubStatus: 404,
+        repositoryFullName: "acme/example-repo",
+        scanJobId: "scan-job-1",
+        snapshotId: "snapshot-1",
+      }),
+    );
+    loggerError.mockRestore();
   });
 });
