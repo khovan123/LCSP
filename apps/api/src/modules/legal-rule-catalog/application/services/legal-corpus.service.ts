@@ -31,6 +31,11 @@ interface LegalReviewSignoff {
   documents: LegalReviewDocumentSignoff[];
 }
 
+interface ReviewTargetDocument {
+  documentId: string;
+  sourceSha256: string;
+}
+
 @Injectable()
 export class LegalCorpusService {
   constructor(private readonly prisma: PrismaService) {}
@@ -119,7 +124,10 @@ export class LegalCorpusService {
 
     const reviewSignoff = this.requireApprovedReviewSignoff(
       corpus.sourceManifest,
-      corpus.documents.map((document) => document.documentId),
+      corpus.documents.map((document) => ({
+        documentId: document.documentId,
+        sourceSha256: document.sourceSha256,
+      })),
       input.correlationId,
     );
     if (reviewSignoff.reviewedBy !== input.approvedBy) {
@@ -270,14 +278,17 @@ export class LegalCorpusService {
 
     this.requireApprovedReviewSignoff(
       input.sourceManifest,
-      input.documents.map((document) => document.documentId),
+      input.documents.map((document) => ({
+        documentId: document.documentId,
+        sourceSha256: document.sourceSha256,
+      })),
       "legal-corpus-ingest",
     );
   }
 
   private requireApprovedReviewSignoff(
     sourceManifest: unknown,
-    documentIds: string[],
+    targetDocuments: ReviewTargetDocument[],
     correlationId: string,
   ): LegalReviewSignoff {
     const invalid = (reason: string): never => {
@@ -346,14 +357,23 @@ export class LegalCorpusService {
       });
     }
 
-    const signoffIds = new Set(
-      documents.map((document) => document.documentId),
+    const signoffByDocumentId = new Map(
+      documents.map((document) => [document.documentId, document]),
     );
     if (
-      documents.length !== documentIds.length ||
-      documentIds.some((documentId) => !signoffIds.has(documentId))
+      documents.length !== targetDocuments.length ||
+      signoffByDocumentId.size !== targetDocuments.length
     ) {
       return invalid("legal_operator_signoff_document_set_mismatch");
+    }
+    for (const targetDocument of targetDocuments) {
+      const signoff = signoffByDocumentId.get(targetDocument.documentId);
+      if (!signoff) {
+        return invalid("legal_operator_signoff_document_set_mismatch");
+      }
+      if (signoff.reviewedSourceSha256 !== targetDocument.sourceSha256) {
+        return invalid("legal_operator_signoff_source_hash_mismatch");
+      }
     }
 
     return {
