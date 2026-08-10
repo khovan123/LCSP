@@ -8,10 +8,7 @@ import {
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
-import {
-  AUTH_ERROR_CODES,
-  type AuthErrorCode,
-} from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, type AuthErrorCode } from "@lcsp/contracts/auth";
 import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,

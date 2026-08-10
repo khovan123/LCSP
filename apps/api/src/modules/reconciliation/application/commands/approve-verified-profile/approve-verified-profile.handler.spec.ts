@@ -34,17 +34,21 @@ function buildHandler(input?: { owned?: boolean }) {
   const findAssessment = jest
     .fn<() => Promise<{ id: string } | null>>()
     .mockResolvedValue(owned ? { id: "assessment-1" } : null);
-  const findProfile = jest.fn<() => Promise<{
-    id: string;
-    assessmentId: string;
-    organizationId: string;
-    status: string;
-  }>>().mockResolvedValue({
-    id: "vp-1",
-    assessmentId: "assessment-1",
-    organizationId: "org-1",
-    status: VERIFIED_PROFILE_STATUSES.pendingApproval,
-  });
+  const findProfile = jest
+    .fn<
+      () => Promise<{
+        id: string;
+        assessmentId: string;
+        organizationId: string;
+        status: string;
+      }>
+    >()
+    .mockResolvedValue({
+      id: "vp-1",
+      assessmentId: "assessment-1",
+      organizationId: "org-1",
+      status: VERIFIED_PROFILE_STATUSES.pendingApproval,
+    });
   const countConflicts = jest.fn<() => Promise<number>>().mockResolvedValue(0);
   const updateProfile = jest.fn<() => Promise<object>>().mockResolvedValue({});
   const tx = {
@@ -62,13 +66,17 @@ function buildHandler(input?: { owned?: boolean }) {
     $transaction: transaction,
   } as unknown as PrismaService;
 
-  const write = jest.fn<AuditWriterService["write"]>().mockResolvedValue(undefined);
+  const write = jest
+    .fn<AuditWriterService["write"]>()
+    .mockResolvedValue(undefined);
   const writeInTx = jest
     .fn<AuditWriterService["writeInTx"]>()
     .mockResolvedValue(undefined);
   const auditWriter = { write, writeInTx } as unknown as AuditWriterService;
 
-  const enqueue = jest.fn<OutboxRepository["enqueue"]>().mockResolvedValue(undefined);
+  const enqueue = jest
+    .fn<OutboxRepository["enqueue"]>()
+    .mockResolvedValue(undefined);
   const outbox = { enqueue } as unknown as OutboxRepository;
 
   return {
