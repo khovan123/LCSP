@@ -277,7 +277,9 @@ describe("GetAssessmentHandler", () => {
           },
         ],
         verification_source: "TECHNICAL_PLUS_WIZARD",
-        conflict_resolutions: [{ conflict_id: "conflict-1", status: "RESOLVED" }],
+        conflict_resolutions: [
+          { conflict_id: "conflict-1", status: "RESOLVED" },
+        ],
         evidence_chain_integrity: true,
       },
       gatesPassedAt: { conflicts_resolved: "2026-08-11T00:00:00.000Z" },
