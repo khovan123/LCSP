@@ -91,7 +91,9 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
         where: {
           assessmentId: command.assessmentId,
           organizationId: command.organizationId,
-          status: toPrismaConflictRecordStatus(CONFLICT_RECORD_STATUSES.pending),
+          status: toPrismaConflictRecordStatus(
+            CONFLICT_RECORD_STATUSES.pending,
+          ),
         },
       });
       if (pendingConflicts > 0) {
@@ -105,7 +107,9 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
       await tx.verifiedProfile.update({
         where: { id: profile.id },
         data: {
-          status: toPrismaVerifiedProfileStatus(VERIFIED_PROFILE_STATUSES.approved),
+          status: toPrismaVerifiedProfileStatus(
+            VERIFIED_PROFILE_STATUSES.approved,
+          ),
           approvedAt,
           approvedById: command.approvedById,
         },

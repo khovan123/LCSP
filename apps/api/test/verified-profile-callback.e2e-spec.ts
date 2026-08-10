@@ -478,7 +478,9 @@ async function seedConflicts(
   });
 }
 
-async function grantVerifiedProfileApproval(prisma: PrismaClient): Promise<void> {
+async function grantVerifiedProfileApproval(
+  prisma: PrismaClient,
+): Promise<void> {
   const policy = await prisma.authPolicy.findUniqueOrThrow({
     where: {
       id_version: {
@@ -490,7 +492,9 @@ async function grantVerifiedProfileApproval(prisma: PrismaClient): Promise<void>
   await prisma.authPolicy.update({
     where: { id_version: { id: policy.id, version: policy.version } },
     data: {
-      actions: [...new Set([...policy.actions, PBAC_ACTIONS.verifiedProfileApprove])],
+      actions: [
+        ...new Set([...policy.actions, PBAC_ACTIONS.verifiedProfileApprove]),
+      ],
     },
   });
 }
