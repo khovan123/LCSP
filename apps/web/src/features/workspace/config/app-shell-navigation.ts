@@ -7,6 +7,7 @@ import {
   UsersIcon,
   LayoutDashboardIcon,
   ListChecksIcon,
+  LibraryBigIcon,
   ScaleIcon,
   ShieldCheckIcon,
 } from "lucide-react";
@@ -30,6 +31,11 @@ export const primaryNavigation = [
     href: "/assessments",
     labelKey: "pages.appShell.assessments",
     icon: ListChecksIcon,
+  },
+  {
+    href: "/laws",
+    labelKey: "pages.appShell.legalLibrary",
+    icon: LibraryBigIcon,
   },
 ] as const satisfies readonly NavigationDefinition[];
 

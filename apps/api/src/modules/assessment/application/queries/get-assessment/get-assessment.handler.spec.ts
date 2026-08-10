@@ -30,6 +30,7 @@ function makeAssessment(
 function buildHandler(input: {
   assessment: Assessment | null;
   wizardProfile?: { status: string } | null;
+  acceptedEvidenceReport?: { id: string } | null;
 }) {
   const findById = jest
     .fn<AssessmentRepository["findById"]>()
@@ -53,12 +54,16 @@ function buildHandler(input: {
   const findUnique = jest
     .fn<() => Promise<{ status: string } | null>>()
     .mockResolvedValue(input.wizardProfile ?? null);
+  const findFirst = jest
+    .fn<() => Promise<{ id: string } | null>>()
+    .mockResolvedValue(input.acceptedEvidenceReport ?? null);
   const prisma = {
     wizardProfile: { findUnique },
+    technicalEvidenceReport: { findFirst },
   } as unknown as PrismaService;
 
   const handler = new GetAssessmentHandler(repository, prisma);
-  return { handler, findById, findUnique };
+  return { handler, findById, findUnique, findFirst };
 }
 
 describe("GetAssessmentHandler", () => {
@@ -126,8 +131,8 @@ describe("GetAssessmentHandler", () => {
     expect(result.wizard_status).toBe(WIZARD_STATUS_CODES.inProgress);
   });
 
-  // T02: classification always locked until MW-evid-001 lands (no TechnicalEvidenceReport table yet)
-  it("always reports classification_locked=true with LOCKED_EVIDENCE_REQUIRED (no accepted evidence possible yet)", async () => {
+  // T03: no accepted TechnicalEvidenceReport keeps classification locked.
+  it("reports classification_locked=true with LOCKED_EVIDENCE_REQUIRED when evidence is absent", async () => {
     const assessment = makeAssessment();
     const { handler } = buildHandler({ assessment, wizardProfile: null });
 
@@ -146,6 +151,31 @@ describe("GetAssessmentHandler", () => {
       ASSESSMENT_LOCK_REASONS.evidenceRequired,
     );
     expect(result.readiness_state.missing_evidence.length).toBeGreaterThan(0);
+  });
+
+  it("unlocks classification when accepted technical evidence exists", async () => {
+    const assessment = makeAssessment();
+    const { handler, findFirst } = buildHandler({
+      assessment,
+      acceptedEvidenceReport: { id: "evidence-1" },
+    });
+
+    const result = await handler.execute(
+      new GetAssessmentQuery(
+        "assessment-1",
+        "org-1",
+        "user-1",
+        SUBJECT_ROLES.manager,
+        "corr-1",
+      ),
+    );
+
+    expect(findFirst).toHaveBeenCalledTimes(1);
+    expect(result.readiness_state).toEqual({
+      classification_locked: false,
+      lock_reason: null,
+      missing_evidence: [],
+    });
   });
 
   // T04

@@ -31,6 +31,7 @@ export const enPages = {
     conflicts: "Conflict review",
     developer: "Technical findings",
     developers: "Developers",
+    legalLibrary: "Laws",
     secureWorkspace: "Protected organization workspace",
     signOut: "Sign out",
     switchWorkspace: "Switch workspace",
@@ -1102,6 +1103,55 @@ export const enPages = {
     },
     documentActions: {
       download: "Download",
+    },
+  },
+  legalLibrary: {
+    metadataTitle: "Legal library | LCSP",
+    metadataDescription:
+      "Review Vietnamese legal documents used as reference material in LCSP.",
+    pageTitle: "Legal documents",
+    pageDescription:
+      "Read the copy retained in LCSP and compare it with the official Government publication.",
+    officialSourceLabel: "Official source",
+    readDocument: "Read document",
+    openOfficialSource: "Open Government source",
+    downloadDocument: "Download PDF",
+    documentReferenceLabel: "Reference",
+    issuedOnLabel: "Issued",
+    effectiveOnLabel: "Effective",
+    authorityLabel: "Authority",
+    documentUnavailableTitle: "Document not found",
+    documentUnavailableDescription:
+      "The requested document is not available in this workspace legal library.",
+    riskTableTitle: "Processed legal risk",
+    riskTableDescription:
+      "Source-page chunks from the original documents, prioritized for review in the LCSP workflow.",
+    riskTableDisclaimer:
+      "Risk level is an LCSP review priority and not a legal conclusion.",
+    chunkIdLabel: "Chunk",
+    documentLabel: "Document",
+    locatorLabel: "Source range",
+    riskLevelLabel: "Risk level",
+    riskLevels: {
+      LOW: "Low",
+      MEDIUM: "Medium",
+      HIGH: "High",
+    },
+    documents: {
+      aiLaw: {
+        title: "Law on Artificial Intelligence",
+        reference: "134/2025/QH15",
+        issuedOn: "10 Dec 2025",
+        effectiveOn: "1 Mar 2026",
+        authority: "National Assembly",
+      },
+      digitalTechnologyIndustryLaw: {
+        title: "Law on Digital Technology Industry",
+        reference: "71/2025/QH15",
+        issuedOn: "14 Jun 2025",
+        effectiveOn: "1 Jan 2026",
+        authority: "National Assembly",
+      },
     },
   },
 } as const satisfies PagesMessages;

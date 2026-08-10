@@ -73,6 +73,7 @@ export type PagesMessages = {
     conflicts: string;
     developer: string;
     developers: string;
+    legalLibrary: string;
     secureWorkspace: string;
     signOut: string;
     switchWorkspace: string;
@@ -536,6 +537,50 @@ export type PagesMessages = {
       assessmentsUnavailableDetail: string;
       createAssessmentTitle: string;
       createAssessmentDetail: string;
+    };
+  };
+  legalLibrary: {
+    metadataTitle: string;
+    metadataDescription: string;
+    pageTitle: string;
+    pageDescription: string;
+    officialSourceLabel: string;
+    readDocument: string;
+    openOfficialSource: string;
+    downloadDocument: string;
+    documentReferenceLabel: string;
+    issuedOnLabel: string;
+    effectiveOnLabel: string;
+    authorityLabel: string;
+    documentUnavailableTitle: string;
+    documentUnavailableDescription: string;
+    riskTableTitle: string;
+    riskTableDescription: string;
+    riskTableDisclaimer: string;
+    chunkIdLabel: string;
+    documentLabel: string;
+    locatorLabel: string;
+    riskLevelLabel: string;
+    riskLevels: {
+      LOW: string;
+      MEDIUM: string;
+      HIGH: string;
+    };
+    documents: {
+      aiLaw: {
+        title: string;
+        reference: string;
+        issuedOn: string;
+        effectiveOn: string;
+        authority: string;
+      };
+      digitalTechnologyIndustryLaw: {
+        title: string;
+        reference: string;
+        issuedOn: string;
+        effectiveOn: string;
+        authority: string;
+      };
     };
   };
   workspaceSelector: {

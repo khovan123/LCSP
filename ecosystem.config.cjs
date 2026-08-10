@@ -101,7 +101,8 @@ module.exports = {
         ...commonEnv,
         PORT: "3001",
         HOSTNAME: "127.0.0.1",
-        LCSP_API_BASE_URL: "http://127.0.0.1:8080"
+        LCSP_API_BASE_URL: "http://127.0.0.1:8080",
+        LCSP_LEGAL_DOCUMENTS_DIR: `${APP}/reports`
       },
 
       instances: 1,

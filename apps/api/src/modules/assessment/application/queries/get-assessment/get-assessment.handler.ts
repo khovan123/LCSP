@@ -11,7 +11,11 @@ import {
   WIZARD_STATUS_CODES,
   type AssessmentNextActionKey,
 } from "@lcsp/contracts/assessment";
-import { fromPrismaWizardStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
+import {
+  fromPrismaWizardStatus,
+  toPrismaEvidenceAcceptanceStatus,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import {
@@ -56,16 +60,31 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       ? fromPrismaWizardStatus(wizardProfile.status)
       : WIZARD_STATUS_CODES.notStarted;
 
-    // classification_locked is unconditionally true until MW-evid-001 (Get Technical
-    // Evidence Report Endpoint) creates TechnicalEvidenceReport — there is no accepted
-    // report to check yet, so "locked" is the only correct answer, not a placeholder.
-    const readinessState: ReadinessState = {
-      classification_locked: true,
-      lock_reason: ASSESSMENT_LOCK_REASONS.evidenceRequired,
-      missing_evidence: [
-        ASSESSMENT_MISSING_EVIDENCE_CODES.technicalEvidenceReport,
-      ],
-    };
+    const acceptedEvidenceReport =
+      await this.prisma.technicalEvidenceReport.findFirst({
+        where: {
+          assessmentId: assessment.id,
+          organizationId: assessment.organizationId,
+          status: toPrismaEvidenceAcceptanceStatus(
+            TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+          ),
+        },
+        select: { id: true },
+      });
+
+    const readinessState: ReadinessState = acceptedEvidenceReport
+      ? {
+          classification_locked: false,
+          lock_reason: null,
+          missing_evidence: [],
+        }
+      : {
+          classification_locked: true,
+          lock_reason: ASSESSMENT_LOCK_REASONS.evidenceRequired,
+          missing_evidence: [
+            ASSESSMENT_MISSING_EVIDENCE_CODES.technicalEvidenceReport,
+          ],
+        };
 
     return {
       assessment_id: assessment.id,

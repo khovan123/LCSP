@@ -31,6 +31,7 @@ export const viPages = {
     conflicts: "Xử lý xung đột",
     developer: "Phát hiện kỹ thuật",
     developers: "Developer",
+    legalLibrary: "Luật",
     secureWorkspace: "Workspace tổ chức được bảo vệ",
     signOut: "Đăng xuất",
     switchWorkspace: "Đổi workspace",
@@ -1097,6 +1098,55 @@ export const viPages = {
     },
     documentActions: {
       download: "Tải về",
+    },
+  },
+  legalLibrary: {
+    metadataTitle: "Văn bản pháp luật | LCSP",
+    metadataDescription:
+      "Tra cứu các văn bản pháp luật Việt Nam được dùng làm căn cứ trong LCSP.",
+    pageTitle: "Văn bản pháp luật",
+    pageDescription:
+      "Đọc bản lưu trong LCSP và đối chiếu với nguồn công bố chính thức của Chính phủ.",
+    officialSourceLabel: "Nguồn chính thức",
+    readDocument: "Đọc văn bản",
+    openOfficialSource: "Mở nguồn Chính phủ",
+    downloadDocument: "Tải PDF",
+    documentReferenceLabel: "Số hiệu",
+    issuedOnLabel: "Ngày ban hành",
+    effectiveOnLabel: "Ngày có hiệu lực",
+    authorityLabel: "Cơ quan ban hành",
+    documentUnavailableTitle: "Không tìm thấy văn bản",
+    documentUnavailableDescription:
+      "Văn bản được yêu cầu không có trong thư viện pháp luật của workspace.",
+    riskTableTitle: "Legal risk đã xử lý",
+    riskTableDescription:
+      "Các chunk theo phạm vi trang của văn bản gốc, được ưu tiên để rà soát trong quy trình LCSP.",
+    riskTableDisclaimer:
+      "Mức độ rủi ro là thứ tự ưu tiên rà soát của LCSP, không phải kết luận pháp lý.",
+    chunkIdLabel: "Chunk",
+    documentLabel: "Văn bản",
+    locatorLabel: "Phạm vi nguồn",
+    riskLevelLabel: "Mức độ rủi ro",
+    riskLevels: {
+      LOW: "Thấp",
+      MEDIUM: "Trung bình",
+      HIGH: "Cao",
+    },
+    documents: {
+      aiLaw: {
+        title: "Luật Trí tuệ nhân tạo",
+        reference: "134/2025/QH15",
+        issuedOn: "10/12/2025",
+        effectiveOn: "01/03/2026",
+        authority: "Quốc hội",
+      },
+      digitalTechnologyIndustryLaw: {
+        title: "Luật Công nghiệp công nghệ số",
+        reference: "71/2025/QH15",
+        issuedOn: "14/06/2025",
+        effectiveOn: "01/01/2026",
+        authority: "Quốc hội",
+      },
     },
   },
 } as const satisfies PagesMessages;
