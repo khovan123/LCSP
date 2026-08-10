@@ -102,9 +102,7 @@ describe("AcceptLegalRuleMatchHandler", () => {
       });
 
     mockFindApprovedCorpus = jest
-      .fn<
-        (args: FindApprovedVersionArgs) => Promise<{ id: string } | null>
-      >()
+      .fn<(args: FindApprovedVersionArgs) => Promise<{ id: string } | null>>()
       .mockImplementation((args) =>
         Promise.resolve(
           args.where?.id === "unapproved-corpus-v0"
@@ -114,9 +112,7 @@ describe("AcceptLegalRuleMatchHandler", () => {
       );
 
     mockFindApprovedCatalog = jest
-      .fn<
-        (args: FindApprovedVersionArgs) => Promise<{ id: string } | null>
-      >()
+      .fn<(args: FindApprovedVersionArgs) => Promise<{ id: string } | null>>()
       .mockImplementation((args) =>
         Promise.resolve(
           args.where?.id === "unapproved-catalog-v0"
