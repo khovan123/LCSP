@@ -1,5 +1,8 @@
-from lcsp_workers.legal.legal_retrieval_consumer import LegalRetrievalConsumer
+import pytest
+
 from lcsp_workers.legal.chromadb_citation_retriever import RetrievedChunk
+from lcsp_workers.legal.legal_retrieval_consumer import LegalRetrievalConsumer
+from lcsp_workers.platform.api_client import WorkerCallbackError
 
 
 class DummyConfig:
@@ -8,13 +11,15 @@ class DummyConfig:
 
 
 class DummyApiClient:
-    def __init__(self):
+    def __init__(self, verified_profile_status="APPROVED"):
         self.calls = []
+        self.verified_profile_status = verified_profile_status
 
     def get_verified_profile_by_id(self, verified_profile_id):
         self.calls.append(("verified_profile", verified_profile_id))
         return {
             "id": verified_profile_id,
+            "status": self.verified_profile_status,
             "mergedProfile": {
                 "businessProcess": "AUTOMATED_DECISION",
                 "automationLevel": "FULLY_AUTOMATED",
@@ -87,3 +92,18 @@ def test_consumer_fetches_data_and_submits_callback():
     assert callback_payload.matches[0]["match_id"].startswith("RULE-A")
     assert callback_payload.citation_allowlist == ["chunk-1"]
     assert callback_payload.overall_coverage_status == "COMPLETE_CITATION"
+
+
+def test_consumer_rejects_unapproved_verified_profile_before_legal_lookup():
+    api_client = DummyApiClient(verified_profile_status="PENDING_APPROVAL")
+    consumer = LegalRetrievalConsumer(
+        DummyConfig(), api_client=api_client, retriever=DummyRetriever()
+    )
+
+    with pytest.raises(WorkerCallbackError, match="Verified profile is not approved"):
+        consumer.handle(
+            {"verifiedProfileId": "vp-1", "assessmentId": "assessment-1"},
+            correlation_id="corr-1",
+        )
+
+    assert api_client.calls == [("verified_profile", "vp-1")]
