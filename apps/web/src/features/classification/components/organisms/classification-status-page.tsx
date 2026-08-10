@@ -90,6 +90,10 @@ export function ClassificationStatusPage({
   const showFinalReport = actionVisibility.showFinalReport;
   const showGapAnalysis = actionVisibility.showGapAnalysis;
   const showRerunClassification = actionVisibility.showRerunClassification;
+  const summary = viewModel.summaryText ??
+    (viewModel.summaryKey
+      ? resolveMessage(appLocale, viewModel.summaryKey)
+      : null);
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
@@ -106,11 +110,11 @@ export function ClassificationStatusPage({
         badgeLabel={resolveMessage(appLocale, viewModel.badgeKey)}
         badgeVariant={state === "blocked" ? "destructive" : "secondary"}
       >
-        {viewModel.summaryKey ? (
+        {summary ? (
           <div className="rounded-lg border bg-muted/40 p-4">
             <p className="text-sm font-medium">{resolveMessage(appLocale, "pages.classification.summaryLabel")}</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              {resolveMessage(appLocale, viewModel.summaryKey)}
+              {summary}
             </p>
           </div>
         ) : null}
