@@ -28,6 +28,7 @@ export type ClassificationStatusViewModel = {
   badgeKey: MessageKey;
   descriptionKey: MessageKey;
   summaryKey?: MessageKey;
+  summaryText?: string;
   references?: string[];
   hasClassification: boolean;
   canRerunClassification: boolean;
@@ -108,6 +109,7 @@ export function sanitizeAssessmentDetailPayload(
     wizard_status?: unknown;
     readiness_state?: unknown;
     guardrail_status?: unknown;
+    classification_result?: unknown;
     can_rerun_classification?: unknown;
   };
 
@@ -132,6 +134,17 @@ export function sanitizeAssessmentDetailPayload(
     guardrailStatus !== undefined &&
     guardrailStatus !== null &&
     typeof guardrailStatus !== "string"
+  ) {
+    return null;
+  }
+
+  const classificationResult = sanitizeClassificationResult(
+    candidate.classification_result,
+  );
+  if (
+    candidate.classification_result !== undefined &&
+    candidate.classification_result !== null &&
+    classificationResult === null
   ) {
     return null;
   }
@@ -165,6 +178,10 @@ export function sanitizeAssessmentDetailPayload(
 
   if (guardrailStatus !== undefined) {
     sanitized.guardrail_status = guardrailStatus as string | null;
+  }
+
+  if (candidate.classification_result !== undefined) {
+    sanitized.classification_result = classificationResult;
   }
 
   if (candidate.can_rerun_classification !== undefined) {
@@ -206,6 +223,9 @@ export function toClassificationStatusOutcome(
 function toClassificationStatusViewModel(payload: AssessmentDetailPayload): ClassificationStatusViewModel {
   const locked = payload.readiness_state?.classification_locked === true;
   const guardrailStatus = payload.guardrail_status ?? null;
+  const classificationResult = payload.classification_result ?? null;
+  const references = classificationResult?.citation_basis ?? [];
+  const summaryText = classificationResult?.rationale ?? undefined;
 
   if (locked) {
     return {
@@ -225,7 +245,8 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
       badgeKey: "pages.classification.states.passedBadge",
       descriptionKey: "pages.classification.states.passedDescription",
       summaryKey: "pages.classification.states.passedSummary",
-      references: ["Article 1", "Article 2"],
+      summaryText,
+      references,
       hasClassification: true,
       canRerunClassification: false,
     };
@@ -238,6 +259,8 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
       badgeKey: "pages.classification.states.degradedBadge",
       descriptionKey: "pages.classification.states.degradedDescription",
       summaryKey: "pages.classification.states.degradedSummary",
+      summaryText,
+      references,
       hasClassification: true,
       canRerunClassification: false,
     };
@@ -250,6 +273,8 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
       badgeKey: "pages.classification.states.blockedBadge",
       descriptionKey: "pages.classification.states.blockedDescription",
       summaryKey: "pages.classification.states.blockedSummary",
+      summaryText,
+      references,
       hasClassification: true,
       canRerunClassification: false,
     };
@@ -265,6 +290,13 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
   };
 }
 
+type ClassificationResultPayload = {
+  risk_level?: string | null;
+  applicability_assessment?: string | null;
+  citation_basis: string[];
+  rationale?: string | null;
+};
+
 type AssessmentDetailPayload = {
   assessment_id?: string;
   name?: string;
@@ -273,6 +305,7 @@ type AssessmentDetailPayload = {
     classification_locked?: boolean;
   };
   guardrail_status?: string | null;
+  classification_result?: ClassificationResultPayload | null;
   can_rerun_classification?: boolean;
 };
 
@@ -283,4 +316,50 @@ function isAssessmentDetailPayload(payload: unknown): payload is AssessmentDetai
 
   const candidate = payload as AssessmentDetailPayload;
   return typeof candidate.readiness_state?.classification_locked === "boolean" || "guardrail_status" in candidate;
+}
+
+function sanitizeClassificationResult(
+  value: unknown,
+): ClassificationResultPayload | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return null;
+
+  const candidate = value as Record<string, unknown>;
+  const citationBasis = candidate.citation_basis;
+  if (
+    citationBasis !== undefined &&
+    (!Array.isArray(citationBasis) ||
+      citationBasis.some((entry) => typeof entry !== "string"))
+  ) {
+    return null;
+  }
+
+  for (const key of [
+    "risk_level",
+    "applicability_assessment",
+    "rationale",
+  ] as const) {
+    const entry = candidate[key];
+    if (entry !== undefined && entry !== null && typeof entry !== "string") {
+      return null;
+    }
+  }
+
+  return {
+    risk_level: normalizeOptionalString(candidate.risk_level),
+    applicability_assessment: normalizeOptionalString(
+      candidate.applicability_assessment,
+    ),
+    citation_basis: Array.isArray(citationBasis)
+      ? citationBasis.map((entry) => entry.trim()).filter(Boolean)
+      : [],
+    rationale: normalizeOptionalString(candidate.rationale),
+  };
+}
+
+function normalizeOptionalString(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
 }
