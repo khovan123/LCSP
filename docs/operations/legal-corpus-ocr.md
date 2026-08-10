@@ -1,7 +1,31 @@
 # Legal Corpus OCR
 
-Use this operator-only step for scanned legal PDFs before corpus normalization.
-It creates review artifacts only; it does not ingest or approve legal content.
+Use the VBPL HTML crawler as the preferred source path. It preserves document
+text and metadata without OCR. The OCR command is only a fallback for a
+provenance-validated scan that has no accessible HTML source.
+
+Both commands create review artifacts only; neither ingests or approves legal
+content.
+
+## Preferred: Crawl Official VBPL HTML
+
+The crawler requires the numeric gateway document ID, not the `ItemID` in the
+portal URL. Obtain that ID from an approved operator lookup; do not bulk-crawl
+or probe the gateway.
+
+```bash
+lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/crawl_vbpl_document.py \
+  --document-id LAW-71-2025-QH15 \
+  --gateway-document-id <validated-vbpl-gateway-id> \
+  --source-url 'https://vbpl.vn/TW/Pages/vbpq-toanvan.aspx?ItemID=179989&Keyword=' \
+  --output-dir reports/legal-corpus-source
+```
+
+This outputs source HTML, normalized plain text and a JSON manifest containing
+the source/status metadata, retrieval time, and SHA-256 hashes. Review the
+manifest's `sourceEffectStatus` before corpus ingestion.
+
+## Fallback: OCR Scanned PDF
 
 ## Prerequisites
 
