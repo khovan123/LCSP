@@ -34,10 +34,36 @@ lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/normalize_vbpl_
   --output reports/legal-corpus-source/LAW-71-2025-QH15.ingest.json
 ```
 
+The crawler always verifies HTTPS. On a server using an enterprise TLS proxy,
+provide the proxy CA without disabling verification:
+
+```bash
+REQUESTS_CA_BUNDLE=/etc/ssl/certs/enterprise-proxy-ca.pem \
+  lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/crawl_congbao_docx.py ...
+```
+
 The generated payload contains stable `art-N`, `art-N::cl-M`, and
 `art-N::cl-M::pt-X` locators, parent context and direct in-document article
 references. It has `reviewRequired: true`; inspect warnings, hierarchy and
 cross references before submitting it to the corpus ingestion endpoint.
+
+## Official DOCX Fallback For Law 134
+
+Luật 134/2025/QH15 is available as an official Công báo DOCX. Use it instead
+of OCR:
+
+```bash
+lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/crawl_congbao_docx.py \
+  --document-id LAW-134-2025-QH15 \
+  --source-url 'https://congbao.chinhphu.vn/van-ban/luat-so-134-2025-qh15-468694.htm' \
+  --source-effect-status 'Còn hiệu lực' \
+  --output-dir reports/legal-corpus-source
+
+lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/normalize_vbpl_document.py \
+  --source-manifest reports/legal-corpus-source/LAW-134-2025-QH15.source.json \
+  --corpus-version VN-LEGAL-2026-08 \
+  --output reports/legal-corpus-source/LAW-134-2025-QH15.ingest.json
+```
 
 ## Fallback: OCR Scanned PDF
 
