@@ -25,6 +25,7 @@ import {
   OVERALL_COVERAGE_STATUSES,
   SCAN_ERROR_CODES,
   SCAN_EVENT_TYPES,
+  VERIFIED_PROFILE_STATUSES,
 } from "@lcsp/contracts/scan";
 import { Prisma } from "@prisma/client";
 
@@ -33,6 +34,7 @@ import {
   toPrismaLegalRuleLifecycleStatus,
   toPrismaLegalRuleMatchGuardrailStatus,
   toPrismaOverallCoverageStatus,
+  toPrismaVerifiedProfileStatus,
 } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -95,6 +97,9 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
       where: {
         id: payload.verified_profile_id,
         assessmentId: payload.assessment_id,
+        status: toPrismaVerifiedProfileStatus(
+          VERIFIED_PROFILE_STATUSES.approved,
+        ),
       },
       select: {
         id: true,
