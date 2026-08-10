@@ -21,6 +21,13 @@ export interface ReadinessState {
   missing_evidence: AssessmentMissingEvidenceCode[];
 }
 
+export interface ClassificationResultSummaryDto {
+  risk_level: string | null;
+  applicability_assessment: string | null;
+  citation_basis: string[];
+  rationale: string | null;
+}
+
 export interface AssessmentDetailDto {
   assessment_id: string;
   name: string;
@@ -30,6 +37,7 @@ export interface AssessmentDetailDto {
   wizard_status: WizardStatus;
   readiness_state: ReadinessState;
   guardrail_status: ClassificationGuardrailStatus | null;
+  classification_result: ClassificationResultSummaryDto | null;
   can_rerun_classification: boolean;
   next_action: AssessmentNextActionKey;
   created_at: string;
