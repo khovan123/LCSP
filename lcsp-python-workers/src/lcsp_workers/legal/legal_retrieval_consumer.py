@@ -43,6 +43,10 @@ class LegalRetrievalConsumer(ConsumerBase):
         assessment_id = self._required_message_id(message, "assessmentId")
 
         verified_profile = self._api_client.get_verified_profile_by_id(verified_profile_id)
+        verified_profile_status = str(verified_profile.get("status") or "").upper()
+        if verified_profile_status != "APPROVED":
+            raise WorkerCallbackError("Verified profile is not approved.")
+
         legal_catalog = self._api_client.get_active_legal_rule_catalog()
         legal_corpus = self._api_client.get_active_legal_corpus()
         corpus_version_id = str(legal_corpus.get("versionId") or "")
