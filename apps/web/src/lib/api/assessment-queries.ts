@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  approveVerifiedProfile,
   getClassificationStatus,
   rerunClassification,
 } from "./classification-client";
@@ -49,6 +50,20 @@ export function useRerunClassificationMutation(assessmentId: string) {
 
   return useMutation({
     mutationFn: () => rerunClassification(assessmentId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: apiQueryKeys.assessment.classification(assessmentId),
+      });
+    },
+  });
+}
+
+export function useApproveVerifiedProfileMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (verifiedProfileId: string) =>
+      approveVerifiedProfile(assessmentId, verifiedProfileId),
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: apiQueryKeys.assessment.classification(assessmentId),
