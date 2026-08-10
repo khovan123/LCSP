@@ -50,7 +50,8 @@ cross references before submitting it to the corpus ingestion endpoint.
 ## Official DOCX Fallback For Law 134
 
 Luật 134/2025/QH15 is available as an official Công báo DOCX. Use it instead
-of OCR:
+of OCR whenever the official DOCX can be retrieved and its provenance can be
+validated by the Legal Operator.
 
 ```bash
 lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/crawl_congbao_docx.py \
@@ -67,7 +68,7 @@ lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/normalize_vbpl_
 
 ## Fallback: OCR Scanned PDF
 
-## Prerequisites
+### Prerequisites
 
 ```bash
 sudo apt-get update
@@ -77,7 +78,7 @@ sudo apt-get install -y poppler-utils tesseract-ocr tesseract-ocr-vie
 `pdftoppm` comes from `poppler-utils`; Vietnamese recognition data is supplied
 by `tesseract-ocr-vie`.
 
-## Run The Repository Sources
+### Run The Repository Sources
 
 From the repository root:
 
@@ -97,12 +98,71 @@ lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/ocr_legal_pdf.p
 
 Each run creates:
 
-- `<document-id>.ocr.txt`: page-separated OCR text;
+- `<document-id>.ocr.txt`: page-separated raw OCR text;
 - `<document-id>.ocr.json`: source hash, page text hashes, OCR language/DPI and timestamp.
 
-## Review Gate
+Raw OCR artefacts are immutable evidence of the OCR run. Do not correct them in
+place after hashes have been recorded.
 
-The Internal Legal Operator must correct and review the OCR output, identify
-document/article/clause/point hierarchy, and create stable citation locators
-before calling the corpus ingestion API. OCR output is never automatically
-approved or presented as a legal source.
+## Legal Operator Review Gate
+
+The Internal Legal Operator must correct and review the extracted text, identify
+document/chapter/article/clause/point hierarchy, and confirm stable citation
+locators before calling the corpus ingestion API. OCR output is never
+automatically approved or presented as a legal source.
+
+The remaining required handoff for the current Law 134/Law 71 corpus is:
+
+- `<document-id>.reviewed.txt` — text corrected against the PRIMARY source;
+- `<document-id>.hierarchy-review.json` — reviewed hierarchy and sign-off
+  metadata, including reviewer, review date, source snapshot/hash and review
+  state;
+- an explicit `APPROVED` hierarchy decision before the reviewed text is used to
+  build a corpus payload.
+
+Until these artefacts exist, corpus approval must fail closed. A parser warning
+or obvious OCR sequence does not substitute for Legal Operator approval.
+
+### Law 134 hierarchy item that must be confirmed
+
+The current raw OCR has an apparent duplicate `Chương VI`: Articles 28–29 are
+under the enforcement/violations chapter, and Articles 30–32 are then preceded
+by another `Chương VI`, followed by `Chương VIII` for Articles 33–35.
+
+The candidate hierarchy to verify against the PRIMARY source is:
+
+```text
+Chương VI   -> Điều 28-29
+Chương VII  -> Điều 30-32
+Chương VIII -> Điều 33-35
+```
+
+In particular, `Chương VII` for Articles 30–32 must be explicitly confirmed by
+the Legal Operator and recorded in
+`LAW-134-2025-QH15.hierarchy-review.json`. Do not silently mutate the raw OCR
+heading to make the sequence look correct.
+
+### Minimum hierarchy-review record
+
+A review record should contain at least:
+
+```json
+{
+  "documentId": "LAW-134-2025-QH15",
+  "reviewedSourceSha256": "sha256:...",
+  "reviewedTextSha256": "sha256:...",
+  "reviewedBy": "<legal-operator-id>",
+  "reviewedAt": "<ISO-8601>",
+  "reviewState": "APPROVED",
+  "hierarchyCorrections": [
+    {
+      "raw": "Chương VI before Điều 30",
+      "reviewed": "Chương VII",
+      "scope": "Điều 30-32"
+    }
+  ]
+}
+```
+
+`reviewState` must remain `CHANGES_REQUIRED` while any material OCR or hierarchy
+issue is unresolved.
