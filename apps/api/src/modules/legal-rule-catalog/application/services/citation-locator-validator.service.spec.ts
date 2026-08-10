@@ -6,20 +6,25 @@ import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.
 describe("CitationLocatorValidatorService", () => {
   let service: CitationLocatorValidatorService;
   let prisma: jest.Mocked<PrismaService>;
+  let mockFindApprovedCorpus: jest.Mock;
+  let mockFindChunk: jest.Mock;
 
   beforeEach(async () => {
+    mockFindApprovedCorpus = jest.fn().mockResolvedValue({ id: "v1" });
+    mockFindChunk = jest.fn().mockResolvedValue({
+      id: "chunk-1",
+      legalCorpusVersionId: "v1",
+      documentId: "doc1",
+      locator: "art-1",
+      legalStatus: "ACTIVE",
+    });
+
     prisma = {
       legalCorpusVersion: {
-        findFirst: jest.fn().mockResolvedValue({ id: "v1" }),
+        findFirst: mockFindApprovedCorpus,
       },
       legalDocumentChunk: {
-        findFirst: jest.fn().mockResolvedValue({
-          id: "chunk-1",
-          legalCorpusVersionId: "v1",
-          documentId: "doc1",
-          locator: "art-1",
-          legalStatus: "ACTIVE",
-        }),
+        findFirst: mockFindChunk,
       },
     } as unknown as jest.Mocked<PrismaService>;
 
@@ -50,7 +55,7 @@ describe("CitationLocatorValidatorService", () => {
       ]),
     ).resolves.toBeUndefined();
 
-    expect(prisma.legalCorpusVersion.findFirst).toHaveBeenCalled();
-    expect(prisma.legalDocumentChunk.findFirst).toHaveBeenCalled();
+    expect(mockFindApprovedCorpus).toHaveBeenCalled();
+    expect(mockFindChunk).toHaveBeenCalled();
   });
 });
