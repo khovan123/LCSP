@@ -29,7 +29,11 @@ from lcsp_workers.platform.callback_schemas import (
 
 logger = get_logger(__name__)
 
-_IDEMPOTENT_CONFLICT_CODES = {"FLOW_ALREADY_EXISTS", "RESULT_ALREADY_EXISTS"}
+_IDEMPOTENT_CONFLICT_CODES = {
+    "FLOW_ALREADY_EXISTS",
+    "PROFILE_ALREADY_EXISTS",
+    "RESULT_ALREADY_EXISTS",
+}
 _PRIVACY_FLAG_KEYS = {
     "containsSourceCode",
     "secretsRedacted",

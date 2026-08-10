@@ -15,6 +15,7 @@ class CallbackResponse(BaseModel):
     success: Optional[bool] = None
     accepted: Optional[bool] = None
     evidence_report_id: Optional[str] = None
+    technical_profile_id: Optional[str] = None
     verified_profile_id: Optional[str] = None
     ai_usage_flow_id: Optional[str] = None
     legal_rule_match_id: Optional[str] = None

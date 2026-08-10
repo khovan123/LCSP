@@ -181,13 +181,40 @@ def test_technical_profile_callback_uses_evidence_endpoint(client):
     with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"accepted": True}
+        mock_resp.json.return_value = {
+            "accepted": True,
+            "technical_profile_id": "technical-profile-1",
+        }
         mock_post.return_value = mock_resp
 
-        client.post_technical_profile_callback(payload)
+        response = client.post_technical_profile_callback(payload)
 
         url = mock_post.call_args.args[0]
         assert url == "http://testserver/internal/evidence/technical-profile-callback"
+        assert response.technical_profile_id == "technical-profile-1"
+
+
+def test_profile_already_exists_is_an_idempotent_callback_result(client):
+    payload = TechnicalProfileCallbackPayload(
+        evidence_report_id="ter-1",
+        assessment_id="assessment-1",
+        schema_version="1.0.0",
+        provider_version="lcsp.technical-profile-worker.v1",
+        profile_data={},
+        privacy_flags={"containsSourceCode": False, "secretsRedacted": True},
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 409
+        mock_resp.json.return_value = {"problem": {"code": "PROFILE_ALREADY_EXISTS"}}
+        mock_post.return_value = mock_resp
+
+        response = client.post_technical_profile_callback(payload)
+
+    assert response.accepted is True
+    assert response.status == "duplicate"
+    assert mock_post.call_count == 1
 
 
 def test_get_accepted_technical_evidence_report_rejects_non_accepted(client):
