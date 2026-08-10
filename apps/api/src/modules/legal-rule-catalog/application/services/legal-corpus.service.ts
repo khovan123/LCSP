@@ -317,9 +317,13 @@ export class LegalCorpusService {
       const documentId = stringValue(rawDocument.documentId);
       const documentReviewedBy = stringValue(rawDocument.reviewedBy);
       const reviewedAt = stringValue(rawDocument.reviewedAt);
-      const reviewedSourceSha256 = stringValue(rawDocument.reviewedSourceSha256);
+      const reviewedSourceSha256 = stringValue(
+        rawDocument.reviewedSourceSha256,
+      );
       const reviewedTextSha256 = stringValue(rawDocument.reviewedTextSha256);
-      const hierarchyReviewSha256 = stringValue(rawDocument.hierarchyReviewSha256);
+      const hierarchyReviewSha256 = stringValue(
+        rawDocument.hierarchyReviewSha256,
+      );
       if (
         !documentId ||
         rawDocument.reviewState !== "APPROVED" ||
@@ -342,7 +346,9 @@ export class LegalCorpusService {
       });
     }
 
-    const signoffIds = new Set(documents.map((document) => document.documentId));
+    const signoffIds = new Set(
+      documents.map((document) => document.documentId),
+    );
     if (
       documents.length !== documentIds.length ||
       documentIds.some((documentId) => !signoffIds.has(documentId))
