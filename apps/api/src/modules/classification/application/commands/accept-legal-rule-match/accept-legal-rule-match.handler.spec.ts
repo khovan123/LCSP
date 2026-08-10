@@ -27,6 +27,12 @@ type VerifiedProfileRecord = {
   organizationId: string;
 };
 
+type FindApprovedVersionArgs = {
+  where?: {
+    id?: string;
+  };
+};
+
 describe("AcceptLegalRuleMatchHandler", () => {
   let handler: AcceptLegalRuleMatchHandler;
   let prisma: jest.Mocked<PrismaService>;
@@ -35,10 +41,10 @@ describe("AcceptLegalRuleMatchHandler", () => {
     (args: unknown) => Promise<VerifiedProfileRecord | null>
   >;
   let mockFindApprovedCorpus: jest.Mock<
-    (args: any) => Promise<{ id: string } | null>
+    (args: FindApprovedVersionArgs) => Promise<{ id: string } | null>
   >;
   let mockFindApprovedCatalog: jest.Mock<
-    (args: any) => Promise<{ id: string } | null>
+    (args: FindApprovedVersionArgs) => Promise<{ id: string } | null>
   >;
   let mockCreateLegalRuleMatch: jest.Mock<
     (args: { data: unknown }) => Promise<unknown>
@@ -96,22 +102,26 @@ describe("AcceptLegalRuleMatchHandler", () => {
       });
 
     mockFindApprovedCorpus = jest
-      .fn<(args: any) => Promise<{ id: string } | null>>()
-      .mockImplementation((args: any) =>
+      .fn<
+        (args: FindApprovedVersionArgs) => Promise<{ id: string } | null>
+      >()
+      .mockImplementation((args) =>
         Promise.resolve(
-          args?.where?.id === "unapproved-corpus-v0"
+          args.where?.id === "unapproved-corpus-v0"
             ? null
-            : { id: String(args?.where?.id ?? "") },
+            : { id: String(args.where?.id ?? "") },
         ),
       );
 
     mockFindApprovedCatalog = jest
-      .fn<(args: any) => Promise<{ id: string } | null>>()
-      .mockImplementation((args: any) =>
+      .fn<
+        (args: FindApprovedVersionArgs) => Promise<{ id: string } | null>
+      >()
+      .mockImplementation((args) =>
         Promise.resolve(
-          args?.where?.id === "unapproved-catalog-v0"
+          args.where?.id === "unapproved-catalog-v0"
             ? null
-            : { id: String(args?.where?.id ?? "") },
+            : { id: String(args.where?.id ?? "") },
         ),
       );
 
