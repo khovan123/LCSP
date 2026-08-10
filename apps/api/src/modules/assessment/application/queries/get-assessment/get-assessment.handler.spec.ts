@@ -3,6 +3,7 @@ import {
   ASSESSMENT_STATUS_CODES,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
+import { CLASSIFICATION_GUARDRAIL_STATUSES } from "@lcsp/contracts/scan";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { describe, it, expect, jest } from "@jest/globals";
 import { NotFoundException } from "@nestjs/common";
@@ -31,6 +32,7 @@ function buildHandler(input: {
   assessment: Assessment | null;
   wizardProfile?: { status: string } | null;
   acceptedEvidenceReport?: { id: string } | null;
+  classificationResult?: { guardrailStatus: string } | null;
 }) {
   const findById = jest
     .fn<AssessmentRepository["findById"]>()
@@ -54,16 +56,26 @@ function buildHandler(input: {
   const findUnique = jest
     .fn<() => Promise<{ status: string } | null>>()
     .mockResolvedValue(input.wizardProfile ?? null);
-  const findFirst = jest
+  const findAcceptedEvidence = jest
     .fn<() => Promise<{ id: string } | null>>()
     .mockResolvedValue(input.acceptedEvidenceReport ?? null);
+  const findClassificationResult = jest
+    .fn<() => Promise<{ guardrailStatus: string } | null>>()
+    .mockResolvedValue(input.classificationResult ?? null);
   const prisma = {
     wizardProfile: { findUnique },
-    technicalEvidenceReport: { findFirst },
+    technicalEvidenceReport: { findFirst: findAcceptedEvidence },
+    classificationResult: { findFirst: findClassificationResult },
   } as unknown as PrismaService;
 
   const handler = new GetAssessmentHandler(repository, prisma);
-  return { handler, findById, findUnique, findFirst };
+  return {
+    handler,
+    findById,
+    findUnique,
+    findAcceptedEvidence,
+    findClassificationResult,
+  };
 }
 
 describe("GetAssessmentHandler", () => {
@@ -155,7 +167,7 @@ describe("GetAssessmentHandler", () => {
 
   it("unlocks classification when accepted technical evidence exists", async () => {
     const assessment = makeAssessment();
-    const { handler, findFirst } = buildHandler({
+    const { handler, findAcceptedEvidence } = buildHandler({
       assessment,
       acceptedEvidenceReport: { id: "evidence-1" },
     });
@@ -170,12 +182,38 @@ describe("GetAssessmentHandler", () => {
       ),
     );
 
-    expect(findFirst).toHaveBeenCalledTimes(1);
+    expect(findAcceptedEvidence).toHaveBeenCalledTimes(1);
     expect(result.readiness_state).toEqual({
       classification_locked: false,
       lock_reason: null,
       missing_evidence: [],
     });
+  });
+
+  it("projects the accepted classification result guardrail status", async () => {
+    const assessment = makeAssessment();
+    const { handler, findClassificationResult } = buildHandler({
+      assessment,
+      acceptedEvidenceReport: { id: "evidence-1" },
+      classificationResult: {
+        guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+      },
+    });
+
+    const result = await handler.execute(
+      new GetAssessmentQuery(
+        "assessment-1",
+        "org-1",
+        "user-1",
+        SUBJECT_ROLES.manager,
+        "corr-1",
+      ),
+    );
+
+    expect(findClassificationResult).toHaveBeenCalledTimes(1);
+    expect(result.guardrail_status).toBe(
+      CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+    );
   });
 
   // T04

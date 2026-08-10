@@ -11,8 +11,12 @@ import {
   WIZARD_STATUS_CODES,
   type AssessmentNextActionKey,
 } from "@lcsp/contracts/assessment";
-import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import {
+  CLASSIFICATION_RESULT_STATUSES,
+  TECHNICAL_EVIDENCE_REPORT_STATUSES,
+} from "@lcsp/contracts/scan";
+import {
+  fromPrismaClassificationGuardrailStatus,
   fromPrismaWizardStatus,
   toPrismaEvidenceAcceptanceStatus,
 } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
@@ -86,6 +90,20 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
           ],
         };
 
+    const classificationResult = acceptedEvidenceReport
+      ? await this.prisma.classificationResult.findFirst({
+          where: {
+            assessmentId: assessment.id,
+            organizationId: assessment.organizationId,
+            status: toPrismaEvidenceAcceptanceStatus(
+              CLASSIFICATION_RESULT_STATUSES.accepted,
+            ),
+          },
+          select: { guardrailStatus: true },
+          orderBy: { createdAt: "desc" },
+        })
+      : null;
+
     return {
       assessment_id: assessment.id,
       name: assessment.name,
@@ -94,6 +112,11 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       organization_id: assessment.organizationId,
       wizard_status: wizardStatus,
       readiness_state: readinessState,
+      guardrail_status: classificationResult
+        ? fromPrismaClassificationGuardrailStatus(
+            classificationResult.guardrailStatus,
+          )
+        : null,
       next_action: nextActionFor(wizardStatus),
       created_at: assessment.createdAt.toISOString(),
       updated_at: assessment.updatedAt.toISOString(),

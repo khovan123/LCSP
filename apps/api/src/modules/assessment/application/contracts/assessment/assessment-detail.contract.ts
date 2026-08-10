@@ -7,6 +7,7 @@ import {
   type AssessmentNextActionKey,
   type AssessmentStatusCode,
 } from "@lcsp/contracts/assessment";
+import type { ClassificationGuardrailStatus } from "@lcsp/contracts/scan";
 
 export type AssessmentDetailErrorCode =
   (typeof ASSESSMENT_DETAIL_ERROR_CODES)[keyof typeof ASSESSMENT_DETAIL_ERROR_CODES];
@@ -28,6 +29,7 @@ export interface AssessmentDetailDto {
   organization_id: string;
   wizard_status: WizardStatus;
   readiness_state: ReadinessState;
+  guardrail_status: ClassificationGuardrailStatus | null;
   next_action: AssessmentNextActionKey;
   created_at: string;
   updated_at: string;

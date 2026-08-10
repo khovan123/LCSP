@@ -6,7 +6,11 @@ import {
   ASSESSMENT_STATUS_CODES,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
+import {
+  CLASSIFICATION_GUARDRAIL_STATUSES,
+  CLASSIFICATION_RESULT_STATUSES,
+  TECHNICAL_EVIDENCE_REPORT_STATUSES,
+} from "@lcsp/contracts/scan";
 import {
   PBAC_ACTIONS,
   PBAC_REASON_CODE,
@@ -61,6 +65,7 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
   });
 
   beforeEach(async () => {
+    await prisma.classificationResult.deleteMany();
     await prisma.technicalEvidenceReport.deleteMany();
     await prisma.wizardProfile.deleteMany();
     await prisma.assessment.deleteMany();
@@ -187,6 +192,44 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
     assert.equal(body.readiness_state.classification_locked, false);
     assert.equal(body.readiness_state.lock_reason, null);
     assert.deepEqual(body.readiness_state.missing_evidence, []);
+  });
+
+  it("T03c: Accepted classification result projects its guardrail status", async () => {
+    const assessmentId = await createAssessment();
+    await prisma.technicalEvidenceReport.create({
+      data: {
+        id: "accepted-evidence-for-classification",
+        scanJobId: "scan-job-classification",
+        assessmentId,
+        snapshotId: "snapshot-classification",
+        organizationId: orgId,
+        toolsVersion: { semgrep: "1.172.0" },
+        configHash: { semgrep: "sha256:test" },
+        evidencePayload: { findings: [] },
+        privacyFlags: { containsSourceCode: false, secretsRedacted: true },
+        schemaVersion: "1.0.0",
+        status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+      },
+    });
+    await prisma.classificationResult.create({
+      data: {
+        id: "classification-result-passed",
+        assessmentId,
+        organizationId: orgId,
+        guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+        status: CLASSIFICATION_RESULT_STATUSES.accepted,
+      },
+    });
+
+    const result = await httpRequest(app)
+      .get(`/assessments/${assessmentId}`)
+      .set("Authorization", `Bearer ${managerToken}`);
+    const body = successBody<AssessmentDetailDto>(result);
+
+    assert.equal(
+      body.guardrail_status,
+      CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+    );
   });
 
   // T04
