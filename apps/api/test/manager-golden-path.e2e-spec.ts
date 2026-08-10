@@ -201,7 +201,11 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       )
       .set("Authorization", `Bearer ${token}`)
       .send({});
-    assert.equal(approvedProfile.status, 200, JSON.stringify(approvedProfile.body));
+    assert.equal(
+      approvedProfile.status,
+      200,
+      JSON.stringify(approvedProfile.body),
+    );
     assert.equal(
       successBody<{ status: string }>(approvedProfile).status,
       VERIFIED_PROFILE_STATUSES.approved,
