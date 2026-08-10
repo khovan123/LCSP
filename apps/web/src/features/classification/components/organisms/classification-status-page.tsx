@@ -307,9 +307,12 @@ function claimTitle(claim: Record<string, unknown>, index: number): string {
 
 function claimFacts(claim: Record<string, unknown>): Array<[string, string]> {
   const omitted = new Set(["evidence_refs", "evidenceRefs"]);
-  return Object.entries(claim)
-    .filter(([key, value]) => !omitted.has(key) && isDisplayValue(value))
-    .map(([key, value]) => [key, formatValue(value)]);
+  return Object.entries(claim).flatMap(([key, value]) => {
+    if (omitted.has(key) || !isDisplayValue(value)) {
+      return [];
+    }
+    return [[key, formatValue(value)] as [string, string]];
+  });
 }
 
 function claimEvidenceRefs(claim: Record<string, unknown>): string[] {
