@@ -46,7 +46,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
   });
 
   beforeEach(async () => {
-    // Clear catalog data
     await prisma.ruleApprovalRecord.deleteMany();
     await prisma.legalRule.deleteMany();
     await prisma.legalRuleCatalogVersion.deleteMany();
@@ -56,14 +55,13 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
     await prisma.legalCorpusVersion.deleteMany();
 
     await resetAuthWorkspaceDatabase(prisma);
-    await seedAuthWorkspaceFixture(prisma); // sets up orgId
+    await seedAuthWorkspaceFixture(prisma);
 
     const hashFn = (
       await import("../src/modules/auth-workspace/infrastructure/security/security.utils.js")
     ).hashSecret;
     const passwordHash = hashFn("CorrectHorseBatteryStaple!");
 
-    // 1. Setup Author User
     const authorPolicyId = "policy-author";
     await prisma.authPolicy.create({
       data: {
@@ -108,7 +106,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       successBody<{ session_token?: string }>(signInAuthor).session_token ?? "",
     );
 
-    // 2. Setup Approver User
     const approverPolicyId = "policy-approver";
     await prisma.authPolicy.create({
       data: {
@@ -154,7 +151,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         "",
     );
 
-    // 3. Setup Restricted User (no rights)
     const restrictedPolicyId = "policy-restricted";
     await prisma.authPolicy.create({
       data: {
@@ -263,20 +259,24 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
   });
 
   describe("legal corpus ingest and approval", () => {
-    it("stores immutable chunk locators as DRAFT and activates only after approval", async () => {
+    it("stores immutable chunk locators as DRAFT and activates only after matching Legal Operator sign-off", async () => {
       const content = "Điều 1. Test corpus content.";
+      const sourceSha = sha256("source");
       const response = await httpRequest(app)
         .post("/internal/legal-rule-catalog/corpus")
         .set("Authorization", `Bearer ${authorToken}`)
         .send({
           version: "corpus-draft-v1",
-          sourceManifest: { source: "test" },
+          sourceManifest: reviewManifest(
+            [{ documentId: "LAW-DRAFT", sourceSha256: sourceSha }],
+            "user-approver",
+          ),
           documents: [
             {
               documentId: "LAW-DRAFT",
               title: "Draft legal source",
               sourceUrl: "https://example.test/draft-law",
-              sourceSha256: sha256("source"),
+              sourceSha256: sourceSha,
               sourceEffectStatus: "ACTIVE",
               chunks: [
                 {
@@ -310,6 +310,90 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       });
       assert.equal(stored?.locator, "art-1");
       assert.equal(stored?.contentSha256, sha256(content));
+
+      const approvalRecord = await prisma.corpusApprovalRecord.findFirst({
+        where: { legalCorpusVersionId: draft.id },
+      });
+      assert.equal(approvalRecord?.approvedBy, "user-approver");
+    });
+
+    it("fails closed when Legal Operator sign-off is missing", async () => {
+      const content = "Điều 1. Unsigned corpus content.";
+      const response = await httpRequest(app)
+        .post("/internal/legal-rule-catalog/corpus")
+        .set("Authorization", `Bearer ${authorToken}`)
+        .send({
+          version: "corpus-unsigned-v1",
+          sourceManifest: { reviewRequired: true },
+          documents: [
+            {
+              documentId: "LAW-UNSIGNED",
+              title: "Unsigned legal source",
+              sourceUrl: "https://example.test/unsigned-law",
+              sourceSha256: sha256("unsigned-source"),
+              sourceEffectStatus: "ACTIVE",
+              chunks: [
+                {
+                  id: "chunk-unsigned-v1",
+                  locator: "art-1",
+                  content,
+                  contentSha256: sha256(content),
+                  hierarchy: { article: "1" },
+                  legalStatus: "ACTIVE",
+                },
+              ],
+            },
+          ],
+        });
+
+      assert.equal(response.status, 422);
+    });
+
+    it("rejects approval when authenticated approver differs from reviewedBy", async () => {
+      const content = "Điều 1. Reviewer mismatch.";
+      const sourceSha = sha256("mismatch-source");
+      const ingest = await httpRequest(app)
+        .post("/internal/legal-rule-catalog/corpus")
+        .set("Authorization", `Bearer ${authorToken}`)
+        .send({
+          version: "corpus-mismatch-v1",
+          sourceManifest: reviewManifest(
+            [{ documentId: "LAW-MISMATCH", sourceSha256: sourceSha }],
+            "user-author",
+          ),
+          documents: [
+            {
+              documentId: "LAW-MISMATCH",
+              title: "Reviewer mismatch legal source",
+              sourceUrl: "https://example.test/mismatch-law",
+              sourceSha256: sourceSha,
+              sourceEffectStatus: "ACTIVE",
+              chunks: [
+                {
+                  id: "chunk-mismatch-v1",
+                  locator: "art-1",
+                  content,
+                  contentSha256: sha256(content),
+                  hierarchy: { article: "1" },
+                  legalStatus: "ACTIVE",
+                },
+              ],
+            },
+          ],
+        });
+      assert.equal(ingest.status, 201);
+      const draft = successBody<{ id: string }>(ingest);
+
+      const approval = await httpRequest(app)
+        .post(`/internal/legal-rule-catalog/corpus/${draft.id}/approve`)
+        .set("Authorization", `Bearer ${approverToken}`)
+        .send({ scopeDescription: "Must not approve for another reviewer" });
+
+      assert.equal(approval.status, 422);
+      const stored = await prisma.legalCorpusVersion.findUnique({
+        where: { id: draft.id },
+      });
+      assert.equal(stored?.status, LEGAL_RULE_LIFECYCLE_STATUSES.draft);
     });
   });
 
@@ -406,6 +490,29 @@ async function seedApprovedCorpus(prisma: PrismaClient): Promise<void> {
       legalStatus: "ACTIVE",
     },
   });
+}
+
+function reviewManifest(
+  documents: Array<{ documentId: string; sourceSha256: string }>,
+  reviewedBy: string,
+) {
+  return {
+    reviewRequired: true,
+    normalizationWarnings: [],
+    reviewSignoff: {
+      state: "APPROVED",
+      reviewedBy,
+      documents: documents.map((document) => ({
+        documentId: document.documentId,
+        reviewState: "APPROVED",
+        reviewedBy,
+        reviewedAt: "2026-08-11T00:00:00+07:00",
+        reviewedSourceSha256: document.sourceSha256,
+        reviewedTextSha256: sha256(`reviewed:${document.documentId}`),
+        hierarchyReviewSha256: sha256(`hierarchy:${document.documentId}`),
+      })),
+    },
+  };
 }
 
 function sha256(value: string): string {
