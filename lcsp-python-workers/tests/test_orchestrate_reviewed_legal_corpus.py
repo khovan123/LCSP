@@ -1,16 +1,27 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
 import pytest
 
-from scripts.orchestrate_reviewed_legal_corpus import (
-    ReviewGateError,
-    build_review_signoff,
-    enrich_payload_with_signoff,
-    sha256_file,
+_SCRIPT_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "scripts"
+    / "orchestrate_reviewed_legal_corpus.py"
 )
+_SPEC = importlib.util.spec_from_file_location(
+    "orchestrate_reviewed_legal_corpus", _SCRIPT_PATH
+)
+assert _SPEC is not None and _SPEC.loader is not None
+_MODULE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+
+ReviewGateError = _MODULE.ReviewGateError
+build_review_signoff = _MODULE.build_review_signoff
+enrich_payload_with_signoff = _MODULE.enrich_payload_with_signoff
+sha256_file = _MODULE.sha256_file
 
 
 def _payload() -> dict:
