@@ -72,6 +72,13 @@ class LegalRetrievalConsumer(ConsumerBase):
             allowlist = citation_result["allowlist"]
             if not allowlist:
                 continue
+            allowed_chunks = [chunk for chunk in chunks if chunk.id in allowlist]
+            legal_statuses = {chunk.legal_status.upper() for chunk in allowed_chunks}
+            if "REPEALED" in legal_statuses:
+                raise WorkerCallbackError("Repealed citation escaped the legal allowlist.")
+            legal_status = (
+                next(iter(legal_statuses)) if len(legal_statuses) == 1 else "ACTIVE"
+            )
             matches.append(
                 {
                     "match_id": f"{result.rule_id}:{verified_profile_id}",
@@ -81,11 +88,11 @@ class LegalRetrievalConsumer(ConsumerBase):
                     "clause_ref": "",
                     "match_type": "PRIMARY_MATCH",
                     "citation_chunk_ids": allowlist,
-                    "context_roles": [chunk.role for chunk in chunks if chunk.id in allowlist],
+                    "context_roles": [chunk.role for chunk in allowed_chunks],
                     "confidence": result.confidence,
                     "coverage_status": "COMPLETE_CITATION" if allowlist else "NO_CITATION",
                     "usage_claim_ref": verified_profile_id,
-                    "legal_status": legal_corpus.get("status") or "APPROVED",
+                    "legal_status": legal_status,
                 }
             )
 
