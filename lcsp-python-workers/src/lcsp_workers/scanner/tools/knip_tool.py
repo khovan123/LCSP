@@ -66,7 +66,20 @@ class KnipTool:
         workspace = Path(workspace_path)
         config_hash = self._config_hash()
 
-        if not self._should_run(workspace):
+        project_root = self._find_project_root(workspace)
+        if project_root is None:
+            return KnipRunResult(
+                facts=[],
+                execution=ToolExecutionResult(
+                    tool_name=DEFAULT_TOOL_NAME,
+                    tool_version="not-run",
+                    outcome=OUTCOME_SUCCESS,
+                    config_hash=config_hash,
+                    messages=["knip skipped: package.json not found in workspace"],
+                ),
+            )
+
+        if not self._should_run(project_root):
             return KnipRunResult(
                 facts=[],
                 execution=ToolExecutionResult(
@@ -86,7 +99,7 @@ class KnipTool:
         try:
             completed = subprocess.run(
                 command,
-                cwd=workspace,
+                cwd=project_root,
                 capture_output=True,
                 text=True,
                 timeout=self._timeout_seconds,
@@ -142,7 +155,7 @@ class KnipTool:
             )
 
         return KnipRunResult(
-            facts=self._parse_facts(payload, workspace),
+            facts=self._parse_facts(payload, project_root),
             execution=ToolExecutionResult(
                 tool_name=DEFAULT_TOOL_NAME,
                 tool_version=version_result.tool_version,
@@ -294,6 +307,17 @@ class KnipTool:
             for path in workspace.rglob("*")
         )
 
+    def _find_project_root(self, workspace: Path) -> Path | None:
+        manifests = sorted(
+            (
+                path
+                for path in workspace.rglob("package.json")
+                if "node_modules" not in path.parts
+            ),
+            key=lambda path: (len(path.relative_to(workspace).parts), str(path)),
+        )
+        return manifests[0].parent if manifests else None
+
     def _config_hash(self) -> str:
-        material = f"{DEFAULT_TOOL_NAME}:{self._pinned_version}:npx-no-install-json"
+        material = f"{DEFAULT_TOOL_NAME}:{self._pinned_version}:npx-no-install-json-manifest-root"
         return f"sha256:{hashlib.sha256(material.encode('utf-8')).hexdigest()}"

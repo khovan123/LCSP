@@ -90,6 +90,30 @@ def test_knip_tool_accepts_the_supported_v6_release_line(
 
 
 @pytest.mark.p0
+def test_knip_runs_from_the_archive_package_manifest_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = tmp_path / "repository-archive"
+    source_file = project_root / "src" / "ai.ts"
+    source_file.parent.mkdir(parents=True)
+    source_file.write_text("export const model = 'gpt';\n", encoding="utf-8")
+    (project_root / "package.json").write_text("{}\n", encoding="utf-8")
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if "--version" in command:
+            return _completed(command, 0, stdout="6.32.0\n")
+        assert kwargs["cwd"] == project_root
+        return _completed(command, 0, stdout=json.dumps({}))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = KnipTool().run(tmp_path)
+
+    assert result.execution.outcome == OUTCOME_SUCCESS
+
+
+@pytest.mark.p0
 def test_t02_deptry_marks_torch_unused(
     sample_python_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
