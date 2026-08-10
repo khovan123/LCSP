@@ -66,8 +66,8 @@ class KnipTool:
         workspace = Path(workspace_path)
         config_hash = self._config_hash()
 
-        project_root = self._find_project_root(workspace)
-        if project_root is None:
+        project_roots = self._find_project_roots(workspace)
+        if not project_roots:
             return KnipRunResult(
                 facts=[],
                 execution=ToolExecutionResult(
@@ -79,21 +79,51 @@ class KnipTool:
                 ),
             )
 
+        version_result = self._read_version(config_hash)
+        if version_result.outcome != OUTCOME_SUCCESS:
+            return KnipRunResult(facts=[], execution=version_result)
+
+        facts: list[DependencyUsageFact] = []
+        messages: list[str] = []
+        outcome = OUTCOME_SUCCESS
+        for project_root in project_roots:
+            result = self._run_project(project_root, version_result, config_hash)
+            facts.extend(result.facts)
+            messages.extend(
+                f"{project_root.relative_to(workspace)}: {message}"
+                for message in result.execution.messages
+            )
+            if result.execution.outcome != OUTCOME_SUCCESS:
+                outcome = result.execution.outcome
+
+        return KnipRunResult(
+            facts=facts,
+            execution=ToolExecutionResult(
+                tool_name=DEFAULT_TOOL_NAME,
+                tool_version=version_result.tool_version,
+                outcome=outcome,
+                config_hash=config_hash,
+                messages=messages,
+            ),
+        )
+
+    def _run_project(
+        self,
+        project_root: Path,
+        version_result: ToolExecutionResult,
+        config_hash: str,
+    ) -> KnipRunResult:
         if not self._should_run(project_root):
             return KnipRunResult(
                 facts=[],
                 execution=ToolExecutionResult(
                     tool_name=DEFAULT_TOOL_NAME,
-                    tool_version="not-run",
+                    tool_version=version_result.tool_version,
                     outcome=OUTCOME_SUCCESS,
                     config_hash=config_hash,
                     messages=["knip skipped: no JS/TS files present"],
                 ),
             )
-
-        version_result = self._read_version(config_hash)
-        if version_result.outcome != OUTCOME_SUCCESS:
-            return KnipRunResult(facts=[], execution=version_result)
 
         command = [self._npx_binary, "--no-install", "knip", "--reporter", "json"]
         try:
@@ -307,7 +337,7 @@ class KnipTool:
             for path in workspace.rglob("*")
         )
 
-    def _find_project_root(self, workspace: Path) -> Path | None:
+    def _find_project_roots(self, workspace: Path) -> list[Path]:
         manifests = sorted(
             (
                 path
@@ -316,8 +346,38 @@ class KnipTool:
             ),
             key=lambda path: (len(path.relative_to(workspace).parts), str(path)),
         )
-        return manifests[0].parent if manifests else None
+        if not manifests:
+            return []
+        if self._has_workspace_configuration(workspace):
+            return [workspace]
+        return [manifest.parent for manifest in manifests]
+
+    def _has_workspace_configuration(self, workspace: Path) -> bool:
+        if (workspace / "pnpm-workspace.yaml").is_file():
+            return True
+        if any(
+            (workspace / name).is_file()
+            for name in (
+                "knip.json",
+                "knip.jsonc",
+                ".knip.json",
+                ".knip.jsonc",
+                "knip.ts",
+                "knip.js",
+                "knip.config.ts",
+                "knip.config.js",
+            )
+        ):
+            return True
+        root_manifest = workspace / "package.json"
+        if not root_manifest.is_file():
+            return False
+        try:
+            payload = json.loads(root_manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        return bool(payload.get("workspaces")) if isinstance(payload, dict) else False
 
     def _config_hash(self) -> str:
-        material = f"{DEFAULT_TOOL_NAME}:{self._pinned_version}:npx-no-install-json-manifest-root"
+        material = f"{DEFAULT_TOOL_NAME}:{self._pinned_version}:npx-no-install-json-all-manifest-roots"
         return f"sha256:{hashlib.sha256(material.encode('utf-8')).hexdigest()}"
