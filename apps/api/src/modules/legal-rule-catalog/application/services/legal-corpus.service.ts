@@ -15,6 +15,22 @@ import type {
   LegalCorpusDocumentInput,
 } from "../contracts/legal-corpus.contract.js";
 
+interface LegalReviewDocumentSignoff {
+  documentId: string;
+  reviewState: "APPROVED";
+  reviewedBy: string;
+  reviewedAt: string;
+  reviewedSourceSha256: string;
+  reviewedTextSha256: string;
+  hierarchyReviewSha256: string;
+}
+
+interface LegalReviewSignoff {
+  state: "APPROVED";
+  reviewedBy: string;
+  documents: LegalReviewDocumentSignoff[];
+}
+
 @Injectable()
 export class LegalCorpusService {
   constructor(private readonly prisma: PrismaService) {}
@@ -101,6 +117,25 @@ export class LegalCorpusService {
       );
     }
 
+    const reviewSignoff = this.requireApprovedReviewSignoff(
+      corpus.sourceManifest,
+      corpus.documents.map((document) => document.documentId),
+      input.correlationId,
+    );
+    if (reviewSignoff.reviewedBy !== input.approvedBy) {
+      throw problemException(
+        LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
+        input.correlationId,
+        {
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          meta: {
+            reason: "legal_operator_identity_mismatch",
+            signoffReviewedBy: reviewSignoff.reviewedBy,
+          },
+        },
+      );
+    }
+
     const approvedAt = new Date();
     await this.prisma.$transaction(async (tx) => {
       await tx.legalCorpusVersion.update({
@@ -115,7 +150,7 @@ export class LegalCorpusService {
       await tx.corpusApprovalRecord.create({
         data: {
           legalCorpusVersionId: corpus.id,
-          approvedBy: input.approvedBy,
+          approvedBy: reviewSignoff.reviewedBy,
           status: toPrismaLegalRuleLifecycleStatus(
             LEGAL_RULE_LIFECYCLE_STATUSES.approved,
           ),
@@ -232,6 +267,94 @@ export class LegalCorpusService {
         { status: HttpStatus.UNPROCESSABLE_ENTITY },
       );
     }
+
+    this.requireApprovedReviewSignoff(
+      input.sourceManifest,
+      input.documents.map((document) => document.documentId),
+      "legal-corpus-ingest",
+    );
+  }
+
+  private requireApprovedReviewSignoff(
+    sourceManifest: unknown,
+    documentIds: string[],
+    correlationId: string,
+  ): LegalReviewSignoff {
+    const invalid = (reason: string): never => {
+      throw problemException(
+        LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
+        correlationId,
+        {
+          status: HttpStatus.UNPROCESSABLE_ENTITY,
+          meta: { reason },
+        },
+      );
+    };
+
+    if (!isRecord(sourceManifest) || sourceManifest.reviewRequired !== true) {
+      return invalid("legal_operator_signoff_required");
+    }
+    const warnings = sourceManifest.normalizationWarnings;
+    if (Array.isArray(warnings) && warnings.length > 0) {
+      return invalid("normalization_warnings_unresolved");
+    }
+
+    const rawSignoff = sourceManifest.reviewSignoff;
+    if (!isRecord(rawSignoff) || rawSignoff.state !== "APPROVED") {
+      return invalid("legal_operator_signoff_not_approved");
+    }
+    const reviewedBy = stringValue(rawSignoff.reviewedBy);
+    const rawDocuments = rawSignoff.documents;
+    if (!reviewedBy || !Array.isArray(rawDocuments)) {
+      return invalid("legal_operator_signoff_invalid");
+    }
+
+    const documents: LegalReviewDocumentSignoff[] = [];
+    for (const rawDocument of rawDocuments) {
+      if (!isRecord(rawDocument)) {
+        return invalid("legal_operator_document_signoff_invalid");
+      }
+      const documentId = stringValue(rawDocument.documentId);
+      const documentReviewedBy = stringValue(rawDocument.reviewedBy);
+      const reviewedAt = stringValue(rawDocument.reviewedAt);
+      const reviewedSourceSha256 = stringValue(rawDocument.reviewedSourceSha256);
+      const reviewedTextSha256 = stringValue(rawDocument.reviewedTextSha256);
+      const hierarchyReviewSha256 = stringValue(rawDocument.hierarchyReviewSha256);
+      if (
+        !documentId ||
+        rawDocument.reviewState !== "APPROVED" ||
+        documentReviewedBy !== reviewedBy ||
+        !reviewedAt ||
+        !isSha256(reviewedSourceSha256) ||
+        !isSha256(reviewedTextSha256) ||
+        !isSha256(hierarchyReviewSha256)
+      ) {
+        return invalid("legal_operator_document_signoff_invalid");
+      }
+      documents.push({
+        documentId,
+        reviewState: "APPROVED",
+        reviewedBy: documentReviewedBy,
+        reviewedAt,
+        reviewedSourceSha256,
+        reviewedTextSha256,
+        hierarchyReviewSha256,
+      });
+    }
+
+    const signoffIds = new Set(documents.map((document) => document.documentId));
+    if (
+      documents.length !== documentIds.length ||
+      documentIds.some((documentId) => !signoffIds.has(documentId))
+    ) {
+      return invalid("legal_operator_signoff_document_set_mismatch");
+    }
+
+    return {
+      state: "APPROVED",
+      reviewedBy,
+      documents,
+    };
   }
 }
 
@@ -239,6 +362,14 @@ function hash(content: string): string {
   return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
 
-function isSha256(value: string): boolean {
-  return /^sha256:[a-f0-9]{64}$/i.test(value);
+function isSha256(value: unknown): value is string {
+  return typeof value === "string" && /^sha256:[a-f0-9]{64}$/i.test(value);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
