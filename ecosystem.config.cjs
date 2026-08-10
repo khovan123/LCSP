@@ -1,7 +1,16 @@
 const APP = "/srv/apps/lcsp-pm2";
 const ENV_FILE = `${APP}/.env.pm2`;
 const PYTHON = `${APP}/.venv/bin/python`;
-const PATH = "/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+const PATH = [
+  "/root/.local/bin",
+  process.env.PATH,
+  "/usr/local/sbin",
+  "/usr/local/bin",
+  "/usr/sbin",
+  "/usr/bin",
+  "/sbin",
+  "/bin"
+].filter(Boolean).join(":");
 
 const commonEnv = {
   NODE_ENV: "production",

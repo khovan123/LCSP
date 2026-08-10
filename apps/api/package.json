@@ -40,6 +40,7 @@
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "7.8.0",
     "amqplib": "^2.0.1",
+    "express": "^5.2.1",
     "joi": "^18.2.3",
     "nodemailer": "^9.0.3",
     "pg": "^8.22.0",
