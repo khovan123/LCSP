@@ -193,7 +193,7 @@ def build_structured_html(paragraphs: Iterable[str]) -> str:
 def provision_class(paragraph: str) -> str:
     if re.match(r"^Điều\s+\d+", paragraph, re.IGNORECASE):
         return "prov-article"
-    if re.match(r"^\d+\.\s+", paragraph):
+    if re.match(r"^\d+\.\s*\S", paragraph):
         return "prov-clause"
     if re.match(r"^[a-zđ]\)\s+", paragraph, re.IGNORECASE):
         return "prov-item"

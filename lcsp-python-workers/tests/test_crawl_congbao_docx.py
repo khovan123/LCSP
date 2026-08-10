@@ -13,6 +13,7 @@ crawl_module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = crawl_module
 spec.loader.exec_module(crawl_module)
 CongBaoDocxCrawler = crawl_module.CongBaoDocxCrawler
+provision_class = crawl_module.provision_class
 
 
 def docx_fixture() -> bytes:
@@ -67,3 +68,7 @@ def test_crawler_writes_normalizer_compatible_artifacts(tmp_path: Path):
     assert 'class="prov-article"' in source_html
     assert 'class="prov-clause"' in source_html
     assert 'class="prov-item"' in source_html
+
+
+def test_clause_without_space_after_number_is_classified():
+    assert provision_class("3.Quỹ được ưu tiên sử dụng") == "prov-clause"
