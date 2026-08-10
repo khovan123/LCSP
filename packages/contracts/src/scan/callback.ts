@@ -135,6 +135,7 @@ export const SCAN_EVENT_TYPES = {
   conflictDismissedAudit: "CONFLICT_DISMISSED",
   noConflictsDetectedAudit: "NO_CONFLICTS_DETECTED",
   verifiedProfileAcceptedAudit: "VERIFIED_PROFILE_ACCEPTED",
+  verifiedProfileApprovedAudit: "VERIFIED_PROFILE_APPROVED",
   legalRuleMatchAcceptedAudit: "LEGAL_RULE_MATCH_ACCEPTED",
   legalRuleMatchBlockedAudit: "LEGAL_RULE_MATCH_BLOCKED",
   classificationAcceptedAudit: "CLASSIFICATION_ACCEPTED",
