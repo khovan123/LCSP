@@ -7,16 +7,58 @@ Operator. It does not create an approved `LegalCorpusVersion`, an approved
 `LegalRuleCatalogVersion`, or a legal-compliance conclusion.
 
 The source PDFs were processed with Vietnamese/English OCR to produce stable,
-hashable review artefacts. OCR text must be corrected by a Legal Operator
-before it is normalized and ingested. In particular, the locally held Law 71
-PDF must not be promoted to a PRIMARY source merely because its OCR manifest
-uses the canonical VBPL URL; the source file provenance remains subject to
-review.
+hashable review artefacts. Raw OCR artefacts are immutable evidence of the OCR
+run and must not be edited in place. Before normalization and corpus ingestion,
+a Legal Operator must produce a corrected reviewed-text artefact and explicitly
+confirm the document hierarchy used to derive stable locators.
+
+In particular, the locally held Law 71 PDF must not be promoted to a PRIMARY
+source merely because its OCR manifest uses the canonical VBPL URL; the source
+file provenance remains subject to review.
 
 | Document | OCR artefacts | Canonical source URL | OCR profile | Review state |
 | --- | --- | --- | --- | --- |
-| `LAW-134-2025-QH15` | `LAW-134-2025-QH15.ocr.txt`, `LAW-134-2025-QH15.ocr.json` | `https://congbao.chinhphu.vn/van-ban/luat-so-134-2025-qh15-468694.htm` | `vie+eng`, 200 DPI, 20 pages | `PROVENANCE_AND_TEXT_REVIEW_REQUIRED` |
-| `LAW-71-2025-QH15` | `LAW-71-2025-QH15.ocr.txt`, `LAW-71-2025-QH15.ocr.json` | `https://vbpl.vn/van-ban/chi-tiet/luat-cong-nghiep-cong-nghe-so-so-71-2025-qh15--179989` | `vie+eng`, 300 DPI, 28 pages | `PROVENANCE_AND_TEXT_REVIEW_REQUIRED` |
+| `LAW-134-2025-QH15` | `LAW-134-2025-QH15.ocr.txt`, `LAW-134-2025-QH15.ocr.json` | `https://congbao.chinhphu.vn/van-ban/luat-so-134-2025-qh15-468694.htm` | `vie+eng`, 200 DPI, 20 pages | `REVIEWED_TEXT_AND_HIERARCHY_SIGNOFF_REQUIRED` |
+| `LAW-71-2025-QH15` | `LAW-71-2025-QH15.ocr.txt`, `LAW-71-2025-QH15.ocr.json` | `https://vbpl.vn/van-ban/chi-tiet/luat-cong-nghiep-cong-nghe-so-so-71-2025-qh15--179989` | `vie+eng`, 200 DPI, 28 pages | `REVIEWED_TEXT_AND_HIERARCHY_SIGNOFF_REQUIRED` |
+
+## Required Legal Operator handoff before implementation continues
+
+The remaining blocking input is not another OCR run. It is the Legal
+Operator-reviewed source text and hierarchy confirmation for each document.
+Implementation must remain fail-closed until that handoff exists.
+
+Required artefacts per document:
+
+1. `<document-id>.reviewed.txt`
+   - corrected against a PRIMARY official source;
+   - free of OCR-only transcription artefacts that could change legal meaning or
+     hierarchy;
+   - preserves the reviewed legal wording used for normalization.
+2. `<document-id>.hierarchy-review.json`
+   - records reviewed chapter/article/clause/point boundaries;
+   - records any correction from raw OCR headings;
+   - records the Legal Operator identity, review date and source snapshot/hash;
+   - ends with an explicit review state (`APPROVED` or `CHANGES_REQUIRED`).
+3. The corpus normalizer/ingestion flow must consume the reviewed artefacts,
+   never the raw `.ocr.txt`, once the Legal Operator gate is enabled.
+
+### Known hierarchy issue requiring explicit confirmation — Law 134
+
+The raw OCR currently renders the management chapter following Article 29 as
+`Chương VI`, even though the preceding enforcement chapter is already
+`Chương VI`, and the final provisions are rendered as `Chương VIII`.
+
+Candidate reviewed hierarchy:
+
+- `Chương VI` — Articles 28–29 — inspection/enforcement and violations;
+- **`Chương VII` — Articles 30–32 — state management of artificial intelligence;**
+- `Chương VIII` — Articles 33–35 — final provisions.
+
+This is a **candidate correction only** until the Legal Operator compares it to
+the PRIMARY source and records the decision in
+`LAW-134-2025-QH15.hierarchy-review.json`. Do not silently rewrite the raw OCR
+artefact and do not approve a corpus version while this hierarchy decision is
+missing.
 
 ## Candidate locator normalization and repeal mapping
 
@@ -75,13 +117,17 @@ applicability expression.
 
 ## Legal Operator sign-off checklist
 
-- [ ] Verify each OCR paragraph against a PRIMARY official source and correct
-      transcription/hierarchy errors.
+- [ ] Produce reviewed text for Law 134 from a PRIMARY official source and
+      record the reviewed source/hash.
+- [ ] Confirm Law 134 chapter hierarchy, specifically that Articles 30–32 belong
+      to Chapter VII (or record the authoritative correction if different).
+- [ ] Produce reviewed text for Law 71 from a PRIMARY official source and
+      record the reviewed source/hash.
 - [ ] Verify identity, effective date and source effect status for both laws.
 - [ ] Produce reviewed stable article/clause/point locators.
 - [ ] Verify Law 134 Article 33 mapping and mark all listed Law 71 target
       chunks `REPEALED`.
-- [ ] Create a `DRAFT` corpus version from the reviewed source snapshots.
+- [ ] Create a `DRAFT` corpus version only from the reviewed source artefacts.
 - [ ] Review and approve the missing verified-profile fact definitions.
 - [ ] Author the replacement Article 9–15 rules against reviewed locators.
 - [ ] Approve corpus and rule catalog separately, recording authority, date and
