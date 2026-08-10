@@ -72,6 +72,24 @@ def test_t01_knip_detects_js_openai_used_dependency(
 
 
 @pytest.mark.p0
+def test_knip_tool_accepts_the_supported_v6_release_line(
+    sample_ts_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        if "--version" in command:
+            return _completed(command, 0, stdout="6.32.0\n")
+        return _completed(command, 0, stdout=json.dumps({}))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = KnipTool().run(sample_ts_repo)
+
+    assert result.execution.outcome == OUTCOME_SUCCESS
+    assert result.execution.tool_version == "6.32.0"
+
+
+@pytest.mark.p0
 def test_t02_deptry_marks_torch_unused(
     sample_python_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
