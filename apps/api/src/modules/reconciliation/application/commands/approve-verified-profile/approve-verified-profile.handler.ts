@@ -1,6 +1,7 @@
 import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import type { Prisma } from "@prisma/client";
+import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import {
   AUDIT_ACTOR_TYPES,
   AUDIT_DECISIONS,
@@ -51,6 +52,7 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
     command: ApproveVerifiedProfileCommand,
   ): Promise<ApproveVerifiedProfileDto> {
     await this.assertManagerOnly(command);
+    await this.assertOwnedAssessment(command);
     const approvedAt = new Date();
 
     await this.prisma.$transaction(async (tx) => {
@@ -166,6 +168,38 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
 
     if (allowed) return;
 
+    await this.auditDenied(command, AUTH_ERROR_CODES.pbacDenied);
+    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+      status: HttpStatus.FORBIDDEN,
+    });
+  }
+
+  private async assertOwnedAssessment(
+    command: ApproveVerifiedProfileCommand,
+  ): Promise<void> {
+    const assessment = await this.prisma.assessment.findFirst({
+      where: {
+        id: command.assessmentId,
+        organizationId: command.organizationId,
+        ownerId: command.approvedById,
+      },
+      select: { id: true },
+    });
+
+    if (assessment) return;
+
+    await this.auditDenied(command, AUTH_ERROR_CODES.pbacDenied);
+    throw problemException(
+      ASSESSMENT_ERROR_CODES.notFound,
+      command.correlationId,
+      { status: HttpStatus.NOT_FOUND },
+    );
+  }
+
+  private async auditDenied(
+    command: ApproveVerifiedProfileCommand,
+    reasonCode: string,
+  ): Promise<void> {
     await this.auditWriter.write({
       eventType: SCAN_EVENT_TYPES.verifiedProfileApprovedAudit,
       actorId: command.approvedById,
@@ -175,7 +209,7 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
       resourceId: command.verifiedProfileId,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      reasonCode,
       policyId: command.authorization.policyId,
       policyVersion: command.authorization.policyVersion,
       payload: {
@@ -184,10 +218,6 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
         action: PBAC_ACTIONS.verifiedProfileApprove,
         result: AUDIT_DECISIONS.deny,
       },
-    });
-
-    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
-      status: HttpStatus.FORBIDDEN,
     });
   }
 
