@@ -27,7 +27,9 @@ describe("RerunClassificationHandler", () => {
     policyVersion: "1",
   };
 
-  function createHandler(options?: { result?: { id: string; status: string } | null }) {
+  function createHandler(options?: {
+    result?: { id: string; status: string } | null;
+  }) {
     const prisma = {
       legalRuleMatch: {
         findFirst: jest.fn().mockResolvedValue({
