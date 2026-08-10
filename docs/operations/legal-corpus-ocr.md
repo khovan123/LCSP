@@ -166,3 +166,36 @@ A review record should contain at least:
 
 `reviewState` must remain `CHANGES_REQUIRED` while any material OCR or hierarchy
 issue is unresolved.
+
+## Automatic Post-Sign-off Pipeline
+
+The only per-corpus manual gate is the Legal Operator review/sign-off described
+above. After all reviewed text and hierarchy files are present and every
+`reviewState` is `APPROVED`, the remaining lifecycle is automated:
+
+```text
+reviewed text + hierarchy APPROVED
+  -> validate hashes/operator identity
+  -> ingest DRAFT corpus
+  -> build and validate retrieval index
+  -> approve corpus
+```
+
+Run the orchestration only after the builder has produced the corpus payload:
+
+```bash
+LEGAL_OPERATOR_BEARER_TOKEN='<authenticated legal operator token>' \
+LEGAL_CHROMA_PATH='/var/lib/lcsp/chroma' \
+lcsp-python-workers/.venv/bin/python \
+  lcsp-python-workers/scripts/orchestrate_reviewed_legal_corpus.py \
+  --payload reports/legal-corpus-source/VN-LEGAL-2026-08.ingest.json \
+  --reviewed-dir reports/legal-corpus-reviewed \
+  --api-base-url http://127.0.0.1:4000
+```
+
+The orchestration fails closed when any reviewed text or hierarchy file is
+missing, `reviewState` is not `APPROVED`, a reviewed text/source hash differs,
+normalization warnings remain unresolved, the retrieval index cannot return all
+stable chunk IDs, or the authenticated approver does not match `reviewedBy`.
+The API persists the approval under the authenticated Legal Operator identity;
+it does not accept an arbitrary `approvedBy` value from the request payload.
