@@ -284,13 +284,18 @@ def test_reconciliation_conflict_callback_uses_internal_endpoint(client):
     with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"accepted": True}
+        mock_resp.json.return_value = {
+            "accepted": True,
+            "conflict_count": 0,
+            "correlation_id": "correlation-1",
+        }
         mock_post.return_value = mock_resp
 
-        client.post_reconciliation_conflict_callback(payload)
+        response = client.post_reconciliation_conflict_callback(payload)
 
         url = mock_post.call_args.args[0]
         assert url == "http://testserver/internal/reconciliation/conflict-callback"
+        assert response.conflict_count == 0
 
 
 def test_verified_profile_callback_uses_reconciliation_endpoint(client):

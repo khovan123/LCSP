@@ -20,6 +20,7 @@ class CallbackResponse(BaseModel):
     ai_usage_flow_id: Optional[str] = None
     legal_rule_match_id: Optional[str] = None
     classification_result_id: Optional[str] = None
+    conflict_count: Optional[int] = None
     guardrail_status: Optional[str] = None
     status: Optional[str] = None
     correlation_id: Optional[str] = None
