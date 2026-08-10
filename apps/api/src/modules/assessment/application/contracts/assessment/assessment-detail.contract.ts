@@ -28,6 +28,21 @@ export interface ClassificationResultSummaryDto {
   rationale: string | null;
 }
 
+export interface VerifiedProfileReviewDto {
+  verified_profile_id: string;
+  status: string;
+  provider_version: string;
+  verified_claims: Record<string, unknown>[];
+  verification_source: string | null;
+  wizard_context: Record<string, unknown> | null;
+  conflict_resolutions: Record<string, unknown>[];
+  gates_passed_at: Record<string, unknown>;
+  evidence_chain_integrity: boolean | null;
+  created_at: string;
+  approved_at: string | null;
+  approved_by_id: string | null;
+}
+
 export interface AssessmentDetailDto {
   assessment_id: string;
   name: string;
@@ -38,6 +53,7 @@ export interface AssessmentDetailDto {
   readiness_state: ReadinessState;
   guardrail_status: ClassificationGuardrailStatus | null;
   classification_result: ClassificationResultSummaryDto | null;
+  verified_profile_review: VerifiedProfileReviewDto | null;
   can_rerun_classification: boolean;
   next_action: AssessmentNextActionKey;
   created_at: string;
