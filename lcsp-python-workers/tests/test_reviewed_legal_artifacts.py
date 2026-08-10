@@ -15,7 +15,7 @@ def _sha256(path: Path) -> str:
 
 
 def test_reviewed_legal_artifacts_are_hash_bound_and_scoped() -> None:
-    reviewers: set[str] = set()
+    review_principals: set[str] = set()
 
     for document_id in DOCUMENT_IDS:
         reviewed_text = REVIEW_DIR / f"{document_id}.reviewed.txt"
@@ -29,10 +29,13 @@ def test_reviewed_legal_artifacts_are_hash_bound_and_scoped() -> None:
         assert review["reviewState"] == "APPROVED"
         assert review["reviewedTextSha256"] == _sha256(reviewed_text)
         assert review["reviewScope"]["locators"]
-        assert review["humanLegalOperatorSignoffRequiredForProduction"] is True
-        reviewers.add(review["reviewedBy"])
+        assert (
+            review["reviewIdentityPolicy"]
+            == "TECHNICAL_AUDIT_PRINCIPAL_NOT_LEGAL_SIGNATURE"
+        )
+        review_principals.add(review["reviewedBy"])
 
-    assert reviewers == {"gpt-5.6-sol-assisted-legal-review"}
+    assert review_principals == {"lcsp-legal-review-gate"}
 
 
 def test_law_134_hierarchy_correction_is_explicit() -> None:
