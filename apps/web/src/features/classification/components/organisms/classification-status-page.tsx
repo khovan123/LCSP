@@ -11,7 +11,10 @@ import { StatusCard } from "@/components/organisms/status-card";
 import {
   getClassificationActionVisibility,
 } from "@/lib/api/classification-client";
-import { useClassificationStatusQuery } from "@/lib/api/assessment-queries";
+import {
+  useClassificationStatusQuery,
+  useRerunClassificationMutation,
+} from "@/lib/api/assessment-queries";
 import { appLocale } from "@/lib/locale";
 import type { ClassificationStatusPageProps } from "../../types/component-props.types";
 
@@ -20,6 +23,7 @@ export function ClassificationStatusPage({
 }: ClassificationStatusPageProps) {
   const router = useRouter();
   const statusQuery = useClassificationStatusQuery(assessmentId);
+  const rerunMutation = useRerunClassificationMutation(assessmentId);
 
   useEffect(() => {
     if (statusQuery.data?.kind === "redirect") {
@@ -85,6 +89,7 @@ export function ClassificationStatusPage({
   const actionVisibility = getClassificationActionVisibility(viewModel);
   const showFinalReport = actionVisibility.showFinalReport;
   const showGapAnalysis = actionVisibility.showGapAnalysis;
+  const showRerunClassification = actionVisibility.showRerunClassification;
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
@@ -130,6 +135,20 @@ export function ClassificationStatusPage({
         ) : null}
 
         <div className="flex flex-wrap gap-3">
+          {showRerunClassification ? (
+            <Button
+              disabled={rerunMutation.isPending}
+              onClick={() => rerunMutation.mutate()}
+              variant="outline"
+            >
+              {resolveMessage(
+                appLocale,
+                rerunMutation.isPending
+                  ? "pages.classification.rerunSubmitting"
+                  : "pages.classification.rerunClassification",
+              )}
+            </Button>
+          ) : null}
           {showFinalReport ? (
             <Button
               render={<Link href={`/assessments/${assessmentId}/documents`} />}

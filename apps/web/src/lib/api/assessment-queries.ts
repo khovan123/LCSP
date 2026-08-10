@@ -2,7 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getClassificationStatus } from "./classification-client";
+import {
+  getClassificationStatus,
+  rerunClassification,
+} from "./classification-client";
 import {
   getPendingConflicts,
   resolveConflict,
@@ -38,6 +41,19 @@ export function useClassificationStatusQuery(assessmentId: string) {
     queryKey: apiQueryKeys.assessment.classification(assessmentId),
     queryFn: () => getClassificationStatus(assessmentId),
     enabled: assessmentId.length > 0,
+  });
+}
+
+export function useRerunClassificationMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => rerunClassification(assessmentId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: apiQueryKeys.assessment.classification(assessmentId),
+      });
+    },
   });
 }
 

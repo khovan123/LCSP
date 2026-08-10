@@ -1035,6 +1035,8 @@ export const enPages = {
     referencesLabel: "Applicable legal references",
     generateFinalReport: "Generate Final Report",
     generateGapAnalysis: "Generate Gap Analysis",
+    rerunClassification: "Retry classification",
+    rerunSubmitting: "Queueing classification",
     errorTitle: "Unable to load classification status",
     errorDetail: "Please try again in a moment.",
     states: {

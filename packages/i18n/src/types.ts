@@ -960,6 +960,8 @@ export type PagesMessages = {
     referencesLabel: string;
     generateFinalReport: string;
     generateGapAnalysis: string;
+    rerunClassification: string;
+    rerunSubmitting: string;
     errorTitle: string;
     errorDetail: string;
     finalReportRequestedTitle: string;

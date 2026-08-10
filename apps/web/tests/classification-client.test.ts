@@ -47,6 +47,28 @@ test("classification outcome maps passed state with final report action", () => 
     assert.deepEqual(getClassificationActionVisibility(result.data), {
       showFinalReport: true,
       showGapAnalysis: true,
+      showRerunClassification: false,
+    });
+  }
+});
+
+test("processing classification exposes a retry action only before a result exists", () => {
+  const result = toClassificationStatusOutcome(
+    {
+      readiness_state: { classification_locked: false },
+      guardrail_status: null,
+    },
+    true,
+    200,
+  );
+
+  assert.equal(result.kind, "loaded");
+  if (result.kind === "loaded") {
+    assert.equal(result.data.state, "processing");
+    assert.deepEqual(getClassificationActionVisibility(result.data), {
+      showFinalReport: false,
+      showGapAnalysis: false,
+      showRerunClassification: true,
     });
   }
 });

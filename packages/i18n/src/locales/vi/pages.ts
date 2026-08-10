@@ -1029,6 +1029,8 @@ export const viPages = {
     referencesLabel: "Tham chiếu pháp lý áp dụng",
     generateFinalReport: "Tạo Báo cáo Cuối cùng",
     generateGapAnalysis: "Tạo Phân tích Khoảng trống",
+    rerunClassification: "Chạy lại phân loại",
+    rerunSubmitting: "Đang đưa vào hàng đợi",
     errorTitle: "Không thể tải trạng thái phân loại",
     errorDetail: "Vui lòng thử lại sau ít phút.",
     states: {

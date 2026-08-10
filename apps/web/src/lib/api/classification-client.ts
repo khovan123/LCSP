@@ -35,6 +35,7 @@ export type ClassificationStatusViewModel = {
 export type ClassificationActionVisibility = {
   showFinalReport: boolean;
   showGapAnalysis: boolean;
+  showRerunClassification: boolean;
 };
 
 type ClassificationStatusOutcome =
@@ -55,7 +56,25 @@ export function getClassificationActionVisibility(
   return {
     showFinalReport: viewModel.state === CLASSIFICATION_STATUS_STATES.passed,
     showGapAnalysis: viewModel.hasClassification,
+    showRerunClassification:
+      viewModel.state === CLASSIFICATION_STATUS_STATES.processing &&
+      !viewModel.hasClassification,
   };
+}
+
+export async function rerunClassification(assessmentId: string): Promise<void> {
+  const response = await apiRequest(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/classification/rerun`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(response.problemCode ?? "classification-rerun-failed");
+  }
 }
 
 export async function getClassificationStatus(

@@ -73,6 +73,13 @@ export const CLASSIFICATION_RESULT_STATUSES = {
 export type ClassificationResultStatus =
   (typeof CLASSIFICATION_RESULT_STATUSES)[keyof typeof CLASSIFICATION_RESULT_STATUSES];
 
+export const CLASSIFICATION_RERUN_STATUSES = {
+  queued: "QUEUED",
+} as const;
+
+export type ClassificationRerunStatus =
+  (typeof CLASSIFICATION_RERUN_STATUSES)[keyof typeof CLASSIFICATION_RERUN_STATUSES];
+
 export const CLASSIFICATION_GUARDRAIL_STATUSES = {
   passed: "PASSED",
   degraded: "DEGRADED",
@@ -144,5 +151,6 @@ export const SCAN_EVENT_TYPES = {
   legalRuleMatchBlockedAudit: "LEGAL_RULE_MATCH_BLOCKED",
   classificationAcceptedAudit: "CLASSIFICATION_ACCEPTED",
   classificationBlockedAudit: "CLASSIFICATION_BLOCKED",
+  classificationRerunTriggeredAudit: "CLASSIFICATION_RERUN_TRIGGERED",
   scanRerunTriggeredAudit: "SCAN_RERUN_TRIGGERED",
 } as const;
