@@ -25,6 +25,20 @@ This outputs source HTML, normalized plain text and a JSON manifest containing
 the source/status metadata, retrieval time, and SHA-256 hashes. Review the
 manifest's `sourceEffectStatus` before corpus ingestion.
 
+## Normalize To A Draft Corpus Payload
+
+```bash
+lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/normalize_vbpl_document.py \
+  --source-manifest reports/legal-corpus-source/LAW-71-2025-QH15.source.json \
+  --corpus-version VN-LEGAL-2026-08 \
+  --output reports/legal-corpus-source/LAW-71-2025-QH15.ingest.json
+```
+
+The generated payload contains stable `art-N`, `art-N::cl-M`, and
+`art-N::cl-M::pt-X` locators, parent context and direct in-document article
+references. It has `reviewRequired: true`; inspect warnings, hierarchy and
+cross references before submitting it to the corpus ingestion endpoint.
+
 ## Fallback: OCR Scanned PDF
 
 ## Prerequisites
