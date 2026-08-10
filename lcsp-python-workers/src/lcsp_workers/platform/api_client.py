@@ -30,6 +30,11 @@ from lcsp_workers.platform.callback_schemas import (
 logger = get_logger(__name__)
 
 _IDEMPOTENT_CONFLICT_CODES = {"FLOW_ALREADY_EXISTS", "RESULT_ALREADY_EXISTS"}
+_PRIVACY_FLAG_KEYS = {
+    "containsSourceCode",
+    "secretsRedacted",
+    "sourceStrippedFromFindings",
+}
 
 
 class WorkerCallbackError(Exception):
@@ -258,7 +263,15 @@ class WorkerApiClient:
                     [signal for signal in signals if isinstance(signal, dict)]
                 )
             safe_payload["evidence_payload"] = safe_evidence_payload
-        return redact_dict(safe_payload)
+        redacted_payload = redact_dict(safe_payload)
+        privacy_flags = safe_payload.get("privacy_flags")
+        if isinstance(privacy_flags, dict):
+            redacted_payload["privacy_flags"] = {
+                key: value
+                for key, value in privacy_flags.items()
+                if key in _PRIVACY_FLAG_KEYS and isinstance(value, bool)
+            }
+        return redacted_payload
 
     def post_scan_callback(
         self, scan_job_id: str, payload: ScanCallbackPayload

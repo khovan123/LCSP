@@ -142,6 +142,32 @@ def test_callback_payload_is_redacted_before_serialization(client):
         ]
 
 
+def test_scan_callback_preserves_boolean_privacy_flags(client):
+    payload = ScanCallbackPayload(
+        status="PARTIAL",
+        scan_job_id="job123",
+        tools_version={"scanner": "1.0.0"},
+        config_hash={"scanner": "sha256:test"},
+        evidence_payload={"coverage_notes": []},
+        privacy_flags={
+            "containsSourceCode": False,
+            "secretsRedacted": True,
+            "sourceStrippedFromFindings": True,
+        },
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"success": True}
+        mock_post.return_value = mock_resp
+
+        client.post_scan_callback("job123", payload)
+
+        _, kwargs = mock_post.call_args
+        assert kwargs["json"]["privacy_flags"] == payload.privacy_flags
+
+
 def test_technical_profile_callback_uses_evidence_endpoint(client):
     payload = TechnicalProfileCallbackPayload(
         evidence_report_id="ter-1",
