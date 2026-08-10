@@ -26,6 +26,7 @@ import { resultEnvelope } from "../../../../platform/problems/result-envelope.js
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptConflictCommand } from "../../application/commands/accept-conflict/accept-conflict.command.js";
 import { AcceptVerifiedProfileCommand } from "../../application/commands/accept-verified-profile/accept-verified-profile.command.js";
+import { ApproveVerifiedProfileCommand } from "../../application/commands/approve-verified-profile/approve-verified-profile.command.js";
 import { ResolveConflictCommand } from "../../application/commands/resolve-conflict/resolve-conflict.command.js";
 import type { ConflictDetectionCallbackRequest } from "../../application/contracts/reconciliation/conflict-detection-callback.contract.js";
 import type { VerifiedProfileCallbackRequest } from "../../application/contracts/reconciliation/verified-profile-callback.contract.js";
@@ -230,6 +231,36 @@ export class ReconciliationController {
           pbacContext.subjectRole,
           body.resolution,
           body.resolution_note,
+          request.correlationId as string,
+          {
+            selectedAction: pbacContext.selectedAction,
+            policyId: pbacContext.policyId,
+            policyVersion: pbacContext.policyVersion,
+          },
+        ),
+      ),
+    );
+  }
+
+  @Post(":assessmentId/verified-profiles/:verifiedProfileId/approve")
+  @HttpCode(200)
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.verifiedProfileApprove)
+  async approveVerifiedProfile(
+    @Param("assessmentId") assessmentId: string,
+    @Param("verifiedProfileId") verifiedProfileId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const pbacContext = request.pbacContext;
+
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ApproveVerifiedProfileCommand(
+          assessmentId,
+          verifiedProfileId,
+          pbacContext.organizationId,
+          pbacContext.userId,
+          pbacContext.subjectRole,
           request.correlationId as string,
           {
             selectedAction: pbacContext.selectedAction,
