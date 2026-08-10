@@ -1,6 +1,12 @@
 const APP = "/srv/apps/lcsp-pm2";
 const ENV_FILE = `${APP}/.env.pm2`;
 const PYTHON = `${APP}/.venv/bin/python`;
+const PATH = "/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+
+const commonEnv = {
+  NODE_ENV: "production",
+  PATH
+};
 
 function worker(name, target, healthPort) {
   return {
@@ -19,11 +25,10 @@ function worker(name, target, healthPort) {
     ],
 
     env: {
-      NODE_ENV: "production",
+      ...commonEnv,
       PYTHONUNBUFFERED: "1",
       PYTHONDONTWRITEBYTECODE: "1",
       PYTHONPATH: `${APP}/lcsp-python-workers/src`,
-      PATH: "/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
       NESTJS_API_BASE_URL: "http://127.0.0.1:8080",
       HEALTH_PORT: String(healthPort)
     },
@@ -53,7 +58,7 @@ module.exports = {
       ],
 
       env: {
-        NODE_ENV: "production",
+        ...commonEnv,
         PORT: "8080"
       },
 
@@ -84,7 +89,7 @@ module.exports = {
       ],
 
       env: {
-        NODE_ENV: "production",
+        ...commonEnv,
         PORT: "3001",
         HOSTNAME: "127.0.0.1",
         LCSP_API_BASE_URL: "http://127.0.0.1:8080"
