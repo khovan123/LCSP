@@ -18,6 +18,7 @@ dependencies = [
   "langgraph>=0.2.0",
   "langgraph-checkpoint-postgres==3.1.0",
   "google-genai==2.13.0",
+  "chromadb==1.5.5",
 ]
 
 [project.optional-dependencies]

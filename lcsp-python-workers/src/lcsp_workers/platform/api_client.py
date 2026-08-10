@@ -414,6 +414,13 @@ class WorkerApiClient:
             raise WorkerCallbackError("Legal corpus response was invalid.")
         return data
 
+    def get_legal_corpus_chunks(self, corpus_version_id: str) -> dict:
+        path = f"/internal/legal-rule-catalog/corpus/{corpus_version_id}/chunks"
+        data = self._get_with_retry(path)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Legal corpus chunks response was invalid.")
+        return data
+
     def post_legal_rule_match_callback(
         self, payload: LegalRuleMatchCallbackPayload
     ) -> CallbackResponse:

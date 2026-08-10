@@ -1,4 +1,5 @@
 import * as assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
@@ -49,6 +50,10 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
     await prisma.ruleApprovalRecord.deleteMany();
     await prisma.legalRule.deleteMany();
     await prisma.legalRuleCatalogVersion.deleteMany();
+    await prisma.corpusApprovalRecord.deleteMany();
+    await prisma.legalDocumentChunk.deleteMany();
+    await prisma.legalSourceDocument.deleteMany();
+    await prisma.legalCorpusVersion.deleteMany();
 
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma); // sets up orgId
@@ -64,7 +69,10 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       data: {
         id: authorPolicyId,
         version: "2026-07-26-author",
-        actions: [PBAC_ACTIONS.legalRuleCatalogAuthor],
+        actions: [
+          PBAC_ACTIONS.legalRuleCatalogAuthor,
+          PBAC_ACTIONS.legalCorpusIngest,
+        ],
         subjectRole: SUBJECT_ROLES.developer,
         stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
@@ -106,7 +114,10 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       data: {
         id: approverPolicyId,
         version: "2026-07-26-approver",
-        actions: [PBAC_ACTIONS.legalRuleCatalogApprove],
+        actions: [
+          PBAC_ACTIONS.legalRuleCatalogApprove,
+          PBAC_ACTIONS.legalCorpusApprove,
+        ],
         subjectRole: SUBJECT_ROLES.developer,
         stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
@@ -184,6 +195,7 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         ruleRefs: [],
       },
     });
+    await seedApprovedCorpus(prisma);
 
     const signInRestricted = await httpRequest(app).post("/auth/sign-in").send({
       email: "restricted@acme.test",
@@ -208,7 +220,13 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       ruleFamily: "SECURITY",
       requiredFacts: {},
       unknownFactPolicy: "BLOCK",
-      citationLocatorRefs: [{ chunkId: "chunk-1" }],
+      citationLocatorRefs: [
+        {
+          legalCorpusVersionId: "corpus-v1",
+          documentId: "LAW-TEST",
+          locator: "art-1",
+        },
+      ],
     };
 
     it("T01: Returns 201 when called by author", async () => {
@@ -244,6 +262,57 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
     });
   });
 
+  describe("legal corpus ingest and approval", () => {
+    it("stores immutable chunk locators as DRAFT and activates only after approval", async () => {
+      const content = "Điều 1. Test corpus content.";
+      const response = await httpRequest(app)
+        .post("/internal/legal-rule-catalog/corpus")
+        .set("Authorization", `Bearer ${authorToken}`)
+        .send({
+          version: "corpus-draft-v1",
+          sourceManifest: { source: "test" },
+          documents: [
+            {
+              documentId: "LAW-DRAFT",
+              title: "Draft legal source",
+              sourceUrl: "https://example.test/draft-law",
+              sourceSha256: sha256("source"),
+              sourceEffectStatus: "ACTIVE",
+              chunks: [
+                {
+                  id: "chunk-draft-v1",
+                  locator: "art-1",
+                  content,
+                  contentSha256: sha256(content),
+                  hierarchy: { article: "1" },
+                  legalStatus: "ACTIVE",
+                },
+              ],
+            },
+          ],
+        });
+      assert.equal(response.status, 201);
+      const draft = successBody<{ id: string; status: string }>(response);
+      assert.equal(draft.status, LEGAL_RULE_LIFECYCLE_STATUSES.draft);
+
+      const approval = await httpRequest(app)
+        .post(`/internal/legal-rule-catalog/corpus/${draft.id}/approve`)
+        .set("Authorization", `Bearer ${approverToken}`)
+        .send({ scopeDescription: "Verified source and chunk locator" });
+      assert.equal(approval.status, 200);
+      assert.equal(
+        successBody<{ status: string }>(approval).status,
+        LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+      );
+
+      const stored = await prisma.legalDocumentChunk.findUnique({
+        where: { id: "chunk-draft-v1" },
+      });
+      assert.equal(stored?.locator, "art-1");
+      assert.equal(stored?.contentSha256, sha256(content));
+    });
+  });
+
   describe("POST /internal/legal-rule-catalog/versions/:id/approve", () => {
     let versionId: string;
 
@@ -257,7 +326,13 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
           ruleFamily: "RISK",
           requiredFacts: {},
           unknownFactPolicy: "BLOCK",
-          citationLocatorRefs: [],
+          citationLocatorRefs: [
+            {
+              legalCorpusVersionId: "corpus-v1",
+              documentId: "LAW-TEST",
+              locator: "art-1",
+            },
+          ],
         });
 
       versionId = "cat-version-1";
@@ -297,3 +372,42 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
     });
   });
 });
+
+async function seedApprovedCorpus(prisma: PrismaClient): Promise<void> {
+  const corpus = await prisma.legalCorpusVersion.create({
+    data: {
+      id: "corpus-v1",
+      version: "corpus-v1",
+      status: "APPROVED",
+      sourceManifest: {},
+      approvedAt: new Date(),
+    },
+  });
+  const document = await prisma.legalSourceDocument.create({
+    data: {
+      legalCorpusVersionId: corpus.id,
+      documentId: "LAW-TEST",
+      title: "Test law",
+      sourceUrl: "https://example.test/law",
+      sourceSha256: "sha256:test",
+      sourceEffectStatus: "ACTIVE",
+    },
+  });
+  await prisma.legalDocumentChunk.create({
+    data: {
+      id: "chunk-test-1",
+      legalCorpusVersionId: corpus.id,
+      legalSourceDocumentId: document.id,
+      documentId: document.documentId,
+      locator: "art-1",
+      content: "Test legal source content.",
+      contentSha256: "sha256:test",
+      hierarchy: { article: "1" },
+      legalStatus: "ACTIVE",
+    },
+  });
+}
+
+function sha256(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}

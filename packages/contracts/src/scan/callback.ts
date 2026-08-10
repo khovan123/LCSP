@@ -107,18 +107,6 @@ export const LEGAL_MATCH_TYPES = {
 export type LegalMatchType =
   (typeof LEGAL_MATCH_TYPES)[keyof typeof LEGAL_MATCH_TYPES];
 
-export const APPROVED_CORPUS_VERSIONS = [
-  "LCSP-LEGAL-CORPUS-v0.1.0",
-  "v1.0.0",
-  "approved-v1",
-] as const;
-
-export const APPROVED_LEGAL_RULE_CATALOG_VERSIONS = [
-  "LCSP-RULE-CATALOG-v0.1.0",
-  "v1.0.0",
-  "approved-v1",
-] as const;
-
 export const SCAN_EVIDENCE_SCHEMA_VERSIONS = ["1.0.0"] as const;
 export const TECHNICAL_PROFILE_SCHEMA_VERSIONS = ["1.0.0"] as const;
 export const AI_USAGE_FLOW_SCHEMA_VERSIONS = ["1.0.0"] as const;
