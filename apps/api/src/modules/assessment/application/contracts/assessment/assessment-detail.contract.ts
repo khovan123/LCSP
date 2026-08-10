@@ -30,6 +30,7 @@ export interface AssessmentDetailDto {
   wizard_status: WizardStatus;
   readiness_state: ReadinessState;
   guardrail_status: ClassificationGuardrailStatus | null;
+  can_rerun_classification: boolean;
   next_action: AssessmentNextActionKey;
   created_at: string;
   updated_at: string;

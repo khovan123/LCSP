@@ -57,6 +57,7 @@ test("processing classification exposes a retry action only before a result exis
     {
       readiness_state: { classification_locked: false },
       guardrail_status: null,
+      can_rerun_classification: true,
     },
     true,
     200,

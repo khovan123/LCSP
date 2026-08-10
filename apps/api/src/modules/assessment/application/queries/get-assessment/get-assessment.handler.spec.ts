@@ -33,6 +33,7 @@ function buildHandler(input: {
   wizardProfile?: { status: string } | null;
   acceptedEvidenceReport?: { id: string } | null;
   classificationResult?: { guardrailStatus: string } | null;
+  rerunnableLegalRuleMatch?: { id: string } | null;
 }) {
   const findById = jest
     .fn<AssessmentRepository["findById"]>()
@@ -62,10 +63,14 @@ function buildHandler(input: {
   const findClassificationResult = jest
     .fn<() => Promise<{ guardrailStatus: string } | null>>()
     .mockResolvedValue(input.classificationResult ?? null);
+  const findRerunnableLegalRuleMatch = jest
+    .fn<() => Promise<{ id: string } | null>>()
+    .mockResolvedValue(input.rerunnableLegalRuleMatch ?? null);
   const prisma = {
     wizardProfile: { findUnique },
     technicalEvidenceReport: { findFirst: findAcceptedEvidence },
     classificationResult: { findFirst: findClassificationResult },
+    legalRuleMatch: { findFirst: findRerunnableLegalRuleMatch },
   } as unknown as PrismaService;
 
   const handler = new GetAssessmentHandler(repository, prisma);
@@ -75,6 +80,7 @@ function buildHandler(input: {
     findUnique,
     findAcceptedEvidence,
     findClassificationResult,
+    findRerunnableLegalRuleMatch,
   };
 }
 
@@ -214,6 +220,28 @@ describe("GetAssessmentHandler", () => {
     expect(result.guardrail_status).toBe(
       CLASSIFICATION_GUARDRAIL_STATUSES.passed,
     );
+  });
+
+  it("only exposes classification retry after a passed legal rule match exists", async () => {
+    const assessment = makeAssessment();
+    const { handler, findRerunnableLegalRuleMatch } = buildHandler({
+      assessment,
+      acceptedEvidenceReport: { id: "evidence-1" },
+      rerunnableLegalRuleMatch: { id: "match-1" },
+    });
+
+    const result = await handler.execute(
+      new GetAssessmentQuery(
+        assessment.id,
+        "org-1",
+        "user-1",
+        SUBJECT_ROLES.manager,
+        "corr-1",
+      ),
+    );
+
+    expect(findRerunnableLegalRuleMatch).toHaveBeenCalledTimes(1);
+    expect(result.can_rerun_classification).toBe(true);
   });
 
   // T04

@@ -13,6 +13,8 @@ import {
 } from "@lcsp/contracts/assessment";
 import {
   CLASSIFICATION_RESULT_STATUSES,
+  LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
+  LEGAL_RULE_MATCH_STATUSES,
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
 } from "@lcsp/contracts/scan";
 import {
@@ -104,6 +106,22 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
         })
       : null;
 
+    const rerunnableLegalRuleMatch =
+      acceptedEvidenceReport && !classificationResult
+        ? await this.prisma.legalRuleMatch.findFirst({
+            where: {
+              assessmentId: assessment.id,
+              organizationId: assessment.organizationId,
+              status: toPrismaEvidenceAcceptanceStatus(
+                LEGAL_RULE_MATCH_STATUSES.accepted,
+              ),
+              guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed,
+            },
+            select: { id: true },
+            orderBy: { createdAt: "desc" },
+          })
+        : null;
+
     return {
       assessment_id: assessment.id,
       name: assessment.name,
@@ -117,6 +135,7 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
             classificationResult.guardrailStatus,
           )
         : null,
+      can_rerun_classification: rerunnableLegalRuleMatch !== null,
       next_action: nextActionFor(wizardStatus),
       created_at: assessment.createdAt.toISOString(),
       updated_at: assessment.updatedAt.toISOString(),

@@ -30,6 +30,7 @@ export type ClassificationStatusViewModel = {
   summaryKey?: MessageKey;
   references?: string[];
   hasClassification: boolean;
+  canRerunClassification: boolean;
 };
 
 export type ClassificationActionVisibility = {
@@ -51,14 +52,18 @@ type ClassificationStatusOutcome =
     };
 
 export function getClassificationActionVisibility(
-  viewModel: Pick<ClassificationStatusViewModel, "state" | "hasClassification">,
+  viewModel: Pick<
+    ClassificationStatusViewModel,
+    "state" | "hasClassification" | "canRerunClassification"
+  >,
 ): ClassificationActionVisibility {
   return {
     showFinalReport: viewModel.state === CLASSIFICATION_STATUS_STATES.passed,
     showGapAnalysis: viewModel.hasClassification,
     showRerunClassification:
       viewModel.state === CLASSIFICATION_STATUS_STATES.processing &&
-      !viewModel.hasClassification,
+      !viewModel.hasClassification &&
+      viewModel.canRerunClassification,
   };
 }
 
@@ -103,6 +108,7 @@ export function sanitizeAssessmentDetailPayload(
     wizard_status?: unknown;
     readiness_state?: unknown;
     guardrail_status?: unknown;
+    can_rerun_classification?: unknown;
   };
 
   const readiness = candidate.readiness_state;
@@ -130,6 +136,13 @@ export function sanitizeAssessmentDetailPayload(
     return null;
   }
 
+  if (
+    candidate.can_rerun_classification !== undefined &&
+    typeof candidate.can_rerun_classification !== "boolean"
+  ) {
+    return null;
+  }
+
   const sanitized: AssessmentDetailPayload = {};
 
   if (typeof candidate.assessment_id === "string") {
@@ -152,6 +165,10 @@ export function sanitizeAssessmentDetailPayload(
 
   if (guardrailStatus !== undefined) {
     sanitized.guardrail_status = guardrailStatus as string | null;
+  }
+
+  if (candidate.can_rerun_classification !== undefined) {
+    sanitized.can_rerun_classification = candidate.can_rerun_classification;
   }
 
   return sanitized;
@@ -197,6 +214,7 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
       badgeKey: "pages.classification.states.lockedBadge",
       descriptionKey: "pages.classification.states.lockedDescription",
       hasClassification: false,
+      canRerunClassification: false,
     };
   }
 
@@ -209,6 +227,7 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
       summaryKey: "pages.classification.states.passedSummary",
       references: ["Article 1", "Article 2"],
       hasClassification: true,
+      canRerunClassification: false,
     };
   }
 
@@ -220,6 +239,7 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
       descriptionKey: "pages.classification.states.degradedDescription",
       summaryKey: "pages.classification.states.degradedSummary",
       hasClassification: true,
+      canRerunClassification: false,
     };
   }
 
@@ -231,6 +251,7 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
       descriptionKey: "pages.classification.states.blockedDescription",
       summaryKey: "pages.classification.states.blockedSummary",
       hasClassification: true,
+      canRerunClassification: false,
     };
   }
 
@@ -240,6 +261,7 @@ function toClassificationStatusViewModel(payload: AssessmentDetailPayload): Clas
     badgeKey: "pages.classification.states.processingBadge",
     descriptionKey: "pages.classification.states.processingDescription",
     hasClassification: false,
+    canRerunClassification: payload.can_rerun_classification === true,
   };
 }
 
@@ -251,6 +273,7 @@ type AssessmentDetailPayload = {
     classification_locked?: boolean;
   };
   guardrail_status?: string | null;
+  can_rerun_classification?: boolean;
 };
 
 function isAssessmentDetailPayload(payload: unknown): payload is AssessmentDetailPayload {
