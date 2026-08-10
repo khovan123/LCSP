@@ -217,6 +217,23 @@ describe("LegalRuleMatch Callback Endpoint (e2e) [MW-cls-001]", () => {
     );
   });
 
+  it("T04d rejects legal matching for a pending VerifiedProfile", async () => {
+    await prisma.verifiedProfile.update({
+      where: { id: "vp-1" },
+      data: { status: VERIFIED_PROFILE_STATUSES.pendingApproval },
+    });
+
+    const response = await callback(app, validPayload());
+
+    assertError(
+      response.status,
+      response.body,
+      404,
+      SCAN_ERROR_CODES.verifiedProfileNotFound,
+    );
+    assert.equal(await prisma.legalRuleMatch.count(), 0);
+  });
+
   it("T05 preserves distinct PRIMARY_MATCH and REFERENCED_CONTEXT match types", async () => {
     const response = await callback(app, validPayload());
     const body = successBody<LegalRuleMatchCallbackResponseDto>(response);
@@ -365,7 +382,9 @@ async function seedAssessmentAndVerifiedProfile(
       providerVersion: "verified-profile-worker@1.0.0",
       profileData: { verified: true },
       gatesPassedAt: { test: new Date().toISOString() },
-      status: VERIFIED_PROFILE_STATUSES.pendingApproval,
+      status: VERIFIED_PROFILE_STATUSES.approved,
+      approvedAt: new Date(),
+      approvedById: "user-1",
     },
   });
 }
