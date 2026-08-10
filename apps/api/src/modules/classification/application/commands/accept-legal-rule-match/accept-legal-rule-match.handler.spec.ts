@@ -34,8 +34,12 @@ describe("AcceptLegalRuleMatchHandler", () => {
   let mockFindFirstVerifiedProfile: jest.Mock<
     (args: unknown) => Promise<VerifiedProfileRecord | null>
   >;
-  let mockFindApprovedCorpus: jest.Mock<(args: any) => Promise<{ id: string } | null>>;
-  let mockFindApprovedCatalog: jest.Mock<(args: any) => Promise<{ id: string } | null>>;
+  let mockFindApprovedCorpus: jest.Mock<
+    (args: any) => Promise<{ id: string } | null>
+  >;
+  let mockFindApprovedCatalog: jest.Mock<
+    (args: any) => Promise<{ id: string } | null>
+  >;
   let mockCreateLegalRuleMatch: jest.Mock<
     (args: { data: unknown }) => Promise<unknown>
   >;
