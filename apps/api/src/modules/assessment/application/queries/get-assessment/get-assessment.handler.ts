@@ -19,6 +19,7 @@ import {
 } from "@lcsp/contracts/scan";
 import {
   fromPrismaClassificationGuardrailStatus,
+  fromPrismaVerifiedProfileStatus,
   fromPrismaWizardStatus,
   toPrismaEvidenceAcceptanceStatus,
 } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
@@ -32,6 +33,7 @@ import type {
   AssessmentDetailDto,
   ClassificationResultSummaryDto,
   ReadinessState,
+  VerifiedProfileReviewDto,
   WizardStatus,
 } from "../../contracts/assessment/assessment-detail.contract.js";
 import { GetAssessmentQuery } from "./get-assessment.query.js";
@@ -110,6 +112,27 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
         })
       : null;
 
+    const verifiedProfileReview =
+      query.subjectRole === SUBJECT_ROLES.manager
+        ? await this.prisma.verifiedProfile.findFirst({
+            where: {
+              assessmentId: assessment.id,
+              organizationId: assessment.organizationId,
+            },
+            select: {
+              id: true,
+              status: true,
+              providerVersion: true,
+              profileData: true,
+              gatesPassedAt: true,
+              createdAt: true,
+              approvedAt: true,
+              approvedById: true,
+            },
+            orderBy: { createdAt: "desc" },
+          })
+        : null;
+
     const rerunnableLegalRuleMatch =
       acceptedEvidenceReport && !classificationResult
         ? await this.prisma.legalRuleMatch.findFirst({
@@ -141,6 +164,9 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
         : null,
       classification_result: classificationResult
         ? toClassificationResultSummary(classificationResult.classificationData)
+        : null,
+      verified_profile_review: verifiedProfileReview
+        ? toVerifiedProfileReview(verifiedProfileReview)
         : null,
       can_rerun_classification: rerunnableLegalRuleMatch !== null,
       next_action: nextActionFor(wizardStatus),
@@ -190,8 +216,46 @@ function toClassificationResultSummary(
   };
 }
 
+function toVerifiedProfileReview(profile: {
+  id: string;
+  status: Parameters<typeof fromPrismaVerifiedProfileStatus>[0];
+  providerVersion: string;
+  profileData: unknown;
+  gatesPassedAt: unknown;
+  createdAt: Date;
+  approvedAt: Date | null;
+  approvedById: string | null;
+}): VerifiedProfileReviewDto {
+  const data = isRecord(profile.profileData) ? profile.profileData : {};
+  return {
+    verified_profile_id: profile.id,
+    status: fromPrismaVerifiedProfileStatus(profile.status),
+    provider_version: profile.providerVersion,
+    verified_claims: recordArray(data.verified_claims),
+    verification_source: cleanString(data.verification_source),
+    wizard_context: isRecord(data.wizard_context) ? data.wizard_context : null,
+    conflict_resolutions: recordArray(data.conflict_resolutions),
+    gates_passed_at: isRecord(profile.gatesPassedAt)
+      ? profile.gatesPassedAt
+      : isRecord(data.gates_passed_at)
+        ? data.gates_passed_at
+        : {},
+    evidence_chain_integrity:
+      typeof data.evidence_chain_integrity === "boolean"
+        ? data.evidence_chain_integrity
+        : null,
+    created_at: profile.createdAt.toISOString(),
+    approved_at: profile.approvedAt?.toISOString() ?? null,
+    approved_by_id: profile.approvedById,
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function recordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
 }
 
 function cleanString(value: unknown): string | null {
