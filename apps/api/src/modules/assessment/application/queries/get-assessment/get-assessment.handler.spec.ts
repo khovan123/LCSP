@@ -3,7 +3,10 @@ import {
   ASSESSMENT_STATUS_CODES,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import { CLASSIFICATION_GUARDRAIL_STATUSES } from "@lcsp/contracts/scan";
+import {
+  CLASSIFICATION_GUARDRAIL_STATUSES,
+  VERIFIED_PROFILE_STATUSES,
+} from "@lcsp/contracts/scan";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { describe, it, expect, jest } from "@jest/globals";
 import { NotFoundException } from "@nestjs/common";
@@ -28,11 +31,26 @@ function makeAssessment(
   });
 }
 
+type VerifiedProfileReviewFixture = {
+  id: string;
+  status: string;
+  providerVersion: string;
+  profileData: unknown;
+  gatesPassedAt: unknown;
+  createdAt: Date;
+  approvedAt: Date | null;
+  approvedById: string | null;
+};
+
 function buildHandler(input: {
   assessment: Assessment | null;
   wizardProfile?: { status: string } | null;
   acceptedEvidenceReport?: { id: string } | null;
-  classificationResult?: { guardrailStatus: string } | null;
+  classificationResult?: {
+    guardrailStatus: string;
+    classificationData?: unknown;
+  } | null;
+  verifiedProfileReview?: VerifiedProfileReviewFixture | null;
   rerunnableLegalRuleMatch?: { id: string } | null;
 }) {
   const findById = jest
@@ -61,8 +79,16 @@ function buildHandler(input: {
     .fn<() => Promise<{ id: string } | null>>()
     .mockResolvedValue(input.acceptedEvidenceReport ?? null);
   const findClassificationResult = jest
-    .fn<() => Promise<{ guardrailStatus: string } | null>>()
+    .fn<
+      () => Promise<{
+        guardrailStatus: string;
+        classificationData?: unknown;
+      } | null>
+    >()
     .mockResolvedValue(input.classificationResult ?? null);
+  const findVerifiedProfileReview = jest
+    .fn<() => Promise<VerifiedProfileReviewFixture | null>>()
+    .mockResolvedValue(input.verifiedProfileReview ?? null);
   const findRerunnableLegalRuleMatch = jest
     .fn<() => Promise<{ id: string } | null>>()
     .mockResolvedValue(input.rerunnableLegalRuleMatch ?? null);
@@ -70,6 +96,7 @@ function buildHandler(input: {
     wizardProfile: { findUnique },
     technicalEvidenceReport: { findFirst: findAcceptedEvidence },
     classificationResult: { findFirst: findClassificationResult },
+    verifiedProfile: { findFirst: findVerifiedProfileReview },
     legalRuleMatch: { findFirst: findRerunnableLegalRuleMatch },
   } as unknown as PrismaService;
 
@@ -80,6 +107,7 @@ function buildHandler(input: {
     findUnique,
     findAcceptedEvidence,
     findClassificationResult,
+    findVerifiedProfileReview,
     findRerunnableLegalRuleMatch,
   };
 }
@@ -196,13 +224,19 @@ describe("GetAssessmentHandler", () => {
     });
   });
 
-  it("projects the accepted classification result guardrail status", async () => {
+  it("projects the accepted classification result guardrail status and details", async () => {
     const assessment = makeAssessment();
     const { handler, findClassificationResult } = buildHandler({
       assessment,
       acceptedEvidenceReport: { id: "evidence-1" },
       classificationResult: {
         guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+        classificationData: {
+          risk_level: "HIGH",
+          applicability_assessment: "applicable",
+          citation_basis: ["chunk-1"],
+          rationale: "Evidence-backed rationale",
+        },
       },
     });
 
@@ -220,6 +254,61 @@ describe("GetAssessmentHandler", () => {
     expect(result.guardrail_status).toBe(
       CLASSIFICATION_GUARDRAIL_STATUSES.passed,
     );
+    expect(result.classification_result).toEqual({
+      risk_level: "HIGH",
+      applicability_assessment: "applicable",
+      citation_basis: ["chunk-1"],
+      rationale: "Evidence-backed rationale",
+    });
+  });
+
+  it("projects pending VerifiedProfile review only for the owning Manager", async () => {
+    const assessment = makeAssessment();
+    const profile: VerifiedProfileReviewFixture = {
+      id: "vp-1",
+      status: VERIFIED_PROFILE_STATUSES.pendingApproval,
+      providerVersion: "lcsp.verified-profile-worker.v1",
+      profileData: {
+        verified_claims: [
+          {
+            claim_id: "claim-1",
+            claim_category: "MODEL_INVOCATION",
+            evidence_refs: ["evidence-1"],
+          },
+        ],
+        verification_source: "TECHNICAL_PLUS_WIZARD",
+        conflict_resolutions: [{ conflict_id: "conflict-1", status: "RESOLVED" }],
+        evidence_chain_integrity: true,
+      },
+      gatesPassedAt: { conflicts_resolved: "2026-08-11T00:00:00.000Z" },
+      createdAt: new Date("2026-08-11T00:01:00.000Z"),
+      approvedAt: null,
+      approvedById: null,
+    };
+    const { handler, findVerifiedProfileReview } = buildHandler({
+      assessment,
+      verifiedProfileReview: profile,
+    });
+
+    const result = await handler.execute(
+      new GetAssessmentQuery(
+        assessment.id,
+        "org-1",
+        "user-1",
+        SUBJECT_ROLES.manager,
+        "corr-1",
+      ),
+    );
+
+    expect(findVerifiedProfileReview).toHaveBeenCalledTimes(1);
+    expect(result.verified_profile_review).toMatchObject({
+      verified_profile_id: "vp-1",
+      status: VERIFIED_PROFILE_STATUSES.pendingApproval,
+      verification_source: "TECHNICAL_PLUS_WIZARD",
+      evidence_chain_integrity: true,
+      approved_at: null,
+      approved_by_id: null,
+    });
   });
 
   it("only exposes classification retry after a passed legal rule match exists", async () => {
@@ -299,12 +388,24 @@ describe("GetAssessmentHandler", () => {
   });
 
   // T07: Developer scope is not restricted by ownerId (PBAC action grant already gates access)
-  it("allows a Developer to read an assessment not owned by them, in the same org", async () => {
+  it("allows a Developer to read an assessment but never exposes Manager profile review", async () => {
     const assessment = makeAssessment({
       organizationId: "org-1",
       ownerId: "user-2",
     });
-    const { handler } = buildHandler({ assessment });
+    const { handler, findVerifiedProfileReview } = buildHandler({
+      assessment,
+      verifiedProfileReview: {
+        id: "vp-sensitive",
+        status: VERIFIED_PROFILE_STATUSES.pendingApproval,
+        providerVersion: "worker-v1",
+        profileData: { verified_claims: [{ claim_id: "sensitive" }] },
+        gatesPassedAt: {},
+        createdAt: new Date(),
+        approvedAt: null,
+        approvedById: null,
+      },
+    });
 
     const result = await handler.execute(
       new GetAssessmentQuery(
@@ -317,10 +418,12 @@ describe("GetAssessmentHandler", () => {
     );
 
     expect(result.assessment_id).toBe(assessment.id);
+    expect(result.verified_profile_review).toBeNull();
+    expect(findVerifiedProfileReview).not.toHaveBeenCalled();
   });
 
   // T06 / T08
-  it("never includes risk/severity/non-compliant wording, and next_action is business language", async () => {
+  it("never includes risk/severity/non-compliant wording before classification, and next_action is business language", async () => {
     const assessment = makeAssessment();
     const { handler } = buildHandler({ assessment, wizardProfile: null });
 
