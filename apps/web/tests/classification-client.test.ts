@@ -28,11 +28,17 @@ test("classification outcome maps locked state correctly", () => {
   }
 });
 
-test("classification outcome maps passed state with final report action", () => {
+test("classification outcome maps passed state with real result data and final report action", () => {
   const result = toClassificationStatusOutcome(
     {
       readiness_state: { classification_locked: false },
       guardrail_status: "passed",
+      classification_result: {
+        risk_level: "HIGH",
+        applicability_assessment: "applicable",
+        citation_basis: ["LAW-134-2025-QH15::art-33"],
+        rationale: "The applicable legal rule is backed by the cited article.",
+      },
     },
     true,
     200,
@@ -43,7 +49,13 @@ test("classification outcome maps passed state with final report action", () => 
     assert.equal(result.data.state, "passed");
     assert.equal(result.data.hasClassification, true);
     assert.equal(result.data.summaryKey, "pages.classification.states.passedSummary");
-    assert.deepEqual(result.data.references, ["Article 1", "Article 2"]);
+    assert.equal(
+      result.data.summaryText,
+      "The applicable legal rule is backed by the cited article.",
+    );
+    assert.deepEqual(result.data.references, [
+      "LAW-134-2025-QH15::art-33",
+    ]);
     assert.deepEqual(getClassificationActionVisibility(result.data), {
       showFinalReport: true,
       showGapAnalysis: true,
@@ -122,11 +134,23 @@ test("sanitizeAssessmentDetailPayload accepts valid classification payloads", ()
   const payload = sanitizeAssessmentDetailPayload({
     readiness_state: { classification_locked: false },
     guardrail_status: "passed",
+    classification_result: {
+      risk_level: "HIGH",
+      applicability_assessment: "applicable",
+      citation_basis: ["chunk-1", " chunk-2 "],
+      rationale: "Citation-backed rationale",
+    },
   });
 
   assert.deepEqual(payload, {
     readiness_state: { classification_locked: false },
     guardrail_status: "passed",
+    classification_result: {
+      risk_level: "HIGH",
+      applicability_assessment: "applicable",
+      citation_basis: ["chunk-1", "chunk-2"],
+      rationale: "Citation-backed rationale",
+    },
   });
 });
 
@@ -135,6 +159,16 @@ test("sanitizeAssessmentDetailPayload rejects invalid payloads", () => {
     sanitizeAssessmentDetailPayload({
       readiness_state: { classification_locked: "true" },
       guardrail_status: 123,
+    }),
+    null,
+  );
+  assert.equal(
+    sanitizeAssessmentDetailPayload({
+      readiness_state: { classification_locked: false },
+      guardrail_status: "passed",
+      classification_result: {
+        citation_basis: ["chunk-1", 2],
+      },
     }),
     null,
   );
