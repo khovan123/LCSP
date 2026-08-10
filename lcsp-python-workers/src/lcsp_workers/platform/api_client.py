@@ -1,4 +1,5 @@
 import time
+from urllib.parse import urlencode
 import httpx
 from structlog import get_logger
 
@@ -356,10 +357,16 @@ class WorkerApiClient:
             raise WorkerCallbackError("Wizard profile response was invalid.")
         return data
 
-    def get_verified_profile_reconciliation_context(self, assessment_id: str) -> dict:
+    def get_verified_profile_reconciliation_context(
+        self,
+        assessment_id: str,
+        ai_usage_flow_id: str | None = None,
+    ) -> dict:
         path = InternalPath.VERIFIED_PROFILE_CONTEXT.format(
             assessment_id=assessment_id
         )
+        if ai_usage_flow_id:
+            path = f"{path}?{urlencode({'ai_usage_flow_id': ai_usage_flow_id})}"
         data = self._get_with_retry(path)
         if not isinstance(data, dict):
             raise WorkerCallbackError(

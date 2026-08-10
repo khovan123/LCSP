@@ -162,6 +162,48 @@ describe("VerifiedProfile Callback Endpoint (e2e) [MW-rec-004]", () => {
     await assertNoVerifiedProfileMutation(prisma);
   });
 
+  it("returns the reconciliation context for the event AI usage flow", async () => {
+    await seedConflicts(prisma, [
+      { id: "conflict-1", status: CONFLICT_RECORD_STATUSES.resolved },
+    ]);
+    await prisma.wizardProfile.deleteMany({
+      where: { assessmentId: "assessment-1" },
+    });
+    await prisma.wizardProfile.create({
+      data: {
+        id: "reconciliation-context-wizard-1",
+        assessmentId: "assessment-1",
+        organizationId: "org-1",
+        ownerId: "user-1",
+        answers: { aiPurpose: "decision_support" },
+      },
+    });
+
+    const response = await httpRequest(app)
+      .get(
+        "/internal/reconciliation/verified-profile-context/assessment-1?ai_usage_flow_id=ai-flow-1",
+      )
+      .set("X-Worker-Api-Key", WORKER_KEY);
+    const body = successBody<{
+      ai_usage_flow: { id: string; claims: unknown };
+      conflicts: Array<{ conflict_id: string; status: string }>;
+      wizard_profile: { id: string; answers: unknown } | null;
+    }>(response);
+
+    assert.equal(response.status, 200);
+    assert.equal(body.ai_usage_flow.id, "ai-flow-1");
+    assert.deepEqual(body.ai_usage_flow.claims, [{ claim_id: "claim-1" }]);
+    assert.equal(body.conflicts.length, 1);
+    assert.equal(body.conflicts[0]?.conflict_id, "conflict-1");
+    assert.equal(body.conflicts[0]?.status, CONFLICT_RECORD_STATUSES.resolved);
+    assert.deepEqual(body.wizard_profile, {
+      id: "reconciliation-context-wizard-1",
+      assessment_id: "assessment-1",
+      version: 1,
+      answers: { aiPurpose: "decision_support" },
+    });
+  });
+
   it("T06 rejects mutation attempts after acceptance because no update path exists", async () => {
     await seedConflicts(prisma, [
       { id: "conflict-1", status: CONFLICT_RECORD_STATUSES.dismissed },

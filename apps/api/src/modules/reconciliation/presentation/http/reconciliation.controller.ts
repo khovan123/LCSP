@@ -6,6 +6,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -15,8 +16,10 @@ import {
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { AI_USAGE_FLOW_STATUSES } from "@lcsp/contracts/scan";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
+import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
 import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
@@ -39,6 +42,7 @@ export class InternalReconciliationController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
+    private readonly prisma: PrismaService,
   ) {}
 
   @Post("conflict-callback")
@@ -86,6 +90,87 @@ export class InternalReconciliationController {
         new GetVerifiedProfileByIdQuery(verifiedProfileId),
       ),
     );
+  }
+
+  @Get("verified-profile-context/:assessmentId")
+  @UseGuards(WorkerApiKeyGuard)
+  async getVerifiedProfileContext(
+    @Param("assessmentId") assessmentId: string,
+    @Query("ai_usage_flow_id") aiUsageFlowId?: string,
+  ) {
+    const aiUsageFlow = await this.prisma.aIUsageFlow.findFirst({
+      where: {
+        assessmentId,
+        ...(aiUsageFlowId ? { id: aiUsageFlowId } : {}),
+        status: AI_USAGE_FLOW_STATUSES.accepted,
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        assessmentId: true,
+        organizationId: true,
+        schemaVersion: true,
+        providerVersion: true,
+        claims: true,
+        unknownUsages: true,
+        privacyFlags: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    if (!aiUsageFlow) {
+      throw new NotFoundException("Accepted AI usage flow not found");
+    }
+
+    const [conflicts, wizardProfile] = await Promise.all([
+      this.prisma.conflictRecord.findMany({
+        where: { aiUsageFlowId: aiUsageFlow.id, assessmentId },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          conflictType: true,
+          status: true,
+          resolvedAt: true,
+          evidenceRefs: true,
+        },
+      }),
+      this.prisma.wizardProfile.findUnique({
+        where: { assessmentId },
+        select: { id: true, assessmentId: true, version: true, answers: true },
+      }),
+    ]);
+
+    return resultEnvelope({
+      ai_usage_flow: {
+        id: aiUsageFlow.id,
+        ai_usage_flow_id: aiUsageFlow.id,
+        assessment_id: aiUsageFlow.assessmentId,
+        organization_id: aiUsageFlow.organizationId,
+        schema_version: aiUsageFlow.schemaVersion,
+        provider_version: aiUsageFlow.providerVersion,
+        claims: aiUsageFlow.claims,
+        unknown_usages: aiUsageFlow.unknownUsages,
+        privacy_flags: aiUsageFlow.privacyFlags,
+        status: AI_USAGE_FLOW_STATUSES.accepted.toLowerCase(),
+        created_at: aiUsageFlow.createdAt.toISOString(),
+      },
+      conflicts: conflicts.map((conflict) => ({
+        conflict_id: conflict.id,
+        conflict_type: conflict.conflictType,
+        status: conflict.status,
+        resolved_at: conflict.resolvedAt?.toISOString() ?? null,
+        evidence_refs: conflict.evidenceRefs,
+      })),
+      wizard_profile: wizardProfile
+        ? {
+            id: wizardProfile.id,
+            assessment_id: wizardProfile.assessmentId,
+            version: wizardProfile.version,
+            answers: wizardProfile.answers,
+          }
+        : null,
+    });
   }
 }
 

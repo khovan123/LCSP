@@ -98,13 +98,15 @@ def test_t01_all_conflicts_resolved_submits_verified_profile() -> None:
     consumer.handle(
         {
             "assessmentId": "assessment-1",
+            "aiUsageFlowId": "auf-1",
             "conflictsResolvedAt": "2026-07-25T09:30:00Z",
         },
         correlation_id="corr-1",
     )
 
     api_client.get_verified_profile_reconciliation_context.assert_called_once_with(
-        "assessment-1"
+        "assessment-1",
+        "auf-1",
     )
     api_client.post_verified_profile_callback.assert_called_once()
     payload = api_client.post_verified_profile_callback.call_args.args[0]

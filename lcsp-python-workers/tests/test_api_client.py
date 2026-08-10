@@ -370,13 +370,15 @@ def test_get_verified_profile_reconciliation_context_uses_internal_endpoint(clie
         mock_resp.json.return_value = {"ai_usage_flow": {"id": "auf-1"}}
         mock_get.return_value = mock_resp
 
-        data = client.get_verified_profile_reconciliation_context("assessment-1")
+        data = client.get_verified_profile_reconciliation_context(
+            "assessment-1", "auf-1"
+        )
 
         assert data == {"ai_usage_flow": {"id": "auf-1"}}
         url = mock_get.call_args.args[0]
         assert url == (
             "http://testserver/internal/reconciliation/"
-            "verified-profile-context/assessment-1"
+            "verified-profile-context/assessment-1?ai_usage_flow_id=auf-1"
         )
 
 
