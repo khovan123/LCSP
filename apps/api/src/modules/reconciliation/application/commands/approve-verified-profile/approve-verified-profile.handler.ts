@@ -8,7 +8,10 @@ import {
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import {
+  AUTH_ERROR_CODES,
+  type AuthErrorCode,
+} from "@lcsp/contracts/auth";
 import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
@@ -198,7 +201,7 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
 
   private async auditDenied(
     command: ApproveVerifiedProfileCommand,
-    reasonCode: string,
+    reasonCode: AuthErrorCode,
   ): Promise<void> {
     await this.auditWriter.write({
       eventType: SCAN_EVENT_TYPES.verifiedProfileApprovedAudit,
