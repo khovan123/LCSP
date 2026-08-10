@@ -23,6 +23,7 @@ function worker(name, target, healthPort) {
       PYTHONUNBUFFERED: "1",
       PYTHONDONTWRITEBYTECODE: "1",
       PYTHONPATH: `${APP}/lcsp-python-workers/src`,
+      PATH: "/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
       NESTJS_API_BASE_URL: "http://127.0.0.1:8080",
       HEALTH_PORT: String(healthPort)
     },
