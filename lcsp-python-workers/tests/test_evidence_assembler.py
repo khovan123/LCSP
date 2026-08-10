@@ -6,6 +6,7 @@ from dataclasses import asdict
 
 import pytest
 
+from lcsp_workers.platform.callback_schemas import SCAN_CALLBACK_STATUSES
 from lcsp_workers.scanner.evidence_assembler import (
     EvidenceAssembler,
     PrivacyAssertionError,
@@ -121,7 +122,7 @@ def test_t01_assembles_full_evidence_payload() -> None:
     )
 
     assert payload.scan_job_id == "scan-job-1"
-    assert payload.status == "success"
+    assert payload.status == SCAN_CALLBACK_STATUSES["success"]
     assert payload.tools_version == {
         "syft": "syft v1.0.0",
         "semgrep_ai_usage": "semgrep 1.99.0",
@@ -151,7 +152,7 @@ def test_t02_one_tool_failure_is_recorded_and_callback_payload_is_partial() -> N
         coverage_notes=[],
     )
 
-    assert payload.status == "partial"
+    assert payload.status == SCAN_CALLBACK_STATUSES["partial"]
     assert payload.evidence_payload["tool_failures"] == [
         {
             "tool_name": "syft",
@@ -171,7 +172,7 @@ def test_t03_all_tools_fail_still_assembles_failed_callback_payload() -> None:
         coverage_notes=[],
     )
 
-    assert payload.status == "failed"
+    assert payload.status == SCAN_CALLBACK_STATUSES["failed"]
     assert payload.error_code == "ALL_TOOLS_FAILED"
     assert payload.evidence_payload["sbom_entries"] == []
     assert payload.evidence_payload["ai_usage_signals"] == []
