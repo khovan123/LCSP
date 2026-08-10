@@ -30,6 +30,7 @@ import {
 } from "../../ports/persistence/assessment.repository.js";
 import type {
   AssessmentDetailDto,
+  ClassificationResultSummaryDto,
   ReadinessState,
   WizardStatus,
 } from "../../contracts/assessment/assessment-detail.contract.js";
@@ -101,7 +102,10 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
               CLASSIFICATION_RESULT_STATUSES.accepted,
             ),
           },
-          select: { guardrailStatus: true },
+          select: {
+            guardrailStatus: true,
+            classificationData: true,
+          },
           orderBy: { createdAt: "desc" },
         })
       : null;
@@ -135,6 +139,9 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
             classificationResult.guardrailStatus,
           )
         : null,
+      classification_result: classificationResult
+        ? toClassificationResultSummary(classificationResult.classificationData)
+        : null,
       can_rerun_classification: rerunnableLegalRuleMatch !== null,
       next_action: nextActionFor(wizardStatus),
       created_at: assessment.createdAt.toISOString(),
@@ -161,4 +168,42 @@ function nextActionFor(wizardStatus: WizardStatus): AssessmentNextActionKey {
     default:
       return ASSESSMENT_NEXT_ACTION_KEYS.wizardInProgress;
   }
+}
+
+function toClassificationResultSummary(
+  value: unknown,
+): ClassificationResultSummaryDto {
+  if (!isRecord(value)) {
+    return {
+      risk_level: null,
+      applicability_assessment: null,
+      citation_basis: [],
+      rationale: null,
+    };
+  }
+
+  return {
+    risk_level: cleanString(value.risk_level),
+    applicability_assessment: cleanString(value.applicability_assessment),
+    citation_basis: stringArray(value.citation_basis),
+    rationale: cleanString(value.rationale),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function cleanString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
