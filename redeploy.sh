@@ -31,6 +31,17 @@ wait_for_health() {
   return 1
 }
 
+restart_pm2() {
+  if pm2 startOrRestart "$ECOSYSTEM_FILE" --update-env; then
+    return 0
+  fi
+
+  echo "==> PM2 process list is inconsistent; rebuilding the PM2 daemon state"
+  pm2 kill || true
+  sleep 2
+  pm2 start "$ECOSYSTEM_FILE" --update-env
+}
+
 require_command curl
 require_command dotenv
 require_command git
@@ -64,7 +75,7 @@ echo "==> Build Web"
 dotenv -e .env.pm2 -- pnpm --filter @lcsp/web build
 
 echo "==> Restart PM2"
-pm2 startOrRestart "$ECOSYSTEM_FILE" --update-env
+restart_pm2
 pm2 save
 
 echo "==> Status"
