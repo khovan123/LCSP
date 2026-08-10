@@ -45,23 +45,25 @@ describe("RerunClassificationHandler", () => {
         callback(prisma),
       ),
     } as unknown as jest.Mocked<PrismaService>;
+    const enqueue = jest.fn().mockResolvedValue(undefined);
     const outbox = {
-      enqueue: jest.fn().mockResolvedValue(undefined),
+      enqueue,
     } as unknown as jest.Mocked<OutboxRepository>;
+    const writeInTx = jest.fn().mockResolvedValue(undefined);
     const auditWriter = {
-      writeInTx: jest.fn().mockResolvedValue(undefined),
+      writeInTx,
     } as unknown as jest.Mocked<AuditWriterService>;
 
     return {
       handler: new RerunClassificationHandler(prisma, outbox, auditWriter),
-      outbox,
-      auditWriter,
+      enqueue,
+      writeInTx,
       prisma,
     };
   }
 
   it("queues the accepted legal rule match for classification without rescanning evidence", async () => {
-    const { handler, outbox, auditWriter } = createHandler();
+    const { handler, enqueue, writeInTx } = createHandler();
 
     const result = await handler.execute(
       new RerunClassificationCommand(
@@ -76,14 +78,14 @@ describe("RerunClassificationHandler", () => {
       status: CLASSIFICATION_RERUN_STATUSES.queued,
       correlation_id: "correlation-1",
     });
-    expect(outbox.enqueue).toHaveBeenCalledWith(
+    expect(enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
         aggregateId: "match-1",
         eventType: SCAN_EVENT_TYPES.legalRuleMatchReady,
       }),
       expect.anything(),
     );
-    expect(auditWriter.writeInTx).toHaveBeenCalledWith(
+    expect(writeInTx).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: SCAN_EVENT_TYPES.classificationRerunTriggeredAudit,
       }),
