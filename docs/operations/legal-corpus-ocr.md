@@ -10,8 +10,8 @@ content.
 ## Preferred: Crawl Official VBPL HTML
 
 The crawler requires the numeric gateway document ID, not the `ItemID` in the
-portal URL. Obtain that ID from an approved operator lookup; do not bulk-crawl
-or probe the gateway.
+portal URL. Obtain that ID from an approved source lookup; do not bulk-crawl or
+probe the gateway.
 
 ```bash
 lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/crawl_vbpl_document.py \
@@ -51,7 +51,7 @@ cross references before submitting it to the corpus ingestion endpoint.
 
 Luật 134/2025/QH15 is available as an official Công báo DOCX. Use it instead
 of OCR whenever the official DOCX can be retrieved and its provenance can be
-validated by the Legal Operator.
+validated against the official publication metadata.
 
 ```bash
 lcsp-python-workers/.venv/bin/python lcsp-python-workers/scripts/crawl_congbao_docx.py \
@@ -104,32 +104,35 @@ Each run creates:
 Raw OCR artefacts are immutable evidence of the OCR run. Do not correct them in
 place after hashes have been recorded.
 
-## Legal Operator Review Gate
+## Reviewed Artefact Gate
 
-The Internal Legal Operator must correct and review the extracted text, identify
-document/chapter/article/clause/point hierarchy, and confirm stable citation
-locators before calling the corpus ingestion API. OCR output is never
-automatically approved or presented as a legal source.
+Before a corpus can leave `DRAFT`, the extracted text and legal hierarchy must
+be reviewed and represented by deterministic artefacts. The gate is an artefact
+and validation gate, not a real-person signature gate.
 
-The remaining required handoff for the current Law 134/Law 71 corpus is:
+The current Law 134/Law 71 corpus requires:
 
 - `<document-id>.reviewed.txt` — text corrected against the PRIMARY source;
-- `<document-id>.hierarchy-review.json` — reviewed hierarchy and sign-off
-  metadata, including reviewer, review date, source snapshot/hash and review
-  state;
-- an explicit `APPROVED` hierarchy decision before the reviewed text is used to
-  build a corpus payload.
+- `<document-id>.hierarchy-review.json` — reviewed hierarchy, source/text hashes,
+  review scope and review state;
+- `reviewState: APPROVED` before the reviewed artefacts are eligible for corpus
+  ingestion and automatic approval.
 
-Until these artefacts exist, corpus approval must fail closed. A parser warning
-or obvious OCR sequence does not substitute for Legal Operator approval.
+No handwritten/digital signature or verified identity of a legal-department
+employee is required by the LCSP corpus pipeline. `reviewedBy`, when present,
+is an audit principal/label only. It may identify a service account, automated
+review process, role account or other technical principal and must not be
+interpreted as legal certification or as evidence that a named lawyer signed the
+content.
 
-### Law 134 hierarchy item that must be confirmed
+Corpus approval remains fail-closed when reviewed artefacts are missing,
+hashes do not match, hierarchy/repeal relationships are unresolved or review
+state is not `APPROVED`.
 
-The current raw OCR has an apparent duplicate `Chương VI`: Articles 28–29 are
-under the enforcement/violations chapter, and Articles 30–32 are then preceded
-by another `Chương VI`, followed by `Chương VIII` for Articles 33–35.
+### Law 134 reviewed hierarchy
 
-The candidate hierarchy to verify against the PRIMARY source is:
+The raw OCR has a duplicate `Chương VI` before Điều 30. The reviewed hierarchy
+used by LCSP is:
 
 ```text
 Chương VI   -> Điều 28-29
@@ -137,23 +140,23 @@ Chương VII  -> Điều 30-32
 Chương VIII -> Điều 33-35
 ```
 
-In particular, `Chương VII` for Articles 30–32 must be explicitly confirmed by
-the Legal Operator and recorded in
-`LAW-134-2025-QH15.hierarchy-review.json`. Do not silently mutate the raw OCR
-heading to make the sequence look correct.
+This correction is recorded in
+`LAW-134-2025-QH15.hierarchy-review.json`; the raw OCR file remains unchanged.
 
 ### Minimum hierarchy-review record
 
-A review record should contain at least:
+A review record contains at least:
 
 ```json
 {
   "documentId": "LAW-134-2025-QH15",
   "reviewedSourceSha256": "sha256:...",
   "reviewedTextSha256": "sha256:...",
-  "reviewedBy": "<legal-operator-id>",
-  "reviewedAt": "<ISO-8601>",
   "reviewState": "APPROVED",
+  "reviewScope": {
+    "type": "LCSP_TARGETED_CORPUS_PROVISIONS",
+    "locators": ["art-9", "art-10", "art-33"]
+  },
   "hierarchyCorrections": [
     {
       "raw": "Chương VI before Điều 30",
@@ -164,27 +167,34 @@ A review record should contain at least:
 }
 ```
 
-`reviewState` must remain `CHANGES_REQUIRED` while any material OCR or hierarchy
-issue is unresolved.
+Optional audit metadata such as `reviewedBy` and `reviewedAt` may be retained,
+but it is not a requirement that `reviewedBy` resolve to a real legal employee.
 
-## Automatic Post-Sign-off Pipeline
+`reviewState` must remain `CHANGES_REQUIRED` while any material OCR, hierarchy,
+source-provenance or repeal-mapping issue is unresolved.
 
-The only per-corpus manual gate is the Legal Operator review/sign-off described
-above. After all reviewed text and hierarchy files are present and every
-`reviewState` is `APPROVED`, the remaining lifecycle is automated:
+## Automatic Post-Review Pipeline
+
+After all reviewed text and hierarchy files are present and every `reviewState`
+is `APPROVED`, the remaining lifecycle is automated:
 
 ```text
 reviewed text + hierarchy APPROVED
-  -> validate hashes/operator identity
+  -> validate source/text hashes and review scope
   -> ingest DRAFT corpus
   -> build and validate retrieval index
   -> approve corpus
 ```
 
+The API still requires an authenticated principal with the applicable PBAC
+actions to execute ingest/approval. That principal is a technical audit actor;
+it does not have to be a real-person Legal Operator and its identity is not a
+legal signature.
+
 Run the orchestration only after the builder has produced the corpus payload:
 
 ```bash
-LEGAL_OPERATOR_BEARER_TOKEN='<authenticated legal operator token>' \
+LEGAL_OPERATOR_BEARER_TOKEN='<authenticated corpus approval principal token>' \
 LEGAL_CHROMA_PATH='/var/lib/lcsp/chroma' \
 lcsp-python-workers/.venv/bin/python \
   lcsp-python-workers/scripts/orchestrate_reviewed_legal_corpus.py \
@@ -193,9 +203,14 @@ lcsp-python-workers/.venv/bin/python \
   --api-base-url http://127.0.0.1:4000
 ```
 
+`LEGAL_OPERATOR_BEARER_TOKEN` is retained as the current environment-variable
+name for compatibility; it does not imply that the token belongs to a named
+legal-department employee.
+
 The orchestration fails closed when any reviewed text or hierarchy file is
 missing, `reviewState` is not `APPROVED`, a reviewed text/source hash differs,
-normalization warnings remain unresolved, the retrieval index cannot return all
-stable chunk IDs, or the authenticated approver does not match `reviewedBy`.
-The API persists the approval under the authenticated Legal Operator identity;
-it does not accept an arbitrary `approvedBy` value from the request payload.
+normalization warnings remain unresolved, or the retrieval index cannot return
+all stable chunk IDs.
+
+Corpus approval is an LCSP lifecycle decision only. It does not constitute a
+legal opinion, legal certification or external regulatory approval.
