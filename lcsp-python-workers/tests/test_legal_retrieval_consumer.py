@@ -90,6 +90,7 @@ def test_consumer_fetches_data_and_submits_callback():
     assert callback_payload.corpus_version_id == "corpus-v1"
     assert callback_payload.legal_rule_catalog_version_id == "catalog-v1"
     assert callback_payload.matches[0]["match_id"].startswith("RULE-A")
+    assert callback_payload.matches[0]["legal_status"] == "ACTIVE"
     assert callback_payload.citation_allowlist == ["chunk-1"]
     assert callback_payload.overall_coverage_status == "COMPLETE_CITATION"
 
