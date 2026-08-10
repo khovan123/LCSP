@@ -64,6 +64,50 @@ test("classification outcome maps passed state with real result data and final r
   }
 });
 
+test("processing classification exposes a pending Manager profile review", () => {
+  const result = toClassificationStatusOutcome(
+    {
+      readiness_state: { classification_locked: false },
+      guardrail_status: null,
+      can_rerun_classification: false,
+      verified_profile_review: {
+        verified_profile_id: "vp-1",
+        status: "PENDING_APPROVAL",
+        provider_version: "lcsp.verified-profile-worker.v1",
+        verified_claims: [
+          {
+            claim_id: "claim-1",
+            claim_category: "MODEL_INVOCATION",
+            evidence_refs: ["evidence-1"],
+          },
+        ],
+        verification_source: "TECHNICAL_PLUS_WIZARD",
+        conflict_resolutions: [{ conflict_id: "conflict-1", status: "RESOLVED" }],
+        gates_passed_at: { conflicts_resolved: "2026-08-11T00:00:00.000Z" },
+        evidence_chain_integrity: true,
+        created_at: "2026-08-11T00:01:00.000Z",
+        approved_at: null,
+        approved_by_id: null,
+      },
+    },
+    true,
+    200,
+  );
+
+  assert.equal(result.kind, "loaded");
+  if (result.kind === "loaded") {
+    assert.equal(result.data.state, "processing");
+    assert.equal(result.data.verifiedProfileReview?.verifiedProfileId, "vp-1");
+    assert.equal(result.data.verifiedProfileReview?.status, "PENDING_APPROVAL");
+    assert.equal(result.data.verifiedProfileReview?.evidenceChainIntegrity, true);
+    assert.deepEqual(result.data.verifiedProfileReview?.verifiedClaims[0], {
+      claim_id: "claim-1",
+      claim_category: "MODEL_INVOCATION",
+      evidence_refs: ["evidence-1"],
+    });
+  }
+});
+
 test("processing classification exposes a retry action only before a result exists", () => {
   const result = toClassificationStatusOutcome(
     {
@@ -168,6 +212,26 @@ test("sanitizeAssessmentDetailPayload rejects invalid payloads", () => {
       guardrail_status: "passed",
       classification_result: {
         citation_basis: ["chunk-1", 2],
+      },
+    }),
+    null,
+  );
+  assert.equal(
+    sanitizeAssessmentDetailPayload({
+      readiness_state: { classification_locked: false },
+      guardrail_status: null,
+      verified_profile_review: {
+        verified_profile_id: "vp-1",
+        status: "PENDING_APPROVAL",
+        provider_version: "worker-v1",
+        verified_claims: "not-an-array",
+        conflict_resolutions: [],
+        gates_passed_at: {},
+        evidence_chain_integrity: true,
+        created_at: "2026-08-11T00:01:00.000Z",
+        approved_at: null,
+        approved_by_id: null,
+        verification_source: null,
       },
     }),
     null,
