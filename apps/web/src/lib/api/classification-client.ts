@@ -519,6 +519,7 @@ function nullableString(value: unknown): string | null | undefined {
 function normalizeOptionalString(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
+  if (typeof value !== "string") return undefined;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
 }
