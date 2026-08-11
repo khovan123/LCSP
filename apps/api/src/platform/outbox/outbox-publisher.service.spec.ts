@@ -83,10 +83,18 @@ function makeRabbitMqClient(overrides: {
   } as unknown as RabbitMqClient;
 }
 
-function makeAuditWriter(): AuditWriterService {
+type AuditWriterDouble = AuditWriterService & {
+  writeMock: jest.MockedFunction<AuditWriterService["write"]>;
+};
+
+function makeAuditWriter(): AuditWriterDouble {
+  const writeMock = jest
+    .fn<AuditWriterService["write"]>()
+    .mockResolvedValue(undefined);
   return {
-    write: jest.fn().mockResolvedValue(undefined),
-  } as unknown as AuditWriterService;
+    write: writeMock,
+    writeMock,
+  } as unknown as AuditWriterDouble;
 }
 
 function makeMessage(
@@ -226,7 +234,7 @@ describe("OutboxPublisherService", () => {
       expect.any(Date),
       expect.any(Date),
     );
-    expect(auditWriter.write).toHaveBeenCalledWith(
+    expect(auditWriter.writeMock).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: OUTBOX_AUDIT_EVENT_TYPES.retryScheduled,
         correlationId: "outbox:outbox-1",

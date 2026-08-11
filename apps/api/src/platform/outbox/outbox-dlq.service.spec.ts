@@ -104,9 +104,12 @@ describe("OutboxDlqService", () => {
           actorId: "actor-1",
           organizationId: "org-1",
           correlationId: "corr-1",
-          payload: expect.objectContaining({
-            replayAuthority: PBAC_ACTIONS.outboxReplay,
-          }),
+        }),
+      );
+      const replayAuditEvent = writeAudit.mock.calls[0]?.[0];
+      expect(replayAuditEvent?.payload).toEqual(
+        expect.objectContaining({
+          replayAuthority: PBAC_ACTIONS.outboxReplay,
         }),
       );
     });
