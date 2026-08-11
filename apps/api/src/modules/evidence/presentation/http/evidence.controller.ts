@@ -27,6 +27,7 @@ import type { TechnicalProfileCallbackRequest } from "../../application/contract
 import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evidence.query.js";
 import { GetFindingDetailQuery } from "../../application/queries/get-finding-detail/get-finding-detail.query.js";
 import { SearchEvidenceQuery } from "../../application/queries/search-evidence/search-evidence.query.js";
+import { FindProviderInvocationsQuery } from "../../application/queries/find-provider-invocations/find-provider-invocations.query.js";
 import {
   FINDING_DETAIL_INCLUDES,
   type FindingDetailInclude,
@@ -35,6 +36,10 @@ import {
   SEARCH_EVIDENCE_CONFIDENCE,
   type SearchEvidenceConfidence,
 } from "../../application/contracts/evidence/search-evidence.contract.js";
+import {
+  PROVIDER_INVOCATION_PROVIDERS,
+  type ProviderInvocationProvider,
+} from "../../application/contracts/evidence/provider-invocation.contract.js";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { HttpStatus } from "@nestjs/common";
@@ -131,6 +136,36 @@ export class EvidenceController {
       ),
     );
   }
+
+  @Get(":assessmentId/evidence-reports/:evidenceReportId/provider-invocations")
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async findProviderInvocations(
+    @Param("assessmentId") assessmentId: string,
+    @Param("evidenceReportId") evidenceReportId: string,
+    @Query("max_results") maxResultsRaw: string | undefined,
+    @Query("provider") providerRaw: string | undefined,
+    @Query("path_prefixes") pathPrefixesRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new FindProviderInvocationsQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          evidenceReportId,
+          parseSearchMaxResults(maxResultsRaw, correlationId),
+          correlationId,
+          parseProvider(providerRaw, correlationId),
+          parsePathPrefixes(pathPrefixesRaw, correlationId),
+        ),
+      ),
+    );
+  }
 }
 
 function parseFindingDetailInclude(
@@ -209,6 +244,23 @@ function parseSearchConfidence(
     });
   }
   return value as SearchEvidenceConfidence;
+}
+
+function parseProvider(
+  value: string | undefined,
+  correlationId: string,
+): ProviderInvocationProvider | undefined {
+  if (!value) return undefined;
+  if (
+    !Object.values(PROVIDER_INVOCATION_PROVIDERS).includes(
+      value as ProviderInvocationProvider,
+    )
+  ) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return value as ProviderInvocationProvider;
 }
 
 @Controller("internal/evidence")

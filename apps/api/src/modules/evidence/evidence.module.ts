@@ -7,6 +7,7 @@ import { AcceptTechnicalProfileHandler } from "./application/commands/accept-tec
 import { GetEvidenceHandler } from "./application/queries/get-evidence/get-evidence.handler.js";
 import { GetFindingDetailHandler } from "./application/queries/get-finding-detail/get-finding-detail.handler.js";
 import { SearchEvidenceHandler } from "./application/queries/search-evidence/search-evidence.handler.js";
+import { FindProviderInvocationsHandler } from "./application/queries/find-provider-invocations/find-provider-invocations.handler.js";
 import { EvidenceRedactorService } from "./application/services/evidence/evidence-redactor.service.js";
 import {
   EvidenceController,
@@ -20,6 +21,7 @@ import {
     GetEvidenceHandler,
     GetFindingDetailHandler,
     SearchEvidenceHandler,
+    FindProviderInvocationsHandler,
     AcceptTechnicalProfileHandler,
     EvidenceRedactorService,
     WorkerApiKeyGuard,
