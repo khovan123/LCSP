@@ -241,6 +241,7 @@ export class InternalTargetedReanalysisController {
     @Param("requestId") requestId: string,
     @Body() payload: TargetedReanalysisTerminalPayload,
   ) {
+    const auditRequest = await this.findRequestAuditContext(requestId);
     const request = await this.prisma.targetedReanalysisRequest.updateMany({
       where: {
         id: requestId,
@@ -269,6 +270,13 @@ export class InternalTargetedReanalysisController {
           outputEvidenceReportId: payload.output_evidence_report_id,
         },
       });
+      if (auditRequest) {
+        await this.writeTransitionAudit(
+          requestId,
+          auditRequest,
+          SCAN_EVENT_TYPES.targetedReanalysisTerminalAudit,
+        );
+      }
     }
     return resultEnvelope({ transitioned: request.count === 1 });
   }
@@ -277,6 +285,7 @@ export class InternalTargetedReanalysisController {
   @HttpCode(200)
   @UseGuards(WorkerApiKeyGuard)
   async requeueRequest(@Param("requestId") requestId: string) {
+    const auditRequest = await this.findRequestAuditContext(requestId);
     const request = await this.prisma.targetedReanalysisRequest.updateMany({
       where: {
         id: requestId,
@@ -289,8 +298,30 @@ export class InternalTargetedReanalysisController {
         where: { requestId },
         data: { state: TARGETED_REANALYSIS_CHECKPOINT_STATES.retryScheduled },
       });
+      if (auditRequest) {
+        await this.writeTransitionAudit(
+          requestId,
+          auditRequest,
+          SCAN_EVENT_TYPES.targetedReanalysisRetryAudit,
+        );
+      }
     }
     return resultEnvelope({ requeued: request.count === 1 });
+  }
+
+  private async findRequestAuditContext(requestId: string): Promise<{
+    organizationId: string;
+    assessmentId: string;
+    correlationId: string;
+  } | null> {
+    return this.prisma.targetedReanalysisRequest.findUnique({
+      where: { id: requestId },
+      select: {
+        organizationId: true,
+        assessmentId: true,
+        correlationId: true,
+      },
+    });
   }
 
   private async writeTransitionAudit(
