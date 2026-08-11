@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import { TARGETED_REANALYSIS_REQUEST_STATES } from "@lcsp/contracts/scan";
 import {
   type OutboxAggregateType,
   OUTBOX_STATUSES,
@@ -133,6 +134,39 @@ export class OutboxRepository {
         lastAttemptAt: now,
         nextAttemptAt,
         errorMessage: errorMessage.slice(0, 500),
+      },
+    });
+  }
+
+  /**
+   * Keeps a targeted-reanalysis request observable while its command is being
+   * published. This is deliberately in the same outbox transaction as
+   * `markFailure`, so an outbox DLQ cannot leave a request appearing queued.
+   */
+  async recordTargetedReanalysisPublishFailure(
+    tx: Prisma.TransactionClient,
+    requestId: string,
+    attempts: number,
+    terminalFailureCode: string | null,
+  ): Promise<void> {
+    await tx.targetedReanalysisRequest.updateMany({
+      where: {
+        id: requestId,
+        state: {
+          in: [
+            TARGETED_REANALYSIS_REQUEST_STATES.queued,
+            TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
+          ],
+        },
+      },
+      data: {
+        apiPublishAttempts: attempts,
+        ...(terminalFailureCode
+          ? {
+              state: TARGETED_REANALYSIS_REQUEST_STATES.dlq,
+              safeFailureCode: terminalFailureCode,
+            }
+          : {}),
       },
     });
   }

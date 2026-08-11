@@ -3,6 +3,7 @@ import {
   OUTBOX_STATUSES,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
+import { TARGETED_REANALYSIS_REQUEST_STATES } from "@lcsp/contracts/scan";
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
 
@@ -14,11 +15,14 @@ type CreateFn = (args: unknown) => Promise<unknown>;
 
 function makeTx() {
   const update = jest.fn<UpdateFn>().mockResolvedValue(undefined);
+  const updateMany = jest.fn<UpdateFn>().mockResolvedValue({ count: 1 });
   return {
     tx: {
       outboxMessage: { update },
+      targetedReanalysisRequest: { updateMany },
     } as unknown as Prisma.TransactionClient,
     update,
+    updateMany,
   };
 }
 
@@ -110,6 +114,35 @@ describe("OutboxRepository", () => {
       data: { errorMessage: string };
     };
     expect(call.data.errorMessage).toHaveLength(500);
+  });
+
+  it("records targeted reanalysis publish attempts and makes an exhausted command visible as DLQ", async () => {
+    const repository = new OutboxRepository({} as PrismaService);
+    const { tx, updateMany } = makeTx();
+
+    await repository.recordTargetedReanalysisPublishFailure(
+      tx,
+      "request-1",
+      4,
+      "TARGETED_REANALYSIS_OUTBOX_DELIVERY_EXHAUSTED",
+    );
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "request-1",
+        state: {
+          in: [
+            TARGETED_REANALYSIS_REQUEST_STATES.queued,
+            TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
+          ],
+        },
+      },
+      data: {
+        apiPublishAttempts: 4,
+        state: TARGETED_REANALYSIS_REQUEST_STATES.dlq,
+        safeFailureCode: "TARGETED_REANALYSIS_OUTBOX_DELIVERY_EXHAUSTED",
+      },
+    });
   });
 
   describe("enqueue", () => {
