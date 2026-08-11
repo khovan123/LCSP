@@ -13,6 +13,7 @@ export const AGENTIC_TOOL_NAMES = {
   inspectDataPath: "inspect_data_path",
   findSimilarSymbols: "find_similar_symbols",
   inspectDeploymentContext: "inspect_deployment_context",
+  proposeMissingTargets: "propose_missing_targets",
   getReconciliationContext: "get_reconciliation_context",
 } as const;
 
@@ -68,4 +69,5 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   dataPathRead: "AGENTIC_TOOL_DATA_PATH_READ",
   similarSymbolsRead: "AGENTIC_TOOL_SIMILAR_SYMBOLS_READ",
   deploymentContextRead: "AGENTIC_TOOL_DEPLOYMENT_CONTEXT_READ",
+  missingTargetProposalRead: "AGENTIC_TOOL_MISSING_TARGET_PROPOSAL_READ",
 } as const;
