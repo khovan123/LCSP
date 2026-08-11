@@ -443,8 +443,18 @@ enum OutboxAggregateType {
   REPOSITORY_SNAPSHOT
   TECHNICAL_EVIDENCE_REPORT
   TECHNICAL_PROFILE
+  TARGETED_REANALYSIS_REQUEST
   VERIFIED_PROFILE
   WIZARD_PROFILE
+}
+
+enum TargetedReanalysisRequestState {
+  QUEUED
+  DISPATCHED
+  RUNNING
+  COMPLETED
+  FAILED
+  DLQ
 }
 
 enum OutboxStatus {
@@ -536,6 +546,34 @@ model RepositoryScanJob {
   updatedAt      DateTime                    @updatedAt
 
   @@index([assessmentId])
+  @@index([snapshotId])
+}
+
+model TargetedReanalysisRequest {
+  id                    String                         @id
+  assessmentId          String
+  organizationId        String
+  inputEvidenceReportId String
+  snapshotId            String
+  commitSha             String
+  analyzerId            String
+  normalizedScope       Json
+  reasonRequirementId   String
+  idempotencyKey        String
+  state                 TargetedReanalysisRequestState @default(QUEUED)
+  apiPublishAttempts    Int                            @default(0)
+  workerDeliveryAttempts Int                           @default(0)
+  checkpointRef         String
+  outputEvidenceReportId String?
+  safeFailureCode       String?
+  correlationId         String
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, state, createdAt])
+  @@index([assessmentId, createdAt])
+  @@index([inputEvidenceReportId])
   @@index([snapshotId])
 }
 
