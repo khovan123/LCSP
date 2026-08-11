@@ -112,6 +112,29 @@ def test_rule_applicability_evaluator_blocks_not_determinable_from_code_as_unkno
     assert "is unknown" in result.rationale[0]
 
 
+def test_rule_applicability_evaluator_blocks_unknown_marker_inside_list_fact():
+    evaluator = RuleApplicabilityEvaluator()
+    profile = {
+        "mergedProfile": {"potentialHarmCategories": ["UNKNOWN"]},
+        "evidenceRefs": [{"id": "ev-1"}],
+    }
+    rule = {
+        "legalRuleId": "RULE-UNKNOWN-LIST",
+        "requiredFacts": [
+            {
+                "field": "potentialHarmCategories",
+                "expectedValue": ["POTENTIAL_HIGH_IMPACT"],
+            },
+        ],
+        "blockingFacts": [],
+        "unknownFactPolicy": "BLOCK_ON_UNKNOWN",
+    }
+
+    result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
+
+    assert result.status == "BLOCKED_UNKNOWN_FACT"
+
+
 def test_rule_applicability_evaluator_matches_required_list_as_subset():
     evaluator = RuleApplicabilityEvaluator()
     profile = {
@@ -138,6 +161,27 @@ def test_rule_applicability_evaluator_matches_required_list_as_subset():
     result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
 
     assert result.status == "MATCHED"
+
+
+def test_rule_applicability_evaluator_blocks_malformed_or_empty_required_facts():
+    evaluator = RuleApplicabilityEvaluator()
+    profile = {
+        "mergedProfile": {"automationLevel": "FULLY_AUTOMATED"},
+        "evidenceRefs": [{"id": "ev-1"}],
+    }
+
+    for required_facts in ({}, [], [{"field": "automationLevel"}]):
+        result = evaluator.evaluate_rule(
+            rule={
+                "legalRuleId": "RULE-MALFORMED",
+                "requiredFacts": required_facts,
+                "blockingFacts": [],
+                "unknownFactPolicy": "BLOCK_ON_UNKNOWN",
+            },
+            verified_profile=profile,
+        )
+        assert result.status == "BLOCKED_UNKNOWN_FACT"
+        assert "invalid" in result.rationale[0]
 
 
 def test_rule_applicability_evaluator_blocks_only_when_blocking_value_matches():
