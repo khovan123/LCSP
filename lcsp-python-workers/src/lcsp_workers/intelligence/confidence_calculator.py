@@ -61,3 +61,4 @@ def lifecycle_for_confidence(
     if confidence < 0.65:
         return "DETECTED"
     return "VALIDATED"
+
