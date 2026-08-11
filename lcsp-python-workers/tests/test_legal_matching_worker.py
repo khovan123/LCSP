@@ -18,9 +18,11 @@ def test_rule_applicability_evaluator_marks_match_when_required_facts_present_an
             "inputDataTypes": ["PERSONAL_DATA"],
             "affectedSubjects": ["CUSTOMERS"],
         },
-        "evidenceRefs": [
-            {"id": "ev-1", "lifecycle": "VERIFIED", "confidence": 0.9},
-        ],
+        "factEvidenceRefs": {
+            "businessProcess": ["ev-1"],
+            "automationLevel": ["ev-2"],
+        },
+        "evidenceRefs": ["ev-1", "ev-2"],
     }
     rule = {
         "legalRuleId": "RULE-A",
@@ -47,6 +49,7 @@ def test_rule_applicability_evaluator_blocks_when_required_fact_is_not_evidence_
         "mergedProfile": {
             "businessProcess": "AUTOMATED_DECISION",
         },
+        "factEvidenceRefs": {},
         "evidenceRefs": [],
     }
     rule = {
@@ -63,13 +66,42 @@ def test_rule_applicability_evaluator_blocks_when_required_fact_is_not_evidence_
     result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
 
     assert result.status == "BLOCKED_UNKNOWN_FACT"
+    assert "lacks eligible evidence refs" in result.rationale[0]
+
+
+def test_rule_applicability_evaluator_does_not_use_unrelated_global_evidence():
+    evaluator = RuleApplicabilityEvaluator()
+    profile = {
+        "mergedProfile": {
+            "businessProcess": "AUTOMATED_DECISION",
+            "automationLevel": "FULLY_AUTOMATED",
+        },
+        "factEvidenceRefs": {
+            "businessProcess": ["ev-business"],
+        },
+        "evidenceRefs": ["ev-business", "ev-unrelated"],
+    }
+    rule = {
+        "legalRuleId": "RULE-FIELD-BACKING",
+        "requiredFacts": [
+            {"field": "automationLevel", "expectedValue": "FULLY_AUTOMATED"},
+        ],
+        "blockingFacts": [],
+        "unknownFactPolicy": "BLOCK_ON_UNKNOWN",
+    }
+
+    result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
+
+    assert result.status == "BLOCKED_UNKNOWN_FACT"
+    assert result.matched_required_facts == []
+    assert "automationLevel lacks eligible evidence refs" in result.rationale[0]
 
 
 def test_rule_applicability_evaluator_treats_known_mismatch_as_not_applicable():
     evaluator = RuleApplicabilityEvaluator()
     profile = {
         "mergedProfile": {"automationLevel": "ASSISTIVE"},
-        "evidenceRefs": [{"id": "ev-1"}],
+        "factEvidenceRefs": {},
     }
     rule = {
         "legalRuleId": "RULE-KNOWN-MISMATCH",
@@ -92,7 +124,9 @@ def test_rule_applicability_evaluator_blocks_not_determinable_from_code_as_unkno
         "mergedProfile": {
             "riskDocumentationEvidence": "NOT_DETERMINABLE_FROM_CODE",
         },
-        "evidenceRefs": [{"id": "ev-1"}],
+        "factEvidenceRefs": {
+            "riskDocumentationEvidence": ["ev-1"],
+        },
     }
     rule = {
         "legalRuleId": "RULE-UNKNOWN-PROCESS-FACT",
@@ -116,7 +150,7 @@ def test_rule_applicability_evaluator_blocks_unknown_marker_inside_list_fact():
     evaluator = RuleApplicabilityEvaluator()
     profile = {
         "mergedProfile": {"potentialHarmCategories": ["UNKNOWN"]},
-        "evidenceRefs": [{"id": "ev-1"}],
+        "factEvidenceRefs": {"potentialHarmCategories": ["ev-1"]},
     }
     rule = {
         "legalRuleId": "RULE-UNKNOWN-LIST",
@@ -144,7 +178,7 @@ def test_rule_applicability_evaluator_matches_required_list_as_subset():
                 "PERSONAL_DATA_IMPACT",
             ],
         },
-        "evidenceRefs": [{"id": "ev-1"}],
+        "factEvidenceRefs": {"potentialHarmCategories": ["ev-1"]},
     }
     rule = {
         "legalRuleId": "RULE-LIST-SUBSET",
@@ -167,7 +201,7 @@ def test_rule_applicability_evaluator_blocks_malformed_or_empty_required_facts()
     evaluator = RuleApplicabilityEvaluator()
     profile = {
         "mergedProfile": {"automationLevel": "FULLY_AUTOMATED"},
-        "evidenceRefs": [{"id": "ev-1"}],
+        "factEvidenceRefs": {"automationLevel": ["ev-1"]},
     }
 
     for required_facts in ({}, [], [{"field": "automationLevel"}]):
@@ -201,7 +235,7 @@ def test_rule_applicability_evaluator_blocks_only_when_blocking_value_matches():
             "automationLevel": "FULLY_AUTOMATED",
             "deploymentStage": "PUBLIC",
         },
-        "evidenceRefs": [{"id": "ev-1"}],
+        "factEvidenceRefs": {"automationLevel": ["ev-1"]},
     }
 
     result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
