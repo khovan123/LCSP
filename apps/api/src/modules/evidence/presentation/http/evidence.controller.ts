@@ -26,10 +26,15 @@ import { AcceptTechnicalProfileCommand } from "../../application/commands/accept
 import type { TechnicalProfileCallbackRequest } from "../../application/contracts/evidence/technical-profile-callback.contract.js";
 import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evidence.query.js";
 import { GetFindingDetailQuery } from "../../application/queries/get-finding-detail/get-finding-detail.query.js";
+import { SearchEvidenceQuery } from "../../application/queries/search-evidence/search-evidence.query.js";
 import {
   FINDING_DETAIL_INCLUDES,
   type FindingDetailInclude,
 } from "../../application/contracts/evidence/finding-detail.contract.js";
+import {
+  SEARCH_EVIDENCE_CONFIDENCE,
+  type SearchEvidenceConfidence,
+} from "../../application/contracts/evidence/search-evidence.contract.js";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { HttpStatus } from "@nestjs/common";
@@ -92,6 +97,40 @@ export class EvidenceController {
       ),
     );
   }
+
+  @Get(":assessmentId/evidence-reports/:evidenceReportId/findings")
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async searchEvidence(
+    @Param("assessmentId") assessmentId: string,
+    @Param("evidenceReportId") evidenceReportId: string,
+    @Query("max_results") maxResultsRaw: string | undefined,
+    @Query("finding_kinds") findingKindsRaw: string | undefined,
+    @Query("providers") providersRaw: string | undefined,
+    @Query("path_prefixes") pathPrefixesRaw: string | undefined,
+    @Query("min_confidence") minConfidenceRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new SearchEvidenceQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          evidenceReportId,
+          parseSearchMaxResults(maxResultsRaw, correlationId),
+          correlationId,
+          parseCsv(findingKindsRaw, correlationId),
+          parseCsv(providersRaw, correlationId),
+          parsePathPrefixes(pathPrefixesRaw, correlationId),
+          parseSearchConfidence(minConfidenceRaw, correlationId),
+        ),
+      ),
+    );
+  }
 }
 
 function parseFindingDetailInclude(
@@ -111,6 +150,65 @@ function parseFindingDetailInclude(
     });
   }
   return include as FindingDetailInclude[];
+}
+
+function parseSearchMaxResults(
+  value: string | undefined,
+  correlationId: string,
+): number {
+  const maxResults = Number(value);
+  if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 100) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return maxResults;
+}
+
+function parseCsv(value: string | undefined, correlationId: string): string[] {
+  if (!value) return [];
+  const result = value.split(",").map((item) => item.trim());
+  if (result.some((item) => !item) || new Set(result).size !== result.length) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return result;
+}
+
+function parsePathPrefixes(
+  value: string | undefined,
+  correlationId: string,
+): string[] {
+  const paths = parseCsv(value, correlationId);
+  if (
+    paths.some(
+      (path) =>
+        path.startsWith("/") || path.includes("..") || !path.endsWith("/"),
+    )
+  ) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return paths;
+}
+
+function parseSearchConfidence(
+  value: string | undefined,
+  correlationId: string,
+): SearchEvidenceConfidence | undefined {
+  if (!value) return undefined;
+  if (
+    !Object.values(SEARCH_EVIDENCE_CONFIDENCE).includes(
+      value as SearchEvidenceConfidence,
+    )
+  ) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return value as SearchEvidenceConfidence;
 }
 
 @Controller("internal/evidence")
