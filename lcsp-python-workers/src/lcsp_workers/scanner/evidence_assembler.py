@@ -60,7 +60,7 @@ class EvidenceAssembler:
         *,
         scan_job_id: str,
         syft_result: SyftRunResult | None,
-        semgrep_result: SemgrepRunResult,
+        semgrep_result: SemgrepRunResult | None,
         coverage_notes: list[str],
         package_dependencies: list[PackageDependency] | None = None,
         dependency_executions: list[ToolExecutionResult] | None = None,
@@ -70,15 +70,19 @@ class EvidenceAssembler:
         structural_facts: list[StructuralFact] | None = None,
         evidence_graph: ScanGraph | None = None,
         scan_coverage: list[LanguageClassification] | None = None,
+        targeted_reanalysis: dict[str, object] | None = None,
     ) -> ScanCallbackPayload:
         executions = [
             *( [syft_result.execution] if syft_result is not None else [] ),
-            *semgrep_result.executions,
+            *(semgrep_result.executions if semgrep_result is not None else []),
             *(dependency_executions or []),
         ]
         if ts_js_analysis is not None:
             executions.append(ts_js_analysis.execution)
-        findings = [asdict(finding) for finding in semgrep_result.findings]
+        findings = [
+            asdict(finding)
+            for finding in (semgrep_result.findings if semgrep_result is not None else [])
+        ]
         redacted_findings = redact_source_code(findings)
         source_stripped = len(redacted_findings) == len(findings)
 
@@ -102,6 +106,7 @@ class EvidenceAssembler:
             "coverage_notes": list(coverage_notes),
             "scan_coverage": self._scan_coverage(scan_coverage or []),
             "evidence_graph": serialize_graph(evidence_graph) if evidence_graph else None,
+            "targeted_reanalysis": targeted_reanalysis,
         }
         safe_evidence_payload = redact_dict(evidence_payload)
 
@@ -166,6 +171,8 @@ class EvidenceAssembler:
         self, executions: Iterable[ToolExecutionResult]
     ) -> tuple[str, str | None]:
         outcomes = [execution.outcome for execution in executions]
+        if not outcomes:
+            return SCAN_CALLBACK_STATUSES["success"], None
         failed_count = sum(1 for outcome in outcomes if outcome != OUTCOME_SUCCESS)
         if failed_count == 0:
             return SCAN_CALLBACK_STATUSES["success"], None

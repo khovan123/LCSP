@@ -390,11 +390,17 @@ def test_scan_consumer_limits_source_analyzers_to_targeted_path_prefixes(
         correlation_id="fallback-corr",
     )
 
-    semgrep_tool.run.assert_called_once()
-    assert semgrep_tool.run.call_args.kwargs["include_files"] == ["repo/src/in_scope.py"]
+    semgrep_tool.run.assert_not_called()
+    syft_tool.run.assert_not_called()
+    knip_tool.run.assert_not_called()
+    deptry_tool.run.assert_not_called()
     posted_payload = api_client.post_scan_callback.call_args.args[1]
     coverage_files = posted_payload.evidence_payload["scan_coverage"]["files"]
     assert [item["file_path"] for item in coverage_files] == ["repo/src/in_scope.py"]
+    assert posted_payload.evidence_payload["targeted_reanalysis"] == {
+        "analyzer_id": "RUN_PYTHON_SEMANTIC_ANALYSIS",
+        "path_prefixes": ["repo/src/"],
+    }
 
 
 @pytest.mark.p0
