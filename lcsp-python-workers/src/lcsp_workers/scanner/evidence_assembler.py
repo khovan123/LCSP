@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import hashlib
+import json
 import re
 from typing import Iterable
 
@@ -139,8 +141,6 @@ class EvidenceAssembler:
             "targeted_reanalysis": targeted_reanalysis,
         }
         self._assert_safe_payload(evidence_payload)
-        safe_evidence_payload = redact_dict(evidence_payload)
-
         privacy_flags = PrivacyFlags(
             contains_source_code=False,
             secrets_redacted=True,
@@ -149,6 +149,16 @@ class EvidenceAssembler:
         self._assert_privacy(privacy_flags, findings, redacted_findings)
 
         status, error_code = self._status_for(executions)
+        safe_evidence_payload = redact_dict(evidence_payload)
+        safe_evidence_payload["report_provenance"] = self._report_provenance(
+            scan_job_id=scan_job_id,
+            status=status,
+            error_code=error_code,
+            tools_version=self._tools_version(executions),
+            config_hash=self._config_hash(executions),
+            privacy_flags=privacy_flags.to_callback_dict(),
+            evidence_payload=safe_evidence_payload,
+        )
         return ScanCallbackPayload(
             scan_job_id=scan_job_id,
             tools_version=self._tools_version(executions),
@@ -159,6 +169,38 @@ class EvidenceAssembler:
             status=status,
             error_code=error_code,
         )
+
+    @staticmethod
+    def _report_provenance(
+        *,
+        scan_job_id: str,
+        status: str,
+        error_code: str | None,
+        tools_version: dict[str, str],
+        config_hash: dict[str, str],
+        privacy_flags: dict[str, bool],
+        evidence_payload: dict,
+    ) -> dict[str, str]:
+        canonical_report = {
+            "schema_version": SCHEMA_VERSION,
+            "scan_job_id": scan_job_id,
+            "status": status,
+            "error_code": error_code,
+            "tools_version": tools_version,
+            "config_hash": config_hash,
+            "privacy_flags": privacy_flags,
+            "evidence_payload": evidence_payload,
+        }
+        encoded = json.dumps(
+            canonical_report,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "hash_algorithm": "SHA-256",
+            "report_hash": f"sha256:{hashlib.sha256(encoded).hexdigest()}",
+        }
 
     @staticmethod
     def _scan_coverage(
