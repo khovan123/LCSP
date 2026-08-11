@@ -33,6 +33,7 @@ import { GetSymbolContextQuery } from "../../application/queries/get-symbol-cont
 import { TraceStaticFlowQuery } from "../../application/queries/trace-static-flow/trace-static-flow.query.js";
 import { InspectHumanReviewPathQuery } from "../../application/queries/inspect-human-review-path/inspect-human-review-path.query.js";
 import { GetScanCoverageQuery } from "../../application/queries/get-scan-coverage/get-scan-coverage.query.js";
+import { InspectDecisionPathQuery } from "../../application/queries/inspect-decision-path/inspect-decision-path.query.js";
 import {
   FINDING_DETAIL_INCLUDES,
   type FindingDetailInclude,
@@ -61,6 +62,10 @@ import {
   HUMAN_REVIEW_KINDS,
   type HumanReviewKind,
 } from "../../application/contracts/evidence/human-review-path.contract.js";
+import {
+  DECISION_ACTION_CATEGORIES,
+  type DecisionActionCategory,
+} from "../../application/contracts/evidence/decision-path.contract.js";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { HttpStatus } from "@nestjs/common";
@@ -341,6 +346,40 @@ export class EvidenceController {
       ),
     );
   }
+
+  @Get(
+    ":assessmentId/evidence-reports/:evidenceReportId/decision-path/:startNodeId",
+  )
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async inspectDecisionPath(
+    @Param("assessmentId") assessmentId: string,
+    @Param("evidenceReportId") evidenceReportId: string,
+    @Param("startNodeId") startNodeId: string,
+    @Query("action_categories") actionCategoriesRaw: string | undefined,
+    @Query("max_hops") maxHopsRaw: string | undefined,
+    @Query("max_results") maxResultsRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new InspectDecisionPathQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          evidenceReportId,
+          startNodeId,
+          parseDecisionActionCategories(actionCategoriesRaw, correlationId),
+          parseBoundedInteger(maxHopsRaw, 1, 20, correlationId),
+          parseBoundedInteger(maxResultsRaw, 1, 100, correlationId),
+          correlationId,
+        ),
+      ),
+    );
+  }
 }
 
 function parseFindingDetailInclude(
@@ -511,6 +550,30 @@ function parseHumanReviewKinds(
       status: HttpStatus.NOT_FOUND,
     });
   return kinds as HumanReviewKind[];
+}
+
+function parseDecisionActionCategories(
+  value: string | undefined,
+  correlationId: string,
+): DecisionActionCategory[] {
+  const categories =
+    value?.split(",").map((item) => item.trim()) ??
+    Object.values(DECISION_ACTION_CATEGORIES);
+  if (
+    categories.length === 0 ||
+    categories.length > Object.keys(DECISION_ACTION_CATEGORIES).length ||
+    categories.some(
+      (item) =>
+        !Object.values(DECISION_ACTION_CATEGORIES).includes(
+          item as DecisionActionCategory,
+        ),
+    ) ||
+    new Set(categories).size !== categories.length
+  )
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  return categories as DecisionActionCategory[];
 }
 
 function parseBoundedInteger(
