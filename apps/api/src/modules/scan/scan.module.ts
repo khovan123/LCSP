@@ -12,6 +12,7 @@ import {
 import { WorkspaceRuntimeEventsController } from "./presentation/http/workspace-runtime-events.controller.js";
 import { WorkerApiKeyGuard } from "./presentation/http/worker-api-key.guard.js";
 import { RerunScanHandler } from "./application/commands/rerun-scan/rerun-scan.handler.js";
+import { RequestTargetedReanalysisHandler } from "./application/commands/request-targeted-reanalysis/request-targeted-reanalysis.handler.js";
 
 @Module({
   imports: [CqrsModule, PbacModule],
@@ -24,6 +25,7 @@ import { RerunScanHandler } from "./application/commands/rerun-scan/rerun-scan.h
     GetScanJobHandler,
     ProcessScanCallbackHandler,
     RerunScanHandler,
+    RequestTargetedReanalysisHandler,
     EvidenceSchemaValidatorService,
     WorkerApiKeyGuard,
   ],

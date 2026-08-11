@@ -142,4 +142,5 @@ export const SCAN_EVENT_TYPES = {
   classificationBlockedAudit: "CLASSIFICATION_BLOCKED",
   classificationRerunTriggeredAudit: "CLASSIFICATION_RERUN_TRIGGERED",
   scanRerunTriggeredAudit: "SCAN_RERUN_TRIGGERED",
+  targetedReanalysisQueuedAudit: "TARGETED_REANALYSIS_QUEUED",
 } as const;
