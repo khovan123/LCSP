@@ -4,6 +4,7 @@ export const AGENTIC_TOOL_NAMES = {
   getFindingDetail: "get_finding_detail",
   searchEvidence: "search_evidence",
   findProviderInvocations: "find_provider_invocations",
+  getEvidenceSubgraph: "get_evidence_subgraph",
   getReconciliationContext: "get_reconciliation_context",
 } as const;
 
@@ -50,4 +51,5 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   findingDetailRead: "AGENTIC_TOOL_FINDING_DETAIL_READ",
   evidenceSearchRead: "AGENTIC_TOOL_EVIDENCE_SEARCH_READ",
   providerInvocationRead: "AGENTIC_TOOL_PROVIDER_INVOCATION_READ",
+  evidenceSubgraphRead: "AGENTIC_TOOL_EVIDENCE_SUBGRAPH_READ",
 } as const;
