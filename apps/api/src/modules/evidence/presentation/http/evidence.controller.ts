@@ -11,6 +11,7 @@ import {
   Post,
   Req,
   UseGuards,
+  Query,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
@@ -24,6 +25,14 @@ import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-ke
 import { AcceptTechnicalProfileCommand } from "../../application/commands/accept-technical-profile/accept-technical-profile.command.js";
 import type { TechnicalProfileCallbackRequest } from "../../application/contracts/evidence/technical-profile-callback.contract.js";
 import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evidence.query.js";
+import { GetFindingDetailQuery } from "../../application/queries/get-finding-detail/get-finding-detail.query.js";
+import {
+  FINDING_DETAIL_INCLUDES,
+  type FindingDetailInclude,
+} from "../../application/contracts/evidence/finding-detail.contract.js";
+import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
+import { HttpStatus } from "@nestjs/common";
 
 @Controller("assessments")
 export class EvidenceController {
@@ -52,6 +61,56 @@ export class EvidenceController {
       ),
     );
   }
+
+  @Get(":assessmentId/evidence-reports/:evidenceReportId/findings/:findingId")
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async getFindingDetail(
+    @Param("assessmentId") assessmentId: string,
+    @Param("evidenceReportId") evidenceReportId: string,
+    @Param("findingId") findingId: string,
+    @Query("include") includeRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const include = parseFindingDetailInclude(
+      includeRaw,
+      request.correlationId as string,
+    );
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetFindingDetailQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          evidenceReportId,
+          findingId,
+          include,
+          request.correlationId as string,
+        ),
+      ),
+    );
+  }
+}
+
+function parseFindingDetailInclude(
+  value: string | undefined,
+  correlationId: string,
+): FindingDetailInclude[] {
+  const include = value?.split(",").map((item) => item.trim()) ?? [];
+  const allowed = new Set(Object.values(FINDING_DETAIL_INCLUDES));
+  if (
+    include.length === 0 ||
+    include.length > Object.keys(FINDING_DETAIL_INCLUDES).length ||
+    include.some((item) => !allowed.has(item as FindingDetailInclude)) ||
+    new Set(include).size !== include.length
+  ) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return include as FindingDetailInclude[];
 }
 
 @Controller("internal/evidence")
