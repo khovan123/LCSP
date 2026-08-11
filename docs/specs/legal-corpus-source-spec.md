@@ -8,7 +8,7 @@ Originally introduced by SPRINT-CHANGE-PROPOSAL-5.2J (2026-06-23) and ADR-025; u
 
 ## Purpose
 
-Defines legal corpus source requirements, ingestion schema, approval process, and corpus management policy. Design/spec contract, not source code.
+Defines legal corpus source requirements, ingestion schema, automated activation process, and corpus management policy. Design/spec contract, not source code.
 
 ## Source Hierarchy
 
@@ -17,12 +17,18 @@ Defines legal corpus source requirements, ingestion schema, approval process, an
 | PRIMARY       | Official government legal databases; ministry-issued decrees, circulars, decisions | Legally authoritative |
 | SUPPLEMENTARY | Regulatory guidance documents; official FAQs and implementation guidance           | Contextual only       |
 
-**Source candidates (pending validation):**
+**Admin-managed official source catalog:**
 
 | Source                      | URL                | Status                       |
 | --------------------------- | ------------------ | ---------------------------- |
-| Hệ thống pháp luật Việt Nam | vbpl.vn            | `SOURCE_VALIDATION_REQUIRED` |
-| Cổng thông tin Chính phủ    | vanban.chinhphu.vn | `SOURCE_VALIDATION_REQUIRED` |
+| Hệ thống pháp luật Việt Nam | vbpl.vn            | `ADMIN_MANAGED_OFFICIAL` |
+| Cổng thông tin Chính phủ    | vanban.chinhphu.vn | `ADMIN_MANAGED_OFFICIAL` |
+
+Sources in this catalog are already approved by the Admin boundary. Ingestion
+must resolve source/document identity through this catalog and must not require
+per-run human or manual source approval. It still validates the resolved final
+URL, snapshot hash, content type, document identity, hierarchy, effect status,
+chunk integrity, and retrieval index before activating a corpus version.
 
 ## Legal Document Identity Schema
 
@@ -143,28 +149,28 @@ Rules:
 | 5. Relationship mapping     | Identity + registry  | Document-level amendment relationships plus locator-level `repealed_locators` resolved to target chunk IDs (see Document Relationship Schema) | Best-effort; flag unmapped document relationships; fail closed on unresolved locator-level repeal targets and on `LEGAL_EFFECT_STATUS_CONFLICT`             |
 | 6. Normalization            | Reviewed source text | Chapter/article/clause/point structure                                                                                                        | `LEGAL_NORMALIZATION_FAILED`; review required                                                                                                              |
 | 7. Structure-first chunking | Normalized structure | `LegalDocumentChunk` rows with stable hierarchical IDs and xref metadata                                                                      | Required for ChromaDB vectorless retrieval                                                                                                                 |
-| 8. Review gate              | Reviewed artefacts   | Hash-bound review manifest attached to `LegalCorpusVersion.status = DRAFT`                                                                    | Blocked until `reviewState = APPROVED` and validations pass                                                                                                |
-| 9. Approval                 | Validated review     | `CorpusApprovalRecord` (APPROVED) + `LegalCorpusVersion`                                                                                      | Blocked if review/hash/hierarchy/retrieval validation fails                                                                                                |
+| 8. Automated validation gate | Extracted/review artefacts | Hash-bound validation manifest attached to `LegalCorpusVersion.status = DRAFT`                                                               | Blocked until automated OCR/extraction, hierarchy, effect-status, hash, chunk, and index validations pass                                                  |
+| 9. Automatic activation      | Validated corpus       | `CorpusApprovalRecord` with system actor + `LegalCorpusVersion.status = APPROVED`                                                            | Blocked if any validation fails; no manual source approval is required                                                                                     |
 
-## Corpus Approval Process
+## Automated Corpus Activation Process
 
-LCSP corpus approval is an internal lifecycle gate. It does not require a
-handwritten/digital signature or the verified identity of a real
-legal-department employee.
+LCSP activation is an automated internal lifecycle gate for sources already in
+the Admin-managed official catalog. It does not require a handwritten/digital
+signature, a real legal-department employee, or a manual source approval.
 
 | Step                | Requirement                                                                                                                          |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Review gate         | Hash-bound reviewed text + hierarchy/repeal review artefacts with `reviewState = APPROVED`                                           |
-| Review scope        | Document identity, effective dates, source effect status, normalization accuracy, amendment relationships                            |
-| Approval record     | `date`, `scope_description`, `status`, `corpus_version_id`; a technical `approved_by` audit principal may be recorded                |
-| Identity policy     | `reviewedBy`/`approvedBy` are technical audit metadata; service/role/process principals are allowed and are not legal signatures     |
-| Approval gate       | `LegalCorpusVersion.status = APPROVED` before production retrieval                                                                   |
-| Rejection           | Approval is not recorded as approved; the corpus version remains `DRAFT` and is blocked from retrieval until corrected or abandoned. |
-| Re-approval trigger | Content hash change, effective date change, source effect-status change, or supersession event                                       |
+| Validation gate     | Hash-bound extraction/OCR, hierarchy/repeal, chunk, index, and effect-status validations pass                                       |
+| Validation scope    | Document identity, effective dates, source effect status, normalization accuracy, amendment relationships, chunk/index integrity    |
+| Activation record   | `date`, `scope_description`, `status`, `corpus_version_id`; system actor and validation-result refs are audited                      |
+| Identity policy     | A system/process principal is audit metadata only and is not a legal signature                                                        |
+| Activation gate     | `LegalCorpusVersion.status = APPROVED` before production retrieval                                                                   |
+| Rejection           | Activation is not recorded; the corpus version remains `DRAFT` and is blocked until a corrected immutable version validates.        |
+| Reactivation trigger | Content hash change, effective date change, source effect-status change, supersession event, or failed index integrity              |
 
-A technical approval principal must still satisfy the configured authentication
-and PBAC policy. That requirement provides system accountability only; it must
-not be represented as legal counsel sign-off or a legal certification.
+The automatic activation service must satisfy its configured PBAC policy. That
+requirement provides system accountability only; it is not legal counsel
+sign-off or a legal certification.
 
 ## LegalCorpusVersion Management
 

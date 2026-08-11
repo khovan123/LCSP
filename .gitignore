@@ -41,3 +41,4 @@ _bmad/
 **/.codex/
 .venv
 *.env.*
+fogewise-dev-launchers/
