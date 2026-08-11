@@ -210,6 +210,30 @@ def test_t04_privacy_assertion_blocks_source_code_payload() -> None:
 
 
 @pytest.mark.p0
+@pytest.mark.parametrize(
+    "unsafe_payload",
+    [
+        {"nested": {"prompt": "do not persist"}},
+        {"nested": {"ast_body": "Module(...)"}},
+        {"nested": {"api_key": "example"}},
+        {"nested": {"message": "Bearer abcdefghijklmnopqrstuvwxyz"}},
+        {"nested": {"message": "def call_model():\n    return client.run()"}},
+    ],
+)
+def test_t05_privacy_gate_rejects_nested_forbidden_payloads(
+    unsafe_payload: dict,
+) -> None:
+    with pytest.raises(PrivacyAssertionError):
+        EvidenceAssembler().assemble(
+            scan_job_id="scan-job-1",
+            syft_result=_syft_result(),
+            semgrep_result=_semgrep_result(),
+            coverage_notes=[],
+            targeted_reanalysis=unsafe_payload,
+        )
+
+
+@pytest.mark.p0
 def test_t06_final_payload_redacts_secret_patterns_without_redacting_config_hash() -> None:
     semgrep_result = SemgrepRunResult(
         findings=[
