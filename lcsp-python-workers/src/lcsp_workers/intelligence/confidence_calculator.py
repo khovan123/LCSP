@@ -17,10 +17,6 @@ CLAIM_CATEGORY_BASE = {
     "HUMAN_OVERSIGHT_CONTROL": 0.65,
     "AI_INTERACTION_DISCLOSURE": 0.60,
     "INCIDENT_HANDLING": 0.55,
-    # A HARM_POTENTIAL_SIGNAL is a technical heuristic, not a legal finding of
-    # significant/high impact. Keep its claim confidence aligned with the
-    # scanner signal instead of promoting it to legal-match strength.
-    "POTENTIAL_HARM": 0.55,
 }
 
 
