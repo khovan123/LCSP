@@ -263,11 +263,12 @@ model OutboxMessage {
   status        OutboxStatus        @default(PENDING)
   attempts      Int                 @default(0)
   lastAttemptAt DateTime?
+  nextAttemptAt DateTime?
   publishedAt   DateTime?
   errorMessage  String?
   createdAt     DateTime            @default(now())
 
-  @@index([status, createdAt])
+  @@index([status, nextAttemptAt, createdAt])
   @@index([aggregateType, aggregateId])
 }
 

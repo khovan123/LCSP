@@ -2,6 +2,7 @@ import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
 import {
   OUTBOX_STATUSES,
   OUTBOX_AGGREGATE_TYPES,
+  OUTBOX_AUDIT_EVENT_TYPES,
 } from "@lcsp/contracts/outbox";
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
@@ -12,6 +13,7 @@ import { OutboxMessageEntity } from "./outbox-message.entity.js";
 import { OutboxPublisherService } from "./outbox-publisher.service.js";
 import type { OutboxRepository } from "./outbox.repository.js";
 import type { RabbitMqClient } from "./rabbitmq.client.js";
+import type { AuditWriterService } from "../audit/audit-writer.service.js";
 
 type WithPendingBatchFn = (
   batchSize: number,
@@ -32,6 +34,7 @@ type MarkFailureFn = (
   maxAttempts: number,
   errorMessage: string,
   now: Date,
+  nextAttemptAt: Date | null,
 ) => Promise<void>;
 type EnsureConnectedFn = () => Promise<void>;
 type PublishFn = (
@@ -80,6 +83,12 @@ function makeRabbitMqClient(overrides: {
   } as unknown as RabbitMqClient;
 }
 
+function makeAuditWriter(): AuditWriterService {
+  return {
+    write: jest.fn().mockResolvedValue(undefined),
+  } as unknown as AuditWriterService;
+}
+
 function makeMessage(
   overrides: Partial<
     Parameters<typeof OutboxMessageEntity.fromPersistence>[0]
@@ -122,6 +131,7 @@ describe("OutboxPublisherService", () => {
       makeOutboxRepository({}),
       makeRabbitMqClient({}),
       makeConfigService({ "outbox.enabled": false }),
+      makeAuditWriter(),
     );
 
     service.onModuleInit();
@@ -156,6 +166,7 @@ describe("OutboxPublisherService", () => {
       outboxRepository,
       rabbitMqClient,
       makeConfigService(),
+      makeAuditWriter(),
     );
 
     await service.poll();
@@ -195,11 +206,13 @@ describe("OutboxPublisherService", () => {
         .fn<PublishFn>()
         .mockRejectedValue(new Error("broker refused")),
     });
+    const auditWriter = makeAuditWriter();
 
     const service = new OutboxPublisherService(
       outboxRepository,
       rabbitMqClient,
       makeConfigService({ "outbox.maxAttempts": 5 }),
+      auditWriter,
     );
 
     await service.poll();
@@ -211,6 +224,13 @@ describe("OutboxPublisherService", () => {
       5,
       "broker refused",
       expect.any(Date),
+      expect.any(Date),
+    );
+    expect(auditWriter.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: OUTBOX_AUDIT_EVENT_TYPES.retryScheduled,
+        correlationId: "outbox:outbox-1",
+      }),
     );
   });
 
@@ -240,6 +260,7 @@ describe("OutboxPublisherService", () => {
         publish,
       }),
       makeConfigService(),
+      makeAuditWriter(),
     );
 
     await service.poll();
@@ -271,6 +292,7 @@ describe("OutboxPublisherService", () => {
       outboxRepository,
       rabbitMqClient,
       makeConfigService(),
+      makeAuditWriter(),
     );
 
     await expect(service.poll()).resolves.toBeUndefined();
@@ -295,6 +317,7 @@ describe("OutboxPublisherService", () => {
       outboxRepository,
       rabbitMqClient,
       makeConfigService(),
+      makeAuditWriter(),
     );
 
     const firstPoll = service.poll();
@@ -322,6 +345,7 @@ describe("OutboxPublisherService", () => {
       outboxRepository,
       rabbitMqClient,
       makeConfigService({ "outbox.pollIntervalMs": 100 }),
+      makeAuditWriter(),
     );
 
     service.onModuleInit();

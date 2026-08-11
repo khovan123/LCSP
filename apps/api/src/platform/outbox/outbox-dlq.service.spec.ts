@@ -5,6 +5,8 @@ import {
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
+import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { jest } from "@jest/globals";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -102,6 +104,9 @@ describe("OutboxDlqService", () => {
           actorId: "actor-1",
           organizationId: "org-1",
           correlationId: "corr-1",
+          payload: expect.objectContaining({
+            replayAuthority: PBAC_ACTIONS.outboxReplay,
+          }),
         }),
       );
     });
@@ -151,6 +156,12 @@ describe("OutboxDlqService", () => {
         },
       });
       expect(resetMessageForReplay).not.toHaveBeenCalled();
+      expect(writeAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: OUTBOX_AUDIT_EVENT_TYPES.dlqReplayDenied,
+          decision: AUDIT_DECISIONS.deny,
+        }),
+      );
     });
 
     it("rejects replay for an accepted technical evidence artifact", async () => {

@@ -5,8 +5,17 @@ import {
   type OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import {
+  AUDIT_ACTOR_TYPES,
+  AUDIT_DECISIONS,
+  AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+} from "@lcsp/contracts/audit";
+import { OUTBOX_AUDIT_EVENT_TYPES } from "@lcsp/contracts/outbox";
 
+import { AuditWriterService } from "../audit/audit-writer.service.js";
 import { OutboxRepository } from "./outbox.repository.js";
+import { OutboxMessageEntity } from "./outbox-message.entity.js";
 import { RabbitMqClient } from "./rabbitmq.client.js";
 import type { RabbitMqMessageHeaders } from "./rabbitmq.client.js";
 
@@ -20,6 +29,7 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
     private readonly outboxRepository: OutboxRepository,
     private readonly rabbitMqClient: RabbitMqClient,
     private readonly configService: ConfigService,
+    private readonly auditWriter: AuditWriterService,
   ) {}
 
   onModuleInit(): void {
@@ -69,6 +79,14 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       "lcsp.events",
     );
 
+    const failures: Array<{
+      message: OutboxMessageEntity;
+      attempts: number;
+      maxAttempts: number;
+      reason: string;
+      nextAttemptAt: Date | null;
+    }> = [];
+
     try {
       await this.outboxRepository.withPendingBatch(
         batchSize,
@@ -96,6 +114,8 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
             } catch (error) {
               const nextAttempts = message.attempts + 1;
               const reason = (error as Error).message;
+              const nextAttemptAt =
+                nextAttempts >= maxAttempts ? null : retryAt(now, nextAttempts);
 
               await this.outboxRepository.markFailure(
                 tx,
@@ -104,7 +124,15 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
                 maxAttempts,
                 reason,
                 now,
+                nextAttemptAt,
               );
+              failures.push({
+                message,
+                attempts: nextAttempts,
+                maxAttempts,
+                reason,
+                nextAttemptAt,
+              });
               this.logger.error(
                 `Outbox message ${message.id} publish failed (attempt ${nextAttempts}/${maxAttempts}): ${reason}`,
               );
@@ -112,6 +140,7 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
           }
         },
       );
+      await Promise.all(failures.map((failure) => this.auditFailure(failure)));
     } catch (error) {
       this.logger.error(
         `Outbox poll batch failed: ${(error as Error).message}`,
@@ -120,6 +149,62 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
       this.polling = false;
     }
   }
+
+  private async auditFailure(failure: {
+    message: {
+      id: string;
+      aggregateId: string;
+      payload: Record<string, unknown>;
+    };
+    attempts: number;
+    maxAttempts: number;
+    reason: string;
+    nextAttemptAt: Date | null;
+  }): Promise<void> {
+    const payload = failure.message.payload;
+    const organizationId = readString(payload.organizationId);
+    const assessmentId = readString(payload.assessmentId);
+    const correlationId =
+      readString(payload.correlationId) ?? `outbox:${failure.message.id}`;
+    const actor = readActor(payload.actor);
+    const isDlq = failure.attempts >= failure.maxAttempts;
+
+    await this.auditWriter.write({
+      eventType: isDlq
+        ? OUTBOX_AUDIT_EVENT_TYPES.dlqEntered
+        : OUTBOX_AUDIT_EVENT_TYPES.retryScheduled,
+      actorId: actor?.id ?? null,
+      organizationId: organizationId ?? null,
+      assessmentId,
+      resourceType: AUDIT_RESOURCE_TYPES.outbox,
+      resourceId: failure.message.id,
+      correlationId,
+      reasonCode: safeReasonCode(failure.reason),
+      decision: AUDIT_DECISIONS.allow,
+      result: isDlq
+        ? OUTBOX_AUDIT_EVENT_TYPES.dlqEntered
+        : OUTBOX_AUDIT_EVENT_TYPES.retryScheduled,
+      redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
+      actor: actor ?? {
+        id: "outbox-publisher",
+        type: AUDIT_ACTOR_TYPES.service,
+      },
+      payload: {
+        aggregateId: failure.message.aggregateId,
+        attempts: failure.attempts,
+        maxAttempts: failure.maxAttempts,
+        ...(failure.nextAttemptAt
+          ? { nextRetryAt: failure.nextAttemptAt.toISOString() }
+          : { operatorRecoveryAction: "REPLAY_DLQ_AFTER_RECOVERY" }),
+      },
+    });
+  }
+}
+
+function retryAt(now: Date, attempts: number): Date {
+  const baseDelayMs = Math.min(30_000, 1_000 * 2 ** (attempts - 1));
+  const jitterMs = Math.floor(Math.random() * 250);
+  return new Date(now.getTime() + baseDelayMs + jitterMs);
 }
 
 function authorizationHeaders(
@@ -148,4 +233,26 @@ function authorizationHeaders(
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function readActor(
+  value: unknown,
+): { id: string; type: "USER" | "SERVICE" } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const actor = value as Record<string, unknown>;
+  const id = readString(actor.id);
+  const type = actor.type;
+  if (
+    !id ||
+    (type !== AUDIT_ACTOR_TYPES.user && type !== AUDIT_ACTOR_TYPES.service)
+  ) {
+    return undefined;
+  }
+  return { id, type };
+}
+
+function safeReasonCode(reason: string): string {
+  return (
+    reason.replace(/[^A-Z0-9_]/gi, "_").slice(0, 120) || "OUTBOX_PUBLISH_FAILED"
+  );
 }
