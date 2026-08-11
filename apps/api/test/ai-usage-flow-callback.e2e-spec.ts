@@ -230,7 +230,10 @@ describe("AIUsageFlow Callback Endpoint (e2e) [MW-aiuf-001]", () => {
   });
 
   it("accepts legacy compact claims when optional flow_data is absent", async () => {
-    const response = await callback(app, validPayload({ flow_data: undefined }));
+    const response = await callback(
+      app,
+      validPayload({ flow_data: undefined }),
+    );
     const body = successBody<AIUsageFlowCallbackDto>(response);
 
     assert.equal(response.status, 200);
