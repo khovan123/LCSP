@@ -65,6 +65,110 @@ def test_rule_applicability_evaluator_blocks_when_required_fact_is_not_evidence_
     assert result.status == "BLOCKED_UNKNOWN_FACT"
 
 
+def test_rule_applicability_evaluator_treats_known_mismatch_as_not_applicable():
+    evaluator = RuleApplicabilityEvaluator()
+    profile = {
+        "mergedProfile": {"automationLevel": "ASSISTIVE"},
+        "evidenceRefs": [{"id": "ev-1"}],
+    }
+    rule = {
+        "legalRuleId": "RULE-KNOWN-MISMATCH",
+        "requiredFacts": [
+            {"field": "automationLevel", "expectedValue": "FULLY_AUTOMATED"},
+        ],
+        "blockingFacts": [],
+        "unknownFactPolicy": "BLOCK_ON_UNKNOWN",
+    }
+
+    result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
+
+    assert result.status == "NOT_APPLICABLE"
+    assert "did not match" in result.rationale[0]
+
+
+def test_rule_applicability_evaluator_blocks_not_determinable_from_code_as_unknown():
+    evaluator = RuleApplicabilityEvaluator()
+    profile = {
+        "mergedProfile": {
+            "riskDocumentationEvidence": "NOT_DETERMINABLE_FROM_CODE",
+        },
+        "evidenceRefs": [{"id": "ev-1"}],
+    }
+    rule = {
+        "legalRuleId": "RULE-UNKNOWN-PROCESS-FACT",
+        "requiredFacts": [
+            {
+                "field": "riskDocumentationEvidence",
+                "expectedValue": "NOT_DETERMINABLE_FROM_CODE",
+            },
+        ],
+        "blockingFacts": [],
+        "unknownFactPolicy": "BLOCK_ON_UNKNOWN",
+    }
+
+    result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
+
+    assert result.status == "BLOCKED_UNKNOWN_FACT"
+    assert "is unknown" in result.rationale[0]
+
+
+def test_rule_applicability_evaluator_matches_required_list_as_subset():
+    evaluator = RuleApplicabilityEvaluator()
+    profile = {
+        "mergedProfile": {
+            "potentialHarmCategories": [
+                "POTENTIAL_HIGH_IMPACT",
+                "PERSONAL_DATA_IMPACT",
+            ],
+        },
+        "evidenceRefs": [{"id": "ev-1"}],
+    }
+    rule = {
+        "legalRuleId": "RULE-LIST-SUBSET",
+        "requiredFacts": [
+            {
+                "field": "potentialHarmCategories",
+                "expectedValue": ["POTENTIAL_HIGH_IMPACT"],
+            },
+        ],
+        "blockingFacts": [],
+        "unknownFactPolicy": "BLOCK_ON_UNKNOWN",
+    }
+
+    result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
+
+    assert result.status == "MATCHED"
+
+
+def test_rule_applicability_evaluator_blocks_only_when_blocking_value_matches():
+    evaluator = RuleApplicabilityEvaluator()
+    rule = {
+        "legalRuleId": "RULE-BLOCKING-VALUE",
+        "requiredFacts": [
+            {"field": "automationLevel", "expectedValue": "FULLY_AUTOMATED"},
+        ],
+        "blockingFacts": [
+            {"field": "deploymentStage", "expectedValue": "INTERNAL_ONLY"},
+        ],
+        "unknownFactPolicy": "BLOCK_ON_UNKNOWN",
+    }
+    profile = {
+        "mergedProfile": {
+            "automationLevel": "FULLY_AUTOMATED",
+            "deploymentStage": "PUBLIC",
+        },
+        "evidenceRefs": [{"id": "ev-1"}],
+    }
+
+    result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
+    assert result.status == "MATCHED"
+
+    profile["mergedProfile"]["deploymentStage"] = "INTERNAL_ONLY"
+    blocked = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
+    assert blocked.status == "NOT_APPLICABLE"
+    assert blocked.blocking_facts == ["deploymentStage"]
+
+
 def test_citation_retriever_drops_repealed_chunks_and_builds_allowlist():
     retriever = ChromaDbCitationRetriever()
     chunks = [
@@ -114,7 +218,10 @@ def test_citation_retriever_expands_parent_and_one_hop_references():
 
         def get(self, *, ids, include):
             existing = [(value, self.records[value]) for value in ids if value in self.records]
-            return {"ids": [value for value, _ in existing], "metadatas": [metadata for _, metadata in existing]}
+            return {
+                "ids": [value for value, _ in existing],
+                "metadatas": [metadata for _, metadata in existing],
+            }
 
     class Retriever(ChromaDbCitationRetriever):
         def _collection(self, corpus_version_id):
