@@ -201,15 +201,36 @@ export class InternalTargetedReanalysisController {
     @Param("requestId") requestId: string,
     @Body() payload: TargetedReanalysisTerminalPayload,
   ) {
-    const request = await this.prisma.targetedReanalysisRequest.update({
-      where: { id: requestId },
+    const request = await this.prisma.targetedReanalysisRequest.updateMany({
+      where: {
+        id: requestId,
+        state: {
+          in: [
+            TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
+            TARGETED_REANALYSIS_REQUEST_STATES.running,
+          ],
+        },
+      },
       data: {
         state: payload.state,
         safeFailureCode: payload.safe_failure_code,
         outputEvidenceReportId: payload.output_evidence_report_id,
       },
-      select: { id: true, state: true, checkpointRef: true },
     });
-    return resultEnvelope(request);
+    return resultEnvelope({ transitioned: request.count === 1 });
+  }
+
+  @Post(":requestId/requeue")
+  @HttpCode(200)
+  @UseGuards(WorkerApiKeyGuard)
+  async requeueRequest(@Param("requestId") requestId: string) {
+    const request = await this.prisma.targetedReanalysisRequest.updateMany({
+      where: {
+        id: requestId,
+        state: TARGETED_REANALYSIS_REQUEST_STATES.running,
+      },
+      data: { state: TARGETED_REANALYSIS_REQUEST_STATES.dispatched },
+    });
+    return resultEnvelope({ requeued: request.count === 1 });
   }
 }
