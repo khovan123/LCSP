@@ -18,6 +18,7 @@ export const AGENTIC_TOOL_NAMES = {
   getVerifiedProfile: "get_verified_profile",
   getLegalCorpusReadiness: "get_legal_corpus_readiness",
   retrieveLegalBasis: "retrieve_legal_basis",
+  validateCitationSet: "validate_citation_set",
   reconcileProfileToVerifiedProfile: "reconcile_profile_to_verified_profile",
 } as const;
 
@@ -72,6 +73,7 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   verifiedProfileRead: "AGENTIC_TOOL_VERIFIED_PROFILE_READ",
   legalCorpusReadinessRead: "AGENTIC_TOOL_LEGAL_CORPUS_READINESS_READ",
   legalBasisRetrieved: "AGENTIC_TOOL_LEGAL_BASIS_RETRIEVED",
+  citationSetValidated: "AGENTIC_TOOL_CITATION_SET_VALIDATED",
   findingDetailRead: "AGENTIC_TOOL_FINDING_DETAIL_READ",
   evidenceSearchRead: "AGENTIC_TOOL_EVIDENCE_SEARCH_READ",
   providerInvocationRead: "AGENTIC_TOOL_PROVIDER_INVOCATION_READ",

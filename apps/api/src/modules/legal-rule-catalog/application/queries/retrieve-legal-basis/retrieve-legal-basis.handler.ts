@@ -261,9 +261,7 @@ export class RetrieveLegalBasisHandler implements IQueryHandler<
       coverageState: resultLimited
         ? AGENTIC_TOOL_COVERAGE_STATES.partial
         : AGENTIC_TOOL_COVERAGE_STATES.sufficient,
-      evidenceRefs: rendered.map(({ chunkId, contentHash }) =>
-        citationRef(chunkId, contentHash),
-      ),
+      evidenceRefs: rendered.map(({ chunkId }) => citationRef(chunkId)),
       limitations: resultLimited
         ? [
             {
@@ -461,8 +459,8 @@ function indexRef(id: string): string {
   return `index_${id}`;
 }
 
-function citationRef(chunkId: string, contentHash: string): string {
-  return `citation:${chunkId}:${contentHash}`;
+function citationRef(chunkId: string): string {
+  return `citation:${chunkId}`;
 }
 
 function excerpt(content: string): string {
