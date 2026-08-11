@@ -6,6 +6,7 @@ export const AGENTIC_TOOL_NAMES = {
   findProviderInvocations: "find_provider_invocations",
   getEvidenceSubgraph: "get_evidence_subgraph",
   getSymbolContext: "get_symbol_context",
+  traceStaticFlow: "trace_static_flow",
   getReconciliationContext: "get_reconciliation_context",
 } as const;
 
@@ -54,4 +55,5 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   providerInvocationRead: "AGENTIC_TOOL_PROVIDER_INVOCATION_READ",
   evidenceSubgraphRead: "AGENTIC_TOOL_EVIDENCE_SUBGRAPH_READ",
   symbolContextRead: "AGENTIC_TOOL_SYMBOL_CONTEXT_READ",
+  staticFlowRead: "AGENTIC_TOOL_STATIC_FLOW_READ",
 } as const;

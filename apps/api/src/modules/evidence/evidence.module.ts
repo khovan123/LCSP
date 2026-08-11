@@ -10,6 +10,7 @@ import { SearchEvidenceHandler } from "./application/queries/search-evidence/sea
 import { FindProviderInvocationsHandler } from "./application/queries/find-provider-invocations/find-provider-invocations.handler.js";
 import { GetEvidenceSubgraphHandler } from "./application/queries/get-evidence-subgraph/get-evidence-subgraph.handler.js";
 import { GetSymbolContextHandler } from "./application/queries/get-symbol-context/get-symbol-context.handler.js";
+import { TraceStaticFlowHandler } from "./application/queries/trace-static-flow/trace-static-flow.handler.js";
 import { EvidenceRedactorService } from "./application/services/evidence/evidence-redactor.service.js";
 import {
   EvidenceController,
@@ -26,6 +27,7 @@ import {
     FindProviderInvocationsHandler,
     GetEvidenceSubgraphHandler,
     GetSymbolContextHandler,
+    TraceStaticFlowHandler,
     AcceptTechnicalProfileHandler,
     EvidenceRedactorService,
     WorkerApiKeyGuard,
