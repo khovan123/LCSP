@@ -16,6 +16,7 @@ export const AGENTIC_TOOL_NAMES = {
   proposeMissingTargets: "propose_missing_targets",
   getReconciliationContext: "get_reconciliation_context",
   getVerifiedProfile: "get_verified_profile",
+  getLegalCorpusReadiness: "get_legal_corpus_readiness",
   reconcileProfileToVerifiedProfile: "reconcile_profile_to_verified_profile",
 } as const;
 
@@ -24,6 +25,11 @@ export type AgenticToolName =
 
 export const AGENTIC_TOOL_STATUSES = {
   ready: "READY",
+  needsInput: "NEEDS_INPUT",
+  conflict: "CONFLICT",
+  outOfCoverage: "OUT_OF_COVERAGE",
+  blocked: "BLOCKED",
+  failed: "FAILED",
 } as const;
 
 export type AgenticToolStatus =
@@ -31,7 +37,9 @@ export type AgenticToolStatus =
 
 export const AGENTIC_TOOL_COVERAGE_STATES = {
   sufficient: "SUFFICIENT",
+  partial: "PARTIAL",
   limited: "LIMITED",
+  unavailable: "UNAVAILABLE",
 } as const;
 
 export type AgenticToolCoverageState =
@@ -61,6 +69,7 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   artifactChainRead: "AGENTIC_TOOL_ARTIFACT_CHAIN_READ",
   reconciliationContextRead: "AGENTIC_TOOL_RECONCILIATION_CONTEXT_READ",
   verifiedProfileRead: "AGENTIC_TOOL_VERIFIED_PROFILE_READ",
+  legalCorpusReadinessRead: "AGENTIC_TOOL_LEGAL_CORPUS_READINESS_READ",
   findingDetailRead: "AGENTIC_TOOL_FINDING_DETAIL_READ",
   evidenceSearchRead: "AGENTIC_TOOL_EVIDENCE_SEARCH_READ",
   providerInvocationRead: "AGENTIC_TOOL_PROVIDER_INVOCATION_READ",

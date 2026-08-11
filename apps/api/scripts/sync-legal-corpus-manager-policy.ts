@@ -9,6 +9,7 @@ const policyVersion = process.env.LCSP_MANAGER_POLICY_VERSION ?? "2026-07-29";
 const legalCorpusActions = [
   PBAC_ACTIONS.legalCorpusIngest,
   PBAC_ACTIONS.legalCorpusApprove,
+  PBAC_ACTIONS.legalCorpusRead,
 ];
 
 async function main() {
