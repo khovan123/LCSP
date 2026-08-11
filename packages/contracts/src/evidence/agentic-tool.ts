@@ -9,6 +9,7 @@ export const AGENTIC_TOOL_NAMES = {
   getSymbolContext: "get_symbol_context",
   traceStaticFlow: "trace_static_flow",
   inspectHumanReviewPath: "inspect_human_review_path",
+  inspectDecisionPath: "inspect_decision_path",
   getReconciliationContext: "get_reconciliation_context",
 } as const;
 
@@ -60,4 +61,5 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   symbolContextRead: "AGENTIC_TOOL_SYMBOL_CONTEXT_READ",
   staticFlowRead: "AGENTIC_TOOL_STATIC_FLOW_READ",
   humanReviewPathRead: "AGENTIC_TOOL_HUMAN_REVIEW_PATH_READ",
+  decisionPathRead: "AGENTIC_TOOL_DECISION_PATH_READ",
 } as const;

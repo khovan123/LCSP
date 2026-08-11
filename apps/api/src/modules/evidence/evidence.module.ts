@@ -13,6 +13,7 @@ import { GetSymbolContextHandler } from "./application/queries/get-symbol-contex
 import { TraceStaticFlowHandler } from "./application/queries/trace-static-flow/trace-static-flow.handler.js";
 import { InspectHumanReviewPathHandler } from "./application/queries/inspect-human-review-path/inspect-human-review-path.handler.js";
 import { GetScanCoverageHandler } from "./application/queries/get-scan-coverage/get-scan-coverage.handler.js";
+import { InspectDecisionPathHandler } from "./application/queries/inspect-decision-path/inspect-decision-path.handler.js";
 import { EvidenceRedactorService } from "./application/services/evidence/evidence-redactor.service.js";
 import {
   EvidenceController,
@@ -32,6 +33,7 @@ import {
     TraceStaticFlowHandler,
     InspectHumanReviewPathHandler,
     GetScanCoverageHandler,
+    InspectDecisionPathHandler,
     AcceptTechnicalProfileHandler,
     EvidenceRedactorService,
     WorkerApiKeyGuard,
