@@ -40,6 +40,11 @@ import type { VerifiedProfileCallbackRequest } from "../../application/contracts
 import { ListConflictsQuery } from "../../application/queries/list-conflicts/list-conflicts.query.js";
 import { GetVerifiedProfileByIdQuery } from "../../application/queries/get-verified-profile-by-id/get-verified-profile-by-id.query.js";
 import { GetArtifactChainQuery } from "../../application/queries/get-artifact-chain/get-artifact-chain.query.js";
+import { GetReconciliationContextQuery } from "../../application/queries/get-reconciliation-context/get-reconciliation-context.query.js";
+import {
+  RECONCILIATION_CONTEXT_STATUSES,
+  type ReconciliationContextStatus,
+} from "../../application/contracts/reconciliation/reconciliation-context.contract.js";
 
 type ResolveConflictRequest = {
   resolution?: unknown;
@@ -246,6 +251,36 @@ export class ReconciliationController {
     );
   }
 
+  @Get(":assessmentId/reconciliation-context")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.conflictRead)
+  async getReconciliationContext(
+    @Param("assessmentId") assessmentId: string,
+    @Query("flow_ref") flowRef: string | undefined,
+    @Query("statuses") statusesRaw: string | undefined,
+    @Query("max_results") maxResultsRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const pbacContext = request.pbacContext;
+    const correlationId = request.correlationId as string;
+    const flowId = parseFlowRef(flowRef, correlationId);
+    const statuses = parseReconciliationStatuses(statusesRaw, correlationId);
+    const maxResults = parseMaxResults(maxResultsRaw, correlationId);
+
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetReconciliationContextQuery(
+          assessmentId,
+          pbacContext.organizationId,
+          correlationId,
+          flowId,
+          maxResults,
+          statuses,
+        ),
+      ),
+    );
+  }
+
   @Patch(":assessmentId/conflicts/:conflictId/resolve")
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.conflictResolve)
@@ -330,4 +365,46 @@ function parseArtifactChainStages(
   }
 
   return stages;
+}
+
+function parseFlowRef(
+  value: string | undefined,
+  correlationId: string,
+): string {
+  if (!value?.startsWith("flow:")) {
+    throwInvalidRequest(correlationId);
+  }
+  return value.slice("flow:".length);
+}
+
+function parseReconciliationStatuses(
+  value: string | undefined,
+  correlationId: string,
+): ReconciliationContextStatus[] {
+  if (!value) return [];
+  const allowed = new Set(Object.values(RECONCILIATION_CONTEXT_STATUSES));
+  const statuses = value
+    .split(",")
+    .map((status) => status.trim()) as ReconciliationContextStatus[];
+  if (statuses.some((status) => !allowed.has(status))) {
+    throwInvalidRequest(correlationId);
+  }
+  return statuses;
+}
+
+function parseMaxResults(
+  value: string | undefined,
+  correlationId: string,
+): number {
+  const maxResults = Number(value);
+  if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 50) {
+    throwInvalidRequest(correlationId);
+  }
+  return maxResults;
+}
+
+function throwInvalidRequest(correlationId: string): never {
+  throw problemException(ASSESSMENT_ERROR_CODES.invalidRequest, correlationId, {
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+  });
 }
