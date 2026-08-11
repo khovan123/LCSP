@@ -30,6 +30,7 @@ import { SearchEvidenceQuery } from "../../application/queries/search-evidence/s
 import { FindProviderInvocationsQuery } from "../../application/queries/find-provider-invocations/find-provider-invocations.query.js";
 import { GetEvidenceSubgraphQuery } from "../../application/queries/get-evidence-subgraph/get-evidence-subgraph.query.js";
 import { GetSymbolContextQuery } from "../../application/queries/get-symbol-context/get-symbol-context.query.js";
+import { TraceStaticFlowQuery } from "../../application/queries/trace-static-flow/trace-static-flow.query.js";
 import {
   FINDING_DETAIL_INCLUDES,
   type FindingDetailInclude,
@@ -50,6 +51,10 @@ import {
   SYMBOL_CONTEXT_INCLUDES,
   type SymbolContextInclude,
 } from "../../application/contracts/evidence/symbol-context.contract.js";
+import {
+  STATIC_FLOW_DIRECTIONS,
+  type StaticFlowDirection,
+} from "../../application/contracts/evidence/static-flow.contract.js";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { HttpStatus } from "@nestjs/common";
@@ -240,6 +245,38 @@ export class EvidenceController {
       ),
     );
   }
+
+  @Get(
+    ":assessmentId/evidence-reports/:evidenceReportId/static-flow/:startNodeId",
+  )
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async traceStaticFlow(
+    @Param("assessmentId") assessmentId: string,
+    @Param("evidenceReportId") evidenceReportId: string,
+    @Param("startNodeId") startNodeId: string,
+    @Query("direction") directionRaw: string | undefined,
+    @Query("max_hops") maxHopsRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new TraceStaticFlowQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          evidenceReportId,
+          startNodeId,
+          parseStaticFlowDirection(directionRaw, correlationId),
+          parseBoundedInteger(maxHopsRaw, 1, 20, correlationId),
+          correlationId,
+        ),
+      ),
+    );
+  }
 }
 
 function parseFindingDetailInclude(
@@ -371,6 +408,23 @@ function parseDirection(
     });
   }
   return value as EvidenceSubgraphDirection;
+}
+
+function parseStaticFlowDirection(
+  value: string | undefined,
+  correlationId: string,
+): StaticFlowDirection {
+  if (
+    !value ||
+    !Object.values(STATIC_FLOW_DIRECTIONS).includes(
+      value as StaticFlowDirection,
+    )
+  ) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return value as StaticFlowDirection;
 }
 
 function parseBoundedInteger(
