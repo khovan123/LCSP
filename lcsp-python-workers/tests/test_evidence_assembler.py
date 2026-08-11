@@ -304,3 +304,13 @@ def test_t09_serializes_sanitized_versioned_evidence_graph() -> None:
     assert graph["schema_version"] == "1.0.0"
     assert graph["graph_hash"].startswith("sha256:")
     assert graph["nodes"][0]["evidence_refs"] == ["evidence:finding-1"]
+
+
+@pytest.mark.p0
+def test_t10_fails_closed_when_graph_contains_prompt_or_ast_body() -> None:
+    builder = EvidenceGraphBuilder(scan_job_id="scan-job-1")
+    with pytest.raises(AssertionError):
+        builder.add_node("FUNCTION", "call", attributes={"prompt": "secret prompt"})
+
+    with pytest.raises(PrivacyAssertionError):
+        EvidenceAssembler()._assert_safe_payload({"nested": {"ast_body": "x"}})
