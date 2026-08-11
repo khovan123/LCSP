@@ -14,6 +14,14 @@ import {
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import {
+  AUDIT_ACTOR_IDS,
+  AUDIT_ACTOR_TYPES,
+  AUDIT_DECISIONS,
+  AUDIT_REDACTION_STATUSES,
+  AUDIT_RESOURCE_TYPES,
+} from "@lcsp/contracts/audit";
+import {
+  SCAN_EVENT_TYPES,
   TARGETED_REANALYSIS_CAPACITY_POLICY,
   TARGETED_REANALYSIS_CHECKPOINT_STATES,
   TARGETED_REANALYSIS_REQUEST_STATES,
@@ -31,6 +39,7 @@ import type { RerunScanRequestDto } from "../../application/contracts/scan/rerun
 import { WorkerApiKeyGuard } from "./worker-api-key.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import { AuditWriterService } from "../../../../platform/audit/audit-writer.service.js";
 
 interface ScanStatusRequest {
   pbacContext: PbacRequestContext;
@@ -123,7 +132,10 @@ interface TargetedReanalysisTerminalPayload {
 
 @Controller("internal/targeted-reanalysis")
 export class InternalTargetedReanalysisController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditWriter: AuditWriterService,
+  ) {}
 
   @Get(":requestId")
   @UseGuards(WorkerApiKeyGuard)
@@ -155,13 +167,18 @@ export class InternalTargetedReanalysisController {
     const claimed = await this.prisma.$transaction(async (tx) => {
       const request = await tx.targetedReanalysisRequest.findUnique({
         where: { id: requestId },
-        select: { organizationId: true, state: true },
+        select: {
+          organizationId: true,
+          assessmentId: true,
+          correlationId: true,
+          state: true,
+        },
       });
       if (
         !request ||
         request.state !== TARGETED_REANALYSIS_REQUEST_STATES.dispatched
       ) {
-        return false;
+        return { claimed: false };
       }
 
       await tx.$executeRaw`
@@ -177,7 +194,7 @@ export class InternalTargetedReanalysisController {
         runningCount >=
         TARGETED_REANALYSIS_CAPACITY_POLICY.maxRunningPerOrganization
       ) {
-        return false;
+        return { claimed: false };
       }
 
       const updated = await tx.targetedReanalysisRequest.updateMany({
@@ -199,9 +216,22 @@ export class InternalTargetedReanalysisController {
           },
         });
       }
-      return updated.count === 1;
+      return updated.count === 1
+        ? {
+            claimed: true,
+            organizationId: request.organizationId,
+            assessmentId: request.assessmentId,
+            correlationId: request.correlationId,
+          }
+        : { claimed: false };
     });
-    return resultEnvelope({ claimed });
+    if (claimed.claimed)
+      await this.writeTransitionAudit(
+        requestId,
+        claimed,
+        SCAN_EVENT_TYPES.targetedReanalysisRunningAudit,
+      );
+    return resultEnvelope({ claimed: claimed.claimed });
   }
 
   @Post(":requestId/terminal")
@@ -261,5 +291,33 @@ export class InternalTargetedReanalysisController {
       });
     }
     return resultEnvelope({ requeued: request.count === 1 });
+  }
+
+  private async writeTransitionAudit(
+    requestId: string,
+    request: {
+      organizationId: string;
+      assessmentId: string;
+      correlationId: string;
+    },
+    eventType: string,
+  ): Promise<void> {
+    await this.auditWriter.write({
+      eventType,
+      actorId: AUDIT_ACTOR_IDS.scannerWorker,
+      organizationId: request.organizationId,
+      assessmentId: request.assessmentId,
+      resourceType: AUDIT_RESOURCE_TYPES.workerTask,
+      resourceId: requestId,
+      correlationId: request.correlationId,
+      decision: AUDIT_DECISIONS.allow,
+      result: eventType,
+      redactionStatus: AUDIT_REDACTION_STATUSES.none,
+      actor: {
+        id: AUDIT_ACTOR_IDS.scannerWorker,
+        type: AUDIT_ACTOR_TYPES.service,
+      },
+      payload: { requestId },
+    });
   }
 }
