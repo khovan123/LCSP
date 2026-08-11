@@ -25,6 +25,7 @@ export const PBAC_ACTIONS = {
   legalRuleCatalogApprove: "legal-rule-catalog:approve",
   legalCorpusIngest: "legal-corpus:ingest",
   legalCorpusApprove: "legal-corpus:approve",
+  legalCorpusRead: "legal-corpus:read",
   managerDecisionChange: "manager-decision:change",
   membershipRevoke: "membership:revoke",
   metadataCheck: "pbac:metadata",

@@ -178,7 +178,7 @@ export class InternalTargetedReanalysisController {
         !request ||
         request.state !== TARGETED_REANALYSIS_REQUEST_STATES.dispatched
       ) {
-        return { claimed: false };
+        return { claimed: false as const };
       }
 
       await tx.$executeRaw`
@@ -194,7 +194,7 @@ export class InternalTargetedReanalysisController {
         runningCount >=
         TARGETED_REANALYSIS_CAPACITY_POLICY.maxRunningPerOrganization
       ) {
-        return { claimed: false };
+        return { claimed: false as const };
       }
 
       const updated = await tx.targetedReanalysisRequest.updateMany({
@@ -218,12 +218,12 @@ export class InternalTargetedReanalysisController {
       }
       return updated.count === 1
         ? {
-            claimed: true,
+            claimed: true as const,
             organizationId: request.organizationId,
             assessmentId: request.assessmentId,
             correlationId: request.correlationId,
           }
-        : { claimed: false };
+        : { claimed: false as const };
     });
     if (claimed.claimed)
       await this.writeTransitionAudit(

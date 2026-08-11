@@ -767,8 +767,24 @@ model LegalCorpusVersion {
   documents      LegalSourceDocument[]
   chunks         LegalDocumentChunk[]
   approvals      CorpusApprovalRecord[]
+  retrievalIndexes LegalRetrievalIndex[]
 
   @@index([status, createdAt])
+}
+
+model LegalRetrievalIndex {
+  id                    String                    @id @default(uuid())
+  legalCorpusVersionId  String
+  version               String                    @unique
+  status                LegalRetrievalIndexStatus @default(BUILDING)
+  configHash            String
+  contentHash           String
+  validationManifestRef String?
+  validatedAt           DateTime?
+  createdAt             DateTime                  @default(now())
+  corpusVersion         LegalCorpusVersion        @relation(fields: [legalCorpusVersionId], references: [id], onDelete: Cascade)
+
+  @@index([legalCorpusVersionId, status, validatedAt])
 }
 
 model LegalSourceDocument {
@@ -949,4 +965,10 @@ enum LegalRuleLifecycleStatus {
   APPROVED
   REJECTED
   SUPERSEDED
+}
+
+enum LegalRetrievalIndexStatus {
+  BUILDING
+  VALID
+  INVALID
 }
