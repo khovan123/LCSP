@@ -118,7 +118,9 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
             // deterministic claim field/value/lifecycle/numeric confidence. Join
             // those details by claim_id before persistence so reconciliation/legal
             // matching does not have to guess values from descriptions later.
-            claims: enrichStoredClaims(payload) as unknown as Prisma.InputJsonValue,
+            claims: enrichStoredClaims(
+              payload,
+            ) as unknown as Prisma.InputJsonValue,
             unknownUsages:
               payload.unknown_usages as unknown as Prisma.InputJsonValue,
             privacyFlags: payload.privacy_flags as Prisma.InputJsonValue,
