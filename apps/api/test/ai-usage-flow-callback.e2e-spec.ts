@@ -199,9 +199,16 @@ describe("AIUsageFlow Callback Endpoint (e2e) [MW-aiuf-001]", () => {
       app,
       validPayload({
         flow_data: {
+          ...validFlowData(),
           claims: [
             {
               claim_id: "claim-1",
+              claim_field: "automation_level",
+              claim_value: { automationLevel: "FULLY_AUTOMATED" },
+              lifecycle_state: "VALIDATED",
+              confidence: 0.91,
+              conflict_refs: null,
+              evidence_refs: ["evidence-report-1::finding-1"],
               source_code: "const key = 'ghp_secret12345678901234567890'",
             },
           ],
@@ -218,7 +225,13 @@ describe("AIUsageFlow Callback Endpoint (e2e) [MW-aiuf-001]", () => {
   });
 
   it("T07 accepts empty claims when no AI usage was found", async () => {
-    const response = await callback(app, validPayload({ claims: [] }));
+    const response = await callback(
+      app,
+      validPayload({
+        claims: [],
+        flow_data: { ...validFlowData(), claims: [] },
+      }),
+    );
     const body = successBody<AIUsageFlowCallbackDto>(response);
 
     assert.equal(response.status, 200);
@@ -241,6 +254,36 @@ describe("AIUsageFlow Callback Endpoint (e2e) [MW-aiuf-001]", () => {
       where: { id: body.ai_usage_flow_id },
     });
     assert.deepEqual(flow?.claims, validPayload().claims);
+  });
+
+  it("rejects rich claims whose evidence does not match the compact callback", async () => {
+    const response = await callback(
+      app,
+      validPayload({
+        flow_data: {
+          ...validFlowData(),
+          claims: [
+            {
+              claim_id: "claim-1",
+              claim_field: "automation_level",
+              claim_value: { automationLevel: "FULLY_AUTOMATED" },
+              lifecycle_state: "VALIDATED",
+              confidence: 0.91,
+              conflict_refs: null,
+              evidence_refs: ["different-evidence"],
+            },
+          ],
+        },
+      }),
+    );
+
+    assertError(
+      response.status,
+      response.body,
+      422,
+      SCAN_ERROR_CODES.aiUsageFlowSchemaInvalid,
+    );
+    await assertNoFlowMutation(prisma);
   });
 
   it("rejects a missing technical profile and does not expose an update path", async () => {
