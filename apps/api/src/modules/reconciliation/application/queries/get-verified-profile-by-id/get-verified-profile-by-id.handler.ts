@@ -25,15 +25,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function toMergedProfile(profileData: unknown): Record<string, unknown> {
   const data = asRecord(profileData);
   if (!data) return {};
-  return (
-    asRecord(data.merged_profile) ?? asRecord(data.mergedProfile) ?? {}
-  );
+  return asRecord(data.merged_profile) ?? asRecord(data.mergedProfile) ?? {};
 }
 
 function toFactEvidenceRefs(profileData: unknown): Record<string, string[]> {
   const data = asRecord(profileData);
   if (!data) return {};
-  const raw = asRecord(data.fact_evidence_refs) ?? asRecord(data.factEvidenceRefs);
+  const raw =
+    asRecord(data.fact_evidence_refs) ?? asRecord(data.factEvidenceRefs);
   if (!raw) return {};
 
   const mapped: Record<string, string[]> = {};
@@ -42,7 +41,10 @@ function toFactEvidenceRefs(profileData: unknown): Record<string, string[]> {
     mapped[field] = [
       ...new Set(
         refs
-          .filter((ref): ref is string => typeof ref === "string" && Boolean(ref.trim()))
+          .filter(
+            (ref): ref is string =>
+              typeof ref === "string" && Boolean(ref.trim()),
+          )
           .map((ref) => ref.trim()),
       ),
     ].sort();
@@ -58,7 +60,10 @@ function toEvidenceRefs(profileData: unknown): string[] {
   return [
     ...new Set(
       raw
-        .filter((ref): ref is string => typeof ref === "string" && Boolean(ref.trim()))
+        .filter(
+          (ref): ref is string =>
+            typeof ref === "string" && Boolean(ref.trim()),
+        )
         .map((ref) => ref.trim()),
     ),
   ].sort();
