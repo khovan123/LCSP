@@ -22,10 +22,15 @@ type ResultEnvelope<T> = {
 
 const documentId = "LAW-134-2025-QH15";
 const unknownFactPolicy = "BLOCK_ON_UNKNOWN";
+const unknownValues = new Set([
+  "UNKNOWN",
+  "UNCLEAR",
+  "NOT_DETERMINABLE_FROM_CODE",
+]);
 
-// The worker evaluates only evidence-backed verified-profile facts. Each rule
-// below is deliberately narrow: it represents an applicable obligation, not a
-// conclusion that the obligation has been satisfied.
+// These are authoring candidates, not legal conclusions. The script deliberately
+// leaves the catalog in DRAFT unless approval is explicitly requested after the
+// applicability logic and legal-role scope have been reviewed.
 const rules: Rule[] = [
   {
     legalRuleId: "LAW-134-2025-QH15-ART-9-HIGH-RISK-IMPACT",
@@ -103,10 +108,6 @@ const rules: Rule[] = [
         field: "potentialHarmCategories",
         expectedValue: ["POTENTIAL_HIGH_IMPACT"],
       },
-      {
-        field: "riskDocumentationEvidence",
-        expectedValue: "NOT_DETERMINABLE_FROM_CODE",
-      },
     ],
     citations: [
       { locator: "art-14::cl-1::pt-a" },
@@ -156,6 +157,48 @@ const rules: Rule[] = [
   },
 ];
 
+function validateCandidateRules(): void {
+  const ids = new Set<string>();
+  for (const rule of rules) {
+    if (!rule.legalRuleId.trim() || ids.has(rule.legalRuleId)) {
+      throw new Error(`Duplicate or empty legalRuleId: ${rule.legalRuleId}`);
+    }
+    ids.add(rule.legalRuleId);
+
+    if (!rule.ruleFamily.trim()) {
+      throw new Error(`${rule.legalRuleId}: ruleFamily is required`);
+    }
+    if (rule.requiredFacts.length === 0) {
+      throw new Error(`${rule.legalRuleId}: at least one required fact is required`);
+    }
+    if (rule.citations.length === 0) {
+      throw new Error(`${rule.legalRuleId}: at least one citation is required`);
+    }
+
+    for (const fact of rule.requiredFacts) {
+      if (!fact.field.trim()) {
+        throw new Error(`${rule.legalRuleId}: required fact field is empty`);
+      }
+      if (
+        typeof fact.expectedValue === "string" &&
+        unknownValues.has(fact.expectedValue.trim().toUpperCase())
+      ) {
+        throw new Error(
+          `${rule.legalRuleId}: unknown value ${fact.expectedValue} cannot be authored as a positive required fact`,
+        );
+      }
+    }
+
+    for (const citation of rule.citations) {
+      if (!/^art-\d+(?:::[a-z]+-[^:]+)*$/u.test(citation.locator)) {
+        throw new Error(
+          `${rule.legalRuleId}: invalid citation locator ${citation.locator}`,
+        );
+      }
+    }
+  }
+}
+
 async function request<T>(
   url: string,
   token: string,
@@ -179,10 +222,15 @@ async function request<T>(
 }
 
 async function main(): Promise<void> {
+  validateCandidateRules();
+
   const apiUrl = process.env.LCSP_API_URL ?? "http://127.0.0.1:8080";
   const token = process.env.LCSP_SESSION_TOKEN ?? process.env.TOKEN;
   const corpusVersionId = process.env.LEGAL_CORPUS_VERSION_ID;
   const version = process.env.LEGAL_RULE_CATALOG_VERSION;
+  const approveRequested = ["1", "true", "yes"].includes(
+    (process.env.LEGAL_RULE_CATALOG_APPROVE ?? "").trim().toLowerCase(),
+  );
 
   if (!token || !corpusVersionId || !version) {
     throw new Error(
@@ -217,6 +265,25 @@ async function main(): Promise<void> {
     );
   }
 
+  if (!approveRequested) {
+    console.log(
+      JSON.stringify(
+        {
+          catalogVersionId: catalog.id,
+          status: "DRAFT",
+          ruleCount: rules.length,
+          corpusVersionId,
+          approval: "NOT_REQUESTED",
+          reviewRequired:
+            "Applicability logic, including provider/deployer/developer/user role scope, must be reviewed before approval.",
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   const approved = await request<{ id: string; status: string }>(
     `${apiUrl}/internal/legal-rule-catalog/versions/${catalog.id}/approve`,
     token,
@@ -230,6 +297,7 @@ async function main(): Promise<void> {
         status: approved.status,
         ruleCount: rules.length,
         corpusVersionId,
+        approval: "EXPLICITLY_REQUESTED",
       },
       null,
       2,
