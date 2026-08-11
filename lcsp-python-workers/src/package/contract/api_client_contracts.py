@@ -15,6 +15,7 @@ class CallbackPath(StrEnum):
     CLASSIFICATION = "/internal/classification/result-callback"
     AUDIT_EXPORT = "/internal/callbacks/audit-export/{export_request_id}"
     TARGETED_REANALYSIS_CLAIM = "/internal/targeted-reanalysis/{request_id}/claim"
+    TARGETED_REANALYSIS_REQUEUE = "/internal/targeted-reanalysis/{request_id}/requeue"
     TARGETED_REANALYSIS_TERMINAL = "/internal/targeted-reanalysis/{request_id}/terminal"
 
 

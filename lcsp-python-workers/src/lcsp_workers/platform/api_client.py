@@ -344,6 +344,11 @@ class WorkerApiClient:
             {"state": state, "safe_failure_code": safe_failure_code},
         )
 
+    def requeue_targeted_reanalysis_request(self, request_id: str) -> bool:
+        path = CallbackPath.TARGETED_REANALYSIS_REQUEUE.format(request_id=request_id)
+        data = self._post_with_retry(path, {})
+        return bool(data.get("requeued"))
+
     def _post_targeted_reanalysis_terminal(self, request_id: str, payload: dict) -> dict:
         path = CallbackPath.TARGETED_REANALYSIS_TERMINAL.format(request_id=request_id)
         return self._post_with_retry(path, payload)
