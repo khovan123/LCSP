@@ -87,9 +87,6 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
     const requestId = randomUUID();
     const scanJobId = randomUUID();
     const checkpointRef = `checkpoint:${requestId}`;
-    const normalizedScope = input.pathPrefixes
-      ? { pathPrefixes: [...input.pathPrefixes].sort() }
-      : { subjectRefs: [...(input.subjectRefs ?? [])].sort() };
     const [report, snapshot] = await Promise.all([
       this.prisma.technicalEvidenceReport.findFirst({
         where: {
@@ -99,7 +96,7 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           snapshotId: input.snapshotId,
           status: "ACCEPTED",
         },
-        select: { id: true },
+        select: { id: true, evidencePayload: true },
       }),
       this.prisma.repositorySnapshot.findFirst({
         where: {
@@ -118,6 +115,11 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
         { status: HttpStatus.NOT_FOUND },
       );
     }
+    const normalizedScope = this.resolveScope(
+      input,
+      report.evidencePayload,
+      correlationId,
+    );
     const created = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`
         SELECT pg_advisory_xact_lock(hashtext(${organizationId}))
@@ -285,4 +287,116 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
         { status: HttpStatus.BAD_REQUEST },
       );
   }
+
+  private resolveScope(
+    input: RequestTargetedReanalysisCommand["input"],
+    evidencePayload: unknown,
+    correlationId: string,
+  ): { pathPrefixes: string[] } {
+    if (input.pathPrefixes) {
+      return { pathPrefixes: [...input.pathPrefixes].sort() };
+    }
+
+    const pathPrefixes = resolveSubjectRefPathPrefixes(
+      evidencePayload,
+      input.subjectRefs ?? [],
+    );
+    if (pathPrefixes.length === 0) {
+      throw problemException(
+        SCAN_ERROR_CODES.targetedReanalysisInvalidScope,
+        correlationId,
+        { status: HttpStatus.BAD_REQUEST },
+      );
+    }
+    return { pathPrefixes };
+  }
+}
+
+const SUBJECT_REF_KINDS = {
+  finding: "finding",
+  node: "node",
+  symbol: "symbol",
+} as const;
+
+type SubjectRefKind =
+  (typeof SUBJECT_REF_KINDS)[keyof typeof SUBJECT_REF_KINDS];
+
+type EvidenceRecord = Record<string, unknown>;
+
+function resolveSubjectRefPathPrefixes(
+  evidencePayload: unknown,
+  subjectRefs: string[],
+): string[] {
+  const records = collectEvidenceRecords(evidencePayload);
+  const prefixes = new Set<string>();
+  for (const subjectRef of subjectRefs) {
+    const parsed = parseSubjectRef(subjectRef);
+    if (!parsed) continue;
+    for (const record of records) {
+      if (!matchesSubjectRef(record, parsed.kind, parsed.id)) continue;
+      const pathPrefix = toPathPrefix(readFilePath(record));
+      if (pathPrefix) prefixes.add(pathPrefix);
+    }
+  }
+  return [...prefixes].sort();
+}
+
+function collectEvidenceRecords(value: unknown): EvidenceRecord[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectEvidenceRecords(item));
+  }
+  if (!isEvidenceRecord(value)) return [];
+  return [
+    value,
+    ...Object.values(value).flatMap((item) => collectEvidenceRecords(item)),
+  ];
+}
+
+function isEvidenceRecord(value: unknown): value is EvidenceRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseSubjectRef(
+  value: string,
+): { kind: SubjectRefKind; id: string } | null {
+  const [kind, id, ...rest] = value.split(":");
+  if (rest.length > 0 || !id || !(kind in SUBJECT_REF_KINDS)) return null;
+  return { kind: kind as SubjectRefKind, id };
+}
+
+function matchesSubjectRef(
+  record: EvidenceRecord,
+  kind: SubjectRefKind,
+  id: string,
+): boolean {
+  if (kind === SUBJECT_REF_KINDS.finding) {
+    return (
+      record.finding_id === id ||
+      record.findingId === id ||
+      (Array.isArray(record.finding_ids) && record.finding_ids.includes(id)) ||
+      (Array.isArray(record.findingIds) && record.findingIds.includes(id))
+    );
+  }
+  if (kind === SUBJECT_REF_KINDS.node) {
+    return record.node_id === id || record.nodeId === id;
+  }
+  return record.symbol_id === id || record.symbolId === id;
+}
+
+function readFilePath(record: EvidenceRecord): string | null {
+  const value = record.file_path ?? record.filePath;
+  return typeof value === "string" ? value : null;
+}
+
+function toPathPrefix(filePath: string | null): string | null {
+  if (
+    !filePath ||
+    filePath.startsWith("/") ||
+    filePath.split("/").includes("..")
+  ) {
+    return null;
+  }
+  const separatorIndex = filePath.lastIndexOf("/");
+  if (separatorIndex <= 0) return null;
+  return `${filePath.slice(0, separatorIndex + 1)}`;
 }
