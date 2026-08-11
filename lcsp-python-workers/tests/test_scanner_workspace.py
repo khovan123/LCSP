@@ -337,7 +337,7 @@ def test_scan_consumer_uses_internal_snapshot_service_and_cleans_up(
 
 @pytest.mark.p0
 @pytest.mark.integration
-def test_scan_consumer_posts_callback_before_workspace_cleanup(
+def test_scan_consumer_verifies_workspace_cleanup_before_callback(
     workspace_dir: Path,
 ) -> None:
     workspace = ScannerWorkspace(root_path=workspace_dir / "scanner")
@@ -364,12 +364,12 @@ def test_scan_consumer_posts_callback_before_workspace_cleanup(
     deptry_tool.run.return_value = _mock_deptry_result()
     api_client = MagicMock()
 
-    def assert_workspace_exists_during_callback(scan_job_id, payload) -> None:
+    def assert_workspace_is_cleaned_before_callback(scan_job_id, payload) -> None:
         assert scan_job_id == "job-6"
         assert payload.scan_job_id == "job-6"
-        assert workspace.workspace_path("job-6").exists()
+        assert not workspace.workspace_path("job-6").exists()
 
-    api_client.post_scan_callback.side_effect = assert_workspace_exists_during_callback
+    api_client.post_scan_callback.side_effect = assert_workspace_is_cleaned_before_callback
     consumer = ScanConsumer(
         config,
         snapshot_client=snapshot_client,
