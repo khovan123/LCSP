@@ -14,6 +14,7 @@ import { TraceStaticFlowHandler } from "./application/queries/trace-static-flow/
 import { InspectHumanReviewPathHandler } from "./application/queries/inspect-human-review-path/inspect-human-review-path.handler.js";
 import { GetScanCoverageHandler } from "./application/queries/get-scan-coverage/get-scan-coverage.handler.js";
 import { InspectDecisionPathHandler } from "./application/queries/inspect-decision-path/inspect-decision-path.handler.js";
+import { InspectDataPathHandler } from "./application/queries/inspect-data-path/inspect-data-path.handler.js";
 import { EvidenceRedactorService } from "./application/services/evidence/evidence-redactor.service.js";
 import {
   EvidenceController,
@@ -34,6 +35,7 @@ import {
     InspectHumanReviewPathHandler,
     GetScanCoverageHandler,
     InspectDecisionPathHandler,
+    InspectDataPathHandler,
     AcceptTechnicalProfileHandler,
     EvidenceRedactorService,
     WorkerApiKeyGuard,
