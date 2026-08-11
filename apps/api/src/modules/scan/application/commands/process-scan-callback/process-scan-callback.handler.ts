@@ -27,6 +27,7 @@ import {
   SCAN_ERROR_CODES,
   SCAN_EVENT_TYPES,
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
+  TARGETED_REANALYSIS_CHECKPOINT_STATES,
   TARGETED_REANALYSIS_REQUEST_STATES,
 } from "@lcsp/contracts/scan";
 
@@ -177,6 +178,18 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
             }
           : {
               state: TARGETED_REANALYSIS_REQUEST_STATES.completed,
+              outputEvidenceReportId: reportId,
+            },
+      });
+      await tx.targetedReanalysisCheckpoint.updateMany({
+        where: { request: { scanJobId: job.id } },
+        data: isRejected
+          ? {
+              state: TARGETED_REANALYSIS_CHECKPOINT_STATES.failed,
+              safeFailureCode: rejectionReason,
+            }
+          : {
+              state: TARGETED_REANALYSIS_CHECKPOINT_STATES.completed,
               outputEvidenceReportId: reportId,
             },
       });

@@ -457,6 +457,16 @@ enum TargetedReanalysisRequestState {
   DLQ
 }
 
+enum TargetedReanalysisCheckpointState {
+  PENDING_DISPATCH
+  DISPATCHED
+  RUNNING
+  RETRY_SCHEDULED
+  COMPLETED
+  FAILED
+  DLQ
+}
+
 enum OutboxStatus {
   PENDING
   PUBLISHED
@@ -568,6 +578,7 @@ model TargetedReanalysisRequest {
   outputEvidenceReportId String?
   safeFailureCode       String?
   correlationId         String
+  checkpoint            TargetedReanalysisCheckpoint?
   createdAt             DateTime                       @default(now())
   updatedAt             DateTime                       @updatedAt
 
@@ -576,6 +587,22 @@ model TargetedReanalysisRequest {
   @@index([assessmentId, createdAt])
   @@index([inputEvidenceReportId])
   @@index([snapshotId])
+}
+
+model TargetedReanalysisCheckpoint {
+  id                     String                            @id
+  requestId              String                            @unique
+  state                  TargetedReanalysisCheckpointState @default(PENDING_DISPATCH)
+  apiPublishAttempts     Int                               @default(0)
+  workerDeliveryAttempts Int                               @default(0)
+  outputEvidenceReportId String?
+  safeFailureCode        String?
+  correlationId          String
+  createdAt              DateTime                          @default(now())
+  updatedAt              DateTime                          @updatedAt
+  request                TargetedReanalysisRequest         @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([state, updatedAt])
 }
 
 model TechnicalEvidenceReport {

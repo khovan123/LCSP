@@ -25,12 +25,16 @@ function buildHandler() {
   const targetedReanalysisRequest = {
     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
   };
+  const targetedReanalysisCheckpoint = {
+    updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+  };
   const outboxMessage = { create: jest.fn().mockResolvedValue(undefined) };
   const authAuditEvent = { create: jest.fn().mockResolvedValue(undefined) };
   const transaction = {
     repositoryScanJob,
     technicalEvidenceReport,
     targetedReanalysisRequest,
+    targetedReanalysisCheckpoint,
     outboxMessage,
     authAuditEvent,
   };

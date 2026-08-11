@@ -171,6 +171,9 @@ describe("InternalTargetedReanalysisController", () => {
     const $executeRaw = jest.fn().mockResolvedValue(undefined);
     const transaction = {
       targetedReanalysisRequest: { findUnique, count, updateMany },
+      targetedReanalysisCheckpoint: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       $executeRaw,
     };
     const prisma = {
@@ -205,6 +208,9 @@ describe("InternalTargetedReanalysisController", () => {
     });
     const transaction = {
       targetedReanalysisRequest: { findUnique },
+      targetedReanalysisCheckpoint: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       $executeRaw: jest.fn(),
     };
     const prisma = {

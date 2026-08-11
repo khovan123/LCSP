@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import {
   TARGETED_REANALYSIS_CAPACITY_POLICY,
+  TARGETED_REANALYSIS_CHECKPOINT_STATES,
   TARGETED_REANALYSIS_REQUEST_STATES,
 } from "@lcsp/contracts/scan";
 import {
@@ -172,6 +173,18 @@ export class OutboxRepository {
           : {}),
       },
     });
+    await tx.targetedReanalysisCheckpoint.updateMany({
+      where: { requestId },
+      data: {
+        apiPublishAttempts: attempts,
+        ...(terminalFailureCode
+          ? {
+              state: TARGETED_REANALYSIS_CHECKPOINT_STATES.dlq,
+              safeFailureCode: terminalFailureCode,
+            }
+          : {}),
+      },
+    });
   }
 
   /**
@@ -223,6 +236,12 @@ export class OutboxRepository {
       },
       data: { state: TARGETED_REANALYSIS_REQUEST_STATES.dispatched },
     });
+    if (claimed.count === 1) {
+      await tx.targetedReanalysisCheckpoint.updateMany({
+        where: { requestId },
+        data: { state: TARGETED_REANALYSIS_CHECKPOINT_STATES.dispatched },
+      });
+    }
     return claimed.count === 1;
   }
 
