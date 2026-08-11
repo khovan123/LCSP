@@ -14,6 +14,11 @@ type Rule = {
   citations: Citation[];
 };
 
+type DeferredRule = {
+  legalBasis: string;
+  reason: string;
+};
+
 type ResultEnvelope<T> = {
   ok: boolean;
   data?: T;
@@ -144,18 +149,29 @@ const rules: Rule[] = [
       { locator: "art-14::cl-2::pt-d" },
     ],
   },
+];
+
+// Article 15 is intentionally not authored yet. Legal matching runs before risk
+// classification, so `aiInteractionDisclosurePresent = ABSENT` cannot be used to
+// prove that a system is medium-risk without creating a circular classification
+// dependency. Add this family only after a non-circular, evidence-backed medium-
+// risk applicability fact exists in VerifiedProfile.
+const deferredRules: DeferredRule[] = [
   {
-    legalRuleId: "LAW-134-2025-QH15-ART-15-MEDIUM-RISK-TRANSPARENCY-GAP",
-    ruleFamily: "AI_MEDIUM_RISK_GOVERNANCE",
-    requiredFacts: [
-      { field: "aiInteractionDisclosurePresent", expectedValue: "ABSENT" },
-    ],
-    citations: [
-      { locator: "art-9::cl-1::pt-b" },
-      { locator: "art-15::cl-1::pt-a" },
-    ],
+    legalBasis: "LAW-134-2025-QH15::art-15",
+    reason: "MEDIUM_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED",
   },
 ];
+
+function containsUnknownValue(value: unknown): boolean {
+  if (typeof value === "string") {
+    return unknownValues.has(value.trim().toUpperCase());
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => containsUnknownValue(item));
+  }
+  return false;
+}
 
 function validateCandidateRules(): void {
   const ids = new Set<string>();
@@ -181,12 +197,9 @@ function validateCandidateRules(): void {
       if (!fact.field.trim()) {
         throw new Error(`${rule.legalRuleId}: required fact field is empty`);
       }
-      if (
-        typeof fact.expectedValue === "string" &&
-        unknownValues.has(fact.expectedValue.trim().toUpperCase())
-      ) {
+      if (containsUnknownValue(fact.expectedValue)) {
         throw new Error(
-          `${rule.legalRuleId}: unknown value ${fact.expectedValue} cannot be authored as a positive required fact`,
+          `${rule.legalRuleId}: unknown value cannot be authored as a positive required fact`,
         );
       }
     }
@@ -276,6 +289,7 @@ async function main(): Promise<void> {
           ruleCount: rules.length,
           corpusVersionId,
           approval: "NOT_REQUESTED",
+          deferredRules,
           reviewRequired:
             "Applicability logic, including provider/deployer/developer/user role scope, must be reviewed before approval.",
         },
@@ -300,6 +314,7 @@ async function main(): Promise<void> {
         ruleCount: rules.length,
         corpusVersionId,
         approval: "EXPLICITLY_REQUESTED",
+        deferredRules,
       },
       null,
       2,
