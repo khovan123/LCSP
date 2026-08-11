@@ -83,6 +83,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
           status: toPrismaRepositoryScanJobStatus(
             REPOSITORY_SCAN_JOB_STATUSES.running,
           ),
+          attemptCount: { increment: 1 },
         },
       });
       if (claim.count !== 1) {

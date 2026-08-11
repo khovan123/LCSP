@@ -13,6 +13,9 @@ export const OUTBOX_STATUSES = {
 } as const;
 
 export const OUTBOX_AUDIT_EVENT_TYPES = {
+  retryScheduled: "OUTBOX_RETRY_SCHEDULED",
+  dlqEntered: "OUTBOX_DLQ_ENTERED",
+  dlqReplayDenied: "OUTBOX_DLQ_REPLAY_DENIED",
   dlqReplayed: "OUTBOX_DLQ_REPLAYED",
   dlqDiscarded: "OUTBOX_DLQ_DISCARDED",
 } as const;
