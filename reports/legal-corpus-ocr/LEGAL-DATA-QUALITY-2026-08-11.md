@@ -120,7 +120,11 @@ previously conflated:
 
 `NOT_DETERMINABLE_FROM_CODE` is explicitly treated as unknown and cannot be used
 as a positive fact proving that a legal obligation applies or has been
-violated.
+violated. Unknown markers inside list-valued facts are also treated as unknown.
+
+Malformed or empty `requiredFacts` now fail closed as `BLOCKED_UNKNOWN_FACT`.
+They can no longer behave like a zero-condition rule and become `MATCHED` merely
+because the VerifiedProfile contains some evidence reference.
 
 List-valued facts use containment semantics. Example: a rule requiring
 `POTENTIAL_HIGH_IMPACT` still matches a verified profile that contains that
@@ -137,15 +141,32 @@ utility, not an implicit approval utility:
 
 - duplicate/empty rule IDs are rejected;
 - every candidate needs required facts and citation locators;
-- unknown values (`UNKNOWN`, `UNCLEAR`, `NOT_DETERMINABLE_FROM_CODE`) cannot be
-  authored as positive required facts;
+- unknown values (`UNKNOWN`, `UNCLEAR`, `NOT_DETERMINABLE_FROM_CODE`), including
+  unknown markers nested in expected-value arrays, cannot be authored as
+  positive required facts;
 - the previous Article 14 rule no longer treats
   `riskDocumentationEvidence = NOT_DETERMINABLE_FROM_CODE` as a positive match;
 - the catalog remains `DRAFT` by default;
 - approval happens only when `LEGAL_RULE_CATALOG_APPROVE` is explicitly set to
   `1`, `true`, or `yes`.
 
-The baseline still requires human/domain review of legal-role applicability
+### Deferred Article 15 candidate
+
+The previous `ART-15-MEDIUM-RISK-TRANSPARENCY-GAP` candidate has been removed
+from the authored baseline and is reported as deferred with reason
+`MEDIUM_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED`.
+
+Reason: legal matching is an input to risk classification. The current
+VerifiedProfile does not contain a non-circular, evidence-backed fact proving
+that the system is already in the Article 15 medium-risk class. Using
+`aiInteractionDisclosurePresent = ABSENT` alone would be unsound because the
+same disclosure gap can exist on a high-risk system and therefore cannot prove
+medium-risk applicability.
+
+The Article 15 family should be authored only after LCSP has a non-circular
+applicability basis for medium-risk scope.
+
+The remaining baseline still requires domain review of legal-role applicability
 (provider/deployer/developer/user scope) before production approval because the
 current VerifiedProfile does not yet expose a sufficiently explicit legal-role
 fact for those obligations.
@@ -160,7 +181,8 @@ The branch adds/extends tests for:
 - reviewed-dir/source-manifest handoff;
 - exact reviewed source provenance;
 - known mismatch versus unknown fact behavior;
-- `NOT_DETERMINABLE_FROM_CODE` blocking;
+- `NOT_DETERMINABLE_FROM_CODE` and unknown-list blocking;
+- malformed/empty required-fact fail-closed behavior;
 - additive list matching;
 - value-aware blocking facts;
 - independent technical review/approval audit-principal sign-off policy.
