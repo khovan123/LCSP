@@ -81,6 +81,57 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
     const normalizedScope = input.pathPrefixes
       ? { pathPrefixes: [...input.pathPrefixes].sort() }
       : { subjectRefs: [...(input.subjectRefs ?? [])].sort() };
+    const [report, snapshot] = await Promise.all([
+      this.prisma.technicalEvidenceReport.findFirst({
+        where: {
+          id: input.inputEvidenceReportId,
+          assessmentId: input.assessmentId,
+          organizationId,
+          snapshotId: input.snapshotId,
+          status: "ACCEPTED",
+        },
+        select: { id: true },
+      }),
+      this.prisma.repositorySnapshot.findFirst({
+        where: {
+          id: input.snapshotId,
+          assessmentId: input.assessmentId,
+          organizationId,
+          commitSha: input.commitSha,
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (!report || !snapshot) {
+      throw problemException(
+        SCAN_ERROR_CODES.evidenceReportNotFound,
+        correlationId,
+        { status: HttpStatus.NOT_FOUND },
+      );
+    }
+    const now = new Date();
+    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const [fifteenMinuteCount, dailyCount] = await Promise.all([
+      this.prisma.targetedReanalysisRequest.count({
+        where: { organizationId, createdAt: { gte: fifteenMinutesAgo } },
+      }),
+      this.prisma.targetedReanalysisRequest.count({
+        where: { organizationId, createdAt: { gte: twentyFourHoursAgo } },
+      }),
+    ]);
+    if (
+      fifteenMinuteCount >=
+        TARGETED_REANALYSIS_CAPACITY_POLICY.maxRequestsPerFifteenMinutes ||
+      dailyCount >=
+        TARGETED_REANALYSIS_CAPACITY_POLICY.maxRequestsPerTwentyFourHours
+    ) {
+      throw problemException(
+        SCAN_ERROR_CODES.targetedReanalysisRateLimited,
+        correlationId,
+        { status: HttpStatus.TOO_MANY_REQUESTS },
+      );
+    }
     const activeCount = await this.prisma.targetedReanalysisRequest.count({
       where: {
         organizationId,
