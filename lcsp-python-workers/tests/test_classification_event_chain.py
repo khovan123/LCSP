@@ -24,8 +24,13 @@ class EventChainApiClient:
                 "businessProcess": "AUTOMATED_DECISION",
                 "automationLevel": "FULLY_AUTOMATED",
             },
+            "factEvidenceRefs": {
+                "businessProcess": ["evidence-business-process"],
+                "automationLevel": ["evidence-automation-level"],
+            },
             "evidenceRefs": [
-                {"id": "evidence-1", "lifecycle": "VERIFIED", "confidence": 0.95}
+                "evidence-business-process",
+                "evidence-automation-level",
             ],
         }
 

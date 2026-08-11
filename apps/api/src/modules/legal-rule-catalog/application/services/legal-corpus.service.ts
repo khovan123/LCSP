@@ -15,6 +15,9 @@ import type {
   LegalCorpusDocumentInput,
 } from "../contracts/legal-corpus.contract.js";
 
+const INDEPENDENT_AUDIT_PRINCIPAL_POLICY =
+  "TECHNICAL_AUDIT_PRINCIPALS_INDEPENDENT";
+
 interface LegalReviewDocumentSignoff {
   documentId: string;
   reviewState: "APPROVED";
@@ -28,6 +31,8 @@ interface LegalReviewDocumentSignoff {
 interface LegalReviewSignoff {
   state: "APPROVED";
   reviewedBy: string;
+  identityPolicy: string | null;
+  approvalActorMayDiffer: boolean;
   documents: LegalReviewDocumentSignoff[];
 }
 
@@ -130,7 +135,10 @@ export class LegalCorpusService {
       })),
       input.correlationId,
     );
-    if (reviewSignoff.reviewedBy !== input.approvedBy) {
+    if (
+      reviewSignoff.reviewedBy !== input.approvedBy &&
+      !reviewSignoff.approvalActorMayDiffer
+    ) {
       throw problemException(
         LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
         input.correlationId,
@@ -158,7 +166,7 @@ export class LegalCorpusService {
       await tx.corpusApprovalRecord.create({
         data: {
           legalCorpusVersionId: corpus.id,
-          approvedBy: reviewSignoff.reviewedBy,
+          approvedBy: input.approvedBy,
           status: toPrismaLegalRuleLifecycleStatus(
             LEGAL_RULE_LIFECYCLE_STATUSES.approved,
           ),
@@ -320,6 +328,14 @@ export class LegalCorpusService {
       return invalid("legal_operator_signoff_invalid");
     }
 
+    const identityPolicy = stringValue(rawSignoff.identityPolicy) || null;
+    const approvalActorMayDiffer =
+      rawSignoff.approvalActorMayDiffer === true &&
+      identityPolicy === INDEPENDENT_AUDIT_PRINCIPAL_POLICY;
+    if (rawSignoff.approvalActorMayDiffer === true && !approvalActorMayDiffer) {
+      return invalid("legal_operator_identity_policy_invalid");
+    }
+
     const documents: LegalReviewDocumentSignoff[] = [];
     for (const rawDocument of rawDocuments) {
       if (!isRecord(rawDocument)) {
@@ -379,6 +395,8 @@ export class LegalCorpusService {
     return {
       state: "APPROVED",
       reviewedBy,
+      identityPolicy,
+      approvalActorMayDiffer,
       documents,
     };
   }

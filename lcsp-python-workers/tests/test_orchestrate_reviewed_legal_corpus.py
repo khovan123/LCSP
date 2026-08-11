@@ -57,7 +57,7 @@ def _write_review_files(tmp_path: Path, *, state: str = "APPROVED") -> None:
         "documentId": "LAW-TEST",
         "reviewedSourceSha256": "sha256:" + "a" * 64,
         "reviewedTextSha256": sha256_file(reviewed_text),
-        "reviewedBy": "legal-operator-1",
+        "reviewedBy": "legal-review-gate",
         "reviewedAt": "2026-08-11T00:00:00+07:00",
         "reviewState": state,
         "hierarchyCorrections": [],
@@ -73,7 +73,9 @@ def test_build_review_signoff_requires_approved_review(tmp_path: Path) -> None:
     signoff = build_review_signoff(_payload(), reviewed_dir=tmp_path)
 
     assert signoff["state"] == "APPROVED"
-    assert signoff["reviewedBy"] == "legal-operator-1"
+    assert signoff["reviewedBy"] == "legal-review-gate"
+    assert signoff["identityPolicy"] == "TECHNICAL_AUDIT_PRINCIPALS_INDEPENDENT"
+    assert signoff["approvalActorMayDiffer"] is True
     assert signoff["documents"][0]["documentId"] == "LAW-TEST"
     assert signoff["documents"][0]["reviewState"] == "APPROVED"
 
@@ -101,5 +103,11 @@ def test_enrich_payload_rejects_unresolved_normalization_warnings() -> None:
     with pytest.raises(ReviewGateError, match="Normalization warnings"):
         enrich_payload_with_signoff(
             payload,
-            {"state": "APPROVED", "reviewedBy": "legal-operator-1", "documents": []},
+            {
+                "state": "APPROVED",
+                "reviewedBy": "legal-review-gate",
+                "identityPolicy": "TECHNICAL_AUDIT_PRINCIPALS_INDEPENDENT",
+                "approvalActorMayDiffer": True,
+                "documents": [],
+            },
         )

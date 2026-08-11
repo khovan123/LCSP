@@ -24,7 +24,11 @@ class DummyApiClient:
                 "businessProcess": "AUTOMATED_DECISION",
                 "automationLevel": "FULLY_AUTOMATED",
             },
-            "evidenceRefs": [{"id": "e1", "lifecycle": "VERIFIED", "confidence": 0.9}],
+            "factEvidenceRefs": {
+                "businessProcess": ["e1"],
+                "automationLevel": ["e2"],
+            },
+            "evidenceRefs": ["e1", "e2"],
         }
 
     def get_active_legal_rule_catalog(self):
