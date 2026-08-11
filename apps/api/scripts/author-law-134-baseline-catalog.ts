@@ -33,43 +33,11 @@ const unknownValues = new Set([
   "NOT_DETERMINABLE_FROM_CODE",
 ]);
 
-// These are authoring candidates, not legal conclusions. The script deliberately
-// leaves the catalog in DRAFT unless approval is explicitly requested after the
-// applicability logic and legal-role scope have been reviewed.
+// These remain authoring candidates only. They are kept in DRAFT so the legal
+// operator can review locator selection and future applicability modelling.
+// Production approval is deliberately blocked below while legal-role scope is
+// not represented as an evidence-backed VerifiedProfile fact.
 const rules: Rule[] = [
-  {
-    legalRuleId: "LAW-134-2025-QH15-ART-9-HIGH-RISK-IMPACT",
-    ruleFamily: "AI_RISK_CLASSIFICATION",
-    requiredFacts: [
-      {
-        field: "potentialHarmCategories",
-        expectedValue: ["POTENTIAL_HIGH_IMPACT"],
-      },
-    ],
-    citations: [{ locator: "art-9::cl-1::pt-a" }, { locator: "art-9::cl-2" }],
-  },
-  {
-    legalRuleId: "LAW-134-2025-QH15-ART-10-HIGH-RISK-CLASSIFICATION",
-    ruleFamily: "AI_RISK_CLASSIFICATION",
-    requiredFacts: [
-      {
-        field: "potentialHarmCategories",
-        expectedValue: ["POTENTIAL_HIGH_IMPACT"],
-      },
-    ],
-    citations: [{ locator: "art-10::cl-1" }, { locator: "art-10::cl-3" }],
-  },
-  {
-    legalRuleId: "LAW-134-2025-QH15-ART-10-HIGH-RISK-SUPERVISION",
-    ruleFamily: "AI_RISK_SUPERVISION",
-    requiredFacts: [
-      {
-        field: "potentialHarmCategories",
-        expectedValue: ["POTENTIAL_HIGH_IMPACT"],
-      },
-    ],
-    citations: [{ locator: "art-10::cl-5::pt-a" }, { locator: "art-10::cl-6" }],
-  },
   {
     legalRuleId: "LAW-134-2025-QH15-ART-11-INTERACTION-DISCLOSURE-GAP",
     ruleFamily: "AI_TRANSPARENCY",
@@ -94,73 +62,40 @@ const rules: Rule[] = [
     ],
     citations: [{ locator: "art-12::cl-1" }, { locator: "art-12::cl-2" }],
   },
-  {
-    legalRuleId: "LAW-134-2025-QH15-ART-13-HIGH-RISK-CONFORMITY",
-    ruleFamily: "AI_CONFORMITY_ASSESSMENT",
-    requiredFacts: [
-      {
-        field: "potentialHarmCategories",
-        expectedValue: ["POTENTIAL_HIGH_IMPACT"],
-      },
-    ],
-    citations: [{ locator: "art-13::cl-1" }, { locator: "art-13::cl-3" }],
-  },
-  {
-    legalRuleId: "LAW-134-2025-QH15-ART-14-HIGH-RISK-RISK-MANAGEMENT",
-    ruleFamily: "AI_HIGH_RISK_GOVERNANCE",
-    requiredFacts: [
-      {
-        field: "potentialHarmCategories",
-        expectedValue: ["POTENTIAL_HIGH_IMPACT"],
-      },
-    ],
-    citations: [
-      { locator: "art-14::cl-1::pt-a" },
-      { locator: "art-14::cl-1::pt-c" },
-    ],
-  },
-  {
-    legalRuleId: "LAW-134-2025-QH15-ART-14-HIGH-RISK-HUMAN-OVERSIGHT-GAP",
-    ruleFamily: "AI_HIGH_RISK_GOVERNANCE",
-    requiredFacts: [
-      {
-        field: "potentialHarmCategories",
-        expectedValue: ["POTENTIAL_HIGH_IMPACT"],
-      },
-      { field: "interventionControlPresent", expectedValue: "ABSENT" },
-    ],
-    citations: [
-      { locator: "art-14::cl-1::pt-d" },
-      { locator: "art-14::cl-2::pt-b" },
-    ],
-  },
-  {
-    legalRuleId: "LAW-134-2025-QH15-ART-14-HIGH-RISK-INCIDENT-GAP",
-    ruleFamily: "AI_HIGH_RISK_GOVERNANCE",
-    requiredFacts: [
-      {
-        field: "potentialHarmCategories",
-        expectedValue: ["POTENTIAL_HIGH_IMPACT"],
-      },
-      { field: "incidentHandlingPresent", expectedValue: "ABSENT" },
-    ],
-    citations: [
-      { locator: "art-14::cl-1::pt-đ" },
-      { locator: "art-14::cl-2::pt-d" },
-    ],
-  },
 ];
 
-// Article 15 is intentionally not authored yet. Legal matching runs before risk
-// classification, so `aiInteractionDisclosurePresent = ABSENT` cannot be used to
-// prove that a system is medium-risk without creating a circular classification
-// dependency. Add this family only after a non-circular, evidence-backed medium-
-// risk applicability fact exists in VerifiedProfile.
+// The current scanner's HARM_POTENTIAL_SIGNAL is a technical heuristic (for
+// example a high-stakes-looking function name or domain package), not evidence
+// that the legal high-risk test in Articles 9/10 has been satisfied. Legal
+// matching also runs before classification, so medium-risk cannot be assumed
+// without creating a circular dependency. Keep these legal bases out of the
+// authored catalog until non-circular, evidence-backed applicability facts exist.
 const deferredRules: DeferredRule[] = [
+  {
+    legalBasis: "LAW-134-2025-QH15::art-9",
+    reason: "HIGH_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED",
+  },
+  {
+    legalBasis: "LAW-134-2025-QH15::art-10",
+    reason: "HIGH_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED",
+  },
+  {
+    legalBasis: "LAW-134-2025-QH15::art-13",
+    reason: "HIGH_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED",
+  },
+  {
+    legalBasis: "LAW-134-2025-QH15::art-14",
+    reason: "HIGH_RISK_AND_LEGAL_ROLE_APPLICABILITY_NOT_EVIDENCE_BACKED",
+  },
   {
     legalBasis: "LAW-134-2025-QH15::art-15",
     reason: "MEDIUM_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED",
   },
+];
+
+const approvalBlockers = [
+  "LEGAL_ROLE_APPLICABILITY_NOT_MODELED_IN_VERIFIED_PROFILE",
+  "DEFERRED_RISK_APPLICABILITY_RULES_REMAIN",
 ];
 
 function containsUnknownValue(value: unknown): boolean {
@@ -280,41 +215,24 @@ async function main(): Promise<void> {
     );
   }
 
-  if (!approveRequested) {
-    console.log(
-      JSON.stringify(
-        {
-          catalogVersionId: catalog.id,
-          status: "DRAFT",
-          ruleCount: rules.length,
-          corpusVersionId,
-          approval: "NOT_REQUESTED",
-          deferredRules,
-          reviewRequired:
-            "Applicability logic, including provider/deployer/developer/user role scope, must be reviewed before approval.",
-        },
-        null,
-        2,
-      ),
+  if (approveRequested) {
+    throw new Error(
+      `Catalog approval is blocked: ${approvalBlockers.join(", ")}. Keep this version DRAFT until these data-model gaps are resolved and the rules are re-authored/reviewed.`,
     );
-    return;
   }
-
-  const approved = await request<{ id: string; status: string }>(
-    `${apiUrl}/internal/legal-rule-catalog/versions/${catalog.id}/approve`,
-    token,
-    {},
-  );
 
   console.log(
     JSON.stringify(
       {
-        catalogVersionId: approved.id,
-        status: approved.status,
+        catalogVersionId: catalog.id,
+        status: "DRAFT",
         ruleCount: rules.length,
         corpusVersionId,
-        approval: "EXPLICITLY_REQUESTED",
+        approval: "BLOCKED_PENDING_DATA_MODEL_AND_LEGAL_REVIEW",
+        approvalBlockers,
         deferredRules,
+        reviewRequired:
+          "Applicability logic and provider/deployer/developer/user role scope must be evidence-backed and legally reviewed before production approval.",
       },
       null,
       2,
