@@ -34,6 +34,7 @@ import { TraceStaticFlowQuery } from "../../application/queries/trace-static-flo
 import { InspectHumanReviewPathQuery } from "../../application/queries/inspect-human-review-path/inspect-human-review-path.query.js";
 import { GetScanCoverageQuery } from "../../application/queries/get-scan-coverage/get-scan-coverage.query.js";
 import { InspectDecisionPathQuery } from "../../application/queries/inspect-decision-path/inspect-decision-path.query.js";
+import { InspectDataPathQuery } from "../../application/queries/inspect-data-path/inspect-data-path.query.js";
 import {
   FINDING_DETAIL_INCLUDES,
   type FindingDetailInclude,
@@ -66,6 +67,12 @@ import {
   DECISION_ACTION_CATEGORIES,
   type DecisionActionCategory,
 } from "../../application/contracts/evidence/decision-path.contract.js";
+import {
+  DATA_CATEGORIES,
+  DATA_PATH_DIRECTIONS,
+  type DataCategory,
+  type DataPathDirection,
+} from "../../application/contracts/evidence/data-path.contract.js";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { HttpStatus } from "@nestjs/common";
@@ -380,6 +387,42 @@ export class EvidenceController {
       ),
     );
   }
+
+  @Get(
+    ":assessmentId/evidence-reports/:evidenceReportId/data-path/:startNodeId",
+  )
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async inspectDataPath(
+    @Param("assessmentId") assessmentId: string,
+    @Param("evidenceReportId") evidenceReportId: string,
+    @Param("startNodeId") startNodeId: string,
+    @Query("direction") directionRaw: string | undefined,
+    @Query("data_categories") categoriesRaw: string | undefined,
+    @Query("max_hops") maxHopsRaw: string | undefined,
+    @Query("max_results") maxResultsRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new InspectDataPathQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          evidenceReportId,
+          startNodeId,
+          parseDataDirection(directionRaw, correlationId),
+          parseDataCategories(categoriesRaw, correlationId),
+          parseBoundedInteger(maxHopsRaw, 1, 20, correlationId),
+          parseBoundedInteger(maxResultsRaw, 1, 100, correlationId),
+          correlationId,
+        ),
+      ),
+    );
+  }
 }
 
 function parseFindingDetailInclude(
@@ -574,6 +617,40 @@ function parseDecisionActionCategories(
       status: HttpStatus.NOT_FOUND,
     });
   return categories as DecisionActionCategory[];
+}
+
+function parseDataDirection(
+  value: string | undefined,
+  correlationId: string,
+): DataPathDirection {
+  if (
+    !value ||
+    !Object.values(DATA_PATH_DIRECTIONS).includes(value as DataPathDirection)
+  )
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  return value as DataPathDirection;
+}
+function parseDataCategories(
+  value: string | undefined,
+  correlationId: string,
+): DataCategory[] {
+  const categories =
+    value?.split(",").map((item) => item.trim()) ??
+    Object.values(DATA_CATEGORIES);
+  if (
+    categories.length === 0 ||
+    categories.length > Object.keys(DATA_CATEGORIES).length ||
+    categories.some(
+      (item) => !Object.values(DATA_CATEGORIES).includes(item as DataCategory),
+    ) ||
+    new Set(categories).size !== categories.length
+  )
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  return categories as DataCategory[];
 }
 
 function parseBoundedInteger(
