@@ -1,6 +1,7 @@
 /** Shared value sets for the first protected agentic-evidence tools. */
 export const AGENTIC_TOOL_NAMES = {
   getArtifactChain: "get_artifact_chain",
+  getReconciliationContext: "get_reconciliation_context",
 } as const;
 
 export type AgenticToolName =
@@ -42,4 +43,5 @@ export type ArtifactChainIntegrity =
 
 export const AGENTIC_TOOL_EVENT_TYPES = {
   artifactChainRead: "AGENTIC_TOOL_ARTIFACT_CHAIN_READ",
+  reconciliationContextRead: "AGENTIC_TOOL_RECONCILIATION_CONTEXT_READ",
 } as const;
