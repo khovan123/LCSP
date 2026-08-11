@@ -101,6 +101,17 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
           for (const message of messages) {
             const now = new Date();
 
+            if (
+              message.aggregateType ===
+                OUTBOX_AGGREGATE_TYPES.targetedReanalysisRequest &&
+              !(await this.outboxRepository.reserveTargetedReanalysisDispatch(
+                tx,
+                message.aggregateId,
+              ))
+            ) {
+              continue;
+            }
+
             try {
               const headers = authorizationHeaders(message.payload);
               if (headers) {

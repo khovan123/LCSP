@@ -14,6 +14,7 @@ import {
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import {
+  TARGETED_REANALYSIS_CAPACITY_POLICY,
   TARGETED_REANALYSIS_REQUEST_STATES,
   type TargetedReanalysisTerminalState,
 } from "@lcsp/contracts/scan";
@@ -150,19 +151,47 @@ export class InternalTargetedReanalysisController {
   @HttpCode(200)
   @UseGuards(WorkerApiKeyGuard)
   async claimRequest(@Param("requestId") requestId: string) {
-    const request = await this.prisma.targetedReanalysisRequest.updateMany({
-      where: {
-        id: requestId,
-        state: {
-          in: [
-            TARGETED_REANALYSIS_REQUEST_STATES.queued,
-            TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
-          ],
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      const request = await tx.targetedReanalysisRequest.findUnique({
+        where: { id: requestId },
+        select: { organizationId: true, state: true },
+      });
+      if (
+        !request ||
+        request.state !== TARGETED_REANALYSIS_REQUEST_STATES.dispatched
+      ) {
+        return false;
+      }
+
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtext(${request.organizationId}))
+      `;
+      const runningCount = await tx.targetedReanalysisRequest.count({
+        where: {
+          organizationId: request.organizationId,
+          state: TARGETED_REANALYSIS_REQUEST_STATES.running,
         },
-      },
-      data: { state: TARGETED_REANALYSIS_REQUEST_STATES.running },
+      });
+      if (
+        runningCount >=
+        TARGETED_REANALYSIS_CAPACITY_POLICY.maxRunningPerOrganization
+      ) {
+        return false;
+      }
+
+      const updated = await tx.targetedReanalysisRequest.updateMany({
+        where: {
+          id: requestId,
+          state: TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
+        },
+        data: {
+          state: TARGETED_REANALYSIS_REQUEST_STATES.running,
+          workerDeliveryAttempts: { increment: 1 },
+        },
+      });
+      return updated.count === 1;
     });
-    return resultEnvelope({ claimed: request.count === 1 });
+    return resultEnvelope({ claimed });
   }
 
   @Post(":requestId/terminal")

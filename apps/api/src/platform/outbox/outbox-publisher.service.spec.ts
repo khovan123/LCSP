@@ -44,6 +44,10 @@ type RecordTargetedReanalysisPublishFailureFn = (
   attempts: number,
   terminalFailureCode: string | null,
 ) => Promise<void>;
+type ReserveTargetedReanalysisDispatchFn = (
+  tx: Prisma.TransactionClient,
+  requestId: string,
+) => Promise<boolean>;
 type EnsureConnectedFn = () => Promise<void>;
 type PublishFn = (
   exchange: string,
@@ -75,6 +79,9 @@ function makeOutboxRepository(overrides: {
   recordTargetedReanalysisPublishFailure?: ReturnType<
     typeof jest.fn<RecordTargetedReanalysisPublishFailureFn>
   >;
+  reserveTargetedReanalysisDispatch?: ReturnType<
+    typeof jest.fn<ReserveTargetedReanalysisDispatchFn>
+  >;
 }) {
   return {
     withPendingBatch:
@@ -84,6 +91,9 @@ function makeOutboxRepository(overrides: {
     recordTargetedReanalysisPublishFailure:
       overrides.recordTargetedReanalysisPublishFailure ??
       jest.fn<RecordTargetedReanalysisPublishFailureFn>(),
+    reserveTargetedReanalysisDispatch:
+      overrides.reserveTargetedReanalysisDispatch ??
+      jest.fn<ReserveTargetedReanalysisDispatchFn>().mockResolvedValue(true),
   } as unknown as OutboxRepository;
 }
 
@@ -306,6 +316,49 @@ describe("OutboxPublisherService", () => {
       TARGETED_REANALYSIS_CAPACITY_POLICY.apiOutboxMaxAttempts,
       "TARGETED_REANALYSIS_OUTBOX_DELIVERY_EXHAUSTED",
     );
+  });
+
+  it("keeps a targeted-reanalysis message pending when the organization has no dispatch slot", async () => {
+    const message = makeMessage({
+      aggregateType: OUTBOX_AGGREGATE_TYPES.targetedReanalysisRequest,
+      aggregateId: "reanalysis-1",
+      eventType: GITHUB_INTEGRATION_EVENT_TYPES.targetedReanalysisRequested,
+    });
+    const reserveTargetedReanalysisDispatch = jest
+      .fn<ReserveTargetedReanalysisDispatchFn>()
+      .mockResolvedValue(false);
+    const markPublished = jest
+      .fn<MarkPublishedFn>()
+      .mockResolvedValue(undefined);
+    const publish = jest.fn<PublishFn>().mockResolvedValue(undefined);
+    const service = new OutboxPublisherService(
+      makeOutboxRepository({
+        withPendingBatch: jest
+          .fn<WithPendingBatchFn>()
+          .mockImplementation(async (_batchSize, handler) =>
+            handler([message], {} as Prisma.TransactionClient),
+          ),
+        reserveTargetedReanalysisDispatch,
+        markPublished,
+      }),
+      makeRabbitMqClient({
+        ensureConnected: jest
+          .fn<EnsureConnectedFn>()
+          .mockResolvedValue(undefined),
+        publish,
+      }),
+      makeConfigService(),
+      makeAuditWriter(),
+    );
+
+    await service.poll();
+
+    expect(reserveTargetedReanalysisDispatch).toHaveBeenCalledWith(
+      {},
+      "reanalysis-1",
+    );
+    expect(publish).not.toHaveBeenCalled();
+    expect(markPublished).not.toHaveBeenCalled();
   });
 
   it("publishes worker authorization metadata as AMQP headers", async () => {

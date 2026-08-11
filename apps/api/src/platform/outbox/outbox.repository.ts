@@ -1,6 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
-import { TARGETED_REANALYSIS_REQUEST_STATES } from "@lcsp/contracts/scan";
+import {
+  TARGETED_REANALYSIS_CAPACITY_POLICY,
+  TARGETED_REANALYSIS_REQUEST_STATES,
+} from "@lcsp/contracts/scan";
 import {
   type OutboxAggregateType,
   OUTBOX_STATUSES,
@@ -169,6 +172,58 @@ export class OutboxRepository {
           : {}),
       },
     });
+  }
+
+  /**
+   * Reserves one of an organization's two targeted-reanalysis worker slots
+   * before AMQP publication. The advisory lock serializes reservations for one
+   * organization without globally serializing unrelated tenants.
+   */
+  async reserveTargetedReanalysisDispatch(
+    tx: Prisma.TransactionClient,
+    requestId: string,
+  ): Promise<boolean> {
+    const request = await tx.targetedReanalysisRequest.findUnique({
+      where: { id: requestId },
+      select: { organizationId: true, state: true },
+    });
+    if (!request) return false;
+    if (request.state === TARGETED_REANALYSIS_REQUEST_STATES.dispatched) {
+      return true;
+    }
+    if (request.state !== TARGETED_REANALYSIS_REQUEST_STATES.queued) {
+      return false;
+    }
+
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtext(${request.organizationId}))
+    `;
+    const reservedCount = await tx.targetedReanalysisRequest.count({
+      where: {
+        organizationId: request.organizationId,
+        state: {
+          in: [
+            TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
+            TARGETED_REANALYSIS_REQUEST_STATES.running,
+          ],
+        },
+      },
+    });
+    if (
+      reservedCount >=
+      TARGETED_REANALYSIS_CAPACITY_POLICY.maxRunningPerOrganization
+    ) {
+      return false;
+    }
+
+    const claimed = await tx.targetedReanalysisRequest.updateMany({
+      where: {
+        id: requestId,
+        state: TARGETED_REANALYSIS_REQUEST_STATES.queued,
+      },
+      data: { state: TARGETED_REANALYSIS_REQUEST_STATES.dispatched },
+    });
+    return claimed.count === 1;
   }
 
   async findDlqMessages(): Promise<OutboxMessageEntity[]> {
