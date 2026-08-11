@@ -551,6 +551,7 @@ model RepositoryScanJob {
 
 model TargetedReanalysisRequest {
   id                    String                         @id
+  scanJobId             String                         @unique
   assessmentId          String
   organizationId        String
   inputEvidenceReportId String

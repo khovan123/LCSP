@@ -130,6 +130,7 @@ export class InternalTargetedReanalysisController {
       where: { id: requestId },
       select: {
         id: true,
+        scanJobId: true,
         assessmentId: true,
         inputEvidenceReportId: true,
         snapshotId: true,
