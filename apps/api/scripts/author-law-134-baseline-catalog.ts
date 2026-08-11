@@ -188,6 +188,14 @@ async function main(): Promise<void> {
     );
   }
 
+  // Fail before any write so an accidental approval request cannot leave an
+  // orphaned catalog/rule set behind while known applicability blockers exist.
+  if (approveRequested) {
+    throw new Error(
+      `Catalog approval is blocked: ${approvalBlockers.join(", ")}. Resolve the data-model gaps, then re-author and review the rule set.`,
+    );
+  }
+
   const catalog = await request<{ id: string }>(
     `${apiUrl}/internal/legal-rule-catalog/versions`,
     token,
@@ -212,12 +220,6 @@ async function main(): Promise<void> {
           locator,
         })),
       },
-    );
-  }
-
-  if (approveRequested) {
-    throw new Error(
-      `Catalog approval is blocked: ${approvalBlockers.join(", ")}. Keep this version DRAFT until these data-model gaps are resolved and the rules are re-authored/reviewed.`,
     );
   }
 
