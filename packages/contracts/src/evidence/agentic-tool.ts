@@ -15,6 +15,7 @@ export const AGENTIC_TOOL_NAMES = {
   inspectDeploymentContext: "inspect_deployment_context",
   proposeMissingTargets: "propose_missing_targets",
   getReconciliationContext: "get_reconciliation_context",
+  getVerifiedProfile: "get_verified_profile",
   reconcileProfileToVerifiedProfile: "reconcile_profile_to_verified_profile",
 } as const;
 
@@ -59,6 +60,7 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   scanCoverageRead: "AGENTIC_TOOL_SCAN_COVERAGE_READ",
   artifactChainRead: "AGENTIC_TOOL_ARTIFACT_CHAIN_READ",
   reconciliationContextRead: "AGENTIC_TOOL_RECONCILIATION_CONTEXT_READ",
+  verifiedProfileRead: "AGENTIC_TOOL_VERIFIED_PROFILE_READ",
   findingDetailRead: "AGENTIC_TOOL_FINDING_DETAIL_READ",
   evidenceSearchRead: "AGENTIC_TOOL_EVIDENCE_SEARCH_READ",
   providerInvocationRead: "AGENTIC_TOOL_PROVIDER_INVOCATION_READ",

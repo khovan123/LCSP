@@ -20,7 +20,9 @@ import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import { AI_USAGE_FLOW_STATUSES } from "@lcsp/contracts/scan";
 import {
   ARTIFACT_CHAIN_STAGES,
+  VERIFIED_PROFILE_REQUIRED_FOR,
   type ArtifactChainStage,
+  type VerifiedProfileRequiredFor,
 } from "@lcsp/contracts/evidence";
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 
@@ -40,6 +42,7 @@ import type { ConflictDetectionCallbackRequest } from "../../application/contrac
 import type { VerifiedProfileCallbackRequest } from "../../application/contracts/reconciliation/verified-profile-callback.contract.js";
 import { ListConflictsQuery } from "../../application/queries/list-conflicts/list-conflicts.query.js";
 import { GetVerifiedProfileByIdQuery } from "../../application/queries/get-verified-profile-by-id/get-verified-profile-by-id.query.js";
+import { GetVerifiedProfileQuery } from "../../application/queries/get-verified-profile/get-verified-profile.query.js";
 import { GetArtifactChainQuery } from "../../application/queries/get-artifact-chain/get-artifact-chain.query.js";
 import { GetReconciliationContextQuery } from "../../application/queries/get-reconciliation-context/get-reconciliation-context.query.js";
 import { ProposeMissingTargetsQuery } from "../../application/queries/propose-missing-targets/propose-missing-targets.query.js";
@@ -354,6 +357,37 @@ export class ReconciliationController {
     );
   }
 
+  @Get(":assessmentId/verified-profiles/:verifiedProfileId")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.verifiedProfileRead)
+  async getVerifiedProfile(
+    @Param("assessmentId") assessmentId: string,
+    @Param("verifiedProfileId") verifiedProfileId: string,
+    @Query("expected_version") expectedVersion: string | undefined,
+    @Query("required_for") requiredForRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    const requiredFor = parseVerifiedProfileRequiredFor(
+      requiredForRaw,
+      correlationId,
+    );
+    const version = parseVerifiedProfileVersion(expectedVersion, correlationId);
+
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetVerifiedProfileQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          verifiedProfileId,
+          version,
+          requiredFor,
+          correlationId,
+        ),
+      ),
+    );
+  }
+
   @Patch(":assessmentId/conflicts/:conflictId/resolve")
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.conflictResolve)
@@ -415,6 +449,31 @@ export class ReconciliationController {
       ),
     );
   }
+}
+
+function parseVerifiedProfileVersion(
+  value: string | undefined,
+  correlationId: string,
+): string {
+  if (value && /^[1-9][0-9]{0,9}$/.test(value)) return value;
+  throw problemException(ASSESSMENT_ERROR_CODES.invalidRequest, correlationId, {
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+  });
+}
+
+function parseVerifiedProfileRequiredFor(
+  value: string | undefined,
+  correlationId: string,
+): VerifiedProfileRequiredFor {
+  if (
+    value === VERIFIED_PROFILE_REQUIRED_FOR.legalMatching ||
+    value === VERIFIED_PROFILE_REQUIRED_FOR.classification ||
+    value === VERIFIED_PROFILE_REQUIRED_FOR.gapAnalysis
+  )
+    return value;
+  throw problemException(ASSESSMENT_ERROR_CODES.invalidRequest, correlationId, {
+    status: HttpStatus.UNPROCESSABLE_ENTITY,
+  });
 }
 
 function parseArtifactChainStages(

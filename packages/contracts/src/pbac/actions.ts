@@ -36,6 +36,7 @@ export const PBAC_ACTIONS = {
   snapshotCreate: "snapshot:create",
   verifiedProfileApprove: "verified-profile:approve",
   verifiedProfilePersist: "verified-profile:persist",
+  verifiedProfileRead: "verified-profile:read",
   wizardWrite: "wizard:write",
   wizardSubmit: "wizard:submit",
   wizardExport: "wizard:export",
