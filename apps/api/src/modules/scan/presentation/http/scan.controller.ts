@@ -15,6 +15,7 @@ import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import {
   TARGETED_REANALYSIS_CAPACITY_POLICY,
+  TARGETED_REANALYSIS_CHECKPOINT_STATES,
   TARGETED_REANALYSIS_REQUEST_STATES,
   type TargetedReanalysisTerminalState,
 } from "@lcsp/contracts/scan";
@@ -189,6 +190,15 @@ export class InternalTargetedReanalysisController {
           workerDeliveryAttempts: { increment: 1 },
         },
       });
+      if (updated.count === 1) {
+        await tx.targetedReanalysisCheckpoint.updateMany({
+          where: { requestId },
+          data: {
+            state: TARGETED_REANALYSIS_CHECKPOINT_STATES.running,
+            workerDeliveryAttempts: { increment: 1 },
+          },
+        });
+      }
       return updated.count === 1;
     });
     return resultEnvelope({ claimed });
@@ -217,6 +227,19 @@ export class InternalTargetedReanalysisController {
         outputEvidenceReportId: payload.output_evidence_report_id,
       },
     });
+    if (request.count === 1) {
+      await this.prisma.targetedReanalysisCheckpoint.updateMany({
+        where: { requestId },
+        data: {
+          state:
+            payload.state === TARGETED_REANALYSIS_REQUEST_STATES.dlq
+              ? TARGETED_REANALYSIS_CHECKPOINT_STATES.dlq
+              : TARGETED_REANALYSIS_CHECKPOINT_STATES.failed,
+          safeFailureCode: payload.safe_failure_code,
+          outputEvidenceReportId: payload.output_evidence_report_id,
+        },
+      });
+    }
     return resultEnvelope({ transitioned: request.count === 1 });
   }
 
@@ -231,6 +254,12 @@ export class InternalTargetedReanalysisController {
       },
       data: { state: TARGETED_REANALYSIS_REQUEST_STATES.dispatched },
     });
+    if (request.count === 1) {
+      await this.prisma.targetedReanalysisCheckpoint.updateMany({
+        where: { requestId },
+        data: { state: TARGETED_REANALYSIS_CHECKPOINT_STATES.retryScheduled },
+      });
+    }
     return resultEnvelope({ requeued: request.count === 1 });
   }
 }

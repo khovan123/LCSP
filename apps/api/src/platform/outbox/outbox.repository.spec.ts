@@ -19,17 +19,22 @@ function makeTx() {
   const updateMany = jest.fn<UpdateFn>().mockResolvedValue({ count: 1 });
   const findUnique = jest.fn<UpdateFn>();
   const count = jest.fn<UpdateFn>();
+  const checkpointUpdateMany = jest
+    .fn<UpdateFn>()
+    .mockResolvedValue({ count: 1 });
   const $executeRaw = jest.fn<UpdateFn>().mockResolvedValue(undefined);
   return {
     tx: {
       outboxMessage: { update },
       targetedReanalysisRequest: { updateMany, findUnique, count },
+      targetedReanalysisCheckpoint: { updateMany: checkpointUpdateMany },
       $executeRaw,
     } as unknown as Prisma.TransactionClient,
     update,
     updateMany,
     findUnique,
     count,
+    checkpointUpdateMany,
     $executeRaw,
   };
 }
@@ -126,7 +131,7 @@ describe("OutboxRepository", () => {
 
   it("records targeted reanalysis publish attempts and makes an exhausted command visible as DLQ", async () => {
     const repository = new OutboxRepository({} as PrismaService);
-    const { tx, updateMany } = makeTx();
+    const { tx, updateMany, checkpointUpdateMany } = makeTx();
 
     await repository.recordTargetedReanalysisPublishFailure(
       tx,
@@ -145,6 +150,14 @@ describe("OutboxRepository", () => {
           ],
         },
       },
+      data: {
+        apiPublishAttempts: 4,
+        state: TARGETED_REANALYSIS_REQUEST_STATES.dlq,
+        safeFailureCode: "TARGETED_REANALYSIS_OUTBOX_DELIVERY_EXHAUSTED",
+      },
+    });
+    expect(checkpointUpdateMany).toHaveBeenCalledWith({
+      where: { requestId: "request-1" },
       data: {
         apiPublishAttempts: 4,
         state: TARGETED_REANALYSIS_REQUEST_STATES.dlq,

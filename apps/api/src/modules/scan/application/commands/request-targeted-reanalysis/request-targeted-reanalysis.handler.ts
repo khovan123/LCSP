@@ -176,6 +176,13 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           correlationId,
         },
       });
+      await tx.targetedReanalysisCheckpoint.create({
+        data: {
+          id: checkpointRef,
+          requestId,
+          correlationId,
+        },
+      });
       await tx.repositoryScanJob.create({
         data: {
           id: scanJobId,

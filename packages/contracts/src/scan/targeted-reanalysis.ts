@@ -38,6 +38,19 @@ export const TARGETED_REANALYSIS_TERMINAL_STATES = {
 export type TargetedReanalysisTerminalState =
   (typeof TARGETED_REANALYSIS_TERMINAL_STATES)[keyof typeof TARGETED_REANALYSIS_TERMINAL_STATES];
 
+export const TARGETED_REANALYSIS_CHECKPOINT_STATES = {
+  pendingDispatch: "PENDING_DISPATCH",
+  dispatched: "DISPATCHED",
+  running: "RUNNING",
+  retryScheduled: "RETRY_SCHEDULED",
+  completed: "COMPLETED",
+  failed: "FAILED",
+  dlq: "DLQ",
+} as const;
+
+export type TargetedReanalysisCheckpointState =
+  (typeof TARGETED_REANALYSIS_CHECKPOINT_STATES)[keyof typeof TARGETED_REANALYSIS_CHECKPOINT_STATES];
+
 export const TARGETED_REANALYSIS_BLOCK_CODES = {
   capacityExhausted: "TENANT_REANALYSIS_CAPACITY_EXHAUSTED",
   rateLimited: "TENANT_REANALYSIS_RATE_LIMITED",
