@@ -9,6 +9,7 @@ import { GetFindingDetailHandler } from "./application/queries/get-finding-detai
 import { SearchEvidenceHandler } from "./application/queries/search-evidence/search-evidence.handler.js";
 import { FindProviderInvocationsHandler } from "./application/queries/find-provider-invocations/find-provider-invocations.handler.js";
 import { GetEvidenceSubgraphHandler } from "./application/queries/get-evidence-subgraph/get-evidence-subgraph.handler.js";
+import { GetSymbolContextHandler } from "./application/queries/get-symbol-context/get-symbol-context.handler.js";
 import { EvidenceRedactorService } from "./application/services/evidence/evidence-redactor.service.js";
 import {
   EvidenceController,
@@ -24,6 +25,7 @@ import {
     SearchEvidenceHandler,
     FindProviderInvocationsHandler,
     GetEvidenceSubgraphHandler,
+    GetSymbolContextHandler,
     AcceptTechnicalProfileHandler,
     EvidenceRedactorService,
     WorkerApiKeyGuard,

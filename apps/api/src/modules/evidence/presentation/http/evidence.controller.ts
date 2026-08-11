@@ -29,6 +29,7 @@ import { GetFindingDetailQuery } from "../../application/queries/get-finding-det
 import { SearchEvidenceQuery } from "../../application/queries/search-evidence/search-evidence.query.js";
 import { FindProviderInvocationsQuery } from "../../application/queries/find-provider-invocations/find-provider-invocations.query.js";
 import { GetEvidenceSubgraphQuery } from "../../application/queries/get-evidence-subgraph/get-evidence-subgraph.query.js";
+import { GetSymbolContextQuery } from "../../application/queries/get-symbol-context/get-symbol-context.query.js";
 import {
   FINDING_DETAIL_INCLUDES,
   type FindingDetailInclude,
@@ -45,6 +46,10 @@ import {
   EVIDENCE_SUBGRAPH_DIRECTIONS,
   type EvidenceSubgraphDirection,
 } from "../../application/contracts/evidence/evidence-subgraph.contract.js";
+import {
+  SYMBOL_CONTEXT_INCLUDES,
+  type SymbolContextInclude,
+} from "../../application/contracts/evidence/symbol-context.contract.js";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { HttpStatus } from "@nestjs/common";
@@ -205,6 +210,36 @@ export class EvidenceController {
       ),
     );
   }
+
+  @Get(":assessmentId/evidence-reports/:evidenceReportId/symbols/:symbolNodeId")
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async getSymbolContext(
+    @Param("assessmentId") assessmentId: string,
+    @Param("evidenceReportId") evidenceReportId: string,
+    @Param("symbolNodeId") symbolNodeId: string,
+    @Query("include") includeRaw: string | undefined,
+    @Query("max_neighbors") maxNeighborsRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetSymbolContextQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          evidenceReportId,
+          symbolNodeId,
+          parseSymbolIncludes(includeRaw, correlationId),
+          parseBoundedInteger(maxNeighborsRaw, 1, 50, correlationId),
+          correlationId,
+        ),
+      ),
+    );
+  }
 }
 
 function parseFindingDetailInclude(
@@ -224,6 +259,25 @@ function parseFindingDetailInclude(
     });
   }
   return include as FindingDetailInclude[];
+}
+
+function parseSymbolIncludes(
+  value: string | undefined,
+  correlationId: string,
+): SymbolContextInclude[] {
+  const items = value?.split(",").map((item) => item.trim()) ?? [];
+  const allowed = new Set(Object.values(SYMBOL_CONTEXT_INCLUDES));
+  if (
+    items.length === 0 ||
+    items.length > Object.keys(SYMBOL_CONTEXT_INCLUDES).length ||
+    items.some((item) => !allowed.has(item as SymbolContextInclude)) ||
+    new Set(items).size !== items.length
+  ) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return items as SymbolContextInclude[];
 }
 
 function parseSearchMaxResults(
