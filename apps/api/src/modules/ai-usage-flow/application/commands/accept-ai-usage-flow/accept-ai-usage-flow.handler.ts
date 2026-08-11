@@ -276,7 +276,10 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
 function hasConsistentRichClaims(payload: unknown): boolean {
   if (!isRecord(payload)) return false;
   if (payload.flow_data === undefined) return true;
-  if (!isRecord(payload.flow_data) || !Array.isArray(payload.flow_data.claims)) {
+  if (
+    !isRecord(payload.flow_data) ||
+    !Array.isArray(payload.flow_data.claims)
+  ) {
     return false;
   }
   if (!Array.isArray(payload.claims)) return false;
@@ -322,14 +325,13 @@ function hasConsistentRichClaims(payload: unknown): boolean {
 
 function sameEvidenceRefs(left: unknown, right: unknown): boolean {
   if (!Array.isArray(left) || !Array.isArray(right)) return false;
-  if (
-    left.some((ref) => !clean(ref)) ||
-    right.some((ref) => !clean(ref))
-  ) {
+  if (left.some((ref) => !clean(ref)) || right.some((ref) => !clean(ref))) {
     return false;
   }
   const leftRefs = [...new Set(left.map((ref) => clean(ref) as string))].sort();
-  const rightRefs = [...new Set(right.map((ref) => clean(ref) as string))].sort();
+  const rightRefs = [
+    ...new Set(right.map((ref) => clean(ref) as string)),
+  ].sort();
   return (
     leftRefs.length === rightRefs.length &&
     leftRefs.every((ref, index) => ref === rightRefs[index])
