@@ -381,6 +381,7 @@ def test_scan_consumer_limits_source_analyzers_to_targeted_path_prefixes(
         {
             "scanJobId": "job-targeted-scope",
             "snapshotId": "snap-targeted-scope",
+            "commitSha": "commit-targeted-scope",
             "correlationId": "corr-targeted-scope",
             "targetedReanalysis": {
                 "analyzerId": "RUN_PYTHON_SEMANTIC_ANALYSIS",
@@ -401,6 +402,9 @@ def test_scan_consumer_limits_source_analyzers_to_targeted_path_prefixes(
         "analyzer_id": "RUN_PYTHON_SEMANTIC_ANALYSIS",
         "path_prefixes": ["repo/src/"],
     }
+    graph = posted_payload.evidence_payload["evidence_graph"]
+    assert graph["provenance"]["snapshot_id"] == "snap-targeted-scope"
+    assert graph["provenance"]["commit_sha"] == "commit-targeted-scope"
 
 
 @pytest.mark.p0

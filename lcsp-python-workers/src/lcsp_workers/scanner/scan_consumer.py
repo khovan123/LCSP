@@ -50,6 +50,7 @@ TARGETED_REANALYSIS_ANALYZER_IDS = {
 class ScanJobEnvelope:
     scan_job_id: str
     snapshot_id: str
+    commit_sha: str
     correlation_id: str
 
 
@@ -372,6 +373,8 @@ class ScanConsumer(ConsumerBase):
                 )
             evidence_graph = self._evidence_graph_assembler.assemble(
                 scan_job_id=envelope.scan_job_id,
+                snapshot_id=envelope.snapshot_id,
+                commit_sha=envelope.commit_sha,
                 workspace_path=result.workspace_path,
                 technical_findings=technical_findings,
                 structural_facts=structural_facts or [],
@@ -442,6 +445,7 @@ class ScanConsumer(ConsumerBase):
     def _read_envelope(self, message: dict, correlation_id: str) -> ScanJobEnvelope:
         scan_job_id = self._read_field(message, "scan_job_id", "scanJobId")
         snapshot_id = self._read_field(message, "snapshot_id", "snapshotId")
+        commit_sha = self._read_field(message, "commit_sha", "commitSha") or ""
         message_correlation_id = self._read_field(
             message,
             "correlation_id",
@@ -456,6 +460,7 @@ class ScanConsumer(ConsumerBase):
         return ScanJobEnvelope(
             scan_job_id=scan_job_id,
             snapshot_id=snapshot_id,
+            commit_sha=commit_sha,
             correlation_id=message_correlation_id or correlation_id,
         )
 
