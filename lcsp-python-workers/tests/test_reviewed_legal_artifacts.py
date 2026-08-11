@@ -37,7 +37,7 @@ def test_reviewed_legal_artifacts_are_pdf_hash_bound_and_scoped() -> None:
             == "TECHNICAL_AUDIT_PRINCIPAL_NOT_LEGAL_SIGNATURE"
         )
 
-        # The reviewed legal text must resolve back to the exact PDF held in reports/.
+        # Reviewed text must resolve back to the exact PDF bytes held in reports/.
         snapshot_ref = review["sourceReview"]["sourceSnapshotReviewed"]
         source_snapshot = REPOSITORY_ROOT / snapshot_ref
         assert source_snapshot.is_file()
