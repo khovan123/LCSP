@@ -28,6 +28,7 @@ import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evi
 import { GetFindingDetailQuery } from "../../application/queries/get-finding-detail/get-finding-detail.query.js";
 import { SearchEvidenceQuery } from "../../application/queries/search-evidence/search-evidence.query.js";
 import { FindProviderInvocationsQuery } from "../../application/queries/find-provider-invocations/find-provider-invocations.query.js";
+import { GetEvidenceSubgraphQuery } from "../../application/queries/get-evidence-subgraph/get-evidence-subgraph.query.js";
 import {
   FINDING_DETAIL_INCLUDES,
   type FindingDetailInclude,
@@ -40,6 +41,10 @@ import {
   PROVIDER_INVOCATION_PROVIDERS,
   type ProviderInvocationProvider,
 } from "../../application/contracts/evidence/provider-invocation.contract.js";
+import {
+  EVIDENCE_SUBGRAPH_DIRECTIONS,
+  type EvidenceSubgraphDirection,
+} from "../../application/contracts/evidence/evidence-subgraph.contract.js";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { HttpStatus } from "@nestjs/common";
@@ -166,6 +171,40 @@ export class EvidenceController {
       ),
     );
   }
+
+  @Get(":assessmentId/evidence-reports/:evidenceReportId/subgraph/:seedNodeId")
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async getEvidenceSubgraph(
+    @Param("assessmentId") assessmentId: string,
+    @Param("evidenceReportId") evidenceReportId: string,
+    @Param("seedNodeId") seedNodeId: string,
+    @Query("direction") directionRaw: string | undefined,
+    @Query("max_depth") maxDepthRaw: string | undefined,
+    @Query("max_nodes") maxNodesRaw: string | undefined,
+    @Query("max_edges") maxEdgesRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetEvidenceSubgraphQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          evidenceReportId,
+          seedNodeId,
+          parseDirection(directionRaw, correlationId),
+          parseBoundedInteger(maxDepthRaw, 1, 3, correlationId),
+          parseBoundedInteger(maxNodesRaw, 1, 100, correlationId),
+          parseBoundedInteger(maxEdgesRaw, 1, 200, correlationId),
+          correlationId,
+        ),
+      ),
+    );
+  }
 }
 
 function parseFindingDetailInclude(
@@ -261,6 +300,38 @@ function parseProvider(
     });
   }
   return value as ProviderInvocationProvider;
+}
+
+function parseDirection(
+  value: string | undefined,
+  correlationId: string,
+): EvidenceSubgraphDirection {
+  if (
+    !value ||
+    !Object.values(EVIDENCE_SUBGRAPH_DIRECTIONS).includes(
+      value as EvidenceSubgraphDirection,
+    )
+  ) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return value as EvidenceSubgraphDirection;
+}
+
+function parseBoundedInteger(
+  value: string | undefined,
+  min: number,
+  max: number,
+  correlationId: string,
+): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return parsed;
 }
 
 @Controller("internal/evidence")
