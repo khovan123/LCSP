@@ -12,6 +12,7 @@ import { GetEvidenceSubgraphHandler } from "./application/queries/get-evidence-s
 import { GetSymbolContextHandler } from "./application/queries/get-symbol-context/get-symbol-context.handler.js";
 import { TraceStaticFlowHandler } from "./application/queries/trace-static-flow/trace-static-flow.handler.js";
 import { InspectHumanReviewPathHandler } from "./application/queries/inspect-human-review-path/inspect-human-review-path.handler.js";
+import { GetScanCoverageHandler } from "./application/queries/get-scan-coverage/get-scan-coverage.handler.js";
 import { EvidenceRedactorService } from "./application/services/evidence/evidence-redactor.service.js";
 import {
   EvidenceController,
@@ -30,6 +31,7 @@ import {
     GetSymbolContextHandler,
     TraceStaticFlowHandler,
     InspectHumanReviewPathHandler,
+    GetScanCoverageHandler,
     AcceptTechnicalProfileHandler,
     EvidenceRedactorService,
     WorkerApiKeyGuard,
