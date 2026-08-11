@@ -142,6 +142,31 @@ def test_t01_assembles_full_evidence_payload() -> None:
     assert payload.evidence_payload["coverage_notes"] == [
         "Workspace skipped 1 oversize file"
     ]
+    assert payload.evidence_payload["report_provenance"]["hash_algorithm"] == "SHA-256"
+    assert payload.evidence_payload["report_provenance"]["report_hash"].startswith(
+        "sha256:"
+    )
+
+
+@pytest.mark.p0
+def test_t01b_report_hash_is_deterministic_for_the_same_safe_artifact() -> None:
+    first = EvidenceAssembler().assemble(
+        scan_job_id="scan-job-1",
+        syft_result=_syft_result(),
+        semgrep_result=_semgrep_result(),
+        coverage_notes=[],
+    )
+    second = EvidenceAssembler().assemble(
+        scan_job_id="scan-job-1",
+        syft_result=_syft_result(),
+        semgrep_result=_semgrep_result(),
+        coverage_notes=[],
+    )
+
+    assert (
+        first.evidence_payload["report_provenance"]["report_hash"]
+        == second.evidence_payload["report_provenance"]["report_hash"]
+    )
 
 
 @pytest.mark.p0
