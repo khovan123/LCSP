@@ -239,8 +239,7 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
       !payload.claims.every(isClaim) ||
       !Array.isArray(payload.unknown_usages) ||
       !payload.unknown_usages.every(isRecord) ||
-      !isRecord(payload.privacy_flags) ||
-      !hasConsistentRichClaims(payload)
+      !isRecord(payload.privacy_flags)
     ) {
       throw new UnprocessableEntityException(
         this.errorBody(command, SCAN_ERROR_CODES.aiUsageFlowSchemaInvalid),
@@ -250,6 +249,12 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
     if (payload.claims.some(isMaterialClaimMissingEvidence)) {
       throw new UnprocessableEntityException(
         this.errorBody(command, SCAN_ERROR_CODES.claimMissingEvidenceRef),
+      );
+    }
+
+    if (!hasConsistentRichClaims(payload)) {
+      throw new UnprocessableEntityException(
+        this.errorBody(command, SCAN_ERROR_CODES.aiUsageFlowSchemaInvalid),
       );
     }
 
