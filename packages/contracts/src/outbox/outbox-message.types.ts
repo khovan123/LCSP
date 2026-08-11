@@ -62,6 +62,7 @@ export interface OutboxMessageInput {
   actor?: AuditActorRef;
   result?: string;
   redactionStatus?: AuditRedactionStatus;
+  authorizationAction?: string;
   idempotencyKey?: string;
   payload: Record<string, unknown>;
 }
@@ -86,6 +87,7 @@ export type MaterialOutboxMessageInput = Omit<
   actor: AuditActorRef;
   result: string;
   redactionStatus: AuditRedactionStatus;
+  authorizationAction?: string;
   idempotencyKey: string;
   payload?: Record<string, unknown>;
 };
@@ -120,6 +122,9 @@ export function buildOutboxMessageInput(
       correlationId: input.correlationId,
       causationId: input.causationId,
       actor: input.actor,
+      ...(input.authorizationAction
+        ? { authorizationAction: input.authorizationAction }
+        : {}),
       result: input.result,
       redactionStatus,
       idempotencyKey: input.idempotencyKey,

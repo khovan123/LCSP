@@ -1,10 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { requireSessionToken } from "@/lib/server/session-token";
-import {
-  upstreamRequest,
-  upstreamJson,
-} from "@/lib/server/upstream-request";
+import { upstreamJson, upstreamRequest } from "@/lib/server/upstream-request";
 
 export async function POST(
   request: NextRequest,
@@ -14,12 +11,14 @@ export async function POST(
   if (!session.ok) return session.response;
 
   const { id } = await params;
-
+  const body = await request.json().catch(() => null);
   const upstream = await upstreamRequest(
-    `/assessments/${encodeURIComponent(id)}/mock-evidence`,
+    `/assessments/${encodeURIComponent(id)}/scan-jobs`,
     {
       method: "POST",
       bearerToken: session.token,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
     },
   );
 

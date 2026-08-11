@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Iterable
 
-from lcsp_workers.platform.callback_schemas import ScanCallbackPayload
+from lcsp_workers.platform.callback_schemas import (
+    SCAN_CALLBACK_STATUSES,
+    ScanCallbackPayload,
+)
 from lcsp_workers.platform.redaction import redact_dict, redact_source_code
 from lcsp_workers.scanner.analyzers.ai_invocation_detector import TechnicalFinding
 from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalysisResult
@@ -143,10 +146,10 @@ class EvidenceAssembler:
         outcomes = [execution.outcome for execution in executions]
         failed_count = sum(1 for outcome in outcomes if outcome != OUTCOME_SUCCESS)
         if failed_count == 0:
-            return "success", None
+            return SCAN_CALLBACK_STATUSES["success"], None
         if failed_count == len(outcomes):
-            return "failed", ALL_TOOLS_FAILED
-        return "partial", None
+            return SCAN_CALLBACK_STATUSES["failed"], ALL_TOOLS_FAILED
+        return SCAN_CALLBACK_STATUSES["partial"], None
 
     def _assert_privacy(
         self,

@@ -90,6 +90,45 @@ def test_citation_retriever_drops_repealed_chunks_and_builds_allowlist():
     assert result["repealed_chunk_ids"] == ["doc-2::art-2::cl-2::pt-2"]
 
 
+def test_citation_retriever_expands_parent_and_one_hop_references():
+    class Collection:
+        records = {
+            "point": {
+                "document_id": "doc-1",
+                "locator": "art-1::cl-1::pt-a",
+                "legal_status": "ACTIVE",
+                "parent_chunk_id": "clause",
+                "related_chunk_ids": '["referenced"]',
+            },
+            "clause": {
+                "document_id": "doc-1",
+                "locator": "art-1::cl-1",
+                "legal_status": "ACTIVE",
+            },
+            "referenced": {
+                "document_id": "doc-2",
+                "locator": "art-2::cl-3",
+                "legal_status": "ACTIVE",
+            },
+        }
+
+        def get(self, *, ids, include):
+            existing = [(value, self.records[value]) for value in ids if value in self.records]
+            return {"ids": [value for value, _ in existing], "metadatas": [metadata for _, metadata in existing]}
+
+    class Retriever(ChromaDbCitationRetriever):
+        def _collection(self, corpus_version_id):
+            return Collection()
+
+    chunks = Retriever().retrieve_exact("corpus-v1", ["point"])
+
+    assert [(chunk.id, chunk.role) for chunk in chunks] == [
+        ("point", "PRIMARY_MATCH"),
+        ("clause", "PARENT_CONTEXT"),
+        ("referenced", "REFERENCED_CONTEXT"),
+    ]
+
+
 def test_legal_match_builder_builds_callback_payload_with_versions_and_empty_matches():
     builder = LegalMatchBuilder()
     payload = builder.build_payload(
