@@ -15,6 +15,7 @@ import { InspectHumanReviewPathHandler } from "./application/queries/inspect-hum
 import { GetScanCoverageHandler } from "./application/queries/get-scan-coverage/get-scan-coverage.handler.js";
 import { InspectDecisionPathHandler } from "./application/queries/inspect-decision-path/inspect-decision-path.handler.js";
 import { InspectDataPathHandler } from "./application/queries/inspect-data-path/inspect-data-path.handler.js";
+import { FindSimilarSymbolsHandler } from "./application/queries/find-similar-symbols/find-similar-symbols.handler.js";
 import { EvidenceRedactorService } from "./application/services/evidence/evidence-redactor.service.js";
 import {
   EvidenceController,
@@ -36,6 +37,7 @@ import {
     GetScanCoverageHandler,
     InspectDecisionPathHandler,
     InspectDataPathHandler,
+    FindSimilarSymbolsHandler,
     AcceptTechnicalProfileHandler,
     EvidenceRedactorService,
     WorkerApiKeyGuard,
