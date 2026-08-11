@@ -164,6 +164,8 @@ describe("InternalTargetedReanalysisController", () => {
   it("claims only a dispatched request while atomically enforcing the per-organization running limit", async () => {
     const findUnique = jest.fn().mockResolvedValue({
       organizationId: "org-1",
+      assessmentId: "assessment-1",
+      correlationId: "correlation-1",
       state: TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
     });
     const count = jest.fn().mockResolvedValue(1);
@@ -181,9 +183,10 @@ describe("InternalTargetedReanalysisController", () => {
         Promise.resolve(handler(transaction)),
       ),
     };
+    const auditWriter = { write: jest.fn().mockResolvedValue(undefined) };
     const controller = new InternalTargetedReanalysisController(
       prisma as never,
-      { write: jest.fn().mockResolvedValue(undefined) } as never,
+      auditWriter as never,
     );
 
     const response = await controller.claimRequest("request-1");
@@ -200,6 +203,13 @@ describe("InternalTargetedReanalysisController", () => {
         workerDeliveryAttempts: { increment: 1 },
       },
     });
+    expect(auditWriter.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "org-1",
+        assessmentId: "assessment-1",
+        correlationId: "correlation-1",
+      }),
+    );
   });
 
   it("does not claim a queued request injected outside the outbox scheduler", async () => {
