@@ -108,12 +108,54 @@ present. Legacy/undeclared sign-offs remain fail-closed and still require the
 same principal. `CorpusApprovalRecord.approvedBy` records the authenticated
 actor who actually performed approval.
 
+## VerifiedProfile legal-fact bridge
+
+The AIUsageFlow callback has two representations:
+
+- compact callback claims used by the existing API contract;
+- sanitized `flow_data.claims` from the deterministic worker containing
+  `claim_field`, `claim_value`, lifecycle, numeric confidence and conflict refs.
+
+Previously only the compact list was persisted, so reconciliation lost the
+field/value/confidence data required to reproduce legal applicability. The API
+now joins the rich metadata onto each compact claim by stable `claim_id` before
+writing the existing `AIUsageFlow.claims` JSON column. No schema migration or
+inferred backfill is used.
+
+The VerifiedProfile worker now materializes three canonical legal-matching
+views inside immutable `profile_data`:
+
+- `merged_profile`: reconciled fact values for deterministic evaluation and
+  explanation;
+- `fact_evidence_refs`: field -> evidence-ref mapping for material legal facts;
+- `evidence_refs`: aggregate union for audit/navigation only.
+
+A claim contributes to `fact_evidence_refs` only when it is:
+
+- `VALIDATED` or `VERIFIED`;
+- confidence `>= 0.75`;
+- backed by one or more evidence refs;
+- free of unresolved conflict refs.
+
+Claims below the material threshold may remain in `merged_profile` as context,
+but they cannot independently prove a required legal fact. Likewise, an
+aggregate or unrelated evidence ref cannot satisfy another field's required
+fact. The rule evaluator requires evidence on the exact required field and
+returns `BLOCKED_UNKNOWN_FACT` when a value matches but its field lacks eligible
+evidence.
+
+The API `GetVerifiedProfileById` projection now reads only these canonical
+fields. Legacy profile payloads without `merged_profile`/`fact_evidence_refs`
+fail closed instead of treating the whole profile JSON or unrelated evidence as
+a legal fact source.
+
 ## Rule Catalog quality gate
 
 Rule applicability evaluation now distinguishes three states that were
 previously conflated:
 
-- required fact matched -> candidate can become `MATCHED` when evidence exists;
+- required fact matched -> candidate can become `MATCHED` only when that exact
+  field has eligible evidence refs;
 - required fact is known and different -> `NOT_APPLICABLE`;
 - required fact is unknown/unclear/not determinable ->
   `BLOCKED_UNKNOWN_FACT` under `BLOCK_ON_UNKNOWN`.
@@ -126,50 +168,53 @@ Malformed or empty `requiredFacts` now fail closed as `BLOCKED_UNKNOWN_FACT`.
 They can no longer behave like a zero-condition rule and become `MATCHED` merely
 because the VerifiedProfile contains some evidence reference.
 
-List-valued facts use containment semantics. Example: a rule requiring
-`POTENTIAL_HIGH_IMPACT` still matches a verified profile that contains that
-category plus other evidence-backed harm categories.
-
-Blocking facts with an `expectedValue` block only when the actual value matches
-that expected value; mere presence of the field does not make a rule
-inapplicable.
+List-valued facts use containment semantics only after the required field has
+eligible evidence backing. Blocking facts with an `expectedValue` block only
+when the actual value matches that expected value; mere presence of the field
+does not make a rule inapplicable.
 
 ## Law 134 baseline Rule Catalog authoring
 
-`apps/api/scripts/author-law-134-baseline-catalog.ts` now behaves as an authoring
-utility, not an implicit approval utility:
+`apps/api/scripts/author-law-134-baseline-catalog.ts` now behaves as a guarded
+authoring utility rather than an approval utility:
 
 - duplicate/empty rule IDs are rejected;
 - every candidate needs required facts and citation locators;
 - unknown values (`UNKNOWN`, `UNCLEAR`, `NOT_DETERMINABLE_FROM_CODE`), including
   unknown markers nested in expected-value arrays, cannot be authored as
   positive required facts;
-- the previous Article 14 rule no longer treats
-  `riskDocumentationEvidence = NOT_DETERMINABLE_FROM_CODE` as a positive match;
-- the catalog remains `DRAFT` by default;
-- approval happens only when `LEGAL_RULE_CATALOG_APPROVE` is explicitly set to
-  `1`, `true`, or `yes`.
+- only three Article 11/12 review candidates are authored into the DRAFT catalog;
+- production approval from this script is blocked while the known applicability
+  data-model gaps remain.
 
-### Deferred Article 15 candidate
+### Deferred high-risk and medium-risk families
 
-The previous `ART-15-MEDIUM-RISK-TRANSPARENCY-GAP` candidate has been removed
-from the authored baseline and is reported as deferred with reason
-`MEDIUM_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED`.
+Articles 9, 10, 13 and 14 are deferred because the current scanner's
+`HARM_POTENTIAL_SIGNAL` is only a technical heuristic. It may be emitted from a
+domain package or a high-stakes-looking function name such as an approval,
+rejection or risk-assessment call. That is not sufficient evidence that the
+legal high-risk applicability test has been satisfied.
 
-Reason: legal matching is an input to risk classification. The current
-VerifiedProfile does not contain a non-circular, evidence-backed fact proving
-that the system is already in the Article 15 medium-risk class. Using
-`aiInteractionDisclosurePresent = ABSENT` alone would be unsound because the
-same disclosure gap can exist on a high-risk system and therefore cannot prove
-medium-risk applicability.
+The current deferred reasons are:
 
-The Article 15 family should be authored only after LCSP has a non-circular
-applicability basis for medium-risk scope.
+```text
+art-9  -> HIGH_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED
+art-10 -> HIGH_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED
+art-13 -> HIGH_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED
+art-14 -> HIGH_RISK_AND_LEGAL_ROLE_APPLICABILITY_NOT_EVIDENCE_BACKED
+art-15 -> MEDIUM_RISK_APPLICABILITY_NOT_EVIDENCE_BACKED
+```
 
-The remaining baseline still requires domain review of legal-role applicability
-(provider/deployer/developer/user scope) before production approval because the
-current VerifiedProfile does not yet expose a sufficiently explicit legal-role
-fact for those obligations.
+Article 15 is also deferred because legal matching is an input to risk
+classification. A disclosure gap cannot itself prove that a system belongs to
+the medium-risk class without creating a circular classification dependency.
+
+The remaining Article 11/12 candidates are still role-sensitive. Because the
+current VerifiedProfile does not yet expose an evidence-backed legal role
+(provider/deployer/developer/user), the script reports
+`LEGAL_ROLE_APPLICABILITY_NOT_MODELED_IN_VERIFIED_PROFILE` and deliberately
+rejects a production approval request. The catalog must stay DRAFT until that
+applicability dimension is modeled and the rules are re-authored/reviewed.
 
 ## Verification targets
 
@@ -180,6 +225,11 @@ The branch adds/extends tests for:
 - bilateral Article 33 repeal confirmation;
 - reviewed-dir/source-manifest handoff;
 - exact reviewed source provenance;
+- rich AIUsageFlow claim preservation without a DB migration;
+- VerifiedProfile `merged_profile` and field-level evidence projection;
+- the `>= 0.75` material legal-fact eligibility threshold;
+- exclusion of conflicted and lower-confidence claims from material fact backing;
+- rejection of unrelated/global evidence as backing for a required field;
 - known mismatch versus unknown fact behavior;
 - `NOT_DETERMINABLE_FROM_CODE` and unknown-list blocking;
 - malformed/empty required-fact fail-closed behavior;
