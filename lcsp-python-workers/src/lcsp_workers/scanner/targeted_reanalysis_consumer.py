@@ -50,6 +50,7 @@ class TargetedReanalysisConsumer(ConsumerBase):
     queue_name = TARGETED_REANALYSIS_QUEUE
     routing_key = TARGETED_REANALYSIS_COMMAND
     requires_pbac = False
+    retry_delays_seconds = (10, 60, 300)
 
     def __init__(
         self,
