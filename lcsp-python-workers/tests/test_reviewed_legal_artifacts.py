@@ -14,17 +14,20 @@ def _sha256(path: Path) -> str:
     return f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
 
 
-def test_reviewed_legal_artifacts_are_hash_bound_and_scoped() -> None:
+def test_reviewed_legal_artifacts_are_pdf_hash_bound_and_scoped() -> None:
     review_principals: set[str] = set()
 
     for document_id in DOCUMENT_IDS:
         reviewed_text = REVIEW_DIR / f"{document_id}.reviewed.txt"
         hierarchy_review = REVIEW_DIR / f"{document_id}.hierarchy-review.json"
+        ocr_manifest = REVIEW_DIR / f"{document_id}.ocr.json"
 
         assert reviewed_text.is_file()
         assert hierarchy_review.is_file()
+        assert ocr_manifest.is_file()
 
         review = json.loads(hierarchy_review.read_text(encoding="utf-8"))
+        ocr = json.loads(ocr_manifest.read_text(encoding="utf-8"))
         assert review["documentId"] == document_id
         assert review["reviewState"] == "APPROVED"
         assert review["reviewedTextSha256"] == _sha256(reviewed_text)
@@ -33,6 +36,15 @@ def test_reviewed_legal_artifacts_are_hash_bound_and_scoped() -> None:
             review["reviewIdentityPolicy"]
             == "TECHNICAL_AUDIT_PRINCIPAL_NOT_LEGAL_SIGNATURE"
         )
+
+        # Reviewed text must resolve back to the exact PDF bytes held in reports/.
+        snapshot_ref = review["sourceReview"]["sourceSnapshotReviewed"]
+        source_snapshot = REPOSITORY_ROOT / snapshot_ref
+        assert source_snapshot.is_file()
+        assert review["reviewedSourceSha256"] == _sha256(source_snapshot)
+        assert ocr["sourceFile"] == snapshot_ref
+        assert ocr["sourceSha256"] == review["reviewedSourceSha256"]
+
         review_principals.add(review["reviewedBy"])
 
     assert review_principals == {"lcsp-legal-review-gate"}
