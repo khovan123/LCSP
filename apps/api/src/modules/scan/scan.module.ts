@@ -7,6 +7,7 @@ import { GetScanJobHandler } from "./application/queries/get-scan-job/get-scan-j
 import { EvidenceSchemaValidatorService } from "./application/services/scan/evidence-schema-validator.service.js";
 import {
   InternalScanController,
+  InternalTargetedReanalysisController,
   ScanController,
 } from "./presentation/http/scan.controller.js";
 import { WorkspaceRuntimeEventsController } from "./presentation/http/workspace-runtime-events.controller.js";
@@ -19,6 +20,7 @@ import { RequestTargetedReanalysisHandler } from "./application/commands/request
   controllers: [
     ScanController,
     InternalScanController,
+    InternalTargetedReanalysisController,
     WorkspaceRuntimeEventsController,
   ],
   providers: [
