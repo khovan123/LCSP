@@ -122,6 +122,13 @@ now joins the rich metadata onto each compact claim by stable `claim_id` before
 writing the existing `AIUsageFlow.claims` JSON column. No schema migration or
 inferred backfill is used.
 
+`flow_data` remains optional for legacy callers, but when supplied it must be a
+complete and consistent companion to the compact claims. The API rejects the
+payload unless both claim representations have the same unique `claim_id` set,
+the same evidence-ref set per claim, and each rich claim supplies a legal fact
+field/value, lifecycle and finite numeric confidence in `[0,1]`. The rich
+payload passes the same privacy/secret checks as the compact payload.
+
 The VerifiedProfile worker now materializes three canonical legal-matching
 views inside immutable `profile_data`:
 
@@ -132,17 +139,17 @@ views inside immutable `profile_data`:
 
 A claim contributes to `fact_evidence_refs` only when it is:
 
+- a material claim (`is_material` is not false);
 - `VALIDATED` or `VERIFIED`;
 - confidence `>= 0.75`;
 - backed by one or more evidence refs;
 - free of unresolved conflict refs.
 
-Claims below the material threshold may remain in `merged_profile` as context,
-but they cannot independently prove a required legal fact. Likewise, an
-aggregate or unrelated evidence ref cannot satisfy another field's required
-fact. The rule evaluator requires evidence on the exact required field and
-returns `BLOCKED_UNKNOWN_FACT` when a value matches but its field lacks eligible
-evidence.
+Claims outside that material gate may remain in `merged_profile` as context,
+but they cannot independently establish either applicability or
+non-applicability. Likewise, an aggregate or unrelated evidence ref cannot
+satisfy another field's required fact. The rule evaluator requires evidence on
+the exact field before using its value for a match or mismatch decision.
 
 The API `GetVerifiedProfileById` projection now reads only these canonical
 fields. Legacy profile payloads without `merged_profile`/`fact_evidence_refs`
@@ -154,11 +161,16 @@ a legal fact source.
 Rule applicability evaluation now distinguishes three states that were
 previously conflated:
 
-- required fact matched -> candidate can become `MATCHED` only when that exact
-  field has eligible evidence refs;
-- required fact is known and different -> `NOT_APPLICABLE`;
-- required fact is unknown/unclear/not determinable ->
-  `BLOCKED_UNKNOWN_FACT` under `BLOCK_ON_UNKNOWN`.
+- evidence-backed required fact matched -> candidate may become `MATCHED`;
+- evidence-backed required fact is known and different -> `NOT_APPLICABLE`;
+- required fact is unknown, unbacked, unclear or not determinable ->
+  `BLOCKED_UNKNOWN_FACT` under the fail-closed path.
+
+An unbacked mismatch may not be used to exclude a legal obligation. Similarly,
+a blocking fact already present in `merged_profile` is actionable only when its
+exact field has eligible evidence. Under `BLOCK_ON_UNKNOWN`, a present but
+unknown/unbacked blocking fact blocks the decision rather than silently making
+the rule match or become inapplicable.
 
 `NOT_DETERMINABLE_FROM_CODE` is explicitly treated as unknown and cannot be used
 as a positive fact proving that a legal obligation applies or has been
@@ -169,9 +181,8 @@ They can no longer behave like a zero-condition rule and become `MATCHED` merely
 because the VerifiedProfile contains some evidence reference.
 
 List-valued facts use containment semantics only after the required field has
-eligible evidence backing. Blocking facts with an `expectedValue` block only
-when the actual value matches that expected value; mere presence of the field
-does not make a rule inapplicable.
+eligible evidence backing. Blocking facts with an `expectedValue` exclude a
+rule only when the evidence-backed actual value matches that expected value.
 
 ## Law 134 baseline Rule Catalog authoring
 
@@ -185,7 +196,9 @@ authoring utility rather than an approval utility:
   positive required facts;
 - only three Article 11/12 review candidates are authored into the DRAFT catalog;
 - production approval from this script is blocked while the known applicability
-  data-model gaps remain.
+  data-model gaps remain;
+- an accidental approval request fails before any catalog/rule write, preventing
+  an orphan DRAFT from being created by the blocked path.
 
 ### Deferred high-risk and medium-risk families
 
@@ -225,16 +238,16 @@ The branch adds/extends tests for:
 - bilateral Article 33 repeal confirmation;
 - reviewed-dir/source-manifest handoff;
 - exact reviewed source provenance;
-- rich AIUsageFlow claim preservation without a DB migration;
+- rich/compact AIUsageFlow claim preservation and consistency without a DB migration;
 - VerifiedProfile `merged_profile` and field-level evidence projection;
 - the `>= 0.75` material legal-fact eligibility threshold;
-- exclusion of conflicted and lower-confidence claims from material fact backing;
+- exclusion of non-material, conflicted and lower-confidence claims from material fact backing;
 - rejection of unrelated/global evidence as backing for a required field;
-- known mismatch versus unknown fact behavior;
+- evidence-backed mismatch versus unbacked/unknown fact behavior;
+- evidence requirements for blocking-fact decisions;
 - `NOT_DETERMINABLE_FROM_CODE` and unknown-list blocking;
 - malformed/empty required-fact fail-closed behavior;
 - additive list matching;
-- value-aware blocking facts;
 - independent technical review/approval audit-principal sign-off policy.
 
 CI remains the final repository-level verification gate before merge.
