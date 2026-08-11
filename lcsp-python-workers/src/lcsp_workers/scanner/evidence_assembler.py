@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import re
 from typing import Iterable
 
 from lcsp_workers.platform.callback_schemas import (
@@ -23,6 +24,8 @@ from .tools.tool_base import OUTCOME_SUCCESS, ToolExecutionResult
 SCHEMA_VERSION = "1.0.0"
 PRIVACY_ASSERTION_FAILED = "PRIVACY_ASSERTION_FAILED"
 ALL_TOOLS_FAILED = "ALL_TOOLS_FAILED"
+FORBIDDEN_PAYLOAD_KEYS = {"source_code", "raw_source", "raw_content", "prompt", "ast_body", "full_ast"}
+SECRET_PATTERNS = (re.compile(r"\bsk-ant-[A-Za-z0-9_-]{16,}\b"), re.compile(r"\bgh[oprsu]_[A-Za-z0-9_]{20,}\b"))
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,7 @@ class EvidenceAssembler:
             "coverage_notes": list(coverage_notes),
             "evidence_graph": serialize_graph(evidence_graph) if evidence_graph else None,
         }
+        self._assert_safe_payload(evidence_payload)
         safe_evidence_payload = redact_dict(evidence_payload)
 
         privacy_flags = PrivacyFlags(
@@ -166,3 +170,20 @@ class EvidenceAssembler:
             raise PrivacyAssertionError("evidence payload contains unredacted secrets")
         if len(original_findings) != len(redacted_findings):
             raise PrivacyAssertionError("raw source was stripped from findings")
+
+    def _assert_safe_payload(self, value: object) -> None:
+        if isinstance(value, str):
+            if any(pattern.search(value) for pattern in SECRET_PATTERNS):
+                raise PrivacyAssertionError("evidence payload contains a secret")
+            return
+        if isinstance(value, list):
+            for item in value:
+                self._assert_safe_payload(item)
+            return
+        if not isinstance(value, dict):
+            return
+        for key, item in value.items():
+            normalized = key.replace("-", "_").lower()
+            if normalized in FORBIDDEN_PAYLOAD_KEYS:
+                raise PrivacyAssertionError(f"evidence payload contains forbidden field {key}")
+            self._assert_safe_payload(item)

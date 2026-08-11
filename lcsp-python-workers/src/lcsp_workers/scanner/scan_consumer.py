@@ -291,6 +291,9 @@ class ScanConsumer(ConsumerBase):
                 structural_facts=structural_facts,
                 evidence_graph=evidence_graph,
             )
+            # The callback is a durable success boundary: no source workspace may
+            # remain when evidence becomes externally observable.
+            self._workspace.cleanup(envelope.scan_job_id)
             self._api_client.post_scan_callback(
                 envelope.scan_job_id,
                 callback_payload,
