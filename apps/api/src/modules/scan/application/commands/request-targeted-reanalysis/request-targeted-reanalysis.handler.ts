@@ -19,6 +19,14 @@ import {
   TARGETED_REANALYSIS_CAPACITY_POLICY,
   TARGETED_REANALYSIS_REQUEST_STATES,
 } from "@lcsp/contracts/scan";
+import {
+  REPOSITORY_SCAN_JOB_STATUSES,
+  REPOSITORY_SCAN_TRIGGER_SOURCES,
+} from "@lcsp/contracts/github-integration";
+import {
+  toPrismaRepositoryScanJobStatus,
+  toPrismaRepositoryScanTriggerSource,
+} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -77,6 +85,7 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
     }
 
     const requestId = randomUUID();
+    const scanJobId = randomUUID();
     const checkpointRef = `checkpoint:${requestId}`;
     const normalizedScope = input.pathPrefixes
       ? { pathPrefixes: [...input.pathPrefixes].sort() }
@@ -153,6 +162,7 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
       const row = await tx.targetedReanalysisRequest.create({
         data: {
           id: requestId,
+          scanJobId,
           assessmentId: input.assessmentId,
           organizationId,
           inputEvidenceReportId: input.inputEvidenceReportId,
@@ -163,6 +173,22 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           reasonRequirementId: input.reasonRequirementId,
           idempotencyKey: input.idempotencyKey,
           checkpointRef,
+          correlationId,
+        },
+      });
+      await tx.repositoryScanJob.create({
+        data: {
+          id: scanJobId,
+          assessmentId: input.assessmentId,
+          snapshotId: input.snapshotId,
+          organizationId,
+          idempotencyKey: `reanalysis:${input.idempotencyKey}`,
+          triggerSource: toPrismaRepositoryScanTriggerSource(
+            REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
+          ),
+          status: toPrismaRepositoryScanJobStatus(
+            REPOSITORY_SCAN_JOB_STATUSES.queued,
+          ),
           correlationId,
         },
       });
@@ -182,6 +208,7 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           idempotencyKey: input.idempotencyKey,
           payload: {
             requestId,
+            scanJobId,
             assessmentId: input.assessmentId,
             inputEvidenceReportId: input.inputEvidenceReportId,
             snapshotId: input.snapshotId,
