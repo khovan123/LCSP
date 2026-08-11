@@ -11,6 +11,7 @@ import { FindProviderInvocationsHandler } from "./application/queries/find-provi
 import { GetEvidenceSubgraphHandler } from "./application/queries/get-evidence-subgraph/get-evidence-subgraph.handler.js";
 import { GetSymbolContextHandler } from "./application/queries/get-symbol-context/get-symbol-context.handler.js";
 import { TraceStaticFlowHandler } from "./application/queries/trace-static-flow/trace-static-flow.handler.js";
+import { InspectHumanReviewPathHandler } from "./application/queries/inspect-human-review-path/inspect-human-review-path.handler.js";
 import { EvidenceRedactorService } from "./application/services/evidence/evidence-redactor.service.js";
 import {
   EvidenceController,
@@ -28,6 +29,7 @@ import {
     GetEvidenceSubgraphHandler,
     GetSymbolContextHandler,
     TraceStaticFlowHandler,
+    InspectHumanReviewPathHandler,
     AcceptTechnicalProfileHandler,
     EvidenceRedactorService,
     WorkerApiKeyGuard,
