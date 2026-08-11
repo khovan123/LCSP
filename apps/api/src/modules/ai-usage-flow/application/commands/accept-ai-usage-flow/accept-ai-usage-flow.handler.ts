@@ -239,7 +239,8 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
       !payload.claims.every(isClaim) ||
       !Array.isArray(payload.unknown_usages) ||
       !payload.unknown_usages.every(isRecord) ||
-      !isRecord(payload.privacy_flags)
+      !isRecord(payload.privacy_flags) ||
+      (payload.flow_data !== undefined && !isRecord(payload.flow_data))
     ) {
       throw new UnprocessableEntityException(
         this.errorBody(command, SCAN_ERROR_CODES.aiUsageFlowSchemaInvalid),
