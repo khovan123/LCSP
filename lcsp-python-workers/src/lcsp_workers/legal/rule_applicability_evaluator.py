@@ -82,29 +82,35 @@ class RuleApplicabilityEvaluator:
             if is_unknown_fact(actual_value):
                 unknown_required_facts.append(field)
                 rationale.append(f"required fact {field} is unknown")
-            elif not fact_matches(actual_value, expected_value):
-                mismatched_required_facts.append(field)
-                rationale.append(f"required fact {field} did not match")
             elif not has_evidence_refs(fact_evidence_refs.get(field)):
+                # An unbacked value may not prove either applicability or
+                # non-applicability. Treat it as unresolved before comparing it
+                # with the authored expectation.
                 unbacked_required_facts.append(field)
                 rationale.append(
                     f"required fact {field} lacks eligible evidence refs"
                 )
+            elif not fact_matches(actual_value, expected_value):
+                mismatched_required_facts.append(field)
+                rationale.append(f"required fact {field} did not match")
             else:
                 matched_required_facts.append(field)
                 rationale.append(f"required fact {field} matched")
 
         blocking_present: list[str] = []
+        unresolved_blocking_facts: list[str] = []
         for item in blocking_facts:
             field = str(item["field"])
             if field not in merged_profile:
                 continue
             actual_value = merged_profile.get(field)
-            if "expectedValue" not in item:
-                if not is_unknown_fact(actual_value):
-                    blocking_present.append(field)
+            if is_unknown_fact(actual_value) or not has_evidence_refs(
+                fact_evidence_refs.get(field)
+            ):
+                unresolved_blocking_facts.append(field)
+                rationale.append(f"blocking fact {field} is unknown or unbacked")
                 continue
-            if not is_unknown_fact(actual_value) and fact_matches(
+            if "expectedValue" not in item or fact_matches(
                 actual_value,
                 item.get("expectedValue"),
             ):
@@ -120,10 +126,20 @@ class RuleApplicabilityEvaluator:
                 blocking_facts=blocking_present,
             )
 
-        if mismatched_required_facts:
+        if unresolved_blocking_facts and unknown_fact_policy == "BLOCK_ON_UNKNOWN":
             return RuleEvaluationResult(
                 rule_id=rule_id,
-                status="NOT_APPLICABLE",
+                status="BLOCKED_UNKNOWN_FACT",
+                confidence=0.0,
+                rationale=rationale,
+                matched_required_facts=matched_required_facts,
+                blocking_facts=[],
+            )
+
+        if unbacked_required_facts:
+            return RuleEvaluationResult(
+                rule_id=rule_id,
+                status="BLOCKED_UNKNOWN_FACT",
                 confidence=0.0,
                 rationale=rationale,
                 matched_required_facts=matched_required_facts,
@@ -145,10 +161,10 @@ class RuleApplicabilityEvaluator:
                 blocking_facts=blocking_present,
             )
 
-        if unbacked_required_facts:
+        if mismatched_required_facts:
             return RuleEvaluationResult(
                 rule_id=rule_id,
-                status="BLOCKED_UNKNOWN_FACT",
+                status="NOT_APPLICABLE",
                 confidence=0.0,
                 rationale=rationale,
                 matched_required_facts=matched_required_facts,
