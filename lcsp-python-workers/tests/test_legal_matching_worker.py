@@ -97,11 +97,11 @@ def test_rule_applicability_evaluator_does_not_use_unrelated_global_evidence():
     assert "automationLevel lacks eligible evidence refs" in result.rationale[0]
 
 
-def test_rule_applicability_evaluator_treats_known_mismatch_as_not_applicable():
+def test_rule_applicability_evaluator_treats_evidence_backed_known_mismatch_as_not_applicable():
     evaluator = RuleApplicabilityEvaluator()
     profile = {
         "mergedProfile": {"automationLevel": "ASSISTIVE"},
-        "factEvidenceRefs": {},
+        "factEvidenceRefs": {"automationLevel": ["ev-automation"]},
     }
     rule = {
         "legalRuleId": "RULE-KNOWN-MISMATCH",
@@ -116,6 +116,27 @@ def test_rule_applicability_evaluator_treats_known_mismatch_as_not_applicable():
 
     assert result.status == "NOT_APPLICABLE"
     assert "did not match" in result.rationale[0]
+
+
+def test_rule_applicability_evaluator_does_not_use_unbacked_mismatch_to_exclude_rule():
+    evaluator = RuleApplicabilityEvaluator()
+    profile = {
+        "mergedProfile": {"automationLevel": "ASSISTIVE"},
+        "factEvidenceRefs": {},
+    }
+    rule = {
+        "legalRuleId": "RULE-UNBACKED-MISMATCH",
+        "requiredFacts": [
+            {"field": "automationLevel", "expectedValue": "FULLY_AUTOMATED"},
+        ],
+        "blockingFacts": [],
+        "unknownFactPolicy": "BLOCK_ON_UNKNOWN",
+    }
+
+    result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
+
+    assert result.status == "BLOCKED_UNKNOWN_FACT"
+    assert "lacks eligible evidence refs" in result.rationale[0]
 
 
 def test_rule_applicability_evaluator_blocks_not_determinable_from_code_as_unknown():
@@ -218,7 +239,7 @@ def test_rule_applicability_evaluator_blocks_malformed_or_empty_required_facts()
         assert "invalid" in result.rationale[0]
 
 
-def test_rule_applicability_evaluator_blocks_only_when_blocking_value_matches():
+def test_rule_applicability_evaluator_blocks_only_when_evidence_backed_blocking_value_matches():
     evaluator = RuleApplicabilityEvaluator()
     rule = {
         "legalRuleId": "RULE-BLOCKING-VALUE",
@@ -235,7 +256,10 @@ def test_rule_applicability_evaluator_blocks_only_when_blocking_value_matches():
             "automationLevel": "FULLY_AUTOMATED",
             "deploymentStage": "PUBLIC",
         },
-        "factEvidenceRefs": {"automationLevel": ["ev-1"]},
+        "factEvidenceRefs": {
+            "automationLevel": ["ev-automation"],
+            "deploymentStage": ["ev-stage"],
+        },
     }
 
     result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
@@ -245,6 +269,32 @@ def test_rule_applicability_evaluator_blocks_only_when_blocking_value_matches():
     blocked = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
     assert blocked.status == "NOT_APPLICABLE"
     assert blocked.blocking_facts == ["deploymentStage"]
+
+
+def test_rule_applicability_evaluator_blocks_when_present_blocking_fact_is_unbacked():
+    evaluator = RuleApplicabilityEvaluator()
+    rule = {
+        "legalRuleId": "RULE-UNKNOWN-BLOCKER",
+        "requiredFacts": [
+            {"field": "automationLevel", "expectedValue": "FULLY_AUTOMATED"},
+        ],
+        "blockingFacts": [
+            {"field": "deploymentStage", "expectedValue": "INTERNAL_ONLY"},
+        ],
+        "unknownFactPolicy": "BLOCK_ON_UNKNOWN",
+    }
+    profile = {
+        "mergedProfile": {
+            "automationLevel": "FULLY_AUTOMATED",
+            "deploymentStage": "PUBLIC",
+        },
+        "factEvidenceRefs": {"automationLevel": ["ev-automation"]},
+    }
+
+    result = evaluator.evaluate_rule(rule=rule, verified_profile=profile)
+
+    assert result.status == "BLOCKED_UNKNOWN_FACT"
+    assert "blocking fact deploymentStage is unknown or unbacked" in result.rationale
 
 
 def test_citation_retriever_drops_repealed_chunks_and_builds_allowlist():
