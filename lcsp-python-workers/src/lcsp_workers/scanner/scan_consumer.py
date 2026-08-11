@@ -244,15 +244,21 @@ class ScanConsumer(ConsumerBase):
             )
             structural_facts: list | None = None
             try:
+                self._structural_augmentor.set_workspace_path(result.workspace_path)
                 candidate_files = [
-                    *routed_python_files,
-                    *routed_ts_js_files,
+                    *(routed_python_files or []),
+                    *(routed_ts_js_files or []),
                 ]
                 structural_facts = self._structural_augmentor.augment(
                     files=candidate_files or [],
                     finding_ids=[finding.finding_id for finding in technical_findings],
                 )
+                coverage_notes.extend(self._structural_augmentor.last_coverage_notes)
             except Exception as error:
+                coverage_notes.append(
+                    "SCAN_COVERAGE_LIMITATION: "
+                    f"file=<workspace> reason=structural_augmentation_failed:{type(error).__name__}"
+                )
                 logger.warning(
                     "SCAN_STRUCTURAL_AUGMENTATION_FAILED",
                     scan_job_id=envelope.scan_job_id,
