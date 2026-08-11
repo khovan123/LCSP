@@ -30,6 +30,7 @@ class RuleApplicabilityEvaluator:
         rule: dict[str, Any],
         verified_profile: dict[str, Any],
     ) -> RuleEvaluationResult:
+        rule_id = str(rule.get("legalRuleId") or "unknown")
         merged_profile = verified_profile.get("mergedProfile") or {}
         evidence_refs = verified_profile.get("evidenceRefs") or []
         evidence_ids = {
@@ -38,9 +39,27 @@ class RuleApplicabilityEvaluator:
             if isinstance(item, dict) and item.get("id")
         }
 
-        required_facts = rule.get("requiredFacts") or []
-        blocking_facts = rule.get("blockingFacts") or []
-        unknown_fact_policy = str(rule.get("unknownFactPolicy") or "BLOCK_ON_UNKNOWN")
+        raw_required_facts = rule.get("requiredFacts")
+        if not isinstance(raw_required_facts, list) or not raw_required_facts:
+            return blocked_invalid_rule(rule_id, "required facts missing or invalid")
+        if any(not is_valid_fact_definition(fact) for fact in raw_required_facts):
+            return blocked_invalid_rule(rule_id, "required fact definition invalid")
+        required_facts = raw_required_facts
+
+        raw_blocking_facts = rule.get("blockingFacts")
+        if raw_blocking_facts is None:
+            blocking_facts: list[dict[str, Any]] = []
+        elif isinstance(raw_blocking_facts, list) and all(
+            is_valid_fact_definition(fact, expected_value_optional=True)
+            for fact in raw_blocking_facts
+        ):
+            blocking_facts = raw_blocking_facts
+        else:
+            return blocked_invalid_rule(rule_id, "blocking fact definition invalid")
+
+        unknown_fact_policy = str(
+            rule.get("unknownFactPolicy") or "BLOCK_ON_UNKNOWN"
+        )
 
         matched_required_facts: list[str] = []
         unknown_required_facts: list[str] = []
@@ -48,12 +67,8 @@ class RuleApplicabilityEvaluator:
         rationale: list[str] = []
 
         for fact in required_facts:
-            if not isinstance(fact, dict):
-                continue
-            field = str(fact.get("field") or "")
-            if not field:
-                continue
-            expected_value = fact.get("expectedValue")
+            field = str(fact["field"])
+            expected_value = fact["expectedValue"]
             actual_value = merged_profile.get(field)
 
             if is_unknown_fact(actual_value):
@@ -68,10 +83,8 @@ class RuleApplicabilityEvaluator:
 
         blocking_present: list[str] = []
         for item in blocking_facts:
-            if not isinstance(item, dict):
-                continue
-            field = str(item.get("field") or "")
-            if not field or field not in merged_profile:
+            field = str(item["field"])
+            if field not in merged_profile:
                 continue
             actual_value = merged_profile.get(field)
             if "expectedValue" not in item:
@@ -86,7 +99,7 @@ class RuleApplicabilityEvaluator:
 
         if blocking_present:
             return RuleEvaluationResult(
-                rule_id=str(rule.get("legalRuleId") or "unknown"),
+                rule_id=rule_id,
                 status="NOT_APPLICABLE",
                 confidence=0.0,
                 rationale=rationale + ["blocking fact matched"],
@@ -96,7 +109,7 @@ class RuleApplicabilityEvaluator:
 
         if mismatched_required_facts:
             return RuleEvaluationResult(
-                rule_id=str(rule.get("legalRuleId") or "unknown"),
+                rule_id=rule_id,
                 status="NOT_APPLICABLE",
                 confidence=0.0,
                 rationale=rationale,
@@ -111,7 +124,7 @@ class RuleApplicabilityEvaluator:
                 else "NOT_APPLICABLE"
             )
             return RuleEvaluationResult(
-                rule_id=str(rule.get("legalRuleId") or "unknown"),
+                rule_id=rule_id,
                 status=status,
                 confidence=0.0,
                 rationale=rationale,
@@ -119,21 +132,12 @@ class RuleApplicabilityEvaluator:
                 blocking_facts=blocking_present,
             )
 
-        if len(matched_required_facts) != len(
-            [fact for fact in required_facts if isinstance(fact, dict) and fact.get("field")]
-        ):
-            return RuleEvaluationResult(
-                rule_id=str(rule.get("legalRuleId") or "unknown"),
-                status="BLOCKED_UNKNOWN_FACT",
-                confidence=0.0,
-                rationale=rationale + ["required fact definition invalid"],
-                matched_required_facts=matched_required_facts,
-                blocking_facts=blocking_present,
-            )
+        if len(matched_required_facts) != len(required_facts):
+            return blocked_invalid_rule(rule_id, "required fact evaluation incomplete")
 
         if not evidence_ids:
             return RuleEvaluationResult(
-                rule_id=str(rule.get("legalRuleId") or "unknown"),
+                rule_id=rule_id,
                 status="BLOCKED_UNKNOWN_FACT",
                 confidence=0.0,
                 rationale=rationale + ["evidence refs missing"],
@@ -142,7 +146,7 @@ class RuleApplicabilityEvaluator:
             )
 
         return RuleEvaluationResult(
-            rule_id=str(rule.get("legalRuleId") or "unknown"),
+            rule_id=rule_id,
             status="MATCHED",
             confidence=0.95,
             rationale=rationale,
@@ -151,12 +155,38 @@ class RuleApplicabilityEvaluator:
         )
 
 
+def blocked_invalid_rule(rule_id: str, reason: str) -> RuleEvaluationResult:
+    return RuleEvaluationResult(
+        rule_id=rule_id,
+        status="BLOCKED_UNKNOWN_FACT",
+        confidence=0.0,
+        rationale=[reason],
+        matched_required_facts=[],
+        blocking_facts=[],
+    )
+
+
+def is_valid_fact_definition(
+    value: Any,
+    *,
+    expected_value_optional: bool = False,
+) -> bool:
+    if not isinstance(value, dict):
+        return False
+    field = value.get("field")
+    if not isinstance(field, str) or not field.strip():
+        return False
+    return expected_value_optional or "expectedValue" in value
+
+
 def is_unknown_fact(value: Any) -> bool:
     if value is None:
         return True
     if isinstance(value, str):
         normalized = value.strip().upper()
         return not normalized or normalized in UNKNOWN_FACT_VALUES
+    if isinstance(value, list):
+        return any(is_unknown_fact(item) for item in value)
     return False
 
 
