@@ -35,6 +35,7 @@ def _claim(**overrides: object) -> dict:
         "lifecycle_state": "VALIDATED",
         "evidence_refs": ["finding-invocation"],
         "confidence": 0.91,
+        "is_material": True,
     }
     claim.update(overrides)
     return claim
@@ -215,8 +216,8 @@ def test_legal_fact_evidence_requires_validated_claim_at_material_threshold() ->
         conflicts_resolved_at="2026-07-25T09:30:00Z",
     )
 
-    # Reconciled facts remain visible, but only >= 0.75 evidence-backed claims
-    # may become material required-fact backing for legal matching.
+    # Reconciled facts remain visible, but only >= 0.75 evidence-backed material
+    # claims may become required-fact backing for legal matching.
     assert profile.merged_profile["automationLevel"] == "FULLY_AUTOMATED"
     assert profile.merged_profile["contentLabelingStatus"] == "ABSENT"
     assert profile.fact_evidence_refs == {
@@ -245,6 +246,29 @@ def test_legal_fact_evidence_excludes_conflicted_claim() -> None:
 
     assert profile.merged_profile["automationLevel"] == "FULLY_AUTOMATED"
     assert profile.fact_evidence_refs == {}
+
+
+@pytest.mark.p0
+def test_legal_fact_evidence_excludes_non_material_claim() -> None:
+    profile = VerifiedProfileBuilder().build(
+        ai_usage_flow=_ai_usage_flow(
+            claims=[
+                _claim(
+                    claim_value={"automationLevel": "FULLY_AUTOMATED"},
+                    confidence=0.95,
+                    evidence_refs=["ev-automation"],
+                    is_material=False,
+                )
+            ]
+        ),
+        conflict_records=[],
+        wizard_profile=None,
+        conflicts_resolved_at="2026-07-25T09:30:00Z",
+    )
+
+    assert profile.merged_profile["automationLevel"] == "FULLY_AUTOMATED"
+    assert profile.fact_evidence_refs == {}
+    assert profile.evidence_refs == []
 
 
 @pytest.mark.p0
