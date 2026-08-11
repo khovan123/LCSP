@@ -7,6 +7,7 @@ import { AcceptConflictHandler } from "./application/commands/accept-conflict/ac
 import { AcceptVerifiedProfileHandler } from "./application/commands/accept-verified-profile/accept-verified-profile.handler.js";
 import { ApproveVerifiedProfileHandler } from "./application/commands/approve-verified-profile/approve-verified-profile.handler.js";
 import { ResolveConflictHandler } from "./application/commands/resolve-conflict/resolve-conflict.handler.js";
+import { ReconcileProfileToVerifiedProfileHandler } from "./application/commands/reconcile-profile-to-verified-profile/reconcile-profile-to-verified-profile.handler.js";
 import { ListConflictsHandler } from "./application/queries/list-conflicts/list-conflicts.handler.js";
 import { GetVerifiedProfileByIdHandler } from "./application/queries/get-verified-profile-by-id/get-verified-profile-by-id.handler.js";
 import { GetArtifactChainHandler } from "./application/queries/get-artifact-chain/get-artifact-chain.handler.js";
@@ -30,6 +31,7 @@ import {
     ProposeMissingTargetsHandler,
     ListConflictsHandler,
     ResolveConflictHandler,
+    ReconcileProfileToVerifiedProfileHandler,
     WorkerApiKeyGuard,
   ],
 })
