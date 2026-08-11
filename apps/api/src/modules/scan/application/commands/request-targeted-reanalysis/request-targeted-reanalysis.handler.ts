@@ -118,47 +118,55 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
         { status: HttpStatus.NOT_FOUND },
       );
     }
-    const now = new Date();
-    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const [fifteenMinuteCount, dailyCount] = await Promise.all([
-      this.prisma.targetedReanalysisRequest.count({
-        where: { organizationId, createdAt: { gte: fifteenMinutesAgo } },
-      }),
-      this.prisma.targetedReanalysisRequest.count({
-        where: { organizationId, createdAt: { gte: twentyFourHoursAgo } },
-      }),
-    ]);
-    if (
-      fifteenMinuteCount >=
-        TARGETED_REANALYSIS_CAPACITY_POLICY.maxRequestsPerFifteenMinutes ||
-      dailyCount >=
-        TARGETED_REANALYSIS_CAPACITY_POLICY.maxRequestsPerTwentyFourHours
-    ) {
-      throw problemException(
-        SCAN_ERROR_CODES.targetedReanalysisRateLimited,
-        correlationId,
-        { status: HttpStatus.TOO_MANY_REQUESTS },
-      );
-    }
-    const activeCount = await this.prisma.targetedReanalysisRequest.count({
-      where: {
-        organizationId,
-        state: { in: ["QUEUED", "DISPATCHED", "RUNNING"] },
-      },
-    });
-    if (
-      activeCount >=
-      TARGETED_REANALYSIS_CAPACITY_POLICY.maxActivePerOrganization
-    ) {
-      throw problemException(
-        SCAN_ERROR_CODES.targetedReanalysisCapacityExhausted,
-        correlationId,
-        { status: HttpStatus.TOO_MANY_REQUESTS },
-      );
-    }
-
     const created = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtext(${organizationId}))
+      `;
+      const now = new Date();
+      const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const [fifteenMinuteCount, dailyCount, activeCount] = await Promise.all([
+        tx.targetedReanalysisRequest.count({
+          where: { organizationId, createdAt: { gte: fifteenMinutesAgo } },
+        }),
+        tx.targetedReanalysisRequest.count({
+          where: { organizationId, createdAt: { gte: twentyFourHoursAgo } },
+        }),
+        tx.targetedReanalysisRequest.count({
+          where: {
+            organizationId,
+            state: {
+              in: [
+                TARGETED_REANALYSIS_REQUEST_STATES.queued,
+                TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
+                TARGETED_REANALYSIS_REQUEST_STATES.running,
+              ],
+            },
+          },
+        }),
+      ]);
+      if (
+        fifteenMinuteCount >=
+          TARGETED_REANALYSIS_CAPACITY_POLICY.maxRequestsPerFifteenMinutes ||
+        dailyCount >=
+          TARGETED_REANALYSIS_CAPACITY_POLICY.maxRequestsPerTwentyFourHours
+      ) {
+        throw problemException(
+          SCAN_ERROR_CODES.targetedReanalysisRateLimited,
+          correlationId,
+          { status: HttpStatus.TOO_MANY_REQUESTS },
+        );
+      }
+      if (
+        activeCount >=
+        TARGETED_REANALYSIS_CAPACITY_POLICY.maxActivePerOrganization
+      ) {
+        throw problemException(
+          SCAN_ERROR_CODES.targetedReanalysisCapacityExhausted,
+          correlationId,
+          { status: HttpStatus.TOO_MANY_REQUESTS },
+        );
+      }
       const row = await tx.targetedReanalysisRequest.create({
         data: {
           id: requestId,
