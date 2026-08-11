@@ -467,7 +467,7 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       const corpus = await prisma.legalCorpusVersion.findUnique({
         where: { version: "corpus-hash-mismatch-v1" },
       });
-      assert.isUndefined(corpus);
+      assert.equal(corpus, null);
     });
 
     it("fails closed when document sourceSha256 does not match signoff", async () => {

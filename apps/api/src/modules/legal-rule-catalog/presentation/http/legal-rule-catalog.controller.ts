@@ -62,10 +62,7 @@ export class LegalRuleCatalogController {
   @HttpCode(201)
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.legalCorpusIngest)
-  async ingestCorpus(
-    @Body() body: IngestLegalCorpusRequest,
-    @Req() req: AuthenticatedRequest,
-  ) {
+  async ingestCorpus(@Body() body: IngestLegalCorpusRequest) {
     return resultEnvelope(
       await this.legalCorpus.ingestDraft({
         ...body,
