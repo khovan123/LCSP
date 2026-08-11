@@ -183,6 +183,7 @@ describe("InternalTargetedReanalysisController", () => {
     };
     const controller = new InternalTargetedReanalysisController(
       prisma as never,
+      { write: jest.fn().mockResolvedValue(undefined) } as never,
     );
 
     const response = await controller.claimRequest("request-1");
@@ -220,6 +221,7 @@ describe("InternalTargetedReanalysisController", () => {
     };
     const controller = new InternalTargetedReanalysisController(
       prisma as never,
+      { write: jest.fn().mockResolvedValue(undefined) } as never,
     );
 
     await expect(controller.claimRequest("request-1")).resolves.toEqual({
