@@ -35,6 +35,7 @@ export const PBAC_ACTIONS = {
   technicalEvidenceReanalyze: "technical-evidence:reanalyze",
   snapshotCreate: "snapshot:create",
   verifiedProfileApprove: "verified-profile:approve",
+  verifiedProfilePersist: "verified-profile:persist",
   wizardWrite: "wizard:write",
   wizardSubmit: "wizard:submit",
   wizardExport: "wizard:export",

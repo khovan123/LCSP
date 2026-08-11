@@ -35,6 +35,7 @@ import { AcceptConflictCommand } from "../../application/commands/accept-conflic
 import { AcceptVerifiedProfileCommand } from "../../application/commands/accept-verified-profile/accept-verified-profile.command.js";
 import { ApproveVerifiedProfileCommand } from "../../application/commands/approve-verified-profile/approve-verified-profile.command.js";
 import { ResolveConflictCommand } from "../../application/commands/resolve-conflict/resolve-conflict.command.js";
+import { ReconcileProfileToVerifiedProfileCommand } from "../../application/commands/reconcile-profile-to-verified-profile/reconcile-profile-to-verified-profile.command.js";
 import type { ConflictDetectionCallbackRequest } from "../../application/contracts/reconciliation/conflict-detection-callback.contract.js";
 import type { VerifiedProfileCallbackRequest } from "../../application/contracts/reconciliation/verified-profile-callback.contract.js";
 import { ListConflictsQuery } from "../../application/queries/list-conflicts/list-conflicts.query.js";
@@ -85,12 +86,28 @@ export class InternalReconciliationController {
     @Body() payload: VerifiedProfileCallbackRequest,
     @Headers("x-correlation-id") correlationId?: string,
   ) {
+    const resolvedCorrelationId = correlationId?.trim() || randomUUID();
+    if (isAgenticReconciliationCallback(payload)) {
+      return resultEnvelope(
+        await this.commandBus.execute(
+          new ReconcileProfileToVerifiedProfileCommand(
+            {
+              assessmentId: payload.assessment_id,
+              wizardProfileId: payload.wizard_profile_id,
+              technicalEvidenceReportId: payload.technical_evidence_report_id,
+              aiUsageFlowId: payload.ai_usage_flow_id,
+              reconciliationDecisionRefs: payload.reconciliation_decision_refs,
+              idempotencyKey: payload.idempotency_key,
+            },
+            payload.organization_id,
+            resolvedCorrelationId,
+          ),
+        ),
+      );
+    }
     return resultEnvelope(
       await this.commandBus.execute(
-        new AcceptVerifiedProfileCommand(
-          payload,
-          correlationId?.trim() || randomUUID(),
-        ),
+        new AcceptVerifiedProfileCommand(payload, resolvedCorrelationId),
       ),
     );
   }
@@ -123,6 +140,7 @@ export class InternalReconciliationController {
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
+        technicalProfileId: true,
         assessmentId: true,
         organizationId: true,
         schemaVersion: true,
@@ -139,7 +157,7 @@ export class InternalReconciliationController {
       throw new NotFoundException("Accepted AI usage flow not found");
     }
 
-    const [conflicts, wizardProfile] = await Promise.all([
+    const [conflicts, wizardProfile, technicalProfile] = await Promise.all([
       this.prisma.conflictRecord.findMany({
         where: { aiUsageFlowId: aiUsageFlow.id, assessmentId },
         orderBy: { createdAt: "asc" },
@@ -154,6 +172,14 @@ export class InternalReconciliationController {
       this.prisma.wizardProfile.findUnique({
         where: { assessmentId },
         select: { id: true, assessmentId: true, version: true, answers: true },
+      }),
+      this.prisma.technicalProfile.findFirst({
+        where: {
+          id: aiUsageFlow.technicalProfileId,
+          assessmentId,
+          organizationId: aiUsageFlow.organizationId,
+        },
+        select: { evidenceReportId: true },
       }),
     ]);
 
@@ -186,8 +212,27 @@ export class InternalReconciliationController {
             answers: wizardProfile.answers,
           }
         : null,
+      technical_evidence_report_id: technicalProfile?.evidenceReportId ?? null,
     });
   }
+}
+
+function isAgenticReconciliationCallback(
+  payload: VerifiedProfileCallbackRequest,
+): payload is VerifiedProfileCallbackRequest & {
+  wizard_profile_id: string;
+  technical_evidence_report_id: string;
+  reconciliation_decision_refs: string[];
+  idempotency_key: string;
+  organization_id: string;
+} {
+  return (
+    typeof payload.wizard_profile_id === "string" &&
+    typeof payload.technical_evidence_report_id === "string" &&
+    Array.isArray(payload.reconciliation_decision_refs) &&
+    typeof payload.idempotency_key === "string" &&
+    typeof payload.organization_id === "string"
+  );
 }
 
 @Controller("assessments")

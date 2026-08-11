@@ -124,6 +124,7 @@ export const SCAN_EVENT_TYPES = {
   reconciliationAllConflictsResolved:
     "event.reconciliation.all-conflicts-resolved.v1",
   verifiedProfileReady: "event.verified-profile.ready.v1",
+  verifiedProfilePersisted: "event.verified-profile.persisted.v1",
   legalRuleMatchReady: "event.legal-rule-match.ready.v1",
   classificationResultReady: "event.classification-result.ready.v1",
   evidenceAcceptedAudit: "SCAN_EVIDENCE_ACCEPTED",
@@ -136,6 +137,7 @@ export const SCAN_EVENT_TYPES = {
   noConflictsDetectedAudit: "NO_CONFLICTS_DETECTED",
   verifiedProfileAcceptedAudit: "VERIFIED_PROFILE_ACCEPTED",
   verifiedProfileApprovedAudit: "VERIFIED_PROFILE_APPROVED",
+  verifiedProfilePersistedAudit: "VERIFIED_PROFILE_PERSISTED",
   legalRuleMatchAcceptedAudit: "LEGAL_RULE_MATCH_ACCEPTED",
   legalRuleMatchBlockedAudit: "LEGAL_RULE_MATCH_BLOCKED",
   classificationAcceptedAudit: "CLASSIFICATION_ACCEPTED",

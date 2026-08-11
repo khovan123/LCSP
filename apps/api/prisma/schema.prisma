@@ -678,6 +678,10 @@ model ConflictRecord {
 model VerifiedProfile {
   id              String                @id @default(uuid())
   aiUsageFlowId   String                @unique
+  wizardProfileId String?
+  technicalEvidenceReportId String?
+  reconciliationDecisionRefs Json?
+  idempotencyKey String?
   assessmentId    String
   organizationId  String
   schemaVersion   String
@@ -690,6 +694,7 @@ model VerifiedProfile {
   createdAt       DateTime              @default(now())
 
   @@index([assessmentId])
+  @@unique([organizationId, idempotencyKey])
 }
 
 model ClassificationResult {
