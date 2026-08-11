@@ -11,6 +11,7 @@ export const AGENTIC_TOOL_NAMES = {
   inspectHumanReviewPath: "inspect_human_review_path",
   inspectDecisionPath: "inspect_decision_path",
   inspectDataPath: "inspect_data_path",
+  findSimilarSymbols: "find_similar_symbols",
   getReconciliationContext: "get_reconciliation_context",
 } as const;
 
@@ -64,4 +65,5 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   humanReviewPathRead: "AGENTIC_TOOL_HUMAN_REVIEW_PATH_READ",
   decisionPathRead: "AGENTIC_TOOL_DECISION_PATH_READ",
   dataPathRead: "AGENTIC_TOOL_DATA_PATH_READ",
+  similarSymbolsRead: "AGENTIC_TOOL_SIMILAR_SYMBOLS_READ",
 } as const;
