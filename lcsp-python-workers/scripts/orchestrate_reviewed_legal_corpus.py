@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Fail-closed orchestration for a Legal Operator reviewed corpus.
+"""Fail-closed orchestration for an approved reviewed corpus.
 
 The builder remains responsible for producing an ingest payload. This script is
-responsible for the post-sign-off lifecycle only:
+responsible for the post-review lifecycle only:
 
 reviewed text + hierarchy APPROVED -> ingest DRAFT -> build/validate retrieval
 index -> approve corpus.
 
-The same authenticated Legal Operator identity is used for ingest/approval and
-must match every reviewedBy value in the hierarchy sign-off files. The API also
-re-validates that identity before approval, so this script cannot bypass the
-sign-off gate.
+`reviewedBy` and the authenticated approval actor are independent technical
+audit principals. The reviewed artefacts prove what content was reviewed; the
+API token proves who is authorized to execute the lifecycle action. Neither is
+a legal signature. The API re-validates the explicit identity policy carried by
+this sign-off before allowing those principals to differ.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from lcsp_workers.legal.chromadb_citation_retriever import ChromaDbCitationRetri
 
 
 APPROVED = "APPROVED"
+REVIEW_IDENTITY_POLICY = "TECHNICAL_AUDIT_PRINCIPALS_INDEPENDENT"
 
 
 class ReviewGateError(RuntimeError):
@@ -138,12 +140,14 @@ def build_review_signoff(
 
     if len(reviewers) != 1:
         raise ReviewGateError(
-            "All corpus documents must be signed by the same Legal Operator for automatic approval"
+            "All corpus documents must currently share one review-gate principal for automatic orchestration"
         )
 
     return {
         "state": APPROVED,
         "reviewedBy": next(iter(reviewers)),
+        "identityPolicy": REVIEW_IDENTITY_POLICY,
+        "approvalActorMayDiffer": True,
         "documents": signoffs,
     }
 
@@ -256,6 +260,7 @@ def orchestrate(
         return {
             "status": "VALIDATED",
             "reviewedBy": signoff["reviewedBy"],
+            "identityPolicy": signoff["identityPolicy"],
             "documentCount": len(signoff["documents"]),
         }
     if not operator_token:
@@ -284,8 +289,8 @@ def orchestrate(
             api_base_url,
             f"/internal/legal-rule-catalog/corpus/{corpus_id}/approve",
             {
-                "scopeDescription": "Automatic approval after Legal Operator reviewed-text and hierarchy sign-off",
-                "comments": "Orchestrated after reviewed corpus retrieval-index validation",
+                "scopeDescription": "Automatic approval after reviewed-text, hierarchy and retrieval-index validation",
+                "comments": "Review audit principal and lifecycle approval actor are independently authenticated technical principals",
             },
             operator_token,
         )
@@ -305,7 +310,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--operator-token",
         default=os.getenv("LEGAL_OPERATOR_BEARER_TOKEN", ""),
-        help="Authenticated Legal Operator token. Must match reviewedBy and hold ingest/approve PBAC actions.",
+        help="Authenticated principal holding legal-corpus ingest/approve PBAC actions. It need not equal reviewedBy.",
     )
     parser.add_argument(
         "--chroma-path",
