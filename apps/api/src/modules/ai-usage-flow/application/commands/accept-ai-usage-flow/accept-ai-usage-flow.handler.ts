@@ -113,7 +113,12 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
             organizationId: technicalProfile.organizationId,
             schemaVersion: payload.schema_version,
             providerVersion: payload.provider_version,
-            claims: payload.claims as unknown as Prisma.InputJsonValue,
+            // The public callback claim contract is intentionally compact, but the
+            // Python worker also sends sanitized `flow_data.claims` containing the
+            // deterministic claim field/value/lifecycle/numeric confidence. Join
+            // those details by claim_id before persistence so reconciliation/legal
+            // matching does not have to guess values from descriptions later.
+            claims: enrichStoredClaims(payload) as unknown as Prisma.InputJsonValue,
             unknownUsages:
               payload.unknown_usages as unknown as Prisma.InputJsonValue,
             privacyFlags: payload.privacy_flags as Prisma.InputJsonValue,
@@ -249,7 +254,8 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
       payload.privacy_flags.containsSourceCode !== false ||
       payload.privacy_flags.secretsRedacted !== true ||
       containsUnsafePayload(payload.claims) ||
-      containsUnsafePayload(payload.unknown_usages)
+      containsUnsafePayload(payload.unknown_usages) ||
+      containsUnsafePayload(flowDataOf(payload))
     ) {
       throw new UnprocessableEntityException(
         this.errorBody(command, SCAN_ERROR_CODES.privacyFlagsInvalid),
@@ -262,6 +268,41 @@ export class AcceptAIUsageFlowHandler implements ICommandHandler<AcceptAIUsageFl
       status: HttpStatus.BAD_REQUEST,
     });
   }
+}
+
+function enrichStoredClaims(payload: unknown): Record<string, unknown>[] {
+  if (!isRecord(payload) || !Array.isArray(payload.claims)) return [];
+
+  const flowData = flowDataOf(payload);
+  const richClaims =
+    flowData && Array.isArray(flowData.claims)
+      ? flowData.claims.filter(isRecord)
+      : [];
+  const byClaimId = new Map<string, Record<string, unknown>>();
+  for (const claim of richClaims) {
+    const claimId = clean(claim.claim_id);
+    if (claimId) byClaimId.set(claimId, claim);
+  }
+
+  return payload.claims.filter(isRecord).map((compactClaim) => {
+    const claimId = clean(compactClaim.claim_id);
+    const richClaim = claimId ? byClaimId.get(claimId) : undefined;
+    if (!richClaim) return { ...compactClaim };
+
+    return {
+      ...compactClaim,
+      claim_field: richClaim.claim_field,
+      claim_value: richClaim.claim_value,
+      lifecycle_state: richClaim.lifecycle_state,
+      claim_confidence: richClaim.confidence,
+      conflict_refs: richClaim.conflict_refs ?? null,
+    };
+  });
+}
+
+function flowDataOf(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) return null;
+  return isRecord(value.flow_data) ? value.flow_data : null;
 }
 
 function isClaim(value: unknown): value is AIUsageFlowClaimRequest {
