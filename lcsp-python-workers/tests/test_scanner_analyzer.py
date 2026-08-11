@@ -350,3 +350,35 @@ def test_t10_llamaindex_query_engine_detected(workspace_dir: Path) -> None:
         and site.finding_type == "RAG_USAGE_SIGNAL"
         for site in result.ai_call_sites
     )
+
+
+@pytest.mark.p0
+def test_t11_python_cst_parser_executes_the_pinned_libcst_backend(
+    workspace_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import lcsp_workers.scanner.parsers.python_cst_parser as parser_module
+
+    source_file = workspace_dir / "app.py"
+    source_file.write_text(
+        "client.responses.create(model='gpt-4o', messages=[])\n",
+        encoding="utf-8",
+    )
+    calls = 0
+    real_parse_module = parser_module.cst.parse_module
+
+    def tracking_parse_module(source: str):
+        nonlocal calls
+        calls += 1
+        return real_parse_module(source)
+
+    monkeypatch.setattr(parser_module.cst, "parse_module", tracking_parse_module)
+
+    names = parser_module.PythonCstParser().kwarg_names_for_calls(
+        source_file,
+        workspace_dir,
+    )
+
+    assert calls == 1
+    assert names == {1: ["model", "messages"]}
+    assert parser_module.PythonCstParser.tool_version() != "not-installed"
