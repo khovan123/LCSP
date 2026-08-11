@@ -25,6 +25,7 @@ DLQ_FAILURE_STATE = "DLQ"
 SAFE_VALIDATION_FAILURE_CODE = "TARGETED_REANALYSIS_EVENT_MISMATCH"
 SAFE_PRIVACY_FAILURE_CODE = "PRIVACY_ASSERTION_FAILED"
 SAFE_DELIVERY_FAILURE_CODE = "TARGETED_REANALYSIS_WORKER_DELIVERY_EXHAUSTED"
+SAFE_UNRESOLVED_SCOPE_CODE = "TARGETED_REANALYSIS_SCOPE_UNRESOLVED"
 
 
 class ScanRunner(Protocol):
@@ -81,11 +82,24 @@ class TargetedReanalysisConsumer(ConsumerBase):
             return
 
         try:
+            if "pathPrefixes" not in envelope.normalized_scope:
+                self._fail_terminal(
+                    envelope.request_id,
+                    TERMINAL_FAILURE_STATE,
+                    SAFE_UNRESOLVED_SCOPE_CODE,
+                )
+                raise NonRetryableWorkerError(
+                    "targeted reanalysis subject references require API path resolution"
+                )
             self._scan_runner.handle(
                 {
                     "scanJobId": envelope.scan_job_id,
                     "snapshotId": envelope.snapshot_id,
                     "correlationId": envelope.correlation_id,
+                    "targetedReanalysis": {
+                        "analyzerId": envelope.analyzer_id,
+                        "pathPrefixes": envelope.normalized_scope["pathPrefixes"],
+                    },
                 },
                 envelope.correlation_id,
             )
@@ -96,6 +110,8 @@ class TargetedReanalysisConsumer(ConsumerBase):
                 SAFE_PRIVACY_FAILURE_CODE,
             )
             raise NonRetryableWorkerError("targeted reanalysis privacy assertion failed") from error
+        except NonRetryableWorkerError:
+            raise
         except Exception as error:
             self._handle_execution_failure(envelope, error)
 

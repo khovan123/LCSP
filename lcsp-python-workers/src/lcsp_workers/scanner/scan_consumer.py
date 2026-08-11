@@ -38,11 +38,55 @@ from .workspace import ArchiveMaterializationError, ScannerWorkspace
 logger = get_logger(__name__)
 
 
+TARGETED_REANALYSIS_ANALYZER_IDS = {
+    "RUN_SEMGREP_RULES",
+    "RUN_PYTHON_SEMANTIC_ANALYSIS",
+    "RUN_TS_JS_SEMANTIC_ANALYSIS",
+    "RUN_STRUCTURAL_AUGMENTATION",
+}
+
+
 @dataclass(frozen=True)
 class ScanJobEnvelope:
     scan_job_id: str
     snapshot_id: str
     correlation_id: str
+
+
+@dataclass(frozen=True)
+class TargetedReanalysisPlan:
+    analyzer_id: str
+    path_prefixes: tuple[str, ...]
+
+    @classmethod
+    def from_message(cls, message: dict) -> "TargetedReanalysisPlan | None":
+        value = message.get("targetedReanalysis")
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ArchiveMaterializationError("targeted reanalysis plan is invalid")
+        analyzer_id = value.get("analyzerId")
+        path_prefixes = value.get("pathPrefixes")
+        if (
+            not isinstance(analyzer_id, str)
+            or analyzer_id not in TARGETED_REANALYSIS_ANALYZER_IDS
+            or not isinstance(path_prefixes, list)
+        ):
+            raise ArchiveMaterializationError("targeted reanalysis plan is invalid")
+        normalized_prefixes = tuple(sorted(set(path_prefixes)))
+        if not normalized_prefixes or any(
+            not isinstance(prefix, str)
+            or not prefix.endswith("/")
+            or prefix.startswith("/")
+            or ".." in prefix.split("/")
+            for prefix in normalized_prefixes
+        ):
+            raise ArchiveMaterializationError("targeted reanalysis plan is invalid")
+        return cls(analyzer_id=analyzer_id, path_prefixes=normalized_prefixes)
+
+    def includes(self, file_path: str) -> bool:
+        normalized_path = file_path.replace("\\", "/")
+        return any(normalized_path.startswith(prefix) for prefix in self.path_prefixes)
 
 
 class ScanConsumer(ConsumerBase):
@@ -98,6 +142,7 @@ class ScanConsumer(ConsumerBase):
     def handle(self, message: dict, correlation_id: str) -> CallbackResponse:
         started_at = time.monotonic()
         envelope = self._read_envelope(message, correlation_id)
+        targeted_plan = TargetedReanalysisPlan.from_message(message)
         set_correlation_id(envelope.correlation_id)
 
         archive = self._snapshot_client.download_snapshot_archive(
@@ -135,6 +180,12 @@ class ScanConsumer(ConsumerBase):
                 classifications = self._language_classifier.classify_workspace(
                     result.workspace_path
                 )
+                if targeted_plan is not None:
+                    classifications = [
+                        classification
+                        for classification in classifications
+                        if targeted_plan.includes(classification.file_path)
+                    ]
                 dispatch = self._analyzer_router.route(classifications)
                 routed_python_files = list(dispatch.python_files)
                 routed_ts_js_files = list(dispatch.ts_js_files)
@@ -173,7 +224,14 @@ class ScanConsumer(ConsumerBase):
                     f"scan timeout exceeded for job {envelope.scan_job_id!r}"
                 )
 
-            semgrep_result = self._semgrep_tool.run(result.workspace_path)
+            semgrep_result = self._semgrep_tool.run(
+                result.workspace_path,
+                include_files=(
+                    [classification.file_path for classification in classifications]
+                    if targeted_plan is not None
+                    else None
+                ),
+            )
             self._record_semgrep_executions(tool_registry, semgrep_result)
 
             if time.monotonic() - started_at > self.scan_timeout_seconds:
