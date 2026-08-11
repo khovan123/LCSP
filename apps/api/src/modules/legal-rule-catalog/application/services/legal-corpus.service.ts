@@ -62,7 +62,9 @@ export class LegalCorpusService {
 
     // Capture ingestion provenance metadata
     const ingestionRunId = input.ingestionRunId || randomUUID();
-    const retrievedAt = input.retrievedAt ? new Date(input.retrievedAt) : new Date();
+    const retrievedAt = input.retrievedAt
+      ? new Date(input.retrievedAt)
+      : new Date();
     const enrichedManifest = {
       ...input.sourceManifest,
       ingestionMetadata: {
@@ -76,7 +78,7 @@ export class LegalCorpusService {
       const corpus = await tx.legalCorpusVersion.create({
         data: {
           version: input.version,
-          sourceManifest: enrichedManifest as Prisma.InputJsonValue,
+          sourceManifest: enrichedManifest,
           status: toPrismaLegalRuleLifecycleStatus(
             LEGAL_RULE_LIFECYCLE_STATUSES.draft,
           ),
