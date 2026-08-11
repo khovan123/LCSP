@@ -20,6 +20,7 @@ from lcsp_workers.scanner.tools.tool_base import (
     OUTCOME_TOOL_FAILURE,
     ToolExecutionResult,
 )
+from lcsp_workers.scanner.graph.graph_builder import EvidenceGraphBuilder
 
 
 def _syft_result(outcome: str = OUTCOME_SUCCESS) -> SyftRunResult:
@@ -289,3 +290,17 @@ def test_t08_assembles_technical_findings_without_source_content() -> None:
 
     assert payload.evidence_payload["technical_findings"][0]["finding_type"] == "AI_PROVIDER_USAGE"
     assert "source_code" not in str(payload.evidence_payload["technical_findings"])
+
+
+@pytest.mark.p0
+def test_t09_serializes_sanitized_versioned_evidence_graph() -> None:
+    builder = EvidenceGraphBuilder(scan_job_id="scan-job-1", tool_version="graph-1")
+    builder.add_node("FILE", "src/app.py", "src/app.py", evidence_refs=["evidence:finding-1"])
+    payload = EvidenceAssembler().assemble(
+        scan_job_id="scan-job-1", syft_result=_syft_result(), semgrep_result=_semgrep_result(),
+        coverage_notes=[], evidence_graph=builder.build_scan_graph(),
+    )
+    graph = payload.evidence_payload["evidence_graph"]
+    assert graph["schema_version"] == "1.0.0"
+    assert graph["graph_hash"].startswith("sha256:")
+    assert graph["nodes"][0]["evidence_refs"] == ["evidence:finding-1"]
