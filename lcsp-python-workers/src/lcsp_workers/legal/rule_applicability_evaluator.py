@@ -32,12 +32,19 @@ class RuleApplicabilityEvaluator:
     ) -> RuleEvaluationResult:
         rule_id = str(rule.get("legalRuleId") or "unknown")
         merged_profile = verified_profile.get("mergedProfile") or {}
-        evidence_refs = verified_profile.get("evidenceRefs") or []
-        evidence_ids = {
-            str(item.get("id"))
-            for item in evidence_refs
-            if isinstance(item, dict) and item.get("id")
-        }
+        if not isinstance(merged_profile, dict):
+            return blocked_invalid_rule(rule_id, "merged profile missing or invalid")
+
+        raw_fact_evidence_refs = (
+            verified_profile.get("factEvidenceRefs")
+            or verified_profile.get("fact_evidence_refs")
+            or {}
+        )
+        fact_evidence_refs = (
+            raw_fact_evidence_refs
+            if isinstance(raw_fact_evidence_refs, dict)
+            else {}
+        )
 
         raw_required_facts = rule.get("requiredFacts")
         if not isinstance(raw_required_facts, list) or not raw_required_facts:
@@ -63,6 +70,7 @@ class RuleApplicabilityEvaluator:
 
         matched_required_facts: list[str] = []
         unknown_required_facts: list[str] = []
+        unbacked_required_facts: list[str] = []
         mismatched_required_facts: list[str] = []
         rationale: list[str] = []
 
@@ -74,12 +82,17 @@ class RuleApplicabilityEvaluator:
             if is_unknown_fact(actual_value):
                 unknown_required_facts.append(field)
                 rationale.append(f"required fact {field} is unknown")
-            elif fact_matches(actual_value, expected_value):
-                matched_required_facts.append(field)
-                rationale.append(f"required fact {field} matched")
-            else:
+            elif not fact_matches(actual_value, expected_value):
                 mismatched_required_facts.append(field)
                 rationale.append(f"required fact {field} did not match")
+            elif not has_evidence_refs(fact_evidence_refs.get(field)):
+                unbacked_required_facts.append(field)
+                rationale.append(
+                    f"required fact {field} lacks eligible evidence refs"
+                )
+            else:
+                matched_required_facts.append(field)
+                rationale.append(f"required fact {field} matched")
 
         blocking_present: list[str] = []
         for item in blocking_facts:
@@ -132,18 +145,18 @@ class RuleApplicabilityEvaluator:
                 blocking_facts=blocking_present,
             )
 
-        if len(matched_required_facts) != len(required_facts):
-            return blocked_invalid_rule(rule_id, "required fact evaluation incomplete")
-
-        if not evidence_ids:
+        if unbacked_required_facts:
             return RuleEvaluationResult(
                 rule_id=rule_id,
                 status="BLOCKED_UNKNOWN_FACT",
                 confidence=0.0,
-                rationale=rationale + ["evidence refs missing"],
+                rationale=rationale,
                 matched_required_facts=matched_required_facts,
                 blocking_facts=blocking_present,
             )
+
+        if len(matched_required_facts) != len(required_facts):
+            return blocked_invalid_rule(rule_id, "required fact evaluation incomplete")
 
         return RuleEvaluationResult(
             rule_id=rule_id,
@@ -177,6 +190,12 @@ def is_valid_fact_definition(
     if not isinstance(field, str) or not field.strip():
         return False
     return expected_value_optional or "expectedValue" in value
+
+
+def has_evidence_refs(value: Any) -> bool:
+    return isinstance(value, list) and any(
+        isinstance(ref, str) and bool(ref.strip()) for ref in value
+    )
 
 
 def is_unknown_fact(value: Any) -> bool:
