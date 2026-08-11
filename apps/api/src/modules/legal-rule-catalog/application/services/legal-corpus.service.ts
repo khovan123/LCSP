@@ -332,10 +332,7 @@ export class LegalCorpusService {
     const approvalActorMayDiffer =
       rawSignoff.approvalActorMayDiffer === true &&
       identityPolicy === INDEPENDENT_AUDIT_PRINCIPAL_POLICY;
-    if (
-      rawSignoff.approvalActorMayDiffer === true &&
-      !approvalActorMayDiffer
-    ) {
+    if (rawSignoff.approvalActorMayDiffer === true && !approvalActorMayDiffer) {
       return invalid("legal_operator_identity_policy_invalid");
     }
 

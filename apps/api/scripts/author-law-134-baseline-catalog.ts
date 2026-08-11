@@ -169,7 +169,9 @@ function validateCandidateRules(): void {
       throw new Error(`${rule.legalRuleId}: ruleFamily is required`);
     }
     if (rule.requiredFacts.length === 0) {
-      throw new Error(`${rule.legalRuleId}: at least one required fact is required`);
+      throw new Error(
+        `${rule.legalRuleId}: at least one required fact is required`,
+      );
     }
     if (rule.citations.length === 0) {
       throw new Error(`${rule.legalRuleId}: at least one citation is required`);
