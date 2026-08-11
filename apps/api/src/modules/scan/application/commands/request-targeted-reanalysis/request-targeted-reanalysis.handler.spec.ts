@@ -66,4 +66,70 @@ describe("RequestTargetedReanalysisHandler admission", () => {
     expect(requestCount).toHaveBeenCalledTimes(3);
     expect(prisma.targetedReanalysisRequest).not.toHaveProperty("count");
   });
+
+  it("resolves subject references to safe paths from the pinned evidence report", async () => {
+    const transaction = {
+      $executeRaw: jest.fn().mockResolvedValue(undefined),
+      targetedReanalysisRequest: {
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn().mockResolvedValue({ id: "request-subject" }),
+      },
+      targetedReanalysisCheckpoint: { create: jest.fn().mockResolvedValue({}) },
+      repositoryScanJob: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      targetedReanalysisRequest: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      technicalEvidenceReport: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "ter-1",
+          evidencePayload: {
+            technical_findings: [
+              { finding_id: "finding-12345678", file_path: "repo/src/ai.py" },
+            ],
+          },
+        }),
+      },
+      repositorySnapshot: {
+        findFirst: jest.fn().mockResolvedValue({ id: "snapshot-1" }),
+      },
+      $transaction: jest.fn((handler: (tx: typeof transaction) => unknown) =>
+        Promise.resolve(handler(transaction)),
+      ),
+    };
+    const outbox = { enqueue: jest.fn().mockResolvedValue(undefined) };
+    const auditWriter = { write: jest.fn().mockResolvedValue(undefined) };
+    const handler = new RequestTargetedReanalysisHandler(
+      prisma as never,
+      auditWriter as never,
+      outbox as never,
+    );
+
+    await handler.execute(
+      new RequestTargetedReanalysisCommand(
+        {
+          assessmentId: "assessment-1",
+          inputEvidenceReportId: "ter-1",
+          snapshotId: "snapshot-1",
+          commitSha: "commit-1",
+          analyzerId: "RUN_PYTHON_SEMANTIC_ANALYSIS",
+          subjectRefs: ["finding:finding-12345678"],
+          reasonRequirementId: "requirement:1",
+          idempotencyKey: "idempotency-key-subject-0001",
+        },
+        { userId: "user-1", organizationId: "org-1" } as never,
+        "correlation-1",
+      ),
+    );
+
+    expect(outbox.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          normalizedScope: { pathPrefixes: ["repo/src/"] },
+        }),
+      }),
+      transaction,
+    );
+  });
 });
