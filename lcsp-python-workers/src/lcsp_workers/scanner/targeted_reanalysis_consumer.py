@@ -37,6 +37,7 @@ class TargetedReanalysisEnvelope:
     request_id: str
     scan_job_id: str
     snapshot_id: str
+    commit_sha: str
     analyzer_id: str
     normalized_scope: dict[str, object]
     checkpoint_ref: str
@@ -96,6 +97,7 @@ class TargetedReanalysisConsumer(ConsumerBase):
                 {
                     "scanJobId": envelope.scan_job_id,
                     "snapshotId": envelope.snapshot_id,
+                    "commitSha": envelope.commit_sha,
                     "correlationId": envelope.correlation_id,
                     "targetedReanalysis": {
                         "analyzerId": envelope.analyzer_id,
@@ -158,6 +160,7 @@ class TargetedReanalysisConsumer(ConsumerBase):
         request_id = self._read_string(message, "requestId", "request_id")
         scan_job_id = self._read_string(message, "scanJobId", "scan_job_id")
         snapshot_id = self._read_string(message, "snapshotId", "snapshot_id")
+        commit_sha = self._read_string(message, "commitSha", "commit_sha")
         analyzer_id = self._read_string(message, "analyzerId", "analyzer_id")
         checkpoint_ref = self._read_string(message, "checkpointRef", "checkpoint_ref")
         message_correlation_id = self._read_string(
@@ -167,7 +170,16 @@ class TargetedReanalysisConsumer(ConsumerBase):
         )
         normalized_scope = message.get("normalizedScope", message.get("normalized_scope"))
         if (
-            not all([request_id, scan_job_id, snapshot_id, analyzer_id, checkpoint_ref])
+            not all(
+                [
+                    request_id,
+                    scan_job_id,
+                    snapshot_id,
+                    commit_sha,
+                    analyzer_id,
+                    checkpoint_ref,
+                ]
+            )
             or not self._is_scope(normalized_scope)
         ):
             raise NonRetryableWorkerError("targeted reanalysis event is invalid")
@@ -179,6 +191,7 @@ class TargetedReanalysisConsumer(ConsumerBase):
             request_id=request_id,
             scan_job_id=scan_job_id,
             snapshot_id=snapshot_id,
+            commit_sha=commit_sha,
             analyzer_id=analyzer_id,
             normalized_scope=normalized_scope,
             checkpoint_ref=checkpoint_ref,
@@ -195,6 +208,7 @@ class TargetedReanalysisConsumer(ConsumerBase):
             "id": envelope.request_id,
             "scanJobId": envelope.scan_job_id,
             "snapshotId": envelope.snapshot_id,
+            "commitSha": envelope.commit_sha,
             "analyzerId": envelope.analyzer_id,
             "checkpointRef": envelope.checkpoint_ref,
         }

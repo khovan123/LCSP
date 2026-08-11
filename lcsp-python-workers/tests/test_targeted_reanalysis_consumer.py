@@ -30,6 +30,7 @@ def event():
         "requestId": "request-1",
         "scanJobId": "scan-job-1",
         "snapshotId": "snapshot-1",
+        "commitSha": "commit-1",
         "analyzerId": "RUN_PYTHON_SEMANTIC_ANALYSIS",
         "normalizedScope": {"pathPrefixes": ["src/"]},
         "checkpointRef": "checkpoint:request-1",
@@ -43,6 +44,7 @@ def authorized_request(event):
         "id": event["requestId"],
         "scanJobId": event["scanJobId"],
         "snapshotId": event["snapshotId"],
+        "commitSha": event["commitSha"],
         "analyzerId": event["analyzerId"],
         "normalizedScope": event["normalizedScope"],
         "checkpointRef": event["checkpointRef"],
@@ -76,6 +78,7 @@ def test_claims_an_authorized_event_then_runs_the_immutable_scan_job(
         {
             "scanJobId": "scan-job-1",
             "snapshotId": "snapshot-1",
+            "commitSha": "commit-1",
             "correlationId": "correlation-1",
             "targetedReanalysis": {
                 "analyzerId": "RUN_PYTHON_SEMANTIC_ANALYSIS",
