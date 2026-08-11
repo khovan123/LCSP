@@ -32,6 +32,7 @@ import { GetEvidenceSubgraphQuery } from "../../application/queries/get-evidence
 import { GetSymbolContextQuery } from "../../application/queries/get-symbol-context/get-symbol-context.query.js";
 import { TraceStaticFlowQuery } from "../../application/queries/trace-static-flow/trace-static-flow.query.js";
 import { InspectHumanReviewPathQuery } from "../../application/queries/inspect-human-review-path/inspect-human-review-path.query.js";
+import { GetScanCoverageQuery } from "../../application/queries/get-scan-coverage/get-scan-coverage.query.js";
 import {
   FINDING_DETAIL_INCLUDES,
   type FindingDetailInclude,
@@ -87,6 +88,32 @@ export class EvidenceController {
           context.scope,
           context.selectedAction,
           request.correlationId as string,
+        ),
+      ),
+    );
+  }
+
+  @Get(":assessmentId/evidence-reports/:evidenceReportId/coverage")
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async getScanCoverage(
+    @Param("assessmentId") assessmentId: string,
+    @Param("evidenceReportId") evidenceReportId: string,
+    @Query("max_results") maxResultsRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetScanCoverageQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          evidenceReportId,
+          parseBoundedInteger(maxResultsRaw, 1, 500, correlationId),
+          correlationId,
         ),
       ),
     );
