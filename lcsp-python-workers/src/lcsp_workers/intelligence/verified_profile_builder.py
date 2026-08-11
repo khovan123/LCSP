@@ -120,7 +120,8 @@ class VerifiedProfileBuilder:
         ).upper()
         conflict_refs = claim.get("conflict_refs") or claim.get("conflictRefs") or []
         return (
-            state in LEGAL_MATCH_ELIGIBLE_STATES
+            self._is_material_claim(claim)
+            and state in LEGAL_MATCH_ELIGIBLE_STATES
             and self._numeric_confidence(claim) >= LEGAL_MATCH_MIN_CONFIDENCE
             and bool(self._evidence_refs(claim))
             and not conflict_refs
