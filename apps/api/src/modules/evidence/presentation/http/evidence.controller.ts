@@ -31,6 +31,7 @@ import { FindProviderInvocationsQuery } from "../../application/queries/find-pro
 import { GetEvidenceSubgraphQuery } from "../../application/queries/get-evidence-subgraph/get-evidence-subgraph.query.js";
 import { GetSymbolContextQuery } from "../../application/queries/get-symbol-context/get-symbol-context.query.js";
 import { TraceStaticFlowQuery } from "../../application/queries/trace-static-flow/trace-static-flow.query.js";
+import { InspectHumanReviewPathQuery } from "../../application/queries/inspect-human-review-path/inspect-human-review-path.query.js";
 import {
   FINDING_DETAIL_INCLUDES,
   type FindingDetailInclude,
@@ -55,6 +56,10 @@ import {
   STATIC_FLOW_DIRECTIONS,
   type StaticFlowDirection,
 } from "../../application/contracts/evidence/static-flow.contract.js";
+import {
+  HUMAN_REVIEW_KINDS,
+  type HumanReviewKind,
+} from "../../application/contracts/evidence/human-review-path.contract.js";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { HttpStatus } from "@nestjs/common";
@@ -277,6 +282,38 @@ export class EvidenceController {
       ),
     );
   }
+
+  @Get(
+    ":assessmentId/evidence-reports/:evidenceReportId/human-review-path/:startNodeId",
+  )
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async inspectHumanReviewPath(
+    @Param("assessmentId") assessmentId: string,
+    @Param("evidenceReportId") evidenceReportId: string,
+    @Param("startNodeId") startNodeId: string,
+    @Query("review_kinds") reviewKindsRaw: string | undefined,
+    @Query("max_hops") maxHopsRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new InspectHumanReviewPathQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          evidenceReportId,
+          startNodeId,
+          parseHumanReviewKinds(reviewKindsRaw, correlationId),
+          parseBoundedInteger(maxHopsRaw, 1, 20, correlationId),
+          correlationId,
+        ),
+      ),
+    );
+  }
 }
 
 function parseFindingDetailInclude(
@@ -425,6 +462,28 @@ function parseStaticFlowDirection(
     });
   }
   return value as StaticFlowDirection;
+}
+
+function parseHumanReviewKinds(
+  value: string | undefined,
+  correlationId: string,
+): HumanReviewKind[] {
+  const kinds =
+    value?.split(",").map((item) => item.trim()) ??
+    Object.values(HUMAN_REVIEW_KINDS);
+  if (
+    kinds.length === 0 ||
+    kinds.length > Object.keys(HUMAN_REVIEW_KINDS).length ||
+    kinds.some(
+      (item) =>
+        !Object.values(HUMAN_REVIEW_KINDS).includes(item as HumanReviewKind),
+    ) ||
+    new Set(kinds).size !== kinds.length
+  )
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  return kinds as HumanReviewKind[];
 }
 
 function parseBoundedInteger(
