@@ -5,7 +5,7 @@ import {
   PBAC_METADATA_TYPES,
   SUBJECT_ROLES,
 } from "@lcsp/contracts/pbac";
-import { SCAN_CALLBACK_STATUSES } from "@lcsp/contracts/scan";
+import { SCAN_CALLBACK_STATUSES, SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 
 import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-metadata.js";
@@ -229,5 +229,49 @@ describe("InternalTargetedReanalysisController", () => {
       data: { claimed: false },
     });
     expect(transaction.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it("audits terminal and retry transitions with only the safe request reference", async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const checkpointUpdate = jest.fn().mockResolvedValue({ count: 1 });
+    const auditWriter = { write: jest.fn().mockResolvedValue(undefined) };
+    const prisma = {
+      targetedReanalysisRequest: {
+        findUnique: jest.fn().mockResolvedValue({
+          organizationId: "org-1",
+          assessmentId: "assessment-1",
+          correlationId: "correlation-1",
+        }),
+        updateMany,
+      },
+      targetedReanalysisCheckpoint: { updateMany: checkpointUpdate },
+    };
+    const controller = new InternalTargetedReanalysisController(
+      prisma as never,
+      auditWriter as never,
+    );
+
+    await controller.requeueRequest("request-1");
+    await controller.setTerminalState("request-1", {
+      state: TARGETED_REANALYSIS_REQUEST_STATES.failed,
+      safe_failure_code: "SAFE_FAILURE",
+    });
+
+    expect(auditWriter.write).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        eventType: SCAN_EVENT_TYPES.targetedReanalysisRetryAudit,
+        resourceId: "request-1",
+        payload: { requestId: "request-1" },
+      }),
+    );
+    expect(auditWriter.write).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        eventType: SCAN_EVENT_TYPES.targetedReanalysisTerminalAudit,
+        resourceId: "request-1",
+        payload: { requestId: "request-1" },
+      }),
+    );
   });
 });
