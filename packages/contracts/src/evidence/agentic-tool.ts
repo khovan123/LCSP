@@ -21,6 +21,7 @@ export const AGENTIC_TOOL_NAMES = {
   getLegalRuleMatch: "get_legal_rule_match",
   validateCitationSet: "validate_citation_set",
   getClassificationBaseline: "get_classification_baseline",
+  validateClassificationProposal: "validate_classification_proposal",
   reconcileProfileToVerifiedProfile: "reconcile_profile_to_verified_profile",
 } as const;
 
@@ -78,6 +79,8 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   legalRuleMatchRead: "AGENTIC_TOOL_LEGAL_RULE_MATCH_READ",
   citationSetValidated: "AGENTIC_TOOL_CITATION_SET_VALIDATED",
   classificationBaselineRead: "AGENTIC_TOOL_CLASSIFICATION_BASELINE_READ",
+  classificationProposalValidated:
+    "AGENTIC_TOOL_CLASSIFICATION_PROPOSAL_VALIDATED",
   findingDetailRead: "AGENTIC_TOOL_FINDING_DETAIL_READ",
   evidenceSearchRead: "AGENTIC_TOOL_EVIDENCE_SEARCH_READ",
   providerInvocationRead: "AGENTIC_TOOL_PROVIDER_INVOCATION_READ",
