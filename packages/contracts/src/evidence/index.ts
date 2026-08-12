@@ -10,3 +10,4 @@ export * from "./citation-set-validation.ts";
 export * from "./classification-baseline.ts";
 export * from "./classification-proposal-validation.ts";
 export * from "./classification-review-submission.ts";
+export * from "./gap-matrix-evaluation.ts";

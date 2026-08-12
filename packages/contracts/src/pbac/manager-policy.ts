@@ -23,6 +23,7 @@ export const MANAGER_ONLY_ACTION_VALUES = [
   PBAC_ACTIONS.legalCitationValidate,
   PBAC_ACTIONS.classificationBaselineRead,
   PBAC_ACTIONS.classificationProposalValidate,
+  PBAC_ACTIONS.gapMatrixEvaluate,
   PBAC_ACTIONS.classificationReviewSubmit,
 ] as const;
 

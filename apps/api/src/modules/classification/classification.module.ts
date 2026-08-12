@@ -6,6 +6,7 @@ import { AcceptClassificationHandler } from "./application/commands/accept-class
 import { AcceptLegalRuleMatchHandler } from "./application/commands/accept-legal-rule-match/accept-legal-rule-match.handler.js";
 import { RerunClassificationHandler } from "./application/commands/rerun-classification/rerun-classification.handler.js";
 import { SubmitClassificationReviewHandler } from "./application/commands/submit-classification-review/submit-classification-review.handler.js";
+import { EvaluateGapMatrixHandler } from "./application/queries/evaluate-gap-matrix/evaluate-gap-matrix.handler.js";
 import { GetClassificationBaselineHandler } from "./application/queries/get-classification-baseline/get-classification-baseline.handler.js";
 import { ValidateClassificationProposalHandler } from "./application/queries/validate-classification-proposal/validate-classification-proposal.handler.js";
 import { CitationGuardrailService } from "./application/services/classification/citation-guardrail.service.js";
@@ -16,6 +17,7 @@ import { ClassificationBaselineController } from "./presentation/http/classifica
 import { ClassificationProposalValidationController } from "./presentation/http/classification-proposal-validation.controller.js";
 import { ClassificationReviewSubmissionController } from "./presentation/http/classification-review-submission.controller.js";
 import { ClassificationRuntimeController } from "./presentation/http/classification-runtime.controller.js";
+import { GapMatrixEvaluationController } from "./presentation/http/gap-matrix-evaluation.controller.js";
 
 @Module({
   imports: [CqrsModule],
@@ -26,12 +28,14 @@ import { ClassificationRuntimeController } from "./presentation/http/classificat
     ClassificationBaselineController,
     ClassificationProposalValidationController,
     ClassificationReviewSubmissionController,
+    GapMatrixEvaluationController,
   ],
   providers: [
     AcceptLegalRuleMatchHandler,
     AcceptClassificationHandler,
     RerunClassificationHandler,
     SubmitClassificationReviewHandler,
+    EvaluateGapMatrixHandler,
     GetClassificationBaselineHandler,
     ValidateClassificationProposalHandler,
     CitationGuardrailService,

@@ -30,6 +30,7 @@ export const PBAC_ACTIONS = {
   legalCitationValidate: "legal-citation:validate",
   classificationBaselineRead: "classification-baseline:read",
   classificationProposalValidate: "classification-proposal:validate",
+  gapMatrixEvaluate: "gap-matrix:evaluate",
   classificationReviewSubmit: "classification-review:submit",
   managerDecisionChange: "manager-decision:change",
   membershipRevoke: "membership:revoke",
