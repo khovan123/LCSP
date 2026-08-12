@@ -31,6 +31,7 @@ export const PBAC_ACTIONS = {
   classificationBaselineRead: "classification-baseline:read",
   classificationProposalValidate: "classification-proposal:validate",
   gapMatrixEvaluate: "gap-matrix:evaluate",
+  gapEvidenceTraceRead: "gap-evidence-trace:read",
   classificationReviewSubmit: "classification-review:submit",
   managerDecisionChange: "manager-decision:change",
   membershipRevoke: "membership:revoke",
