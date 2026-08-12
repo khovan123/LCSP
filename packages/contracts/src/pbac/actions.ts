@@ -29,6 +29,7 @@ export const PBAC_ACTIONS = {
   legalRuleMatchRead: "legal-rule-match:read",
   legalCitationValidate: "legal-citation:validate",
   classificationBaselineRead: "classification-baseline:read",
+  classificationProposalValidate: "classification-proposal:validate",
   managerDecisionChange: "manager-decision:change",
   membershipRevoke: "membership:revoke",
   metadataCheck: "pbac:metadata",

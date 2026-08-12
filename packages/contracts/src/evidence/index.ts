@@ -7,3 +7,4 @@ export * from "./legal-basis-retrieval.ts";
 export * from "./legal-rule-match.ts";
 export * from "./citation-set-validation.ts";
 export * from "./classification-baseline.ts";
+export * from "./classification-proposal-validation.ts";
