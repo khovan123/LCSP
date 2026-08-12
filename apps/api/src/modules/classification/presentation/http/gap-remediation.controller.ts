@@ -14,6 +14,7 @@ import { QueryBus } from "@nestjs/cqrs";
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import {
   GAP_REMEDIATION_TEMPLATE_IDS,
+  type GapRemediationTemplateId,
   type ProposeGapRemediationInput,
 } from "@lcsp/contracts/evidence";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
@@ -27,7 +28,9 @@ import { ProposeGapRemediationQuery } from "../../application/queries/propose-ga
 
 const ROW_REF = /^gap-row:[A-Za-z0-9:_-]{6,120}$/;
 const INPUT_KEYS = new Set(["rowRef", "templateId"]);
-const TEMPLATE_IDS = new Set(Object.values(GAP_REMEDIATION_TEMPLATE_IDS));
+const TEMPLATE_IDS = new Set<GapRemediationTemplateId>(
+  Object.values(GAP_REMEDIATION_TEMPLATE_IDS),
+);
 
 @Controller("assessments")
 export class GapRemediationController {
@@ -72,8 +75,7 @@ function parseInput(
   if (
     typeof rowRef !== "string" ||
     !ROW_REF.test(rowRef) ||
-    typeof templateId !== "string" ||
-    !TEMPLATE_IDS.has(templateId)
+    !isGapRemediationTemplateId(templateId)
   ) {
     invalidRequest(correlationId);
   }
@@ -82,6 +84,15 @@ function parseInput(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isGapRemediationTemplateId(
+  value: unknown,
+): value is GapRemediationTemplateId {
+  return (
+    typeof value === "string" &&
+    TEMPLATE_IDS.has(value as GapRemediationTemplateId)
+  );
 }
 
 function invalidRequest(correlationId: string): never {

@@ -8,6 +8,7 @@ import { CitationSetValidationController } from "./presentation/http/citation-se
 import { LegalRuleMatchController } from "./presentation/http/legal-rule-match.controller.js";
 import { DraftLegalRuleHandler } from "./application/commands/draft-legal-rule/draft-legal-rule.handler.js";
 import { ApproveRuleCatalogVersionHandler } from "./application/commands/approve-rule-catalog-version/approve-rule-catalog-version.handler.js";
+import { ResumeWaitingRunsHandler } from "./application/commands/resume-waiting-runs/resume-waiting-runs.handler.js";
 import { GetActiveRuleCatalogHandler } from "./application/queries/get-active-rule-catalog/get-active-rule-catalog.handler.js";
 import { GetActiveLegalCorpusHandler } from "./application/queries/get-active-legal-corpus/get-active-legal-corpus.handler.js";
 import { GetLegalCorpusReadinessHandler } from "./application/queries/get-legal-corpus-readiness/get-legal-corpus-readiness.handler.js";
@@ -21,6 +22,7 @@ import { RuleCatalogVersionService } from "./application/services/rule-catalog-v
 const Handlers = [
   DraftLegalRuleHandler,
   ApproveRuleCatalogVersionHandler,
+  ResumeWaitingRunsHandler,
   GetActiveRuleCatalogHandler,
   GetActiveLegalCorpusHandler,
   GetLegalCorpusReadinessHandler,
