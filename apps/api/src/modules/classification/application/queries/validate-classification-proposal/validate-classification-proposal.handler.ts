@@ -195,6 +195,7 @@ export class ValidateClassificationProposalHandler implements IQueryHandler<
       evidenceRefs: query.input.citationRefs.slice().sort(),
       limitations: [],
       result: {
+        proposalGateRef: proposalGateRef(query.input),
         verdict: CLASSIFICATION_PROPOSAL_VERDICTS.pass,
         violations: [],
         allowedNextState:
@@ -219,6 +220,7 @@ export class ValidateClassificationProposalHandler implements IQueryHandler<
       evidenceRefs: query.input.citationRefs.slice().sort(),
       limitations: [],
       result: {
+        proposalGateRef: proposalGateRef(query.input),
         verdict: CLASSIFICATION_PROPOSAL_VERDICTS.fail,
         violations: violations.slice(
           0,
@@ -257,6 +259,7 @@ export class ValidateClassificationProposalHandler implements IQueryHandler<
         },
       ],
       result: {
+        proposalGateRef: proposalGateRef(query.input),
         verdict: CLASSIFICATION_PROPOSAL_VERDICTS.fail,
         violations: [currentViolation],
         allowedNextState: null,
@@ -331,6 +334,23 @@ function idFromRef(ref: string, prefix: string): string {
 
 function provenanceRef(correlationId: string): string {
   return `provenance:classification-gate:${correlationId}`;
+}
+
+export function proposalGateRef(input: {
+  baselineRef: string;
+  candidateLabel: string;
+  citationRefs: string[];
+}): string {
+  return `classification-gate:${createHash("sha256")
+    .update(
+      JSON.stringify({
+        baselineRef: input.baselineRef,
+        candidateLabel: input.candidateLabel,
+        citationRefs: input.citationRefs.slice().sort(),
+      }),
+    )
+    .digest("hex")
+    .slice(0, 32)}`;
 }
 
 function safeHash(value: unknown): string {

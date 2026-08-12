@@ -92,6 +92,7 @@ describe("ValidateClassificationProposalHandler", () => {
     const response = await handler.execute(query());
 
     expect(response.status).toBe(AGENTIC_TOOL_STATUSES.ready);
+    expect(response.result.proposalGateRef).toMatch(/^classification-gate:/);
     expect(response.result.verdict).toBe(CLASSIFICATION_PROPOSAL_VERDICTS.pass);
     expect(response.result.allowedNextState).toBe(
       CLASSIFICATION_PROPOSAL_NEXT_STATES.readyForIndependentReview,

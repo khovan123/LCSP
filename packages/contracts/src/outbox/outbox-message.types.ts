@@ -36,6 +36,7 @@ export const OUTBOX_AGGREGATE_TYPES = {
   aiUsageFlow: "AI_USAGE_FLOW",
   assessment: "ASSESSMENT",
   authUser: "AUTH_USER",
+  classificationReviewRequest: "CLASSIFICATION_REVIEW_REQUEST",
   classificationResult: "CLASSIFICATION_RESULT",
   documentRequest: "DOCUMENT_REQUEST",
   legalRuleMatch: "LEGAL_RULE_MATCH",

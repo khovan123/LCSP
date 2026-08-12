@@ -193,7 +193,7 @@ export class ReconcileProfileToVerifiedProfileHandler implements ICommandHandler
           ) as Prisma.InputJsonValue,
           gatesPassedAt: {
             reconciliation_complete: new Date().toISOString(),
-          } as Prisma.InputJsonValue,
+          },
           status: toPrismaVerifiedProfileStatus(
             VERIFIED_PROFILE_STATUSES.pendingApproval,
           ),

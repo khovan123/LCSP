@@ -374,6 +374,7 @@ enum AuditResourceType {
   AUTH_MFA_RECOVERY_CODE
   AUTH_ORGANIZATION
   AUTH_SESSION
+  CLASSIFICATION_REVIEW_REQUEST
   CLASSIFICATION_RESULT
   CONFLICT_RECORD
   DOCUMENT_REQUEST
@@ -436,6 +437,7 @@ enum OutboxAggregateType {
   AI_USAGE_FLOW
   ASSESSMENT
   AUTH_USER
+  CLASSIFICATION_REVIEW_REQUEST
   CLASSIFICATION_RESULT
   DOCUMENT_REQUEST
   LEGAL_RULE_MATCH
@@ -715,6 +717,26 @@ model ClassificationResult {
   @@index([assessmentId])
 }
 
+model ClassificationReviewRequest {
+  id                 String                            @id @default(uuid())
+  legalRuleMatchId   String
+  assessmentId       String
+  organizationId     String
+  proposalGateRef    String
+  baselineRef        String
+  candidateLabel     String
+  citationRefs       Json
+  requestedById      String
+  idempotencyKey     String
+  status             ClassificationReviewRequestStatus @default(PENDING_INDEPENDENT_REVIEW)
+  expiresAt          DateTime
+  createdAt          DateTime                          @default(now())
+
+  @@index([assessmentId, status])
+  @@index([legalRuleMatchId])
+  @@unique([organizationId, idempotencyKey])
+}
+
 model DocumentRequest {
   id                     String                @id
   assessmentId           String
@@ -933,6 +955,13 @@ enum ClassificationGuardrailStatus {
   PASSED
   DEGRADED
   BLOCKED
+}
+
+enum ClassificationReviewRequestStatus {
+  PENDING_INDEPENDENT_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
 }
 
 enum LegalRuleMatchGuardrailStatus {
