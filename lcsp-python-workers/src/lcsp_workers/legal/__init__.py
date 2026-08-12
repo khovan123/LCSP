@@ -21,6 +21,15 @@ from .ocr_fallback_repository import (
 from .ocr_quality_consumer import OcrQualityConsumer
 from .ocr_quality_repository import OcrQualityRecord, OcrQualityRepository
 from .ocr_quality_validator import EvaluateOcrQualityRequest, OcrQualityValidator
+from .reviewed_corpus_input_builder import (
+    BuildReviewedCorpusInputRequest,
+    ReviewedCorpusInputBuilder,
+)
+from .reviewed_corpus_input_consumer import ReviewedCorpusInputConsumer
+from .reviewed_corpus_input_repository import (
+    ReviewedCorpusInputRecord,
+    ReviewedCorpusInputRepository,
+)
 from .official_text_extraction_consumer import OfficialTextExtractionConsumer
 
 __all__ = [
@@ -47,5 +56,10 @@ __all__ = [
     "OcrQualityConsumer",
     "OcrQualityRecord",
     "OcrQualityRepository",
+    "BuildReviewedCorpusInputRequest",
+    "ReviewedCorpusInputBuilder",
+    "ReviewedCorpusInputConsumer",
+    "ReviewedCorpusInputRecord",
+    "ReviewedCorpusInputRepository",
     "OfficialTextExtractionConsumer",
 ]

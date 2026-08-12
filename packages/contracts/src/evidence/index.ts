@@ -17,3 +17,4 @@ export * from "./gap-remediation-proposal.ts";
 export * from "./extract-official-text.ts";
 export * from "./run-ocr-fallback.ts";
 export * from "./evaluate-ocr-quality.ts";
+export * from "./build-reviewed-corpus-input.ts";
