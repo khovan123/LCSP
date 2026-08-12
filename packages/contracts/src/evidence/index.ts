@@ -12,3 +12,4 @@ export * from "./classification-proposal-validation.ts";
 export * from "./classification-review-submission.ts";
 export * from "./gap-matrix-evaluation.ts";
 export * from "./gap-evidence-trace.ts";
+export * from "./gap-remediation-proposal.ts";

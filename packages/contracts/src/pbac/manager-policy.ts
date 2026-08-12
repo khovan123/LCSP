@@ -25,6 +25,7 @@ export const MANAGER_ONLY_ACTION_VALUES = [
   PBAC_ACTIONS.classificationProposalValidate,
   PBAC_ACTIONS.gapMatrixEvaluate,
   PBAC_ACTIONS.gapEvidenceTraceRead,
+  PBAC_ACTIONS.gapRemediationPropose,
   PBAC_ACTIONS.classificationReviewSubmit,
 ] as const;
 
