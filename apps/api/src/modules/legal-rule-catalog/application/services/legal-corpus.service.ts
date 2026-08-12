@@ -307,7 +307,8 @@ export class LegalCorpusService {
           supersededApprovedCount: superseded.count,
         },
       });
-      outboxEventId = await this.outboxRepository.enqueue(outboxEvent, tx);
+      outboxEventId = outboxEvent.id;
+      await this.outboxRepository.enqueue(outboxEvent, tx);
       await tx.corpusApprovalRecord.update({
         where: { id: approval.id },
         data: { outboxEventId },
@@ -331,6 +332,7 @@ export class LegalCorpusService {
             toolName: ACTIVATE_VALIDATED_CORPUS_VERSION_TOOL.name,
             corpusVersionRef: `corpus-version:${corpus.id}`,
             activationRecordRef: `corpus-approval:${approval.id}`,
+            outboxEventRef: `outbox:${outboxEventId}`,
             outboxEventRef: `outbox:${outboxEventId}`,
             integrityManifestRef: input.integrityManifestRef,
             retrievalValidationRef: input.retrievalValidationRef,
@@ -387,10 +389,7 @@ export class LegalCorpusService {
       throw problemException(
         LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
         input.correlationId,
-        {
-          status: HttpStatus.UNPROCESSABLE_ENTITY,
-          meta: { reason: "idempotency_key_required" },
-        },
+        { status: HttpStatus.UNPROCESSABLE_ENTITY, meta: { reason: "idempotency_key_required" } },
       );
     }
   }
