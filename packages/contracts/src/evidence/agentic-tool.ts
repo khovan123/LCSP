@@ -32,6 +32,7 @@ export const AGENTIC_TOOL_NAMES = {
   evaluateOcrQuality: "evaluate_ocr_quality",
   buildReviewedCorpusInput: "build_reviewed_corpus_input",
   buildLegalChunks: "build_legal_chunks",
+  validateChunkIntegrity: "validate_chunk_integrity",
   resumeWaitingRuns: "resume_waiting_runs",
   requestTargetedReanalysis: "request_targeted_reanalysis",
   submitClassificationForIndependentReview:
@@ -105,6 +106,7 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   ocrQualityEvaluated: "AGENTIC_TOOL_OCR_QUALITY_EVALUATED",
   reviewedCorpusInputBuilt: "AGENTIC_TOOL_REVIEWED_CORPUS_INPUT_BUILT",
   legalChunksBuilt: "AGENTIC_TOOL_LEGAL_CHUNKS_BUILT",
+  chunkIntegrityValidated: "AGENTIC_TOOL_CHUNK_INTEGRITY_VALIDATED",
   waitingRunsResumed: "AGENTIC_TOOL_WAITING_RUNS_RESUMED",
   targetedReanalysisRequested: "AGENTIC_TOOL_TARGETED_REANALYSIS_REQUESTED",
   classificationReviewSubmitted: "AGENTIC_TOOL_CLASSIFICATION_REVIEW_SUBMITTED",

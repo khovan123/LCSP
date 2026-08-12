@@ -21,9 +21,19 @@ from .ocr_fallback_repository import (
 from .ocr_quality_consumer import OcrQualityConsumer
 from .ocr_quality_repository import OcrQualityRecord, OcrQualityRepository
 from .ocr_quality_validator import EvaluateOcrQualityRequest, OcrQualityValidator
+from .chunk_integrity_consumer import ChunkIntegrityConsumer
+from .chunk_integrity_repository import ChunkIntegrityRecord, ChunkIntegrityRepository
+from .chunk_integrity_validator import (
+    ChunkIntegrityValidator,
+    ValidateChunkIntegrityRequest,
+)
 from .legal_chunk_builder import BuildLegalChunksRequest, LegalChunkBuilder
 from .legal_chunk_consumer import LegalChunkConsumer
 from .legal_chunk_repository import LegalChunkRepository, LegalChunkSetRecord
+from .relationship_manifest_repository import (
+    RelationshipManifestRecord,
+    RelationshipManifestRepository,
+)
 from .reviewed_corpus_input_builder import (
     BuildReviewedCorpusInputRequest,
     ReviewedCorpusInputBuilder,
@@ -59,11 +69,18 @@ __all__ = [
     "OcrQualityConsumer",
     "OcrQualityRecord",
     "OcrQualityRepository",
+    "ValidateChunkIntegrityRequest",
+    "ChunkIntegrityValidator",
+    "ChunkIntegrityConsumer",
+    "ChunkIntegrityRecord",
+    "ChunkIntegrityRepository",
     "BuildLegalChunksRequest",
     "LegalChunkBuilder",
     "LegalChunkConsumer",
     "LegalChunkRepository",
     "LegalChunkSetRecord",
+    "RelationshipManifestRecord",
+    "RelationshipManifestRepository",
     "BuildReviewedCorpusInputRequest",
     "ReviewedCorpusInputBuilder",
     "ReviewedCorpusInputConsumer",
