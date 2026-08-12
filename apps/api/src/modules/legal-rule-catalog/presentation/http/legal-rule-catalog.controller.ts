@@ -83,7 +83,7 @@ export class LegalRuleCatalogController {
   async activateValidatedCorpusVersion(
     @Param("versionId") versionId: string,
     @Body() body: ApproveLegalCorpusRequest,
-    @Req() req: AuthenticatedRequest,
+    @Req() req: { correlationId?: string },
   ) {
     return resultEnvelope(
       await this.legalCorpus.activateValidatedCorpusVersion({
@@ -91,8 +91,7 @@ export class LegalRuleCatalogController {
         integrityManifestRef: body.integrityManifestRef,
         retrievalValidationRef: body.retrievalValidationRef,
         idempotencyKey: body.idempotencyKey,
-        scopeDescription:
-          body.scopeDescription?.trim() || "Activated via worker API",
+        scopeDescription: body.scopeDescription?.trim() || "Activated via worker API",
         comments: body.comments ?? null,
         correlationId: req.correlationId || randomUUID(),
       }),

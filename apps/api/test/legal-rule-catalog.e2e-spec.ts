@@ -299,11 +299,7 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       assert.equal(response.status, 201);
       const draft = successBody<{ id: string; status: string }>(response);
       assert.equal(draft.status, LEGAL_RULE_LIFECYCLE_STATUSES.draft);
-      await seedValidatedDraftIndex(
-        prisma,
-        draft.id,
-        "retrieval-validation:draft-v1",
-      );
+      await seedValidatedDraftIndex(prisma, draft.id, "retrieval-validation:draft-v1");
 
       const approval = await httpRequest(app)
         .post(
@@ -317,10 +313,7 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
           scopeDescription: "Verified source and chunk locator",
         });
       assert.equal(approval.status, 200);
-      const approved = successBody<{
-        status: string;
-        result: { outboxEventRef: string };
-      }>(approval);
+      const approved = successBody<{ status: string; result: { outboxEventRef: string } }>(approval);
       assert.equal(approved.status, LEGAL_RULE_LIFECYCLE_STATUSES.approved);
       assert.match(approved.result.outboxEventRef, /^outbox:/);
 

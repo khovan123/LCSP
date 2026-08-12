@@ -22,3 +22,4 @@ export * from "./build-legal-chunks.ts";
 export * from "./validate-chunk-integrity.ts";
 export * from "./build-legal-retrieval-index.ts";
 export * from "./validate-retrieval-index.ts";
+export * from "./activate-validated-corpus-version.ts";
