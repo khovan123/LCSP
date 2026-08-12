@@ -51,7 +51,12 @@ class ChromaDbCitationRetriever:
                 }
             )
         if ids:
-            collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
+            collection.upsert(
+                ids=ids,
+                documents=documents,
+                metadatas=metadatas,
+                embeddings=[[0.0] for _ in ids],
+            )
 
     def retrieve_exact(self, corpus_version_id: str, chunk_ids: list[str]) -> list[RetrievedChunk]:
         if not chunk_ids:

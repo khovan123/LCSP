@@ -30,6 +30,15 @@ from .chunk_integrity_validator import (
 from .legal_chunk_builder import BuildLegalChunksRequest, LegalChunkBuilder
 from .legal_chunk_consumer import LegalChunkConsumer
 from .legal_chunk_repository import LegalChunkRepository, LegalChunkSetRecord
+from .legal_retrieval_index_builder import (
+    BuildLegalRetrievalIndexRequest,
+    LegalRetrievalIndexBuilder,
+)
+from .legal_retrieval_index_consumer import LegalRetrievalIndexConsumer
+from .legal_retrieval_index_repository import (
+    LegalRetrievalIndexRecord,
+    LegalRetrievalIndexRepository,
+)
 from .relationship_manifest_repository import (
     RelationshipManifestRecord,
     RelationshipManifestRepository,
@@ -79,6 +88,11 @@ __all__ = [
     "LegalChunkConsumer",
     "LegalChunkRepository",
     "LegalChunkSetRecord",
+    "BuildLegalRetrievalIndexRequest",
+    "LegalRetrievalIndexBuilder",
+    "LegalRetrievalIndexConsumer",
+    "LegalRetrievalIndexRecord",
+    "LegalRetrievalIndexRepository",
     "RelationshipManifestRecord",
     "RelationshipManifestRepository",
     "BuildReviewedCorpusInputRequest",
