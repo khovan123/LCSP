@@ -23,6 +23,7 @@ export const AGENTIC_TOOL_NAMES = {
   validateCitationSet: "validate_citation_set",
   getClassificationBaseline: "get_classification_baseline",
   validateClassificationProposal: "validate_classification_proposal",
+  evaluateGapMatrix: "evaluate_gap_matrix",
   requestTargetedReanalysis: "request_targeted_reanalysis",
   submitClassificationForIndependentReview:
     "submit_classification_for_independent_review",
@@ -86,6 +87,7 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   classificationBaselineRead: "AGENTIC_TOOL_CLASSIFICATION_BASELINE_READ",
   classificationProposalValidated:
     "AGENTIC_TOOL_CLASSIFICATION_PROPOSAL_VALIDATED",
+  gapMatrixEvaluated: "AGENTIC_TOOL_GAP_MATRIX_EVALUATED",
   targetedReanalysisRequested: "AGENTIC_TOOL_TARGETED_REANALYSIS_REQUESTED",
   classificationReviewSubmitted:
     "AGENTIC_TOOL_CLASSIFICATION_REVIEW_SUBMITTED",
