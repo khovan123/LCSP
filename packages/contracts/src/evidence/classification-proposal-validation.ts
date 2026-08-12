@@ -40,6 +40,8 @@ export const VALIDATE_CLASSIFICATION_PROPOSAL_TOOL = {
 } as const;
 
 const STABLE_BASELINE_REF = "^baseline:[A-Za-z0-9_-]{6,80}$";
+const STABLE_PROPOSAL_GATE_REF =
+  "^classification-gate:[A-Za-z0-9_-]{8,120}$";
 const STABLE_LABEL = "^CLASSIFICATION_[A-Z0-9_]{3,64}$";
 const STABLE_CITATION_REF = "^citation:chunk_[A-Za-z0-9_-]{6,80}$";
 
@@ -63,8 +65,9 @@ export const VALIDATE_CLASSIFICATION_PROPOSAL_INPUT_JSON_SCHEMA = {
 export const VALIDATE_CLASSIFICATION_PROPOSAL_RESULT_JSON_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["verdict", "violations", "allowedNextState"],
+  required: ["proposalGateRef", "verdict", "violations", "allowedNextState"],
   properties: {
+    proposalGateRef: { type: "string", pattern: STABLE_PROPOSAL_GATE_REF },
     verdict: { enum: Object.values(CLASSIFICATION_PROPOSAL_VERDICTS) },
     violations: {
       type: "array",
@@ -114,6 +117,7 @@ export type ValidateClassificationProposalResponse = {
     retryable: boolean;
   }>;
   result: {
+    proposalGateRef: string;
     verdict: ClassificationProposalVerdict;
     violations: Array<{
       code: ClassificationProposalViolationCode;

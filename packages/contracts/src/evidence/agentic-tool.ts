@@ -22,6 +22,8 @@ export const AGENTIC_TOOL_NAMES = {
   validateCitationSet: "validate_citation_set",
   getClassificationBaseline: "get_classification_baseline",
   validateClassificationProposal: "validate_classification_proposal",
+  submitClassificationForIndependentReview:
+    "submit_classification_for_independent_review",
   reconcileProfileToVerifiedProfile: "reconcile_profile_to_verified_profile",
 } as const;
 
@@ -81,6 +83,8 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   classificationBaselineRead: "AGENTIC_TOOL_CLASSIFICATION_BASELINE_READ",
   classificationProposalValidated:
     "AGENTIC_TOOL_CLASSIFICATION_PROPOSAL_VALIDATED",
+  classificationReviewSubmitted:
+    "AGENTIC_TOOL_CLASSIFICATION_REVIEW_SUBMITTED",
   findingDetailRead: "AGENTIC_TOOL_FINDING_DETAIL_READ",
   evidenceSearchRead: "AGENTIC_TOOL_EVIDENCE_SEARCH_READ",
   providerInvocationRead: "AGENTIC_TOOL_PROVIDER_INVOCATION_READ",

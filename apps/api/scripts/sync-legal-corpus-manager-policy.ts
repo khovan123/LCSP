@@ -14,6 +14,7 @@ const legalCorpusActions = [
   PBAC_ACTIONS.legalCitationValidate,
   PBAC_ACTIONS.classificationBaselineRead,
   PBAC_ACTIONS.classificationProposalValidate,
+  PBAC_ACTIONS.classificationReviewSubmit,
 ];
 
 async function main() {
