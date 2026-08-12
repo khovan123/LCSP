@@ -10,6 +10,7 @@ from .chunk_integrity_repository import ChunkIntegrityRepository
 from .legal_chunk_repository import LegalChunkRepository, LegalChunkSetRecord
 from .legal_retrieval_index_repository import LegalRetrievalIndexRecord
 from .official_text_extraction import _sha256_bytes
+from .relationship_manifest_repository import RelationshipManifestRepository
 
 LEGAL_RETRIEVAL_INDEX_TOOL = {
     "name": "build_legal_retrieval_index",
@@ -157,11 +158,15 @@ class LegalRetrievalIndexBuilder:
         storage_root: Path,
         chunk_repository: LegalChunkRepository,
         integrity_repository: ChunkIntegrityRepository,
+        relationship_repository: RelationshipManifestRepository | None = None,
         index_store: LegalIndexStore | None = None,
     ) -> None:
         self._storage_root = storage_root
         self._chunk_repository = chunk_repository
         self._integrity_repository = integrity_repository
+        self._relationship_repository = relationship_repository or RelationshipManifestRepository(
+            storage_root=storage_root
+        )
         self._index_store = index_store or ChromaLegalIndexStore(
             chroma_path=storage_root / "chroma"
         )
@@ -221,6 +226,9 @@ class LegalRetrievalIndexBuilder:
                 collection_name=collection_name,
                 evidence_refs=[request.integrity_manifest_ref],
             )
+        relationship_record = self._relationship_repository.get_by_relationship_manifest_ref(
+            integrity_record.relationship_manifest_ref
+        )
 
         chunk_record = self._chunk_repository.get_by_chunk_set_ref(request.chunk_set_ref)
         if chunk_record is None:
@@ -252,7 +260,17 @@ class LegalRetrievalIndexBuilder:
                 evidence_refs=[request.integrity_manifest_ref],
             )
 
-        records = [self._to_index_record(chunk) for chunk in chunks]
+        records = [
+            self._to_index_record(
+                chunk,
+                source_effect_status=(
+                    relationship_record.source_effect_status
+                    if relationship_record is not None
+                    else ""
+                ),
+            )
+            for chunk in chunks
+        ]
         records_json = json.dumps(records, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
         index_checksum = _sha256_bytes(records_json.encode("utf-8"))
         output_dir = self._storage_root / "legal-indexes" / index_id
@@ -383,7 +401,9 @@ class LegalRetrievalIndexBuilder:
             raise RuntimeError("chunk payload must be a JSON list")
         return [item for item in payload if isinstance(item, dict)], None
 
-    def _to_index_record(self, chunk: dict[str, Any]) -> dict[str, Any]:
+    def _to_index_record(
+        self, chunk: dict[str, Any], *, source_effect_status: str
+    ) -> dict[str, Any]:
         chunk_id = str(chunk.get("id", "")).strip()
         content = str(chunk.get("content", "")).strip()
         locator = str(chunk.get("locator", "")).strip()
@@ -408,7 +428,9 @@ class LegalRetrievalIndexBuilder:
             "effective_from": str(hierarchy.get("effectiveFrom", "")),
             "effective_to": str(hierarchy.get("effectiveTo", "")),
             "legal_status": str(chunk.get("legalStatus", "ACTIVE")),
-            "source_effect_status": str(hierarchy.get("sourceEffectStatus", "")),
+            "source_effect_status": str(
+                hierarchy.get("sourceEffectStatus", "") or source_effect_status
+            ),
             "source_url": str(hierarchy.get("sourceUrl", "")),
             "source_checksum": str(hierarchy.get("sourceChecksum", "")),
             "chunk_checksum": str(chunk.get("contentSha256", "")),

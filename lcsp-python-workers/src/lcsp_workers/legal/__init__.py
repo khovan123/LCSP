@@ -39,6 +39,15 @@ from .legal_retrieval_index_repository import (
     LegalRetrievalIndexRecord,
     LegalRetrievalIndexRepository,
 )
+from .retrieval_index_validation_consumer import RetrievalIndexValidationConsumer
+from .retrieval_index_validator import (
+    RetrievalIndexValidator,
+    ValidateRetrievalIndexRequest,
+)
+from .retrieval_validation_repository import (
+    RetrievalValidationRecord,
+    RetrievalValidationRepository,
+)
 from .relationship_manifest_repository import (
     RelationshipManifestRecord,
     RelationshipManifestRepository,
@@ -93,6 +102,11 @@ __all__ = [
     "LegalRetrievalIndexConsumer",
     "LegalRetrievalIndexRecord",
     "LegalRetrievalIndexRepository",
+    "ValidateRetrievalIndexRequest",
+    "RetrievalIndexValidator",
+    "RetrievalIndexValidationConsumer",
+    "RetrievalValidationRecord",
+    "RetrievalValidationRepository",
     "RelationshipManifestRecord",
     "RelationshipManifestRepository",
     "BuildReviewedCorpusInputRequest",
