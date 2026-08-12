@@ -18,9 +18,11 @@ import type {
   ApproveLegalCorpusRequest,
   IngestLegalCorpusRequest,
 } from "../../application/contracts/legal-corpus.contract.js";
+import type { ResumeWaitingRunsRequest } from "../../application/contracts/resume-waiting-runs.contract.js";
 
 import { DraftLegalRuleCommand } from "../../application/commands/draft-legal-rule/draft-legal-rule.command.js";
 import { ApproveRuleCatalogVersionCommand } from "../../application/commands/approve-rule-catalog-version/approve-rule-catalog-version.command.js";
+import { ResumeWaitingRunsCommand } from "../../application/commands/resume-waiting-runs/resume-waiting-runs.command.js";
 import { GetActiveRuleCatalogQuery } from "../../application/queries/get-active-rule-catalog/get-active-rule-catalog.query.js";
 import { GetActiveLegalCorpusQuery } from "../../application/queries/get-active-legal-corpus/get-active-legal-corpus.query.js";
 
@@ -88,6 +90,26 @@ export class LegalRuleCatalogController {
         comments: body.comments ?? null,
         correlationId: req.correlationId || randomUUID(),
       }),
+    );
+  }
+
+  @Post("corpus/:versionId/resume-waiting-runs")
+  @HttpCode(200)
+  @UseGuards(WorkerApiKeyGuard)
+  async resumeWaitingRuns(
+    @Param("versionId") versionId: string,
+    @Body() body: ResumeWaitingRunsRequest,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ResumeWaitingRunsCommand(
+          versionId,
+          body.maxRuns,
+          body.idempotencyKey,
+          req.correlationId || randomUUID(),
+        ),
+      ),
     );
   }
 
