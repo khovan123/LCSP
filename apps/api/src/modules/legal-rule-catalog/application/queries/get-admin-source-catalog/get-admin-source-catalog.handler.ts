@@ -21,10 +21,10 @@ import { AdminSourceCatalogService } from "../../services/admin-source-catalog.s
 import { GetAdminSourceCatalogQuery } from "./get-admin-source-catalog.query.js";
 
 @QueryHandler(GetAdminSourceCatalogQuery)
-export class GetAdminSourceCatalogHandler
-  implements
-    IQueryHandler<GetAdminSourceCatalogQuery, GetAdminSourceCatalogResponse>
-{
+export class GetAdminSourceCatalogHandler implements IQueryHandler<
+  GetAdminSourceCatalogQuery,
+  GetAdminSourceCatalogResponse
+> {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditWriter: AuditWriterService,

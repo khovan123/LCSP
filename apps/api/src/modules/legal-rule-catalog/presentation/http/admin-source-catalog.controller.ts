@@ -72,16 +72,16 @@ export class AdminSourceCatalogController {
   }
 }
 
-function parseInput(
-  query: Record<string, unknown>,
-  correlationId: string,
-) {
+function parseInput(query: Record<string, unknown>, correlationId: string) {
   if (Object.keys(query).some((key) => !ALLOWED_KEYS.has(key))) {
     invalidRequest(correlationId);
   }
 
   const catalogId = single(query.catalog_id);
-  if (catalogId !== null && !CATALOG_IDS.has(catalogId as AdminSourceCatalogId)) {
+  if (
+    catalogId !== null &&
+    !CATALOG_IDS.has(catalogId as AdminSourceCatalogId)
+  ) {
     invalidRequest(correlationId);
   }
 
@@ -124,9 +124,9 @@ function parseInput(
       ? {
           documentIdentity: {
             documentType: documentType as AdminSourceDocumentType,
-            documentNumber: documentNumber!,
-            issuingAuthority: issuingAuthority!,
-            issueDate: issueDate!,
+            documentNumber: documentNumber,
+            issuingAuthority: issuingAuthority,
+            issueDate: issueDate,
           },
         }
       : {}),

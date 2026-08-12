@@ -16,7 +16,9 @@ function createHandler(input?: { assessment?: object | null }) {
   const assessmentFindFirst = jest
     .fn<() => Promise<object | null>>()
     .mockResolvedValue(
-      input?.assessment === undefined ? { id: "assessment-1" } : input.assessment,
+      input?.assessment === undefined
+        ? { id: "assessment-1" }
+        : input.assessment,
     );
   const prisma = {
     assessment: { findFirst: assessmentFindFirst },
@@ -32,7 +34,9 @@ function createHandler(input?: { assessment?: object | null }) {
   };
 }
 
-function query(input: ConstructorParameters<typeof GetAdminSourceCatalogQuery>[2]) {
+function query(
+  input: ConstructorParameters<typeof GetAdminSourceCatalogQuery>[2],
+) {
   return new GetAdminSourceCatalogQuery(
     "assessment-1",
     "organization-1",
@@ -54,8 +58,12 @@ describe("GetAdminSourceCatalogHandler", () => {
 
     expect(response.status).toBe(AGENTIC_TOOL_STATUSES.ready);
     expect(response.result.allowedHost).toBe("vbpl.vn");
-    expect(response.result.catalogSourceRef).toContain("catalog-source:vbpl.vn");
-    expect(JSON.stringify(write.mock.calls)).toContain("AGENTIC_TOOL_ADMIN_SOURCE_CATALOG_READ");
+    expect(response.result.catalogSourceRef).toContain(
+      "catalog-source:vbpl.vn",
+    );
+    expect(JSON.stringify(write.mock.calls)).toContain(
+      "AGENTIC_TOOL_ADMIN_SOURCE_CATALOG_READ",
+    );
   });
 
   it("TC-02: returns conflict when identity does not map uniquely to a catalog source", async () => {

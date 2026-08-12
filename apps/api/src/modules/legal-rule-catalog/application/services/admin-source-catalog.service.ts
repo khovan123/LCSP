@@ -48,7 +48,9 @@ export class AdminSourceCatalogService {
 
   resolve(input: GetAdminSourceCatalogInput): CatalogResolution {
     if (input.catalogId) {
-      const entry = CATALOG_ENTRIES.find((item) => item.catalogId === input.catalogId);
+      const entry = CATALOG_ENTRIES.find(
+        (item) => item.catalogId === input.catalogId,
+      );
       if (!entry) {
         return {
           kind: "missing",
@@ -59,7 +61,10 @@ export class AdminSourceCatalogService {
         kind: "resolved",
         entry,
         documentIdentity: input.documentIdentity ?? null,
-        evidenceRef: this.catalogSourceRef(entry.allowedHost, input.documentIdentity),
+        evidenceRef: this.catalogSourceRef(
+          entry.allowedHost,
+          input.documentIdentity,
+        ),
       };
     }
 
@@ -90,7 +95,10 @@ export class AdminSourceCatalogService {
       kind: "resolved",
       entry,
       documentIdentity: input.documentIdentity,
-      evidenceRef: this.catalogSourceRef(entry.allowedHost, input.documentIdentity),
+      evidenceRef: this.catalogSourceRef(
+        entry.allowedHost,
+        input.documentIdentity,
+      ),
     };
   }
 
