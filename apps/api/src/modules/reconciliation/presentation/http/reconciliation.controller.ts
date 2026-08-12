@@ -20,8 +20,12 @@ import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import { AI_USAGE_FLOW_STATUSES } from "@lcsp/contracts/scan";
 import {
   ARTIFACT_CHAIN_STAGES,
+  ASSESSMENT_CONTEXT_ANSWER_FIELDS,
+  ASSESSMENT_CONTEXT_INCLUDES,
   VERIFIED_PROFILE_REQUIRED_FOR,
   type ArtifactChainStage,
+  type AssessmentContextAnswerField,
+  type AssessmentContextInclude,
   type VerifiedProfileRequiredFor,
 } from "@lcsp/contracts/evidence";
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
@@ -44,6 +48,7 @@ import { ListConflictsQuery } from "../../application/queries/list-conflicts/lis
 import { GetVerifiedProfileByIdQuery } from "../../application/queries/get-verified-profile-by-id/get-verified-profile-by-id.query.js";
 import { GetVerifiedProfileQuery } from "../../application/queries/get-verified-profile/get-verified-profile.query.js";
 import { GetArtifactChainQuery } from "../../application/queries/get-artifact-chain/get-artifact-chain.query.js";
+import { GetAssessmentContextQuery } from "../../application/queries/get-assessment-context/get-assessment-context.query.js";
 import { GetReconciliationContextQuery } from "../../application/queries/get-reconciliation-context/get-reconciliation-context.query.js";
 import { ProposeMissingTargetsQuery } from "../../application/queries/propose-missing-targets/propose-missing-targets.query.js";
 import {
@@ -357,6 +362,37 @@ export class ReconciliationController {
     );
   }
 
+  @Get(":assessmentId/assessment-context")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.assessmentRead)
+  async getAssessmentContext(
+    @Param("assessmentId") assessmentId: string,
+    @Query("wizard_profile_id") wizardProfileId: string,
+    @Query("include") includeRaw: string | undefined,
+    @Query("answer_fields") answerFieldsRaw: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const correlationId = request.correlationId as string;
+    const includes = parseAssessmentContextIncludes(includeRaw, correlationId);
+    const answerFields = parseAssessmentContextAnswerFields(
+      answerFieldsRaw,
+      correlationId,
+    );
+
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetAssessmentContextQuery(
+          assessmentId,
+          request.pbacContext.organizationId,
+          wizardProfileId,
+          includes,
+          answerFields,
+          correlationId,
+        ),
+      ),
+    );
+  }
+
   @Get(":assessmentId/verified-profiles/:verifiedProfileId")
   @UseGuards(PbacGuard)
   @RequireAction(PBAC_ACTIONS.verifiedProfileRead)
@@ -533,6 +569,65 @@ function parseMaxResults(
     throwInvalidRequest(correlationId);
   }
   return maxResults;
+}
+
+function parseAssessmentContextIncludes(
+  raw: string | undefined,
+  correlationId: string,
+): AssessmentContextInclude[] {
+  const values = splitCsv(raw);
+  if (values.length === 0) {
+    throw problemException(
+      ASSESSMENT_ERROR_CODES.invalidRequest,
+      correlationId,
+      {
+        status: HttpStatus.BAD_REQUEST,
+      },
+    );
+  }
+  const allowed = new Set(Object.values(ASSESSMENT_CONTEXT_INCLUDES));
+  if (values.some((value) => !allowed.has(value as AssessmentContextInclude))) {
+    throw problemException(
+      ASSESSMENT_ERROR_CODES.invalidRequest,
+      correlationId,
+      {
+        status: HttpStatus.BAD_REQUEST,
+      },
+    );
+  }
+  return values as AssessmentContextInclude[];
+}
+
+function parseAssessmentContextAnswerFields(
+  raw: string | undefined,
+  correlationId: string,
+): AssessmentContextAnswerField[] {
+  const values = splitCsv(raw);
+  const allowed = new Set(Object.values(ASSESSMENT_CONTEXT_ANSWER_FIELDS));
+  if (
+    values.some((value) => !allowed.has(value as AssessmentContextAnswerField))
+  ) {
+    throw problemException(
+      ASSESSMENT_ERROR_CODES.invalidRequest,
+      correlationId,
+      {
+        status: HttpStatus.BAD_REQUEST,
+      },
+    );
+  }
+  return values as AssessmentContextAnswerField[];
+}
+
+function splitCsv(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return [
+    ...new Set(
+      raw
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function throwInvalidRequest(correlationId: string): never {

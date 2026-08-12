@@ -1,5 +1,6 @@
 export * from "./codes.ts";
 export * from "./agentic-tool.ts";
+export * from "./assessment-context.ts";
 export * from "./reconcile-verified-profile.ts";
 export * from "./verified-profile.ts";
 export * from "./legal-corpus-readiness.ts";

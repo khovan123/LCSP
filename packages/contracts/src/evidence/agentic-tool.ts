@@ -1,5 +1,6 @@
 /** Shared value sets for the first protected agentic-evidence tools. */
 export const AGENTIC_TOOL_NAMES = {
+  getAssessmentContext: "get_assessment_context",
   getScanCoverage: "get_scan_coverage",
   getArtifactChain: "get_artifact_chain",
   getFindingDetail: "get_finding_detail",
@@ -73,6 +74,7 @@ export type ArtifactChainIntegrity =
   (typeof ARTIFACT_CHAIN_INTEGRITY)[keyof typeof ARTIFACT_CHAIN_INTEGRITY];
 
 export const AGENTIC_TOOL_EVENT_TYPES = {
+  assessmentContextRead: "AGENTIC_TOOL_ASSESSMENT_CONTEXT_READ",
   scanCoverageRead: "AGENTIC_TOOL_SCAN_COVERAGE_READ",
   artifactChainRead: "AGENTIC_TOOL_ARTIFACT_CHAIN_READ",
   reconciliationContextRead: "AGENTIC_TOOL_RECONCILIATION_CONTEXT_READ",
