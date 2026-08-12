@@ -440,6 +440,7 @@ enum OutboxAggregateType {
   CLASSIFICATION_REVIEW_REQUEST
   CLASSIFICATION_RESULT
   DOCUMENT_REQUEST
+  LEGAL_CORPUS_VERSION
   LEGAL_RULE_MATCH
   REPOSITORY_SCAN_JOB
   REPOSITORY_SNAPSHOT
@@ -784,6 +785,7 @@ model LegalCorpusVersion {
   version        String                   @unique
   status         LegalRuleLifecycleStatus @default(DRAFT)
   sourceManifest Json
+  integrityManifestRef String?
   createdAt      DateTime                 @default(now())
   approvedAt     DateTime?
   documents      LegalSourceDocument[]
@@ -880,12 +882,17 @@ model CorpusApprovalRecord {
   legalCorpusVersionId String
   approvedBy           String
   status               LegalRuleLifecycleStatus
+  idempotencyKey       String?
+  integrityManifestRef String?
+  retrievalValidationRef String?
+  outboxEventId        String?
   scopeDescription     String
   comments             String?
   approvalDate         DateTime           @default(now())
   corpusVersion        LegalCorpusVersion @relation(fields: [legalCorpusVersionId], references: [id], onDelete: Cascade)
 
   @@index([legalCorpusVersionId])
+  @@unique([idempotencyKey])
 }
 
 model LegalRule {

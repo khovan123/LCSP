@@ -39,6 +39,7 @@ export const OUTBOX_AGGREGATE_TYPES = {
   classificationReviewRequest: "CLASSIFICATION_REVIEW_REQUEST",
   classificationResult: "CLASSIFICATION_RESULT",
   documentRequest: "DOCUMENT_REQUEST",
+  legalCorpusVersion: "LEGAL_CORPUS_VERSION",
   legalRuleMatch: "LEGAL_RULE_MATCH",
   repositoryScanJob: "REPOSITORY_SCAN_JOB",
   repositorySnapshot: "REPOSITORY_SNAPSHOT",
@@ -86,7 +87,7 @@ export type MaterialOutboxMessageInput = Omit<
   OutboxMessageInput,
   "schemaVersion" | "payload" | "redactionStatus"
 > & {
-  organizationId: string;
+  organizationId: string | null;
   correlationId: string;
   causationId: string;
   actor: AuditActorRef;

@@ -24,6 +24,7 @@ export const PBAC_ACTIONS = {
   legalRuleCatalogAuthor: "legal-rule-catalog:author",
   legalRuleCatalogApprove: "legal-rule-catalog:approve",
   legalCorpusIngest: "legal-corpus:ingest",
+  legalCorpusActivate: "legal-corpus:activate",
   legalCorpusApprove: "legal-corpus:approve",
   legalCorpusRead: "legal-corpus:read",
   legalRuleMatchRead: "legal-rule-match:read",

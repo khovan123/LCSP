@@ -509,6 +509,8 @@ const OUTBOX_AGGREGATE_TYPE_TO_PRISMA = {
     PrismaOutboxAggregateType.CLASSIFICATION_RESULT,
   [OUTBOX_AGGREGATE_TYPES.documentRequest]:
     PrismaOutboxAggregateType.DOCUMENT_REQUEST,
+  [OUTBOX_AGGREGATE_TYPES.legalCorpusVersion]:
+    PrismaOutboxAggregateType.LEGAL_CORPUS_VERSION,
   [OUTBOX_AGGREGATE_TYPES.legalRuleMatch]:
     PrismaOutboxAggregateType.LEGAL_RULE_MATCH,
   [OUTBOX_AGGREGATE_TYPES.repositoryScanJob]:
@@ -537,6 +539,8 @@ const PRISMA_OUTBOX_AGGREGATE_TYPE_TO_CONTRACT = {
     OUTBOX_AGGREGATE_TYPES.classificationResult,
   [PrismaOutboxAggregateType.DOCUMENT_REQUEST]:
     OUTBOX_AGGREGATE_TYPES.documentRequest,
+  [PrismaOutboxAggregateType.LEGAL_CORPUS_VERSION]:
+    OUTBOX_AGGREGATE_TYPES.legalCorpusVersion,
   [PrismaOutboxAggregateType.LEGAL_RULE_MATCH]:
     OUTBOX_AGGREGATE_TYPES.legalRuleMatch,
   [PrismaOutboxAggregateType.REPOSITORY_SCAN_JOB]:
