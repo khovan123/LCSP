@@ -10,6 +10,7 @@ const legalCorpusActions = [
   PBAC_ACTIONS.legalCorpusIngest,
   PBAC_ACTIONS.legalCorpusApprove,
   PBAC_ACTIONS.legalCorpusRead,
+  PBAC_ACTIONS.legalRuleMatchRead,
   PBAC_ACTIONS.legalCitationValidate,
 ];
 

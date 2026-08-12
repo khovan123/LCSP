@@ -19,6 +19,7 @@ export const MANAGER_ONLY_ACTION_VALUES = [
   PBAC_ACTIONS.legalCorpusIngest,
   PBAC_ACTIONS.legalCorpusApprove,
   PBAC_ACTIONS.legalCorpusRead,
+  PBAC_ACTIONS.legalRuleMatchRead,
   PBAC_ACTIONS.legalCitationValidate,
 ] as const;
 
