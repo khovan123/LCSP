@@ -18,3 +18,4 @@ export * from "./extract-official-text.ts";
 export * from "./run-ocr-fallback.ts";
 export * from "./evaluate-ocr-quality.ts";
 export * from "./build-reviewed-corpus-input.ts";
+export * from "./build-legal-chunks.ts";

@@ -21,6 +21,9 @@ from .ocr_fallback_repository import (
 from .ocr_quality_consumer import OcrQualityConsumer
 from .ocr_quality_repository import OcrQualityRecord, OcrQualityRepository
 from .ocr_quality_validator import EvaluateOcrQualityRequest, OcrQualityValidator
+from .legal_chunk_builder import BuildLegalChunksRequest, LegalChunkBuilder
+from .legal_chunk_consumer import LegalChunkConsumer
+from .legal_chunk_repository import LegalChunkRepository, LegalChunkSetRecord
 from .reviewed_corpus_input_builder import (
     BuildReviewedCorpusInputRequest,
     ReviewedCorpusInputBuilder,
@@ -56,6 +59,11 @@ __all__ = [
     "OcrQualityConsumer",
     "OcrQualityRecord",
     "OcrQualityRepository",
+    "BuildLegalChunksRequest",
+    "LegalChunkBuilder",
+    "LegalChunkConsumer",
+    "LegalChunkRepository",
+    "LegalChunkSetRecord",
     "BuildReviewedCorpusInputRequest",
     "ReviewedCorpusInputBuilder",
     "ReviewedCorpusInputConsumer",
