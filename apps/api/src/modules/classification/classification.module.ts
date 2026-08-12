@@ -5,10 +5,12 @@ import { WorkerApiKeyGuard } from "../scan/presentation/http/worker-api-key.guar
 import { AcceptClassificationHandler } from "./application/commands/accept-classification/accept-classification.handler.js";
 import { AcceptLegalRuleMatchHandler } from "./application/commands/accept-legal-rule-match/accept-legal-rule-match.handler.js";
 import { RerunClassificationHandler } from "./application/commands/rerun-classification/rerun-classification.handler.js";
+import { GetClassificationBaselineHandler } from "./application/queries/get-classification-baseline/get-classification-baseline.handler.js";
 import { CitationGuardrailService } from "./application/services/classification/citation-guardrail.service.js";
 import { OverclaimGuardrailService } from "./application/services/classification/overclaim-guardrail.service.js";
 import { ClassificationController } from "./presentation/http/classification.controller.js";
 import { AssessmentClassificationController } from "./presentation/http/assessment-classification.controller.js";
+import { ClassificationBaselineController } from "./presentation/http/classification-baseline.controller.js";
 import { ClassificationRuntimeController } from "./presentation/http/classification-runtime.controller.js";
 
 @Module({
@@ -17,11 +19,13 @@ import { ClassificationRuntimeController } from "./presentation/http/classificat
     ClassificationController,
     ClassificationRuntimeController,
     AssessmentClassificationController,
+    ClassificationBaselineController,
   ],
   providers: [
     AcceptLegalRuleMatchHandler,
     AcceptClassificationHandler,
     RerunClassificationHandler,
+    GetClassificationBaselineHandler,
     CitationGuardrailService,
     OverclaimGuardrailService,
     WorkerApiKeyGuard,

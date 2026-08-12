@@ -12,6 +12,7 @@ const legalCorpusActions = [
   PBAC_ACTIONS.legalCorpusRead,
   PBAC_ACTIONS.legalRuleMatchRead,
   PBAC_ACTIONS.legalCitationValidate,
+  PBAC_ACTIONS.classificationBaselineRead,
 ];
 
 async function main() {

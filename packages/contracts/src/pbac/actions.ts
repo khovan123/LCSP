@@ -28,6 +28,7 @@ export const PBAC_ACTIONS = {
   legalCorpusRead: "legal-corpus:read",
   legalRuleMatchRead: "legal-rule-match:read",
   legalCitationValidate: "legal-citation:validate",
+  classificationBaselineRead: "classification-baseline:read",
   managerDecisionChange: "manager-decision:change",
   membershipRevoke: "membership:revoke",
   metadataCheck: "pbac:metadata",
