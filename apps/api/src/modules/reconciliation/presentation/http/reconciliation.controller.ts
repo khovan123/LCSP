@@ -343,10 +343,21 @@ export class ReconciliationController {
     @Param("assessmentId") assessmentId: string,
     @Query("wizard_profile_id") wizardProfileId: string,
     @Query("evidence_report_id") evidenceReportId: string,
+    @Query("candidate_kinds") candidateKindsRaw: string | undefined,
+    @Query("seed_refs") seedRefsRaw: string | undefined,
+    @Query("exclude_target_ids") excludeTargetIdsRaw: string | undefined,
     @Query("max_results") maxResultsRaw: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
     const correlationId = request.correlationId as string;
+    const candidateKinds = parseTargetCandidateKinds(
+      candidateKindsRaw,
+      correlationId,
+    );
+    const seedRefs = parseSeedRefs(seedRefsRaw, correlationId);
+    const excludeTargetIds = parseTargetIds(excludeTargetIdsRaw, correlationId);
+    const maxResults = parseProposalMaxResults(maxResultsRaw, correlationId);
+
     return resultEnvelope(
       await this.queryBus.execute(
         new ProposeMissingTargetsQuery(
@@ -354,8 +365,10 @@ export class ReconciliationController {
           request.pbacContext.organizationId,
           wizardProfileId,
           evidenceReportId,
-          [TARGET_CANDIDATE_KINDS.providerUsage],
-          maxResultsRaw ? Number(maxResultsRaw) : 25,
+          candidateKinds,
+          seedRefs,
+          excludeTargetIds,
+          maxResults,
           correlationId,
         ),
       ),
@@ -628,6 +641,60 @@ function splitCsv(raw: string | undefined): string[] {
         .filter(Boolean),
     ),
   ];
+}
+
+function parseTargetCandidateKinds(
+  raw: string | undefined,
+  correlationId: string,
+): Array<(typeof TARGET_CANDIDATE_KINDS)[keyof typeof TARGET_CANDIDATE_KINDS]> {
+  const values = splitCsv(raw);
+  if (values.length === 0) {
+    throwInvalidRequest(correlationId);
+  }
+  const allowed = new Set(Object.values(TARGET_CANDIDATE_KINDS));
+  if (values.some((value) => !allowed.has(value as never))) {
+    throwInvalidRequest(correlationId);
+  }
+  return values as Array<
+    (typeof TARGET_CANDIDATE_KINDS)[keyof typeof TARGET_CANDIDATE_KINDS]
+  >;
+}
+
+function parseSeedRefs(
+  raw: string | undefined,
+  correlationId: string,
+): string[] {
+  const values = splitCsv(raw);
+  const allowedPattern =
+    /^(finding|symbol|node|invocation):[A-Za-z0-9_-]{1,120}$/;
+  if (values.some((value) => !allowedPattern.test(value))) {
+    throwInvalidRequest(correlationId);
+  }
+  return values;
+}
+
+function parseTargetIds(
+  raw: string | undefined,
+  correlationId: string,
+): string[] {
+  const values = splitCsv(raw);
+  const allowedPattern = /^target:[A-Za-z0-9_-]{1,120}$/;
+  if (values.some((value) => !allowedPattern.test(value))) {
+    throwInvalidRequest(correlationId);
+  }
+  return values;
+}
+
+function parseProposalMaxResults(
+  raw: string | undefined,
+  correlationId: string,
+): number {
+  if (!raw) return 25;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 25) {
+    throwInvalidRequest(correlationId);
+  }
+  return parsed;
 }
 
 function throwInvalidRequest(correlationId: string): never {
