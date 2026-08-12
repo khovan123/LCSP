@@ -7,6 +7,7 @@ import {
   Req,
   HttpCode,
   Get,
+  Query,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
@@ -18,6 +19,7 @@ import type {
   ApproveLegalCorpusRequest,
   IngestLegalCorpusRequest,
 } from "../../application/contracts/legal-corpus.contract.js";
+import type { RegisterOfficialSourceSnapshotRequest } from "../../application/contracts/official-source-snapshot.contract.js";
 import type { ResumeWaitingRunsRequest } from "../../application/contracts/resume-waiting-runs.contract.js";
 
 import { DraftLegalRuleCommand } from "../../application/commands/draft-legal-rule/draft-legal-rule.command.js";
@@ -33,6 +35,7 @@ import { resultEnvelope } from "../../../../platform/problems/result-envelope.js
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { LegalCorpusService } from "../../application/services/legal-corpus.service.js";
+import { OfficialSourceSnapshotService } from "../../application/services/official-source-snapshot.service.js";
 import { RuleCatalogVersionService } from "../../application/services/rule-catalog-version.service.js";
 
 @Controller("internal/legal-rule-catalog")
@@ -41,6 +44,7 @@ export class LegalRuleCatalogController {
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
     private readonly legalCorpus: LegalCorpusService,
+    private readonly officialSourceSnapshots: OfficialSourceSnapshotService,
     private readonly catalogVersions: RuleCatalogVersionService,
   ) {}
 
@@ -173,6 +177,37 @@ export class LegalRuleCatalogController {
   async getCorpusChunks(@Param("versionId") versionId: string) {
     const corpus = await this.legalCorpus.getApprovedChunks(versionId);
     return resultEnvelope(corpus);
+  }
+
+  @Post("source-snapshots")
+  @HttpCode(201)
+  @UseGuards(WorkerApiKeyGuard)
+  async registerOfficialSourceSnapshot(
+    @Body() body: RegisterOfficialSourceSnapshotRequest,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.officialSourceSnapshots.register(
+        body,
+        req.correlationId || randomUUID(),
+      ),
+    );
+  }
+
+  @Get("source-snapshots")
+  @HttpCode(200)
+  @UseGuards(WorkerApiKeyGuard)
+  async getOfficialSourceSnapshot(
+    @Query("snapshot_ref") snapshotRef: string | undefined,
+    @Query("snapshot_id") snapshotId: string | undefined,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.officialSourceSnapshots.get(
+        { snapshotRef, snapshotId },
+        req.correlationId || randomUUID(),
+      ),
+    );
   }
 
   @Post("versions/:versionId/approve")

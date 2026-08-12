@@ -17,6 +17,7 @@ import { GetLegalRuleMatchHandler } from "./application/queries/get-legal-rule-m
 import { ValidateCitationSetHandler } from "./application/queries/validate-citation-set/validate-citation-set.handler.js";
 import { CitationLocatorValidatorService } from "./application/services/citation-locator-validator.service.js";
 import { LegalCorpusService } from "./application/services/legal-corpus.service.js";
+import { OfficialSourceSnapshotService } from "./application/services/official-source-snapshot.service.js";
 import { RuleCatalogVersionService } from "./application/services/rule-catalog-version.service.js";
 
 const Handlers = [
@@ -44,6 +45,7 @@ const Handlers = [
     ...Handlers,
     CitationLocatorValidatorService,
     LegalCorpusService,
+    OfficialSourceSnapshotService,
     RuleCatalogVersionService,
   ],
 })

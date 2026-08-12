@@ -827,6 +827,33 @@ model LegalSourceDocument {
   @@index([documentId])
 }
 
+model LegalSourceSnapshot {
+  id                  String   @id @default(uuid())
+  snapshotRef         String   @unique
+  snapshotId          String   @unique
+  catalogSourceRef    String
+  adminCatalogVersion String
+  documentId          String
+  documentNumber      String?
+  sourceUrl           String
+  finalUrl            String?
+  contentType         String
+  byteLength          Int
+  contentSha256       String
+  snapshotObjectKey   String
+  provenanceRef       String
+  retrievedAt         DateTime
+  sourceEffectStatus  String?
+  normalizationSource String?
+  identityVerified    Boolean  @default(false)
+  correlationId       String
+  createdAt           DateTime @default(now())
+
+  @@index([catalogSourceRef, createdAt])
+  @@index([documentId, createdAt])
+  @@index([contentSha256])
+}
+
 model LegalDocumentChunk {
   id                    String              @id
   legalCorpusVersionId  String
