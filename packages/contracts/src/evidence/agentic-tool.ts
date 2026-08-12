@@ -25,6 +25,7 @@ export const AGENTIC_TOOL_NAMES = {
   validateClassificationProposal: "validate_classification_proposal",
   evaluateGapMatrix: "evaluate_gap_matrix",
   getGapEvidenceTrace: "get_gap_evidence_trace",
+  proposeGapRemediation: "propose_gap_remediation",
   requestTargetedReanalysis: "request_targeted_reanalysis",
   submitClassificationForIndependentReview:
     "submit_classification_for_independent_review",
@@ -90,6 +91,7 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
     "AGENTIC_TOOL_CLASSIFICATION_PROPOSAL_VALIDATED",
   gapMatrixEvaluated: "AGENTIC_TOOL_GAP_MATRIX_EVALUATED",
   gapEvidenceTraceRead: "AGENTIC_TOOL_GAP_EVIDENCE_TRACE_READ",
+  gapRemediationProposed: "AGENTIC_TOOL_GAP_REMEDIATION_PROPOSED",
   targetedReanalysisRequested: "AGENTIC_TOOL_TARGETED_REANALYSIS_REQUESTED",
   classificationReviewSubmitted: "AGENTIC_TOOL_CLASSIFICATION_REVIEW_SUBMITTED",
   findingDetailRead: "AGENTIC_TOOL_FINDING_DETAIL_READ",
