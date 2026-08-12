@@ -77,20 +77,22 @@ export class LegalRuleCatalogController {
     );
   }
 
-  @Post("corpus/:versionId/approve")
+  @Post("corpus/:versionId/activate-validated")
   @HttpCode(200)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.legalCorpusApprove)
-  async approveCorpus(
+  @UseGuards(WorkerApiKeyGuard)
+  async activateValidatedCorpusVersion(
     @Param("versionId") versionId: string,
     @Body() body: ApproveLegalCorpusRequest,
     @Req() req: AuthenticatedRequest,
   ) {
     return resultEnvelope(
-      await this.legalCorpus.approveDraft({
+      await this.legalCorpus.activateValidatedCorpusVersion({
         corpusVersionId: versionId,
-        approvedBy: req.pbacContext.userId,
-        scopeDescription: body.scopeDescription?.trim() || "Approved via API",
+        integrityManifestRef: body.integrityManifestRef,
+        retrievalValidationRef: body.retrievalValidationRef,
+        idempotencyKey: body.idempotencyKey,
+        scopeDescription:
+          body.scopeDescription?.trim() || "Activated via worker API",
         comments: body.comments ?? null,
         correlationId: req.correlationId || randomUUID(),
       }),

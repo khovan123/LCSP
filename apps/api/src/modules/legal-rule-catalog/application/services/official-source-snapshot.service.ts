@@ -1,8 +1,5 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
-import {
-  AUDIT_DECISIONS,
-  AUDIT_RESOURCE_TYPES,
-} from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { LEGAL_RULE_ERROR_CODES } from "@lcsp/contracts/legal-rule-catalog";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
@@ -72,7 +69,7 @@ export class OfficialSourceSnapshotService {
       eventType: "LEGAL_SOURCE_SNAPSHOT_STORED",
       actorId: null,
       organizationId: null,
-      resourceType: AUDIT_RESOURCE_TYPES.legalCorpus,
+      resourceType: null,
       resourceId: created.snapshotRef,
       decision: AUDIT_DECISIONS.allow,
       correlationId,
@@ -118,7 +115,7 @@ export class OfficialSourceSnapshotService {
       eventType: "LEGAL_SOURCE_SNAPSHOT_READ",
       actorId: null,
       organizationId: null,
-      resourceType: AUDIT_RESOURCE_TYPES.legalCorpus,
+      resourceType: null,
       resourceId: record.snapshotRef,
       decision: AUDIT_DECISIONS.allow,
       correlationId,
@@ -177,7 +174,10 @@ function validateRegisterInput(
     SHA_256_PATTERN.test(input.contentSha256) &&
     SNAPSHOT_OBJECT_KEY_PATTERN.test(input.snapshotObjectKey) &&
     Boolean(input.provenanceRef?.trim()) &&
-    !Number.isNaN(Date.parse(input.retrievedAt));
+    !Number.isNaN(Date.parse(input.retrievedAt)) &&
+    optionalScalarLooksSafe(input.sourceEffectStatus) &&
+    optionalScalarLooksSafe(input.normalizationSource) &&
+    optionalScalarLooksSafe(input.documentNumber);
   if (!valid) {
     throw problemException(
       LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
@@ -235,6 +235,10 @@ function optionalUrlIsValid(value: string | null | undefined): boolean {
   }
 }
 
+function optionalScalarLooksSafe(value: string | null | undefined): boolean {
+  return value == null || value.trim().length <= 255;
+}
+
 function matchesExisting(
   existing: {
     snapshotId: string;
@@ -269,9 +273,12 @@ function matchesExisting(
     existing.contentSha256 === input.contentSha256 &&
     existing.snapshotObjectKey === input.snapshotObjectKey &&
     existing.provenanceRef === input.provenanceRef &&
-    existing.sourceEffectStatus === normalizeOptional(input.sourceEffectStatus) &&
-    existing.normalizationSource === normalizeOptional(input.normalizationSource) &&
+    existing.sourceEffectStatus ===
+      normalizeOptional(input.sourceEffectStatus) &&
+    existing.normalizationSource ===
+      normalizeOptional(input.normalizationSource) &&
     existing.identityVerified === input.documentIdentityVerified &&
-    existing.retrievedAt.toISOString() === new Date(input.retrievedAt).toISOString()
+    existing.retrievedAt.toISOString() ===
+      new Date(input.retrievedAt).toISOString()
   );
 }
