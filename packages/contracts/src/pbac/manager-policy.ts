@@ -21,6 +21,7 @@ export const MANAGER_ONLY_ACTION_VALUES = [
   PBAC_ACTIONS.legalCorpusRead,
   PBAC_ACTIONS.legalRuleMatchRead,
   PBAC_ACTIONS.legalCitationValidate,
+  PBAC_ACTIONS.classificationBaselineRead,
 ] as const;
 
 export const MANAGER_ONLY_ACTIONS: string[] = [...MANAGER_ONLY_ACTION_VALUES];
