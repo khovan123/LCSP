@@ -12,6 +12,7 @@ import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-met
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
 import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
 import { RerunScanCommand } from "../../application/commands/rerun-scan/rerun-scan.command.js";
+import { RequestTargetedReanalysisCommand } from "../../application/commands/request-targeted-reanalysis/request-targeted-reanalysis.command.js";
 import { InternalScanController, ScanController } from "./scan.controller.js";
 import { InternalTargetedReanalysisController } from "./scan.controller.js";
 import { TARGETED_REANALYSIS_REQUEST_STATES } from "@lcsp/contracts/scan";
@@ -123,6 +124,76 @@ describe("ScanController", () => {
       pbacContext,
       correlationId: "corr-1",
       reason: "Test rerun",
+    });
+  });
+
+  it("requires the technical-evidence:reanalyze PBAC action for requestTargetedReanalysis", () => {
+    const metadata = Reflect.getMetadata(
+      PBAC_METADATA_KEY,
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      ScanController.prototype.requestTargetedReanalysis,
+    ) as unknown;
+
+    expect(metadata).toEqual({
+      type: PBAC_METADATA_TYPES.action,
+      action: PBAC_ACTIONS.technicalEvidenceReanalyze,
+    });
+  });
+
+  it("dispatches RequestTargetedReanalysisCommand with the packet-shaped body", async () => {
+    const execute = jest.fn<(command: unknown) => Promise<unknown>>();
+    execute.mockResolvedValue({
+      status: "READY",
+      toolName: "request_targeted_reanalysis",
+    });
+    const controller = new ScanController(
+      {} as unknown as QueryBus,
+      { execute } as unknown as CommandBus,
+    );
+
+    const pbacContext = {
+      userId: "manager-1",
+      sessionId: "session-1",
+      organizationId: "org-1",
+      subjectRole: SUBJECT_ROLES.manager,
+      scope: "assessment-1",
+      grantedActions: [PBAC_ACTIONS.technicalEvidenceReanalyze],
+      selectedAction: PBAC_ACTIONS.technicalEvidenceReanalyze,
+      policyId: "policy-manager",
+      policyVersion: "v1",
+    };
+
+    await controller.requestTargetedReanalysis(
+      "assessment-1",
+      "ter_12345678",
+      {
+        inputArtifactVersion: "ter_12345678",
+        analyzerId: "RUN_TS_JS_SEMANTIC_ANALYSIS",
+        scope: { pathPrefixes: ["src/web/"] },
+        reasonRequirementId: "requirement:gap_12345678",
+        idempotencyKey: "request_targeted_reanalysis_0001",
+      },
+      {
+        correlationId: "corr-1",
+        pbacContext,
+      },
+    );
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]?.[0]).toBeInstanceOf(
+      RequestTargetedReanalysisCommand,
+    );
+    expect(execute.mock.calls[0]?.[0]).toMatchObject({
+      input: {
+        assessmentId: "assessment-1",
+        inputArtifactVersion: "ter_12345678",
+        analyzerId: "RUN_TS_JS_SEMANTIC_ANALYSIS",
+        scope: { pathPrefixes: ["src/web/"] },
+        reasonRequirementId: "requirement:gap_12345678",
+        idempotencyKey: "request_targeted_reanalysis_0001",
+      },
+      pbacContext,
+      correlationId: "corr-1",
     });
   });
 });

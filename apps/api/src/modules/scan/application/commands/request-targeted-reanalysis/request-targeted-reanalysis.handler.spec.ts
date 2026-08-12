@@ -25,10 +25,17 @@ describe("RequestTargetedReanalysisHandler admission", () => {
         findUnique: jest.fn().mockResolvedValue(null),
       },
       technicalEvidenceReport: {
-        findFirst: jest.fn().mockResolvedValue({ id: "ter-1" }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "ter-1",
+          snapshotId: "snapshot-1",
+          evidencePayload: {},
+        }),
       },
       repositorySnapshot: {
-        findFirst: jest.fn().mockResolvedValue({ id: "snapshot-1" }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "snapshot-1",
+          commitSha: "commit-1",
+        }),
       },
       $transaction: jest.fn((handler: (tx: typeof transaction) => unknown) =>
         Promise.resolve(handler(transaction)),
@@ -46,11 +53,9 @@ describe("RequestTargetedReanalysisHandler admission", () => {
       new RequestTargetedReanalysisCommand(
         {
           assessmentId: "assessment-1",
-          inputEvidenceReportId: "ter-1",
-          snapshotId: "snapshot-1",
-          commitSha: "commit-1",
+          inputArtifactVersion: "ter-1",
           analyzerId: "RUN_PYTHON_SEMANTIC_ANALYSIS",
-          pathPrefixes: ["src/"],
+          scope: { pathPrefixes: ["src/"] },
           reasonRequirementId: "requirement:1",
           idempotencyKey: "idempotency-key-0001",
         },
@@ -63,7 +68,7 @@ describe("RequestTargetedReanalysisHandler admission", () => {
     );
 
     expect($executeRaw).toHaveBeenCalledTimes(1);
-    expect(requestCount).toHaveBeenCalledTimes(3);
+    expect(requestCount).toHaveBeenCalledTimes(4);
     expect(prisma.targetedReanalysisRequest).not.toHaveProperty("count");
   });
 
@@ -84,6 +89,7 @@ describe("RequestTargetedReanalysisHandler admission", () => {
       technicalEvidenceReport: {
         findFirst: jest.fn().mockResolvedValue({
           id: "ter-1",
+          snapshotId: "snapshot-1",
           evidencePayload: {
             technical_findings: [
               { finding_id: "finding-12345678", file_path: "repo/src/ai.py" },
@@ -92,7 +98,10 @@ describe("RequestTargetedReanalysisHandler admission", () => {
         }),
       },
       repositorySnapshot: {
-        findFirst: jest.fn().mockResolvedValue({ id: "snapshot-1" }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "snapshot-1",
+          commitSha: "commit-1",
+        }),
       },
       $transaction: jest.fn((handler: (tx: typeof transaction) => unknown) =>
         Promise.resolve(handler(transaction)),
@@ -110,11 +119,9 @@ describe("RequestTargetedReanalysisHandler admission", () => {
       new RequestTargetedReanalysisCommand(
         {
           assessmentId: "assessment-1",
-          inputEvidenceReportId: "ter-1",
-          snapshotId: "snapshot-1",
-          commitSha: "commit-1",
+          inputArtifactVersion: "ter-1",
           analyzerId: "RUN_PYTHON_SEMANTIC_ANALYSIS",
-          subjectRefs: ["finding:finding-12345678"],
+          scope: { subjectRefs: ["finding:finding-12345678"] },
           reasonRequirementId: "requirement:1",
           idempotencyKey: "idempotency-key-subject-0001",
         },
@@ -131,5 +138,84 @@ describe("RequestTargetedReanalysisHandler admission", () => {
       }),
       transaction,
     );
+  });
+
+  it("rejects a new request once the organization already has 10 queued requests", async () => {
+    const requestCount = jest
+      .fn()
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(11)
+      .mockResolvedValueOnce(10);
+    const transaction = {
+      $executeRaw: jest.fn().mockResolvedValue(undefined),
+      targetedReanalysisRequest: {
+        count: requestCount,
+        create: jest.fn(),
+      },
+      targetedReanalysisCheckpoint: { create: jest.fn() },
+      repositoryScanJob: { create: jest.fn() },
+    };
+    const prisma = {
+      targetedReanalysisRequest: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      technicalEvidenceReport: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "ter-1",
+          snapshotId: "snapshot-1",
+          evidencePayload: {},
+        }),
+      },
+      repositorySnapshot: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "snapshot-1",
+          commitSha: "commit-1",
+        }),
+      },
+      $transaction: jest.fn((handler: (tx: typeof transaction) => unknown) =>
+        Promise.resolve(handler(transaction)),
+      ),
+    };
+    const outbox = { enqueue: jest.fn() };
+    const auditWriter = { write: jest.fn() };
+    const handler = new RequestTargetedReanalysisHandler(
+      prisma as never,
+      auditWriter as never,
+      outbox as never,
+    );
+
+    let caught: unknown;
+    try {
+      await handler.execute(
+        new RequestTargetedReanalysisCommand(
+          {
+            assessmentId: "assessment-1",
+            inputArtifactVersion: "ter-1",
+            analyzerId: "RUN_PYTHON_SEMANTIC_ANALYSIS",
+            scope: { pathPrefixes: ["src/"] },
+            reasonRequirementId: "requirement:1",
+            idempotencyKey: "idempotency-key-queued-cap-0001",
+          },
+          {
+            userId: "user-1",
+            organizationId: "org-1",
+          } as never,
+          "correlation-1",
+        ),
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeDefined();
+    expect(
+      (
+        caught as { getResponse: () => { problem?: { code?: string } } }
+      ).getResponse().problem?.code,
+    ).toBe("TENANT_REANALYSIS_CAPACITY_EXHAUSTED");
+
+    expect(transaction.targetedReanalysisRequest.create).not.toHaveBeenCalled();
+    expect(outbox.enqueue).not.toHaveBeenCalled();
   });
 });
