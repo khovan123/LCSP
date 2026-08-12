@@ -7,6 +7,7 @@ import {
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
+import { AGENTIC_TOOL_STATUSES } from "@lcsp/contracts/evidence";
 import { GITHUB_INTEGRATION_EVENT_TYPES } from "@lcsp/contracts/github-integration";
 import {
   buildOutboxMessageInput,
@@ -14,10 +15,13 @@ import {
 } from "@lcsp/contracts/outbox";
 import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 import {
+  REQUEST_TARGETED_REANALYSIS_TOOL,
   SCAN_ERROR_CODES,
   SCAN_EVENT_TYPES,
   TARGETED_REANALYSIS_CAPACITY_POLICY,
+  TARGETED_REANALYSIS_COVERAGE_STATES,
   TARGETED_REANALYSIS_REQUEST_STATES,
+  TARGETED_REANALYSIS_RESPONSE_STATES,
 } from "@lcsp/contracts/scan";
 import {
   REPOSITORY_SCAN_JOB_STATUSES,
@@ -68,7 +72,7 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
     if (existing) {
       if (
         existing.assessmentId !== input.assessmentId ||
-        existing.inputEvidenceReportId !== input.inputEvidenceReportId
+        existing.inputEvidenceReportId !== input.inputArtifactVersion
       ) {
         throw problemException(
           SCAN_ERROR_CODES.targetedReanalysisIdempotencyConflict,
@@ -76,38 +80,40 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           { status: HttpStatus.CONFLICT },
         );
       }
-      return {
+      return this.buildResponse({
         requestId: existing.id,
-        state: existing.state,
+        inputEvidenceReportId: existing.inputEvidenceReportId,
+        analyzerId: existing.analyzerId,
         checkpointRef: existing.checkpointRef,
-        alreadyQueued: true,
-      };
+        correlationId,
+        scopeRef: `scope:${existing.id}`,
+        auditRef: `audit:${existing.id}`,
+        state: TARGETED_REANALYSIS_RESPONSE_STATES.alreadyQueued,
+      });
     }
 
     const requestId = randomUUID();
     const scanJobId = randomUUID();
     const checkpointRef = `checkpoint:${requestId}`;
-    const [report, snapshot] = await Promise.all([
-      this.prisma.technicalEvidenceReport.findFirst({
-        where: {
-          id: input.inputEvidenceReportId,
-          assessmentId: input.assessmentId,
-          organizationId,
-          snapshotId: input.snapshotId,
-          status: "ACCEPTED",
-        },
-        select: { id: true, evidencePayload: true },
-      }),
-      this.prisma.repositorySnapshot.findFirst({
-        where: {
-          id: input.snapshotId,
-          assessmentId: input.assessmentId,
-          organizationId,
-          commitSha: input.commitSha,
-        },
-        select: { id: true },
-      }),
-    ]);
+    const report = await this.prisma.technicalEvidenceReport.findFirst({
+      where: {
+        id: input.inputArtifactVersion,
+        assessmentId: input.assessmentId,
+        organizationId,
+        status: "ACCEPTED",
+      },
+      select: { id: true, evidencePayload: true, snapshotId: true },
+    });
+    const snapshot = report
+      ? await this.prisma.repositorySnapshot.findFirst({
+          where: {
+            id: report.snapshotId,
+            assessmentId: input.assessmentId,
+            organizationId,
+          },
+          select: { id: true, commitSha: true },
+        })
+      : null;
     if (!report || !snapshot) {
       throw problemException(
         SCAN_ERROR_CODES.evidenceReportNotFound,
@@ -120,6 +126,8 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
       report.evidencePayload,
       correlationId,
     );
+    const scopeRef = `scope:${requestId}`;
+    const auditRef = `audit:${requestId}`;
     const created = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`
         SELECT pg_advisory_xact_lock(hashtext(${organizationId}))
@@ -127,26 +135,33 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
       const now = new Date();
       const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
       const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      const [fifteenMinuteCount, dailyCount, activeCount] = await Promise.all([
-        tx.targetedReanalysisRequest.count({
-          where: { organizationId, createdAt: { gte: fifteenMinutesAgo } },
-        }),
-        tx.targetedReanalysisRequest.count({
-          where: { organizationId, createdAt: { gte: twentyFourHoursAgo } },
-        }),
-        tx.targetedReanalysisRequest.count({
-          where: {
-            organizationId,
-            state: {
-              in: [
-                TARGETED_REANALYSIS_REQUEST_STATES.queued,
-                TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
-                TARGETED_REANALYSIS_REQUEST_STATES.running,
-              ],
+      const [fifteenMinuteCount, dailyCount, activeCount, queuedCount] =
+        await Promise.all([
+          tx.targetedReanalysisRequest.count({
+            where: { organizationId, createdAt: { gte: fifteenMinutesAgo } },
+          }),
+          tx.targetedReanalysisRequest.count({
+            where: { organizationId, createdAt: { gte: twentyFourHoursAgo } },
+          }),
+          tx.targetedReanalysisRequest.count({
+            where: {
+              organizationId,
+              state: {
+                in: [
+                  TARGETED_REANALYSIS_REQUEST_STATES.queued,
+                  TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
+                  TARGETED_REANALYSIS_REQUEST_STATES.running,
+                ],
+              },
             },
-          },
-        }),
-      ]);
+          }),
+          tx.targetedReanalysisRequest.count({
+            where: {
+              organizationId,
+              state: TARGETED_REANALYSIS_REQUEST_STATES.queued,
+            },
+          }),
+        ]);
       if (
         fifteenMinuteCount >=
           TARGETED_REANALYSIS_CAPACITY_POLICY.maxRequestsPerFifteenMinutes ||
@@ -160,8 +175,10 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
         );
       }
       if (
+        queuedCount >=
+          TARGETED_REANALYSIS_CAPACITY_POLICY.maxQueuedPerOrganization ||
         activeCount >=
-        TARGETED_REANALYSIS_CAPACITY_POLICY.maxActivePerOrganization
+          TARGETED_REANALYSIS_CAPACITY_POLICY.maxActivePerOrganization
       ) {
         throw problemException(
           SCAN_ERROR_CODES.targetedReanalysisCapacityExhausted,
@@ -175,9 +192,9 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           scanJobId,
           assessmentId: input.assessmentId,
           organizationId,
-          inputEvidenceReportId: input.inputEvidenceReportId,
-          snapshotId: input.snapshotId,
-          commitSha: input.commitSha,
+          inputEvidenceReportId: input.inputArtifactVersion,
+          snapshotId: report.snapshotId,
+          commitSha: snapshot.commitSha,
           analyzerId: input.analyzerId,
           normalizedScope,
           reasonRequirementId: input.reasonRequirementId,
@@ -197,7 +214,7 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
         data: {
           id: scanJobId,
           assessmentId: input.assessmentId,
-          snapshotId: input.snapshotId,
+          snapshotId: report.snapshotId,
           organizationId,
           idempotencyKey: `reanalysis:${input.idempotencyKey}`,
           triggerSource: toPrismaRepositoryScanTriggerSource(
@@ -227,9 +244,9 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
             requestId,
             scanJobId,
             assessmentId: input.assessmentId,
-            inputEvidenceReportId: input.inputEvidenceReportId,
-            snapshotId: input.snapshotId,
-            commitSha: input.commitSha,
+            inputEvidenceReportId: input.inputArtifactVersion,
+            snapshotId: report.snapshotId,
+            commitSha: snapshot.commitSha,
             analyzerId: input.analyzerId,
             normalizedScope,
             checkpointRef,
@@ -254,21 +271,29 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       payload: { requestId, checkpointRef, analyzerId: input.analyzerId },
     });
-    return {
+    return this.buildResponse({
       requestId: created.id,
-      state: TARGETED_REANALYSIS_REQUEST_STATES.queued,
+      inputEvidenceReportId: input.inputArtifactVersion,
+      analyzerId: input.analyzerId,
       checkpointRef,
-      alreadyQueued: false,
-    };
+      correlationId,
+      scopeRef,
+      auditRef,
+      state: TARGETED_REANALYSIS_RESPONSE_STATES.queued,
+    });
   }
 
   private assertInput(
     input: RequestTargetedReanalysisCommand["input"],
     correlationId: string,
   ): void {
+    const pathPrefixes =
+      "pathPrefixes" in input.scope ? input.scope.pathPrefixes : undefined;
+    const subjectRefs =
+      "subjectRefs" in input.scope ? input.scope.subjectRefs : undefined;
     const exactlyOneScope =
-      Number(Boolean(input.pathPrefixes?.length)) +
-        Number(Boolean(input.subjectRefs?.length)) ===
+      Number(Boolean(pathPrefixes?.length)) +
+        Number(Boolean(subjectRefs?.length)) ===
       1;
     if (!ALLOWED_ANALYZERS.has(input.analyzerId))
       throw problemException(
@@ -278,8 +303,10 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
       );
     if (
       !exactlyOneScope ||
-      (input.pathPrefixes?.length ?? 0) > 20 ||
-      (input.subjectRefs?.length ?? 0) > 50
+      (pathPrefixes?.length ?? 0) >
+        REQUEST_TARGETED_REANALYSIS_TOOL.maxPathPrefixes ||
+      (subjectRefs?.length ?? 0) >
+        REQUEST_TARGETED_REANALYSIS_TOOL.maxSubjectRefs
     )
       throw problemException(
         SCAN_ERROR_CODES.targetedReanalysisInvalidScope,
@@ -293,13 +320,13 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
     evidencePayload: unknown,
     correlationId: string,
   ): { pathPrefixes: string[] } {
-    if (input.pathPrefixes) {
-      return { pathPrefixes: [...input.pathPrefixes].sort() };
+    if ("pathPrefixes" in input.scope) {
+      return { pathPrefixes: [...input.scope.pathPrefixes].sort() };
     }
 
     const pathPrefixes = resolveSubjectRefPathPrefixes(
       evidencePayload,
-      input.subjectRefs ?? [],
+      input.scope.subjectRefs,
     );
     if (pathPrefixes.length === 0) {
       throw problemException(
@@ -309,6 +336,41 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
       );
     }
     return { pathPrefixes };
+  }
+
+  private buildResponse(input: {
+    requestId: string;
+    inputEvidenceReportId: string;
+    analyzerId: string;
+    checkpointRef: string;
+    correlationId: string;
+    scopeRef: string;
+    auditRef: string;
+    state: (typeof TARGETED_REANALYSIS_RESPONSE_STATES)[keyof typeof TARGETED_REANALYSIS_RESPONSE_STATES];
+  }): RequestTargetedReanalysisResponse {
+    return {
+      status: AGENTIC_TOOL_STATUSES.ready,
+      toolName: REQUEST_TARGETED_REANALYSIS_TOOL.name,
+      toolVersion: REQUEST_TARGETED_REANALYSIS_TOOL.version,
+      configHash: REQUEST_TARGETED_REANALYSIS_TOOL.configHash,
+      correlationId: input.correlationId,
+      artifactVersions: {
+        technicalEvidenceReportId: input.inputEvidenceReportId,
+      },
+      provenanceRef: `tool-execution:${input.requestId}`,
+      coverageState: TARGETED_REANALYSIS_COVERAGE_STATES.pending,
+      evidenceRefs: [],
+      limitations: [],
+      result: {
+        reanalysisRequestId: `reanalysis:${input.requestId}`,
+        state: input.state,
+        inputArtifactVersion: input.inputEvidenceReportId,
+        requestedAnalyzer: input.analyzerId,
+        scopeRef: input.scopeRef,
+        checkpointRef: input.checkpointRef,
+        auditRef: input.auditRef,
+      },
+    };
   }
 }
 
