@@ -1,9 +1,14 @@
 import { HttpException } from "@nestjs/common";
 import { jest } from "@jest/globals";
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
-import { VERIFIED_PROFILE_REQUIRED_FOR } from "@lcsp/contracts/evidence";
+import {
+  ASSESSMENT_CONTEXT_ANSWER_FIELDS,
+  ASSESSMENT_CONTEXT_INCLUDES,
+  VERIFIED_PROFILE_REQUIRED_FOR,
+} from "@lcsp/contracts/evidence";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
+import { GetAssessmentContextQuery } from "../../application/queries/get-assessment-context/get-assessment-context.query.js";
 import { GetVerifiedProfileQuery } from "../../application/queries/get-verified-profile/get-verified-profile.query.js";
 import { ReconciliationController } from "./reconciliation.controller.js";
 
@@ -83,5 +88,76 @@ describe("ReconciliationController.getVerifiedProfile", () => {
         problem: { code: ASSESSMENT_ERROR_CODES.invalidRequest },
       });
     }
+  });
+});
+
+describe("ReconciliationController.getAssessmentContext", () => {
+  it("forwards include and answer-field allow lists to the protected query", async () => {
+    const queryBus = {
+      execute: jest.fn().mockResolvedValue({ result: { wizard: {} } }),
+    };
+    const controller = new ReconciliationController(
+      {} as never,
+      queryBus as never,
+    );
+
+    await controller.getAssessmentContext(
+      "assessment-1",
+      "wizard-1",
+      [
+        ASSESSMENT_CONTEXT_INCLUDES.submittedAnswers,
+        ASSESSMENT_CONTEXT_INCLUDES.pinnedArtifacts,
+      ].join(","),
+      [
+        ASSESSMENT_CONTEXT_ANSWER_FIELDS.systemPurpose,
+        ASSESSMENT_CONTEXT_ANSWER_FIELDS.humanReviewDeclaration,
+      ].join(","),
+      request(),
+    );
+
+    expect(queryBus.execute).toHaveBeenCalledWith(
+      new GetAssessmentContextQuery(
+        "assessment-1",
+        "org-1",
+        "wizard-1",
+        [
+          ASSESSMENT_CONTEXT_INCLUDES.submittedAnswers,
+          ASSESSMENT_CONTEXT_INCLUDES.pinnedArtifacts,
+        ],
+        [
+          ASSESSMENT_CONTEXT_ANSWER_FIELDS.systemPurpose,
+          ASSESSMENT_CONTEXT_ANSWER_FIELDS.humanReviewDeclaration,
+        ],
+        "corr-1",
+      ),
+    );
+  });
+
+  it("rejects missing includes and unknown answer fields before dispatch", async () => {
+    const queryBus = { execute: jest.fn() };
+    const controller = new ReconciliationController(
+      {} as never,
+      queryBus as never,
+    );
+
+    await expect(
+      controller.getAssessmentContext(
+        "assessment-1",
+        "wizard-1",
+        undefined,
+        undefined,
+        request(),
+      ),
+    ).rejects.toBeInstanceOf(HttpException);
+    await expect(
+      controller.getAssessmentContext(
+        "assessment-1",
+        "wizard-1",
+        ASSESSMENT_CONTEXT_INCLUDES.submittedAnswers,
+        "UNKNOWN_FIELD",
+        request(),
+      ),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(queryBus.execute).not.toHaveBeenCalled();
   });
 });
