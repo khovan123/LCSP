@@ -6,4 +6,3 @@ export class ResumeWaitingRunsCommand {
     public readonly correlationId: string,
   ) {}
 }
-
