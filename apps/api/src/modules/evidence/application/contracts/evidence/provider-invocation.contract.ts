@@ -15,6 +15,17 @@ export const PROVIDER_INVOCATION_PROVIDERS = {
 export type ProviderInvocationProvider =
   (typeof PROVIDER_INVOCATION_PROVIDERS)[keyof typeof PROVIDER_INVOCATION_PROVIDERS];
 
+export const PROVIDER_INVOCATION_FRAMEWORKS = {
+  langchain: "LANGCHAIN",
+  langgraph: "LANGGRAPH",
+  genaiSdk: "GENAI_SDK",
+  openaiSdk: "OPENAI_SDK",
+  other: "OTHER",
+} as const;
+
+export type ProviderInvocationFramework =
+  (typeof PROVIDER_INVOCATION_FRAMEWORKS)[keyof typeof PROVIDER_INVOCATION_FRAMEWORKS];
+
 export type ProviderInvocationResponse = {
   status: AgenticToolStatus;
   tool_name: AgenticToolName;
@@ -30,7 +41,7 @@ export type ProviderInvocationResponse = {
     invocations: Array<{
       invocation_ref: string;
       provider: ProviderInvocationProvider;
-      framework: string | null;
+      framework: ProviderInvocationFramework | null;
       relative_location: string | null;
       symbol_ref: null;
       evidence_refs: string[];
