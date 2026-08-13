@@ -85,7 +85,6 @@ type DispatchRequest = {
   artifact_versions?: unknown;
   input?: unknown;
   correlationId?: unknown;
-  correlationId?: unknown;
 };
 
 @Controller("internal/evidence/agentic-tools")

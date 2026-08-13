@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,11 +9,19 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const workerRoot = path.join(repoRoot, "lcsp-python-workers");
 const workerPython = path.join(workerRoot, ".venv", "bin", "python");
+const rootEnv = loadDotEnv(path.join(repoRoot, ".env"));
 const defaultWorkerRuntimeVersion =
-  process.env.WORKER_RUNTIME_VERSION ?? "2026.08.13";
+  process.env.WORKER_RUNTIME_VERSION ??
+  rootEnv.WORKER_RUNTIME_VERSION ??
+  "2026.08.13";
 const defaultWorkerRuntimeBuildRef =
-  process.env.WORKER_RUNTIME_BUILD_REF ?? detectGitBuildRef();
-const defaultOrchestrationDebug = process.env.ORCHESTRATION_DEBUG ?? "false";
+  process.env.WORKER_RUNTIME_BUILD_REF ??
+  rootEnv.WORKER_RUNTIME_BUILD_REF ??
+  detectGitBuildRef();
+const defaultOrchestrationDebug =
+  process.env.ORCHESTRATION_DEBUG ??
+  rootEnv.ORCHESTRATION_DEBUG ??
+  "false";
 
 const targets = {
   proxy: {
@@ -53,12 +61,14 @@ const targets = {
     cwd: repoRoot,
     cmd: "pnpm",
     args: ["--dir", "apps/api", "start:dev"],
+    env: rootEnv,
     description: "Start NestJS API in watch mode",
   },
   web: {
     cwd: repoRoot,
     cmd: "pnpm",
     args: ["--dir", "apps/web", "dev"],
+    env: rootEnv,
     description: "Start Next.js web app in dev mode",
   },
   scanner: workerTarget(
@@ -159,6 +169,7 @@ function workerTarget(target, description, healthPort) {
       ORCHESTRATION_DEBUG: defaultOrchestrationDebug,
     },
     description,
+    healthPort,
   };
 }
 
@@ -176,6 +187,35 @@ function detectGitBuildRef() {
   }
 
   return "local";
+}
+
+function loadDotEnv(filePath) {
+  if (!existsSync(filePath)) {
+    return {};
+  }
+
+  const env = {};
+  const text = readFileSync(filePath, "utf8");
+  for (const rawLine of text.split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const key = line.slice(0, separatorIndex).trim();
+    let value = line.slice(separatorIndex + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    env[key] = value;
+  }
+  return env;
 }
 
 function logWorkerRuntimeBanner(name, target) {
@@ -264,6 +304,8 @@ async function runGroup(name) {
     longRunningMembers.push(member);
   }
 
+  assertPortsAvailable(longRunningMembers);
+
   if (members.includes("infra") && hasWorkerMember(longRunningMembers)) {
     console.log(
       "[run] Waiting for local RabbitMQ and Redis to accept connections...",
@@ -305,6 +347,59 @@ async function runGroup(name) {
       process.exit(code ?? 0);
     });
   }
+}
+
+function assertPortsAvailable(members) {
+  const conflicts = [];
+
+  for (const member of members) {
+    const target = targets[member];
+    const healthPort = target?.healthPort;
+    if (!healthPort) {
+      continue;
+    }
+    const owner = describeListeningPort(healthPort);
+    if (owner) {
+      conflicts.push({
+        member,
+        port: healthPort,
+        owner,
+      });
+    }
+  }
+
+  if (conflicts.length === 0) {
+    return;
+  }
+
+  console.error("[run] Cannot start dev group because required ports are already in use:");
+  for (const conflict of conflicts) {
+    console.error(
+      `  - target=${conflict.member} health_port=${conflict.port}${conflict.owner ? ` owner=${conflict.owner}` : ""}`,
+    );
+  }
+  console.error(
+    "[run] Stop the stale process first, then re-run `pnpm dev`.",
+  );
+  process.exit(1);
+}
+
+function describeListeningPort(port) {
+  const result = spawnSync("bash", ["-lc", `ss -ltnp | grep ':${port}\\b'`], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  const line = result.stdout
+    .split("\n")
+    .map((value) => value.trim())
+    .find(Boolean);
+
+  return line || null;
 }
 
 function spawnSyncCompatible(target) {
