@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 from uuid import UUID
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError, ValidationError as JsonSchemaValidationError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .catalog import AgenticToolSpec, SPRINT6_AGENTIC_TOOL_SPECS
 
 
 class AgenticToolValidationError(ValueError):
@@ -55,90 +58,45 @@ class AgenticToolRequest(BaseModel):
         return value
 
 
-@dataclass(frozen=True)
-class AgenticToolCapability:
-    name: str
-    mutation: bool
-    max_items: int
-    max_depth: int
-    max_bytes: int
-    max_duration_ms: int
-    required_artifacts: tuple[str, ...] = ()
-
-
+# Compatibility alias for callers/tests that used the earlier registry type name.
+AgenticToolCapability = AgenticToolSpec
 AgenticToolHandler = Callable[[AgenticToolRequest], Mapping[str, Any]]
-
-
-# Sprint 6 runtime inventory requested by the delivery scope. These names are exact
-# contract values; aliases and free-form tool names are intentionally unsupported.
-SPRINT6_AGENTIC_CAPABILITIES: tuple[AgenticToolCapability, ...] = (
-    AgenticToolCapability("resume_waiting_runs", True, 100, 1, 131_072, 10_000),
-    AgenticToolCapability("propose_gap_remediation", False, 50, 2, 131_072, 5_000),
-    AgenticToolCapability("get_gap_evidence_trace", False, 100, 5, 262_144, 5_000),
-    AgenticToolCapability("get_reconciliation_context", False, 100, 3, 262_144, 5_000),
-    AgenticToolCapability(
-        "request_targeted_reanalysis",
-        True,
-        100,
-        3,
-        131_072,
-        10_000,
-        ("technicalEvidenceReportId",),
-    ),
-    AgenticToolCapability(
-        "propose_missing_targets",
-        False,
-        100,
-        3,
-        262_144,
-        5_000,
-        ("technicalEvidenceReportId",),
-    ),
-    AgenticToolCapability(
-        "inspect_deployment_context",
-        False,
-        100,
-        5,
-        262_144,
-        5_000,
-        ("technicalEvidenceReportId",),
-    ),
-    AgenticToolCapability("inspect_decision_path", False, 100, 20, 262_144, 5_000),
-    AgenticToolCapability("get_artifact_chain", False, 100, 10, 262_144, 5_000),
-    AgenticToolCapability("find_similar_symbols", False, 100, 3, 262_144, 5_000),
-    AgenticToolCapability("inspect_human_review_path", False, 100, 20, 262_144, 5_000),
-    AgenticToolCapability("inspect_data_path", False, 100, 20, 262_144, 5_000),
-    AgenticToolCapability("find_provider_invocations", False, 100, 3, 262_144, 5_000),
-    AgenticToolCapability("get_finding_detail", False, 50, 3, 262_144, 5_000),
-    AgenticToolCapability("get_symbol_context", False, 50, 3, 262_144, 5_000),
-    AgenticToolCapability(
-        "get_scan_coverage",
-        False,
-        100,
-        1,
-        262_144,
-        2_000,
-        ("technicalEvidenceReportId",),
-    ),
-    AgenticToolCapability("search_evidence", False, 100, 3, 262_144, 5_000),
-    AgenticToolCapability("get_evidence_subgraph", False, 100, 3, 262_144, 5_000),
-    AgenticToolCapability("trace_static_flow", False, 100, 20, 262_144, 5_000),
-)
+SPRINT6_AGENTIC_CAPABILITIES = SPRINT6_AGENTIC_TOOL_SPECS
 
 
 class AgenticToolRegistry:
-    """Fail-closed allow-list and dispatcher for LLM-callable Sprint 6 tools."""
+    """Fail-closed catalog, validator and dispatcher for Sprint 6 agentic tools."""
 
-    def __init__(self, capabilities: tuple[AgenticToolCapability, ...]) -> None:
+    def __init__(self, capabilities: tuple[AgenticToolSpec, ...]) -> None:
         self._capabilities = {capability.name: capability for capability in capabilities}
         if len(self._capabilities) != len(capabilities):
             raise ValueError("agentic tool capability names must be unique")
+        self._validators: dict[str, Draft202012Validator] = {}
+        for capability in capabilities:
+            try:
+                Draft202012Validator.check_schema(capability.input_schema)
+            except SchemaError as exc:
+                raise ValueError(
+                    f"invalid JSON schema for agentic tool: {capability.name}"
+                ) from exc
+            self._validators[capability.name] = Draft202012Validator(
+                capability.input_schema
+            )
         self._handlers: dict[str, AgenticToolHandler] = {}
 
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(self._capabilities))
 
-    def capability(self, name: str) -> AgenticToolCapability:
+    def model_callable_names(self) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                capability.name
+                for capability in self._capabilities.values()
+                if capability.exposure == "LLM_CALLABLE"
+            )
+        )
+
+    def capability(self, name: str) -> AgenticToolSpec:
         capability = self._capabilities.get(name)
         if capability is None:
             raise AgenticToolValidationError("UNREGISTERED_AGENTIC_TOOL")
@@ -150,7 +108,7 @@ class AgenticToolRegistry:
             raise AgenticToolValidationError("AGENTIC_TOOL_HANDLER_ALREADY_REGISTERED")
         self._handlers[name] = handler
 
-    def validate(self, request: AgenticToolRequest) -> AgenticToolCapability:
+    def validate(self, request: AgenticToolRequest) -> AgenticToolSpec:
         capability = self.capability(request.tool_name)
         budget = request.budget
         if (
@@ -169,14 +127,34 @@ class AgenticToolRegistry:
         if missing_artifacts:
             raise AgenticToolValidationError("AGENTIC_TOOL_ARTIFACT_VERSION_REQUIRED")
 
+        try:
+            self._validators[request.tool_name].validate(request.input)
+        except JsonSchemaValidationError as exc:
+            raise AgenticToolValidationError("AGENTIC_TOOL_INPUT_SCHEMA_INVALID") from exc
+
         if capability.mutation and not request.idempotency_key:
             raise AgenticToolValidationError("AGENTIC_TOOL_IDEMPOTENCY_KEY_REQUIRED")
         if not capability.mutation and request.idempotency_key:
             raise AgenticToolValidationError("AGENTIC_TOOL_READ_IDEMPOTENCY_KEY_NOT_ALLOWED")
         return capability
 
+    def validate_model_request(self, request: AgenticToolRequest) -> AgenticToolSpec:
+        capability = self.validate(request)
+        if capability.exposure != "LLM_CALLABLE":
+            raise AgenticToolValidationError("AGENTIC_TOOL_NOT_MODEL_CALLABLE")
+        if capability.mutation:
+            raise AgenticToolValidationError("AGENTIC_TOOL_MODEL_MUTATION_FORBIDDEN")
+        return capability
+
     def invoke(self, request: AgenticToolRequest) -> Mapping[str, Any]:
         self.validate(request)
+        return self._invoke_bound_handler(request)
+
+    def invoke_model_tool(self, request: AgenticToolRequest) -> Mapping[str, Any]:
+        self.validate_model_request(request)
+        return self._invoke_bound_handler(request)
+
+    def _invoke_bound_handler(self, request: AgenticToolRequest) -> Mapping[str, Any]:
         handler = self._handlers.get(request.tool_name)
         if handler is None:
             raise AgenticToolValidationError("AGENTIC_TOOL_HANDLER_NOT_BOUND")
@@ -186,7 +164,7 @@ class AgenticToolRegistry:
 
 
 def build_sprint6_agentic_registry() -> AgenticToolRegistry:
-    return AgenticToolRegistry(SPRINT6_AGENTIC_CAPABILITIES)
+    return AgenticToolRegistry(SPRINT6_AGENTIC_TOOL_SPECS)
 
 
 _FORBIDDEN_KEYS = {
