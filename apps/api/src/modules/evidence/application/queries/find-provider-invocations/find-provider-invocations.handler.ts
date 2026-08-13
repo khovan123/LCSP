@@ -15,7 +15,9 @@ import { PrismaService } from "../../../../../infrastructure/prisma/prisma.servi
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import {
+  PROVIDER_INVOCATION_FRAMEWORKS,
   PROVIDER_INVOCATION_PROVIDERS,
+  type ProviderInvocationFramework,
   type ProviderInvocationProvider,
   type ProviderInvocationResponse,
 } from "../../contracts/evidence/provider-invocation.contract.js";
@@ -128,12 +130,14 @@ function invocation(
 ): boolean {
   const kind = text(finding.finding_type);
   const findingProvider = provider(finding);
+  const findingFramework = framework(finding);
   const path = text(finding.file_path);
   return (
     kind !== null &&
     kind.includes("AI_PROVIDER") &&
     findingProvider !== null &&
     (query.provider === undefined || query.provider === findingProvider) &&
+    (query.framework === undefined || query.framework === findingFramework) &&
     (query.pathPrefixes.length === 0 ||
       (path !== null &&
         query.pathPrefixes.some((prefix) => path.startsWith(prefix))))
@@ -155,15 +159,17 @@ function provider(
   return PROVIDER_INVOCATION_PROVIDERS.other;
 }
 
-function framework(finding: Record<string, unknown>): string | null {
+function framework(
+  finding: Record<string, unknown>,
+): ProviderInvocationFramework | null {
   const library = text(finding.library_group)?.toUpperCase();
-  return library?.includes("LANGCHAIN")
-    ? "LANGCHAIN"
-    : library?.includes("LANGGRAPH")
-      ? "LANGGRAPH"
-      : library?.includes("OPENAI")
-        ? "OPENAI_SDK"
-        : null;
+  if (!library) return null;
+  if (library.includes("LANGCHAIN")) return PROVIDER_INVOCATION_FRAMEWORKS.langchain;
+  if (library.includes("LANGGRAPH")) return PROVIDER_INVOCATION_FRAMEWORKS.langgraph;
+  if (library.includes("GOOGLE") || library.includes("GEMINI"))
+    return PROVIDER_INVOCATION_FRAMEWORKS.genaiSdk;
+  if (library.includes("OPENAI")) return PROVIDER_INVOCATION_FRAMEWORKS.openaiSdk;
+  return PROVIDER_INVOCATION_FRAMEWORKS.other;
 }
 function location(finding: Record<string, unknown>): string {
   const path = text(finding.file_path) ?? "";
