@@ -1,4 +1,12 @@
 import {
+  AGENTIC_TOOL_NAMES,
+  ARTIFACT_CHAIN_STAGES,
+  ASSESSMENT_CONTEXT_ANSWER_FIELDS,
+  ASSESSMENT_CONTEXT_INCLUDES,
+  EVIDENCE_ERROR_CODES,
+  VERIFIED_PROFILE_REQUIRED_FOR,
+} from "@lcsp/contracts/evidence";
+import {
   Body,
   Controller,
   HttpCode,
@@ -7,41 +15,58 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { QueryBus } from "@nestjs/cqrs";
-import {
-  AGENTIC_TOOL_NAMES,
-  EVIDENCE_ERROR_CODES,
-} from "@lcsp/contracts/evidence";
 
-import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
-import { GetScanCoverageQuery } from "../../application/queries/get-scan-coverage/get-scan-coverage.query.js";
-import { SearchEvidenceQuery } from "../../application/queries/search-evidence/search-evidence.query.js";
-import { SEARCH_EVIDENCE_CONFIDENCE } from "../../application/contracts/evidence/search-evidence.contract.js";
-import { GetFindingDetailQuery } from "../../application/queries/get-finding-detail/get-finding-detail.query.js";
-import { FindProviderInvocationsQuery } from "../../application/queries/find-provider-invocations/find-provider-invocations.query.js";
-import { GetEvidenceSubgraphQuery } from "../../application/queries/get-evidence-subgraph/get-evidence-subgraph.query.js";
-import { GetSymbolContextQuery } from "../../application/queries/get-symbol-context/get-symbol-context.query.js";
-import { TraceStaticFlowQuery } from "../../application/queries/trace-static-flow/trace-static-flow.query.js";
-import { InspectHumanReviewPathQuery } from "../../application/queries/inspect-human-review-path/inspect-human-review-path.query.js";
-import { InspectDecisionPathQuery } from "../../application/queries/inspect-decision-path/inspect-decision-path.query.js";
-import { InspectDataPathQuery } from "../../application/queries/inspect-data-path/inspect-data-path.query.js";
-import { FindSimilarSymbolsQuery } from "../../application/queries/find-similar-symbols/find-similar-symbols.query.js";
-import { InspectDeploymentContextQuery } from "../../application/queries/inspect-deployment-context/inspect-deployment-context.query.js";
-import { GetAssessmentContextQuery } from "../../../reconciliation/application/queries/get-assessment-context/get-assessment-context.query.js";
-import { GetArtifactChainQuery } from "../../../reconciliation/application/queries/get-artifact-chain/get-artifact-chain.query.js";
-import { GetReconciliationContextQuery } from "../../../reconciliation/application/queries/get-reconciliation-context/get-reconciliation-context.query.js";
-import { ProposeMissingTargetsQuery } from "../../../reconciliation/application/queries/propose-missing-targets/propose-missing-targets.query.js";
-import { GetVerifiedProfileQuery } from "../../../reconciliation/application/queries/get-verified-profile/get-verified-profile.query.js";
+import { EvaluateGapMatrixQuery } from "../../../classification/application/queries/evaluate-gap-matrix/evaluate-gap-matrix.query.js";
 import { GetClassificationBaselineQuery } from "../../../classification/application/queries/get-classification-baseline/get-classification-baseline.query.js";
 import { GetGapEvidenceTraceQuery } from "../../../classification/application/queries/get-gap-evidence-trace/get-gap-evidence-trace.query.js";
 import { ProposeGapRemediationQuery } from "../../../classification/application/queries/propose-gap-remediation/propose-gap-remediation.query.js";
 import { ValidateClassificationProposalQuery } from "../../../classification/application/queries/validate-classification-proposal/validate-classification-proposal.query.js";
-import { EvaluateGapMatrixQuery } from "../../../classification/application/queries/evaluate-gap-matrix/evaluate-gap-matrix.query.js";
 import { GetLegalCorpusReadinessQuery } from "../../../legal-rule-catalog/application/queries/get-legal-corpus-readiness/get-legal-corpus-readiness.query.js";
-import { RetrieveLegalBasisQuery } from "../../../legal-rule-catalog/application/queries/retrieve-legal-basis/retrieve-legal-basis.query.js";
 import { GetLegalRuleMatchQuery } from "../../../legal-rule-catalog/application/queries/get-legal-rule-match/get-legal-rule-match.query.js";
+import { RetrieveLegalBasisQuery } from "../../../legal-rule-catalog/application/queries/retrieve-legal-basis/retrieve-legal-basis.query.js";
 import { ValidateCitationSetQuery } from "../../../legal-rule-catalog/application/queries/validate-citation-set/validate-citation-set.query.js";
+import { TARGET_CANDIDATE_KINDS } from "../../../reconciliation/application/contracts/missing-target-proposal.contract.js";
+import { RECONCILIATION_CONTEXT_STATUSES } from "../../../reconciliation/application/contracts/reconciliation/reconciliation-context.contract.js";
+import { GetArtifactChainQuery } from "../../../reconciliation/application/queries/get-artifact-chain/get-artifact-chain.query.js";
+import { GetAssessmentContextQuery } from "../../../reconciliation/application/queries/get-assessment-context/get-assessment-context.query.js";
+import { GetReconciliationContextQuery } from "../../../reconciliation/application/queries/get-reconciliation-context/get-reconciliation-context.query.js";
+import { GetVerifiedProfileQuery } from "../../../reconciliation/application/queries/get-verified-profile/get-verified-profile.query.js";
+import { ProposeMissingTargetsQuery } from "../../../reconciliation/application/queries/propose-missing-targets/propose-missing-targets.query.js";
+import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
+import {
+  DATA_CATEGORIES,
+  DATA_PATH_DIRECTIONS,
+} from "../../application/contracts/evidence/data-path.contract.js";
+import { DECISION_ACTION_CATEGORIES } from "../../application/contracts/evidence/decision-path.contract.js";
+import {
+  DEPLOYMENT_ENVIRONMENTS,
+  DEPLOYMENT_MANIFEST_KINDS,
+} from "../../application/contracts/evidence/deployment-context.contract.js";
+import { EVIDENCE_SUBGRAPH_DIRECTIONS } from "../../application/contracts/evidence/evidence-subgraph.contract.js";
+import { FINDING_DETAIL_INCLUDES } from "../../application/contracts/evidence/finding-detail.contract.js";
+import { HUMAN_REVIEW_KINDS } from "../../application/contracts/evidence/human-review-path.contract.js";
+import {
+  PROVIDER_INVOCATION_FRAMEWORKS,
+  PROVIDER_INVOCATION_PROVIDERS,
+} from "../../application/contracts/evidence/provider-invocation.contract.js";
+import { SEARCH_EVIDENCE_CONFIDENCE } from "../../application/contracts/evidence/search-evidence.contract.js";
+import { SYMBOL_SIMILARITY_DIMENSIONS } from "../../application/contracts/evidence/similar-symbols.contract.js";
+import { STATIC_FLOW_DIRECTIONS } from "../../application/contracts/evidence/static-flow.contract.js";
+import { SYMBOL_CONTEXT_INCLUDES } from "../../application/contracts/evidence/symbol-context.contract.js";
+import { FindProviderInvocationsQuery } from "../../application/queries/find-provider-invocations/find-provider-invocations.query.js";
+import { FindSimilarSymbolsQuery } from "../../application/queries/find-similar-symbols/find-similar-symbols.query.js";
+import { GetEvidenceSubgraphQuery } from "../../application/queries/get-evidence-subgraph/get-evidence-subgraph.query.js";
+import { GetFindingDetailQuery } from "../../application/queries/get-finding-detail/get-finding-detail.query.js";
+import { GetScanCoverageQuery } from "../../application/queries/get-scan-coverage/get-scan-coverage.query.js";
+import { GetSymbolContextQuery } from "../../application/queries/get-symbol-context/get-symbol-context.query.js";
+import { InspectDataPathQuery } from "../../application/queries/inspect-data-path/inspect-data-path.query.js";
+import { InspectDecisionPathQuery } from "../../application/queries/inspect-decision-path/inspect-decision-path.query.js";
+import { InspectDeploymentContextQuery } from "../../application/queries/inspect-deployment-context/inspect-deployment-context.query.js";
+import { InspectHumanReviewPathQuery } from "../../application/queries/inspect-human-review-path/inspect-human-review-path.query.js";
+import { SearchEvidenceQuery } from "../../application/queries/search-evidence/search-evidence.query.js";
+import { TraceStaticFlowQuery } from "../../application/queries/trace-static-flow/trace-static-flow.query.js";
 
 type DispatchRequest = {
   tool_name?: unknown;
@@ -117,6 +142,7 @@ function buildQuery(args: {
         stringArray(input.dispositions) as Array<
           "ANALYZED" | "SKIPPED" | "LIMITED"
         >,
+        stringArray(input.toolNames),
         optionalString(input.cursor),
       );
     case AGENTIC_TOOL_NAMES.searchEvidence:
@@ -141,7 +167,7 @@ function buildQuery(args: {
         organizationId,
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
         stripRef(requiredString(input.findingId), "finding:"),
-        stringArray(input.include),
+        typedStringArray(input.include, Object.values(FINDING_DETAIL_INCLUDES)),
         correlationId,
       );
     case AGENTIC_TOOL_NAMES.findProviderInvocations:
@@ -151,9 +177,15 @@ function buildQuery(args: {
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
         numberWithDefault(input.maxResults, 25),
         correlationId,
-        optionalString(input.provider) ?? undefined,
+        optionalEnum(
+          input.provider,
+          Object.values(PROVIDER_INVOCATION_PROVIDERS),
+        ),
         stringArray(input.pathPrefixes),
-        optionalString(input.framework) ?? undefined,
+        optionalEnum(
+          input.framework,
+          Object.values(PROVIDER_INVOCATION_FRAMEWORKS),
+        ),
       );
     case AGENTIC_TOOL_NAMES.getEvidenceSubgraph:
       return new GetEvidenceSubgraphQuery(
@@ -161,7 +193,10 @@ function buildQuery(args: {
         organizationId,
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
         stripRef(requiredString(input.seedRef), "node:"),
-        requiredString(input.direction),
+        requiredEnum(
+          input.direction,
+          Object.values(EVIDENCE_SUBGRAPH_DIRECTIONS),
+        ),
         numberWithDefault(input.maxDepth, 2),
         numberWithDefault(input.maxNodes, 25),
         numberWithDefault(input.maxEdges, 50),
@@ -175,7 +210,7 @@ function buildQuery(args: {
         organizationId,
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
         stripRef(requiredString(input.symbolRef), "symbol:"),
-        stringArray(input.include),
+        typedStringArray(input.include, Object.values(SYMBOL_CONTEXT_INCLUDES)),
         numberWithDefault(input.maxNeighbors, 25),
         correlationId,
       );
@@ -185,7 +220,7 @@ function buildQuery(args: {
         organizationId,
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
         stripRef(requiredString(input.startRef), "node:"),
-        requiredString(input.direction),
+        requiredEnum(input.direction, Object.values(STATIC_FLOW_DIRECTIONS)),
         numberWithDefault(input.maxHops, 5),
         correlationId,
         stringArray(input.desiredStages),
@@ -196,7 +231,7 @@ function buildQuery(args: {
         organizationId,
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
         stripRef(requiredString(input.startRef), "node:"),
-        stringArray(input.reviewKinds),
+        typedStringArray(input.reviewKinds, Object.values(HUMAN_REVIEW_KINDS)),
         numberWithDefault(input.maxHops, 5),
         correlationId,
       );
@@ -206,7 +241,10 @@ function buildQuery(args: {
         organizationId,
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
         stripRef(requiredString(input.startRef), "node:"),
-        stringArray(input.actionCategories),
+        typedStringArray(
+          input.actionCategories,
+          Object.values(DECISION_ACTION_CATEGORIES),
+        ),
         numberWithDefault(input.maxHops, 5),
         numberWithDefault(input.maxResults, 25),
         correlationId,
@@ -217,8 +255,8 @@ function buildQuery(args: {
         organizationId,
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
         stripRef(requiredString(input.startRef), "node:"),
-        requiredString(input.direction),
-        stringArray(input.dataCategories),
+        requiredEnum(input.direction, Object.values(DATA_PATH_DIRECTIONS)),
+        typedStringArray(input.dataCategories, Object.values(DATA_CATEGORIES)),
         numberWithDefault(input.maxHops, 5),
         numberWithDefault(input.maxResults, 25),
         correlationId,
@@ -229,7 +267,10 @@ function buildQuery(args: {
         organizationId,
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
         stripRef(requiredString(input.seedSymbolRef), "symbol:"),
-        stringArray(input.dimensions),
+        typedStringArray(
+          input.dimensions,
+          Object.values(SYMBOL_SIMILARITY_DIMENSIONS),
+        ),
         numberWithDefault(input.maxResults, 25),
         correlationId,
         stringArray(input.pathPrefixes),
@@ -239,8 +280,14 @@ function buildQuery(args: {
         assessmentId,
         organizationId,
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        stringArray(input.manifestKinds),
-        stringArray(input.environments),
+        typedStringArray(
+          input.manifestKinds,
+          Object.values(DEPLOYMENT_MANIFEST_KINDS),
+        ),
+        typedStringArray(
+          input.environments,
+          Object.values(DEPLOYMENT_ENVIRONMENTS),
+        ),
         numberWithDefault(input.maxResults, 25),
         correlationId,
         stringArray(input.pathPrefixes),
@@ -251,8 +298,14 @@ function buildQuery(args: {
         assessmentId,
         organizationId,
         requiredArtifactVersion(artifactVersions, "wizardProfileId"),
-        stringArray(input.include),
-        stringArray(input.answerFields),
+        typedStringArray(
+          input.include,
+          Object.values(ASSESSMENT_CONTEXT_INCLUDES),
+        ),
+        typedStringArray(
+          input.answerFields,
+          Object.values(ASSESSMENT_CONTEXT_ANSWER_FIELDS),
+        ),
         correlationId,
       );
     case AGENTIC_TOOL_NAMES.getArtifactChain:
@@ -263,7 +316,10 @@ function buildQuery(args: {
         optionalRecord(input.anchor)
           ? optionalString(optionalRecord(input.anchor)?.artifactRef)
           : null,
-        stringArray(input.requiredStages),
+        typedStringArray(
+          input.requiredStages,
+          Object.values(ARTIFACT_CHAIN_STAGES),
+        ),
         input.exactVersions === true,
       );
     case AGENTIC_TOOL_NAMES.getReconciliationContext:
@@ -277,7 +333,10 @@ function buildQuery(args: {
         ),
         optionalString(input.cursor),
         numberWithDefault(input.maxResults, 25),
-        stringArray(input.statuses),
+        typedStringArray(
+          input.statuses,
+          Object.values(RECONCILIATION_CONTEXT_STATUSES),
+        ),
       );
     case AGENTIC_TOOL_NAMES.proposeMissingTargets:
       return new ProposeMissingTargetsQuery(
@@ -285,7 +344,10 @@ function buildQuery(args: {
         organizationId,
         requiredArtifactVersion(artifactVersions, "wizardProfileId"),
         requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        stringArray(input.candidateKinds),
+        typedStringArray(
+          input.candidateKinds,
+          Object.values(TARGET_CANDIDATE_KINDS),
+        ),
         stringArray(input.seedRefs),
         stringArray(input.excludeTargetIds),
         numberWithDefault(input.maxResults, 25),
@@ -297,7 +359,10 @@ function buildQuery(args: {
         organizationId,
         stripRef(requiredString(input.verifiedProfileId), "verified:"),
         requiredString(input.expectedVersion),
-        requiredString(input.requiredFor),
+        requiredEnum(
+          input.requiredFor,
+          Object.values(VERIFIED_PROFILE_REQUIRED_FOR),
+        ),
         correlationId,
       );
     case AGENTIC_TOOL_NAMES.getClassificationBaseline:
@@ -462,4 +527,45 @@ function optionalEnum<T extends string>(
   return typeof value === "string" && allowed.includes(value as T)
     ? (value as T)
     : undefined;
+}
+
+function requiredEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+): T {
+  const parsed = optionalEnum(value, allowed);
+  if (!parsed) {
+    throw problemException(
+      EVIDENCE_ERROR_CODES.notFound,
+      "internal-agentic-dispatch",
+      {
+        status: HttpStatus.NOT_FOUND,
+      },
+    );
+  }
+  return parsed;
+}
+
+function typedStringArray<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+): T[] {
+  const values = stringArray(value);
+  if (values.length === 0) {
+    return [];
+  }
+  const allowedSet = new Set(allowed);
+  if (
+    values.some((item) => !allowedSet.has(item as T)) ||
+    new Set(values).size !== values.length
+  ) {
+    throw problemException(
+      EVIDENCE_ERROR_CODES.notFound,
+      "internal-agentic-dispatch",
+      {
+        status: HttpStatus.NOT_FOUND,
+      },
+    );
+  }
+  return values as T[];
 }

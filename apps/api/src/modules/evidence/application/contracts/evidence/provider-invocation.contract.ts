@@ -47,6 +47,14 @@ export type ProviderInvocationResponse = {
       evidence_refs: string[];
     }>;
     declared_signals: Array<{ kind: string; ref: string }>;
+    configured_signals: Array<{ kind: string; ref: string }>;
+    searched_scope: {
+      artifact_version: string;
+      provider: ProviderInvocationProvider | null;
+      framework: ProviderInvocationFramework | null;
+      path_prefixes: string[];
+      exhaustive: boolean;
+    };
     truncated: boolean;
   };
 };

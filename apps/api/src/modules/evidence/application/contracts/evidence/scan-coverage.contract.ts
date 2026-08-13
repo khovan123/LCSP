@@ -33,6 +33,14 @@ export type ScanCoverageResponse = {
       support_level: string;
       limitation_refs: string[];
     }>;
+    searched_scope: {
+      artifact_version: string;
+      path_prefixes: string[];
+      languages: string[];
+      dispositions: string[];
+      tool_names: string[];
+      exhaustive: boolean;
+    };
     tool_outcomes: Array<{
       tool_name: string;
       tool_version: string | null;

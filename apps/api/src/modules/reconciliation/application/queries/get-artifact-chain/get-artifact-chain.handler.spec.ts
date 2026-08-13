@@ -50,8 +50,7 @@ describe("GetArtifactChainHandler", () => {
         findFirst: jest.fn().mockImplementation(() =>
           Promise.resolve({
             id: "profile-1",
-            schemaVersion: "1.0.0",
-            status: EvidenceAcceptanceStatus.ACCEPTED,
+            evidenceReportId: "report-1",
           }),
         ),
       },
@@ -61,6 +60,7 @@ describe("GetArtifactChainHandler", () => {
             id: "flow-1",
             schemaVersion: "1.0.0",
             status: EvidenceAcceptanceStatus.ACCEPTED,
+            technicalProfileId: "profile-1",
           }),
         ),
       },
@@ -73,6 +73,8 @@ describe("GetArtifactChainHandler", () => {
             id: "verified-1",
             schemaVersion: "1.0.0",
             status: VerifiedProfileStatus.APPROVED,
+            wizardProfileId: "wizard-1",
+            aiUsageFlowId: "flow-1",
           }),
         ),
       },
@@ -155,10 +157,12 @@ describe("GetArtifactChainHandler", () => {
           ),
       },
       technicalProfile: {
-        findFirst: jest.fn().mockResolvedValue({
-          id: "profile-1",
-          evidenceReportId: "report-anchor",
-        }),
+        findFirst: jest
+          .fn<(args?: unknown) => Promise<Record<string, unknown> | null>>()
+          .mockResolvedValue({
+            id: "profile-1",
+            evidenceReportId: "report-anchor",
+          }),
       },
     });
 

@@ -100,7 +100,20 @@ export class GetScanCoverageHandler implements IQueryHandler<
         .flatMap((item) => item.limitation_refs),
       result: {
         files,
-        tool_outcomes: coverage.toolOutcomes,
+        searched_scope: {
+          artifact_version: report.id,
+          path_prefixes: query.pathPrefixes,
+          languages: query.languages,
+          dispositions: query.dispositions,
+          tool_names: query.toolNames,
+          exhaustive: !truncated,
+        },
+        tool_outcomes:
+          query.toolNames.length > 0
+            ? coverage.toolOutcomes.filter((item) =>
+                query.toolNames.includes(item.tool_name),
+              )
+            : coverage.toolOutcomes,
         unresolved_dynamic_boundaries: coverage.unresolvedDynamicBoundaries,
         counts,
         next_cursor: nextCursor,

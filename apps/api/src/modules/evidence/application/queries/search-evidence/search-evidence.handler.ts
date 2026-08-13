@@ -67,22 +67,46 @@ export class SearchEvidenceHandler implements IQueryHandler<
     const truncated = page.length > query.maxResults;
     const pageFindings = page.slice(0, query.maxResults);
     const resultFindings = pageFindings.map(toSummary);
+    const coverageLimited = scopeCoverageLimited(
+      report.evidencePayload,
+      query.pathPrefixes,
+    );
     const nextCursor =
       truncated && pageFindings.length > 0
         ? encodeCursor(findingCursorKey(pageFindings[pageFindings.length - 1]))
         : null;
     const response: SearchEvidenceResponse = {
-      status: AGENTIC_TOOL_STATUSES.ready,
+      status:
+        resultFindings.length === 0 && coverageLimited
+          ? AGENTIC_TOOL_STATUSES.outOfCoverage
+          : AGENTIC_TOOL_STATUSES.ready,
       tool_name: AGENTIC_TOOL_NAMES.searchEvidence,
       tool_version: TOOL_VERSION,
       config_hash: TOOL_CONFIG_HASH,
       correlation_id: query.correlationId,
       artifact_versions: { technical_evidence_report_id: report.id },
       provenance_ref: `tool-execution:${query.correlationId}`,
-      coverage_state: AGENTIC_TOOL_COVERAGE_STATES.sufficient,
+      coverage_state: coverageLimited
+        ? AGENTIC_TOOL_COVERAGE_STATES.limited
+        : AGENTIC_TOOL_COVERAGE_STATES.sufficient,
       evidence_refs: resultFindings.map((finding) => finding.finding_ref),
-      limitations: truncated ? ["RESULT_LIMIT_REACHED"] : [],
-      result: { findings: resultFindings, next_cursor: nextCursor, truncated },
+      limitations: [
+        ...(coverageLimited ? ["SCAN_COVERAGE_LIMITATION"] : []),
+        ...(truncated ? ["RESULT_LIMIT_REACHED"] : []),
+      ],
+      result: {
+        findings: resultFindings,
+        searched_scope: {
+          artifact_version: report.id,
+          finding_kinds: query.findingKinds,
+          providers: query.providers,
+          path_prefixes: query.pathPrefixes,
+          min_confidence: query.minConfidence ?? null,
+          exhaustive: !coverageLimited && !truncated,
+        },
+        next_cursor: nextCursor,
+        truncated,
+      },
     };
     await this.auditWriter.write({
       eventType: AGENTIC_TOOL_EVENT_TYPES.evidenceSearchRead,
@@ -236,4 +260,21 @@ function confidenceRank(value: SearchEvidenceConfidence): number {
   if (value === SEARCH_EVIDENCE_CONFIDENCE.high) return 3;
   if (value === SEARCH_EVIDENCE_CONFIDENCE.medium) return 2;
   return 1;
+}
+
+function scopeCoverageLimited(
+  payload: unknown,
+  pathPrefixes: string[],
+): boolean {
+  if (!isRecord(payload)) return false;
+  const coverage = isRecord(payload.scan_coverage) ? payload.scan_coverage : null;
+  const files = Array.isArray(coverage?.files) ? coverage.files : [];
+  return files.some((item) => {
+    if (!isRecord(item)) return false;
+    const path = stringValue(item.file_path);
+    const limited = item.coverage_limitation === true;
+    if (!path || !limited) return false;
+    if (pathPrefixes.length === 0) return true;
+    return pathPrefixes.some((prefix) => path.startsWith(prefix));
+  });
 }

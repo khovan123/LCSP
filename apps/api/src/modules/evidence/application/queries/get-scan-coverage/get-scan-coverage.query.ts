@@ -10,6 +10,7 @@ export class GetScanCoverageQuery {
     public readonly pathPrefixes: string[] = [],
     public readonly languages: string[] = [],
     public readonly dispositions: ScanCoverageDisposition[] = [],
+    public readonly toolNames: string[] = [],
     public readonly cursor: string | null = null,
   ) {}
 }

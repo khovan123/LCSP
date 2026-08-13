@@ -44,15 +44,20 @@ class LLMToolResponse(LLMResponse):
 
 DEFAULT_MODEL_PRICING = {
     "gpt-4o": (5.0, 15.0),
+    "gpt-4o-mini": (0.15, 0.60),
     "gpt-4-turbo": (10.0, 30.0),
     "gpt-3.5-turbo": (0.5, 1.5),
     "claude-3-opus-20240229": (15.0, 75.0),
     "claude-3-sonnet-20240229": (3.0, 15.0),
     "claude-3-haiku-20240307": (0.25, 1.25),
+    "claude-sonnet-5": (2.0, 10.0),
+    "gemini-2.5-pro": (1.5, 9.0),
+    "gemini-2.5-flash": (0.30, 2.5),
+    "gemini-2.5-flash-lite": (0.15, 1.25),
     "gemini-1.5-pro": (1.25, 5.0),
     "gemini-1.5-flash": (0.075, 0.30),
     "gemini-3.5-flash": (0.075, 0.30),
-    "gemini-3.1-flash-lite": (0.0375, 0.15),
+    "gemini-3.1-flash-lite": (0.15, 1.25),
 }
 
 _TOOL_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -63,7 +68,19 @@ def get_model_pricing() -> dict[str, tuple[float, float]]:
     if pricing_env:
         try:
             parsed = json.loads(pricing_env)
-            return {k: (float(v[0]), float(v[1])) for k, v in parsed.items()}
+            pricing: dict[str, tuple[float, float]] = {}
+            for key, value in parsed.items():
+                if isinstance(value, dict):
+                    pricing[key] = (
+                        float(value["input"]),
+                        float(value["output"]),
+                    )
+                    continue
+                if isinstance(value, (list, tuple)) and len(value) == 2:
+                    pricing[key] = (float(value[0]), float(value[1]))
+                    continue
+                raise ValueError(f"Invalid pricing entry for model: {key}")
+            return pricing
         except Exception as exc:
             logger.warning(
                 "Failed to parse LLM_MODEL_PRICING env var, using defaults.",
@@ -96,21 +113,29 @@ class LLMGatewayClient:
         model: str,
         budget_tracker: BudgetTracker,
         max_tokens_per_call: int = 4096,
+        timeout_seconds: float = 30.0,
     ):
         self.provider = provider.lower()
         self.api_key = api_key
         self.model = model
         self.max_tokens_per_call = max_tokens_per_call
+        self.timeout_seconds = timeout_seconds
         self.budget_tracker = budget_tracker
 
         if self.provider == "openai":
             import openai
 
-            self._openai_client = openai.OpenAI(api_key=self.api_key)
+            self._openai_client = openai.OpenAI(
+                api_key=self.api_key,
+                timeout=self.timeout_seconds,
+            )
         elif self.provider == "anthropic":
             import anthropic
 
-            self._anthropic_client = anthropic.Anthropic(api_key=self.api_key)
+            self._anthropic_client = anthropic.Anthropic(
+                api_key=self.api_key,
+                timeout=self.timeout_seconds,
+            )
         elif self.provider in ("google", "google-genai", "gemini"):
             from google import genai
 

@@ -122,6 +122,7 @@ describe("GetScanCoverageHandler", () => {
         ["apps/api/"],
         ["TYPESCRIPT"],
         [SCAN_COVERAGE_DISPOSITIONS.analyzed],
+        [],
         first.result.next_cursor,
       ),
     );

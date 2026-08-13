@@ -1,5 +1,9 @@
 import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
+import type {
+  EvidenceAcceptanceStatus as PrismaEvidenceAcceptanceStatus,
+  VerifiedProfileStatus as PrismaVerifiedProfileStatus,
+} from "@prisma/client";
 import {
   AGENTIC_TOOL_COVERAGE_STATES,
   AGENTIC_TOOL_EVENT_TYPES,
@@ -28,6 +32,32 @@ import { GetArtifactChainQuery } from "./get-artifact-chain.query.js";
 
 const TOOL_VERSION = "1.0.0";
 const TOOL_CONFIG_HASH = "sha256:artifact-chain-v1";
+
+type ArtifactChainReportRecord = {
+  id: string;
+  schemaVersion: string;
+  status: PrismaEvidenceAcceptanceStatus;
+};
+
+type ArtifactChainFlowRecord = {
+  id: string;
+  schemaVersion: string;
+  status: PrismaEvidenceAcceptanceStatus;
+  technicalProfileId: string;
+};
+
+type ArtifactChainConflictRecord = {
+  id: string;
+  status: string;
+};
+
+type ArtifactChainVerifiedProfileRecord = {
+  id: string;
+  schemaVersion: string;
+  status: PrismaVerifiedProfileStatus;
+  wizardProfileId: string | null;
+  aiUsageFlowId: string;
+};
 
 @QueryHandler(GetArtifactChainQuery)
 export class GetArtifactChainHandler implements IQueryHandler<
@@ -215,7 +245,12 @@ export class GetArtifactChainHandler implements IQueryHandler<
             assessmentId,
             organizationId,
           },
-          select: { id: true, schemaVersion: true, status: true },
+          select: {
+            id: true,
+            schemaVersion: true,
+            status: true,
+            technicalProfileId: true,
+          },
         })
       : null;
     const [conflicts, verifiedProfile] = flow
@@ -240,6 +275,7 @@ export class GetArtifactChainHandler implements IQueryHandler<
               schemaVersion: true,
               status: true,
               wizardProfileId: true,
+              aiUsageFlowId: true,
             },
           }),
         ])
@@ -256,17 +292,10 @@ export class GetArtifactChainHandler implements IQueryHandler<
   ) {
     const anchor = parseArtifactRef(artifactRef, correlationId);
 
-    let report: { id: string; schemaVersion: string; status: string } | null =
-      null;
-    let flow: { id: string; schemaVersion: string; status: string } | null =
-      null;
-    let conflicts: Array<{ id: string; status: string }> = [];
-    let verifiedProfile: {
-      id: string;
-      schemaVersion: string;
-      status: string;
-      wizardProfileId: string | null;
-    } | null = null;
+    let report: ArtifactChainReportRecord | null = null;
+    let flow: ArtifactChainFlowRecord | null = null;
+    let conflicts: ArtifactChainConflictRecord[] = [];
+    let verifiedProfile: ArtifactChainVerifiedProfileRecord | null = null;
 
     if (anchor.kind === "ter") {
       report = await this.prisma.technicalEvidenceReport.findFirst({
@@ -289,7 +318,12 @@ export class GetArtifactChainHandler implements IQueryHandler<
               assessmentId,
               organizationId,
             },
-            select: { id: true, schemaVersion: true, status: true },
+            select: {
+              id: true,
+              schemaVersion: true,
+              status: true,
+              technicalProfileId: true,
+            },
           })
         : null;
     } else if (anchor.kind === "flow") {
@@ -420,6 +454,7 @@ export class GetArtifactChainHandler implements IQueryHandler<
           schemaVersion: true,
           status: true,
           wizardProfileId: true,
+          aiUsageFlowId: true,
         },
       });
     }

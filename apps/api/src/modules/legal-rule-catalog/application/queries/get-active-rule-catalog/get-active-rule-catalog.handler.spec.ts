@@ -8,16 +8,25 @@ describe("GetActiveRuleCatalogHandler", () => {
   it("returns the latest approved rule catalog and approved rules", async () => {
     const prisma = {
       legalRuleCatalogVersion: {
-        findFirst: jest.fn().mockResolvedValue({
-          id: "catalog-1",
-          version: "v1",
-          status: toPrismaLegalRuleLifecycleStatus(
-            LEGAL_RULE_LIFECYCLE_STATUSES.approved,
-          ),
-        }),
+        findFirst: jest
+          .fn<
+            () =>
+              Promise<{
+                id: string;
+                version: string;
+                status: ReturnType<typeof toPrismaLegalRuleLifecycleStatus>;
+              } | null>
+          >()
+          .mockResolvedValue({
+            id: "catalog-1",
+            version: "v1",
+            status: toPrismaLegalRuleLifecycleStatus(
+              LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+            ),
+          }),
       },
       legalRule: {
-        findMany: jest.fn().mockResolvedValue([
+        findMany: jest.fn<() => Promise<Array<Record<string, unknown>>>>().mockResolvedValue([
           {
             legalRuleId: "RULE-A",
             requiredFacts: [
@@ -41,7 +50,7 @@ describe("GetActiveRuleCatalogHandler", () => {
         ]),
       },
       legalDocumentChunk: {
-        findMany: jest.fn().mockResolvedValue([
+        findMany: jest.fn<() => Promise<Array<Record<string, unknown>>>>().mockResolvedValue([
           {
             id: "chunk-1",
             legalCorpusVersionId: "corpus-1",
