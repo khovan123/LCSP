@@ -58,7 +58,6 @@ class AgenticToolRequest(BaseModel):
         return value
 
 
-# Compatibility alias for callers/tests that used the earlier registry type name.
 AgenticToolCapability = AgenticToolSpec
 AgenticToolHandler = Callable[[AgenticToolRequest], Mapping[str, Any]]
 SPRINT6_AGENTIC_CAPABILITIES = SPRINT6_AGENTIC_TOOL_SPECS
@@ -139,12 +138,12 @@ class AgenticToolRegistry:
         return capability
 
     def validate_model_request(self, request: AgenticToolRequest) -> AgenticToolSpec:
-        capability = self.validate(request)
+        capability = self.capability(request.tool_name)
         if capability.exposure != "LLM_CALLABLE":
             raise AgenticToolValidationError("AGENTIC_TOOL_NOT_MODEL_CALLABLE")
         if capability.mutation:
             raise AgenticToolValidationError("AGENTIC_TOOL_MODEL_MUTATION_FORBIDDEN")
-        return capability
+        return self.validate(request)
 
     def invoke(self, request: AgenticToolRequest) -> Mapping[str, Any]:
         self.validate(request)
