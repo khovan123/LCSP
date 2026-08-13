@@ -1,3 +1,9 @@
+from .authorization import (
+    AgenticAuthorizationResult,
+    AgenticToolAuthorizer,
+    ApiPbacToolAuthorizer,
+    TOOL_PBAC_ACTIONS,
+)
 from .catalog import (
     AgenticToolSpec,
     SPRINT6_AGENTIC_TOOL_SPECS,
@@ -20,7 +26,9 @@ from .resolver import (
 )
 
 __all__ = [
+    "AgenticAuthorizationResult",
     "AgenticInvocationContext",
+    "AgenticToolAuthorizer",
     "AgenticToolBudget",
     "AgenticToolCallResult",
     "AgenticToolCapability",
@@ -29,8 +37,10 @@ __all__ = [
     "AgenticToolResolver",
     "AgenticToolSpec",
     "AgenticToolValidationError",
+    "ApiPbacToolAuthorizer",
     "SPRINT6_AGENTIC_CAPABILITIES",
     "SPRINT6_AGENTIC_TOOL_SPECS",
+    "TOOL_PBAC_ACTIONS",
     "build_llm_tool_definitions",
     "build_sprint6_agentic_registry",
     "llm_callable_tool_specs",
