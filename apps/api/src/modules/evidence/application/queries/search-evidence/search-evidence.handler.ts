@@ -55,12 +55,22 @@ export class SearchEvidenceHandler implements IQueryHandler<
         },
       );
     }
-    const findings = technicalFindings(report.evidencePayload)
+
+    const cursorKey = query.cursor ? decodeCursor(query.cursor) : null;
+    const matching = technicalFindings(report.evidencePayload)
       .filter((finding) => matches(finding, query))
-      .sort(compareFindings)
-      .slice(0, query.maxResults + 1);
-    const truncated = findings.length > query.maxResults;
-    const resultFindings = findings.slice(0, query.maxResults).map(toSummary);
+      .sort(compareFindings);
+    const afterCursor = cursorKey
+      ? matching.filter((finding) => findingCursorKey(finding) > cursorKey)
+      : matching;
+    const page = afterCursor.slice(0, query.maxResults + 1);
+    const truncated = page.length > query.maxResults;
+    const pageFindings = page.slice(0, query.maxResults);
+    const resultFindings = pageFindings.map(toSummary);
+    const nextCursor =
+      truncated && pageFindings.length > 0
+        ? encodeCursor(findingCursorKey(pageFindings[pageFindings.length - 1]!))
+        : null;
     const response: SearchEvidenceResponse = {
       status: AGENTIC_TOOL_STATUSES.ready,
       tool_name: AGENTIC_TOOL_NAMES.searchEvidence,
@@ -72,7 +82,7 @@ export class SearchEvidenceHandler implements IQueryHandler<
       coverage_state: AGENTIC_TOOL_COVERAGE_STATES.sufficient,
       evidence_refs: resultFindings.map((finding) => finding.finding_ref),
       limitations: truncated ? ["RESULT_LIMIT_REACHED"] : [],
-      result: { findings: resultFindings, next_cursor: null, truncated },
+      result: { findings: resultFindings, next_cursor: nextCursor, truncated },
     };
     await this.auditWriter.write({
       eventType: AGENTIC_TOOL_EVENT_TYPES.evidenceSearchRead,
@@ -87,6 +97,7 @@ export class SearchEvidenceHandler implements IQueryHandler<
       payload: {
         toolName: response.tool_name,
         resultCount: resultFindings.length,
+        truncated,
       },
     });
     return response;
@@ -141,18 +152,29 @@ function compareFindings(
   left: Record<string, unknown>,
   right: Record<string, unknown>,
 ): number {
-  const path = (stringValue(left.file_path) ?? "").localeCompare(
-    stringValue(right.file_path) ?? "",
-  );
-  if (path !== 0) return path;
-  const line =
-    (positiveInteger(left.line_number) ?? 0) -
-    (positiveInteger(right.line_number) ?? 0);
-  return line !== 0
-    ? line
-    : (stringValue(left.finding_id) ?? "").localeCompare(
-        stringValue(right.finding_id) ?? "",
-      );
+  return findingCursorKey(left).localeCompare(findingCursorKey(right));
+}
+
+function findingCursorKey(finding: Record<string, unknown>): string {
+  const path = stringValue(finding.file_path) ?? "";
+  const line = String(positiveInteger(finding.line_number) ?? 0).padStart(12, "0");
+  const id = stringValue(finding.finding_id) ?? "";
+  return `${path}\u0000${line}\u0000${id}`;
+}
+
+function encodeCursor(value: string): string {
+  return Buffer.from(value, "utf8").toString("base64url");
+}
+
+function decodeCursor(value: string): string | null {
+  try {
+    const decoded = Buffer.from(value, "base64url").toString("utf8");
+    return decoded && encodeCursor(decoded) === value.replace(/=+$/u, "")
+      ? decoded
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function providerFor(finding: Record<string, unknown>): string | null {
