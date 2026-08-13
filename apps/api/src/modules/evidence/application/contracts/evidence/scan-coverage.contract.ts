@@ -11,6 +11,9 @@ export const SCAN_COVERAGE_DISPOSITIONS = {
 } as const;
 export type ScanCoverageDisposition =
   (typeof SCAN_COVERAGE_DISPOSITIONS)[keyof typeof SCAN_COVERAGE_DISPOSITIONS];
+
+export const SCAN_COVERAGE_MAX_RESULTS = 100;
+
 export type ScanCoverageResponse = {
   status: AgenticToolStatus;
   tool_name: AgenticToolName;
@@ -36,6 +39,7 @@ export type ScanCoverageResponse = {
       skipped: number;
       limited: number;
     };
+    next_cursor: string | null;
     truncated: boolean;
   };
 };
