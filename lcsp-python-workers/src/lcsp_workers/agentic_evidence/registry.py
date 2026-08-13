@@ -64,7 +64,7 @@ SPRINT6_AGENTIC_CAPABILITIES = SPRINT6_AGENTIC_TOOL_SPECS
 
 
 class AgenticToolRegistry:
-    """Fail-closed catalog, validator and dispatcher for Sprint 6 agentic tools."""
+    """Fail-closed catalog, validator and dispatcher for Agentic tools."""
 
     def __init__(self, capabilities: tuple[AgenticToolSpec, ...]) -> None:
         self._capabilities = {capability.name: capability for capability in capabilities}

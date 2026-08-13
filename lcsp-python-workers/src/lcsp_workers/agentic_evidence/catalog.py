@@ -866,7 +866,7 @@ SPRINT6_AGENTIC_TOOL_SPEC_BY_NAME = {
 }
 
 if len(SPRINT6_AGENTIC_TOOL_SPEC_BY_NAME) != len(SPRINT6_AGENTIC_TOOL_SPECS):
-    raise RuntimeError("Sprint 6 agentic tool names must be unique")
+    raise RuntimeError("Agentic tool names must be unique")
 
 
 def llm_callable_tool_specs() -> tuple[AgenticToolSpec, ...]:
