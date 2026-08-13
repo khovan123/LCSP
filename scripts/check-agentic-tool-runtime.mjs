@@ -19,7 +19,7 @@ const tools = [
     test: "apps/api/src/modules/classification/application/queries/propose-gap-remediation/propose-gap-remediation.handler.spec.ts",
     module: "apps/api/src/modules/classification/classification.module.ts",
     registration: "ProposeGapRemediationHandler",
-    exposure: "apps/api/src/modules/classification/presentation/http/classification.controller.ts",
+    exposure: "apps/api/src/modules/classification/presentation/http/gap-remediation.controller.ts",
     exposureToken: "proposeGapRemediation",
   },
   {
@@ -28,7 +28,7 @@ const tools = [
     test: "apps/api/src/modules/classification/application/queries/get-gap-evidence-trace/get-gap-evidence-trace.handler.spec.ts",
     module: "apps/api/src/modules/classification/classification.module.ts",
     registration: "GetGapEvidenceTraceHandler",
-    exposure: "apps/api/src/modules/classification/presentation/http/classification.controller.ts",
+    exposure: "apps/api/src/modules/classification/presentation/http/gap-evidence-trace.controller.ts",
     exposureToken: "getGapEvidenceTrace",
   },
   {
