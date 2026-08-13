@@ -12,8 +12,8 @@ export class FindProviderInvocationsQuery {
     public readonly correlationId: string,
     public readonly provider:
       ProviderInvocationProvider | undefined = undefined,
+    public readonly pathPrefixes: string[] = [],
     public readonly framework:
       ProviderInvocationFramework | undefined = undefined,
-    public readonly pathPrefixes: string[] = [],
   ) {}
 }
