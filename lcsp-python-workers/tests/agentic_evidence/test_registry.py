@@ -5,6 +5,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
+from lcsp_workers.agentic_evidence.catalog import build_llm_tool_definitions
 from lcsp_workers.agentic_evidence.registry import (
     AgenticToolRequest,
     AgenticToolValidationError,
@@ -34,6 +35,31 @@ EXPECTED_TOOLS = {
     "trace_static_flow",
 }
 
+NON_MODEL_TOOLS = {"resume_waiting_runs", "request_targeted_reanalysis"}
+
+
+def valid_input_for(tool_name: str) -> dict:
+    if tool_name == "get_scan_coverage":
+        return {"maxResults": 10}
+    if tool_name == "search_evidence":
+        return {"maxResults": 10}
+    if tool_name == "request_targeted_reanalysis":
+        return {
+            "inputArtifactVersion": "ter_12345678",
+            "analyzerId": "RUN_TS_JS_SEMANTIC_ANALYSIS",
+            "scope": {"pathPrefixes": ["apps/api/"]},
+            "reasonRequirementId": "requirement:12345678",
+            "idempotencyKey": "request_1234567890",
+        }
+    if tool_name == "resume_waiting_runs":
+        return {
+            "activationRecordRef": "corpus-approval:abc123",
+            "corpusVersionRef": "corpus-version:abc123",
+            "maxRuns": 10,
+            "idempotencyKey": str(uuid4()),
+        }
+    return {}
+
 
 def request_for(
     tool_name: str,
@@ -59,7 +85,7 @@ def request_for(
                 "maxBytes": 16_384,
                 "maxDurationMs": 1_000,
             },
-            "input": input_payload or {},
+            "input": input_payload if input_payload is not None else valid_input_for(tool_name),
             "idempotencyKey": idempotency_key,
         }
     )
@@ -69,6 +95,17 @@ def test_sprint6_inventory_is_exact_and_unique() -> None:
     registry = build_sprint6_agentic_registry()
     assert set(registry.names()) == EXPECTED_TOOLS
     assert len(registry.names()) == len(EXPECTED_TOOLS)
+
+
+def test_only_read_tools_are_exposed_to_the_model() -> None:
+    registry = build_sprint6_agentic_registry()
+    definitions = build_llm_tool_definitions()
+    model_names = {definition.name for definition in definitions}
+
+    assert model_names == EXPECTED_TOOLS - NON_MODEL_TOOLS
+    assert set(registry.model_callable_names()) == model_names
+    assert len(definitions) == 17
+    assert all(definition.input_schema["additionalProperties"] is False for definition in definitions)
 
 
 def test_unknown_tool_fails_closed() -> None:
@@ -98,6 +135,31 @@ def test_required_pinned_artifact_is_enforced() -> None:
         registry.validate(request)
 
 
+def test_tool_specific_json_schema_is_enforced_before_dispatch() -> None:
+    registry = build_sprint6_agentic_registry()
+    request = request_for(
+        "get_scan_coverage",
+        artifact_versions={"technicalEvidenceReportId": "ter-1"},
+        input_payload={"maxResults": 101},
+    )
+    with pytest.raises(
+        AgenticToolValidationError,
+        match="AGENTIC_TOOL_INPUT_SCHEMA_INVALID",
+    ):
+        registry.validate(request)
+
+    extra_field = request_for(
+        "get_scan_coverage",
+        artifact_versions={"technicalEvidenceReportId": "ter-1"},
+        input_payload={"maxResults": 10, "rawQuery": "anything"},
+    )
+    with pytest.raises(
+        AgenticToolValidationError,
+        match="AGENTIC_TOOL_INPUT_SCHEMA_INVALID",
+    ):
+        registry.validate(extra_field)
+
+
 def test_mutation_requires_idempotency_key() -> None:
     registry = build_sprint6_agentic_registry()
     request = request_for(
@@ -109,6 +171,31 @@ def test_mutation_requires_idempotency_key() -> None:
         match="AGENTIC_TOOL_IDEMPOTENCY_KEY_REQUIRED",
     ):
         registry.validate(request)
+
+
+def test_system_and_orchestrator_tools_are_never_model_callable() -> None:
+    registry = build_sprint6_agentic_registry()
+
+    targeted = request_for(
+        "request_targeted_reanalysis",
+        idempotency_key="request-12345678",
+        artifact_versions={"technicalEvidenceReportId": "ter-1"},
+    )
+    with pytest.raises(
+        AgenticToolValidationError,
+        match="AGENTIC_TOOL_NOT_MODEL_CALLABLE",
+    ):
+        registry.validate_model_request(targeted)
+
+    resume = request_for(
+        "resume_waiting_runs",
+        idempotency_key="request-87654321",
+    )
+    with pytest.raises(
+        AgenticToolValidationError,
+        match="AGENTIC_TOOL_NOT_MODEL_CALLABLE",
+    ):
+        registry.validate_model_request(resume)
 
 
 def test_read_tool_rejects_mutation_idempotency_key() -> None:
@@ -150,13 +237,13 @@ def test_dispatch_requires_bound_handler_and_checks_output() -> None:
         artifact_versions={"technicalEvidenceReportId": "ter-1"},
     )
     with pytest.raises(AgenticToolValidationError, match="AGENTIC_TOOL_HANDLER_NOT_BOUND"):
-        registry.invoke(request)
+        registry.invoke_model_tool(request)
 
     registry.register_handler(
         "get_scan_coverage",
         lambda _: {"status": "READY", "result": {"items": []}},
     )
-    assert registry.invoke(request)["status"] == "READY"
+    assert registry.invoke_model_tool(request)["status"] == "READY"
 
 
 def test_dispatch_blocks_forbidden_output_fields() -> None:
@@ -170,4 +257,4 @@ def test_dispatch_blocks_forbidden_output_fields() -> None:
         lambda _: {"status": "READY", "result": {"raw_source": "secret"}},
     )
     with pytest.raises(AgenticToolValidationError, match="AGENTIC_TOOL_UNSAFE_OUTPUT"):
-        registry.invoke(request)
+        registry.invoke_model_tool(request)
