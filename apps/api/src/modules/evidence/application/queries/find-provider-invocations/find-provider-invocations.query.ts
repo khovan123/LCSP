@@ -1,4 +1,7 @@
-import type { ProviderInvocationProvider } from "../../contracts/evidence/provider-invocation.contract.js";
+import type {
+  ProviderInvocationFramework,
+  ProviderInvocationProvider,
+} from "../../contracts/evidence/provider-invocation.contract.js";
 
 export class FindProviderInvocationsQuery {
   constructor(
@@ -9,6 +12,8 @@ export class FindProviderInvocationsQuery {
     public readonly correlationId: string,
     public readonly provider:
       ProviderInvocationProvider | undefined = undefined,
+    public readonly framework:
+      ProviderInvocationFramework | undefined = undefined,
     public readonly pathPrefixes: string[] = [],
   ) {}
 }
