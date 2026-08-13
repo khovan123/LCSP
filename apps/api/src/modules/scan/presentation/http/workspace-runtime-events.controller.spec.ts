@@ -6,65 +6,65 @@ import { WorkspaceRuntimeEventsController } from "./workspace-runtime-events.con
 
 describe("WorkspaceRuntimeEventsController", () => {
   it("publishes only organization-scoped runtime metadata", async () => {
-    const buildWorkspaceSnapshot = jest.fn<
-      (organizationId: string) => Promise<unknown>
-    >().mockResolvedValue({
-      emittedAt: "2026-08-09T14:05:00.000Z",
-      runs: [
-        {
-          assessmentId: "assessment-1",
-          runId: "run-1",
-          stage: "TECHNICAL_EVIDENCE",
-          status: "RUNNING",
-          activeTools: [
-            {
-              toolName: "get_scan_coverage",
-              status: "RUNNING",
-              summary: "Starting get_scan_coverage",
-              startedAt: "2026-08-09T14:00:00.000Z",
-              attempt: 1,
-            },
-          ],
-          updatedAt: "2026-08-09T14:04:00.000Z",
-        },
-      ],
-      recentActivity: [
-        {
-          eventId: "evt-1",
-          sequence: 1,
-          emittedAt: "2026-08-09T14:05:00.000Z",
-          organizationId: "org-1",
-          assessmentId: "assessment-1",
-          runId: "run-1",
-          correlationId: "corr-1",
-          eventType: "TOOL_STARTED",
-          runStatus: "RUNNING",
-          stage: "TECHNICAL_EVIDENCE",
-          toolName: "get_scan_coverage",
-          summary: "Starting get_scan_coverage",
-          inputSummary: { maxResults: 25 },
-          outputSummary: null,
-          errorSummary: null,
-          startedAt: "2026-08-09T14:00:00.000Z",
-          completedAt: null,
-          durationMs: null,
-          attempt: 1,
-          waitingReason: null,
-        },
-      ],
-      scanJobs: [
-        {
-          id: "scan-job-1",
-          assessmentId: "assessment-1",
-          snapshotId: "snapshot-1",
-          status: "RUNNING",
-          attemptCount: 2,
-          blockedReason: null,
-          updatedAt: new Date("2026-08-09T14:00:00.000Z"),
-        },
-      ],
-      evidenceReports: [],
-    });
+    const buildWorkspaceSnapshot = jest
+      .fn<(organizationId: string) => Promise<unknown>>()
+      .mockResolvedValue({
+        emittedAt: "2026-08-09T14:05:00.000Z",
+        runs: [
+          {
+            assessmentId: "assessment-1",
+            runId: "run-1",
+            stage: "TECHNICAL_EVIDENCE",
+            status: "RUNNING",
+            activeTools: [
+              {
+                toolName: "get_scan_coverage",
+                status: "RUNNING",
+                summary: "Starting get_scan_coverage",
+                startedAt: "2026-08-09T14:00:00.000Z",
+                attempt: 1,
+              },
+            ],
+            updatedAt: "2026-08-09T14:04:00.000Z",
+          },
+        ],
+        recentActivity: [
+          {
+            eventId: "evt-1",
+            sequence: 1,
+            emittedAt: "2026-08-09T14:05:00.000Z",
+            organizationId: "org-1",
+            assessmentId: "assessment-1",
+            runId: "run-1",
+            correlationId: "corr-1",
+            eventType: "TOOL_STARTED",
+            runStatus: "RUNNING",
+            stage: "TECHNICAL_EVIDENCE",
+            toolName: "get_scan_coverage",
+            summary: "Starting get_scan_coverage",
+            inputSummary: { maxResults: 25 },
+            outputSummary: null,
+            errorSummary: null,
+            startedAt: "2026-08-09T14:00:00.000Z",
+            completedAt: null,
+            durationMs: null,
+            attempt: 1,
+            waitingReason: null,
+          },
+        ],
+        scanJobs: [
+          {
+            id: "scan-job-1",
+            assessmentId: "assessment-1",
+            snapshotId: "snapshot-1",
+            status: "RUNNING",
+            attemptCount: 2,
+            blockedReason: null,
+            updatedAt: new Date("2026-08-09T14:00:00.000Z"),
+          },
+        ],
+        evidenceReports: [],
+      });
     const controller = new WorkspaceRuntimeEventsController({
       buildWorkspaceSnapshot,
     } as unknown as AssessmentRuntimeEventService);

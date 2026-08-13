@@ -93,8 +93,7 @@ export class AssessmentRuntimeEventService {
     await this.recordEvent({
       ...input,
       eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runStarted,
-      runStatus:
-        input.runStatus ?? ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+      runStatus: input.runStatus ?? ASSESSMENT_RUNTIME_RUN_STATUSES.running,
       summary: sanitizeRuntimeSummaryText(input.summary),
       startedAt: input.startedAt ?? null,
     });
@@ -113,8 +112,7 @@ export class AssessmentRuntimeEventService {
     await this.recordEvent({
       ...input,
       eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runStageChanged,
-      runStatus:
-        input.runStatus ?? ASSESSMENT_RUNTIME_RUN_STATUSES.running,
+      runStatus: input.runStatus ?? ASSESSMENT_RUNTIME_RUN_STATUSES.running,
       summary: sanitizeRuntimeSummaryText(input.summary),
       startedAt: input.startedAt ?? null,
     });
@@ -268,7 +266,8 @@ export class AssessmentRuntimeEventService {
               durationMs: input.durationMs ?? null,
               attempt: input.attempt ?? null,
               waitingReason:
-                input.waitingReason === null || input.waitingReason === undefined
+                input.waitingReason === null ||
+                input.waitingReason === undefined
                   ? null
                   : sanitizeRuntimeSummaryText(input.waitingReason),
             },
@@ -303,9 +302,12 @@ export class AssessmentRuntimeEventService {
       stage: event.stage as AssessmentRuntimeStageCode,
       toolName: event.toolName,
       summary: event.summary,
-      inputSummary: (event.inputSummaryJson as AssessmentRuntimeSummaryValue | null) ?? null,
+      inputSummary:
+        (event.inputSummaryJson as AssessmentRuntimeSummaryValue | null) ??
+        null,
       outputSummary:
-        (event.outputSummaryJson as AssessmentRuntimeSummaryValue | null) ?? null,
+        (event.outputSummaryJson as AssessmentRuntimeSummaryValue | null) ??
+        null,
       errorSummary: event.errorSummary,
       startedAt: event.startedAt?.toISOString() ?? null,
       completedAt: event.completedAt?.toISOString() ?? null,
@@ -377,7 +379,9 @@ function deriveRuns(
     });
   }
 
-  return runs.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  return runs.sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt),
+  );
 }
 
 function deriveActiveTools(
@@ -416,7 +420,7 @@ function toJsonOrNull(
   if (value === null) {
     return null;
   }
-  return value as Prisma.InputJsonValue;
+  return value;
 }
 
 function isUniqueSequenceViolation(error: unknown): boolean {
@@ -426,9 +430,9 @@ function isUniqueSequenceViolation(error: unknown): boolean {
 function isMissingAssessmentRuntimeEventTable(error: unknown): boolean {
   return (
     error instanceof Error &&
-    (error.message.includes("AssessmentRuntimeEvent") &&
-      (error.message.includes("does not exist") ||
-        error.message.includes("does not exist in the current database")))
+    error.message.includes("AssessmentRuntimeEvent") &&
+    (error.message.includes("does not exist") ||
+      error.message.includes("does not exist in the current database"))
   );
 }
 
@@ -437,11 +441,13 @@ export function summarizeFailure(error: unknown): string {
 }
 
 function runtimeEventDelegate(prisma: unknown) {
-  return (prisma as {
-    assessmentRuntimeEvent: {
-      findFirst: (...args: any[]) => Promise<any>;
-      findMany: (...args: any[]) => Promise<any[]>;
-      create: (...args: any[]) => Promise<any>;
-    };
-  }).assessmentRuntimeEvent;
+  return (
+    prisma as {
+      assessmentRuntimeEvent: {
+        findFirst: (...args: any[]) => Promise<any>;
+        findMany: (...args: any[]) => Promise<any[]>;
+        create: (...args: any[]) => Promise<any>;
+      };
+    }
+  ).assessmentRuntimeEvent;
 }

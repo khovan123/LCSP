@@ -66,7 +66,11 @@ function sanitizeValue(
   value: unknown,
   options: InternalOptions,
 ): AssessmentRuntimeSummaryValue | null {
-  if (value === null || typeof value === "boolean" || typeof value === "number") {
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "number"
+  ) {
     return value;
   }
 
@@ -98,7 +102,10 @@ function sanitizeValue(
   }
 
   const sanitized: Record<string, AssessmentRuntimeSummaryValue> = {};
-  for (const [rawKey, nestedValue] of Object.entries(value).slice(0, options.maxItems)) {
+  for (const [rawKey, nestedValue] of Object.entries(value).slice(
+    0,
+    options.maxItems,
+  )) {
     if (FORBIDDEN_KEY_PATTERN.test(rawKey)) {
       sanitized[rawKey] = "[REDACTED]";
       continue;

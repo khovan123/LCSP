@@ -14,9 +14,7 @@ interface WorkspaceRuntimeRequest {
 
 @Controller("workspace/runtime-events")
 export class WorkspaceRuntimeEventsController {
-  constructor(
-    private readonly runtimeEvents: AssessmentRuntimeEventService,
-  ) {}
+  constructor(private readonly runtimeEvents: AssessmentRuntimeEventService) {}
 
   @Sse()
   @UseGuards(PbacGuard)
@@ -26,7 +24,9 @@ export class WorkspaceRuntimeEventsController {
 
     return interval(2_000).pipe(
       startWith(0),
-      switchMap(async () => this.runtimeEvents.buildWorkspaceSnapshot(organizationId)),
+      switchMap(async () =>
+        this.runtimeEvents.buildWorkspaceSnapshot(organizationId),
+      ),
       map((data): MessageEvent => ({
         type: "workspace.runtime",
         data: {
@@ -103,6 +103,8 @@ function toLegacyEvidenceReportPayload(report: unknown) {
     status: item.status,
     rejection_reason: item.rejectionReason ?? null,
     created_at:
-      item.createdAt instanceof Date ? item.createdAt.toISOString() : item.createdAt,
+      item.createdAt instanceof Date
+        ? item.createdAt.toISOString()
+        : item.createdAt,
   };
 }
