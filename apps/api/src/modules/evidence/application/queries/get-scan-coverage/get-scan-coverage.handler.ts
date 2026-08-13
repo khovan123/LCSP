@@ -66,7 +66,7 @@ export class GetScanCoverageHandler implements IQueryHandler<
     const truncated = afterCursor.length > files.length;
     const nextCursor =
       truncated && files.length > 0
-        ? encodeCursor(files[files.length - 1]!.path)
+        ? encodeCursor(files[files.length - 1].path)
         : null;
     const counts = {
       total: all.length,

@@ -89,9 +89,9 @@ describe("GetScanCoverageHandler", () => {
     expect(first.result.counts.total).toBe(101);
     expect(first.result.truncated).toBe(true);
     expect(first.result.next_cursor).toEqual(expect.any(String));
-    expect(first.result.files.every((item) => item.path.startsWith("apps/api/"))).toBe(
-      true,
-    );
+    expect(
+      first.result.files.every((item) => item.path.startsWith("apps/api/")),
+    ).toBe(true);
 
     const second = await handler.execute(
       new GetScanCoverageQuery(
