@@ -55,7 +55,9 @@ export class FindSimilarSymbolsHandler implements IQueryHandler<
         (node) =>
           query.pathPrefixes.length === 0 ||
           (node.file_path !== null &&
-            query.pathPrefixes.some((prefix) => node.file_path!.startsWith(prefix))),
+            query.pathPrefixes.some((prefix) =>
+              node.file_path!.startsWith(prefix),
+            )),
       )
       .map((node) => candidate(seed, node, query.dimensions))
       .filter((item): item is NonNullable<typeof item> => item !== null)

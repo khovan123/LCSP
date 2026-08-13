@@ -71,7 +71,7 @@ export class InspectDeploymentContextHandler implements IQueryHandler<
     const selected = page.slice(0, query.maxResults);
     const nextCursor =
       truncated && selected.length > 0
-        ? encodeCursor(contextKey(selected[selected.length - 1]!))
+        ? encodeCursor(contextKey(selected[selected.length - 1]))
         : null;
     const response: DeploymentContextResponse = {
       status: AGENTIC_TOOL_STATUSES.ready,

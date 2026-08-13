@@ -69,7 +69,7 @@ export class SearchEvidenceHandler implements IQueryHandler<
     const resultFindings = pageFindings.map(toSummary);
     const nextCursor =
       truncated && pageFindings.length > 0
-        ? encodeCursor(findingCursorKey(pageFindings[pageFindings.length - 1]!))
+        ? encodeCursor(findingCursorKey(pageFindings[pageFindings.length - 1]))
         : null;
     const response: SearchEvidenceResponse = {
       status: AGENTIC_TOOL_STATUSES.ready,
@@ -157,7 +157,10 @@ function compareFindings(
 
 function findingCursorKey(finding: Record<string, unknown>): string {
   const path = stringValue(finding.file_path) ?? "";
-  const line = String(positiveInteger(finding.line_number) ?? 0).padStart(12, "0");
+  const line = String(positiveInteger(finding.line_number) ?? 0).padStart(
+    12,
+    "0",
+  );
   const id = stringValue(finding.finding_id) ?? "";
   return `${path}\u0000${line}\u0000${id}`;
 }
