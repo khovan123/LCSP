@@ -34,7 +34,7 @@ export type SearchEvidenceResponse = {
       evidence_refs: string[];
       limitation_refs: string[];
     }>;
-    next_cursor: null;
+    next_cursor: string | null;
     truncated: boolean;
   };
 };
