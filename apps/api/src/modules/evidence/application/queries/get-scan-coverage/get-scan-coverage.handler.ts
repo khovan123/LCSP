@@ -169,9 +169,7 @@ function decodeCursor(cursor: string): string | null {
   }
 }
 
-function coverageData(
-  payload: unknown,
-): {
+function coverageData(payload: unknown): {
   files: ScanCoverageResponse["result"]["files"];
   toolOutcomes: ScanCoverageResponse["result"]["tool_outcomes"];
   unresolvedDynamicBoundaries: ScanCoverageResponse["result"]["unresolved_dynamic_boundaries"];
@@ -217,14 +215,17 @@ function toolOutcomes(
     ? record(payload?.report_provenance)?.schema_version
     : null;
   const versions = record(payload?.tools_version);
-  const failures = Array.isArray(payload?.tool_failures) ? payload.tool_failures : [];
+  const failures = Array.isArray(payload?.tool_failures)
+    ? payload.tool_failures
+    : [];
   const failureRows = failures.flatMap((value) => {
     const item = record(value);
     const toolName = item && text(item.tool_name);
     const outcome = item && text(item.outcome);
     if (!toolName || !outcome) return [];
     const version =
-      (versions && text(versions[toolName])) || (item && text(item.tool_version));
+      (versions && text(versions[toolName])) ||
+      (item && text(item.tool_version));
     return [
       {
         tool_name: toolName,
@@ -257,7 +258,10 @@ function unresolvedDynamicBoundaries(
   payload: Record<string, unknown> | null,
 ): ScanCoverageResponse["result"]["unresolved_dynamic_boundaries"] {
   return [
-    ...readDynamicBoundaries(record(payload?.python_analysis), "PYTHON_ANALYSIS"),
+    ...readDynamicBoundaries(
+      record(payload?.python_analysis),
+      "PYTHON_ANALYSIS",
+    ),
     ...readDynamicBoundaries(record(payload?.ts_js_analysis), "TS_JS_ANALYSIS"),
   ];
 }

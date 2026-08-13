@@ -114,7 +114,9 @@ function buildQuery(args: {
         correlationId,
         stringArray(input.pathPrefixes),
         stringArray(input.languages),
-        stringArray(input.dispositions) as Array<"ANALYZED" | "SKIPPED" | "LIMITED">,
+        stringArray(input.dispositions) as Array<
+          "ANALYZED" | "SKIPPED" | "LIMITED"
+        >,
         optionalString(input.cursor),
       );
     case AGENTIC_TOOL_NAMES.searchEvidence:
@@ -127,7 +129,10 @@ function buildQuery(args: {
         stringArray(input.findingKinds),
         stringArray(input.providers),
         stringArray(input.pathPrefixes),
-        optionalEnum(input.minConfidence, Object.values(SEARCH_EVIDENCE_CONFIDENCE)),
+        optionalEnum(
+          input.minConfidence,
+          Object.values(SEARCH_EVIDENCE_CONFIDENCE),
+        ),
         optionalString(input.cursor),
       );
     case AGENTIC_TOOL_NAMES.getFindingDetail:
@@ -255,7 +260,9 @@ function buildQuery(args: {
         assessmentId,
         organizationId,
         correlationId,
-        optionalRecord(input.anchor) ? optionalString(optionalRecord(input.anchor)?.artifactRef) : null,
+        optionalRecord(input.anchor)
+          ? optionalString(optionalRecord(input.anchor)?.artifactRef)
+          : null,
         stringArray(input.requiredStages),
         input.exactVersions === true,
       );
@@ -265,7 +272,9 @@ function buildQuery(args: {
         organizationId,
         correlationId,
         stripOptionalRef(optionalString(input.flowRef), "flow:"),
-        stringArray(input.conflictIds).map((value) => stripRef(value, "conflict:")),
+        stringArray(input.conflictIds).map((value) =>
+          stripRef(value, "conflict:"),
+        ),
         optionalString(input.cursor),
         numberWithDefault(input.maxResults, 25),
         stringArray(input.statuses),
@@ -340,7 +349,10 @@ function buildQuery(args: {
         assessmentId,
         organizationId,
         new Date(`${requiredString(input.effectiveDate)}T00:00:00.000Z`),
-        stripOptionalRef(optionalString(input.pinnedCorpusVersionId), "corpus_"),
+        stripOptionalRef(
+          optionalString(input.pinnedCorpusVersionId),
+          "corpus_",
+        ),
         userId,
         null,
         null,
@@ -403,9 +415,13 @@ function optionalRecord(value: unknown): Record<string, unknown> | null {
 function requiredString(value: unknown): string {
   const result = optionalString(value);
   if (!result) {
-    throw problemException(EVIDENCE_ERROR_CODES.notFound, "internal-agentic-dispatch", {
-      status: HttpStatus.NOT_FOUND,
-    });
+    throw problemException(
+      EVIDENCE_ERROR_CODES.notFound,
+      "internal-agentic-dispatch",
+      {
+        status: HttpStatus.NOT_FOUND,
+      },
+    );
   }
   return result;
 }
@@ -418,7 +434,10 @@ function optionalString(value: unknown): string | null {
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
     : [];
 }
 
