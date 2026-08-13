@@ -119,9 +119,13 @@ describe("GetArtifactChainHandler", () => {
     });
 
     const response = await handler.execute(
-      new GetArtifactChainQuery("assessment-1", "org-1", "corr-2", [
-        ARTIFACT_CHAIN_STAGES.verifiedProfile,
-      ]),
+      new GetArtifactChainQuery(
+        "assessment-1",
+        "org-1",
+        "corr-2",
+        null,
+        [ARTIFACT_CHAIN_STAGES.verifiedProfile],
+      ),
     );
 
     expect(response.coverage_state).toBe(AGENTIC_TOOL_COVERAGE_STATES.limited);
@@ -131,5 +135,46 @@ describe("GetArtifactChainHandler", () => {
         reason: "ARTIFACT_LINK_MISSING",
       },
     ]);
+  });
+
+  it("T03: resolves exact chain from anchored artifact ref instead of latest substitution", async () => {
+    const { handler } = makeHandler({
+      technicalEvidenceReport: {
+        findFirst: jest
+          .fn()
+          .mockImplementation(({ where }: { where: { id?: string } }) =>
+            Promise.resolve(
+              where?.id === "report-anchor"
+                ? {
+                    id: "report-anchor",
+                    schemaVersion: "1.0.0",
+                    status: EvidenceAcceptanceStatus.ACCEPTED,
+                  }
+                : {
+                    id: "report-latest",
+                    schemaVersion: "1.0.0",
+                    status: EvidenceAcceptanceStatus.ACCEPTED,
+                  },
+            ),
+          ),
+      },
+      technicalProfile: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ id: "profile-1", evidenceReportId: "report-anchor" }),
+      },
+    });
+
+    const response = await handler.execute(
+      new GetArtifactChainQuery(
+        "assessment-1",
+        "org-1",
+        "corr-3",
+        "ter:report-anchor",
+      ),
+    );
+
+    expect(response.result.anchor_artifact_ref).toBe("ter:report-anchor");
+    expect(response.result.links[0]?.artifact_ref).toBe("ter:report-anchor");
   });
 });
