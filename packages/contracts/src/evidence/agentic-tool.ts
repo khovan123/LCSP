@@ -15,7 +15,7 @@ import {
   AO6_AGENTIC_TOOL_NAMES,
 } from "./agentic-tool-ao6.ts";
 
-/** Shared value sets for the protected agentic-evidence tools. */
+/** Shared value sets for the first protected agentic-evidence tools. */
 export const AGENTIC_TOOL_NAMES = {
   getAssessmentContext: "get_assessment_context",
   getScanCoverage: "get_scan_coverage",
@@ -51,10 +51,10 @@ export const AGENTIC_TOOL_NAMES = {
   submitClassificationForIndependentReview:
     "submit_classification_for_independent_review",
   reconcileProfileToVerifiedProfile: "reconcile_profile_to_verified_profile",
-  ...AO3_AGENTIC_TOOL_NAMES,
+  ...AO6_AGENTIC_TOOL_NAMES,
   ...AO4_AGENTIC_TOOL_NAMES,
   ...AO5_AGENTIC_TOOL_NAMES,
-  ...AO6_AGENTIC_TOOL_NAMES,
+  ...AO3_AGENTIC_TOOL_NAMES,
 } as const;
 
 export type AgenticToolName =
@@ -136,8 +136,8 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   deploymentContextRead: "AGENTIC_TOOL_DEPLOYMENT_CONTEXT_READ",
   missingTargetProposalRead: "AGENTIC_TOOL_MISSING_TARGET_PROPOSAL_READ",
   verifiedProfilePersisted: "AGENTIC_TOOL_VERIFIED_PROFILE_PERSISTED",
-  ...AO3_AGENTIC_TOOL_EVENT_TYPES,
+  ...AO6_AGENTIC_TOOL_EVENT_TYPES,
   ...AO4_AGENTIC_TOOL_EVENT_TYPES,
   ...AO5_AGENTIC_TOOL_EVENT_TYPES,
-  ...AO6_AGENTIC_TOOL_EVENT_TYPES,
+  ...AO3_AGENTIC_TOOL_EVENT_TYPES,
 } as const;

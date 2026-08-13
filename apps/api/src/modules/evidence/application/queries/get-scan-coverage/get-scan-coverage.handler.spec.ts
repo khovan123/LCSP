@@ -117,17 +117,19 @@ describe("GetScanCoverageHandler", () => {
 function buildPrisma(files: Array<Record<string, unknown>>): PrismaService {
   return {
     technicalEvidenceReport: {
-      findFirst: jest.fn().mockResolvedValue({
-        id: "report-1",
-        status: EvidenceAcceptanceStatus.ACCEPTED,
-        evidencePayload: { scan_coverage: { files } },
-      }),
+      findFirst: jest.fn().mockImplementation(() =>
+        Promise.resolve({
+          id: "report-1",
+          status: EvidenceAcceptanceStatus.ACCEPTED,
+          evidencePayload: { scan_coverage: { files } },
+        }),
+      ),
     },
   } as unknown as PrismaService;
 }
 
 function buildAudit(): jest.Mocked<AuditWriterService> {
   return {
-    write: jest.fn<AuditWriterService["write"]>(),
+    write: jest.fn().mockImplementation(() => Promise.resolve()),
   } as unknown as jest.Mocked<AuditWriterService>;
 }
