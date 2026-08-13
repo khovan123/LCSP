@@ -11,6 +11,7 @@ on:
       - "apps/api/src/modules/legal-rule-catalog/**"
       - "packages/contracts/src/evidence/**"
       - "lcsp-python-workers/src/lcsp_workers/agentic_evidence/**"
+      - "lcsp-python-workers/src/lcsp_workers/llm/**"
       - "lcsp-python-workers/tests/agentic_evidence/**"
       - "scripts/check-agentic-tool-runtime.mjs"
       - ".github/workflows/agentic-tools.yml"
@@ -34,7 +35,7 @@ jobs:
         run: node scripts/check-agentic-tool-runtime.mjs
 
   worker-registry:
-    name: Worker agentic registry
+    name: Worker agentic runtime
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -51,5 +52,5 @@ jobs:
       - name: Install worker dependencies
         run: python -m pip install -e ".[dev]"
 
-      - name: Test fail-closed tool registry
-        run: pytest tests/agentic_evidence/test_registry.py
+      - name: Test fail-closed agentic runtime
+        run: pytest tests/agentic_evidence
