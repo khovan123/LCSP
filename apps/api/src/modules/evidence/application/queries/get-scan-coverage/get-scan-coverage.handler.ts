@@ -100,6 +100,8 @@ export class GetScanCoverageHandler implements IQueryHandler<
         .flatMap((item) => item.limitation_refs),
       result: {
         files,
+        tool_outcomes: coverage.toolOutcomes,
+        unresolved_dynamic_boundaries: coverage.unresolvedDynamicBoundaries,
         counts,
         next_cursor: nextCursor,
         truncated,
@@ -169,7 +171,11 @@ function decodeCursor(cursor: string): string | null {
 
 function coverageData(
   payload: unknown,
-): { files: ScanCoverageResponse["result"]["files"] } | null {
+): {
+  files: ScanCoverageResponse["result"]["files"];
+  toolOutcomes: ScanCoverageResponse["result"]["tool_outcomes"];
+  unresolvedDynamicBoundaries: ScanCoverageResponse["result"]["unresolved_dynamic_boundaries"];
+} | null {
   const root = record(payload);
   const coverage = root && record(root.scan_coverage);
   if (!coverage || !Array.isArray(coverage.files)) return null;
@@ -199,7 +205,98 @@ function coverageData(
         ];
       },
     ),
+    toolOutcomes: toolOutcomes(root),
+    unresolvedDynamicBoundaries: unresolvedDynamicBoundaries(root),
   };
+}
+
+function toolOutcomes(
+  payload: Record<string, unknown> | null,
+): ScanCoverageResponse["result"]["tool_outcomes"] {
+  const toolsVersion = record(payload?.report_provenance)
+    ? record(payload?.report_provenance)?.schema_version
+    : null;
+  const versions = record(payload?.tools_version);
+  const failures = Array.isArray(payload?.tool_failures) ? payload.tool_failures : [];
+  const failureRows = failures.flatMap((value) => {
+    const item = record(value);
+    const toolName = item && text(item.tool_name);
+    const outcome = item && text(item.outcome);
+    if (!toolName || !outcome) return [];
+    const version =
+      (versions && text(versions[toolName])) || (item && text(item.tool_version));
+    return [
+      {
+        tool_name: toolName,
+        tool_version: version ?? null,
+        outcome,
+        limitation_refs: [`tool_failure:${toolName}:${outcome.toLowerCase()}`],
+      },
+    ];
+  });
+  const seen = new Set(failureRows.map((row) => row.tool_name));
+  const successRows = versions
+    ? Object.entries(versions).flatMap(([toolName, version]) => {
+        if (seen.has(toolName) || typeof version !== "string") return [];
+        return [
+          {
+            tool_name: toolName,
+            tool_version: version,
+            outcome: "SUCCESS",
+            limitation_refs: [],
+          },
+        ];
+      })
+    : [];
+  return [...failureRows, ...successRows].sort((left, right) =>
+    left.tool_name.localeCompare(right.tool_name),
+  );
+}
+
+function unresolvedDynamicBoundaries(
+  payload: Record<string, unknown> | null,
+): ScanCoverageResponse["result"]["unresolved_dynamic_boundaries"] {
+  return [
+    ...readDynamicBoundaries(record(payload?.python_analysis), "PYTHON_ANALYSIS"),
+    ...readDynamicBoundaries(record(payload?.ts_js_analysis), "TS_JS_ANALYSIS"),
+  ];
+}
+
+function readDynamicBoundaries(
+  analysis: Record<string, unknown> | null,
+  source: string,
+): ScanCoverageResponse["result"]["unresolved_dynamic_boundaries"] {
+  const items = Array.isArray(analysis?.unsupported_dynamic_flows)
+    ? analysis.unsupported_dynamic_flows
+    : [];
+  return items.flatMap((value) => {
+    const item = record(value);
+    const filePath =
+      (item && text(item.file_path)) ||
+      (item && text(item.relative_path)) ||
+      null;
+    const symbolRef =
+      (item && text(item.symbol_ref)) ||
+      (item && text(item.function_name)) ||
+      null;
+    const reason =
+      (item && text(item.reason)) ||
+      (item && text(item.description)) ||
+      "UNSUPPORTED_DYNAMIC_FLOW";
+    const evidenceRef =
+      (item && text(item.finding_ref)) ||
+      (item && text(item.evidence_ref)) ||
+      null;
+    return [
+      {
+        source,
+        file_path: filePath,
+        symbol_ref: symbolRef,
+        reason,
+        evidence_ref: evidenceRef,
+      },
+    ];
+  });
 }
 
 function record(value: unknown): Record<string, unknown> | null {

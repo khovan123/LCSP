@@ -24,6 +24,7 @@ from .resolver import (
     AgenticToolCallResult,
     AgenticToolResolver,
 )
+from .runtime_binding import bind_runtime_handlers
 
 __all__ = [
     "AgenticAuthorizationResult",
@@ -41,6 +42,7 @@ __all__ = [
     "SPRINT6_AGENTIC_CAPABILITIES",
     "SPRINT6_AGENTIC_TOOL_SPECS",
     "TOOL_PBAC_ACTIONS",
+    "bind_runtime_handlers",
     "build_llm_tool_definitions",
     "build_sprint6_agentic_registry",
     "llm_callable_tool_specs",

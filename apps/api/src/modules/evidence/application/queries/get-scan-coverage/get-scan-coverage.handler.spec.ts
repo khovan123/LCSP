@@ -48,6 +48,25 @@ describe("GetScanCoverageHandler", () => {
       "coverage:file:src/a.ts",
       "coverage:file:src/z.py",
     ]);
+    expect(response.result.tool_outcomes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tool_name: "semgrep_ai_usage",
+          outcome: "FAILED",
+        }),
+        expect.objectContaining({
+          tool_name: "syft",
+          outcome: "SUCCESS",
+        }),
+      ]),
+    );
+    expect(response.result.unresolved_dynamic_boundaries).toEqual([
+      expect.objectContaining({
+        source: "PYTHON_ANALYSIS",
+        file_path: "src/runtime.py",
+        reason: "dynamic getattr",
+      }),
+    ]);
     expect(response.result.next_cursor).toBeNull();
     expect(JSON.stringify(response)).not.toContain("raw_source");
     expect(JSON.stringify(response)).not.toContain("secret");
@@ -121,7 +140,29 @@ function buildPrisma(files: Array<Record<string, unknown>>): PrismaService {
         Promise.resolve({
           id: "report-1",
           status: EvidenceAcceptanceStatus.ACCEPTED,
-          evidencePayload: { scan_coverage: { files } },
+          evidencePayload: {
+            scan_coverage: { files },
+            tools_version: {
+              syft: "syft 1.0.0",
+              semgrep_ai_usage: "semgrep 1.99.0",
+            },
+            tool_failures: [
+              {
+                tool_name: "semgrep_ai_usage",
+                tool_version: "semgrep 1.99.0",
+                outcome: "FAILED",
+              },
+            ],
+            python_analysis: {
+              unsupported_dynamic_flows: [
+                {
+                  file_path: "src/runtime.py",
+                  function_name: "dynamic_call",
+                  reason: "dynamic getattr",
+                },
+              ],
+            },
+          },
         }),
       ),
     },

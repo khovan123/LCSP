@@ -3,6 +3,7 @@ import { jest } from "@jest/globals";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { InternalEvidenceController } from "./evidence.controller.js";
+import { InternalAgenticToolDispatchController } from "./agentic-tool-dispatch.controller.js";
 
 function buildController() {
   const technicalEvidenceReportFindUnique = jest.fn();
@@ -124,5 +125,45 @@ describe("InternalEvidenceController runtime reads", () => {
     await expect(
       controller.getTechnicalProfile("missing-profile"),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("InternalAgenticToolDispatchController", () => {
+  it("dispatches get_scan_coverage to QueryBus with pinned artifact versions", async () => {
+    const execute = jest.fn().mockResolvedValue({ status: "READY" });
+    const controller = new InternalAgenticToolDispatchController({
+      execute,
+    } as never);
+
+    await controller.dispatch({
+      tool_name: "get_scan_coverage",
+      assessment_id: "assessment-1",
+      organization_id: "org-1",
+      user_id: "user-1",
+      artifact_versions: {
+        technicalEvidenceReportId: "report-1",
+      },
+      input: {
+        maxResults: 10,
+        pathPrefixes: ["apps/api/"],
+        languages: ["TYPESCRIPT"],
+        dispositions: ["ANALYZED"],
+        cursor: "abc",
+      },
+      correlation_id: "corr-1",
+    });
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assessmentId: "assessment-1",
+        organizationId: "org-1",
+        evidenceReportId: "report-1",
+        maxResults: 10,
+        pathPrefixes: ["apps/api/"],
+        languages: ["TYPESCRIPT"],
+        dispositions: ["ANALYZED"],
+        cursor: "abc",
+      }),
+    );
   });
 });

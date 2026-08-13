@@ -33,6 +33,19 @@ export type ScanCoverageResponse = {
       support_level: string;
       limitation_refs: string[];
     }>;
+    tool_outcomes: Array<{
+      tool_name: string;
+      tool_version: string | null;
+      outcome: string;
+      limitation_refs: string[];
+    }>;
+    unresolved_dynamic_boundaries: Array<{
+      source: string;
+      file_path: string | null;
+      symbol_ref: string | null;
+      reason: string;
+      evidence_ref: string | null;
+    }>;
     counts: {
       total: number;
       analyzed: number;

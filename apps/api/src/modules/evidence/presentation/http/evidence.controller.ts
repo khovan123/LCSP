@@ -125,6 +125,10 @@ export class EvidenceController {
     @Param("assessmentId") assessmentId: string,
     @Param("evidenceReportId") evidenceReportId: string,
     @Query("max_results") maxResultsRaw: string | undefined,
+    @Query("path_prefixes") pathPrefixesRaw: string | undefined,
+    @Query("languages") languagesRaw: string | undefined,
+    @Query("dispositions") dispositionsRaw: string | undefined,
+    @Query("cursor") cursorRaw: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
     const correlationId = request.correlationId as string;
@@ -136,6 +140,10 @@ export class EvidenceController {
           evidenceReportId,
           parseBoundedInteger(maxResultsRaw, 1, 500, correlationId),
           correlationId,
+          parsePathPrefixes(pathPrefixesRaw, correlationId),
+          parseCsv(languagesRaw, correlationId),
+          parseScanCoverageDispositions(dispositionsRaw, correlationId),
+          parseOpaqueCursor(cursorRaw, correlationId),
         ),
       ),
     );
@@ -590,6 +598,33 @@ function parseSearchConfidence(
     });
   }
   return value as SearchEvidenceConfidence;
+}
+
+function parseScanCoverageDispositions(
+  value: string | undefined,
+  correlationId: string,
+): Array<"ANALYZED" | "SKIPPED" | "LIMITED"> {
+  const items = parseCsv(value, correlationId);
+  const allowed = new Set(["ANALYZED", "SKIPPED", "LIMITED"]);
+  if (items.some((item) => !allowed.has(item))) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return items as Array<"ANALYZED" | "SKIPPED" | "LIMITED">;
+}
+
+function parseOpaqueCursor(
+  value: string | undefined,
+  correlationId: string,
+): string | null {
+  if (!value) return null;
+  if (value.length > 512) {
+    throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      status: HttpStatus.NOT_FOUND,
+    });
+  }
+  return value;
 }
 
 function parseProvider(
