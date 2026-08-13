@@ -1,6 +1,11 @@
 import { NotFoundException } from "@nestjs/common";
 import { jest } from "@jest/globals";
-import { AGENTIC_TOOL_NAMES } from "@lcsp/contracts/evidence";
+import {
+  AGENTIC_TOOL_NAMES,
+  ARTIFACT_CHAIN_STAGES,
+  ASSESSMENT_CONTEXT_ANSWER_FIELDS,
+  ASSESSMENT_CONTEXT_INCLUDES,
+} from "@lcsp/contracts/evidence";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { InternalEvidenceController } from "./evidence.controller.js";
@@ -218,7 +223,7 @@ describe("InternalAgenticToolDispatchController", () => {
         artifact_versions: { technicalEvidenceReportId: "report-1" },
         input: {
           findingId: "finding:finding-1",
-          include: ["STRUCTURAL_FACTS", "RELATED_FINDINGS"],
+          include: ["LOCATION", "RELATED_REFS"],
         },
         correlation_id: "corr-1",
       },
@@ -227,7 +232,7 @@ describe("InternalAgenticToolDispatchController", () => {
         organizationId: "org-1",
         evidenceReportId: "report-1",
         findingId: "finding-1",
-        include: ["STRUCTURAL_FACTS", "RELATED_FINDINGS"],
+        include: ["LOCATION", "RELATED_REFS"],
         correlationId: "corr-1",
       },
     },
@@ -301,7 +306,7 @@ describe("InternalAgenticToolDispatchController", () => {
         artifact_versions: { technicalEvidenceReportId: "report-1" },
         input: {
           symbolRef: "symbol:symbol-1",
-          include: ["IMPORTS", "CALLERS"],
+          include: ["CATEGORIES", "CALLERS"],
           maxNeighbors: 8,
         },
         correlation_id: "corr-1",
@@ -311,7 +316,7 @@ describe("InternalAgenticToolDispatchController", () => {
         organizationId: "org-1",
         evidenceReportId: "report-1",
         symbolNodeId: "symbol-1",
-        include: ["IMPORTS", "CALLERS"],
+        include: ["CATEGORIES", "CALLERS"],
         maxNeighbors: 8,
         correlationId: "corr-1",
       },
@@ -326,7 +331,7 @@ describe("InternalAgenticToolDispatchController", () => {
         artifact_versions: { technicalEvidenceReportId: "report-1" },
         input: {
           startRef: "node:start-1",
-          direction: "DOWNSTREAM",
+          direction: "FORWARD",
           maxHops: 4,
           desiredStages: ["INPUT", "INVOCATION"],
         },
@@ -337,7 +342,7 @@ describe("InternalAgenticToolDispatchController", () => {
         organizationId: "org-1",
         evidenceReportId: "report-1",
         startNodeId: "start-1",
-        direction: "DOWNSTREAM",
+        direction: "FORWARD",
         maxHops: 4,
         correlationId: "corr-1",
         desiredStages: ["INPUT", "INVOCATION"],
@@ -405,8 +410,8 @@ describe("InternalAgenticToolDispatchController", () => {
         artifact_versions: { technicalEvidenceReportId: "report-1" },
         input: {
           startRef: "node:start-1",
-          direction: "UPSTREAM",
-          dataCategories: ["PERSONAL_DATA"],
+          direction: "BACKWARD",
+          dataCategories: ["LEGAL"],
           maxHops: 6,
           maxResults: 12,
         },
@@ -417,8 +422,8 @@ describe("InternalAgenticToolDispatchController", () => {
         organizationId: "org-1",
         evidenceReportId: "report-1",
         startNodeId: "start-1",
-        direction: "UPSTREAM",
-        dataCategories: ["PERSONAL_DATA"],
+        direction: "BACKWARD",
+        dataCategories: ["LEGAL"],
         maxHops: 6,
         maxResults: 12,
         correlationId: "corr-1",
@@ -434,7 +439,7 @@ describe("InternalAgenticToolDispatchController", () => {
         artifact_versions: { technicalEvidenceReportId: "report-1" },
         input: {
           seedSymbolRef: "symbol:seed-1",
-          dimensions: ["CALL_SHAPE", "PROVIDER_FRAMEWORK"],
+          dimensions: ["IMPORTS", "DATA_FLOW"],
           pathPrefixes: ["apps/web/"],
           maxResults: 9,
         },
@@ -445,7 +450,7 @@ describe("InternalAgenticToolDispatchController", () => {
         organizationId: "org-1",
         evidenceReportId: "report-1",
         seedNodeId: "seed-1",
-        dimensions: ["CALL_SHAPE", "PROVIDER_FRAMEWORK"],
+        dimensions: ["IMPORTS", "DATA_FLOW"],
         maxResults: 9,
         correlationId: "corr-1",
         pathPrefixes: ["apps/web/"],
@@ -460,7 +465,7 @@ describe("InternalAgenticToolDispatchController", () => {
         user_id: "user-1",
         artifact_versions: { technicalEvidenceReportId: "report-1" },
         input: {
-          manifestKinds: ["DOCKERFILE", "KUBERNETES"],
+          manifestKinds: ["CONTAINER", "KUBERNETES"],
           environments: ["PRODUCTION"],
           pathPrefixes: ["deploy/"],
           cursor: "cursor-3",
@@ -472,7 +477,7 @@ describe("InternalAgenticToolDispatchController", () => {
         assessmentId: "assessment-1",
         organizationId: "org-1",
         evidenceReportId: "report-1",
-        manifestKinds: ["DOCKERFILE", "KUBERNETES"],
+        manifestKinds: ["CONTAINER", "KUBERNETES"],
         environments: ["PRODUCTION"],
         maxResults: 11,
         correlationId: "corr-1",
@@ -489,8 +494,14 @@ describe("InternalAgenticToolDispatchController", () => {
         user_id: "user-1",
         artifact_versions: { wizardProfileId: "wizard-1" },
         input: {
-          include: ["SUBMITTED_ANSWERS", "PINNED_ARTIFACTS"],
-          answerFields: ["LEGAL_BASIS", "SUMMARY"],
+          include: [
+            ASSESSMENT_CONTEXT_INCLUDES.submittedAnswers,
+            ASSESSMENT_CONTEXT_INCLUDES.pinnedArtifacts,
+          ],
+          answerFields: [
+            ASSESSMENT_CONTEXT_ANSWER_FIELDS.systemPurpose,
+            ASSESSMENT_CONTEXT_ANSWER_FIELDS.providerDeclaration,
+          ],
         },
         correlation_id: "corr-1",
       },
@@ -498,8 +509,14 @@ describe("InternalAgenticToolDispatchController", () => {
         assessmentId: "assessment-1",
         organizationId: "org-1",
         wizardProfileId: "wizard-1",
-        includes: ["SUBMITTED_ANSWERS", "PINNED_ARTIFACTS"],
-        answerFields: ["LEGAL_BASIS", "SUMMARY"],
+        includes: [
+          ASSESSMENT_CONTEXT_INCLUDES.submittedAnswers,
+          ASSESSMENT_CONTEXT_INCLUDES.pinnedArtifacts,
+        ],
+        answerFields: [
+          ASSESSMENT_CONTEXT_ANSWER_FIELDS.systemPurpose,
+          ASSESSMENT_CONTEXT_ANSWER_FIELDS.providerDeclaration,
+        ],
         correlationId: "corr-1",
       },
     },
@@ -513,7 +530,10 @@ describe("InternalAgenticToolDispatchController", () => {
         artifact_versions: {},
         input: {
           anchor: { artifactRef: "flow:flow-1" },
-          requiredStages: ["TECHNICAL_EVIDENCE_REPORT", "VERIFIED_PROFILE"],
+          requiredStages: [
+            ARTIFACT_CHAIN_STAGES.technicalEvidence,
+            ARTIFACT_CHAIN_STAGES.verifiedProfile,
+          ],
           exactVersions: true,
         },
         correlation_id: "corr-1",
@@ -523,7 +543,10 @@ describe("InternalAgenticToolDispatchController", () => {
         organizationId: "org-1",
         correlationId: "corr-1",
         artifactRef: "flow:flow-1",
-        requiredStages: ["TECHNICAL_EVIDENCE_REPORT", "VERIFIED_PROFILE"],
+        requiredStages: [
+          ARTIFACT_CHAIN_STAGES.technicalEvidence,
+          ARTIFACT_CHAIN_STAGES.verifiedProfile,
+        ],
         exactVersions: true,
       },
     },
@@ -538,7 +561,7 @@ describe("InternalAgenticToolDispatchController", () => {
         input: {
           flowRef: "flow:flow-1",
           conflictIds: ["conflict:one", "conflict:two"],
-          statuses: ["OPEN", "ESCALATED"],
+          statuses: ["OPEN", "RESOLVED"],
           cursor: "cursor-2",
           maxResults: 20,
         },
@@ -552,7 +575,7 @@ describe("InternalAgenticToolDispatchController", () => {
         conflictIds: ["one", "two"],
         cursor: "cursor-2",
         maxResults: 20,
-        statuses: ["OPEN", "ESCALATED"],
+        statuses: ["OPEN", "RESOLVED"],
       },
     },
     {
@@ -567,7 +590,7 @@ describe("InternalAgenticToolDispatchController", () => {
           technicalEvidenceReportId: "report-1",
         },
         input: {
-          candidateKinds: ["MODEL", "PIPELINE"],
+          candidateKinds: ["PROVIDER_USAGE", "DEPLOYMENT"],
           seedRefs: ["symbol:ingress-1"],
           excludeTargetIds: ["target-1"],
           maxResults: 10,
@@ -579,7 +602,7 @@ describe("InternalAgenticToolDispatchController", () => {
         organizationId: "org-1",
         wizardProfileId: "wizard-1",
         evidenceReportId: "report-1",
-        candidateKinds: ["MODEL", "PIPELINE"],
+        candidateKinds: ["PROVIDER_USAGE", "DEPLOYMENT"],
         seedRefs: ["symbol:ingress-1"],
         excludeTargetIds: ["target-1"],
         maxResults: 10,
@@ -822,7 +845,8 @@ describe("InternalAgenticToolDispatchController", () => {
         expect((query.effectiveDate as Date).toISOString()).toBe(
           expected.effectiveDateIso,
         );
-        const { effectiveDateIso, ...rest } = expected;
+        const rest = { ...expected };
+        delete (rest as { effectiveDateIso?: string }).effectiveDateIso;
         expect(query).toEqual(expect.objectContaining(rest));
         return;
       }

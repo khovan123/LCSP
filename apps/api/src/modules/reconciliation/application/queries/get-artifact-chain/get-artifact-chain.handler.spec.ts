@@ -45,6 +45,13 @@ describe("GetArtifactChainHandler", () => {
             status: WizardProfileStatus.SUBMITTED,
           }),
         ),
+        findFirst: jest.fn().mockImplementation(() =>
+          Promise.resolve({
+            id: "wizard-1",
+            version: 2,
+            status: WizardProfileStatus.SUBMITTED,
+          }),
+        ),
       },
       technicalProfile: {
         findFirst: jest.fn().mockImplementation(() =>

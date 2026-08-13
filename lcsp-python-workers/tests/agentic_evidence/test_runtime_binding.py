@@ -11,6 +11,8 @@ from lcsp_workers.agentic_evidence.runtime_binding import bind_runtime_handlers
 
 
 def _request_for(tool_name: str, artifact_versions: dict[str, str]) -> AgenticToolRequest:
+    registry = build_sprint6_agentic_registry()
+    capability = registry.capability(tool_name)
     return AgenticToolRequest.model_validate(
         {
             "toolName": tool_name,
@@ -21,10 +23,10 @@ def _request_for(tool_name: str, artifact_versions: dict[str, str]) -> AgenticTo
             "correlationId": str(uuid4()),
             "scope": {"pathPrefixes": ["apps/api/"]},
             "budget": {
-                "maxItems": 10,
-                "maxDepth": 2,
-                "maxBytes": 16_384,
-                "maxDurationMs": 1_000,
+                "maxItems": min(10, capability.max_items),
+                "maxDepth": min(1, capability.max_depth),
+                "maxBytes": min(16_384, capability.max_bytes),
+                "maxDurationMs": min(1_000, capability.max_duration_ms),
             },
             "input": {"maxResults": 10},
         }
@@ -85,7 +87,7 @@ def test_bound_runtime_handler_dispatches_expected_worker_payload() -> None:
             "scope": {"pathPrefixes": ["apps/api/"]},
             "budget": {
                 "maxItems": 10,
-                "maxDepth": 2,
+                "maxDepth": 1,
                 "maxBytes": 16_384,
                 "maxDurationMs": 1_000,
             },

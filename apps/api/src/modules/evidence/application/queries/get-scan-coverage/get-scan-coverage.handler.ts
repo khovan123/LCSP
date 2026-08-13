@@ -224,9 +224,6 @@ function coverageData(payload: unknown): {
 function toolOutcomes(
   payload: Record<string, unknown> | null,
 ): ScanCoverageResponse["result"]["tool_outcomes"] {
-  const toolsVersion = record(payload?.report_provenance)
-    ? record(payload?.report_provenance)?.schema_version
-    : null;
   const versions = record(payload?.tools_version);
   const failures = Array.isArray(payload?.tool_failures)
     ? payload.tool_failures
