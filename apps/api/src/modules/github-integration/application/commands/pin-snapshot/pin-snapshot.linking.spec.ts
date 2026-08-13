@@ -68,12 +68,11 @@ describe("PinSnapshotHandler repository reuse", () => {
       assessment: {
         findUnique: jest
           .fn<
-            () =>
-              Promise<{
-                id: string;
-                organizationId: string;
-                ownerId: string;
-              } | null>
+            () => Promise<{
+              id: string;
+              organizationId: string;
+              ownerId: string;
+            } | null>
           >()
           .mockResolvedValue({
             id: "assessment-1",

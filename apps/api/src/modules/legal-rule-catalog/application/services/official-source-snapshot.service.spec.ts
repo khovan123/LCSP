@@ -7,27 +7,27 @@ describe("OfficialSourceSnapshotService", () => {
     const create = jest
       .fn<() => Promise<Record<string, unknown>>>()
       .mockResolvedValue({
-      snapshotRef: "snapshot:LAW-71-2025-QH15:abcd1234ef56",
-      snapshotId: "LAW-71-2025-QH15:abcd1234ef56",
-      catalogSourceRef: "catalog-source:vbpl.vn:law:71-2025-qh15",
-      adminCatalogVersion: "catalog_v2026_08",
-      documentId: "LAW-71-2025-QH15",
-      documentNumber: "71/2025/QH15",
-      sourceUrl: "https://vbpl.vn/TW/Pages/vbpq-toanvan.aspx?ItemID=179989",
-      finalUrl: "https://vbpl.vn/TW/Pages/vbpq-toanvan.aspx?ItemID=179989",
-      contentType: "text/html",
-      byteLength: 2048,
-      contentSha256:
-        "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-      snapshotObjectKey:
-        "legal-source-snapshots/catalog_vbpl_vn/LAW-71-2025-QH15/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/LAW-71-2025-QH15.source.html",
-      provenanceRef: "prov:fetch:LAW-71-2025-QH15:abcd1234ef56",
-      retrievedAt: new Date("2026-08-12T10:00:00.000Z"),
-      sourceEffectStatus: "Còn hiệu lực",
-      normalizationSource: "VBPL_GATEWAY_JSON",
-      identityVerified: true,
-      correlationId: "corr-1",
-      createdAt: new Date("2026-08-12T10:00:00.000Z"),
+        snapshotRef: "snapshot:LAW-71-2025-QH15:abcd1234ef56",
+        snapshotId: "LAW-71-2025-QH15:abcd1234ef56",
+        catalogSourceRef: "catalog-source:vbpl.vn:law:71-2025-qh15",
+        adminCatalogVersion: "catalog_v2026_08",
+        documentId: "LAW-71-2025-QH15",
+        documentNumber: "71/2025/QH15",
+        sourceUrl: "https://vbpl.vn/TW/Pages/vbpq-toanvan.aspx?ItemID=179989",
+        finalUrl: "https://vbpl.vn/TW/Pages/vbpq-toanvan.aspx?ItemID=179989",
+        contentType: "text/html",
+        byteLength: 2048,
+        contentSha256:
+          "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        snapshotObjectKey:
+          "legal-source-snapshots/catalog_vbpl_vn/LAW-71-2025-QH15/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/LAW-71-2025-QH15.source.html",
+        provenanceRef: "prov:fetch:LAW-71-2025-QH15:abcd1234ef56",
+        retrievedAt: new Date("2026-08-12T10:00:00.000Z"),
+        sourceEffectStatus: "Còn hiệu lực",
+        normalizationSource: "VBPL_GATEWAY_JSON",
+        identityVerified: true,
+        correlationId: "corr-1",
+        createdAt: new Date("2026-08-12T10:00:00.000Z"),
       });
     const prisma = {
       legalSourceSnapshot: {
@@ -38,7 +38,9 @@ describe("OfficialSourceSnapshotService", () => {
       },
     };
     const auditWriter = {
-      write: jest.fn<(entry?: unknown) => Promise<void>>().mockResolvedValue(undefined),
+      write: jest
+        .fn<(entry?: unknown) => Promise<void>>()
+        .mockResolvedValue(undefined),
     };
     const service = new OfficialSourceSnapshotService(
       prisma as never,

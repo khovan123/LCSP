@@ -83,9 +83,13 @@ export class RabbitMqClient implements OnModuleDestroy {
       });
 
       const channel = await connection.createChannel();
-      await channel.assertExchange(this.resolveExchangeName(), this.exchangeType, {
-        durable: true,
-      });
+      await channel.assertExchange(
+        this.resolveExchangeName(),
+        this.exchangeType,
+        {
+          durable: true,
+        },
+      );
       this.connection = connection;
       this.channel = channel;
 

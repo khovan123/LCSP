@@ -11,14 +11,13 @@ describe("CitationLocatorValidatorService", () => {
   >;
   let mockFindChunk: ReturnType<
     typeof jest.fn<
-      () =>
-        Promise<{
-          id: string;
-          legalCorpusVersionId: string;
-          documentId: string;
-          locator: string;
-          legalStatus: string;
-        } | null>
+      () => Promise<{
+        id: string;
+        legalCorpusVersionId: string;
+        documentId: string;
+        locator: string;
+        legalStatus: string;
+      } | null>
     >
   >;
 
@@ -28,14 +27,13 @@ describe("CitationLocatorValidatorService", () => {
       .mockResolvedValue({ id: "v1" });
     mockFindChunk = jest
       .fn<
-        () =>
-          Promise<{
-            id: string;
-            legalCorpusVersionId: string;
-            documentId: string;
-            locator: string;
-            legalStatus: string;
-          } | null>
+        () => Promise<{
+          id: string;
+          legalCorpusVersionId: string;
+          documentId: string;
+          locator: string;
+          legalStatus: string;
+        } | null>
       >()
       .mockResolvedValue({
         id: "chunk-1",

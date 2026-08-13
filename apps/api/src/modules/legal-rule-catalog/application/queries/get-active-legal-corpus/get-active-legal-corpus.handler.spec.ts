@@ -11,14 +11,13 @@ describe("GetActiveLegalCorpusHandler", () => {
       legalCorpusVersion: {
         findFirst: jest
           .fn<
-            () =>
-              Promise<{
-                id: string;
-                version: string;
-                status: ReturnType<typeof toPrismaLegalRuleLifecycleStatus>;
-                createdAt: Date;
-                approvedAt: Date;
-              } | null>
+            () => Promise<{
+              id: string;
+              version: string;
+              status: ReturnType<typeof toPrismaLegalRuleLifecycleStatus>;
+              createdAt: Date;
+              approvedAt: Date;
+            } | null>
           >()
           .mockResolvedValue({
             id: "corpus-v1",

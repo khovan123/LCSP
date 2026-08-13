@@ -7,12 +7,10 @@ import { InternalEvidenceController } from "./evidence.controller.js";
 import { InternalAgenticToolDispatchController } from "./agentic-tool-dispatch.controller.js";
 
 function buildController() {
-  const technicalEvidenceReportFindUnique = jest.fn<
-    (args?: unknown) => Promise<Record<string, unknown> | null>
-  >();
-  const technicalProfileFindUnique = jest.fn<
-    (args?: unknown) => Promise<Record<string, unknown> | null>
-  >();
+  const technicalEvidenceReportFindUnique =
+    jest.fn<(args?: unknown) => Promise<Record<string, unknown> | null>>();
+  const technicalProfileFindUnique =
+    jest.fn<(args?: unknown) => Promise<Record<string, unknown> | null>>();
   const commandBus = {
     execute: jest.fn<(query?: unknown) => Promise<{ status: string }>>(),
   };
@@ -50,7 +48,8 @@ describe("InternalEvidenceController runtime reads", () => {
     const result = await controller.getTechnicalEvidenceReport("report-1");
 
     expect(technicalEvidenceReportFindUnique).toHaveBeenCalledTimes(1);
-    const [findUniqueArgs] = technicalEvidenceReportFindUnique.mock.calls[0] ?? [];
+    const [findUniqueArgs] =
+      technicalEvidenceReportFindUnique.mock.calls[0] ?? [];
     expect(findUniqueArgs).toEqual({
       where: { id: "report-1" },
       select: {

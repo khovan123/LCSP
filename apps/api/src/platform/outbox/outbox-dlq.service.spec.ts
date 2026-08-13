@@ -43,12 +43,12 @@ describe("OutboxDlqService", () => {
       jest.fn<OutboxRepository["resetMessageForReplay"]>();
     deleteMessage = jest.fn<OutboxRepository["deleteMessage"]>();
     writeAudit = jest.fn<AuditWriterService["write"]>();
-    repositoryScanJobFindUnique = jest
-      .fn<() => Promise<Record<string, unknown> | null>>();
-    technicalEvidenceReportFindUnique = jest
-      .fn<() => Promise<Record<string, unknown> | null>>();
-    technicalProfileFindUnique = jest
-      .fn<() => Promise<Record<string, unknown> | null>>();
+    repositoryScanJobFindUnique =
+      jest.fn<() => Promise<Record<string, unknown> | null>>();
+    technicalEvidenceReportFindUnique =
+      jest.fn<() => Promise<Record<string, unknown> | null>>();
+    technicalProfileFindUnique =
+      jest.fn<() => Promise<Record<string, unknown> | null>>();
 
     const outboxRepositoryMock = {
       findDlqMessages,

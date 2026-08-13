@@ -36,36 +36,37 @@ function buildHandler(input?: {
     legalRetrievalIndex: {
       findFirst: jest
         .fn<() => Promise<object | null>>()
-        .mockResolvedValue(hasIndex ? (input?.index ?? null) : { id: "index-1" }),
+        .mockResolvedValue(
+          hasIndex ? (input?.index ?? null) : { id: "index-1" },
+        ),
     },
     verifiedProfile: {
       findMany: jest
         .fn<
-          () =>
-            Promise<
-              Array<{
-                id: string;
-                assessmentId: string;
-                organizationId: string;
-                approvedAt: Date | null;
-              }>
-            >
+          () => Promise<
+            Array<{
+              id: string;
+              assessmentId: string;
+              organizationId: string;
+              approvedAt: Date | null;
+            }>
+          >
         >()
         .mockResolvedValue(
-        input?.approvedProfiles ?? [
-          {
-            id: "vp-1",
-            assessmentId: "assessment-1",
-            organizationId: "org-1",
-            approvedAt: new Date("2026-08-11T00:00:00.000Z"),
-          },
-          {
-            id: "vp-2",
-            assessmentId: "assessment-2",
-            organizationId: "org-1",
-            approvedAt: new Date("2026-08-11T00:05:00.000Z"),
-          },
-        ],
+          input?.approvedProfiles ?? [
+            {
+              id: "vp-1",
+              assessmentId: "assessment-1",
+              organizationId: "org-1",
+              approvedAt: new Date("2026-08-11T00:00:00.000Z"),
+            },
+            {
+              id: "vp-2",
+              assessmentId: "assessment-2",
+              organizationId: "org-1",
+              approvedAt: new Date("2026-08-11T00:05:00.000Z"),
+            },
+          ],
         ),
     },
     legalRuleMatch: {

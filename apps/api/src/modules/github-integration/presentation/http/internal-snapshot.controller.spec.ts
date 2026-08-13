@@ -25,15 +25,14 @@ describe("InternalSnapshotController", () => {
     const queryBus = {
       execute: jest
         .fn<
-          () =>
-            Promise<{
-              snapshotId: string;
-              commitSha: string;
-              repositoryFullName: string;
-              contentType: string;
-              resolvedUrl: string;
-              stream: Readable;
-            }>
+          () => Promise<{
+            snapshotId: string;
+            commitSha: string;
+            repositoryFullName: string;
+            contentType: string;
+            resolvedUrl: string;
+            stream: Readable;
+          }>
         >()
         .mockResolvedValue({
           snapshotId: "snapshot-1",

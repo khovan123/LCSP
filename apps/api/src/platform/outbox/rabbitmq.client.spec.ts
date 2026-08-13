@@ -4,11 +4,7 @@ import { jest } from "@jest/globals";
 interface FakeChannel {
   assertExchange: ReturnType<
     typeof jest.fn<
-      (
-        exchange: string,
-        type: string,
-        options?: unknown,
-      ) => Promise<void>
+      (exchange: string, type: string, options?: unknown) => Promise<void>
     >
   >;
   publish: ReturnType<
@@ -100,9 +96,13 @@ describe("RabbitMqClient", () => {
 
     expect(connect).toHaveBeenCalledTimes(1);
     expect(connection.createChannel).toHaveBeenCalledTimes(1);
-    expect(channel.assertExchange).toHaveBeenCalledWith(expectedExchange, "topic", {
-      durable: true,
-    });
+    expect(channel.assertExchange).toHaveBeenCalledWith(
+      expectedExchange,
+      "topic",
+      {
+        durable: true,
+      },
+    );
   });
 
   it("publishes with the exact exchange, routing key, and JSON payload", async () => {

@@ -5,9 +5,8 @@ import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.
 import { InternalWizardController } from "./internal-wizard.controller.js";
 
 function buildController() {
-  const wizardProfileFindUnique = jest.fn<
-    (args?: unknown) => Promise<Record<string, unknown> | null>
-  >();
+  const wizardProfileFindUnique =
+    jest.fn<(args?: unknown) => Promise<Record<string, unknown> | null>>();
   const prisma = {
     wizardProfile: { findUnique: wizardProfileFindUnique },
   } as unknown as PrismaService;

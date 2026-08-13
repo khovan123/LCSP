@@ -267,7 +267,9 @@ function scopeCoverageLimited(
   pathPrefixes: string[],
 ): boolean {
   if (!isRecord(payload)) return false;
-  const coverage = isRecord(payload.scan_coverage) ? payload.scan_coverage : null;
+  const coverage = isRecord(payload.scan_coverage)
+    ? payload.scan_coverage
+    : null;
   const files = Array.isArray(coverage?.files) ? coverage.files : [];
   return files.some((item) => {
     if (!isRecord(item)) return false;
