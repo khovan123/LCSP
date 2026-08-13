@@ -119,13 +119,9 @@ describe("GetArtifactChainHandler", () => {
     });
 
     const response = await handler.execute(
-      new GetArtifactChainQuery(
-        "assessment-1",
-        "org-1",
-        "corr-2",
-        null,
-        [ARTIFACT_CHAIN_STAGES.verifiedProfile],
-      ),
+      new GetArtifactChainQuery("assessment-1", "org-1", "corr-2", null, [
+        ARTIFACT_CHAIN_STAGES.verifiedProfile,
+      ]),
     );
 
     expect(response.coverage_state).toBe(AGENTIC_TOOL_COVERAGE_STATES.limited);
@@ -159,9 +155,10 @@ describe("GetArtifactChainHandler", () => {
           ),
       },
       technicalProfile: {
-        findFirst: jest
-          .fn()
-          .mockResolvedValue({ id: "profile-1", evidenceReportId: "report-anchor" }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: "profile-1",
+          evidenceReportId: "report-anchor",
+        }),
       },
     });
 

@@ -39,9 +39,9 @@ export type ReconciliationContextResponse = {
     }>;
     permitted_resolution_paths: Array<{
       path_id: typeof RECONCILIATION_RESOLUTION_PATHS.humanReconcile;
-        required_actor: string;
-        required_state: typeof RECONCILIATION_CONTEXT_STATUSES.open;
-      }>;
+      required_actor: string;
+      required_state: typeof RECONCILIATION_CONTEXT_STATUSES.open;
+    }>;
     next_cursor: string | null;
     truncated: boolean;
   };

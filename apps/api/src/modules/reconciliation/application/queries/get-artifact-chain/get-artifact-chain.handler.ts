@@ -62,10 +62,7 @@ export class GetArtifactChainHandler implements IQueryHandler<
           query.artifactRef,
           query.correlationId,
         )
-      : await this.resolveLatestChain(
-          assessment.id,
-          query.organizationId,
-        );
+      : await this.resolveLatestChain(assessment.id, query.organizationId);
     const { report, wizardProfile, flow, conflicts, verifiedProfile } = chain;
 
     const links: ArtifactChainLink[] = [];
@@ -259,21 +256,17 @@ export class GetArtifactChainHandler implements IQueryHandler<
   ) {
     const anchor = parseArtifactRef(artifactRef, correlationId);
 
-    let report:
-      | { id: string; schemaVersion: string; status: string }
-      | null = null;
-    let flow:
-      | { id: string; schemaVersion: string; status: string }
-      | null = null;
+    let report: { id: string; schemaVersion: string; status: string } | null =
+      null;
+    let flow: { id: string; schemaVersion: string; status: string } | null =
+      null;
     let conflicts: Array<{ id: string; status: string }> = [];
-    let verifiedProfile:
-      | {
-          id: string;
-          schemaVersion: string;
-          status: string;
-          wizardProfileId: string | null;
-        }
-      | null = null;
+    let verifiedProfile: {
+      id: string;
+      schemaVersion: string;
+      status: string;
+      wizardProfileId: string | null;
+    } | null = null;
 
     if (anchor.kind === "ter") {
       report = await this.prisma.technicalEvidenceReport.findFirst({
@@ -281,11 +274,9 @@ export class GetArtifactChainHandler implements IQueryHandler<
         select: { id: true, schemaVersion: true, status: true },
       });
       if (!report) {
-        throw problemException(
-          ASSESSMENT_ERROR_CODES.notFound,
-          correlationId,
-          { status: HttpStatus.NOT_FOUND },
-        );
+        throw problemException(ASSESSMENT_ERROR_CODES.notFound, correlationId, {
+          status: HttpStatus.NOT_FOUND,
+        });
       }
       const profile = await this.prisma.technicalProfile.findFirst({
         where: { evidenceReportId: report.id, assessmentId, organizationId },
@@ -293,21 +284,28 @@ export class GetArtifactChainHandler implements IQueryHandler<
       });
       flow = profile
         ? await this.prisma.aIUsageFlow.findFirst({
-            where: { technicalProfileId: profile.id, assessmentId, organizationId },
+            where: {
+              technicalProfileId: profile.id,
+              assessmentId,
+              organizationId,
+            },
             select: { id: true, schemaVersion: true, status: true },
           })
         : null;
     } else if (anchor.kind === "flow") {
       flow = await this.prisma.aIUsageFlow.findFirst({
         where: { id: anchor.id, assessmentId, organizationId },
-        select: { id: true, schemaVersion: true, status: true, technicalProfileId: true },
+        select: {
+          id: true,
+          schemaVersion: true,
+          status: true,
+          technicalProfileId: true,
+        },
       });
       if (!flow) {
-        throw problemException(
-          ASSESSMENT_ERROR_CODES.notFound,
-          correlationId,
-          { status: HttpStatus.NOT_FOUND },
-        );
+        throw problemException(ASSESSMENT_ERROR_CODES.notFound, correlationId, {
+          status: HttpStatus.NOT_FOUND,
+        });
       }
       const profile = await this.prisma.technicalProfile.findFirst({
         where: { id: flow.technicalProfileId, assessmentId, organizationId },
@@ -315,7 +313,11 @@ export class GetArtifactChainHandler implements IQueryHandler<
       });
       report = profile
         ? await this.prisma.technicalEvidenceReport.findFirst({
-            where: { id: profile.evidenceReportId, assessmentId, organizationId },
+            where: {
+              id: profile.evidenceReportId,
+              assessmentId,
+              organizationId,
+            },
             select: { id: true, schemaVersion: true, status: true },
           })
         : null;
@@ -325,16 +327,19 @@ export class GetArtifactChainHandler implements IQueryHandler<
         select: { id: true, status: true, aiUsageFlowId: true },
       });
       if (!conflict) {
-        throw problemException(
-          ASSESSMENT_ERROR_CODES.notFound,
-          correlationId,
-          { status: HttpStatus.NOT_FOUND },
-        );
+        throw problemException(ASSESSMENT_ERROR_CODES.notFound, correlationId, {
+          status: HttpStatus.NOT_FOUND,
+        });
       }
       conflicts = [{ id: conflict.id, status: conflict.status }];
       flow = await this.prisma.aIUsageFlow.findFirst({
         where: { id: conflict.aiUsageFlowId, assessmentId, organizationId },
-        select: { id: true, schemaVersion: true, status: true, technicalProfileId: true },
+        select: {
+          id: true,
+          schemaVersion: true,
+          status: true,
+          technicalProfileId: true,
+        },
       });
       if (flow) {
         const profile = await this.prisma.technicalProfile.findFirst({
@@ -343,7 +348,11 @@ export class GetArtifactChainHandler implements IQueryHandler<
         });
         report = profile
           ? await this.prisma.technicalEvidenceReport.findFirst({
-              where: { id: profile.evidenceReportId, assessmentId, organizationId },
+              where: {
+                id: profile.evidenceReportId,
+                assessmentId,
+                organizationId,
+              },
               select: { id: true, schemaVersion: true, status: true },
             })
           : null;
@@ -360,15 +369,22 @@ export class GetArtifactChainHandler implements IQueryHandler<
         },
       });
       if (!verifiedProfile) {
-        throw problemException(
-          ASSESSMENT_ERROR_CODES.notFound,
-          correlationId,
-          { status: HttpStatus.NOT_FOUND },
-        );
+        throw problemException(ASSESSMENT_ERROR_CODES.notFound, correlationId, {
+          status: HttpStatus.NOT_FOUND,
+        });
       }
       flow = await this.prisma.aIUsageFlow.findFirst({
-        where: { id: verifiedProfile.aiUsageFlowId, assessmentId, organizationId },
-        select: { id: true, schemaVersion: true, status: true, technicalProfileId: true },
+        where: {
+          id: verifiedProfile.aiUsageFlowId,
+          assessmentId,
+          organizationId,
+        },
+        select: {
+          id: true,
+          schemaVersion: true,
+          status: true,
+          technicalProfileId: true,
+        },
       });
       if (flow) {
         const profile = await this.prisma.technicalProfile.findFirst({
@@ -377,7 +393,11 @@ export class GetArtifactChainHandler implements IQueryHandler<
         });
         report = profile
           ? await this.prisma.technicalEvidenceReport.findFirst({
-              where: { id: profile.evidenceReportId, assessmentId, organizationId },
+              where: {
+                id: profile.evidenceReportId,
+                assessmentId,
+                organizationId,
+              },
               select: { id: true, schemaVersion: true, status: true },
             })
           : null;
@@ -421,9 +441,13 @@ function parseArtifactRef(artifactRef: string, correlationId: string) {
       artifactRef,
     );
   if (!match?.groups?.kind || !match.groups.id) {
-    throw problemException(ASSESSMENT_ERROR_CODES.invalidRequest, correlationId, {
-      status: HttpStatus.UNPROCESSABLE_ENTITY,
-    });
+    throw problemException(
+      ASSESSMENT_ERROR_CODES.invalidRequest,
+      correlationId,
+      {
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+      },
+    );
   }
   return {
     kind: match.groups.kind as "ter" | "flow" | "conflict" | "verified",
