@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from lcsp_workers.llm import LLMToolCall, LLMToolDefinition
 
+from .authorization import AgenticToolAuthorizer
 from .catalog import build_llm_tool_definitions
 from .registry import AgenticToolRegistry, AgenticToolRequest, AgenticToolValidationError
 
@@ -15,6 +16,8 @@ class AgenticInvocationContext:
     assessment_id: UUID
     workflow_run_id: UUID
     correlation_id: UUID
+    user_id: str
+    organization_id: str
     artifact_versions: dict[str, str]
     scope: dict[str, Any]
 
@@ -23,20 +26,30 @@ class AgenticInvocationContext:
 class AgenticToolCallResult:
     call_id: str | None
     tool_name: str
+    authorized_action: str
     response: Mapping[str, Any]
 
 
 class AgenticToolResolver:
     """Bridge manual provider tool calls to the fail-closed Sprint 6 registry.
 
-    The resolver exposes only catalog entries marked ``LLM_CALLABLE``. It never
-    constructs idempotency keys or invokes mutation/system tools on behalf of a model.
+    The resolver exposes only catalog entries marked ``LLM_CALLABLE``. Every call
+    passes strict request validation before API PBAC preflight, then dispatches only
+    to an explicitly registered read handler. Mutations/system tools are never
+    synthesized on behalf of a model.
     """
 
-    def __init__(self, registry: AgenticToolRegistry, *, max_tool_calls: int) -> None:
+    def __init__(
+        self,
+        registry: AgenticToolRegistry,
+        authorizer: AgenticToolAuthorizer,
+        *,
+        max_tool_calls: int,
+    ) -> None:
         if max_tool_calls < 1 or max_tool_calls > 32:
             raise ValueError("max_tool_calls must be between 1 and 32")
         self._registry = registry
+        self._authorizer = authorizer
         self._max_tool_calls = max_tool_calls
 
     def tool_definitions(self) -> list[LLMToolDefinition]:
@@ -77,11 +90,21 @@ class AgenticToolResolver:
                     "input": call.arguments,
                 }
             )
+
+            # Validate exposure/schema/budget before making any authorization or data call.
+            self._registry.validate_model_request(request)
+            authorization = self._authorizer.authorize(
+                tool_name=call.name,
+                user_id=context.user_id,
+                organization_id=context.organization_id,
+                correlation_id=context.correlation_id,
+            )
             response = self._registry.invoke_model_tool(request)
             results.append(
                 AgenticToolCallResult(
                     call_id=call.call_id,
                     tool_name=call.name,
+                    authorized_action=authorization.action,
                     response=response,
                 )
             )
