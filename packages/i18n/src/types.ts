@@ -83,6 +83,47 @@ export type PagesMessages = {
     authEyebrow: string;
     authTitle: string;
     authDescription: string;
+    runtimePanelTitle: string;
+    runtimePanelAwaiting: string;
+    runtimePanelLastUpdated: string;
+    runtimePanelActiveTools: string;
+    runtimePanelRecentActivity: string;
+    runtimePanelEmpty: string;
+    runtimePanelViewFull: string;
+    runtimePanelStatuses: {
+      running: string;
+      waiting: string;
+      completed: string;
+      failed: string;
+    };
+    runtimePanelStages: {
+      snapshot: string;
+      scan: string;
+      technicalEvidence: string;
+      technicalProfile: string;
+      aiUsageFlow: string;
+      reconciliation: string;
+      classification: string;
+      conflicts: string;
+      documents: string;
+      legalRetrieval: string;
+    };
+    runtimePanelConnection: {
+      connected: string;
+      connecting: string;
+      disconnected: string;
+    };
+    runtimePanelEvents: {
+      runStarted: string;
+      runStageChanged: string;
+      toolStarted: string;
+      toolCompleted: string;
+      toolFailed: string;
+      toolWaitingInput: string;
+      toolSkipped: string;
+      runCompleted: string;
+      runFailed: string;
+    };
   };
   signIn: {
     metadataTitle: string;

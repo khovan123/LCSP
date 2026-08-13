@@ -19,9 +19,7 @@ const defaultWorkerRuntimeBuildRef =
   rootEnv.WORKER_RUNTIME_BUILD_REF ??
   detectGitBuildRef();
 const defaultOrchestrationDebug =
-  process.env.ORCHESTRATION_DEBUG ??
-  rootEnv.ORCHESTRATION_DEBUG ??
-  "false";
+  process.env.ORCHESTRATION_DEBUG ?? rootEnv.ORCHESTRATION_DEBUG ?? "false";
 
 const targets = {
   proxy: {
@@ -68,7 +66,10 @@ const targets = {
     cwd: repoRoot,
     cmd: "pnpm",
     args: ["--dir", "apps/web", "dev"],
-    env: rootEnv,
+    env: {
+      ...rootEnv,
+      PORT: rootEnv.NEXT_PORT ?? "3000",
+    },
     description: "Start Next.js web app in dev mode",
   },
   scanner: workerTarget(
@@ -116,6 +117,7 @@ const targets = {
 const groups = {
   fogewise: ["proxy", "infra"],
   fogewise_reset: ["proxy_reset", "infra_reset"],
+  dev_stop: ["dev_stop"],
   dev: [
     "api",
     "web",
@@ -142,6 +144,11 @@ async function main() {
 
   if (selection === "list") {
     printList();
+    process.exit(0);
+  }
+
+  if (selection === "dev_stop") {
+    stopDevProcesses();
     process.exit(0);
   }
 
@@ -187,6 +194,118 @@ function detectGitBuildRef() {
   }
 
   return "local";
+}
+
+function stopDevProcesses() {
+  const patterns = [
+    "lcsp_workers.runtime",
+    "pnpm --dir apps/api start:dev",
+    "nest start --watch",
+    "pnpm --dir apps/web dev",
+    "next dev",
+  ];
+  const protectedPids = new Set([
+    process.pid,
+    process.ppid,
+    ...listParentPids(process.pid),
+  ]);
+  const killed = [];
+
+  for (const pattern of patterns) {
+    for (const pid of findMatchingPids(pattern, protectedPids)) {
+      try {
+        process.kill(pid, "SIGTERM");
+        killed.push({ pid, signal: "SIGTERM", pattern });
+      } catch {}
+    }
+  }
+
+  sleepMs(750);
+
+  for (const pattern of patterns) {
+    for (const pid of findMatchingPids(pattern, protectedPids)) {
+      try {
+        process.kill(pid, "SIGKILL");
+        killed.push({ pid, signal: "SIGKILL", pattern });
+      } catch {}
+    }
+  }
+
+  if (killed.length === 0) {
+    console.log("[run] No matching local LCSP dev processes were running.");
+    return;
+  }
+
+  console.log("[run] Stopped local LCSP dev processes:");
+  for (const entry of killed) {
+    console.log(
+      `  - pid=${entry.pid} signal=${entry.signal} pattern=${entry.pattern}`,
+    );
+  }
+}
+
+function findMatchingPids(pattern, protectedPids) {
+  const result = spawnSync(
+    "bash",
+    ["-lc", `ps -eo pid=,args= | grep -F ${shellQuote(pattern)} | grep -v grep`],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+    },
+  );
+
+  if (result.status !== 0 || !result.stdout.trim()) {
+    return [];
+  }
+
+  const pids = [];
+  for (const line of result.stdout.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const pidText = trimmed.split(/\s+/, 1)[0];
+    const pid = Number.parseInt(pidText, 10);
+    if (!Number.isInteger(pid) || pid <= 0 || protectedPids.has(pid)) {
+      continue;
+    }
+    pids.push(pid);
+  }
+  return [...new Set(pids)];
+}
+
+function listParentPids(startPid) {
+  const result = [];
+  let currentPid = startPid;
+
+  for (;;) {
+    const parentPid = readParentPid(currentPid);
+    if (!parentPid || result.includes(parentPid)) {
+      break;
+    }
+    result.push(parentPid);
+    currentPid = parentPid;
+  }
+
+  return result;
+}
+
+function readParentPid(pid) {
+  const result = spawnSync("ps", ["-o", "ppid=", "-p", String(pid)], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    return null;
+  }
+  const value = Number.parseInt(result.stdout.trim(), 10);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'\"'\"'`)}'`;
+}
+
+function sleepMs(durationMs) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, durationMs);
 }
 
 function loadDotEnv(filePath) {
@@ -372,15 +491,15 @@ function assertPortsAvailable(members) {
     return;
   }
 
-  console.error("[run] Cannot start dev group because required ports are already in use:");
+  console.error(
+    "[run] Cannot start dev group because required ports are already in use:",
+  );
   for (const conflict of conflicts) {
     console.error(
       `  - target=${conflict.member} health_port=${conflict.port}${conflict.owner ? ` owner=${conflict.owner}` : ""}`,
     );
   }
-  console.error(
-    "[run] Stop the stale process first, then re-run `pnpm dev`.",
-  );
+  console.error("[run] Stop the stale process first, then re-run `pnpm dev`.");
   process.exit(1);
 }
 
@@ -487,11 +606,13 @@ function printHelp() {
 Targets:
   fogewise
   fogewise_reset
+  dev_stop
   dev
 
 Examples:
   pnpm run dev:fogewise
   pnpm run dev:fogewise:reset
+  pnpm run dev:stop
   pnpm run dev
 `);
 }
