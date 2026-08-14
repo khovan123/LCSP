@@ -82,10 +82,10 @@ export class AssessmentRuntimeEventService {
   constructor(private readonly prisma: PrismaService) {}
 
   async recordRunStartedIfMissing(input: EnsureRunInput): Promise<void> {
-    const existing = await this.safeFindFirst({
+    const existing = (await this.safeFindFirst({
       where: { runId: input.runId },
       select: { id: true },
-    });
+    })) as { id: string } | null;
     if (existing) {
       return;
     }
@@ -100,11 +100,11 @@ export class AssessmentRuntimeEventService {
   }
 
   async recordRunStageChangedIfNeeded(input: EnsureRunInput): Promise<void> {
-    const latest = await this.safeFindFirst({
+    const latest = (await this.safeFindFirst({
       where: { runId: input.runId },
       orderBy: [{ sequence: "desc" }],
       select: { stage: true },
-    });
+    })) as { stage: string } | null;
     if (!latest || latest.stage === input.stage) {
       return;
     }
@@ -241,11 +241,11 @@ export class AssessmentRuntimeEventService {
     for (let index = 0; index < 3; index += 1) {
       try {
         await this.prisma.$transaction(async (tx) => {
-          const latest = await runtimeEventDelegate(tx).findFirst({
+          const latest = (await runtimeEventDelegate(tx).findFirst({
             where: { runId: input.runId },
             orderBy: [{ sequence: "desc" }],
             select: { sequence: true },
-          });
+          })) as { sequence: number } | null;
           await runtimeEventDelegate(tx).create({
             data: {
               organizationId: input.organizationId,
@@ -317,9 +317,11 @@ export class AssessmentRuntimeEventService {
     };
   }
 
-  private async safeFindFirst(args: Record<string, unknown>) {
+  private async safeFindFirst(args: Record<string, unknown>): Promise<unknown> {
     try {
-      return await runtimeEventDelegate(this.prisma).findFirst(args);
+      return (await runtimeEventDelegate(this.prisma).findFirst(
+        args,
+      )) as unknown;
     } catch (error) {
       if (isMissingAssessmentRuntimeEventTable(error)) {
         this.logRuntimeEventTableMissing("findFirst", error);

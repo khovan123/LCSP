@@ -188,7 +188,7 @@ export class InternalAgenticToolDispatchController {
     });
 
     try {
-      const result =
+      const result = (
         toolName === AGENTIC_TOOL_NAMES.requestTargetedReanalysis
           ? await this.pythonWorkerRuntime.requestTargetedReanalysis(
               {
@@ -228,7 +228,8 @@ export class InternalAgenticToolDispatchController {
                   artifactVersions,
                   input,
                 }),
-              );
+              )
+      ) as unknown;
 
       if (isNeedsInputResult(result)) {
         await this.runtimeEvents.recordToolWaitingInput({

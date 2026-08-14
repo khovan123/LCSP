@@ -45,6 +45,7 @@ describe("SnapshotCreatedAutoScanService", () => {
       },
     });
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(commandBus.execute).toHaveBeenCalledWith(
       expect.any(TriggerScanCommand),
     );
@@ -93,6 +94,7 @@ describe("SnapshotCreatedAutoScanService", () => {
       },
     });
 
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
 });
