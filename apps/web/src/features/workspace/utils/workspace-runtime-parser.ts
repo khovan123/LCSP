@@ -2,7 +2,6 @@ import {
   WORKSPACE_RUNTIME_CONNECTION_STATES,
   type WorkspaceRuntimeActivityItem,
   type WorkspaceRuntimeActiveTool,
-  type WorkspaceRuntimeAssessmentTimeline,
   type WorkspaceRuntimeContextValue,
   type WorkspaceRuntimeEvidenceReport,
   type WorkspaceRuntimeRun,

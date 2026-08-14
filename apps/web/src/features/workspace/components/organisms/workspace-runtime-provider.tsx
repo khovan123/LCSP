@@ -18,14 +18,8 @@ import {
 } from "../../utils/workspace-runtime-parser";
 import {
   WORKSPACE_RUNTIME_CONNECTION_STATES,
-  type WorkspaceRuntimeActivityItem,
-  type WorkspaceRuntimeActiveTool,
   type WorkspaceRuntimeAssessmentTimeline,
   type WorkspaceRuntimeContextValue,
-  type WorkspaceRuntimeEvidenceReport,
-  type WorkspaceRuntimeRun,
-  type WorkspaceRuntimeScanJob,
-  type WorkspaceRuntimeSummaryValue,
 } from "../../types/workspace-runtime.types";
 
 const initialRuntime: WorkspaceRuntimeContextValue = {
@@ -38,7 +32,7 @@ const initialRuntime: WorkspaceRuntimeContextValue = {
   runsByAssessmentId: {},
   recentActivityByAssessmentId: {},
   latestRunIdByAssessmentId: {},
-  getAssessmentRuntime: (assessmentId: string): WorkspaceRuntimeAssessmentTimeline => ({
+  getAssessmentRuntime: (): WorkspaceRuntimeAssessmentTimeline => ({
     currentRun: null,
     recentActivity: [],
     latestRunId: null,

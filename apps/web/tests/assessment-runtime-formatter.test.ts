@@ -7,8 +7,6 @@ import {
   stageLabel,
   runtimeEventLabel,
   formatTimelineTime,
-  formatStableTimestamp,
-  formatRelativeTime,
 } from "../src/features/workspace/utils/assessment-runtime-formatter.ts";
 
 test("assessment runtime formatter returns stable timestamp when not hydrated", () => {
