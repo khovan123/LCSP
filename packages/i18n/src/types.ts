@@ -967,14 +967,21 @@ export type PagesMessages = {
     connectionDisconnected: string;
     scanJobsTitle: string;
     evidenceReportsTitle: string;
+    orchestrationTitle: string;
     awaitingEvent: string;
     lastUpdated: string;
     noScanJobs: string;
     noEvidenceReports: string;
+    noOrchestrationActivity: string;
     scanJobLabel: string;
     evidenceReportLabel: string;
     updatedAt: string;
     createdAt: string;
+    attemptLabel: string;
+    inputSummaryLabel: string;
+    outputSummaryLabel: string;
+    errorSummaryLabel: string;
+    waitingReasonLabel: string;
     rerunScan: string;
     rerunningScan: string;
     rerunError: string;
@@ -989,6 +996,35 @@ export type PagesMessages = {
     evidenceStatuses: {
       accepted: string;
       rejected: string;
+    };
+    runtimeStatuses: {
+      running: string;
+      waiting: string;
+      completed: string;
+      failed: string;
+    };
+    runtimeStages: {
+      snapshot: string;
+      scan: string;
+      technicalEvidence: string;
+      technicalProfile: string;
+      aiUsageFlow: string;
+      reconciliation: string;
+      classification: string;
+      conflicts: string;
+      documents: string;
+      legalRetrieval: string;
+    };
+    runtimeEvents: {
+      runStarted: string;
+      runStageChanged: string;
+      toolStarted: string;
+      toolCompleted: string;
+      toolFailed: string;
+      toolWaitingInput: string;
+      toolSkipped: string;
+      runCompleted: string;
+      runFailed: string;
     };
   };
   classification: {
