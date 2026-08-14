@@ -48,13 +48,14 @@ describe("SnapshotCreatedAutoScanService", () => {
     expect(commandBus.execute).toHaveBeenCalledWith(
       expect.any(TriggerScanCommand),
     );
-    const command = (commandBus.execute as jest.Mock).mock.calls[0][0] as TriggerScanCommand;
-    expect(command.triggerSource).toBe(
-      REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
-    );
+    const command = (commandBus.execute as jest.Mock).mock
+      .calls[0][0] as TriggerScanCommand;
+    expect(command.triggerSource).toBe(REPOSITORY_SCAN_TRIGGER_SOURCES.trusted);
     expect(command.assessmentId).toBe("assessment-1");
     expect(command.snapshotId).toBe("snapshot-1");
-    expect(command.idempotencyKey).toBe("snapshot-auto:assessment-1:snapshot-1");
+    expect(command.idempotencyKey).toBe(
+      "snapshot-auto:assessment-1:snapshot-1",
+    );
     expect(command.actorId).toBe("user-1");
     expect(command.organizationId).toBe("org-1");
   });
@@ -73,7 +74,8 @@ describe("SnapshotCreatedAutoScanService", () => {
       },
     });
 
-    const command = (commandBus.execute as jest.Mock).mock.calls[0][0] as TriggerScanCommand;
+    const command = (commandBus.execute as jest.Mock).mock
+      .calls[0][0] as TriggerScanCommand;
     expect(command.correlationId).toBe("snapshot-auto:snapshot-1");
   });
 
