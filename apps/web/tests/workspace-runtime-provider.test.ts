@@ -1,10 +1,10 @@
 import * as assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { __workspaceRuntimeTestUtils } from "../src/features/workspace/components/organisms/workspace-runtime-provider.tsx";
+import { parseRuntimeEvent } from "../src/features/workspace/utils/workspace-runtime-parser.ts";
 
 test("workspace runtime parser groups runs and activity by assessment", () => {
-  const parsed = __workspaceRuntimeTestUtils.parseRuntimeEvent(
+  const parsed = parseRuntimeEvent(
     JSON.stringify({
       emitted_at: "2026-08-13T11:00:00.000Z",
       runs: [
