@@ -24,6 +24,7 @@ from .evidence_assembler import EvidenceAssembler, PrivacyAssertionError
 from .inventory.analyzer_router import AnalyzerRouter
 from .inventory.language_classifier import LanguageClassifier
 from .parsers.structural_augmentor import StructuralAugmentor
+from .parsers.structural_types import StructuralFact
 from .graph.evidence_graph_assembler import EvidenceGraphAssembler
 from .evidence.terminal_state_handler import (
     CleanupBlockedError,
@@ -43,7 +44,12 @@ from .tools.deptry_tool import DeptryRunResult, DeptryTool
 from .tools.knip_tool import KnipRunResult, KnipTool
 from .tools.semgrep_tool import SemgrepRunResult, SemgrepTool
 from .tools.syft_tool import SyftRunResult, SyftTool
-from .tools.tool_base import OUTCOME_SUCCESS, OUTCOME_TOOL_FAILURE, ToolExecutionResult
+from .tools.tool_base import (
+    NOT_RUN_VERSION,
+    OUTCOME_SUCCESS,
+    OUTCOME_TOOL_FAILURE,
+    ToolExecutionResult,
+)
 from .ts_js_bridge.bridge_types import TsJsBridgeResult
 from .workspace import ArchiveMaterializationError, ScannerWorkspace
 
@@ -408,7 +414,7 @@ class ScanConsumer(ConsumerBase):
                     findings=[],
                     unsupported_dynamic_flows=[],
                     coverage_limitations=[],
-                    analyzer_version="not-run",
+                    analyzer_version=NOT_RUN_VERSION,
                     execution=self._register_skipped_tool(
                         tool_registry,
                         execution_plan,
@@ -427,10 +433,13 @@ class ScanConsumer(ConsumerBase):
                 )
                 python_ended_at = self._utc_timestamp()
                 python_limitations = (
-                    ["Python analysis reported bounded coverage limitations"]
-                    if python_analysis.coverage_limitation
-                    or python_analysis.files_skipped
-                    else []
+                    list(python_analysis.coverage_limitations)
+                    or (
+                        ["Python analysis reported bounded coverage limitations"]
+                        if python_analysis.coverage_limitation
+                        or python_analysis.files_skipped
+                        else []
+                    )
                 )
                 for tool_key, tool_version in (
                     ("python_ast", f"python-{platform.python_version()}"),
@@ -496,7 +505,7 @@ class ScanConsumer(ConsumerBase):
                     f"analyzer={targeted_plan.analyzer_id} "
                     f"path_prefixes={len(targeted_plan.path_prefixes)}"
                 )
-            structural_facts: list = []
+            structural_facts: list[StructuralFact] = []
             if execution_plan.should_run(APPROVED_TOOL_NAMES["tree_sitter"]):
                 structural_started_at = self._utc_timestamp()
                 try:
@@ -735,7 +744,9 @@ class ScanConsumer(ConsumerBase):
     def _execution_limitations(self, execution: ToolExecutionResult) -> list[str]:
         if execution.outcome == OUTCOME_SUCCESS:
             return []
-        return list(execution.messages)
+        if execution.messages:
+            return list(execution.messages)
+        return [f"{execution.tool_name}: {execution.outcome} without diagnostic messages"]
 
     def _register_skipped_tool(
         self,

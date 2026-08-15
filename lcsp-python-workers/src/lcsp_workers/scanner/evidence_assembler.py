@@ -284,7 +284,7 @@ class EvidenceAssembler:
                 tool_name=execution.tool_name,
                 tool_version=execution.tool_version,
                 outcome=execution.outcome,
-                messages=list(execution.messages),
+                messages=self._failure_messages(execution),
             )
             for execution in executions
             if execution.outcome not in (OUTCOME_SUCCESS, OUTCOME_SKIPPED_UNSUPPORTED)
@@ -315,6 +315,12 @@ class EvidenceAssembler:
         if run_count > 0 and failed_count == run_count:
             return SCAN_CALLBACK_STATUSES["failed"], ALL_TOOLS_FAILED
         return SCAN_CALLBACK_STATUSES["partial"], None
+
+    @staticmethod
+    def _failure_messages(execution: ToolExecutionResult) -> list[str]:
+        if execution.messages:
+            return list(execution.messages)
+        return [f"{execution.tool_name}: {execution.outcome} without diagnostic messages"]
 
     def _assert_privacy(
         self,

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Final, Mapping
 
 from .inventory.language_types import (
     LANGUAGE_CSHARP,
@@ -16,11 +18,7 @@ from .inventory.language_types import (
     LanguageClassification,
 )
 
-
-from typing import Final
-
-
-APPROVED_TOOL_NAMES: Final = {
+APPROVED_TOOL_NAMES: Final[Mapping[str, str]] = MappingProxyType({
     "syft": "syft",
     "knip": "knip",
     "deptry": "deptry",
@@ -29,16 +27,12 @@ APPROVED_TOOL_NAMES: Final = {
     "ts_morph": "ts_morph",
     "tree_sitter": "tree_sitter_custom_parser",
     "semgrep": "semgrep",
-}
+})
 
-TOOL_DISPOSITIONS: Final = {
+TOOL_DISPOSITIONS: Final[Mapping[str, str]] = MappingProxyType({
     "run": "RUN",
     "skip": "SKIP",
-}
-
-# Sentinel values used when a tool is skipped (not executed for this scan)
-NOT_RUN_VERSION: Final = "not-run"
-NOT_EXECUTED_HASH: Final = "sha256:not-executed"
+})
 
 _PYTHON_LANGUAGES = {LANGUAGE_PYTHON}
 _TS_JS_LANGUAGES = {LANGUAGE_TYPESCRIPT, LANGUAGE_JAVASCRIPT}

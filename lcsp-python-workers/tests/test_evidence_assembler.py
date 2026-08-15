@@ -440,3 +440,37 @@ def test_t10_unsupported_skip_yields_success_and_empty_tool_failures() -> None:
     assert payload.error_code is None
     # Skipped tools must not appear in tool_failures
     assert payload.evidence_payload["tool_failures"] == []
+
+
+@pytest.mark.p0
+def test_t11_failed_tool_without_messages_gets_default_failure_limitation() -> None:
+    payload = EvidenceAssembler().assemble(
+        scan_job_id="scan-job-1",
+        syft_result=_syft_result(),
+        semgrep_result=SemgrepRunResult(
+            findings=[],
+            executions=[
+                ToolExecutionResult(
+                    tool_name="semgrep_ai_usage",
+                    tool_version="semgrep 1.99.0",
+                    outcome=OUTCOME_TOOL_FAILURE,
+                    config_hash="sha256:semgrep-ai",
+                    messages=[],
+                )
+            ],
+            redaction_applied=False,
+        ),
+        coverage_notes=[],
+    )
+
+    assert payload.status == SCAN_CALLBACK_STATUSES["partial"]
+    assert payload.evidence_payload["tool_failures"] == [
+        {
+            "tool_name": "semgrep_ai_usage",
+            "tool_version": "semgrep 1.99.0",
+            "outcome": OUTCOME_TOOL_FAILURE,
+            "messages": [
+                "semgrep_ai_usage: tool_failure without diagnostic messages"
+            ],
+        }
+    ]
