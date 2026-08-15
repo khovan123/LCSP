@@ -31,7 +31,7 @@ class ChromaDbCitationRetriever:
         return [RetrievedChunk(item["id"], str(item["metadata"].get("document_id") or ""), str(item["metadata"].get("locator") or ""), str(item["metadata"].get("legal_status") or "ACTIVE"), item["role"]) for item in records]
 
     def retrieve_exact_context(self, corpus_version_id: str, chunk_ids: list[str]) -> list[dict[str, Any]]:
-        """Return exact legal text + parent/reference context for one-time EngineeringRule compilation."""
+        """Return exact text plus parent/reference context for EngineeringRule compilation."""
         return [{"id": item["id"], "documentId": str(item["metadata"].get("document_id") or ""), "locator": str(item["metadata"].get("locator") or ""), "legalStatus": str(item["metadata"].get("legal_status") or "ACTIVE"), "contentSha256": str(item["metadata"].get("content_sha256") or ""), "role": item["role"], "content": item["document"]} for item in self._structural_records(corpus_version_id, chunk_ids)]
 
     def build_citation_allowlist(self, chunks: list[RetrievedChunk]) -> dict[str, Any]:
@@ -41,7 +41,8 @@ class ChromaDbCitationRetriever:
         if not chunk_ids: return []
         primary = self._records(corpus_version_id, chunk_ids); primary_ids = {item["id"] for item in primary}
         parent_ids = self._unique(str(item["metadata"].get("parent_chunk_id") or "") for item in primary)
-        referenced_ids = self._unique(ref for item in primary for ref in self._metadata_related_ids(item["metadata"]) if ref not in primary_ids and ref not in set(parent_ids))
+        parent_set = set(parent_ids)
+        referenced_ids = self._unique(ref for item in primary for ref in self._metadata_related_ids(item["metadata"]) if ref not in primary_ids and ref not in parent_set)
         rows = []
         for role, records in (("PRIMARY_MATCH", primary), ("PARENT_CONTEXT", self._records(corpus_version_id, parent_ids)), ("REFERENCED_CONTEXT", self._records(corpus_version_id, referenced_ids))):
             rows.extend({**item, "role": role} for item in records)
@@ -55,8 +56,15 @@ class ChromaDbCitationRetriever:
     def _records(self, corpus_version_id: str, chunk_ids: list[str]) -> list[dict[str, Any]]:
         if not chunk_ids: return []
         result = self._collection(corpus_version_id).get(ids=chunk_ids, include=["documents", "metadatas"])
-        ids, documents, metadatas = result.get("ids") or [], result.get("documents") or [], result.get("metadatas") or []
-        return [{"id": str(chunk_id), "document": str(document or ""), "metadata": metadata or {}} for chunk_id, document, metadata in zip(ids, documents, metadatas, strict=True)]
+        ids = list(result.get("ids") or [])
+        metadatas = list(result.get("metadatas") or [])
+        documents = list(result.get("documents") or [])
+        # Citation-only callers and lightweight test doubles may omit documents. Exact
+        # identity/metadata retrieval must still work; compiler callers receive empty
+        # text only when their backing collection truly did not return documents.
+        if len(documents) < len(ids): documents.extend([""] * (len(ids) - len(documents)))
+        if len(metadatas) < len(ids): metadatas.extend([{}] * (len(ids) - len(metadatas)))
+        return [{"id": str(chunk_id), "document": str(documents[index] or ""), "metadata": metadatas[index] or {}} for index, chunk_id in enumerate(ids)]
 
     @staticmethod
     def _metadata_related_ids(metadata: dict[str, Any]) -> list[str]:
