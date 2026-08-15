@@ -55,7 +55,7 @@ describe("buildAgenticToolQuery", () => {
     for (const toolName of EXACT_QUERY_ENTRYPOINTS) {
       const entrypoint = queryEntrypoints[toolName];
       expect(typeof entrypoint).toBe("function");
-      expect((entrypoint as Function).name).toBe(toolName);
+      expect((entrypoint as { name: string }).name).toBe(toolName);
     }
   });
 
