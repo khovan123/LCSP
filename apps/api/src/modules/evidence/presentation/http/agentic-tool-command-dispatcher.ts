@@ -4,6 +4,7 @@ import {
   type ResolveClassificationReviewInput,
   type SubmitClassificationReviewInput,
 } from "@lcsp/contracts/evidence";
+import { PBAC_ACTIONS, type PbacAction } from "@lcsp/contracts/pbac";
 import { HttpStatus } from "@nestjs/common";
 
 import { problemException } from "../../../../platform/problems/problem-factory.js";
@@ -22,15 +23,31 @@ export type AgenticToolCommandDispatchArgs = {
   input: Record<string, unknown>;
 };
 
-const PROTECTED_COMMAND_NAMES = new Set<string>([
-  AGENTIC_TOOL_NAMES.reconcileProfileToVerifiedProfile,
-  AGENTIC_TOOL_NAMES.submitClassificationForIndependentReview,
-  AGENTIC_TOOL_NAMES.resolveIndependentClassificationReview,
-]);
+const PROTECTED_COMMAND_ACTIONS: Readonly<Record<string, PbacAction>> = {
+  [AGENTIC_TOOL_NAMES.reconcileProfileToVerifiedProfile]:
+    PBAC_ACTIONS.verifiedProfilePersist,
+  [AGENTIC_TOOL_NAMES.submitClassificationForIndependentReview]:
+    PBAC_ACTIONS.classificationReviewSubmit,
+  [AGENTIC_TOOL_NAMES.resolveIndependentClassificationReview]:
+    PBAC_ACTIONS.classificationReviewResolve,
+};
 
 /** Return true only for centrally registered protected mutation tools. */
 export function isAgenticToolCommand(toolName: string): boolean {
-  return PROTECTED_COMMAND_NAMES.has(toolName);
+  return toolName in PROTECTED_COMMAND_ACTIONS;
+}
+
+/** Resolve the mandatory PBAC action for one protected canonical tool. */
+export function agenticToolCommandPbacAction(toolName: string): PbacAction {
+  const action = PROTECTED_COMMAND_ACTIONS[toolName];
+  if (!action) {
+    throw problemException(
+      EVIDENCE_ERROR_CODES.notFound,
+      "internal-agentic-dispatch",
+      { status: HttpStatus.NOT_FOUND },
+    );
+  }
+  return action;
 }
 
 /** Resolve one protected canonical name to the Nest command owning its mutation. */
@@ -46,9 +63,7 @@ export function buildAgenticToolCommand(args: AgenticToolCommandDispatchArgs) {
       throw problemException(
         EVIDENCE_ERROR_CODES.notFound,
         args.correlationId,
-        {
-          status: HttpStatus.NOT_FOUND,
-        },
+        { status: HttpStatus.NOT_FOUND },
       );
   }
 }
