@@ -417,7 +417,7 @@ export function buildAgenticToolQuery(args: AgenticToolQueryDispatchArgs) {
       return new GetAdminSourceCatalogQuery(
         assessmentId,
         organizationId,
-        input as never,
+        input,
         userId,
         null,
         null,
