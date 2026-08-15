@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  Optional,
   Post,
   UseGuards,
 } from "@nestjs/common";
@@ -63,10 +64,10 @@ export class InternalAgenticToolDispatchController {
 
   constructor(
     private readonly queryBus: QueryBus,
-    private readonly commandBus: CommandBus,
     private readonly pythonWorkerRuntime: PythonWorkerRuntimeClient,
     private readonly configService: ConfigService<AppConfig, true>,
     private readonly runtimeEvents: AssessmentRuntimeEventService,
+    @Optional() private readonly commandBus?: CommandBus,
   ) {}
 
   @Post("dispatch")
@@ -173,7 +174,7 @@ export class InternalAgenticToolDispatchController {
                 correlationId,
               )
             : isAgenticToolCommand(toolName)
-              ? await this.commandBus.execute(
+              ? await this.requireCommandBus(correlationId).execute(
                   buildAgenticToolCommand({
                     toolName,
                     assessmentId,
@@ -245,6 +246,15 @@ export class InternalAgenticToolDispatchController {
       });
       throw error;
     }
+  }
+
+  private requireCommandBus(correlationId: string): CommandBus {
+    if (!this.commandBus) {
+      throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      });
+    }
+    return this.commandBus;
   }
 }
 
