@@ -273,9 +273,13 @@ export class InternalAgenticToolDispatchController {
     policyVersion: string;
   }> {
     if (!this.pbacPreflight) {
-      throw problemException(EVIDENCE_ERROR_CODES.notFound, args.correlationId, {
-        status: HttpStatus.SERVICE_UNAVAILABLE,
-      });
+      throw problemException(
+        EVIDENCE_ERROR_CODES.notFound,
+        args.correlationId,
+        {
+          status: HttpStatus.SERVICE_UNAVAILABLE,
+        },
+      );
     }
 
     const authorization = await this.pbacPreflight.evaluateWithPolicy({

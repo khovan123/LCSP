@@ -41,7 +41,7 @@ describe("PbacPreflightService trusted policy context", () => {
         memberships as never,
         policies as never,
         evaluator as never,
-        decisions as never,
+        decisions,
       ),
       decisions,
     };
@@ -77,8 +77,9 @@ describe("PbacPreflightService trusted policy context", () => {
 
   it("fails closed with no trusted policy metadata on evaluator deny", async () => {
     const { service } = buildService();
-    const evaluator = (service as unknown as { evaluator: { evaluate: jest.Mock } })
-      .evaluator;
+    const evaluator = (
+      service as unknown as { evaluator: { evaluate: jest.Mock } }
+    ).evaluator;
     evaluator.evaluate.mockReturnValue({
       decision: "DENY",
       reasonCode: "ACTION_NOT_GRANTED",
