@@ -6,23 +6,27 @@ import { PbacPreflightService } from "./pbac-preflight.service.js";
 describe("PbacPreflightService trusted policy context", () => {
   function buildService() {
     const memberships = {
-      findByUserAndOrganization: jest.fn(async () => ({
-        policyId: "policy-1",
-        policyVersion: "v7",
-        status: "ACTIVE",
-        subjectAttributes: {},
-        role: () => "Owner",
-      })),
+      findByUserAndOrganization: jest.fn(() =>
+        Promise.resolve({
+          policyId: "policy-1",
+          policyVersion: "v7",
+          status: "ACTIVE",
+          subjectAttributes: {},
+          role: () => "Owner",
+        }),
+      ),
     };
     const policies = {
-      findByIdAndVersion: jest.fn(async () => ({
-        id: "policy-1",
-        organizationId: "org-1",
-        version: "v7",
-        subjectRole: "Owner",
-        stateGate: "ACTIVE",
-        actions: ["classification:review:submit"],
-      })),
+      findByIdAndVersion: jest.fn(() =>
+        Promise.resolve({
+          id: "policy-1",
+          organizationId: "org-1",
+          version: "v7",
+          subjectRole: "Owner",
+          stateGate: "ACTIVE",
+          actions: ["classification:review:submit"],
+        }),
+      ),
     };
     const evaluator = {
       evaluate: jest.fn(() => ({
@@ -33,7 +37,7 @@ describe("PbacPreflightService trusted policy context", () => {
       })),
     };
     const decisions = {
-      append: jest.fn(async () => undefined),
+      append: jest.fn(() => Promise.resolve(undefined)),
     };
 
     return {
