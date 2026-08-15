@@ -80,9 +80,13 @@ export function buildAgenticToolQuery(args: AgenticToolQueryDispatchArgs) {
     case AGENTIC_TOOL_NAMES.validateCitationSet:
       return validate_citation_set(args);
     default:
-      throw problemException(EVIDENCE_ERROR_CODES.notFound, args.correlationId, {
-        status: HttpStatus.NOT_FOUND,
-      });
+      throw problemException(
+        EVIDENCE_ERROR_CODES.notFound,
+        args.correlationId,
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
   }
 }
 
@@ -93,7 +97,10 @@ export function get_assessment_context(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     requiredArtifactVersion(artifactVersions, "wizardProfileId"),
     typedStringArray(input.include, Object.values(ASSESSMENT_CONTEXT_INCLUDES)),
-    typedStringArray(input.answerFields, Object.values(ASSESSMENT_CONTEXT_ANSWER_FIELDS)),
+    typedStringArray(
+      input.answerFields,
+      Object.values(ASSESSMENT_CONTEXT_ANSWER_FIELDS),
+    ),
     args.correlationId,
   );
 }
@@ -104,8 +111,13 @@ export function get_artifact_chain(args: AgenticToolQueryDispatchArgs) {
     args.assessmentId,
     args.organizationId,
     args.correlationId,
-    optionalRecord(input.anchor) ? optionalString(optionalRecord(input.anchor)?.artifactRef) : null,
-    typedStringArray(input.requiredStages, Object.values(ARTIFACT_CHAIN_STAGES)),
+    optionalRecord(input.anchor)
+      ? optionalString(optionalRecord(input.anchor)?.artifactRef)
+      : null,
+    typedStringArray(
+      input.requiredStages,
+      Object.values(ARTIFACT_CHAIN_STAGES),
+    ),
     input.exactVersions === true,
   );
 }
@@ -120,7 +132,10 @@ export function get_reconciliation_context(args: AgenticToolQueryDispatchArgs) {
     stringArray(input.conflictIds).map((value) => stripRef(value, "conflict:")),
     optionalString(input.cursor),
     numberWithDefault(input.maxResults, 25),
-    typedStringArray(input.statuses, Object.values(RECONCILIATION_CONTEXT_STATUSES)),
+    typedStringArray(
+      input.statuses,
+      Object.values(RECONCILIATION_CONTEXT_STATUSES),
+    ),
   );
 }
 
@@ -131,15 +146,24 @@ export function get_verified_profile(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     stripRef(requiredString(input.verifiedProfileId), "verified:"),
     requiredString(input.expectedVersion),
-    requiredEnum(input.requiredFor, Object.values(VERIFIED_PROFILE_REQUIRED_FOR)),
+    requiredEnum(
+      input.requiredFor,
+      Object.values(VERIFIED_PROFILE_REQUIRED_FOR),
+    ),
     args.correlationId,
   );
 }
 
 export function compare_wizard_claim(args: AgenticToolQueryDispatchArgs) {
   const { input, artifactVersions } = args;
-  const claimField = parseWizardClaimField(optionalString(input.claimField) ?? undefined, args.correlationId);
-  const rawMaxEvidenceRefs = typeof input.maxEvidenceRefs === "number" ? String(input.maxEvidenceRefs) : (optionalString(input.maxEvidenceRefs) ?? undefined);
+  const claimField = parseWizardClaimField(
+    optionalString(input.claimField) ?? undefined,
+    args.correlationId,
+  );
+  const rawMaxEvidenceRefs =
+    typeof input.maxEvidenceRefs === "number"
+      ? String(input.maxEvidenceRefs)
+      : (optionalString(input.maxEvidenceRefs) ?? undefined);
   return new CompareWizardClaimQuery(
     args.assessmentId,
     args.organizationId,
@@ -147,82 +171,218 @@ export function compare_wizard_claim(args: AgenticToolQueryDispatchArgs) {
     requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
     parseSingleTargetId(requiredString(input.targetId), args.correlationId),
     claimField,
-    parseWizardClaimExpectedValue(optionalString(input.expectedValue) ?? undefined, claimField, args.correlationId),
-    parseWizardClaimComparisonScope(optionalString(input.comparisonScope) ?? undefined, args.correlationId),
+    parseWizardClaimExpectedValue(
+      optionalString(input.expectedValue) ?? undefined,
+      claimField,
+      args.correlationId,
+    ),
+    parseWizardClaimComparisonScope(
+      optionalString(input.comparisonScope) ?? undefined,
+      args.correlationId,
+    ),
     parseWizardClaimMaxEvidenceRefs(rawMaxEvidenceRefs, args.correlationId),
     args.correlationId,
   );
 }
 
-export function get_classification_baseline(args: AgenticToolQueryDispatchArgs) {
-  return new GetClassificationBaselineQuery(args.assessmentId, args.organizationId, args.input as never, args.userId, null, null, args.correlationId);
+export function get_classification_baseline(
+  args: AgenticToolQueryDispatchArgs,
+) {
+  return new GetClassificationBaselineQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
 }
 export function get_gap_requirements(args: AgenticToolQueryDispatchArgs) {
-  return new GetGapRequirementsQuery(args.assessmentId, args.organizationId, args.input as never, args.userId, null, null, args.correlationId);
+  return new GetGapRequirementsQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
 }
 export function get_gap_evidence_trace(args: AgenticToolQueryDispatchArgs) {
-  return new GetGapEvidenceTraceQuery(args.assessmentId, args.organizationId, args.input as never, args.userId, args.correlationId);
+  return new GetGapEvidenceTraceQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    args.correlationId,
+  );
 }
-export function validate_classification_proposal(args: AgenticToolQueryDispatchArgs) {
-  return new ValidateClassificationProposalQuery(args.assessmentId, args.organizationId, args.input as never, args.userId, null, null, args.correlationId);
+export function validate_classification_proposal(
+  args: AgenticToolQueryDispatchArgs,
+) {
+  return new ValidateClassificationProposalQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
 }
 export function evaluate_gap_matrix(args: AgenticToolQueryDispatchArgs) {
-  return new EvaluateGapMatrixQuery(args.assessmentId, args.organizationId, args.input as never, args.userId, args.correlationId);
+  return new EvaluateGapMatrixQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    args.correlationId,
+  );
 }
 export function get_admin_source_catalog(args: AgenticToolQueryDispatchArgs) {
-  return new GetAdminSourceCatalogQuery(args.assessmentId, args.organizationId, args.input, args.userId, null, null, args.correlationId);
+  return new GetAdminSourceCatalogQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
 }
 export function get_legal_corpus_readiness(args: AgenticToolQueryDispatchArgs) {
   const { input } = args;
-  return new GetLegalCorpusReadinessQuery(args.assessmentId, args.organizationId, new Date(`${requiredString(input.effectiveDate)}T00:00:00.000Z`), stripOptionalRef(optionalString(input.pinnedCorpusVersionId), "corpus_"), args.userId, null, null, args.correlationId);
+  return new GetLegalCorpusReadinessQuery(
+    args.assessmentId,
+    args.organizationId,
+    new Date(`${requiredString(input.effectiveDate)}T00:00:00.000Z`),
+    stripOptionalRef(optionalString(input.pinnedCorpusVersionId), "corpus_"),
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
 }
 export function retrieve_legal_basis(args: AgenticToolQueryDispatchArgs) {
-  return new RetrieveLegalBasisQuery(args.assessmentId, args.organizationId, args.input as never, args.userId, null, null, args.correlationId);
+  return new RetrieveLegalBasisQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
 }
 export function get_legal_rule_match(args: AgenticToolQueryDispatchArgs) {
-  return new GetLegalRuleMatchQuery(args.assessmentId, args.organizationId, args.input as never, args.userId, null, null, args.correlationId);
+  return new GetLegalRuleMatchQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
 }
 export function validate_citation_set(args: AgenticToolQueryDispatchArgs) {
-  return new ValidateCitationSetQuery(args.assessmentId, args.organizationId, args.input as never, args.userId, null, null, args.correlationId);
+  return new ValidateCitationSetQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
 }
 
-function requiredArtifactVersion(input: Record<string, unknown>, key: string): string {
+function requiredArtifactVersion(
+  input: Record<string, unknown>,
+  key: string,
+): string {
   return requiredString(input[key]);
 }
 function record(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
-function optionalRecord(value: unknown): Record<string, unknown> | null { return record(value); }
+function optionalRecord(value: unknown): Record<string, unknown> | null {
+  return record(value);
+}
 function requiredString(value: unknown): string {
   const result = optionalString(value);
-  if (!result) throw problemException(EVIDENCE_ERROR_CODES.notFound, "internal-agentic-dispatch", { status: HttpStatus.NOT_FOUND });
+  if (!result)
+    throw problemException(
+      EVIDENCE_ERROR_CODES.notFound,
+      "internal-agentic-dispatch",
+      { status: HttpStatus.NOT_FOUND },
+    );
   return result;
 }
 function optionalString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : null;
 }
 function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
+      )
+    : [];
 }
 function numberWithDefault(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : fallback;
 }
-function stripRef(value: string, prefix: string): string { return value.startsWith(prefix) ? value.slice(prefix.length) : value; }
-function stripOptionalRef(value: string | null, prefix: string): string | null { return value ? stripRef(value, prefix) : null; }
-function optionalEnum<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
-  return typeof value === "string" && allowed.includes(value as T) ? (value as T) : undefined;
+function stripRef(value: string, prefix: string): string {
+  return value.startsWith(prefix) ? value.slice(prefix.length) : value;
 }
-function requiredEnum<T extends string>(value: unknown, allowed: readonly T[]): T {
+function stripOptionalRef(value: string | null, prefix: string): string | null {
+  return value ? stripRef(value, prefix) : null;
+}
+function optionalEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+): T | undefined {
+  return typeof value === "string" && allowed.includes(value as T)
+    ? (value as T)
+    : undefined;
+}
+function requiredEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+): T {
   const parsed = optionalEnum(value, allowed);
-  if (!parsed) throw problemException(EVIDENCE_ERROR_CODES.notFound, "internal-agentic-dispatch", { status: HttpStatus.NOT_FOUND });
+  if (!parsed)
+    throw problemException(
+      EVIDENCE_ERROR_CODES.notFound,
+      "internal-agentic-dispatch",
+      { status: HttpStatus.NOT_FOUND },
+    );
   return parsed;
 }
-function typedStringArray<T extends string>(value: unknown, allowed: readonly T[]): T[] {
+function typedStringArray<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+): T[] {
   const values = stringArray(value);
   if (values.length === 0) return [];
   const allowedSet = new Set(allowed);
-  if (values.some((item) => !allowedSet.has(item as T)) || new Set(values).size !== values.length) {
-    throw problemException(EVIDENCE_ERROR_CODES.notFound, "internal-agentic-dispatch", { status: HttpStatus.NOT_FOUND });
+  if (
+    values.some((item) => !allowedSet.has(item as T)) ||
+    new Set(values).size !== values.length
+  ) {
+    throw problemException(
+      EVIDENCE_ERROR_CODES.notFound,
+      "internal-agentic-dispatch",
+      { status: HttpStatus.NOT_FOUND },
+    );
   }
   return values as T[];
 }
