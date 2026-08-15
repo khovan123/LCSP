@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate deterministic OCR/canonical extraction quality for legal corpus recovery."""
+"""Build a deterministic immutable reviewed corpus input from passing quality evidence."""
 
 from __future__ import annotations
 
@@ -11,9 +11,10 @@ from lcsp_workers.legal.official_text_extraction_repository import (
     OfficialTextExtractionRepository,
 )
 from lcsp_workers.legal.ocr_fallback_repository import OcrFallbackRepository
-from lcsp_workers.legal.ocr_quality_validator import (
-    EvaluateOcrQualityRequest,
-    OcrQualityValidator,
+from lcsp_workers.legal.ocr_quality_repository import OcrQualityRepository
+from lcsp_workers.legal.reviewed_corpus_input_builder import (
+    BuildReviewedCorpusInputRequest,
+    ReviewedCorpusInputBuilder,
 )
 
 
@@ -21,26 +22,27 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--storage-root", required=True, type=Path)
     parser.add_argument("--extraction-ref", required=True)
-    parser.add_argument("--expected-identity-ref", required=True)
-    parser.add_argument("--quality-profile", required=True)
+    parser.add_argument("--quality-manifest-ref", required=True)
+    parser.add_argument("--correction-profile", required=True)
     parser.add_argument("--correlation-id", default="local-cli")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    validator = OcrQualityValidator(
+    builder = ReviewedCorpusInputBuilder(
         storage_root=args.storage_root,
         extraction_repository=OfficialTextExtractionRepository(
             storage_root=args.storage_root
         ),
         ocr_repository=OcrFallbackRepository(storage_root=args.storage_root),
+        quality_repository=OcrQualityRepository(storage_root=args.storage_root),
     )
-    result = validator.evaluate(
-        EvaluateOcrQualityRequest(
+    result = builder.build(
+        BuildReviewedCorpusInputRequest(
             extraction_ref=args.extraction_ref,
-            expected_identity_ref=args.expected_identity_ref,
-            quality_profile=args.quality_profile,
+            quality_manifest_ref=args.quality_manifest_ref,
+            correction_profile=args.correction_profile,
         )
     )
     print(
