@@ -3,6 +3,11 @@
 Every function in this module intentionally has the exact canonical tool name.
 The functions are thin adapters only: they make runtime ownership discoverable
 while preserving the existing scanner implementations and their tests.
+
+This module deliberately avoids importing ``lcsp_workers.scanner`` modules at
+module-import time. ``scanner.__init__`` exports ``ScanConsumer`` eagerly, so
+keeping scanner dependencies in the execution context (and one lazy import for
+PythonAnalyzer) prevents a package initialization cycle.
 """
 
 from __future__ import annotations
@@ -12,31 +17,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
-from lcsp_workers.scanner.graph.evidence_graph_assembler import EvidenceGraphAssembler
-from lcsp_workers.scanner.inventory.language_classifier import LanguageClassifier
-from lcsp_workers.scanner.parsers.structural_augmentor import StructuralAugmentor
-from lcsp_workers.scanner.tools.deptry_tool import DeptryTool
-from lcsp_workers.scanner.tools.knip_tool import KnipTool
-from lcsp_workers.scanner.tools.semgrep_tool import SemgrepTool
-from lcsp_workers.scanner.tools.syft_tool import SyftTool
-from lcsp_workers.scanner.ts_js_bridge.bridge import TsJsBridge
-from lcsp_workers.scanner.workspace import ScannerWorkspace
-
 
 @dataclass(frozen=True)
 class ScannerToolExecutionContext:
     """Trusted local scanner dependencies used by AO-1 canonical entrypoints."""
 
-    workspace: ScannerWorkspace
-    language_classifier: LanguageClassifier
-    syft_tool: SyftTool
-    semgrep_tool: SemgrepTool
-    knip_tool: KnipTool
-    deptry_tool: DeptryTool
-    ts_js_bridge_factory: Callable[[Path], TsJsBridge]
-    structural_augmentor: StructuralAugmentor
-    evidence_graph_assembler: EvidenceGraphAssembler
+    workspace: Any
+    language_classifier: Any
+    syft_tool: Any
+    semgrep_tool: Any
+    knip_tool: Any
+    deptry_tool: Any
+    ts_js_bridge_factory: Callable[[Path], Any]
+    structural_augmentor: Any
+    evidence_graph_assembler: Any
 
 
 ScannerToolInput = Mapping[str, Any]
@@ -129,6 +123,8 @@ def run_python_semantic_analysis(
     context: ScannerToolExecutionContext,
 ):
     """Run Python semantic analysis for a bounded file set."""
+    from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalyzer
+
     include_files = request.get("include_files")
     return PythonAnalyzer(_workspace_path(request)).analyze(
         include_files=list(include_files) if include_files is not None else None
