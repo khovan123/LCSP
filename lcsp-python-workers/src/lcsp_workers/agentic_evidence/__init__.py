@@ -13,6 +13,7 @@ from .catalog import (
 from .dispatcher import (
     ALL_TOOL_BINDINGS,
     AO1_SCANNER_TOOL_BINDINGS,
+    NEST_CQRS_DISCOVERY_BINDINGS,
     AgenticToolBinding,
     AgenticToolDispatcher,
     AgenticToolRuntimeTarget,
@@ -44,6 +45,7 @@ from .tool_entrypoints import AgenticToolExecutionContext
 __all__ = [
     "ALL_TOOL_BINDINGS",
     "AO1_SCANNER_TOOL_BINDINGS",
+    "NEST_CQRS_DISCOVERY_BINDINGS",
     "AGENTIC_TOOL_SPECS",
     "AgenticAuthorizationResult",
     "AgenticInvocationContext",

@@ -24,15 +24,21 @@ from .scanner_tool_entrypoints import (
 )
 from .tool_entrypoints import (
     AgenticToolExecutionContext,
+    evaluate_gap_matrix,
     find_provider_invocations,
     find_similar_symbols,
     get_artifact_chain,
+    get_assessment_context,
+    get_classification_baseline,
     get_evidence_subgraph,
     get_finding_detail,
     get_gap_evidence_trace,
+    get_legal_corpus_readiness,
+    get_legal_rule_match,
     get_reconciliation_context,
     get_scan_coverage,
     get_symbol_context,
+    get_verified_profile,
     inspect_data_path,
     inspect_decision_path,
     inspect_deployment_context,
@@ -41,8 +47,11 @@ from .tool_entrypoints import (
     propose_missing_targets,
     request_targeted_reanalysis,
     resume_waiting_runs,
+    retrieve_legal_basis,
     search_evidence,
     trace_static_flow,
+    validate_citation_set,
+    validate_classification_proposal,
 )
 
 
@@ -197,6 +206,67 @@ SPRINT6_AGENTIC_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
 )
 
 
+# These names are already executable through InternalAgenticToolDispatchController
+# but are not yet registered in the Python LLM-callable catalog. Keeping their
+# binding rows here makes the runtime path discoverable without widening model access.
+NEST_CQRS_DISCOVERY_BINDINGS: tuple[ToolBinding, ...] = (
+    ToolBinding(
+        "get_assessment_context",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_assessment_context,
+        "GetAssessmentContextQuery",
+    ),
+    ToolBinding(
+        "get_verified_profile",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_verified_profile,
+        "GetVerifiedProfileQuery",
+    ),
+    ToolBinding(
+        "get_classification_baseline",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_classification_baseline,
+        "GetClassificationBaselineQuery",
+    ),
+    ToolBinding(
+        "validate_classification_proposal",
+        ToolRuntimeTarget.NEST_CQRS,
+        validate_classification_proposal,
+        "ValidateClassificationProposalQuery",
+    ),
+    ToolBinding(
+        "evaluate_gap_matrix",
+        ToolRuntimeTarget.NEST_CQRS,
+        evaluate_gap_matrix,
+        "EvaluateGapMatrixQuery",
+    ),
+    ToolBinding(
+        "get_legal_corpus_readiness",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_legal_corpus_readiness,
+        "GetLegalCorpusReadinessQuery",
+    ),
+    ToolBinding(
+        "retrieve_legal_basis",
+        ToolRuntimeTarget.NEST_CQRS,
+        retrieve_legal_basis,
+        "RetrieveLegalBasisQuery",
+    ),
+    ToolBinding(
+        "get_legal_rule_match",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_legal_rule_match,
+        "GetLegalRuleMatchQuery",
+    ),
+    ToolBinding(
+        "validate_citation_set",
+        ToolRuntimeTarget.NEST_CQRS,
+        validate_citation_set,
+        "ValidateCitationSetQuery",
+    ),
+)
+
+
 AO1_SCANNER_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
     ToolBinding(
         "materialize_snapshot",
@@ -269,6 +339,7 @@ AO1_SCANNER_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
 
 ALL_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
     *SPRINT6_AGENTIC_TOOL_BINDINGS,
+    *NEST_CQRS_DISCOVERY_BINDINGS,
     *AO1_SCANNER_TOOL_BINDINGS,
 )
 

@@ -1,9 +1,10 @@
-"""Canonical execution entrypoints for registered Agentic tools.
+"""Canonical execution entrypoints for registered API/Agentic tools.
 
-Architecture invariant: every canonical ``tool_name`` has a real public function
-with exactly the same snake_case name. These functions are intentionally thin:
-they provide a stable, searchable execution boundary while domain logic remains
-owned by the downstream NestJS CQRS handler or protected worker runtime.
+Architecture invariant: every canonical ``tool_name`` represented by this runtime
+has a real public function with exactly the same snake_case name. These functions
+are intentionally thin: they provide a stable, searchable execution boundary
+while domain logic remains owned by the downstream NestJS CQRS handler or
+protected worker runtime.
 """
 
 from __future__ import annotations
@@ -184,3 +185,72 @@ def trace_static_flow(
     context: AgenticToolExecutionContext,
 ) -> Mapping[str, Any]:
     return _dispatch_via_internal_api("trace_static_flow", request, context)
+
+
+# The tools below are already handled by the internal NestJS dispatcher but are
+# not yet part of the Python LLM-callable catalog. They still expose exact-name
+# execution entrypoints so a developer can trace the canonical name directly to
+# the CQRS query that actually owns the business logic.
+
+
+def get_assessment_context(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("get_assessment_context", request, context)
+
+
+def get_verified_profile(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("get_verified_profile", request, context)
+
+
+def get_classification_baseline(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("get_classification_baseline", request, context)
+
+
+def validate_classification_proposal(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("validate_classification_proposal", request, context)
+
+
+def evaluate_gap_matrix(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("evaluate_gap_matrix", request, context)
+
+
+def get_legal_corpus_readiness(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("get_legal_corpus_readiness", request, context)
+
+
+def retrieve_legal_basis(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("retrieve_legal_basis", request, context)
+
+
+def get_legal_rule_match(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("get_legal_rule_match", request, context)
+
+
+def validate_citation_set(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("validate_citation_set", request, context)
