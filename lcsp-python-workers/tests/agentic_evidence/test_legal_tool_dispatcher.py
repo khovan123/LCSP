@@ -48,7 +48,7 @@ EXPECTED_AO6_LOCAL_TOOLS = {
     ),
     "validate_retrieval_index": (
         ToolRuntimeTarget.PYTHON_LOCAL,
-        "LegalCorpusRecoveryDriver._validate_retrieval_index",
+        "ChromaDbCitationRetriever.index_corpus + retrieve_exact",
     ),
     "activate_validated_corpus_version": (
         ToolRuntimeTarget.PROTECTED_API,
