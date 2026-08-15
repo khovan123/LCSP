@@ -48,7 +48,9 @@ describe("agentic worker bridge dispatcher", () => {
   });
 
   it("routes resume_waiting_runs through PythonWorkerRuntimeClient", async () => {
-    const resumeWaitingRuns = jest.fn(() => Promise.resolve({ status: "READY" }));
+    const resumeWaitingRuns = jest.fn(() =>
+      Promise.resolve({ status: "READY" }),
+    );
     const client = {
       resumeWaitingRuns,
     } as unknown as PythonWorkerRuntimeClient;
