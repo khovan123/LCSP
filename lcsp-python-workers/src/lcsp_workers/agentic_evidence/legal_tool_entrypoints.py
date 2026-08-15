@@ -3,7 +3,7 @@
 These adapters keep the canonical tool name searchable while preserving the
 existing legal-source builders, validators, protected API authority, and worker
 implementations. Legal modules are imported lazily to avoid broad package-load
-coupling and to keep this routing layer free of domain logic.
+coupling and to keep this routing layer free of orchestration policy.
 """
 
 from __future__ import annotations
@@ -18,8 +18,9 @@ class LegalToolExecutionContext:
     """Trusted dependencies and storage boundary for AO-6 execution adapters."""
 
     api_client: Any
-    storage_root: Path
+    storage_root: Path | None
     snapshot_fetcher: Any | None = None
+    text_extractor: Any | None = None
     ocr_tool: Any | None = None
     chroma_path: str | None = None
 
@@ -55,6 +56,8 @@ def _path(request: LegalToolInput, name: str) -> Path:
 
 
 def _storage_root(context: LegalToolExecutionContext) -> Path:
+    if context.storage_root is None:
+        raise ValueError("legal tool execution requires a storage_root")
     return context.storage_root.resolve()
 
 
@@ -97,9 +100,15 @@ def extract_official_text(
     request: LegalToolInput,
     context: LegalToolExecutionContext,
 ):
-    """Extract deterministic canonical text from one immutable source snapshot."""
-    del context
+    """Extract deterministic canonical text from one immutable source snapshot.
+
+    Runtime consumers normally provide only the registered ``snapshot_ref`` and
+    let this canonical boundary resolve/verify storage metadata. ``source_manifest_path``
+    remains supported for deterministic script/tests that already hold a pinned
+    manifest path.
+    """
     from lcsp_workers.legal.official_text_extraction import (
+        OfficialSourceSnapshotResolver,
         OfficialTextExtractionRequest,
         OfficialTextExtractor,
     )
@@ -107,14 +116,39 @@ def extract_official_text(
     max_pages = _required(request, "max_pages")
     if not isinstance(max_pages, int) or max_pages < 1:
         raise ValueError("legal tool input max_pages must be a positive integer")
-    return OfficialTextExtractor().extract(
-        OfficialTextExtractionRequest(
-            snapshot_ref=_required_str(request, "snapshot_ref"),
-            extractor_profile=_required_str(request, "extractor_profile"),
-            max_pages=max_pages,
-            source_manifest_path=_path(request, "source_manifest_path"),
-            output_dir=_path(request, "output_dir"),
+
+    extractor = context.text_extractor or OfficialTextExtractor()
+    source_manifest_path = request.get("source_manifest_path")
+    if source_manifest_path is not None:
+        return extractor.extract(
+            OfficialTextExtractionRequest(
+                snapshot_ref=_required_str(request, "snapshot_ref"),
+                extractor_profile=_required_str(request, "extractor_profile"),
+                max_pages=max_pages,
+                source_manifest_path=_path(request, "source_manifest_path"),
+                output_dir=_path(request, "output_dir"),
+            )
         )
+
+    root = _storage_root(context)
+    snapshot_ref = _required_str(request, "snapshot_ref")
+    resolved = OfficialSourceSnapshotResolver(
+        api_client=context.api_client,
+        storage_root=root,
+    ).resolve(snapshot_ref=snapshot_ref)
+    output_dir = request.get("output_dir")
+    if output_dir is None:
+        output_dir = (
+            root
+            / "official-text-extractions"
+            / resolved.snapshot_ref.removeprefix("snapshot:").replace(":", "_")
+        )
+    output_path = output_dir if isinstance(output_dir, Path) else Path(str(output_dir))
+    return extractor.extract_from_resolved_snapshot(
+        resolved_snapshot=resolved,
+        extractor_profile=_required_str(request, "extractor_profile"),
+        max_pages=max_pages,
+        output_dir=output_path,
     )
 
 
@@ -307,18 +341,35 @@ def validate_retrieval_index(
     request: LegalToolInput,
     context: LegalToolExecutionContext,
 ) -> dict[str, str]:
-    """Require every corpus chunk to round-trip as an exact primary match."""
-    from lcsp_workers.legal.legal_corpus_recovery_driver import LegalCorpusRecoveryDriver
+    """Require every corpus chunk to round-trip as an exact PRIMARY_MATCH."""
+    from lcsp_workers.legal.chromadb_citation_retriever import ChromaDbCitationRetriever
 
     payload = _required(request, "payload")
     if not isinstance(payload, dict):
         raise ValueError("legal tool input payload must be an object")
     corpus_version_id = _required_str(request, "corpus_version_id")
-    driver = LegalCorpusRecoveryDriver(
-        api_client=context.api_client,
-        chroma_path=context.chroma_path,
-    )
-    driver._validate_retrieval_index(corpus_version_id, payload)
+    chunks = [
+        chunk
+        for document in payload.get("documents") or []
+        if isinstance(document, dict)
+        for chunk in document.get("chunks") or []
+        if isinstance(chunk, dict)
+    ]
+    if not chunks:
+        raise RuntimeError("Corpus payload has no chunks to index")
+
+    retriever = ChromaDbCitationRetriever(context.chroma_path)
+    retriever.index_corpus(corpus_version_id, chunks)
+    expected_ids = {str(chunk.get("id") or "") for chunk in chunks}
+    if "" in expected_ids:
+        raise RuntimeError("Corpus payload contains a chunk without stable ID")
+    retrieved = retriever.retrieve_exact(corpus_version_id, list(expected_ids))
+    primary_ids = {chunk.id for chunk in retrieved if chunk.role == "PRIMARY_MATCH"}
+    if primary_ids != expected_ids:
+        missing = sorted(expected_ids - primary_ids)
+        raise RuntimeError(
+            f"Retrieval index validation failed; missing chunk IDs: {missing}"
+        )
     return {
         "status": "READY",
         "corpus_version_id": corpus_version_id,
