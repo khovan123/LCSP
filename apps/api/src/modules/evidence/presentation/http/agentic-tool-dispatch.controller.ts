@@ -16,7 +16,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { QueryBus } from "@nestjs/cqrs";
+import { CommandBus, QueryBus } from "@nestjs/cqrs";
 
 import type { AppConfig } from "../../../../config/config.types.js";
 import {
@@ -32,6 +32,10 @@ import {
 } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { PythonWorkerRuntimeClient } from "../../application/services/evidence/python-worker-runtime.client.js";
+import {
+  buildAgenticToolCommand,
+  isAgenticToolCommand,
+} from "./agentic-tool-command-dispatcher.js";
 import { buildAgenticToolQuery } from "./agentic-tool-query-dispatcher.js";
 
 type DispatchRequest = {
@@ -39,6 +43,8 @@ type DispatchRequest = {
   assessment_id?: unknown;
   organization_id?: unknown;
   user_id?: unknown;
+  policy_id?: unknown;
+  policy_version?: unknown;
   artifact_versions?: unknown;
   input?: unknown;
   correlationId?: unknown;
@@ -57,6 +63,7 @@ export class InternalAgenticToolDispatchController {
 
   constructor(
     private readonly queryBus: QueryBus,
+    private readonly commandBus: CommandBus,
     private readonly pythonWorkerRuntime: PythonWorkerRuntimeClient,
     private readonly configService: ConfigService<AppConfig, true>,
     private readonly runtimeEvents: AssessmentRuntimeEventService,
@@ -165,17 +172,30 @@ export class InternalAgenticToolDispatchController {
                 },
                 correlationId,
               )
-            : await this.queryBus.execute(
-                buildAgenticToolQuery({
-                  toolName,
-                  assessmentId,
-                  organizationId,
-                  userId,
-                  correlationId,
-                  artifactVersions,
-                  input,
-                }),
-              )
+            : isAgenticToolCommand(toolName)
+              ? await this.commandBus.execute(
+                  buildAgenticToolCommand({
+                    toolName,
+                    assessmentId,
+                    organizationId,
+                    userId,
+                    policyId: optionalString(payload.policy_id),
+                    policyVersion: optionalString(payload.policy_version),
+                    correlationId,
+                    input,
+                  }),
+                )
+              : await this.queryBus.execute(
+                  buildAgenticToolQuery({
+                    toolName,
+                    assessmentId,
+                    organizationId,
+                    userId,
+                    correlationId,
+                    artifactVersions,
+                    input,
+                  }),
+                )
       ) as unknown;
 
       if (isNeedsInputResult(result)) {
@@ -449,6 +469,7 @@ const RECONCILIATION_TOOL_NAMES = new Set<string>([
   AGENTIC_TOOL_NAMES.getReconciliationContext,
   AGENTIC_TOOL_NAMES.getVerifiedProfile,
   AGENTIC_TOOL_NAMES.compareWizardClaim,
+  AGENTIC_TOOL_NAMES.reconcileProfileToVerifiedProfile,
 ]);
 
 const CLASSIFICATION_TOOL_NAMES = new Set<string>([
@@ -458,6 +479,8 @@ const CLASSIFICATION_TOOL_NAMES = new Set<string>([
   AGENTIC_TOOL_NAMES.evaluateGapMatrix,
   AGENTIC_TOOL_NAMES.getGapEvidenceTrace,
   AGENTIC_TOOL_NAMES.proposeGapRemediation,
+  AGENTIC_TOOL_NAMES.submitClassificationForIndependentReview,
+  AGENTIC_TOOL_NAMES.resolveIndependentClassificationReview,
 ]);
 
 const LEGAL_RETRIEVAL_TOOL_NAMES = new Set<string>([
