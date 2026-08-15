@@ -80,6 +80,7 @@ export class OutboxRepository {
 
   /**
    * Locks an eligible pending batch with `FOR UPDATE SKIP LOCKED` and executes a handler before the transaction commits.
+   * The row locks remain held while `handler` runs, preventing another publisher instance from selecting the same messages concurrently.
    *
    * @param batchSize - Maximum number of deliverable messages to lock in one transaction.
    * @param handler - Callback that processes the locked entities using the same Prisma transaction.
@@ -182,6 +183,7 @@ export class OutboxRepository {
 
   /**
    * Keeps a targeted-reanalysis request and checkpoint observable while its command publication is retrying or exhausted.
+   * This update intentionally runs in the same outbox transaction as `markFailure`, so an outbox message entering DLQ cannot leave the request appearing queued.
    *
    * @param tx - Prisma transaction shared with the outbox failure update.
    * @param requestId - Targeted-reanalysis request identifier represented by the message.
@@ -231,6 +233,8 @@ export class OutboxRepository {
 
   /**
    * Atomically reserves one of an organization's targeted-reanalysis worker slots before AMQP publication.
+   * The organization-scoped PostgreSQL advisory lock serializes competing reservations for the same tenant without globally serializing unrelated organizations.
+   * Capacity is enforced by `TARGETED_REANALYSIS_CAPACITY_POLICY.maxRunningPerOrganization` rather than by this method assuming a hard-coded slot count.
    *
    * @param tx - Prisma transaction used for the organization-scoped advisory lock and state transition.
    * @param requestId - Targeted-reanalysis request that should be dispatched.
