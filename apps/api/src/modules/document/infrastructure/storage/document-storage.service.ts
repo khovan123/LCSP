@@ -156,9 +156,9 @@ function base64UrlEncode(value: string): string {
 /**
  * Decodes URL-safe Base64 back to UTF-8 text.
  *
-   * @param value - Base64url value to decode.
-   * @returns Decoded UTF-8 text.
-   */
+ * @param value - Base64url value to decode.
+ * @returns Decoded UTF-8 text.
+ */
 function base64UrlDecode(value: string): string {
   return Buffer.from(value, "base64url").toString("utf8");
 }
