@@ -139,8 +139,7 @@ def run_structural_augmentation(
     request: ScannerToolInput,
     context: ScannerToolExecutionContext,
 ):
-    """Run structural augmentation using the existing deterministic augmentor."""
-    context.structural_augmentor.set_workspace_path(_workspace_path(request))
+    """Run structural augmentation through the existing deterministic augmentor."""
     return context.structural_augmentor.augment(
         files=list(_required(request, "files")),
         finding_ids=list(_required(request, "finding_ids")),

@@ -18,6 +18,7 @@ from lcsp_workers.agentic_evidence.registry import AgenticToolValidationError
 from lcsp_workers.agentic_evidence.scanner_tool_entrypoints import (
     ScannerToolExecutionContext,
 )
+from lcsp_workers.scanner.scan_consumer import ScanConsumer
 
 
 EXPECTED_AO1_SCANNER_TOOLS = {
@@ -88,6 +89,20 @@ def test_scanner_dispatcher_routes_syft_through_same_named_entrypoint() -> None:
 
     assert result is expected
     context.syft_tool.run.assert_called_once_with(Path("/tmp/lcsp-workspace"))
+
+
+def test_scan_consumer_does_not_bypass_canonical_ao1_entrypoints() -> None:
+    source = inspect.getsource(ScanConsumer)
+
+    assert "self._syft_tool.run(" not in source
+    assert "self._semgrep_tool.run(" not in source
+    assert "self._knip_tool.run(" not in source
+    assert "self._deptry_tool.run(" not in source
+    assert "PythonAnalyzer(" not in source
+    assert "self._evidence_graph_assembler.assemble(" not in source
+
+    for tool_name in EXPECTED_AO1_SCANNER_TOOLS:
+        assert f'"{tool_name}"' in source
 
 
 def test_scanner_dispatcher_fails_closed_for_unknown_tool() -> None:
