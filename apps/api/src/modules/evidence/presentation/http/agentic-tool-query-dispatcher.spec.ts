@@ -4,6 +4,7 @@ import { GetGapRequirementsQuery } from "../../../classification/application/que
 import { GetAdminSourceCatalogQuery } from "../../../legal-rule-catalog/application/queries/get-admin-source-catalog/get-admin-source-catalog.query.js";
 import { CompareWizardClaimQuery } from "../../../reconciliation/application/queries/compare-wizard-claim/compare-wizard-claim.query.js";
 import { SearchEvidenceQuery } from "../../application/queries/search-evidence/search-evidence.query.js";
+import * as queryEntrypoints from "./agentic-tool-query-dispatcher.js";
 import { buildAgenticToolQuery } from "./agentic-tool-query-dispatcher.js";
 
 const baseArgs = {
@@ -17,7 +18,47 @@ const baseArgs = {
   },
 };
 
+const EXACT_QUERY_ENTRYPOINTS = [
+  "get_scan_coverage",
+  "search_evidence",
+  "get_finding_detail",
+  "find_provider_invocations",
+  "get_evidence_subgraph",
+  "get_symbol_context",
+  "trace_static_flow",
+  "inspect_human_review_path",
+  "inspect_decision_path",
+  "inspect_data_path",
+  "find_similar_symbols",
+  "inspect_deployment_context",
+  "get_assessment_context",
+  "get_artifact_chain",
+  "get_reconciliation_context",
+  "propose_missing_targets",
+  "get_verified_profile",
+  "compare_wizard_claim",
+  "get_classification_baseline",
+  "get_gap_requirements",
+  "get_gap_evidence_trace",
+  "propose_gap_remediation",
+  "validate_classification_proposal",
+  "evaluate_gap_matrix",
+  "get_admin_source_catalog",
+  "get_legal_corpus_readiness",
+  "retrieve_legal_basis",
+  "get_legal_rule_match",
+  "validate_citation_set",
+] as const;
+
 describe("buildAgenticToolQuery", () => {
+  it("exposes a real function whose name exactly matches every canonical query tool", () => {
+    for (const toolName of EXACT_QUERY_ENTRYPOINTS) {
+      const entrypoint = queryEntrypoints[toolName];
+      expect(typeof entrypoint).toBe("function");
+      expect((entrypoint as Function).name).toBe(toolName);
+    }
+  });
+
   it("keeps search_evidence mapped to SearchEvidenceQuery", () => {
     const query = buildAgenticToolQuery({
       ...baseArgs,
