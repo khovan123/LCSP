@@ -33,12 +33,7 @@ export function isAgenticToolCommand(toolName: string): boolean {
   return PROTECTED_COMMAND_NAMES.has(toolName);
 }
 
-/**
- * Resolve a protected canonical tool name to the exact Nest CQRS command that
- * owns its mutation transaction. Query routing remains in
- * `agentic-tool-query-dispatcher.ts` so read and mutation authority stay
- * visibly separate while sharing the same controller entry boundary.
- */
+/** Resolve one protected canonical name to the Nest command owning its mutation. */
 export function buildAgenticToolCommand(args: AgenticToolCommandDispatchArgs) {
   switch (args.toolName) {
     case AGENTIC_TOOL_NAMES.reconcileProfileToVerifiedProfile:
@@ -65,14 +60,17 @@ export function reconcile_profile_to_verified_profile(
       wizardProfileId: stripRef(
         requiredString(input.wizardProfileRef, args.correlationId),
         "wizard:",
+        args.correlationId,
       ),
       technicalEvidenceReportId: stripRef(
         requiredString(input.technicalEvidenceReportRef, args.correlationId),
         "ter:",
+        args.correlationId,
       ),
       aiUsageFlowId: stripRef(
         requiredString(input.aiUsageFlowRef, args.correlationId),
         "flow:",
+        args.correlationId,
       ),
       reconciliationDecisionRefs: stringArray(
         input.reconciliationDecisionRefs,
@@ -94,8 +92,8 @@ export function submit_classification_for_independent_review(
     args.organizationId,
     args.input as SubmitClassificationReviewInput,
     args.userId,
-    requiredPolicy(args.policyId, "policyId", args.correlationId),
-    requiredPolicy(args.policyVersion, "policyVersion", args.correlationId),
+    requiredPolicy(args.policyId, args.correlationId),
+    requiredPolicy(args.policyVersion, args.correlationId),
     args.correlationId,
   );
 }
@@ -109,8 +107,8 @@ export function resolve_independent_classification_review(
     args.organizationId,
     args.input as ResolveClassificationReviewInput,
     args.userId,
-    requiredPolicy(args.policyId, "policyId", args.correlationId),
-    requiredPolicy(args.policyVersion, "policyVersion", args.correlationId),
+    requiredPolicy(args.policyId, args.correlationId),
+    requiredPolicy(args.policyVersion, args.correlationId),
     args.correlationId,
   );
 }
@@ -135,7 +133,6 @@ function stringArray(value: unknown, correlationId: string): string[] {
 
 function requiredPolicy(
   value: string | null | undefined,
-  _field: string,
   correlationId: string,
 ): string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -144,9 +141,9 @@ function requiredPolicy(
   return value.trim();
 }
 
-function stripRef(value: string, prefix: string): string {
+function stripRef(value: string, prefix: string, correlationId: string): string {
   if (!value.startsWith(prefix) || value.length <= prefix.length) {
-    invalid("internal-agentic-dispatch");
+    invalid(correlationId);
   }
   return value.slice(prefix.length);
 }
