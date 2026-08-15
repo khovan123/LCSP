@@ -36,7 +36,8 @@ export type PbacContextResult =
     };
 
 /**
- * Loads the authenticated PBAC context in session → MFA → membership → policy order using auth-workspace repositories.
+ * Loads the authenticated PBAC context in session → MFA → membership → policy order.
+ * Reuses the auth-workspace repositories instead of querying Prisma directly so session and membership semantics remain consistent across authentication and PBAC paths.
  */
 @Injectable()
 export class PbacContextLoader {
