@@ -3,14 +3,12 @@ from dataclasses import replace
 from types import SimpleNamespace
 import pytest
 
-from lcsp_workers.scanner.analyzers.python_analyzer import AIInvocationCallSite, PythonAnalysisResult
+from lcsp_workers.scanner.analyzers.python_analyzer import AiCallSite, PythonAnalysisResult
 from lcsp_workers.scanner.dependencies.dependency_fact import PackageDependency
 from lcsp_workers.scanner.evidence_assembler import EvidenceAssembler, PrivacyAssertionError
 from lcsp_workers.scanner.program_graph.builder import ProgramGraphBuilder
 from lcsp_workers.scanner.program_graph.semantic_ir import SemanticNodeFact, SemanticProgram
 from lcsp_workers.scanner.parsers.structural_types import StructuralFact
-from lcsp_workers.scanner.tools.deptry_tool import DeptryRunResult
-from lcsp_workers.scanner.tools.knip_tool import KnipRunResult
 from lcsp_workers.scanner.tools.semgrep_tool import SemgrepRunResult
 from lcsp_workers.scanner.tools.syft_tool import SBOMEntry, SyftRunResult
 from lcsp_workers.scanner.tools.tool_base import OUTCOME_SUCCESS, OUTCOME_TOOL_FAILURE, ToolExecutionResult
@@ -27,7 +25,29 @@ def _provenance(name: str, outcome: str = OUTCOME_SUCCESS) -> ToolRunProvenance:
 
 
 def _python_analysis() -> PythonAnalysisResult:
-    return PythonAnalysisResult(files_analyzed=1, files_skipped=0, ai_call_sites=[AIInvocationCallSite(file_path="src/app.py", line_number=8, column_offset=4, provider="OPENAI", model="gpt-4o-mini", method="client.responses.create", enclosing_symbol="generate", input_signals=["prompt"], output_signals=["response"], confidence=0.95)], import_map={"src/app.py": ["openai"]}, unsupported_dynamic_flows=[], coverage_limitation=False)
+    return PythonAnalysisResult(
+        files_analyzed=1,
+        files_skipped=0,
+        ai_call_sites=[
+            AiCallSite(
+                file_path="src/app.py",
+                line_number=8,
+                function_name="client.responses.create",
+                module_alias="openai",
+                matched_rule_id="openai.responses.create",
+                finding_type="AI_MODEL_INVOCATION",
+                analysis_level="L1",
+                call_args_schema=["input"],
+                has_dynamic_call=False,
+                kwarg_names=["input"],
+                confidence=0.95,
+                evidence=[{"file": "src/app.py", "line": 8}],
+            )
+        ],
+        import_map={"openai": "openai"},
+        unsupported_dynamic_flows=[],
+        coverage_limitation=False,
+    )
 
 
 def _ts_analysis() -> TsJsBridgeResult:
