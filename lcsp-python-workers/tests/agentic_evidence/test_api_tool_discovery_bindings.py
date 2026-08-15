@@ -17,9 +17,12 @@ from lcsp_workers.agentic_evidence.tool_entrypoints import AgenticToolExecutionC
 EXPECTED_NEST_DISCOVERY_TOOLS = {
     "get_assessment_context": "GetAssessmentContextQuery",
     "get_verified_profile": "GetVerifiedProfileQuery",
+    "compare_wizard_claim": "CompareWizardClaimQuery",
     "get_classification_baseline": "GetClassificationBaselineQuery",
+    "get_gap_requirements": "GetGapRequirementsQuery",
     "validate_classification_proposal": "ValidateClassificationProposalQuery",
     "evaluate_gap_matrix": "EvaluateGapMatrixQuery",
+    "get_admin_source_catalog": "GetAdminSourceCatalogQuery",
     "get_legal_corpus_readiness": "GetLegalCorpusReadinessQuery",
     "retrieve_legal_basis": "RetrieveLegalBasisQuery",
     "get_legal_rule_match": "GetLegalRuleMatchQuery",
@@ -67,6 +70,16 @@ def test_runtime_binding_resolves_existing_nest_query_without_guessing() -> None
     assert binding.runtime_target == ToolRuntimeTarget.NEST_CQRS
     assert binding.entrypoint.__name__ == "retrieve_legal_basis"
     assert binding.downstream_target == "RetrieveLegalBasisQuery"
+
+    compare = runtime_binding("compare_wizard_claim")
+    assert compare.entrypoint.__name__ == "compare_wizard_claim"
+    assert compare.downstream_target == "CompareWizardClaimQuery"
+
+    gap_requirements = runtime_binding("get_gap_requirements")
+    assert gap_requirements.downstream_target == "GetGapRequirementsQuery"
+
+    source_catalog = runtime_binding("get_admin_source_catalog")
+    assert source_catalog.downstream_target == "GetAdminSourceCatalogQuery"
 
 
 def test_exact_named_entrypoint_dispatches_through_internal_api() -> None:
