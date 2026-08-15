@@ -154,7 +154,9 @@ export class InternalEvidenceController {
       throw new NotFoundException("TechnicalProfile not found");
     }
 
-    const profileData = isRecord(profile.profileData) ? profile.profileData : {};
+    const profileData = isRecord(profile.profileData)
+      ? profile.profileData
+      : {};
     return {
       ...profileData,
       id: profile.id,
