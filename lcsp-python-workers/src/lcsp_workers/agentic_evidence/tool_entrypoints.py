@@ -187,10 +187,10 @@ def trace_static_flow(
     return _dispatch_via_internal_api("trace_static_flow", request, context)
 
 
-# The tools below are already handled by the internal NestJS dispatcher but are
-# not yet part of the Python LLM-callable catalog. They still expose exact-name
-# execution entrypoints so a developer can trace the canonical name directly to
-# the CQRS query that actually owns the business logic.
+# The tools below are handled by the internal NestJS dispatcher but are not all
+# part of the Python LLM-callable catalog. They still expose exact-name execution
+# entrypoints so a developer can trace the canonical name directly to the CQRS
+# query that owns the business logic without widening model access.
 
 
 def get_assessment_context(
@@ -207,11 +207,25 @@ def get_verified_profile(
     return _dispatch_via_internal_api("get_verified_profile", request, context)
 
 
+def compare_wizard_claim(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("compare_wizard_claim", request, context)
+
+
 def get_classification_baseline(
     request: AgenticToolRequest,
     context: AgenticToolExecutionContext,
 ) -> Mapping[str, Any]:
     return _dispatch_via_internal_api("get_classification_baseline", request, context)
+
+
+def get_gap_requirements(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("get_gap_requirements", request, context)
 
 
 def validate_classification_proposal(
@@ -226,6 +240,13 @@ def evaluate_gap_matrix(
     context: AgenticToolExecutionContext,
 ) -> Mapping[str, Any]:
     return _dispatch_via_internal_api("evaluate_gap_matrix", request, context)
+
+
+def get_admin_source_catalog(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    return _dispatch_via_internal_api("get_admin_source_catalog", request, context)
 
 
 def get_legal_corpus_readiness(
