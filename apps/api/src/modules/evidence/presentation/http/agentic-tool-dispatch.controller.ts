@@ -1,3 +1,4 @@
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   AGENTIC_TOOL_NAMES,
   AGENTIC_TOOL_STATUSES,
@@ -6,6 +7,7 @@ import {
   type AssessmentRuntimeStageCode,
   EVIDENCE_ERROR_CODES,
 } from "@lcsp/contracts/evidence";
+import { PBAC_DECISION } from "@lcsp/contracts/pbac";
 import {
   Body,
   Controller,
@@ -25,6 +27,7 @@ import {
   ORCHESTRATION_RUNTIME_LOG_EVENTS,
   sanitizeOrchestrationLogValue,
 } from "../../../../platform/logging/orchestration-runtime-log.js";
+import { PbacPreflightService } from "../../../../platform/pbac/pbac-preflight.service.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import {
@@ -34,6 +37,7 @@ import {
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { PythonWorkerRuntimeClient } from "../../application/services/evidence/python-worker-runtime.client.js";
 import {
+  agenticToolCommandPbacAction,
   buildAgenticToolCommand,
   isAgenticToolCommand,
 } from "./agentic-tool-command-dispatcher.js";
@@ -44,8 +48,6 @@ type DispatchRequest = {
   assessment_id?: unknown;
   organization_id?: unknown;
   user_id?: unknown;
-  policy_id?: unknown;
-  policy_version?: unknown;
   artifact_versions?: unknown;
   input?: unknown;
   correlationId?: unknown;
@@ -53,6 +55,16 @@ type DispatchRequest = {
   workflowRunId?: unknown;
   run_id?: unknown;
   runId?: unknown;
+};
+
+type ToolExecutionArgs = {
+  toolName: string;
+  assessmentId: string;
+  organizationId: string;
+  userId: string;
+  correlationId: string;
+  artifactVersions: Record<string, unknown>;
+  input: Record<string, unknown>;
 };
 
 @Controller("internal/evidence/agentic-tools")
@@ -68,6 +80,7 @@ export class InternalAgenticToolDispatchController {
     private readonly configService: ConfigService<AppConfig, true>,
     private readonly runtimeEvents: AssessmentRuntimeEventService,
     @Optional() private readonly commandBus?: CommandBus,
+    @Optional() private readonly pbacPreflight?: PbacPreflightService,
   ) {}
 
   @Post("dispatch")
@@ -143,61 +156,15 @@ export class InternalAgenticToolDispatchController {
     });
 
     try {
-      const result = (
-        toolName === AGENTIC_TOOL_NAMES.requestTargetedReanalysis
-          ? await this.pythonWorkerRuntime.requestTargetedReanalysis(
-              {
-                assessmentId,
-                organizationId,
-                userId,
-                inputArtifactVersion: requiredArtifactVersion(
-                  artifactVersions,
-                  "technicalEvidenceReportId",
-                ),
-                analyzerId: requiredString(input.analyzerId),
-                scope: requiredScope(input.scope),
-                reasonRequirementId: requiredString(input.reasonRequirementId),
-                idempotencyKey: requiredString(input.idempotencyKey),
-              },
-              correlationId,
-            )
-          : toolName === AGENTIC_TOOL_NAMES.resumeWaitingRuns
-            ? await this.pythonWorkerRuntime.resumeWaitingRuns(
-                {
-                  corpusVersionId: requiredArtifactVersion(
-                    artifactVersions,
-                    "corpusVersionId",
-                  ),
-                  maxRuns: numberWithDefault(input.maxRuns, 25),
-                  idempotencyKey: requiredString(input.idempotencyKey),
-                },
-                correlationId,
-              )
-            : isAgenticToolCommand(toolName)
-              ? await this.requireCommandBus(correlationId).execute(
-                  buildAgenticToolCommand({
-                    toolName,
-                    assessmentId,
-                    organizationId,
-                    userId,
-                    policyId: optionalString(payload.policy_id),
-                    policyVersion: optionalString(payload.policy_version),
-                    correlationId,
-                    input,
-                  }),
-                )
-              : await this.queryBus.execute(
-                  buildAgenticToolQuery({
-                    toolName,
-                    assessmentId,
-                    organizationId,
-                    userId,
-                    correlationId,
-                    artifactVersions,
-                    input,
-                  }),
-                )
-      ) as unknown;
+      const result = await this.executeTool({
+        toolName,
+        assessmentId,
+        organizationId,
+        userId,
+        correlationId,
+        artifactVersions,
+        input,
+      });
 
       if (isNeedsInputResult(result)) {
         await this.runtimeEvents.recordToolWaitingInput({
@@ -246,6 +213,92 @@ export class InternalAgenticToolDispatchController {
       });
       throw error;
     }
+  }
+
+  private async executeTool(args: ToolExecutionArgs): Promise<unknown> {
+    if (args.toolName === AGENTIC_TOOL_NAMES.requestTargetedReanalysis) {
+      return this.pythonWorkerRuntime.requestTargetedReanalysis(
+        {
+          assessmentId: args.assessmentId,
+          organizationId: args.organizationId,
+          userId: args.userId,
+          inputArtifactVersion: requiredArtifactVersion(
+            args.artifactVersions,
+            "technicalEvidenceReportId",
+          ),
+          analyzerId: requiredString(args.input.analyzerId),
+          scope: requiredScope(args.input.scope),
+          reasonRequirementId: requiredString(args.input.reasonRequirementId),
+          idempotencyKey: requiredString(args.input.idempotencyKey),
+        },
+        args.correlationId,
+      );
+    }
+
+    if (args.toolName === AGENTIC_TOOL_NAMES.resumeWaitingRuns) {
+      return this.pythonWorkerRuntime.resumeWaitingRuns(
+        {
+          corpusVersionId: requiredArtifactVersion(
+            args.artifactVersions,
+            "corpusVersionId",
+          ),
+          maxRuns: numberWithDefault(args.input.maxRuns, 25),
+          idempotencyKey: requiredString(args.input.idempotencyKey),
+        },
+        args.correlationId,
+      );
+    }
+
+    if (isAgenticToolCommand(args.toolName)) {
+      const policy = await this.authorizeProtectedCommand(args);
+      return this.requireCommandBus(args.correlationId).execute(
+        buildAgenticToolCommand({
+          toolName: args.toolName,
+          assessmentId: args.assessmentId,
+          organizationId: args.organizationId,
+          userId: args.userId,
+          policyId: policy.policyId,
+          policyVersion: policy.policyVersion,
+          correlationId: args.correlationId,
+          input: args.input,
+        }),
+      );
+    }
+
+    return this.queryBus.execute(buildAgenticToolQuery(args));
+  }
+
+  private async authorizeProtectedCommand(args: ToolExecutionArgs): Promise<{
+    policyId: string;
+    policyVersion: string;
+  }> {
+    if (!this.pbacPreflight) {
+      throw problemException(EVIDENCE_ERROR_CODES.notFound, args.correlationId, {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      });
+    }
+
+    const authorization = await this.pbacPreflight.evaluateWithPolicy({
+      userId: args.userId,
+      organizationId: args.organizationId,
+      action: agenticToolCommandPbacAction(args.toolName),
+      correlationId: args.correlationId,
+    });
+
+    if (
+      authorization.decision !== PBAC_DECISION.allow ||
+      !authorization.policyId ||
+      !authorization.policyVersion
+    ) {
+      throw problemException(AUTH_ERROR_CODES.pbacDenied, args.correlationId, {
+        status: HttpStatus.FORBIDDEN,
+      });
+    }
+
+    return {
+      policyId: authorization.policyId,
+      policyVersion: authorization.policyVersion,
+    };
   }
 
   private requireCommandBus(correlationId: string): CommandBus {
