@@ -81,11 +81,11 @@ def test_ao6_bindings_have_exact_named_static_entrypoints() -> None:
         assert f"def {binding.tool_name}(" in source
 
 
-def test_global_binding_index_now_includes_ao6_python_runtime() -> None:
+def test_global_binding_index_covers_all_55_canonical_tools() -> None:
     names = [binding.tool_name for binding in ALL_TOOL_BINDINGS]
 
     assert len(names) == len(set(names))
-    assert len(names) == 52
+    assert len(names) == 55
     assert runtime_binding("build_legal_chunks").downstream_target == "LegalChunkBuilder.build"
     assert (
         runtime_binding("activate_validated_corpus_version").runtime_target
