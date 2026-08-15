@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 from lcsp_workers.agentic_evidence import tool_entrypoints
-from lcsp_workers.agentic_evidence.catalog import SPRINT6_AGENTIC_TOOL_SPECS
+from lcsp_workers.agentic_evidence.catalog import AGENTIC_TOOL_SPECS
 from lcsp_workers.agentic_evidence.dispatcher import (
     AgenticToolDispatcher,
     SPRINT6_AGENTIC_TOOL_BINDINGS,
@@ -36,7 +36,7 @@ def _request_for(tool_name: str) -> AgenticToolRequest:
 
 
 def test_every_canonical_tool_has_exact_named_runtime_binding() -> None:
-    catalog_names = {spec.name for spec in SPRINT6_AGENTIC_TOOL_SPECS}
+    catalog_names = {spec.name for spec in AGENTIC_TOOL_SPECS}
     binding_names = {binding.tool_name for binding in SPRINT6_AGENTIC_TOOL_BINDINGS}
 
     assert binding_names == catalog_names
@@ -48,7 +48,7 @@ def test_every_canonical_tool_has_exact_named_runtime_binding() -> None:
 
 def test_canonical_entrypoints_are_real_static_functions() -> None:
     source = inspect.getsource(tool_entrypoints)
-    for spec in SPRINT6_AGENTIC_TOOL_SPECS:
+    for spec in AGENTIC_TOOL_SPECS:
         assert f"def {spec.name}(" in source
 
 

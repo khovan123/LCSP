@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Mapping
 
-from .catalog import SPRINT6_AGENTIC_TOOL_SPECS
+from .catalog import AGENTIC_TOOL_SPECS
 from .registry import AgenticToolRequest, AgenticToolValidationError
 from .tool_entrypoints import (
     AgenticToolExecutionContext,
@@ -216,7 +216,7 @@ class AgenticToolDispatcher:
         return execute
 
     def _assert_catalog_coverage(self) -> None:
-        catalog_names = {spec.name for spec in SPRINT6_AGENTIC_TOOL_SPECS}
+        catalog_names = {spec.name for spec in AGENTIC_TOOL_SPECS}
         binding_names = set(self._bindings)
         if binding_names != catalog_names:
             missing = sorted(catalog_names - binding_names)

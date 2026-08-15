@@ -6,7 +6,7 @@ from .authorization import (
 )
 from .catalog import (
     AgenticToolSpec,
-    SPRINT6_AGENTIC_TOOL_SPECS,
+    AGENTIC_TOOL_SPECS,
     build_llm_tool_definitions,
     llm_callable_tool_specs,
 )
@@ -52,7 +52,7 @@ __all__ = [
     "ApiPbacToolAuthorizer",
     "SPRINT6_AGENTIC_CAPABILITIES",
     "SPRINT6_AGENTIC_TOOL_BINDINGS",
-    "SPRINT6_AGENTIC_TOOL_SPECS",
+    "AGENTIC_TOOL_SPECS",
     "TOOL_PBAC_ACTIONS",
     "bind_runtime_handlers",
     "build_llm_tool_definitions",
