@@ -1,4 +1,7 @@
-import { AGENTIC_TOOL_NAMES, EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
+import {
+  AGENTIC_TOOL_NAMES,
+  EVIDENCE_ERROR_CODES,
+} from "@lcsp/contracts/evidence";
 import { HttpStatus } from "@nestjs/common";
 
 import { problemException } from "../../../../platform/problems/problem-factory.js";
@@ -38,9 +41,13 @@ export async function dispatchAgenticToolWorkerBridge(
     case AGENTIC_TOOL_NAMES.resumeWaitingRuns:
       return resume_waiting_runs(args, client);
     default:
-      throw problemException(EVIDENCE_ERROR_CODES.notFound, args.correlationId, {
-        status: HttpStatus.NOT_FOUND,
-      });
+      throw problemException(
+        EVIDENCE_ERROR_CODES.notFound,
+        args.correlationId,
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
   }
 }
 

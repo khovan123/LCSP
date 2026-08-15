@@ -143,9 +143,13 @@ export function buildAgenticToolQuery(args: AgenticToolQueryDispatchArgs) {
     case AGENTIC_TOOL_NAMES.validateCitationSet:
       return validate_citation_set(args);
     default:
-      throw problemException(EVIDENCE_ERROR_CODES.notFound, args.correlationId, {
-        status: HttpStatus.NOT_FOUND,
-      });
+      throw problemException(
+        EVIDENCE_ERROR_CODES.notFound,
+        args.correlationId,
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
   }
 }
 
@@ -159,7 +163,9 @@ export function get_scan_coverage(args: AgenticToolQueryDispatchArgs) {
     args.correlationId,
     stringArray(input.pathPrefixes),
     stringArray(input.languages),
-    stringArray(input.dispositions) as Array<"ANALYZED" | "SKIPPED" | "LIMITED">,
+    stringArray(input.dispositions) as Array<
+      "ANALYZED" | "SKIPPED" | "LIMITED"
+    >,
     stringArray(input.toolNames),
     optionalString(input.cursor),
   );
@@ -176,7 +182,10 @@ export function search_evidence(args: AgenticToolQueryDispatchArgs) {
     stringArray(input.findingKinds),
     stringArray(input.providers),
     stringArray(input.pathPrefixes),
-    optionalEnum(input.minConfidence, Object.values(SEARCH_EVIDENCE_CONFIDENCE)),
+    optionalEnum(
+      input.minConfidence,
+      Object.values(SEARCH_EVIDENCE_CONFIDENCE),
+    ),
     optionalString(input.cursor),
   );
 }
@@ -203,7 +212,10 @@ export function find_provider_invocations(args: AgenticToolQueryDispatchArgs) {
     args.correlationId,
     optionalEnum(input.provider, Object.values(PROVIDER_INVOCATION_PROVIDERS)),
     stringArray(input.pathPrefixes),
-    optionalEnum(input.framework, Object.values(PROVIDER_INVOCATION_FRAMEWORKS)),
+    optionalEnum(
+      input.framework,
+      Object.values(PROVIDER_INVOCATION_FRAMEWORKS),
+    ),
   );
 }
 
@@ -271,7 +283,10 @@ export function inspect_decision_path(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
     stripRef(requiredString(input.startRef), "node:"),
-    typedStringArray(input.actionCategories, Object.values(DECISION_ACTION_CATEGORIES)),
+    typedStringArray(
+      input.actionCategories,
+      Object.values(DECISION_ACTION_CATEGORIES),
+    ),
     numberWithDefault(input.maxHops, 5),
     numberWithDefault(input.maxResults, 25),
     args.correlationId,
@@ -300,7 +315,10 @@ export function find_similar_symbols(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
     stripRef(requiredString(input.seedSymbolRef), "symbol:"),
-    typedStringArray(input.dimensions, Object.values(SYMBOL_SIMILARITY_DIMENSIONS)),
+    typedStringArray(
+      input.dimensions,
+      Object.values(SYMBOL_SIMILARITY_DIMENSIONS),
+    ),
     numberWithDefault(input.maxResults, 25),
     args.correlationId,
     stringArray(input.pathPrefixes),
@@ -313,8 +331,14 @@ export function inspect_deployment_context(args: AgenticToolQueryDispatchArgs) {
     args.assessmentId,
     args.organizationId,
     requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-    typedStringArray(input.manifestKinds, Object.values(DEPLOYMENT_MANIFEST_KINDS)),
-    typedStringArray(input.environments, Object.values(DEPLOYMENT_ENVIRONMENTS)),
+    typedStringArray(
+      input.manifestKinds,
+      Object.values(DEPLOYMENT_MANIFEST_KINDS),
+    ),
+    typedStringArray(
+      input.environments,
+      Object.values(DEPLOYMENT_ENVIRONMENTS),
+    ),
     numberWithDefault(input.maxResults, 25),
     args.correlationId,
     stringArray(input.pathPrefixes),
@@ -329,7 +353,10 @@ export function get_assessment_context(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     requiredArtifactVersion(artifactVersions, "wizardProfileId"),
     typedStringArray(input.include, Object.values(ASSESSMENT_CONTEXT_INCLUDES)),
-    typedStringArray(input.answerFields, Object.values(ASSESSMENT_CONTEXT_ANSWER_FIELDS)),
+    typedStringArray(
+      input.answerFields,
+      Object.values(ASSESSMENT_CONTEXT_ANSWER_FIELDS),
+    ),
     args.correlationId,
   );
 }
@@ -343,7 +370,10 @@ export function get_artifact_chain(args: AgenticToolQueryDispatchArgs) {
     optionalRecord(input.anchor)
       ? optionalString(optionalRecord(input.anchor)?.artifactRef)
       : null,
-    typedStringArray(input.requiredStages, Object.values(ARTIFACT_CHAIN_STAGES)),
+    typedStringArray(
+      input.requiredStages,
+      Object.values(ARTIFACT_CHAIN_STAGES),
+    ),
     input.exactVersions === true,
   );
 }
@@ -358,7 +388,10 @@ export function get_reconciliation_context(args: AgenticToolQueryDispatchArgs) {
     stringArray(input.conflictIds).map((value) => stripRef(value, "conflict:")),
     optionalString(input.cursor),
     numberWithDefault(input.maxResults, 25),
-    typedStringArray(input.statuses, Object.values(RECONCILIATION_CONTEXT_STATUSES)),
+    typedStringArray(
+      input.statuses,
+      Object.values(RECONCILIATION_CONTEXT_STATUSES),
+    ),
   );
 }
 
@@ -369,7 +402,10 @@ export function propose_missing_targets(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     requiredArtifactVersion(artifactVersions, "wizardProfileId"),
     requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-    typedStringArray(input.candidateKinds, Object.values(TARGET_CANDIDATE_KINDS)),
+    typedStringArray(
+      input.candidateKinds,
+      Object.values(TARGET_CANDIDATE_KINDS),
+    ),
     stringArray(input.seedRefs),
     stringArray(input.excludeTargetIds),
     numberWithDefault(input.maxResults, 25),
@@ -384,7 +420,10 @@ export function get_verified_profile(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     stripRef(requiredString(input.verifiedProfileId), "verified:"),
     requiredString(input.expectedVersion),
-    requiredEnum(input.requiredFor, Object.values(VERIFIED_PROFILE_REQUIRED_FOR)),
+    requiredEnum(
+      input.requiredFor,
+      Object.values(VERIFIED_PROFILE_REQUIRED_FOR),
+    ),
     args.correlationId,
   );
 }
@@ -420,7 +459,9 @@ export function compare_wizard_claim(args: AgenticToolQueryDispatchArgs) {
   );
 }
 
-export function get_classification_baseline(args: AgenticToolQueryDispatchArgs) {
+export function get_classification_baseline(
+  args: AgenticToolQueryDispatchArgs,
+) {
   return new GetClassificationBaselineQuery(
     args.assessmentId,
     args.organizationId,
@@ -464,7 +505,9 @@ export function propose_gap_remediation(args: AgenticToolQueryDispatchArgs) {
   );
 }
 
-export function validate_classification_proposal(args: AgenticToolQueryDispatchArgs) {
+export function validate_classification_proposal(
+  args: AgenticToolQueryDispatchArgs,
+) {
   return new ValidateClassificationProposalQuery(
     args.assessmentId,
     args.organizationId,
@@ -490,7 +533,7 @@ export function get_admin_source_catalog(args: AgenticToolQueryDispatchArgs) {
   return new GetAdminSourceCatalogQuery(
     args.assessmentId,
     args.organizationId,
-    args.input as never,
+    args.input,
     args.userId,
     null,
     null,
@@ -548,7 +591,10 @@ export function validate_citation_set(args: AgenticToolQueryDispatchArgs) {
   );
 }
 
-function requiredArtifactVersion(input: Record<string, unknown>, key: string): string {
+function requiredArtifactVersion(
+  input: Record<string, unknown>,
+  key: string,
+): string {
   return requiredString(input[key]);
 }
 
@@ -612,7 +658,10 @@ function optionalEnum<T extends string>(
     : undefined;
 }
 
-function requiredEnum<T extends string>(value: unknown, allowed: readonly T[]): T {
+function requiredEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+): T {
   const parsed = optionalEnum(value, allowed);
   if (!parsed) {
     throw problemException(

@@ -17,7 +17,9 @@ const baseArgs = {
 
 describe("agentic worker bridge dispatcher", () => {
   it("exports exact same-name bridge functions", () => {
-    expect(request_targeted_reanalysis.name).toBe("request_targeted_reanalysis");
+    expect(request_targeted_reanalysis.name).toBe(
+      "request_targeted_reanalysis",
+    );
     expect(resume_waiting_runs.name).toBe("resume_waiting_runs");
   });
 
