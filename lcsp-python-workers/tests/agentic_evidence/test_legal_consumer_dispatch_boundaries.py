@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import inspect
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -66,6 +68,38 @@ def test_ao6_consumer_executes_through_canonical_dispatcher(
     assert "dispatcher.dispatch(" in source
     assert f'"{tool_name}"' in source
     assert forbidden_direct_call not in source
+
+
+def test_source_fetch_runtime_failure_stays_retryable() -> None:
+    """Dispatcher migration must not turn transient fetch failures into terminal DLQ errors."""
+    config = SimpleNamespace(
+        nestjs_api_base_url="http://api.test",
+        worker_api_key="worker-key",
+        max_retries=3,
+    )
+    fetcher = MagicMock()
+    fetcher.fetch.side_effect = RuntimeError("temporary source outage")
+    consumer = LegalSourceIngestConsumer(
+        config,
+        api_client=MagicMock(),
+        snapshot_fetcher=fetcher,
+    )
+
+    with pytest.raises(RuntimeError, match="temporary source outage"):
+        consumer.handle(
+            {
+                "documentId": "LAW-TEST",
+                "catalogSourceRef": "catalog-source:test",
+                "adminCatalogVersion": "catalog-v1",
+                "corpusVersionId": "corpus-v1",
+                "idempotencyKey": "legal-source-ingest:test:01",
+                "actorRef": "actor:test",
+                "sourceUrl": "https://example.test/legal",
+                "maxBytes": 1024,
+                "expectedIdentity": {"documentNumber": "01/2026/TEST"},
+            },
+            correlationId="corr-retry",
+        )
 
 
 def test_recovery_validation_crosses_canonical_dispatcher() -> None:
