@@ -33,6 +33,9 @@ describe("GetReconciliationContextHandler", () => {
           ]),
         ),
       },
+      reconciliationDecision: {
+        findMany: jest.fn().mockImplementation(() => Promise.resolve([])),
+      },
     } as unknown as PrismaService;
     const audit = {
       write: jest.fn().mockImplementation(() => Promise.resolve(undefined)),
@@ -59,6 +62,7 @@ describe("GetReconciliationContextHandler", () => {
         conflict_ref: "conflict:conflict-1",
         status: RECONCILIATION_CONTEXT_STATUSES.open,
         evidence_refs: ["evidence:1"],
+        resolution_history: [],
       }),
     ]);
     expect(response.result.permitted_resolution_paths).toEqual([
@@ -98,6 +102,9 @@ describe("GetReconciliationContextHandler", () => {
               },
             ]),
           ),
+      },
+      reconciliationDecision: {
+        findMany: jest.fn().mockImplementation(() => Promise.resolve([])),
       },
     } as unknown as PrismaService;
     const audit = {

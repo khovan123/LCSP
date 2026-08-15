@@ -190,6 +190,36 @@ export class InternalReconciliationController {
         select: { evidenceReportId: true },
       }),
     ]);
+    const decisions =
+      conflicts.length > 0
+        ? await this.prisma.reconciliationDecision.findMany({
+            where: {
+              conflictRecordId: {
+                in: conflicts.map((conflict) => conflict.id),
+              },
+              assessmentId,
+              organizationId: aiUsageFlow.organizationId,
+            },
+            orderBy: { resolutionVersion: "asc" },
+            select: {
+              id: true,
+              conflictRecordId: true,
+              resolution: true,
+              resolutionVersion: true,
+              actorId: true,
+              evidenceRefs: true,
+              technicalEvidenceReportId: true,
+              technicalEvidenceReportVersion: true,
+              technicalEvidenceReportHash: true,
+              technicalProfileId: true,
+              technicalProfileVersion: true,
+              resolvedAt: true,
+            },
+          })
+        : [];
+    const latestDecisionByConflictId = new Map(
+      decisions.map((decision) => [decision.conflictRecordId, decision]),
+    );
 
     return resultEnvelope({
       ai_usage_flow: {
@@ -205,13 +235,12 @@ export class InternalReconciliationController {
         status: AI_USAGE_FLOW_STATUSES.accepted.toLowerCase(),
         created_at: aiUsageFlow.createdAt.toISOString(),
       },
-      conflicts: conflicts.map((conflict) => ({
-        conflict_id: conflict.id,
-        conflict_type: conflict.conflictType,
-        status: conflict.status,
-        resolved_at: conflict.resolvedAt?.toISOString() ?? null,
-        evidence_refs: conflict.evidenceRefs,
-      })),
+      conflicts: conflicts.map((conflict) =>
+        toVerifiedProfileConflictContext(
+          conflict,
+          latestDecisionByConflictId.get(conflict.id),
+        ),
+      ),
       wizard_profile: wizardProfile
         ? {
             id: wizardProfile.id,
@@ -223,6 +252,55 @@ export class InternalReconciliationController {
       technical_evidence_report_id: technicalProfile?.evidenceReportId ?? null,
     });
   }
+}
+
+function toVerifiedProfileConflictContext(
+  conflict: {
+    id: string;
+    conflictType: string;
+    status: string;
+    resolvedAt: Date | null;
+    evidenceRefs: unknown;
+  },
+  decision:
+    | {
+        id: string;
+        resolution: string;
+        resolutionVersion: number;
+        actorId: string;
+        evidenceRefs: unknown;
+        technicalEvidenceReportId: string | null;
+        technicalEvidenceReportVersion: string | null;
+        technicalEvidenceReportHash: unknown;
+        technicalProfileId: string | null;
+        technicalProfileVersion: string | null;
+        resolvedAt: Date;
+      }
+    | undefined,
+) {
+  return {
+    conflict_id: conflict.id,
+    conflict_type: conflict.conflictType,
+    status: conflict.status,
+    resolution: decision?.resolution ?? null,
+    resolution_version: decision?.resolutionVersion ?? null,
+    resolved_by_id: decision?.actorId ?? null,
+    resolved_at:
+      decision?.resolvedAt.toISOString() ??
+      conflict.resolvedAt?.toISOString() ??
+      null,
+    reconciliation_decision_ref: decision
+      ? `reconciliation-decision:${decision.id}`
+      : null,
+    evidence_refs: decision?.evidenceRefs ?? conflict.evidenceRefs,
+    technical_evidence_report_id: decision?.technicalEvidenceReportId ?? null,
+    technical_evidence_report_version:
+      decision?.technicalEvidenceReportVersion ?? null,
+    technical_evidence_report_hash:
+      decision?.technicalEvidenceReportHash ?? null,
+    technical_profile_id: decision?.technicalProfileId ?? null,
+    technical_profile_version: decision?.technicalProfileVersion ?? null,
+  };
 }
 
 function isAgenticReconciliationCallback(

@@ -36,6 +36,19 @@ export type ReconciliationContextResponse = {
       score: number;
       summary_key: string;
       evidence_refs: string[];
+      resolution_history: Array<{
+        reconciliation_decision_ref: string;
+        resolution: string;
+        resolution_version: number;
+        actor_id: string;
+        resolved_at: string;
+        rationale: string | null;
+        evidence_refs: string[];
+        technical_evidence_report_id: string | null;
+        technical_evidence_report_version: string | null;
+        technical_profile_id: string | null;
+        technical_profile_version: string | null;
+      }>;
     }>;
     permitted_resolution_paths: Array<{
       path_id: typeof RECONCILIATION_RESOLUTION_PATHS.humanReconcile;

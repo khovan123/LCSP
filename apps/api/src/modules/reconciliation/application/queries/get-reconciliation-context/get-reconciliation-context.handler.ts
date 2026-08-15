@@ -103,6 +103,32 @@ export class GetReconciliationContextHandler implements IQueryHandler<
     });
     const truncated = conflicts.length > query.maxResults;
     const page = conflicts.slice(0, query.maxResults);
+    const decisions =
+      page.length > 0
+        ? await this.prisma.reconciliationDecision.findMany({
+            where: {
+              conflictRecordId: { in: page.map((conflict) => conflict.id) },
+              assessmentId: query.assessmentId,
+              organizationId: query.organizationId,
+            },
+            orderBy: { resolutionVersion: "asc" },
+            select: {
+              id: true,
+              conflictRecordId: true,
+              resolution: true,
+              resolutionVersion: true,
+              actorId: true,
+              rationale: true,
+              resolvedAt: true,
+              evidenceRefs: true,
+              technicalEvidenceReportId: true,
+              technicalEvidenceReportVersion: true,
+              technicalProfileId: true,
+              technicalProfileVersion: true,
+            },
+          })
+        : [];
+    const decisionsByConflictId = groupDecisionsByConflictId(decisions);
     const resultConflicts = page.map((conflict) => ({
       conflict_ref: `conflict:${conflict.id}`,
       type: conflict.conflictType,
@@ -110,6 +136,22 @@ export class GetReconciliationContextHandler implements IQueryHandler<
       score: conflict.conflictScore,
       summary_key: `CONFLICT_${conflict.conflictType.toUpperCase()}`,
       evidence_refs: asStringRefs(conflict.evidenceRefs),
+      resolution_history: (decisionsByConflictId.get(conflict.id) ?? []).map(
+        (decision) => ({
+          reconciliation_decision_ref: `reconciliation-decision:${decision.id}`,
+          resolution: decision.resolution,
+          resolution_version: decision.resolutionVersion,
+          actor_id: decision.actorId,
+          resolved_at: decision.resolvedAt.toISOString(),
+          rationale: decision.rationale,
+          evidence_refs: asStringRefs(decision.evidenceRefs),
+          technical_evidence_report_id: decision.technicalEvidenceReportId,
+          technical_evidence_report_version:
+            decision.technicalEvidenceReportVersion,
+          technical_profile_id: decision.technicalProfileId,
+          technical_profile_version: decision.technicalProfileVersion,
+        }),
+      ),
     }));
     const openConflict = resultConflicts.some(
       (conflict) => conflict.status === RECONCILIATION_CONTEXT_STATUSES.open,
@@ -183,6 +225,18 @@ export class GetReconciliationContextHandler implements IQueryHandler<
     const flowIds = [...new Set(conflicts.map((item) => item.aiUsageFlowId))];
     return flowIds.length === 1 ? flowIds[0] : null;
   }
+}
+
+function groupDecisionsByConflictId<
+  TDecision extends { conflictRecordId: string },
+>(decisions: TDecision[]): Map<string, TDecision[]> {
+  const grouped = new Map<string, TDecision[]>();
+  for (const decision of decisions) {
+    const items = grouped.get(decision.conflictRecordId) ?? [];
+    items.push(decision);
+    grouped.set(decision.conflictRecordId, items);
+  }
+  return grouped;
 }
 
 function encodeCursor(value: string): string {
