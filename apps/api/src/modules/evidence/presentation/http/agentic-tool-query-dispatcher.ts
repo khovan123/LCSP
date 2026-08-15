@@ -79,405 +79,476 @@ export type AgenticToolQueryDispatchArgs = {
 };
 
 /**
- * Resolve one canonical Agentic tool name to the exact Nest CQRS query that
- * owns its read-side business logic. This is the single Nest query-routing
- * table; controller/runtime code must not duplicate tool-to-query knowledge.
+ * Single Nest query-routing table. Every case delegates to a real exported
+ * function whose name exactly matches the canonical snake_case tool name.
  */
 export function buildAgenticToolQuery(args: AgenticToolQueryDispatchArgs) {
-  const {
-    toolName,
-    assessmentId,
-    organizationId,
-    userId,
-    correlationId,
-    artifactVersions,
-    input,
-  } = args;
-
-  switch (toolName) {
+  switch (args.toolName) {
     case AGENTIC_TOOL_NAMES.getScanCoverage:
-      return new GetScanCoverageQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        numberWithDefault(input.maxResults, 25),
-        correlationId,
-        stringArray(input.pathPrefixes),
-        stringArray(input.languages),
-        stringArray(input.dispositions) as Array<
-          "ANALYZED" | "SKIPPED" | "LIMITED"
-        >,
-        stringArray(input.toolNames),
-        optionalString(input.cursor),
-      );
+      return get_scan_coverage(args);
     case AGENTIC_TOOL_NAMES.searchEvidence:
-      return new SearchEvidenceQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        numberWithDefault(input.maxResults, 25),
-        correlationId,
-        stringArray(input.findingKinds),
-        stringArray(input.providers),
-        stringArray(input.pathPrefixes),
-        optionalEnum(
-          input.minConfidence,
-          Object.values(SEARCH_EVIDENCE_CONFIDENCE),
-        ),
-        optionalString(input.cursor),
-      );
+      return search_evidence(args);
     case AGENTIC_TOOL_NAMES.getFindingDetail:
-      return new GetFindingDetailQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        stripRef(requiredString(input.findingId), "finding:"),
-        typedStringArray(input.include, Object.values(FINDING_DETAIL_INCLUDES)),
-        correlationId,
-      );
+      return get_finding_detail(args);
     case AGENTIC_TOOL_NAMES.findProviderInvocations:
-      return new FindProviderInvocationsQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        numberWithDefault(input.maxResults, 25),
-        correlationId,
-        optionalEnum(
-          input.provider,
-          Object.values(PROVIDER_INVOCATION_PROVIDERS),
-        ),
-        stringArray(input.pathPrefixes),
-        optionalEnum(
-          input.framework,
-          Object.values(PROVIDER_INVOCATION_FRAMEWORKS),
-        ),
-      );
+      return find_provider_invocations(args);
     case AGENTIC_TOOL_NAMES.getEvidenceSubgraph:
-      return new GetEvidenceSubgraphQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        stripRef(requiredString(input.seedRef), "node:"),
-        requiredEnum(
-          input.direction,
-          Object.values(EVIDENCE_SUBGRAPH_DIRECTIONS),
-        ),
-        numberWithDefault(input.maxDepth, 2),
-        numberWithDefault(input.maxNodes, 25),
-        numberWithDefault(input.maxEdges, 50),
-        correlationId,
-        stringArray(input.nodeTypes),
-        stringArray(input.edgeTypes),
-      );
+      return get_evidence_subgraph(args);
     case AGENTIC_TOOL_NAMES.getSymbolContext:
-      return new GetSymbolContextQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        stripRef(requiredString(input.symbolRef), "symbol:"),
-        typedStringArray(input.include, Object.values(SYMBOL_CONTEXT_INCLUDES)),
-        numberWithDefault(input.maxNeighbors, 25),
-        correlationId,
-      );
+      return get_symbol_context(args);
     case AGENTIC_TOOL_NAMES.traceStaticFlow:
-      return new TraceStaticFlowQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        stripRef(requiredString(input.startRef), "node:"),
-        requiredEnum(input.direction, Object.values(STATIC_FLOW_DIRECTIONS)),
-        numberWithDefault(input.maxHops, 5),
-        correlationId,
-        stringArray(input.desiredStages),
-      );
+      return trace_static_flow(args);
     case AGENTIC_TOOL_NAMES.inspectHumanReviewPath:
-      return new InspectHumanReviewPathQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        stripRef(requiredString(input.startRef), "node:"),
-        typedStringArray(input.reviewKinds, Object.values(HUMAN_REVIEW_KINDS)),
-        numberWithDefault(input.maxHops, 5),
-        correlationId,
-      );
+      return inspect_human_review_path(args);
     case AGENTIC_TOOL_NAMES.inspectDecisionPath:
-      return new InspectDecisionPathQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        stripRef(requiredString(input.startRef), "node:"),
-        typedStringArray(
-          input.actionCategories,
-          Object.values(DECISION_ACTION_CATEGORIES),
-        ),
-        numberWithDefault(input.maxHops, 5),
-        numberWithDefault(input.maxResults, 25),
-        correlationId,
-      );
+      return inspect_decision_path(args);
     case AGENTIC_TOOL_NAMES.inspectDataPath:
-      return new InspectDataPathQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        stripRef(requiredString(input.startRef), "node:"),
-        requiredEnum(input.direction, Object.values(DATA_PATH_DIRECTIONS)),
-        typedStringArray(input.dataCategories, Object.values(DATA_CATEGORIES)),
-        numberWithDefault(input.maxHops, 5),
-        numberWithDefault(input.maxResults, 25),
-        correlationId,
-      );
+      return inspect_data_path(args);
     case AGENTIC_TOOL_NAMES.findSimilarSymbols:
-      return new FindSimilarSymbolsQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        stripRef(requiredString(input.seedSymbolRef), "symbol:"),
-        typedStringArray(
-          input.dimensions,
-          Object.values(SYMBOL_SIMILARITY_DIMENSIONS),
-        ),
-        numberWithDefault(input.maxResults, 25),
-        correlationId,
-        stringArray(input.pathPrefixes),
-      );
+      return find_similar_symbols(args);
     case AGENTIC_TOOL_NAMES.inspectDeploymentContext:
-      return new InspectDeploymentContextQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        typedStringArray(
-          input.manifestKinds,
-          Object.values(DEPLOYMENT_MANIFEST_KINDS),
-        ),
-        typedStringArray(
-          input.environments,
-          Object.values(DEPLOYMENT_ENVIRONMENTS),
-        ),
-        numberWithDefault(input.maxResults, 25),
-        correlationId,
-        stringArray(input.pathPrefixes),
-        optionalString(input.cursor),
-      );
+      return inspect_deployment_context(args);
     case AGENTIC_TOOL_NAMES.getAssessmentContext:
-      return new GetAssessmentContextQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "wizardProfileId"),
-        typedStringArray(
-          input.include,
-          Object.values(ASSESSMENT_CONTEXT_INCLUDES),
-        ),
-        typedStringArray(
-          input.answerFields,
-          Object.values(ASSESSMENT_CONTEXT_ANSWER_FIELDS),
-        ),
-        correlationId,
-      );
+      return get_assessment_context(args);
     case AGENTIC_TOOL_NAMES.getArtifactChain:
-      return new GetArtifactChainQuery(
-        assessmentId,
-        organizationId,
-        correlationId,
-        optionalRecord(input.anchor)
-          ? optionalString(optionalRecord(input.anchor)?.artifactRef)
-          : null,
-        typedStringArray(
-          input.requiredStages,
-          Object.values(ARTIFACT_CHAIN_STAGES),
-        ),
-        input.exactVersions === true,
-      );
+      return get_artifact_chain(args);
     case AGENTIC_TOOL_NAMES.getReconciliationContext:
-      return new GetReconciliationContextQuery(
-        assessmentId,
-        organizationId,
-        correlationId,
-        stripOptionalRef(optionalString(input.flowRef), "flow:"),
-        stringArray(input.conflictIds).map((value) =>
-          stripRef(value, "conflict:"),
-        ),
-        optionalString(input.cursor),
-        numberWithDefault(input.maxResults, 25),
-        typedStringArray(
-          input.statuses,
-          Object.values(RECONCILIATION_CONTEXT_STATUSES),
-        ),
-      );
+      return get_reconciliation_context(args);
     case AGENTIC_TOOL_NAMES.proposeMissingTargets:
-      return new ProposeMissingTargetsQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "wizardProfileId"),
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        typedStringArray(
-          input.candidateKinds,
-          Object.values(TARGET_CANDIDATE_KINDS),
-        ),
-        stringArray(input.seedRefs),
-        stringArray(input.excludeTargetIds),
-        numberWithDefault(input.maxResults, 25),
-        correlationId,
-      );
+      return propose_missing_targets(args);
     case AGENTIC_TOOL_NAMES.getVerifiedProfile:
-      return new GetVerifiedProfileQuery(
-        assessmentId,
-        organizationId,
-        stripRef(requiredString(input.verifiedProfileId), "verified:"),
-        requiredString(input.expectedVersion),
-        requiredEnum(
-          input.requiredFor,
-          Object.values(VERIFIED_PROFILE_REQUIRED_FOR),
-        ),
-        correlationId,
-      );
-    case AGENTIC_TOOL_NAMES.compareWizardClaim: {
-      const claimField = parseWizardClaimField(
-        optionalString(input.claimField) ?? undefined,
-        correlationId,
-      );
-      const rawMaxEvidenceRefs =
-        typeof input.maxEvidenceRefs === "number"
-          ? String(input.maxEvidenceRefs)
-          : (optionalString(input.maxEvidenceRefs) ?? undefined);
-      return new CompareWizardClaimQuery(
-        assessmentId,
-        organizationId,
-        requiredArtifactVersion(artifactVersions, "wizardProfileId"),
-        requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
-        parseSingleTargetId(requiredString(input.targetId), correlationId),
-        claimField,
-        parseWizardClaimExpectedValue(
-          optionalString(input.expectedValue) ?? undefined,
-          claimField,
-          correlationId,
-        ),
-        parseWizardClaimComparisonScope(
-          optionalString(input.comparisonScope) ?? undefined,
-          correlationId,
-        ),
-        parseWizardClaimMaxEvidenceRefs(rawMaxEvidenceRefs, correlationId),
-        correlationId,
-      );
-    }
+      return get_verified_profile(args);
+    case AGENTIC_TOOL_NAMES.compareWizardClaim:
+      return compare_wizard_claim(args);
     case AGENTIC_TOOL_NAMES.getClassificationBaseline:
-      return new GetClassificationBaselineQuery(
-        assessmentId,
-        organizationId,
-        input as never,
-        userId,
-        null,
-        null,
-        correlationId,
-      );
+      return get_classification_baseline(args);
     case AGENTIC_TOOL_NAMES.getGapRequirements:
-      return new GetGapRequirementsQuery(
-        assessmentId,
-        organizationId,
-        input as never,
-        userId,
-        null,
-        null,
-        correlationId,
-      );
+      return get_gap_requirements(args);
     case AGENTIC_TOOL_NAMES.getGapEvidenceTrace:
-      return new GetGapEvidenceTraceQuery(
-        assessmentId,
-        organizationId,
-        input as never,
-        userId,
-        correlationId,
-      );
+      return get_gap_evidence_trace(args);
     case AGENTIC_TOOL_NAMES.proposeGapRemediation:
-      return new ProposeGapRemediationQuery(
-        assessmentId,
-        organizationId,
-        input as never,
-        userId,
-        correlationId,
-      );
+      return propose_gap_remediation(args);
     case AGENTIC_TOOL_NAMES.validateClassificationProposal:
-      return new ValidateClassificationProposalQuery(
-        assessmentId,
-        organizationId,
-        input as never,
-        userId,
-        null,
-        null,
-        correlationId,
-      );
+      return validate_classification_proposal(args);
     case AGENTIC_TOOL_NAMES.evaluateGapMatrix:
-      return new EvaluateGapMatrixQuery(
-        assessmentId,
-        organizationId,
-        input as never,
-        userId,
-        correlationId,
-      );
+      return evaluate_gap_matrix(args);
     case AGENTIC_TOOL_NAMES.getAdminSourceCatalog:
-      return new GetAdminSourceCatalogQuery(
-        assessmentId,
-        organizationId,
-        input,
-        userId,
-        null,
-        null,
-        correlationId,
-      );
+      return get_admin_source_catalog(args);
     case AGENTIC_TOOL_NAMES.getLegalCorpusReadiness:
-      return new GetLegalCorpusReadinessQuery(
-        assessmentId,
-        organizationId,
-        new Date(`${requiredString(input.effectiveDate)}T00:00:00.000Z`),
-        stripOptionalRef(
-          optionalString(input.pinnedCorpusVersionId),
-          "corpus_",
-        ),
-        userId,
-        null,
-        null,
-        correlationId,
-      );
+      return get_legal_corpus_readiness(args);
     case AGENTIC_TOOL_NAMES.retrieveLegalBasis:
-      return new RetrieveLegalBasisQuery(
-        assessmentId,
-        organizationId,
-        input as never,
-        userId,
-        null,
-        null,
-        correlationId,
-      );
+      return retrieve_legal_basis(args);
     case AGENTIC_TOOL_NAMES.getLegalRuleMatch:
-      return new GetLegalRuleMatchQuery(
-        assessmentId,
-        organizationId,
-        input as never,
-        userId,
-        null,
-        null,
-        correlationId,
-      );
+      return get_legal_rule_match(args);
     case AGENTIC_TOOL_NAMES.validateCitationSet:
-      return new ValidateCitationSetQuery(
-        assessmentId,
-        organizationId,
-        input as never,
-        userId,
-        null,
-        null,
-        correlationId,
-      );
+      return validate_citation_set(args);
     default:
-      throw problemException(EVIDENCE_ERROR_CODES.notFound, correlationId, {
+      throw problemException(EVIDENCE_ERROR_CODES.notFound, args.correlationId, {
         status: HttpStatus.NOT_FOUND,
       });
   }
 }
 
-function requiredArtifactVersion(
-  input: Record<string, unknown>,
-  key: string,
-): string {
+export function get_scan_coverage(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new GetScanCoverageQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    numberWithDefault(input.maxResults, 25),
+    args.correlationId,
+    stringArray(input.pathPrefixes),
+    stringArray(input.languages),
+    stringArray(input.dispositions) as Array<"ANALYZED" | "SKIPPED" | "LIMITED">,
+    stringArray(input.toolNames),
+    optionalString(input.cursor),
+  );
+}
+
+export function search_evidence(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new SearchEvidenceQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    numberWithDefault(input.maxResults, 25),
+    args.correlationId,
+    stringArray(input.findingKinds),
+    stringArray(input.providers),
+    stringArray(input.pathPrefixes),
+    optionalEnum(input.minConfidence, Object.values(SEARCH_EVIDENCE_CONFIDENCE)),
+    optionalString(input.cursor),
+  );
+}
+
+export function get_finding_detail(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new GetFindingDetailQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    stripRef(requiredString(input.findingId), "finding:"),
+    typedStringArray(input.include, Object.values(FINDING_DETAIL_INCLUDES)),
+    args.correlationId,
+  );
+}
+
+export function find_provider_invocations(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new FindProviderInvocationsQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    numberWithDefault(input.maxResults, 25),
+    args.correlationId,
+    optionalEnum(input.provider, Object.values(PROVIDER_INVOCATION_PROVIDERS)),
+    stringArray(input.pathPrefixes),
+    optionalEnum(input.framework, Object.values(PROVIDER_INVOCATION_FRAMEWORKS)),
+  );
+}
+
+export function get_evidence_subgraph(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new GetEvidenceSubgraphQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    stripRef(requiredString(input.seedRef), "node:"),
+    requiredEnum(input.direction, Object.values(EVIDENCE_SUBGRAPH_DIRECTIONS)),
+    numberWithDefault(input.maxDepth, 2),
+    numberWithDefault(input.maxNodes, 25),
+    numberWithDefault(input.maxEdges, 50),
+    args.correlationId,
+    stringArray(input.nodeTypes),
+    stringArray(input.edgeTypes),
+  );
+}
+
+export function get_symbol_context(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new GetSymbolContextQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    stripRef(requiredString(input.symbolRef), "symbol:"),
+    typedStringArray(input.include, Object.values(SYMBOL_CONTEXT_INCLUDES)),
+    numberWithDefault(input.maxNeighbors, 25),
+    args.correlationId,
+  );
+}
+
+export function trace_static_flow(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new TraceStaticFlowQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    stripRef(requiredString(input.startRef), "node:"),
+    requiredEnum(input.direction, Object.values(STATIC_FLOW_DIRECTIONS)),
+    numberWithDefault(input.maxHops, 5),
+    args.correlationId,
+    stringArray(input.desiredStages),
+  );
+}
+
+export function inspect_human_review_path(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new InspectHumanReviewPathQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    stripRef(requiredString(input.startRef), "node:"),
+    typedStringArray(input.reviewKinds, Object.values(HUMAN_REVIEW_KINDS)),
+    numberWithDefault(input.maxHops, 5),
+    args.correlationId,
+  );
+}
+
+export function inspect_decision_path(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new InspectDecisionPathQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    stripRef(requiredString(input.startRef), "node:"),
+    typedStringArray(input.actionCategories, Object.values(DECISION_ACTION_CATEGORIES)),
+    numberWithDefault(input.maxHops, 5),
+    numberWithDefault(input.maxResults, 25),
+    args.correlationId,
+  );
+}
+
+export function inspect_data_path(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new InspectDataPathQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    stripRef(requiredString(input.startRef), "node:"),
+    requiredEnum(input.direction, Object.values(DATA_PATH_DIRECTIONS)),
+    typedStringArray(input.dataCategories, Object.values(DATA_CATEGORIES)),
+    numberWithDefault(input.maxHops, 5),
+    numberWithDefault(input.maxResults, 25),
+    args.correlationId,
+  );
+}
+
+export function find_similar_symbols(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new FindSimilarSymbolsQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    stripRef(requiredString(input.seedSymbolRef), "symbol:"),
+    typedStringArray(input.dimensions, Object.values(SYMBOL_SIMILARITY_DIMENSIONS)),
+    numberWithDefault(input.maxResults, 25),
+    args.correlationId,
+    stringArray(input.pathPrefixes),
+  );
+}
+
+export function inspect_deployment_context(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new InspectDeploymentContextQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    typedStringArray(input.manifestKinds, Object.values(DEPLOYMENT_MANIFEST_KINDS)),
+    typedStringArray(input.environments, Object.values(DEPLOYMENT_ENVIRONMENTS)),
+    numberWithDefault(input.maxResults, 25),
+    args.correlationId,
+    stringArray(input.pathPrefixes),
+    optionalString(input.cursor),
+  );
+}
+
+export function get_assessment_context(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new GetAssessmentContextQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "wizardProfileId"),
+    typedStringArray(input.include, Object.values(ASSESSMENT_CONTEXT_INCLUDES)),
+    typedStringArray(input.answerFields, Object.values(ASSESSMENT_CONTEXT_ANSWER_FIELDS)),
+    args.correlationId,
+  );
+}
+
+export function get_artifact_chain(args: AgenticToolQueryDispatchArgs) {
+  const { input } = args;
+  return new GetArtifactChainQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.correlationId,
+    optionalRecord(input.anchor)
+      ? optionalString(optionalRecord(input.anchor)?.artifactRef)
+      : null,
+    typedStringArray(input.requiredStages, Object.values(ARTIFACT_CHAIN_STAGES)),
+    input.exactVersions === true,
+  );
+}
+
+export function get_reconciliation_context(args: AgenticToolQueryDispatchArgs) {
+  const { input } = args;
+  return new GetReconciliationContextQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.correlationId,
+    stripOptionalRef(optionalString(input.flowRef), "flow:"),
+    stringArray(input.conflictIds).map((value) => stripRef(value, "conflict:")),
+    optionalString(input.cursor),
+    numberWithDefault(input.maxResults, 25),
+    typedStringArray(input.statuses, Object.values(RECONCILIATION_CONTEXT_STATUSES)),
+  );
+}
+
+export function propose_missing_targets(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  return new ProposeMissingTargetsQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "wizardProfileId"),
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    typedStringArray(input.candidateKinds, Object.values(TARGET_CANDIDATE_KINDS)),
+    stringArray(input.seedRefs),
+    stringArray(input.excludeTargetIds),
+    numberWithDefault(input.maxResults, 25),
+    args.correlationId,
+  );
+}
+
+export function get_verified_profile(args: AgenticToolQueryDispatchArgs) {
+  const { input } = args;
+  return new GetVerifiedProfileQuery(
+    args.assessmentId,
+    args.organizationId,
+    stripRef(requiredString(input.verifiedProfileId), "verified:"),
+    requiredString(input.expectedVersion),
+    requiredEnum(input.requiredFor, Object.values(VERIFIED_PROFILE_REQUIRED_FOR)),
+    args.correlationId,
+  );
+}
+
+export function compare_wizard_claim(args: AgenticToolQueryDispatchArgs) {
+  const { input, artifactVersions } = args;
+  const claimField = parseWizardClaimField(
+    optionalString(input.claimField) ?? undefined,
+    args.correlationId,
+  );
+  const rawMaxEvidenceRefs =
+    typeof input.maxEvidenceRefs === "number"
+      ? String(input.maxEvidenceRefs)
+      : (optionalString(input.maxEvidenceRefs) ?? undefined);
+  return new CompareWizardClaimQuery(
+    args.assessmentId,
+    args.organizationId,
+    requiredArtifactVersion(artifactVersions, "wizardProfileId"),
+    requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
+    parseSingleTargetId(requiredString(input.targetId), args.correlationId),
+    claimField,
+    parseWizardClaimExpectedValue(
+      optionalString(input.expectedValue) ?? undefined,
+      claimField,
+      args.correlationId,
+    ),
+    parseWizardClaimComparisonScope(
+      optionalString(input.comparisonScope) ?? undefined,
+      args.correlationId,
+    ),
+    parseWizardClaimMaxEvidenceRefs(rawMaxEvidenceRefs, args.correlationId),
+    args.correlationId,
+  );
+}
+
+export function get_classification_baseline(args: AgenticToolQueryDispatchArgs) {
+  return new GetClassificationBaselineQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
+}
+
+export function get_gap_requirements(args: AgenticToolQueryDispatchArgs) {
+  return new GetGapRequirementsQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
+}
+
+export function get_gap_evidence_trace(args: AgenticToolQueryDispatchArgs) {
+  return new GetGapEvidenceTraceQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    args.correlationId,
+  );
+}
+
+export function propose_gap_remediation(args: AgenticToolQueryDispatchArgs) {
+  return new ProposeGapRemediationQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    args.correlationId,
+  );
+}
+
+export function validate_classification_proposal(args: AgenticToolQueryDispatchArgs) {
+  return new ValidateClassificationProposalQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
+}
+
+export function evaluate_gap_matrix(args: AgenticToolQueryDispatchArgs) {
+  return new EvaluateGapMatrixQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    args.correlationId,
+  );
+}
+
+export function get_admin_source_catalog(args: AgenticToolQueryDispatchArgs) {
+  return new GetAdminSourceCatalogQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
+}
+
+export function get_legal_corpus_readiness(args: AgenticToolQueryDispatchArgs) {
+  const { input } = args;
+  return new GetLegalCorpusReadinessQuery(
+    args.assessmentId,
+    args.organizationId,
+    new Date(`${requiredString(input.effectiveDate)}T00:00:00.000Z`),
+    stripOptionalRef(optionalString(input.pinnedCorpusVersionId), "corpus_"),
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
+}
+
+export function retrieve_legal_basis(args: AgenticToolQueryDispatchArgs) {
+  return new RetrieveLegalBasisQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
+}
+
+export function get_legal_rule_match(args: AgenticToolQueryDispatchArgs) {
+  return new GetLegalRuleMatchQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
+}
+
+export function validate_citation_set(args: AgenticToolQueryDispatchArgs) {
+  return new ValidateCitationSetQuery(
+    args.assessmentId,
+    args.organizationId,
+    args.input as never,
+    args.userId,
+    null,
+    null,
+    args.correlationId,
+  );
+}
+
+function requiredArtifactVersion(input: Record<string, unknown>, key: string): string {
   return requiredString(input[key]);
 }
 
@@ -541,10 +612,7 @@ function optionalEnum<T extends string>(
     : undefined;
 }
 
-function requiredEnum<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-): T {
+function requiredEnum<T extends string>(value: unknown, allowed: readonly T[]): T {
   const parsed = optionalEnum(value, allowed);
   if (!parsed) {
     throw problemException(
