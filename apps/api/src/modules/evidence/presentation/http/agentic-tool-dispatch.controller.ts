@@ -42,6 +42,10 @@ import {
   isAgenticToolCommand,
 } from "./agentic-tool-command-dispatcher.js";
 import { buildAgenticToolQuery } from "./agentic-tool-query-dispatcher.js";
+import {
+  dispatchAgenticToolWorkerBridge,
+  isAgenticToolWorkerBridge,
+} from "./agentic-tool-worker-bridge-dispatcher.js";
 
 type DispatchRequest = {
   tool_name?: unknown;
@@ -216,37 +220,8 @@ export class InternalAgenticToolDispatchController {
   }
 
   private async executeTool(args: ToolExecutionArgs): Promise<unknown> {
-    if (args.toolName === AGENTIC_TOOL_NAMES.requestTargetedReanalysis) {
-      return this.pythonWorkerRuntime.requestTargetedReanalysis(
-        {
-          assessmentId: args.assessmentId,
-          organizationId: args.organizationId,
-          userId: args.userId,
-          inputArtifactVersion: requiredArtifactVersion(
-            args.artifactVersions,
-            "technicalEvidenceReportId",
-          ),
-          analyzerId: requiredString(args.input.analyzerId),
-          scope: requiredScope(args.input.scope),
-          reasonRequirementId: requiredString(args.input.reasonRequirementId),
-          idempotencyKey: requiredString(args.input.idempotencyKey),
-        },
-        args.correlationId,
-      );
-    }
-
-    if (args.toolName === AGENTIC_TOOL_NAMES.resumeWaitingRuns) {
-      return this.pythonWorkerRuntime.resumeWaitingRuns(
-        {
-          corpusVersionId: requiredArtifactVersion(
-            args.artifactVersions,
-            "corpusVersionId",
-          ),
-          maxRuns: numberWithDefault(args.input.maxRuns, 25),
-          idempotencyKey: requiredString(args.input.idempotencyKey),
-        },
-        args.correlationId,
-      );
+    if (isAgenticToolWorkerBridge(args.toolName)) {
+      return dispatchAgenticToolWorkerBridge(args, this.pythonWorkerRuntime);
     }
 
     if (isAgenticToolCommand(args.toolName)) {
@@ -273,13 +248,9 @@ export class InternalAgenticToolDispatchController {
     policyVersion: string;
   }> {
     if (!this.pbacPreflight) {
-      throw problemException(
-        EVIDENCE_ERROR_CODES.notFound,
-        args.correlationId,
-        {
-          status: HttpStatus.SERVICE_UNAVAILABLE,
-        },
-      );
+      throw problemException(EVIDENCE_ERROR_CODES.notFound, args.correlationId, {
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      });
     }
 
     const authorization = await this.pbacPreflight.evaluateWithPolicy({
@@ -315,13 +286,6 @@ export class InternalAgenticToolDispatchController {
   }
 }
 
-function requiredArtifactVersion(
-  input: Record<string, unknown>,
-  key: string,
-): string {
-  return requiredString(input[key]);
-}
-
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -353,38 +317,6 @@ function stringArray(value: unknown): string[] {
           typeof item === "string" && item.trim().length > 0,
       )
     : [];
-}
-
-function numberWithDefault(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isInteger(value) && value > 0
-    ? value
-    : fallback;
-}
-
-function requiredScope(
-  value: unknown,
-): { pathPrefixes: string[] } | { subjectRefs: string[] } {
-  const scope = record(value);
-  if (!scope) {
-    throw problemException(
-      EVIDENCE_ERROR_CODES.notFound,
-      "internal-agentic-dispatch",
-      { status: HttpStatus.NOT_FOUND },
-    );
-  }
-  const pathPrefixes = stringArray(scope.pathPrefixes);
-  const subjectRefs = stringArray(scope.subjectRefs);
-  if (pathPrefixes.length > 0 && subjectRefs.length === 0) {
-    return { pathPrefixes };
-  }
-  if (subjectRefs.length > 0 && pathPrefixes.length === 0) {
-    return { subjectRefs };
-  }
-  throw problemException(
-    EVIDENCE_ERROR_CODES.notFound,
-    "internal-agentic-dispatch",
-    { status: HttpStatus.NOT_FOUND },
-  );
 }
 
 function runtimeStageForTool(toolName: string): AssessmentRuntimeStageCode {
