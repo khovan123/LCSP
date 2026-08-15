@@ -156,7 +156,7 @@ def test_consumer_persists_reviewed_input_manifest(tmp_path: Path):
             "qualityManifestRef": quality_ref,
             "correctionProfile": "DETERMINISTIC_V1",
         },
-        correlation_id="corr-reviewed-input",
+        correlationId="corr-reviewed-input",
     )
 
     repository = ReviewedCorpusInputRepository(storage_root=storage_root)
@@ -194,5 +194,5 @@ def test_consumer_rejects_missing_required_field(tmp_path: Path):
                 "extractionRef": "extraction:test",
                 "correctionProfile": "DETERMINISTIC_V1",
             },
-            correlation_id="corr-missing",
+            correlationId="corr-missing",
         )

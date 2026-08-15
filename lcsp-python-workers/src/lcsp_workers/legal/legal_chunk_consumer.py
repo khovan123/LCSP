@@ -31,7 +31,7 @@ class LegalChunkConsumer(ConsumerBase):
     requires_pbac = False
     retry_delays_seconds = ()
 
-    def handle(self, message: dict[str, Any], correlation_id: str) -> None:
+    def handle(self, message: dict[str, Any], correlationId: str) -> None:
         envelope = self._read_envelope(message)
         storage_root = self._storage_root()
         builder = LegalChunkBuilder(
@@ -55,7 +55,7 @@ class LegalChunkConsumer(ConsumerBase):
             "LEGAL_CHUNK_SET_BUILT",
             reviewed_input_ref=envelope.reviewed_input_ref,
             chunk_set_ref=result.chunk_set_ref,
-            correlation_id=correlation_id,
+            correlationId=correlationId,
         )
 
     def _storage_root(self) -> Path:

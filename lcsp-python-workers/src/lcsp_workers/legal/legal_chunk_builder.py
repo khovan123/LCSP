@@ -74,13 +74,13 @@ class LegalChunkSetResult:
     manifest_path: Path
     sample: dict[str, Any]
 
-    def to_tool_response(self, *, correlation_id: str) -> dict[str, Any]:
+    def to_tool_response(self, *, correlationId: str) -> dict[str, Any]:
         return {
             "status": self.status,
             "toolName": LEGAL_CHUNK_TOOL["name"],
             "toolVersion": LEGAL_CHUNK_TOOL["version"],
             "configHash": LEGAL_CHUNK_TOOL["config_hash"],
-            "correlationId": correlation_id,
+            "correlationId": correlationId,
             "artifactVersions": {
                 "chunkSetId": self.chunk_set_id,
             },

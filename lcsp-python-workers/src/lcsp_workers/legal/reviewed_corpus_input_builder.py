@@ -77,13 +77,13 @@ class ReviewedCorpusInputResult:
     normalized_text_path: Path
     manifest_path: Path
 
-    def to_tool_response(self, *, correlation_id: str) -> dict[str, Any]:
+    def to_tool_response(self, *, correlationId: str) -> dict[str, Any]:
         return {
             "status": self.status,
             "toolName": REVIEWED_CORPUS_INPUT_TOOL["name"],
             "toolVersion": REVIEWED_CORPUS_INPUT_TOOL["version"],
             "configHash": REVIEWED_CORPUS_INPUT_TOOL["config_hash"],
-            "correlationId": correlation_id,
+            "correlationId": correlationId,
             "artifactVersions": {
                 "reviewedInputId": self.reviewed_input_id,
             },

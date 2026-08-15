@@ -99,7 +99,7 @@ def test_consumer_persists_chunk_set(tmp_path: Path):
             "documentIdentityRef": "catalog-source:vbpl.vn:decree:13-2023-nd-cp",
             "chunkSchemaVersion": "LEGAL_CHUNK_V1",
         },
-        correlation_id="corr-chunks",
+        correlationId="corr-chunks",
     )
 
     repository = LegalChunkRepository(storage_root=storage_root)
@@ -137,5 +137,5 @@ def test_consumer_rejects_missing_required_field(tmp_path: Path):
                 "reviewedInputRef": "reviewed-input:test",
                 "chunkSchemaVersion": "LEGAL_CHUNK_V1",
             },
-            correlation_id="corr-missing",
+            correlationId="corr-missing",
         )

@@ -124,7 +124,7 @@ def test_builder_creates_stable_article_clause_point_chunks(tmp_path: Path):
     assert point_a["hierarchy"]["parentChunkId"] == clause["id"]
     assert "a) Chi tiết" in clause["content"]
     assert "b) Bổ sung" in clause["content"]
-    response = first.to_tool_response(correlation_id="corr-chunks")
+    response = first.to_tool_response(correlationId="corr-chunks")
     serialized = json.dumps(response, ensure_ascii=False)
     assert "Nội dung áp dụng" not in serialized
 
