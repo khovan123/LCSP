@@ -43,9 +43,13 @@ export function buildAgenticToolCommand(args: AgenticToolCommandDispatchArgs) {
     case AGENTIC_TOOL_NAMES.resolveIndependentClassificationReview:
       return resolve_independent_classification_review(args);
     default:
-      throw problemException(EVIDENCE_ERROR_CODES.notFound, args.correlationId, {
-        status: HttpStatus.NOT_FOUND,
-      });
+      throw problemException(
+        EVIDENCE_ERROR_CODES.notFound,
+        args.correlationId,
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
   }
 }
 
@@ -141,7 +145,11 @@ function requiredPolicy(
   return value.trim();
 }
 
-function stripRef(value: string, prefix: string, correlationId: string): string {
+function stripRef(
+  value: string,
+  prefix: string,
+  correlationId: string,
+): string {
   if (!value.startsWith(prefix) || value.length <= prefix.length) {
     invalid(correlationId);
   }
