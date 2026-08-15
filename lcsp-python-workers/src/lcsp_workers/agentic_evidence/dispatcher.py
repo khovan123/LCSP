@@ -129,39 +129,184 @@ SPRINT6_AGENTIC_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
         request_targeted_reanalysis,
         "PythonWorkerRuntimeClient.requestTargetedReanalysis",
     ),
-    _binding("propose_gap_remediation", ToolRuntimeTarget.NEST_CQRS, propose_gap_remediation, "ProposeGapRemediationQuery"),
-    _binding("get_gap_evidence_trace", ToolRuntimeTarget.NEST_CQRS, get_gap_evidence_trace, "GetGapEvidenceTraceQuery"),
-    _binding("get_reconciliation_context", ToolRuntimeTarget.NEST_CQRS, get_reconciliation_context, "GetReconciliationContextQuery"),
-    _binding("propose_missing_targets", ToolRuntimeTarget.NEST_CQRS, propose_missing_targets, "ProposeMissingTargetsQuery"),
-    _binding("inspect_deployment_context", ToolRuntimeTarget.NEST_CQRS, inspect_deployment_context, "InspectDeploymentContextQuery"),
-    _binding("inspect_decision_path", ToolRuntimeTarget.NEST_CQRS, inspect_decision_path, "InspectDecisionPathQuery"),
-    _binding("get_artifact_chain", ToolRuntimeTarget.NEST_CQRS, get_artifact_chain, "GetArtifactChainQuery"),
-    _binding("find_similar_symbols", ToolRuntimeTarget.NEST_CQRS, find_similar_symbols, "FindSimilarSymbolsQuery"),
-    _binding("inspect_human_review_path", ToolRuntimeTarget.NEST_CQRS, inspect_human_review_path, "InspectHumanReviewPathQuery"),
-    _binding("inspect_data_path", ToolRuntimeTarget.NEST_CQRS, inspect_data_path, "InspectDataPathQuery"),
-    _binding("find_provider_invocations", ToolRuntimeTarget.NEST_CQRS, find_provider_invocations, "FindProviderInvocationsQuery"),
-    _binding("get_finding_detail", ToolRuntimeTarget.NEST_CQRS, get_finding_detail, "GetFindingDetailQuery"),
-    _binding("get_symbol_context", ToolRuntimeTarget.NEST_CQRS, get_symbol_context, "GetSymbolContextQuery"),
-    _binding("get_scan_coverage", ToolRuntimeTarget.NEST_CQRS, get_scan_coverage, "GetScanCoverageQuery"),
-    _binding("search_evidence", ToolRuntimeTarget.NEST_CQRS, search_evidence, "SearchEvidenceQuery"),
-    _binding("get_evidence_subgraph", ToolRuntimeTarget.NEST_CQRS, get_evidence_subgraph, "GetEvidenceSubgraphQuery"),
-    _binding("trace_static_flow", ToolRuntimeTarget.NEST_CQRS, trace_static_flow, "TraceStaticFlowQuery"),
+    _binding(
+        "propose_gap_remediation",
+        ToolRuntimeTarget.NEST_CQRS,
+        propose_gap_remediation,
+        "ProposeGapRemediationQuery",
+    ),
+    _binding(
+        "get_gap_evidence_trace",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_gap_evidence_trace,
+        "GetGapEvidenceTraceQuery",
+    ),
+    _binding(
+        "get_reconciliation_context",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_reconciliation_context,
+        "GetReconciliationContextQuery",
+    ),
+    _binding(
+        "propose_missing_targets",
+        ToolRuntimeTarget.NEST_CQRS,
+        propose_missing_targets,
+        "ProposeMissingTargetsQuery",
+    ),
+    _binding(
+        "inspect_deployment_context",
+        ToolRuntimeTarget.NEST_CQRS,
+        inspect_deployment_context,
+        "InspectDeploymentContextQuery",
+    ),
+    _binding(
+        "inspect_decision_path",
+        ToolRuntimeTarget.NEST_CQRS,
+        inspect_decision_path,
+        "InspectDecisionPathQuery",
+    ),
+    _binding(
+        "get_artifact_chain",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_artifact_chain,
+        "GetArtifactChainQuery",
+    ),
+    _binding(
+        "find_similar_symbols",
+        ToolRuntimeTarget.NEST_CQRS,
+        find_similar_symbols,
+        "FindSimilarSymbolsQuery",
+    ),
+    _binding(
+        "inspect_human_review_path",
+        ToolRuntimeTarget.NEST_CQRS,
+        inspect_human_review_path,
+        "InspectHumanReviewPathQuery",
+    ),
+    _binding(
+        "inspect_data_path",
+        ToolRuntimeTarget.NEST_CQRS,
+        inspect_data_path,
+        "InspectDataPathQuery",
+    ),
+    _binding(
+        "find_provider_invocations",
+        ToolRuntimeTarget.NEST_CQRS,
+        find_provider_invocations,
+        "FindProviderInvocationsQuery",
+    ),
+    _binding(
+        "get_finding_detail",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_finding_detail,
+        "GetFindingDetailQuery",
+    ),
+    _binding(
+        "get_symbol_context",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_symbol_context,
+        "GetSymbolContextQuery",
+    ),
+    _binding(
+        "get_scan_coverage",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_scan_coverage,
+        "GetScanCoverageQuery",
+    ),
+    _binding(
+        "search_evidence",
+        ToolRuntimeTarget.NEST_CQRS,
+        search_evidence,
+        "SearchEvidenceQuery",
+    ),
+    _binding(
+        "get_evidence_subgraph",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_evidence_subgraph,
+        "GetEvidenceSubgraphQuery",
+    ),
+    _binding(
+        "trace_static_flow",
+        ToolRuntimeTarget.NEST_CQRS,
+        trace_static_flow,
+        "TraceStaticFlowQuery",
+    ),
 )
 
 
 NEST_CQRS_DISCOVERY_BINDINGS: tuple[ToolBinding, ...] = (
-    _binding("get_assessment_context", ToolRuntimeTarget.NEST_CQRS, get_assessment_context, "GetAssessmentContextQuery"),
-    _binding("get_verified_profile", ToolRuntimeTarget.NEST_CQRS, get_verified_profile, "GetVerifiedProfileQuery"),
-    _binding("compare_wizard_claim", ToolRuntimeTarget.NEST_CQRS, compare_wizard_claim, "CompareWizardClaimQuery"),
-    _binding("get_classification_baseline", ToolRuntimeTarget.NEST_CQRS, get_classification_baseline, "GetClassificationBaselineQuery"),
-    _binding("get_gap_requirements", ToolRuntimeTarget.NEST_CQRS, get_gap_requirements, "GetGapRequirementsQuery"),
-    _binding("validate_classification_proposal", ToolRuntimeTarget.NEST_CQRS, validate_classification_proposal, "ValidateClassificationProposalQuery"),
-    _binding("evaluate_gap_matrix", ToolRuntimeTarget.NEST_CQRS, evaluate_gap_matrix, "EvaluateGapMatrixQuery"),
-    _binding("get_admin_source_catalog", ToolRuntimeTarget.NEST_CQRS, get_admin_source_catalog, "GetAdminSourceCatalogQuery"),
-    _binding("get_legal_corpus_readiness", ToolRuntimeTarget.NEST_CQRS, get_legal_corpus_readiness, "GetLegalCorpusReadinessQuery"),
-    _binding("retrieve_legal_basis", ToolRuntimeTarget.NEST_CQRS, retrieve_legal_basis, "RetrieveLegalBasisQuery"),
-    _binding("get_legal_rule_match", ToolRuntimeTarget.NEST_CQRS, get_legal_rule_match, "GetLegalRuleMatchQuery"),
-    _binding("validate_citation_set", ToolRuntimeTarget.NEST_CQRS, validate_citation_set, "ValidateCitationSetQuery"),
+    _binding(
+        "get_assessment_context",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_assessment_context,
+        "GetAssessmentContextQuery",
+    ),
+    _binding(
+        "get_verified_profile",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_verified_profile,
+        "GetVerifiedProfileQuery",
+    ),
+    _binding(
+        "compare_wizard_claim",
+        ToolRuntimeTarget.NEST_CQRS,
+        compare_wizard_claim,
+        "CompareWizardClaimQuery",
+    ),
+    _binding(
+        "get_classification_baseline",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_classification_baseline,
+        "GetClassificationBaselineQuery",
+    ),
+    _binding(
+        "get_gap_requirements",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_gap_requirements,
+        "GetGapRequirementsQuery",
+    ),
+    _binding(
+        "validate_classification_proposal",
+        ToolRuntimeTarget.NEST_CQRS,
+        validate_classification_proposal,
+        "ValidateClassificationProposalQuery",
+    ),
+    _binding(
+        "evaluate_gap_matrix",
+        ToolRuntimeTarget.NEST_CQRS,
+        evaluate_gap_matrix,
+        "EvaluateGapMatrixQuery",
+    ),
+    _binding(
+        "get_admin_source_catalog",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_admin_source_catalog,
+        "GetAdminSourceCatalogQuery",
+    ),
+    _binding(
+        "get_legal_corpus_readiness",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_legal_corpus_readiness,
+        "GetLegalCorpusReadinessQuery",
+    ),
+    _binding(
+        "retrieve_legal_basis",
+        ToolRuntimeTarget.NEST_CQRS,
+        retrieve_legal_basis,
+        "RetrieveLegalBasisQuery",
+    ),
+    _binding(
+        "get_legal_rule_match",
+        ToolRuntimeTarget.NEST_CQRS,
+        get_legal_rule_match,
+        "GetLegalRuleMatchQuery",
+    ),
+    _binding(
+        "validate_citation_set",
+        ToolRuntimeTarget.NEST_CQRS,
+        validate_citation_set,
+        "ValidateCitationSetQuery",
+    ),
 )
 
 
@@ -188,31 +333,136 @@ PROTECTED_COMMAND_BINDINGS: tuple[ToolBinding, ...] = (
 
 
 AO1_SCANNER_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
-    _binding("materialize_snapshot", ToolRuntimeTarget.PYTHON_LOCAL, materialize_snapshot, "ScannerWorkspace.materialize"),
-    _binding("classify_workspace_languages", ToolRuntimeTarget.PYTHON_LOCAL, classify_workspace_languages, "LanguageClassifier.classify_workspace"),
-    _binding("run_syft_inventory", ToolRuntimeTarget.PYTHON_LOCAL, run_syft_inventory, "SyftTool.run"),
-    _binding("run_semgrep_rules", ToolRuntimeTarget.PYTHON_LOCAL, run_semgrep_rules, "SemgrepTool.run"),
-    _binding("run_knip_usage_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_knip_usage_analysis, "KnipTool.run"),
-    _binding("run_deptry_usage_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_deptry_usage_analysis, "DeptryTool.run"),
-    _binding("run_ts_js_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_ts_js_semantic_analysis, "TsJsBridge.analyze"),
-    _binding("run_python_semantic_analysis", ToolRuntimeTarget.PYTHON_LOCAL, run_python_semantic_analysis, "PythonAnalyzer.analyze"),
-    _binding("run_structural_augmentation", ToolRuntimeTarget.PYTHON_LOCAL, run_structural_augmentation, "StructuralAugmentor.augment"),
-    _binding("build_evidence_graph", ToolRuntimeTarget.PYTHON_LOCAL, build_evidence_graph, "EvidenceGraphAssembler.assemble"),
-    _binding("validate_evidence_report", ToolRuntimeTarget.PYTHON_LOCAL, validate_evidence_report, "validate_schema + assert_privacy_flags + classify_quality"),
+    _binding(
+        "materialize_snapshot",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        materialize_snapshot,
+        "ScannerWorkspace.materialize",
+    ),
+    _binding(
+        "classify_workspace_languages",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        classify_workspace_languages,
+        "LanguageClassifier.classify_workspace",
+    ),
+    _binding(
+        "run_syft_inventory",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_syft_inventory,
+        "SyftTool.run",
+    ),
+    _binding(
+        "run_semgrep_rules",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_semgrep_rules,
+        "SemgrepTool.run",
+    ),
+    _binding(
+        "run_knip_usage_analysis",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_knip_usage_analysis,
+        "KnipTool.run",
+    ),
+    _binding(
+        "run_deptry_usage_analysis",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_deptry_usage_analysis,
+        "DeptryTool.run",
+    ),
+    _binding(
+        "run_ts_js_semantic_analysis",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_ts_js_semantic_analysis,
+        "TsJsBridge.analyze",
+    ),
+    _binding(
+        "run_python_semantic_analysis",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_python_semantic_analysis,
+        "PythonAnalyzer.analyze",
+    ),
+    _binding(
+        "run_structural_augmentation",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_structural_augmentation,
+        "StructuralAugmentor.augment",
+    ),
+    _binding(
+        "build_evidence_graph",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        build_evidence_graph,
+        "EvidenceGraphAssembler.assemble",
+    ),
+    _binding(
+        "validate_evidence_report",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        validate_evidence_report,
+        "validate_schema + assert_privacy_flags + classify_quality",
+    ),
 )
 
 
 AO6_LEGAL_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
-    _binding("fetch_official_source_snapshot", ToolRuntimeTarget.PYTHON_LOCAL, fetch_official_source_snapshot, "OfficialSourceSnapshotFetcher.fetch"),
-    _binding("extract_official_text", ToolRuntimeTarget.PYTHON_LOCAL, extract_official_text, "OfficialTextExtractor.extract"),
-    _binding("run_ocr_fallback", ToolRuntimeTarget.PYTHON_LOCAL, run_ocr_fallback, "OcrFallbackTool.run"),
-    _binding("evaluate_ocr_quality", ToolRuntimeTarget.PYTHON_LOCAL, evaluate_ocr_quality, "OcrQualityValidator.evaluate"),
-    _binding("build_reviewed_corpus_input", ToolRuntimeTarget.PYTHON_LOCAL, build_reviewed_corpus_input, "ReviewedCorpusInputBuilder.build"),
-    _binding("build_legal_chunks", ToolRuntimeTarget.PYTHON_LOCAL, build_legal_chunks, "LegalChunkBuilder.build"),
-    _binding("validate_chunk_integrity", ToolRuntimeTarget.PYTHON_LOCAL, validate_chunk_integrity, "ChunkIntegrityValidator.validate"),
-    _binding("build_legal_retrieval_index", ToolRuntimeTarget.PYTHON_LOCAL, build_legal_retrieval_index, "LegalRetrievalIndexBuilder.build"),
-    _binding("validate_retrieval_index", ToolRuntimeTarget.PYTHON_LOCAL, validate_retrieval_index, "LegalCorpusRecoveryDriver._validate_retrieval_index"),
-    _binding("activate_validated_corpus_version", ToolRuntimeTarget.PROTECTED_API, activate_validated_corpus_version, "WorkerApiClient.activate_validated_corpus_version"),
+    _binding(
+        "fetch_official_source_snapshot",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        fetch_official_source_snapshot,
+        "OfficialSourceSnapshotFetcher.fetch",
+    ),
+    _binding(
+        "extract_official_text",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        extract_official_text,
+        "OfficialTextExtractor.extract",
+    ),
+    _binding(
+        "run_ocr_fallback",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_ocr_fallback,
+        "OcrFallbackTool.run",
+    ),
+    _binding(
+        "evaluate_ocr_quality",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        evaluate_ocr_quality,
+        "OcrQualityValidator.evaluate",
+    ),
+    _binding(
+        "build_reviewed_corpus_input",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        build_reviewed_corpus_input,
+        "ReviewedCorpusInputBuilder.build",
+    ),
+    _binding(
+        "build_legal_chunks",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        build_legal_chunks,
+        "LegalChunkBuilder.build",
+    ),
+    _binding(
+        "validate_chunk_integrity",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        validate_chunk_integrity,
+        "ChunkIntegrityValidator.validate",
+    ),
+    _binding(
+        "build_legal_retrieval_index",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        build_legal_retrieval_index,
+        "LegalRetrievalIndexBuilder.build",
+    ),
+    _binding(
+        "validate_retrieval_index",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        validate_retrieval_index,
+        "ChromaDbCitationRetriever.index_corpus + retrieve_exact",
+    ),
+    _binding(
+        "activate_validated_corpus_version",
+        ToolRuntimeTarget.PROTECTED_API,
+        activate_validated_corpus_version,
+        "WorkerApiClient.activate_validated_corpus_version",
+    ),
 )
 
 
@@ -300,7 +550,9 @@ class ScannerToolDispatcher:
 
     def __init__(self, context: ScannerToolExecutionContext) -> None:
         self._context = context
-        self._bindings = {binding.tool_name: binding for binding in AO1_SCANNER_TOOL_BINDINGS}
+        self._bindings = {
+            binding.tool_name: binding for binding in AO1_SCANNER_TOOL_BINDINGS
+        }
 
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(self._bindings))
@@ -321,7 +573,9 @@ class LegalToolDispatcher:
 
     def __init__(self, context: LegalToolExecutionContext) -> None:
         self._context = context
-        self._bindings = {binding.tool_name: binding for binding in AO6_LEGAL_TOOL_BINDINGS}
+        self._bindings = {
+            binding.tool_name: binding for binding in AO6_LEGAL_TOOL_BINDINGS
+        }
 
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(self._bindings))
