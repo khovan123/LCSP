@@ -76,6 +76,8 @@ class LegalSourceIngestConsumer(ConsumerBase):
         Downloaded bytes live only in a temporary directory during validation and
         registration. The fetch operation is forced through the canonical
         ``fetch_official_source_snapshot`` boundary before provenance registration.
+        Fetch/runtime failures remain retryable exactly as before this refactor;
+        only deterministic envelope validation is terminal.
         """
         envelope = self._read_envelope(message)
         with TemporaryDirectory(prefix="lcsp-legal-source-") as temp_dir:
@@ -87,20 +89,17 @@ class LegalSourceIngestConsumer(ConsumerBase):
                     snapshot_fetcher=self._snapshot_fetcher,
                 )
             )
-            try:
-                result = dispatcher.dispatch(
-                    "fetch_official_source_snapshot",
-                    document_id=envelope.document_id,
-                    catalog_source_ref=envelope.catalog_source_ref,
-                    source_url=envelope.source_url,
-                    output_dir=temp_root,
-                    max_bytes=envelope.max_bytes,
-                    gateway_document_id=envelope.gateway_document_id,
-                    source_effect_status=envelope.source_effect_status,
-                    expected_document_number=envelope.expected_document_number,
-                )
-            except (ValueError, RuntimeError, OSError, TimeoutError) as exc:
-                raise NonRetryableWorkerError(str(exc)) from exc
+            result = dispatcher.dispatch(
+                "fetch_official_source_snapshot",
+                document_id=envelope.document_id,
+                catalog_source_ref=envelope.catalog_source_ref,
+                source_url=envelope.source_url,
+                output_dir=temp_root,
+                max_bytes=envelope.max_bytes,
+                gateway_document_id=envelope.gateway_document_id,
+                source_effect_status=envelope.source_effect_status,
+                expected_document_number=envelope.expected_document_number,
+            )
             registered = result.register_with_api(
                 api_client=self._api_client,
                 admin_catalog_version=envelope.admin_catalog_version,
