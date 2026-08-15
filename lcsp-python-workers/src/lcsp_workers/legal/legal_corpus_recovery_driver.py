@@ -87,11 +87,7 @@ class LegalCorpusRecoveryDriver:
 
         validation_ref = f"retrieval-validation:{_safe_ref(version)}"
         integrity_ref = f"integrity-manifest:{_safe_ref(version)}"
-        self._legal_dispatcher.dispatch(
-            "validate_retrieval_index",
-            corpus_version_id=corpus_id,
-            payload=enriched_payload,
-        )
+        self._validate_retrieval_index(corpus_id, enriched_payload)
         index = self._api_client.register_validated_retrieval_index(
             corpus_id,
             {
