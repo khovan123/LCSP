@@ -75,13 +75,53 @@ This currently owns:
 - `request_targeted_reanalysis`
 - `resume_waiting_runs`
 
+`resume_waiting_runs` remains a system-only worker bridge. AO-6 recovery must not route it back through `LegalToolDispatcher`, because doing so would create a Python → Nest → Python worker recursion path. The recovery driver therefore invokes the existing internal API client at the terminal resume seam after corpus activation.
+
 ### AO-6 legal corpus tools
 
 Canonical functions live in:
 
 `lcsp-python-workers/src/lcsp_workers/agentic_evidence/legal_tool_entrypoints.py`
 
-Protected activation remains behind `WorkerApiClient.activate_validated_corpus_version`.
+Authoritative AO-6 queue consumers are no longer allowed to instantiate the corresponding builder/validator/tool and call `run()`, `build()`, `evaluate()`, `validate()`, or `extract_*()` directly. Runtime execution is now:
+
+```text
+RabbitMQ command
+  -> AO-6 consumer
+  -> LegalToolDispatcher.dispatch(canonical_tool_name, ...)
+  -> ToolBinding
+  -> exact same-name canonical function
+  -> domain implementation
+  -> consumer persists the returned immutable artifact
+```
+
+The migrated consumers are:
+
+- `LegalSourceIngestConsumer` → `fetch_official_source_snapshot`
+- `OfficialTextExtractionConsumer` → `extract_official_text`
+- `OcrFallbackConsumer` → `run_ocr_fallback`
+- `OcrQualityConsumer` → `evaluate_ocr_quality`
+- `ReviewedCorpusInputConsumer` → `build_reviewed_corpus_input`
+- `LegalChunkConsumer` → `build_legal_chunks`
+- `ChunkIntegrityConsumer` → `validate_chunk_integrity`
+- `LegalRetrievalIndexConsumer` → `build_legal_retrieval_index`
+
+The recovery driver also crosses the canonical boundary for:
+
+- `validate_retrieval_index`
+- `activate_validated_corpus_version`
+
+`validate_retrieval_index` now owns its Chroma round-trip validation inside the exact-name canonical entrypoint rather than calling back into the recovery driver's private method. `LegalCorpusRecoveryDriver._validate_retrieval_index()` is only a compatibility/test seam and immediately dispatches the canonical tool.
+
+Protected corpus activation remains behind `WorkerApiClient.activate_validated_corpus_version` and is reachable through `activate_validated_corpus_version(...)` only. Draft ingest and retrieval-index registration remain explicit corpus lifecycle API operations because they are not canonical tools in the 55-tool catalog.
+
+Source-fetch retry semantics are preserved: deterministic command-envelope errors are terminal, while fetch/runtime failures continue through the existing consumer retry/DLQ policy.
+
+Architecture regression coverage lives in:
+
+`lcsp-python-workers/tests/agentic_evidence/test_legal_consumer_dispatch_boundaries.py`
+
+It fails if an authoritative AO-6 consumer bypasses `LegalToolDispatcher`, if recovery owns Chroma validation directly again, or if recovery calls the activation API directly.
 
 ## Debugging
 
