@@ -24,6 +24,8 @@ class AgenticToolExecutionContext:
     api_client: WorkerApiClient
     user_id: str
     organization_id: str
+    policy_id: str | None = None
+    policy_version: str | None = None
 
 
 def _dispatch_via_internal_api(
@@ -32,26 +34,29 @@ def _dispatch_via_internal_api(
     context: AgenticToolExecutionContext,
 ) -> Mapping[str, Any]:
     """Send one canonical tool invocation through the protected API boundary."""
-    return context.api_client.dispatch_agentic_tool(
-        {
-            "tool_name": tool_name,
-            "request_id": str(request.request_id),
-            "assessment_id": str(request.assessment_id),
-            "workflow_run_id": str(request.workflow_run_id),
-            "organization_id": context.organization_id,
-            "user_id": context.user_id,
-            "artifact_versions": request.artifact_versions,
-            "scope": request.scope,
-            "budget": {
-                "maxItems": request.budget.max_items,
-                "maxDepth": request.budget.max_depth,
-                "maxBytes": request.budget.max_bytes,
-                "maxDurationMs": request.budget.max_duration_ms,
-            },
-            "input": request.input,
-            "correlationId": str(request.correlationId),
-        }
-    )
+    payload: dict[str, Any] = {
+        "tool_name": tool_name,
+        "request_id": str(request.request_id),
+        "assessment_id": str(request.assessment_id),
+        "workflow_run_id": str(request.workflow_run_id),
+        "organization_id": context.organization_id,
+        "user_id": context.user_id,
+        "artifact_versions": request.artifact_versions,
+        "scope": request.scope,
+        "budget": {
+            "maxItems": request.budget.max_items,
+            "maxDepth": request.budget.max_depth,
+            "maxBytes": request.budget.max_bytes,
+            "maxDurationMs": request.budget.max_duration_ms,
+        },
+        "input": request.input,
+        "correlationId": str(request.correlationId),
+    }
+    if context.policy_id:
+        payload["policy_id"] = context.policy_id
+    if context.policy_version:
+        payload["policy_version"] = context.policy_version
+    return context.api_client.dispatch_agentic_tool(payload)
 
 
 def resume_waiting_runs(
@@ -190,7 +195,7 @@ def trace_static_flow(
 # The tools below are handled by the internal NestJS dispatcher but are not all
 # part of the Python LLM-callable catalog. They still expose exact-name execution
 # entrypoints so a developer can trace the canonical name directly to the CQRS
-# query that owns the business logic without widening model access.
+# owner without widening model access.
 
 
 def get_assessment_context(
@@ -275,3 +280,33 @@ def validate_citation_set(
     context: AgenticToolExecutionContext,
 ) -> Mapping[str, Any]:
     return _dispatch_via_internal_api("validate_citation_set", request, context)
+
+
+def reconcile_profile_to_verified_profile(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    """Dispatch the protected reconciliation mutation through Nest CommandBus."""
+    return _dispatch_via_internal_api(
+        "reconcile_profile_to_verified_profile", request, context
+    )
+
+
+def submit_classification_for_independent_review(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    """Dispatch protected review submission with pinned PBAC policy metadata."""
+    return _dispatch_via_internal_api(
+        "submit_classification_for_independent_review", request, context
+    )
+
+
+def resolve_independent_classification_review(
+    request: AgenticToolRequest,
+    context: AgenticToolExecutionContext,
+) -> Mapping[str, Any]:
+    """Dispatch protected review resolution with pinned PBAC policy metadata."""
+    return _dispatch_via_internal_api(
+        "resolve_independent_classification_review", request, context
+    )
