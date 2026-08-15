@@ -35,6 +35,10 @@ const DECISION_LOG_RESOURCE_TYPE = AUDIT_RESOURCE_TYPES.workerTask;
 
 /**
  * Re-evaluates PBAC for a queued worker task immediately before processing so authorization reflects current membership and policy state.
+ *
+ * Unlike `PbacGuard`, this service does not reject an existing membership before evaluation solely because its status is no longer active.
+ * A membership revoked after task dispatch must still reach `PbacEvaluatorService` so the state-gate rule can produce `STATE_GATE_FAILED`;
+ * that case is intentionally distinct from a membership that does not exist at all.
  */
 @Injectable()
 export class PbacPreflightService {
