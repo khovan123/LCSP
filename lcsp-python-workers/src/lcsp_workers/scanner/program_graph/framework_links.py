@@ -33,14 +33,18 @@ class FrameworkBoundaryExtractor:
 
     def _source(self, rel: str, text: str, out: SemanticProgram) -> None:
         lines = text.splitlines(); controller_prefix = self._controller_prefix(text)
+        dynamic_callables = set(re.findall(r"\b([A-Za-z_$][\w$]*)\s*=\s*[A-Za-z_$][\w$.]*\s*\[[^\]]+\]", text))
         for line_no, line in enumerate(lines, 1):
-            # Server route declarations share a canonical route node with matching clients.
+            for name in dynamic_callables:
+                if re.search(rf"\b{re.escape(name)}\s*\(", line):
+                    key = f"dynamic:{rel}:{line_no}:{name}"
+                    out.add_node(SemanticNodeFact(key, "UNRESOLVED_DYNAMIC_TARGET", name, rel, line_no, line_no, coverage_state="LIMITED"))
+                    out.add_edge(SemanticEdgeFact("CALLS_DYNAMICALLY", f"module:{rel}", key, coverage_state="LIMITED")); out.unresolved_frontiers.append(key)
             route = re.search(r"@(Get|Post|Put|Patch|Delete)\s*\(\s*['\"]([^'\"]*)['\"]", line, re.I)
             py_route = re.search(r"@(?:app|router|blueprint)\.(get|post|put|patch|delete)\s*\(\s*['\"]([^'\"]+)['\"]", line, re.I)
             match = route or py_route
             if match:
                 method = match.group(1).upper(); path = self._join_route(controller_prefix, match.group(2)); rkey = self._route_key(method, path); out.add_node(SemanticNodeFact(rkey, "HTTP_ROUTE", f"{method} {path}", attributes={"method": method, "route": path})); out.add_edge(SemanticEdgeFact("HANDLED_BY", rkey, f"module:{rel}"))
-            # Client HTTP calls with statically visible relative/absolute path.
             http = re.search(r"\baxios\.(get|post|put|patch|delete)\s*\(\s*['\"]([^'\"]+)['\"]", line, re.I)
             fetch = re.search(r"\bfetch\s*\(\s*['\"]([^'\"]+)['\"]", line)
             if http or fetch:
@@ -51,22 +55,18 @@ class FrameworkBoundaryExtractor:
                     ekey = f"external:{host}"; out.add_node(SemanticNodeFact(ekey, "EXTERNAL_API", host, attributes={"host": host})); out.add_edge(SemanticEdgeFact("SENDS_TO_EXTERNAL", call_key, ekey))
                 else:
                     rkey = self._route_key(method, self._normalize_route(target)); out.add_node(SemanticNodeFact(rkey, "HTTP_ROUTE", f"{method} {self._normalize_route(target)}", attributes={"method": method, "route": self._normalize_route(target)})); out.add_edge(SemanticEdgeFact("CALLS_API", call_key, rkey))
-            # Event/message consumers.
             consumer = re.search(r"@(EventPattern|MessagePattern|OnEvent)\s*\(\s*['\"]([^'\"]+)['\"]", line)
             if consumer:
                 ekey = f"event:{consumer.group(2)}"; out.add_node(SemanticNodeFact(ekey, "EVENT", consumer.group(2))); out.add_edge(SemanticEdgeFact("CONSUMES_EVENT", ekey, f"module:{rel}"))
-            # Named queue consumers.
             queue = re.search(r"@(Processor|Process)\s*\(\s*['\"]([^'\"]+)['\"]", line)
             if queue:
                 qkey = f"queue:{queue.group(2)}"; out.add_node(SemanticNodeFact(qkey, "QUEUE", queue.group(2))); out.add_edge(SemanticEdgeFact("CONSUMES_FROM_QUEUE", qkey, f"module:{rel}"))
-            # CQRS handlers.
             command_handler = re.search(r"@CommandHandler\s*\(\s*([A-Za-z_$][\w$]*)", line)
             query_handler = re.search(r"@QueryHandler\s*\(\s*([A-Za-z_$][\w$]*)", line)
             if command_handler:
                 ckey = f"command:{command_handler.group(1)}"; out.add_node(SemanticNodeFact(ckey, "COMMAND", command_handler.group(1))); out.add_edge(SemanticEdgeFact("HANDLES_COMMAND", ckey, f"module:{rel}"))
             if query_handler:
                 qkey = f"query:{query_handler.group(1)}"; out.add_node(SemanticNodeFact(qkey, "QUERY", query_handler.group(1))); out.add_edge(SemanticEdgeFact("HANDLES_QUERY", qkey, f"module:{rel}"))
-            # Producers use canonical event/queue/CQRS identity where visible.
             producer = re.search(r"\b(?:emit|publish|produce|sendEvent|send_event)\s*\(\s*['\"]([^'\"]+)['\"]", line)
             if producer:
                 call = f"call:{rel}:{line_no}:publish"; ekey = f"event:{producer.group(1)}"; out.add_node(SemanticNodeFact(call, "CALL_SITE", "publish", rel, line_no, line_no)); out.add_node(SemanticNodeFact(ekey, "EVENT", producer.group(1))); out.add_edge(SemanticEdgeFact("PUBLISHES_EVENT", call, ekey))
@@ -82,7 +82,6 @@ class FrameworkBoundaryExtractor:
 
     def _config(self, rel: str, text: str, out: SemanticProgram) -> None:
         fkey = f"file:{rel}"; out.add_node(SemanticNodeFact(f"config:{rel}", "MODULE", rel, rel, 1, 1, attributes=self._file_attributes(rel))); out.add_edge(SemanticEdgeFact("CONTAINS", fkey, f"config:{rel}"))
-        # Only safe hosts are retained; query strings, credentials and literal values are discarded.
         for match in re.finditer(r"https?://[^\s'\"<>]+", text):
             host = safe_external_host(match.group(0))
             if host:

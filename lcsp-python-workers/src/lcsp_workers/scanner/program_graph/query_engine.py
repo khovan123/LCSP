@@ -34,7 +34,7 @@ class ProgramGraphQueryEngine:
         return self._walk(seed_ref, direction, max_depth, max_nodes, max_edges, set(node_types), set(edge_types), set())
 
     def trace_static_flow(self, *, start_ref: str, direction: str = "FORWARD", max_hops: int = 10, edge_types: Iterable[str] = (), stop_node_types: Iterable[str] = (), max_results: int = 100) -> GraphQueryResult:
-        follow = set(edge_types) or ({"CALLS", "RESOLVES_TO", "TRIGGERS", "AFFECTS", "HANDLED_BY", "PUBLISHES_EVENT", "CONSUMES_EVENT", "PUBLISHES_COMMAND", "HANDLES_COMMAND", "PUBLISHES_QUERY", "HANDLES_QUERY"} | set(DATA_FLOW_EDGES) | set(DECISION_EDGE_TYPES))
+        follow = set(edge_types) or ({"CALLS", "RESOLVES_TO", "TRIGGERS", "AFFECTS", "HANDLED_BY", "PUBLISHES_EVENT", "CONSUMES_EVENT", "PUBLISHES_TO_QUEUE", "CONSUMES_FROM_QUEUE", "PUBLISHES_COMMAND", "HANDLES_COMMAND", "PUBLISHES_QUERY", "HANDLES_QUERY"} | set(DATA_FLOW_EDGES) | set(DECISION_EDGE_TYPES))
         return self._walk(start_ref, direction, max_hops, max_results, max_results * 5, set(), follow, set(stop_node_types))
 
     def inspect_data_path(self, *, start_ref: str, direction: str = "FORWARD", max_hops: int = 10, max_results: int = 100) -> GraphQueryResult:
@@ -43,7 +43,7 @@ class ProgramGraphQueryEngine:
     def inspect_decision_path(self, *, start_ref: str, max_hops: int = 12, action_categories: Iterable[str] = (), max_results: int = 100) -> GraphQueryResult:
         mapping = {"APPROVE": "APPROVAL", "REJECT": "REJECTION", "RANK": "RANKING", "RECOMMEND": "RECOMMENDATION", "STATUS_CHANGE": "STATUS_CHANGE"}; selected = {mapping.get(v, v) for v in action_categories}
         stops = set(BUSINESS_ACTION_NODE_TYPES); stops = stops & (selected | {"BUSINESS_ACTION"}) if selected else stops
-        return self._walk(start_ref, "FORWARD", max_hops, max_results, max_results * 5, set(), set(DATA_FLOW_EDGES) | set(DECISION_EDGE_TYPES) | {"CALLS", "RESOLVES_TO", "TRIGGERS", "HANDLED_BY", "PUBLISHES_EVENT", "CONSUMES_EVENT"}, stops)
+        return self._walk(start_ref, "FORWARD", max_hops, max_results, max_results * 5, set(), set(DATA_FLOW_EDGES) | set(DECISION_EDGE_TYPES) | {"CALLS", "RESOLVES_TO", "TRIGGERS", "HANDLED_BY", "PUBLISHES_EVENT", "CONSUMES_EVENT", "PUBLISHES_TO_QUEUE", "CONSUMES_FROM_QUEUE"}, stops)
 
     def inspect_human_review_path(self, *, start_ref: str, max_hops: int = 12, max_results: int = 100) -> dict:
         result = self.inspect_decision_path(start_ref=start_ref, max_hops=max_hops, max_results=max_results)
@@ -57,14 +57,15 @@ class ProgramGraphQueryEngine:
         return result[:max_results]
 
     def symbol_context(self, symbol_ref: str, max_neighbors: int = 50) -> dict:
-        node = next((n for n in self.graph.nodes if (n.get("source") or {}).get("symbol_ref") == symbol_ref or n.get("node_id") == self._strip(symbol_ref)), None)
+        canonical = self._canonical_ref(symbol_ref)
+        node = next((n for n in self.graph.nodes if (n.get("source") or {}).get("symbol_ref") == symbol_ref or n.get("node_id") == canonical), None)
         if not node: return {"symbol": None, "neighbors": [], "edges": [], "evidenceRefs": []}
         nid = str(node["node_id"]); edges = [*self.inc.get(nid, []), *self.out.get(nid, [])][:max_neighbors]
         ids = {str(e["source_node_id"] if e["target_node_id"] == nid else e["target_node_id"]) for e in edges}; neighbors = [self.nodes[i] for i in sorted(ids) if i in self.nodes]
         return {"symbol": node, "neighbors": neighbors, "edges": edges, "evidenceRefs": self._refs([node, *neighbors], edges)}
 
     def _walk(self, seed_ref: str, direction: str, depth_limit: int, node_limit: int, edge_limit: int, node_types: set[str], edge_types: set[str], stop_types: set[str]) -> GraphQueryResult:
-        seed = self._strip(seed_ref)
+        seed = self._canonical_ref(seed_ref)
         if seed not in self.nodes: return GraphQueryResult([], [], [], False, [seed_ref], [])
         queue = deque([(seed, 0, [seed])]); seen_nodes = {seed}; seen_edges: set[str] = set(); order = [seed]; paths = []; unresolved: set[str] = set(); truncated = False
         while queue:
@@ -87,6 +88,13 @@ class ProgramGraphQueryEngine:
         edges = [e for e in self.graph.edges if str(e["edge_id"]) in seen_edges and str(e["source_node_id"]) in returned and str(e["target_node_id"]) in returned]
         return GraphQueryResult(nodes, edges, paths, truncated, sorted(unresolved), self._refs(nodes, edges))
 
+    def _canonical_ref(self, value: str) -> str:
+        if value in self.nodes: return value
+        if value.startswith(("node:", "symbol:", "finding:")) and value.count(":") == 1:
+            candidate = value.split(":", 1)[1]
+            if candidate in self.nodes: return candidate
+        return value
+
     def _neighbors(self, nid: str, direction: str, edge_types: set[str]) -> list[tuple[dict, str]]:
         result = []; direction = direction.upper()
         if direction in {"FORWARD", "BOTH"}:
@@ -94,9 +102,7 @@ class ProgramGraphQueryEngine:
         if direction in {"BACKWARD", "BOTH"}:
             result += [(e, str(e["source_node_id"])) for e in self.inc.get(nid, []) if not edge_types or e.get("edge_type") in edge_types]
         return sorted(result, key=lambda item: str(item[0]["edge_id"]))
-    @staticmethod
-    def _strip(value: str) -> str:
-        return value.split(":", 1)[1] if value.startswith(("node:", "symbol:", "finding:")) and value.count(":") == 1 else value
+
     @staticmethod
     def _refs(nodes: list[dict], edges: list[dict]) -> list[str]:
         return sorted({str(ref) for item in [*nodes, *edges] for ref in item.get("evidence_refs") or [] if str(ref)})

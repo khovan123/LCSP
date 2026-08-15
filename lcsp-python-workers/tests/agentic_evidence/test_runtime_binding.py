@@ -21,6 +21,6 @@ def test_runtime_registry_binds_python_local_model_tools() -> None:
 def test_runtime_registry_still_dispatches_cqrs_tools_to_nest() -> None:
     registry = build_sprint6_agentic_registry(); api = MagicMock(); api.dispatch_agentic_tool.return_value = {"status": "READY"}
     bind_runtime_handlers(registry, api_client=api, user_id="user-1", organization_id="org-1")
-    request = _request("get_artifact_chain"); request.input.clear()
+    request = _request("get_artifact_chain"); request.input.clear(); request.input.update({"anchor": {"assessmentId": "assessment:abcdefgh"}})
     assert registry.invoke_model_tool(request) == {"status": "READY"}
     assert api.dispatch_agentic_tool.call_count == 1
