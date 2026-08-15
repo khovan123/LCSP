@@ -21,6 +21,7 @@ from .dispatcher import (
     ToolBinding,
     ToolRuntimeTarget,
     runtime_binding,
+    tool_runtime_manifest,
 )
 from .registry import (
     AgenticToolBudget,
@@ -72,4 +73,5 @@ __all__ = [
     "build_sprint6_agentic_registry",
     "llm_callable_tool_specs",
     "runtime_binding",
+    "tool_runtime_manifest",
 ]

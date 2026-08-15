@@ -20,6 +20,7 @@ from .scanner_tool_entrypoints import (
     run_structural_augmentation,
     run_syft_inventory,
     run_ts_js_semantic_analysis,
+    validate_evidence_report,
 )
 from .tool_entrypoints import (
     AgenticToolExecutionContext,
@@ -257,6 +258,12 @@ AO1_SCANNER_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
         build_evidence_graph,
         "EvidenceGraphAssembler.assemble",
     ),
+    ToolBinding(
+        "validate_evidence_report",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        validate_evidence_report,
+        "validate_schema + assert_privacy_flags + classify_quality",
+    ),
 )
 
 
@@ -276,6 +283,19 @@ def runtime_binding(tool_name: str) -> ToolBinding:
     if binding is None:
         raise AgenticToolValidationError("TOOL_RUNTIME_BINDING_NOT_FOUND")
     return binding
+
+
+def tool_runtime_manifest() -> tuple[dict[str, str], ...]:
+    """Return a deterministic debug view of every centrally registered tool binding."""
+    return tuple(
+        {
+            "tool_name": binding.tool_name,
+            "runtime_target": binding.runtime_target.value,
+            "entrypoint": binding.entrypoint.__name__,
+            "downstream_target": binding.downstream_target,
+        }
+        for binding in sorted(ALL_TOOL_BINDINGS, key=lambda item: item.tool_name)
+    )
 
 
 class AgenticToolDispatcher:

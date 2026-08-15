@@ -13,6 +13,7 @@ from lcsp_workers.agentic_evidence.dispatcher import (
     ScannerToolDispatcher,
     ToolRuntimeTarget,
     runtime_binding,
+    tool_runtime_manifest,
 )
 from lcsp_workers.agentic_evidence.registry import AgenticToolValidationError
 from lcsp_workers.agentic_evidence.scanner_tool_entrypoints import (
@@ -32,6 +33,7 @@ EXPECTED_AO1_SCANNER_TOOLS = {
     "run_python_semantic_analysis",
     "run_structural_augmentation",
     "build_evidence_graph",
+    "validate_evidence_report",
 }
 
 
@@ -75,6 +77,26 @@ def test_global_runtime_binding_index_is_unique_and_discoverable() -> None:
     assert evidence.runtime_target == ToolRuntimeTarget.NEST_CQRS
     assert evidence.downstream_target == "SearchEvidenceQuery"
 
+    validation = runtime_binding("validate_evidence_report")
+    assert validation.entrypoint.__name__ == "validate_evidence_report"
+    assert "assert_privacy_flags" in validation.downstream_target
+
+
+def test_runtime_manifest_exposes_one_debug_row_per_binding() -> None:
+    manifest = tool_runtime_manifest()
+
+    assert len(manifest) == len(ALL_TOOL_BINDINGS)
+    assert [row["tool_name"] for row in manifest] == sorted(
+        binding.tool_name for binding in ALL_TOOL_BINDINGS
+    )
+    syft = next(row for row in manifest if row["tool_name"] == "run_syft_inventory")
+    assert syft == {
+        "tool_name": "run_syft_inventory",
+        "runtime_target": "PYTHON_LOCAL",
+        "entrypoint": "run_syft_inventory",
+        "downstream_target": "SyftTool.run",
+    }
+
 
 def test_scanner_dispatcher_routes_syft_through_same_named_entrypoint() -> None:
     context = _context()
@@ -91,6 +113,43 @@ def test_scanner_dispatcher_routes_syft_through_same_named_entrypoint() -> None:
     context.syft_tool.run.assert_called_once_with(Path("/tmp/lcsp-workspace"))
 
 
+def test_validate_evidence_report_runs_named_gates() -> None:
+    dispatcher = ScannerToolDispatcher(_context())
+    payload = {
+        "job_id": "job-1",
+        "snapshot_id": "snapshot-1",
+        "schema_version": "1",
+        "tools_version": {"syft": "1.0.0"},
+        "config_hash": "sha256:test",
+        "findings": [{"finding_type": "AI_INVOCATION"}],
+        "privacy_flags": {
+            "contains_source_code": False,
+            "secrets_redacted": True,
+        },
+        "quality_state": "",
+        "coverage_limitations": [],
+        "scan_graph": {},
+        "scanned_at": "2026-08-15T00:00:00Z",
+    }
+    tool_provenance = [
+        {
+            "tool_name": "syft",
+            "tool_version": "1.0.0",
+            "config_hash": "sha256:test",
+            "ran_at": "2026-08-15T00:00:00Z",
+            "outcome": "success",
+        }
+    ]
+
+    result = dispatcher.dispatch(
+        "validate_evidence_report",
+        payload=payload,
+        tool_provenance=tool_provenance,
+    )
+
+    assert result == {"quality_state": "QUALITY_VALID"}
+
+
 def test_scan_consumer_does_not_bypass_canonical_ao1_entrypoints() -> None:
     source = inspect.getsource(ScanConsumer)
 
@@ -101,7 +160,7 @@ def test_scan_consumer_does_not_bypass_canonical_ao1_entrypoints() -> None:
     assert "PythonAnalyzer(" not in source
     assert "self._evidence_graph_assembler.assemble(" not in source
 
-    for tool_name in EXPECTED_AO1_SCANNER_TOOLS:
+    for tool_name in EXPECTED_AO1_SCANNER_TOOLS - {"validate_evidence_report"}:
         assert f'"{tool_name}"' in source
 
 

@@ -6,8 +6,8 @@ while preserving the existing scanner implementations and their tests.
 
 This module deliberately avoids importing ``lcsp_workers.scanner`` modules at
 module-import time. ``scanner.__init__`` exports ``ScanConsumer`` eagerly, so
-keeping scanner dependencies in the execution context (and one lazy import for
-PythonAnalyzer) prevents a package initialization cycle.
+keeping scanner dependencies in the execution context (and lazy imports for
+scanner-owned implementations) prevents a package initialization cycle.
 """
 
 from __future__ import annotations
@@ -157,3 +157,26 @@ def build_evidence_graph(
         package_dependencies=list(request.get("package_dependencies") or []),
         coverage_notes=list(request.get("coverage_notes") or []),
     )
+
+
+def validate_evidence_report(
+    request: ScannerToolInput,
+    context: ScannerToolExecutionContext,
+) -> dict[str, str]:
+    """Run the scanner schema, privacy, and quality gates behind one tool boundary."""
+    del context  # Validation is deterministic and does not require injected services.
+
+    from lcsp_workers.scanner.evidence.privacy_gate import assert_privacy_flags
+    from lcsp_workers.scanner.evidence.quality_gate import classify_quality
+    from lcsp_workers.scanner.evidence.schema_validator import validate_schema
+
+    payload = dict(_required(request, "payload"))
+    tool_provenance = list(_required(request, "tool_provenance"))
+
+    validate_schema(payload, tool_provenance)
+    assert_privacy_flags(payload)
+    quality_state = classify_quality(
+        list(payload.get("findings") or []),
+        tool_provenance,
+    )
+    return {"quality_state": quality_state}
