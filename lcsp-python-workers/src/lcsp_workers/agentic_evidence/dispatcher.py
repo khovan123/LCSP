@@ -1,4 +1,4 @@
-"""Single runtime binding table and dispatcher for Agentic tools."""
+"""Single runtime binding index and dispatchers for LCSP tools."""
 
 from __future__ import annotations
 
@@ -8,6 +8,19 @@ from typing import Callable, Mapping
 
 from .catalog import AGENTIC_TOOL_SPECS
 from .registry import AgenticToolRequest, AgenticToolValidationError
+from .scanner_tool_entrypoints import (
+    ScannerToolExecutionContext,
+    build_evidence_graph,
+    classify_workspace_languages,
+    materialize_snapshot,
+    run_deptry_usage_analysis,
+    run_knip_usage_analysis,
+    run_python_semantic_analysis,
+    run_semgrep_rules,
+    run_structural_augmentation,
+    run_syft_inventory,
+    run_ts_js_semantic_analysis,
+)
 from .tool_entrypoints import (
     AgenticToolExecutionContext,
     find_provider_invocations,
@@ -32,169 +45,253 @@ from .tool_entrypoints import (
 )
 
 
-class AgenticToolRuntimeTarget(str, Enum):
-    """Downstream execution mechanism reached by a canonical entrypoint."""
+class ToolRuntimeTarget(str, Enum):
+    """Execution mechanism reached after canonical tool-name resolution."""
 
     NEST_CQRS = "NEST_CQRS"
     PYTHON_WORKER_BRIDGE = "PYTHON_WORKER_BRIDGE"
+    PYTHON_LOCAL = "PYTHON_LOCAL"
 
 
-AgenticToolEntrypoint = Callable[
-    [AgenticToolRequest, AgenticToolExecutionContext], Mapping[str, object]
-]
+# Backward-compatible public name used by existing imports.
+AgenticToolRuntimeTarget = ToolRuntimeTarget
 
 
 @dataclass(frozen=True)
-class AgenticToolBinding:
-    """Discoverable mapping from canonical tool name to execution entrypoint."""
+class ToolBinding:
+    """Discoverable mapping from canonical tool name to its execution boundary."""
 
     tool_name: str
-    runtime_target: AgenticToolRuntimeTarget
-    entrypoint: AgenticToolEntrypoint
+    runtime_target: ToolRuntimeTarget
+    entrypoint: Callable[..., object]
     downstream_target: str
 
     def __post_init__(self) -> None:
         if self.entrypoint.__name__ != self.tool_name:
             raise ValueError(
-                "agentic tool entrypoint name must exactly match canonical tool name: "
+                "tool entrypoint name must exactly match canonical tool name: "
                 f"{self.tool_name} != {self.entrypoint.__name__}"
             )
 
 
-SPRINT6_AGENTIC_TOOL_BINDINGS: tuple[AgenticToolBinding, ...] = (
-    AgenticToolBinding(
+# Backward-compatible alias while callers migrate to the generic name.
+AgenticToolBinding = ToolBinding
+
+
+SPRINT6_AGENTIC_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
+    ToolBinding(
         "resume_waiting_runs",
-        AgenticToolRuntimeTarget.PYTHON_WORKER_BRIDGE,
+        ToolRuntimeTarget.PYTHON_WORKER_BRIDGE,
         resume_waiting_runs,
         "PythonWorkerRuntimeClient.resumeWaitingRuns",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "request_targeted_reanalysis",
-        AgenticToolRuntimeTarget.PYTHON_WORKER_BRIDGE,
+        ToolRuntimeTarget.PYTHON_WORKER_BRIDGE,
         request_targeted_reanalysis,
         "PythonWorkerRuntimeClient.requestTargetedReanalysis",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "propose_gap_remediation",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         propose_gap_remediation,
         "ProposeGapRemediationQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "get_gap_evidence_trace",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         get_gap_evidence_trace,
         "GetGapEvidenceTraceQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "get_reconciliation_context",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         get_reconciliation_context,
         "GetReconciliationContextQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "propose_missing_targets",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         propose_missing_targets,
         "ProposeMissingTargetsQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "inspect_deployment_context",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         inspect_deployment_context,
         "InspectDeploymentContextQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "inspect_decision_path",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         inspect_decision_path,
         "InspectDecisionPathQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "get_artifact_chain",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         get_artifact_chain,
         "GetArtifactChainQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "find_similar_symbols",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         find_similar_symbols,
         "FindSimilarSymbolsQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "inspect_human_review_path",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         inspect_human_review_path,
         "InspectHumanReviewPathQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "inspect_data_path",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         inspect_data_path,
         "InspectDataPathQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "find_provider_invocations",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         find_provider_invocations,
         "FindProviderInvocationsQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "get_finding_detail",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         get_finding_detail,
         "GetFindingDetailQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "get_symbol_context",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         get_symbol_context,
         "GetSymbolContextQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "get_scan_coverage",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         get_scan_coverage,
         "GetScanCoverageQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "search_evidence",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         search_evidence,
         "SearchEvidenceQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "get_evidence_subgraph",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         get_evidence_subgraph,
         "GetEvidenceSubgraphQuery",
     ),
-    AgenticToolBinding(
+    ToolBinding(
         "trace_static_flow",
-        AgenticToolRuntimeTarget.NEST_CQRS,
+        ToolRuntimeTarget.NEST_CQRS,
         trace_static_flow,
         "TraceStaticFlowQuery",
     ),
 )
 
 
+AO1_SCANNER_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
+    ToolBinding(
+        "materialize_snapshot",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        materialize_snapshot,
+        "ScannerWorkspace.materialize",
+    ),
+    ToolBinding(
+        "classify_workspace_languages",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        classify_workspace_languages,
+        "LanguageClassifier.classify_workspace",
+    ),
+    ToolBinding(
+        "run_syft_inventory",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_syft_inventory,
+        "SyftTool.run",
+    ),
+    ToolBinding(
+        "run_semgrep_rules",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_semgrep_rules,
+        "SemgrepTool.run",
+    ),
+    ToolBinding(
+        "run_knip_usage_analysis",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_knip_usage_analysis,
+        "KnipTool.run",
+    ),
+    ToolBinding(
+        "run_deptry_usage_analysis",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_deptry_usage_analysis,
+        "DeptryTool.run",
+    ),
+    ToolBinding(
+        "run_ts_js_semantic_analysis",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_ts_js_semantic_analysis,
+        "TsJsBridge.analyze",
+    ),
+    ToolBinding(
+        "run_python_semantic_analysis",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_python_semantic_analysis,
+        "PythonAnalyzer.analyze",
+    ),
+    ToolBinding(
+        "run_structural_augmentation",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_structural_augmentation,
+        "StructuralAugmentor.augment",
+    ),
+    ToolBinding(
+        "build_evidence_graph",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        build_evidence_graph,
+        "EvidenceGraphAssembler.assemble",
+    ),
+)
+
+
+ALL_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
+    *SPRINT6_AGENTIC_TOOL_BINDINGS,
+    *AO1_SCANNER_TOOL_BINDINGS,
+)
+
+_TOOL_BINDING_INDEX = {binding.tool_name: binding for binding in ALL_TOOL_BINDINGS}
+if len(_TOOL_BINDING_INDEX) != len(ALL_TOOL_BINDINGS):
+    raise RuntimeError("canonical tool runtime bindings must be globally unique")
+
+
+def runtime_binding(tool_name: str) -> ToolBinding:
+    """Resolve one canonical tool name to its runtime target and implementation seam."""
+    binding = _TOOL_BINDING_INDEX.get(tool_name)
+    if binding is None:
+        raise AgenticToolValidationError("TOOL_RUNTIME_BINDING_NOT_FOUND")
+    return binding
+
+
 class AgenticToolDispatcher:
-    """Resolve a canonical tool name once and invoke its explicit entrypoint."""
+    """Dispatch validated AgenticToolRequest objects through explicit bindings."""
 
     def __init__(self, context: AgenticToolExecutionContext) -> None:
         self._context = context
         self._bindings = {
             binding.tool_name: binding for binding in SPRINT6_AGENTIC_TOOL_BINDINGS
         }
-        if len(self._bindings) != len(SPRINT6_AGENTIC_TOOL_BINDINGS):
-            raise ValueError("agentic tool runtime bindings must be unique")
         self._assert_catalog_coverage()
 
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(self._bindings))
 
-    def binding(self, tool_name: str) -> AgenticToolBinding:
+    def binding(self, tool_name: str) -> ToolBinding:
         binding = self._bindings.get(tool_name)
         if binding is None:
             raise AgenticToolValidationError("AGENTIC_TOOL_RUNTIME_BINDING_NOT_FOUND")
@@ -202,14 +299,14 @@ class AgenticToolDispatcher:
 
     def dispatch(self, request: AgenticToolRequest) -> Mapping[str, object]:
         binding = self.binding(request.tool_name)
-        return binding.entrypoint(request, self._context)
+        return binding.entrypoint(request, self._context)  # type: ignore[return-value]
 
     def bound_handler(self, tool_name: str):
         """Return a registry-compatible callable while preserving canonical naming."""
         binding = self.binding(tool_name)
 
         def execute(request: AgenticToolRequest) -> Mapping[str, object]:
-            return binding.entrypoint(request, self._context)
+            return binding.entrypoint(request, self._context)  # type: ignore[return-value]
 
         execute.__name__ = tool_name
         execute.__qualname__ = tool_name
@@ -225,3 +322,26 @@ class AgenticToolDispatcher:
                 "agentic tool runtime bindings must exactly cover the canonical catalog; "
                 f"missing={missing}, extra={extra}"
             )
+
+
+class ScannerToolDispatcher:
+    """Dispatch AO-1 system tools through exact-name local Python entrypoints."""
+
+    def __init__(self, context: ScannerToolExecutionContext) -> None:
+        self._context = context
+        self._bindings = {
+            binding.tool_name: binding for binding in AO1_SCANNER_TOOL_BINDINGS
+        }
+
+    def names(self) -> tuple[str, ...]:
+        return tuple(sorted(self._bindings))
+
+    def binding(self, tool_name: str) -> ToolBinding:
+        binding = self._bindings.get(tool_name)
+        if binding is None:
+            raise AgenticToolValidationError("SCANNER_TOOL_RUNTIME_BINDING_NOT_FOUND")
+        return binding
+
+    def dispatch(self, tool_name: str, **tool_input: object):
+        binding = self.binding(tool_name)
+        return binding.entrypoint(tool_input, self._context)

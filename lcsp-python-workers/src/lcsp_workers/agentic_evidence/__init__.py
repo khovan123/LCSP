@@ -11,10 +11,16 @@ from .catalog import (
     llm_callable_tool_specs,
 )
 from .dispatcher import (
+    ALL_TOOL_BINDINGS,
+    AO1_SCANNER_TOOL_BINDINGS,
     AgenticToolBinding,
     AgenticToolDispatcher,
     AgenticToolRuntimeTarget,
     SPRINT6_AGENTIC_TOOL_BINDINGS,
+    ScannerToolDispatcher,
+    ToolBinding,
+    ToolRuntimeTarget,
+    runtime_binding,
 )
 from .registry import (
     AgenticToolBudget,
@@ -31,9 +37,13 @@ from .resolver import (
     AgenticToolResolver,
 )
 from .runtime_binding import bind_runtime_handlers
+from .scanner_tool_entrypoints import ScannerToolExecutionContext
 from .tool_entrypoints import AgenticToolExecutionContext
 
 __all__ = [
+    "ALL_TOOL_BINDINGS",
+    "AO1_SCANNER_TOOL_BINDINGS",
+    "AGENTIC_TOOL_SPECS",
     "AgenticAuthorizationResult",
     "AgenticInvocationContext",
     "AgenticToolAuthorizer",
@@ -52,10 +62,14 @@ __all__ = [
     "ApiPbacToolAuthorizer",
     "SPRINT6_AGENTIC_CAPABILITIES",
     "SPRINT6_AGENTIC_TOOL_BINDINGS",
-    "AGENTIC_TOOL_SPECS",
+    "ScannerToolDispatcher",
+    "ScannerToolExecutionContext",
     "TOOL_PBAC_ACTIONS",
+    "ToolBinding",
+    "ToolRuntimeTarget",
     "bind_runtime_handlers",
     "build_llm_tool_definitions",
     "build_sprint6_agentic_registry",
     "llm_callable_tool_specs",
+    "runtime_binding",
 ]
