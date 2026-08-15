@@ -7,6 +7,8 @@ from typing import Any
 class CleanupBlockedError(Exception):
     """Raised when a scan cannot safely finish because its workspace still exists."""
 
+    pass
+
 
 async def mark_terminal_state(job_id: str, quality_state: str, api_client: Any) -> None:
     """Persist the scan terminal state with a small bounded retry budget.
