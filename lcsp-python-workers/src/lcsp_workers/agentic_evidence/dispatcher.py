@@ -11,12 +11,13 @@ from .program_graph_tool_entrypoints import (
     inspect_deployment_context, inspect_human_review_path, propose_missing_targets,
     search_evidence, trace_static_flow,
 )
+from .remediation_tool_entrypoints import propose_gap_remediation
 from .tool_entrypoints import (
     AgenticToolExecutionContext, compare_wizard_claim, evaluate_gap_matrix,
     get_admin_source_catalog, get_artifact_chain, get_assessment_context,
     get_classification_baseline, get_gap_evidence_trace, get_gap_requirements,
     get_legal_corpus_readiness, get_legal_rule_match, get_reconciliation_context,
-    get_verified_profile, propose_gap_remediation, reconcile_profile_to_verified_profile,
+    get_verified_profile, reconcile_profile_to_verified_profile,
     request_targeted_reanalysis, resolve_independent_classification_review,
     resume_waiting_runs, retrieve_legal_basis, submit_classification_for_independent_review,
     validate_citation_set, validate_classification_proposal,
@@ -66,7 +67,7 @@ PROGRAM_GRAPH_TOOL_BINDINGS = (
 SPRINT6_AGENTIC_TOOL_BINDINGS = (
     _binding("resume_waiting_runs", ToolRuntimeTarget.PYTHON_WORKER_BRIDGE, resume_waiting_runs, "PythonWorkerRuntimeClient.resumeWaitingRuns"),
     _binding("request_targeted_reanalysis", ToolRuntimeTarget.PYTHON_WORKER_BRIDGE, request_targeted_reanalysis, "PythonWorkerRuntimeClient.requestTargetedReanalysis"),
-    _binding("propose_gap_remediation", ToolRuntimeTarget.NEST_CQRS, propose_gap_remediation, "GetGapEvidenceTraceQuery + remediation template"),
+    _binding("propose_gap_remediation", ToolRuntimeTarget.PYTHON_LOCAL, propose_gap_remediation, "Python remediation over GetGapEvidenceTraceQuery"),
     _binding("get_gap_evidence_trace", ToolRuntimeTarget.NEST_CQRS, get_gap_evidence_trace, "GetGapEvidenceTraceQuery"),
     _binding("get_reconciliation_context", ToolRuntimeTarget.NEST_CQRS, get_reconciliation_context, "GetReconciliationContextQuery"),
     *PROGRAM_GRAPH_TOOL_BINDINGS[:3],
@@ -156,7 +157,8 @@ class ScannerToolDispatcher:
     def dispatch(self, tool_name: str, **tool_input): return self.binding(tool_name).entrypoint(tool_input, self._context)
 
 class LegalToolDispatcher:
-    def __init__(self, context: LegalToolExecutionContext) -> None: self._context = context; self._bindings = {b.tool_name: b for b in AO6_LEGAL_TOOL_BINDINGS}
+    def __init__(self, context: LegalToolExecutionContext) -> None:
+        self._context = context; self._bindings = {b.tool_name: b for b in AO6_LEGAL_TOOL_BINDINGS}
     def names(self): return tuple(sorted(self._bindings))
     def binding(self, name):
         value = self._bindings.get(name)
