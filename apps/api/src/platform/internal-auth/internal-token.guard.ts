@@ -67,9 +67,9 @@ function headerString(value: string | string[] | undefined): string | null {
 /**
  * Compares two UTF-8 strings without exposing value-dependent timing differences.
  *
-   * @param a - Supplied token value.
-   * @param b - Expected token value.
-   * @returns True when both values have equal bytes.
+ * @param a - Supplied token value.
+ * @param b - Expected token value.
+ * @returns True when both values have equal bytes.
  */
 function timingSafeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a, "utf8");
