@@ -7,6 +7,19 @@ from enum import Enum
 from typing import Callable, Mapping
 
 from .catalog import AGENTIC_TOOL_SPECS
+from .legal_tool_entrypoints import (
+    LegalToolExecutionContext,
+    activate_validated_corpus_version,
+    build_legal_chunks,
+    build_legal_retrieval_index,
+    build_reviewed_corpus_input,
+    evaluate_ocr_quality,
+    extract_official_text,
+    fetch_official_source_snapshot,
+    run_ocr_fallback,
+    validate_chunk_integrity,
+    validate_retrieval_index,
+)
 from .registry import AgenticToolRequest, AgenticToolValidationError
 from .scanner_tool_entrypoints import (
     ScannerToolExecutionContext,
@@ -61,6 +74,7 @@ class ToolRuntimeTarget(str, Enum):
     NEST_CQRS = "NEST_CQRS"
     PYTHON_WORKER_BRIDGE = "PYTHON_WORKER_BRIDGE"
     PYTHON_LOCAL = "PYTHON_LOCAL"
+    PROTECTED_API = "PROTECTED_API"
 
 
 # Backward-compatible public name used by existing imports.
@@ -337,10 +351,75 @@ AO1_SCANNER_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
 )
 
 
+AO6_LEGAL_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
+    ToolBinding(
+        "fetch_official_source_snapshot",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        fetch_official_source_snapshot,
+        "OfficialSourceSnapshotFetcher.fetch",
+    ),
+    ToolBinding(
+        "extract_official_text",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        extract_official_text,
+        "OfficialTextExtractor.extract",
+    ),
+    ToolBinding(
+        "run_ocr_fallback",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        run_ocr_fallback,
+        "OcrFallbackTool.run",
+    ),
+    ToolBinding(
+        "evaluate_ocr_quality",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        evaluate_ocr_quality,
+        "OcrQualityValidator.evaluate",
+    ),
+    ToolBinding(
+        "build_reviewed_corpus_input",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        build_reviewed_corpus_input,
+        "ReviewedCorpusInputBuilder.build",
+    ),
+    ToolBinding(
+        "build_legal_chunks",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        build_legal_chunks,
+        "LegalChunkBuilder.build",
+    ),
+    ToolBinding(
+        "validate_chunk_integrity",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        validate_chunk_integrity,
+        "ChunkIntegrityValidator.validate",
+    ),
+    ToolBinding(
+        "build_legal_retrieval_index",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        build_legal_retrieval_index,
+        "LegalRetrievalIndexBuilder.build",
+    ),
+    ToolBinding(
+        "validate_retrieval_index",
+        ToolRuntimeTarget.PYTHON_LOCAL,
+        validate_retrieval_index,
+        "LegalCorpusRecoveryDriver._validate_retrieval_index",
+    ),
+    ToolBinding(
+        "activate_validated_corpus_version",
+        ToolRuntimeTarget.PROTECTED_API,
+        activate_validated_corpus_version,
+        "WorkerApiClient.activate_validated_corpus_version",
+    ),
+)
+
+
 ALL_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
     *SPRINT6_AGENTIC_TOOL_BINDINGS,
     *NEST_CQRS_DISCOVERY_BINDINGS,
     *AO1_SCANNER_TOOL_BINDINGS,
+    *AO6_LEGAL_TOOL_BINDINGS,
 )
 
 _TOOL_BINDING_INDEX = {binding.tool_name: binding for binding in ALL_TOOL_BINDINGS}
@@ -431,6 +510,29 @@ class ScannerToolDispatcher:
         binding = self._bindings.get(tool_name)
         if binding is None:
             raise AgenticToolValidationError("SCANNER_TOOL_RUNTIME_BINDING_NOT_FOUND")
+        return binding
+
+    def dispatch(self, tool_name: str, **tool_input: object):
+        binding = self.binding(tool_name)
+        return binding.entrypoint(tool_input, self._context)
+
+
+class LegalToolDispatcher:
+    """Dispatch AO-6 legal tools without widening model or mutation authority."""
+
+    def __init__(self, context: LegalToolExecutionContext) -> None:
+        self._context = context
+        self._bindings = {
+            binding.tool_name: binding for binding in AO6_LEGAL_TOOL_BINDINGS
+        }
+
+    def names(self) -> tuple[str, ...]:
+        return tuple(sorted(self._bindings))
+
+    def binding(self, tool_name: str) -> ToolBinding:
+        binding = self._bindings.get(tool_name)
+        if binding is None:
+            raise AgenticToolValidationError("LEGAL_TOOL_RUNTIME_BINDING_NOT_FOUND")
         return binding
 
     def dispatch(self, tool_name: str, **tool_input: object):

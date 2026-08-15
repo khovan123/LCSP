@@ -13,10 +13,12 @@ from .catalog import (
 from .dispatcher import (
     ALL_TOOL_BINDINGS,
     AO1_SCANNER_TOOL_BINDINGS,
+    AO6_LEGAL_TOOL_BINDINGS,
     NEST_CQRS_DISCOVERY_BINDINGS,
     AgenticToolBinding,
     AgenticToolDispatcher,
     AgenticToolRuntimeTarget,
+    LegalToolDispatcher,
     SPRINT6_AGENTIC_TOOL_BINDINGS,
     ScannerToolDispatcher,
     ToolBinding,
@@ -24,6 +26,7 @@ from .dispatcher import (
     runtime_binding,
     tool_runtime_manifest,
 )
+from .legal_tool_entrypoints import LegalToolExecutionContext
 from .registry import (
     AgenticToolBudget,
     AgenticToolCapability,
@@ -45,6 +48,7 @@ from .tool_entrypoints import AgenticToolExecutionContext
 __all__ = [
     "ALL_TOOL_BINDINGS",
     "AO1_SCANNER_TOOL_BINDINGS",
+    "AO6_LEGAL_TOOL_BINDINGS",
     "NEST_CQRS_DISCOVERY_BINDINGS",
     "AGENTIC_TOOL_SPECS",
     "AgenticAuthorizationResult",
@@ -63,6 +67,8 @@ __all__ = [
     "AgenticToolSpec",
     "AgenticToolValidationError",
     "ApiPbacToolAuthorizer",
+    "LegalToolDispatcher",
+    "LegalToolExecutionContext",
     "SPRINT6_AGENTIC_CAPABILITIES",
     "SPRINT6_AGENTIC_TOOL_BINDINGS",
     "ScannerToolDispatcher",
