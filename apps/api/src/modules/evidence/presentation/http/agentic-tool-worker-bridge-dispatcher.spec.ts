@@ -24,8 +24,11 @@ describe("agentic worker bridge dispatcher", () => {
   });
 
   it("routes request_targeted_reanalysis through PythonWorkerRuntimeClient", async () => {
+    const requestTargetedReanalysis = jest.fn(() =>
+      Promise.resolve({ status: "READY" }),
+    );
     const client = {
-      requestTargetedReanalysis: jest.fn(async () => ({ status: "READY" })),
+      requestTargetedReanalysis,
     } as unknown as PythonWorkerRuntimeClient;
     const args = {
       ...baseArgs,
@@ -41,12 +44,13 @@ describe("agentic worker bridge dispatcher", () => {
 
     await dispatchAgenticToolWorkerBridge(args, client);
 
-    expect(client.requestTargetedReanalysis).toHaveBeenCalledTimes(1);
+    expect(requestTargetedReanalysis).toHaveBeenCalledTimes(1);
   });
 
   it("routes resume_waiting_runs through PythonWorkerRuntimeClient", async () => {
+    const resumeWaitingRuns = jest.fn(() => Promise.resolve({ status: "READY" }));
     const client = {
-      resumeWaitingRuns: jest.fn(async () => ({ status: "READY" })),
+      resumeWaitingRuns,
     } as unknown as PythonWorkerRuntimeClient;
     const args = {
       ...baseArgs,
@@ -60,6 +64,6 @@ describe("agentic worker bridge dispatcher", () => {
 
     await dispatchAgenticToolWorkerBridge(args, client);
 
-    expect(client.resumeWaitingRuns).toHaveBeenCalledTimes(1);
+    expect(resumeWaitingRuns).toHaveBeenCalledTimes(1);
   });
 });
