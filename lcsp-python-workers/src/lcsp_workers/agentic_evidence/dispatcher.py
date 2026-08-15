@@ -61,10 +61,13 @@ from .tool_entrypoints import (
     inspect_human_review_path,
     propose_gap_remediation,
     propose_missing_targets,
+    reconcile_profile_to_verified_profile,
     request_targeted_reanalysis,
+    resolve_independent_classification_review,
     resume_waiting_runs,
     retrieve_legal_basis,
     search_evidence,
+    submit_classification_for_independent_review,
     trace_static_flow,
     validate_citation_set,
     validate_classification_proposal,
@@ -75,6 +78,7 @@ class ToolRuntimeTarget(str, Enum):
     """Execution mechanism reached after canonical tool-name resolution."""
 
     NEST_CQRS = "NEST_CQRS"
+    NEST_COMMAND = "NEST_COMMAND"
     PYTHON_WORKER_BRIDGE = "PYTHON_WORKER_BRIDGE"
     PYTHON_LOCAL = "PYTHON_LOCAL"
     PROTECTED_API = "PROTECTED_API"
@@ -145,8 +149,6 @@ SPRINT6_AGENTIC_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
 )
 
 
-# Existing internal Nest CQRS tools that are not all part of the Python LLM
-# catalog. They are centrally discoverable without widening model exposure.
 NEST_CQRS_DISCOVERY_BINDINGS: tuple[ToolBinding, ...] = (
     _binding("get_assessment_context", ToolRuntimeTarget.NEST_CQRS, get_assessment_context, "GetAssessmentContextQuery"),
     _binding("get_verified_profile", ToolRuntimeTarget.NEST_CQRS, get_verified_profile, "GetVerifiedProfileQuery"),
@@ -160,6 +162,28 @@ NEST_CQRS_DISCOVERY_BINDINGS: tuple[ToolBinding, ...] = (
     _binding("retrieve_legal_basis", ToolRuntimeTarget.NEST_CQRS, retrieve_legal_basis, "RetrieveLegalBasisQuery"),
     _binding("get_legal_rule_match", ToolRuntimeTarget.NEST_CQRS, get_legal_rule_match, "GetLegalRuleMatchQuery"),
     _binding("validate_citation_set", ToolRuntimeTarget.NEST_CQRS, validate_citation_set, "ValidateCitationSetQuery"),
+)
+
+
+PROTECTED_COMMAND_BINDINGS: tuple[ToolBinding, ...] = (
+    _binding(
+        "reconcile_profile_to_verified_profile",
+        ToolRuntimeTarget.NEST_COMMAND,
+        reconcile_profile_to_verified_profile,
+        "ReconcileProfileToVerifiedProfileCommand",
+    ),
+    _binding(
+        "submit_classification_for_independent_review",
+        ToolRuntimeTarget.NEST_COMMAND,
+        submit_classification_for_independent_review,
+        "SubmitClassificationReviewCommand",
+    ),
+    _binding(
+        "resolve_independent_classification_review",
+        ToolRuntimeTarget.NEST_COMMAND,
+        resolve_independent_classification_review,
+        "ResolveClassificationReviewCommand",
+    ),
 )
 
 
@@ -195,6 +219,7 @@ AO6_LEGAL_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
 ALL_TOOL_BINDINGS: tuple[ToolBinding, ...] = (
     *SPRINT6_AGENTIC_TOOL_BINDINGS,
     *NEST_CQRS_DISCOVERY_BINDINGS,
+    *PROTECTED_COMMAND_BINDINGS,
     *AO1_SCANNER_TOOL_BINDINGS,
     *AO6_LEGAL_TOOL_BINDINGS,
 )
