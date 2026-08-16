@@ -47,7 +47,8 @@ export class DevUnsafeHttpTraceMiddleware implements NestMiddleware {
       params: request.params,
       body: request.body,
       cookies: (request as Request & { cookies?: unknown }).cookies,
-      signedCookies: (request as Request & { signedCookies?: unknown }).signedCookies,
+      signedCookies: (request as Request & { signedCookies?: unknown })
+        .signedCookies,
     });
 
     const originalJson = response.json.bind(response);

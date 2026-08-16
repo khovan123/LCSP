@@ -75,9 +75,9 @@ function safeStringify(value: unknown): string {
         name: entry.name,
         message: entry.message,
         stack: entry.stack,
-        ...(entry as Error & { cause?: unknown }).cause !== undefined
+        ...((entry as Error & { cause?: unknown }).cause !== undefined
           ? { cause: (entry as Error & { cause?: unknown }).cause }
-          : {},
+          : {}),
       };
     }
     if (Buffer.isBuffer(entry)) {
