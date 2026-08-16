@@ -39,6 +39,8 @@ class ScanCallbackPayload(BaseModel):
     schema_version: str = "1.0.0"
     error_code: Optional[str] = None
     findings: List[Dict[str, Any]] = Field(default_factory=list)
+    is_artifact_reference: Optional[bool] = None
+    artifact_manifest: Optional[Dict[str, Any]] = None
 
 
 class TechnicalProfileCallbackPayload(BaseModel):
@@ -47,9 +49,11 @@ class TechnicalProfileCallbackPayload(BaseModel):
     assessment_id: str
     schema_version: str
     provider_version: str
-    profile_data: Dict[str, Any]
+    profile_data: Optional[Dict[str, Any]] = None
     privacy_flags: Dict[str, Any]
     scan_job_id: Optional[str] = None
+    is_artifact_reference: Optional[bool] = None
+    artifact_manifest: Optional[Dict[str, Any]] = None
 
 
 class AIUsageFlowCallbackPayload(BaseModel):

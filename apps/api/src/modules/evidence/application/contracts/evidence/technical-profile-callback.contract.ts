@@ -3,8 +3,15 @@ export interface TechnicalProfileCallbackRequest {
   assessment_id: string;
   schema_version: string;
   provider_version: string;
-  profile_data: Record<string, unknown>;
+  profile_data?: Record<string, unknown>;
   privacy_flags: Record<string, unknown>;
+  is_artifact_reference?: boolean;
+  artifact_manifest?: {
+    artifact_id: string;
+    total_size: number;
+    hash: string;
+    chunks: string[];
+  };
 }
 
 export interface TechnicalProfileCallbackDto {

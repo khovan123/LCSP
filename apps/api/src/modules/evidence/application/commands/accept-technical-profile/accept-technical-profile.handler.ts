@@ -38,6 +38,7 @@ import {
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { problemResult } from "../../../../../platform/problems/problem-factory.js";
 import type { TechnicalProfileCallbackDto } from "../../contracts/evidence/technical-profile-callback.contract.js";
+import { ArtifactStorageService } from "../../../../../platform/storage/artifact-storage.service.js";
 import { AcceptTechnicalProfileCommand } from "./accept-technical-profile.command.js";
 
 const TECHNICAL_PROFILE_WORKER_ACTOR_ID =
@@ -61,13 +62,26 @@ const SECRET_PATTERNS = [
 
 @CommandHandler(AcceptTechnicalProfileCommand)
 export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTechnicalProfileCommand> {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storageService: ArtifactStorageService,
+  ) {}
 
   async execute(
     command: AcceptTechnicalProfileCommand,
   ): Promise<TechnicalProfileCallbackDto> {
     const payload = command.payload;
-    if (payload?.profile_data && typeof payload.profile_data === "object") {
+    if (payload.is_artifact_reference && payload.artifact_manifest) {
+      const reconstructed = await this.storageService.readAndReconstruct(
+        payload.artifact_manifest,
+      );
+      const fullPayload = JSON.parse(reconstructed) as Record<string, unknown>;
+      Object.assign(payload, fullPayload);
+      payload.is_artifact_reference = false;
+    } else if (
+      payload?.profile_data &&
+      typeof payload.profile_data === "object"
+    ) {
       const ref = payload.profile_data.profile_data_ref;
       if (typeof ref === "string" && ref) {
         try {

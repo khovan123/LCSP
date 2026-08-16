@@ -35,6 +35,7 @@ import { OutboxModule } from "./platform/outbox/outbox.module.js";
 import { PbacModule } from "./platform/pbac/pbac.module.js";
 import { ProblemExceptionFilter } from "./platform/problems/problem-exception.filter.js";
 import { ProblemStatusInterceptor } from "./platform/problems/problem-status.interceptor.js";
+import { StorageModule } from "./platform/storage/storage.module.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,6 +100,7 @@ function findUpwards(
     MailModule,
     OutboxModule,
     PbacModule,
+    StorageModule,
     AIUsageFlowModule,
     AppFeatureModule,
     AuthWorkspaceModule,
