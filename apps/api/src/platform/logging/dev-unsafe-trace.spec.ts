@@ -40,7 +40,9 @@ describe("dev-unsafe-trace", () => {
     process.env.LCSP_DEV_UNSAFE_UNFILTERED = "false";
     process.env.NODE_ENV = "development";
 
-    const writeSpy = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const writeSpy = jest
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
 
     emitDevUnsafeTrace("TEST_EVENT_RAW", {
       api_key: "secret-key-123",
@@ -72,7 +74,9 @@ describe("dev-unsafe-trace", () => {
     process.env.LCSP_DEV_UNSAFE_UNFILTERED = "true";
     process.env.NODE_ENV = "development";
 
-    const writeSpy = jest.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const writeSpy = jest
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
 
     emitDevUnsafeTrace("TEST_EVENT_RAW", {
       api_key: "secret-key-123",

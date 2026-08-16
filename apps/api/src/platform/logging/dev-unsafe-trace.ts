@@ -94,11 +94,15 @@ export function emitDevUnsafeTrace(
   }
 }
 
-function findIdRecursive(data: unknown, keys: Set<string>, seen = new WeakSet<object>()): any {
+function findIdRecursive(
+  data: unknown,
+  keys: Set<string>,
+  seen = new WeakSet<object>(),
+): any {
   if (!data || typeof data !== "object") return undefined;
   if (seen.has(data)) return undefined;
   seen.add(data);
-  
+
   if (Array.isArray(data)) {
     for (const item of data) {
       const res = findIdRecursive(item, keys, seen);
@@ -118,11 +122,15 @@ function findIdRecursive(data: unknown, keys: Set<string>, seen = new WeakSet<ob
   return undefined;
 }
 
-function findCountRecursive(data: unknown, targetKey: string, seen = new WeakSet<object>()): number | undefined {
+function findCountRecursive(
+  data: unknown,
+  targetKey: string,
+  seen = new WeakSet<object>(),
+): number | undefined {
   if (!data || typeof data !== "object") return undefined;
   if (seen.has(data)) return undefined;
   seen.add(data);
-  
+
   if (Array.isArray(data)) {
     for (const item of data) {
       const res = findCountRecursive(item, targetKey, seen);
@@ -144,47 +152,105 @@ function findCountRecursive(data: unknown, targetKey: string, seen = new WeakSet
   return undefined;
 }
 
-function summarizeTraceFields(event: string, fields: Record<string, unknown>): Record<string, unknown> {
+function summarizeTraceFields(
+  event: string,
+  fields: Record<string, unknown>,
+): Record<string, unknown> {
   const summary: Record<string, unknown> = {};
-  
-  const idKeys = new Set(["scan_job_id", "scanJobId", "snapshot_id", "snapshotId", "snapshot_ref", "snapshotRef", "corpus_version_id", "corpusVersionId", "assessment_id", "assessmentId", "workflow_run_id", "workflowRunId"]);
-  const scanJobId = findIdRecursive(fields, new Set(["scan_job_id", "scanJobId"]));
-  const snapshotId = findIdRecursive(fields, new Set(["snapshot_id", "snapshotId"]));
-  const snapshotRef = findIdRecursive(fields, new Set(["snapshot_ref", "snapshotRef"]));
-  const corpusVersionId = findIdRecursive(fields, new Set(["corpus_version_id", "corpusVersionId"]));
-  const assessmentId = findIdRecursive(fields, new Set(["assessment_id", "assessmentId"]));
-  const workflowRunId = findIdRecursive(fields, new Set(["workflow_run_id", "workflowRunId"]));
-  
+
+  const idKeys = new Set([
+    "scan_job_id",
+    "scanJobId",
+    "snapshot_id",
+    "snapshotId",
+    "snapshot_ref",
+    "snapshotRef",
+    "corpus_version_id",
+    "corpusVersionId",
+    "assessment_id",
+    "assessmentId",
+    "workflow_run_id",
+    "workflowRunId",
+  ]);
+  const scanJobId = findIdRecursive(
+    fields,
+    new Set(["scan_job_id", "scanJobId"]),
+  );
+  const snapshotId = findIdRecursive(
+    fields,
+    new Set(["snapshot_id", "snapshotId"]),
+  );
+  const snapshotRef = findIdRecursive(
+    fields,
+    new Set(["snapshot_ref", "snapshotRef"]),
+  );
+  const corpusVersionId = findIdRecursive(
+    fields,
+    new Set(["corpus_version_id", "corpusVersionId"]),
+  );
+  const assessmentId = findIdRecursive(
+    fields,
+    new Set(["assessment_id", "assessmentId"]),
+  );
+  const workflowRunId = findIdRecursive(
+    fields,
+    new Set(["workflow_run_id", "workflowRunId"]),
+  );
+
   if (scanJobId !== undefined) summary["scan_job_id"] = scanJobId;
   if (snapshotId !== undefined) summary["snapshot_id"] = snapshotId;
   if (snapshotRef !== undefined) summary["snapshot_ref"] = snapshotRef;
-  if (corpusVersionId !== undefined) summary["corpus_version_id"] = corpusVersionId;
+  if (corpusVersionId !== undefined)
+    summary["corpus_version_id"] = corpusVersionId;
   if (assessmentId !== undefined) summary["assessment_id"] = assessmentId;
   if (workflowRunId !== undefined) summary["workflow_run_id"] = workflowRunId;
 
   let nodeCount = findCountRecursive(fields, "nodes");
   let edgeCount = findCountRecursive(fields, "edges");
-  
+
   if ("node_count" in fields) nodeCount = fields["node_count"] as number;
   else if ("nodeCount" in fields) nodeCount = fields["nodeCount"] as number;
-  
+
   if ("edge_count" in fields) edgeCount = fields["edge_count"] as number;
   else if ("edgeCount" in fields) edgeCount = fields["edgeCount"] as number;
-  
+
   if (nodeCount !== undefined) summary["node_count"] = nodeCount;
   if (edgeCount !== undefined) summary["edge_count"] = edgeCount;
 
-  const sensitiveKeys = ["api_key", "secret", "token", "password", "authorization", "x-worker-api-key", "cookie", "set-cookie"];
-  const payloadKeys = ["payload", "body", "result", "results", "tool_input", "response", "params", "headers", "rawHeaders", "cookies", "signedCookies", "responseHeaders", "responseBody"];
-  
+  const sensitiveKeys = [
+    "api_key",
+    "secret",
+    "token",
+    "password",
+    "authorization",
+    "x-worker-api-key",
+    "cookie",
+    "set-cookie",
+  ];
+  const payloadKeys = [
+    "payload",
+    "body",
+    "result",
+    "results",
+    "tool_input",
+    "response",
+    "params",
+    "headers",
+    "rawHeaders",
+    "cookies",
+    "signedCookies",
+    "responseHeaders",
+    "responseBody",
+  ];
+
   for (const k of Object.keys(fields)) {
     const v = fields[k];
-    
-    if (sensitiveKeys.some(secKey => k.toLowerCase().includes(secKey))) {
+
+    if (sensitiveKeys.some((secKey) => k.toLowerCase().includes(secKey))) {
       summary[k] = "[REDACTED]";
       continue;
     }
-    
+
     if (payloadKeys.includes(k)) {
       let size = 0;
       if (typeof v === "string") {
@@ -199,14 +265,20 @@ function summarizeTraceFields(event: string, fields: Record<string, unknown>): R
         }
       }
       summary[`${k}_size`] = size;
-      
-      const httpEvents = ["DEV_API_HTTP_REQUEST_RAW", "DEV_API_HTTP_RESPONSE_JSON_RAW", "DEV_API_HTTP_RESPONSE_SEND_RAW", "DEV_API_HTTP_COMPLETED_RAW", "DEV_API_HTTP_CLOSED_EARLY_RAW"];
+
+      const httpEvents = [
+        "DEV_API_HTTP_REQUEST_RAW",
+        "DEV_API_HTTP_RESPONSE_JSON_RAW",
+        "DEV_API_HTTP_RESPONSE_SEND_RAW",
+        "DEV_API_HTTP_COMPLETED_RAW",
+        "DEV_API_HTTP_CLOSED_EARLY_RAW",
+      ];
       if (httpEvents.includes(event)) {
         const limit = 52428800; // 50MB limit
         summary[`${k}_limit`] = limit;
         summary[`${k}_truncated`] = size > limit;
       }
-      
+
       let count: number | undefined = undefined;
       if (v && typeof v === "object") {
         count = Array.isArray(v) ? v.length : Object.keys(v).length;
@@ -216,15 +288,44 @@ function summarizeTraceFields(event: string, fields: Record<string, unknown>): R
       }
       continue;
     }
-    
-    const safeKeys = ["method", "originalUrl", "url", "baseUrl", "path", "protocol", "hostname", "ip", "ips", "statusCode", "durationMs", "dispatcher", "tool_name", "runtime_target", "downstream_target", "worker", "queue_name", "routing_key", "attempts", "max_tool_calls", "operation", "provider", "model"];
-    if (safeKeys.includes(k) || typeof v === "boolean" || typeof v === "number" || v === null) {
+
+    const safeKeys = [
+      "method",
+      "originalUrl",
+      "url",
+      "baseUrl",
+      "path",
+      "protocol",
+      "hostname",
+      "ip",
+      "ips",
+      "statusCode",
+      "durationMs",
+      "dispatcher",
+      "tool_name",
+      "runtime_target",
+      "downstream_target",
+      "worker",
+      "queue_name",
+      "routing_key",
+      "attempts",
+      "max_tool_calls",
+      "operation",
+      "provider",
+      "model",
+    ];
+    if (
+      safeKeys.includes(k) ||
+      typeof v === "boolean" ||
+      typeof v === "number" ||
+      v === null
+    ) {
       summary[k] = v;
     } else if (typeof v === "string" && v.length < 256) {
       summary[k] = v;
     }
   }
-  
+
   return summary;
 }
 
