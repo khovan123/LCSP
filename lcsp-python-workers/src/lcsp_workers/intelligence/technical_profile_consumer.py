@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from typing import Any
 
 from structlog import get_logger
@@ -73,26 +75,12 @@ class TechnicalProfileConsumer(ConsumerBase):
         profile_data = profile.to_profile_data()
         profile_data["engineering_investigation"] = investigation.to_profile_data()
 
-        # Write full profile_data to /tmp/lcsp-technical-profile-data-{evidence_report_id}.json
         ref_path = f"/tmp/lcsp-technical-profile-data-{profile.evidence_report_id}.json"
-        import json
-        try:
-            with open(ref_path, "w") as f:
-                json.dump(profile_data, f)
-        except Exception:
-            pass
-
-        minimized_profile_data = {
-            **profile_data,
-            "external_integrations": [],
-            "business_actions": [],
-            "dependency_licenses": [],
-            "engineering_investigation": {
-                **profile_data.get("engineering_investigation", {}),
-                "claims": [],
-            },
-            "profile_data_ref": ref_path,
-        }
+        self._write_profile_data_ref(ref_path, profile_data)
+        minimized_profile_data = self._minimized_profile_data(
+            profile_data=profile_data,
+            profile_data_ref=ref_path,
+        )
 
         callback_payload = TechnicalProfileCallbackPayload(
             evidence_report_id=profile.evidence_report_id,
@@ -115,6 +103,100 @@ class TechnicalProfileConsumer(ConsumerBase):
             engineering_claim_count=len(investigation.claims),
             correlationId=correlationId,
         )
+
+    def _write_profile_data_ref(
+        self,
+        ref_path: str,
+        profile_data: dict[str, Any],
+    ) -> None:
+        try:
+            with open(ref_path, "w", encoding="utf-8") as f:
+                json.dump(profile_data, f, ensure_ascii=False)
+        except Exception:
+            logger.warning(
+                "TECHNICAL_PROFILE_DATA_REF_WRITE_FAILED",
+                profile_data_ref=ref_path,
+            )
+
+    def _minimized_profile_data(
+        self,
+        *,
+        profile_data: dict[str, Any],
+        profile_data_ref: str,
+    ) -> dict[str, Any]:
+        investigation = profile_data.get("engineering_investigation")
+        if not isinstance(investigation, dict):
+            investigation = {}
+
+        return {
+            "schema_version": profile_data.get("schema_version"),
+            "provider_version": profile_data.get("provider_version"),
+            "evidence_report_id": profile_data.get("evidence_report_id"),
+            "assessment_id": profile_data.get("assessment_id"),
+            "organization_id": profile_data.get("organization_id"),
+            "evidence_quality": profile_data.get("evidence_quality"),
+            "tool_coverage": profile_data.get("tool_coverage", {}),
+            "ai_usage_signal_count": profile_data.get("ai_usage_signal_count", 0),
+            "signal_types_detected": self._sample_strings(
+                profile_data.get("signal_types_detected", []),
+                limit=100,
+            ),
+            "dependency_ai_packages": self._sample_strings(
+                profile_data.get("dependency_ai_packages", []),
+                limit=100,
+            ),
+            "privacy_flags": profile_data.get("privacy_flags", {}),
+            "ai_detected": profile_data.get("ai_detected"),
+            "confidence": profile_data.get("confidence"),
+            "evidence_refs": self._sample_strings(
+                profile_data.get("evidence_refs", []),
+                limit=100,
+            ),
+            "evidence_refs_count": len(profile_data.get("evidence_refs", []))
+            if isinstance(profile_data.get("evidence_refs"), list)
+            else 0,
+            "program_graph_ref": profile_data.get("program_graph_ref", {}),
+            "data_categories": self._sample_strings(
+                profile_data.get("data_categories", []),
+                limit=100,
+            ),
+            "human_control_evidence": profile_data.get("human_control_evidence", {}),
+            "coverage_notes_count": len(profile_data.get("coverage_notes", []))
+            if isinstance(profile_data.get("coverage_notes"), list)
+            else 0,
+            "unresolved_frontiers_count": len(
+                profile_data.get("unresolved_frontiers", [])
+            )
+            if isinstance(profile_data.get("unresolved_frontiers"), list)
+            else 0,
+            "external_integrations": [],
+            "business_actions": [],
+            "dependency_licenses": [],
+            "engineering_investigation": {
+                "status": investigation.get("status", "NOT_RUN"),
+                "legal_rule_catalog_version_id": investigation.get(
+                    "legal_rule_catalog_version_id", ""
+                ),
+                "legal_corpus_version_id": investigation.get(
+                    "legal_corpus_version_id", ""
+                ),
+                "rules_considered": investigation.get("rules_considered", 0),
+                "engineering_rules_executed": investigation.get(
+                    "engineering_rules_executed", 0
+                ),
+                "engineering_rule_cache_hits": investigation.get(
+                    "engineering_rule_cache_hits", 0
+                ),
+                "limitations": investigation.get("limitations", []),
+                "claims": [],
+            },
+            "profile_data_ref": profile_data_ref,
+        }
+
+    def _sample_strings(self, value: Any, *, limit: int) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value[:limit] if str(item)]
 
     def _engineering_investigation(
         self,

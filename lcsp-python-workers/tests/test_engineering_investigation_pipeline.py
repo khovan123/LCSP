@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 from lcsp_workers.investigation.models import EvidenceClaim, InvestigationPacket
 from lcsp_workers.investigation.pipeline import EngineeringInvestigationPipeline
+from lcsp_workers.llm.budget_tracker import BudgetExceeded
 
 
 def _evidence_report() -> dict:
@@ -155,3 +156,34 @@ def test_pipeline_ignores_explicitly_inactive_legal_rules() -> None:
     assert result.status == "COMPLETE"
     assert result.rules_considered == 0
     rule_service.get_or_compile.assert_not_called()
+
+
+def test_pipeline_stops_investigation_when_llm_budget_is_exhausted() -> None:
+    api_client = MagicMock()
+    api_client.get_active_legal_rule_catalog.return_value = {
+        "versionId": "catalog-v1",
+        "rules": [
+            {"legalRuleId": "rule-1", "status": "APPROVED"},
+            {"legalRuleId": "rule-2", "status": "APPROVED"},
+        ],
+    }
+    api_client.get_active_legal_corpus.return_value = {"versionId": "corpus-v1"}
+    api_client.get_legal_corpus_chunks.return_value = {"chunks": []}
+    rule_service = MagicMock()
+    rule_service.get_or_compile.side_effect = BudgetExceeded("Monthly token cap exceeded.")
+
+    result = EngineeringInvestigationPipeline(
+        api_client=api_client,
+        llm_client=MagicMock(),
+        retriever=MagicMock(),
+        rule_service=rule_service,
+        query_executor=MagicMock(),
+        investigator=MagicMock(),
+    ).run(evidence_report=_evidence_report(), workflow_run_id="workflow-1")
+
+    assert result.status == "PARTIAL"
+    assert result.engineering_rules_executed == 0
+    assert result.limitations == (
+        "ENGINEERING_INVESTIGATION_BUDGET_EXHAUSTED:rule-1",
+    )
+    assert rule_service.get_or_compile.call_count == 1

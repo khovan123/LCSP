@@ -72,34 +72,32 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
   ): Promise<TechnicalProfileCallbackDto> {
     const payload = command.payload;
     if (payload.is_artifact_reference && payload.artifact_manifest) {
-      const reconstructed = await this.storageService.readAndReconstruct(
-        payload.artifact_manifest,
-      );
-      const fullPayload = JSON.parse(reconstructed) as Record<string, unknown>;
-      Object.assign(payload, fullPayload);
-      payload.is_artifact_reference = false;
-    } else if (
-      payload?.profile_data &&
-      typeof payload.profile_data === "object"
-    ) {
-      const ref = payload.profile_data.profile_data_ref;
-      if (typeof ref === "string" && ref) {
-        try {
-          if (fs.existsSync(ref)) {
-            const fileContent = fs.readFileSync(ref, "utf8");
-            const fileData = JSON.parse(fileContent) as Record<string, unknown>;
-            if (fileData && typeof fileData === "object") {
-              payload.profile_data = {
-                ...fileData,
-                ...payload.profile_data,
-              };
-            }
-          }
-        } catch {
-          // ignore
+      try {
+        const reconstructed = await this.storageService.readAndReconstruct(
+          payload.artifact_manifest,
+        );
+        const fullPayload = JSON.parse(reconstructed) as unknown;
+        if (!isRecord(fullPayload)) {
+          throw new Error(
+            "technical profile artifact payload must be an object",
+          );
+        }
+        Object.assign(payload, fullPayload);
+        payload.is_artifact_reference = false;
+      } catch {
+        if (!isRecord(payload.profile_data)) {
+          throw new UnprocessableEntityException(
+            this.errorBody(
+              command,
+              SCAN_ERROR_CODES.technicalProfileArtifactInvalid,
+              HttpStatus.UNPROCESSABLE_ENTITY,
+            ),
+          );
         }
       }
     }
+
+    this.hydrateProfileDataRef(payload);
 
     this.validate(command);
     const evidenceReport = await this.prisma.technicalEvidenceReport.findFirst({
@@ -260,7 +258,11 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
       !isRecord(payload.privacy_flags)
     ) {
       throw new UnprocessableEntityException(
-        this.errorBody(command, SCAN_ERROR_CODES.technicalProfileSchemaInvalid),
+        this.errorBody(
+          command,
+          SCAN_ERROR_CODES.technicalProfileSchemaInvalid,
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        ),
       );
     }
 
@@ -270,14 +272,46 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
       containsUnsafeProfile(payload.profile_data)
     ) {
       throw new UnprocessableEntityException(
-        this.errorBody(command, SCAN_ERROR_CODES.privacyFlagsInvalid),
+        this.errorBody(
+          command,
+          SCAN_ERROR_CODES.privacyFlagsInvalid,
+          HttpStatus.UNPROCESSABLE_ENTITY,
+        ),
       );
     }
   }
 
-  private errorBody(command: AcceptTechnicalProfileCommand, errorCode: string) {
+  private hydrateProfileDataRef(
+    payload: AcceptTechnicalProfileCommand["payload"],
+  ): void {
+    if (!isRecord(payload.profile_data)) return;
+
+    const ref = payload.profile_data.profile_data_ref;
+    if (typeof ref !== "string" || !ref) return;
+
+    try {
+      if (!fs.existsSync(ref)) return;
+      const fileContent = fs.readFileSync(ref, "utf8");
+      const fileData = JSON.parse(fileContent) as unknown;
+      if (isRecord(fileData)) {
+        payload.profile_data = {
+          ...fileData,
+          ...payload.profile_data,
+        };
+      }
+    } catch {
+      // Inline minimized profile_data remains the safe fallback when the local
+      // development ref file is unavailable or malformed.
+    }
+  }
+
+  private errorBody(
+    command: AcceptTechnicalProfileCommand,
+    errorCode: string,
+    status: HttpStatus = HttpStatus.BAD_REQUEST,
+  ) {
     return problemResult(errorCode, command.correlationId, {
-      status: HttpStatus.BAD_REQUEST,
+      status,
     });
   }
 }

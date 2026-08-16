@@ -5,6 +5,7 @@ export interface TechnicalProfileCallbackRequest {
   provider_version: string;
   profile_data?: Record<string, unknown>;
   privacy_flags: Record<string, unknown>;
+  scan_job_id?: string;
   is_artifact_reference?: boolean;
   artifact_manifest?: {
     artifact_id: string;

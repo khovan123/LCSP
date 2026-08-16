@@ -344,6 +344,7 @@ class WorkerApiClient:
                 "provider_version": payload.provider_version,
                 "privacy_flags": payload.privacy_flags,
                 "scan_job_id": payload.scan_job_id,
+                "profile_data": request_payload.get("profile_data"),
                 "is_artifact_reference": True,
                 "artifact_manifest": manifest
             }

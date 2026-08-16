@@ -216,6 +216,39 @@ def test_technical_profile_callback_uses_evidence_endpoint(client):
         assert response.technical_profile_id == "technical-profile-1"
 
 
+
+
+def test_large_technical_profile_callback_uses_artifact_with_inline_fallback(
+    client, monkeypatch
+):
+    monkeypatch.setenv("LCSP_PROFILE_CALLBACK_THRESHOLD", "1")
+    monkeypatch.setenv("LCSP_PROFILE_CALLBACK_CHUNK_SIZE", "64")
+    payload = TechnicalProfileCallbackPayload(
+        evidence_report_id="ter-1",
+        assessment_id="assessment-1",
+        schema_version="2.0.0",
+        provider_version="lcsp.technical-profile-worker.v2",
+        profile_data={"evidence_quality": "high", "profile_data_ref": "/tmp/profile.json"},
+        privacy_flags={"containsSourceCode": False, "secretsRedacted": True},
+        scan_job_id="scan-job-1",
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "accepted": True,
+            "technical_profile_id": "technical-profile-1",
+        }
+        mock_post.return_value = mock_resp
+
+        client.post_technical_profile_callback(payload)
+
+    sent_payload = mock_post.call_args.kwargs["json"]
+    assert sent_payload["is_artifact_reference"] is True
+    assert sent_payload["artifact_manifest"]["chunks"]
+    assert sent_payload["profile_data"] == payload.profile_data
+
 def test_dispatch_agentic_tool_uses_internal_runtime_endpoint(client):
     with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
         mock_resp = MagicMock()

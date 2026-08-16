@@ -7,6 +7,7 @@ from typing import Any
 from lcsp_workers.legal.chromadb_citation_retriever import ChromaDbCitationRetriever
 from lcsp_workers.legal.engineering_rules.compiler import EngineeringRuleCompiler
 from lcsp_workers.legal.engineering_rules.service import EngineeringRuleService
+from lcsp_workers.llm.budget_tracker import BudgetExceeded
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
 from lcsp_workers.platform.api_client import WorkerApiClient
 from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
@@ -145,6 +146,11 @@ class EngineeringInvestigationPipeline:
                         )
                     )
                     executed += 1
+            except BudgetExceeded:
+                limitations.append(
+                    f"ENGINEERING_INVESTIGATION_BUDGET_EXHAUSTED:{legal_rule_id}"
+                )
+                break
             except Exception as error:
                 limitations.append(
                     f"ENGINEERING_RULE_INVESTIGATION_FAILED:{legal_rule_id}:{type(error).__name__}"
