@@ -11,9 +11,7 @@ import { GetDocumentGenerationContextQuery } from "./get-document-generation-con
  * gap, remediation, or dossier processing in NestJS.
  */
 @QueryHandler(GetDocumentGenerationContextQuery)
-export class GetDocumentGenerationContextHandler
-  implements IQueryHandler<GetDocumentGenerationContextQuery>
-{
+export class GetDocumentGenerationContextHandler implements IQueryHandler<GetDocumentGenerationContextQuery> {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(
@@ -56,7 +54,10 @@ export class GetDocumentGenerationContextHandler
       }),
     ]);
     if (!assessment) this.notFound("Assessment");
-    if (!classification?.verifiedProfileId || !classification.legalRuleMatchId) {
+    if (
+      !classification?.verifiedProfileId ||
+      !classification.legalRuleMatchId
+    ) {
       this.notFound("ClassificationResult");
     }
 
@@ -124,7 +125,8 @@ export class GetDocumentGenerationContextHandler
     if (!technicalProfile) this.notFound("TechnicalProfile");
 
     const evidenceReportId =
-      verifiedProfile.technicalEvidenceReportId ?? technicalProfile.evidenceReportId;
+      verifiedProfile.technicalEvidenceReportId ??
+      technicalProfile.evidenceReportId;
     const technicalEvidenceReport =
       await this.prisma.technicalEvidenceReport.findFirst({
         where: {
@@ -207,7 +209,8 @@ export class GetDocumentGenerationContextHandler
         id: verifiedProfile.id,
         version: verifiedProfile.version,
         ai_usage_flow_id: verifiedProfile.aiUsageFlowId,
-        wizard_profile_id: verifiedProfile.wizardProfileId ?? wizardProfile?.id ?? null,
+        wizard_profile_id:
+          verifiedProfile.wizardProfileId ?? wizardProfile?.id ?? null,
         technical_evidence_report_id: evidenceReportId,
         profile_data: verifiedProfile.profileData,
       },
