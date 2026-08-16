@@ -75,18 +75,21 @@ class ConflictDetectionCallbackPayload(BaseModel):
 
 
 class VerifiedProfileCallbackPayload(BaseModel):
+    """Pinned inputs for the canonical Nest reconciliation command.
+
+    Python no longer builds a competing VerifiedProfile payload. Nest validates
+    these source identities, conflict decision refs and idempotency key before
+    persisting the single immutable profile representation.
+    """
+
     model_config = ConfigDict(extra="forbid")
     ai_usage_flow_id: str
     assessment_id: str
-    schema_version: str
-    provider_version: str
-    profile_data: Dict[str, Any]
-    gates_passed_at: Dict[str, Any]
-    wizard_profile_id: Optional[str] = None
-    technical_evidence_report_id: Optional[str] = None
-    reconciliation_decision_refs: Optional[List[str]] = None
-    idempotency_key: Optional[str] = None
-    organization_id: Optional[str] = None
+    wizard_profile_id: str
+    technical_evidence_report_id: str
+    reconciliation_decision_refs: List[str]
+    idempotency_key: str
+    organization_id: str
 
 
 class LegalRuleMatchCallbackPayload(BaseModel):
