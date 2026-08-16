@@ -57,7 +57,13 @@ class ProgramGraphBuilder:
         nodes = [self._nodes[k].to_dict() for k in sorted(self._nodes)]; edges = [self._edges[k].to_dict() for k in sorted(self._edges)]; anchors = [self._anchors[k].__dict__ for k in sorted(self._anchors)]
         indexes: dict[str, list[str]] = {}
         for node in nodes:
-            indexes.setdefault(str(node["node_type"]), []).append(str(node["node_id"]))
+            # Index keys are namespace-qualified because canonical node vocabulary
+            # intentionally includes values such as SECRET. A raw key named
+            # ``SECRET`` is semantically a node category, but generic evidence
+            # privacy guards correctly reserve that JSON field name for credential
+            # material. Namespacing removes the ambiguity without weakening the
+            # privacy boundary or changing the canonical node_type itself.
+            indexes.setdefault(f"node:{node['node_type']}", []).append(str(node["node_id"]))
             for semantic in node.get("semantic_types") or []: indexes.setdefault(f"semantic:{semantic}", []).append(str(node["node_id"]))
         indexes = {k: sorted(set(v)) for k, v in sorted(indexes.items())}
         refs = sorted({str(ref) for item in [*nodes, *edges] for ref in item.get("evidence_refs") or []}); coverage = sorted({self._one_line(n) for n in self._coverage if n}); unresolved = sorted(set(self._unresolved))
