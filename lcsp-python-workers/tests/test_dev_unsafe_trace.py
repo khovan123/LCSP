@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-
 import pytest
 
 from lcsp_workers.platform import dev_unsafe_trace
@@ -14,17 +12,33 @@ def enable_dev_trace(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NODE_ENV", "development")
 
 
-def test_large_binary_payload_is_summarized_instead_of_hex_dumped() -> None:
+def test_large_binary_payload_is_omitted_entirely() -> None:
     archive = b"\x1f\x8b" + (b"\x00" * (128 * 1024))
 
-    rendered = dev_unsafe_trace._json_safe(archive)
+    assert dev_unsafe_trace._json_safe(archive) is dev_unsafe_trace._OMIT_TRACE_FIELD
 
-    assert rendered["encoding"] == "binary-metadata"
-    assert rendered["byteLength"] == len(archive)
-    assert rendered["sha256"] == hashlib.sha256(archive).hexdigest()
-    assert rendered["truncated"] is True
-    assert len(rendered["previewHex"]) <= dev_unsafe_trace._BINARY_PREVIEW_BYTES * 2
-    assert "value" not in rendered
+
+def test_binary_field_is_removed_from_nested_mapping() -> None:
+    archive = b"\x1f\x8b" + (b"\x00" * 4096)
+    payload = {
+        "scan_job_id": "scan-1",
+        "snapshot_id": "snapshot-1",
+        "archive": archive,
+    }
+
+    rendered = dev_unsafe_trace._json_safe(payload)
+
+    assert rendered == {
+        "scan_job_id": "scan-1",
+        "snapshot_id": "snapshot-1",
+    }
+    assert "archive" not in rendered
+
+
+def test_oversized_utf8_bytes_are_omitted_entirely() -> None:
+    payload = b"x" * (dev_unsafe_trace._MAX_INLINE_UTF8_BYTES + 1)
+
+    assert dev_unsafe_trace._json_safe(payload) is dev_unsafe_trace._OMIT_TRACE_FIELD
 
 
 def test_large_structured_tool_result_is_collection_bounded() -> None:
