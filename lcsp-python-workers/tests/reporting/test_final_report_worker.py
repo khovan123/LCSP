@@ -100,10 +100,12 @@ def test_t01_authoritative_context_generates_ready_report():
 
 
 def test_t02_report_contains_certified_is_blocked():
-    llm = MagicMock()
-    llm.complete.return_value = MagicMock(content="The system is certified.")
-    consumer, document_client = _consumer(llm)
-    consumer.handle({"documentRequestId": "doc123"}, "corr-id")
+    consumer, document_client = _consumer()
+    with patch(
+        "lcsp_workers.reporting.final_report_consumer.FinalReportGenerator.generate",
+        return_value="The system is certified.",
+    ):
+        consumer.handle({"documentRequestId": "doc123"}, "corr-id")
     kwargs = document_client.post_document_callback.call_args.kwargs
     assert kwargs["status"] == "BLOCKED"
     assert kwargs["error_code"] == "FINAL_REPORT_OVERCLAIM_BLOCKED"
