@@ -81,7 +81,7 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
               };
             }
           }
-        } catch (error) {
+        } catch {
           // ignore
         }
       }

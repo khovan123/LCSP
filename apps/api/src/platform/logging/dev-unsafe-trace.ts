@@ -247,7 +247,10 @@ function summarizeTraceFields(
         const headers = fields.headers as Record<string, unknown>;
         const contentLength =
           headers["content-length"] ?? headers["Content-Length"];
-        if (contentLength !== undefined && contentLength !== null) {
+        if (
+          typeof contentLength === "string" ||
+          typeof contentLength === "number"
+        ) {
           size = parseInt(String(contentLength), 10) || 0;
         }
       }
@@ -274,9 +277,8 @@ function summarizeTraceFields(
         "DEV_API_HTTP_CLOSED_EARLY_RAW",
       ];
       if (httpEvents.includes(event)) {
-        const pathStr = String(
-          fields.originalUrl ?? fields.path ?? fields.url ?? "",
-        );
+        const rawUrl = fields.originalUrl ?? fields.path ?? fields.url;
+        const pathStr = typeof rawUrl === "string" ? rawUrl : "";
         const isTechnicalProfile = pathStr.includes(
           "technical-profile-callback",
         );
