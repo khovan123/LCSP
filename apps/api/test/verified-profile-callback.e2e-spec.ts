@@ -95,7 +95,10 @@ describe("VerifiedProfile Callback Endpoint (e2e) [MW-rec-004]", () => {
     const verifiedProfileId = body.result.verifiedProfileId;
 
     assert.equal(response.status, 200);
-    assert.equal(body.result.lifecycleStatus, VERIFIED_PROFILE_STATUSES.pendingApproval);
+    assert.equal(
+      body.result.lifecycleStatus,
+      VERIFIED_PROFILE_STATUSES.pendingApproval,
+    );
     assert.ok(verifiedProfileId);
     assert.deepEqual(body.result.sourceArtifactRefs, [
       `wizard:${WIZARD_PROFILE_ID}`,
