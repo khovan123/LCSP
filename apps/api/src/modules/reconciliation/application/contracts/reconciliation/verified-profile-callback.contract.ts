@@ -1,3 +1,5 @@
+import type { ReconcileVerifiedProfileResult } from "@lcsp/contracts/evidence";
+
 export interface VerifiedProfileCallbackRequest {
   /** Immutable source identities required by the canonical reconciliation command. */
   ai_usage_flow_id: string;
@@ -10,8 +12,8 @@ export interface VerifiedProfileCallbackRequest {
 }
 
 export interface VerifiedProfileCallbackDto {
-  accepted: boolean;
-  verified_profile_id: string;
+  /** Canonical reconciliation handler result returned inside the HTTP success envelope. */
   status: string;
+  result: ReconcileVerifiedProfileResult;
   correlationId: string;
 }
