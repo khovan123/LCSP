@@ -5,6 +5,18 @@ import {
   unsafeDevUnfilteredEnabled,
 } from "./dev-unsafe-trace.js";
 
+interface TraceRecord {
+  event?: string;
+  api_key?: string;
+  authorization?: string;
+  body_size?: number;
+  body_itemCount?: number;
+  node_count?: number;
+  method?: string;
+  statusCode?: number;
+  body?: string;
+}
+
 describe("dev-unsafe-trace", () => {
   const originalEnv = { ...process.env };
 
@@ -55,7 +67,7 @@ describe("dev-unsafe-trace", () => {
 
     expect(writeSpy).toHaveBeenCalled();
     const logCall = writeSpy.mock.calls[0][0] as string;
-    const record = JSON.parse(logCall.trim());
+    const record = JSON.parse(logCall.trim()) as TraceRecord;
 
     expect(record.event).toBe("TEST_EVENT");
     expect(record.api_key).toBe("[REDACTED]");
@@ -85,7 +97,7 @@ describe("dev-unsafe-trace", () => {
 
     expect(writeSpy).toHaveBeenCalled();
     const logCall = writeSpy.mock.calls[0][0] as string;
-    const record = JSON.parse(logCall.trim());
+    const record = JSON.parse(logCall.trim()) as TraceRecord;
 
     expect(record.event).toBe("TEST_EVENT_RAW");
     expect(record.api_key).toBe("secret-key-123");

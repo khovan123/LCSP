@@ -98,7 +98,7 @@ function findIdRecursive(
   data: unknown,
   keys: Set<string>,
   seen = new WeakSet<object>(),
-): any {
+): string | number | undefined {
   if (!data || typeof data !== "object") return undefined;
   if (seen.has(data)) return undefined;
   seen.add(data);
@@ -158,20 +158,6 @@ function summarizeTraceFields(
 ): Record<string, unknown> {
   const summary: Record<string, unknown> = {};
 
-  const idKeys = new Set([
-    "scan_job_id",
-    "scanJobId",
-    "snapshot_id",
-    "snapshotId",
-    "snapshot_ref",
-    "snapshotRef",
-    "corpus_version_id",
-    "corpusVersionId",
-    "assessment_id",
-    "assessmentId",
-    "workflow_run_id",
-    "workflowRunId",
-  ]);
   const scanJobId = findIdRecursive(
     fields,
     new Set(["scan_job_id", "scanJobId"]),
