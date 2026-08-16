@@ -15,13 +15,13 @@ from lcsp_workers.scanner.analyzers.ai_invocation_detector import TechnicalFindi
 from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalysisResult
 from lcsp_workers.scanner.dependencies.dependency_fact import PackageDependency
 from lcsp_workers.scanner.inventory.language_types import LanguageClassification
+from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
 from lcsp_workers.scanner.ts_js_bridge.bridge_types import TsJsBridgeResult
 
 from .parsers.structural_types import StructuralFact
 from .tool_registry import ToolProvenance
 from .tools.semgrep_tool import SemgrepRunResult
 from .tools.syft_tool import SyftRunResult
-from .graph.graph_serializer import ScanGraph, serialize_graph
 from .tools.tool_base import OUTCOME_SKIPPED_UNSUPPORTED, OUTCOME_SUCCESS, ToolExecutionResult
 
 
@@ -117,42 +117,20 @@ class EvidenceAssembler:
         ts_js_analysis: TsJsBridgeResult | None = None,
         technical_findings: list[TechnicalFinding] | None = None,
         structural_facts: list[StructuralFact] | None = None,
-        evidence_graph: ScanGraph | None = None,
+        evidence_graph: ProgramEvidenceGraph | None = None,
         scan_coverage: list[LanguageClassification] | None = None,
         targeted_reanalysis: dict[str, object] | None = None,
         tool_provenance: list[ToolProvenance] | None = None,
     ) -> ScanCallbackPayload:
-        """Assemble the callback payload after enforcing evidence privacy invariants.
-
-        Args:
-            scan_job_id: Scan job that owns the generated evidence.
-            syft_result: Optional SBOM tool result.
-            semgrep_result: Optional Semgrep findings and execution metadata.
-            coverage_notes: Human-readable notes about scanner coverage limitations.
-            package_dependencies: Normalized dependency facts from supported manifests.
-            dependency_executions: Execution metadata from dependency extractors.
-            python_analysis: Optional Python structural/AI-usage analysis.
-            ts_js_analysis: Optional TypeScript/JavaScript bridge analysis.
-            technical_findings: Normalized AI invocation and technical findings.
-            structural_facts: Language-agnostic structural facts from parsers.
-            evidence_graph: Optional graph joining code/dependency/evidence relationships.
-            scan_coverage: Per-file language and support classifications.
-            targeted_reanalysis: Optional metadata describing constrained reanalysis scope.
-
-        Returns:
-            A callback payload containing only redacted evidence plus provenance metadata.
-
-        Raises:
-            PrivacyAssertionError: If any field/value can persist raw source, prompts,
-                credentials, or if privacy flags are internally inconsistent.
-        """
+        """Assemble the callback payload after enforcing evidence privacy invariants."""
         executions = [
-            *( [syft_result.execution] if syft_result is not None else [] ),
+            *([syft_result.execution] if syft_result is not None else []),
             *(semgrep_result.executions if semgrep_result is not None else []),
             *(dependency_executions or []),
         ]
         if ts_js_analysis is not None:
             executions.append(ts_js_analysis.execution)
+
         findings = [
             asdict(finding)
             for finding in (semgrep_result.findings if semgrep_result is not None else [])
@@ -161,7 +139,9 @@ class EvidenceAssembler:
         source_stripped = len(redacted_findings) == len(findings)
 
         evidence_payload = {
-            "sbom_entries": [asdict(entry) for entry in (syft_result.entries if syft_result is not None else [])],
+            "sbom_entries": [
+                asdict(entry) for entry in (syft_result.entries if syft_result is not None else [])
+            ],
             "ai_usage_signals": redacted_findings,
             "package_dependencies": [
                 asdict(package) for package in (package_dependencies or [])
@@ -182,10 +162,11 @@ class EvidenceAssembler:
             ],
             "coverage_notes": list(coverage_notes),
             "scan_coverage": self._scan_coverage(scan_coverage or []),
-            "evidence_graph": serialize_graph(evidence_graph) if evidence_graph else None,
+            "evidence_graph": evidence_graph.to_dict() if evidence_graph else None,
             "targeted_reanalysis": targeted_reanalysis,
         }
         self._assert_safe_payload(evidence_payload)
+
         privacy_flags = PrivacyFlags(
             contains_source_code=False,
             secrets_redacted=True,
@@ -293,18 +274,13 @@ class EvidenceAssembler:
     def _status_for(
         self, executions: Iterable[ToolExecutionResult]
     ) -> tuple[str, str | None]:
-        """Derive callback status from aggregate tool outcomes.
-
-        No executions or all-success executions are successful, mixed outcomes are
-        partial, and an all-tool failure produces the stable ``ALL_TOOLS_FAILED`` code.
-        """
+        """Derive callback status from aggregate tool outcomes."""
         outcomes = [execution.outcome for execution in executions]
         if not outcomes:
             return SCAN_CALLBACK_STATUSES["success"], None
-        # Skipped tools are expected behaviour for language profiles that do not
-        # support them; exclude them from failure counting entirely.
         failed_count = sum(
-            1 for outcome in outcomes
+            1
+            for outcome in outcomes
             if outcome not in (OUTCOME_SUCCESS, OUTCOME_SKIPPED_UNSUPPORTED)
         )
         run_count = sum(
