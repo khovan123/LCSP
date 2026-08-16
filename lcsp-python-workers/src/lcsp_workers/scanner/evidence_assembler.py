@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import os
 import re
 from typing import Iterable
 
@@ -10,6 +11,7 @@ from lcsp_workers.platform.callback_schemas import (
     SCAN_CALLBACK_STATUSES,
     ScanCallbackPayload,
 )
+from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.platform.redaction import redact_dict, redact_source_code
 from lcsp_workers.scanner.analyzers.ai_invocation_detector import TechnicalFinding
 from lcsp_workers.scanner.analyzers.python_analyzer import PythonAnalysisResult
@@ -25,9 +27,12 @@ from .tools.syft_tool import SyftRunResult
 from .tools.tool_base import OUTCOME_SKIPPED_UNSUPPORTED, OUTCOME_SUCCESS, ToolExecutionResult
 
 
+logger = get_logger(__name__)
+
 SCHEMA_VERSION = "1.0.0"
 PRIVACY_ASSERTION_FAILED = "PRIVACY_ASSERTION_FAILED"
 ALL_TOOLS_FAILED = "ALL_TOOLS_FAILED"
+SCANNER_PRIVACY_DEBUG_ENV = "SCANNER_PRIVACY_DEBUG"
 FORBIDDEN_PERSISTED_KEYS = {
     "source_code",
     "raw_source",
@@ -87,12 +92,50 @@ class ToolFailureRecord:
 
 
 class PrivacyAssertionError(RuntimeError):
-    """Raised when evidence would violate the worker persistence privacy contract."""
+    """Raised when evidence would violate the worker persistence privacy contract.
 
-    def __init__(self, message: str, error_code: str = PRIVACY_ASSERTION_FAILED) -> None:
-        """Create a privacy failure with the safe callback error code."""
-        super().__init__(message)
+    The exception carries structure-only diagnostics. It never stores or logs the
+    rejected value itself, so development diagnostics can identify the exact
+    payload location without weakening the privacy boundary.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        error_code: str = PRIVACY_ASSERTION_FAILED,
+        *,
+        reason: str = "PRIVACY_ASSERTION_FAILED",
+        json_path: str = "$",
+        field_name: str | None = None,
+        value_type: str | None = None,
+        container_size: int | None = None,
+        string_length: int | None = None,
+    ) -> None:
+        """Create a privacy failure with safe structural diagnostics."""
+        super().__init__(f"{message} at {json_path}")
         self.error_code = error_code
+        self.reason = reason
+        self.json_path = json_path
+        self.field_name = field_name
+        self.value_type = value_type
+        self.container_size = container_size
+        self.string_length = string_length
+
+    def safe_diagnostic(self) -> dict[str, object]:
+        """Return metadata safe for development logging without rejected values."""
+        diagnostic: dict[str, object] = {
+            "reason": self.reason,
+            "json_path": self.json_path,
+        }
+        if self.field_name is not None:
+            diagnostic["field_name"] = self.field_name
+        if self.value_type is not None:
+            diagnostic["value_type"] = self.value_type
+        if self.container_size is not None:
+            diagnostic["container_size"] = self.container_size
+        if self.string_length is not None:
+            diagnostic["string_length"] = self.string_length
+        return diagnostic
 
 
 class EvidenceAssembler:
@@ -336,24 +379,85 @@ class EvidenceAssembler:
         if len(original_findings) != len(redacted_findings):
             raise PrivacyAssertionError("raw source was stripped from findings")
 
-    def _assert_safe_payload(self, value: object) -> None:
-        """Recursively reject source-like values, secrets, and forbidden persisted keys."""
+    def _assert_safe_payload(self, value: object, *, json_path: str = "$") -> None:
+        """Recursively reject unsafe values while retaining the exact safe JSON path."""
         if isinstance(value, str):
             if any(pattern.search(value) for pattern in SECRET_VALUE_PATTERNS):
-                raise PrivacyAssertionError("evidence payload contains a secret")
+                self._raise_privacy_assertion(
+                    "evidence payload contains a secret",
+                    reason="SECRET_VALUE_PATTERN",
+                    json_path=json_path,
+                    value=value,
+                )
             if "\n" in value and SOURCE_BODY_PATTERN.search(value):
-                raise PrivacyAssertionError("evidence payload contains raw source")
+                self._raise_privacy_assertion(
+                    "evidence payload contains raw source",
+                    reason="RAW_SOURCE_PATTERN",
+                    json_path=json_path,
+                    value=value,
+                )
             return
         if isinstance(value, (list, tuple)):
-            for item in value:
-                self._assert_safe_payload(item)
+            for index, item in enumerate(value):
+                self._assert_safe_payload(item, json_path=f"{json_path}[{index}]")
             return
         if not isinstance(value, dict):
             return
         for key, item in value.items():
             normalized_key = str(key).replace("-", "_").lower()
+            child_path = self._json_path_for_key(json_path, key)
             if normalized_key in FORBIDDEN_PERSISTED_KEYS:
-                raise PrivacyAssertionError(
-                    f"evidence payload contains forbidden field {normalized_key}"
+                self._raise_privacy_assertion(
+                    f"evidence payload contains forbidden field {normalized_key}",
+                    reason="FORBIDDEN_PERSISTED_FIELD",
+                    json_path=child_path,
+                    field_name=normalized_key,
+                    value=item,
                 )
-            self._assert_safe_payload(item)
+            self._assert_safe_payload(item, json_path=child_path)
+
+    def _raise_privacy_assertion(
+        self,
+        message: str,
+        *,
+        reason: str,
+        json_path: str,
+        value: object,
+        field_name: str | None = None,
+    ) -> None:
+        """Raise with structure-only diagnostics and optional development logging."""
+        container_size: int | None = None
+        string_length: int | None = None
+        if isinstance(value, str):
+            string_length = len(value)
+        elif isinstance(value, (dict, list, tuple)):
+            container_size = len(value)
+
+        error = PrivacyAssertionError(
+            message,
+            reason=reason,
+            json_path=json_path,
+            field_name=field_name,
+            value_type=type(value).__name__,
+            container_size=container_size,
+            string_length=string_length,
+        )
+        if self._privacy_debug_enabled():
+            logger.error(
+                "SCAN_EVIDENCE_PRIVACY_DIAGNOSTIC",
+                error_code=error.error_code,
+                **error.safe_diagnostic(),
+            )
+        raise error
+
+    @staticmethod
+    def _json_path_for_key(parent: str, key: object) -> str:
+        """Append one mapping key using quoted JSONPath notation."""
+        encoded = json.dumps(str(key), ensure_ascii=True)
+        return f"{parent}[{encoded}]"
+
+    @staticmethod
+    def _privacy_debug_enabled() -> bool:
+        """Enable extra safe diagnostics only when explicitly requested in development."""
+        value = os.getenv(SCANNER_PRIVACY_DEBUG_ENV, "")
+        return value.strip().lower() in {"1", "true", "yes", "on"}
