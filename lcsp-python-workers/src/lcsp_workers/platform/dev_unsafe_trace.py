@@ -5,10 +5,11 @@ It exists so local developers can inspect values crossing LCSP runtime boundarie
 while the normal persistence/callback privacy controls remain intact.
 
 When ``LCSP_DEV_UNSAFE_TRACE=true`` trace records are written as JSON lines to
-stderr. Text payloads remain unredacted when they are small enough to be useful.
-Large strings, collections, and binary payloads are represented by bounded
-metadata/previews so diagnostic tracing cannot flood a pipe and perturb runtime
-execution. Serialization/write failures are fail-open by design.
+stderr. Small text payloads remain unredacted. Large strings and collections are
+bounded so diagnostic tracing cannot flood a pipe. Binary payloads and oversized
+byte buffers are omitted entirely from trace records; repository archives must
+never be emitted, hashed, previewed, or hex-encoded in logs. Serialization/write
+failures are fail-open by design.
 """
 
 from __future__ import annotations
@@ -26,10 +27,10 @@ from lcsp_workers.platform.correlation import get_correlationId
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _MAX_INLINE_UTF8_BYTES = 64 * 1024
-_BINARY_PREVIEW_BYTES = 256
 _MAX_TRACE_COLLECTION_ITEMS = 16
 _MAX_INLINE_TRACE_STRING_CHARS = 16 * 1024
 _TRACE_STRING_PREVIEW_CHARS = 2048
+_OMIT_TRACE_FIELD = object()
 
 
 def unsafe_dev_trace_enabled() -> bool:
@@ -60,12 +61,18 @@ def emit_dev_unsafe_trace(event: str, /, **fields: Any) -> None:
         return
 
     try:
+        safe_fields: dict[str, Any] = {}
+        for key, value in fields.items():
+            safe_value = _json_safe(value)
+            if safe_value is not _OMIT_TRACE_FIELD:
+                safe_fields[key] = safe_value
+
         record = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": "UNSAFE_DEV_TRACE",
             "event": event,
             "correlationId": get_correlationId(),
-            **{key: _json_safe(value) for key, value in fields.items()},
+            **safe_fields,
         }
         rendered = json.dumps(
             record,
@@ -110,26 +117,7 @@ def _json_safe(value: Any, seen: set[int] | None = None) -> Any:
         except Exception:
             pass
     if isinstance(value, Mapping):
-        seen.add(obj_id)
-        try:
-            entries = list(value.items())
-            if len(entries) <= _MAX_TRACE_COLLECTION_ITEMS:
-                return {
-                    str(key): _json_safe(entry, seen)
-                    for key, entry in entries
-                }
-            return {
-                "encoding": "collection-metadata",
-                "collectionType": "mapping",
-                "itemCount": len(entries),
-                "items": {
-                    str(key): _json_safe(entry, seen)
-                    for key, entry in entries[:_MAX_TRACE_COLLECTION_ITEMS]
-                },
-                "truncated": True,
-            }
-        finally:
-            seen.remove(obj_id)
+        return _mapping_trace_value(value, seen)
     if isinstance(value, tuple):
         return _sequence_trace_value(value, "tuple", seen)
     if isinstance(value, list):
@@ -142,22 +130,26 @@ def _json_safe(value: Any, seen: set[int] | None = None) -> Any:
         try:
             attributes = list(vars(value).items())
             payload: dict[str, Any] = {"__type__": type(value).__name__}
+            selected = (
+                attributes
+                if len(attributes) <= _MAX_TRACE_COLLECTION_ITEMS
+                else attributes[:_MAX_TRACE_COLLECTION_ITEMS]
+            )
+            safe_attributes: dict[str, Any] = {}
+            for key, entry in selected:
+                safe_entry = _json_safe(entry, seen)
+                if safe_entry is not _OMIT_TRACE_FIELD:
+                    safe_attributes[str(key)] = safe_entry
+
             if len(attributes) <= _MAX_TRACE_COLLECTION_ITEMS:
-                payload.update(
-                    {
-                        str(key): _json_safe(entry, seen)
-                        for key, entry in attributes
-                    }
-                )
+                payload.update(safe_attributes)
                 return payload
+
             payload.update(
                 {
                     "encoding": "object-metadata",
                     "attributeCount": len(attributes),
-                    "attributes": {
-                        str(key): _json_safe(entry, seen)
-                        for key, entry in attributes[:_MAX_TRACE_COLLECTION_ITEMS]
-                    },
+                    "attributes": safe_attributes,
                     "truncated": True,
                 }
             )
@@ -170,6 +162,36 @@ def _json_safe(value: Any, seen: set[int] | None = None) -> Any:
     return _string_trace_value(repr(value))
 
 
+def _mapping_trace_value(value: Mapping[Any, Any], seen: set[int]) -> Any:
+    """Render mappings while dropping binary-valued fields completely."""
+    obj_id = id(value)
+    seen.add(obj_id)
+    try:
+        entries = list(value.items())
+        selected = (
+            entries
+            if len(entries) <= _MAX_TRACE_COLLECTION_ITEMS
+            else entries[:_MAX_TRACE_COLLECTION_ITEMS]
+        )
+        safe_items: dict[str, Any] = {}
+        for key, entry in selected:
+            safe_entry = _json_safe(entry, seen)
+            if safe_entry is not _OMIT_TRACE_FIELD:
+                safe_items[str(key)] = safe_entry
+
+        if len(entries) <= _MAX_TRACE_COLLECTION_ITEMS:
+            return safe_items
+        return {
+            "encoding": "collection-metadata",
+            "collectionType": "mapping",
+            "itemCount": len(entries),
+            "items": safe_items,
+            "truncated": True,
+        }
+    finally:
+        seen.remove(obj_id)
+
+
 def _sequence_trace_value(
     value: Sequence[Any],
     collection_type: str,
@@ -179,16 +201,24 @@ def _sequence_trace_value(
     obj_id = id(value)
     seen.add(obj_id)
     try:
+        selected = (
+            value
+            if len(value) <= _MAX_TRACE_COLLECTION_ITEMS
+            else value[:_MAX_TRACE_COLLECTION_ITEMS]
+        )
+        safe_items = []
+        for entry in selected:
+            safe_entry = _json_safe(entry, seen)
+            if safe_entry is not _OMIT_TRACE_FIELD:
+                safe_items.append(safe_entry)
+
         if len(value) <= _MAX_TRACE_COLLECTION_ITEMS:
-            return [_json_safe(entry, seen) for entry in value]
+            return safe_items
         return {
             "encoding": "collection-metadata",
             "collectionType": collection_type,
             "itemCount": len(value),
-            "items": [
-                _json_safe(entry, seen)
-                for entry in value[:_MAX_TRACE_COLLECTION_ITEMS]
-            ],
+            "items": safe_items,
             "truncated": True,
         }
     finally:
@@ -211,23 +241,11 @@ def _string_trace_value(value: str) -> Any:
 
 
 def _bytes_trace_value(value: bytes) -> Any:
-    """Render text bytes inline and summarize binary/large byte payloads.
-
-    Repository archives and other binary payloads must not be converted to full
-    hex strings: that doubles their size and can overflow a non-blocking stderr
-    pipe before the underlying scanner tool is even invoked.
-    """
+    """Keep only small UTF-8 text bytes; omit binary or oversized bytes entirely."""
     if len(value) <= _MAX_INLINE_UTF8_BYTES:
         try:
             return _string_trace_value(value.decode("utf-8"))
         except UnicodeDecodeError:
-            pass
+            return _OMIT_TRACE_FIELD
 
-    preview = value[:_BINARY_PREVIEW_BYTES]
-    return {
-        "encoding": "binary-metadata",
-        "byteLength": len(value),
-        "sha256": hashlib.sha256(value).hexdigest(),
-        "previewHex": preview.hex(),
-        "truncated": len(preview) < len(value),
-    }
+    return _OMIT_TRACE_FIELD
