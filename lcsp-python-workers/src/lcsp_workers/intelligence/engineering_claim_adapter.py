@@ -4,7 +4,11 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
-from .ai_usage_flow_rule_engine import AIUsageFlow, AIUsageFlowClaim
+from .ai_usage_flow_rule_engine import (
+    AIUsageFlow,
+    AIUsageFlowClaim,
+    AIUsageFlowRuleEngine,
+)
 
 
 class EngineeringClaimAdapter:
@@ -139,3 +143,34 @@ class EngineeringClaimAdapter:
                 raise ValueError(f"duplicate AIUsageFlow claim id: {claim.claim_id}")
             by_id[claim.claim_id] = claim
         return list(by_id.values())
+
+
+class EngineeringAwareAIUsageFlowRuleEngine:
+    """Compose deterministic AI usage rules with validated engineering claims."""
+
+    def __init__(
+        self,
+        base_engine: AIUsageFlowRuleEngine | None = None,
+        adapter: EngineeringClaimAdapter | None = None,
+    ) -> None:
+        self._base_engine = base_engine or AIUsageFlowRuleEngine()
+        self._adapter = adapter or EngineeringClaimAdapter()
+
+    def generate(
+        self,
+        *,
+        technical_profile: dict[str, Any] | None,
+        evidence_report: dict[str, Any] | None,
+        wizard_profile: dict[str, Any] | None,
+    ) -> AIUsageFlow:
+        flow = self._base_engine.generate(
+            technical_profile=technical_profile,
+            evidence_report=evidence_report,
+            wizard_profile=wizard_profile,
+        )
+        if not technical_profile:
+            return flow
+        return self._adapter.apply(
+            flow=flow,
+            technical_profile=technical_profile,
+        )
