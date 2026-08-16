@@ -353,3 +353,22 @@ def test_t11_tool_provenance_is_complete_and_sanitized() -> None:
     serialized = str(rows).lower()
     assert "authorization" not in serialized
     assert "api_key" not in serialized
+
+
+def test_t12_source_identifier_named_secret_is_preserved_as_import_binding() -> None:
+    python_analysis = replace(
+        _python_analysis(),
+        import_map={"openai": "openai", "secret": "secrets"},
+    )
+    report = _assemble(python_analysis=python_analysis)
+    persisted = report.evidence_payload["python_analysis"]
+
+    assert "import_map" not in persisted
+    assert {"local_name": "secret", "package": "secrets"} in persisted[
+        "import_bindings"
+    ]
+
+
+def test_t13_actual_forbidden_schema_key_still_fails_closed() -> None:
+    with pytest.raises(PrivacyAssertionError, match="forbidden field secret"):
+        _assemble(targeted_reanalysis={"secret": "must-not-persist"})
