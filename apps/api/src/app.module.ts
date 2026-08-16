@@ -27,7 +27,9 @@ import { ScanModule } from "./modules/scan/scan.module.js";
 import { UsersModule } from "./modules/users/users.module.js";
 import { WizardModule } from "./modules/wizard/wizard.module.js";
 import { AuditModule as AuditPlatformModule } from "./platform/audit/audit.module.js";
+import { DevUnsafeHttpTraceMiddleware } from "./platform/logging/dev-unsafe-http-trace.middleware.js";
 import { HttpLoggerMiddleware } from "./platform/logging/http-logger.middleware.js";
+import { unsafeDevTraceEnabled } from "./platform/logging/dev-unsafe-trace.js";
 import { MailModule } from "./platform/mail/mail.module.js";
 import { OutboxModule } from "./platform/outbox/outbox.module.js";
 import { PbacModule } from "./platform/pbac/pbac.module.js";
@@ -126,6 +128,11 @@ function findUpwards(
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(HttpLoggerMiddleware).forRoutes("*");
+    // Fail during API bootstrap if unsafe raw logging was accidentally combined
+    // with production mode. Outside explicit unsafe dev tracing this is a no-op.
+    unsafeDevTraceEnabled();
+    consumer
+      .apply(DevUnsafeHttpTraceMiddleware, HttpLoggerMiddleware)
+      .forRoutes("*");
   }
 }
