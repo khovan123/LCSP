@@ -49,6 +49,191 @@ def unsafe_dev_trace_enabled() -> bool:
     return True
 
 
+def unsafe_dev_unfiltered_enabled() -> bool:
+    """Return whether explicitly opted-in raw, unfiltered development tracing is enabled.
+
+    Raises:
+        RuntimeError: If unfiltered tracing is requested while ``NODE_ENV=production``.
+    """
+    enabled = os.getenv("LCSP_DEV_UNSAFE_UNFILTERED", "").strip().lower() in _TRUE_VALUES
+    if not enabled:
+        return False
+    if os.getenv("NODE_ENV", "").strip().lower() == "production":
+        raise RuntimeError(
+            "LCSP_DEV_UNSAFE_UNFILTERED must never be enabled with NODE_ENV=production"
+        )
+    return True
+
+
+def _find_id_recursive(data: Any, keys: set[str], seen: set[int] | None = None) -> Any | None:
+    if seen is None:
+        seen = set()
+    if data is None or isinstance(data, (bool, int, float, bytes, bytearray)):
+        return None
+    if isinstance(data, str):
+        return None
+    obj_id = id(data)
+    if obj_id in seen:
+        return None
+    seen.add(obj_id)
+    try:
+        if isinstance(data, Mapping):
+            for k, v in data.items():
+                if str(k) in keys and isinstance(v, (str, int)):
+                    return v
+                res = _find_id_recursive(v, keys, seen)
+                if res is not None:
+                    return res
+        elif isinstance(data, Sequence):
+            for item in data:
+                res = _find_id_recursive(item, keys, seen)
+                if res is not None:
+                    return res
+        elif hasattr(data, "__dict__"):
+            for k, v in vars(data).items():
+                if str(k) in keys and isinstance(v, (str, int)):
+                    return v
+                res = _find_id_recursive(v, keys, seen)
+                if res is not None:
+                    return res
+    except Exception:
+        pass
+    finally:
+        seen.discard(obj_id)
+    return None
+
+
+def _find_count_recursive(data: Any, target_key: str, seen: set[int] | None = None) -> int | None:
+    if seen is None:
+        seen = set()
+    if data is None or isinstance(data, (bool, int, float, bytes, bytearray, str)):
+        return None
+    obj_id = id(data)
+    if obj_id in seen:
+        return None
+    seen.add(obj_id)
+    try:
+        if isinstance(data, Mapping):
+            for k, v in data.items():
+                if str(k) == target_key:
+                    if isinstance(v, (Sequence, Mapping)) and not isinstance(v, (str, bytes, bytearray)):
+                        return len(v)
+                res = _find_count_recursive(v, target_key, seen)
+                if res is not None:
+                    return res
+        elif isinstance(data, Sequence):
+            for item in data:
+                res = _find_count_recursive(item, target_key, seen)
+                if res is not None:
+                    return res
+        elif hasattr(data, "__dict__"):
+            for k, v in vars(data).items():
+                if str(k) == target_key:
+                    if isinstance(v, (Sequence, Mapping)) and not isinstance(v, (str, bytes, bytearray)):
+                        return len(v)
+                res = _find_count_recursive(v, target_key, seen)
+                if res is not None:
+                    return res
+    except Exception:
+        pass
+    finally:
+        seen.discard(obj_id)
+    return None
+
+
+def _summarize_trace_fields(event: str, fields: Mapping[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    
+    # 1. Extract metadata from outer fields or nested structures
+    scan_job_id = _find_id_recursive(fields, {"scan_job_id", "scanJobId"})
+    snapshot_id = _find_id_recursive(fields, {"snapshot_id", "snapshotId"})
+    snapshot_ref = _find_id_recursive(fields, {"snapshot_ref", "snapshotRef"})
+    corpus_version_id = _find_id_recursive(fields, {"corpus_version_id", "corpusVersionId"})
+    assessment_id = _find_id_recursive(fields, {"assessment_id", "assessmentId"})
+    workflow_run_id = _find_id_recursive(fields, {"workflow_run_id", "workflowRunId"})
+    
+    if scan_job_id is not None:
+        summary["scan_job_id"] = scan_job_id
+    if snapshot_id is not None:
+        summary["snapshot_id"] = snapshot_id
+    if snapshot_ref is not None:
+        summary["snapshot_ref"] = snapshot_ref
+    if corpus_version_id is not None:
+        summary["corpus_version_id"] = corpus_version_id
+    if assessment_id is not None:
+        summary["assessment_id"] = assessment_id
+    if workflow_run_id is not None:
+        summary["workflow_run_id"] = workflow_run_id
+
+    # 2. Extract counts (node_count, edge_count)
+    node_count = _find_count_recursive(fields, "nodes")
+    edge_count = _find_count_recursive(fields, "edges")
+    
+    if "node_count" in fields:
+        node_count = fields["node_count"]
+    elif "nodeCount" in fields:
+        node_count = fields["nodeCount"]
+        
+    if "edge_count" in fields:
+        edge_count = fields["edge_count"]
+    elif "edgeCount" in fields:
+        edge_count = fields["edgeCount"]
+        
+    if node_count is not None:
+        summary["node_count"] = node_count
+    if edge_count is not None:
+        summary["edge_count"] = edge_count
+
+    # 3. Process specific fields
+    for k, v in fields.items():
+        if any(sec_key in k.lower() for sec_key in ("api_key", "secret", "token", "password", "authorization")):
+            summary[k] = "[REDACTED]"
+            continue
+            
+        if k in ("payload", "body", "result", "results", "tool_input", "response", "params"):
+            payload_size = 0
+            if isinstance(v, (str, bytes, bytearray)):
+                payload_size = len(v)
+            else:
+                try:
+                    payload_size = len(json.dumps(_json_safe(v)))
+                except Exception:
+                    payload_size = len(str(v))
+                    
+            summary[f"{k}_size"] = payload_size
+            
+            if event in ("DEV_WORKER_HTTP_REQUEST_RAW", "DEV_WORKER_HTTP_RESPONSE_RAW", "DEV_WORKER_HTTP_ERROR_RAW"):
+                limit = 52428800
+                summary[f"{k}_limit"] = limit
+                summary[f"{k}_truncated"] = payload_size > limit
+            
+            item_count = None
+            if isinstance(v, Mapping):
+                item_count = len(v)
+            elif isinstance(v, Sequence) and not isinstance(v, (str, bytes, bytearray)):
+                item_count = len(v)
+            elif hasattr(v, "__dict__"):
+                item_count = len(vars(v))
+                
+            if item_count is not None:
+                summary[f"{k}_itemCount"] = item_count
+            continue
+            
+        if k in (
+            "method", "base_url", "path", "url", "timeout", "max_retries", 
+            "error_type", "error", "dispatcher", "tool_name", "runtime_target", 
+            "downstream_target", "worker", "queue_name", "routing_key", 
+            "attempts", "max_tool_calls", "operation", "provider", "model",
+            "duration", "timing", "error_code", "status_code", "status", "outcome"
+        ) or isinstance(v, (bool, int, float)) or v is None:
+            summary[k] = v
+        else:
+            if isinstance(v, str) and len(v) < 256:
+                summary[k] = v
+                
+    return summary
+
+
 def emit_dev_unsafe_trace(event: str, /, **fields: Any) -> None:
     """Emit one bounded development trace record without affecting runtime semantics.
 
@@ -61,19 +246,34 @@ def emit_dev_unsafe_trace(event: str, /, **fields: Any) -> None:
         return
 
     try:
-        safe_fields: dict[str, Any] = {}
-        for key, value in fields.items():
-            safe_value = _json_safe(value)
-            if safe_value is not _OMIT_TRACE_FIELD:
-                safe_fields[key] = safe_value
+        if unsafe_dev_unfiltered_enabled():
+            safe_fields: dict[str, Any] = {}
+            for key, value in fields.items():
+                safe_value = _json_safe(value)
+                if safe_value is not _OMIT_TRACE_FIELD:
+                    safe_fields[key] = safe_value
 
-        record = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "level": "UNSAFE_DEV_TRACE",
-            "event": event,
-            "correlationId": get_correlationId(),
-            **safe_fields,
-        }
+            record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "level": "UNSAFE_DEV_TRACE",
+                "event": event,
+                "correlationId": get_correlationId(),
+                **safe_fields,
+            }
+        else:
+            summarized_event = event
+            if summarized_event.endswith("_RAW"):
+                summarized_event = summarized_event[:-4]
+                
+            summarized_fields = _summarize_trace_fields(event, fields)
+            record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "level": "UNSAFE_DEV_TRACE",
+                "event": summarized_event,
+                "correlationId": get_correlationId(),
+                **summarized_fields,
+            }
+
         rendered = json.dumps(
             record,
             ensure_ascii=False,
