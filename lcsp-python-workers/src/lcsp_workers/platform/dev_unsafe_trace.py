@@ -5,10 +5,10 @@ It exists so local developers can inspect values crossing LCSP runtime boundarie
 while the normal persistence/callback privacy controls remain intact.
 
 When ``LCSP_DEV_UNSAFE_TRACE=true`` trace records are written as JSON lines to
-stderr. Text payloads remain unredacted. Binary payloads are represented by
-bounded metadata instead of being expanded into unbounded hex strings, and any
-serialization/write failure is fail-open so diagnostic tracing can never break
-worker execution.
+stderr. Text payloads remain unredacted when they are small enough to be useful.
+Large strings, collections, and binary payloads are represented by bounded
+metadata/previews so diagnostic tracing cannot flood a pipe and perturb runtime
+execution. Serialization/write failures are fail-open by design.
 """
 
 from __future__ import annotations
@@ -27,6 +27,9 @@ from lcsp_workers.platform.correlation import get_correlationId
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _MAX_INLINE_UTF8_BYTES = 64 * 1024
 _BINARY_PREVIEW_BYTES = 256
+_MAX_TRACE_COLLECTION_ITEMS = 16
+_MAX_INLINE_TRACE_STRING_CHARS = 16 * 1024
+_TRACE_STRING_PREVIEW_CHARS = 2048
 
 
 def unsafe_dev_trace_enabled() -> bool:
@@ -46,7 +49,7 @@ def unsafe_dev_trace_enabled() -> bool:
 
 
 def emit_dev_unsafe_trace(event: str, /, **fields: Any) -> None:
-    """Emit one development trace record without affecting runtime semantics.
+    """Emit one bounded development trace record without affecting runtime semantics.
 
     The production guard is intentionally evaluated before the fail-open block:
     requesting unsafe tracing in production must still fail fast. Once tracing
@@ -83,8 +86,10 @@ def _json_safe(value: Any, seen: set[int] | None = None) -> Any:
     if seen is None:
         seen = set()
 
-    if value is None or isinstance(value, (bool, int, float, str)):
+    if value is None or isinstance(value, (bool, int, float)):
         return value
+    if isinstance(value, str):
+        return _string_trace_value(value)
     if isinstance(value, bytes):
         return _bytes_trace_value(value)
     if isinstance(value, bytearray):
@@ -107,47 +112,102 @@ def _json_safe(value: Any, seen: set[int] | None = None) -> Any:
     if isinstance(value, Mapping):
         seen.add(obj_id)
         try:
+            entries = list(value.items())
+            if len(entries) <= _MAX_TRACE_COLLECTION_ITEMS:
+                return {
+                    str(key): _json_safe(entry, seen)
+                    for key, entry in entries
+                }
             return {
-                str(key): _json_safe(entry, seen)
-                for key, entry in value.items()
+                "encoding": "collection-metadata",
+                "collectionType": "mapping",
+                "itemCount": len(entries),
+                "items": {
+                    str(key): _json_safe(entry, seen)
+                    for key, entry in entries[:_MAX_TRACE_COLLECTION_ITEMS]
+                },
+                "truncated": True,
             }
         finally:
             seen.remove(obj_id)
     if isinstance(value, tuple):
-        seen.add(obj_id)
-        try:
-            return [_json_safe(entry, seen) for entry in value]
-        finally:
-            seen.remove(obj_id)
+        return _sequence_trace_value(value, "tuple", seen)
     if isinstance(value, list):
-        seen.add(obj_id)
-        try:
-            return [_json_safe(entry, seen) for entry in value]
-        finally:
-            seen.remove(obj_id)
+        return _sequence_trace_value(value, "list", seen)
     if isinstance(value, Sequence) and not isinstance(value, str):
-        seen.add(obj_id)
-        try:
-            return [_json_safe(entry, seen) for entry in value]
-        finally:
-            seen.remove(obj_id)
+        return _sequence_trace_value(value, type(value).__name__, seen)
 
     if hasattr(value, "__dict__"):
         seen.add(obj_id)
         try:
-            return {
-                "__type__": type(value).__name__,
-                **{
-                    str(key): _json_safe(entry, seen)
-                    for key, entry in vars(value).items()
-                },
-            }
+            attributes = list(vars(value).items())
+            payload: dict[str, Any] = {"__type__": type(value).__name__}
+            if len(attributes) <= _MAX_TRACE_COLLECTION_ITEMS:
+                payload.update(
+                    {
+                        str(key): _json_safe(entry, seen)
+                        for key, entry in attributes
+                    }
+                )
+                return payload
+            payload.update(
+                {
+                    "encoding": "object-metadata",
+                    "attributeCount": len(attributes),
+                    "attributes": {
+                        str(key): _json_safe(entry, seen)
+                        for key, entry in attributes[:_MAX_TRACE_COLLECTION_ITEMS]
+                    },
+                    "truncated": True,
+                }
+            )
+            return payload
         except Exception:
             pass
         finally:
             seen.discard(obj_id)
 
-    return repr(value)
+    return _string_trace_value(repr(value))
+
+
+def _sequence_trace_value(
+    value: Sequence[Any],
+    collection_type: str,
+    seen: set[int],
+) -> Any:
+    """Keep small sequences verbatim and summarize large result collections."""
+    obj_id = id(value)
+    seen.add(obj_id)
+    try:
+        if len(value) <= _MAX_TRACE_COLLECTION_ITEMS:
+            return [_json_safe(entry, seen) for entry in value]
+        return {
+            "encoding": "collection-metadata",
+            "collectionType": collection_type,
+            "itemCount": len(value),
+            "items": [
+                _json_safe(entry, seen)
+                for entry in value[:_MAX_TRACE_COLLECTION_ITEMS]
+            ],
+            "truncated": True,
+        }
+    finally:
+        seen.remove(obj_id)
+
+
+def _string_trace_value(value: str) -> Any:
+    """Keep normal text raw but summarize unusually large strings."""
+    if len(value) <= _MAX_INLINE_TRACE_STRING_CHARS:
+        return value
+    encoded = value.encode("utf-8", errors="replace")
+    return {
+        "encoding": "text-metadata",
+        "charLength": len(value),
+        "byteLength": len(encoded),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "preview": value[:_TRACE_STRING_PREVIEW_CHARS],
+        "truncated": True,
+    }
 
 
 def _bytes_trace_value(value: bytes) -> Any:
@@ -159,7 +219,7 @@ def _bytes_trace_value(value: bytes) -> Any:
     """
     if len(value) <= _MAX_INLINE_UTF8_BYTES:
         try:
-            return value.decode("utf-8")
+            return _string_trace_value(value.decode("utf-8"))
         except UnicodeDecodeError:
             pass
 
