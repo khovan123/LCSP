@@ -51,7 +51,9 @@ export class DevUnsafeHttpTraceMiddleware implements NestMiddleware {
         .signedCookies,
     });
 
-    const originalJson = response.json.bind(response);
+    const originalJson = response.json.bind(response) as (
+      body: unknown,
+    ) => Response;
     response.json = ((body: unknown) => {
       responseBody = body;
       emitDevUnsafeTrace("DEV_API_HTTP_RESPONSE_JSON_RAW", {
@@ -63,7 +65,9 @@ export class DevUnsafeHttpTraceMiddleware implements NestMiddleware {
       return originalJson(body);
     }) as Response["json"];
 
-    const originalSend = response.send.bind(response);
+    const originalSend = response.send.bind(response) as (
+      body?: unknown,
+    ) => Response;
     response.send = ((body?: unknown) => {
       if (responseBody === undefined) {
         responseBody = body;
