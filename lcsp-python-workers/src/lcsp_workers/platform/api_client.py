@@ -412,6 +412,26 @@ class WorkerApiClient:
         status = str(data.get("status", "")).lower()
         if status and status != "accepted":
             raise WorkerCallbackError("Technical profile is not accepted.")
+
+        # Resolve reference file if present
+        ref = data.get("profile_data_ref")
+        if ref and isinstance(ref, str):
+            import os
+            import json
+            if os.path.exists(ref):
+                try:
+                    with open(ref, "r") as f:
+                        file_payload = json.load(f)
+                        if isinstance(file_payload, dict):
+                            def merge_dict(target: dict, source: dict) -> None:
+                                for k, v in source.items():
+                                    if k not in target or target[k] in ([], {}, None, ""):
+                                        target[k] = v
+                                    elif isinstance(target[k], dict) and isinstance(v, dict):
+                                        merge_dict(target[k], v)
+                            merge_dict(data, file_payload)
+                except Exception:
+                    pass
         return data
 
     def dispatch_agentic_tool(self, payload: dict) -> dict:

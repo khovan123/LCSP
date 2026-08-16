@@ -1,4 +1,5 @@
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
 
 import {
   AUDIT_ACTOR_IDS,
@@ -65,9 +66,28 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
   async execute(
     command: AcceptTechnicalProfileCommand,
   ): Promise<TechnicalProfileCallbackDto> {
-    this.validate(command);
-
     const payload = command.payload;
+    if (payload?.profile_data && typeof payload.profile_data === "object") {
+      const ref = (payload.profile_data as Record<string, unknown>).profile_data_ref;
+      if (typeof ref === "string" && ref) {
+        try {
+          if (fs.existsSync(ref)) {
+            const fileContent = fs.readFileSync(ref, "utf8");
+            const fileData = JSON.parse(fileContent) as Record<string, unknown>;
+            if (fileData && typeof fileData === "object") {
+              payload.profile_data = {
+                ...fileData,
+                ...payload.profile_data,
+              };
+            }
+          }
+        } catch (error) {
+          // ignore
+        }
+      }
+    }
+
+    this.validate(command);
     const evidenceReport = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
         id: payload.evidence_report_id,

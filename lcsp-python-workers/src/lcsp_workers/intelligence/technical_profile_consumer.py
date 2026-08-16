@@ -72,12 +72,34 @@ class TechnicalProfileConsumer(ConsumerBase):
         )
         profile_data = profile.to_profile_data()
         profile_data["engineering_investigation"] = investigation.to_profile_data()
+
+        # Write full profile_data to /tmp/lcsp-technical-profile-data-{evidence_report_id}.json
+        ref_path = f"/tmp/lcsp-technical-profile-data-{profile.evidence_report_id}.json"
+        import json
+        try:
+            with open(ref_path, "w") as f:
+                json.dump(profile_data, f)
+        except Exception:
+            pass
+
+        minimized_profile_data = {
+            **profile_data,
+            "external_integrations": [],
+            "business_actions": [],
+            "dependency_licenses": [],
+            "engineering_investigation": {
+                **profile_data.get("engineering_investigation", {}),
+                "claims": [],
+            },
+            "profile_data_ref": ref_path,
+        }
+
         callback_payload = TechnicalProfileCallbackPayload(
             evidence_report_id=profile.evidence_report_id,
             assessment_id=profile.assessment_id,
             schema_version=profile.schema_version,
             provider_version=profile.provider_version,
-            profile_data=profile_data,
+            profile_data=minimized_profile_data,
             privacy_flags=profile.privacy_flags,
             scan_job_id=self._scan_job_id(evidence_report),
         )

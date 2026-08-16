@@ -105,4 +105,35 @@ describe("dev-unsafe-trace", () => {
 
     writeSpy.mockRestore();
   });
+
+  it("logs actual body size from content-length header and dynamic limit for technical profile callback", () => {
+    process.env.LCSP_DEV_UNSAFE_TRACE = "true";
+    process.env.LCSP_DEV_UNSAFE_UNFILTERED = "false";
+    process.env.NODE_ENV = "development";
+
+    const writeSpy = jest
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    emitDevUnsafeTrace("DEV_API_HTTP_REQUEST_RAW", {
+      originalUrl: "/internal/evidence/technical-profile-callback",
+      headers: {
+        "content-length": "3333740",
+      },
+      body: { some: "payload" },
+    });
+
+    expect(writeSpy).toHaveBeenCalled();
+    const logCall = writeSpy.mock.calls[0][0] as string;
+    const record = JSON.parse(logCall.trim()) as TraceRecord & {
+      body_limit?: number;
+      body_truncated?: boolean;
+    };
+
+    expect(record.body_size).toBe(3333740);
+    expect(record.body_limit).toBe(1048576);
+    expect(record.body_truncated).toBe(true);
+
+    writeSpy.mockRestore();
+  });
 });
