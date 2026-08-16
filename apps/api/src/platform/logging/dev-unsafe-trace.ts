@@ -239,9 +239,14 @@ function summarizeTraceFields(
 
     if (payloadKeys.includes(k)) {
       let size = 0;
-      if (k === "body" && fields.headers && typeof fields.headers === "object") {
+      if (
+        k === "body" &&
+        fields.headers &&
+        typeof fields.headers === "object"
+      ) {
         const headers = fields.headers as Record<string, unknown>;
-        const contentLength = headers["content-length"] ?? headers["Content-Length"];
+        const contentLength =
+          headers["content-length"] ?? headers["Content-Length"];
         if (contentLength !== undefined && contentLength !== null) {
           size = parseInt(String(contentLength), 10) || 0;
         }
@@ -269,8 +274,12 @@ function summarizeTraceFields(
         "DEV_API_HTTP_CLOSED_EARLY_RAW",
       ];
       if (httpEvents.includes(event)) {
-        const pathStr = String(fields.originalUrl ?? fields.path ?? fields.url ?? "");
-        const isTechnicalProfile = pathStr.includes("technical-profile-callback");
+        const pathStr = String(
+          fields.originalUrl ?? fields.path ?? fields.url ?? "",
+        );
+        const isTechnicalProfile = pathStr.includes(
+          "technical-profile-callback",
+        );
         const limit = isTechnicalProfile ? 1048576 : 52428800; // 1MB vs 50MB
         summary[`${k}_limit`] = limit;
         summary[`${k}_truncated`] = size > limit;

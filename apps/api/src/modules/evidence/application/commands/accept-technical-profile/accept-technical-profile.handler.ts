@@ -68,7 +68,7 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
   ): Promise<TechnicalProfileCallbackDto> {
     const payload = command.payload;
     if (payload?.profile_data && typeof payload.profile_data === "object") {
-      const ref = (payload.profile_data as Record<string, unknown>).profile_data_ref;
+      const ref = payload.profile_data.profile_data_ref;
       if (typeof ref === "string" && ref) {
         try {
           if (fs.existsSync(ref)) {
