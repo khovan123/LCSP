@@ -2,6 +2,7 @@
 
 import structlog
 from lcsp_workers.platform.correlation import get_correlationId
+from lcsp_workers.platform.dev_unsafe_trace import unsafe_dev_trace_enabled
 from lcsp_workers.platform.redaction import redact_dict
 
 
@@ -23,14 +24,22 @@ def _inject_correlationId(logger, method_name, event_dict):
 def _redact_secrets(logger, method_name, event_dict):
     """Remove configured secret values before a log event is rendered.
 
+    ``LCSP_DEV_UNSAFE_TRACE=true`` deliberately disables this log-rendering
+    redaction in non-production environments so local developers can inspect
+    exact payloads. Runtime persistence/callback privacy controls are separate
+    and remain active.
+
     Args:
         logger: Structlog logger invoking the processor.
         method_name: Logging method name supplied by structlog.
         event_dict: Structured event payload to sanitize.
 
     Returns:
-        A redacted copy of the event payload.
+        A redacted copy normally, or the original event in explicitly unsafe
+        development tracing mode.
     """
+    if unsafe_dev_trace_enabled():
+        return event_dict
     return redact_dict(event_dict)
 
 
@@ -38,12 +47,15 @@ def configure_logging(level: str = "INFO") -> None:
     """Configure JSON logging for worker processes.
 
     Correlation enrichment and secret redaction run before log-level and
-    rendering processors so downstream logs remain traceable without exposing
-    sensitive values.
+    rendering processors. Raw development tracing can explicitly disable log
+    redaction but is rejected when ``NODE_ENV=production``.
 
     Args:
         level: Minimum log level accepted by the bound logger.
     """
+    # Evaluate once during configuration so an unsafe production combination
+    # fails at process startup rather than after the first diagnostic event.
+    unsafe_dev_trace_enabled()
     structlog.configure(
         processors=[
             _inject_correlationId,
