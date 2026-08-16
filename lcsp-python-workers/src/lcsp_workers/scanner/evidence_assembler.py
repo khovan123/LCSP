@@ -146,7 +146,7 @@ class EvidenceAssembler:
             "package_dependencies": [
                 asdict(package) for package in (package_dependencies or [])
             ],
-            "python_analysis": asdict(python_analysis) if python_analysis else None,
+            "python_analysis": self._persistable_python_analysis(python_analysis),
             "ts_js_analysis": asdict(ts_js_analysis) if ts_js_analysis else None,
             "technical_findings": [
                 asdict(finding) for finding in (technical_findings or [])
@@ -195,6 +195,30 @@ class EvidenceAssembler:
             status=status,
             error_code=error_code,
         )
+
+    @staticmethod
+    def _persistable_python_analysis(
+        python_analysis: PythonAnalysisResult | None,
+    ) -> dict | None:
+        """Serialize Python analysis without treating source identifiers as JSON field names.
+
+        ``import_map`` is keyed by repository-controlled local identifiers. A valid alias
+        such as ``secret`` or ``token`` is semantic source metadata, not a persisted
+        credential field. Persist those bindings as records so the privacy boundary can
+        continue to reject actual forbidden schema keys without erasing useful semantics.
+        """
+        if python_analysis is None:
+            return None
+        payload = asdict(python_analysis)
+        import_map = payload.pop("import_map", {})
+        payload["import_bindings"] = [
+            {
+                "local_name": str(local_name),
+                "package": str(package_name),
+            }
+            for local_name, package_name in sorted(import_map.items())
+        ]
+        return payload
 
     @staticmethod
     def _report_provenance(
