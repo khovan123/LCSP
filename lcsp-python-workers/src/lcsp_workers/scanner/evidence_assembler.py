@@ -210,6 +210,39 @@ class EvidenceAssembler:
         }
         self._assert_safe_payload(evidence_payload)
 
+        # Move/summarize large graph payload if present
+        if evidence_graph:
+            full_graph_dict = evidence_graph.to_dict()
+            graph_id = full_graph_dict.get("graph_id") or "unknown"
+            ref_path = f"/tmp/lcsp-evidence-graph-{graph_id}.json"
+            
+            import json
+            try:
+                with open(ref_path, "w") as f:
+                    json.dump(full_graph_dict, f)
+            except Exception:
+                pass
+                
+            evidence_payload["evidence_graph"] = {
+                "graph_id": graph_id,
+                "snapshot_id": full_graph_dict.get("snapshot_id"),
+                "commit_sha": full_graph_dict.get("commit_sha"),
+                "node_count": full_graph_dict.get("node_count"),
+                "edge_count": full_graph_dict.get("edge_count"),
+                "graph_hash": full_graph_dict.get("graph_hash"),
+                "schema_version": full_graph_dict.get("schema_version"),
+                "coverage_state": full_graph_dict.get("coverage_state"),
+                "coverage_notes": full_graph_dict.get("coverage_notes"),
+                "provenance": full_graph_dict.get("provenance"),
+                "evidence_refs": full_graph_dict.get("evidence_refs"),
+                "unresolved_frontiers": full_graph_dict.get("unresolved_frontiers"),
+                "nodes": [],
+                "edges": [],
+                "source_anchors": [],
+                "indexes": {},
+                "evidence_graph_ref": ref_path,
+            }
+
         privacy_flags = PrivacyFlags(
             contains_source_code=False,
             secrets_redacted=True,

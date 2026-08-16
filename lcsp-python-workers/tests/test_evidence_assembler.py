@@ -320,10 +320,21 @@ def test_t09_serializes_sanitized_versioned_program_evidence_graph() -> None:
     assert graph_payload["snapshot_id"] == "snapshot-1"
     assert graph_payload["commit_sha"] == "abc123"
     assert graph_payload["graph_hash"].startswith("sha256:")
-    assert graph_payload["source_anchors"]
+    
+    # MINIMIZED callback payload fields to prevent 413 Request Entity Too Large
+    assert not graph_payload["source_anchors"]
+    assert not graph_payload["nodes"]
+    assert graph_payload["evidence_graph_ref"]
+
+    # Resolution checks: ProgramEvidenceGraph.from_dict correctly loads data from the ref file
+    from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
+    loaded_graph = ProgramEvidenceGraph.from_dict(graph_payload)
+    assert loaded_graph.source_anchors
+    assert loaded_graph.nodes
     assert "evidence:finding-1" in next(
-        node for node in graph_payload["nodes"] if node["node_type"] == "FILE"
+        node for node in loaded_graph.to_dict()["nodes"] if node["node_type"] == "FILE"
     )["evidence_refs"]
+
     serialized = str(graph_payload).lower()
     assert "raw_source" not in serialized
     assert "full_ast" not in serialized

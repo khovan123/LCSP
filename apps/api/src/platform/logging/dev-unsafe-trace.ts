@@ -25,14 +25,31 @@ export function unsafeDevTraceEnabled(): boolean {
 }
 
 /**
- * Emits one unredacted JSON-line diagnostic record to stderr in unsafe dev mode.
+ * Returns whether unfiltered, fully raw development tracing is enabled.
  *
- * No field-name filtering, source-code stripping, token masking, or truncation is
- * performed here. Circular/non-JSON runtime objects are represented safely so the
- * tracing path cannot accidentally break the application request path.
+ * Gated behind LCSP_DEV_UNSAFE_UNFILTERED. Must never be enabled in production.
+ */
+export function unsafeDevUnfilteredEnabled(): boolean {
+  const enabled = TRUE_VALUES.has(
+    (process.env.LCSP_DEV_UNSAFE_UNFILTERED ?? "").trim().toLowerCase(),
+  );
+  if (!enabled) {
+    return false;
+  }
+  if ((process.env.NODE_ENV ?? "").trim().toLowerCase() === "production") {
+    throw new Error(
+      "LCSP_DEV_UNSAFE_UNFILTERED must never be enabled with NODE_ENV=production",
+    );
+  }
+  return true;
+}
+
+/**
+ * Emits one JSON-line diagnostic record to stderr in dev mode.
+ * Summarized and redacted by default, or fully raw if LCSP_DEV_UNSAFE_UNFILTERED is active.
  *
  * @param event - Stable diagnostic event name.
- * @param fields - Exact diagnostic values to serialize without redaction.
+ * @param fields - Exact diagnostic values to serialize.
  */
 export function emitDevUnsafeTrace(
   event: string,
@@ -42,12 +59,25 @@ export function emitDevUnsafeTrace(
     return;
   }
 
-  const record = {
-    timestamp: new Date().toISOString(),
-    level: "UNSAFE_DEV_TRACE",
-    event,
-    ...fields,
-  };
+  let record: Record<string, unknown>;
+
+  if (unsafeDevUnfilteredEnabled()) {
+    record = {
+      timestamp: new Date().toISOString(),
+      level: "UNSAFE_DEV_TRACE",
+      event,
+      ...fields,
+    };
+  } else {
+    const summarizedEvent = event.endsWith("_RAW") ? event.slice(0, -4) : event;
+    const summarizedFields = summarizeTraceFields(event, fields);
+    record = {
+      timestamp: new Date().toISOString(),
+      level: "UNSAFE_DEV_TRACE",
+      event: summarizedEvent,
+      ...summarizedFields,
+    };
+  }
 
   try {
     process.stderr.write(`${safeStringify(record)}\n`);
@@ -62,6 +92,140 @@ export function emitDevUnsafeTrace(
       })}\n`,
     );
   }
+}
+
+function findIdRecursive(data: unknown, keys: Set<string>, seen = new WeakSet<object>()): any {
+  if (!data || typeof data !== "object") return undefined;
+  if (seen.has(data)) return undefined;
+  seen.add(data);
+  
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const res = findIdRecursive(item, keys, seen);
+      if (res !== undefined) return res;
+    }
+  } else {
+    const record = data as Record<string, unknown>;
+    for (const k of Object.keys(record)) {
+      const v = record[k];
+      if (keys.has(k) && (typeof v === "string" || typeof v === "number")) {
+        return v;
+      }
+      const res = findIdRecursive(v, keys, seen);
+      if (res !== undefined) return res;
+    }
+  }
+  return undefined;
+}
+
+function findCountRecursive(data: unknown, targetKey: string, seen = new WeakSet<object>()): number | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  if (seen.has(data)) return undefined;
+  seen.add(data);
+  
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const res = findCountRecursive(item, targetKey, seen);
+      if (res !== undefined) return res;
+    }
+  } else {
+    const record = data as Record<string, unknown>;
+    for (const k of Object.keys(record)) {
+      const v = record[k];
+      if (k === targetKey) {
+        if (v && typeof v === "object") {
+          return Array.isArray(v) ? v.length : Object.keys(v).length;
+        }
+      }
+      const res = findCountRecursive(v, targetKey, seen);
+      if (res !== undefined) return res;
+    }
+  }
+  return undefined;
+}
+
+function summarizeTraceFields(event: string, fields: Record<string, unknown>): Record<string, unknown> {
+  const summary: Record<string, unknown> = {};
+  
+  const idKeys = new Set(["scan_job_id", "scanJobId", "snapshot_id", "snapshotId", "snapshot_ref", "snapshotRef", "corpus_version_id", "corpusVersionId", "assessment_id", "assessmentId", "workflow_run_id", "workflowRunId"]);
+  const scanJobId = findIdRecursive(fields, new Set(["scan_job_id", "scanJobId"]));
+  const snapshotId = findIdRecursive(fields, new Set(["snapshot_id", "snapshotId"]));
+  const snapshotRef = findIdRecursive(fields, new Set(["snapshot_ref", "snapshotRef"]));
+  const corpusVersionId = findIdRecursive(fields, new Set(["corpus_version_id", "corpusVersionId"]));
+  const assessmentId = findIdRecursive(fields, new Set(["assessment_id", "assessmentId"]));
+  const workflowRunId = findIdRecursive(fields, new Set(["workflow_run_id", "workflowRunId"]));
+  
+  if (scanJobId !== undefined) summary["scan_job_id"] = scanJobId;
+  if (snapshotId !== undefined) summary["snapshot_id"] = snapshotId;
+  if (snapshotRef !== undefined) summary["snapshot_ref"] = snapshotRef;
+  if (corpusVersionId !== undefined) summary["corpus_version_id"] = corpusVersionId;
+  if (assessmentId !== undefined) summary["assessment_id"] = assessmentId;
+  if (workflowRunId !== undefined) summary["workflow_run_id"] = workflowRunId;
+
+  let nodeCount = findCountRecursive(fields, "nodes");
+  let edgeCount = findCountRecursive(fields, "edges");
+  
+  if ("node_count" in fields) nodeCount = fields["node_count"] as number;
+  else if ("nodeCount" in fields) nodeCount = fields["nodeCount"] as number;
+  
+  if ("edge_count" in fields) edgeCount = fields["edge_count"] as number;
+  else if ("edgeCount" in fields) edgeCount = fields["edgeCount"] as number;
+  
+  if (nodeCount !== undefined) summary["node_count"] = nodeCount;
+  if (edgeCount !== undefined) summary["edge_count"] = edgeCount;
+
+  const sensitiveKeys = ["api_key", "secret", "token", "password", "authorization", "x-worker-api-key", "cookie", "set-cookie"];
+  const payloadKeys = ["payload", "body", "result", "results", "tool_input", "response", "params", "headers", "rawHeaders", "cookies", "signedCookies", "responseHeaders", "responseBody"];
+  
+  for (const k of Object.keys(fields)) {
+    const v = fields[k];
+    
+    if (sensitiveKeys.some(secKey => k.toLowerCase().includes(secKey))) {
+      summary[k] = "[REDACTED]";
+      continue;
+    }
+    
+    if (payloadKeys.includes(k)) {
+      let size = 0;
+      if (typeof v === "string") {
+        size = v.length;
+      } else if (Buffer.isBuffer(v)) {
+        size = v.length;
+      } else {
+        try {
+          size = JSON.stringify(v).length;
+        } catch {
+          size = String(v).length;
+        }
+      }
+      summary[`${k}_size`] = size;
+      
+      const httpEvents = ["DEV_API_HTTP_REQUEST_RAW", "DEV_API_HTTP_RESPONSE_JSON_RAW", "DEV_API_HTTP_RESPONSE_SEND_RAW", "DEV_API_HTTP_COMPLETED_RAW", "DEV_API_HTTP_CLOSED_EARLY_RAW"];
+      if (httpEvents.includes(event)) {
+        const limit = 52428800; // 50MB limit
+        summary[`${k}_limit`] = limit;
+        summary[`${k}_truncated`] = size > limit;
+      }
+      
+      let count: number | undefined = undefined;
+      if (v && typeof v === "object") {
+        count = Array.isArray(v) ? v.length : Object.keys(v).length;
+      }
+      if (count !== undefined) {
+        summary[`${k}_itemCount`] = count;
+      }
+      continue;
+    }
+    
+    const safeKeys = ["method", "originalUrl", "url", "baseUrl", "path", "protocol", "hostname", "ip", "ips", "statusCode", "durationMs", "dispatcher", "tool_name", "runtime_target", "downstream_target", "worker", "queue_name", "routing_key", "attempts", "max_tool_calls", "operation", "provider", "model"];
+    if (safeKeys.includes(k) || typeof v === "boolean" || typeof v === "number" || v === null) {
+      summary[k] = v;
+    } else if (typeof v === "string" && v.length < 256) {
+      summary[k] = v;
+    }
+  }
+  
+  return summary;
 }
 
 function safeStringify(value: unknown): string {

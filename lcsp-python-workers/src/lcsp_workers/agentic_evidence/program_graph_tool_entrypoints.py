@@ -13,6 +13,19 @@ def _graph(request: AgenticToolRequest, context) -> tuple[ProgramGraphQueryEngin
     if isinstance(evidence, dict) and "evidence_payload" in evidence: evidence = evidence["evidence_payload"]
     graph = evidence.get("evidence_graph") or evidence.get("program_evidence_graph") or evidence.get("programEvidenceGraph") if isinstance(evidence, dict) else None
     if not isinstance(graph, dict): raise ValueError("PROGRAM_EVIDENCE_GRAPH_NOT_AVAILABLE")
+    
+    import json
+    import os
+    ref = graph.get("evidence_graph_ref") or graph.get("evidenceGraphRef")
+    if ref and isinstance(ref, str) and os.path.exists(ref):
+        try:
+            with open(ref, "r") as f:
+                file_payload = json.load(f)
+                if isinstance(file_payload, dict):
+                    graph = {**file_payload, **graph}
+        except Exception:
+            pass
+            
     return ProgramGraphQueryEngine(graph), report
 
 def _input(request: AgenticToolRequest, name: str, default=None): return request.input.get(name, default)

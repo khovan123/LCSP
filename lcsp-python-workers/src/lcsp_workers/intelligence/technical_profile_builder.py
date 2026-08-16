@@ -100,7 +100,20 @@ class TechnicalProfileBuilder:
 
     def _program_graph(self, evidence_payload: dict[str, Any]) -> dict[str, Any]:
         value = evidence_payload.get("evidence_graph") or evidence_payload.get("program_evidence_graph") or evidence_payload.get("programEvidenceGraph")
-        return value if isinstance(value, dict) else {}
+        if isinstance(value, dict):
+            import json
+            import os
+            ref = value.get("evidence_graph_ref") or value.get("evidenceGraphRef")
+            if ref and isinstance(ref, str) and os.path.exists(ref):
+                try:
+                    with open(ref, "r") as f:
+                        file_payload = json.load(f)
+                        if isinstance(file_payload, dict):
+                            return {**file_payload, **value}
+                except Exception:
+                    pass
+            return value
+        return {}
 
     def _graph_summary(self, graph: dict[str, Any]) -> dict[str, Any]:
         nodes = [node for node in graph.get("nodes") or [] if isinstance(node, dict)]

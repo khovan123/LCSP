@@ -77,6 +77,20 @@ class ProgramEvidenceGraph:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "ProgramEvidenceGraph":
+        import json
+        import os
+        ref = payload.get("evidence_graph_ref") or payload.get("evidenceGraphRef")
+        if ref and isinstance(ref, str) and os.path.exists(ref):
+            try:
+                with open(ref, "r") as f:
+                    file_payload = json.load(f)
+                    if isinstance(file_payload, dict):
+                        for k, v in file_payload.items():
+                            if k not in payload or payload[k] in ([], {}, None, ""):
+                                payload[k] = v
+            except Exception:
+                pass
+
         def pick(snake: str, camel: str, default=None):
             value = payload.get(snake)
             return payload.get(camel, default) if value is None else value
