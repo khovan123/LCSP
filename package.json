@@ -23,6 +23,8 @@
     "test": "pnpm run test:web && pnpm --filter @lcsp/api test:e2e",
     "test:web": "node --test tests/*.web.test.ts apps/web/tests/*.test.ts",
     "typecheck": "pnpm --filter @lcsp/api prisma:generate && pnpm exec tsc -b",
+    "seed:legal-corpus:dev:dry": "PYTHONPATH=lcsp-python-workers/src lcsp-python-workers/.venv/bin/python ./scripts/seed_legal_corpus_dev.py --dry-run",
+    "seed:legal-corpus:dev": "PYTHONPATH=lcsp-python-workers/src lcsp-python-workers/.venv/bin/python ./scripts/seed_legal_corpus_dev.py",
     "seed:rules:dry": "PYTHONPATH=lcsp-python-workers/src lcsp-python-workers/.venv/bin/python ./scripts/import_lcsp_precompiled_engineering_rules.py --bundle ./reports/legal-corpus-ocr/lcsp-precompiled-engineering-rules-vn-2026-08.json --dry-run",
     "seed:rules": "PYTHONPATH=lcsp-python-workers/src lcsp-python-workers/.venv/bin/python ./scripts/import_lcsp_precompiled_engineering_rules.py --bundle ./reports/legal-corpus-ocr/lcsp-precompiled-engineering-rules-vn-2026-08.json"
   },
