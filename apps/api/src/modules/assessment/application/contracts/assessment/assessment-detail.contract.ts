@@ -46,6 +46,32 @@ export interface VerifiedProfileReviewDto {
   approved_by_id: string | null;
 }
 
+export interface LegalRuleEvaluationDiagnosticDto {
+  rule_id: string;
+  status: string;
+  rationale: string[];
+  matched_required_facts: string[];
+  blocking_facts: string[];
+}
+
+export interface LegalRuleMatchDiagnosticsDto {
+  no_match_reason: string | null;
+  rule_count: number | null;
+  candidate_rule_count: number | null;
+  chunk_count: number | null;
+  deterministic_match_count: number | null;
+  matched_without_citation_count: number | null;
+  match_count: number | null;
+  profile_fact_fields: string[];
+  profile_evidence_fields: string[];
+  evaluations: LegalRuleEvaluationDiagnosticDto[];
+  evaluations_truncated: boolean;
+  verified_profile_id: string;
+  corpus_version_id: string;
+  legal_rule_catalog_version_id: string;
+  snapshot_id: string | null;
+}
+
 export interface AssessmentDetailDto {
   assessment_id: string;
   name: string;
@@ -56,6 +82,7 @@ export interface AssessmentDetailDto {
   readiness_state: ReadinessState;
   guardrail_status: ClassificationGuardrailStatus | null;
   legal_rule_match_guardrail_status: LegalRuleMatchGuardrailStatus | null;
+  legal_rule_match_diagnostics: LegalRuleMatchDiagnosticsDto | null;
   classification_result: ClassificationResultSummaryDto | null;
   verified_profile_review: VerifiedProfileReviewDto | null;
   can_rerun_classification: boolean;
