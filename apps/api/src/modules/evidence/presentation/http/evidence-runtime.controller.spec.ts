@@ -30,12 +30,24 @@ function buildAgenticController() {
     .fn<(query?: unknown) => Promise<{ status: string }>>()
     .mockResolvedValue({ status: "READY" });
   const runtimeEvents = {
-    recordRunStartedIfMissing: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    recordRunStageChangedIfNeeded: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    recordToolStarted: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    recordToolCompleted: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    recordToolWaitingInput: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
-    recordToolFailed: jest.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    recordRunStartedIfMissing: jest
+      .fn<() => Promise<void>>()
+      .mockResolvedValue(undefined),
+    recordRunStageChangedIfNeeded: jest
+      .fn<() => Promise<void>>()
+      .mockResolvedValue(undefined),
+    recordToolStarted: jest
+      .fn<() => Promise<void>>()
+      .mockResolvedValue(undefined),
+    recordToolCompleted: jest
+      .fn<() => Promise<void>>()
+      .mockResolvedValue(undefined),
+    recordToolWaitingInput: jest
+      .fn<() => Promise<void>>()
+      .mockResolvedValue(undefined),
+    recordToolFailed: jest
+      .fn<() => Promise<void>>()
+      .mockResolvedValue(undefined),
   };
   const controller = new InternalAgenticToolDispatchController(
     { execute } as never,

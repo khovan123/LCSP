@@ -39,7 +39,9 @@ function buildHandler(
     outboxMessage,
     authAuditEvent,
     $transaction: jest.fn((handler: (tx: any) => unknown) =>
-      Promise.resolve(handler({ technicalProfile, outboxMessage, authAuditEvent })),
+      Promise.resolve(
+        handler({ technicalProfile, outboxMessage, authAuditEvent }),
+      ),
     ),
   };
   const storageService = {
