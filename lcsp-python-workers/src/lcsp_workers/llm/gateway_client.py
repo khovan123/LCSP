@@ -142,12 +142,14 @@ class LLMGatewayClient:
             api_key: Provider credential used only by the SDK client.
             model: Provider model identifier.
             budget_tracker: Shared/process-local budget enforcement adapter.
-            max_tokens_per_call: Default maximum output tokens for one call.
+            max_tokens_per_call: Hard maximum output tokens for one call.
             timeout_seconds: Provider request timeout.
 
         Raises:
-            ValueError: If the provider is unsupported.
+            ValueError: If the provider is unsupported or the token limit is invalid.
         """
+        if max_tokens_per_call < 1:
+            raise ValueError("max_tokens_per_call must be >= 1")
         self.provider = provider.lower()
         self.api_key = api_key
         self.model = model
@@ -190,7 +192,7 @@ class LLMGatewayClient:
             prompt: Structured prompt that must pass source-code safety checks.
             workflow_run_id: Workflow identifier propagated to provider metadata.
             node_name: Graph/orchestration node issuing the call.
-            max_tokens: Optional output-token override bounded by caller policy.
+            max_tokens: Optional output-token request bounded by max_tokens_per_call.
             correlationId: Optional end-to-end trace identifier.
 
         Returns:
@@ -440,9 +442,12 @@ class LLMGatewayClient:
             raise ValueError("node_name is required")
 
         check_prompt_safety(prompt)
-        max_tokens_to_use = (
+        requested_max_tokens = (
             max_tokens if max_tokens is not None else self.max_tokens_per_call
         )
+        if requested_max_tokens < 1:
+            raise ValueError("max_tokens must be >= 1")
+        max_tokens_to_use = min(requested_max_tokens, self.max_tokens_per_call)
         safe_prompt = redact_string(prompt)
         est_input = estimate_tokens(safe_prompt)
         est_cost_pre = estimate_cost(self.model, est_input, max_tokens_to_use)
