@@ -42,11 +42,17 @@ import { AuditWriterService } from "../../../../../platform/audit/audit-writer.s
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
 import { problemResult } from "../../../../../platform/problems/problem-factory.js";
 import { AssessmentRuntimeEventService } from "../../../../../platform/runtime-events/assessment-runtime-event.service.js";
-import type { LegalRuleMatchCallbackResponseDto } from "../../contracts/classification/legal-rule-match-callback.contract.js";
+import type {
+  LegalRuleEvaluationDiagnosticDto,
+  LegalRuleMatchCallbackResponseDto,
+  LegalRuleMatchDiagnosticsDto,
+} from "../../contracts/classification/legal-rule-match-callback.contract.js";
 import { CitationGuardrailService } from "../../services/classification/citation-guardrail.service.js";
 import { AcceptLegalRuleMatchCommand } from "./accept-legal-rule-match.command.js";
 
 const LEGAL_WORKER_ACTOR_ID = AUDIT_ACTOR_IDS.legalRuleMatchWorker;
+const MAX_DIAGNOSTIC_EVALUATIONS = 50;
+const MAX_DIAGNOSTIC_STRINGS = 100;
 
 @CommandHandler(AcceptLegalRuleMatchCommand)
 export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalRuleMatchCommand> {
@@ -123,11 +129,14 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
       command.correlationId,
     );
 
+    const diagnostics = normalizeDiagnostics(payload.diagnostics);
     const isMatchesEmpty = payload.matches.length === 0;
     const guardrailStatus = isMatchesEmpty
       ? LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.blocked
       : LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed;
-    const blockedReason = isMatchesEmpty ? "NO_CITATION_BASIS" : null;
+    const blockedReason = isMatchesEmpty
+      ? diagnostics.no_match_reason ?? "NO_CITATION_BASIS"
+      : null;
     const overallCoverageStatus = isMatchesEmpty
       ? OVERALL_COVERAGE_STATUSES.noCitation
       : payload.overall_coverage_status;
@@ -173,6 +182,7 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
         legalRuleMatchId,
         guardrailStatus,
         blockedReason,
+        diagnostics,
       );
     });
 
@@ -194,6 +204,7 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
         matchCount: payload.matches.length,
         guardrailStatus,
         coverageStatus: overallCoverageStatus,
+        diagnostics,
       },
       completedAt: new Date(),
     });
@@ -277,6 +288,7 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
     legalRuleMatchId: string,
     guardrailStatus: string,
     blockedReason: string | null,
+    diagnostics: LegalRuleMatchDiagnosticsDto,
   ): Promise<void> {
     const isPassed =
       guardrailStatus === LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed;
@@ -324,6 +336,9 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
             assessmentId: verifiedProfile.assessmentId,
             guardrailStatus,
             blockedReason,
+            ruleCount: diagnostics.rule_count,
+            candidateRuleCount: diagnostics.candidate_rule_count,
+            matchCount: diagnostics.match_count,
             correlationId: command.correlationId,
           },
         },
@@ -337,6 +352,73 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
       status: HttpStatus.BAD_REQUEST,
     });
   }
+}
+
+function normalizeDiagnostics(value: unknown): LegalRuleMatchDiagnosticsDto {
+  const input = isRecord(value) ? value : {};
+  const evaluations = Array.isArray(input.evaluations)
+    ? input.evaluations
+        .slice(0, MAX_DIAGNOSTIC_EVALUATIONS)
+        .map(normalizeEvaluation)
+        .filter(
+          (item): item is LegalRuleEvaluationDiagnosticDto => item !== null,
+        )
+    : [];
+
+  return {
+    no_match_reason: clean(input.no_match_reason),
+    rule_count: nonNegativeInteger(input.rule_count),
+    candidate_rule_count: nonNegativeInteger(input.candidate_rule_count),
+    chunk_count: nonNegativeInteger(input.chunk_count),
+    deterministic_match_count: nonNegativeInteger(
+      input.deterministic_match_count,
+    ),
+    matched_without_citation_count: nonNegativeInteger(
+      input.matched_without_citation_count,
+    ),
+    match_count: nonNegativeInteger(input.match_count),
+    profile_fact_fields: cleanStringList(input.profile_fact_fields),
+    profile_evidence_fields: cleanStringList(input.profile_evidence_fields),
+    evaluations,
+    evaluations_truncated: input.evaluations_truncated === true,
+  };
+}
+
+function normalizeEvaluation(
+  value: unknown,
+): LegalRuleEvaluationDiagnosticDto | null {
+  if (!isRecord(value)) return null;
+  const ruleId = clean(value.rule_id);
+  const status = clean(value.status);
+  if (!ruleId || !status) return null;
+  return {
+    rule_id: ruleId,
+    status,
+    rationale: cleanStringList(value.rationale),
+    matched_required_facts: cleanStringList(value.matched_required_facts),
+    blocking_facts: cleanStringList(value.blocking_facts),
+  };
+}
+
+function cleanStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value
+        .slice(0, MAX_DIAGNOSTIC_STRINGS)
+        .map(clean)
+        .filter((item): item is string => item !== null),
+    ),
+  ];
+}
+
+function nonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    Number.isSafeInteger(value)
+    ? value
+    : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
