@@ -52,6 +52,7 @@ import { AcceptLegalRuleMatchCommand } from "./accept-legal-rule-match.command.j
 
 const LEGAL_WORKER_ACTOR_ID = AUDIT_ACTOR_IDS.legalRuleMatchWorker;
 const MAX_DIAGNOSTIC_EVALUATIONS = 50;
+const MAX_RUNTIME_DIAGNOSTIC_EVALUATIONS = 12;
 const MAX_DIAGNOSTIC_STRINGS = 100;
 
 @CommandHandler(AcceptLegalRuleMatchCommand)
@@ -186,6 +187,7 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
       );
     });
 
+    const runtimeEvaluations = toRuntimeEvaluations(diagnostics.evaluations);
     await this.runtimeEvents.recordToolCompleted({
       organizationId: verifiedProfile.organizationId,
       assessmentId: verifiedProfile.assessmentId,
@@ -205,6 +207,11 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
         guardrailStatus,
         coverageStatus: overallCoverageStatus,
         diagnostics,
+        ruleEvaluations: runtimeEvaluations,
+        evaluationsTruncated:
+          diagnostics.evaluations_truncated === true ||
+          (diagnostics.evaluations?.length ?? 0) >
+            MAX_RUNTIME_DIAGNOSTIC_EVALUATIONS,
       },
       completedAt: new Date(),
     });
@@ -398,6 +405,20 @@ function normalizeEvaluation(
     matched_required_facts: cleanStringList(value.matched_required_facts),
     blocking_facts: cleanStringList(value.blocking_facts),
   };
+}
+
+function toRuntimeEvaluations(
+  evaluations: LegalRuleEvaluationDiagnosticDto[] | undefined,
+) {
+  return (evaluations ?? [])
+    .slice(0, MAX_RUNTIME_DIAGNOSTIC_EVALUATIONS)
+    .map((evaluation) => ({
+      ruleId: evaluation.rule_id,
+      status: evaluation.status,
+      rationale: evaluation.rationale.join(" | "),
+      matchedRequiredFacts: evaluation.matched_required_facts.join(" | "),
+      blockingFacts: evaluation.blocking_facts.join(" | "),
+    }));
 }
 
 function cleanStringList(value: unknown): string[] {
