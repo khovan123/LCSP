@@ -11,6 +11,7 @@ import {
   WIZARD_STATUS_CODES,
   type AssessmentNextActionKey,
 } from "@lcsp/contracts/assessment";
+import { LEGAL_RULE_LIFECYCLE_STATUSES } from "@lcsp/contracts/legal-rule-catalog";
 import {
   CLASSIFICATION_RESULT_STATUSES,
   LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
@@ -18,8 +19,8 @@ import {
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
   VERIFIED_PROFILE_STATUSES,
 } from "@lcsp/contracts/scan";
-import { LEGAL_RULE_LIFECYCLE_STATUSES } from "@lcsp/contracts/legal-rule-catalog";
 import { LegalRetrievalIndexStatus } from "@prisma/client";
+
 import {
   fromPrismaClassificationGuardrailStatus,
   fromPrismaVerifiedProfileStatus,
@@ -33,6 +34,8 @@ import { problemException } from "../../../../../platform/problems/problem-facto
 import type {
   AssessmentDetailDto,
   ClassificationResultSummaryDto,
+  LegalRuleEvaluationDiagnosticDto,
+  LegalRuleMatchDiagnosticsDto,
   ReadinessState,
   VerifiedProfileReviewDto,
   WizardStatus,
@@ -209,10 +212,24 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
               ),
               guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.blocked,
             },
-            select: { guardrailStatus: true },
+            select: {
+              guardrailStatus: true,
+              verifiedProfileId: true,
+              corpusVersionId: true,
+              legalRuleCatalogVersionId: true,
+              blockedReason: true,
+            },
             orderBy: { createdAt: "desc" },
           })
         : null;
+
+    const legalRuleMatchDiagnostics = latestBlockedLegalRuleMatch
+      ? await this.getLegalRuleMatchDiagnostics(
+          assessment.id,
+          assessment.organizationId,
+          latestBlockedLegalRuleMatch,
+        )
+      : null;
 
     return {
       assessment_id: assessment.id,
@@ -230,6 +247,7 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       legal_rule_match_guardrail_status: latestBlockedLegalRuleMatch
         ? LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.blocked
         : null,
+      legal_rule_match_diagnostics: legalRuleMatchDiagnostics,
       classification_result: classificationResult
         ? toClassificationResultSummary(classificationResult.classificationData)
         : null,
@@ -242,6 +260,59 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       updated_at: assessment.updatedAt.toISOString(),
       correlationId: query.correlationId,
     };
+  }
+
+  /**
+   * Reads the bounded legal retrieval diagnostics recorded for the blocked profile and attaches its pinned snapshot identity.
+   */
+  private async getLegalRuleMatchDiagnostics(
+    assessmentId: string,
+    organizationId: string,
+    legalRuleMatch: {
+      verifiedProfileId: string;
+      corpusVersionId: string;
+      legalRuleCatalogVersionId: string;
+      blockedReason: string | null;
+    },
+  ): Promise<LegalRuleMatchDiagnosticsDto> {
+    const [runtimeEvent, profile] = await Promise.all([
+      this.prisma.assessmentRuntimeEvent.findFirst({
+        where: {
+          assessmentId,
+          organizationId,
+          runId: classificationRunId(
+            assessmentId,
+            legalRuleMatch.verifiedProfileId,
+          ),
+          toolName: "legal_rule_match",
+        },
+        orderBy: { createdAt: "desc" },
+        select: { outputSummaryJson: true },
+      }),
+      this.prisma.verifiedProfile.findUnique({
+        where: { id: legalRuleMatch.verifiedProfileId },
+        select: { technicalEvidenceReportId: true },
+      }),
+    ]);
+
+    const report = profile?.technicalEvidenceReportId
+      ? await this.prisma.technicalEvidenceReport.findUnique({
+          where: { id: profile.technicalEvidenceReportId },
+          select: { snapshotId: true },
+        })
+      : null;
+    const output = isRecord(runtimeEvent?.outputSummaryJson)
+      ? runtimeEvent.outputSummaryJson
+      : {};
+    const diagnostics = isRecord(output.diagnostics) ? output.diagnostics : {};
+
+    return toLegalRuleMatchDiagnostics(diagnostics, {
+      noMatchReason: legalRuleMatch.blockedReason,
+      verifiedProfileId: legalRuleMatch.verifiedProfileId,
+      corpusVersionId: legalRuleMatch.corpusVersionId,
+      legalRuleCatalogVersionId: legalRuleMatch.legalRuleCatalogVersionId,
+      snapshotId: report?.snapshotId ?? null,
+    });
   }
 
   /**
@@ -403,6 +474,73 @@ function toVerifiedProfileReview(profile: {
     approved_at: profile.approvedAt?.toISOString() ?? null,
     approved_by_id: profile.approvedById,
   };
+}
+
+function toLegalRuleMatchDiagnostics(
+  value: Record<string, unknown>,
+  refs: {
+    noMatchReason: string | null;
+    verifiedProfileId: string;
+    corpusVersionId: string;
+    legalRuleCatalogVersionId: string;
+    snapshotId: string | null;
+  },
+): LegalRuleMatchDiagnosticsDto {
+  return {
+    no_match_reason: cleanString(value.no_match_reason) ?? refs.noMatchReason,
+    rule_count: nonNegativeInteger(value.rule_count),
+    candidate_rule_count: nonNegativeInteger(value.candidate_rule_count),
+    chunk_count: nonNegativeInteger(value.chunk_count),
+    deterministic_match_count: nonNegativeInteger(
+      value.deterministic_match_count,
+    ),
+    matched_without_citation_count: nonNegativeInteger(
+      value.matched_without_citation_count,
+    ),
+    match_count: nonNegativeInteger(value.match_count),
+    profile_fact_fields: stringArray(value.profile_fact_fields),
+    profile_evidence_fields: stringArray(value.profile_evidence_fields),
+    evaluations: recordArray(value.evaluations)
+      .map(toLegalRuleEvaluationDiagnostic)
+      .filter(
+        (item): item is LegalRuleEvaluationDiagnosticDto => item !== null,
+      ),
+    evaluations_truncated: value.evaluations_truncated === true,
+    verified_profile_id: refs.verifiedProfileId,
+    corpus_version_id: refs.corpusVersionId,
+    legal_rule_catalog_version_id: refs.legalRuleCatalogVersionId,
+    snapshot_id: refs.snapshotId,
+  };
+}
+
+function toLegalRuleEvaluationDiagnostic(
+  value: Record<string, unknown>,
+): LegalRuleEvaluationDiagnosticDto | null {
+  const ruleId = cleanString(value.rule_id);
+  const status = cleanString(value.status);
+  if (!ruleId || !status) return null;
+  return {
+    rule_id: ruleId,
+    status,
+    rationale: stringArray(value.rationale),
+    matched_required_facts: stringArray(value.matched_required_facts),
+    blocking_facts: stringArray(value.blocking_facts),
+  };
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0
+    ? value
+    : null;
+}
+
+function classificationRunId(
+  assessmentId: string,
+  verifiedProfileId: string,
+): string {
+  return `classification:${assessmentId}:${verifiedProfileId}`;
 }
 
 /**
