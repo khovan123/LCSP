@@ -115,3 +115,106 @@ def test_consumer_rejects_unapproved_verified_profile_before_legal_lookup():
         )
 
     assert api_client.calls == [("verified_profile", "vp-1")]
+
+
+def test_consumer_emits_blocked_reason_when_no_rule_matches():
+    """When no rules match the verified profile, blocked_reason must be logged."""
+
+    class DummyApiClientNoMatch(DummyApiClient):
+        def get_active_legal_rule_catalog(self):
+            self.calls.append(("catalog", None))
+            return {
+                "versionId": "catalog-v2",
+                "rules": [
+                    {
+                        "legalRuleId": "RULE-B",
+                        # Required fact that does NOT match the verified profile
+                        "requiredFacts": [
+                            {"field": "businessProcess", "expectedValue": "HUMAN_REVIEW"},
+                        ],
+                        "optionalFacts": [],
+                        "blockingFacts": [],
+                        "unknownFactPolicy": "BLOCK_ON_UNKNOWN",
+                        "citationLocatorRefs": [{"id": "chunk-1", "documentId": "doc-1", "locator": "art-1"}],
+                    }
+                ],
+            }
+
+    api_client = DummyApiClientNoMatch()
+    consumer = LegalRetrievalConsumer(DummyConfig(), api_client=api_client, retriever=DummyRetriever())
+
+    consumer.handle(
+        {
+            "verifiedProfileId": "vp-2",
+            "assessmentId": "assessment-2",
+            "corpusVersionId": "corpus-v1",
+        },
+        correlationId="corr-2",
+    )
+
+    callback_payload = next(call[1] for call in api_client.calls if call[0] == "callback")
+    # match_count must be 0 because the rule required HUMAN_REVIEW but profile has AUTOMATED_DECISION
+    assert len(callback_payload.matches) == 0
+    assert callback_payload.overall_coverage_status == "NO_CITATION"
+
+
+def test_consumer_emits_matched_rule_but_empty_citation_allowlist():
+    """When a rule matches but the retriever returns no valid citation chunks, it must be excluded."""
+
+    class EmptyAllowlistRetriever(DummyRetriever):
+        def build_citation_allowlist(self, chunks):
+            return {"allowlist": [], "repealed_chunk_ids": []}
+
+    api_client = DummyApiClient()
+    consumer = LegalRetrievalConsumer(
+        DummyConfig(), api_client=api_client, retriever=EmptyAllowlistRetriever()
+    )
+
+    consumer.handle(
+        {
+            "verifiedProfileId": "vp-3",
+            "assessmentId": "assessment-3",
+            "corpusVersionId": "corpus-v1",
+        },
+        correlationId="corr-3",
+    )
+
+    callback_payload = next(call[1] for call in api_client.calls if call[0] == "callback")
+    assert len(callback_payload.matches) == 0
+    assert callback_payload.overall_coverage_status == "NO_CITATION"
+
+
+def test_consumer_includes_rich_diagnostic_fields_in_callback_log(caplog):
+    """LEGAL_RULE_MATCH_CALLBACK_SUBMITTED must include verified_profile_id, catalog_id, chunk_count, match_count."""
+    import structlog
+    import logging
+
+    log_events: list[dict] = []
+
+    def capture_processor(logger, method_name, event_dict):
+        log_events.append(dict(event_dict))
+        return event_dict
+
+    structlog.configure(processors=[capture_processor, structlog.dev.ConsoleRenderer()])
+
+    api_client = DummyApiClient()
+    consumer = LegalRetrievalConsumer(DummyConfig(), api_client=api_client, retriever=DummyRetriever())
+
+    consumer.handle(
+        {
+            "verifiedProfileId": "vp-4",
+            "assessmentId": "assessment-4",
+            "corpusVersionId": "corpus-v4",
+        },
+        correlationId="corr-4",
+    )
+
+    callback_log = next(
+        (e for e in log_events if e.get("event") == "LEGAL_RULE_MATCH_CALLBACK_SUBMITTED"), None
+    )
+    assert callback_log is not None, "LEGAL_RULE_MATCH_CALLBACK_SUBMITTED was not emitted"
+    assert callback_log["verified_profile_id"] == "vp-4"
+    assert callback_log["catalog_id"] == "catalog-v1"
+    assert callback_log["corpus_version_id"] == "corpus-v4"
+    assert callback_log["chunk_count"] == 1
+    assert callback_log["match_count"] == 1

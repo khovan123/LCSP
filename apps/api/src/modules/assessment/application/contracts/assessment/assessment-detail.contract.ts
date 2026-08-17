@@ -7,7 +7,11 @@ import {
   type AssessmentNextActionKey,
   type AssessmentStatusCode,
 } from "@lcsp/contracts/assessment";
-import type { ClassificationGuardrailStatus } from "@lcsp/contracts/scan";
+import type {
+  ClassificationGuardrailStatus,
+  LegalRuleMatchGuardrailStatus,
+} from "@lcsp/contracts/scan";
+
 
 export type AssessmentDetailErrorCode =
   (typeof ASSESSMENT_DETAIL_ERROR_CODES)[keyof typeof ASSESSMENT_DETAIL_ERROR_CODES];
@@ -52,6 +56,7 @@ export interface AssessmentDetailDto {
   wizard_status: WizardStatus;
   readiness_state: ReadinessState;
   guardrail_status: ClassificationGuardrailStatus | null;
+  legal_rule_match_guardrail_status: LegalRuleMatchGuardrailStatus | null;
   classification_result: ClassificationResultSummaryDto | null;
   verified_profile_review: VerifiedProfileReviewDto | null;
   can_rerun_classification: boolean;
@@ -60,3 +65,4 @@ export interface AssessmentDetailDto {
   updated_at: string;
   correlationId: string;
 }
+

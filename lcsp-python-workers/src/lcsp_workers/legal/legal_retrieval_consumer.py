@@ -81,16 +81,27 @@ class LegalRetrievalConsumer(ConsumerBase):
             raise WorkerCallbackError("Verified profile is not approved.")
 
         legal_catalog = self._api_client.get_active_legal_rule_catalog()
+        catalog_id = str(legal_catalog.get("versionId") or legal_catalog.get("id") or "")
         corpus_index = self._api_client.get_legal_corpus_chunks(corpus_version_id)
-        self._retriever.index_corpus(corpus_version_id, corpus_index.get("chunks") or [])
+        corpus_chunks = corpus_index.get("chunks") or []
+        self._retriever.index_corpus(corpus_version_id, corpus_chunks)
+
+        rules = legal_catalog.get("rules", [])
+        rule_count = len(rules)
+        chunk_count = len(corpus_chunks)
 
         matches: list[dict[str, Any]] = []
-        for rule in legal_catalog.get("rules", []):
+        not_matched_reasons: list[str] = []
+
+        for rule in rules:
             result = self._evaluator.evaluate_rule(
                 rule=rule,
                 verified_profile=verified_profile,
             )
             if result.status != "MATCHED":
+                not_matched_reasons.append(
+                    f"rule={result.rule_id} status={result.status}"
+                )
                 continue
 
             citation_ids = []
@@ -98,12 +109,15 @@ class LegalRetrievalConsumer(ConsumerBase):
                 chunk_id = str(ref.get("id") or "")
                 if chunk_id:
                     citation_ids.append(chunk_id)
-            chunks = self._retriever.retrieve_exact(corpus_version_id, citation_ids)
-            citation_result = self._retriever.build_citation_allowlist(chunks)
+            citation_chunks = self._retriever.retrieve_exact(corpus_version_id, citation_ids)
+            citation_result = self._retriever.build_citation_allowlist(citation_chunks)
             allowlist = citation_result["allowlist"]
             if not allowlist:
+                not_matched_reasons.append(
+                    f"rule={result.rule_id} status=NO_CITATION_FOR_MATCHED_RULE"
+                )
                 continue
-            allowed_chunks = [chunk for chunk in chunks if chunk.id in allowlist]
+            allowed_chunks = [chunk for chunk in citation_chunks if chunk.id in allowlist]
             legal_statuses = {chunk.legal_status.upper() for chunk in allowed_chunks}
             if "REPEALED" in legal_statuses:
                 raise WorkerCallbackError("Repealed citation escaped the legal allowlist.")
@@ -114,7 +128,7 @@ class LegalRetrievalConsumer(ConsumerBase):
                 {
                     "match_id": f"{result.rule_id}:{verified_profile_id}",
                     "rule_id": result.rule_id,
-                    "legal_rule_catalog_version_id": legal_catalog.get("versionId") or legal_catalog.get("id") or "",
+                    "legal_rule_catalog_version_id": catalog_id,
                     "article_ref": "",
                     "clause_ref": "",
                     "match_type": "PRIMARY_MATCH",
@@ -127,10 +141,27 @@ class LegalRetrievalConsumer(ConsumerBase):
                 }
             )
 
+        match_count = len(matches)
+        blocked_reason: str | None = (
+            "; ".join(not_matched_reasons) if not_matched_reasons and match_count == 0 else None
+        )
+
+        logger.info(
+            "LEGAL_RULE_MATCH_EVALUATION_SUMMARY",
+            verified_profile_id=verified_profile_id,
+            catalog_id=catalog_id,
+            corpus_version_id=corpus_version_id,
+            rule_count=rule_count,
+            chunk_count=chunk_count,
+            match_count=match_count,
+            blocked_reason=blocked_reason,
+            correlationId=correlationId,
+        )
+
         payload = self._builder.build_payload(
             verified_profile_id=verified_profile_id,
             assessment_id=assessment_id,
-            legal_rule_catalog_version_id=legal_catalog.get("versionId") or legal_catalog.get("id") or "",
+            legal_rule_catalog_version_id=catalog_id,
             legal_corpus_version_id=corpus_version_id,
             matches=matches,
         )
@@ -147,8 +178,15 @@ class LegalRetrievalConsumer(ConsumerBase):
         self._api_client.post_legal_rule_match_callback(callback_payload)
         logger.info(
             "LEGAL_RULE_MATCH_CALLBACK_SUBMITTED",
+            verified_profile_id=verified_profile_id,
+            catalog_id=catalog_id,
+            corpus_version_id=corpus_version_id,
             assessment_id=assessment_id,
-            match_count=len(matches),
+            rule_count=rule_count,
+            chunk_count=chunk_count,
+            match_count=match_count,
+            overall_coverage_status=payload["overall_coverage_status"],
+            blocked_reason=blocked_reason,
             correlationId=correlationId,
         )
 

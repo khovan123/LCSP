@@ -196,6 +196,22 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
           })
         : null;
 
+    const latestBlockedLegalRuleMatch =
+      acceptedEvidenceReport && !classificationResult && !rerunnableLegalRuleMatch
+        ? await this.prisma.legalRuleMatch.findFirst({
+            where: {
+              assessmentId: assessment.id,
+              organizationId: assessment.organizationId,
+              status: toPrismaEvidenceAcceptanceStatus(
+                LEGAL_RULE_MATCH_STATUSES.accepted,
+              ),
+              guardrailStatus: LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.blocked,
+            },
+            select: { guardrailStatus: true },
+            orderBy: { createdAt: "desc" },
+          })
+        : null;
+
     return {
       assessment_id: assessment.id,
       name: assessment.name,
@@ -208,6 +224,9 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
         ? fromPrismaClassificationGuardrailStatus(
             classificationResult.guardrailStatus,
           )
+        : null,
+      legal_rule_match_guardrail_status: latestBlockedLegalRuleMatch
+        ? LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.blocked
         : null,
       classification_result: classificationResult
         ? toClassificationResultSummary(classificationResult.classificationData)

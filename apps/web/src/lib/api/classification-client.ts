@@ -13,10 +13,12 @@ export const CLASSIFICATION_STATUS_STATES = {
   locked: "locked",
   waitingLegalReadiness: "waiting_legal_readiness",
   processing: "processing",
+  legalMatchBlocked: "legal_match_blocked",
   passed: "passed",
   degraded: "degraded",
   blocked: "blocked",
 } as const;
+
 
 const CLASSIFICATION_STATUS_OUTCOME_KINDS = {
   loaded: "loaded",
@@ -150,10 +152,12 @@ export function sanitizeAssessmentDetailPayload(
     wizard_status?: unknown;
     readiness_state?: unknown;
     guardrail_status?: unknown;
+    legal_rule_match_guardrail_status?: unknown;
     classification_result?: unknown;
     verified_profile_review?: unknown;
     can_rerun_classification?: unknown;
   };
+
 
   const readiness = candidate.readiness_state;
   if (
@@ -200,6 +204,15 @@ export function sanitizeAssessmentDetailPayload(
     guardrailStatus !== undefined &&
     guardrailStatus !== null &&
     typeof guardrailStatus !== "string"
+  ) {
+    return null;
+  }
+
+  const legalMatchGuardrailStatus = candidate.legal_rule_match_guardrail_status;
+  if (
+    legalMatchGuardrailStatus !== undefined &&
+    legalMatchGuardrailStatus !== null &&
+    typeof legalMatchGuardrailStatus !== "string"
   ) {
     return null;
   }
@@ -262,6 +275,11 @@ export function sanitizeAssessmentDetailPayload(
 
   if (guardrailStatus !== undefined) {
     sanitized.guardrail_status = guardrailStatus as string | null;
+  }
+
+  if (legalMatchGuardrailStatus !== undefined) {
+    sanitized.legal_rule_match_guardrail_status =
+      legalMatchGuardrailStatus as string | null;
   }
 
   if (candidate.classification_result !== undefined) {
@@ -410,6 +428,19 @@ function toClassificationStatusViewModel(
     };
   }
 
+  if (normalizeLegalMatchGuardrailStatus(payload.legal_rule_match_guardrail_status) === "blocked") {
+    return {
+      state: CLASSIFICATION_STATUS_STATES.legalMatchBlocked,
+      titleKey: "pages.classification.states.legalMatchBlockedTitle",
+      badgeKey: "pages.classification.states.legalMatchBlockedBadge",
+      descriptionKey: "pages.classification.states.legalMatchBlockedDescription",
+      summaryKey: "pages.classification.states.legalMatchBlockedSummary",
+      verifiedProfileReview,
+      hasClassification: false,
+      canRerunClassification: false,
+    };
+  }
+
   return {
     state: CLASSIFICATION_STATUS_STATES.processing,
     titleKey: "pages.classification.states.processingTitle",
@@ -428,6 +459,11 @@ function normalizeGuardrailStatus(value: string | null | undefined) {
     normalized === "blocked"
     ? normalized
     : null;
+}
+
+function normalizeLegalMatchGuardrailStatus(value: string | null | undefined) {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "blocked" ? normalized : null;
 }
 
 type ClassificationResultPayload = {
@@ -461,10 +497,12 @@ type AssessmentDetailPayload = {
     missing_evidence?: string[];
   };
   guardrail_status?: string | null;
+  legal_rule_match_guardrail_status?: string | null;
   classification_result?: ClassificationResultPayload | null;
   verified_profile_review?: VerifiedProfileReviewPayload | null;
   can_rerun_classification?: boolean;
 };
+
 
 function isAssessmentDetailPayload(
   payload: unknown,

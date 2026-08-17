@@ -3,10 +3,12 @@ import { test } from "node:test";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import {
+  CLASSIFICATION_STATUS_STATES,
   getClassificationActionVisibility,
   sanitizeAssessmentDetailPayload,
   toClassificationStatusOutcome,
 } from "../src/lib/api/classification-client.ts";
+
 
 test("classification outcome maps locked state correctly", () => {
   const result = toClassificationStatusOutcome(
@@ -240,4 +242,70 @@ test("sanitizeAssessmentDetailPayload rejects invalid payloads", () => {
     }),
     null,
   );
+});
+
+test("legalMatchBlocked state is returned when legal_rule_match_guardrail_status is BLOCKED and no classification result", () => {
+  const result = toClassificationStatusOutcome(
+    {
+      readiness_state: { classification_locked: false },
+      guardrail_status: null,
+      legal_rule_match_guardrail_status: "BLOCKED",
+      can_rerun_classification: false,
+    },
+    true,
+    200,
+  );
+
+  assert.equal(result.kind, "loaded");
+  if (result.kind === "loaded") {
+    assert.equal(result.data.state, CLASSIFICATION_STATUS_STATES.legalMatchBlocked);
+    assert.equal(result.data.hasClassification, false);
+    assert.equal(result.data.titleKey, "pages.classification.states.legalMatchBlockedTitle");
+    assert.equal(result.data.badgeKey, "pages.classification.states.legalMatchBlockedBadge");
+    assert.deepEqual(getClassificationActionVisibility(result.data), {
+      showFinalReport: false,
+      showGapAnalysis: false,
+      showRerunClassification: false,
+    });
+  }
+});
+
+test("processing state is still returned when legal_rule_match_guardrail_status is absent", () => {
+  const result = toClassificationStatusOutcome(
+    {
+      readiness_state: { classification_locked: false },
+      guardrail_status: null,
+      can_rerun_classification: false,
+    },
+    true,
+    200,
+  );
+
+  assert.equal(result.kind, "loaded");
+  if (result.kind === "loaded") {
+    assert.equal(result.data.state, CLASSIFICATION_STATUS_STATES.processing);
+  }
+});
+
+test("sanitizeAssessmentDetailPayload passes legal_rule_match_guardrail_status through correctly", () => {
+  const payload = sanitizeAssessmentDetailPayload({
+    readiness_state: { classification_locked: false },
+    guardrail_status: null,
+    legal_rule_match_guardrail_status: "BLOCKED",
+  });
+
+  assert.notEqual(payload, null);
+  if (payload !== null) {
+    assert.equal(payload.legal_rule_match_guardrail_status, "BLOCKED");
+  }
+});
+
+test("sanitizeAssessmentDetailPayload rejects non-string legal_rule_match_guardrail_status", () => {
+  const payload = sanitizeAssessmentDetailPayload({
+    readiness_state: { classification_locked: false },
+    guardrail_status: null,
+    legal_rule_match_guardrail_status: 123,
+  });
+
+  assert.equal(payload, null);
 });
