@@ -111,8 +111,6 @@ def test_budget_exceeded_fail_fast() -> None:
 
     assert rule_service.get_or_compile.call_count == 1
     assert result.status == "PARTIAL"
-    assert len(result.limitations) == 3
-    assert result.limitations[0] == "ENGINEERING_RULE_INVESTIGATION_FAILED:L1:BudgetExceeded"
-    assert result.limitations[1] == "ENGINEERING_RULE_INVESTIGATION_FAILED:L2:BudgetExceeded"
-    assert result.limitations[2] == "ENGINEERING_RULE_INVESTIGATION_FAILED:L3:BudgetExceeded"
+    assert len(result.limitations) == 1
+    assert result.limitations[0] == "ENGINEERING_INVESTIGATION_BUDGET_EXHAUSTED:L1"
 
