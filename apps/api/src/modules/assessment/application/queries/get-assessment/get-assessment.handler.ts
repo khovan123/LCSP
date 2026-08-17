@@ -305,8 +305,18 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       ? runtimeEvent.outputSummaryJson
       : {};
     const diagnostics = isRecord(output.diagnostics) ? output.diagnostics : {};
+    const runtimeEvaluations = recordArray(output.ruleEvaluations);
+    const projectedDiagnostics = runtimeEvaluations.length
+      ? {
+          ...diagnostics,
+          evaluations: runtimeEvaluations,
+          evaluations_truncated:
+            output.evaluationsTruncated === true ||
+            diagnostics.evaluations_truncated === true,
+        }
+      : diagnostics;
 
-    return toLegalRuleMatchDiagnostics(diagnostics, {
+    return toLegalRuleMatchDiagnostics(projectedDiagnostics, {
       noMatchReason: legalRuleMatch.blockedReason,
       verifiedProfileId: legalRuleMatch.verifiedProfileId,
       corpusVersionId: legalRuleMatch.corpusVersionId,
@@ -516,16 +526,31 @@ function toLegalRuleMatchDiagnostics(
 function toLegalRuleEvaluationDiagnostic(
   value: Record<string, unknown>,
 ): LegalRuleEvaluationDiagnosticDto | null {
-  const ruleId = cleanString(value.rule_id);
+  const ruleId = cleanString(value.rule_id) ?? cleanString(value.ruleId);
   const status = cleanString(value.status);
   if (!ruleId || !status) return null;
   return {
     rule_id: ruleId,
     status,
-    rationale: stringArray(value.rationale),
-    matched_required_facts: stringArray(value.matched_required_facts),
-    blocking_facts: stringArray(value.blocking_facts),
+    rationale: diagnosticStringArray(value.rationale),
+    matched_required_facts: diagnosticStringArray(
+      value.matched_required_facts ?? value.matchedRequiredFacts,
+    ),
+    blocking_facts: diagnosticStringArray(
+      value.blocking_facts ?? value.blockingFacts,
+    ),
   };
+}
+
+function diagnosticStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return stringArray(value);
+  const summary = cleanString(value);
+  return summary
+    ? summary
+        .split(" | ")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
 }
 
 function nonNegativeInteger(value: unknown): number | null {
