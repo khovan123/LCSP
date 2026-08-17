@@ -5,7 +5,7 @@ import { GetVerifiedProfileByIdHandler } from "./get-verified-profile-by-id.hand
 import { GetVerifiedProfileByIdQuery } from "./get-verified-profile-by-id.query.js";
 
 describe("GetVerifiedProfileByIdHandler", () => {
-  it("rebuilds merged legal facts and field evidence refs for legacy verified profiles", async () => {
+  it("rebuilds merged legal facts and field evidence refs from persisted wizard answers and legacy verified claims", async () => {
     const prisma = {
       verifiedProfile: {
         findUnique: jest.fn().mockResolvedValue({
@@ -40,10 +40,20 @@ describe("GetVerifiedProfileByIdHandler", () => {
       },
       wizardProfile: {
         findUnique: jest.fn().mockResolvedValue({
-          answers: {
-            aiRole: "PROVIDER",
-            jurisdiction: "EU",
-          },
+          answers: [
+            {
+              questionId: "businessProcess",
+              value: "customer support",
+              answerState: "ANSWERED",
+              updatedAt: "2026-08-18T00:00:00.000Z",
+            },
+            {
+              questionId: "humanReview",
+              value: "PRESENT",
+              answerState: "ANSWERED",
+              updatedAt: "2026-08-18T00:00:00.000Z",
+            },
+          ],
         }),
       },
     } as unknown as PrismaService;
@@ -53,8 +63,8 @@ describe("GetVerifiedProfileByIdHandler", () => {
     );
 
     expect(result.mergedProfile).toMatchObject({
-      aiRole: "PROVIDER",
-      jurisdiction: "EU",
+      businessProcess: "customer support",
+      humanReview: "PRESENT",
       model_invocation: { invocationDetected: true },
       invocationDetected: true,
       provider_usage: {
@@ -65,8 +75,8 @@ describe("GetVerifiedProfileByIdHandler", () => {
       frameworks: ["langchain"],
     });
     expect(result.factEvidenceRefs).toMatchObject({
-      aiRole: ["wizard:wizard-1:aiRole"],
-      jurisdiction: ["wizard:wizard-1:jurisdiction"],
+      businessProcess: ["wizard:wizard-1:businessProcess"],
+      humanReview: ["wizard:wizard-1:humanReview"],
       model_invocation: ["evidence:model-call"],
       invocationDetected: ["evidence:model-call"],
       provider_usage: ["evidence:provider"],
@@ -74,7 +84,46 @@ describe("GetVerifiedProfileByIdHandler", () => {
       frameworks: ["evidence:provider"],
     });
     expect(result.evidenceRefs).toContain("evidence:model-call");
-    expect(result.evidenceRefs).toContain("wizard:wizard-1:aiRole");
+    expect(result.evidenceRefs).toContain("wizard:wizard-1:businessProcess");
+  });
+
+  it("keeps compatibility with legacy object-shaped wizard answers", async () => {
+    const prisma = {
+      verifiedProfile: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "verified-legacy-wizard",
+          aiUsageFlowId: "flow-legacy",
+          assessmentId: "assessment-legacy",
+          organizationId: "org-1",
+          wizardProfileId: "wizard-legacy",
+          schemaVersion: "1.0.0",
+          providerVersion: "provider-1",
+          status: "APPROVED",
+          gatesPassedAt: null,
+          profileData: { verified_claims: [] },
+        }),
+      },
+      wizardProfile: {
+        findUnique: jest.fn().mockResolvedValue({
+          answers: {
+            aiRole: "PROVIDER",
+            jurisdiction: "EU",
+          },
+        }),
+      },
+    } as unknown as PrismaService;
+
+    const result = await new GetVerifiedProfileByIdHandler(prisma).execute(
+      new GetVerifiedProfileByIdQuery("verified-legacy-wizard"),
+    );
+
+    expect(result.mergedProfile).toMatchObject({
+      aiRole: "PROVIDER",
+      jurisdiction: "EU",
+    });
+    expect(result.factEvidenceRefs.aiRole).toEqual([
+      "wizard:wizard-legacy:aiRole",
+    ]);
   });
 
   it("lets explicit canonical legal facts override reconstructed legacy values", async () => {
@@ -106,7 +155,7 @@ describe("GetVerifiedProfileByIdHandler", () => {
         }),
       },
       wizardProfile: {
-        findUnique: jest.fn().mockResolvedValue({ answers: {} }),
+        findUnique: jest.fn().mockResolvedValue({ answers: [] }),
       },
     } as unknown as PrismaService;
 
