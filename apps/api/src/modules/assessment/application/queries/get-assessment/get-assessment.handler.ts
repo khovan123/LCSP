@@ -197,7 +197,9 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
         : null;
 
     const latestBlockedLegalRuleMatch =
-      acceptedEvidenceReport && !classificationResult && !rerunnableLegalRuleMatch
+      acceptedEvidenceReport &&
+      !classificationResult &&
+      !rerunnableLegalRuleMatch
         ? await this.prisma.legalRuleMatch.findFirst({
             where: {
               assessmentId: assessment.id,

@@ -12,7 +12,6 @@ import type {
   LegalRuleMatchGuardrailStatus,
 } from "@lcsp/contracts/scan";
 
-
 export type AssessmentDetailErrorCode =
   (typeof ASSESSMENT_DETAIL_ERROR_CODES)[keyof typeof ASSESSMENT_DETAIL_ERROR_CODES];
 
@@ -65,4 +64,3 @@ export interface AssessmentDetailDto {
   updated_at: string;
   correlationId: string;
 }
-
