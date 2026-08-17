@@ -113,8 +113,6 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
       }
     }
 
-    this.hydrateProfileDataRef(payload);
-
     this.validate(command);
     const evidenceReport = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
@@ -311,7 +309,6 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
     status: number = HttpStatus.UNPROCESSABLE_ENTITY,
   ) {
     return problemResult(errorCode, command.correlationId, {
-      status,
       status,
     });
   }

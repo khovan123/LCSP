@@ -70,35 +70,6 @@ def test_large_text_payload_is_summarized() -> None:
     assert len(rendered["preview"]) <= dev_unsafe_trace._TRACE_STRING_PREVIEW_CHARS
 
 
-def test_large_structured_tool_result_is_collection_bounded() -> None:
-    payload = {
-        "entries": [
-            {"name": f"package-{index}", "version": "1.0.0"}
-            for index in range(5000)
-        ]
-    }
-
-    rendered = dev_unsafe_trace._json_safe(payload)
-    entries = rendered["entries"]
-
-    assert entries["encoding"] == "collection-metadata"
-    assert entries["collectionType"] == "list"
-    assert entries["itemCount"] == 5000
-    assert entries["truncated"] is True
-    assert len(entries["items"]) == dev_unsafe_trace._MAX_TRACE_COLLECTION_ITEMS
-
-
-def test_large_text_payload_is_summarized() -> None:
-    value = "source-or-result:" + ("x" * (dev_unsafe_trace._MAX_INLINE_TRACE_STRING_CHARS + 100))
-
-    rendered = dev_unsafe_trace._json_safe(value)
-
-    assert rendered["encoding"] == "text-metadata"
-    assert rendered["charLength"] == len(value)
-    assert rendered["truncated"] is True
-    assert len(rendered["preview"]) <= dev_unsafe_trace._TRACE_STRING_PREVIEW_CHARS
-
-
 def test_small_utf8_bytes_remain_visible_for_debugging() -> None:
     payload = b'{"scanJobId":"scan-1"}'
 

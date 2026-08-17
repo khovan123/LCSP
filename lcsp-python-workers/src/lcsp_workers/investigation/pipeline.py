@@ -117,16 +117,10 @@ class EngineeringInvestigationPipeline:
         executed = 0
         cache_hits = 0
 
-        budget_exceeded = False
         for rule in rules:
             legal_rule_id = str(
                 rule.get("legalRuleId") or rule.get("legal_rule_id") or rule.get("id") or "unknown"
             )
-            if budget_exceeded:
-                limitations.append(
-                    f"ENGINEERING_RULE_INVESTIGATION_FAILED:{legal_rule_id}:BudgetExceeded"
-                )
-                continue
             try:
                 engineering_rules, cache_hit = self._rule_service.get_or_compile(
                     legal_rule=rule,
@@ -158,8 +152,6 @@ class EngineeringInvestigationPipeline:
                 )
                 break
             except Exception as error:
-                if type(error).__name__ == "BudgetExceeded":
-                    budget_exceeded = True
                 limitations.append(
                     f"ENGINEERING_RULE_INVESTIGATION_FAILED:{legal_rule_id}:{type(error).__name__}"
                 )
