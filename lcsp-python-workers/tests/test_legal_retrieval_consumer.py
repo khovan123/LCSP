@@ -184,21 +184,23 @@ def test_consumer_emits_matched_rule_but_empty_citation_allowlist():
     assert callback_payload.overall_coverage_status == "NO_CITATION"
 
 
-def test_consumer_includes_rich_diagnostic_fields_in_callback_log(caplog):
-    """LEGAL_RULE_MATCH_CALLBACK_SUBMITTED must include verified_profile_id, catalog_id, chunk_count, match_count."""
-    import structlog
-    import logging
-
+def test_consumer_includes_rich_diagnostic_fields_in_callback_log(monkeypatch):
+    """LEGAL_RULE_MATCH_CALLBACK_SUBMITTED includes the expected diagnostic fields."""
     log_events: list[dict] = []
 
-    def capture_processor(logger, method_name, event_dict):
-        log_events.append(dict(event_dict))
-        return event_dict
+    class RecordingLogger:
+        def info(self, event, **fields):
+            log_events.append({"event": event, **fields})
 
-    structlog.configure(processors=[capture_processor, structlog.dev.ConsoleRenderer()])
+    monkeypatch.setattr(
+        "lcsp_workers.legal.legal_retrieval_consumer.logger",
+        RecordingLogger(),
+    )
 
     api_client = DummyApiClient()
-    consumer = LegalRetrievalConsumer(DummyConfig(), api_client=api_client, retriever=DummyRetriever())
+    consumer = LegalRetrievalConsumer(
+        DummyConfig(), api_client=api_client, retriever=DummyRetriever()
+    )
 
     consumer.handle(
         {
@@ -210,7 +212,12 @@ def test_consumer_includes_rich_diagnostic_fields_in_callback_log(caplog):
     )
 
     callback_log = next(
-        (e for e in log_events if e.get("event") == "LEGAL_RULE_MATCH_CALLBACK_SUBMITTED"), None
+        (
+            event
+            for event in log_events
+            if event.get("event") == "LEGAL_RULE_MATCH_CALLBACK_SUBMITTED"
+        ),
+        None,
     )
     assert callback_log is not None, "LEGAL_RULE_MATCH_CALLBACK_SUBMITTED was not emitted"
     assert callback_log["verified_profile_id"] == "vp-4"
