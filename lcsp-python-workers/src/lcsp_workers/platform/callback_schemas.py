@@ -120,6 +120,7 @@ class LegalRuleMatchCallbackPayload(BaseModel):
     matches: List[Dict[str, Any]]
     citation_allowlist: List[str] = Field(default_factory=list)
     overall_coverage_status: str = "NO_CITATION"
+    diagnostics: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ClassificationCallbackPayload(BaseModel):
