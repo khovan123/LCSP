@@ -92,31 +92,41 @@ describe("StreamSnapshotArchiveHandler", () => {
           ),
       },
     } as unknown as PrismaService;
+
+    const downloadRepositoryArchiveMock = jest.fn().mockImplementation(() => {
+      if (options?.archiveError) throw options.archiveError;
+      return (
+        options?.archive ?? {
+          contentType: "application/gzip",
+          resolvedUrl:
+            "https://codeload.github.com/acme/example-repo/tar.gz/a",
+          stream: Readable.from([Buffer.from("archive")]),
+        }
+      );
+    });
     const githubAppClient = {
-      downloadRepositoryArchive: jest.fn().mockImplementation(() => {
-        if (options?.archiveError) throw options.archiveError;
-        return (
-          options?.archive ?? {
-            contentType: "application/gzip",
-            resolvedUrl:
-              "https://codeload.github.com/acme/example-repo/tar.gz/a",
-            stream: Readable.from([Buffer.from("archive")]),
-          }
-        );
-      }),
+      downloadRepositoryArchive: downloadRepositoryArchiveMock,
     } as unknown as GitHubAppClient;
+
+    const cacheGetMock = jest
+      .fn<() => Promise<SnapshotArchiveCacheHit | null>>()
+      .mockResolvedValue(options?.cacheHit ?? null);
+    const cacheCaptureMock = jest
+      .fn<
+        (input: { source: NodeJS.ReadableStream }) => Promise<{
+          stream: NodeJS.ReadableStream;
+          completion: Promise<void>;
+        }>
+      >()
+      .mockImplementation((input) =>
+        Promise.resolve({
+          stream: input.source,
+          completion: Promise.resolve(),
+        }),
+      );
     const snapshotArchiveCache = {
-      get: jest
-        .fn<() => Promise<SnapshotArchiveCacheHit | null>>()
-        .mockResolvedValue(options?.cacheHit ?? null),
-      capture: jest
-        .fn()
-        .mockImplementation(
-          async (input: { source: NodeJS.ReadableStream }) => ({
-            stream: input.source,
-            completion: Promise.resolve(),
-          }),
-        ),
+      get: cacheGetMock,
+      capture: cacheCaptureMock,
     } as unknown as SnapshotArchiveCache;
 
     return {
@@ -125,13 +135,14 @@ describe("StreamSnapshotArchiveHandler", () => {
         githubAppClient,
         snapshotArchiveCache,
       ),
-      githubAppClient,
-      snapshotArchiveCache,
+      downloadRepositoryArchiveMock,
+      cacheGetMock,
+      cacheCaptureMock,
     };
   }
 
   it("streams the pinned repository archive when scope is valid", async () => {
-    const { handler, snapshotArchiveCache } = buildHandler();
+    const { handler, cacheCaptureMock } = buildHandler();
 
     const result = await handler.execute(
       new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1"),
@@ -140,7 +151,7 @@ describe("StreamSnapshotArchiveHandler", () => {
     expect(result.snapshotId).toBe("snapshot-1");
     expect(result.commitSha).toBe("a".repeat(40));
     expect(result.contentType).toBe("application/gzip");
-    expect(snapshotArchiveCache.capture).toHaveBeenCalledWith(
+    expect(cacheCaptureMock).toHaveBeenCalledWith(
       expect.objectContaining({
         snapshotId: "snapshot-1",
         commitSha: "a".repeat(40),
@@ -154,7 +165,7 @@ describe("StreamSnapshotArchiveHandler", () => {
       resolvedUrl: "https://codeload.github.com/acme/example-repo/tar.gz/a",
       stream: Readable.from([Buffer.from("cached-archive")]),
     };
-    const { handler, githubAppClient, snapshotArchiveCache } = buildHandler({
+    const { handler, downloadRepositoryArchiveMock, cacheGetMock } = buildHandler({
       cacheHit,
     });
 
@@ -163,11 +174,11 @@ describe("StreamSnapshotArchiveHandler", () => {
     );
 
     expect(result.stream).toBe(cacheHit.stream);
-    expect(snapshotArchiveCache.get).toHaveBeenCalledWith({
+    expect(cacheGetMock).toHaveBeenCalledWith({
       snapshotId: "snapshot-1",
       commitSha: "a".repeat(40),
     });
-    expect(githubAppClient.downloadRepositoryArchive).not.toHaveBeenCalled();
+    expect(downloadRepositoryArchiveMock).not.toHaveBeenCalled();
   });
 
   it("rejects snapshot and scan job mismatch", async () => {
