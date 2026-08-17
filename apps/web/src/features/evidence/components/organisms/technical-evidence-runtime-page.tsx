@@ -8,13 +8,26 @@ import {
   ASSESSMENT_RUNTIME_STAGE_CODES,
 } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
-import { ActivityIcon, ClockIcon, RotateCcwIcon } from "lucide-react";
+import {
+  ActivityIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  RotateCcwIcon,
+} from "lucide-react";
+import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { appLocale } from "@/lib/locale";
 import { useRerunRepositoryScanMutation } from "@/lib/api/assessment-queries";
 import { useWorkspaceRuntime } from "@/features/workspace/components/organisms/workspace-runtime-provider";
+import {
+  buildRuntimeConsoleModel,
+  isActiveRuntim=eStatus,
+  selectRuntimeConsoleActivity,
+  type RuntimeConsoleStep,
+} from "@/features/evidence/utils/runtime-console";
 import {
   WORKSPACE_RUNTIME_CONNECTION_STATES,
   type WorkspaceRuntimeActivityItem,
@@ -41,11 +54,16 @@ export function TechnicalEvidenceRuntimePage({
   const activeCurrentRun = isActiveRuntimeStatus(timeline.currentRun?.status)
     ? timeline.currentRun
     : null;
-  const activeActivity = timeline.recentActivity.filter((item) =>
-    isActiveRuntimeStatus(item.runStatus),
+  const consoleModel = buildRuntimeConsoleModel(
+    selectRuntimeConsoleActivity({
+      activity: timeline.recentActivity,
+      latestScanJobId: latestScan?.id ?? null,
+      activeRunId: activeCurrentRun?.runId ?? null,
+      latestRunId: timeline.latestRunId,
+    }),
   );
   const showOrchestration =
-    activeCurrentRun !== null || activeActivity.length > 0;
+    activeCurrentRun !== null || consoleModel.steps.length > 0;
   const rerunMutation = useRerunRepositoryScanMutation(assessmentId);
 
   return (
@@ -84,16 +102,12 @@ export function TechnicalEvidenceRuntimePage({
             <CurrentRunPanel run={activeCurrentRun} />
           ) : null}
 
-          {activeActivity.length === 0 ? (
+          {consoleModel.steps.length === 0 ? (
             <p className="px-4 py-6 text-sm text-muted-foreground">
               {t("pages.technicalEvidence.noOrchestrationActivity")}
             </p>
           ) : (
-            <ul className="divide-y">
-              {activeActivity.map((item) => (
-                <RuntimeActivityItem key={item.eventId} item={item} />
-              ))}
-            </ul>
+            <RuntimeConsole model={consoleModel} />
           )}
         </section>
       ) : null}
@@ -222,7 +236,9 @@ function CurrentRunPanel({ run }: { run: WorkspaceRuntimeRun }) {
         <Badge variant={runtimeStatusBadgeVariant(run.status)}>
           {runtimeStatusLabel(run.status)}
         </Badge>
-        <span className="text-sm font-medium">{runtimeStageLabel(run.stage)}</span>
+        <span className="text-sm font-medium">
+          {runtimeStageLabel(run.stage)}
+        </span>
         <span className="text-xs text-muted-foreground">
           {t("pages.technicalEvidence.updatedAt")}: {formatDate(run.updatedAt)}
         </span>
@@ -231,10 +247,7 @@ function CurrentRunPanel({ run }: { run: WorkspaceRuntimeRun }) {
       {run.activeTools.length > 0 ? (
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {run.activeTools.map((tool) => (
-            <ActiveToolItem
-              key={`${run.runId}-${tool.toolName}`}
-              tool={tool}
-            />
+            <ActiveToolItem key={`${run.runId}-${tool.toolName}`} tool={tool} />
           ))}
         </div>
       ) : null}
@@ -265,30 +278,127 @@ function ActiveToolItem({ tool }: { tool: WorkspaceRuntimeActiveTool }) {
   );
 }
 
-function RuntimeActivityItem({ item }: { item: WorkspaceRuntimeActivityItem }) {
+function RuntimeConsole({
+  model,
+}: {
+  model: ReturnType<typeof buildRuntimeConsoleModel>;
+}) {
   return (
-    <li className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground md:w-40 md:shrink-0">
-        <ClockIcon className="size-3.5" />
-        <span>{formatDate(item.emittedAt)}</span>
+    <div>
+      <div className="grid gap-2 border-b bg-background px-4 py-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-5">
+        <RuntimeMetric
+          label={t("pages.technicalEvidence.activeStepLabel")}
+          value={
+            model.activeStep === null
+              ? t("pages.technicalEvidence.noActiveStep")
+              : runtimeStepTitle(model.activeStep.item)
+          }
+        />
+        <RuntimeMetric
+          label={t("pages.technicalEvidence.runningStepsLabel")}
+          value={String(model.runningCount)}
+        />
+        <RuntimeMetric
+          label={t("pages.technicalEvidence.completedStepsLabel")}
+          value={String(model.completedCount)}
+        />
+        <RuntimeMetric
+          label={t("pages.technicalEvidence.failedStepsLabel")}
+          value={String(model.failedCount)}
+        />
+        <RuntimeMetric
+          label={t("pages.technicalEvidence.skippedStepsLabel")}
+          value={String(model.skippedCount)}
+        />
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-medium">
-            {item.toolName ?? runtimeEventLabel(item.eventType)}
-          </p>
-          <span className="text-xs text-muted-foreground">
-            {runtimeStageLabel(item.stage)}
-          </span>
+      <ul className="divide-y">
+        {model.steps.map((step) => (
+          <RuntimeConsoleStepItem key={step.id} step={step} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function RuntimeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-md bg-muted/30 px-3 py-2">
+      <p className="text-xs uppercase tracking-wide">{label}</p>
+      <p className="mt-1 truncate text-sm font-medium text-foreground">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function RuntimeConsoleStepItem({ step }: { step: RuntimeConsoleStep }) {
+  const [expanded, setExpanded] = useState(step.defaultExpanded);
+  const item = step.item;
+  const durationLabel =
+    item.durationMs === null ? null : formatDuration(item.durationMs);
+
+  return (
+    <li
+      className={
+        step.isActive
+          ? "bg-primary/5"
+          : step.isFailed
+            ? "bg-destructive/5"
+            : "bg-background"
+      }
+    >
+      <button
+        aria-expanded={expanded}
+        className="flex w-full flex-col gap-2 px-4 py-3 text-left md:flex-row md:items-start"
+        onClick={() => setExpanded((current) => !current)}
+        type="button"
+      >
+        <div className="flex items-center gap-2 text-xs text-muted-foreground md:w-40 md:shrink-0">
+          <ClockIcon className="size-3.5" />
+          <span>{formatDate(item.emittedAt)}</span>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">{item.summary}</p>
-        <RuntimeDetailList item={item} />
-      </div>
-      <div className="md:shrink-0">
-        <Badge variant={runtimeStatusBadgeVariant(item.runStatus)}>
-          {runtimeStatusLabel(item.runStatus)}
-        </Badge>
-      </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            {expanded ? (
+              <ChevronDownIcon className="size-4 text-muted-foreground" />
+            ) : (
+              <ChevronRightIcon className="size-4 text-muted-foreground" />
+            )}
+            <p className="truncate text-sm font-medium">
+              {runtimeStepTitle(item)}
+            </p>
+            <span className="text-xs text-muted-foreground">
+              {runtimeStageLabel(item.stage)}
+            </span>
+            {durationLabel !== null ? (
+              <span className="text-xs text-muted-foreground">
+                {durationLabel}
+              </span>
+            ) : null}
+          </div>
+          <p
+            className={
+              expanded
+                ? "mt-1 text-sm text-muted-foreground"
+                : "mt-1 truncate text-sm text-muted-foreground"
+            }
+          >
+            {item.summary}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 md:shrink-0">
+          {step.isFailed &&
+          item.runStatus !== ASSESSMENT_RUNTIME_RUN_STATUSES.failed ? (
+            <Badge variant="secondary">
+              {t("pages.technicalEvidence.nonBlockingFailureLabel")}
+            </Badge>
+          ) : null}
+          <Badge variant={runtimeStatusBadgeVariant(item.runStatus)}>
+            {runtimeStatusLabel(item.runStatus)}
+          </Badge>
+        </div>
+      </button>
+      {expanded ? <RuntimeDetailList item={item} /> : null}
     </li>
   );
 }
@@ -299,25 +409,35 @@ function RuntimeDetailList({ item }: { item: WorkspaceRuntimeActivityItem }) {
       ? null
       : {
           label: t("pages.technicalEvidence.inputSummaryLabel"),
-          value: formatSummaryValue(item.inputSummary),
+          values: formatSummaryEntries(item.inputSummary),
         },
     item.outputSummary === null
       ? null
       : {
           label: t("pages.technicalEvidence.outputSummaryLabel"),
-          value: formatSummaryValue(item.outputSummary),
+          values: formatSummaryEntries(item.outputSummary),
         },
     item.errorSummary === null
       ? null
       : {
           label: t("pages.technicalEvidence.errorSummaryLabel"),
-          value: item.errorSummary,
+          values: [
+            {
+              label: t("pages.technicalEvidence.messageLabel"),
+              value: item.errorSummary,
+            },
+          ],
         },
     item.waitingReason === null
       ? null
       : {
           label: t("pages.technicalEvidence.waitingReasonLabel"),
-          value: item.waitingReason,
+          values: [
+            {
+              label: t("pages.technicalEvidence.reasonLabel"),
+              value: item.waitingReason,
+            },
+          ],
         },
   ].filter(isDefined);
 
@@ -326,17 +446,90 @@ function RuntimeDetailList({ item }: { item: WorkspaceRuntimeActivityItem }) {
   }
 
   return (
-    <dl className="mt-2 grid gap-2 text-xs">
-      {details.map((detail) => (
-        <div className="grid gap-1" key={detail.label}>
-          <dt className="font-medium text-foreground">{detail.label}</dt>
-          <dd className="rounded-md bg-muted/40 px-2 py-1.5 font-mono text-muted-foreground">
-            {detail.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <div className="px-4 pb-4 md:pl-48">
+      <dl className="grid gap-3 text-xs md:grid-cols-2">
+        {details.map((detail) => (
+          <div
+            className="grid gap-2 rounded-md border bg-muted/20 p-3"
+            key={detail.label}
+          >
+            <dt className="font-medium text-foreground">{detail.label}</dt>
+            <dd className="grid gap-1.5">
+              {detail.values.map((entry) => (
+                <div
+                  className="grid gap-1 rounded-sm bg-background px-2 py-1.5 sm:flex sm:items-start"
+                  key={`${detail.label}-${entry.label}`}
+                >
+                  <span className="truncate text-muted-foreground sm:w-36 sm:shrink-0">
+                    {entry.label}
+                  </span>
+                  <span className="break-words font-mono text-foreground">
+                    {entry.value}
+                  </span>
+                </div>
+              ))}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
+}
+
+function runtimeStepTitle(item: WorkspaceRuntimeActivityItem) {
+  return item.toolName ?? runtimeEventLabel(item.eventType);
+}
+
+function formatSummaryEntries(value: WorkspaceRuntimeSummaryValue) {
+  const entries = flattenSummaryValue(value);
+  if (entries.length > 0) {
+    return entries;
+  }
+  return [
+    {
+      label: t("pages.technicalEvidence.valueLabel"),
+      value: formatSummaryValue(value),
+    },
+  ];
+}
+
+function flattenSummaryValue(
+  value: WorkspaceRuntimeSummaryValue,
+  prefix?: string,
+): Array<{ label: string; value: string }> {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      flattenSummaryValue(
+        item,
+        prefix === undefined ? String(index) : `${prefix}.${index}`,
+      ),
+    );
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.entries(value).flatMap(([key, child]) =>
+      flattenSummaryValue(
+        child,
+        prefix === undefined ? key : `${prefix}.${key}`,
+      ),
+    );
+  }
+  if (prefix === undefined) {
+    return [];
+  }
+  return [
+    {
+      label: humanizeRuntimeKey(prefix),
+      value: formatSummaryValue(value),
+    },
+  ];
+}
+
+function humanizeRuntimeKey(value: string) {
+  return value
+    .replaceAll(".", " / ")
+    .replaceAll("_", " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim();
 }
 
 function connectionBadgeVariant(state: WorkspaceRuntimeConnectionState) {
@@ -388,13 +581,6 @@ function runtimeStatusBadgeVariant(status: string) {
   return "secondary";
 }
 
-function isActiveRuntimeStatus(status: string | null | undefined): boolean {
-  return (
-    status === ASSESSMENT_RUNTIME_RUN_STATUSES.running ||
-    status === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting
-  );
-}
-
 function runtimeStatusLabel(status: string) {
   const statuses = ASSESSMENT_RUNTIME_RUN_STATUSES;
   if (status === statuses.running)
@@ -412,7 +598,8 @@ function runtimeStageLabel(stage: string) {
   const stages = ASSESSMENT_RUNTIME_STAGE_CODES;
   if (stage === stages.snapshot)
     return t("pages.technicalEvidence.runtimeStages.snapshot");
-  if (stage === stages.scan) return t("pages.technicalEvidence.runtimeStages.scan");
+  if (stage === stages.scan)
+    return t("pages.technicalEvidence.runtimeStages.scan");
   if (stage === stages.technicalEvidence)
     return t("pages.technicalEvidence.runtimeStages.technicalEvidence");
   if (stage === stages.technicalProfile)
@@ -459,6 +646,9 @@ function formatSummaryValue(value: WorkspaceRuntimeSummaryValue) {
   if (typeof value === "string") {
     return value;
   }
+  if (value === null) {
+    return t("pages.technicalEvidence.emptyValueLabel");
+  }
   return JSON.stringify(value);
 }
 
@@ -471,6 +661,13 @@ function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "medium",
   }).format(new Date(value));
+}
+
+function formatDuration(durationMs: number) {
+  if (durationMs < 1000) {
+    return `${durationMs}ms`;
+  }
+  return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
 function t(key: string) {

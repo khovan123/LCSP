@@ -993,6 +993,17 @@ export type PagesMessages = {
     outputSummaryLabel: string;
     errorSummaryLabel: string;
     waitingReasonLabel: string;
+    activeStepLabel: string;
+    runningStepsLabel: string;
+    completedStepsLabel: string;
+    failedStepsLabel: string;
+    skippedStepsLabel: string;
+    noActiveStep: string;
+    nonBlockingFailureLabel: string;
+    messageLabel: string;
+    reasonLabel: string;
+    valueLabel: string;
+    emptyValueLabel: string;
     rerunScan: string;
     rerunningScan: string;
     rerunError: string;

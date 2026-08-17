@@ -8,7 +8,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const workerRoot = path.join(repoRoot, "lcsp-python-workers");
-const workerPython = path.join(workerRoot, ".venv", "bin", "python");
+const workerPython = process.platform === "win32"
+  ? path.join(workerRoot, ".venv", "Scripts", "python.exe")
+  : path.join(workerRoot, ".venv", "bin", "python");
 const rootEnv = loadDotEnv(path.join(repoRoot, ".env"));
 const defaultWorkerRuntimeVersion =
   process.env.WORKER_RUNTIME_VERSION ??
@@ -379,6 +381,7 @@ function spawnTarget(target) {
     cwd: target.cwd,
     env: { ...process.env, ...target.env },
     stdio: "inherit",
+    shell: process.platform === "win32",
   });
 }
 
@@ -419,6 +422,7 @@ function spawnSyncCompatible(target) {
     cwd: target.cwd,
     env: { ...process.env, ...target.env },
     stdio: "inherit",
+    shell: process.platform === "win32",
   });
   if (result.signal) {
     process.kill(process.pid, result.signal);
