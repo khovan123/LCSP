@@ -83,13 +83,22 @@ export class AcceptTechnicalProfileHandler implements ICommandHandler<AcceptTech
         Object.assign(payload, fullPayload);
         payload.is_artifact_reference = false;
       } catch {
-        throw new UnprocessableEntityException(
-          this.errorBody(
-            command,
-            SCAN_ERROR_CODES.artifactStorageError,
-            HttpStatus.UNPROCESSABLE_ENTITY,
-          ),
-        );
+        // If profile_data is already present inline in the callback payload,
+        // we can fallback to it instead of failing.
+        if (
+          !payload.profile_data ||
+          typeof payload.profile_data !== "object" ||
+          Object.keys(payload.profile_data).length === 0
+        ) {
+          throw new UnprocessableEntityException(
+            this.errorBody(
+              command,
+              SCAN_ERROR_CODES.artifactStorageError,
+              HttpStatus.UNPROCESSABLE_ENTITY,
+            ),
+          );
+        }
+        payload.is_artifact_reference = false;
       }
     }
 
