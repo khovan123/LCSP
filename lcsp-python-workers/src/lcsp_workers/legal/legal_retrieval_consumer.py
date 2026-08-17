@@ -144,6 +144,15 @@ class LegalRetrievalConsumer(ConsumerBase):
             citation_allowlist=payload["citation_allowlist"],
             overall_coverage_status=payload["overall_coverage_status"],
         )
+        if not matches:
+            logger.warning(
+                "LEGAL_RULE_MATCH_BLOCKED_EMPTY_MATCHES",
+                reason="NO_CITATION_BASIS",
+                verified_profile_id=verified_profile_id,
+                assessment_id=assessment_id,
+                correlationId=correlationId,
+            )
+
         self._api_client.post_legal_rule_match_callback(callback_payload)
         logger.info(
             "LEGAL_RULE_MATCH_CALLBACK_SUBMITTED",

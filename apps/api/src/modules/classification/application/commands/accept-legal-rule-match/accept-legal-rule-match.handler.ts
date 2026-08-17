@@ -24,6 +24,7 @@ import {
 } from "@lcsp/contracts/scan";
 import {
   HttpStatus,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -50,6 +51,8 @@ const LEGAL_WORKER_ACTOR_ID = AUDIT_ACTOR_IDS.legalRuleMatchWorker;
 
 @CommandHandler(AcceptLegalRuleMatchCommand)
 export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalRuleMatchCommand> {
+  private readonly logger = new Logger(AcceptLegalRuleMatchHandler.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditWriter: AuditWriterService,
@@ -131,6 +134,12 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
     const overallCoverageStatus = isMatchesEmpty
       ? OVERALL_COVERAGE_STATUSES.noCitation
       : payload.overall_coverage_status;
+
+    this.logger.warn(
+      `Legal rule match evaluated. Status: ${guardrailStatus}, Reason: ${
+        blockedReason || "PASSED"
+      }, Coverage: ${overallCoverageStatus}, Match Count: ${payload.matches.length}`,
+    );
 
     const legalRuleMatchId = crypto.randomUUID();
 
