@@ -78,6 +78,20 @@ function verifiedClaims(profileData: unknown): Record<string, unknown>[] {
   );
 }
 
+function wizardFactEntries(wizardAnswers: unknown): [string, unknown][] {
+  if (Array.isArray(wizardAnswers)) {
+    return wizardAnswers.flatMap((item) => {
+      const answer = asRecord(item);
+      const questionId = cleanString(answer?.questionId);
+      if (!answer || !questionId || !("value" in answer)) return [];
+      return [[questionId, answer.value] as [string, unknown]];
+    });
+  }
+
+  const legacyAnswers = asRecord(wizardAnswers);
+  return legacyAnswers ? Object.entries(legacyAnswers) : [];
+}
+
 function mergeRefs(
   target: Record<string, string[]>,
   field: string,
@@ -95,15 +109,12 @@ function buildFactProjection(
   const mergedProfile: Record<string, unknown> = {};
   const factEvidenceRefs: Record<string, string[]> = {};
 
-  const wizard = asRecord(wizardAnswers);
-  if (wizard) {
-    for (const [field, value] of Object.entries(wizard)) {
-      mergedProfile[field] = value;
-      if (wizardProfileId) {
-        mergeRefs(factEvidenceRefs, field, [
-          `wizard:${wizardProfileId}:${field}`,
-        ]);
-      }
+  for (const [field, value] of wizardFactEntries(wizardAnswers)) {
+    mergedProfile[field] = value;
+    if (wizardProfileId) {
+      mergeRefs(factEvidenceRefs, field, [
+        `wizard:${wizardProfileId}:${field}`,
+      ]);
     }
   }
 
