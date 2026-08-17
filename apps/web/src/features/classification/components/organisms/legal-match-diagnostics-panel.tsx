@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { resolveMessage } from "@lcsp/i18n";
 
-import { StatusCard } from "@/components/organisms/status-card";
 import { apiRequest } from "@/lib/api/api-request";
 import { appLocale } from "@/lib/locale";
 
@@ -70,21 +69,7 @@ export function LegalMatchDiagnosticsPanel({
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 pb-6 lg:px-6">
-      <StatusCard
-        title={resolveMessage(
-          appLocale,
-          "pages.classification.states.legalMatchBlockedTitle",
-        )}
-        description={resolveMessage(
-          appLocale,
-          "pages.classification.states.legalMatchBlockedDescription",
-        )}
-        badgeLabel={resolveMessage(
-          appLocale,
-          "pages.classification.states.legalMatchBlockedBadge",
-        )}
-        badgeVariant="secondary"
-      >
+      <section className="grid gap-4 rounded-lg border bg-card p-5">
         <div className="rounded-lg border bg-muted/40 p-4">
           <p className="text-sm font-medium">
             {resolveMessage(appLocale, "pages.classification.summaryLabel")}
@@ -181,7 +166,7 @@ export function LegalMatchDiagnosticsPanel({
             ) : null}
           </div>
         ) : null}
-      </StatusCard>
+      </section>
     </div>
   );
 }
@@ -231,7 +216,10 @@ function DiagnosticList({
 
 function parseDiagnostics(payload: unknown): LegalMatchDiagnostics | null {
   const root = record(payload);
-  if (!root || String(root.legal_rule_match_guardrail_status).toLowerCase() !== "blocked") {
+  if (
+    !root ||
+    String(root.legal_rule_match_guardrail_status).toLowerCase() !== "blocked"
+  ) {
     return null;
   }
 
