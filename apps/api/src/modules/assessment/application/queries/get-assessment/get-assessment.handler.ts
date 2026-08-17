@@ -529,9 +529,7 @@ function toLegalRuleEvaluationDiagnostic(
 }
 
 function nonNegativeInteger(value: unknown): number | null {
-  return typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value >= 0
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
     ? value
     : null;
 }

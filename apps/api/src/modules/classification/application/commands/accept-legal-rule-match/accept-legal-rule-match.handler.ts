@@ -135,7 +135,7 @@ export class AcceptLegalRuleMatchHandler implements ICommandHandler<AcceptLegalR
       ? LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.blocked
       : LEGAL_RULE_MATCH_GUARDRAIL_STATUSES.passed;
     const blockedReason = isMatchesEmpty
-      ? diagnostics.no_match_reason ?? "NO_CITATION_BASIS"
+      ? (diagnostics.no_match_reason ?? "NO_CITATION_BASIS")
       : null;
     const overallCoverageStatus = isMatchesEmpty
       ? OVERALL_COVERAGE_STATUSES.noCitation
