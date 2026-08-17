@@ -102,8 +102,8 @@ describe("SnapshotArchiveCache", () => {
 
 async function readStream(stream: NodeJS.ReadableStream): Promise<Buffer> {
   const chunks: Buffer[] = [];
-  for await (const chunk of stream as Readable) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  for await (const chunk of stream as AsyncIterable<Buffer>) {
+    chunks.push(chunk);
   }
   return Buffer.concat(chunks);
 }
