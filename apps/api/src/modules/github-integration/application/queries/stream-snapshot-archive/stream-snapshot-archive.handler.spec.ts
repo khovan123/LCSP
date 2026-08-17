@@ -98,8 +98,7 @@ describe("StreamSnapshotArchiveHandler", () => {
       return (
         options?.archive ?? {
           contentType: "application/gzip",
-          resolvedUrl:
-            "https://codeload.github.com/acme/example-repo/tar.gz/a",
+          resolvedUrl: "https://codeload.github.com/acme/example-repo/tar.gz/a",
           stream: Readable.from([Buffer.from("archive")]),
         }
       );
@@ -165,9 +164,10 @@ describe("StreamSnapshotArchiveHandler", () => {
       resolvedUrl: "https://codeload.github.com/acme/example-repo/tar.gz/a",
       stream: Readable.from([Buffer.from("cached-archive")]),
     };
-    const { handler, downloadRepositoryArchiveMock, cacheGetMock } = buildHandler({
-      cacheHit,
-    });
+    const { handler, downloadRepositoryArchiveMock, cacheGetMock } =
+      buildHandler({
+        cacheHit,
+      });
 
     const result = await handler.execute(
       new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-cache"),
