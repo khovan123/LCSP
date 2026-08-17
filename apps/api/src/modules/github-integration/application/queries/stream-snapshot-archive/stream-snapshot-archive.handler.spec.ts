@@ -109,10 +109,14 @@ describe("StreamSnapshotArchiveHandler", () => {
       get: jest
         .fn<() => Promise<SnapshotArchiveCacheHit | null>>()
         .mockResolvedValue(options?.cacheHit ?? null),
-      capture: jest.fn().mockImplementation(async (input: { source: NodeJS.ReadableStream }) => ({
-        stream: input.source,
-        completion: Promise.resolve(),
-      })),
+      capture: jest
+        .fn()
+        .mockImplementation(
+          async (input: { source: NodeJS.ReadableStream }) => ({
+            stream: input.source,
+            completion: Promise.resolve(),
+          }),
+        ),
     } as unknown as SnapshotArchiveCache;
 
     return {

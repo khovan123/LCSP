@@ -244,11 +244,14 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
       }
       return cacheHit;
     } catch (error: unknown) {
-      this.logger.warn("Repository snapshot archive cache read failed; using GitHub", {
-        correlationId,
-        snapshotId,
-        reason: cacheFailureReason(error),
-      });
+      this.logger.warn(
+        "Repository snapshot archive cache read failed; using GitHub",
+        {
+          correlationId,
+          snapshotId,
+          reason: cacheFailureReason(error),
+        },
+      );
       return null;
     }
   }
@@ -274,11 +277,14 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
       });
       return cached.stream;
     } catch (error: unknown) {
-      this.logger.warn("Repository snapshot archive cache unavailable; streaming directly", {
-        correlationId,
-        snapshotId: input.snapshotId,
-        reason: cacheFailureReason(error),
-      });
+      this.logger.warn(
+        "Repository snapshot archive cache unavailable; streaming directly",
+        {
+          correlationId,
+          snapshotId: input.snapshotId,
+          reason: cacheFailureReason(error),
+        },
+      );
       return input.source;
     }
   }

@@ -45,7 +45,9 @@ describe("SnapshotArchiveCache", () => {
       source: Readable.from([Buffer.from("pinned-archive")]),
     });
 
-    expect(await readStream(capture.stream)).toEqual(Buffer.from("pinned-archive"));
+    expect(await readStream(capture.stream)).toEqual(
+      Buffer.from("pinned-archive"),
+    );
     await capture.completion;
 
     const hit = await cache.get({
@@ -53,7 +55,9 @@ describe("SnapshotArchiveCache", () => {
       commitSha: "a".repeat(40),
     });
     expect(hit).not.toBeNull();
-    expect(await readStream(hit!.stream)).toEqual(Buffer.from("pinned-archive"));
+    expect(await readStream(hit!.stream)).toEqual(
+      Buffer.from("pinned-archive"),
+    );
 
     await expect(
       cache.get({
@@ -64,7 +68,9 @@ describe("SnapshotArchiveCache", () => {
   });
 
   it("removes ephemeral raw-source files on graceful shutdown", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "lcsp-snapshot-cache-test-"));
+    const directory = await mkdtemp(
+      join(tmpdir(), "lcsp-snapshot-cache-test-"),
+    );
     process.env.LCSP_SNAPSHOT_ARCHIVE_CACHE_DIR = directory;
     cache = new SnapshotArchiveCache();
     await cache.onModuleInit();

@@ -14,7 +14,11 @@ import { join } from "node:path";
 import { Readable, Transform, type TransformCallback } from "node:stream";
 import { finished } from "node:stream/promises";
 
-import { Injectable, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
+import {
+  Injectable,
+  type OnModuleDestroy,
+  type OnModuleInit,
+} from "@nestjs/common";
 
 const DEFAULT_CACHE_TTL_MS = 15 * 60 * 1000;
 const MAX_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -87,7 +91,9 @@ export class SnapshotArchiveCache implements OnModuleInit, OnModuleDestroy {
    * @param lookup - Immutable snapshot and commit identity.
    * @returns Cached stream metadata, or null when the entry is absent, expired, or invalid.
    */
-  async get(lookup: SnapshotArchiveCacheLookup): Promise<SnapshotArchiveCacheHit | null> {
+  async get(
+    lookup: SnapshotArchiveCacheLookup,
+  ): Promise<SnapshotArchiveCacheHit | null> {
     await this.ensureRootDirectory();
     const key = cacheKey(lookup);
     const paths = this.pathsForKey(key);
@@ -194,9 +200,12 @@ export class SnapshotArchiveCache implements OnModuleInit, OnModuleDestroy {
       clearTimeout(previous);
     }
 
-    const timer = setTimeout(() => {
-      void this.removeEntry(key);
-    }, Math.max(0, delayMs));
+    const timer = setTimeout(
+      () => {
+        void this.removeEntry(key);
+      },
+      Math.max(0, delayMs),
+    );
     timer.unref();
     this.evictionTimers.set(key, timer);
   }
@@ -215,7 +224,9 @@ export class SnapshotArchiveCache implements OnModuleInit, OnModuleDestroy {
   }
 
   private async restoreEvictionTimers(): Promise<void> {
-    const entries = await readdir(this.rootDirectory).catch(() => [] as string[]);
+    const entries = await readdir(this.rootDirectory).catch(
+      () => [] as string[],
+    );
     for (const entry of entries) {
       if (entry.endsWith(".tmp")) {
         await rm(join(this.rootDirectory, entry), { force: true }).catch(
@@ -300,7 +311,10 @@ class ArchiveCacheTee extends Transform {
     this.writer.end();
   }
 
-  override _destroy(error: Error | null, callback: (error?: Error | null) => void): void {
+  override _destroy(
+    error: Error | null,
+    callback: (error?: Error | null) => void,
+  ): void {
     if (!this.writer.destroyed && !this.writer.writableFinished) {
       this.writer.destroy();
     }
