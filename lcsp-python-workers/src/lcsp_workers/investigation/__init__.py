@@ -3,6 +3,7 @@ from .initial_query_executor import InitialQueryExecutor
 from .investigator import LawGuidedInvestigator
 from .models import EvidenceClaim, InvestigationPacket
 from .pipeline import EngineeringInvestigationPipeline, EngineeringInvestigationResult
+from .rule_evaluator import EngineeringRuleEvaluation, EngineeringRuleEvaluator
 
 __all__ = [
     "EvidenceClaimValidationError",
@@ -13,4 +14,6 @@ __all__ = [
     "InvestigationPacket",
     "EngineeringInvestigationPipeline",
     "EngineeringInvestigationResult",
+    "EngineeringRuleEvaluation",
+    "EngineeringRuleEvaluator",
 ]
