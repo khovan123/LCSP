@@ -184,6 +184,40 @@ export function formatTechnicalEvidenceMore(locale: Locale, count: number): stri
     : `${count} additional technical references remain in the audit artifact.`;
 }
 
+export function formatLegalProvisionCitation(
+  locale: Locale,
+  provision: {
+    documentId: string;
+    articleNumber: string | null;
+    clauseNumber: string | null;
+    pointCode: string | null;
+  },
+): string {
+  const parts = [formatLegalDocument(locale, provision.documentId)];
+  if (provision.articleNumber) {
+    parts.push(
+      locale === "vi"
+        ? `Điều ${provision.articleNumber}`
+        : `Article ${provision.articleNumber}`,
+    );
+  }
+  if (provision.clauseNumber) {
+    parts.push(
+      locale === "vi"
+        ? `Khoản ${provision.clauseNumber}`
+        : `Clause ${provision.clauseNumber}`,
+    );
+  }
+  if (provision.pointCode) {
+    parts.push(
+      locale === "vi"
+        ? `Điểm ${provision.pointCode}`
+        : `Point ${provision.pointCode}`,
+    );
+  }
+  return parts.join(" · ");
+}
+
 export function formatLegalReference(locale: Locale, value: string): string {
   const segments = value.split("::").filter(Boolean);
   return segments
@@ -191,13 +225,17 @@ export function formatLegalReference(locale: Locale, value: string): string {
     .join(" · ");
 }
 
-function formatLegalReferenceSegment(locale: Locale, value: string): string {
+function formatLegalDocument(locale: Locale, value: string): string {
   const lawMatch = /^LAW-(\d+)-(\d{4})-(QH\d+)$/i.exec(value);
-  if (lawMatch) {
-    return locale === "vi"
-      ? `Luật ${lawMatch[1]}/${lawMatch[2]}/${lawMatch[3].toUpperCase()}`
-      : `Law ${lawMatch[1]}/${lawMatch[2]}/${lawMatch[3].toUpperCase()}`;
-  }
+  if (!lawMatch) return value;
+  return locale === "vi"
+    ? `Luật ${lawMatch[1]}/${lawMatch[2]}/${lawMatch[3].toUpperCase()}`
+    : `Law ${lawMatch[1]}/${lawMatch[2]}/${lawMatch[3].toUpperCase()}`;
+}
+
+function formatLegalReferenceSegment(locale: Locale, value: string): string {
+  const document = formatLegalDocument(locale, value);
+  if (document !== value) return document;
 
   const article = /^art-(.+)$/i.exec(value);
   if (article) return locale === "vi" ? `Điều ${article[1]}` : `Article ${article[1]}`;
