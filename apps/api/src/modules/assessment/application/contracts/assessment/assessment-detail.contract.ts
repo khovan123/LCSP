@@ -69,11 +69,11 @@ export interface AssessmentDetailDto {
   readiness_state: ReadinessState;
   guardrail_status: ClassificationGuardrailStatus | null;
   classification_result: ClassificationResultSummaryDto | null;
-  /** Legacy fields are always null/false in the canonical direct runtime. */
+  /** Legacy display fields are empty in the canonical direct runtime. */
   legal_rule_match_guardrail_status: null;
   legal_rule_match_diagnostics: null;
   verified_profile_review: null;
-  can_rerun_classification: false;
+  can_rerun_classification: boolean;
   next_action: AssessmentNextActionKey;
   created_at: string;
   updated_at: string;
