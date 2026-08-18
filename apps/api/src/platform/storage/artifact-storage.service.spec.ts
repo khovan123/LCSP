@@ -95,4 +95,27 @@ describe("ArtifactStorageService", () => {
       BadRequestException,
     );
   });
+
+  it("reads a JSON artifact by a safe shared-storage key", async () => {
+    const graphPath = path.join(testStoragePath, "graphs", "graph-1.json");
+    fs.mkdirSync(path.dirname(graphPath), { recursive: true });
+    fs.writeFileSync(
+      graphPath,
+      JSON.stringify({ nodes: [], edges: [] }),
+      "utf8",
+    );
+
+    await expect(
+      service.readJsonArtifact("graphs/graph-1.json"),
+    ).resolves.toEqual({
+      nodes: [],
+      edges: [],
+    });
+  });
+
+  it("rejects unsafe JSON artifact keys", async () => {
+    await expect(
+      service.readJsonArtifact("../graph.json"),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
 });

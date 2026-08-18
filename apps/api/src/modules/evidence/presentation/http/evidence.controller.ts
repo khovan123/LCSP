@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   Body,
   Controller,
@@ -9,11 +10,11 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { isRecord } from "../../../../common/utils/index.js";
@@ -24,6 +25,7 @@ import { resultEnvelope } from "../../../../platform/problems/result-envelope.js
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptTechnicalProfileCommand } from "../../application/commands/accept-technical-profile/accept-technical-profile.command.js";
 import type { TechnicalProfileCallbackRequest } from "../../application/contracts/evidence/technical-profile-callback.contract.js";
+import { GetEvidenceGraphQuery } from "../../application/queries/get-evidence-graph/get-evidence-graph.query.js";
 import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evidence.query.js";
 
 @Controller("assessments")
@@ -46,6 +48,41 @@ export class EvidenceController {
         new GetEvidenceQuery(
           assessmentId,
           context.role,
+          request.correlationId as string,
+        ),
+      ),
+    );
+  }
+
+  /**
+   * Return evidence graph visualization: nodes, edges, clusters.
+   *
+   * Scope parameter controls detail level:
+   * - overview: Cluster-level view; aggregated nodes
+   * - detail: Expanded cluster; full node/edge detail
+   *
+   * For Developer scope, file paths and line numbers are redacted.
+   */
+  @Get(":assessmentId/evidence-graph")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
+  async getEvidenceGraph(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+    @Query("scope") scope?: string,
+    @Query("clusterId") clusterId?: string,
+  ) {
+    const context = request.rbacContext;
+
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetEvidenceGraphQuery(
+          assessmentId,
+          context.scope ?? "",
+          context.userId,
+          context.role === AUTH_USER_ROLES.admin ? "MANAGER" : "DEVELOPER",
+          (scope ?? "overview") as "overview" | "detail",
+          clusterId,
           request.correlationId as string,
         ),
       ),

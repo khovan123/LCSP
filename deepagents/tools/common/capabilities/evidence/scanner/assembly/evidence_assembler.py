@@ -219,10 +219,20 @@ class EvidenceAssembler:
             full_graph_dict = evidence_graph.to_dict()
             graph_id = full_graph_dict.get("graph_id") or "unknown"
             from tools.common.capabilities.platform.correlation import get_user_id, get_assessment_id
-            from tools.common.capabilities.platform.logging_path import get_partitioned_graph_path
-            user_id = get_user_id()
-            assessment_id = get_assessment_id()
-            ref_path = get_partitioned_graph_path(user_id, assessment_id, f"lcsp-evidence-graph-{graph_id}.json")
+            from tools.common.capabilities.platform.logging_path import get_repo_root
+            user_id = get_user_id() or "unknown_user"
+            assessment_id = get_assessment_id() or "unknown_assessment"
+            storage_root = os.getenv(
+                "LCSP_ARTIFACT_STORAGE_PATH",
+                os.path.join(get_repo_root(), "tmp", "lcsp-storage"),
+            )
+            storage_key = os.path.join(
+                "graphs",
+                f"user_{user_id}",
+                f"assessment_{assessment_id}",
+                f"lcsp-evidence-graph-{graph_id}.json",
+            ).replace(os.sep, "/")
+            ref_path = os.path.join(storage_root, storage_key)
             
             import json
             try:
@@ -249,7 +259,7 @@ class EvidenceAssembler:
                 "edges": [],
                 "source_anchors": [],
                 "indexes": {},
-                "evidence_graph_ref": ref_path,
+                "evidence_graph_ref": storage_key,
             }
 
         privacy_flags = PrivacyFlags(

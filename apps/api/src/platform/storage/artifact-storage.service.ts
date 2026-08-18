@@ -12,6 +12,8 @@ export interface ChunkedManifest {
   chunks: string[];
 }
 
+export type StoredJsonArtifact = Record<string, unknown>;
+
 @Injectable()
 export class ArtifactStorageService {
   private readonly storagePath: string;
@@ -66,5 +68,33 @@ export class ArtifactStorageService {
     }
 
     return reconstructed;
+  }
+
+  async readJsonArtifact(storageKey: string): Promise<StoredJsonArtifact> {
+    if (!/^[a-zA-Z0-9_./-]+\.json$/.test(storageKey)) {
+      throw new BadRequestException("Invalid artifact storage key");
+    }
+
+    const artifactPath = path.resolve(this.storagePath, storageKey);
+    const storageRoot = path.resolve(this.storagePath) + path.sep;
+    if (!artifactPath.startsWith(storageRoot)) {
+      throw new BadRequestException("Invalid artifact storage key");
+    }
+
+    const content = await fs.promises.readFile(artifactPath, "utf8");
+    const parsed = JSON.parse(content) as unknown;
+    if (
+      parsed === null ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed)
+    ) {
+      throw new BadRequestException("Invalid JSON artifact");
+    }
+
+    return parsed as StoredJsonArtifact;
+  }
+
+  get storageRoot(): string {
+    return this.storagePath;
   }
 }
