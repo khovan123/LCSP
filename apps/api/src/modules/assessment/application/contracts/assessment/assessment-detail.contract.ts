@@ -33,6 +33,15 @@ export interface TechnicalEvidenceDisplayDto {
   end_line: number | null;
 }
 
+export interface LegalProvisionDisplayDto {
+  document_id: string;
+  locator: string;
+  article_number: string | null;
+  clause_number: string | null;
+  point_code: string | null;
+  content: string;
+}
+
 export interface EngineeringRuleEvaluationDto {
   engineering_rule_id: string;
   legal_rule_id: string;
@@ -43,6 +52,7 @@ export interface EngineeringRuleEvaluationDto {
   technical_evidence: TechnicalEvidenceDisplayDto[];
   source_chunk_ids: string[];
   source_locators: string[];
+  legal_provisions: LegalProvisionDisplayDto[];
   confidence: number;
   limitations: string[];
 }
