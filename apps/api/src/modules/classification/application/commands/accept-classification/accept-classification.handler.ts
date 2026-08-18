@@ -17,6 +17,9 @@ import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_SCHEMA_VERSIONS,
   CLASSIFICATION_RESULT_STATUSES,
+  ENGINEERING_EVIDENCE_CLAIM_TYPES,
+  ENGINEERING_LIMITATION_CODES,
+  ENGINEERING_RULE_EVALUATION_STATUSES,
   SCAN_ERROR_CODES,
   SCAN_EVENT_TYPES,
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
@@ -46,6 +49,15 @@ import { AcceptClassificationCommand } from "./accept-classification.command.js"
 
 const CLASSIFICATION_WORKER_ACTOR_ID =
   AUDIT_ACTOR_IDS.classificationResultWorker;
+const ENGINEERING_LIMITATION_CODE_SET = new Set<string>(
+  Object.values(ENGINEERING_LIMITATION_CODES),
+);
+const ENGINEERING_CLAIM_TYPE_SET = new Set<string>(
+  Object.values(ENGINEERING_EVIDENCE_CLAIM_TYPES),
+);
+const ENGINEERING_EVALUATION_STATUS_SET = new Set<string>(
+  Object.values(ENGINEERING_RULE_EVALUATION_STATUSES),
+);
 
 @CommandHandler(AcceptClassificationCommand)
 export class AcceptClassificationHandler implements ICommandHandler<AcceptClassificationCommand> {
@@ -233,6 +245,7 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
       !isRecord(payload.classification_data) ||
       clean(payload.classification_data.mode) !==
         ASSESSMENT_RESULT_MODES.engineeringRuleEvaluation ||
+      !isValidEngineeringAssessmentData(payload.classification_data) ||
       !Object.values(CLASSIFICATION_GUARDRAIL_STATUSES).includes(
         payload.guardrail_status,
       )
@@ -341,6 +354,47 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
       { status: HttpStatus.BAD_REQUEST },
     );
   }
+}
+
+function isValidEngineeringAssessmentData(
+  data: Record<string, unknown>,
+): boolean {
+  if (!isMachineLimitationArray(data.limitations)) return false;
+
+  if (data.evaluations !== undefined) {
+    if (!Array.isArray(data.evaluations)) return false;
+    for (const evaluation of data.evaluations) {
+      if (!isRecord(evaluation)) return false;
+      const status = clean(evaluation.status);
+      if (status && !ENGINEERING_EVALUATION_STATUS_SET.has(status)) return false;
+      if (!isMachineLimitationArray(evaluation.limitations)) return false;
+    }
+  }
+
+  if (data.claims !== undefined) {
+    if (!Array.isArray(data.claims)) return false;
+    for (const claim of data.claims) {
+      if (!isRecord(claim)) return false;
+      const claimType = clean(claim.claim_type);
+      if (!claimType || !ENGINEERING_CLAIM_TYPE_SET.has(claimType)) return false;
+      if (!("value" in claim)) return false;
+      if (claim.value !== null && typeof claim.value !== "boolean") return false;
+      if (!isMachineLimitationArray(claim.limitations)) return false;
+    }
+  }
+
+  return true;
+}
+
+function isMachineLimitationArray(value: unknown): boolean {
+  if (value === undefined) return true;
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === "string" && ENGINEERING_LIMITATION_CODE_SET.has(item),
+    )
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
