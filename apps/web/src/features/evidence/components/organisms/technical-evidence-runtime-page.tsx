@@ -9,10 +9,12 @@ import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { resolveMessage } from "@lcsp/i18n";
 import { ActivityIcon, BotIcon, RotateCcwIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { GraphLoadingSkeleton } from "@/features/evidence/components/atoms/GraphLoadingSkeleton";
+import { EvidenceGraphPage } from "@/features/evidence/pages/EvidenceGraphPage";
 import {
   buildRuntimeConsoleModel,
   isActiveRuntimeStatus,
@@ -28,6 +30,7 @@ import {
   type WorkspaceRuntimeSummaryValue,
 } from "@/features/workspace/types/workspace-runtime.types";
 import { useRerunRepositoryScanMutation } from "@/lib/api/assessment-queries";
+import { isEvidenceGraphMockEnabled } from "@/lib/api/evidence-graph-client";
 import { appLocale } from "@/lib/locale";
 
 type SummaryRecord = {
@@ -278,9 +281,14 @@ export function TechnicalEvidenceRuntimePage({
   );
   const rerunDisabled =
     hasActiveScan || rerunSnapshotId === undefined || rerunMutation.isPending;
+  const acceptedReport = reports.find(
+    (report) => report.status === TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+  );
+  const showEvidenceGraph =
+    acceptedReport !== undefined || isEvidenceGraphMockEnabled();
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:px-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
       <header className="flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-2">
@@ -441,6 +449,28 @@ export function TechnicalEvidenceRuntimePage({
           </ul>
         )}
       </section>
+
+      {showEvidenceGraph ? (
+        <section className="overflow-hidden rounded-lg border">
+          <div className="border-b bg-muted/30 px-4 py-3">
+            <h2 className="text-sm font-medium">
+              {t("pages.technicalEvidence.graphVisualizationTitle")}
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("pages.technicalEvidence.graphVisualizationDescription")}
+            </p>
+          </div>
+          <div className="bg-background p-4">
+            <Suspense fallback={<GraphLoadingSkeleton className="min-h-96" />}>
+              <EvidenceGraphPage
+                assessmentId={assessmentId}
+                scope="overview"
+                className="min-h-96"
+              />
+            </Suspense>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

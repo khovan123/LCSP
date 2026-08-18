@@ -1,0 +1,221 @@
+{
+  "ok": true,
+  "data": {
+    "nodes": [
+      {
+        "id": "node:ai:openai",
+        "type": "ai_invocation",
+        "label": "OPENAI (OPENAI_SDK)",
+        "metadata": {
+          "provider": "OPENAI",
+          "framework": "OPENAI_SDK",
+          "confidence": "HIGH",
+          "severity": "MEDIUM",
+          "findingCount": 4
+        }
+      },
+      {
+        "id": "node:ai:google",
+        "type": "ai_invocation",
+        "label": "GOOGLE (VERTEXAI)",
+        "metadata": {
+          "provider": "GOOGLE",
+          "framework": "VERTEXAI",
+          "confidence": "MEDIUM",
+          "severity": "LOW",
+          "findingCount": 2
+        }
+      },
+      {
+        "id": "node:file:auth-login",
+        "type": "file",
+        "label": "login.ts",
+        "metadata": {
+          "filePath": "/src/auth/login.ts",
+          "lineNumber": 42,
+          "severity": "HIGH",
+          "findingCount": 3
+        },
+        "cluster": "cluster:auth"
+      },
+      {
+        "id": "node:file:auth-policy",
+        "type": "file",
+        "label": "policy.ts",
+        "metadata": {
+          "filePath": "/src/auth/policy.ts",
+          "lineNumber": 87,
+          "severity": "MEDIUM",
+          "findingCount": 2
+        },
+        "cluster": "cluster:auth"
+      },
+      {
+        "id": "node:file:billing-risk",
+        "type": "file",
+        "label": "risk-score.ts",
+        "metadata": {
+          "filePath": "/src/billing/risk-score.ts",
+          "lineNumber": 119,
+          "severity": "HIGH",
+          "findingCount": 4
+        },
+        "cluster": "cluster:billing"
+      },
+      {
+        "id": "node:file:shared-client",
+        "type": "file",
+        "label": "ai-client.ts",
+        "metadata": {
+          "filePath": "/src/shared/ai-client.ts",
+          "lineNumber": 18,
+          "severity": "LOW",
+          "findingCount": 1
+        },
+        "cluster": "cluster:shared"
+      },
+      {
+        "id": "node:dep:openai",
+        "type": "dependency",
+        "label": "openai@4.52.0",
+        "metadata": {
+          "packageName": "openai"
+        }
+      },
+      {
+        "id": "node:dep:vertexai",
+        "type": "dependency",
+        "label": "@google-cloud/vertexai@1.3.0",
+        "metadata": {
+          "packageName": "@google-cloud/vertexai"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge:openai-login",
+        "source": "node:ai:openai",
+        "target": "node:file:auth-login",
+        "type": "call",
+        "metadata": {
+          "severity": "HIGH"
+        }
+      },
+      {
+        "id": "edge:openai-policy",
+        "source": "node:ai:openai",
+        "target": "node:file:auth-policy",
+        "type": "call",
+        "metadata": {
+          "severity": "MEDIUM"
+        }
+      },
+      {
+        "id": "edge:google-risk",
+        "source": "node:ai:google",
+        "target": "node:file:billing-risk",
+        "type": "call",
+        "metadata": {
+          "severity": "HIGH"
+        }
+      },
+      {
+        "id": "edge:openai-google",
+        "source": "node:ai:openai",
+        "target": "node:ai:google",
+        "type": "output_to_decision",
+        "metadata": {
+          "requiresReview": true
+        }
+      },
+      {
+        "id": "edge:login-policy",
+        "source": "node:file:auth-login",
+        "target": "node:file:auth-policy",
+        "type": "data_flow",
+        "metadata": {
+          "severity": "MEDIUM"
+        }
+      },
+      {
+        "id": "edge:policy-client",
+        "source": "node:file:auth-policy",
+        "target": "node:file:shared-client",
+        "type": "data_flow",
+        "metadata": {
+          "severity": "LOW"
+        }
+      },
+      {
+        "id": "edge:openai-dependency",
+        "source": "node:ai:openai",
+        "target": "node:dep:openai",
+        "type": "dependency",
+        "metadata": {}
+      },
+      {
+        "id": "edge:google-dependency",
+        "source": "node:ai:google",
+        "target": "node:dep:vertexai",
+        "type": "dependency",
+        "metadata": {}
+      }
+    ],
+    "clusters": [
+      {
+        "id": "cluster:auth",
+        "type": "file",
+        "label": "auth",
+        "findingCount": 5,
+        "severityDistribution": {
+          "HIGH": 1,
+          "MEDIUM": 1,
+          "LOW": 0
+        },
+        "nodeIds": ["node:file:auth-login", "node:file:auth-policy"],
+        "metadata": {
+          "filePath": "/src/auth"
+        }
+      },
+      {
+        "id": "cluster:billing",
+        "type": "file",
+        "label": "billing",
+        "findingCount": 4,
+        "severityDistribution": {
+          "HIGH": 1,
+          "MEDIUM": 0,
+          "LOW": 0
+        },
+        "nodeIds": ["node:file:billing-risk"],
+        "metadata": {
+          "filePath": "/src/billing"
+        }
+      },
+      {
+        "id": "cluster:shared",
+        "type": "file",
+        "label": "shared",
+        "findingCount": 1,
+        "severityDistribution": {
+          "HIGH": 0,
+          "MEDIUM": 0,
+          "LOW": 1
+        },
+        "nodeIds": ["node:file:shared-client"],
+        "metadata": {
+          "filePath": "/src/shared"
+        }
+      }
+    ],
+    "meta": {
+      "scope": "overview",
+      "assessmentId": "mock-assessment",
+      "artifactVersion": "mock-evidence-graph-v1",
+      "generatedAt": "2026-08-19T00:00:00.000Z",
+      "totalFindingCount": 12,
+      "redactedForDeveloper": false
+    },
+    "correlationId": "mock-evidence-graph"
+  }
+}
