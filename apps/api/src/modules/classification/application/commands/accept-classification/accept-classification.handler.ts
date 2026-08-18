@@ -110,7 +110,8 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
         : {};
       return (
         clean(data.technical_evidence_report_id) === evidenceReport.id &&
-        clean(data.mode) === ASSESSMENT_RESULT_MODES.engineeringRuleEvaluation &&
+        clean(data.mode) ===
+          ASSESSMENT_RESULT_MODES.engineeringRuleEvaluation &&
         clean(data.run_id) === assessmentRunId
       );
     });
@@ -174,7 +175,10 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
 
     const runId =
       assessmentRunId ??
-      engineeringAssessmentRunId(evidenceReport.assessmentId, evidenceReport.id);
+      engineeringAssessmentRunId(
+        evidenceReport.assessmentId,
+        evidenceReport.id,
+      );
     await this.runtimeEvents.recordToolCompleted({
       organizationId: evidenceReport.organizationId,
       assessmentId: evidenceReport.assessmentId,
