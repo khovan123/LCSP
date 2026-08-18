@@ -73,14 +73,16 @@ def test_api_client_callback_chunking(monkeypatch) -> None:
     shutil.rmtree(client_storage_path, ignore_errors=True)
 
 
-def test_compilation_budget_exhaustion_is_recorded_for_each_uncompiled_rule() -> None:
+def test_legacy_budget_exception_does_not_restore_budget_result_semantics() -> None:
+    """Legacy BudgetExceeded imports must not resurrect removed monthly-budget outcomes."""
+    from lcsp_workers.investigation.models import ENGINEERING_LIMITATION_CODES
     from lcsp_workers.investigation.pipeline import EngineeringInvestigationPipeline
     from lcsp_workers.llm.budget_tracker import BudgetExceeded
 
     llm_client = MagicMock()
     rule_service = MagicMock()
     rule_service.get_or_compile.side_effect = BudgetExceeded(
-        "Monthly token cap exceeded."
+        "Legacy monthly token cap exceeded."
     )
 
     api_client = MagicMock()
@@ -120,7 +122,6 @@ def test_compilation_budget_exhaustion_is_recorded_for_each_uncompiled_rule() ->
     assert result.engineering_rules_executed == 0
     assert result.evaluations == ()
     assert result.limitations == (
-        "ENGINEERING_RULE_COMPILATION_BUDGET_EXHAUSTED:L1",
-        "ENGINEERING_RULE_COMPILATION_BUDGET_EXHAUSTED:L2",
-        "ENGINEERING_RULE_COMPILATION_BUDGET_EXHAUSTED:L3",
+        ENGINEERING_LIMITATION_CODES["engineering_rule_compilation_failed"],
     )
+    assert all("BUDGET" not in limitation for limitation in result.limitations)
