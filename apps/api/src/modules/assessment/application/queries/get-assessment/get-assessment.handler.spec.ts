@@ -168,7 +168,8 @@ describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
           id: "LAW-134-2025-QH15:art-10",
           documentId: "LAW-134-2025-QH15",
           locator: "art-10",
-          content: "Điều 10. Hồ sơ phân loại\n1. Nội dung khoản một.\n3. Nội dung khoản ba.",
+          content:
+            "Điều 10. Hồ sơ phân loại\n1. Nội dung khoản một.\n3. Nội dung khoản ba.",
           hierarchy: { articleNumber: "10" },
         },
         {

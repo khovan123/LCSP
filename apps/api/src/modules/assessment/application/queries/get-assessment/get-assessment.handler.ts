@@ -272,7 +272,10 @@ function toEngineeringRuleEvaluation(
     ),
     source_chunk_ids: sourceChunkIds,
     source_locators: stringArray(value.source_locators),
-    legal_provisions: resolveLegalProvisionDisplays(sourceChunkIds, legalChunks),
+    legal_provisions: resolveLegalProvisionDisplays(
+      sourceChunkIds,
+      legalChunks,
+    ),
     confidence:
       typeof value.confidence === "number" && Number.isFinite(value.confidence)
         ? Math.max(0, Math.min(1, value.confidence))
