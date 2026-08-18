@@ -158,6 +158,24 @@ module.exports = {
       "lcsp-gap-analysis-worker",
       "lcsp_workers.reporting.gap_analysis_consumer:GapAnalysisConsumer",
       8108
+    ),
+
+    worker(
+      "lcsp-legal-corpus-recovery-worker",
+      "lcsp_workers.legal.legal_corpus_recovery_consumer:LegalCorpusRecoveryConsumer",
+      8109
+    ),
+
+    worker(
+      "lcsp-targeted-reanalysis-worker",
+      "lcsp_workers.scanner.targeted_reanalysis_consumer:TargetedReanalysisConsumer",
+      8110
+    ),
+
+    worker(
+      "lcsp-final-report-worker",
+      "lcsp_workers.reporting.final_report_consumer:FinalReportConsumer",
+      8111
     )
   ]
 };
