@@ -54,7 +54,12 @@ export function resolveTechnicalEvidenceDisplays(
     const anchor = anchorById.get(ref);
     if (anchor) {
       const linkedNodeId = text(anchor.graph_node_id ?? anchor.graphNodeId);
-      add(fromAnchor(anchor, linkedNodeId ? nodeById.get(linkedNodeId) : undefined));
+      add(
+        fromAnchor(
+          anchor,
+          linkedNodeId ? nodeById.get(linkedNodeId) : undefined,
+        ),
+      );
       continue;
     }
     const edge = edgeById.get(ref);
@@ -65,14 +70,20 @@ export function resolveTechnicalEvidenceDisplays(
     for (const match of nodesByEvidenceRef.get(ref) ?? []) add(fromNode(match));
   }
 
-  return Array.from(displays.values()).slice(0, MAX_TECHNICAL_EVIDENCE_DISPLAY_ITEMS);
+  return Array.from(displays.values()).slice(
+    0,
+    MAX_TECHNICAL_EVIDENCE_DISPLAY_ITEMS,
+  );
 }
 
 function fromNode(node: JsonRecord): TechnicalEvidenceDisplayDto {
   const source = asRecord(node.source) ?? {};
   return {
     kind: text(node.node_type ?? node.nodeType) ?? "TECHNICAL_EVIDENCE",
-    label: text(node.label) ?? text(source.symbol_ref ?? source.symbolRef) ?? "Repository evidence",
+    label:
+      text(node.label) ??
+      text(source.symbol_ref ?? source.symbolRef) ??
+      "Repository evidence",
     file_path: sourcePath(text(source.file_path ?? source.filePath)),
     symbol_ref: text(source.symbol_ref ?? source.symbolRef),
     start_line: integer(source.start_line ?? source.startLine),
@@ -80,19 +91,36 @@ function fromNode(node: JsonRecord): TechnicalEvidenceDisplayDto {
   };
 }
 
-function fromAnchor(anchor: JsonRecord, node?: JsonRecord): TechnicalEvidenceDisplayDto {
+function fromAnchor(
+  anchor: JsonRecord,
+  node?: JsonRecord,
+): TechnicalEvidenceDisplayDto {
   const base = node ? fromNode(node) : null;
   return {
     kind: base?.kind ?? "SOURCE_LOCATION",
-    label: base?.label ?? text(anchor.symbol_ref ?? anchor.symbolRef) ?? fileName(text(anchor.file_path ?? anchor.filePath)) ?? "Repository source location",
-    file_path: sourcePath(text(anchor.file_path ?? anchor.filePath) ?? base?.file_path ?? null),
-    symbol_ref: text(anchor.symbol_ref ?? anchor.symbolRef) ?? base?.symbol_ref ?? null,
-    start_line: integer(anchor.start_line ?? anchor.startLine) ?? base?.start_line ?? null,
-    end_line: integer(anchor.end_line ?? anchor.endLine) ?? base?.end_line ?? null,
+    label:
+      base?.label ??
+      text(anchor.symbol_ref ?? anchor.symbolRef) ??
+      fileName(text(anchor.file_path ?? anchor.filePath)) ??
+      "Repository source location",
+    file_path: sourcePath(
+      text(anchor.file_path ?? anchor.filePath) ?? base?.file_path ?? null,
+    ),
+    symbol_ref:
+      text(anchor.symbol_ref ?? anchor.symbolRef) ?? base?.symbol_ref ?? null,
+    start_line:
+      integer(anchor.start_line ?? anchor.startLine) ??
+      base?.start_line ??
+      null,
+    end_line:
+      integer(anchor.end_line ?? anchor.endLine) ?? base?.end_line ?? null,
   };
 }
 
-function fromEdge(edge: JsonRecord, nodeById: Map<string, JsonRecord>): TechnicalEvidenceDisplayDto | null {
+function fromEdge(
+  edge: JsonRecord,
+  nodeById: Map<string, JsonRecord>,
+): TechnicalEvidenceDisplayDto | null {
   const sourceId = text(edge.source_node_id ?? edge.sourceNodeId);
   const targetId = text(edge.target_node_id ?? edge.targetNodeId);
   const source = sourceId ? nodeById.get(sourceId) : undefined;
@@ -100,11 +128,14 @@ function fromEdge(edge: JsonRecord, nodeById: Map<string, JsonRecord>): Technica
   if (!source && !target) return null;
   const sourceDisplay = source ? fromNode(source) : null;
   const targetDisplay = target ? fromNode(target) : null;
-  const labels = [sourceDisplay?.label, targetDisplay?.label].filter((value): value is string => Boolean(value));
+  const labels = [sourceDisplay?.label, targetDisplay?.label].filter(
+    (value): value is string => Boolean(value),
+  );
   const location = sourceDisplay?.file_path ? sourceDisplay : targetDisplay;
   return {
     kind: text(edge.edge_type ?? edge.edgeType) ?? "STATIC_FLOW",
-    label: labels.length > 1 ? labels.join(" → ") : labels[0] ?? "Repository flow",
+    label:
+      labels.length > 1 ? labels.join(" → ") : (labels[0] ?? "Repository flow"),
     file_path: location?.file_path ?? null,
     symbol_ref: location?.symbol_ref ?? null,
     start_line: location?.start_line ?? null,
@@ -116,7 +147,8 @@ function sourcePath(value: string | null): string | null {
   if (!value) return null;
   const normalized = value.replaceAll("\\", "/");
   const parts = normalized.split("/").filter(Boolean);
-  if (parts.length > 1 && /-[0-9a-f]{7,40}$/i.test(parts[0] ?? "")) return parts.slice(1).join("/");
+  if (parts.length > 1 && /-[0-9a-f]{7,40}$/i.test(parts[0] ?? ""))
+    return parts.slice(1).join("/");
   return normalized;
 }
 
@@ -126,11 +158,15 @@ function fileName(value: string | null): string | null {
 }
 
 function asRecord(value: unknown): JsonRecord | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonRecord)
+    : null;
 }
 
 function asRecords(value: unknown): JsonRecord[] {
-  return Array.isArray(value) ? value.map(asRecord).filter((item): item is JsonRecord => item !== null) : [];
+  return Array.isArray(value)
+    ? value.map(asRecord).filter((item): item is JsonRecord => item !== null)
+    : [];
 }
 
 function text(value: unknown): string | null {
@@ -138,9 +174,16 @@ function text(value: unknown): string | null {
 }
 
 function strings(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean) : [];
+  return Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
 }
 
 function integer(value: unknown): number | null {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : null;
 }
