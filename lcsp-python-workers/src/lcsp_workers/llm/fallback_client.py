@@ -7,6 +7,8 @@ from typing import Protocol, runtime_checkable
 
 import httpx
 
+from lcsp_workers.platform.logging import get_logger
+
 from .budget_tracker import BudgetExceeded
 from .gateway_client import (
     LLMGatewayClient,
@@ -15,6 +17,9 @@ from .gateway_client import (
     LLMToolResponse,
 )
 from .prompt_safety import PromptSafetyViolation
+
+
+logger = get_logger(__name__)
 
 
 @runtime_checkable
@@ -123,16 +128,42 @@ class PrimaryThenFallbackLLMClient:
         max_tokens: int | None = None,
         correlationId: str | None = None,
     ) -> LLMResponse:
-        """Dispatch a plain completion through the provider fallback policy."""
-        return self._dispatch(
-            lambda client: client.complete(
-                prompt=prompt,
+        """Dispatch a plain completion and emit safe request/response telemetry."""
+        self._log_request(
+            operation="complete",
+            prompt=prompt,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            max_tokens=max_tokens,
+            correlation_id=correlationId,
+        )
+        try:
+            result = self._dispatch(
+                lambda client: client.complete(
+                    prompt=prompt,
+                    workflow_run_id=workflow_run_id,
+                    node_name=node_name,
+                    max_tokens=max_tokens,
+                    correlationId=correlationId,
+                )
+            )
+        except Exception as exc:
+            self._log_failure(
+                operation="complete",
                 workflow_run_id=workflow_run_id,
                 node_name=node_name,
-                max_tokens=max_tokens,
-                correlationId=correlationId,
+                correlation_id=correlationId,
+                error=exc,
             )
+            raise
+        self._log_response(
+            operation="complete",
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            correlation_id=correlationId,
+            response=result,
         )
+        return result
 
     def complete_with_tools(
         self,
@@ -144,17 +175,44 @@ class PrimaryThenFallbackLLMClient:
         max_tokens: int | None = None,
         correlationId: str | None = None,
     ) -> LLMToolResponse:
-        """Dispatch a tool-enabled completion through the same fallback policy."""
-        return self._dispatch(
-            lambda client: client.complete_with_tools(
-                prompt=prompt,
-                tools=tools,
+        """Dispatch a tool-enabled completion and emit safe request telemetry."""
+        self._log_request(
+            operation="complete_with_tools",
+            prompt=prompt,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            max_tokens=max_tokens,
+            correlation_id=correlationId,
+            tool_names=[tool.name for tool in tools],
+        )
+        try:
+            result = self._dispatch(
+                lambda client: client.complete_with_tools(
+                    prompt=prompt,
+                    tools=tools,
+                    workflow_run_id=workflow_run_id,
+                    node_name=node_name,
+                    max_tokens=max_tokens,
+                    correlationId=correlationId,
+                )
+            )
+        except Exception as exc:
+            self._log_failure(
+                operation="complete_with_tools",
                 workflow_run_id=workflow_run_id,
                 node_name=node_name,
-                max_tokens=max_tokens,
-                correlationId=correlationId,
+                correlation_id=correlationId,
+                error=exc,
             )
+            raise
+        self._log_response(
+            operation="complete_with_tools",
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            correlation_id=correlationId,
+            response=result,
         )
+        return result
 
     def _dispatch(self, operation):
         """Run one operation against eligible providers until policy stops fallback."""
@@ -175,6 +233,75 @@ class PrimaryThenFallbackLLMClient:
                     raise
                 continue
         raise LlmProviderUnavailableError(reasons)
+
+    def _log_request(
+        self,
+        *,
+        operation: str,
+        prompt: str,
+        workflow_run_id: str,
+        node_name: str,
+        max_tokens: int | None,
+        correlation_id: str | None,
+        tool_names: list[str] | None = None,
+    ) -> None:
+        """Log one safe logical LLM request without prompt or credential contents."""
+        logger.info(
+            "LLM_REQUEST",
+            operation=operation,
+            provider_chain=[provider.name for provider in self._providers],
+            model_chain=[provider.client.model for provider in self._providers],
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            max_tokens=max_tokens,
+            prompt_chars=len(prompt),
+            tool_names=tool_names or [],
+            correlationId=correlation_id,
+        )
+
+    @staticmethod
+    def _log_response(
+        *,
+        operation: str,
+        workflow_run_id: str,
+        node_name: str,
+        correlation_id: str | None,
+        response: LLMResponse,
+    ) -> None:
+        """Log normalized provider usage after a successful LLM request."""
+        logger.info(
+            "LLM_RESPONSE",
+            operation=operation,
+            provider=response.provider,
+            model=response.model,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            request_id=response.request_id,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+            tool_call_count=len(getattr(response, "tool_calls", ()) or ()),
+            correlationId=correlation_id,
+        )
+
+    @staticmethod
+    def _log_failure(
+        *,
+        operation: str,
+        workflow_run_id: str,
+        node_name: str,
+        correlation_id: str | None,
+        error: Exception,
+    ) -> None:
+        """Log safe failure metadata while preserving the original exception."""
+        logger.error(
+            "LLM_REQUEST_FAILED",
+            operation=operation,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            error_type=type(error).__name__,
+            error_code=_classify_provider_error(error),
+            correlationId=correlation_id,
+        )
 
 
 def _classify_provider_error(exc: Exception) -> str:
