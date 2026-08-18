@@ -60,7 +60,7 @@ class EngineeringAssessmentConsumer(ConsumerBase):
         if not assessment_id:
             raise ValueError("accepted evidence report is missing assessment_id")
 
-        wizard_context = self._wizard_context(assessment_id)
+        wizard_context = self._wizard_context(assessment_id, correlationId)
         if self._pipeline is None:
             result_data = {
                 "mode": "ENGINEERING_RULE_EVALUATION",
@@ -114,8 +114,22 @@ class EngineeringAssessmentConsumer(ConsumerBase):
             correlationId=correlationId,
         )
 
-    def _wizard_context(self, assessment_id: str) -> dict[str, Any] | None:
-        profile = self._api_client.get_wizard_profile_for_assessment(assessment_id)
+    def _wizard_context(
+        self,
+        assessment_id: str,
+        correlation_id: str,
+    ) -> dict[str, Any] | None:
+        try:
+            profile = self._api_client.get_wizard_profile_for_assessment(assessment_id)
+        except Exception as error:
+            logger.info(
+                "OPTIONAL_WIZARD_CONTEXT_UNAVAILABLE",
+                assessment_id=assessment_id,
+                error_type=type(error).__name__,
+                correlationId=correlation_id,
+            )
+            return None
+
         if not isinstance(profile, dict):
             return None
         answers = profile.get("answers")
