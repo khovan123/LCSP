@@ -2,6 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import { UnprocessableEntityException } from "@nestjs/common";
 import {
   ASSESSMENT_RESULT_MODES,
+  ENGINEERING_LIMITATION_CODES,
   SCAN_ERROR_CODES,
 } from "@lcsp/contracts/scan";
 
@@ -38,7 +39,7 @@ describe("OverclaimGuardrailService", () => {
     expectOverclaim(service, { result: "non-compliant" });
   });
 
-  it("does not treat direct EngineeringRule provenance and identifiers as narrative claims", () => {
+  it("does not treat direct EngineeringRule machine fields as narrative claims", () => {
     expect(() =>
       service.validate(
         {
@@ -61,7 +62,7 @@ describe("OverclaimGuardrailService", () => {
               source_chunk_ids: ["validated-source-chunk"],
               source_locators: ["approved/legal/source"],
               confidence: 0.9,
-              limitations: [],
+              limitations: [ENGINEERING_LIMITATION_CODES.dynamicPathUnresolved],
             },
           ],
           claims: [
@@ -74,10 +75,10 @@ describe("OverclaimGuardrailService", () => {
               graph_path_refs: [],
               source_anchor_refs: [],
               confidence: 0.9,
-              limitations: [],
+              limitations: [ENGINEERING_LIMITATION_CODES.graphCoverageLimited],
             },
           ],
-          limitations: [],
+          limitations: [ENGINEERING_LIMITATION_CODES.searchCoverageIncomplete],
         },
         "corr-test",
       ),
@@ -99,16 +100,12 @@ describe("OverclaimGuardrailService", () => {
     });
   });
 
-  it("still rejects model-authored overclaim language in direct claim limitations", () => {
+  it("still rejects overclaim language in direct top-level notes", () => {
     expectOverclaim(service, {
       mode: ASSESSMENT_RESULT_MODES.engineeringRuleEvaluation,
+      notes: "The product is legally compliant.",
       evaluations: [],
-      claims: [
-        {
-          value: false,
-          limitations: ["System appears compliant based on external evidence."],
-        },
-      ],
+      claims: [],
       limitations: [],
     });
   });
