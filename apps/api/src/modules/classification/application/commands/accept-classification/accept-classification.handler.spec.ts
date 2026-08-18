@@ -204,7 +204,9 @@ describe("AcceptClassificationHandler", () => {
         evaluations: [
           {
             ...evaluations[0],
-            limitations: ["System appears compliant based on external evidence."],
+            limitations: [
+              "System appears compliant based on external evidence.",
+            ],
           },
         ],
       },
@@ -217,7 +219,9 @@ describe("AcceptClassificationHandler", () => {
       throw new Error("expected rejection");
     } catch (error) {
       expect(error).toBeInstanceOf(UnprocessableEntityException);
-      const response = (error as UnprocessableEntityException).getResponse() as {
+      const response = (
+        error as UnprocessableEntityException
+      ).getResponse() as {
         problem: { code: string };
       };
       expect(response.problem.code).toBe(

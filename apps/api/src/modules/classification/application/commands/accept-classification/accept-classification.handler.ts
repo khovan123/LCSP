@@ -366,7 +366,8 @@ function isValidEngineeringAssessmentData(
     for (const evaluation of data.evaluations) {
       if (!isRecord(evaluation)) return false;
       const status = clean(evaluation.status);
-      if (status && !ENGINEERING_EVALUATION_STATUS_SET.has(status)) return false;
+      if (status && !ENGINEERING_EVALUATION_STATUS_SET.has(status))
+        return false;
       if (!isMachineLimitationArray(evaluation.limitations)) return false;
     }
   }
@@ -376,9 +377,11 @@ function isValidEngineeringAssessmentData(
     for (const claim of data.claims) {
       if (!isRecord(claim)) return false;
       const claimType = clean(claim.claim_type);
-      if (!claimType || !ENGINEERING_CLAIM_TYPE_SET.has(claimType)) return false;
+      if (!claimType || !ENGINEERING_CLAIM_TYPE_SET.has(claimType))
+        return false;
       if (!("value" in claim)) return false;
-      if (claim.value !== null && typeof claim.value !== "boolean") return false;
+      if (claim.value !== null && typeof claim.value !== "boolean")
+        return false;
       if (!isMachineLimitationArray(claim.limitations)) return false;
     }
   }
