@@ -1,29 +1,355 @@
-"""LLM semantic synthesis over deterministic law-guided graph packets."""
+"""LLM-guided, evidence-bounded investigation over the Program Evidence Graph."""
 from __future__ import annotations
-import hashlib, json
-from typing import Any
+
+import hashlib
+import json
+from typing import Any, Callable
+
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
+from lcsp_workers.scanner.program_graph.query_engine import ProgramGraphQueryEngine
+
 from .evidence_claim_validator import EvidenceClaimValidator
 from .models import EvidenceClaim, InvestigationPacket
 
+
+MAX_TOOL_STEPS = 4
+MAX_OBSERVATION_ITEMS = 40
+CANONICAL_CLAIM_TYPES = {
+    "RULE_REQUIREMENT_MET",
+    "RULE_REQUIREMENT_NOT_MET",
+    "UNRESOLVED_ENGINEERING_FACT",
+}
+
+
 class LawGuidedInvestigator:
-    def __init__(self, llm_client: LLMClientProtocol) -> None: self.llm = llm_client; self.validator = EvidenceClaimValidator()
-    def investigate(self, *, packet: InvestigationPacket, graph, workflow_run_id: str, correlation_id: str | None = None) -> list[EvidenceClaim]:
-        body = {"task": "Synthesize engineering facts only. Never decide compliance, violation or risk tier.", "engineeringRuleId": packet.engineering_rule_id, "concept": packet.concept, "goals": packet.investigation_goals, "initialGraphResults": packet.initial_results, "unresolvedFrontiers": packet.unresolved_frontiers, "wizardContext": packet.wizard_context, "output": {"claims": [{"claimType": "UPPER_SNAKE_CASE", "value": True, "evidenceRefs": [], "graphPathRefs": [], "sourceAnchorRefs": [], "confidence": 0.0, "limitations": []}]}}
-        response = self.llm.complete(prompt="Return JSON only. Every non-unknown claim requires evidenceRefs from the supplied graph packet.\n" + json.dumps(body, ensure_ascii=False, sort_keys=True), workflow_run_id=workflow_run_id, node_name="investigate_engineering_rule", max_tokens=5000, correlationId=correlation_id)
-        payload = _json(response.content); rows = payload.get("claims")
-        if not isinstance(rows, list): raise ValueError("investigator response must contain claims")
-        result = []
+    """Let the LLM choose bounded graph tools, then emit evidence-backed technical claims.
+
+    The LLM never receives raw repository source and never decides legal compliance.
+    It may only inspect the persisted Program Evidence Graph through the deterministic
+    query engine. Final rule status is computed later by ``EngineeringRuleEvaluator``.
+    """
+
+    def __init__(self, llm_client: LLMClientProtocol) -> None:
+        self.llm = llm_client
+        self.validator = EvidenceClaimValidator()
+
+    def investigate(
+        self,
+        *,
+        packet: InvestigationPacket,
+        graph,
+        workflow_run_id: str,
+        correlation_id: str | None = None,
+    ) -> list[EvidenceClaim]:
+        engine = ProgramGraphQueryEngine(graph)
+        observations: list[dict[str, Any]] = [
+            {
+                "source": "engineering_rule_seed_query",
+                "result": self._bounded(item),
+            }
+            for item in packet.initial_results[:MAX_OBSERVATION_ITEMS]
+        ]
+
+        for step in range(MAX_TOOL_STEPS):
+            response = self.llm.complete(
+                prompt=self._prompt(packet, observations, step),
+                workflow_run_id=workflow_run_id,
+                node_name="investigate_engineering_rule",
+                max_tokens=3500,
+                correlationId=correlation_id,
+            )
+            payload = _json(response.content)
+            action = str(payload.get("action") or "finish").strip().lower()
+
+            if action == "finish":
+                return self._claims_from_payload(payload, packet, graph)
+
+            tool_name = str(payload.get("tool") or "").strip()
+            arguments = payload.get("arguments")
+            if not isinstance(arguments, dict):
+                arguments = {}
+            observation = self._execute_tool(engine, tool_name, arguments)
+            observations.append(
+                {
+                    "step": step + 1,
+                    "tool": tool_name,
+                    "arguments": self._bounded(arguments),
+                    "result": self._bounded(observation),
+                }
+            )
+
+        # One final synthesis call after the bounded tool budget is exhausted. This
+        # call cannot request more tools; unresolved evidence must become UNKNOWN.
+        response = self.llm.complete(
+            prompt=self._finish_prompt(packet, observations),
+            workflow_run_id=workflow_run_id,
+            node_name="investigate_engineering_rule_finish",
+            max_tokens=3000,
+            correlationId=correlation_id,
+        )
+        payload = _json(response.content)
+        payload["action"] = "finish"
+        return self._claims_from_payload(payload, packet, graph)
+
+    def _execute_tool(
+        self,
+        engine: ProgramGraphQueryEngine,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        tools: dict[str, Callable[..., Any]] = {
+            "search_nodes": engine.search_nodes,
+            "trace_static_flow": engine.trace_static_flow,
+            "inspect_data_path": engine.inspect_data_path,
+            "inspect_decision_path": engine.inspect_decision_path,
+            "inspect_human_review_path": engine.inspect_human_review_path,
+            "symbol_context": engine.symbol_context,
+            "provider_invocations": engine.provider_invocations,
+        }
+        tool = tools.get(tool_name)
+        if tool is None:
+            return {
+                "error": "UNKNOWN_GRAPH_TOOL",
+                "allowedTools": sorted(tools),
+            }
+        try:
+            result = tool(**self._normalize_tool_arguments(tool_name, arguments))
+        except (TypeError, ValueError) as error:
+            return {
+                "error": "INVALID_GRAPH_TOOL_ARGUMENTS",
+                "tool": tool_name,
+                "errorType": type(error).__name__,
+            }
+        return result.to_dict() if hasattr(result, "to_dict") else result
+
+    @staticmethod
+    def _normalize_tool_arguments(
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        aliases = {
+            "nodeTypes": "node_types",
+            "pathPrefixes": "path_prefixes",
+            "semanticTypes": "semantic_types",
+            "maxResults": "max_results",
+            "startRef": "start_ref",
+            "maxHops": "max_hops",
+            "edgeTypes": "edge_types",
+            "stopNodeTypes": "stop_node_types",
+            "actionCategories": "action_categories",
+            "symbolRef": "symbol_ref",
+            "maxNeighbors": "max_neighbors",
+        }
+        normalized = {aliases.get(key, key): value for key, value in arguments.items()}
+        if tool_name == "search_nodes":
+            normalized.setdefault("max_results", 25)
+        elif tool_name in {
+            "trace_static_flow",
+            "inspect_data_path",
+            "inspect_decision_path",
+            "inspect_human_review_path",
+        }:
+            normalized.setdefault("max_results", 80)
+        return normalized
+
+    def _claims_from_payload(
+        self,
+        payload: dict[str, Any],
+        packet: InvestigationPacket,
+        graph,
+    ) -> list[EvidenceClaim]:
+        rows = payload.get("claims")
+        if not isinstance(rows, list):
+            rows = []
+        result: list[EvidenceClaim] = []
         for index, item in enumerate(rows, 1):
-            if not isinstance(item, dict): continue
-            refs = tuple(str(v) for v in item.get("evidenceRefs") or [] if str(v)); seed = f"{packet.engineering_rule_id}:{index}:{item.get('claimType')}:{refs}"
-            claim = EvidenceClaim("claim:" + hashlib.sha256(seed.encode()).hexdigest()[:24], packet.engineering_rule_id, str(item.get("claimType") or "UNRESOLVED_ENGINEERING_FACT"), item.get("value"), refs, tuple(str(v) for v in item.get("graphPathRefs") or [] if str(v)), tuple(str(v) for v in item.get("sourceAnchorRefs") or [] if str(v)), float(item.get("confidence") or 0), tuple(str(v) for v in item.get("limitations") or [] if str(v)))
+            if not isinstance(item, dict):
+                continue
+            claim_type = str(
+                item.get("claimType") or "UNRESOLVED_ENGINEERING_FACT"
+            ).strip().upper()
+            if claim_type not in CANONICAL_CLAIM_TYPES:
+                claim_type = "UNRESOLVED_ENGINEERING_FACT"
+            refs = tuple(
+                str(value)
+                for value in item.get("evidenceRefs") or []
+                if str(value)
+            )
+            seed = (
+                f"{packet.engineering_rule_id}:{index}:{claim_type}:"
+                f"{refs}:{item.get('value')}"
+            )
+            claim = EvidenceClaim(
+                "claim:" + hashlib.sha256(seed.encode()).hexdigest()[:24],
+                packet.engineering_rule_id,
+                claim_type,
+                item.get("value"),
+                refs,
+                tuple(
+                    str(value)
+                    for value in item.get("graphPathRefs") or []
+                    if str(value)
+                ),
+                tuple(
+                    str(value)
+                    for value in item.get("sourceAnchorRefs") or []
+                    if str(value)
+                ),
+                float(item.get("confidence") or 0),
+                tuple(
+                    str(value)
+                    for value in item.get("limitations") or []
+                    if str(value)
+                ),
+            )
             result.append(self.validator.validate(claim, graph))
-        return result
+
+        if result:
+            return result
+
+        # Fail closed when the model does not return a usable conclusion.
+        return [
+            EvidenceClaim(
+                "claim:"
+                + hashlib.sha256(
+                    f"{packet.engineering_rule_id}:empty".encode()
+                ).hexdigest()[:24],
+                packet.engineering_rule_id,
+                "UNRESOLVED_ENGINEERING_FACT",
+                None,
+                (),
+                confidence=0.0,
+                limitations=("INVESTIGATION_RETURNED_NO_VALID_CLAIMS",),
+            )
+        ]
+
+    @staticmethod
+    def _bounded(value: Any) -> Any:
+        if isinstance(value, list):
+            return [LawGuidedInvestigator._bounded(item) for item in value[:MAX_OBSERVATION_ITEMS]]
+        if isinstance(value, dict):
+            result: dict[str, Any] = {}
+            for index, (key, item) in enumerate(value.items()):
+                if index >= MAX_OBSERVATION_ITEMS:
+                    break
+                result[str(key)] = LawGuidedInvestigator._bounded(item)
+            return result
+        if isinstance(value, str) and len(value) > 2000:
+            return value[:2000] + "…"
+        return value
+
+    @staticmethod
+    def _prompt(
+        packet: InvestigationPacket,
+        observations: list[dict[str, Any]],
+        step: int,
+    ) -> str:
+        contract = {
+            "task": (
+                "Investigate one EngineeringRule against the Program Evidence Graph. "
+                "Choose graph tools when more evidence is needed. Never decide legal "
+                "compliance, risk tier, certification, or infer facts outside evidence."
+            ),
+            "engineeringRuleId": packet.engineering_rule_id,
+            "concept": packet.concept,
+            "goals": packet.investigation_goals,
+            "seedEvidenceRefs": packet.evidence_refs,
+            "unresolvedFrontiers": packet.unresolved_frontiers,
+            "observations": observations,
+            "toolStep": step + 1,
+            "allowedTools": {
+                "search_nodes": {
+                    "node_types": [],
+                    "text": None,
+                    "semantic_types": [],
+                    "max_results": 25,
+                },
+                "trace_static_flow": {
+                    "start_ref": "node id",
+                    "direction": "FORWARD|BACKWARD|BOTH",
+                    "max_hops": 12,
+                    "edge_types": [],
+                    "stop_node_types": [],
+                    "max_results": 80,
+                },
+                "inspect_data_path": {"start_ref": "node id"},
+                "inspect_decision_path": {"start_ref": "node id"},
+                "inspect_human_review_path": {"start_ref": "node id"},
+                "symbol_context": {"symbol_ref": "symbol or node ref"},
+                "provider_invocations": {"provider": None},
+            },
+            "output": {
+                "action": "tool|finish",
+                "tool": "one allowed tool when action=tool",
+                "arguments": {},
+                "claims": [
+                    {
+                        "claimType": (
+                            "RULE_REQUIREMENT_MET|RULE_REQUIREMENT_NOT_MET|"
+                            "UNRESOLVED_ENGINEERING_FACT"
+                        ),
+                        "value": True,
+                        "evidenceRefs": [],
+                        "graphPathRefs": [],
+                        "sourceAnchorRefs": [],
+                        "confidence": 0.0,
+                        "limitations": [],
+                    }
+                ],
+            },
+            "claimRules": [
+                "MET/NOT_MET require concrete evidenceRefs from graph observations.",
+                "Absence is NOT_MET only when the searched path is bounded and complete.",
+                "Dynamic, truncated, external, or insufficient paths are UNRESOLVED.",
+                "Use action=finish as soon as evidence is sufficient.",
+            ],
+        }
+        return "Return JSON only.\n" + json.dumps(
+            contract, ensure_ascii=False, sort_keys=True
+        )
+
+    @staticmethod
+    def _finish_prompt(
+        packet: InvestigationPacket,
+        observations: list[dict[str, Any]],
+    ) -> str:
+        contract = {
+            "task": (
+                "Tool budget is exhausted. Produce final engineering evidence claims only. "
+                "Do not request more tools and do not decide legal compliance."
+            ),
+            "engineeringRuleId": packet.engineering_rule_id,
+            "concept": packet.concept,
+            "goals": packet.investigation_goals,
+            "observations": observations,
+            "output": {
+                "action": "finish",
+                "claims": [
+                    {
+                        "claimType": (
+                            "RULE_REQUIREMENT_MET|RULE_REQUIREMENT_NOT_MET|"
+                            "UNRESOLVED_ENGINEERING_FACT"
+                        ),
+                        "value": True,
+                        "evidenceRefs": [],
+                        "graphPathRefs": [],
+                        "sourceAnchorRefs": [],
+                        "confidence": 0.0,
+                        "limitations": [],
+                    }
+                ],
+            },
+        }
+        return "Return JSON only.\n" + json.dumps(
+            contract, ensure_ascii=False, sort_keys=True
+        )
+
 
 def _json(text: str) -> dict[str, Any]:
     start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end < start: raise ValueError("investigator output is not JSON")
-    value = json.loads(text[start:end + 1])
-    if not isinstance(value, dict): raise ValueError("investigator output must be object")
+    if start < 0 or end < start:
+        raise ValueError("investigator output is not JSON")
+    value = json.loads(text[start : end + 1])
+    if not isinstance(value, dict):
+        raise ValueError("investigator output must be object")
     return value
