@@ -30,6 +30,7 @@ const ADMIN_EMAILS = [
   "anhkn7@gmail.com",
   "lebaonhi0805@gmail.com",
   "anhtunguyen643@gmail.com",
+  "trannguyendangthuy120701@gmail.com",
 ] as const;
 
 async function main() {
