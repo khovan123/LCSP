@@ -71,7 +71,10 @@ describe("Direct EngineeringRule Result Callback (e2e)", () => {
 
     assert.equal(response.status, 200);
     assert.equal(body.accepted, true);
-    assert.equal(body.guardrail_status, CLASSIFICATION_GUARDRAIL_STATUSES.passed);
+    assert.equal(
+      body.guardrail_status,
+      CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+    );
     assert.ok(body.classification_result_id);
 
     const [result, outbox, audit] = await Promise.all([
@@ -92,7 +95,10 @@ describe("Direct EngineeringRule Result Callback (e2e)", () => {
     assert.equal(result?.organizationId, "org-1");
     assert.equal(result?.schemaVersion, "2.0.0");
     assert.equal(result?.status, CLASSIFICATION_RESULT_STATUSES.accepted);
-    assert.equal(result?.guardrailStatus, CLASSIFICATION_GUARDRAIL_STATUSES.passed);
+    assert.equal(
+      result?.guardrailStatus,
+      CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+    );
 
     const data = result?.classificationData as Record<string, unknown>;
     assert.equal(data.mode, ASSESSMENT_RESULT_MODES.engineeringRuleEvaluation);
@@ -143,7 +149,10 @@ describe("Direct EngineeringRule Result Callback (e2e)", () => {
     const response = await callback(app, payload);
     assert.equal(response.status, 200);
     const body = successBody<ClassificationResultCallbackResponseDto>(response);
-    assert.equal(body.guardrail_status, CLASSIFICATION_GUARDRAIL_STATUSES.degraded);
+    assert.equal(
+      body.guardrail_status,
+      CLASSIFICATION_GUARDRAIL_STATUSES.degraded,
+    );
   });
 
   it("accepts blocked runtime result without fabricating compliance findings", async () => {
@@ -162,7 +171,10 @@ describe("Direct EngineeringRule Result Callback (e2e)", () => {
     const response = await callback(app, payload);
     const body = successBody<ClassificationResultCallbackResponseDto>(response);
     assert.equal(response.status, 200);
-    assert.equal(body.guardrail_status, CLASSIFICATION_GUARDRAIL_STATUSES.blocked);
+    assert.equal(
+      body.guardrail_status,
+      CLASSIFICATION_GUARDRAIL_STATUSES.blocked,
+    );
 
     const audit = await prisma.authAuditEvent.findFirst({
       where: { eventType: SCAN_EVENT_TYPES.classificationBlockedAudit },
@@ -251,7 +263,8 @@ function validPayload(): AcceptClassificationDto {
           legal_rule_id: "legal-review",
           concept: "HUMAN_REVIEW",
           status: "NON_COMPLIANT",
-          reason: "Repository evidence demonstrates that the engineering requirement is not met.",
+          reason:
+            "Repository evidence demonstrates that the engineering requirement is not met.",
           evidence_refs: ["graph:path:1"],
           source_chunk_ids: ["LAW:A1"],
           source_locators: ["art-1::cl-1"],
@@ -263,7 +276,8 @@ function validPayload(): AcceptClassificationDto {
           legal_rule_id: "legal-log",
           concept: "INCIDENT_LOGGING",
           status: "COMPLIANT",
-          reason: "Repository evidence demonstrates that the engineering requirement is met.",
+          reason:
+            "Repository evidence demonstrates that the engineering requirement is met.",
           evidence_refs: ["graph:path:2"],
           source_chunk_ids: ["LAW:A2"],
           source_locators: ["art-2::cl-1"],

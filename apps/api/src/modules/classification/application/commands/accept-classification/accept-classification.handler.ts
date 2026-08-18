@@ -64,7 +64,10 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
 
     const payload = command.payload;
     const correlationId = command.correlationId ?? payload.assessment_id;
-    this.overclaimGuardrail.validate(payload.classification_data, correlationId);
+    this.overclaimGuardrail.validate(
+      payload.classification_data,
+      correlationId,
+    );
 
     const evidenceReport = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
@@ -126,8 +129,9 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
       mode: ASSESSMENT_RESULT_MODES.engineeringRuleEvaluation,
       technical_evidence_report_id: evidenceReport.id,
       snapshot_id:
-        clean(payload.classification_data.snapshot_id) ?? evidenceReport.snapshotId,
-    } as Prisma.InputJsonValue;
+        clean(payload.classification_data.snapshot_id) ??
+        evidenceReport.snapshotId,
+    };
 
     await this.prisma.$transaction(async (tx) => {
       await tx.classificationResult.create({

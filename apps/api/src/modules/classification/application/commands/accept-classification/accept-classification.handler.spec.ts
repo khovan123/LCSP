@@ -47,7 +47,8 @@ describe("AcceptClassificationHandler", () => {
           legal_rule_id: "legal-1",
           concept: "HUMAN_REVIEW",
           status: "NON_COMPLIANT",
-          reason: "Repository evidence demonstrates that the engineering requirement is not met.",
+          reason:
+            "Repository evidence demonstrates that the engineering requirement is not met.",
           evidence_refs: ["graph:path:1"],
           source_chunk_ids: ["LAW:A1"],
           source_locators: ["art-1::cl-1"],
@@ -70,7 +71,9 @@ describe("AcceptClassificationHandler", () => {
     mockFindResults = jest.fn().mockResolvedValue([]);
     mockCreateResult = jest
       .fn()
-      .mockImplementation(({ data }: { data: unknown }) => Promise.resolve(data));
+      .mockImplementation(({ data }: { data: unknown }) =>
+        Promise.resolve(data),
+      );
     mockEnqueueOutbox = jest.fn().mockResolvedValue(undefined);
     mockWriteAuditInTx = jest.fn().mockResolvedValue(undefined);
     mockRecordToolCompleted = jest.fn().mockResolvedValue(undefined);
@@ -84,7 +87,8 @@ describe("AcceptClassificationHandler", () => {
       $transaction: jest
         .fn()
         .mockImplementation(
-          async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma),
+          async (callback: (tx: unknown) => Promise<unknown>) =>
+            callback(prisma),
         ),
     } as unknown as jest.Mocked<PrismaService>;
 
@@ -106,7 +110,9 @@ describe("AcceptClassificationHandler", () => {
     );
 
     expect(result.accepted).toBe(true);
-    expect(result.guardrail_status).toBe(CLASSIFICATION_GUARDRAIL_STATUSES.passed);
+    expect(result.guardrail_status).toBe(
+      CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+    );
     expect(mockCreateResult).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -148,7 +154,9 @@ describe("AcceptClassificationHandler", () => {
 
   it("accepts canonical COMPLIANT/NON_COMPLIANT machine status labels", async () => {
     await expect(
-      handler.execute(new AcceptClassificationCommand(validPayload, "corr-status")),
+      handler.execute(
+        new AcceptClassificationCommand(validPayload, "corr-status"),
+      ),
     ).resolves.toEqual(expect.objectContaining({ accepted: true }));
   });
 
@@ -162,7 +170,9 @@ describe("AcceptClassificationHandler", () => {
     };
 
     await expect(
-      handler.execute(new AcceptClassificationCommand(payload, "corr-overclaim")),
+      handler.execute(
+        new AcceptClassificationCommand(payload, "corr-overclaim"),
+      ),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
   });
 
@@ -188,7 +198,9 @@ describe("AcceptClassificationHandler", () => {
     ]);
 
     await expect(
-      handler.execute(new AcceptClassificationCommand(validPayload, "corr-dup")),
+      handler.execute(
+        new AcceptClassificationCommand(validPayload, "corr-dup"),
+      ),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
@@ -205,7 +217,9 @@ describe("AcceptClassificationHandler", () => {
       const response = (error as NotFoundException).getResponse() as {
         problem: { code: string };
       };
-      expect(response.problem.code).toBe(SCAN_ERROR_CODES.evidenceReportNotFound);
+      expect(response.problem.code).toBe(
+        SCAN_ERROR_CODES.evidenceReportNotFound,
+      );
     }
   });
 

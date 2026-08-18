@@ -15,7 +15,11 @@ import { GetAssessmentHandler } from "./get-assessment.handler.js";
 import { GetAssessmentQuery } from "./get-assessment.query.js";
 
 function makeAssessment(
-  overrides: Partial<{ organizationId: string; ownerId: string; name: string }> = {},
+  overrides: Partial<{
+    organizationId: string;
+    ownerId: string;
+    name: string;
+  }> = {},
 ) {
   return Assessment.create({
     organizationId: overrides.organizationId ?? "org-1",
@@ -34,9 +38,13 @@ function buildHandler(input: {
   } | null;
 }) {
   const repository: AssessmentRepository = {
-    findById: jest.fn<AssessmentRepository["findById"]>().mockResolvedValue(input.assessment),
+    findById: jest
+      .fn<AssessmentRepository["findById"]>()
+      .mockResolvedValue(input.assessment),
     save: jest.fn<AssessmentRepository["save"]>().mockResolvedValue(undefined),
-    saveInTx: jest.fn<AssessmentRepository["saveInTx"]>().mockResolvedValue(undefined),
+    saveInTx: jest
+      .fn<AssessmentRepository["saveInTx"]>()
+      .mockResolvedValue(undefined),
     findMany: jest
       .fn<AssessmentRepository["findMany"]>()
       .mockResolvedValue({ items: [], total: 0 }),
@@ -46,10 +54,14 @@ function buildHandler(input: {
       findUnique: jest.fn().mockResolvedValue(input.wizardProfile ?? null),
     },
     technicalEvidenceReport: {
-      findFirst: jest.fn().mockResolvedValue(input.acceptedEvidenceReport ?? null),
+      findFirst: jest
+        .fn()
+        .mockResolvedValue(input.acceptedEvidenceReport ?? null),
     },
     classificationResult: {
-      findFirst: jest.fn().mockResolvedValue(input.classificationResult ?? null),
+      findFirst: jest
+        .fn()
+        .mockResolvedValue(input.classificationResult ?? null),
     },
   } as unknown as PrismaService;
   return new GetAssessmentHandler(repository, prisma);
@@ -60,13 +72,7 @@ function query(
   role = SUBJECT_ROLES.manager,
   userId = "user-1",
 ) {
-  return new GetAssessmentQuery(
-    assessmentId,
-    "org-1",
-    userId,
-    role,
-    "corr-1",
-  );
+  return new GetAssessmentQuery(assessmentId, "org-1", userId, role, "corr-1");
 }
 
 describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
@@ -145,7 +151,9 @@ describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
 
     const result = await handler.execute(query(assessment.id));
 
-    expect(result.guardrail_status).toBe(CLASSIFICATION_GUARDRAIL_STATUSES.passed);
+    expect(result.guardrail_status).toBe(
+      CLASSIFICATION_GUARDRAIL_STATUSES.passed,
+    );
     expect(result.classification_result).toMatchObject({
       mode: "ENGINEERING_RULE_EVALUATION",
       status: "COMPLETE",
