@@ -5,6 +5,7 @@ import {
   ASSESSMENT_RESULT_MODES,
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_STATUSES,
+  ENGINEERING_LIMITATION_CODES,
   SCAN_ERROR_CODES,
   SCAN_EVENT_TYPES,
 } from "@lcsp/contracts/scan";
@@ -160,6 +161,22 @@ describe("AcceptClassificationHandler", () => {
     ).resolves.toEqual(expect.objectContaining({ accepted: true }));
   });
 
+  it("accepts canonical machine limitation codes", async () => {
+    const payload: AcceptClassificationDto = {
+      ...validPayload,
+      classification_data: {
+        ...validPayload.classification_data,
+        limitations: [ENGINEERING_LIMITATION_CODES.graphCoverageLimited],
+      },
+    };
+
+    await expect(
+      handler.execute(
+        new AcceptClassificationCommand(payload, "corr-limit-code"),
+      ),
+    ).resolves.toEqual(expect.objectContaining({ accepted: true }));
+  });
+
   it("rejects narrative legal/compliance overclaim wording", async () => {
     const payload: AcceptClassificationDto = {
       ...validPayload,
@@ -172,6 +189,67 @@ describe("AcceptClassificationHandler", () => {
     await expect(
       handler.execute(
         new AcceptClassificationCommand(payload, "corr-overclaim"),
+      ),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+  });
+
+  it("rejects free-form prose in machine limitation fields", async () => {
+    const evaluations = validPayload.classification_data.evaluations as Array<
+      Record<string, unknown>
+    >;
+    const payload: AcceptClassificationDto = {
+      ...validPayload,
+      classification_data: {
+        ...validPayload.classification_data,
+        evaluations: [
+          {
+            ...evaluations[0],
+            limitations: ["System appears compliant based on external evidence."],
+          },
+        ],
+      },
+    };
+
+    try {
+      await handler.execute(
+        new AcceptClassificationCommand(payload, "corr-prose-limit"),
+      );
+      throw new Error("expected rejection");
+    } catch (error) {
+      expect(error).toBeInstanceOf(UnprocessableEntityException);
+      const response = (error as UnprocessableEntityException).getResponse() as {
+        problem: { code: string };
+      };
+      expect(response.problem.code).toBe(
+        SCAN_ERROR_CODES.classificationSchemaInvalid,
+      );
+    }
+  });
+
+  it("rejects textual claim values", async () => {
+    const payload: AcceptClassificationDto = {
+      ...validPayload,
+      classification_data: {
+        ...validPayload.classification_data,
+        claims: [
+          {
+            claim_id: "claim-1",
+            engineering_rule_id: "eng-1",
+            claim_type: "RULE_REQUIREMENT_MET",
+            value: "yes",
+            evidence_refs: ["graph:path:1"],
+            graph_path_refs: [],
+            source_anchor_refs: [],
+            confidence: 0.9,
+            limitations: [],
+          },
+        ],
+      },
+    };
+
+    await expect(
+      handler.execute(
+        new AcceptClassificationCommand(payload, "corr-text-claim-value"),
       ),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
   });
