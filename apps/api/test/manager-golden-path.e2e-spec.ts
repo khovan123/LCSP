@@ -297,12 +297,7 @@ async function grantGoldenPathActions(prisma: PrismaClient): Promise<void> {
   await prisma.authPolicy.update({
     where: { id_version: { id: policy.id, version: policy.version } },
     data: {
-      actions: [
-        ...new Set([
-          ...policy.actions,
-          PBAC_ACTIONS.documentRead,
-        ]),
-      ],
+      actions: [...new Set([...policy.actions, PBAC_ACTIONS.documentRead])],
     },
   });
 }
