@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from lcsp_workers.legal.chromadb_citation_retriever import ChromaDbCitationRetriever
@@ -12,6 +13,8 @@ from lcsp_workers.platform.api_client import WorkerApiClient
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
 
+from .code_context import CodeContextSession
+from .code_context_investigator import CodeContextLawGuidedInvestigator
 from .initial_query_executor import InitialQueryExecutor
 from .investigator import LawGuidedInvestigator
 from .models import (
@@ -79,6 +82,10 @@ class EngineeringInvestigationPipeline:
     EngineeringRules. EngineeringRules guide Program Evidence Graph investigation;
     deterministic evaluation then emits COMPLIANT/NON_COMPLIANT/UNKNOWN outcomes.
     No TechnicalProfile, AIUsageFlow, VerifiedProfile, or LegalRuleMatch is required.
+
+    Repository source, when available, is read only from the immutable snapshot's
+    temporary workspace by ``CodeContextSession``. It is never added to persisted
+    TechnicalEvidenceReport/ProgramEvidenceGraph payloads.
     """
 
     def __init__(
@@ -99,7 +106,7 @@ class EngineeringInvestigationPipeline:
             retriever=self._retriever,
         )
         self._query_executor = query_executor or InitialQueryExecutor()
-        self._investigator = investigator or LawGuidedInvestigator(llm_client)
+        self._investigator = investigator or CodeContextLawGuidedInvestigator(llm_client)
         self._evaluator = evaluator or EngineeringRuleEvaluator()
 
     def run(
@@ -109,8 +116,10 @@ class EngineeringInvestigationPipeline:
         workflow_run_id: str,
         correlation_id: str | None = None,
         wizard_context: dict[str, Any] | None = None,
+        workspace_path: str | Path | None = None,
     ) -> EngineeringInvestigationResult:
         graph = self._graph(evidence_report)
+        code_context = CodeContextSession(graph, workspace_path=workspace_path)
         catalog = self._api_client.get_active_legal_rule_catalog()
         corpus = self._api_client.get_active_legal_corpus()
         catalog_version_id = self._required_id(
@@ -203,12 +212,23 @@ class EngineeringInvestigationPipeline:
                     wizard_context=wizard_context,
                 )
                 try:
-                    rule_claims = self._investigator.investigate(
-                        packet=packet,
-                        graph=graph,
-                        workflow_run_id=workflow_run_id,
-                        correlation_id=correlation_id,
-                    )
+                    if isinstance(
+                        self._investigator, CodeContextLawGuidedInvestigator
+                    ):
+                        rule_claims = self._investigator.investigate(
+                            packet=packet,
+                            graph=graph,
+                            workflow_run_id=workflow_run_id,
+                            correlation_id=correlation_id,
+                            code_context=code_context,
+                        )
+                    else:
+                        rule_claims = self._investigator.investigate(
+                            packet=packet,
+                            graph=graph,
+                            workflow_run_id=workflow_run_id,
+                            correlation_id=correlation_id,
+                        )
                 except Exception as error:
                     logger.warning(
                         "ENGINEERING_INVESTIGATION_FAILED",
