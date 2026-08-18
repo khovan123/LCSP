@@ -10,7 +10,13 @@ from lcsp_workers.llm.fallback_client import LLMClientProtocol
 from lcsp_workers.scanner.program_graph.query_engine import ProgramGraphQueryEngine
 
 from .evidence_claim_validator import EvidenceClaimValidator
-from .models import EvidenceClaim, InvestigationPacket
+from .models import (
+    ENGINEERING_EVIDENCE_CLAIM_TYPES,
+    ENGINEERING_LIMITATION_CODES,
+    MODEL_SELECTABLE_LIMITATION_CODES,
+    EvidenceClaim,
+    InvestigationPacket,
+)
 
 
 MAX_TOOL_STEPS = 4
@@ -25,10 +31,11 @@ GRAPH_TOOL_NAMES = (
     "symbol_context",
     "provider_invocations",
 )
-CANONICAL_CLAIM_TYPES = {
-    "RULE_REQUIREMENT_MET",
-    "RULE_REQUIREMENT_NOT_MET",
-    "UNRESOLVED_ENGINEERING_FACT",
+CANONICAL_CLAIM_TYPES = frozenset(ENGINEERING_EVIDENCE_CLAIM_TYPES.values())
+CLAIM_VALUE_BY_TYPE: dict[str, bool | None] = {
+    ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]: True,
+    ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"]: False,
+    ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]: None,
 }
 
 
@@ -304,23 +311,33 @@ class LawGuidedInvestigator:
 
     @classmethod
     def _finish_tool_definition(cls) -> LLMToolDefinition:
-        """Return the native terminal action used to submit evidence claims."""
+        """Return the native terminal action used to submit evidence claims.
+
+        The model selects only a claim type, evidence references, confidence, and
+        closed limitation codes. LCSP derives ``value`` deterministically from the
+        claim type, so provider-authored prose or contradictory boolean values cannot
+        enter the persisted claim artifact.
+        """
         claim_schema = cls._closed_schema(
             {
                 "claimType": {
                     "type": "string",
                     "enum": sorted(CANONICAL_CLAIM_TYPES),
                 },
-                "value": {"type": "boolean"},
                 "evidenceRefs": {"type": "array", "items": {"type": "string"}},
                 "graphPathRefs": {"type": "array", "items": {"type": "string"}},
                 "sourceAnchorRefs": {"type": "array", "items": {"type": "string"}},
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                "limitations": {"type": "array", "items": {"type": "string"}},
+                "limitations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": sorted(MODEL_SELECTABLE_LIMITATION_CODES),
+                    },
+                },
             },
             required=(
                 "claimType",
-                "value",
                 "evidenceRefs",
                 "graphPathRefs",
                 "sourceAnchorRefs",
@@ -332,7 +349,8 @@ class LawGuidedInvestigator:
             name=FINISH_TOOL_NAME,
             description=(
                 "Finish this EngineeringRule investigation and submit only technical evidence "
-                "claims. Never submit a legal conclusion."
+                "claims. Never submit a legal conclusion. Limitation values must be selected "
+                "from the provided machine-code enum."
             ),
             input_schema=cls._closed_schema(
                 {
@@ -388,10 +406,21 @@ class LawGuidedInvestigator:
             if not isinstance(item, dict):
                 continue
             claim_type = str(
-                item.get("claimType") or "UNRESOLVED_ENGINEERING_FACT"
+                item.get("claimType")
+                or ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
             ).strip().upper()
             if claim_type not in CANONICAL_CLAIM_TYPES:
-                claim_type = "UNRESOLVED_ENGINEERING_FACT"
+                claim_type = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+
+            limitations, invalid_limitation = self._normalize_limitations(
+                item.get("limitations")
+            )
+            if invalid_limitation:
+                # Fail closed if a provider violates the native limitation enum.
+                claim_type = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+                limitations = (*limitations, ENGINEERING_LIMITATION_CODES["model_limitation_code_invalid"])
+
+            claim_value = CLAIM_VALUE_BY_TYPE[claim_type]
             refs = tuple(
                 str(value)
                 for value in item.get("evidenceRefs") or []
@@ -409,22 +438,18 @@ class LawGuidedInvestigator:
             )
             seed = (
                 f"{packet.engineering_rule_id}:{index}:{claim_type}:"
-                f"{refs}:{graph_refs}:{source_refs}:{item.get('value')}"
+                f"{refs}:{graph_refs}:{source_refs}:{claim_value}:{limitations}"
             )
             claim = EvidenceClaim(
                 "claim:" + hashlib.sha256(seed.encode()).hexdigest()[:24],
                 packet.engineering_rule_id,
                 claim_type,
-                item.get("value"),
+                claim_value,
                 refs,
                 graph_refs,
                 source_refs,
                 float(item.get("confidence") or 0),
-                tuple(
-                    str(value)
-                    for value in item.get("limitations") or []
-                    if str(value)
-                ),
+                limitations,
             )
             result.append(self.validator.validate(claim, graph))
 
@@ -438,13 +463,38 @@ class LawGuidedInvestigator:
                     f"{packet.engineering_rule_id}:empty".encode()
                 ).hexdigest()[:24],
                 packet.engineering_rule_id,
-                "UNRESOLVED_ENGINEERING_FACT",
+                ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"],
                 None,
                 (),
                 confidence=0.0,
-                limitations=("INVESTIGATION_RETURNED_NO_VALID_CLAIMS",),
+                limitations=(
+                    ENGINEERING_LIMITATION_CODES[
+                        "investigation_returned_no_valid_claims"
+                    ],
+                ),
             )
         ]
+
+    @staticmethod
+    def _normalize_limitations(value: Any) -> tuple[tuple[str, ...], bool]:
+        if value is None:
+            return (), False
+        if not isinstance(value, list):
+            return (), True
+
+        allowed = set(MODEL_SELECTABLE_LIMITATION_CODES)
+        result: list[str] = []
+        invalid = False
+        for item in value:
+            code = str(item).strip().upper()
+            if not code:
+                continue
+            if code not in allowed:
+                invalid = True
+                continue
+            if code not in result:
+                result.append(code)
+        return tuple(result), invalid
 
     @staticmethod
     def _bounded(value: Any) -> Any:
@@ -504,6 +554,8 @@ class LawGuidedInvestigator:
                 "Absence is NOT_MET only when the searched path is bounded and complete.",
                 "Dynamic, truncated, external, or insufficient paths are UNRESOLVED.",
                 "Wizard context may explain an external boundary but never overrides repository evidence.",
+                "Claim value is derived by LCSP from claimType; do not invent a separate value.",
+                "Limitations must use only the machine-code enum exposed by finish.",
                 "Use finish as soon as the EngineeringRule criteria are sufficiently evidenced.",
             ],
         }
@@ -526,6 +578,8 @@ class LawGuidedInvestigator:
             "observations": observations,
             "claimRules": [
                 "If the EngineeringRule criteria are not sufficiently evidenced, emit UNRESOLVED_ENGINEERING_FACT.",
+                "Claim value is derived by LCSP from claimType.",
+                "Use only the machine-code limitation values exposed by finish.",
                 "Do not convert missing repository evidence into a legal conclusion.",
             ],
         }
