@@ -66,7 +66,6 @@ class EngineeringRuleEvaluator:
             sorted({item for row in rows for item in row.limitations if item})
         )
 
-        # Contradictory evidence must fail closed rather than silently choosing one.
         if failed and passed:
             return self._result(
                 rule,
@@ -78,7 +77,7 @@ class EngineeringRuleEvaluator:
             )
 
         if failed:
-            backed = [row for row in failed if row.evidence_refs]
+            backed = [row for row in failed if self._has_evidence(row)]
             if backed:
                 return self._result(
                     rule,
@@ -91,7 +90,7 @@ class EngineeringRuleEvaluator:
             unresolved.append(failed[0])
 
         if passed:
-            backed = [row for row in passed if row.evidence_refs]
+            backed = [row for row in passed if self._has_evidence(row)]
             if backed and not unresolved:
                 return self._result(
                     rule,
@@ -109,6 +108,12 @@ class EngineeringRuleEvaluator:
             evidence_refs,
             rows,
             limitations or ("ENGINEERING_EVIDENCE_INSUFFICIENT",),
+        )
+
+    @staticmethod
+    def _has_evidence(claim: EvidenceClaim) -> bool:
+        return bool(
+            claim.evidence_refs or claim.graph_path_refs or claim.source_anchor_refs
         )
 
     @staticmethod
