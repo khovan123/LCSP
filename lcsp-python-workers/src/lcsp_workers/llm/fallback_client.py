@@ -8,6 +8,7 @@ from typing import Protocol, runtime_checkable
 import httpx
 
 from lcsp_workers.platform.logging import get_logger
+from lcsp_workers.platform.redaction import redact_string
 
 from .budget_tracker import BudgetExceeded
 from .gateway_client import (
@@ -20,6 +21,14 @@ from .prompt_safety import PromptSafetyViolation
 
 
 logger = get_logger(__name__)
+_MAX_PROVIDER_ERROR_MESSAGE_CHARS = 4_000
+_PROVIDER_REQUEST_ID_HEADERS = (
+    "x-request-id",
+    "request-id",
+    "openai-request-id",
+    "anthropic-request-id",
+    "x-goog-request-id",
+)
 
 
 @runtime_checkable
@@ -74,13 +83,23 @@ class LlmProviderNetworkError(Exception):
 class LlmProviderUnavailableError(Exception):
     """Raised when no eligible provider completes the operation."""
 
-    def __init__(self, reasons: list[str]):
+    def __init__(
+        self,
+        reasons: list[str],
+        *,
+        last_error: Exception | None = None,
+        last_provider: str | None = None,
+    ):
         """Store provider failure reasons for audit/debug visibility.
 
         Args:
             reasons: Ordered ``provider:error_code`` entries from attempted providers.
+            last_error: Final provider exception, retained only for safe diagnostic extraction.
+            last_provider: Provider name associated with ``last_error``.
         """
         self.reasons = reasons
+        self.last_error = last_error
+        self.last_provider = last_provider
         super().__init__("No eligible LLM provider completed the request.")
 
 
@@ -218,6 +237,8 @@ class PrimaryThenFallbackLLMClient:
         """Run one operation against eligible providers until policy stops fallback."""
         reasons: list[str] = []
         attempts = 0
+        last_error: Exception | None = None
+        last_provider: str | None = None
         for provider in self._providers:
             if attempts >= self._max_provider_attempts:
                 break
@@ -227,12 +248,18 @@ class PrimaryThenFallbackLLMClient:
             except (PromptSafetyViolation, BudgetExceeded):
                 raise
             except Exception as exc:
+                last_error = exc
+                last_provider = provider.name
                 code = _classify_provider_error(exc)
                 reasons.append(f"{provider.name}:{code}")
                 if code not in self._fallback_on_codes:
                     raise
                 continue
-        raise LlmProviderUnavailableError(reasons)
+        raise LlmProviderUnavailableError(
+            reasons,
+            last_error=last_error,
+            last_provider=last_provider,
+        )
 
     def _log_request(
         self,
@@ -285,8 +312,8 @@ class PrimaryThenFallbackLLMClient:
             correlationId=correlation_id,
         )
 
-    @staticmethod
     def _log_failure(
+        self,
         *,
         operation: str,
         workflow_run_id: str,
@@ -294,16 +321,96 @@ class PrimaryThenFallbackLLMClient:
         correlation_id: str | None,
         error: Exception,
     ) -> None:
-        """Log safe failure metadata while preserving the original exception."""
+        """Log redacted provider failure details while preserving the original exception."""
+        diagnostic_error = (
+            error.last_error
+            if isinstance(error, LlmProviderUnavailableError) and error.last_error is not None
+            else error
+        )
+        provider = (
+            error.last_provider if isinstance(error, LlmProviderUnavailableError) else None
+        )
+        details = _safe_provider_error_details(
+            diagnostic_error,
+            api_keys=tuple(
+                str(key)
+                for key in (
+                    getattr(candidate.client, "api_key", None)
+                    for candidate in self._providers
+                )
+                if key
+            ),
+        )
         logger.error(
             "LLM_REQUEST_FAILED",
             operation=operation,
             workflow_run_id=workflow_run_id,
             node_name=node_name,
-            error_type=type(error).__name__,
-            error_code=_classify_provider_error(error),
+            provider=provider,
+            error_type=type(diagnostic_error).__name__,
+            error_code=_classify_provider_error(diagnostic_error),
+            error_message=details["error_message"],
+            status_code=details["status_code"],
+            request_id=details["request_id"],
             correlationId=correlation_id,
         )
+
+
+def _safe_provider_error_details(
+    error: Exception,
+    *,
+    api_keys: tuple[str, ...] = (),
+) -> dict[str, str | int | None]:
+    """Extract bounded provider diagnostics without exposing configured credentials."""
+    response = getattr(error, "response", None)
+    status_code = getattr(error, "status_code", None)
+    if status_code is None and response is not None:
+        status_code = getattr(response, "status_code", None)
+
+    request_id = (
+        getattr(error, "request_id", None)
+        or getattr(error, "requestId", None)
+        or _request_id_from_headers(getattr(response, "headers", None))
+    )
+
+    message = redact_string(str(error)).strip() or type(error).__name__
+    for api_key in api_keys:
+        if api_key:
+            message = message.replace(api_key, "[REDACTED:API_KEY]")
+    if len(message) > _MAX_PROVIDER_ERROR_MESSAGE_CHARS:
+        message = message[:_MAX_PROVIDER_ERROR_MESSAGE_CHARS] + "…"
+
+    normalized_status: str | int | None
+    if isinstance(status_code, int):
+        normalized_status = status_code
+    elif status_code is None:
+        normalized_status = None
+    else:
+        try:
+            normalized_status = int(status_code)
+        except (TypeError, ValueError):
+            normalized_status = str(status_code)[:64]
+
+    return {
+        "error_message": message,
+        "status_code": normalized_status,
+        "request_id": str(request_id)[:256] if request_id is not None else None,
+    }
+
+
+def _request_id_from_headers(headers) -> str | None:
+    """Read only allow-listed request-id headers from a provider HTTP response."""
+    if headers is None:
+        return None
+    try:
+        normalized = {str(key).lower(): value for key, value in headers.items()}
+    except (AttributeError, TypeError, ValueError):
+        return None
+    for name in _PROVIDER_REQUEST_ID_HEADERS:
+        value = normalized.get(name)
+        if value:
+            return str(value)
+    return None
 
 
 def _classify_provider_error(exc: Exception) -> str:
