@@ -15,6 +15,10 @@ DEFAULT_INDEX_LIMIT = 20
 MAX_INDEX_LIMIT = 40
 DEFAULT_INSPECT_LIMIT = 12
 MAX_INSPECT_LIMIT = 40
+SECTION_ALIASES = {
+    "evidence": "evidenceRefs",
+    "evidence_refs": "evidenceRefs",
+}
 
 
 @dataclass(frozen=True)
@@ -97,7 +101,13 @@ class EvidenceLedger:
         offset: int = 0,
         limit: int = DEFAULT_INSPECT_LIMIT,
     ) -> dict[str, Any]:
-        """Return a bounded page from one full observation without mutating it."""
+        """Return a bounded page from one full observation without mutating it.
+
+        A tiny deterministic alias set accepts the common model spelling ``evidence``
+        for the canonical graph field ``evidenceRefs``. Other section names must match
+        the observation's returned ``availableSections`` exactly; LCSP does not guess
+        ambiguous aliases.
+        """
         row = self.get(observation_id)
         offset = max(0, int(offset))
         limit = min(MAX_INSPECT_LIMIT, max(1, int(limit)))
@@ -110,27 +120,38 @@ class EvidenceLedger:
                 if isinstance(item, Sequence) and not isinstance(item, (str, bytes, bytearray))
             ]
             if section:
-                selected = value.get(section)
+                requested_section = str(section)
+                selected_section = SECTION_ALIASES.get(
+                    requested_section,
+                    SECTION_ALIASES.get(requested_section.lower(), requested_section),
+                )
+                selected = value.get(selected_section)
                 if not isinstance(selected, Sequence) or isinstance(
                     selected, (str, bytes, bytearray)
                 ):
                     return {
                         "observationId": row.observation_id,
                         "error": "OBSERVATION_SECTION_NOT_PAGEABLE",
-                        "section": section,
+                        "section": requested_section,
                         "availableSections": available_sections,
+                        "instruction": (
+                            "Omit section once to inspect availableSections, then use one of those exact names."
+                        ),
                     }
                 items = list(selected)
                 page = items[offset : offset + limit]
-                return {
+                result = {
                     "observationId": row.observation_id,
-                    "section": section,
+                    "section": selected_section,
                     "offset": offset,
                     "limit": limit,
                     "total": len(items),
                     "hasMore": offset + len(page) < len(items),
                     "items": page,
                 }
+                if selected_section != requested_section:
+                    result["requestedSection"] = requested_section
+                return result
 
             scalars = {
                 str(key): item
@@ -174,6 +195,8 @@ class EvidenceLedger:
                 "edges",
                 "paths",
                 "evidenceRefs",
+                "continuationFrontiers",
+                "unresolvedFrontiers",
             ):
                 item = value.get(section)
                 if isinstance(item, Sequence) and not isinstance(
@@ -220,6 +243,7 @@ class EvidenceLedger:
                 "edges",
                 "paths",
                 "evidenceRefs",
+                "continuationFrontiers",
                 "unresolvedFrontiers",
             ):
                 item = result.get(key)
