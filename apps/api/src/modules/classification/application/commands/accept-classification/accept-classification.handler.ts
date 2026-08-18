@@ -64,6 +64,7 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
 
     const payload = command.payload;
     const correlationId = command.correlationId ?? payload.assessment_id;
+    const assessmentRunId = clean(payload.classification_data.run_id);
     this.overclaimGuardrail.validate(
       payload.classification_data,
       correlationId,
@@ -101,7 +102,7 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
       },
       select: { id: true, classificationData: true },
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: 50,
     });
     const existingResult = existingResults.find((item) => {
       const data = isRecord(item.classificationData)
@@ -109,7 +110,8 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
         : {};
       return (
         clean(data.technical_evidence_report_id) === evidenceReport.id &&
-        clean(data.mode) === ASSESSMENT_RESULT_MODES.engineeringRuleEvaluation
+        clean(data.mode) === ASSESSMENT_RESULT_MODES.engineeringRuleEvaluation &&
+        clean(data.run_id) === assessmentRunId
       );
     });
 
@@ -127,6 +129,7 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
     const persistedData: Prisma.InputJsonValue = {
       ...payload.classification_data,
       mode: ASSESSMENT_RESULT_MODES.engineeringRuleEvaluation,
+      ...(assessmentRunId ? { run_id: assessmentRunId } : {}),
       technical_evidence_report_id: evidenceReport.id,
       snapshot_id:
         clean(payload.classification_data.snapshot_id) ??
@@ -169,10 +172,9 @@ export class AcceptClassificationHandler implements ICommandHandler<AcceptClassi
       );
     });
 
-    const runId = engineeringAssessmentRunId(
-      evidenceReport.assessmentId,
-      evidenceReport.id,
-    );
+    const runId =
+      assessmentRunId ??
+      engineeringAssessmentRunId(evidenceReport.assessmentId, evidenceReport.id);
     await this.runtimeEvents.recordToolCompleted({
       organizationId: evidenceReport.organizationId,
       assessmentId: evidenceReport.assessmentId,
