@@ -8,6 +8,16 @@ from .models import InvestigationPacket
 
 
 class InitialQueryExecutor:
+    """Seed candidate graph entry points without eagerly traversing every match.
+
+    EngineeringRule graph queries are retrieval hints, not a request to materialize all
+    possible paths before the agent starts reasoning. The previous implementation traced
+    up to 50 start nodes per query, creating dozens of EvidenceLedger observations that
+    consumed the bounded LLM turn budget on paging. We now persist one deterministic
+    start-node search observation per query and let the investigator choose which
+    candidate requires a bounded trace/data/decision/code expansion.
+    """
+
     def execute(
         self,
         rule: EngineeringRule,
@@ -17,7 +27,6 @@ class InitialQueryExecutor:
     ) -> InvestigationPacket:
         engine = ProgramGraphQueryEngine(graph)
         rows: list[dict] = []
-        unresolved: set[str] = set()
         refs: set[str] = set()
 
         for query in rule.graph_queries:
@@ -35,35 +44,12 @@ class InitialQueryExecutor:
             )
             refs.update(starts.evidence_refs)
 
-            for start in starts:
-                result = engine.trace_static_flow(
-                    start_ref=str(start["node_id"]),
-                    direction=query.direction,
-                    max_hops=12,
-                    edge_types=query.follow_edges,
-                    stop_node_types=query.stop_node_types,
-                    max_results=150,
-                )
-                rows.append(
-                    {
-                        "query": query.name,
-                        "phase": "STATIC_FLOW_TRACE",
-                        "startNodeId": start["node_id"],
-                        **result.to_dict(),
-                    }
-                )
-                # Only real unresolved graph boundaries belong here. A bounded search
-                # that reports truncated=True remains searchable via its continuation
-                # frontiers and is not itself evidence of runtime uncertainty.
-                unresolved.update(result.unresolved_frontiers)
-                refs.update(result.evidence_refs)
-
         return InvestigationPacket(
             engineering_rule_id=rule.engineering_rule_id,
             concept=rule.concept,
             investigation_goals=rule.investigation_goals,
             initial_results=tuple(rows),
-            unresolved_frontiers=tuple(sorted(unresolved)),
+            unresolved_frontiers=(),
             evidence_refs=tuple(sorted(refs)),
             wizard_context=dict(wizard_context or {}),
             required_evidence=rule.required_evidence,
