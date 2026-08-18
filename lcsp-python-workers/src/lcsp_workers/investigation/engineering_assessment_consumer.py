@@ -88,6 +88,10 @@ class EngineeringAssessmentConsumer(ConsumerBase):
             result_data = result.to_assessment_data()
             guardrail_status = self._guardrail_status(result.status)
 
+        # correlationId is the direct assessment run identity. Re-delivery of the
+        # same event remains idempotent; an explicit rerun receives a new correlation
+        # ID and may persist a fresh result for the same pinned evidence report.
+        result_data["run_id"] = correlationId
         result_data["technical_evidence_report_id"] = evidence_report_id
         snapshot_id = evidence_report.get("snapshot_id") or evidence_report.get(
             "snapshotId"
