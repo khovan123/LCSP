@@ -22,12 +22,7 @@ CANONICAL_CLAIM_TYPES = {
 
 
 class LawGuidedInvestigator:
-    """Let the LLM choose bounded graph tools, then emit evidence-backed technical claims.
-
-    The LLM never receives raw repository source and never decides legal compliance.
-    It may only inspect the persisted Program Evidence Graph through the deterministic
-    query engine. Final rule status is computed later by ``EngineeringRuleEvaluator``.
-    """
+    """Let the LLM choose bounded graph tools under EngineeringRule criteria."""
 
     def __init__(self, llm_client: LLMClientProtocol) -> None:
         self.llm = llm_client
@@ -78,8 +73,6 @@ class LawGuidedInvestigator:
                 }
             )
 
-        # One final synthesis call after the bounded tool budget is exhausted. This
-        # call cannot request more tools; unresolved evidence must become UNKNOWN.
         response = self.llm.complete(
             prompt=self._finish_prompt(packet, observations),
             workflow_run_id=workflow_run_id,
@@ -175,9 +168,19 @@ class LawGuidedInvestigator:
                 for value in item.get("evidenceRefs") or []
                 if str(value)
             )
+            graph_refs = tuple(
+                str(value)
+                for value in item.get("graphPathRefs") or []
+                if str(value)
+            )
+            source_refs = tuple(
+                str(value)
+                for value in item.get("sourceAnchorRefs") or []
+                if str(value)
+            )
             seed = (
                 f"{packet.engineering_rule_id}:{index}:{claim_type}:"
-                f"{refs}:{item.get('value')}"
+                f"{refs}:{graph_refs}:{source_refs}:{item.get('value')}"
             )
             claim = EvidenceClaim(
                 "claim:" + hashlib.sha256(seed.encode()).hexdigest()[:24],
@@ -185,16 +188,8 @@ class LawGuidedInvestigator:
                 claim_type,
                 item.get("value"),
                 refs,
-                tuple(
-                    str(value)
-                    for value in item.get("graphPathRefs") or []
-                    if str(value)
-                ),
-                tuple(
-                    str(value)
-                    for value in item.get("sourceAnchorRefs") or []
-                    if str(value)
-                ),
+                graph_refs,
+                source_refs,
                 float(item.get("confidence") or 0),
                 tuple(
                     str(value)
@@ -207,7 +202,6 @@ class LawGuidedInvestigator:
         if result:
             return result
 
-        # Fail closed when the model does not return a usable conclusion.
         return [
             EvidenceClaim(
                 "claim:"
@@ -226,7 +220,10 @@ class LawGuidedInvestigator:
     @staticmethod
     def _bounded(value: Any) -> Any:
         if isinstance(value, list):
-            return [LawGuidedInvestigator._bounded(item) for item in value[:MAX_OBSERVATION_ITEMS]]
+            return [
+                LawGuidedInvestigator._bounded(item)
+                for item in value[:MAX_OBSERVATION_ITEMS]
+            ]
         if isinstance(value, dict):
             result: dict[str, Any] = {}
             for index, (key, item) in enumerate(value.items()):
@@ -239,6 +236,18 @@ class LawGuidedInvestigator:
         return value
 
     @staticmethod
+    def _rule_contract(packet: InvestigationPacket) -> dict[str, Any]:
+        return {
+            "engineeringRuleId": packet.engineering_rule_id,
+            "concept": packet.concept,
+            "investigationGoals": packet.investigation_goals,
+            "requiredEvidence": packet.required_evidence,
+            "supportingEvidence": packet.supporting_evidence,
+            "negativeEvidence": packet.negative_evidence,
+            "unresolvedConditions": packet.unresolved_conditions,
+        }
+
+    @staticmethod
     def _prompt(
         packet: InvestigationPacket,
         observations: list[dict[str, Any]],
@@ -246,13 +255,13 @@ class LawGuidedInvestigator:
     ) -> str:
         contract = {
             "task": (
-                "Investigate one EngineeringRule against the Program Evidence Graph. "
-                "Choose graph tools when more evidence is needed. Never decide legal "
-                "compliance, risk tier, certification, or infer facts outside evidence."
+                "Investigate the supplied EngineeringRule against the Program Evidence Graph. "
+                "The EngineeringRule evidence criteria are authoritative for this technical "
+                "investigation. Choose graph tools when more evidence is needed. Never decide "
+                "legal compliance, legal risk tier, certification, or infer facts outside evidence."
             ),
-            "engineeringRuleId": packet.engineering_rule_id,
-            "concept": packet.concept,
-            "goals": packet.investigation_goals,
+            "engineeringRule": LawGuidedInvestigator._rule_contract(packet),
+            "wizardContext": packet.wizard_context,
             "seedEvidenceRefs": packet.evidence_refs,
             "unresolvedFrontiers": packet.unresolved_frontiers,
             "observations": observations,
@@ -298,10 +307,12 @@ class LawGuidedInvestigator:
                 ],
             },
             "claimRules": [
-                "MET/NOT_MET require concrete evidenceRefs from graph observations.",
+                "Evaluate only the supplied EngineeringRule evidence criteria.",
+                "MET/NOT_MET require concrete graph, path, or source-anchor evidence references.",
                 "Absence is NOT_MET only when the searched path is bounded and complete.",
                 "Dynamic, truncated, external, or insufficient paths are UNRESOLVED.",
-                "Use action=finish as soon as evidence is sufficient.",
+                "Wizard context may explain an external boundary but never overrides repository evidence.",
+                "Use action=finish as soon as the EngineeringRule criteria are sufficiently evidenced.",
             ],
         }
         return "Return JSON only.\n" + json.dumps(
@@ -315,12 +326,13 @@ class LawGuidedInvestigator:
     ) -> str:
         contract = {
             "task": (
-                "Tool budget is exhausted. Produce final engineering evidence claims only. "
-                "Do not request more tools and do not decide legal compliance."
+                "Tool budget is exhausted. Produce final engineering evidence claims only "
+                "against the supplied EngineeringRule criteria. Do not request more tools "
+                "and do not decide legal compliance."
             ),
-            "engineeringRuleId": packet.engineering_rule_id,
-            "concept": packet.concept,
-            "goals": packet.investigation_goals,
+            "engineeringRule": LawGuidedInvestigator._rule_contract(packet),
+            "wizardContext": packet.wizard_context,
+            "unresolvedFrontiers": packet.unresolved_frontiers,
             "observations": observations,
             "output": {
                 "action": "finish",
@@ -339,6 +351,10 @@ class LawGuidedInvestigator:
                     }
                 ],
             },
+            "claimRules": [
+                "If the EngineeringRule criteria are not sufficiently evidenced, emit UNRESOLVED_ENGINEERING_FACT.",
+                "Do not convert missing repository evidence into a legal conclusion.",
+            ],
         }
         return "Return JSON only.\n" + json.dumps(
             contract, ensure_ascii=False, sort_keys=True
