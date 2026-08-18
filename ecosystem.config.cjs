@@ -119,39 +119,9 @@ module.exports = {
     ),
 
     worker(
-      "lcsp-technical-profile-worker",
-      "lcsp_workers.intelligence.technical_profile_consumer:TechnicalProfileConsumer",
+      "lcsp-engineering-assessment-worker",
+      "lcsp_workers.investigation.engineering_assessment_consumer:EngineeringAssessmentConsumer",
       8102
-    ),
-
-    worker(
-      "lcsp-ai-usage-flow-worker",
-      "lcsp_workers.intelligence.ai_usage_flow_consumer:AIUsageFlowConsumer",
-      8103
-    ),
-
-    worker(
-      "lcsp-conflict-detection-worker",
-      "lcsp_workers.intelligence.conflict_detection_consumer:ConflictDetectionConsumer",
-      8104
-    ),
-
-    worker(
-      "lcsp-verified-profile-worker",
-      "lcsp_workers.intelligence.verified_profile_consumer:VerifiedProfileConsumer",
-      8105
-    ),
-
-    worker(
-      "lcsp-legal-retrieval-worker",
-      "lcsp_workers.legal.legal_retrieval_consumer:LegalRetrievalConsumer",
-      8106
-    ),
-
-    worker(
-      "lcsp-classification-worker",
-      "lcsp_workers.classification.classification_consumer:ClassificationConsumer",
-      8107
     ),
 
     worker(
