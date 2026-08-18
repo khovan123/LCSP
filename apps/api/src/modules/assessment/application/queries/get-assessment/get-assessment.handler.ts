@@ -34,6 +34,7 @@ import {
   ASSESSMENT_REPOSITORY,
   type AssessmentRepository,
 } from "../../ports/persistence/assessment.repository.js";
+import { resolveTechnicalEvidenceDisplays } from "../../services/technical-evidence-display.js";
 import { GetAssessmentQuery } from "./get-assessment.query.js";
 
 /**
@@ -82,7 +83,7 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
             TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
           ),
         },
-        select: { id: true },
+        select: { id: true, evidencePayload: true },
         orderBy: { createdAt: "desc" },
       });
 
@@ -131,7 +132,10 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
           )
         : null,
       classification_result: classificationResult
-        ? toClassificationResultSummary(classificationResult.classificationData)
+        ? toClassificationResultSummary(
+            classificationResult.classificationData,
+            acceptedEvidenceReport?.evidencePayload,
+          )
         : null,
       legal_rule_match_guardrail_status: null,
       legal_rule_match_diagnostics: null,
@@ -166,6 +170,7 @@ function nextActionFor(wizardStatus: WizardStatus): AssessmentNextActionKey {
 
 function toClassificationResultSummary(
   value: unknown,
+  evidencePayload: unknown,
 ): ClassificationResultSummaryDto {
   const data = isRecord(value) ? value : {};
   const summary = isRecord(data.summary) ? data.summary : {};
@@ -179,7 +184,7 @@ function toClassificationResultSummary(
       total: nonNegativeInteger(summary.total) ?? 0,
     },
     evaluations: recordArray(data.evaluations)
-      .map(toEngineeringRuleEvaluation)
+      .map((item) => toEngineeringRuleEvaluation(item, evidencePayload))
       .filter((item): item is EngineeringRuleEvaluationDto => item !== null),
     limitations: stringArray(data.limitations),
     legal_rule_catalog_version_id: cleanString(
@@ -199,6 +204,7 @@ function toClassificationResultSummary(
 
 function toEngineeringRuleEvaluation(
   value: Record<string, unknown>,
+  evidencePayload: unknown,
 ): EngineeringRuleEvaluationDto | null {
   const status = cleanString(value.status)?.toUpperCase();
   if (
@@ -212,13 +218,18 @@ function toEngineeringRuleEvaluation(
   const engineeringRuleId = cleanString(value.engineering_rule_id);
   if (!engineeringRuleId) return null;
 
+  const evidenceRefs = stringArray(value.evidence_refs);
   return {
     engineering_rule_id: engineeringRuleId,
     legal_rule_id: cleanString(value.legal_rule_id) ?? "",
     concept: cleanString(value.concept) ?? "UNKNOWN",
     status: status as EngineeringRuleEvaluationStatus,
     reason: cleanString(value.reason) ?? "",
-    evidence_refs: stringArray(value.evidence_refs),
+    evidence_refs: evidenceRefs,
+    technical_evidence: resolveTechnicalEvidenceDisplays(
+      evidencePayload,
+      evidenceRefs,
+    ),
     source_chunk_ids: stringArray(value.source_chunk_ids),
     source_locators: stringArray(value.source_locators),
     confidence:
