@@ -104,6 +104,25 @@ def _render_safe_root_event(data: dict) -> str:
     return json.dumps(safe_data, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
+def _ensure_llm_tool_log_file() -> None:
+    """Create the safe repository-level LLM/tool debug log eagerly.
+
+    The file used to be created lazily on the first matching telemetry event,
+    which made ``tail -f tmp/llm-tool-calls.log`` fail immediately after
+    ``pnpm dev`` startup. Logging is observability-only, so creation remains
+    fail-open and must never prevent a worker from starting.
+    """
+    try:
+        from lcsp_workers.platform.logging_path import get_llm_tool_log_path
+
+        log_path = get_llm_tool_log_path()
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with _original_open(log_path, "a", encoding="utf-8"):
+            pass
+    except Exception:
+        return
+
+
 class PartitionedLogWriter:
     """Write stdout plus partitioned logs and safe root-level LLM tool telemetry."""
 
@@ -186,11 +205,13 @@ def configure_logging(level: str = "INFO") -> None:
     Normal worker events continue to stdout and partitioned run/orchestration
     files. Safe LLM request/response plus EngineeringRule native tool input/result
     telemetry is additionally mirrored to ``<repo>/tmp/llm-tool-calls.log`` (or
-    ``LCSP_LLM_TOOL_LOG_PATH`` when configured). Tool results are bounded by the
-    investigator to the exact observation forwarded into the next LLM turn and
-    are always secret-redacted again before root-level persistence. Raw development
-    trace events are never mirrored into that file.
+    ``LCSP_LLM_TOOL_LOG_PATH`` when configured). The file is created eagerly at
+    worker startup so developers can attach ``tail -f`` before the first LLM call.
+    Tool results are bounded by the investigator to the exact observation forwarded
+    into the next LLM turn and are always secret-redacted again before root-level
+    persistence. Raw development trace events are never mirrored into that file.
     """
+    _ensure_llm_tool_log_file()
     unsafe_trace = unsafe_dev_trace_enabled()
     raw_output: TextIO = _FailOpenTraceWriter(sys.stdout) if unsafe_trace else sys.stdout
     output = PartitionedLogWriter(raw_output)
