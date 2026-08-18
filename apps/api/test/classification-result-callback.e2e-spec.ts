@@ -165,7 +165,9 @@ describe("Direct EngineeringRule Result Callback (e2e)", () => {
         status: "BLOCKED",
         summary: { compliant: 0, non_compliant: 0, unknown: 0, total: 0 },
         evaluations: [],
-        limitations: [ENGINEERING_LIMITATION_CODES.noEngineeringRuleSourceRules],
+        limitations: [
+          ENGINEERING_LIMITATION_CODES.noEngineeringRuleSourceRules,
+        ],
       },
     };
 
