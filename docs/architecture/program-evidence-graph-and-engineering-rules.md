@@ -103,6 +103,10 @@ The LLM emits engineering evidence claims only:
 - `RULE_REQUIREMENT_NOT_MET`
 - `UNRESOLVED_ENGINEERING_FACT`
 
+The provider-native `finish` tool is a closed machine contract. The model does **not** author a separate claim `value`; LCSP derives it deterministically from `claimType` (`true`, `false`, or `null`). `limitations[]` accepts only enumerated machine codes. Free-form prose is not valid in claim/evaluation/top-level limitation arrays and is rejected or converted to a fail-closed unresolved result before persistence.
+
+Narrative text is deliberately restricted to controlled fields such as optional top-level `notes` and deterministic `evaluations[].reason`. Overclaim validation scans those narrative fields only. IDs, provenance, canonical statuses, evidence refs, boolean/null claim values, and machine limitation codes are structured data and are not substring-scanned as prose.
+
 A positive/negative claim must reference supplied graph evidence. Absence can support a negative claim only when the searched graph path is bounded and complete. Dynamic, external, truncated, or otherwise insufficient paths remain unresolved.
 
 The model never determines a legal verdict, certification, legal risk tier, or court-level violation conclusion.
@@ -115,7 +119,7 @@ The final gate is code, not the LLM:
 - evidence-backed `RULE_REQUIREMENT_NOT_MET` -> `NON_COMPLIANT`;
 - missing, conflicting, dynamic or insufficient evidence -> `UNKNOWN`.
 
-Every evaluation carries `engineering_rule_id`, `legal_rule_id`, concept, source chunk IDs/locators, graph/source evidence refs, confidence, rationale and limitations.
+Every evaluation carries `engineering_rule_id`, `legal_rule_id`, concept, source chunk IDs/locators, graph/source evidence refs, confidence, rationale and machine-readable limitation codes.
 
 This lets LCSP show exactly which engineering requirement was met, not met, or could not be determined, while preserving traceability back to the legal source that produced the EngineeringRule.
 
