@@ -250,7 +250,9 @@ class PrimaryThenFallbackLLMClient:
             "LLM_REQUEST",
             operation=operation,
             provider_chain=[provider.name for provider in self._providers],
-            model_chain=[provider.client.model for provider in self._providers],
+            model_chain=[
+                getattr(provider.client, "model", None) for provider in self._providers
+            ],
             workflow_run_id=workflow_run_id,
             node_name=node_name,
             max_tokens=max_tokens,
@@ -272,13 +274,13 @@ class PrimaryThenFallbackLLMClient:
         logger.info(
             "LLM_RESPONSE",
             operation=operation,
-            provider=response.provider,
-            model=response.model,
+            provider=getattr(response, "provider", None),
+            model=getattr(response, "model", None),
             workflow_run_id=workflow_run_id,
             node_name=node_name,
-            request_id=response.request_id,
-            input_tokens=response.input_tokens,
-            output_tokens=response.output_tokens,
+            request_id=getattr(response, "request_id", None),
+            input_tokens=getattr(response, "input_tokens", None),
+            output_tokens=getattr(response, "output_tokens", None),
             tool_call_count=len(getattr(response, "tool_calls", ()) or ()),
             correlationId=correlation_id,
         )
