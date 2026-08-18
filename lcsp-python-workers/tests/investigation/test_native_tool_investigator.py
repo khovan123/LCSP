@@ -4,10 +4,13 @@ import json
 from dataclasses import dataclass, field
 from unittest.mock import patch
 
+from lcsp_workers.investigation.evidence_ledger import EvidenceLedger
 from lcsp_workers.investigation.investigator import (
     FINISH_TOOL_NAME,
     GRAPH_TOOL_NAMES,
+    MAX_INVESTIGATION_STEPS,
     MAX_PROMPT_CHARS,
+    STATE_TOOL_NAMES,
     LawGuidedInvestigator,
 )
 from lcsp_workers.investigation.models import (
@@ -76,27 +79,43 @@ def _graph() -> dict:
     }
 
 
-def _packet() -> InvestigationPacket:
+def _packet(*, initial_results: tuple[dict, ...] = ()) -> InvestigationPacket:
     return InvestigationPacket(
         engineering_rule_id="eng-1",
         concept="HUMAN_OVERSIGHT",
         investigation_goals=("Find human review controls",),
-        initial_results=(),
+        initial_results=initial_results,
         required_evidence=("A bounded human review path",),
     )
 
 
-def _finish_call(*, limitations: list[str] | None = None) -> LLMToolCall:
+def _seed_result() -> dict:
+    return {
+        "query": "human-review",
+        "startNodeId": "node-1",
+        "nodes": [_graph()["nodes"][0]],
+        "edges": [],
+        "paths": [["node-1"]],
+        "truncated": False,
+        "unresolvedFrontiers": [],
+        "evidenceRefs": ["evidence:review-1"],
+    }
+
+
+def _finish_call(
+    *,
+    claim_type: str = "RULE_REQUIREMENT_MET",
+    observation_refs: list[str] | None = None,
+    limitations: list[str] | None = None,
+) -> LLMToolCall:
     return LLMToolCall(
         name=FINISH_TOOL_NAME,
         call_id="call-finish",
         arguments={
             "claims": [
                 {
-                    "claimType": "RULE_REQUIREMENT_MET",
-                    "evidenceRefs": ["evidence:review-1"],
-                    "graphPathRefs": ["node-1"],
-                    "sourceAnchorRefs": [],
+                    "claimType": claim_type,
+                    "observationRefs": observation_refs or [],
                     "confidence": 0.95,
                     "limitations": limitations or [],
                 }
@@ -111,19 +130,16 @@ def _native_search_then_finish_client() -> NativeToolClient:
             _response(
                 LLMToolCall(
                     name="search_nodes",
-                    arguments={
-                        "node_types": ["HUMAN_REVIEW"],
-                        "max_results": 5,
-                    },
+                    arguments={"node_types": ["HUMAN_REVIEW"], "max_results": 5},
                     call_id="call-search",
                 )
             ),
-            _response(_finish_call()),
+            _response(_finish_call(observation_refs=["obs:0001"])),
         ]
     )
 
 
-def test_investigator_uses_native_graph_tool_then_native_finish() -> None:
+def test_investigator_uses_lossless_observation_ref_for_native_finish() -> None:
     client = _native_search_then_finish_client()
 
     claims = LawGuidedInvestigator(client).investigate(
@@ -133,206 +149,136 @@ def test_investigator_uses_native_graph_tool_then_native_finish() -> None:
         correlation_id="corr-1",
     )
 
-    assert len(claims) == 1
     assert claims[0].claim_type == "RULE_REQUIREMENT_MET"
     assert claims[0].value is True
     assert claims[0].evidence_refs == ("evidence:review-1",)
     assert claims[0].graph_path_refs == ("node-1",)
 
-    assert len(client.calls) == 2
     first_tool_names = {tool.name for tool in client.calls[0]["tools"]}
-    assert first_tool_names == {*GRAPH_TOOL_NAMES, FINISH_TOOL_NAME}
-    assert client.calls[0]["node_name"] == "investigate_engineering_rule"
-    assert "JSON pseudo-tool" in client.calls[0]["prompt"]
-    assert "search_nodes" not in client.calls[0]["prompt"]
+    assert first_tool_names == {
+        *GRAPH_TOOL_NAMES,
+        *STATE_TOOL_NAMES,
+        FINISH_TOOL_NAME,
+    }
+    payload = json.loads(client.calls[1]["prompt"])
+    assert payload["evidenceLedger"]["total"] == 1
+    assert payload["evidenceLedger"]["observations"][0]["observationId"] == "obs:0001"
 
 
-def test_investigator_logs_native_tool_arguments_result_and_validated_finish_claims() -> None:
+def test_tool_result_log_contains_observation_id_summary_and_preview() -> None:
     client = _native_search_then_finish_client()
 
     with patch("lcsp_workers.investigation.investigator.logger") as logger:
-        claims = LawGuidedInvestigator(client).investigate(
+        LawGuidedInvestigator(client).investigate(
             packet=_packet(),
             graph=_graph(),
             workflow_run_id="workflow-1",
             correlation_id="corr-1",
         )
 
-    assert claims[0].claim_type == "RULE_REQUIREMENT_MET"
-    info_calls = logger.info.call_args_list
-    tool_call = next(
-        call
-        for call in info_calls
-        if call.args[0] == "ENGINEERING_INVESTIGATION_TOOL_CALL"
-        and call.kwargs["tool"] == "search_nodes"
-    )
-    assert tool_call.kwargs["call_id"] == "call-search"
-    assert tool_call.kwargs["arguments"] == {
-        "node_types": ["HUMAN_REVIEW"],
-        "max_results": 5,
-    }
-
     tool_result = next(
         call
-        for call in info_calls
+        for call in logger.info.call_args_list
         if call.args[0] == "ENGINEERING_INVESTIGATION_TOOL_RESULT"
+        and call.kwargs["tool"] == "search_nodes"
     )
-    assert tool_result.kwargs["tool"] == "search_nodes"
-    assert tool_result.kwargs["call_id"] == "call-search"
-    assert tool_result.kwargs["tool_call_index"] == 1
-    assert tool_result.kwargs["result"][0]["node_id"] == "node-1"
-    assert tool_result.kwargs["result"][0]["evidence_refs"] == [
-        "evidence:review-1"
-    ]
-
-    finished = next(
-        call
-        for call in info_calls
-        if call.args[0] == "ENGINEERING_INVESTIGATION_FINISHED"
-    )
-    assert finished.kwargs["claims"] == [
-        {
-            "claim_id": claims[0].claim_id,
-            "claim_type": "RULE_REQUIREMENT_MET",
-            "value": True,
-            "evidence_refs": ["evidence:review-1"],
-            "graph_path_refs": ["node-1"],
-            "source_anchor_refs": [],
-            "confidence": 0.95,
-            "limitations": [],
-        }
-    ]
+    assert tool_result.kwargs["result"]["observationId"] == "obs:0001"
+    assert tool_result.kwargs["result"]["summary"]["evidenceRefCount"] == 1
+    assert tool_result.kwargs["result"]["preview"]["items"][0]["node_id"] == "node-1"
 
 
-def test_prompt_compacts_oversized_graph_context_under_hard_budget() -> None:
-    huge_node = {
-        "node_id": "node-1",
-        "node_type": "HUMAN_REVIEW",
-        "label": "x" * 20_000,
-        "source": {"file_path": "src/review.py", "symbol_ref": "review"},
-        "attributes": {f"field-{index}": "y" * 20_000 for index in range(30)},
-        "semantic_types": ["HUMAN_OVERSIGHT"] * 50,
-        "evidence_refs": [f"evidence:{index}" for index in range(500)],
-    }
-    seed_result = {
+def test_evidence_ledger_keeps_full_seed_results_while_prompt_uses_index() -> None:
+    huge_result = {
         "query": "large-query",
         "startNodeId": "node-1",
-        "nodes": [huge_node for _ in range(80)],
+        "nodes": [
+            {
+                "node_id": f"node-{index}",
+                "node_type": "SYMBOL",
+                "label": "x" * 10_000,
+                "evidence_refs": [f"evidence:{index}"],
+            }
+            for index in range(100)
+        ],
         "edges": [],
-        "paths": [["node-1"] for _ in range(80)],
+        "paths": [],
         "truncated": False,
-        "unresolvedFrontiers": [f"node:{index}" for index in range(500)],
-        "evidenceRefs": [f"evidence:{index}" for index in range(500)],
+        "unresolvedFrontiers": [],
+        "evidenceRefs": [f"evidence:{index}" for index in range(100)],
     }
-    packet = InvestigationPacket(
-        engineering_rule_id="eng-large",
-        concept="HUMAN_OVERSIGHT",
-        investigation_goals=("Find human review controls",),
-        initial_results=tuple(seed_result for _ in range(100)),
-        evidence_refs=tuple(f"evidence:{index}" for index in range(10_000)),
-        unresolved_frontiers=tuple(f"node:{index}" for index in range(10_000)),
-        wizard_context={"notes": "z" * 200_000},
-        required_evidence=("A bounded human review path",),
-    )
-    observations = [
-        {
-            "source": "engineering_rule_seed_query",
-            "result": LawGuidedInvestigator._compact_observation(item),
-        }
-        for item in LawGuidedInvestigator._select_seed_results(packet.initial_results)
-    ]
+    ledger = EvidenceLedger()
+    for _ in range(100):
+        ledger.add(source="engineering_rule_seed_query", result=huge_result)
 
-    prompt = LawGuidedInvestigator._prompt(packet, observations, 0)
+    prompt = LawGuidedInvestigator._prompt(_packet(), ledger, [], 0)
     payload = json.loads(prompt)
 
+    assert ledger.total == 100
+    assert ledger.get("obs:0100").result["nodes"][99]["label"] == "x" * 10_000
+    assert payload["evidenceLedger"]["total"] == 100
+    assert payload["evidenceLedger"]["hasMore"] is True
+    assert len(payload["evidenceLedger"]["observations"]) == 20
     assert len(prompt) <= MAX_PROMPT_CHARS
-    assert len(payload["seedEvidenceRefs"]) <= 160
-    assert len(payload["unresolvedFrontiers"]) <= 80
-    assert len(payload["observations"]) <= 12
 
 
-def test_finish_schema_derives_value_and_closes_limitations_to_machine_codes() -> None:
-    finish = LawGuidedInvestigator._finish_tool_definition()
-    claim_schema = finish.input_schema["properties"]["claims"]["items"]
-    claim_properties = claim_schema["properties"]
-
-    assert "value" not in claim_properties
-    assert "value" not in claim_schema["required"]
-    assert claim_properties["limitations"]["items"]["enum"] == sorted(
-        MODEL_SELECTABLE_LIMITATION_CODES
-    )
-
-
-def test_investigator_forces_native_finish_after_tool_rounds_without_calls() -> None:
-    client = NativeToolClient(
-        responses=[
-            _response(content="plain text is ignored"),
-            _response(content="still no native call"),
-            _response(content="still no native call"),
-            _response(content="still no native call"),
-            _response(_finish_call()),
-        ]
-    )
-
-    claims = LawGuidedInvestigator(client).investigate(
-        packet=_packet(),
-        graph=_graph(),
-        workflow_run_id="workflow-1",
-    )
-
-    assert claims[0].claim_type == "RULE_REQUIREMENT_MET"
-    assert claims[0].value is True
-    assert len(client.calls) == 5
-    assert [tool.name for tool in client.calls[-1]["tools"]] == [FINISH_TOOL_NAME]
-    assert client.calls[-1]["node_name"] == "investigate_engineering_rule_finish"
-
-
-def test_investigator_fails_closed_on_noncanonical_model_limitation() -> None:
-    client = NativeToolClient(
-        responses=[
-            _response(
-                _finish_call(
-                    limitations=["System appears compliant based on external evidence."]
-                )
-            )
-        ]
-    )
-
-    claims = LawGuidedInvestigator(client).investigate(
-        packet=_packet(),
-        graph=_graph(),
-        workflow_run_id="workflow-1",
-    )
-
-    assert claims[0].claim_type == "UNRESOLVED_ENGINEERING_FACT"
-    assert claims[0].value is None
-    assert claims[0].limitations == (
-        ENGINEERING_LIMITATION_CODES["model_limitation_code_invalid"],
-    )
-
-
-def test_invalid_model_evidence_ref_fails_closed_without_crashing_rule() -> None:
+def test_model_can_page_and_inspect_observations_without_resending_full_history() -> None:
     client = NativeToolClient(
         responses=[
             _response(
                 LLMToolCall(
-                    name=FINISH_TOOL_NAME,
-                    call_id="call-finish-invalid-ref",
-                    arguments={
-                        "claims": [
-                            {
-                                "claimType": "RULE_REQUIREMENT_MET",
-                                "evidenceRefs": ["evidence:invented"],
-                                "graphPathRefs": [],
-                                "sourceAnchorRefs": [],
-                                "confidence": 0.99,
-                                "limitations": [],
-                            }
-                        ]
-                    },
+                    name="list_observations",
+                    arguments={"offset": 0, "limit": 10},
+                    call_id="call-list",
                 )
-            )
+            ),
+            _response(
+                LLMToolCall(
+                    name="inspect_observation",
+                    arguments={
+                        "observation_id": "obs:0001",
+                        "section": "nodes",
+                        "offset": 0,
+                        "limit": 1,
+                    },
+                    call_id="call-inspect",
+                )
+            ),
+            _response(_finish_call(observation_refs=["obs:0001"])),
         ]
+    )
+
+    claims = LawGuidedInvestigator(client).investigate(
+        packet=_packet(initial_results=(_seed_result(),)),
+        graph=_graph(),
+        workflow_run_id="workflow-1",
+    )
+
+    assert claims[0].claim_type == "RULE_REQUIREMENT_MET"
+    inspect_prompt = json.loads(client.calls[2]["prompt"])
+    recent = inspect_prompt["recentToolResults"][-1]
+    assert recent["tool"] == "inspect_observation"
+    assert recent["result"]["observationId"] == "obs:0001"
+    assert recent["result"]["items"][0]["node_id"] == "node-1"
+
+
+def test_finish_schema_accepts_observation_refs_not_model_authored_graph_refs() -> None:
+    finish = LawGuidedInvestigator._finish_tool_definition()
+    claim_schema = finish.input_schema["properties"]["claims"]["items"]
+    props = claim_schema["properties"]
+
+    assert "observationRefs" in props
+    assert "evidenceRefs" not in props
+    assert "graphPathRefs" not in props
+    assert "sourceAnchorRefs" not in props
+    assert "value" not in props
+    assert props["limitations"]["items"]["enum"] == sorted(
+        MODEL_SELECTABLE_LIMITATION_CODES
+    )
+
+
+def test_unknown_observation_ref_fails_closed_without_invented_provenance() -> None:
+    client = NativeToolClient(
+        responses=[_response(_finish_call(observation_refs=["obs:9999"]))]
     )
 
     with patch("lcsp_workers.investigation.investigator.logger") as logger:
@@ -343,21 +289,27 @@ def test_invalid_model_evidence_ref_fails_closed_without_crashing_rule() -> None
         )
 
     assert claims[0].claim_type == "UNRESOLVED_ENGINEERING_FACT"
-    assert claims[0].value is None
-    assert claims[0].confidence == 0.0
-    assert claims[0].limitations == (
-        ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],
-    )
+    assert claims[0].evidence_refs == ()
+    assert ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"] in claims[0].limitations
     rejected = next(
         call
         for call in logger.warning.call_args_list
         if call.args[0] == "ENGINEERING_INVESTIGATION_CLAIM_REJECTED"
     )
-    assert "unknown evidence refs" in rejected.kwargs["error_message"]
+    assert "unknown observation ref" in rejected.kwargs["error_message"]
 
 
-def test_investigator_fails_closed_when_provider_never_calls_finish() -> None:
-    client = NativeToolClient(responses=[_response() for _ in range(5)])
+def test_noncanonical_model_limitation_still_fails_closed() -> None:
+    client = NativeToolClient(
+        responses=[
+            _response(
+                _finish_call(
+                    claim_type="UNRESOLVED_ENGINEERING_FACT",
+                    limitations=["System appears compliant based on external evidence."],
+                )
+            )
+        ]
+    )
 
     claims = LawGuidedInvestigator(client).investigate(
         packet=_packet(),
@@ -365,10 +317,32 @@ def test_investigator_fails_closed_when_provider_never_calls_finish() -> None:
         workflow_run_id="workflow-1",
     )
 
-    assert len(claims) == 1
     assert claims[0].claim_type == "UNRESOLVED_ENGINEERING_FACT"
-    assert claims[0].value is None
-    assert claims[0].confidence == 0.0
     assert claims[0].limitations == (
-        ENGINEERING_LIMITATION_CODES["investigation_returned_no_valid_claims"],
+        ENGINEERING_LIMITATION_CODES["model_limitation_code_invalid"],
     )
+
+
+def test_investigator_forces_finish_after_bounded_turns() -> None:
+    client = NativeToolClient(
+        responses=[
+            *[_response(content="plain text is ignored") for _ in range(MAX_INVESTIGATION_STEPS)],
+            _response(
+                _finish_call(
+                    claim_type="UNRESOLVED_ENGINEERING_FACT",
+                    observation_refs=[],
+                )
+            ),
+        ]
+    )
+
+    claims = LawGuidedInvestigator(client).investigate(
+        packet=_packet(),
+        graph=_graph(),
+        workflow_run_id="workflow-1",
+    )
+
+    assert claims[0].claim_type == "UNRESOLVED_ENGINEERING_FACT"
+    assert len(client.calls) == MAX_INVESTIGATION_STEPS + 1
+    assert [tool.name for tool in client.calls[-1]["tools"]] == [FINISH_TOOL_NAME]
+    assert client.calls[-1]["node_name"] == "investigate_engineering_rule_finish"
