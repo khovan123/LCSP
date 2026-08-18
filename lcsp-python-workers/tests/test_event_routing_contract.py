@@ -76,6 +76,14 @@ def test_production_pm2_starts_every_routed_consumer():
     assert missing_targets == []
 
 
+def test_redeploy_health_gate_covers_all_production_worker_ports():
+    redeploy = read_contract("redeploy.sh")
+
+    assert "readonly FIRST_WORKER_HEALTH_PORT=8101" in redeploy
+    assert "readonly LAST_WORKER_HEALTH_PORT=8111" in redeploy
+    assert 'seq "$FIRST_WORKER_HEALTH_PORT" "$LAST_WORKER_HEALTH_PORT"' in redeploy
+
+
 def read_contract(relative_path: str) -> str:
     return (REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
 
