@@ -11,9 +11,9 @@ export const CLASSIFICATION_RUNTIME_MESSAGE_KEYS = {
   confidence: "confidence",
   technicalEvidence: "technicalEvidence",
   limitations: "limitations",
-  technicalDetails: "technicalDetails",
-  engineeringRule: "engineeringRule",
-  legalRule: "legalRule",
+  evidenceType: "evidenceType",
+  sourceLocation: "sourceLocation",
+  sourceSymbol: "sourceSymbol",
   noTechnicalEvidence: "noTechnicalEvidence",
 } as const;
 
@@ -23,11 +23,11 @@ export type ClassificationRuntimeMessageKey =
 const CLASSIFICATION_RUNTIME_MESSAGES = {
   vi: {
     passedDescription:
-      "Đánh giá EngineeringRule đã hoàn tất trên bằng chứng kỹ thuật hiện có của repository.",
+      "Phiên đánh giá EngineeringRule đã chạy đầy đủ. Kết quả từng quy tắc bên dưới phản ánh mức bằng chứng hiện có, không phải trạng thái lỗi runtime.",
     degradedDescription:
-      "Đánh giá đã hoàn tất, nhưng ít nhất một EngineeringRule chưa đủ bằng chứng kỹ thuật để kết luận.",
+      "Phiên đánh giá chỉ hoàn tất một phần do có lỗi runtime hoặc một số EngineeringRule không được thực thi đầy đủ.",
     blockedDescription:
-      "Runtime chưa tạo được kết quả EngineeringRule đủ tin cậy để tiếp tục.",
+      "Runtime chưa tạo được tập kết quả EngineeringRule đủ tin cậy để tiếp tục.",
     metricTotal: "Tổng quy tắc",
     metricCompliant: "Đáp ứng",
     metricNonCompliant: "Chưa đáp ứng",
@@ -35,18 +35,18 @@ const CLASSIFICATION_RUNTIME_MESSAGES = {
     confidence: "Độ tin cậy",
     technicalEvidence: "Bằng chứng kỹ thuật",
     limitations: "Lý do chưa thể kết luận",
-    technicalDetails: "Chi tiết kỹ thuật",
-    engineeringRule: "EngineeringRule",
-    legalRule: "LegalRule",
-    noTechnicalEvidence: "Chưa có tham chiếu bằng chứng kỹ thuật hợp lệ.",
+    evidenceType: "Loại bằng chứng",
+    sourceLocation: "Vị trí mã nguồn",
+    sourceSymbol: "Symbol",
+    noTechnicalEvidence: "Chưa có vị trí bằng chứng kỹ thuật có thể hiển thị.",
   },
   en: {
     passedDescription:
-      "EngineeringRule evaluation completed against the repository evidence currently available.",
+      "The EngineeringRule evaluation run completed fully. Individual rule outcomes below reflect the available evidence, not runtime health.",
     degradedDescription:
-      "Evaluation completed, but at least one EngineeringRule still lacks enough technical evidence for a determination.",
+      "The evaluation completed only partially because a runtime failure occurred or some EngineeringRules were not executed fully.",
     blockedDescription:
-      "The runtime could not produce a trustworthy EngineeringRule result.",
+      "The runtime could not produce a trustworthy set of EngineeringRule results.",
     metricTotal: "Total rules",
     metricCompliant: "Met",
     metricNonCompliant: "Not met",
@@ -54,10 +54,10 @@ const CLASSIFICATION_RUNTIME_MESSAGES = {
     confidence: "Confidence",
     technicalEvidence: "Technical evidence",
     limitations: "Why this is undetermined",
-    technicalDetails: "Technical details",
-    engineeringRule: "EngineeringRule",
-    legalRule: "LegalRule",
-    noTechnicalEvidence: "No valid technical evidence reference is available.",
+    evidenceType: "Evidence type",
+    sourceLocation: "Source location",
+    sourceSymbol: "Symbol",
+    noTechnicalEvidence: "No displayable technical evidence location is available.",
   },
 } as const;
 
@@ -108,6 +108,29 @@ const ENGINEERING_LIMITATION_LABELS = {
   },
 } as const;
 
+const ENGINEERING_REASON_LABELS = {
+  vi: {
+    "Conflicting evidence supports both satisfied and unsatisfied control states.":
+      "Bằng chứng kỹ thuật đang cho thấy cả trạng thái đáp ứng và chưa đáp ứng đối với cùng yêu cầu.",
+    "Repository evidence demonstrates that the engineering requirement is not met.":
+      "Bằng chứng trong repository cho thấy yêu cầu kỹ thuật này chưa được đáp ứng.",
+    "Repository evidence demonstrates that the engineering requirement is met.":
+      "Bằng chứng trong repository cho thấy yêu cầu kỹ thuật này đã được đáp ứng.",
+    "Available repository evidence is insufficient to determine this engineering requirement.":
+      "Bằng chứng hiện có trong repository chưa đủ để kết luận yêu cầu kỹ thuật này.",
+  },
+  en: {
+    "Conflicting evidence supports both satisfied and unsatisfied control states.":
+      "Conflicting evidence supports both satisfied and unsatisfied control states.",
+    "Repository evidence demonstrates that the engineering requirement is not met.":
+      "Repository evidence demonstrates that the engineering requirement is not met.",
+    "Repository evidence demonstrates that the engineering requirement is met.":
+      "Repository evidence demonstrates that the engineering requirement is met.",
+    "Available repository evidence is insufficient to determine this engineering requirement.":
+      "Available repository evidence is insufficient to determine this engineering requirement.",
+  },
+} as const;
+
 export function resolveClassificationRuntimeMessage(
   locale: Locale,
   key: ClassificationRuntimeMessageKey,
@@ -148,6 +171,17 @@ export function formatEngineeringLimitation(locale: Locale, code: string): strin
   const known = dictionary[code as keyof typeof dictionary];
   if (known) return known;
   return formatEngineeringConcept(code);
+}
+
+export function formatEngineeringReason(locale: Locale, reason: string): string {
+  const dictionary = ENGINEERING_REASON_LABELS[locale] ?? ENGINEERING_REASON_LABELS.en;
+  return dictionary[reason as keyof typeof dictionary] ?? reason;
+}
+
+export function formatTechnicalEvidenceMore(locale: Locale, count: number): string {
+  return locale === "vi"
+    ? `Còn ${count} tham chiếu kỹ thuật khác trong artifact audit.`
+    : `${count} additional technical references remain in the audit artifact.`;
 }
 
 export function formatLegalReference(locale: Locale, value: string): string {
