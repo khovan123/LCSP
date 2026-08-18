@@ -10,7 +10,7 @@ from lcsp_workers.llm.fallback_client import LLMClientProtocol
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.scanner.program_graph.query_engine import ProgramGraphQueryEngine
 
-from .evidence_claim_validator import EvidenceClaimValidator
+from .evidence_claim_validator import EvidenceClaimValidationError, EvidenceClaimValidator
 from .models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
     ENGINEERING_LIMITATION_CODES,
@@ -22,7 +22,17 @@ from .models import (
 
 logger = get_logger(__name__)
 MAX_TOOL_STEPS = 4
-MAX_OBSERVATION_ITEMS = 40
+MAX_OBSERVATION_ITEMS = 12
+MAX_OBSERVATION_STRING_CHARS = 800
+MAX_SEED_OBSERVATIONS = 12
+MAX_PROMPT_OBSERVATIONS = 12
+MAX_PROMPT_EVIDENCE_REFS = 160
+MAX_PROMPT_UNRESOLVED_FRONTIERS = 80
+MAX_PROMPT_CHARS = 90_000
+MAX_RESULT_NODES = 16
+MAX_RESULT_EDGES = 24
+MAX_RESULT_PATHS = 12
+MAX_RESULT_REFS = 60
 FINISH_TOOL_NAME = "finish"
 GRAPH_TOOL_NAMES = (
     "search_nodes",
@@ -67,9 +77,9 @@ class LawGuidedInvestigator:
         observations: list[dict[str, Any]] = [
             {
                 "source": "engineering_rule_seed_query",
-                "result": self._bounded(item),
+                "result": self._compact_observation(item),
             }
-            for item in packet.initial_results[:MAX_OBSERVATION_ITEMS]
+            for item in self._select_seed_results(packet.initial_results)
         ]
         tools = self._tool_definitions()
         graph_tool_calls_used = 0
@@ -134,7 +144,7 @@ class LawGuidedInvestigator:
 
                 graph_tool_calls_used += 1
                 observation = self._execute_tool(engine, call.name, call.arguments)
-                bounded_observation = self._bounded(observation)
+                bounded_observation = self._compact_observation(observation)
                 logger.info(
                     "ENGINEERING_INVESTIGATION_TOOL_RESULT",
                     engineering_rule_id=packet.engineering_rule_id,
@@ -516,7 +526,35 @@ class LawGuidedInvestigator:
                 float(item.get("confidence") or 0),
                 limitations,
             )
-            result.append(self.validator.validate(claim, graph))
+            try:
+                result.append(self.validator.validate(claim, graph))
+            except EvidenceClaimValidationError as error:
+                logger.warning(
+                    "ENGINEERING_INVESTIGATION_CLAIM_REJECTED",
+                    engineering_rule_id=packet.engineering_rule_id,
+                    claim_id=claim.claim_id,
+                    claim_type=claim.claim_type,
+                    error_type=type(error).__name__,
+                    error_message=str(error)[:2000],
+                    evidence_ref_count=len(refs),
+                    graph_path_ref_count=len(graph_refs),
+                    source_anchor_ref_count=len(source_refs),
+                )
+                result.append(
+                    EvidenceClaim(
+                        claim_id=claim.claim_id + ":unresolved",
+                        engineering_rule_id=packet.engineering_rule_id,
+                        claim_type=ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"],
+                        value=None,
+                        evidence_refs=(),
+                        confidence=0.0,
+                        limitations=(
+                            ENGINEERING_LIMITATION_CODES[
+                                "engineering_evidence_insufficient"
+                            ],
+                        ),
+                    )
+                )
 
         if result:
             return result
@@ -562,7 +600,25 @@ class LawGuidedInvestigator:
         return tuple(result), invalid
 
     @staticmethod
+    def _select_seed_results(
+        initial_results: tuple[dict[str, Any], ...],
+    ) -> tuple[dict[str, Any], ...]:
+        """Sample deterministic seed-query results across the full result set."""
+        if len(initial_results) <= MAX_SEED_OBSERVATIONS:
+            return initial_results
+        if MAX_SEED_OBSERVATIONS <= 1:
+            return initial_results[:1]
+        last_index = len(initial_results) - 1
+        indexes = {
+            round(index * last_index / (MAX_SEED_OBSERVATIONS - 1))
+            for index in range(MAX_SEED_OBSERVATIONS)
+        }
+        return tuple(initial_results[index] for index in sorted(indexes))
+
+    @staticmethod
     def _bounded(value: Any) -> Any:
+        if isinstance(value, tuple):
+            value = list(value)
         if isinstance(value, list):
             return [
                 LawGuidedInvestigator._bounded(item)
@@ -575,24 +631,146 @@ class LawGuidedInvestigator:
                     break
                 result[str(key)] = LawGuidedInvestigator._bounded(item)
             return result
-        if isinstance(value, str) and len(value) > 2000:
-            return value[:2000] + "…"
+        if isinstance(value, str) and len(value) > MAX_OBSERVATION_STRING_CHARS:
+            return value[:MAX_OBSERVATION_STRING_CHARS] + "…"
         return value
+
+    @classmethod
+    def _compact_observation(cls, value: Any) -> Any:
+        """Keep graph identities/provenance while bounding prompt and debug-log size."""
+        if isinstance(value, tuple):
+            value = list(value)
+        if isinstance(value, list):
+            if all(isinstance(item, dict) and "node_id" in item for item in value):
+                return [cls._compact_node(item) for item in value[:MAX_RESULT_NODES]]
+            return [cls._bounded(item) for item in value[:MAX_OBSERVATION_ITEMS]]
+        if not isinstance(value, dict):
+            return cls._bounded(value)
+
+        result: dict[str, Any] = {}
+        node_keys = {"nodes", "reviewNodes", "finalActions", "neighbors"}
+        for key, item in value.items():
+            if key in node_keys and isinstance(item, list):
+                result[key] = [
+                    cls._compact_node(node)
+                    for node in item[:MAX_RESULT_NODES]
+                    if isinstance(node, dict)
+                ]
+            elif key == "symbol" and isinstance(item, dict):
+                result[key] = cls._compact_node(item)
+            elif key == "edges" and isinstance(item, list):
+                result[key] = [
+                    cls._compact_edge(edge)
+                    for edge in item[:MAX_RESULT_EDGES]
+                    if isinstance(edge, dict)
+                ]
+            elif key == "paths" and isinstance(item, list):
+                result[key] = [
+                    [str(ref) for ref in path[:MAX_OBSERVATION_ITEMS]]
+                    for path in item[:MAX_RESULT_PATHS]
+                    if isinstance(path, (list, tuple))
+                ]
+            elif key in {"evidenceRefs", "unresolvedFrontiers"} and isinstance(item, list):
+                result[key] = [str(ref) for ref in item[:MAX_RESULT_REFS]]
+            else:
+                result[str(key)] = cls._bounded(item)
+        return result
+
+    @classmethod
+    def _compact_node(cls, node: dict[str, Any]) -> dict[str, Any]:
+        source = node.get("source") if isinstance(node.get("source"), dict) else {}
+        attributes = (
+            node.get("attributes") if isinstance(node.get("attributes"), dict) else {}
+        )
+        compact = {
+            "node_id": node.get("node_id"),
+            "node_type": node.get("node_type"),
+            "label": cls._bounded(node.get("label")),
+            "source": {
+                key: cls._bounded(source.get(key))
+                for key in ("file_path", "symbol_ref", "line_start", "line_end")
+                if source.get(key) is not None
+            },
+            "semantic_types": [
+                str(value)
+                for value in (node.get("semantic_types") or [])[:MAX_OBSERVATION_ITEMS]
+            ],
+            "evidence_refs": [
+                str(value)
+                for value in (node.get("evidence_refs") or [])[:MAX_RESULT_REFS]
+            ],
+        }
+        if attributes:
+            compact["attributes"] = cls._bounded(attributes)
+        return {key: value for key, value in compact.items() if value not in (None, {}, [])}
+
+    @classmethod
+    def _compact_edge(cls, edge: dict[str, Any]) -> dict[str, Any]:
+        compact = {
+            "edge_id": edge.get("edge_id"),
+            "edge_type": edge.get("edge_type"),
+            "source_node_id": edge.get("source_node_id"),
+            "target_node_id": edge.get("target_node_id"),
+            "evidence_refs": [
+                str(value)
+                for value in (edge.get("evidence_refs") or [])[:MAX_RESULT_REFS]
+            ],
+        }
+        return {key: value for key, value in compact.items() if value not in (None, [])}
 
     @staticmethod
     def _rule_contract(packet: InvestigationPacket) -> dict[str, Any]:
         return {
             "engineeringRuleId": packet.engineering_rule_id,
             "concept": packet.concept,
-            "investigationGoals": packet.investigation_goals,
-            "requiredEvidence": packet.required_evidence,
-            "supportingEvidence": packet.supporting_evidence,
-            "negativeEvidence": packet.negative_evidence,
-            "unresolvedConditions": packet.unresolved_conditions,
+            "investigationGoals": list(packet.investigation_goals[:MAX_OBSERVATION_ITEMS]),
+            "requiredEvidence": list(packet.required_evidence[:MAX_OBSERVATION_ITEMS]),
+            "supportingEvidence": list(packet.supporting_evidence[:MAX_OBSERVATION_ITEMS]),
+            "negativeEvidence": list(packet.negative_evidence[:MAX_OBSERVATION_ITEMS]),
+            "unresolvedConditions": list(
+                packet.unresolved_conditions[:MAX_OBSERVATION_ITEMS]
+            ),
         }
 
-    @staticmethod
+    @classmethod
+    def _render_prompt(cls, contract: dict[str, Any]) -> str:
+        """Serialize a valid JSON prompt under a hard character budget."""
+        bounded = dict(contract)
+        bounded["wizardContext"] = cls._bounded(bounded.get("wizardContext") or {})
+        bounded["seedEvidenceRefs"] = list(
+            bounded.get("seedEvidenceRefs") or []
+        )[:MAX_PROMPT_EVIDENCE_REFS]
+        bounded["unresolvedFrontiers"] = list(
+            bounded.get("unresolvedFrontiers") or []
+        )[:MAX_PROMPT_UNRESOLVED_FRONTIERS]
+        observations = list(bounded.get("observations") or [])[-MAX_PROMPT_OBSERVATIONS:]
+        bounded["observations"] = observations
+
+        def render() -> str:
+            return json.dumps(bounded, ensure_ascii=False, sort_keys=True)
+
+        rendered = render()
+        while len(rendered) > MAX_PROMPT_CHARS and bounded["observations"]:
+            bounded["observations"] = bounded["observations"][1:]
+            rendered = render()
+
+        if len(rendered) > MAX_PROMPT_CHARS:
+            bounded["wizardContext"] = {"_lcsp_truncated": True}
+            bounded["seedEvidenceRefs"] = bounded["seedEvidenceRefs"][:40]
+            bounded["unresolvedFrontiers"] = bounded["unresolvedFrontiers"][:20]
+            rendered = render()
+
+        if len(rendered) > MAX_PROMPT_CHARS:
+            bounded["observations"] = []
+            rendered = render()
+
+        if len(rendered) > MAX_PROMPT_CHARS:
+            raise ValueError("ENGINEERING_INVESTIGATION_PROMPT_BUDGET_EXCEEDED")
+        return rendered
+
+    @classmethod
     def _prompt(
+        cls,
         packet: InvestigationPacket,
         observations: list[dict[str, Any]],
         step: int,
@@ -607,7 +785,7 @@ class LawGuidedInvestigator:
                 "Do not answer with a JSON pseudo-tool command or plain-text conclusion. Never "
                 "decide legal compliance, legal risk tier, certification, or infer facts outside evidence."
             ),
-            "engineeringRule": LawGuidedInvestigator._rule_contract(packet),
+            "engineeringRule": cls._rule_contract(packet),
             "wizardContext": packet.wizard_context,
             "seedEvidenceRefs": packet.evidence_refs,
             "unresolvedFrontiers": packet.unresolved_frontiers,
@@ -621,13 +799,15 @@ class LawGuidedInvestigator:
                 "Wizard context may explain an external boundary but never overrides repository evidence.",
                 "Claim value is derived by LCSP from claimType; do not invent a separate value.",
                 "Limitations must use only the machine-code enum exposed by finish.",
+                "Use only evidence/node/edge/anchor identifiers visible in the supplied observations.",
                 "Use finish as soon as the EngineeringRule criteria are sufficiently evidenced.",
             ],
         }
-        return json.dumps(contract, ensure_ascii=False, sort_keys=True)
+        return cls._render_prompt(contract)
 
-    @staticmethod
+    @classmethod
     def _finish_prompt(
+        cls,
         packet: InvestigationPacket,
         observations: list[dict[str, Any]],
     ) -> str:
@@ -637,18 +817,20 @@ class LawGuidedInvestigator:
                 "finish. Call finish now with final engineering evidence claims only. Do not emit "
                 "plain text, request more graph traversal, or decide legal compliance."
             ),
-            "engineeringRule": LawGuidedInvestigator._rule_contract(packet),
+            "engineeringRule": cls._rule_contract(packet),
             "wizardContext": packet.wizard_context,
+            "seedEvidenceRefs": packet.evidence_refs,
             "unresolvedFrontiers": packet.unresolved_frontiers,
             "observations": observations,
             "claimRules": [
                 "If the EngineeringRule criteria are not sufficiently evidenced, emit UNRESOLVED_ENGINEERING_FACT.",
                 "Claim value is derived by LCSP from claimType.",
                 "Use only the machine-code limitation values exposed by finish.",
+                "Use only evidence/node/edge/anchor identifiers visible in the supplied observations.",
                 "Do not convert missing repository evidence into a legal conclusion.",
             ],
         }
-        return json.dumps(contract, ensure_ascii=False, sort_keys=True)
+        return cls._render_prompt(contract)
 
     @staticmethod
     def _log_finish(
