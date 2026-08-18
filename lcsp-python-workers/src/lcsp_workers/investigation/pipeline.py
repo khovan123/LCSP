@@ -7,15 +7,22 @@ from typing import Any
 from lcsp_workers.legal.chromadb_citation_retriever import ChromaDbCitationRetriever
 from lcsp_workers.legal.engineering_rules.compiler import EngineeringRuleCompiler
 from lcsp_workers.legal.engineering_rules.service import EngineeringRuleService
-from lcsp_workers.llm.budget_tracker import BudgetExceeded
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
 from lcsp_workers.platform.api_client import WorkerApiClient
+from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
 
 from .initial_query_executor import InitialQueryExecutor
 from .investigator import LawGuidedInvestigator
-from .models import EvidenceClaim
+from .models import (
+    ENGINEERING_EVIDENCE_CLAIM_TYPES,
+    ENGINEERING_LIMITATION_CODES,
+    EvidenceClaim,
+)
 from .rule_evaluator import EngineeringRuleEvaluation, EngineeringRuleEvaluator
+
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -150,7 +157,11 @@ class EngineeringInvestigationPipeline:
                 rules_considered=0,
                 engineering_rules_executed=0,
                 engineering_rule_cache_hits=0,
-                limitations=("NO_ENGINEERING_RULE_SOURCE_RULES",),
+                limitations=(
+                    ENGINEERING_LIMITATION_CODES[
+                        "no_engineering_rule_source_rules"
+                    ],
+                ),
             )
 
         for rule in rules:
@@ -170,14 +181,18 @@ class EngineeringInvestigationPipeline:
                 )
                 if cache_hit:
                     cache_hits += 1
-            except BudgetExceeded:
-                limitations.append(
-                    f"ENGINEERING_RULE_COMPILATION_BUDGET_EXHAUSTED:{legal_rule_id}"
-                )
-                continue
             except Exception as error:
+                logger.warning(
+                    "ENGINEERING_RULE_COMPILATION_FAILED",
+                    legal_rule_id=legal_rule_id,
+                    error_type=type(error).__name__,
+                    workflow_run_id=workflow_run_id,
+                    correlationId=correlation_id,
+                )
                 limitations.append(
-                    f"ENGINEERING_RULE_COMPILATION_FAILED:{legal_rule_id}:{type(error).__name__}"
+                    ENGINEERING_LIMITATION_CODES[
+                        "engineering_rule_compilation_failed"
+                    ]
                 )
                 continue
 
@@ -194,41 +209,33 @@ class EngineeringInvestigationPipeline:
                         workflow_run_id=workflow_run_id,
                         correlation_id=correlation_id,
                     )
-                except BudgetExceeded:
-                    rule_claims = [
-                        EvidenceClaim(
-                            claim_id=f"claim:budget:{engineering_rule.engineering_rule_id}",
-                            engineering_rule_id=engineering_rule.engineering_rule_id,
-                            claim_type="UNRESOLVED_ENGINEERING_FACT",
-                            value=None,
-                            evidence_refs=tuple(packet.evidence_refs),
-                            confidence=0.0,
-                            limitations=("ENGINEERING_INVESTIGATION_BUDGET_EXHAUSTED",),
-                        )
-                    ]
-                    limitations.append(
-                        "ENGINEERING_INVESTIGATION_BUDGET_EXHAUSTED:"
-                        + engineering_rule.engineering_rule_id
-                    )
                 except Exception as error:
+                    logger.warning(
+                        "ENGINEERING_INVESTIGATION_FAILED",
+                        engineering_rule_id=engineering_rule.engineering_rule_id,
+                        error_type=type(error).__name__,
+                        workflow_run_id=workflow_run_id,
+                        correlationId=correlation_id,
+                    )
                     rule_claims = [
                         EvidenceClaim(
                             claim_id=f"claim:failed:{engineering_rule.engineering_rule_id}",
                             engineering_rule_id=engineering_rule.engineering_rule_id,
-                            claim_type="UNRESOLVED_ENGINEERING_FACT",
+                            claim_type=ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"],
                             value=None,
                             evidence_refs=tuple(packet.evidence_refs),
                             confidence=0.0,
                             limitations=(
-                                f"ENGINEERING_INVESTIGATION_FAILED:{type(error).__name__}",
+                                ENGINEERING_LIMITATION_CODES[
+                                    "engineering_investigation_failed"
+                                ],
                             ),
                         )
                     ]
                     limitations.append(
-                        "ENGINEERING_RULE_INVESTIGATION_FAILED:"
-                        + engineering_rule.engineering_rule_id
-                        + ":"
-                        + type(error).__name__
+                        ENGINEERING_LIMITATION_CODES[
+                            "engineering_investigation_failed"
+                        ]
                     )
 
                 claims.extend(rule_claims)
