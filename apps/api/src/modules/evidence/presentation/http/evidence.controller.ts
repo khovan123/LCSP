@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import {
   Body,
   Controller,
@@ -9,11 +10,11 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
@@ -23,6 +24,7 @@ import { resultEnvelope } from "../../../../platform/problems/result-envelope.js
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptTechnicalProfileCommand } from "../../application/commands/accept-technical-profile/accept-technical-profile.command.js";
 import type { TechnicalProfileCallbackRequest } from "../../application/contracts/evidence/technical-profile-callback.contract.js";
+import { GetEvidenceGraphQuery } from "../../application/queries/get-evidence-graph/get-evidence-graph.query.js";
 import { GetEvidenceQuery } from "../../application/queries/get-evidence/get-evidence.query.js";
 
 @Controller("assessments")
@@ -54,6 +56,46 @@ export class EvidenceController {
           context.organizationId,
           context.scope,
           context.selectedAction,
+          request.correlationId as string,
+        ),
+      ),
+    );
+  }
+
+  /**
+   * Return evidence graph visualization: nodes, edges, clusters.
+   *
+   * Scope parameter controls detail level:
+   * - overview: Cluster-level view; aggregated nodes
+   * - detail: Expanded cluster; full node/edge detail
+   *
+   * For Developer scope, file paths and line numbers are redacted.
+   */
+  @Get(":assessmentId/evidence-graph")
+  @UseGuards(PbacGuard)
+  @RequireAnyAction(
+    PBAC_ACTIONS.evidenceRead,
+    PBAC_ACTIONS.evidenceReadRedacted,
+  )
+  async getEvidenceGraph(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+    @Query("scope") scope?: string,
+    @Query("clusterId") clusterId?: string,
+  ) {
+    const context = request.pbacContext;
+
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetEvidenceGraphQuery(
+          assessmentId,
+          context.organizationId,
+          context.userId,
+          context.subjectRole === SUBJECT_ROLES.developer
+            ? "DEVELOPER"
+            : "MANAGER",
+          (scope ?? "overview") as "overview" | "detail",
+          clusterId,
           request.correlationId as string,
         ),
       ),

@@ -80,6 +80,12 @@ class ProgramEvidenceGraph:
         import json
         import os
         ref = payload.get("evidence_graph_ref") or payload.get("evidenceGraphRef")
+        if ref and isinstance(ref, str) and not os.path.isabs(ref):
+            storage_root = os.getenv(
+                "LCSP_ARTIFACT_STORAGE_PATH",
+                os.path.join(os.getcwd(), "tmp", "lcsp-storage"),
+            )
+            ref = os.path.join(storage_root, ref)
         if ref and isinstance(ref, str) and os.path.exists(ref):
             try:
                 with open(ref, "r") as f:
