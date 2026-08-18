@@ -5,7 +5,7 @@ import {
   formatEngineeringConcept,
   formatEngineeringLimitation,
   formatEngineeringReason,
-  formatLegalReference,
+  formatLegalProvisionCitation,
   formatTechnicalEvidenceMore,
   resolveClassificationRuntimeMessage,
   resolveMessage,
@@ -197,10 +197,7 @@ export function ClassificationStatusPage({
               render={<Link href={`/assessments/${assessmentId}/documents`} />}
               variant="outline"
             >
-              {resolveMessage(
-                appLocale,
-                "pages.classification.generateGapAnalysis",
-              )}
+              {resolveMessage(appLocale, "pages.classification.generateGapAnalysis")}
             </Button>
           ) : null}
         </div>
@@ -214,9 +211,6 @@ function EngineeringRuleCard({
 }: {
   evaluation: EngineeringRuleEvaluationViewModel;
 }) {
-  const legalReferences = Array.from(
-    new Set([...evaluation.sourceLocators, ...evaluation.sourceChunkIds]),
-  );
   const hiddenEvidenceCount = Math.max(
     0,
     evaluation.technicalEvidenceCount - evaluation.technicalEvidence.length,
@@ -271,18 +265,23 @@ function EngineeringRuleCard({
         </div>
       ) : null}
 
-      {legalReferences.length ? (
+      {evaluation.legalProvisions.length ? (
         <div className="mt-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {resolveMessage(appLocale, "pages.classification.referencesLabel")}
           </p>
-          <ul className="mt-2 grid gap-1.5 text-sm text-muted-foreground sm:grid-cols-2">
-            {legalReferences.map((reference) => (
+          <ul className="mt-2 grid gap-2">
+            {evaluation.legalProvisions.map((provision) => (
               <li
-                key={`${evaluation.engineeringRuleId}:legal:${reference}`}
-                className="rounded-md border bg-muted/10 px-3 py-2"
+                key={`${evaluation.engineeringRuleId}:legal:${provision.documentId}:${provision.locator}`}
+                className="rounded-md border bg-muted/10 px-3 py-3"
               >
-                {formatLegalReference(appLocale, reference)}
+                <p className="text-sm font-semibold text-foreground/90">
+                  {formatLegalProvisionCitation(appLocale, provision)}
+                </p>
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-muted-foreground">
+                  {provision.content}
+                </p>
               </li>
             ))}
           </ul>
