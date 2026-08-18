@@ -244,10 +244,14 @@ class EngineeringInvestigationPipeline:
                 )
                 executed += 1
 
+        # Pipeline status describes execution integrity, not the compliance outcome
+        # distribution. UNKNOWN is a valid deterministic EngineeringRule result and
+        # must not degrade the guardrail by itself. PARTIAL is reserved for runtime
+        # defects/skipped rules captured in top-level limitations.
         status = "COMPLETE"
         if not evaluations:
             status = "BLOCKED"
-        elif limitations or any(item.status == "UNKNOWN" for item in evaluations):
+        elif limitations:
             status = "PARTIAL"
 
         return EngineeringInvestigationResult(
