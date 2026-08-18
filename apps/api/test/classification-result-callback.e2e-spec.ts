@@ -16,6 +16,7 @@ import {
   ASSESSMENT_RESULT_MODES,
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_STATUSES,
+  ENGINEERING_LIMITATION_CODES,
   SCAN_ERROR_CODES,
   SCAN_EVENT_TYPES,
 } from "@lcsp/contracts/scan";
@@ -140,7 +141,7 @@ describe("Direct EngineeringRule Result Callback (e2e)", () => {
             source_chunk_ids: ["LAW:A1"],
             source_locators: ["art-1::cl-1"],
             confidence: 0,
-            limitations: ["DYNAMIC_PATH_UNRESOLVED"],
+            limitations: [ENGINEERING_LIMITATION_CODES.dynamicPathUnresolved],
           },
         ],
       },
@@ -164,7 +165,7 @@ describe("Direct EngineeringRule Result Callback (e2e)", () => {
         status: "BLOCKED",
         summary: { compliant: 0, non_compliant: 0, unknown: 0, total: 0 },
         evaluations: [],
-        limitations: ["NO_ENGINEERING_RULE_SOURCE_RULES"],
+        limitations: [ENGINEERING_LIMITATION_CODES.noEngineeringRuleSourceRules],
       },
     };
 
@@ -197,6 +198,31 @@ describe("Direct EngineeringRule Result Callback (e2e)", () => {
       response.body,
       422,
       SCAN_ERROR_CODES.classificationOverclaim,
+    );
+    assert.equal(await prisma.classificationResult.count(), 0);
+  });
+
+  it("rejects free-form prose in machine limitation fields", async () => {
+    const payload = validPayload();
+    const evaluations = payload.classification_data.evaluations as Array<
+      Record<string, unknown>
+    >;
+    payload.classification_data = {
+      ...payload.classification_data,
+      evaluations: [
+        {
+          ...evaluations[0],
+          limitations: ["System appears compliant based on external evidence."],
+        },
+      ],
+    };
+
+    const response = await callback(app, payload);
+    assertError(
+      response.status,
+      response.body,
+      422,
+      SCAN_ERROR_CODES.classificationSchemaInvalid,
     );
     assert.equal(await prisma.classificationResult.count(), 0);
   });
