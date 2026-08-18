@@ -26,6 +26,15 @@ class InitialQueryExecutor:
                 semantic_types=query.semantic_types,
                 max_results=50,
             )
+            rows.append(
+                {
+                    "query": query.name,
+                    "phase": "START_NODE_SEARCH",
+                    **starts.to_dict(),
+                }
+            )
+            refs.update(starts.evidence_refs)
+
             for start in starts:
                 result = engine.trace_static_flow(
                     start_ref=str(start["node_id"]),
@@ -38,10 +47,14 @@ class InitialQueryExecutor:
                 rows.append(
                     {
                         "query": query.name,
+                        "phase": "STATIC_FLOW_TRACE",
                         "startNodeId": start["node_id"],
                         **result.to_dict(),
                     }
                 )
+                # Only real unresolved graph boundaries belong here. A bounded search
+                # that reports truncated=True remains searchable via its continuation
+                # frontiers and is not itself evidence of runtime uncertainty.
                 unresolved.update(result.unresolved_frontiers)
                 refs.update(result.evidence_refs)
 
