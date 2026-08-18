@@ -114,6 +114,53 @@ def test_pipeline_returns_direct_compliant_rule_evaluation() -> None:
     }
 
 
+def test_pipeline_treats_unknown_as_valid_complete_evaluation() -> None:
+    api_client = _api_client()
+    engineering_rule = _rule()
+    rule_service = MagicMock()
+    rule_service.get_or_compile.return_value = ([engineering_rule], True)
+    query_executor = MagicMock()
+    query_executor.execute.return_value = InvestigationPacket(
+        engineering_rule_id="eng-1",
+        concept="HUMAN_OVERSIGHT",
+        investigation_goals=("Find review controls",),
+        initial_results=(),
+    )
+    investigator = MagicMock()
+    investigator.investigate.return_value = [
+        EvidenceClaim(
+            claim_id="claim-unknown",
+            engineering_rule_id="eng-1",
+            claim_type="UNRESOLVED_ENGINEERING_FACT",
+            value=None,
+            evidence_refs=("evidence:finding-1",),
+            confidence=0.5,
+            limitations=(
+                ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],
+            ),
+        )
+    ]
+
+    result = EngineeringInvestigationPipeline(
+        api_client=api_client,
+        llm_client=MagicMock(),
+        retriever=MagicMock(),
+        rule_service=rule_service,
+        query_executor=query_executor,
+        investigator=investigator,
+    ).run(evidence_report=_evidence_report(), workflow_run_id="workflow-1")
+
+    assert result.status == "COMPLETE"
+    assert result.evaluations[0].status == "UNKNOWN"
+    assert result.limitations == ()
+    assert result.to_assessment_data()["summary"] == {
+        "compliant": 0,
+        "non_compliant": 0,
+        "unknown": 1,
+        "total": 1,
+    }
+
+
 def test_pipeline_keeps_other_rules_when_one_compilation_fails() -> None:
     api_client = _api_client(
         [
