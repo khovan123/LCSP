@@ -62,9 +62,7 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
   ): Promise<ApproveVerifiedProfileDto> {
     await this.assertManagerOnly(command);
     await this.assertOwnedAssessment(command);
-    const requestedApprovedAt = new Date();
-    let effectiveApprovedAt = requestedApprovedAt;
-    let effectiveApprovedById = command.approvedById;
+    const approvedAt = new Date();
 
     await this.prisma.$transaction(async (tx) => {
       const profile = await tx.verifiedProfile.findFirst({
@@ -78,8 +76,6 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
           assessmentId: true,
           organizationId: true,
           status: true,
-          approvedAt: true,
-          approvedById: true,
         },
       });
 
@@ -92,10 +88,7 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
       }
 
       const profileStatus = fromPrismaVerifiedProfileStatus(profile.status);
-      if (
-        profileStatus !== VERIFIED_PROFILE_STATUSES.pendingApproval &&
-        profileStatus !== VERIFIED_PROFILE_STATUSES.approved
-      ) {
+      if (profileStatus !== VERIFIED_PROFILE_STATUSES.pendingApproval) {
         throw problemException(
           SCAN_ERROR_CODES.verifiedProfileWrongState,
           command.correlationId,
@@ -120,25 +113,13 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
         );
       }
 
-      if (profileStatus === VERIFIED_PROFILE_STATUSES.approved) {
-        effectiveApprovedAt = profile.approvedAt ?? requestedApprovedAt;
-        effectiveApprovedById = profile.approvedById ?? command.approvedById;
-        await this.enqueueLegalMatchingOrRecoveryCommand(
-          command,
-          tx,
-          profile.id,
-        );
-        await this.auditApprovedReplay(command, tx, profile.id);
-        return;
-      }
-
       await tx.verifiedProfile.update({
         where: { id: profile.id },
         data: {
           status: toPrismaVerifiedProfileStatus(
             VERIFIED_PROFILE_STATUSES.approved,
           ),
-          approvedAt: requestedApprovedAt,
+          approvedAt,
           approvedById: command.approvedById,
         },
       });
@@ -163,7 +144,7 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
             verifiedProfileId: profile.id,
             assessmentId: command.assessmentId,
             approvedById: command.approvedById,
-            approvedAt: requestedApprovedAt.toISOString(),
+            approvedAt: approvedAt.toISOString(),
             correlationId: command.correlationId,
           },
         },
@@ -176,8 +157,8 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
     return {
       verified_profile_id: command.verifiedProfileId,
       status: VERIFIED_PROFILE_STATUSES.approved,
-      approved_at: effectiveApprovedAt.toISOString(),
-      approved_by_id: effectiveApprovedById,
+      approved_at: approvedAt.toISOString(),
+      approved_by_id: command.approvedById,
       correlationId: command.correlationId,
     };
   }
@@ -245,38 +226,6 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
         result: AUDIT_DECISIONS.deny,
       },
     });
-  }
-
-  private async auditApprovedReplay(
-    command: ApproveVerifiedProfileCommand,
-    tx: Prisma.TransactionClient,
-    verifiedProfileId: string,
-  ): Promise<void> {
-    await this.auditWriter.writeInTx(
-      {
-        eventType: SCAN_EVENT_TYPES.verifiedProfileApprovedAudit,
-        actorId: command.approvedById,
-        organizationId: command.organizationId,
-        assessmentId: command.assessmentId,
-        resourceType: AUDIT_RESOURCE_TYPES.verifiedProfile,
-        resourceId: verifiedProfileId,
-        correlationId: command.correlationId,
-        causationId: verifiedProfileId,
-        decision: AUDIT_DECISIONS.allow,
-        result: VERIFIED_PROFILE_STATUSES.approved,
-        redactionStatus: AUDIT_REDACTION_STATUSES.none,
-        policyId: command.authorization.policyId,
-        policyVersion: command.authorization.policyVersion,
-        actor: { id: command.approvedById, type: AUDIT_ACTOR_TYPES.user },
-        payload: {
-          verifiedProfileId,
-          assessmentId: command.assessmentId,
-          replayedApproval: true,
-          correlationId: command.correlationId,
-        },
-      },
-      tx,
-    );
   }
 
   private async enqueueLegalMatchingOrRecoveryCommand(
