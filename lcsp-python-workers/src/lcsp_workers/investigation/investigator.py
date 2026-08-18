@@ -11,6 +11,7 @@ from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.scanner.program_graph.query_engine import ProgramGraphQueryEngine
 
 from .evidence_claim_validator import EvidenceClaimValidationError, EvidenceClaimValidator
+from .evidence_ledger import EvidenceLedger
 from .models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
     ENGINEERING_LIMITATION_CODES,
@@ -21,18 +22,11 @@ from .models import (
 
 
 logger = get_logger(__name__)
-MAX_TOOL_STEPS = 4
-MAX_OBSERVATION_ITEMS = 12
-MAX_OBSERVATION_STRING_CHARS = 800
-MAX_SEED_OBSERVATIONS = 12
-MAX_PROMPT_OBSERVATIONS = 12
-MAX_PROMPT_EVIDENCE_REFS = 160
-MAX_PROMPT_UNRESOLVED_FRONTIERS = 80
-MAX_PROMPT_CHARS = 90_000
-MAX_RESULT_NODES = 16
-MAX_RESULT_EDGES = 24
-MAX_RESULT_PATHS = 12
-MAX_RESULT_REFS = 60
+MAX_INVESTIGATION_STEPS = 8
+MAX_GRAPH_TOOL_STEPS = 4
+MAX_WORKING_RESULTS = 4
+MAX_WORKING_RESULT_CHARS = 24_000
+MAX_PROMPT_CHARS = 110_000
 FINISH_TOOL_NAME = "finish"
 GRAPH_TOOL_NAMES = (
     "search_nodes",
@@ -43,6 +37,10 @@ GRAPH_TOOL_NAMES = (
     "symbol_context",
     "provider_invocations",
 )
+STATE_TOOL_NAMES = (
+    "list_observations",
+    "inspect_observation",
+)
 CANONICAL_CLAIM_TYPES = frozenset(ENGINEERING_EVIDENCE_CLAIM_TYPES.values())
 CLAIM_VALUE_BY_TYPE: dict[str, bool | None] = {
     ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]: True,
@@ -52,7 +50,13 @@ CLAIM_VALUE_BY_TYPE: dict[str, bool | None] = {
 
 
 class LawGuidedInvestigator:
-    """Let the LLM choose bounded native graph tools under EngineeringRule criteria."""
+    """Let the LLM investigate graph evidence through orchestrator-owned state.
+
+    Full seed/tool results live in a lossless ``EvidenceLedger`` for the duration
+    of the EngineeringRule run. The model sees only a pageable working view and can
+    explicitly reload any observation by ID. The prompt is therefore not the source
+    of truth and no observation is silently dropped to satisfy provider context limits.
+    """
 
     def __init__(self, llm_client: LLMClientProtocol) -> None:
         self.llm = llm_client
@@ -66,27 +70,20 @@ class LawGuidedInvestigator:
         workflow_run_id: str,
         correlation_id: str | None = None,
     ) -> list[EvidenceClaim]:
-        """Run a provider-native tool loop and return validated engineering claims.
-
-        The provider receives closed JSON-schema tool definitions. LCSP executes
-        every graph tool itself against the pinned Program Evidence Graph; provider
-        SDK automatic execution remains disabled. A dedicated ``finish`` tool is
-        the only native action allowed to submit final evidence claims.
-        """
         engine = ProgramGraphQueryEngine(graph)
-        observations: list[dict[str, Any]] = [
-            {
-                "source": "engineering_rule_seed_query",
-                "result": self._compact_observation(item),
-            }
-            for item in self._select_seed_results(packet.initial_results)
-        ]
+        ledger = EvidenceLedger()
+        for item in packet.initial_results:
+            ledger.add(source="engineering_rule_seed_query", result=item)
+        if packet.wizard_context:
+            ledger.add(source="wizard_context", result=dict(packet.wizard_context))
+
         tools = self._tool_definitions()
         graph_tool_calls_used = 0
+        working_results: list[dict[str, Any]] = []
 
-        for step in range(MAX_TOOL_STEPS):
+        for step in range(MAX_INVESTIGATION_STEPS):
             response = self.llm.complete_with_tools(
-                prompt=self._prompt(packet, observations, step),
+                prompt=self._prompt(packet, ledger, working_results, step),
                 tools=tools,
                 workflow_run_id=workflow_run_id,
                 node_name="investigate_engineering_rule",
@@ -102,33 +99,29 @@ class LawGuidedInvestigator:
                     workflow_run_id=workflow_run_id,
                     correlationId=correlation_id,
                 )
-                observations.append(
-                    {
-                        "step": step + 1,
-                        "error": "MODEL_RETURNED_NO_NATIVE_TOOL_CALL",
-                        "content": self._bounded(response.content),
-                    }
-                )
                 continue
 
             for call in response.tool_calls:
-                bounded_arguments = self._bounded(call.arguments)
+                arguments = self._bounded_debug(call.arguments)
                 logger.info(
                     "ENGINEERING_INVESTIGATION_TOOL_CALL",
                     engineering_rule_id=packet.engineering_rule_id,
                     step=step + 1,
                     tool=call.name,
                     call_id=call.call_id,
-                    arguments=bounded_arguments,
+                    arguments=arguments,
                     graph_tool_calls_used=graph_tool_calls_used,
+                    ledger_observation_count=ledger.total,
                     workflow_run_id=workflow_run_id,
                     correlationId=correlation_id,
                 )
+
                 if call.name == FINISH_TOOL_NAME:
                     claims = self._claims_from_finish_arguments(
                         call.arguments,
                         packet,
                         graph,
+                        ledger,
                     )
                     self._log_finish(
                         packet=packet,
@@ -136,48 +129,94 @@ class LawGuidedInvestigator:
                         workflow_run_id=workflow_run_id,
                         correlation_id=correlation_id,
                         forced=False,
+                        ledger=ledger,
                     )
                     return claims
 
-                if graph_tool_calls_used >= MAX_TOOL_STEPS:
-                    break
+                if call.name in GRAPH_TOOL_NAMES:
+                    if graph_tool_calls_used >= MAX_GRAPH_TOOL_STEPS:
+                        tool_result = {
+                            "error": "GRAPH_TOOL_BUDGET_EXHAUSTED",
+                            "graphToolCallsUsed": graph_tool_calls_used,
+                        }
+                    else:
+                        graph_tool_calls_used += 1
+                        raw_result = self._execute_graph_tool(
+                            engine,
+                            call.name,
+                            call.arguments,
+                        )
+                        observation = ledger.add(
+                            source="graph_tool",
+                            tool=call.name,
+                            call_id=call.call_id,
+                            arguments=dict(call.arguments),
+                            result=raw_result,
+                        )
+                        tool_result = {
+                            "observationId": observation.observation_id,
+                            "summary": ledger.summary(observation),
+                            "preview": ledger.preview(observation.observation_id, limit=6),
+                            "instruction": (
+                                "Full result is retained by LCSP. Use inspect_observation "
+                                "with this observationId to page more detail."
+                            ),
+                        }
+                elif call.name == "list_observations":
+                    tool_result = ledger.index(
+                        offset=int(call.arguments.get("offset") or 0),
+                        limit=int(call.arguments.get("limit") or 20),
+                    )
+                elif call.name == "inspect_observation":
+                    try:
+                        tool_result = ledger.inspect(
+                            str(call.arguments.get("observation_id") or ""),
+                            section=(
+                                str(call.arguments.get("section"))
+                                if call.arguments.get("section")
+                                else None
+                            ),
+                            offset=int(call.arguments.get("offset") or 0),
+                            limit=int(call.arguments.get("limit") or 12),
+                        )
+                    except KeyError as error:
+                        tool_result = {
+                            "error": "UNKNOWN_OBSERVATION_REF",
+                            "detail": str(error),
+                        }
+                else:
+                    tool_result = {
+                        "error": "UNKNOWN_INVESTIGATION_TOOL",
+                        "allowedTools": sorted(
+                            {*GRAPH_TOOL_NAMES, *STATE_TOOL_NAMES, FINISH_TOOL_NAME}
+                        ),
+                    }
 
-                graph_tool_calls_used += 1
-                observation = self._execute_tool(engine, call.name, call.arguments)
-                bounded_observation = self._compact_observation(observation)
+                working_result = self._fit_working_result(tool_result)
                 logger.info(
                     "ENGINEERING_INVESTIGATION_TOOL_RESULT",
                     engineering_rule_id=packet.engineering_rule_id,
                     step=step + 1,
-                    tool_call_index=graph_tool_calls_used,
                     tool=call.name,
                     call_id=call.call_id,
-                    arguments=bounded_arguments,
-                    result=bounded_observation,
+                    result=working_result,
+                    graph_tool_calls_used=graph_tool_calls_used,
+                    ledger_observation_count=ledger.total,
                     workflow_run_id=workflow_run_id,
                     correlationId=correlation_id,
                 )
-                observations.append(
+                working_results.append(
                     {
                         "step": step + 1,
-                        "toolCall": graph_tool_calls_used,
                         "tool": call.name,
                         "callId": call.call_id,
-                        "arguments": bounded_arguments,
-                        "result": bounded_observation,
+                        "result": working_result,
                     }
                 )
+                working_results = working_results[-MAX_WORKING_RESULTS:]
 
-            if graph_tool_calls_used >= MAX_TOOL_STEPS:
-                break
-
-        # The graph-tool budget is exhausted. Keep finalization native as well:
-        # the provider receives only the finish function and cannot request more
-        # repository traversal in this final round. The finish tool marks native
-        # tool choice as required, so supported providers cannot silently return
-        # a plain-text answer here.
         response = self.llm.complete_with_tools(
-            prompt=self._finish_prompt(packet, observations),
+            prompt=self._finish_prompt(packet, ledger, working_results),
             tools=[self._finish_tool_definition()],
             workflow_run_id=workflow_run_id,
             node_name="investigate_engineering_rule_finish",
@@ -190,6 +229,7 @@ class LawGuidedInvestigator:
                     call.arguments,
                     packet,
                     graph,
+                    ledger,
                 )
                 self._log_finish(
                     packet=packet,
@@ -197,18 +237,20 @@ class LawGuidedInvestigator:
                     workflow_run_id=workflow_run_id,
                     correlation_id=correlation_id,
                     forced=True,
+                    ledger=ledger,
                 )
                 return claims
 
         logger.warning(
             "ENGINEERING_INVESTIGATION_FINISH_MISSING",
             engineering_rule_id=packet.engineering_rule_id,
+            ledger_observation_count=ledger.total,
             workflow_run_id=workflow_run_id,
             correlationId=correlation_id,
         )
-        return self._claims_from_payload({}, packet, graph)
+        return self._claims_from_payload({}, packet, graph, ledger)
 
-    def _execute_tool(
+    def _execute_graph_tool(
         self,
         engine: ProgramGraphQueryEngine,
         tool_name: str,
@@ -225,10 +267,7 @@ class LawGuidedInvestigator:
         }
         tool = tools.get(tool_name)
         if tool is None:
-            return {
-                "error": "UNKNOWN_GRAPH_TOOL",
-                "allowedTools": sorted(tools),
-            }
+            return {"error": "UNKNOWN_GRAPH_TOOL", "allowedTools": sorted(tools)}
         try:
             result = tool(**self._normalize_tool_arguments(tool_name, arguments))
         except (TypeError, ValueError) as error:
@@ -271,14 +310,13 @@ class LawGuidedInvestigator:
 
     @classmethod
     def _tool_definitions(cls) -> list[LLMToolDefinition]:
-        """Build the closed provider-native tool catalog for one investigation."""
         string_array = {"type": "array", "items": {"type": "string"}}
         graph_tools = [
             LLMToolDefinition(
                 name="search_nodes",
                 description=(
                     "Search bounded Program Evidence Graph nodes by structural type, source path, "
-                    "semantic type, or text. Use this to discover concrete node refs before tracing."
+                    "semantic type, or text. Results are stored as an observation by LCSP."
                 ),
                 input_schema=cls._closed_schema(
                     {
@@ -292,9 +330,7 @@ class LawGuidedInvestigator:
             ),
             LLMToolDefinition(
                 name="trace_static_flow",
-                description=(
-                    "Trace a bounded static control/data/event flow from a concrete graph node ref."
-                ),
+                description="Trace bounded static control/data/event flow from a graph node ref.",
                 input_schema=cls._closed_schema(
                     {
                         "start_ref": {"type": "string"},
@@ -309,7 +345,7 @@ class LawGuidedInvestigator:
             ),
             LLMToolDefinition(
                 name="inspect_data_path",
-                description="Inspect bounded data-flow evidence from a concrete graph node ref.",
+                description="Inspect bounded data-flow evidence from a graph node ref.",
                 input_schema=cls._closed_schema(
                     {
                         "start_ref": {"type": "string"},
@@ -322,9 +358,7 @@ class LawGuidedInvestigator:
             ),
             LLMToolDefinition(
                 name="inspect_decision_path",
-                description=(
-                    "Inspect bounded decision/action flow evidence from a concrete graph node ref."
-                ),
+                description="Inspect bounded decision/action flow evidence from a graph node ref.",
                 input_schema=cls._closed_schema(
                     {
                         "start_ref": {"type": "string"},
@@ -337,9 +371,7 @@ class LawGuidedInvestigator:
             ),
             LLMToolDefinition(
                 name="inspect_human_review_path",
-                description=(
-                    "Inspect bounded human-review/override evidence on a decision path from a node ref."
-                ),
+                description="Inspect bounded human-review/override evidence from a graph node ref.",
                 input_schema=cls._closed_schema(
                     {
                         "start_ref": {"type": "string"},
@@ -351,9 +383,7 @@ class LawGuidedInvestigator:
             ),
             LLMToolDefinition(
                 name="symbol_context",
-                description=(
-                    "Resolve one symbol or graph node ref and return its bounded neighboring context."
-                ),
+                description="Resolve one symbol/node ref and return bounded neighboring context.",
                 input_schema=cls._closed_schema(
                     {
                         "symbol_ref": {"type": "string"},
@@ -364,9 +394,7 @@ class LawGuidedInvestigator:
             ),
             LLMToolDefinition(
                 name="provider_invocations",
-                description=(
-                    "Return bounded AI model invocation nodes, optionally filtered by provider."
-                ),
+                description="Return bounded AI model invocation nodes, optionally by provider.",
                 input_schema=cls._closed_schema(
                     {
                         "provider": {"type": "string"},
@@ -375,26 +403,49 @@ class LawGuidedInvestigator:
                 ),
             ),
         ]
-        return [*graph_tools, cls._finish_tool_definition()]
+        state_tools = [
+            LLMToolDefinition(
+                name="list_observations",
+                description=(
+                    "Page the LCSP EvidenceLedger index. Use when the initial working view does "
+                    "not show the observation you need; full observations are retained outside the prompt."
+                ),
+                input_schema=cls._closed_schema(
+                    {
+                        "offset": {"type": "integer", "minimum": 0},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 40},
+                    }
+                ),
+            ),
+            LLMToolDefinition(
+                name="inspect_observation",
+                description=(
+                    "Page details from one EvidenceLedger observation by observation_id. "
+                    "Use section/offset/limit to retrieve only the needed working context."
+                ),
+                input_schema=cls._closed_schema(
+                    {
+                        "observation_id": {"type": "string"},
+                        "section": {"type": "string"},
+                        "offset": {"type": "integer", "minimum": 0},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 40},
+                    },
+                    required=("observation_id",),
+                ),
+            ),
+        ]
+        return [*graph_tools, *state_tools, cls._finish_tool_definition()]
 
     @classmethod
     def _finish_tool_definition(cls) -> LLMToolDefinition:
-        """Return the native terminal action used to submit evidence claims.
-
-        The model selects only a claim type, evidence references, confidence, and
-        closed limitation codes. LCSP derives ``value`` deterministically from the
-        claim type, so provider-authored prose or contradictory boolean values cannot
-        enter the persisted claim artifact.
-        """
         claim_schema = cls._closed_schema(
             {
-                "claimType": {
-                    "type": "string",
-                    "enum": sorted(CANONICAL_CLAIM_TYPES),
+                "claimType": {"type": "string", "enum": sorted(CANONICAL_CLAIM_TYPES)},
+                "observationRefs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 12,
                 },
-                "evidenceRefs": {"type": "array", "items": {"type": "string"}},
-                "graphPathRefs": {"type": "array", "items": {"type": "string"}},
-                "sourceAnchorRefs": {"type": "array", "items": {"type": "string"}},
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 "limitations": {
                     "type": "array",
@@ -404,21 +455,14 @@ class LawGuidedInvestigator:
                     },
                 },
             },
-            required=(
-                "claimType",
-                "evidenceRefs",
-                "graphPathRefs",
-                "sourceAnchorRefs",
-                "confidence",
-                "limitations",
-            ),
+            required=("claimType", "observationRefs", "confidence", "limitations"),
         )
         return LLMToolDefinition(
             name=FINISH_TOOL_NAME,
             description=(
-                "Finish this EngineeringRule investigation and submit only technical evidence "
-                "claims. Never submit a legal conclusion. Limitation values must be selected "
-                "from the provided machine-code enum."
+                "Finish with technical claims that reference LCSP observation IDs only. "
+                "Do not author evidence/node/edge/anchor IDs; LCSP derives immutable provenance "
+                "deterministically from observationRefs."
             ),
             input_schema=cls._closed_schema(
                 {
@@ -431,9 +475,6 @@ class LawGuidedInvestigator:
                 },
                 required=("claims",),
             ),
-            # This policy marker is present in every EngineeringRule tool catalog.
-            # Therefore provider AUTO mode is disabled for every investigation turn;
-            # in the terminal round this is the only tool and ``finish`` is forced.
             tool_choice_required=True,
         )
 
@@ -457,11 +498,13 @@ class LawGuidedInvestigator:
         arguments: dict[str, Any],
         packet: InvestigationPacket,
         graph,
+        ledger: EvidenceLedger,
     ) -> list[EvidenceClaim]:
         return self._claims_from_payload(
             {"claims": arguments.get("claims")},
             packet,
             graph,
+            ledger,
         )
 
     def _claims_from_payload(
@@ -469,11 +512,13 @@ class LawGuidedInvestigator:
         payload: dict[str, Any],
         packet: InvestigationPacket,
         graph,
+        ledger: EvidenceLedger,
     ) -> list[EvidenceClaim]:
         rows = payload.get("claims")
         if not isinstance(rows, list):
             rows = []
         result: list[EvidenceClaim] = []
+
         for index, item in enumerate(rows, 1):
             if not isinstance(item, dict):
                 continue
@@ -487,45 +532,79 @@ class LawGuidedInvestigator:
             limitations, invalid_limitation = self._normalize_limitations(
                 item.get("limitations")
             )
+            observation_refs = tuple(
+                dict.fromkeys(
+                    str(value)
+                    for value in item.get("observationRefs") or []
+                    if str(value)
+                )
+            )
+
             if invalid_limitation:
-                # Fail closed if a provider violates the native limitation enum.
                 claim_type = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
                 limitations = (
                     *limitations,
                     ENGINEERING_LIMITATION_CODES["model_limitation_code_invalid"],
                 )
 
+            try:
+                provenance = ledger.provenance_for(observation_refs)
+            except KeyError as error:
+                logger.warning(
+                    "ENGINEERING_INVESTIGATION_CLAIM_REJECTED",
+                    engineering_rule_id=packet.engineering_rule_id,
+                    claim_type=claim_type,
+                    observation_refs=list(observation_refs),
+                    error_type=type(error).__name__,
+                    error_message=str(error)[:2000],
+                )
+                claim_type = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+                limitations = (
+                    *limitations,
+                    ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],
+                )
+                provenance = ledger.provenance_for(())
+
+            has_provenance = bool(
+                provenance.evidence_refs
+                or provenance.graph_refs
+                or provenance.source_anchor_refs
+            )
+            if (
+                claim_type
+                in {
+                    ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"],
+                    ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"],
+                }
+                and not has_provenance
+            ):
+                claim_type = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+                limitations = (
+                    *limitations,
+                    ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],
+                )
+
             claim_value = CLAIM_VALUE_BY_TYPE[claim_type]
-            refs = tuple(
-                str(value)
-                for value in item.get("evidenceRefs") or []
-                if str(value)
-            )
-            graph_refs = tuple(
-                str(value)
-                for value in item.get("graphPathRefs") or []
-                if str(value)
-            )
-            source_refs = tuple(
-                str(value)
-                for value in item.get("sourceAnchorRefs") or []
-                if str(value)
-            )
             seed = (
                 f"{packet.engineering_rule_id}:{index}:{claim_type}:"
-                f"{refs}:{graph_refs}:{source_refs}:{claim_value}:{limitations}"
+                f"{observation_refs}:{provenance}:{claim_value}:{limitations}"
             )
             claim = EvidenceClaim(
                 "claim:" + hashlib.sha256(seed.encode()).hexdigest()[:24],
                 packet.engineering_rule_id,
                 claim_type,
                 claim_value,
-                refs,
-                graph_refs,
-                source_refs,
+                provenance.evidence_refs,
+                provenance.graph_refs,
+                provenance.source_anchor_refs,
                 float(item.get("confidence") or 0),
-                limitations,
+                tuple(dict.fromkeys(limitations)),
             )
+
+            if claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"] and not has_provenance:
+                result.append(claim)
+                continue
+
             try:
                 result.append(self.validator.validate(claim, graph))
             except EvidenceClaimValidationError as error:
@@ -534,11 +613,12 @@ class LawGuidedInvestigator:
                     engineering_rule_id=packet.engineering_rule_id,
                     claim_id=claim.claim_id,
                     claim_type=claim.claim_type,
+                    observation_refs=list(observation_refs),
                     error_type=type(error).__name__,
                     error_message=str(error)[:2000],
-                    evidence_ref_count=len(refs),
-                    graph_path_ref_count=len(graph_refs),
-                    source_anchor_ref_count=len(source_refs),
+                    evidence_ref_count=len(claim.evidence_refs),
+                    graph_path_ref_count=len(claim.graph_path_refs),
+                    source_anchor_ref_count=len(claim.source_anchor_refs),
                 )
                 result.append(
                     EvidenceClaim(
@@ -549,9 +629,7 @@ class LawGuidedInvestigator:
                         evidence_refs=(),
                         confidence=0.0,
                         limitations=(
-                            ENGINEERING_LIMITATION_CODES[
-                                "engineering_evidence_insufficient"
-                            ],
+                            ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],
                         ),
                     )
                 )
@@ -561,8 +639,7 @@ class LawGuidedInvestigator:
 
         return [
             EvidenceClaim(
-                "claim:"
-                + hashlib.sha256(
+                "claim:" + hashlib.sha256(
                     f"{packet.engineering_rule_id}:empty".encode()
                 ).hexdigest()[:24],
                 packet.engineering_rule_id,
@@ -571,9 +648,7 @@ class LawGuidedInvestigator:
                 (),
                 confidence=0.0,
                 limitations=(
-                    ENGINEERING_LIMITATION_CODES[
-                        "investigation_returned_no_valid_claims"
-                    ],
+                    ENGINEERING_LIMITATION_CODES["investigation_returned_no_valid_claims"],
                 ),
             )
         ]
@@ -584,7 +659,6 @@ class LawGuidedInvestigator:
             return (), False
         if not isinstance(value, list):
             return (), True
-
         allowed = set(MODEL_SELECTABLE_LIMITATION_CODES)
         result: list[str] = []
         invalid = False
@@ -600,237 +674,122 @@ class LawGuidedInvestigator:
         return tuple(result), invalid
 
     @staticmethod
-    def _select_seed_results(
-        initial_results: tuple[dict[str, Any], ...],
-    ) -> tuple[dict[str, Any], ...]:
-        """Sample deterministic seed-query results across the full result set."""
-        if len(initial_results) <= MAX_SEED_OBSERVATIONS:
-            return initial_results
-        if MAX_SEED_OBSERVATIONS <= 1:
-            return initial_results[:1]
-        last_index = len(initial_results) - 1
-        indexes = {
-            round(index * last_index / (MAX_SEED_OBSERVATIONS - 1))
-            for index in range(MAX_SEED_OBSERVATIONS)
-        }
-        return tuple(initial_results[index] for index in sorted(indexes))
-
-    @staticmethod
-    def _bounded(value: Any) -> Any:
+    def _bounded_debug(value: Any, *, depth: int = 5) -> Any:
+        if depth <= 0:
+            return "[BOUNDED]"
         if isinstance(value, tuple):
             value = list(value)
         if isinstance(value, list):
             return [
-                LawGuidedInvestigator._bounded(item)
-                for item in value[:MAX_OBSERVATION_ITEMS]
+                LawGuidedInvestigator._bounded_debug(item, depth=depth - 1)
+                for item in value[:20]
             ]
         if isinstance(value, dict):
-            result: dict[str, Any] = {}
-            for index, (key, item) in enumerate(value.items()):
-                if index >= MAX_OBSERVATION_ITEMS:
-                    break
-                result[str(key)] = LawGuidedInvestigator._bounded(item)
-            return result
-        if isinstance(value, str) and len(value) > MAX_OBSERVATION_STRING_CHARS:
-            return value[:MAX_OBSERVATION_STRING_CHARS] + "…"
+            return {
+                str(key): LawGuidedInvestigator._bounded_debug(item, depth=depth - 1)
+                for key, item in list(value.items())[:20]
+            }
+        if isinstance(value, str) and len(value) > 2000:
+            return value[:2000] + "…"
         return value
 
     @classmethod
-    def _compact_observation(cls, value: Any) -> Any:
-        """Keep graph identities/provenance while bounding prompt and debug-log size."""
-        if isinstance(value, tuple):
-            value = list(value)
-        if isinstance(value, list):
-            if all(isinstance(item, dict) and "node_id" in item for item in value):
-                return [cls._compact_node(item) for item in value[:MAX_RESULT_NODES]]
-            return [cls._bounded(item) for item in value[:MAX_OBSERVATION_ITEMS]]
-        if not isinstance(value, dict):
-            return cls._bounded(value)
-
-        result: dict[str, Any] = {}
-        node_keys = {"nodes", "reviewNodes", "finalActions", "neighbors"}
-        for key, item in value.items():
-            if key in node_keys and isinstance(item, list):
-                result[key] = [
-                    cls._compact_node(node)
-                    for node in item[:MAX_RESULT_NODES]
-                    if isinstance(node, dict)
-                ]
-            elif key == "symbol" and isinstance(item, dict):
-                result[key] = cls._compact_node(item)
-            elif key == "edges" and isinstance(item, list):
-                result[key] = [
-                    cls._compact_edge(edge)
-                    for edge in item[:MAX_RESULT_EDGES]
-                    if isinstance(edge, dict)
-                ]
-            elif key == "paths" and isinstance(item, list):
-                result[key] = [
-                    [str(ref) for ref in path[:MAX_OBSERVATION_ITEMS]]
-                    for path in item[:MAX_RESULT_PATHS]
-                    if isinstance(path, (list, tuple))
-                ]
-            elif key in {"evidenceRefs", "unresolvedFrontiers"} and isinstance(item, list):
-                result[key] = [str(ref) for ref in item[:MAX_RESULT_REFS]]
-            else:
-                result[str(key)] = cls._bounded(item)
-        return result
-
-    @classmethod
-    def _compact_node(cls, node: dict[str, Any]) -> dict[str, Any]:
-        source = node.get("source") if isinstance(node.get("source"), dict) else {}
-        attributes = (
-            node.get("attributes") if isinstance(node.get("attributes"), dict) else {}
-        )
-        compact = {
-            "node_id": node.get("node_id"),
-            "node_type": node.get("node_type"),
-            "label": cls._bounded(node.get("label")),
-            "source": {
-                key: cls._bounded(source.get(key))
-                for key in ("file_path", "symbol_ref", "line_start", "line_end")
-                if source.get(key) is not None
-            },
-            "semantic_types": [
-                str(value)
-                for value in (node.get("semantic_types") or [])[:MAX_OBSERVATION_ITEMS]
-            ],
-            "evidence_refs": [
-                str(value)
-                for value in (node.get("evidence_refs") or [])[:MAX_RESULT_REFS]
-            ],
+    def _fit_working_result(cls, value: Any) -> Any:
+        rendered = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+        if len(rendered) <= MAX_WORKING_RESULT_CHARS:
+            return value
+        observation_id = value.get("observationId") if isinstance(value, dict) else None
+        section = value.get("section") if isinstance(value, dict) else None
+        return {
+            "error": "WORKING_VIEW_TOO_LARGE",
+            "observationId": observation_id,
+            "section": section,
+            "renderedChars": len(rendered),
+            "instruction": (
+                "Full observation remains in the EvidenceLedger. Retry inspect_observation "
+                "with a smaller limit or a narrower section."
+            ),
         }
-        if attributes:
-            compact["attributes"] = cls._bounded(attributes)
-        return {key: value for key, value in compact.items() if value not in (None, {}, [])}
-
-    @classmethod
-    def _compact_edge(cls, edge: dict[str, Any]) -> dict[str, Any]:
-        compact = {
-            "edge_id": edge.get("edge_id"),
-            "edge_type": edge.get("edge_type"),
-            "source_node_id": edge.get("source_node_id"),
-            "target_node_id": edge.get("target_node_id"),
-            "evidence_refs": [
-                str(value)
-                for value in (edge.get("evidence_refs") or [])[:MAX_RESULT_REFS]
-            ],
-        }
-        return {key: value for key, value in compact.items() if value not in (None, [])}
 
     @staticmethod
     def _rule_contract(packet: InvestigationPacket) -> dict[str, Any]:
         return {
             "engineeringRuleId": packet.engineering_rule_id,
             "concept": packet.concept,
-            "investigationGoals": list(packet.investigation_goals[:MAX_OBSERVATION_ITEMS]),
-            "requiredEvidence": list(packet.required_evidence[:MAX_OBSERVATION_ITEMS]),
-            "supportingEvidence": list(packet.supporting_evidence[:MAX_OBSERVATION_ITEMS]),
-            "negativeEvidence": list(packet.negative_evidence[:MAX_OBSERVATION_ITEMS]),
-            "unresolvedConditions": list(
-                packet.unresolved_conditions[:MAX_OBSERVATION_ITEMS]
-            ),
+            "investigationGoals": list(packet.investigation_goals),
+            "requiredEvidence": list(packet.required_evidence),
+            "supportingEvidence": list(packet.supporting_evidence),
+            "negativeEvidence": list(packet.negative_evidence),
+            "unresolvedConditions": list(packet.unresolved_conditions),
         }
 
     @classmethod
     def _render_prompt(cls, contract: dict[str, Any]) -> str:
-        """Serialize a valid JSON prompt under a hard character budget."""
-        bounded = dict(contract)
-        bounded["wizardContext"] = cls._bounded(bounded.get("wizardContext") or {})
-        bounded["seedEvidenceRefs"] = list(
-            bounded.get("seedEvidenceRefs") or []
-        )[:MAX_PROMPT_EVIDENCE_REFS]
-        bounded["unresolvedFrontiers"] = list(
-            bounded.get("unresolvedFrontiers") or []
-        )[:MAX_PROMPT_UNRESOLVED_FRONTIERS]
-        observations = list(bounded.get("observations") or [])[-MAX_PROMPT_OBSERVATIONS:]
-        bounded["observations"] = observations
-
-        def render() -> str:
-            return json.dumps(bounded, ensure_ascii=False, sort_keys=True)
-
-        rendered = render()
-        while len(rendered) > MAX_PROMPT_CHARS and bounded["observations"]:
-            bounded["observations"] = bounded["observations"][1:]
-            rendered = render()
-
+        rendered = json.dumps(contract, ensure_ascii=False, sort_keys=True)
         if len(rendered) > MAX_PROMPT_CHARS:
-            bounded["wizardContext"] = {"_lcsp_truncated": True}
-            bounded["seedEvidenceRefs"] = bounded["seedEvidenceRefs"][:40]
-            bounded["unresolvedFrontiers"] = bounded["unresolvedFrontiers"][:20]
-            rendered = render()
-
-        if len(rendered) > MAX_PROMPT_CHARS:
-            bounded["observations"] = []
-            rendered = render()
-
-        if len(rendered) > MAX_PROMPT_CHARS:
-            raise ValueError("ENGINEERING_INVESTIGATION_PROMPT_BUDGET_EXCEEDED")
+            raise ValueError("ENGINEERING_INVESTIGATION_WORKING_CONTEXT_EXCEEDED")
         return rendered
 
     @classmethod
     def _prompt(
         cls,
         packet: InvestigationPacket,
-        observations: list[dict[str, Any]],
+        ledger: EvidenceLedger,
+        working_results: list[dict[str, Any]],
         step: int,
     ) -> str:
-        contract = {
-            "task": (
-                "Investigate the supplied EngineeringRule against the Program Evidence Graph. "
-                "The EngineeringRule evidence criteria are authoritative for this technical "
-                "investigation. Use exactly one provider-native tool call in this response. "
-                "Use a graph tool when more evidence is needed; call finish when the rule is "
-                "sufficiently evidenced or cannot be resolved within bounded static evidence. "
-                "Do not answer with a JSON pseudo-tool command or plain-text conclusion. Never "
-                "decide legal compliance, legal risk tier, certification, or infer facts outside evidence."
-            ),
-            "engineeringRule": cls._rule_contract(packet),
-            "wizardContext": packet.wizard_context,
-            "seedEvidenceRefs": packet.evidence_refs,
-            "unresolvedFrontiers": packet.unresolved_frontiers,
-            "observations": observations,
-            "nativeToolStep": step + 1,
-            "claimRules": [
-                "Evaluate only the supplied EngineeringRule evidence criteria.",
-                "MET/NOT_MET require concrete graph, path, or source-anchor evidence references.",
-                "Absence is NOT_MET only when the searched path is bounded and complete.",
-                "Dynamic, truncated, external, or insufficient paths are UNRESOLVED.",
-                "Wizard context may explain an external boundary but never overrides repository evidence.",
-                "Claim value is derived by LCSP from claimType; do not invent a separate value.",
-                "Limitations must use only the machine-code enum exposed by finish.",
-                "Use only evidence/node/edge/anchor identifiers visible in the supplied observations.",
-                "Use finish as soon as the EngineeringRule criteria are sufficiently evidenced.",
-            ],
-        }
-        return cls._render_prompt(contract)
+        return cls._render_prompt(
+            {
+                "task": (
+                    "Investigate the EngineeringRule against the Program Evidence Graph. "
+                    "The LCSP EvidenceLedger is the source of truth; this prompt is only a working view. "
+                    "Use graph tools to create observations, list_observations to page the ledger, "
+                    "inspect_observation to reload detail, and finish when sufficiently evidenced. "
+                    "Never decide legal compliance, certification, or infer facts outside evidence."
+                ),
+                "engineeringRule": cls._rule_contract(packet),
+                "evidenceLedger": ledger.index(offset=0, limit=20),
+                "seedContext": {
+                    "seedEvidenceRefCount": len(packet.evidence_refs),
+                    "unresolvedFrontierCount": len(packet.unresolved_frontiers),
+                    "wizardContextStored": bool(packet.wizard_context),
+                },
+                "recentToolResults": working_results[-MAX_WORKING_RESULTS:],
+                "nativeToolStep": step + 1,
+                "claimRules": [
+                    "MET/NOT_MET must reference one or more observationRefs with concrete provenance.",
+                    "Do not author evidenceRefs, graphPathRefs, or sourceAnchorRefs yourself.",
+                    "LCSP derives immutable provenance from observationRefs deterministically.",
+                    "Absence is NOT_MET only when the relevant observation proves bounded complete search.",
+                    "Dynamic, external, truncated, conflicting, or insufficient evidence is UNRESOLVED.",
+                    "Use list_observations/inspect_observation instead of asking LCSP to resend full history.",
+                ],
+            }
+        )
 
     @classmethod
     def _finish_prompt(
         cls,
         packet: InvestigationPacket,
-        observations: list[dict[str, Any]],
+        ledger: EvidenceLedger,
+        working_results: list[dict[str, Any]],
     ) -> str:
-        contract = {
-            "task": (
-                "The graph-tool budget is exhausted. You have exactly one available native tool: "
-                "finish. Call finish now with final engineering evidence claims only. Do not emit "
-                "plain text, request more graph traversal, or decide legal compliance."
-            ),
-            "engineeringRule": cls._rule_contract(packet),
-            "wizardContext": packet.wizard_context,
-            "seedEvidenceRefs": packet.evidence_refs,
-            "unresolvedFrontiers": packet.unresolved_frontiers,
-            "observations": observations,
-            "claimRules": [
-                "If the EngineeringRule criteria are not sufficiently evidenced, emit UNRESOLVED_ENGINEERING_FACT.",
-                "Claim value is derived by LCSP from claimType.",
-                "Use only the machine-code limitation values exposed by finish.",
-                "Use only evidence/node/edge/anchor identifiers visible in the supplied observations.",
-                "Do not convert missing repository evidence into a legal conclusion.",
-            ],
-        }
-        return cls._render_prompt(contract)
+        return cls._render_prompt(
+            {
+                "task": (
+                    "Investigation turn budget is exhausted. Call finish now. Reference only "
+                    "EvidenceLedger observation IDs; LCSP will derive all graph/source provenance."
+                ),
+                "engineeringRule": cls._rule_contract(packet),
+                "evidenceLedger": ledger.index(offset=0, limit=40),
+                "recentToolResults": working_results[-MAX_WORKING_RESULTS:],
+                "claimRules": [
+                    "If evidence is insufficient, emit UNRESOLVED_ENGINEERING_FACT.",
+                    "Do not invent evidence/node/edge/source-anchor IDs.",
+                    "Use only observationRefs returned by the EvidenceLedger.",
+                ],
+            }
+        )
 
     @staticmethod
     def _log_finish(
@@ -840,6 +799,7 @@ class LawGuidedInvestigator:
         workflow_run_id: str,
         correlation_id: str | None,
         forced: bool,
+        ledger: EvidenceLedger,
     ) -> None:
         logger.info(
             "ENGINEERING_INVESTIGATION_FINISHED",
@@ -859,26 +819,7 @@ class LawGuidedInvestigator:
                 }
                 for claim in claims
             ],
-            limitation_codes=sorted(
-                {
-                    limitation
-                    for claim in claims
-                    for limitation in claim.limitations
-                    if limitation
-                }
-            ),
-            evidence_ref_count=len(
-                {
-                    ref
-                    for claim in claims
-                    for ref in (
-                        *claim.evidence_refs,
-                        *claim.graph_path_refs,
-                        *claim.source_anchor_refs,
-                    )
-                    if ref
-                }
-            ),
+            ledger_observation_count=ledger.total,
             forced_finish=forced,
             workflow_run_id=workflow_run_id,
             correlationId=correlation_id,
