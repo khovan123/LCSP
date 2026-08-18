@@ -20,6 +20,7 @@ _SAFE_LLM_TOOL_FILE_EVENTS = frozenset(
         "LLM_RESPONSE",
         "LLM_REQUEST_FAILED",
         "ENGINEERING_INVESTIGATION_TOOL_CALL",
+        "ENGINEERING_INVESTIGATION_TOOL_RESULT",
         "ENGINEERING_INVESTIGATION_FINISHED",
         "ENGINEERING_INVESTIGATION_NO_NATIVE_TOOL_CALL",
         "ENGINEERING_INVESTIGATION_FINISH_MISSING",
@@ -86,15 +87,21 @@ def _is_orchestration_event(data: dict) -> bool:
 
 
 def _is_safe_llm_tool_file_event(data: dict) -> bool:
-    """Select only safe structured telemetry for the repository-level LLM log.
+    """Select structured telemetry allowed in the repository-level LLM debug log.
 
-    Development raw-trace events are intentionally excluded even when
-    ``LCSP_DEV_UNSAFE_TRACE`` is enabled. The root-level file is safe operational
-    telemetry only; raw prompts, tool observations, source, and credentials stay
-    out of it.
+    Development raw-trace events are intentionally excluded. Native tool-result
+    events are allowed because the investigator already bounds the result to the
+    same observation supplied to the next LLM turn. The repository-level file is
+    always redacted again before persistence, even if unsafe dev tracing is enabled.
     """
     event_name = str(data.get("event") or "")
     return event_name in _SAFE_LLM_TOOL_FILE_EVENTS
+
+
+def _render_safe_root_event(data: dict) -> str:
+    """Render an always-redacted JSON line for ``tmp/llm-tool-calls.log``."""
+    safe_data = redact_dict(data)
+    return json.dumps(safe_data, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
 class PartitionedLogWriter:
@@ -167,7 +174,7 @@ class PartitionedLogWriter:
             llm_tool_path = get_llm_tool_log_path()
             os.makedirs(os.path.dirname(llm_tool_path), exist_ok=True)
             with _original_open(llm_tool_path, "a", encoding="utf-8") as file_handle:
-                file_handle.write(rendered_value)
+                file_handle.write(_render_safe_root_event(data))
 
     def flush(self) -> None:
         self._fallback.flush()
@@ -177,10 +184,12 @@ def configure_logging(level: str = "INFO") -> None:
     """Configure JSON logging for worker processes.
 
     Normal worker events continue to stdout and partitioned run/orchestration
-    files. Safe LLM request/response and EngineeringRule native-tool telemetry is
-    additionally mirrored to ``<repo>/tmp/llm-tool-calls.log`` (or
-    ``LCSP_LLM_TOOL_LOG_PATH`` when configured). Raw development trace events are
-    never mirrored into that file.
+    files. Safe LLM request/response plus EngineeringRule native tool input/result
+    telemetry is additionally mirrored to ``<repo>/tmp/llm-tool-calls.log`` (or
+    ``LCSP_LLM_TOOL_LOG_PATH`` when configured). Tool results are bounded by the
+    investigator to the exact observation forwarded into the next LLM turn and
+    are always secret-redacted again before root-level persistence. Raw development
+    trace events are never mirrored into that file.
     """
     unsafe_trace = unsafe_dev_trace_enabled()
     raw_output: TextIO = _FailOpenTraceWriter(sys.stdout) if unsafe_trace else sys.stdout
