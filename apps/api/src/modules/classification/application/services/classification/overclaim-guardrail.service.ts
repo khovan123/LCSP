@@ -74,6 +74,9 @@ function collectEngineeringAssessmentNarratives(
 ): NarrativeValue[] {
   const result: NarrativeValue[] = [];
 
+  // Top-level notes are explicitly narrative. Keep them guarded while avoiding
+  // recursive scans over structured IDs/provenance that caused false positives.
+  collectNamedNarrative(value.notes, "notes", result);
   collectNamedNarrative(value.limitations, "limitations", result);
 
   if (Array.isArray(value.evaluations)) {
