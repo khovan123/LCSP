@@ -316,7 +316,8 @@ class LawGuidedInvestigator:
                 name="search_nodes",
                 description=(
                     "Search bounded Program Evidence Graph nodes by structural type, source path, "
-                    "semantic type, or text. Results are stored as an observation by LCSP."
+                    "semantic type, or text. Results expose a canonical truncated flag and are "
+                    "stored as an observation by LCSP."
                 ),
                 input_schema=cls._closed_schema(
                     {
@@ -324,81 +325,133 @@ class LawGuidedInvestigator:
                         "text": {"type": "string"},
                         "path_prefixes": string_array,
                         "semantic_types": string_array,
-                        "max_results": {"type": "integer", "minimum": 1, "maximum": 25},
+                        "max_results": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 25,
+                        },
                     }
                 ),
             ),
             LLMToolDefinition(
                 name="trace_static_flow",
-                description="Trace bounded static control/data/event flow from a graph node ref.",
+                description=(
+                    "Trace bounded static control/data/event flow from a graph node ref. "
+                    "Use result.truncated rather than reasoning about individual resource limits."
+                ),
                 input_schema=cls._closed_schema(
                     {
                         "start_ref": {"type": "string"},
-                        "direction": {"type": "string", "enum": ["FORWARD", "BACKWARD", "BOTH"]},
+                        "direction": {
+                            "type": "string",
+                            "enum": ["FORWARD", "BACKWARD", "BOTH"],
+                        },
                         "max_hops": {"type": "integer", "minimum": 1, "maximum": 12},
                         "edge_types": string_array,
                         "stop_node_types": string_array,
-                        "max_results": {"type": "integer", "minimum": 1, "maximum": 80},
+                        "max_results": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 80,
+                        },
                     },
                     required=("start_ref",),
                 ),
             ),
             LLMToolDefinition(
                 name="inspect_data_path",
-                description="Inspect bounded data-flow evidence from a graph node ref.",
+                description=(
+                    "Inspect bounded data-flow evidence from a graph node ref. "
+                    "Use result.truncated as the only search-completeness signal."
+                ),
                 input_schema=cls._closed_schema(
                     {
                         "start_ref": {"type": "string"},
-                        "direction": {"type": "string", "enum": ["FORWARD", "BACKWARD", "BOTH"]},
+                        "direction": {
+                            "type": "string",
+                            "enum": ["FORWARD", "BACKWARD", "BOTH"],
+                        },
                         "max_hops": {"type": "integer", "minimum": 1, "maximum": 10},
-                        "max_results": {"type": "integer", "minimum": 1, "maximum": 80},
+                        "max_results": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 80,
+                        },
                     },
                     required=("start_ref",),
                 ),
             ),
             LLMToolDefinition(
                 name="inspect_decision_path",
-                description="Inspect bounded decision/action flow evidence from a graph node ref.",
+                description=(
+                    "Inspect bounded decision/action flow evidence from a graph node ref. "
+                    "Use result.truncated as the only search-completeness signal."
+                ),
                 input_schema=cls._closed_schema(
                     {
                         "start_ref": {"type": "string"},
                         "max_hops": {"type": "integer", "minimum": 1, "maximum": 12},
                         "action_categories": string_array,
-                        "max_results": {"type": "integer", "minimum": 1, "maximum": 80},
+                        "max_results": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 80,
+                        },
                     },
                     required=("start_ref",),
                 ),
             ),
             LLMToolDefinition(
                 name="inspect_human_review_path",
-                description="Inspect bounded human-review/override evidence from a graph node ref.",
+                description=(
+                    "Inspect bounded human-review/override evidence from a graph node ref. "
+                    "Use result.truncated as the only search-completeness signal."
+                ),
                 input_schema=cls._closed_schema(
                     {
                         "start_ref": {"type": "string"},
                         "max_hops": {"type": "integer", "minimum": 1, "maximum": 12},
-                        "max_results": {"type": "integer", "minimum": 1, "maximum": 80},
+                        "max_results": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 80,
+                        },
                     },
                     required=("start_ref",),
                 ),
             ),
             LLMToolDefinition(
                 name="symbol_context",
-                description="Resolve one symbol/node ref and return bounded neighboring context.",
+                description=(
+                    "Resolve one symbol/node ref and return bounded neighboring context with "
+                    "the same truncated search contract."
+                ),
                 input_schema=cls._closed_schema(
                     {
                         "symbol_ref": {"type": "string"},
-                        "max_neighbors": {"type": "integer", "minimum": 1, "maximum": 50},
+                        "max_neighbors": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 50,
+                        },
                     },
                     required=("symbol_ref",),
                 ),
             ),
             LLMToolDefinition(
                 name="provider_invocations",
-                description="Return bounded AI model invocation nodes, optionally by provider.",
+                description=(
+                    "Return bounded AI model invocation nodes, optionally by provider, with "
+                    "the same truncated search contract."
+                ),
                 input_schema=cls._closed_schema(
                     {
                         "provider": {"type": "string"},
-                        "max_results": {"type": "integer", "minimum": 1, "maximum": 80},
+                        "max_results": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 80,
+                        },
                     }
                 ),
             ),
@@ -440,7 +493,10 @@ class LawGuidedInvestigator:
     def _finish_tool_definition(cls) -> LLMToolDefinition:
         claim_schema = cls._closed_schema(
             {
-                "claimType": {"type": "string", "enum": sorted(CANONICAL_CLAIM_TYPES)},
+                "claimType": {
+                    "type": "string",
+                    "enum": sorted(CANONICAL_CLAIM_TYPES),
+                },
                 "observationRefs": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -601,7 +657,10 @@ class LawGuidedInvestigator:
                 tuple(dict.fromkeys(limitations)),
             )
 
-            if claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"] and not has_provenance:
+            if (
+                claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+                and not has_provenance
+            ):
                 result.append(claim)
                 continue
 
@@ -629,7 +688,9 @@ class LawGuidedInvestigator:
                         evidence_refs=(),
                         confidence=0.0,
                         limitations=(
-                            ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],
+                            ENGINEERING_LIMITATION_CODES[
+                                "engineering_evidence_insufficient"
+                            ],
                         ),
                     )
                 )
@@ -639,7 +700,8 @@ class LawGuidedInvestigator:
 
         return [
             EvidenceClaim(
-                "claim:" + hashlib.sha256(
+                "claim:"
+                + hashlib.sha256(
                     f"{packet.engineering_rule_id}:empty".encode()
                 ).hexdigest()[:24],
                 packet.engineering_rule_id,
@@ -648,7 +710,9 @@ class LawGuidedInvestigator:
                 (),
                 confidence=0.0,
                 limitations=(
-                    ENGINEERING_LIMITATION_CODES["investigation_returned_no_valid_claims"],
+                    ENGINEERING_LIMITATION_CODES[
+                        "investigation_returned_no_valid_claims"
+                    ],
                 ),
             )
         ]
@@ -686,7 +750,10 @@ class LawGuidedInvestigator:
             ]
         if isinstance(value, dict):
             return {
-                str(key): LawGuidedInvestigator._bounded_debug(item, depth=depth - 1)
+                str(key): LawGuidedInvestigator._bounded_debug(
+                    item,
+                    depth=depth - 1,
+                )
                 for key, item in list(value.items())[:20]
             }
         if isinstance(value, str) and len(value) > 2000:
@@ -761,7 +828,10 @@ class LawGuidedInvestigator:
                     "Do not author evidenceRefs, graphPathRefs, or sourceAnchorRefs yourself.",
                     "LCSP derives immutable provenance from observationRefs deterministically.",
                     "Absence is NOT_MET only when the relevant observation proves bounded complete search.",
-                    "Dynamic, external, truncated, conflicting, or insufficient evidence is UNRESOLVED.",
+                    "Search resource guards are internal; never infer engineering meaning from max_hops, max_results, node limits, edge limits, or neighbor limits.",
+                    "Use only result.truncated to decide whether a bounded search is exhaustive. truncated=true is not an unresolved engineering fact by itself.",
+                    "If required evidence is still missing after truncated=true, continue or narrow the search from continuationFrontiers before finishing.",
+                    "Treat dynamic or external uncertainty as UNRESOLVED only when the relevant observation contains an actual unresolvedFrontier or boundary that can affect the required criterion.",
                     "Use list_observations/inspect_observation instead of asking LCSP to resend full history.",
                 ],
             }
@@ -785,6 +855,7 @@ class LawGuidedInvestigator:
                 "recentToolResults": working_results[-MAX_WORKING_RESULTS:],
                 "claimRules": [
                     "If evidence is insufficient, emit UNRESOLVED_ENGINEERING_FACT.",
+                    "Do not mark a claim unresolved solely because an observation has truncated=true when the required criterion is already proven by concrete evidence.",
                     "Do not invent evidence/node/edge/source-anchor IDs.",
                     "Use only observationRefs returned by the EvidenceLedger.",
                 ],
