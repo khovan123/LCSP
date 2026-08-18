@@ -31,7 +31,7 @@ function makeAssessment(
 function buildHandler(input: {
   assessment: Assessment | null;
   wizardProfile?: { status: string } | null;
-  acceptedEvidenceReport?: { id: string } | null;
+  acceptedEvidenceReport?: { id: string; evidencePayload?: unknown } | null;
   classificationResult?: {
     guardrailStatus: string;
     classificationData: unknown;
@@ -115,11 +115,42 @@ describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
     expect(result.guardrail_status).toBeNull();
   });
 
-  it("projects EngineeringRule evaluations from ClassificationResult", async () => {
+  it("projects EngineeringRule evaluations with readable graph evidence", async () => {
     const assessment = makeAssessment();
     const handler = buildHandler({
       assessment,
-      acceptedEvidenceReport: { id: "ter-1" },
+      acceptedEvidenceReport: {
+        id: "ter-1",
+        evidencePayload: {
+          evidence_graph: {
+            nodes: [
+              {
+                node_id: "node:review",
+                node_type: "HUMAN_REVIEW",
+                label: "Manual approval",
+                source: {
+                  file_path: "owner-repo-abcdef1/src/review.ts",
+                  symbol_ref: "approveRequest",
+                  start_line: 42,
+                  end_line: 48,
+                },
+                evidence_refs: ["evidence:review"],
+              },
+            ],
+            edges: [],
+            source_anchors: [
+              {
+                anchor_id: "source-anchor:review",
+                graph_node_id: "node:review",
+                file_path: "owner-repo-abcdef1/src/review.ts",
+                symbol_ref: "approveRequest",
+                start_line: 42,
+                end_line: 48,
+              },
+            ],
+          },
+        },
+      },
       classificationResult: {
         guardrailStatus: CLASSIFICATION_GUARDRAIL_STATUSES.passed,
         classificationData: {
@@ -138,7 +169,11 @@ describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
               concept: "HUMAN_REVIEW",
               status: "NON_COMPLIANT",
               reason: "Requirement not met from repository evidence.",
-              evidence_refs: ["graph:path:1"],
+              evidence_refs: [
+                "evidence:review",
+                "node:review",
+                "source-anchor:review",
+              ],
               source_chunk_ids: ["LAW:A1"],
               source_locators: ["art-1::cl-1"],
               confidence: 0.95,
@@ -171,6 +206,16 @@ describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
       legal_rule_id: "legal-1",
       status: "NON_COMPLIANT",
       source_locators: ["art-1::cl-1"],
+      technical_evidence: [
+        {
+          kind: "HUMAN_REVIEW",
+          label: "Manual approval",
+          file_path: "src/review.ts",
+          symbol_ref: "approveRequest",
+          start_line: 42,
+          end_line: 48,
+        },
+      ],
     });
   });
 
