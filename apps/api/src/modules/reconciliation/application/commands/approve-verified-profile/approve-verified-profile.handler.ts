@@ -123,7 +123,11 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
       if (profileStatus === VERIFIED_PROFILE_STATUSES.approved) {
         effectiveApprovedAt = profile.approvedAt ?? requestedApprovedAt;
         effectiveApprovedById = profile.approvedById ?? command.approvedById;
-        await this.enqueueLegalMatchingOrRecoveryCommand(command, tx, profile.id);
+        await this.enqueueLegalMatchingOrRecoveryCommand(
+          command,
+          tx,
+          profile.id,
+        );
         await this.auditApprovedReplay(command, tx, profile.id);
         return;
       }

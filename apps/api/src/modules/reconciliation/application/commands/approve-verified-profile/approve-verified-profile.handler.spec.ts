@@ -239,7 +239,8 @@ describe("ApproveVerifiedProfileHandler", () => {
   });
 
   it("does not duplicate legal work while a retryable outbox command is still in flight", async () => {
-    const { handler, findProfile, findInFlightOutbox, enqueue } = buildHandler();
+    const { handler, findProfile, findInFlightOutbox, enqueue } =
+      buildHandler();
     findProfile.mockImplementation(() =>
       Promise.resolve({
         id: "vp-1",
@@ -251,7 +252,10 @@ describe("ApproveVerifiedProfileHandler", () => {
       }),
     );
     findInFlightOutbox.mockImplementation(() =>
-      Promise.resolve({ id: "outbox-existing", status: OUTBOX_STATUSES.pending }),
+      Promise.resolve({
+        id: "outbox-existing",
+        status: OUTBOX_STATUSES.pending,
+      }),
     );
 
     await handler.execute(command());
