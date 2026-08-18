@@ -4,10 +4,10 @@ from __future__ import annotations
 from typing import Any
 
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
-from lcsp_workers.platform.api_client import WorkerApiClient
+from lcsp_workers.platform.api_client import WorkerApiClient, WorkerCallbackError
 from lcsp_workers.platform.callback_schemas import ClassificationCallbackPayload
 from lcsp_workers.platform.logging import get_logger
-from lcsp_workers.platform.queue_consumer import ConsumerBase
+from lcsp_workers.platform.queue_consumer import ConsumerBase, NonRetryableWorkerError
 
 from .pipeline import EngineeringInvestigationPipeline
 
@@ -108,7 +108,15 @@ class EngineeringAssessmentConsumer(ConsumerBase):
             classification_data=result_data,
             guardrail_status=guardrail_status,
         )
-        self._api_client.post_classification_callback(payload)
+        try:
+            self._api_client.post_classification_callback(payload)
+        except WorkerCallbackError as error:
+            # WorkerApiClient already retries network/5xx failures internally. A
+            # remaining callback 4xx is a deterministic payload/domain rejection;
+            # replaying the expensive EngineeringRule/LLM run cannot heal it.
+            if self._is_terminal_callback_client_error(error):
+                raise NonRetryableWorkerError(str(error)) from error
+            raise
         logger.info(
             "ENGINEERING_ASSESSMENT_SUBMITTED",
             assessment_id=assessment_id,
@@ -184,3 +192,8 @@ class EngineeringAssessmentConsumer(ConsumerBase):
             or evidence_report.get("scanJobId")
             or evidence_report_id
         )
+
+    @staticmethod
+    def _is_terminal_callback_client_error(error: WorkerCallbackError) -> bool:
+        """Return whether WorkerApiClient reported a non-idempotent HTTP 4xx."""
+        return "callback failed with client error 4" in str(error).lower()
