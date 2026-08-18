@@ -16,6 +16,7 @@ import {
 import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
+  OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import {
@@ -61,7 +62,9 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
   ): Promise<ApproveVerifiedProfileDto> {
     await this.assertManagerOnly(command);
     await this.assertOwnedAssessment(command);
-    const approvedAt = new Date();
+    const requestedApprovedAt = new Date();
+    let effectiveApprovedAt = requestedApprovedAt;
+    let effectiveApprovedById = command.approvedById;
 
     await this.prisma.$transaction(async (tx) => {
       const profile = await tx.verifiedProfile.findFirst({
@@ -75,6 +78,8 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
           assessmentId: true,
           organizationId: true,
           status: true,
+          approvedAt: true,
+          approvedById: true,
         },
       });
 
@@ -86,9 +91,10 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
         );
       }
 
+      const profileStatus = fromPrismaVerifiedProfileStatus(profile.status);
       if (
-        fromPrismaVerifiedProfileStatus(profile.status) !==
-        VERIFIED_PROFILE_STATUSES.pendingApproval
+        profileStatus !== VERIFIED_PROFILE_STATUSES.pendingApproval &&
+        profileStatus !== VERIFIED_PROFILE_STATUSES.approved
       ) {
         throw problemException(
           SCAN_ERROR_CODES.verifiedProfileWrongState,
@@ -114,13 +120,21 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
         );
       }
 
+      if (profileStatus === VERIFIED_PROFILE_STATUSES.approved) {
+        effectiveApprovedAt = profile.approvedAt ?? requestedApprovedAt;
+        effectiveApprovedById = profile.approvedById ?? command.approvedById;
+        await this.enqueueLegalMatchingOrRecoveryCommand(command, tx, profile.id);
+        await this.auditApprovedReplay(command, tx, profile.id);
+        return;
+      }
+
       await tx.verifiedProfile.update({
         where: { id: profile.id },
         data: {
           status: toPrismaVerifiedProfileStatus(
             VERIFIED_PROFILE_STATUSES.approved,
           ),
-          approvedAt,
+          approvedAt: requestedApprovedAt,
           approvedById: command.approvedById,
         },
       });
@@ -145,7 +159,7 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
             verifiedProfileId: profile.id,
             assessmentId: command.assessmentId,
             approvedById: command.approvedById,
-            approvedAt: approvedAt.toISOString(),
+            approvedAt: requestedApprovedAt.toISOString(),
             correlationId: command.correlationId,
           },
         },
@@ -158,8 +172,8 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
     return {
       verified_profile_id: command.verifiedProfileId,
       status: VERIFIED_PROFILE_STATUSES.approved,
-      approved_at: approvedAt.toISOString(),
-      approved_by_id: command.approvedById,
+      approved_at: effectiveApprovedAt.toISOString(),
+      approved_by_id: effectiveApprovedById,
       correlationId: command.correlationId,
     };
   }
@@ -229,11 +243,72 @@ export class ApproveVerifiedProfileHandler implements ICommandHandler<ApproveVer
     });
   }
 
+  private async auditApprovedReplay(
+    command: ApproveVerifiedProfileCommand,
+    tx: Prisma.TransactionClient,
+    verifiedProfileId: string,
+  ): Promise<void> {
+    await this.auditWriter.writeInTx(
+      {
+        eventType: SCAN_EVENT_TYPES.verifiedProfileApprovedAudit,
+        actorId: command.approvedById,
+        organizationId: command.organizationId,
+        assessmentId: command.assessmentId,
+        resourceType: AUDIT_RESOURCE_TYPES.verifiedProfile,
+        resourceId: verifiedProfileId,
+        correlationId: command.correlationId,
+        causationId: verifiedProfileId,
+        decision: AUDIT_DECISIONS.allow,
+        result: VERIFIED_PROFILE_STATUSES.approved,
+        redactionStatus: AUDIT_REDACTION_STATUSES.none,
+        policyId: command.authorization.policyId,
+        policyVersion: command.authorization.policyVersion,
+        actor: { id: command.approvedById, type: AUDIT_ACTOR_TYPES.user },
+        payload: {
+          verifiedProfileId,
+          assessmentId: command.assessmentId,
+          replayedApproval: true,
+          correlationId: command.correlationId,
+        },
+      },
+      tx,
+    );
+  }
+
   private async enqueueLegalMatchingOrRecoveryCommand(
     command: ApproveVerifiedProfileCommand,
     tx: Prisma.TransactionClient,
     verifiedProfileId: string,
   ): Promise<void> {
+    const existingMatch = await tx.legalRuleMatch.findFirst({
+      where: { verifiedProfileId },
+      select: { id: true },
+    });
+    if (existingMatch) {
+      return;
+    }
+
+    const inFlightCommand = await tx.outboxMessage.findFirst({
+      where: {
+        aggregateType: OUTBOX_AGGREGATE_TYPES.verifiedProfile,
+        aggregateId: verifiedProfileId,
+        eventType: {
+          in: [
+            LEGAL_MATCHING_REQUEST_COMMAND,
+            LEGAL_CORPUS_RECOVERY_REQUEST_COMMAND,
+          ],
+        },
+        status: {
+          in: [OUTBOX_STATUSES.pending, OUTBOX_STATUSES.failed],
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (inFlightCommand) {
+      return;
+    }
+
     const corpus = await tx.legalCorpusVersion.findFirst({
       where: {
         status: toPrismaLegalRuleLifecycleStatus(
