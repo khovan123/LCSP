@@ -35,8 +35,18 @@ const directResult = {
           end_line: 48,
         },
       ],
-      source_chunk_ids: ["LAW-134:art-14::cl-2"],
+      source_chunk_ids: ["LAW-134-2025-QH15:art-14::cl-2"],
       source_locators: ["art-14::cl-2"],
+      legal_provisions: [
+        {
+          document_id: "LAW-134-2025-QH15",
+          locator: "art-14::cl-2",
+          article_number: "14",
+          clause_number: "2",
+          point_code: null,
+          content: "2. Yêu cầu phải có cơ chế xem xét của con người.",
+        },
+      ],
       confidence: 0.95,
       limitations: [],
     },
@@ -57,8 +67,18 @@ const directResult = {
           end_line: 15,
         },
       ],
-      source_chunk_ids: ["LAW-134:art-12::cl-1"],
+      source_chunk_ids: ["LAW-134-2025-QH15:art-12::cl-1"],
       source_locators: ["art-12::cl-1"],
+      legal_provisions: [
+        {
+          document_id: "LAW-134-2025-QH15",
+          locator: "art-12::cl-1",
+          article_number: "12",
+          clause_number: "1",
+          point_code: null,
+          content: "1. Hệ thống phải lưu nhật ký phục vụ kiểm tra.",
+        },
+      ],
       confidence: 0.9,
       limitations: [],
     },
@@ -86,7 +106,7 @@ test("classification outcome maps locked state correctly", () => {
   }
 });
 
-test("direct EngineeringRule result exposes readable evidence and report actions", () => {
+test("direct EngineeringRule result exposes readable evidence and legal provisions", () => {
   const result = toClassificationStatusOutcome(
     {
       readiness_state: { classification_locked: false },
@@ -115,11 +135,15 @@ test("direct EngineeringRule result exposes readable evidence and report actions
         endLine: 48,
       },
     ]);
-    assert.deepEqual(result.data.references, [
-      "art-14::cl-2",
-      "LAW-134:art-14::cl-2",
-      "art-12::cl-1",
-      "LAW-134:art-12::cl-1",
+    assert.deepEqual(result.data.evaluations[0]?.legalProvisions, [
+      {
+        documentId: "LAW-134-2025-QH15",
+        locator: "art-14::cl-2",
+        articleNumber: "14",
+        clauseNumber: "2",
+        pointCode: null,
+        content: "2. Yêu cầu phải có cơ chế xem xét của con người.",
+      },
     ]);
     assert.deepEqual(getClassificationActionVisibility(result.data), {
       showFinalReport: true,
