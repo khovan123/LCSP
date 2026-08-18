@@ -28,15 +28,11 @@ class CallbackResponse(BaseModel):
     data: Optional[Dict[str, Any]] = None
 
     def __init__(self, **data: Any) -> None:
-        # Handle API envelope shape { ok: True, data: { ... } } or legacy callback wrapper
-        # If result is nested or present inside data
         result = data.get("result")
         if isinstance(result, dict):
-            # Extract fields from result and overlay them to top level
-            for k, v in result.items():
-                if k not in data or data[k] is None:
-                    data[k] = v
-            # Specifically map verifiedProfileId if present in result
+            for key, value in result.items():
+                if key not in data or data[key] is None:
+                    data[key] = value
             if "verifiedProfileId" in result and not data.get("verified_profile_id"):
                 data["verified_profile_id"] = result["verifiedProfileId"]
         super().__init__(**data)
@@ -119,15 +115,15 @@ class LegalRuleMatchCallbackPayload(BaseModel):
 
 
 class ClassificationCallbackPayload(BaseModel):
-    """Persist the canonical direct EngineeringRule assessment artifact.
+    """Persist the direct EngineeringRule assessment artifact.
 
-    ``technical_evidence_report_id`` is the authoritative source identity for v2.
-    Legacy legal/profile identifiers are optional only so historical/offline tests
-    can still deserialize older callback shapes during migration.
+    New v2 runtime messages always supply ``technical_evidence_report_id``. It is
+    optional only so historical v1 fixtures can still deserialize while old rows
+    and inactive worker modules are being removed safely.
     """
 
     model_config = ConfigDict(extra="forbid")
-    technical_evidence_report_id: str
+    technical_evidence_report_id: Optional[str] = None
     assessment_id: str
     schema_version: str = "2.0.0"
     classification_data: Dict[str, Any]
