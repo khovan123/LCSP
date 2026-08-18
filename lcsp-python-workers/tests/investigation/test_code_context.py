@@ -126,14 +126,14 @@ def test_code_source_pages_stay_inside_one_ast_symbol_chunk(tmp_path: Path) -> N
     symbol_id = session.search_code(query="chargePayment")["results"][0]["symbolId"]
 
     first = session.get_code(symbol_id=symbol_id)
-    assert first["sourceLines"][0]["line"] == 2
-    assert first["sourceLines"][-1]["line"] == 81
+    assert first["code"][0]["line"] == 2
+    assert first["code"][-1]["line"] == 81
     assert first["truncated"] is True
     assert first["nextCursor"] == "code:80"
 
     second = session.get_code(symbol_id=symbol_id, cursor=first["nextCursor"])
-    assert second["sourceLines"][0]["line"] == 82
-    assert second["sourceLines"][-1]["line"] == 101
+    assert second["code"][0]["line"] == 82
+    assert second["code"][-1]["line"] == 101
     assert second["truncated"] is False
     assert second["chunkId"] == first["chunkId"]
 
@@ -189,7 +189,7 @@ def test_references_and_workspace_preserve_context_without_resending_source(tmp_
     )
     assert workspace["importantSymbols"][0]["symbolId"] == charge["symbolId"]
     assert workspace["notes"] == ["Webhook path may trigger payment charge."]
-    assert "sourceLines" not in workspace["importantSymbols"][0]
+    assert "code" not in workspace["importantSymbols"][0]
 
 
 def test_code_aware_llm_tools_hide_internal_search_resource_guards() -> None:
