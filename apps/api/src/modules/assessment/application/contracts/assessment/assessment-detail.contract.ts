@@ -24,6 +24,15 @@ export interface ReadinessState {
   missing_evidence: AssessmentMissingEvidenceCode[];
 }
 
+export interface TechnicalEvidenceDisplayDto {
+  kind: string;
+  label: string;
+  file_path: string | null;
+  symbol_ref: string | null;
+  start_line: number | null;
+  end_line: number | null;
+}
+
 export interface EngineeringRuleEvaluationDto {
   engineering_rule_id: string;
   legal_rule_id: string;
@@ -31,6 +40,7 @@ export interface EngineeringRuleEvaluationDto {
   status: EngineeringRuleEvaluationStatus;
   reason: string;
   evidence_refs: string[];
+  technical_evidence: TechnicalEvidenceDisplayDto[];
   source_chunk_ids: string[];
   source_locators: string[];
   confidence: number;
