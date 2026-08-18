@@ -79,6 +79,37 @@ export const ENGINEERING_RULE_EVALUATION_STATUSES = {
 export type EngineeringRuleEvaluationStatus =
   (typeof ENGINEERING_RULE_EVALUATION_STATUSES)[keyof typeof ENGINEERING_RULE_EVALUATION_STATUSES];
 
+export const ENGINEERING_EVIDENCE_CLAIM_TYPES = {
+  requirementMet: "RULE_REQUIREMENT_MET",
+  requirementNotMet: "RULE_REQUIREMENT_NOT_MET",
+  unresolved: "UNRESOLVED_ENGINEERING_FACT",
+} as const;
+
+export type EngineeringEvidenceClaimType =
+  (typeof ENGINEERING_EVIDENCE_CLAIM_TYPES)[keyof typeof ENGINEERING_EVIDENCE_CLAIM_TYPES];
+
+/**
+ * Machine-readable limitation codes permitted in the direct EngineeringRule artifact.
+ * Narrative explanation belongs in controlled fields such as `evaluations[].reason`;
+ * limitation arrays are intentionally closed so model prose cannot leak into them.
+ */
+export const ENGINEERING_LIMITATION_CODES = {
+  noEngineeringRuleSourceRules: "NO_ENGINEERING_RULE_SOURCE_RULES",
+  engineeringRuleCompilationFailed: "ENGINEERING_RULE_COMPILATION_FAILED",
+  engineeringInvestigationFailed: "ENGINEERING_INVESTIGATION_FAILED",
+  investigationReturnedNoValidClaims: "INVESTIGATION_RETURNED_NO_VALID_CLAIMS",
+  modelLimitationCodeInvalid: "MODEL_LIMITATION_CODE_INVALID",
+  engineeringEvidenceInsufficient: "ENGINEERING_EVIDENCE_INSUFFICIENT",
+  conflictingEngineeringEvidence: "CONFLICTING_ENGINEERING_EVIDENCE",
+  dynamicPathUnresolved: "DYNAMIC_PATH_UNRESOLVED",
+  externalBoundaryUnresolved: "EXTERNAL_BOUNDARY_UNRESOLVED",
+  graphCoverageLimited: "GRAPH_COVERAGE_LIMITED",
+  searchCoverageIncomplete: "SEARCH_COVERAGE_INCOMPLETE",
+} as const;
+
+export type EngineeringLimitationCode =
+  (typeof ENGINEERING_LIMITATION_CODES)[keyof typeof ENGINEERING_LIMITATION_CODES];
+
 export const ASSESSMENT_RESULT_MODES = {
   engineeringRuleEvaluation: "ENGINEERING_RULE_EVALUATION",
 } as const;
