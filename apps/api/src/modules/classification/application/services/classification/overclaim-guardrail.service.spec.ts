@@ -24,13 +24,10 @@ describe("OverclaimGuardrailService", () => {
   });
 
   it("throws CLASSIFICATION_OVERCLAIM when 'certified' is present", () => {
-    expectOverclaim(
-      service,
-      {
-        classification: "HIGH_RISK",
-        notes: "This AI model is certified by authority",
-      },
-    );
+    expectOverclaim(service, {
+      classification: "HIGH_RISK",
+      notes: "This AI model is certified by authority",
+    });
   });
 
   it("throws CLASSIFICATION_OVERCLAIM when 'production ready' is present", () => {

@@ -130,10 +130,7 @@ function collectNamedNarrative(
   });
 }
 
-function collectNarrativeStrings(
-  value: unknown,
-  path = "$",
-): NarrativeValue[] {
+function collectNarrativeStrings(value: unknown, path = "$"): NarrativeValue[] {
   if (typeof value === "string") {
     return CANONICAL_ENGINEERING_STATUSES.has(value.trim().toUpperCase())
       ? []
