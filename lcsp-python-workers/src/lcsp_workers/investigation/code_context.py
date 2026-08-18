@@ -29,7 +29,6 @@ CODE_SYMBOL_NODE_TYPES = frozenset(
         "FUNCTION",
         "METHOD",
         "HTTP_ROUTE",
-        "CONTROLLER",
         "COMMAND",
         "QUERY",
         "EVENT",
@@ -65,7 +64,7 @@ SEARCH_PAGE_SIZE = 5
 OUTLINE_PAGE_SIZE = 40
 SOURCE_PAGE_LINES = 80
 HASH_VECTOR_DIMENSIONS = 128
-_TOKEN = re.compile(r"[A-Za-zÀ-ỹ0-9_.$:/-]+", re.UNICODE)
+_TOKEN = re.compile(r"[A-Za-zÀ-ỹ0-9]+", re.UNICODE)
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 
@@ -123,6 +122,7 @@ class CodeContextSession:
         self._search_sessions: dict[str, tuple[str, ...]] = {}
         self._important_symbols: list[str] = []
         self._workspace_notes: list[str] = []
+        self._file_lines: dict[str, list[str] | None] = {}
         self._outgoing: dict[str, list[tuple[str, str]]] = defaultdict(list)
         self._incoming: dict[str, list[tuple[str, str]]] = defaultdict(list)
         self._build_relation_index()
@@ -134,7 +134,7 @@ class CodeContextSession:
         return bool(self._symbols)
 
     def repo_map(self, cursor: str | None = None) -> dict[str, Any]:
-        """Return a hierarchical repository/file map without implementation source."""
+        """Return hierarchical file/symbol summaries without implementation source."""
         files: dict[str, list[CodeSymbol]] = defaultdict(list)
         for symbol in self._symbols.values():
             files[symbol.file_path].append(symbol)
@@ -150,10 +150,13 @@ class CodeContextSession:
                     item.symbol_ref,
                 ),
             )
+            kinds = Counter(item.node_type for item in symbols)
+            semantic = sorted({value for item in symbols for value in item.semantic_types})
             rows.append(
                 {
                     "path": path,
                     "module": path.rsplit("/", 1)[0] if "/" in path else ".",
+                    "summary": self._hierarchical_summary(symbols, kinds, semantic),
                     "symbolCount": len(symbols),
                     "symbols": [
                         {
@@ -188,10 +191,11 @@ class CodeContextSession:
     ) -> dict[str, Any]:
         """Hybrid lexical/vector/graph search with deterministic cursor paging.
 
-        Candidate generation combines BM25-like lexical relevance, a hashed token
-        vector cosine score, exact symbol/token matches, path relevance, and graph
-        proximity to symbols already pinned in the server-side workspace. The top
-        candidate set is then deterministically reranked before paging.
+        Candidate generation combines BM25-like lexical relevance over complete
+        semantic symbol chunks, a hashed vector cosine score over code+metadata,
+        exact symbol/token matches, path relevance, semantic graph labels, and graph
+        proximity to symbols already pinned in the server-side workspace. The top 50
+        candidates are deterministically reranked before exposing pages of five.
         """
         if cursor:
             session_id, offset = self._parse_search_cursor(cursor)
@@ -247,9 +251,12 @@ class CodeContextSession:
                 item.symbol_ref,
             )
         )
+        kinds = Counter(item.node_type for item in rows)
+        semantic = sorted({value for item in rows for value in item.semantic_types})
         return {
             "commit": self.commit_sha,
             "path": normalized,
+            "summary": self._hierarchical_summary(rows, kinds, semantic),
             "symbols": [item.compact() for item in rows],
             "truncated": False,
         }
@@ -263,27 +270,22 @@ class CodeContextSession:
     ) -> dict[str, Any]:
         """Read a line page inside one semantic AST/CST symbol boundary.
 
-        The symbol boundary never changes when the page is advanced; pagination is
+        The symbol boundary never changes when the page advances; pagination is
         line-based inside the same semantic chunk rather than arbitrary character
         splitting. Source is secret-redacted before it can leave the worker boundary.
+        The source payload intentionally uses the key ``code`` so structured logging
+        redaction removes it from safe logs while the governed LLM working view can
+        still consume it.
         """
         lookup = symbol_id or self._by_chunk.get(str(chunk_id or ""))
         symbol = self._resolve_symbol(str(lookup or ""))
         if symbol is None:
             return {"error": "CODE_CHUNK_NOT_FOUND", "truncated": False}
-        path = self._source_path(symbol.file_path)
-        if path is None:
+        lines = self._read_file_lines(symbol.file_path)
+        if lines is None:
             return {
                 **symbol.compact(),
                 "error": "SNAPSHOT_SOURCE_UNAVAILABLE",
-                "truncated": False,
-            }
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except (OSError, UnicodeDecodeError):
-            return {
-                **symbol.compact(),
-                "error": "SNAPSHOT_SOURCE_UNREADABLE",
                 "truncated": False,
             }
 
@@ -294,9 +296,9 @@ class CodeContextSession:
         offset = self._cursor_offset(cursor, prefix="code", default=0)
         page_start = min(end + 1, start + offset)
         page_end = min(end, page_start + SOURCE_PAGE_LINES - 1)
-        source_lines = []
+        code = []
         if page_start <= page_end:
-            source_lines = [
+            code = [
                 {"line": line_no, "text": redact_string(lines[line_no - 1])}
                 for line_no in range(page_start, page_end + 1)
             ]
@@ -304,7 +306,7 @@ class CodeContextSession:
         truncated = page_end < end
         return {
             **symbol.compact(),
-            "sourceLines": source_lines,
+            "code": code,
             "truncated": truncated,
             "nextCursor": f"code:{consumed}" if truncated else None,
         }
@@ -461,7 +463,7 @@ class CodeContextSession:
         for symbol in self._symbols.values():
             if scopes and not any(symbol.file_path.startswith(scope) for scope in scopes):
                 continue
-            document = self._search_document(symbol)
+            document = self._search_document(symbol, include_source=True)
             tokens = self._tokens(document)
             if not tokens:
                 continue
@@ -491,19 +493,29 @@ class CodeContextSession:
 
     def _search_result(self, symbol: CodeSymbol) -> dict[str, Any]:
         item = symbol.compact()
-        item["reason"] = "hybrid lexical + hashed-vector + exact-symbol + graph-proximity rerank"
+        item["reason"] = (
+            "hybrid BM25 + code/semantic hashed-vector + exact-symbol + graph-proximity rerank"
+        )
         return item
 
-    def _search_document(self, symbol: CodeSymbol) -> str:
-        return " ".join(
-            [
-                symbol.label,
-                symbol.symbol_ref,
-                symbol.file_path,
-                symbol.node_type,
-                *symbol.semantic_types,
-            ]
-        )
+    def _search_document(self, symbol: CodeSymbol, *, include_source: bool = False) -> str:
+        parts = [
+            symbol.label,
+            symbol.symbol_ref,
+            symbol.file_path,
+            symbol.node_type,
+            *symbol.semantic_types,
+        ]
+        if include_source:
+            lines = self._read_file_lines(symbol.file_path)
+            if lines is not None:
+                start = max(1, int(symbol.start_line or 1))
+                end = min(len(lines), int(symbol.end_line or start))
+                if start <= end:
+                    # Internal retrieval scoring may inspect the complete semantic
+                    # symbol. It is never copied wholesale into an LLM response.
+                    parts.append("\n".join(lines[start - 1 : end]))
+        return " ".join(parts)
 
     def _build_document_frequency(self) -> Counter[str]:
         counts: Counter[str] = Counter()
@@ -529,7 +541,7 @@ class CodeContextSession:
 
     @classmethod
     def _tokens(cls, text: str) -> list[str]:
-        expanded = _CAMEL.sub(" ", str(text))
+        expanded = _CAMEL.sub(" ", str(text)).replace("_", " ")
         return [value.lower() for value in _TOKEN.findall(expanded) if len(value) > 1]
 
     @staticmethod
@@ -580,6 +592,20 @@ class CodeContextSession:
         mapped = self._by_chunk.get(value) or self._by_node.get(value)
         return self._symbols.get(mapped or "")
 
+    def _read_file_lines(self, file_path: str) -> list[str] | None:
+        if file_path in self._file_lines:
+            return self._file_lines[file_path]
+        path = self._source_path(file_path)
+        if path is None:
+            self._file_lines[file_path] = None
+            return None
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            lines = None
+        self._file_lines[file_path] = lines
+        return lines
+
     def _source_path(self, file_path: str) -> Path | None:
         if self.workspace_path is None:
             return None
@@ -629,6 +655,20 @@ class CodeContextSession:
             return max(0, int(offset))
         except (TypeError, ValueError) as error:
             raise ValueError(f"invalid {prefix} cursor") from error
+
+    @staticmethod
+    def _hierarchical_summary(
+        symbols: list[CodeSymbol],
+        kinds: Counter[str],
+        semantic: list[str],
+    ) -> str:
+        if not symbols:
+            return "No indexed semantic symbols."
+        kind_text = ", ".join(f"{name}:{count}" for name, count in kinds.most_common(4))
+        semantic_text = ", ".join(semantic[:6])
+        if semantic_text:
+            return f"{len(symbols)} symbols ({kind_text}); semantic roles: {semantic_text}."
+        return f"{len(symbols)} symbols ({kind_text})."
 
     @staticmethod
     def _int_or_none(value: Any) -> int | None:
