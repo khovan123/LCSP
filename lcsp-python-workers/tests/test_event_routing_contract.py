@@ -54,6 +54,28 @@ def test_worker_routing_keys_match_the_shared_contracts():
     } == expected
 
 
+def test_production_pm2_starts_every_routed_consumer():
+    ecosystem = read_contract("ecosystem.config.cjs")
+    expected_targets = {
+        "lcsp_workers.scanner.scan_consumer:ScanConsumer",
+        "lcsp_workers.scanner.targeted_reanalysis_consumer:TargetedReanalysisConsumer",
+        "lcsp_workers.intelligence.technical_profile_consumer:TechnicalProfileConsumer",
+        "lcsp_workers.intelligence.ai_usage_flow_consumer:AIUsageFlowConsumer",
+        "lcsp_workers.intelligence.conflict_detection_consumer:ConflictDetectionConsumer",
+        "lcsp_workers.intelligence.verified_profile_consumer:VerifiedProfileConsumer",
+        "lcsp_workers.legal.legal_retrieval_consumer:LegalRetrievalConsumer",
+        "lcsp_workers.legal.legal_corpus_recovery_consumer:LegalCorpusRecoveryConsumer",
+        "lcsp_workers.classification.classification_consumer:ClassificationConsumer",
+        "lcsp_workers.reporting.gap_analysis_consumer:GapAnalysisConsumer",
+        "lcsp_workers.reporting.final_report_consumer:FinalReportConsumer",
+    }
+
+    missing_targets = sorted(
+        target for target in expected_targets if f'"{target}"' not in ecosystem
+    )
+    assert missing_targets == []
+
+
 def read_contract(relative_path: str) -> str:
     return (REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
 
