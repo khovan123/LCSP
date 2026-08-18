@@ -1,4 +1,4 @@
-"""Detect prohibited overclaim language before generated reports are published."""
+"""Detect narrative overclaims while allowing canonical machine status labels."""
 
 import re
 
@@ -8,8 +8,14 @@ OVERCLAIM_WORDS = [
     r"compliant",
     r"non-compliant",
     r"approved",
-    r"production\s+ready"
+    r"production\s+ready",
 ]
+
+CANONICAL_STATUS_TOKENS = (
+    "NON_COMPLIANT",
+    "COMPLIANT",
+    "UNKNOWN",
+)
 
 
 class OutputGuardrail:
@@ -17,19 +23,14 @@ class OutputGuardrail:
 
     @staticmethod
     def check(content: str) -> bool:
-        """Return whether generated content contains prohibited overclaim phrases.
-
-        Args:
-            content: Generated report/document text to validate.
-
-        Returns:
-            ``True`` when an overclaim is detected; ``False`` when the content
-            passes this guardrail.
-        """
         if not content:
             return False
 
-        text_lower = content.lower()
+        normalized = content
+        for token in CANONICAL_STATUS_TOKENS:
+            normalized = normalized.replace(token, "ENGINEERING_RULE_STATUS")
+
+        text_lower = normalized.lower()
         for pattern in OVERCLAIM_WORDS:
             if re.search(pattern, text_lower):
                 return True
