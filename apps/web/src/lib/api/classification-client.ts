@@ -26,13 +26,22 @@ const CLASSIFICATION_STATUS_OUTCOME_KINDS = {
 export type ClassificationStatusState =
   (typeof CLASSIFICATION_STATUS_STATES)[keyof typeof CLASSIFICATION_STATUS_STATES];
 
+export type TechnicalEvidenceViewModel = {
+  kind: string;
+  label: string;
+  filePath: string | null;
+  symbolRef: string | null;
+  startLine: number | null;
+  endLine: number | null;
+};
+
 export type EngineeringRuleEvaluationViewModel = {
   engineeringRuleId: string;
-  legalRuleId: string;
   concept: string;
   status: "COMPLIANT" | "NON_COMPLIANT" | "UNKNOWN";
   reason: string;
-  evidenceRefs: string[];
+  technicalEvidenceCount: number;
+  technicalEvidence: TechnicalEvidenceViewModel[];
   sourceChunkIds: string[];
   sourceLocators: string[];
   confidence: number;
@@ -308,6 +317,15 @@ function normalizeGuardrailStatus(value: string | null | undefined) {
     : null;
 }
 
+type TechnicalEvidencePayload = {
+  kind: string;
+  label: string;
+  file_path: string | null;
+  symbol_ref: string | null;
+  start_line: number | null;
+  end_line: number | null;
+};
+
 type EngineeringRuleEvaluationPayload = {
   engineering_rule_id: string;
   legal_rule_id: string;
@@ -315,6 +333,7 @@ type EngineeringRuleEvaluationPayload = {
   status: "COMPLIANT" | "NON_COMPLIANT" | "UNKNOWN";
   reason: string;
   evidence_refs: string[];
+  technical_evidence: TechnicalEvidencePayload[];
   source_chunk_ids: string[];
   source_locators: string[];
   confidence: number;
@@ -384,11 +403,15 @@ function sanitizeEvaluation(value: unknown): EngineeringRuleEvaluationPayload | 
   const concept = requiredString(value.concept);
   const reason = requiredString(value.reason);
   const status = requiredString(value.status)?.toUpperCase();
+  const technicalEvidence = Array.isArray(value.technical_evidence)
+    ? value.technical_evidence.map(sanitizeTechnicalEvidence)
+    : [];
   if (
     !engineeringRuleId ||
     !legalRuleId ||
     !concept ||
     !reason ||
+    technicalEvidence.some((item) => item === null) ||
     (status !== "COMPLIANT" &&
       status !== "NON_COMPLIANT" &&
       status !== "UNKNOWN")
@@ -402,6 +425,7 @@ function sanitizeEvaluation(value: unknown): EngineeringRuleEvaluationPayload | 
     status,
     reason,
     evidence_refs: stringArray(value.evidence_refs) ?? [],
+    technical_evidence: technicalEvidence as TechnicalEvidencePayload[],
     source_chunk_ids: stringArray(value.source_chunk_ids) ?? [],
     source_locators: stringArray(value.source_locators) ?? [],
     confidence:
@@ -412,16 +436,38 @@ function sanitizeEvaluation(value: unknown): EngineeringRuleEvaluationPayload | 
   };
 }
 
+function sanitizeTechnicalEvidence(value: unknown): TechnicalEvidencePayload | null {
+  if (!recordValue(value)) return null;
+  const kind = requiredString(value.kind);
+  const label = requiredString(value.label);
+  if (!kind || !label) return null;
+  return {
+    kind,
+    label,
+    file_path: nullableString(value.file_path) ?? null,
+    symbol_ref: nullableString(value.symbol_ref) ?? null,
+    start_line: nullableInteger(value.start_line),
+    end_line: nullableInteger(value.end_line),
+  };
+}
+
 function toEvaluationViewModel(
   value: EngineeringRuleEvaluationPayload,
 ): EngineeringRuleEvaluationViewModel {
   return {
     engineeringRuleId: value.engineering_rule_id,
-    legalRuleId: value.legal_rule_id,
     concept: value.concept,
     status: value.status,
     reason: value.reason,
-    evidenceRefs: value.evidence_refs,
+    technicalEvidenceCount: value.evidence_refs.length,
+    technicalEvidence: value.technical_evidence.map((item) => ({
+      kind: item.kind,
+      label: item.label,
+      filePath: item.file_path,
+      symbolRef: item.symbol_ref,
+      startLine: item.start_line,
+      endLine: item.end_line,
+    })),
     sourceChunkIds: value.source_chunk_ids,
     sourceLocators: value.source_locators,
     confidence: value.confidence,
@@ -454,4 +500,11 @@ function nonNegativeNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
     : 0;
+}
+
+function nullableInteger(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : null;
 }
