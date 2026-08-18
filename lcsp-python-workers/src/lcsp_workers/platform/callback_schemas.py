@@ -57,6 +57,8 @@ class ScanCallbackPayload(BaseModel):
     artifact_manifest: Optional[Dict[str, Any]] = None
 
 
+# Legacy callback contracts remain readable for historical artifacts, but they are
+# not part of the canonical post-scan runtime anymore.
 class TechnicalProfileCallbackPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     evidence_report_id: str
@@ -93,13 +95,6 @@ class ConflictDetectionCallbackPayload(BaseModel):
 
 
 class VerifiedProfileCallbackPayload(BaseModel):
-    """Pinned inputs for the canonical Nest reconciliation command.
-
-    Python no longer builds a competing VerifiedProfile payload. Nest validates
-    these source identities, conflict decision refs and idempotency key before
-    persisting the single immutable profile representation.
-    """
-
     model_config = ConfigDict(extra="forbid")
     ai_usage_flow_id: str
     assessment_id: str
@@ -124,13 +119,21 @@ class LegalRuleMatchCallbackPayload(BaseModel):
 
 
 class ClassificationCallbackPayload(BaseModel):
+    """Persist the canonical direct EngineeringRule assessment artifact.
+
+    ``technical_evidence_report_id`` is the authoritative source identity for v2.
+    Legacy legal/profile identifiers are optional only so historical/offline tests
+    can still deserialize older callback shapes during migration.
+    """
+
     model_config = ConfigDict(extra="forbid")
-    legal_rule_match_id: str
-    verified_profile_id: str
+    technical_evidence_report_id: str
     assessment_id: str
-    schema_version: str
+    schema_version: str = "2.0.0"
     classification_data: Dict[str, Any]
     guardrail_status: str
+    legal_rule_match_id: Optional[str] = None
+    verified_profile_id: Optional[str] = None
 
 
 class AuditExportCallbackPayload(BaseModel):
