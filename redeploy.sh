@@ -5,6 +5,8 @@ readonly APP=/srv/apps/lcsp-pm2
 readonly ECOSYSTEM_FILE=ecosystem.config.cjs
 readonly API_HEALTH_URL=http://127.0.0.1:8080/health
 readonly WEB_HEALTH_URL=http://127.0.0.1:3001/
+readonly FIRST_WORKER_HEALTH_PORT=8101
+readonly LAST_WORKER_HEALTH_PORT=8111
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -88,7 +90,7 @@ echo "==> Web"
 wait_for_health "Web" "$WEB_HEALTH_URL"
 
 echo "==> Workers"
-for port in {8101..8108}; do
+for port in $(seq "$FIRST_WORKER_HEALTH_PORT" "$LAST_WORKER_HEALTH_PORT"); do
   wait_for_health "Worker ${port}" "http://127.0.0.1:${port}/health"
 done
 
