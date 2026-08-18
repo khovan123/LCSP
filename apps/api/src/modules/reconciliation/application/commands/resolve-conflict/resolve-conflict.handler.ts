@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   AUDIT_ACTOR_TYPES,
   AUDIT_DECISIONS,
@@ -17,7 +19,10 @@ import {
 } from "@lcsp/contracts/scan";
 import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
-import type { Prisma } from "@prisma/client";
+import type {
+  ConflictRecordStatus as PrismaConflictRecordStatus,
+  Prisma,
+} from "@prisma/client";
 
 import {
   fromPrismaConflictRecordStatus,
@@ -30,6 +35,19 @@ import { problemException } from "../../../../../platform/problems/problem-facto
 import { ResolveConflictCommand } from "./resolve-conflict.command.js";
 
 const RESOLUTION_NOTE_MAX_LENGTH = 2000;
+
+type ConflictResolutionSnapshot = {
+  decisionId: string;
+  decisionRef: string;
+  resolutionVersion: number;
+  aiUsageFlowId: string;
+  evidenceRefs: string[];
+  technicalEvidenceReportId: string | null;
+  technicalEvidenceReportVersion: string | null;
+  technicalEvidenceReportHash: unknown;
+  technicalProfileId: string | null;
+  technicalProfileVersion: string | null;
+};
 
 export type ResolveConflictDto = {
   conflict_id: string;
@@ -71,9 +89,11 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
         },
         select: {
           id: true,
+          aiUsageFlowId: true,
           assessmentId: true,
           organizationId: true,
           status: true,
+          evidenceRefs: true,
         },
       });
 
@@ -95,6 +115,15 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
           { status: HttpStatus.CONFLICT },
         );
       }
+
+      const snapshot = await this.appendReconciliationDecision(
+        command,
+        tx,
+        conflict,
+        resolution,
+        resolutionNote,
+        resolvedAt,
+      );
 
       await tx.conflictRecord.update({
         where: { id: conflict.id },
@@ -141,13 +170,18 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
             resolution,
             resolvedById: command.resolvedById,
             correlationId: command.correlationId,
+            reconciliationDecisionRef: snapshot.decisionRef,
+            resolutionVersion: snapshot.resolutionVersion,
+            evidenceRefs: snapshot.evidenceRefs,
+            technicalEvidenceReportId: snapshot.technicalEvidenceReportId,
+            technicalProfileId: snapshot.technicalProfileId,
           },
         },
         tx,
       );
 
       if (allConflictsResolved) {
-        await this.enqueueAllResolvedEvent(command, tx);
+        await this.enqueueAllResolvedEvent(command, tx, snapshot);
       }
 
       return allConflictsResolved;
@@ -159,6 +193,140 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
       resolved_at: resolvedAt.toISOString(),
       all_conflicts_resolved: result,
       correlationId: command.correlationId,
+    };
+  }
+
+  private async appendReconciliationDecision(
+    command: ResolveConflictCommand,
+    tx: Prisma.TransactionClient,
+    conflict: {
+      id: string;
+      aiUsageFlowId: string;
+      assessmentId: string;
+      organizationId: string;
+      status: PrismaConflictRecordStatus;
+      evidenceRefs: unknown;
+    },
+    resolution:
+      | typeof CONFLICT_RECORD_STATUSES.resolved
+      | typeof CONFLICT_RECORD_STATUSES.dismissed,
+    resolutionNote: string | null,
+    resolvedAt: Date,
+  ): Promise<ConflictResolutionSnapshot> {
+    const evidenceRefs = evidenceRefsOnly(conflict.evidenceRefs);
+    const evidenceSnapshot = await this.loadEvidenceSnapshot(tx, conflict);
+    const version = await tx.reconciliationDecision.aggregate({
+      where: {
+        assessmentId: command.assessmentId,
+        organizationId: command.organizationId,
+      },
+      _max: { resolutionVersion: true },
+    });
+    const resolutionVersion = (version._max.resolutionVersion ?? 0) + 1;
+    const decisionId = randomUUID();
+    const decisionRef = `reconciliation-decision:${decisionId}`;
+
+    await tx.reconciliationDecision.create({
+      data: {
+        id: decisionId,
+        conflictRecordId: conflict.id,
+        aiUsageFlowId: conflict.aiUsageFlowId,
+        assessmentId: conflict.assessmentId,
+        organizationId: conflict.organizationId,
+        resolution: toPrismaConflictRecordStatus(resolution),
+        resolutionVersion,
+        actorId: command.resolvedById,
+        rationale: resolutionNote,
+        evidenceRefs: evidenceRefs as Prisma.InputJsonValue,
+        technicalEvidenceReportId: evidenceSnapshot.technicalEvidenceReportId,
+        technicalEvidenceReportVersion:
+          evidenceSnapshot.technicalEvidenceReportVersion,
+        technicalProfileId: evidenceSnapshot.technicalProfileId,
+        technicalProfileVersion: evidenceSnapshot.technicalProfileVersion,
+        originalConflictStatus: conflict.status,
+        resolvedAt,
+        ...(evidenceSnapshot.technicalEvidenceReportHash === null
+          ? {}
+          : {
+              technicalEvidenceReportHash:
+                evidenceSnapshot.technicalEvidenceReportHash as Prisma.InputJsonValue,
+            }),
+      },
+    });
+
+    return {
+      decisionId,
+      decisionRef,
+      resolutionVersion,
+      aiUsageFlowId: conflict.aiUsageFlowId,
+      evidenceRefs,
+      ...evidenceSnapshot,
+    };
+  }
+
+  private async loadEvidenceSnapshot(
+    tx: Prisma.TransactionClient,
+    conflict: {
+      aiUsageFlowId: string;
+      assessmentId: string;
+      organizationId: string;
+    },
+  ): Promise<
+    Pick<
+      ConflictResolutionSnapshot,
+      | "technicalEvidenceReportId"
+      | "technicalEvidenceReportVersion"
+      | "technicalEvidenceReportHash"
+      | "technicalProfileId"
+      | "technicalProfileVersion"
+    >
+  > {
+    const flow = await tx.aIUsageFlow.findFirst({
+      where: {
+        id: conflict.aiUsageFlowId,
+        assessmentId: conflict.assessmentId,
+        organizationId: conflict.organizationId,
+      },
+      select: { technicalProfileId: true },
+    });
+    const profile = flow
+      ? await tx.technicalProfile.findFirst({
+          where: {
+            id: flow.technicalProfileId,
+            assessmentId: conflict.assessmentId,
+            organizationId: conflict.organizationId,
+          },
+          select: {
+            id: true,
+            evidenceReportId: true,
+            schemaVersion: true,
+            providerVersion: true,
+          },
+        })
+      : null;
+    const report = profile
+      ? await tx.technicalEvidenceReport.findFirst({
+          where: {
+            id: profile.evidenceReportId,
+            assessmentId: conflict.assessmentId,
+            organizationId: conflict.organizationId,
+          },
+          select: {
+            id: true,
+            schemaVersion: true,
+            configHash: true,
+          },
+        })
+      : null;
+
+    return {
+      technicalEvidenceReportId: report?.id ?? null,
+      technicalEvidenceReportVersion: report?.schemaVersion ?? null,
+      technicalEvidenceReportHash: report?.configHash ?? null,
+      technicalProfileId: profile?.id ?? null,
+      technicalProfileVersion: profile
+        ? `${profile.schemaVersion}:${profile.providerVersion}`
+        : null,
     };
   }
 
@@ -201,6 +369,7 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
   private async enqueueAllResolvedEvent(
     command: ResolveConflictCommand,
     tx: Prisma.TransactionClient,
+    snapshot: ConflictResolutionSnapshot,
   ): Promise<void> {
     const outboxEvent = buildOutboxMessageInput({
       aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
@@ -217,11 +386,25 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
       payload: {
         assessmentId: command.assessmentId,
         lastResolvedConflictId: command.conflictId,
+        aiUsageFlowId: snapshot.aiUsageFlowId,
+        lastReconciliationDecisionRef: snapshot.decisionRef,
+        resolutionVersion: snapshot.resolutionVersion,
+        evidenceRefs: snapshot.evidenceRefs,
+        technicalEvidenceReportId: snapshot.technicalEvidenceReportId,
+        technicalEvidenceReportVersion: snapshot.technicalEvidenceReportVersion,
+        technicalProfileId: snapshot.technicalProfileId,
+        technicalProfileVersion: snapshot.technicalProfileVersion,
         correlationId: command.correlationId,
       },
     });
     await this.outboxRepository.enqueue(outboxEvent, tx);
   }
+}
+
+function evidenceRefsOnly(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function parseResolution(

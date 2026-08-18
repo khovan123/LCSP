@@ -82,6 +82,13 @@ def _conflict_record(**overrides: object) -> dict:
         "resolution_note": "manager private note must not be copied verbatim",
         "resolved_at": "2026-07-25T09:20:00Z",
         "evidence_refs": ["finding-invocation"],
+        "resolution_version": 3,
+        "resolved_by_id": "manager-1",
+        "technical_evidence_report_id": "report-1",
+        "technical_evidence_report_version": "1.0.0",
+        "technical_evidence_report_hash": {"semgrep": "sha256:abc"},
+        "technical_profile_id": "technical-profile-1",
+        "technical_profile_version": "1.0.0",
     }
     conflict.update(overrides)
     return conflict
@@ -291,6 +298,15 @@ def test_conflict_resolution_summaries_do_not_copy_manager_notes() -> None:
 
     assert resolution["conflict_id"] == "conflict-1"
     assert resolution["resolution"] == "ACCEPT_TECHNICAL_EVIDENCE"
+    assert resolution["resolution_version"] == 3
+    assert resolution["actor_id"] == "manager-1"
+    assert resolution["evidence_version"] == {
+        "technical_evidence_report_id": "report-1",
+        "technical_evidence_report_version": "1.0.0",
+        "technical_evidence_report_hash": {"semgrep": "sha256:abc"},
+        "technical_profile_id": "technical-profile-1",
+        "technical_profile_version": "1.0.0",
+    }
     assert "resolution_note" not in resolution
     assert "manager private note" not in str(profile.to_dict())
 

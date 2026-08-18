@@ -97,10 +97,13 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     assert.ok(body.resolved_at);
     assert.ok(body.correlationId);
 
-    const [record, audit] = await Promise.all([
+    const [record, audit, decision] = await Promise.all([
       prisma.conflictRecord.findUniqueOrThrow({ where: { id: "conflict-1" } }),
       prisma.authAuditEvent.findFirstOrThrow({
         where: { eventType: SCAN_EVENT_TYPES.conflictResolvedAudit },
+      }),
+      prisma.reconciliationDecision.findFirstOrThrow({
+        where: { conflictRecordId: "conflict-1" },
       }),
     ]);
     assert.equal(record.status, CONFLICT_RECORD_STATUSES.resolved);
@@ -115,6 +118,19 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
       (audit.payload as { resolution?: string }).resolution,
       CONFLICT_RECORD_STATUSES.resolved,
     );
+    assert.equal(decision.resolution, CONFLICT_RECORD_STATUSES.resolved);
+    assert.equal(decision.resolutionVersion, 1);
+    assert.equal(decision.actorId, "user-1");
+    assert.equal(decision.technicalEvidenceReportId, "evidence-assessment-1");
+    assert.equal(decision.technicalEvidenceReportVersion, "1.0.0");
+    assert.equal(decision.technicalProfileId, "technical-profile-assessment-1");
+    assert.equal(
+      decision.technicalProfileVersion,
+      "1.0.0:technical-profile-worker@1.0.0",
+    );
+    assert.deepEqual(decision.evidenceRefs, [
+      "evidence-assessment-1::finding-1",
+    ]);
   });
 
   it("T02 dismisses a pending conflict", async () => {
@@ -272,6 +288,7 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
 });
 
 async function resetDomainData(prisma: PrismaClient): Promise<void> {
+  await prisma.reconciliationDecision.deleteMany();
   await prisma.conflictRecord.deleteMany();
   await prisma.aIUsageFlow.deleteMany();
   await prisma.technicalProfile.deleteMany();

@@ -91,7 +91,7 @@ development_status:
   5-1-detect-material-profile-conflicts: ready-for-dev
   5-2-explain-conflict-score-and-evidence-basis: review
   5-3-manager-conflict-resolution: ready-for-dev
-  5-4-preserve-scanner-evidence-during-resolution: ready-for-dev
+  5-4-preserve-scanner-evidence-during-resolution: review
   5-5-create-verifiedprofile-after-gates-pass: ready-for-dev
   5-6-manager-review-and-approval-of-verifiedprofile: ready-for-dev
   epic-5-retrospective: optional

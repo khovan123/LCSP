@@ -679,6 +679,31 @@ model ConflictRecord {
   @@index([assessmentId, status])
 }
 
+model ReconciliationDecision {
+  id                             String               @id @default(uuid())
+  conflictRecordId               String
+  aiUsageFlowId                  String
+  assessmentId                   String
+  organizationId                 String
+  resolution                     ConflictRecordStatus
+  resolutionVersion              Int
+  actorId                        String
+  rationale                      String?
+  evidenceRefs                   Json
+  technicalEvidenceReportId      String?
+  technicalEvidenceReportVersion String?
+  technicalEvidenceReportHash    Json?
+  technicalProfileId             String?
+  technicalProfileVersion        String?
+  originalConflictStatus         ConflictRecordStatus
+  resolvedAt                     DateTime
+  createdAt                      DateTime             @default(now())
+
+  @@unique([conflictRecordId, resolutionVersion])
+  @@index([assessmentId, resolutionVersion])
+  @@index([aiUsageFlowId])
+}
+
 model AssessmentRuntimeEvent {
   id               String                      @id @default(uuid())
   organizationId   String

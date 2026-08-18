@@ -231,8 +231,32 @@ class VerifiedProfileBuilder:
             or record.get("affectedClaimField"),
             "status": record.get("status"),
             "resolution": record.get("resolution"),
+            "resolution_version": record.get("resolution_version")
+            or record.get("resolutionVersion"),
+            "actor_id": record.get("resolved_by_id")
+            or record.get("resolvedById")
+            or record.get("actor_id")
+            or record.get("actorId"),
             "resolved_at": record.get("resolved_at") or record.get("resolvedAt"),
             "evidence_refs": self._evidence_refs(record),
+            "evidence_version": {
+                "technical_evidence_report_id": record.get(
+                    "technical_evidence_report_id"
+                )
+                or record.get("technicalEvidenceReportId"),
+                "technical_evidence_report_version": record.get(
+                    "technical_evidence_report_version"
+                )
+                or record.get("technicalEvidenceReportVersion"),
+                "technical_evidence_report_hash": record.get(
+                    "technical_evidence_report_hash"
+                )
+                or record.get("technicalEvidenceReportHash"),
+                "technical_profile_id": record.get("technical_profile_id")
+                or record.get("technicalProfileId"),
+                "technical_profile_version": record.get("technical_profile_version")
+                or record.get("technicalProfileVersion"),
+            },
         }
 
     def _evidence_chain_integrity(self, claims: list[dict[str, Any]]) -> bool:

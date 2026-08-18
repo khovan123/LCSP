@@ -204,4 +204,13 @@ class VerifiedProfileConsumer(ConsumerBase):
 
     def _decision_refs(self, records: list[dict[str, Any]]) -> list[str]:
         """Build stable reconciliation decision references for the callback."""
-        return sorted(f"reconciliation:{record['conflict_id']}" for record in records)
+        refs: list[str] = []
+        for record in records:
+            decision_ref = record.get("reconciliation_decision_ref") or record.get(
+                "reconciliationDecisionRef"
+            )
+            if decision_ref:
+                refs.append(str(decision_ref))
+                continue
+            refs.append(f"reconciliation:{record['conflict_id']}")
+        return sorted(refs)

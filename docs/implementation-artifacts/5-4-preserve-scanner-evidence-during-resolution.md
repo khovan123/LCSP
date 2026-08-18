@@ -1,6 +1,10 @@
+---
+baseline_commit: ca0d146feec1ff1ac5937622afc180ae7156128d
+---
+
 # Story 5.4: Preserve Scanner Evidence During Resolution
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -26,9 +30,9 @@ Preserve Scanner Evidence During Resolution
 
 ## Tasks / Subtasks
 
-- [ ] Keep TechnicalEvidenceReport and TechnicalProfile immutable while storing reconciliation decisions separately. (AC: 1)
-- [ ] Carry evidence/report/profile version trail into reconciliation history and exports. (AC: 2)
-- [ ] Handle rerun-triggered new evidence by creating new reconciliation version or review-needed state. (AC: 3)
+- [x] Keep TechnicalEvidenceReport and TechnicalProfile immutable while storing reconciliation decisions separately. (AC: 1)
+- [x] Carry evidence/report/profile version trail into reconciliation history and exports. (AC: 2)
+- [x] Handle rerun-triggered new evidence by creating new reconciliation version or review-needed state. (AC: 3)
 
 ## Dev Notes
 
@@ -156,10 +160,31 @@ GPT-5 Codex
 
 ### Completion Notes List
 
-- Converted planning-derived developer packet into official execution artifact for dev cycle.
-- Status set to `ready-for-dev` in `docs/implementation-artifacts/sprint-status.yaml`.
-- Story retains planning authority references and scope guardrails for downstream `dev-story` work.
+- Added a versioned `ReconciliationDecision` persistence record so Manager resolution is stored separately from immutable scanner evidence and profile rows.
+- Resolve-conflict now snapshots conflict evidence refs, TechnicalEvidenceReport hash/version, TechnicalProfile version, actor, timestamp, rationale, and original status before updating the current conflict projection.
+- Reconciliation context and internal verified-profile context now expose resolution history and evidence/profile version trail for audit/export and worker consumption.
+- Verified profile worker summaries carry resolution/evidence version metadata while continuing to omit Manager private resolution notes.
+- Validation passed: API focused reconciliation Jest specs, verified-profile worker pytest suite, and `@lcsp/api` build.
+- E2E validation was attempted but blocked by unavailable local Docker daemon for Testcontainers.
+- Repository-wide `pnpm run check:contracts` still reports pre-existing contract-literal violations outside this story slice.
 
 ### File List
 
+- apps/api/prisma/schema.prisma
+- apps/api/prisma/migrations/20260815093000_add_reconciliation_decision_history/migration.sql
+- apps/api/src/modules/reconciliation/application/commands/resolve-conflict/resolve-conflict.handler.ts
+- apps/api/src/modules/reconciliation/application/commands/resolve-conflict/resolve-conflict.handler.spec.ts
+- apps/api/src/modules/reconciliation/application/contracts/reconciliation/reconciliation-context.contract.ts
+- apps/api/src/modules/reconciliation/application/queries/get-reconciliation-context/get-reconciliation-context.handler.ts
+- apps/api/src/modules/reconciliation/application/queries/get-reconciliation-context/get-reconciliation-context.handler.spec.ts
+- apps/api/src/modules/reconciliation/presentation/http/reconciliation.controller.ts
+- apps/api/test/resolve-conflict.e2e-spec.ts
+- lcsp-python-workers/src/lcsp_workers/intelligence/verified_profile_builder.py
+- lcsp-python-workers/src/lcsp_workers/intelligence/verified_profile_consumer.py
+- lcsp-python-workers/tests/test_verified_profile_worker.py
 - docs/implementation-artifacts/5-4-preserve-scanner-evidence-during-resolution.md
+- docs/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- 2026-08-15: Implemented separate reconciliation decision history with immutable evidence/profile snapshots and propagated version trail through API context, internal worker context, outbox/audit payloads, and verified profile summaries.
