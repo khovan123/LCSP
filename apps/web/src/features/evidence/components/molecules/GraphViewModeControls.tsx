@@ -7,6 +7,7 @@
 "use client";
 
 import { useGraphUI } from "@/features/evidence/context/GraphUIProvider";
+import type { GraphViewMode } from "@/features/evidence/types/evidence-graph-ui.types";
 
 export interface GraphViewModeControlsProps {
   className?: string;
@@ -16,11 +17,13 @@ export interface GraphViewModeControlsProps {
  * Individual view mode button.
  */
 function ViewModeButton({
+  mode,
   label,
   icon,
   isActive,
   onClick,
 }: {
+  mode: GraphViewMode;
   label: string;
   icon: string;
   isActive: boolean;
@@ -54,18 +57,21 @@ export function GraphViewModeControls({
   return (
     <div className={`flex gap-2 ${className}`}>
       <ViewModeButton
+        mode="3d"
         label="3D"
         icon="⬢"
         isActive={viewMode === "3d"}
         onClick={() => setViewMode("3d")}
       />
       <ViewModeButton
+        mode="2d"
         label="2D"
         icon="⊗"
         isActive={viewMode === "2d"}
         onClick={() => setViewMode("2d")}
       />
       <ViewModeButton
+        mode="table"
         label="Table"
         icon="≣"
         isActive={viewMode === "table"}
