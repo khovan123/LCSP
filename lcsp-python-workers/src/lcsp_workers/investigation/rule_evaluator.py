@@ -6,7 +6,11 @@ from typing import Any, Iterable
 
 from lcsp_workers.legal.engineering_rules.models import EngineeringRule
 
-from .models import EvidenceClaim
+from .models import (
+    ENGINEERING_EVIDENCE_CLAIM_TYPES,
+    ENGINEERING_LIMITATION_CODES,
+    EvidenceClaim,
+)
 
 
 ENGINEERING_RULE_EVALUATION_STATUSES = {
@@ -42,10 +46,21 @@ class EngineeringRuleEvaluator:
         claims: Iterable[EvidenceClaim],
     ) -> EngineeringRuleEvaluation:
         rows = list(claims)
-        failed = [row for row in rows if row.claim_type == "RULE_REQUIREMENT_NOT_MET"]
-        passed = [row for row in rows if row.claim_type == "RULE_REQUIREMENT_MET"]
+        failed = [
+            row
+            for row in rows
+            if row.claim_type
+            == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"]
+        ]
+        passed = [
+            row
+            for row in rows
+            if row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]
+        ]
         unresolved = [
-            row for row in rows if row.claim_type == "UNRESOLVED_ENGINEERING_FACT"
+            row
+            for row in rows
+            if row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
         ]
 
         evidence_refs = tuple(
@@ -73,7 +88,12 @@ class EngineeringRuleEvaluator:
                 "Conflicting evidence supports both satisfied and unsatisfied control states.",
                 evidence_refs,
                 rows,
-                (*limitations, "CONFLICTING_ENGINEERING_EVIDENCE"),
+                (
+                    *limitations,
+                    ENGINEERING_LIMITATION_CODES[
+                        "conflicting_engineering_evidence"
+                    ],
+                ),
             )
 
         if failed:
@@ -107,7 +127,12 @@ class EngineeringRuleEvaluator:
             "Available repository evidence is insufficient to determine this engineering requirement.",
             evidence_refs,
             rows,
-            limitations or ("ENGINEERING_EVIDENCE_INSUFFICIENT",),
+            limitations
+            or (
+                ENGINEERING_LIMITATION_CODES[
+                    "engineering_evidence_insufficient"
+                ],
+            ),
         )
 
     @staticmethod
