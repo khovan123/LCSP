@@ -136,7 +136,7 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       legal_rule_match_guardrail_status: null,
       legal_rule_match_diagnostics: null,
       verified_profile_review: null,
-      can_rerun_classification: false,
+      can_rerun_classification: acceptedEvidenceReport !== null,
       next_action: nextActionFor(wizardStatus),
       created_at: assessment.createdAt.toISOString(),
       updated_at: assessment.updatedAt.toISOString(),
