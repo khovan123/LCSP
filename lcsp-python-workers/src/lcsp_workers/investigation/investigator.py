@@ -102,11 +102,14 @@ class LawGuidedInvestigator:
                 continue
 
             for call in response.tool_calls:
+                bounded_arguments = self._bounded(call.arguments)
                 logger.info(
                     "ENGINEERING_INVESTIGATION_TOOL_CALL",
                     engineering_rule_id=packet.engineering_rule_id,
                     step=step + 1,
                     tool=call.name,
+                    call_id=call.call_id,
+                    arguments=bounded_arguments,
                     graph_tool_calls_used=graph_tool_calls_used,
                     workflow_run_id=workflow_run_id,
                     correlationId=correlation_id,
@@ -131,14 +134,27 @@ class LawGuidedInvestigator:
 
                 graph_tool_calls_used += 1
                 observation = self._execute_tool(engine, call.name, call.arguments)
+                bounded_observation = self._bounded(observation)
+                logger.info(
+                    "ENGINEERING_INVESTIGATION_TOOL_RESULT",
+                    engineering_rule_id=packet.engineering_rule_id,
+                    step=step + 1,
+                    tool_call_index=graph_tool_calls_used,
+                    tool=call.name,
+                    call_id=call.call_id,
+                    arguments=bounded_arguments,
+                    result=bounded_observation,
+                    workflow_run_id=workflow_run_id,
+                    correlationId=correlation_id,
+                )
                 observations.append(
                     {
                         "step": step + 1,
                         "toolCall": graph_tool_calls_used,
                         "tool": call.name,
                         "callId": call.call_id,
-                        "arguments": self._bounded(call.arguments),
-                        "result": self._bounded(observation),
+                        "arguments": bounded_arguments,
+                        "result": bounded_observation,
                     }
                 )
 
@@ -648,6 +664,19 @@ class LawGuidedInvestigator:
             engineering_rule_id=packet.engineering_rule_id,
             claim_count=len(claims),
             claim_types=[claim.claim_type for claim in claims],
+            claims=[
+                {
+                    "claim_id": claim.claim_id,
+                    "claim_type": claim.claim_type,
+                    "value": claim.value,
+                    "evidence_refs": list(claim.evidence_refs),
+                    "graph_path_refs": list(claim.graph_path_refs),
+                    "source_anchor_refs": list(claim.source_anchor_refs),
+                    "confidence": claim.confidence,
+                    "limitations": list(claim.limitations),
+                }
+                for claim in claims
+            ],
             limitation_codes=sorted(
                 {
                     limitation
