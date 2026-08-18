@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from unittest.mock import patch
 
 from lcsp_workers.investigation.investigator import (
     FINISH_TOOL_NAME,
@@ -102,8 +103,8 @@ def _finish_call(*, limitations: list[str] | None = None) -> LLMToolCall:
     )
 
 
-def test_investigator_uses_native_graph_tool_then_native_finish() -> None:
-    client = NativeToolClient(
+def _native_search_then_finish_client() -> NativeToolClient:
+    return NativeToolClient(
         responses=[
             _response(
                 LLMToolCall(
@@ -118,6 +119,10 @@ def test_investigator_uses_native_graph_tool_then_native_finish() -> None:
             _response(_finish_call()),
         ]
     )
+
+
+def test_investigator_uses_native_graph_tool_then_native_finish() -> None:
+    client = _native_search_then_finish_client()
 
     claims = LawGuidedInvestigator(client).investigate(
         packet=_packet(),
@@ -138,6 +143,63 @@ def test_investigator_uses_native_graph_tool_then_native_finish() -> None:
     assert client.calls[0]["node_name"] == "investigate_engineering_rule"
     assert "JSON pseudo-tool" in client.calls[0]["prompt"]
     assert "search_nodes" not in client.calls[0]["prompt"]
+
+
+def test_investigator_logs_native_tool_arguments_result_and_validated_finish_claims() -> None:
+    client = _native_search_then_finish_client()
+
+    with patch("lcsp_workers.investigation.investigator.logger") as logger:
+        claims = LawGuidedInvestigator(client).investigate(
+            packet=_packet(),
+            graph=_graph(),
+            workflow_run_id="workflow-1",
+            correlation_id="corr-1",
+        )
+
+    assert claims[0].claim_type == "RULE_REQUIREMENT_MET"
+    info_calls = logger.info.call_args_list
+    tool_call = next(
+        call
+        for call in info_calls
+        if call.args[0] == "ENGINEERING_INVESTIGATION_TOOL_CALL"
+        and call.kwargs["tool"] == "search_nodes"
+    )
+    assert tool_call.kwargs["call_id"] == "call-search"
+    assert tool_call.kwargs["arguments"] == {
+        "node_types": ["HUMAN_REVIEW"],
+        "max_results": 5,
+    }
+
+    tool_result = next(
+        call
+        for call in info_calls
+        if call.args[0] == "ENGINEERING_INVESTIGATION_TOOL_RESULT"
+    )
+    assert tool_result.kwargs["tool"] == "search_nodes"
+    assert tool_result.kwargs["call_id"] == "call-search"
+    assert tool_result.kwargs["tool_call_index"] == 1
+    assert tool_result.kwargs["result"][0]["node_id"] == "node-1"
+    assert tool_result.kwargs["result"][0]["evidence_refs"] == [
+        "evidence:review-1"
+    ]
+
+    finished = next(
+        call
+        for call in info_calls
+        if call.args[0] == "ENGINEERING_INVESTIGATION_FINISHED"
+    )
+    assert finished.kwargs["claims"] == [
+        {
+            "claim_id": claims[0].claim_id,
+            "claim_type": "RULE_REQUIREMENT_MET",
+            "value": True,
+            "evidence_refs": ["evidence:review-1"],
+            "graph_path_refs": ["node-1"],
+            "source_anchor_refs": [],
+            "confidence": 0.95,
+            "limitations": [],
+        }
+    ]
 
 
 def test_finish_schema_derives_value_and_closes_limitations_to_machine_codes() -> None:
