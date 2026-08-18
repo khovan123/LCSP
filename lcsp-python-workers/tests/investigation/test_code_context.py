@@ -110,12 +110,23 @@ def _workspace(tmp_path: Path) -> Path:
     return tmp_path
 
 
+def _charge_symbol(session: CodeContextSession) -> dict:
+    outline = session.get_file_outline("src/payment.py")
+    return next(
+        row
+        for row in outline["symbols"]
+        if row["symbol"].endswith("PaymentService.chargePayment")
+    )
+
+
 def test_code_context_uses_commit_versioned_semantic_symbol_ids(tmp_path: Path) -> None:
     session = CodeContextSession(_graph(), workspace_path=_workspace(tmp_path))
 
-    result = session.search_code(query="chargePayment")
-    assert result["results"]
-    symbol = result["results"][0]
+    search = session.search_code(query="chargePayment")
+    assert search["results"]
+    assert any("chargePayment" in row["symbol"] for row in search["results"])
+
+    symbol = _charge_symbol(session)
     assert symbol["symbolId"].startswith("sym://abc123/src/payment.py#")
     assert symbol["chunkId"].startswith("chunk://abc123/src/payment.py#")
     assert symbol["lines"] == [2, 101]
@@ -123,7 +134,7 @@ def test_code_context_uses_commit_versioned_semantic_symbol_ids(tmp_path: Path) 
 
 def test_code_source_pages_stay_inside_one_ast_symbol_chunk(tmp_path: Path) -> None:
     session = CodeContextSession(_graph(), workspace_path=_workspace(tmp_path))
-    symbol_id = session.search_code(query="chargePayment")["results"][0]["symbolId"]
+    symbol_id = _charge_symbol(session)["symbolId"]
 
     first = session.get_code(symbol_id=symbol_id)
     assert first["code"][0]["line"] == 2
@@ -173,7 +184,7 @@ def test_search_cursor_is_server_side_and_deterministic(tmp_path: Path) -> None:
 
 def test_references_and_workspace_preserve_context_without_resending_source(tmp_path: Path) -> None:
     session = CodeContextSession(_graph(), workspace_path=_workspace(tmp_path))
-    charge = session.search_code(query="chargePayment")["results"][0]
+    charge = _charge_symbol(session)
 
     references = session.find_references(
         symbol_id=charge["symbolId"], direction="CALLERS"
