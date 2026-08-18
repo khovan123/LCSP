@@ -63,21 +63,17 @@ export class OverclaimGuardrailService {
 }
 
 /**
- * The direct EngineeringRule artifact is mostly structured identities, provenance,
- * enum statuses and evidence refs. Those values are not narrative claims and must
- * not be scanned for English policy substrings (for example an approved legal-source
- * locator containing "approved"). Only fields that can communicate a human/model
- * conclusion are inspected.
+ * Direct EngineeringRule artifacts separate narrative from machine data. Only
+ * top-level notes and deterministic evaluation reasons can communicate prose.
+ * Claim values are boolean/null, limitation arrays are closed machine codes, and
+ * IDs/provenance/evidence refs are structured data validated by the callback gate.
  */
 function collectEngineeringAssessmentNarratives(
   value: Record<string, unknown>,
 ): NarrativeValue[] {
   const result: NarrativeValue[] = [];
 
-  // Top-level notes are explicitly narrative. Keep them guarded while avoiding
-  // recursive scans over structured IDs/provenance that caused false positives.
   collectNamedNarrative(value.notes, "notes", result);
-  collectNamedNarrative(value.limitations, "limitations", result);
 
   if (Array.isArray(value.evaluations)) {
     value.evaluations.forEach((evaluation, index) => {
@@ -85,25 +81,6 @@ function collectEngineeringAssessmentNarratives(
       collectNamedNarrative(
         evaluation.reason,
         `evaluations[${index}].reason`,
-        result,
-      );
-      collectNamedNarrative(
-        evaluation.limitations,
-        `evaluations[${index}].limitations`,
-        result,
-      );
-    });
-  }
-
-  if (Array.isArray(value.claims)) {
-    value.claims.forEach((claim, index) => {
-      if (!isRecord(claim)) return;
-      // Native finish currently constrains value to boolean, but retain this
-      // guard if a future schema permits a textual claim value.
-      collectNamedNarrative(claim.value, `claims[${index}].value`, result);
-      collectNamedNarrative(
-        claim.limitations,
-        `claims[${index}].limitations`,
         result,
       );
     });
@@ -121,16 +98,7 @@ function collectNamedNarrative(
     if (!CANONICAL_ENGINEERING_STATUSES.has(value.trim().toUpperCase())) {
       result.push({ path, text: value });
     }
-    return;
   }
-  if (!Array.isArray(value)) return;
-  value.forEach((item, index) => {
-    if (typeof item === "string") {
-      if (!CANONICAL_ENGINEERING_STATUSES.has(item.trim().toUpperCase())) {
-        result.push({ path: `${path}[${index}]`, text: item });
-      }
-    }
-  });
 }
 
 function collectNarrativeStrings(value: unknown, path = "$"): NarrativeValue[] {
