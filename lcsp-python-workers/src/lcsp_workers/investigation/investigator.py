@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from lcsp_workers.llm import LLMToolDefinition
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
+from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.scanner.program_graph.query_engine import ProgramGraphQueryEngine
 
 from .evidence_claim_validator import EvidenceClaimValidator
@@ -19,6 +20,7 @@ from .models import (
 )
 
 
+logger = get_logger(__name__)
 MAX_TOOL_STEPS = 4
 MAX_OBSERVATION_ITEMS = 40
 FINISH_TOOL_NAME = "finish"
@@ -83,6 +85,13 @@ class LawGuidedInvestigator:
             )
 
             if not response.tool_calls:
+                logger.warning(
+                    "ENGINEERING_INVESTIGATION_NO_NATIVE_TOOL_CALL",
+                    engineering_rule_id=packet.engineering_rule_id,
+                    step=step + 1,
+                    workflow_run_id=workflow_run_id,
+                    correlationId=correlation_id,
+                )
                 observations.append(
                     {
                         "step": step + 1,
@@ -93,12 +102,29 @@ class LawGuidedInvestigator:
                 continue
 
             for call in response.tool_calls:
+                logger.info(
+                    "ENGINEERING_INVESTIGATION_TOOL_CALL",
+                    engineering_rule_id=packet.engineering_rule_id,
+                    step=step + 1,
+                    tool=call.name,
+                    graph_tool_calls_used=graph_tool_calls_used,
+                    workflow_run_id=workflow_run_id,
+                    correlationId=correlation_id,
+                )
                 if call.name == FINISH_TOOL_NAME:
-                    return self._claims_from_finish_arguments(
+                    claims = self._claims_from_finish_arguments(
                         call.arguments,
                         packet,
                         graph,
                     )
+                    self._log_finish(
+                        packet=packet,
+                        claims=claims,
+                        workflow_run_id=workflow_run_id,
+                        correlation_id=correlation_id,
+                        forced=False,
+                    )
+                    return claims
 
                 if graph_tool_calls_used >= MAX_TOOL_STEPS:
                     break
@@ -121,7 +147,9 @@ class LawGuidedInvestigator:
 
         # The graph-tool budget is exhausted. Keep finalization native as well:
         # the provider receives only the finish function and cannot request more
-        # repository traversal in this final round.
+        # repository traversal in this final round. The finish tool marks native
+        # tool choice as required, so supported providers cannot silently return
+        # a plain-text answer here.
         response = self.llm.complete_with_tools(
             prompt=self._finish_prompt(packet, observations),
             tools=[self._finish_tool_definition()],
@@ -132,12 +160,26 @@ class LawGuidedInvestigator:
         )
         for call in response.tool_calls:
             if call.name == FINISH_TOOL_NAME:
-                return self._claims_from_finish_arguments(
+                claims = self._claims_from_finish_arguments(
                     call.arguments,
                     packet,
                     graph,
                 )
+                self._log_finish(
+                    packet=packet,
+                    claims=claims,
+                    workflow_run_id=workflow_run_id,
+                    correlation_id=correlation_id,
+                    forced=True,
+                )
+                return claims
 
+        logger.warning(
+            "ENGINEERING_INVESTIGATION_FINISH_MISSING",
+            engineering_rule_id=packet.engineering_rule_id,
+            workflow_run_id=workflow_run_id,
+            correlationId=correlation_id,
+        )
         return self._claims_from_payload({}, packet, graph)
 
     def _execute_tool(
@@ -363,6 +405,10 @@ class LawGuidedInvestigator:
                 },
                 required=("claims",),
             ),
+            # This policy marker is present in every EngineeringRule tool catalog.
+            # Therefore provider AUTO mode is disabled for every investigation turn;
+            # in the terminal round this is the only tool and ``finish`` is forced.
+            tool_choice_required=True,
         )
 
     @staticmethod
@@ -418,7 +464,10 @@ class LawGuidedInvestigator:
             if invalid_limitation:
                 # Fail closed if a provider violates the native limitation enum.
                 claim_type = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
-                limitations = (*limitations, ENGINEERING_LIMITATION_CODES["model_limitation_code_invalid"])
+                limitations = (
+                    *limitations,
+                    ENGINEERING_LIMITATION_CODES["model_limitation_code_invalid"],
+                )
 
             claim_value = CLAIM_VALUE_BY_TYPE[claim_type]
             refs = tuple(
@@ -584,3 +633,42 @@ class LawGuidedInvestigator:
             ],
         }
         return json.dumps(contract, ensure_ascii=False, sort_keys=True)
+
+    @staticmethod
+    def _log_finish(
+        *,
+        packet: InvestigationPacket,
+        claims: list[EvidenceClaim],
+        workflow_run_id: str,
+        correlation_id: str | None,
+        forced: bool,
+    ) -> None:
+        logger.info(
+            "ENGINEERING_INVESTIGATION_FINISHED",
+            engineering_rule_id=packet.engineering_rule_id,
+            claim_count=len(claims),
+            claim_types=[claim.claim_type for claim in claims],
+            limitation_codes=sorted(
+                {
+                    limitation
+                    for claim in claims
+                    for limitation in claim.limitations
+                    if limitation
+                }
+            ),
+            evidence_ref_count=len(
+                {
+                    ref
+                    for claim in claims
+                    for ref in (
+                        *claim.evidence_refs,
+                        *claim.graph_path_refs,
+                        *claim.source_anchor_refs,
+                    )
+                    if ref
+                }
+            ),
+            forced_finish=forced,
+            workflow_run_id=workflow_run_id,
+            correlationId=correlation_id,
+        )
