@@ -6,6 +6,7 @@ import {
   LEGAL_CORPUS_RECOVERY_REQUEST_COMMAND,
   LEGAL_MATCHING_REQUEST_COMMAND,
 } from "@lcsp/contracts/legal-rule-catalog";
+import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { VERIFIED_PROFILE_STATUSES } from "@lcsp/contracts/scan";
 
@@ -44,9 +45,17 @@ function buildHandler(input?: { owned?: boolean }) {
       assessmentId: "assessment-1",
       organizationId: "org-1",
       status: VERIFIED_PROFILE_STATUSES.pendingApproval,
+      approvedAt: null,
+      approvedById: null,
     }),
   );
   const countConflicts = jest.fn().mockImplementation(() => Promise.resolve(0));
+  const findExistingLegalRuleMatch = jest
+    .fn()
+    .mockImplementation(() => Promise.resolve(null));
+  const findInFlightOutbox = jest
+    .fn()
+    .mockImplementation(() => Promise.resolve(null));
   const findCorpus = jest.fn().mockImplementation(() =>
     Promise.resolve({
       id: "corpus-1",
@@ -65,6 +74,8 @@ function buildHandler(input?: { owned?: boolean }) {
       findFirst: findProfile,
       update: updateProfile,
     },
+    legalRuleMatch: { findFirst: findExistingLegalRuleMatch },
+    outboxMessage: { findFirst: findInFlightOutbox },
     legalCorpusVersion: { findFirst: findCorpus },
     legalRetrievalIndex: { findFirst: findIndex },
     legalRuleCatalogVersion: { findFirst: findCatalog },
@@ -94,8 +105,11 @@ function buildHandler(input?: { owned?: boolean }) {
   return {
     handler: new ApproveVerifiedProfileHandler(prisma, auditWriter, outbox),
     findAssessment,
+    findProfile,
     transaction,
     updateProfile,
+    findExistingLegalRuleMatch,
+    findInFlightOutbox,
     findCorpus,
     findIndex,
     findCatalog,
@@ -186,6 +200,59 @@ describe("ApproveVerifiedProfileHandler", () => {
   it("approves without enqueueing legal-matching work when no approved rule catalog is ready", async () => {
     const { handler, enqueue, findCatalog } = buildHandler();
     findCatalog.mockImplementation(() => Promise.resolve(null));
+
+    await handler.execute(command());
+
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("replays downstream legal work for an already approved profile without changing approval identity", async () => {
+    const { handler, findProfile, updateProfile, enqueue, writeInTx } =
+      buildHandler();
+    findProfile.mockImplementation(() =>
+      Promise.resolve({
+        id: "vp-1",
+        assessmentId: "assessment-1",
+        organizationId: "org-1",
+        status: VERIFIED_PROFILE_STATUSES.approved,
+        approvedAt: new Date("2026-08-18T05:45:23.000Z"),
+        approvedById: "manager-original",
+      }),
+    );
+
+    const result = await handler.execute(command());
+
+    expect(updateProfile).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0][0]).toMatchObject({
+      eventType: LEGAL_MATCHING_REQUEST_COMMAND,
+      aggregateId: "vp-1",
+    });
+    expect(result.approved_at).toBe("2026-08-18T05:45:23.000Z");
+    expect(result.approved_by_id).toBe("manager-original");
+    expect(writeInTx).toHaveBeenCalledTimes(1);
+    expect(writeInTx.mock.calls[0][0]).toMatchObject({
+      payload: {
+        replayedApproval: true,
+      },
+    });
+  });
+
+  it("does not duplicate legal work while a retryable outbox command is still in flight", async () => {
+    const { handler, findProfile, findInFlightOutbox, enqueue } = buildHandler();
+    findProfile.mockImplementation(() =>
+      Promise.resolve({
+        id: "vp-1",
+        assessmentId: "assessment-1",
+        organizationId: "org-1",
+        status: VERIFIED_PROFILE_STATUSES.approved,
+        approvedAt: new Date("2026-08-18T05:45:23.000Z"),
+        approvedById: "manager-1",
+      }),
+    );
+    findInFlightOutbox.mockImplementation(() =>
+      Promise.resolve({ id: "outbox-existing", status: OUTBOX_STATUSES.pending }),
+    );
 
     await handler.execute(command());
 
