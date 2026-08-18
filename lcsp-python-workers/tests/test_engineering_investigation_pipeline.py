@@ -3,9 +3,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from lcsp_workers.investigation.models import EvidenceClaim, InvestigationPacket
+from lcsp_workers.investigation.models import (
+    ENGINEERING_LIMITATION_CODES,
+    EvidenceClaim,
+    InvestigationPacket,
+)
 from lcsp_workers.investigation.pipeline import EngineeringInvestigationPipeline
-from lcsp_workers.llm.budget_tracker import BudgetExceeded
 
 
 def _evidence_report() -> dict:
@@ -155,7 +158,7 @@ def test_pipeline_keeps_other_rules_when_one_compilation_fails() -> None:
     assert result.engineering_rules_executed == 1
     assert result.evaluations[0].status == "NON_COMPLIANT"
     assert result.limitations == (
-        "ENGINEERING_RULE_COMPILATION_FAILED:rule-bad:ValueError",
+        ENGINEERING_LIMITATION_CODES["engineering_rule_compilation_failed"],
     )
 
 
@@ -174,11 +177,13 @@ def test_pipeline_blocks_when_no_approved_source_rules_exist() -> None:
 
     assert result.status == "BLOCKED"
     assert result.rules_considered == 0
-    assert result.limitations == ("NO_ENGINEERING_RULE_SOURCE_RULES",)
+    assert result.limitations == (
+        ENGINEERING_LIMITATION_CODES["no_engineering_rule_source_rules"],
+    )
     rule_service.get_or_compile.assert_not_called()
 
 
-def test_pipeline_reports_compilation_budget_exhaustion_without_fake_result() -> None:
+def test_pipeline_deduplicates_compilation_failure_to_machine_code() -> None:
     api_client = _api_client(
         [
             {"legalRuleId": "rule-1", "status": "APPROVED"},
@@ -186,9 +191,7 @@ def test_pipeline_reports_compilation_budget_exhaustion_without_fake_result() ->
         ]
     )
     rule_service = MagicMock()
-    rule_service.get_or_compile.side_effect = BudgetExceeded(
-        "Monthly token cap exceeded."
-    )
+    rule_service.get_or_compile.side_effect = RuntimeError("provider failure detail")
 
     result = EngineeringInvestigationPipeline(
         api_client=api_client,
@@ -203,7 +206,6 @@ def test_pipeline_reports_compilation_budget_exhaustion_without_fake_result() ->
     assert result.engineering_rules_executed == 0
     assert result.evaluations == ()
     assert result.limitations == (
-        "ENGINEERING_RULE_COMPILATION_BUDGET_EXHAUSTED:rule-1",
-        "ENGINEERING_RULE_COMPILATION_BUDGET_EXHAUSTED:rule-2",
+        ENGINEERING_LIMITATION_CODES["engineering_rule_compilation_failed"],
     )
     assert rule_service.get_or_compile.call_count == 2
