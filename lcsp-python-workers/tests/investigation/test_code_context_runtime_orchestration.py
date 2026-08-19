@@ -100,20 +100,12 @@ def _packet() -> InvestigationPacket:
     )
 
 
-def test_seeded_code_candidate_requires_bounded_source_probe_before_broad_graph_tools(
+def test_seeded_code_candidate_is_source_probed_before_first_llm_turn(
     tmp_path: Path,
 ) -> None:
     session = CodeContextSession(_graph(), workspace_path=_workspace(tmp_path))
-    symbol_id = session.get_file_outline("src/payment.py")["symbols"][0]["symbolId"]
     client = NativeToolClient(
         responses=[
-            _response(
-                LLMToolCall(
-                    name="get_code",
-                    arguments={"symbol_id": symbol_id},
-                    call_id="call-code",
-                )
-            ),
             _response(
                 LLMToolCall(
                     name=FINISH_TOOL_NAME,
@@ -130,7 +122,7 @@ def test_seeded_code_candidate_requires_bounded_source_probe_before_broad_graph_
                     },
                     call_id="call-finish",
                 )
-            ),
+            )
         ]
     )
 
@@ -141,13 +133,47 @@ def test_seeded_code_candidate_requires_bounded_source_probe_before_broad_graph_
         code_context=session,
     )
 
+    # The orchestrator owns seed ranking and now opens the best production source
+    # candidate before asking the model what to do next. The model therefore starts
+    # with the complete progress-capable tool set rather than the former
+    # get_code+inspect_observation trap.
     first_tools = {tool.name for tool in client.calls[0]["tools"]}
-    assert first_tools == {"get_code", "inspect_observation"}
-    assert FINISH_TOOL_NAME not in first_tools
-    second_tools = {tool.name for tool in client.calls[1]["tools"]}
-    assert FINISH_TOOL_NAME in second_tools
-    assert set(GRAPH_TOOL_NAMES).issubset(second_tools)
+    assert FINISH_TOOL_NAME in first_tools
+    assert set(GRAPH_TOOL_NAMES).issubset(first_tools)
+    assert "get_code" in first_tools
+    assert "inspect_observation" in first_tools
     assert claims[0].claim_type == "UNRESOLVED_ENGINEERING_FACT"
+    assert claims[0].evidence_refs == ("evidence:charge",)
+
+
+def test_source_probe_gate_has_no_inspection_escape_hatch() -> None:
+    all_tools = CodeContextLawGuidedInvestigator._code_aware_tool_definitions()
+    active = CodeContextLawGuidedInvestigator._runtime_tool_definitions(
+        all_tools,
+        graph_tool_calls_used=0,
+        code_tool_calls_used=0,
+        source_probe_required=True,
+    )
+    assert [tool.name for tool in active] == ["get_code"]
+
+
+def test_seed_source_candidate_prefers_production_code() -> None:
+    candidate = CodeContextLawGuidedInvestigator._seed_source_candidate(
+        {
+            "results": [
+                {
+                    "symbolId": "sym:test",
+                    "path": "apps/api/src/payment/payment.service.spec.ts",
+                },
+                {
+                    "symbolId": "sym:runtime",
+                    "path": "apps/api/src/payment/payment.service.ts",
+                },
+            ]
+        }
+    )
+    assert candidate is not None
+    assert candidate["symbolId"] == "sym:runtime"
 
 
 def test_exhausted_graph_budget_removes_graph_tools_from_next_native_turn() -> None:
