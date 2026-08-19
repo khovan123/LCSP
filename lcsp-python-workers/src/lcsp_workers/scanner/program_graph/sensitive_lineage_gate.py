@@ -1,9 +1,9 @@
 """Fail closed on weak sensitive-data semantics after lineage extraction.
 
 Identifier taxonomy is intentionally retained as an INFERRED seed, but it is not enough
-to promote a DATA_OBJECT to CORROBORATED biometric/identity-document processing. This
-pass rechecks the source behavior composition that justified the promotion and removes
-only the strong corroboration when the behavior is incomplete.
+to promote a value or downstream sink to trusted sensitive-data evidence. This pass
+normalizes identifier-derived PII/SENSITIVE semantics to INFERRED and preserves a strong
+CORROBORATED state only when explicit processing behavior supports it.
 """
 from __future__ import annotations
 
@@ -35,10 +35,21 @@ _ID_DOCUMENT = re.compile(
     r"kyc|identity[_ .-]?(?:document|verification)|government[_ .-]?id|national[_ .-]?id|passport|mrz|document[_ .-]?(?:number|verify)",
     re.I,
 )
+_IDENTIFIER_CARRIER_TYPES = frozenset(
+    {
+        "PARAMETER",
+        "VARIABLE",
+        "PROPERTY",
+        "DTO_FIELD",
+        "DATA_OBJECT",
+        "DATA_ASSET",
+        "MEDIA_OBJECT",
+    }
+)
 
 
 class SensitiveLineageGate:
-    """Keep weak taxonomy hints inferred and promote only behavior-corroborated data."""
+    """Keep taxonomy hints inferred and promote only behavior-corroborated data."""
 
     def __init__(self, workspace_path: str | Path) -> None:
         self.workspace = Path(workspace_path).resolve(strict=False)
@@ -47,49 +58,71 @@ class SensitiveLineageGate:
         source_cache: dict[str, str] = {}
         replacements: list[SemanticNodeFact] = []
         for node in program.nodes:
-            if node.node_type not in {"DATA_OBJECT", "DATA_ASSET"} or not node.file_path:
+            if node.node_type not in _IDENTIFIER_CARRIER_TYPES:
                 replacements.append(node)
                 continue
+
             attrs = dict(node.attributes or {})
-            capabilities = set(attrs.get("corroboratedCapabilities") or attrs.get("capabilities") or [])
-            if not capabilities:
-                replacements.append(node)
+            semantics = set(node.semantic_types)
+            sensitive_semantics = {
+                value
+                for value in semantics
+                if value.startswith("PII.") or value.startswith("SENSITIVE.")
+            }
+            capabilities = set(
+                attrs.get("corroboratedCapabilities")
+                or attrs.get("capabilities")
+                or []
+            )
+
+            # Identifier/contract taxonomy is a cheap seed only. Without an explicit
+            # corroborated processing capability it must never become trusted merely
+            # because the symbol/field happens to be named fingerprint/cccd/email/etc.
+            resolution = node.resolution_state
+            if sensitive_semantics and not capabilities and resolution != "UNRESOLVED":
+                resolution = "INFERRED"
+
+            if not capabilities or not node.file_path:
+                replacements.append(
+                    node
+                    if resolution == node.resolution_state
+                    else replace(node, resolution_state=resolution)
+                )
                 continue
+
             text = source_cache.get(node.file_path)
             if text is None:
                 text = self._read(node.file_path)
                 source_cache[node.file_path] = text
 
             allowed = set(capabilities)
-            semantics = set(node.semantic_types)
             if "BIOMETRIC_PROCESSING" in allowed and not self._biometric_behavior(text):
                 allowed.discard("BIOMETRIC_PROCESSING")
-                # Preserve an identifier-derived taxonomy seed as INFERRED only when it
-                # was present before behavior promotion. The graph must not describe it
-                # as corroborated processing from one keyword occurrence.
                 if "SENSITIVE.BIOMETRIC" in semantics:
                     resolution = "INFERRED"
-                else:
-                    resolution = node.resolution_state
-            else:
-                resolution = node.resolution_state
-
-            if "IDENTITY_DOCUMENT_PROCESSING" in allowed and not self._identity_document_behavior(text):
+            if (
+                "IDENTITY_DOCUMENT_PROCESSING" in allowed
+                and not self._identity_document_behavior(text)
+            ):
                 allowed.discard("IDENTITY_DOCUMENT_PROCESSING")
                 if "PII.GOVERNMENT_ID" in semantics:
                     resolution = "INFERRED"
 
-            attr_key = "corroboratedCapabilities" if "corroboratedCapabilities" in attrs else "capabilities"
+            attr_key = (
+                "corroboratedCapabilities"
+                if "corroboratedCapabilities" in attrs
+                else "capabilities"
+            )
             if allowed:
                 attrs[attr_key] = sorted(allowed)
+                resolution = "CORROBORATED"
             else:
                 attrs.pop(attr_key, None)
 
-            if allowed == capabilities:
-                replacements.append(node)
-                continue
             replacements.append(
-                replace(
+                node
+                if attrs == node.attributes and resolution == node.resolution_state
+                else replace(
                     node,
                     attributes=attrs,
                     resolution_state=resolution,
