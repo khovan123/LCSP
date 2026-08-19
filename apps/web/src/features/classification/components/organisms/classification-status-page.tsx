@@ -221,7 +221,7 @@ function EngineeringRuleCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-base font-semibold">
-            {formatEngineeringConcept(evaluation.concept)}
+            {formatEngineeringConcept(appLocale, evaluation.concept)}
           </p>
         </div>
         <span className={statusBadgeClassName(evaluation.status)}>
@@ -334,7 +334,7 @@ function TechnicalEvidenceItem({
           {resolveClassificationRuntimeMessage(appLocale, "evidenceType")}
         </span>
         <span className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
-          {formatEngineeringConcept(evidence.kind)}
+          {formatEngineeringConcept(appLocale, evidence.kind)}
         </span>
       </div>
       <p className="mt-2 font-medium text-foreground/90">
@@ -361,7 +361,9 @@ function TechnicalEvidenceItem({
 }
 
 function displayEvidenceLabel(value: string): string {
-  return /^[A-Z0-9_\-\s]+$/.test(value) ? formatEngineeringConcept(value) : value;
+  return /^[A-Z0-9_\-\s]+$/.test(value)
+    ? formatEngineeringConcept(appLocale, value)
+    : value;
 }
 
 function sourceLocation(evidence: TechnicalEvidenceViewModel): string | null {
