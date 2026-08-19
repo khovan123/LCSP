@@ -85,7 +85,14 @@ def is_material_source_path(value: str | None) -> bool:
 
 
 def exclude_test_sources_from_semantic_program(program: SemanticProgram) -> int:
-    """Remove test-backed semantic nodes, incident edges and test-created boundary orphans."""
+    """Remove test-backed semantic nodes and finalize production framework boundaries.
+
+    Framework resolution happens before this policy so resolvers can inspect complete
+    repository wiring. Removing test/spec nodes can invalidate a formerly concrete
+    consumer/provider edge, therefore the post-filter finalizer runs before graph IDs
+    are built and converts any newly exposed production dead-end into an explicit
+    unresolved frontier.
+    """
     removed = {
         node.key
         for node in program.nodes
@@ -117,9 +124,23 @@ def exclude_test_sources_from_semantic_program(program: SemanticProgram) -> int:
     }
     if orphans:
         program.nodes = [node for node in program.nodes if node.key not in orphans]
-        program.unresolved_frontiers = [
-            value for value in program.unresolved_frontiers if value not in orphans
-        ]
+
+    # Remove frontier IDs whose concrete UNRESOLVED_DYNAMIC_TARGET node was filtered.
+    # Keep non-node diagnostics (for example missing_graph_node:...) because the
+    # ProgramGraphBuilder uses those strings as legitimate coverage diagnostics.
+    existing_keys = {node.key for node in program.nodes}
+    known_before = existing_keys | removed | orphans
+    program.unresolved_frontiers = [
+        value
+        for value in program.unresolved_frontiers
+        if value not in known_before or value in existing_keys
+    ]
+
+    # Local import avoids coupling the source-role module to framework extraction at
+    # import time. The finalizer itself depends only on SemanticProgram contracts.
+    from .framework_boundary_finalizer import FrameworkBoundaryFinalizer
+
+    FrameworkBoundaryFinalizer().enrich(program)
     return len(removed) + len(orphans)
 
 
@@ -129,8 +150,13 @@ def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenc
     Newly scanned graphs are already filtered in the semantic assembler. This second
     boundary intentionally also protects classification reruns over older persisted
     graph artifacts that may still contain test/spec nodes. Source-less framework
-    identities left orphaned by that removal are pruned as well.
+    identities left orphaned by that removal are pruned as well. Query traversal owns
+    post-persistence boundary uncertainty, so this compatibility filter also removes
+    stale unresolved node IDs that were deleted with test evidence.
     """
+    original_node_ids = {
+        str(node.get("node_id")) for node in graph.nodes if node.get("node_id")
+    }
     kept_nodes = [
         node
         for node in graph.nodes
@@ -174,7 +200,17 @@ def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenc
             and str(edge.get("target_node_id")) in kept_ids
         ]
 
-    changed = len(kept_nodes) != len(graph.nodes) or len(kept_edges) != len(graph.edges)
+    kept_unresolved = [
+        value
+        for value in graph.unresolved_frontiers
+        if str(value) not in original_node_ids or str(value) in kept_ids
+    ]
+
+    changed = (
+        len(kept_nodes) != len(graph.nodes)
+        or len(kept_edges) != len(graph.edges)
+        or kept_unresolved != list(graph.unresolved_frontiers)
+    )
     if not changed:
         return graph
 
@@ -214,7 +250,7 @@ def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenc
         "edges": kept_edges,
         "source_anchors": kept_anchors,
         "indexes": indexes,
-        "unresolved_frontiers": graph.unresolved_frontiers,
+        "unresolved_frontiers": kept_unresolved,
         "coverage_state": graph.coverage_state,
         "coverage_notes": graph.coverage_notes,
         "provenance": provenance,
@@ -231,6 +267,7 @@ def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenc
         edges=kept_edges,
         source_anchors=kept_anchors,
         indexes=indexes,
+        unresolved_frontiers=kept_unresolved,
         provenance=provenance,
         evidence_refs=evidence_refs,
         graph_hash=graph_hash,
