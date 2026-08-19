@@ -219,6 +219,31 @@ def test_claim_validator_drops_test_evidence_and_minimizes_to_criterion() -> Non
     assert len(all_refs) <= 8
 
 
+def test_specific_criterion_rejects_unrelated_production_refs() -> None:
+    unrelated = _node(
+        "node:unrelated",
+        label="generic command handler",
+        path="src/commands.py",
+        evidence_ref="evidence:unrelated",
+        node_type="FUNCTION",
+    )
+    graph = _graph([unrelated])
+
+    with pytest.raises(EvidenceClaimValidationError):
+        EvidenceClaimValidator().validate(
+            EvidenceClaim(
+                claim_id="claim-unrelated",
+                engineering_rule_id="eng-1",
+                claim_type="RULE_REQUIREMENT_MET",
+                value=True,
+                evidence_refs=("evidence:unrelated",),
+                confidence=0.9,
+                criterion="incident reporting notification",
+            ),
+            graph,
+        )
+
+
 def test_test_only_or_zero_confidence_closed_claim_fails_closed() -> None:
     test = _node(
         "node:test",
