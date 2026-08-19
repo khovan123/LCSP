@@ -50,9 +50,16 @@ def _rule() -> EngineeringRule:
             GraphQueryTemplate(
                 name="review-entrypoints",
                 start_node_types=("HUMAN_REVIEW",),
+                direction="FORWARD",
                 follow_edges=("CALLS",),
+                stop_node_types=("APPROVAL",),
+                semantic_types=("HUMAN_OVERSIGHT",),
             ),
         ),
+        keywords=("review", "approve", "override"),
+        common_apis=("approveDecision",),
+        common_libraries=("workflow",),
+        patterns=("human review",),
         required_evidence=("A concrete review path",),
     )
 
@@ -71,3 +78,21 @@ def test_seed_query_records_candidate_search_once_and_defers_path_traversal() ->
     assert packet.initial_results[0]["truncated"] is True
     assert packet.evidence_refs == ("evidence:1", "evidence:2")
     assert packet.unresolved_frontiers == ()
+
+    assert packet.starting_node_types == ("HUMAN_REVIEW",)
+    assert packet.target_node_types == ("APPROVAL",)
+    assert packet.edge_strategies == ("CALLS",)
+    assert packet.keywords == ("review", "approve", "override")
+    assert packet.common_apis == ("approveDecision",)
+    assert packet.common_libraries == ("workflow",)
+    assert packet.patterns == ("human review",)
+    assert packet.graph_queries == (
+        {
+            "name": "review-entrypoints",
+            "startNodeTypes": ["HUMAN_REVIEW"],
+            "direction": "FORWARD",
+            "followEdges": ["CALLS"],
+            "stopNodeTypes": ["APPROVAL"],
+            "semanticTypes": ["HUMAN_OVERSIGHT"],
+        },
+    )
