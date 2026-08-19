@@ -57,6 +57,13 @@ _DISPATCH_LITERAL_RE = re.compile(
 _DISPATCH_DYNAMIC_RE = re.compile(
     r"\b([A-Za-z_$][\w$]*)\.(dispatch|Dispatch|execute|Execute|publish|Publish|send|Send)\s*\(\s*([A-Za-z_$][\w$]*)"
 )
+# A local callable loaded from an indexed registry (``handler = registry[key]``) is a
+# dynamic dispatch boundary even when the later invocation is syntactically a plain
+# ``handler(...)`` call. The base AST extractor cannot know the concrete target from the
+# call expression alone, so this resolver records the uncertainty explicitly.
+_DYNAMIC_LOOKUP_ASSIGN_RE = re.compile(
+    r"\b([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*\[\s*([^\]\r\n]+?)\s*\]"
+)
 
 
 @dataclass(frozen=True)
@@ -116,6 +123,7 @@ class GenericDispatchResolver:
             else:
                 _mark_unresolved(program, f"{namespace}:{identity}", key, rows[0].rel, rows[0].line)
 
+        existing_node_keys = {node.key for node in program.nodes}
         for rel, text in sources:
             for match in _DISPATCH_LITERAL_RE.finditer(text):
                 namespace, method, identity = match.groups()
@@ -166,6 +174,59 @@ class GenericDispatchResolver:
                 _mark_unresolved(
                     program,
                     f"{namespace}:dynamic:{identity_var}",
+                    call_key,
+                    rel,
+                    line,
+                )
+
+            # Also recognize an indirect local callable obtained from a registry lookup:
+            # ``handler = registry[key]; handler(payload)``. This pattern otherwise looks
+            # like an ordinary named call to the AST extractor and silently closes the
+            # decision path even though the target implementation is unknown.
+            for assignment in _DYNAMIC_LOOKUP_ASSIGN_RE.finditer(text):
+                local_handler, namespace, selector = assignment.groups()
+                selector = selector.strip()
+                if (
+                    len(selector) >= 2
+                    and selector[0] in {'"', "'"}
+                    and selector[-1] == selector[0]
+                ):
+                    # Exact literal lookup may be resolvable by a framework-specific or
+                    # registration resolver; do not downgrade it here.
+                    continue
+                tail_start = assignment.end()
+                tail = text[tail_start : tail_start + 4000]
+                call_match = re.search(
+                    rf"\b{re.escape(local_handler)}\s*\(",
+                    tail,
+                )
+                if call_match is None:
+                    continue
+                call_offset = tail_start + call_match.start()
+                line = _line(text, call_offset)
+                # Reuse the source-backed CALL_SITE already emitted by the repository AST
+                # extractor. If another language parser did not materialize it, create a
+                # bounded call-site identity rather than pointing an edge to a ghost node.
+                call_key = f"call:{rel}:{line}:{local_handler}"
+                if call_key not in existing_node_keys:
+                    program.add_node(
+                        SemanticNodeFact(
+                            call_key,
+                            "CALL_SITE",
+                            local_handler,
+                            rel,
+                            line,
+                            line,
+                            attributes={"frameworkBoundary": "GENERIC_DISPATCH"},
+                        )
+                    )
+                    program.add_edge(
+                        SemanticEdgeFact("CALLS", _module_key(rel), call_key)
+                    )
+                    existing_node_keys.add(call_key)
+                _mark_unresolved(
+                    program,
+                    f"{namespace}:dynamic-lookup:{local_handler}",
                     call_key,
                     rel,
                     line,
@@ -231,6 +292,8 @@ def _mark_unresolved(
                 "resolutionState": "UNRESOLVED",
             },
             coverage_state="LIMITED",
+            origin="FRAMEWORK_RESOLUTION",
+            resolution_state="UNRESOLVED",
         )
     )
     program.add_edge(
@@ -240,6 +303,8 @@ def _mark_unresolved(
             key,
             attributes={"frameworkBoundary": "GENERIC_DISPATCH"},
             coverage_state="LIMITED",
+            origin="FRAMEWORK_RESOLUTION",
+            resolution_state="UNRESOLVED",
         )
     )
     if key not in program.unresolved_frontiers:
