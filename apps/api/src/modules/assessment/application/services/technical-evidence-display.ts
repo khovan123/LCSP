@@ -7,7 +7,16 @@ type JsonRecord = Record<string, unknown>;
 export function resolveTechnicalEvidenceDisplays(
   evidencePayload: unknown,
   evidenceRefs: string[],
+  projectedEvidence?: unknown,
 ): TechnicalEvidenceDisplayDto[] {
+  // The scanner persists only a compact evidence-graph descriptor; its full graph
+  // lives in a worker-local artifact path and is intentionally not readable by the
+  // API process. New ClassificationResult rows therefore carry a bounded, source-free
+  // location projection produced while the full graph is still in worker memory.
+  const projected = projectedDisplays(projectedEvidence);
+  if (projected.length > 0) return projected;
+
+  // Compatibility for historical reports that still embedded graph nodes/anchors.
   const payload = asRecord(evidencePayload);
   const graph = asRecord(payload?.evidence_graph ?? payload?.evidenceGraph);
   if (!graph) return [];
@@ -70,6 +79,29 @@ export function resolveTechnicalEvidenceDisplays(
     for (const match of nodesByEvidenceRef.get(ref) ?? []) add(fromNode(match));
   }
 
+  return Array.from(displays.values()).slice(
+    0,
+    MAX_TECHNICAL_EVIDENCE_DISPLAY_ITEMS,
+  );
+}
+
+function projectedDisplays(value: unknown): TechnicalEvidenceDisplayDto[] {
+  const displays = new Map<string, TechnicalEvidenceDisplayDto>();
+  for (const row of asRecords(value)) {
+    const kind = text(row.kind);
+    const label = text(row.label);
+    if (!kind || !label) continue;
+    const item: TechnicalEvidenceDisplayDto = {
+      kind,
+      label,
+      file_path: sourcePath(text(row.file_path ?? row.filePath)),
+      symbol_ref: text(row.symbol_ref ?? row.symbolRef),
+      start_line: integer(row.start_line ?? row.startLine),
+      end_line: integer(row.end_line ?? row.endLine),
+    };
+    const key = `${item.kind}|${item.label}|${item.file_path ?? ""}|${item.symbol_ref ?? ""}|${item.start_line ?? ""}|${item.end_line ?? ""}`;
+    if (!displays.has(key)) displays.set(key, item);
+  }
   return Array.from(displays.values()).slice(
     0,
     MAX_TECHNICAL_EVIDENCE_DISPLAY_ITEMS,
