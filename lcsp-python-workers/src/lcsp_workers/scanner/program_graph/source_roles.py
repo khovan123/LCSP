@@ -44,7 +44,10 @@ _TEST_FILE_PATTERNS = (
 
 
 def normalize_source_path(value: str | None) -> str:
-    return str(value or "").replace("\\", "/").lstrip("./")
+    path = str(value or "").replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    return path.lstrip("/")
 
 
 def is_test_source_path(value: str | None) -> bool:
