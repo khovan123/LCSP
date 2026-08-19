@@ -17,6 +17,7 @@ import type {
   GraphUIAction,
   GraphUIContextValue,
   GraphViewMode,
+  GraphLayoutAlgorithm,
 } from "../../features/evidence/types/evidence-graph-ui.types";
 import type { GraphScope } from "../../features/evidence/types/evidence-graph.types";
 import {
@@ -257,13 +258,13 @@ function graphUIReducer(
     case "SET_VIEW_MODE":
       return {
         ...state,
-        viewMode: payload as any,
+        viewMode: payload as GraphViewMode,
       };
 
     case "SET_LAYOUT_ALGORITHM":
       return {
         ...state,
-        layout: payload as any,
+        layout: payload as GraphLayoutAlgorithm,
       };
 
     // Display config
@@ -308,7 +309,7 @@ function graphUIReducer(
         ...state,
         display: {
           ...state.display,
-          nodeSize: payload as any,
+          nodeSize: payload as EvidenceGraphUIState["display"]["nodeSize"],
         },
       };
 
@@ -317,7 +318,7 @@ function graphUIReducer(
         ...state,
         display: {
           ...state.display,
-          edgeWidth: payload as any,
+          edgeWidth: payload as EvidenceGraphUIState["display"]["edgeWidth"],
         },
       };
 
@@ -506,8 +507,13 @@ export function useGraphUIState(
 
   const openInspector = useCallback(
     (contentType: "node" | "edge" | "cluster", contentId: string) => {
+      const inspectorActions = {
+        node: "OPEN_INSPECTOR_NODE",
+        edge: "OPEN_INSPECTOR_EDGE",
+        cluster: "OPEN_INSPECTOR_CLUSTER",
+      } as const;
       dispatch({
-        type: `OPEN_INSPECTOR_${contentType.toUpperCase()}` as any,
+        type: inspectorActions[contentType],
         payload: contentId,
       });
     },

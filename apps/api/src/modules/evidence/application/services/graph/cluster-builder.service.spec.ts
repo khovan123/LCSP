@@ -9,6 +9,7 @@ import type { EvidenceGraphNode } from "../../contracts/evidence/evidence-graph.
 import { ClusterBuilderService } from "./cluster-builder.service.js";
 
 describe("ClusterBuilderService", () => {
+  const severities = ["HIGH", "MEDIUM", "LOW"] as const;
   let service: ClusterBuilderService;
 
   beforeEach(() => {
@@ -327,7 +328,7 @@ describe("ClusterBuilderService", () => {
           label: `file${i}.ts`,
           metadata: {
             filePath: `/src/auth/file${i}.ts`,
-            severity: ["HIGH", "MEDIUM", "LOW"][i % 3] as any,
+            severity: severities[i % severities.length],
           },
           cluster: "cluster:auth",
         }),

@@ -70,6 +70,7 @@ export class ClusterBuilderService {
     nodes: EvidenceGraphNode[],
     payload: EvidencePayload,
   ): OverviewCluster[] {
+    void payload;
     const clusterMap = new Map<string, ClusterData>();
 
     // Process each node to assign to cluster
