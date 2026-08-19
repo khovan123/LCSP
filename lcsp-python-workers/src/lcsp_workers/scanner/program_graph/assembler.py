@@ -9,6 +9,7 @@ from lcsp_workers.scanner.dependencies.dependency_fact import normalize_package_
 from .builder import ProgramGraphBuilder
 from .extractor import RepositorySemanticExtractor
 from .framework_links import FrameworkBoundaryExtractor
+from .framework_metadata import normalize_framework_binding_metadata
 from .framework_resolution import FrameworkBoundaryResolver
 from .javascript_architecture_resolution import JavaScriptArchitectureResolver
 from .managed_architecture_resolution import ManagedArchitectureResolver
@@ -55,6 +56,7 @@ class ProgramGraphAssembler:
         PythonArchitectureResolver(workspace_path).enrich(program)
         JavaScriptArchitectureResolver(workspace_path).enrich(program)
         ManagedArchitectureResolver(workspace_path).enrich(program)
+        normalize_framework_binding_metadata(program)
 
         # Test/spec/fixture sources are not product behavior. Remove them before stable
         # graph IDs and source anchors are built so they cannot pollute rule retrieval,
