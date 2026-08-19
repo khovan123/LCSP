@@ -103,11 +103,14 @@ class EvidenceLedger:
         offset = max(0, int(offset))
         limit = min(MAX_INDEX_LIMIT, max(1, int(limit)))
         page = self._rows[offset : offset + limit]
+        next_offset = offset + len(page)
+        has_more = next_offset < len(self._rows)
         return {
             "total": len(self._rows),
             "offset": offset,
             "limit": limit,
-            "hasMore": offset + len(page) < len(self._rows),
+            "hasMore": has_more,
+            "nextOffset": next_offset if has_more else None,
             "observations": [self.summary(row) for row in page],
         }
 
@@ -155,13 +158,16 @@ class EvidenceLedger:
                     }
                 items = list(selected)
                 page = self._bounded_page(items, offset=offset, limit=requested_limit)
+                next_offset = offset + len(page)
+                has_more = next_offset < len(items)
                 result = {
                     "observationId": row.observation_id,
                     "section": selected_section,
                     "offset": offset,
                     "limit": len(page),
                     "total": len(items),
-                    "hasMore": offset + len(page) < len(items),
+                    "hasMore": has_more,
+                    "nextOffset": next_offset if has_more else None,
                     "items": page,
                 }
                 if len(page) < min(requested_limit, max(0, len(items) - offset)):
@@ -186,12 +192,15 @@ class EvidenceLedger:
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
             items = list(value)
             page = self._bounded_page(items, offset=offset, limit=requested_limit)
+            next_offset = offset + len(page)
+            has_more = next_offset < len(items)
             result = {
                 "observationId": row.observation_id,
                 "offset": offset,
                 "limit": len(page),
                 "total": len(items),
-                "hasMore": offset + len(page) < len(items),
+                "hasMore": has_more,
+                "nextOffset": next_offset if has_more else None,
                 "items": page,
             }
             if len(page) < min(requested_limit, max(0, len(items) - offset)):
