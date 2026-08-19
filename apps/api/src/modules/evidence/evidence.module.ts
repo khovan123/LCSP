@@ -3,6 +3,7 @@ import { CqrsModule } from "@nestjs/cqrs";
 
 import { PbacModule } from "../../platform/pbac/pbac.module.js";
 import { AssessmentRuntimeEventService } from "../../platform/runtime-events/assessment-runtime-event.service.js";
+import { StorageModule } from "../../platform/storage/storage.module.js";
 import { WorkerApiKeyGuard } from "../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptTechnicalProfileHandler } from "./application/commands/accept-technical-profile/accept-technical-profile.handler.js";
 import { GetEvidenceGraphHandler } from "./application/queries/get-evidence-graph/get-evidence-graph.handler.js";
@@ -24,7 +25,7 @@ import {
  * Python worker and therefore are intentionally not registered as Nest CQRS handlers.
  */
 @Module({
-  imports: [CqrsModule, PbacModule],
+  imports: [CqrsModule, PbacModule, StorageModule],
   controllers: [
     EvidenceController,
     InternalEvidenceController,
