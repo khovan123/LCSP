@@ -49,6 +49,10 @@ model Identity {
     assert fingerprint["origin"] == "CONTRACT_ANALYSIS"
     assert fingerprint["resolution_state"] == "INFERRED"
     assert "SENSITIVE.BIOMETRIC" in fingerprint["semantic_types"]
+    # The schema field name is a weak seed only. It must not taint the whole entity or
+    # table until runtime/behavior lineage corroborates actual biometric processing.
+    assert "SENSITIVE.BIOMETRIC" not in entity.get("semantic_types", [])
+    assert "SENSITIVE.BIOMETRIC" not in table.get("semantic_types", [])
     assert any(
         edge.get("edge_type") == "MAPS_TO"
         and edge.get("source_node_id") == entity.get("node_id")
@@ -175,7 +179,13 @@ CREATE TABLE people (
         if node.get("node_type") == "DATA_OBJECT"
         and node.get("label") == "people.government_id"
     )
+    table = next(
+        node
+        for node in graph.nodes
+        if node.get("node_type") == "TABLE" and node.get("label") == "people"
+    )
 
     assert "PII.GOVERNMENT_ID" in government_id["semantic_types"]
     assert government_id["resolution_state"] == "INFERRED"
+    assert "PII.GOVERNMENT_ID" not in table.get("semantic_types", [])
     assert not (government_id.get("attributes") or {}).get("corroboratedCapabilities")
