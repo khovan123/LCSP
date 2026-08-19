@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from lcsp_workers.scanner.program_graph.assembler import ProgramGraphAssembler
 from lcsp_workers.scanner.program_graph.business_semantic_enrichment import (
@@ -15,10 +16,15 @@ class _FakeLlm:
 
     def complete_with_tools(self, prompt: str, **kwargs):
         self.prompts.append(prompt)
+        # The production contract sends one compact JSON context after the prompt
+        # preamble. Parse that contract instead of tokenizing the string: replacing ':'
+        # destroyed canonical ``node:<id>`` refs and made the fake submit invalid
+        # provenance even though the clustered context itself was correct.
+        context = json.loads(prompt.rsplit("\n\n", 1)[1])
         support = next(
-            token.strip('"{},[]')
-            for token in prompt.replace(':', ' ').split()
-            if token.strip('"{},[]').startswith('node')
+            str(node["nodeId"])
+            for node in context["nodes"]
+            if str(node.get("nodeId") or "").startswith("node:")
         )
         index = len(self.prompts)
         return SimpleNamespace(
