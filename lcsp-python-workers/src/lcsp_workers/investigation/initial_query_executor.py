@@ -13,9 +13,9 @@ class InitialQueryExecutor:
     EngineeringRule graph queries are retrieval hints, not a request to materialize all
     possible paths before the agent starts reasoning. The previous implementation traced
     up to 50 start nodes per query, creating dozens of EvidenceLedger observations that
-    consumed the bounded LLM turn budget on paging. We now persist one deterministic
-    start-node search observation per query and let the investigator choose which
-    candidate requires a bounded trace/data/decision/code expansion.
+    consumed the bounded LLM turn budget on paging. We persist one deterministic
+    start-node search observation per query and pass the complete rule-owned retrieval
+    contract so the investigator does not invent graph vocabulary or generic code queries.
     """
 
     def execute(
@@ -44,11 +44,31 @@ class InitialQueryExecutor:
             )
             refs.update(starts.evidence_refs)
 
+        graph_queries = tuple(
+            {
+                "name": query.name,
+                "startNodeTypes": list(query.start_node_types),
+                "direction": query.direction,
+                "followEdges": list(query.follow_edges),
+                "stopNodeTypes": list(query.stop_node_types),
+                "semanticTypes": list(query.semantic_types),
+            }
+            for query in rule.graph_queries
+        )
+
         return InvestigationPacket(
             engineering_rule_id=rule.engineering_rule_id,
             concept=rule.concept,
             investigation_goals=rule.investigation_goals,
             initial_results=tuple(rows),
+            starting_node_types=rule.starting_node_types,
+            target_node_types=rule.target_node_types,
+            edge_strategies=rule.edge_strategies,
+            graph_queries=graph_queries,
+            keywords=rule.keywords,
+            common_apis=rule.common_apis,
+            common_libraries=rule.common_libraries,
+            patterns=rule.patterns,
             unresolved_frontiers=(),
             evidence_refs=tuple(sorted(refs)),
             wizard_context=dict(wizard_context or {}),
