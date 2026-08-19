@@ -528,6 +528,13 @@ class LawGuidedInvestigator:
     def _finish_tool_definition(cls) -> LLMToolDefinition:
         claim_schema = cls._closed_schema(
             {
+                "criterion": {
+                    "type": "string",
+                    "description": (
+                        "Exact requiredEvidence criterion label this claim resolves. "
+                        "Use one of the labels provided in the EngineeringRule prompt."
+                    ),
+                },
                 "claimType": {
                     "type": "string",
                     "enum": sorted(CANONICAL_CLAIM_TYPES),
@@ -546,14 +553,19 @@ class LawGuidedInvestigator:
                     },
                 },
             },
-            required=("claimType", "observationRefs", "confidence", "limitations"),
+            required=(
+                "criterion",
+                "claimType",
+                "observationRefs",
+                "confidence",
+                "limitations",
+            ),
         )
         return LLMToolDefinition(
             name=FINISH_TOOL_NAME,
             description=(
-                "Finish with technical claims that reference LCSP observation IDs only. "
-                "Do not author evidence/node/edge/anchor IDs; LCSP derives immutable provenance "
-                "deterministically from observationRefs."
+                "Finish with one technical claim per requiredEvidence criterion. Reference LCSP "
+                "observation IDs only; LCSP derives immutable graph/source provenance."
             ),
             input_schema=cls._closed_schema(
                 {
@@ -609,6 +621,7 @@ class LawGuidedInvestigator:
         if not isinstance(rows, list):
             rows = []
         result: list[EvidenceClaim] = []
+        required_criteria = tuple(dict.fromkeys(packet.required_evidence))
 
         for index, item in enumerate(rows, 1):
             if not isinstance(item, dict):
@@ -619,6 +632,22 @@ class LawGuidedInvestigator:
             ).strip().upper()
             if claim_type not in CANONICAL_CLAIM_TYPES:
                 claim_type = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+
+            raw_criterion = str(item.get("criterion") or "").strip()
+            invalid_criterion = False
+            criterion: str | None
+            if raw_criterion:
+                criterion = raw_criterion if raw_criterion in required_criteria else None
+                invalid_criterion = bool(required_criteria) and criterion is None
+            elif len(required_criteria) == 1:
+                # Compatibility for older deterministic tests/provider fixtures. Runtime
+                # schemas now require criterion explicitly.
+                criterion = required_criteria[0]
+            elif required_criteria:
+                criterion = None
+                invalid_criterion = True
+            else:
+                criterion = None
 
             limitations, invalid_limitation = self._normalize_limitations(
                 item.get("limitations")
@@ -631,6 +660,12 @@ class LawGuidedInvestigator:
                 )
             )
 
+            if invalid_criterion:
+                claim_type = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+                limitations = (
+                    *limitations,
+                    ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],
+                )
             if invalid_limitation:
                 claim_type = ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
                 limitations = (
@@ -644,6 +679,7 @@ class LawGuidedInvestigator:
                 logger.warning(
                     "ENGINEERING_INVESTIGATION_CLAIM_REJECTED",
                     engineering_rule_id=packet.engineering_rule_id,
+                    criterion=criterion,
                     claim_type=claim_type,
                     observation_refs=list(observation_refs),
                     error_type=type(error).__name__,
@@ -677,7 +713,7 @@ class LawGuidedInvestigator:
 
             claim_value = CLAIM_VALUE_BY_TYPE[claim_type]
             seed = (
-                f"{packet.engineering_rule_id}:{index}:{claim_type}:"
+                f"{packet.engineering_rule_id}:{index}:{criterion}:{claim_type}:"
                 f"{observation_refs}:{provenance}:{claim_value}:{limitations}"
             )
             claim = EvidenceClaim(
@@ -690,6 +726,7 @@ class LawGuidedInvestigator:
                 provenance.source_anchor_refs,
                 float(item.get("confidence") or 0),
                 tuple(dict.fromkeys(limitations)),
+                criterion,
             )
 
             if (
@@ -705,6 +742,7 @@ class LawGuidedInvestigator:
                 logger.warning(
                     "ENGINEERING_INVESTIGATION_CLAIM_REJECTED",
                     engineering_rule_id=packet.engineering_rule_id,
+                    criterion=criterion,
                     claim_id=claim.claim_id,
                     claim_type=claim.claim_type,
                     observation_refs=list(observation_refs),
@@ -727,6 +765,7 @@ class LawGuidedInvestigator:
                                 "engineering_evidence_insufficient"
                             ],
                         ),
+                        criterion=criterion,
                     )
                 )
 
@@ -872,6 +911,8 @@ class LawGuidedInvestigator:
                     "startingNodeTypes, targetNodeTypes, graphQueries and edgeStrategies are canonical graph retrieval hints; use them rather than inventing graph types.",
                     "requiredEvidence, supportingEvidence and negativeEvidence are engineering criterion labels, NOT Program Evidence Graph node types.",
                     "Use retrievalHints keywords/commonApis/commonLibraries/patterns for targeted code search; do not substitute criterion labels as search_nodes.node_types.",
+                    "At finish emit exactly one primary claim for each requiredEvidence label and set criterion to that exact label; supportingEvidence/negativeEvidence are evidence guidance, not extra claim criteria.",
+                    "If a required criterion cannot be resolved, emit UNRESOLVED_ENGINEERING_FACT for that criterion rather than an unscoped generic unresolved claim.",
                     "MET/NOT_MET must reference one or more observationRefs with concrete provenance.",
                     "Do not author evidenceRefs, graphPathRefs, or sourceAnchorRefs yourself.",
                     "LCSP derives immutable provenance from observationRefs deterministically.",
@@ -902,7 +943,9 @@ class LawGuidedInvestigator:
                 "evidenceLedger": ledger.index(offset=0, limit=40),
                 "recentToolResults": working_results[-MAX_WORKING_RESULTS:],
                 "claimRules": [
-                    "If evidence is insufficient, emit UNRESOLVED_ENGINEERING_FACT.",
+                    "Emit exactly one primary claim per requiredEvidence criterion and set criterion to the exact requiredEvidence label.",
+                    "If a required criterion is insufficiently evidenced, emit UNRESOLVED_ENGINEERING_FACT for that criterion.",
+                    "Do not create separate claims for supportingEvidence or negativeEvidence labels; use them only to select supporting observations.",
                     "Do not mark a claim unresolved solely because an observation has truncated=true when the required criterion is already proven by concrete evidence.",
                     "Do not invent evidence/node/edge/source-anchor IDs.",
                     "Use only observationRefs returned by the EvidenceLedger.",
@@ -928,6 +971,7 @@ class LawGuidedInvestigator:
             claims=[
                 {
                     "claim_id": claim.claim_id,
+                    "criterion": claim.criterion,
                     "claim_type": claim.claim_type,
                     "value": claim.value,
                     "evidence_refs": list(claim.evidence_refs),
