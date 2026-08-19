@@ -63,7 +63,12 @@ class EngineeringRuleEvaluator:
         limitations = tuple(
             sorted({item for row in rows for item in row.limitations if item})
         )
-        required_criteria = tuple(dict.fromkeys(rule.required_evidence))
+        # Real EngineeringRule instances always expose required_evidence. Keep the
+        # deterministic evaluator compatible with older pipeline fixtures/adapters
+        # that intentionally provide only the historical minimal rule projection.
+        required_criteria = tuple(
+            dict.fromkeys(getattr(rule, "required_evidence", ()) or ())
+        )
 
         if required_criteria:
             return self._evaluate_required_criteria(
