@@ -9,6 +9,7 @@ from lcsp_workers.scanner.dependencies.dependency_fact import normalize_package_
 from .builder import ProgramGraphBuilder
 from .extractor import RepositorySemanticExtractor
 from .framework_links import FrameworkBoundaryExtractor
+from .framework_resolution import FrameworkBoundaryResolver
 from .semantic_ir import SemanticEdgeFact, SemanticNodeFact
 from .source_roles import (
     exclude_test_sources_from_semantic_program,
@@ -39,6 +40,12 @@ class ProgramGraphAssembler:
             include_files=include_files
         )
         program.extend(FrameworkBoundaryExtractor(workspace_path).extract())
+
+        # A framework identity is a continuation boundary, never a silent endpoint.
+        # Resolve NestJS/CQRS/consumer/DI wiring to concrete methods when statically
+        # visible; otherwise emit an explicit unresolved frontier before graph IDs are
+        # built. This keeps negative-evidence reasoning from stopping at a dispatcher.
+        FrameworkBoundaryResolver(workspace_path).enrich(program)
 
         # Test/spec/fixture sources are not product behavior. Remove them before stable
         # graph IDs and source anchors are built so they cannot pollute rule retrieval,
