@@ -43,4 +43,50 @@ def test_unknown_section_returns_exact_available_sections_and_retry_instruction(
         "unresolvedFrontiers",
         "evidenceRefs",
     }
-    assert "Omit section" in result["instruction"]
+    assert "availableSections" in result["instruction"]
+
+
+def test_summary_advertises_observation_specific_sections() -> None:
+    ledger = EvidenceLedger()
+    graph = ledger.add(
+        source="graph_tool",
+        result={"nodes": [{"node_id": "node-1"}], "evidenceRefs": ["evidence:1"]},
+    )
+    code = ledger.add(
+        source="code_context_tool",
+        tool="search_code",
+        result={
+            "results": [{"symbolId": "sym://abc/src/a.py#run"}],
+            "truncated": False,
+        },
+    )
+
+    assert ledger.summary(graph)["availableSections"] == ["nodes", "evidenceRefs"]
+    assert ledger.summary(code)["availableSections"] == ["results"]
+    assert ledger.preview(code.observation_id)["section"] == "results"
+
+
+def test_oversized_requested_page_is_shrunk_instead_of_returning_working_view_error() -> None:
+    ledger = EvidenceLedger()
+    observation = ledger.add(
+        source="code_context_tool",
+        tool="repo_map",
+        result={
+            "files": [
+                {
+                    "path": f"src/module_{index}.py",
+                    "symbols": [{"symbolId": f"sym:{index}", "metadata": "x" * 3000}],
+                }
+                for index in range(40)
+            ],
+            "truncated": True,
+        },
+    )
+
+    result = ledger.inspect(observation.observation_id, section="files", limit=40)
+
+    assert result["pageCharBoundApplied"] is True
+    assert result["requestedLimit"] == 40
+    assert 1 <= result["limit"] < 40
+    assert result["hasMore"] is True
+    assert "error" not in result
