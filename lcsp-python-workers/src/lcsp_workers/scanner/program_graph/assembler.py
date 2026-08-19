@@ -6,6 +6,7 @@ from typing import Iterable
 
 from lcsp_workers.scanner.dependencies.dependency_fact import normalize_package_name
 
+from .ai_lifecycle import AILifecycleExtractor
 from .builder import ProgramGraphBuilder
 from .data_lineage import SemanticDataLineageExtractor
 from .extractor import RepositorySemanticExtractor
@@ -62,6 +63,10 @@ class ProgramGraphAssembler:
         ManagedArchitectureResolver(workspace_path).enrich(program)
         GenericDispatchResolver(workspace_path).enrich(program)
         normalize_framework_binding_metadata(program)
+
+        # Normalize concrete repository evidence for model ownership/lifecycle before
+        # data-lineage enrichment. Dependency presence alone is not a lifecycle stage.
+        AILifecycleExtractor(workspace_path).enrich(program)
 
         # v3 data lineage is built over the already resolved technical IR. It creates
         # first-class DATA_OBJECT identities, preserves payload flow through framework
