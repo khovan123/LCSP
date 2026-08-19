@@ -116,7 +116,7 @@ def test_code_prompt_drives_targeted_search_then_source_expansion() -> None:
     )
 
     assert payload["codeInvestigationFlow"][0].startswith(
-        "SEARCH: first use EngineeringRule retrievalHints"
+        "SEARCH: LCSP deterministically seeds code search from EngineeringRule retrievalHints"
     )
     assert any("get_code" in row and "implementation behavior" in row for row in payload["codeContextRules"])
     assert any("Tests, specs, mocks" in row for row in payload["codeContextRules"])
