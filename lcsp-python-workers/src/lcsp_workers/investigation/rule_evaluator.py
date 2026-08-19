@@ -95,6 +95,7 @@ class EngineeringRuleEvaluator:
             row
             for row in rows
             if row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+            and self._has_evidence(row)
         ]
 
         if failed and passed:
@@ -134,7 +135,14 @@ class EngineeringRuleEvaluator:
                     "Repository evidence demonstrates that the engineering requirement is met.",
                     evidence_refs,
                     backed,
-                    limitations,
+                    tuple(
+                        item
+                        for item in limitations
+                        if item
+                        != ENGINEERING_LIMITATION_CODES[
+                            "engineering_evidence_insufficient"
+                        ]
+                    ),
                 )
 
         return self._unknown(rule, evidence_refs, rows, limitations)
@@ -151,10 +159,10 @@ class EngineeringRuleEvaluator:
 
         A rule is compliant only when every required criterion is backed by a MET claim.
         A backed NOT_MET on any required criterion is non-compliant unless that same
-        criterion also has conflicting backed MET evidence. Missing, unscoped, invalid,
-        or unresolved required criteria fail closed to UNKNOWN. Supporting/negative
-        evidence guides investigation but cannot create extra global blockers simply by
-        being emitted as unrelated claims.
+        criterion also has conflicting backed MET evidence. Missing, scoped unresolved,
+        invalid, or provenance-backed unscoped claims fail closed to UNKNOWN. An
+        evidence-less generic UNRESOLVED emitted beside already-backed required claims is
+        ignored so model hedging cannot poison a deterministic positive result.
         """
         groups: dict[str, list[EvidenceClaim]] = {
             criterion: [] for criterion in required_criteria
@@ -163,13 +171,27 @@ class EngineeringRuleEvaluator:
         for row in rows:
             criterion = self._criterion_for(row, required_criteria)
             if criterion is None:
+                if (
+                    row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+                    and not self._has_evidence(row)
+                ):
+                    continue
                 unscoped.append(row)
             else:
                 groups[criterion].append(row)
 
         satisfied: list[EvidenceClaim] = []
         unresolved_required = bool(unscoped)
-        scoped_limitations = list(limitations)
+        scoped_limitations = [
+            item
+            for row in rows
+            if not (
+                row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+                and not self._has_evidence(row)
+            )
+            for item in row.limitations
+            if item
+        ]
 
         for criterion in required_criteria:
             criterion_rows = groups[criterion]
@@ -183,14 +205,14 @@ class EngineeringRuleEvaluator:
             passed = [
                 row
                 for row in criterion_rows
-                if row.claim_type
-                == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]
+                if row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]
                 and self._has_evidence(row)
             ]
             unresolved = [
                 row
                 for row in criterion_rows
                 if row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+                and self._has_evidence(row)
             ]
 
             if failed and passed:
