@@ -21,13 +21,13 @@ def _packet() -> InvestigationPacket:
         initial_results=(),
         starting_node_types=("AI_OUTPUT",),
         target_node_types=("HTTP_RESPONSE", "NOTIFICATION"),
-        edge_strategies=("CALLS", "FLOWS_TO"),
+        edge_strategies=("CALLS", "RETURNS"),
         graph_queries=(
             {
                 "name": "trace-output",
                 "startNodeTypes": ["AI_OUTPUT"],
                 "direction": "FORWARD",
-                "followEdges": ["CALLS", "FLOWS_TO"],
+                "followEdges": ["CALLS", "RETURNS"],
                 "stopNodeTypes": ["HTTP_RESPONSE", "NOTIFICATION"],
                 "semanticTypes": [],
             },
@@ -50,7 +50,7 @@ def test_rule_contract_exposes_retrieval_hints_separately_from_evidence_labels()
 
     assert rule["startingNodeTypes"] == ["AI_OUTPUT"]
     assert rule["targetNodeTypes"] == ["HTTP_RESPONSE", "NOTIFICATION"]
-    assert rule["edgeStrategies"] == ["CALLS", "FLOWS_TO"]
+    assert rule["edgeStrategies"] == ["CALLS", "RETURNS"]
     assert rule["graphQueries"][0]["startNodeTypes"] == ["AI_OUTPUT"]
     assert rule["retrievalHints"]["keywords"] == ["disclosure", "label", "watermark"]
     assert rule["requiredEvidence"] == ["AI_OUTPUT_SURFACE"]
