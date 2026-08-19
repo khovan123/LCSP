@@ -9,7 +9,11 @@ from lcsp_workers.investigation.code_context_investigator import (
 )
 from lcsp_workers.investigation.evidence_ledger import EvidenceLedger
 from lcsp_workers.investigation.investigator import LawGuidedInvestigator
-from lcsp_workers.investigation.models import InvestigationPacket
+from lcsp_workers.investigation.models import (
+    ENGINEERING_EVIDENCE_CLAIM_TYPES,
+    ENGINEERING_LIMITATION_CODES,
+    InvestigationPacket,
+)
 from lcsp_workers.scanner.program_graph.vocabulary import EDGE_TYPES, NODE_TYPES
 
 
@@ -40,6 +44,37 @@ def _packet() -> InvestigationPacket:
         supporting_evidence=("DISCLOSURE_OR_LABEL_CONTROL",),
         negative_evidence=("AI_OUTPUT_WITHOUT_EVIDENCED_TRANSPARENCY_CONTROL",),
     )
+
+
+def _graph() -> dict:
+    return {
+        "graph_id": "graph-1",
+        "snapshot_id": "snapshot-1",
+        "commit_sha": "abc123",
+        "node_count": 1,
+        "edge_count": 0,
+        "nodes": [
+            {
+                "node_id": "node-1",
+                "node_type": "AI_OUTPUT",
+                "label": "AI output",
+                "source": {"file_path": "src/output.py", "symbol_ref": "render"},
+                "attributes": {},
+                "semantic_types": [],
+                "evidence_refs": ["evidence:1"],
+            }
+        ],
+        "edges": [],
+        "source_anchors": [],
+        "indexes": {},
+        "unresolved_frontiers": [],
+        "coverage_state": "SUFFICIENT",
+        "coverage_notes": [],
+        "provenance": {"scan_job_id": "scan-1"},
+        "evidence_refs": ["evidence:1"],
+        "graph_hash": "sha256:graph",
+        "schema_version": "2.0.0",
+    }
 
 
 def test_rule_contract_exposes_retrieval_hints_separately_from_evidence_labels() -> None:
@@ -85,3 +120,47 @@ def test_code_prompt_drives_targeted_search_then_source_expansion() -> None:
     )
     assert any("get_code" in row and "implementation behavior" in row for row in payload["codeContextRules"])
     assert any("Tests, specs, mocks" in row for row in payload["codeContextRules"])
+
+
+def test_finish_schema_requires_exact_required_evidence_criterion_scope() -> None:
+    finish = LawGuidedInvestigator._finish_tool_definition()
+    claim_schema = finish.input_schema["properties"]["claims"]["items"]
+
+    assert "criterion" in claim_schema["properties"]
+    assert "criterion" in claim_schema["required"]
+    assert "observationRefs" in claim_schema["properties"]
+    assert "evidenceRefs" not in claim_schema["properties"]
+
+
+def test_invalid_finish_criterion_fails_closed_to_unresolved() -> None:
+    ledger = EvidenceLedger()
+    observation = ledger.add(
+        source="graph_tool",
+        result={
+            "nodes": [_graph()["nodes"][0]],
+            "evidenceRefs": ["evidence:1"],
+            "truncated": False,
+        },
+    )
+    investigator = LawGuidedInvestigator(llm_client=object())
+
+    claims = investigator._claims_from_payload(
+        {
+            "claims": [
+                {
+                    "criterion": "DISCLOSURE_OR_LABEL_CONTROL",
+                    "claimType": ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"],
+                    "observationRefs": [observation.observation_id],
+                    "confidence": 0.9,
+                    "limitations": [],
+                }
+            ]
+        },
+        _packet(),
+        _graph(),
+        ledger,
+    )
+
+    assert claims[0].criterion is None
+    assert claims[0].claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+    assert ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"] in claims[0].limitations
