@@ -26,8 +26,10 @@ _EXCLUDED = frozenset(
     }
 )
 _PRISMA_MODEL_RE = re.compile(r"\bmodel\s+([A-Za-z_][\w]*)\s*\{(.*?)\}", re.S)
+# Use horizontal whitespace only. In multiline mode ``\s`` also consumes newlines and can
+# swallow a following Prisma field row, which made later fields disappear from lineage.
 _PRISMA_FIELD_RE = re.compile(
-    r"(?m)^\s*([A-Za-z_][\w]*)\s+([A-Za-z_][\w]*(?:\[\])?\??)(?:\s+.*)?$"
+    r"(?m)^[ \t]*([A-Za-z_][\w]*)[ \t]+([A-Za-z_][\w]*(?:\[\])?\??)(?:[ \t]+.*)?$"
 )
 _SQL_TABLE_RE = re.compile(
     r"\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[\"`\[]?([A-Za-z_][\w]*)[\"`\]]?\.)?[\"`\[]?([A-Za-z_][\w]*)[\"`\]]?\s*\((.*?)\)\s*;",
