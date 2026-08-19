@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import replace
-from typing import Any, Iterable
+from typing import Any
 
 from lcsp_workers.legal.engineering_rules.models import EngineeringRule
 from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
@@ -82,8 +82,29 @@ _MATERIAL_RESOURCE_NODE_TYPES = frozenset(
         "DATA_CATEGORY",
         "PERSONAL_DATA",
         "SENSITIVE_DATA",
+        "DATA_CONTRACT",
+        "GRPC_METHOD",
+        "PROTOCOL_MESSAGE",
+        "MODEL",
+        "MODEL_ARTIFACT",
+        "DATASET",
+        "TRAINING_JOB",
+        "FINE_TUNING_JOB",
+        "EVALUATION_JOB",
+        "MODEL_REGISTRY",
+        "MODEL_ENDPOINT",
+        "MODEL_DEPLOYMENT",
+        "MODEL_MONITORING",
+        "MODEL_DRIFT_SIGNAL",
+        "RETRAINING_JOB",
+        "BUSINESS_PROCESS",
+        "PROCESS_STEP",
+        "BUSINESS_DECISION",
+        "BUSINESS_OUTCOME",
+        "DATA_SUBJECT",
     }
 )
+_STRONG_RESOLUTION_STATES = frozenset({"OBSERVED", "CORROBORATED"})
 
 
 def _tokens(value: Any) -> set[str]:
@@ -122,6 +143,19 @@ def _semantic_query_terms(packet: InvestigationPacket) -> set[str]:
     }
 
 
+def _trustworthy_semantic_node(node: dict[str, Any]) -> bool:
+    """Return whether graph semantics are strong enough to affect Planner scope."""
+    state = str(node.get("resolution_state") or "OBSERVED")
+    origin = str(node.get("origin") or "STATIC_ANALYSIS")
+    if state not in _STRONG_RESOLUTION_STATES:
+        return False
+    if origin == "LLM_SEMANTIC_ENRICHMENT":
+        # LLM-authored semantic nodes become Planner material only after deterministic
+        # provenance validation promoted them to CORROBORATED with concrete support.
+        return state == "CORROBORATED" and bool(node.get("support_refs"))
+    return True
+
+
 def _is_material_node(
     node: dict[str, Any],
     *,
@@ -133,6 +167,7 @@ def _is_material_node(
     source = node.get("source") if isinstance(node.get("source"), dict) else {}
     path = str(source.get("file_path") or source.get("filePath") or "")
     node_type = str(node.get("node_type") or "")
+    trustworthy = _trustworthy_semantic_node(node)
 
     # Script/example/generated sources remain available to the investigator as
     # supporting context, but they cannot make a rule appear applicable to Planner.
@@ -141,13 +176,14 @@ def _is_material_node(
 
     node_semantics = {str(value) for value in node.get("semantic_types") or [] if value}
     if semantic_terms and node_semantics.intersection(semantic_terms):
-        return True
+        # Identifier taxonomy is intentionally retained as INFERRED graph context. It
+        # cannot by itself make a sensitive/domain rule source-backed.
+        return trustworthy
 
-    # A reached target is stronger than a generic start-node seed. This avoids the
-    # previous behavior where every AI_MODEL_INVOCATION made healthcare/high-risk/etc.
-    # look source-backed merely because many rules started retrieval from AI calls.
+    # A reached target is stronger than a generic start-node seed, but inferred/LLM
+    # semantics still require the v3 trust gate before affecting plan scope.
     if node_type in set(rule.target_node_types or ()):
-        return True
+        return trustworthy
 
     node_terms = _tokens(
         {
@@ -160,12 +196,16 @@ def _is_material_node(
         }
     )
     if specific_terms and node_terms.intersection(specific_terms):
-        return True
+        return trustworthy
 
-    # Non-source resource nodes can be material when their own metadata is explicitly
-    # aligned with the governed rule contract (for example license/package evidence).
+    # Source-less resource/business/lifecycle nodes can be material when their own
+    # metadata is rule-specific and their graph semantics passed the trust gate.
     if not path and node_type in _MATERIAL_RESOURCE_NODE_TYPES:
-        return bool(specific_terms and node_terms.intersection(specific_terms))
+        return bool(
+            trustworthy
+            and specific_terms
+            and node_terms.intersection(specific_terms)
+        )
     return False
 
 
@@ -197,7 +237,10 @@ def material_planning_packet(
         row_refs = {
             str(ref)
             for node in nodes
-            for ref in node.get("evidence_refs") or []
+            for ref in [
+                *(node.get("evidence_refs") or []),
+                *(node.get("support_refs") or []),
+            ]
             if str(ref)
         }
         refs.update(row_refs)
@@ -236,7 +279,8 @@ class MaterialEngineeringRulePlanner(EngineeringRulePlanner):
                 "nodeTypes": source_seed.get("nodeTypes", []),
                 "meaning": (
                     "Rule-specific production evidence only. Generic start-node matches, "
-                    "tests, scripts, examples and generated files are not counted."
+                    "tests, scripts, examples, generated files, INFERRED taxonomy hints, "
+                    "and unvalidated LLM semantic proposals are not counted."
                 ),
             }
             rules.append(item)
@@ -250,12 +294,13 @@ class MaterialEngineeringRulePlanner(EngineeringRulePlanner):
             "do not decide legal applicability, legal risk tier, or compliance outcome. Use Wizard "
             "facts plus each rule's materialSourceSignal. repositoryEvidenceSummary is broad context "
             "and MUST NOT by itself make a domain/tier-specific rule source-backed. A zero material "
-            "hit count means LCSP found no rule-specific production source trigger; generic AI presence "
-            "is not a contradiction to Wizard scope. SELECT when Wizard scope matches, when a material "
-            "source signal exists, or when a concrete unresolved scope fact requires investigation. "
-            "SKIP healthcare, education, public-sector, high-risk, medium-risk, prohibited-practice, "
-            "or other domain-specific controls when Wizard excludes/does not indicate that scope and "
-            "materialSourceSignal.hitCount is zero. Never invent rule IDs. Return exactly one decision "
-            "per rule using only the declared reason codes and basis values.\n\n"
+            "hit count means LCSP found no rule-specific trustworthy production trigger; generic AI "
+            "presence or INFERRED sensitive-data taxonomy is not a contradiction to Wizard scope. "
+            "SELECT when Wizard scope matches, when a material source signal exists, or when a "
+            "concrete unresolved scope fact requires investigation. SKIP healthcare, education, "
+            "public-sector, high-risk, medium-risk, prohibited-practice, or other domain-specific "
+            "controls when Wizard excludes/does not indicate that scope and materialSourceSignal.hitCount "
+            "is zero. Never invent rule IDs. Return exactly one decision per rule using only the "
+            "declared reason codes and basis values.\n\n"
             + json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         )
