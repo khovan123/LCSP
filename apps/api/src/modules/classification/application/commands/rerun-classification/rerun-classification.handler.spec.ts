@@ -41,7 +41,7 @@ describe("RerunClassificationHandler", () => {
           }
         : options.evidenceReport;
     const findEvidence = jest
-      .fn<() => Promise<EvidenceReportFixture>>()
+      .fn<(args: unknown) => Promise<EvidenceReportFixture>>()
       .mockResolvedValue(evidenceReport);
     const prisma = {
       technicalEvidenceReport: {
