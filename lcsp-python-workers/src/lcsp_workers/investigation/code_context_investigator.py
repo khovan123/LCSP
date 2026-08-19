@@ -13,7 +13,6 @@ from .evidence_ledger import EvidenceLedger
 from .investigator import (
     FINISH_TOOL_NAME,
     GRAPH_TOOL_NAMES,
-    MAX_GRAPH_TOOL_STEPS,
     MAX_INVESTIGATION_STEPS,
     MAX_WORKING_RESULTS,
     STATE_TOOL_NAMES,
@@ -34,6 +33,8 @@ CODE_CONTEXT_TOOL_NAMES = (
     "workspace_get",
 )
 MAX_CODE_CONTEXT_TOOL_STEPS = 12
+MAX_CODE_AWARE_GRAPH_TOOL_STEPS = 8
+MAX_SEED_CODE_QUERY_TERMS = 12
 
 
 class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
@@ -63,17 +64,65 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
 
         engine = ProgramGraphQueryEngine(graph)
         ledger = EvidenceLedger()
+        working_results: list[dict[str, Any]] = []
         for item in packet.initial_results:
-            ledger.add(source="engineering_rule_seed_query", result=item)
+            observation = ledger.add(source="engineering_rule_seed_query", result=item)
+            working_results.append(
+                {
+                    "step": 0,
+                    "tool": "engineering_rule_seed_query",
+                    "callId": None,
+                    "result": {
+                        "observationId": observation.observation_id,
+                        "summary": ledger.summary(observation),
+                        "preview": ledger.preview(observation.observation_id, limit=6),
+                        "instruction": (
+                            "For graph traversal use nodes[].node_id from this preview. "
+                            "The observationId is an EvidenceLedger handle, not a Program Evidence Graph ref."
+                        ),
+                    },
+                }
+            )
         if packet.wizard_context:
             ledger.add(source="wizard_context", result=dict(packet.wizard_context))
 
-        tools = self._code_aware_tool_definitions()
+        code_candidates_found = False
+        source_probe_attempted = False
+        seed_query = self._seed_code_query(packet)
+        if seed_query:
+            seed_result = code_context.search_code(query=seed_query)
+            if not seed_result.get("error"):
+                code_candidates_found = bool(seed_result.get("results"))
+                seed_view = self._store_observation(
+                    ledger,
+                    source="code_context_seed",
+                    tool="search_code",
+                    call_id="seed:engineering_rule",
+                    arguments={"query": seed_query},
+                    result=seed_result,
+                )
+                working_results.append(
+                    {
+                        "step": 0,
+                        "tool": "search_code",
+                        "callId": "seed:engineering_rule",
+                        "result": seed_view,
+                    }
+                )
+        working_results = working_results[-MAX_WORKING_RESULTS:]
+
+        all_tools = self._code_aware_tool_definitions()
         graph_tool_calls_used = 0
         code_tool_calls_used = 0
-        working_results: list[dict[str, Any]] = []
 
         for step in range(MAX_INVESTIGATION_STEPS):
+            source_probe_required = code_candidates_found and not source_probe_attempted
+            tools = self._runtime_tool_definitions(
+                all_tools,
+                graph_tool_calls_used=graph_tool_calls_used,
+                code_tool_calls_used=code_tool_calls_used,
+                source_probe_required=source_probe_required,
+            )
             response = self.llm.complete_with_tools(
                 prompt=self._code_prompt(packet, ledger, working_results, step),
                 tools=tools,
@@ -125,26 +174,45 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
                     return claims
 
                 if call.name in GRAPH_TOOL_NAMES:
-                    if graph_tool_calls_used >= MAX_GRAPH_TOOL_STEPS:
+                    prepared_arguments, reference_error = self._resolve_graph_observation_ref(
+                        call.name,
+                        call.arguments,
+                        ledger,
+                    )
+                    if reference_error is not None:
+                        tool_result = reference_error
+                    elif graph_tool_calls_used >= MAX_CODE_AWARE_GRAPH_TOOL_STEPS:
                         tool_result = {
                             "error": "GRAPH_TOOL_BUDGET_EXHAUSTED",
                             "truncated": True,
+                            "instruction": (
+                                "Graph tools are exhausted for this rule. Continue with code-context/state "
+                                "tools or finish; do not retry graph tools."
+                            ),
                         }
                     else:
-                        graph_tool_calls_used += 1
                         raw_result = self._execute_graph_tool(
                             engine,
                             call.name,
-                            call.arguments,
+                            prepared_arguments,
                         )
-                        tool_result = self._store_observation(
-                            ledger,
-                            source="graph_tool",
-                            tool=call.name,
-                            call_id=call.call_id,
-                            arguments=call.arguments,
-                            result=raw_result,
-                        )
+                        if (
+                            isinstance(raw_result, dict)
+                            and raw_result.get("error") == "INVALID_GRAPH_TOOL_ARGUMENTS"
+                        ):
+                            # Invalid model arguments are not evidence and must not consume the
+                            # bounded graph investigation budget.
+                            tool_result = raw_result
+                        else:
+                            graph_tool_calls_used += 1
+                            tool_result = self._store_observation(
+                                ledger,
+                                source="graph_tool",
+                                tool=call.name,
+                                call_id=call.call_id,
+                                arguments=prepared_arguments,
+                                result=raw_result,
+                            )
                 elif call.name in CODE_CONTEXT_TOOL_NAMES:
                     if code_tool_calls_used >= MAX_CODE_CONTEXT_TOOL_STEPS:
                         tool_result = {
@@ -158,6 +226,12 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
                             call.name,
                             call.arguments,
                         )
+                        if call.name == "get_code":
+                            source_probe_attempted = True
+                        elif call.name == "search_code" and not raw_result.get("error"):
+                            code_candidates_found = code_candidates_found or bool(
+                                raw_result.get("results")
+                            )
                         tool_result = self._store_observation(
                             ledger,
                             source="code_context_tool",
@@ -261,6 +335,142 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
         return self._claims_from_payload({}, packet, graph, ledger)
 
     @classmethod
+    def _runtime_tool_definitions(
+        cls,
+        tools: list[LLMToolDefinition],
+        *,
+        graph_tool_calls_used: int,
+        code_tool_calls_used: int,
+        source_probe_required: bool,
+    ) -> list[LLMToolDefinition]:
+        """Expose only actions that can still make progress in the current phase.
+
+        The previous runtime kept graph tools visible after their budget was exhausted,
+        so the model repeatedly selected actions that could only return
+        ``GRAPH_TOOL_BUDGET_EXHAUSTED``. When deterministic rule-hint code retrieval has
+        already produced candidates, the first model action is also constrained to a
+        bounded source probe (or inspection of that candidate observation) before broad
+        graph exploration can resume.
+        """
+        if source_probe_required and code_tool_calls_used < MAX_CODE_CONTEXT_TOOL_STEPS:
+            allowed = {"get_code", "inspect_observation"}
+            return [tool for tool in tools if tool.name in allowed]
+
+        result: list[LLMToolDefinition] = []
+        for tool in tools:
+            if (
+                tool.name in GRAPH_TOOL_NAMES
+                and graph_tool_calls_used >= MAX_CODE_AWARE_GRAPH_TOOL_STEPS
+            ):
+                continue
+            if (
+                tool.name in CODE_CONTEXT_TOOL_NAMES
+                and code_tool_calls_used >= MAX_CODE_CONTEXT_TOOL_STEPS
+            ):
+                continue
+            result.append(tool)
+        return result
+
+    @classmethod
+    def _resolve_graph_observation_ref(
+        cls,
+        tool_name: str,
+        arguments: dict[str, Any],
+        ledger: EvidenceLedger,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """Keep EvidenceLedger observation IDs out of Program Evidence Graph namespaces.
+
+        ``obs:*`` is a server-side EvidenceLedger handle. It is not a graph node and must
+        never be converted into ``unresolvedFrontiers``. A singleton node observation can
+        be resolved deterministically; multi-node observations tell the model exactly
+        which node refs are available without consuming graph-search budget.
+        """
+        prepared = dict(arguments)
+        if tool_name == "symbol_context":
+            canonical_key = "symbol_ref"
+            candidate_keys = ("symbol_ref", "symbolRef")
+        elif tool_name in {
+            "trace_static_flow",
+            "inspect_data_path",
+            "inspect_decision_path",
+            "inspect_human_review_path",
+        }:
+            canonical_key = "start_ref"
+            candidate_keys = ("start_ref", "startRef")
+        else:
+            return prepared, None
+
+        supplied_key = next((key for key in candidate_keys if key in prepared), None)
+        if supplied_key is None:
+            return prepared, None
+        reference = str(prepared.get(supplied_key) or "")
+        if not reference.startswith("obs:"):
+            return prepared, None
+
+        try:
+            observation = ledger.get(reference)
+        except KeyError:
+            return prepared, {
+                "error": "UNKNOWN_OBSERVATION_REF",
+                "observationId": reference,
+                "instruction": (
+                    "Use list_observations/inspect_observation to obtain an existing observation, "
+                    "then pass a concrete nodes[].node_id to graph traversal tools."
+                ),
+            }
+
+        node_refs: list[str] = []
+        value = observation.result
+        if isinstance(value, dict):
+            for section in ("nodes", "reviewNodes", "finalActions", "neighbors"):
+                rows = value.get(section)
+                if not isinstance(rows, list):
+                    continue
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    node_ref = str(row.get("node_id") or row.get("nodeId") or "")
+                    if node_ref and node_ref not in node_refs:
+                        node_refs.append(node_ref)
+
+        if len(node_refs) == 1:
+            for key in candidate_keys:
+                prepared.pop(key, None)
+            prepared[canonical_key] = node_refs[0]
+            return prepared, None
+
+        return prepared, {
+            "error": "OBSERVATION_REF_REQUIRES_GRAPH_NODE_ID",
+            "observationId": reference,
+            "availableNodeRefs": node_refs[:20],
+            "instruction": (
+                "EvidenceLedger observation IDs are not graph refs. Use inspect_observation on a "
+                "nodes-like section and pass one concrete nodes[].node_id to this graph tool."
+            ),
+        }
+
+    @staticmethod
+    def _seed_code_query(packet: InvestigationPacket) -> str | None:
+        terms: list[str] = []
+        for group in (
+            packet.keywords,
+            packet.common_apis,
+            packet.common_libraries,
+            packet.patterns,
+        ):
+            for value in group:
+                normalized = str(value).strip()
+                if normalized and normalized not in terms:
+                    terms.append(normalized)
+        if not terms:
+            for value in packet.investigation_goals:
+                normalized = str(value).strip()
+                if normalized and normalized not in terms:
+                    terms.append(normalized)
+        query = " ".join(terms[:MAX_SEED_CODE_QUERY_TERMS]).strip()
+        return query[:1200] or None
+
+    @classmethod
     def _code_aware_tool_definitions(cls) -> list[LLMToolDefinition]:
         # Graph resource guards are intentionally internal. The model sees only the
         # canonical truncated signal and continuation frontiers in tool results.
@@ -271,15 +481,38 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
             properties = dict(tool.input_schema.get("properties") or {})
             for internal in ("max_hops", "max_results", "max_neighbors"):
                 properties.pop(internal, None)
+            if tool.name == "search_nodes":
+                # EngineeringRule seed queries already apply semantic/path constraints.
+                # Hiding these free-form filters prevents criterion labels/strategy names
+                # from being misused as repository path or semantic-type filters.
+                properties.pop("path_prefixes", None)
+                properties.pop("semantic_types", None)
             required = tuple(
                 value
                 for value in tool.input_schema.get("required") or []
                 if value in properties
             )
+            description = tool.description
+            if tool.name == "search_nodes":
+                description = (
+                    "Search bounded Program Evidence Graph nodes by canonical node type and/or text. "
+                    "EngineeringRule semantic/path constraints are already represented by seed queries; "
+                    "criterion labels are not graph node types."
+                )
+            elif tool.name in {
+                "trace_static_flow",
+                "inspect_data_path",
+                "inspect_decision_path",
+                "inspect_human_review_path",
+            }:
+                description += (
+                    " start_ref must be a concrete nodes[].node_id from a graph observation, never an "
+                    "EvidenceLedger obs:* identifier."
+                )
             graph_tools.append(
                 LLMToolDefinition(
                     name=tool.name,
-                    description=tool.description,
+                    description=description,
                     input_schema=cls._closed_schema(properties, required=required),
                 )
             )
@@ -437,14 +670,15 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
         payload = json.loads(super()._prompt(packet, ledger, working_results, step))
         payload["lcspCodeContextProtocol"] = "AST_SYMBOL_CHUNKS_V1"
         payload["codeInvestigationFlow"] = [
-            "SEARCH: first use EngineeringRule retrievalHints with search_code; use repo_map only when no targeted clue exists",
-            "IDENTIFY: search_code preview already exposes candidate symbolId/chunkId; use get_symbol only when caller/callee metadata is needed",
-            "EXPAND: call get_code on the most relevant production candidate when implementation behavior matters",
+            "SEARCH: LCSP deterministically seeds code search from EngineeringRule retrievalHints; use search_code/repo_map only when the seeded candidates are insufficient",
+            "IDENTIFY: code-search previews expose candidate symbolId/chunkId; use get_symbol only when caller/callee metadata is needed",
+            "EXPAND: call get_code on a relevant production candidate before claiming implementation behavior",
             "FOLLOW_REFERENCES: use find_references and graph tools for callers/callees/data/decision paths",
             "REMEMBER: pin important symbols/hypotheses with workspace_update when useful",
             "FINISH: reference EvidenceLedger observations only; LCSP derives provenance",
         ]
         payload["codeContextRules"] = [
+            "EvidenceLedger obs:* identifiers are NOT Program Evidence Graph refs. Graph traversal start_ref must be a concrete nodes[].node_id from a graph observation.",
             "requiredEvidence/supportingEvidence/negativeEvidence are criterion labels, not graph node types or default code-search queries.",
             "Prefer the EngineeringRule retrievalHints keywords/commonApis/commonLibraries/patterns and canonical start/target node types.",
             "search_code results are candidate metadata, not proof of implementation behavior; when source is available and behavior matters, inspect a relevant symbol with get_code before finishing MET/NOT_MET.",
@@ -454,6 +688,7 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
             "Source pages are bounded inside AST/CST symbol boundaries; follow nextCursor when truncated=true and more source is still necessary.",
             "search_code cursors are stable for this commit and search session.",
             "Do not infer search semantics from max_hops/max_results/node/edge/neighbor limits; those guards are internal.",
+            "A tool omitted from the current native tool list is unavailable for this phase. Do not retry an exhausted graph/code action by name.",
         ]
         return cls._render_prompt(payload)
 
