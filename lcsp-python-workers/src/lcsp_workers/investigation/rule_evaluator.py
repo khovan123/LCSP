@@ -46,23 +46,6 @@ class EngineeringRuleEvaluator:
         claims: Iterable[EvidenceClaim],
     ) -> EngineeringRuleEvaluation:
         rows = list(claims)
-        failed = [
-            row
-            for row in rows
-            if row.claim_type
-            == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"]
-        ]
-        passed = [
-            row
-            for row in rows
-            if row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]
-        ]
-        unresolved = [
-            row
-            for row in rows
-            if row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
-        ]
-
         evidence_refs = tuple(
             sorted(
                 {
@@ -80,6 +63,34 @@ class EngineeringRuleEvaluator:
         limitations = tuple(
             sorted({item for row in rows for item in row.limitations if item})
         )
+        required_criteria = tuple(dict.fromkeys(rule.required_evidence))
+
+        if required_criteria:
+            return self._evaluate_required_criteria(
+                rule,
+                rows,
+                required_criteria,
+                evidence_refs,
+                limitations,
+            )
+
+        # Compatibility for EngineeringRules without explicit requiredEvidence.
+        failed = [
+            row
+            for row in rows
+            if row.claim_type
+            == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"]
+        ]
+        passed = [
+            row
+            for row in rows
+            if row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]
+        ]
+        unresolved = [
+            row
+            for row in rows
+            if row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+        ]
 
         if failed and passed:
             return self._result(
@@ -121,24 +132,154 @@ class EngineeringRuleEvaluator:
                     limitations,
                 )
 
+        return self._unknown(rule, evidence_refs, rows, limitations)
+
+    def _evaluate_required_criteria(
+        self,
+        rule: EngineeringRule,
+        rows: list[EvidenceClaim],
+        required_criteria: tuple[str, ...],
+        evidence_refs: tuple[str, ...],
+        limitations: tuple[str, ...],
+    ) -> EngineeringRuleEvaluation:
+        """Aggregate only closed EngineeringRule requiredEvidence criteria.
+
+        A rule is compliant only when every required criterion is backed by a MET claim.
+        A backed NOT_MET on any required criterion is non-compliant unless that same
+        criterion also has conflicting backed MET evidence. Missing, unscoped, invalid,
+        or unresolved required criteria fail closed to UNKNOWN. Supporting/negative
+        evidence guides investigation but cannot create extra global blockers simply by
+        being emitted as unrelated claims.
+        """
+        groups: dict[str, list[EvidenceClaim]] = {
+            criterion: [] for criterion in required_criteria
+        }
+        unscoped: list[EvidenceClaim] = []
+        for row in rows:
+            criterion = self._criterion_for(row, required_criteria)
+            if criterion is None:
+                unscoped.append(row)
+            else:
+                groups[criterion].append(row)
+
+        satisfied: list[EvidenceClaim] = []
+        unresolved_required = bool(unscoped)
+        scoped_limitations = list(limitations)
+
+        for criterion in required_criteria:
+            criterion_rows = groups[criterion]
+            failed = [
+                row
+                for row in criterion_rows
+                if row.claim_type
+                == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_not_met"]
+                and self._has_evidence(row)
+            ]
+            passed = [
+                row
+                for row in criterion_rows
+                if row.claim_type
+                == ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]
+                and self._has_evidence(row)
+            ]
+            unresolved = [
+                row
+                for row in criterion_rows
+                if row.claim_type == ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"]
+            ]
+
+            if failed and passed:
+                return self._result(
+                    rule,
+                    ENGINEERING_RULE_EVALUATION_STATUSES["unknown"],
+                    "Conflicting evidence supports both satisfied and unsatisfied control states.",
+                    evidence_refs,
+                    criterion_rows,
+                    tuple(
+                        dict.fromkeys(
+                            (
+                                *scoped_limitations,
+                                ENGINEERING_LIMITATION_CODES[
+                                    "conflicting_engineering_evidence"
+                                ],
+                            )
+                        )
+                    ),
+                )
+
+            if failed:
+                return self._result(
+                    rule,
+                    ENGINEERING_RULE_EVALUATION_STATUSES["non_compliant"],
+                    "Repository evidence demonstrates that the engineering requirement is not met.",
+                    evidence_refs,
+                    failed,
+                    tuple(dict.fromkeys(scoped_limitations)),
+                )
+
+            if passed and not unresolved:
+                satisfied.extend(passed)
+                continue
+
+            unresolved_required = True
+
+        if not unresolved_required and len(groups) == len(required_criteria):
+            return self._result(
+                rule,
+                ENGINEERING_RULE_EVALUATION_STATUSES["compliant"],
+                "Repository evidence demonstrates that the engineering requirement is met.",
+                evidence_refs,
+                satisfied,
+                tuple(dict.fromkeys(scoped_limitations)),
+            )
+
+        if ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"] not in scoped_limitations:
+            scoped_limitations.append(
+                ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"]
+            )
+        return self._unknown(
+            rule,
+            evidence_refs,
+            rows,
+            tuple(scoped_limitations),
+        )
+
+    @staticmethod
+    def _criterion_for(
+        claim: EvidenceClaim,
+        required_criteria: tuple[str, ...],
+    ) -> str | None:
+        if claim.criterion in required_criteria:
+            return claim.criterion
+        if claim.criterion is None and len(required_criteria) == 1:
+            return required_criteria[0]
+        return None
+
+    @staticmethod
+    def _has_evidence(claim: EvidenceClaim) -> bool:
+        return bool(
+            claim.evidence_refs or claim.graph_path_refs or claim.source_anchor_refs
+        )
+
+    def _unknown(
+        self,
+        rule: EngineeringRule,
+        evidence_refs: tuple[str, ...],
+        claims: list[EvidenceClaim],
+        limitations: tuple[str, ...],
+    ) -> EngineeringRuleEvaluation:
         return self._result(
             rule,
             ENGINEERING_RULE_EVALUATION_STATUSES["unknown"],
             "Available repository evidence is insufficient to determine this engineering requirement.",
             evidence_refs,
-            rows,
+            claims,
             limitations
             or (
                 ENGINEERING_LIMITATION_CODES[
                     "engineering_evidence_insufficient"
                 ],
             ),
-        )
-
-    @staticmethod
-    def _has_evidence(claim: EvidenceClaim) -> bool:
-        return bool(
-            claim.evidence_refs or claim.graph_path_refs or claim.source_anchor_refs
         )
 
     @staticmethod
