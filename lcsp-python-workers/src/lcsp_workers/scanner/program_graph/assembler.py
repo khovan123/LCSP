@@ -10,6 +10,9 @@ from .builder import ProgramGraphBuilder
 from .extractor import RepositorySemanticExtractor
 from .framework_links import FrameworkBoundaryExtractor
 from .framework_resolution import FrameworkBoundaryResolver
+from .javascript_architecture_resolution import JavaScriptArchitectureResolver
+from .managed_architecture_resolution import ManagedArchitectureResolver
+from .python_architecture_resolution import PythonArchitectureResolver
 from .python_consumer_resolution import PythonConsumerBoundaryResolver
 from .semantic_ir import SemanticEdgeFact, SemanticNodeFact
 from .source_roles import (
@@ -42,13 +45,16 @@ class ProgramGraphAssembler:
         )
         program.extend(FrameworkBoundaryExtractor(workspace_path).extract())
 
-        # A framework identity is a continuation boundary, never a silent endpoint.
-        # Resolve NestJS/CQRS/consumer/DI wiring to concrete methods when statically
-        # visible; otherwise emit an explicit unresolved frontier before graph IDs are
-        # built. Python ConsumerBase subclasses are resolved separately from their
-        # queue/routing identities directly into the concrete handle implementation.
+        # Framework identities are continuation boundaries, never silent endpoints.
+        # Resolve the common architecture families before graph IDs are built. Exact
+        # static bindings continue to concrete symbols; dynamic/ambiguous bindings
+        # become UNRESOLVED_DYNAMIC_TARGET frontiers so negative-evidence reasoning
+        # cannot confuse a framework boundary with the end of the product flow.
         FrameworkBoundaryResolver(workspace_path).enrich(program)
         PythonConsumerBoundaryResolver(workspace_path).enrich(program)
+        PythonArchitectureResolver(workspace_path).enrich(program)
+        JavaScriptArchitectureResolver(workspace_path).enrich(program)
+        ManagedArchitectureResolver(workspace_path).enrich(program)
 
         # Test/spec/fixture sources are not product behavior. Remove them before stable
         # graph IDs and source anchors are built so they cannot pollute rule retrieval,
