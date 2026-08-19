@@ -8,6 +8,7 @@ from lcsp_workers.scanner.dependencies.dependency_fact import normalize_package_
 
 from .ai_lifecycle import AILifecycleExtractor
 from .builder import ProgramGraphBuilder
+from .contract_lineage import ContractDataLineageExtractor
 from .data_lineage import SemanticDataLineageExtractor
 from .decision_influence import DecisionInfluenceEnricher
 from .extractor import RepositorySemanticExtractor
@@ -76,6 +77,11 @@ class ProgramGraphAssembler:
         # boundaries, materializes AI input/output flow, reads protobuf contracts and
         # derives weak semantic seeds without trusting identifier names as conclusions.
         SemanticDataLineageExtractor(workspace_path).enrich(program)
+
+        # Protocol/API contracts provide stable data identities before implementation
+        # variables. OpenAPI/Swagger/GraphQL fields are observations/weak semantic seeds;
+        # they become Planner-material only after implementation/behavior corroboration.
+        ContractDataLineageExtractor(workspace_path).enrich(program)
 
         # Promote sensitive semantics only when behavior corroborates the weak seed.
         # A standalone "fingerprint"/"cccd" identifier remains INFERRED, while actual
