@@ -9,6 +9,7 @@ from lcsp_workers.scanner.dependencies.dependency_fact import normalize_package_
 from .ai_lifecycle import AILifecycleExtractor
 from .builder import ProgramGraphBuilder
 from .data_lineage import SemanticDataLineageExtractor
+from .decision_influence import DecisionInfluenceEnricher
 from .extractor import RepositorySemanticExtractor
 from .framework_links import FrameworkBoundaryExtractor
 from .framework_metadata import normalize_framework_binding_metadata
@@ -73,6 +74,11 @@ class ProgramGraphAssembler:
         # boundaries, materializes AI input/output flow, reads protobuf contracts and
         # corroborates sensitive-data processing from behavior rather than variable names.
         SemanticDataLineageExtractor(workspace_path).enrich(program)
+
+        # Bind lineage-backed business actions to first-class BUSINESS_DECISION nodes.
+        # This is a technical influence relation only; legal automation/risk conclusions
+        # remain outside the graph and deterministic EngineeringRule evaluator.
+        DecisionInfluenceEnricher().enrich(program)
 
         # Test/spec/fixture sources are not product behavior. Remove them before stable
         # graph IDs and source anchors are built so they cannot pollute rule retrieval,
