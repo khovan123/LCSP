@@ -46,20 +46,6 @@ class EngineeringRuleEvaluator:
         claims: Iterable[EvidenceClaim],
     ) -> EngineeringRuleEvaluation:
         rows = list(claims)
-        evidence_refs = tuple(
-            sorted(
-                {
-                    ref
-                    for row in rows
-                    for ref in (
-                        *row.evidence_refs,
-                        *row.graph_path_refs,
-                        *row.source_anchor_refs,
-                    )
-                    if ref
-                }
-            )
-        )
         limitations = tuple(
             sorted({item for row in rows for item in row.limitations if item})
         )
@@ -75,7 +61,6 @@ class EngineeringRuleEvaluator:
                 rule,
                 rows,
                 required_criteria,
-                evidence_refs,
                 limitations,
             )
 
@@ -103,10 +88,8 @@ class EngineeringRuleEvaluator:
                 rule,
                 ENGINEERING_RULE_EVALUATION_STATUSES["unknown"],
                 "Conflicting evidence supports both satisfied and unsatisfied control states.",
-                evidence_refs,
                 rows,
                 (
-                    *limitations,
                     ENGINEERING_LIMITATION_CODES[
                         "conflicting_engineering_evidence"
                     ],
@@ -120,9 +103,8 @@ class EngineeringRuleEvaluator:
                     rule,
                     ENGINEERING_RULE_EVALUATION_STATUSES["non_compliant"],
                     "Repository evidence demonstrates that the engineering requirement is not met.",
-                    evidence_refs,
                     backed,
-                    limitations,
+                    (),
                 )
             unresolved.append(failed[0])
 
@@ -133,26 +115,17 @@ class EngineeringRuleEvaluator:
                     rule,
                     ENGINEERING_RULE_EVALUATION_STATUSES["compliant"],
                     "Repository evidence demonstrates that the engineering requirement is met.",
-                    evidence_refs,
                     backed,
-                    tuple(
-                        item
-                        for item in limitations
-                        if item
-                        != ENGINEERING_LIMITATION_CODES[
-                            "engineering_evidence_insufficient"
-                        ]
-                    ),
+                    (),
                 )
 
-        return self._unknown(rule, evidence_refs, rows, limitations)
+        return self._unknown(rule, rows, limitations)
 
     def _evaluate_required_criteria(
         self,
         rule: EngineeringRule,
         rows: list[EvidenceClaim],
         required_criteria: tuple[str, ...],
-        evidence_refs: tuple[str, ...],
         limitations: tuple[str, ...],
     ) -> EngineeringRuleEvaluation:
         """Aggregate only closed EngineeringRule requiredEvidence criteria.
@@ -220,17 +193,11 @@ class EngineeringRuleEvaluator:
                     rule,
                     ENGINEERING_RULE_EVALUATION_STATUSES["unknown"],
                     "Conflicting evidence supports both satisfied and unsatisfied control states.",
-                    evidence_refs,
                     criterion_rows,
-                    tuple(
-                        dict.fromkeys(
-                            (
-                                *scoped_limitations,
-                                ENGINEERING_LIMITATION_CODES[
-                                    "conflicting_engineering_evidence"
-                                ],
-                            )
-                        )
+                    (
+                        ENGINEERING_LIMITATION_CODES[
+                            "conflicting_engineering_evidence"
+                        ],
                     ),
                 )
 
@@ -239,9 +206,8 @@ class EngineeringRuleEvaluator:
                     rule,
                     ENGINEERING_RULE_EVALUATION_STATUSES["non_compliant"],
                     "Repository evidence demonstrates that the engineering requirement is not met.",
-                    evidence_refs,
                     failed,
-                    tuple(dict.fromkeys(scoped_limitations)),
+                    (),
                 )
 
             if passed and not unresolved:
@@ -255,9 +221,8 @@ class EngineeringRuleEvaluator:
                 rule,
                 ENGINEERING_RULE_EVALUATION_STATUSES["compliant"],
                 "Repository evidence demonstrates that the engineering requirement is met.",
-                evidence_refs,
                 satisfied,
-                tuple(dict.fromkeys(scoped_limitations)),
+                (),
             )
 
         if ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"] not in scoped_limitations:
@@ -266,7 +231,6 @@ class EngineeringRuleEvaluator:
             )
         return self._unknown(
             rule,
-            evidence_refs,
             rows,
             tuple(scoped_limitations),
         )
@@ -291,7 +255,6 @@ class EngineeringRuleEvaluator:
     def _unknown(
         self,
         rule: EngineeringRule,
-        evidence_refs: tuple[str, ...],
         claims: list[EvidenceClaim],
         limitations: tuple[str, ...],
     ) -> EngineeringRuleEvaluation:
@@ -299,7 +262,6 @@ class EngineeringRuleEvaluator:
             rule,
             ENGINEERING_RULE_EVALUATION_STATUSES["unknown"],
             "Available repository evidence is insufficient to determine this engineering requirement.",
-            evidence_refs,
             claims,
             limitations
             or (
@@ -314,12 +276,31 @@ class EngineeringRuleEvaluator:
         rule: EngineeringRule,
         status: str,
         reason: str,
-        evidence_refs: tuple[str, ...],
         claims: list[EvidenceClaim],
-        limitations: tuple[str, ...],
+        extra_limitations: tuple[str, ...],
     ) -> EngineeringRuleEvaluation:
         confidence = max((row.confidence for row in claims), default=0.0)
         confidence = max(0.0, min(1.0, float(confidence)))
+        evidence_refs = tuple(
+            sorted(
+                {
+                    ref
+                    for row in claims
+                    for ref in (
+                        *row.evidence_refs,
+                        *row.graph_path_refs,
+                        *row.source_anchor_refs,
+                    )
+                    if ref
+                }
+            )
+        )
+        claim_limitations = tuple(
+            item
+            for row in claims
+            for item in row.limitations
+            if item
+        )
         return EngineeringRuleEvaluation(
             engineering_rule_id=rule.engineering_rule_id,
             legal_rule_id=rule.legal_rule_id,
@@ -330,5 +311,7 @@ class EngineeringRuleEvaluator:
             source_chunk_ids=rule.source_chunk_ids,
             source_locators=rule.source_locators,
             confidence=confidence,
-            limitations=tuple(dict.fromkeys(limitations)),
+            limitations=tuple(
+                dict.fromkeys((*claim_limitations, *extra_limitations))
+            ),
         )
