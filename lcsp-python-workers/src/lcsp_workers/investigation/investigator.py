@@ -9,6 +9,7 @@ from lcsp_workers.llm import LLMToolDefinition
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.scanner.program_graph.query_engine import ProgramGraphQueryEngine
+from lcsp_workers.scanner.program_graph.vocabulary import EDGE_TYPES, NODE_TYPES
 
 from .evidence_claim_validator import EvidenceClaimValidationError, EvidenceClaimValidator
 from .evidence_ledger import EvidenceLedger
@@ -158,8 +159,8 @@ class LawGuidedInvestigator:
                             "summary": ledger.summary(observation),
                             "preview": ledger.preview(observation.observation_id, limit=6),
                             "instruction": (
-                                "Full result is retained by LCSP. Use inspect_observation "
-                                "with this observationId to page more detail."
+                                "Full result is retained by LCSP. Use the availableSections in "
+                                "the observation summary when more detail is required."
                             ),
                         }
                 elif call.name == "list_observations":
@@ -275,6 +276,7 @@ class LawGuidedInvestigator:
                 "error": "INVALID_GRAPH_TOOL_ARGUMENTS",
                 "tool": tool_name,
                 "errorType": type(error).__name__,
+                "detail": str(error)[:500],
             }
         return result.to_dict() if hasattr(result, "to_dict") else result
 
@@ -297,6 +299,15 @@ class LawGuidedInvestigator:
             "maxNeighbors": "max_neighbors",
         }
         normalized = {aliases.get(key, key): value for key, value in arguments.items()}
+        LawGuidedInvestigator._validate_graph_vocabulary(
+            "node_types", normalized.get("node_types"), NODE_TYPES
+        )
+        LawGuidedInvestigator._validate_graph_vocabulary(
+            "stop_node_types", normalized.get("stop_node_types"), NODE_TYPES
+        )
+        LawGuidedInvestigator._validate_graph_vocabulary(
+            "edge_types", normalized.get("edge_types"), EDGE_TYPES
+        )
         if tool_name == "search_nodes":
             normalized.setdefault("max_results", 25)
         elif tool_name in {
@@ -308,20 +319,44 @@ class LawGuidedInvestigator:
             normalized.setdefault("max_results", 80)
         return normalized
 
+    @staticmethod
+    def _validate_graph_vocabulary(
+        field_name: str,
+        value: Any,
+        allowed: frozenset[str],
+    ) -> None:
+        if value is None:
+            return
+        if not isinstance(value, (list, tuple)):
+            raise ValueError(f"{field_name} must be an array")
+        invalid = sorted({str(item) for item in value if str(item) not in allowed})
+        if invalid:
+            raise ValueError(
+                f"{field_name} contains non-canonical Program Evidence Graph values: {invalid}"
+            )
+
     @classmethod
     def _tool_definitions(cls) -> list[LLMToolDefinition]:
         string_array = {"type": "array", "items": {"type": "string"}}
+        node_type_array = {
+            "type": "array",
+            "items": {"type": "string", "enum": sorted(NODE_TYPES)},
+        }
+        edge_type_array = {
+            "type": "array",
+            "items": {"type": "string", "enum": sorted(EDGE_TYPES)},
+        }
         graph_tools = [
             LLMToolDefinition(
                 name="search_nodes",
                 description=(
-                    "Search bounded Program Evidence Graph nodes by structural type, source path, "
-                    "semantic type, or text. Results expose a canonical truncated flag and are "
-                    "stored as an observation by LCSP."
+                    "Search bounded Program Evidence Graph nodes by canonical structural node type, "
+                    "source path, semantic type, or text. requiredEvidence/supportingEvidence labels "
+                    "are not node types. Results expose a canonical truncated flag."
                 ),
                 input_schema=cls._closed_schema(
                     {
-                        "node_types": string_array,
+                        "node_types": node_type_array,
                         "text": {"type": "string"},
                         "path_prefixes": string_array,
                         "semantic_types": string_array,
@@ -336,8 +371,8 @@ class LawGuidedInvestigator:
             LLMToolDefinition(
                 name="trace_static_flow",
                 description=(
-                    "Trace bounded static control/data/event flow from a graph node ref. "
-                    "Use result.truncated rather than reasoning about individual resource limits."
+                    "Trace bounded static control/data/event flow from a graph node ref using only "
+                    "canonical edge/node vocabulary. Use result.truncated rather than resource limits."
                 ),
                 input_schema=cls._closed_schema(
                     {
@@ -347,8 +382,8 @@ class LawGuidedInvestigator:
                             "enum": ["FORWARD", "BACKWARD", "BOTH"],
                         },
                         "max_hops": {"type": "integer", "minimum": 1, "maximum": 12},
-                        "edge_types": string_array,
-                        "stop_node_types": string_array,
+                        "edge_types": edge_type_array,
+                        "stop_node_types": node_type_array,
                         "max_results": {
                             "type": "integer",
                             "minimum": 1,
@@ -460,8 +495,8 @@ class LawGuidedInvestigator:
             LLMToolDefinition(
                 name="list_observations",
                 description=(
-                    "Page the LCSP EvidenceLedger index. Use when the initial working view does "
-                    "not show the observation you need; full observations are retained outside the prompt."
+                    "Page the LCSP EvidenceLedger index. Every summary advertises exact "
+                    "availableSections; use those names rather than guessing a section shape."
                 ),
                 input_schema=cls._closed_schema(
                     {
@@ -473,8 +508,8 @@ class LawGuidedInvestigator:
             LLMToolDefinition(
                 name="inspect_observation",
                 description=(
-                    "Page details from one EvidenceLedger observation by observation_id. "
-                    "Use section/offset/limit to retrieve only the needed working context."
+                    "Page one EvidenceLedger observation. If section is supplied it must be one of "
+                    "that observation summary's availableSections; pages are automatically char-bounded."
                 ),
                 input_schema=cls._closed_schema(
                     {
@@ -784,6 +819,16 @@ class LawGuidedInvestigator:
             "engineeringRuleId": packet.engineering_rule_id,
             "concept": packet.concept,
             "investigationGoals": list(packet.investigation_goals),
+            "startingNodeTypes": list(packet.starting_node_types),
+            "targetNodeTypes": list(packet.target_node_types),
+            "edgeStrategies": list(packet.edge_strategies),
+            "graphQueries": list(packet.graph_queries),
+            "retrievalHints": {
+                "keywords": list(packet.keywords),
+                "commonApis": list(packet.common_apis),
+                "commonLibraries": list(packet.common_libraries),
+                "patterns": list(packet.patterns),
+            },
             "requiredEvidence": list(packet.required_evidence),
             "supportingEvidence": list(packet.supporting_evidence),
             "negativeEvidence": list(packet.negative_evidence),
@@ -810,8 +855,8 @@ class LawGuidedInvestigator:
                 "task": (
                     "Investigate the EngineeringRule against the Program Evidence Graph. "
                     "The LCSP EvidenceLedger is the source of truth; this prompt is only a working view. "
-                    "Use graph tools to create observations, list_observations to page the ledger, "
-                    "inspect_observation to reload detail, and finish when sufficiently evidenced. "
+                    "Use the EngineeringRule-owned graph/retrieval hints before broad search, inspect only "
+                    "advertised observation sections, and finish when sufficiently evidenced. "
                     "Never decide legal compliance, certification, or infer facts outside evidence."
                 ),
                 "engineeringRule": cls._rule_contract(packet),
@@ -824,6 +869,9 @@ class LawGuidedInvestigator:
                 "recentToolResults": working_results[-MAX_WORKING_RESULTS:],
                 "nativeToolStep": step + 1,
                 "claimRules": [
+                    "startingNodeTypes, targetNodeTypes, graphQueries and edgeStrategies are canonical graph retrieval hints; use them rather than inventing graph types.",
+                    "requiredEvidence, supportingEvidence and negativeEvidence are engineering criterion labels, NOT Program Evidence Graph node types.",
+                    "Use retrievalHints keywords/commonApis/commonLibraries/patterns for targeted code search; do not substitute criterion labels as search_nodes.node_types.",
                     "MET/NOT_MET must reference one or more observationRefs with concrete provenance.",
                     "Do not author evidenceRefs, graphPathRefs, or sourceAnchorRefs yourself.",
                     "LCSP derives immutable provenance from observationRefs deterministically.",
@@ -832,7 +880,7 @@ class LawGuidedInvestigator:
                     "Use only result.truncated to decide whether a bounded search is exhaustive. truncated=true is not an unresolved engineering fact by itself.",
                     "If required evidence is still missing after truncated=true, continue or narrow the search from continuationFrontiers before finishing.",
                     "Treat dynamic or external uncertainty as UNRESOLVED only when the relevant observation contains an actual unresolvedFrontier or boundary that can affect the required criterion.",
-                    "Use list_observations/inspect_observation instead of asking LCSP to resend full history.",
+                    "Every EvidenceLedger summary advertises availableSections. Never guess section names across graph, wizard, repo-map, or code-search observations.",
                 ],
             }
         )
