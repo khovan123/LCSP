@@ -67,7 +67,10 @@ def test_valid_business_semantic_proposal_merges_with_support_refs(tmp_path: Pat
     assert semantic["resolution_state"] == "CORROBORATED"
     assert semantic["support_refs"] == [support]
     assert enriched.graph_hash != graph.graph_hash
-    assert enriched.provenance["business_semantic_enrichment"] == "LLM_PROVENANCE_GATED"
+    assert (
+        enriched.provenance["business_semantic_enrichment"]
+        == "LLM_PROVENANCE_GATED_CLUSTERED"
+    )
 
 
 def test_unknown_support_ref_rejects_semantic_proposal(tmp_path: Path) -> None:
