@@ -6,6 +6,7 @@ from typing import Any
 
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
 from lcsp_workers.platform.logging import get_logger
+from lcsp_workers.scanner.program_graph.source_roles import filter_program_evidence_graph
 
 from .code_context import CodeContextSession
 from .code_context_investigator import CodeContextLawGuidedInvestigator
@@ -13,6 +14,7 @@ from .engineering_rule_planner import (
     EngineeringRulePlanner,
     EngineeringRulePlanningCandidate,
 )
+from .material_scope import MaterialEngineeringRulePlanner, material_planning_packet
 from .models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
     ENGINEERING_LIMITATION_CODES,
@@ -48,7 +50,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             investigator=investigator,
             evaluator=evaluator,
         )
-        self._planner = planner or EngineeringRulePlanner(llm_client)
+        self._planner = planner or MaterialEngineeringRulePlanner(llm_client)
 
     def run(
         self,
@@ -59,7 +61,20 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         wizard_context: dict[str, Any] | None = None,
         workspace_path: str | Path | None = None,
     ) -> EngineeringInvestigationResult:
-        graph = self._graph(evidence_report)
+        raw_graph = self._graph(evidence_report)
+        graph = filter_program_evidence_graph(raw_graph)
+        if graph.node_count != raw_graph.node_count:
+            logger.info(
+                "ENGINEERING_TEST_SOURCES_FILTERED",
+                removed_node_count=raw_graph.node_count - graph.node_count,
+                remaining_node_count=graph.node_count,
+                workflow_run_id=workflow_run_id,
+                correlationId=correlation_id,
+            )
+
+        # CodeContextSession is built only after the runtime graph has been cleaned,
+        # so search_code/repo_map/get_symbol/get_code cannot surface test/spec symbols
+        # even when a classification rerun references an older persisted graph.
         code_context = CodeContextSession(graph, workspace_path=workspace_path)
         catalog = self._api_client.get_active_legal_rule_catalog()
         corpus = self._api_client.get_active_legal_corpus()
@@ -110,10 +125,8 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         cache_hits = 0
         prepared: list[tuple[Any, Any]] = []
 
-        # Materialize/cache the governed EngineeringRule contracts and run only their
-        # deterministic seed queries before planning. This is cheap compared with 48
-        # independent LLM investigations and gives the planner source-backed scope
-        # signals without exposing raw repository source.
+        # Materialize/cache governed EngineeringRule contracts and run deterministic
+        # seed queries against the test-free runtime graph before planning.
         for rule in rules:
             legal_rule_id = str(
                 rule.get("legalRuleId")
@@ -163,8 +176,14 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 limitations=tuple(dict.fromkeys(limitations)),
             )
 
+        # Planner does not receive every broad start-node hit. Each packet is projected
+        # into rule-specific material production signals first; the original packet is
+        # retained for the investigator after the rule passes the plan gate.
         candidates = tuple(
-            EngineeringRulePlanningCandidate.from_rule_packet(rule, packet)
+            EngineeringRulePlanningCandidate.from_rule_packet(
+                rule,
+                material_planning_packet(rule, packet),
+            )
             for rule, packet in prepared
         )
         plan = self._planner.plan(
