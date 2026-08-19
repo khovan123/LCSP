@@ -7,7 +7,9 @@ from typing import Iterable
 from lcsp_workers.scanner.dependencies.dependency_fact import normalize_package_name
 
 from .ai_lifecycle import AILifecycleExtractor
+from .api_boundary_resolution import ApiBoundaryResolver
 from .builder import ProgramGraphBuilder
+from .contract_flow import ContractLineageFlowFinalizer
 from .contract_lineage import ContractDataLineageExtractor
 from .data_lineage import SemanticDataLineageExtractor
 from .decision_influence import DecisionInfluenceEnricher
@@ -82,14 +84,16 @@ class ProgramGraphAssembler:
         # variables. OpenAPI/Swagger/GraphQL fields are observations/weak semantic seeds;
         # they become Planner-material only after implementation/behavior corroboration.
         ContractDataLineageExtractor(workspace_path).enrich(program)
+        ContractLineageFlowFinalizer().enrich(program)
 
         # Promote sensitive semantics only when behavior corroborates the weak seed.
         # A standalone "fingerprint"/"cccd" identifier remains INFERRED, while actual
         # OCR/KYC or biometric representation+matching flow becomes CORROBORATED.
         SensitiveLineageGate(workspace_path).enrich(program)
 
-        # Protocol contracts are continuation boundaries just like queues/CQRS. Resolve
-        # unique gRPC method implementations or create an explicit unresolved frontier.
+        # API/protocol declarations are continuation boundaries. Resolve source HTTP,
+        # GraphQL and gRPC handlers to concrete symbols or expose explicit uncertainty.
+        ApiBoundaryResolver(workspace_path).enrich(program)
         ProtocolBoundaryResolver().enrich(program)
 
         # Bind lineage-backed business actions to first-class BUSINESS_DECISION nodes.
