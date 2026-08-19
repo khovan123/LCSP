@@ -54,7 +54,7 @@ class ApiBoundaryResolver:
             except OSError:
                 continue
             self._http_file(program, nodes, rel, text, path.suffix.lower())
-            self._graphql_file(program, nodes, rel, text)
+            self._graphql_file(program, nodes, rel, text, path.suffix.lower())
         return program
 
     def _http_file(
@@ -72,14 +72,37 @@ class ApiBoundaryResolver:
             method = match.group(1).upper()
             path = self._join_route(prefix, match.group(2))
             route_key = f"http-route:{method}:{path}"
-            handler = self._next_handler(text, match.end(), python=suffix == ".py")
-            if not handler:
-                self._mark_unresolved(program, route_key, rel, _line(text, match.start()), f"{method} {path}")
+            handler_match = self._next_handler(text, match.end(), python=suffix == ".py")
+            if not handler_match:
+                self._mark_unresolved(
+                    program,
+                    route_key,
+                    rel,
+                    _line(text, match.start()),
+                    f"{method} {path}",
+                )
                 continue
+            handler, handler_line = handler_match
             symbol_key = f"symbol:{rel}:{handler}"
             target = nodes.get(symbol_key)
+            if target is None and suffix != ".py":
+                target = self._materialize_text_method(
+                    program,
+                    rel=rel,
+                    symbol_key=symbol_key,
+                    handler=handler,
+                    line=handler_line,
+                    boundary="HTTP",
+                )
+                nodes[symbol_key] = target
             if target is None or target.node_type not in {"FUNCTION", "METHOD"}:
-                self._mark_unresolved(program, route_key, rel, _line(text, match.start()), f"{method} {path}")
+                self._mark_unresolved(
+                    program,
+                    route_key,
+                    rel,
+                    _line(text, match.start()),
+                    f"{method} {path}",
+                )
                 continue
             program.add_edge(
                 SemanticEdgeFact(
@@ -98,15 +121,27 @@ class ApiBoundaryResolver:
         nodes: dict[str, SemanticNodeFact],
         rel: str,
         text: str,
+        suffix: str,
     ) -> None:
         for match in _GRAPHQL_DECORATOR_RE.finditer(text):
             operation_type = match.group(1).capitalize()
-            handler = self._next_handler(text, match.end(), python=False)
-            if not handler:
+            handler_match = self._next_handler(text, match.end(), python=suffix == ".py")
+            if not handler_match:
                 continue
+            handler, handler_line = handler_match
             operation_key = f"graphql-operation:{operation_type}:{handler}"
             target_key = f"symbol:{rel}:{handler}"
             target = nodes.get(target_key)
+            if target is None and suffix != ".py":
+                target = self._materialize_text_method(
+                    program,
+                    rel=rel,
+                    symbol_key=target_key,
+                    handler=handler,
+                    line=handler_line,
+                    boundary="GRAPHQL",
+                )
+                nodes[target_key] = target
             if target is None or target.node_type not in {"FUNCTION", "METHOD"}:
                 continue
             # Only bind an operation that already exists in graph evidence (usually
@@ -126,7 +161,12 @@ class ApiBoundaryResolver:
             )
 
     @staticmethod
-    def _next_handler(text: str, start: int, *, python: bool) -> str | None:
+    def _next_handler(
+        text: str,
+        start: int,
+        *,
+        python: bool,
+    ) -> tuple[str, int] | None:
         # Bound matching to the immediate declaration region so one decorator cannot
         # accidentally attach to a later unrelated symbol.
         tail = text[start : start + 1200]
@@ -134,7 +174,49 @@ class ApiBoundaryResolver:
         match = pattern.search(tail)
         if not match:
             return None
-        return match.group(1)
+        return match.group(1), _line(text, start + match.start())
+
+    @staticmethod
+    def _materialize_text_method(
+        program: SemanticProgram,
+        *,
+        rel: str,
+        symbol_key: str,
+        handler: str,
+        line: int,
+        boundary: str,
+    ) -> SemanticNodeFact:
+        """Materialize a concrete JS/TS method proven by the decorator-adjacent source.
+
+        The generic text extractor intentionally indexes declarations conservatively and
+        does not create every class method. A framework decorator plus an immediate method
+        declaration is sufficient static evidence to create this METHOD node, which keeps
+        the API boundary from terminating at a module-only identity.
+        """
+        node = SemanticNodeFact(
+            symbol_key,
+            "METHOD",
+            handler,
+            rel,
+            line,
+            line,
+            handler,
+            attributes={"frameworkBoundary": boundary},
+            origin="FRAMEWORK_RESOLUTION",
+            resolution_state="OBSERVED",
+        )
+        program.add_node(node)
+        program.add_edge(
+            SemanticEdgeFact(
+                "DECLARES",
+                f"module:{rel}",
+                symbol_key,
+                attributes={"frameworkBoundary": boundary},
+                origin="FRAMEWORK_RESOLUTION",
+                resolution_state="OBSERVED",
+            )
+        )
+        return node
 
     @staticmethod
     def _mark_unresolved(
