@@ -16,7 +16,10 @@ export interface GraphErrorDisplayProps {
 /**
  * Get user-friendly error message based on error code or message.
  */
-function getErrorMessage(error: Error | undefined, errorCode?: string): string {
+function getErrorMessage(
+  error: Error | null | undefined,
+  errorCode?: string,
+): string {
   if (errorCode) {
     switch (errorCode) {
       case "EVIDENCE_NOT_FOUND":

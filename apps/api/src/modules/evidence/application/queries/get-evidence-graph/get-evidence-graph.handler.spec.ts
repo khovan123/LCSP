@@ -5,9 +5,9 @@
  */
 
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { createHash } from "node:crypto";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
-import { createHash } from "node:crypto";
 import { ClusterBuilderService } from "../../services/graph/cluster-builder.service.js";
 import { EvidenceGraphMapperService } from "../../services/graph/evidence-graph-mapper.service.js";
 import { EvidenceGraphRedactorService } from "../../services/graph/evidence-graph-redactor.service.js";

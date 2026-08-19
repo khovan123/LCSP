@@ -14,10 +14,10 @@ import { useCallback, useReducer } from "react";
 
 import type {
   EvidenceGraphUIState,
+  GraphLayoutAlgorithm,
   GraphUIAction,
   GraphUIContextValue,
   GraphViewMode,
-  GraphLayoutAlgorithm,
 } from "../../features/evidence/types/evidence-graph-ui.types";
 import type { GraphScope } from "../../features/evidence/types/evidence-graph.types";
 import {
