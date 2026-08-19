@@ -84,7 +84,14 @@ class ProgramGraphBuilder:
         for item in program.edges:
             self._add_edge(item)
         self._coverage.extend(program.coverage_notes)
-        self._unresolved.extend(program.unresolved_frontiers)
+        # Semantic passes own human-readable/stable IR keys while persisted graph
+        # traversal owns stable node IDs. Resolve known frontier keys here so v3
+        # callers never have to translate an explicit UNRESOLVED_DYNAMIC_TARGET back
+        # through SemanticProgram internals. Non-node diagnostics remain unchanged.
+        self._unresolved.extend(
+            self._by_key.get(str(value), str(value))
+            for value in program.unresolved_frontiers
+        )
 
     def add_coverage_note(self, note: str) -> None:
         if note:
