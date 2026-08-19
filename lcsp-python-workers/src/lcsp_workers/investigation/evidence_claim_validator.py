@@ -39,6 +39,12 @@ _GENERIC_CRITERION_TOKENS = frozenset(
         "risks",
         "process",
         "management",
+        "implementation",
+        "implemented",
+        "exists",
+        "exist",
+        "present",
+        "documented",
         "ensure",
         "ensures",
         "must",
@@ -138,7 +144,7 @@ class EvidenceClaimValidator:
         selected = self._criterion_scoped_material_refs(claim, value)
         if claim.claim_type in _CLOSED_CLAIM_TYPES and not any(selected.values()):
             raise EvidenceClaimValidationError(
-                "closed engineering claim requires material production evidence"
+                "closed engineering claim requires criterion-aligned material production evidence"
             )
 
         return replace(
@@ -202,16 +208,18 @@ class EvidenceClaimValidator:
         for ref in claim.evidence_refs:
             add("evidence", ref, 2)
 
-        # Prefer criterion-overlapping source anchors/nodes. When lexical overlap is
-        # unavailable, retain at most two material refs rather than copying a whole
-        # 50-node observation into one deciding claim.
         candidates.sort(key=lambda row: (-row[0], row[1], row[3]))
         positive = [row for row in candidates if row[0] > 0]
         fallback = [row for row in candidates if row[0] == 0]
-        chosen = positive[:_MAX_CLAIM_PROVENANCE_REFS]
-        if len(chosen) < _MAX_CLAIM_PROVENANCE_REFS:
-            fallback_limit = min(2, _MAX_CLAIM_PROVENANCE_REFS - len(chosen))
-            chosen.extend(fallback[:fallback_limit])
+
+        # Specific criteria must be backed by refs whose graph/source metadata actually
+        # overlaps that criterion. Only a genuinely generic criterion may use a tiny
+        # material fallback, preserving backwards compatibility without reintroducing
+        # whole-observation provenance inflation.
+        if criterion_tokens:
+            chosen = positive[:_MAX_CLAIM_PROVENANCE_REFS]
+        else:
+            chosen = fallback[:2]
 
         result: dict[str, list[str]] = {"evidence": [], "graph": [], "anchor": []}
         for _, _, kind, ref in chosen:
