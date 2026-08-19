@@ -48,6 +48,7 @@ class EvidenceClaim:
     source_anchor_refs: tuple[str, ...] = ()
     confidence: float = 0.0
     limitations: tuple[str, ...] = ()
+    criterion: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
