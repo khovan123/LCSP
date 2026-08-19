@@ -12,6 +12,7 @@ from .builder import ProgramGraphBuilder
 from .contract_flow import ContractLineageFlowFinalizer
 from .contract_lineage import ContractDataLineageExtractor
 from .data_lineage import SemanticDataLineageExtractor
+from .database_lineage import DatabaseSchemaLineageExtractor
 from .decision_influence import DecisionInfluenceEnricher
 from .extractor import RepositorySemanticExtractor
 from .framework_links import FrameworkBoundaryExtractor
@@ -80,10 +81,11 @@ class ProgramGraphAssembler:
         # derives weak semantic seeds without trusting identifier names as conclusions.
         SemanticDataLineageExtractor(workspace_path).enrich(program)
 
-        # Protocol/API contracts provide stable data identities before implementation
-        # variables. OpenAPI/Swagger/GraphQL fields are observations/weak semantic seeds;
-        # they become Planner-material only after implementation/behavior corroboration.
+        # Protocol/API/DB contracts provide stable data identities before implementation
+        # variables. Schema field names are weak semantic seeds only; runtime lineage and
+        # processing behavior are required before sensitive facts become Planner-material.
         ContractDataLineageExtractor(workspace_path).enrich(program)
+        DatabaseSchemaLineageExtractor(workspace_path).enrich(program)
         ContractLineageFlowFinalizer().enrich(program)
 
         # Promote sensitive semantics only when behavior corroborates the weak seed.
