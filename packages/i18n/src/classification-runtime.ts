@@ -131,6 +131,154 @@ const ENGINEERING_REASON_LABELS = {
   },
 } as const;
 
+const ENGINEERING_CONCEPT_LABELS = {
+  vi: {
+    HUMAN_AUTHORITY_AND_CONTROL: "Quyền quyết định và kiểm soát của con người",
+    FAIRNESS_TRANSPARENCY_ACCOUNTABILITY: "Công bằng, minh bạch và trách nhiệm giải trình",
+    HEALTH_AI_SAFETY_DATA_PROTECTION: "An toàn AI y tế và bảo vệ dữ liệu",
+    EDUCATION_AI_RISK_CONTROL: "Kiểm soát rủi ro AI trong giáo dục",
+    PROHIBITED_MANIPULATION: "Hành vi thao túng bị cấm",
+    PROHIBITED_VULNERABLE_GROUP_EXPLOITATION: "Khai thác nhóm dễ bị tổn thương bị cấm",
+    PROHIBITED_HARMFUL_FAKE_CONTENT: "Nội dung giả mạo gây hại bị cấm",
+    PROHIBITED_UNLAWFUL_AI_DATA_USE: "Sử dụng dữ liệu AI trái pháp luật bị cấm",
+    PROHIBITED_HUMAN_CONTROL_TAMPERING: "Can thiệp trái phép vào cơ chế kiểm soát của con người",
+    PROHIBITED_TRANSPARENCY_CONCEALMENT: "Che giấu nghĩa vụ minh bạch bị cấm",
+    CLASSIFICATION_DOSSIER_AND_NOTIFICATION: "Hồ sơ phân loại và thông báo",
+    MACHINE_READABLE_AI_MEDIA_MARK: "Đánh dấu nội dung AI ở định dạng máy có thể đọc",
+  },
+  en: {
+    HUMAN_AUTHORITY_AND_CONTROL: "Human authority and control",
+    FAIRNESS_TRANSPARENCY_ACCOUNTABILITY: "Fairness, transparency and accountability",
+    HEALTH_AI_SAFETY_DATA_PROTECTION: "Health AI safety and data protection",
+    EDUCATION_AI_RISK_CONTROL: "Education AI risk control",
+    PROHIBITED_MANIPULATION: "Prohibited manipulation",
+    PROHIBITED_VULNERABLE_GROUP_EXPLOITATION: "Prohibited exploitation of vulnerable groups",
+    PROHIBITED_HARMFUL_FAKE_CONTENT: "Prohibited harmful fake content",
+    PROHIBITED_UNLAWFUL_AI_DATA_USE: "Prohibited unlawful AI data use",
+    PROHIBITED_HUMAN_CONTROL_TAMPERING: "Prohibited human-control tampering",
+    PROHIBITED_TRANSPARENCY_CONCEALMENT: "Prohibited transparency concealment",
+    CLASSIFICATION_DOSSIER_AND_NOTIFICATION: "Classification dossier and notification",
+    MACHINE_READABLE_AI_MEDIA_MARK: "Machine-readable AI media marking",
+  },
+} as const;
+
+const VI_MACHINE_LABEL_TOKENS: Record<string, string> = {
+  AI: "AI",
+  API: "API",
+  PII: "PII",
+  LLM: "LLM",
+  AND: "và",
+  HUMAN: "con người",
+  AUTHORITY: "quyền quyết định",
+  CONTROL: "kiểm soát",
+  FAIRNESS: "công bằng",
+  TRANSPARENCY: "minh bạch",
+  ACCOUNTABILITY: "trách nhiệm giải trình",
+  HEALTH: "y tế",
+  SAFETY: "an toàn",
+  DATA: "dữ liệu",
+  PROTECTION: "bảo vệ",
+  EDUCATION: "giáo dục",
+  RISK: "rủi ro",
+  PROHIBITED: "bị cấm",
+  MANIPULATION: "thao túng",
+  VULNERABLE: "dễ bị tổn thương",
+  GROUP: "nhóm",
+  EXPLOITATION: "khai thác",
+  HARMFUL: "gây hại",
+  FAKE: "giả mạo",
+  CONTENT: "nội dung",
+  UNLAWFUL: "trái pháp luật",
+  USE: "sử dụng",
+  TAMPERING: "can thiệp trái phép",
+  CONCEALMENT: "che giấu",
+  CLASSIFICATION: "phân loại",
+  DOSSIER: "hồ sơ",
+  NOTIFICATION: "thông báo",
+  MACHINE: "máy",
+  READABLE: "có thể đọc",
+  MEDIA: "nội dung đa phương tiện",
+  MARK: "đánh dấu",
+  MARKING: "đánh dấu",
+  SECURITY: "bảo mật",
+  CYBER: "an ninh mạng",
+  PRIVACY: "quyền riêng tư",
+  PERSONAL: "cá nhân",
+  SENSITIVE: "nhạy cảm",
+  TRAINING: "huấn luyện",
+  TESTING: "kiểm thử",
+  VALIDATION: "xác thực",
+  QUALITY: "chất lượng",
+  GOVERNANCE: "quản trị",
+  OVERSIGHT: "giám sát",
+  REVIEW: "xem xét",
+  APPEAL: "khiếu nại",
+  DISCLOSURE: "công bố",
+  LABEL: "nhãn",
+  WARNING: "cảnh báo",
+  OUTPUT: "đầu ra",
+  SYSTEM: "hệ thống",
+  DEPLOYMENT: "triển khai",
+  CHANGE: "thay đổi",
+  REGISTRATION: "đăng ký",
+  TRACEABILITY: "khả năng truy vết",
+  RETENTION: "lưu giữ",
+  NOTICE: "thông báo",
+  INCIDENT: "sự cố",
+  REPORTING: "báo cáo",
+  LOGGING: "ghi log",
+  MONITORING: "giám sát",
+  PROVIDER: "nhà cung cấp",
+  DEVELOPER: "đơn vị phát triển",
+  RESPONSIBILITY: "trách nhiệm",
+  COPYRIGHT: "bản quyền",
+  INTELLECTUAL: "sở hữu trí tuệ",
+  PROPERTY: "tài sản",
+  RIGHTS: "quyền",
+  COMPENSATION: "bồi thường",
+  HIGH: "cao",
+  MEDIUM: "trung bình",
+  LOW: "thấp",
+  IMPACT: "tác động",
+  ASSESSMENT: "đánh giá",
+  PROCESS: "quy trình",
+  PLAN: "kế hoạch",
+  MITIGATION: "giảm thiểu",
+  PERFORMANCE: "hiệu năng",
+  ROBUSTNESS: "độ vững",
+  ACCURACY: "độ chính xác",
+  RELIABILITY: "độ tin cậy",
+  ACCESS: "truy cập",
+  MANAGEMENT: "quản lý",
+  RECORD: "hồ sơ",
+  RECORDS: "hồ sơ",
+  USER: "người dùng",
+  USERS: "người dùng",
+  OPERATOR: "đơn vị vận hành",
+  OPERATIONS: "vận hành",
+  PURPOSE: "mục đích",
+  GENERATED: "được tạo",
+  SYNTHETIC: "tổng hợp",
+  AUDIO: "âm thanh",
+  IMAGE: "hình ảnh",
+  VIDEO: "video",
+  TEXT: "văn bản",
+  WATERMARK: "watermark",
+  IDENTIFICATION: "nhận diện",
+  DIGITAL: "số",
+  PUBLIC: "công cộng",
+  SERVICE: "dịch vụ",
+  CHILDREN: "trẻ em",
+  MINOR: "người chưa thành niên",
+  BIOMETRIC: "sinh trắc học",
+  DECISION: "quyết định",
+  DECISIONS: "quyết định",
+  AUTOMATED: "tự động",
+  EXPLAINABILITY: "khả năng giải thích",
+  EXPLANATION: "giải thích",
+  CONSENT: "sự đồng ý",
+};
+
 export function resolveClassificationRuntimeMessage(
   locale: Locale,
   key: ClassificationRuntimeMessageKey,
@@ -154,23 +302,27 @@ export function formatClassificationRuntimeSummary(
   return `${summary.compliant} met · ${summary.nonCompliant} not met · ${summary.unknown} undetermined out of ${summary.total} EngineeringRules.`;
 }
 
-export function formatEngineeringConcept(value: string): string {
-  return value
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((token) => {
-      const upper = token.toUpperCase();
-      if (["AI", "API", "PII", "LLM"].includes(upper)) return upper;
-      return `${token.slice(0, 1).toUpperCase()}${token.slice(1).toLowerCase()}`;
-    })
-    .join(" ");
+export function formatEngineeringConcept(value: string): string;
+export function formatEngineeringConcept(locale: Locale, value: string): string;
+export function formatEngineeringConcept(
+  localeOrValue: Locale | string,
+  maybeValue?: string,
+): string {
+  const locale: Locale = maybeValue === undefined ? "en" : (localeOrValue as Locale);
+  const value = maybeValue === undefined ? localeOrValue : maybeValue;
+  const key = value.trim().replace(/[\s-]+/g, "_").toUpperCase();
+  const dictionary = ENGINEERING_CONCEPT_LABELS[locale] ?? ENGINEERING_CONCEPT_LABELS.en;
+  const known = dictionary[key as keyof typeof dictionary];
+  if (known) return known;
+  if (locale === "vi") return formatVietnameseMachineLabel(key);
+  return humanizeMachineLabel(key);
 }
 
 export function formatEngineeringLimitation(locale: Locale, code: string): string {
   const dictionary = ENGINEERING_LIMITATION_LABELS[locale] ?? ENGINEERING_LIMITATION_LABELS.en;
   const known = dictionary[code as keyof typeof dictionary];
   if (known) return known;
-  return formatEngineeringConcept(code);
+  return formatEngineeringConcept(locale, code);
 }
 
 export function formatEngineeringReason(locale: Locale, reason: string): string {
@@ -223,6 +375,29 @@ export function formatLegalReference(locale: Locale, value: string): string {
   return segments
     .map((segment) => formatLegalReferenceSegment(locale, segment))
     .join(" · ");
+}
+
+function humanizeMachineLabel(value: string): string {
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((token) => {
+      const upper = token.toUpperCase();
+      if (["AI", "API", "PII", "LLM"].includes(upper)) return upper;
+      return `${token.slice(0, 1).toUpperCase()}${token.slice(1).toLowerCase()}`;
+    })
+    .join(" ");
+}
+
+function formatVietnameseMachineLabel(value: string): string {
+  const translated = value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((token) => VI_MACHINE_LABEL_TOKENS[token.toUpperCase()] ?? token.toLowerCase())
+    .join(" ");
+  return translated
+    ? `${translated.slice(0, 1).toUpperCase()}${translated.slice(1)}`
+    : value;
 }
 
 function formatLegalDocument(locale: Locale, value: string): string {
