@@ -15,6 +15,7 @@ from .javascript_architecture_resolution import JavaScriptArchitectureResolver
 from .managed_architecture_resolution import ManagedArchitectureResolver
 from .python_architecture_resolution import PythonArchitectureResolver
 from .python_consumer_resolution import PythonConsumerBoundaryResolver
+from .python_framework_adapters import PythonFrameworkAdapters
 from .semantic_ir import SemanticEdgeFact, SemanticNodeFact
 from .source_roles import (
     exclude_test_sources_from_semantic_program,
@@ -54,6 +55,7 @@ class ProgramGraphAssembler:
         FrameworkBoundaryResolver(workspace_path).enrich(program)
         PythonConsumerBoundaryResolver(workspace_path).enrich(program)
         PythonArchitectureResolver(workspace_path).enrich(program)
+        PythonFrameworkAdapters(workspace_path).enrich(program)
         JavaScriptArchitectureResolver(workspace_path).enrich(program)
         ManagedArchitectureResolver(workspace_path).enrich(program)
         normalize_framework_binding_metadata(program)
