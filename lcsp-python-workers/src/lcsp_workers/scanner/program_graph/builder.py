@@ -318,7 +318,13 @@ class ProgramGraphBuilder:
         )
 
     def _propagate_semantic_data(self) -> None:
-        """Propagate data categories along value/data edges without inventing meaning."""
+        """Propagate only trusted data semantics along deterministic lineage edges.
+
+        Identifier/contract taxonomy may intentionally exist as ``INFERRED`` seed data.
+        Those semantics stay local until another analyzer corroborates processing or
+        lineage; otherwise a weak field name could incorrectly promote a DB/table/model
+        sink into trusted sensitive-data evidence.
+        """
         changed = True
         rounds = 0
         while changed and rounds < max(1, len(self._nodes)):
@@ -331,6 +337,8 @@ class ProgramGraphBuilder:
                 target = self._nodes.get(edge.target_node_id)
                 if not source or not target:
                     continue
+                if source.resolution_state not in {"OBSERVED", "CORROBORATED"}:
+                    continue
                 propagated = {
                     value
                     for value in source.semantic_types
@@ -340,7 +348,7 @@ class ProgramGraphBuilder:
                     target.semantic_types = sorted(
                         set(target.semantic_types) | propagated
                     )
-                    if target.resolution_state == "OBSERVED":
+                    if target.resolution_state != "UNRESOLVED":
                         target.resolution_state = "CORROBORATED"
                     changed = True
 
