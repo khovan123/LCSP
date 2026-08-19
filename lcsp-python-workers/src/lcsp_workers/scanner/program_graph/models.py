@@ -81,11 +81,25 @@ class ProgramEvidenceGraph:
         import os
         ref = payload.get("evidence_graph_ref") or payload.get("evidenceGraphRef")
         if ref and isinstance(ref, str) and not os.path.isabs(ref):
-            storage_root = os.getenv(
-                "LCSP_ARTIFACT_STORAGE_PATH",
+            relative_ref = ref
+            storage_roots = [
+                os.getenv("LCSP_ARTIFACT_STORAGE_PATH", "").strip(),
                 os.path.join(os.getcwd(), "tmp", "lcsp-storage"),
+            ]
+            try:
+                from lcsp_workers.platform.logging_path import get_repo_root
+
+                storage_roots.append(os.path.join(get_repo_root(), "tmp", "lcsp-storage"))
+            except Exception:
+                pass
+            ref = next(
+                (
+                    os.path.join(root, relative_ref)
+                    for root in storage_roots
+                    if root and os.path.exists(os.path.join(root, relative_ref))
+                ),
+                os.path.join(storage_roots[1], relative_ref),
             )
-            ref = os.path.join(storage_root, ref)
         if ref and isinstance(ref, str) and os.path.exists(ref):
             try:
                 with open(ref, "r") as f:

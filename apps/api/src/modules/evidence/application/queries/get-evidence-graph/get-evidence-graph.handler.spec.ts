@@ -5,6 +5,8 @@
  */
 
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { createHash } from "node:crypto";
 import { ClusterBuilderService } from "../../services/graph/cluster-builder.service.js";
 import { EvidenceGraphMapperService } from "../../services/graph/evidence-graph-mapper.service.js";
@@ -46,11 +48,11 @@ describe("GetEvidenceGraphHandler", () => {
     audit = createMockAudit();
 
     handler = new GetEvidenceGraphHandler(
-      prisma as any,
+      prisma as unknown as PrismaService,
       mapper,
       redactor,
       clusterBuilder,
-      audit as any,
+      audit as unknown as AuditWriterService,
     );
   });
 
@@ -61,7 +63,7 @@ describe("GetEvidenceGraphHandler", () => {
         "org-1",
         "user-1",
         "MANAGER",
-        "invalid-scope" as any,
+        "invalid-scope" as "overview",
         undefined,
         "corr-123",
       );
