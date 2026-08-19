@@ -92,7 +92,8 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
         if seed_query:
             seed_result = code_context.search_code(query=seed_query)
             if not seed_result.get("error"):
-                code_candidates_found = bool(seed_result.get("results"))
+                seed_candidate = self._seed_source_candidate(seed_result)
+                code_candidates_found = seed_candidate is not None
                 seed_view = self._store_observation(
                     ledger,
                     source="code_context_seed",
@@ -109,11 +110,44 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
                         "result": seed_view,
                     }
                 )
+                if seed_candidate is not None:
+                    # The prior runtime restricted the first LLM phase to get_code +
+                    # inspect_observation and waited for the model to choose get_code.
+                    # In production that created a deterministic no-progress loop: the
+                    # model repeatedly paged the same seed observations until forced
+                    # finish. LCSP already owns the ranked candidate set, so probe the
+                    # best production candidate deterministically before the first LLM
+                    # turn and let the agent reason from actual source immediately.
+                    source_probe_attempted = True
+                    source_result = code_context.get_code(
+                        symbol_id=str(seed_candidate.get("symbolId") or "")
+                    )
+                    if not source_result.get("error"):
+                        source_view = self._store_observation(
+                            ledger,
+                            source="code_context_seed_source",
+                            tool="get_code",
+                            call_id="seed:source_probe",
+                            arguments={
+                                "symbol_id": str(seed_candidate.get("symbolId") or "")
+                            },
+                            result=source_result,
+                            expose_result=True,
+                        )
+                        working_results.append(
+                            {
+                                "step": 0,
+                                "tool": "get_code",
+                                "callId": "seed:source_probe",
+                                "result": source_view,
+                            }
+                        )
         working_results = working_results[-MAX_WORKING_RESULTS:]
 
         all_tools = self._code_aware_tool_definitions()
         graph_tool_calls_used = 0
         code_tool_calls_used = 0
+        inspection_offsets: dict[tuple[str, str], int] = {}
 
         for step in range(MAX_INVESTIGATION_STEPS):
             source_probe_required = code_candidates_found and not source_probe_attempted
@@ -220,12 +254,15 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
                             "truncated": True,
                         }
                     else:
-                        code_tool_calls_used += 1
                         raw_result = self._execute_code_tool(
                             code_context,
                             call.name,
                             call.arguments,
                         )
+                        # Invalid or unresolved model arguments are not useful work and
+                        # must not burn the bounded code-context budget.
+                        if not raw_result.get("error"):
+                            code_tool_calls_used += 1
                         if call.name == "get_code":
                             source_probe_attempted = True
                         elif call.name == "search_code" and not raw_result.get("error"):
@@ -247,17 +284,50 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
                         limit=int(call.arguments.get("limit") or 20),
                     )
                 elif call.name == "inspect_observation":
+                    observation_id = str(call.arguments.get("observation_id") or "")
+                    section = (
+                        str(call.arguments.get("section"))
+                        if call.arguments.get("section")
+                        else ""
+                    )
+                    requested_offset = int(call.arguments.get("offset") or 0)
+                    progress_key = (observation_id, section)
+                    effective_offset = max(
+                        requested_offset,
+                        inspection_offsets.get(progress_key, 0),
+                    )
                     try:
                         tool_result = ledger.inspect(
-                            str(call.arguments.get("observation_id") or ""),
-                            section=(
-                                str(call.arguments.get("section"))
-                                if call.arguments.get("section")
-                                else None
-                            ),
-                            offset=int(call.arguments.get("offset") or 0),
+                            observation_id,
+                            section=section or None,
+                            offset=effective_offset,
                             limit=int(call.arguments.get("limit") or 12),
                         )
+                        if effective_offset != requested_offset:
+                            tool_result["requestedOffset"] = requested_offset
+                            tool_result["autoAdvanced"] = True
+                        next_offset = tool_result.get("nextOffset")
+                        if isinstance(next_offset, int):
+                            inspection_offsets[progress_key] = next_offset
+                        elif not tool_result.get("error"):
+                            total = tool_result.get("total")
+                            if isinstance(total, int):
+                                inspection_offsets[progress_key] = total
+                            if (
+                                effective_offset > requested_offset
+                                and isinstance(total, int)
+                                and effective_offset >= total
+                            ):
+                                tool_result = {
+                                    "error": "OBSERVATION_PAGE_ALREADY_CONSUMED",
+                                    "observationId": observation_id,
+                                    "section": section or None,
+                                    "total": total,
+                                    "instruction": (
+                                        "This observation section has already been fully inspected. "
+                                        "Choose a different observation/tool or finish; do not repeat offset 0."
+                                    ),
+                                }
                     except KeyError as error:
                         tool_result = {
                             "error": "UNKNOWN_OBSERVATION_REF",
@@ -345,16 +415,14 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
     ) -> list[LLMToolDefinition]:
         """Expose only actions that can still make progress in the current phase.
 
-        The previous runtime kept graph tools visible after their budget was exhausted,
-        so the model repeatedly selected actions that could only return
-        ``GRAPH_TOOL_BUDGET_EXHAUSTED``. When deterministic rule-hint code retrieval has
-        already produced candidates, the first model action is also constrained to a
-        bounded source probe (or inspection of that candidate observation) before broad
-        graph exploration can resume.
+        Deterministic seed retrieval now probes a production source candidate before
+        the first model turn. This fallback gate therefore exposes only get_code when
+        a later search discovers candidates that have not yet been source-inspected;
+        inspect_observation is deliberately excluded so it cannot become a no-progress
+        escape hatch that keeps the model in the restricted phase forever.
         """
         if source_probe_required and code_tool_calls_used < MAX_CODE_CONTEXT_TOOL_STEPS:
-            allowed = {"get_code", "inspect_observation"}
-            return [tool for tool in tools if tool.name in allowed]
+            return [tool for tool in tools if tool.name == "get_code"]
 
         result: list[LLMToolDefinition] = []
         for tool in tools:
@@ -469,6 +537,33 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
                     terms.append(normalized)
         query = " ".join(terms[:MAX_SEED_CODE_QUERY_TERMS]).strip()
         return query[:1200] or None
+
+    @staticmethod
+    def _seed_source_candidate(seed_result: dict[str, Any]) -> dict[str, Any] | None:
+        rows = [
+            row
+            for row in seed_result.get("results") or []
+            if isinstance(row, dict) and row.get("symbolId")
+        ]
+        if not rows:
+            return None
+
+        def is_production(row: dict[str, Any]) -> bool:
+            path = str(row.get("path") or "").lower()
+            return not any(
+                marker in path
+                for marker in (
+                    "/test/",
+                    "/tests/",
+                    "/fixtures/",
+                    "/examples/",
+                    ".spec.",
+                    ".test.",
+                    "__mocks__",
+                )
+            )
+
+        return next((row for row in rows if is_production(row)), rows[0])
 
     @classmethod
     def _code_aware_tool_definitions(cls) -> list[LLMToolDefinition]:
@@ -670,9 +765,9 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
         payload = json.loads(super()._prompt(packet, ledger, working_results, step))
         payload["lcspCodeContextProtocol"] = "AST_SYMBOL_CHUNKS_V1"
         payload["codeInvestigationFlow"] = [
-            "SEARCH: LCSP deterministically seeds code search from EngineeringRule retrievalHints; use search_code/repo_map only when the seeded candidates are insufficient",
+            "SEARCH: LCSP deterministically seeds code search from EngineeringRule retrievalHints and probes the best production source candidate before the first LLM turn",
             "IDENTIFY: code-search previews expose candidate symbolId/chunkId; use get_symbol only when caller/callee metadata is needed",
-            "EXPAND: call get_code on a relevant production candidate before claiming implementation behavior",
+            "EXPAND: inspect additional relevant source only when the seeded source does not resolve the criterion",
             "FOLLOW_REFERENCES: use find_references and graph tools for callers/callees/data/decision paths",
             "REMEMBER: pin important symbols/hypotheses with workspace_update when useful",
             "FINISH: reference EvidenceLedger observations only; LCSP derives provenance",
@@ -684,6 +779,7 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
             "search_code results are candidate metadata, not proof of implementation behavior; when source is available and behavior matters, inspect a relevant symbol with get_code before finishing MET/NOT_MET.",
             "Prefer runtime/production source. Tests, specs, mocks, fixtures and examples may corroborate behavior but must not by themselves prove production behavior unless the EngineeringRule explicitly targets them.",
             "Every EvidenceLedger summary contains availableSections. Use those exact names and do not guess sections from another observation type.",
+            "For pageable observations, when hasMore=true use the returned nextOffset. Never request the same observationId + section + offset twice; LCSP may auto-advance repeated pages.",
             "Never request an entire repository or file when a symbol/chunk is sufficient.",
             "Source pages are bounded inside AST/CST symbol boundaries; follow nextCursor when truncated=true and more source is still necessary.",
             "search_code cursors are stable for this commit and search session.",
