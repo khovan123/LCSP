@@ -31,9 +31,7 @@ describe("RerunClassificationHandler", () => {
     policyVersion: "1",
   };
 
-  function createHandler(options?: {
-    evidenceReport?: EvidenceReportFixture;
-  }) {
+  function createHandler(options?: { evidenceReport?: EvidenceReportFixture }) {
     const evidenceReport: EvidenceReportFixture =
       options?.evidenceReport === undefined
         ? {

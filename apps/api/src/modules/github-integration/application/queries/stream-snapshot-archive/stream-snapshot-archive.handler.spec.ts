@@ -122,7 +122,9 @@ describe("StreamSnapshotArchiveHandler", () => {
 
     const cacheGetMock = jest
       .fn<
-        (lookup: SnapshotArchiveCacheLookup) => Promise<SnapshotArchiveCacheHit | null>
+        (
+          lookup: SnapshotArchiveCacheLookup,
+        ) => Promise<SnapshotArchiveCacheHit | null>
       >()
       .mockResolvedValue(options?.cacheHit ?? null);
     const cacheCaptureMock = jest
