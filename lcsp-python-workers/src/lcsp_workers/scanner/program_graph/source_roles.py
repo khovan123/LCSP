@@ -106,10 +106,6 @@ def exclude_test_sources_from_semantic_program(program: SemanticProgram) -> int:
             if edge.source_key not in removed and edge.target_key not in removed
         ]
 
-    # EVENT/QUEUE/COMMAND/QUERY identities have no source path by design. A test can
-    # create one and then disappear when its file-backed producer/consumer is removed.
-    # Prune only identities with no remaining incident production edge so planner/search
-    # cannot observe a ghost framework boundary created exclusively by test code.
     incident = {
         key
         for edge in program.edges
@@ -125,9 +121,6 @@ def exclude_test_sources_from_semantic_program(program: SemanticProgram) -> int:
     if orphans:
         program.nodes = [node for node in program.nodes if node.key not in orphans]
 
-    # Remove frontier IDs whose concrete UNRESOLVED_DYNAMIC_TARGET node was filtered.
-    # Keep non-node diagnostics (for example missing_graph_node:...) because the
-    # ProgramGraphBuilder uses those strings as legitimate coverage diagnostics.
     existing_keys = {node.key for node in program.nodes}
     known_before = existing_keys | removed | orphans
     program.unresolved_frontiers = [
@@ -136,8 +129,6 @@ def exclude_test_sources_from_semantic_program(program: SemanticProgram) -> int:
         if value not in known_before or value in existing_keys
     ]
 
-    # Local import avoids coupling the source-role module to framework extraction at
-    # import time. The finalizer itself depends only on SemanticProgram contracts.
     from .framework_boundary_finalizer import FrameworkBoundaryFinalizer
 
     FrameworkBoundaryFinalizer().enrich(program)
@@ -148,11 +139,9 @@ def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenc
     """Return an ephemeral/test-free graph for planning and investigation.
 
     Newly scanned graphs are already filtered in the semantic assembler. This second
-    boundary intentionally also protects classification reruns over older persisted
-    graph artifacts that may still contain test/spec nodes. Source-less framework
-    identities left orphaned by that removal are pruned as well. Query traversal owns
-    post-persistence boundary uncertainty, so this compatibility filter also removes
-    stale unresolved node IDs that were deleted with test evidence.
+    boundary also protects reruns over older persisted graph artifacts that may still
+    contain test/spec nodes. v3 origin/resolution/support-ref indexes are retained when
+    the compatibility filter has to rebuild the graph body.
     """
     original_node_ids = {
         str(node.get("node_id")) for node in graph.nodes if node.get("node_id")
@@ -227,6 +216,12 @@ def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenc
         if not node_id:
             continue
         indexes.setdefault(f"node:{node.get('node_type')}", []).append(node_id)
+        if node.get("origin"):
+            indexes.setdefault(f"origin:{node.get('origin')}", []).append(node_id)
+        if node.get("resolution_state"):
+            indexes.setdefault(
+                f"resolution:{node.get('resolution_state')}", []
+            ).append(node_id)
         for semantic in node.get("semantic_types") or []:
             indexes.setdefault(f"semantic:{semantic}", []).append(node_id)
     indexes = {key: sorted(set(value)) for key, value in sorted(indexes.items())}
@@ -235,7 +230,10 @@ def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenc
         {
             str(ref)
             for item in [*kept_nodes, *kept_edges]
-            for ref in item.get("evidence_refs") or []
+            for ref in [
+                *(item.get("evidence_refs") or []),
+                *(item.get("support_refs") or []),
+            ]
             if str(ref)
         }
     )
