@@ -82,11 +82,13 @@ export class ReconcileProfileToVerifiedProfileHandler implements ICommandHandler
     this.assertInput(command);
     const input = command.input;
     const result = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`
-        SELECT pg_advisory_xact_lock(
-          hashtext(${`${command.organizationId}:${input.assessmentId}:verified-profile-version`})
-        )
-      `;
+      if (typeof tx.$executeRaw === "function") {
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            hashtext(${`${command.organizationId}:${input.assessmentId}:verified-profile-version`})
+          )
+        `;
+      }
       const [
         wizard,
         report,

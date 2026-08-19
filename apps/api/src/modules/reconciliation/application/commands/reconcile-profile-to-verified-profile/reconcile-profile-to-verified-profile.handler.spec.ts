@@ -21,6 +21,9 @@ function buildHandler(pending = false) {
   const update = jest
     .fn()
     .mockImplementation(() => Promise.resolve({ id: "verified-existing" }));
+  const updateMany = jest
+    .fn()
+    .mockImplementation(() => Promise.resolve({ count: 1 }));
   const writeInTx = jest.fn().mockImplementation(() => Promise.resolve());
   const enqueue = jest.fn().mockImplementation(() => Promise.resolve());
   const flow: {
@@ -33,6 +36,8 @@ function buildHandler(pending = false) {
     claims: [{ claim_id: "claim-1", evidence_refs: ["evidence:1"] }],
   };
   const tx = {
+    $executeRaw: jest.fn().mockImplementation(() => Promise.resolve(0)),
+    $queryRaw: jest.fn().mockImplementation(() => Promise.resolve([])),
     wizardProfile: {
       findFirst: jest
         .fn()
@@ -52,6 +57,7 @@ function buildHandler(pending = false) {
       findFirst: jest.fn().mockImplementation(() => Promise.resolve(null)),
       create,
       update,
+      updateMany,
     },
     technicalProfile: {
       findFirst: jest
@@ -92,7 +98,7 @@ function buildHandler(pending = false) {
     "org-1",
     "corr-1",
   );
-  return { handler, command, create, update, writeInTx, enqueue, tx, flow };
+  return { handler, command, create, update, updateMany, writeInTx, enqueue, tx, flow };
 }
 
 describe("ReconcileProfileToVerifiedProfileHandler", () => {
@@ -182,7 +188,7 @@ describe("ReconcileProfileToVerifiedProfileHandler", () => {
   });
 
   it("creates a new version and marks the old profile STALE when rerun produces a new flow", async () => {
-    const { handler, command, create, update, writeInTx, enqueue, tx } = buildHandler();
+    const { handler, command, create, updateMany, writeInTx, enqueue, tx } = buildHandler();
     tx.verifiedProfile.findFirst
       .mockImplementationOnce(() => Promise.resolve(null))
       .mockImplementationOnce(() =>
@@ -210,16 +216,16 @@ describe("ReconcileProfileToVerifiedProfileHandler", () => {
       }),
     );
     // Old row marked STALE (only status changed)
-    expect(update).toHaveBeenCalledWith(
+    expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "verified-existing" },
+        where: expect.objectContaining({ id: "verified-existing" }),
         data: expect.objectContaining({
           status: expect.anything(),
         }),
       }),
     );
-    expect(update).toHaveBeenCalledTimes(1);
-    const updateCall = update.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    const updateCall = updateMany.mock.calls[0][0] as { data: Record<string, unknown> };
     expect(updateCall.data).not.toHaveProperty("aiUsageFlowId");
     expect(updateCall.data).not.toHaveProperty("approvedAt");
     expect(updateCall.data).not.toHaveProperty("version");
