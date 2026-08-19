@@ -17,11 +17,13 @@ from .framework_resolution import FrameworkBoundaryResolver
 from .generic_dispatch_resolution import GenericDispatchResolver
 from .javascript_architecture_resolution import JavaScriptArchitectureResolver
 from .managed_architecture_resolution import ManagedArchitectureResolver
+from .protocol_resolution import ProtocolBoundaryResolver
 from .python_architecture_resolution import PythonArchitectureResolver
 from .python_consumer_resolution import PythonConsumerBoundaryResolver
 from .python_framework_adapters import PythonFrameworkAdapters
 from .redux_extended_resolution import ReduxExtendedResolver
 from .semantic_ir import SemanticEdgeFact, SemanticNodeFact
+from .sensitive_lineage_gate import SensitiveLineageGate
 from .source_roles import (
     exclude_test_sources_from_semantic_program,
     is_test_source_path,
@@ -72,8 +74,17 @@ class ProgramGraphAssembler:
         # v3 data lineage is built over the already resolved technical IR. It creates
         # first-class DATA_OBJECT identities, preserves payload flow through framework
         # boundaries, materializes AI input/output flow, reads protobuf contracts and
-        # corroborates sensitive-data processing from behavior rather than variable names.
+        # derives weak semantic seeds without trusting identifier names as conclusions.
         SemanticDataLineageExtractor(workspace_path).enrich(program)
+
+        # Promote sensitive semantics only when behavior corroborates the weak seed.
+        # A standalone "fingerprint"/"cccd" identifier remains INFERRED, while actual
+        # OCR/KYC or biometric representation+matching flow becomes CORROBORATED.
+        SensitiveLineageGate(workspace_path).enrich(program)
+
+        # Protocol contracts are continuation boundaries just like queues/CQRS. Resolve
+        # unique gRPC method implementations or create an explicit unresolved frontier.
+        ProtocolBoundaryResolver().enrich(program)
 
         # Bind lineage-backed business actions to first-class BUSINESS_DECISION nodes.
         # This is a technical influence relation only; legal automation/risk conclusions
