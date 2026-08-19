@@ -7,6 +7,7 @@ observations deterministically.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -15,10 +16,27 @@ DEFAULT_INDEX_LIMIT = 20
 MAX_INDEX_LIMIT = 40
 DEFAULT_INSPECT_LIMIT = 12
 MAX_INSPECT_LIMIT = 40
+MAX_INSPECT_PAGE_CHARS = 18_000
 SECTION_ALIASES = {
     "evidence": "evidenceRefs",
     "evidence_refs": "evidenceRefs",
 }
+PREVIEW_SECTION_PRIORITY = (
+    "results",
+    "files",
+    "references",
+    "symbols",
+    "importantSymbols",
+    "nodes",
+    "reviewNodes",
+    "finalActions",
+    "neighbors",
+    "edges",
+    "paths",
+    "evidenceRefs",
+    "continuationFrontiers",
+    "unresolvedFrontiers",
+)
 
 
 @dataclass(frozen=True)
@@ -103,22 +121,19 @@ class EvidenceLedger:
     ) -> dict[str, Any]:
         """Return a bounded page from one full observation without mutating it.
 
-        A tiny deterministic alias set accepts the common model spelling ``evidence``
-        for the canonical graph field ``evidenceRefs``. Other section names must match
-        the observation's returned ``availableSections`` exactly; LCSP does not guess
-        ambiguous aliases.
+        Common deterministic aliases are normalized to canonical graph fields. Every
+        observation summary advertises its exact pageable sections so the model does
+        not have to guess across graph, wizard and code-context observation shapes.
+        Requested pages are also char-bounded automatically; LCSP shrinks an oversized
+        page instead of spending another LLM turn on ``WORKING_VIEW_TOO_LARGE``.
         """
         row = self.get(observation_id)
         offset = max(0, int(offset))
-        limit = min(MAX_INSPECT_LIMIT, max(1, int(limit)))
+        requested_limit = min(MAX_INSPECT_LIMIT, max(1, int(limit)))
         value = row.result
 
         if isinstance(value, Mapping):
-            available_sections = [
-                str(key)
-                for key, item in value.items()
-                if isinstance(item, Sequence) and not isinstance(item, (str, bytes, bytearray))
-            ]
+            available_sections = self._available_sections(value)
             if section:
                 requested_section = str(section)
                 selected_section = SECTION_ALIASES.get(
@@ -135,20 +150,23 @@ class EvidenceLedger:
                         "section": requested_section,
                         "availableSections": available_sections,
                         "instruction": (
-                            "Omit section once to inspect availableSections, then use one of those exact names."
+                            "Use one of availableSections exactly; section names are observation-specific."
                         ),
                     }
                 items = list(selected)
-                page = items[offset : offset + limit]
+                page = self._bounded_page(items, offset=offset, limit=requested_limit)
                 result = {
                     "observationId": row.observation_id,
                     "section": selected_section,
                     "offset": offset,
-                    "limit": limit,
+                    "limit": len(page),
                     "total": len(items),
                     "hasMore": offset + len(page) < len(items),
                     "items": page,
                 }
+                if len(page) < min(requested_limit, max(0, len(items) - offset)):
+                    result["requestedLimit"] = requested_limit
+                    result["pageCharBoundApplied"] = True
                 if selected_section != requested_section:
                     result["requestedSection"] = requested_section
                 return result
@@ -167,15 +185,19 @@ class EvidenceLedger:
 
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
             items = list(value)
-            page = items[offset : offset + limit]
-            return {
+            page = self._bounded_page(items, offset=offset, limit=requested_limit)
+            result = {
                 "observationId": row.observation_id,
                 "offset": offset,
-                "limit": limit,
+                "limit": len(page),
                 "total": len(items),
                 "hasMore": offset + len(page) < len(items),
                 "items": page,
             }
+            if len(page) < min(requested_limit, max(0, len(items) - offset)):
+                result["requestedLimit"] = requested_limit
+                result["pageCharBoundApplied"] = True
+            return result
 
         return {
             "observationId": row.observation_id,
@@ -187,17 +209,7 @@ class EvidenceLedger:
         row = self.get(observation_id)
         value = row.result
         if isinstance(value, Mapping):
-            for section in (
-                "nodes",
-                "reviewNodes",
-                "finalActions",
-                "neighbors",
-                "edges",
-                "paths",
-                "evidenceRefs",
-                "continuationFrontiers",
-                "unresolvedFrontiers",
-            ):
+            for section in PREVIEW_SECTION_PRIORITY:
                 item = value.get(section)
                 if isinstance(item, Sequence) and not isinstance(
                     item, (str, bytes, bytearray)
@@ -227,25 +239,19 @@ class EvidenceLedger:
         }
 
         if isinstance(result, Mapping):
+            available_sections = self._available_sections(result)
+            if available_sections:
+                summary["availableSections"] = available_sections
             for key in (
                 "query",
                 "startNodeId",
                 "state",
                 "truncated",
+                "nextCursor",
             ):
                 if key in result:
                     summary[key] = result.get(key)
-            for key in (
-                "nodes",
-                "reviewNodes",
-                "finalActions",
-                "neighbors",
-                "edges",
-                "paths",
-                "evidenceRefs",
-                "continuationFrontiers",
-                "unresolvedFrontiers",
-            ):
+            for key in available_sections:
                 item = result.get(key)
                 if isinstance(item, Sequence) and not isinstance(
                     item, (str, bytes, bytearray)
@@ -272,6 +278,24 @@ class EvidenceLedger:
             graph_refs=tuple(sorted(graph_refs)),
             source_anchor_refs=tuple(sorted(source_anchor_refs)),
         )
+
+    @staticmethod
+    def _available_sections(value: Mapping[str, Any]) -> list[str]:
+        return [
+            str(key)
+            for key, item in value.items()
+            if isinstance(item, Sequence) and not isinstance(item, (str, bytes, bytearray))
+        ]
+
+    @staticmethod
+    def _bounded_page(items: list[Any], *, offset: int, limit: int) -> list[Any]:
+        page = items[offset : offset + limit]
+        while len(page) > 1:
+            rendered = json.dumps(page, ensure_ascii=False, sort_keys=True, default=str)
+            if len(rendered) <= MAX_INSPECT_PAGE_CHARS:
+                break
+            page = page[: max(1, len(page) // 2)]
+        return page
 
     @classmethod
     def _extract_provenance(cls, value: Any) -> ObservationProvenance:
