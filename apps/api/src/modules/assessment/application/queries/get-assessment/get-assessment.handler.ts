@@ -269,6 +269,7 @@ function toEngineeringRuleEvaluation(
     technical_evidence: resolveTechnicalEvidenceDisplays(
       evidencePayload,
       evidenceRefs,
+      value.technical_evidence,
     ),
     source_chunk_ids: sourceChunkIds,
     source_locators: stringArray(value.source_locators),
