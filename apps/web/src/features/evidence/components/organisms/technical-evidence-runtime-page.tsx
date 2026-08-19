@@ -24,7 +24,7 @@ import { useRerunRepositoryScanMutation } from "@/lib/api/assessment-queries";
 import { useWorkspaceRuntime } from "@/features/workspace/components/organisms/workspace-runtime-provider";
 import {
   buildRuntimeConsoleModel,
-  isActiveRuntim=eStatus,
+  isActiveRuntimeStatus,
   selectRuntimeConsoleActivity,
   type RuntimeConsoleStep,
 } from "@/features/evidence/utils/runtime-console";
