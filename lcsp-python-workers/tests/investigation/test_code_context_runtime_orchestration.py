@@ -143,6 +143,7 @@ def test_seeded_code_candidate_requires_bounded_source_probe_before_broad_graph_
 
     first_tools = {tool.name for tool in client.calls[0]["tools"]}
     assert first_tools == {"get_code", "inspect_observation"}
+    assert FINISH_TOOL_NAME not in first_tools
     second_tools = {tool.name for tool in client.calls[1]["tools"]}
     assert FINISH_TOOL_NAME in second_tools
     assert set(GRAPH_TOOL_NAMES).issubset(second_tools)
