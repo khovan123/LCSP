@@ -1,4 +1,4 @@
-"""Repository-wide Program Evidence Graph orchestration."""
+"""Repository-wide Unified System Evidence Graph orchestration."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,6 +7,7 @@ from typing import Iterable
 from lcsp_workers.scanner.dependencies.dependency_fact import normalize_package_name
 
 from .builder import ProgramGraphBuilder
+from .data_lineage import SemanticDataLineageExtractor
 from .extractor import RepositorySemanticExtractor
 from .framework_links import FrameworkBoundaryExtractor
 from .framework_metadata import normalize_framework_binding_metadata
@@ -52,9 +53,6 @@ class ProgramGraphAssembler:
         # Framework identities are continuation boundaries, never silent endpoints.
         # Resolve known framework families first, then run a conservative literal-key
         # registration/dispatch fallback for custom libraries and other languages.
-        # Exact static bindings continue to concrete symbols; dynamic/ambiguous bindings
-        # become UNRESOLVED_DYNAMIC_TARGET frontiers so negative-evidence reasoning
-        # cannot confuse a framework boundary with the end of the product flow.
         FrameworkBoundaryResolver(workspace_path).enrich(program)
         PythonConsumerBoundaryResolver(workspace_path).enrich(program)
         PythonArchitectureResolver(workspace_path).enrich(program)
@@ -65,9 +63,16 @@ class ProgramGraphAssembler:
         GenericDispatchResolver(workspace_path).enrich(program)
         normalize_framework_binding_metadata(program)
 
+        # v3 data lineage is built over the already resolved technical IR. It creates
+        # first-class DATA_OBJECT identities, preserves payload flow through framework
+        # boundaries, materializes AI input/output flow, reads protobuf contracts and
+        # corroborates sensitive-data processing from behavior rather than variable names.
+        SemanticDataLineageExtractor(workspace_path).enrich(program)
+
         # Test/spec/fixture sources are not product behavior. Remove them before stable
         # graph IDs and source anchors are built so they cannot pollute rule retrieval,
-        # code search, planner materiality, or persisted classification evidence.
+        # code search, planner materiality, or persisted classification evidence. The
+        # post-filter framework finalizer runs inside this policy boundary.
         exclude_test_sources_from_semantic_program(program)
 
         program.add_node(
