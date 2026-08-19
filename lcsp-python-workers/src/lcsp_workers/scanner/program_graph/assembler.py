@@ -11,6 +11,7 @@ from .extractor import RepositorySemanticExtractor
 from .framework_links import FrameworkBoundaryExtractor
 from .framework_metadata import normalize_framework_binding_metadata
 from .framework_resolution import FrameworkBoundaryResolver
+from .generic_dispatch_resolution import GenericDispatchResolver
 from .javascript_architecture_resolution import JavaScriptArchitectureResolver
 from .managed_architecture_resolution import ManagedArchitectureResolver
 from .python_architecture_resolution import PythonArchitectureResolver
@@ -48,8 +49,9 @@ class ProgramGraphAssembler:
         program.extend(FrameworkBoundaryExtractor(workspace_path).extract())
 
         # Framework identities are continuation boundaries, never silent endpoints.
-        # Resolve the common architecture families before graph IDs are built. Exact
-        # static bindings continue to concrete symbols; dynamic/ambiguous bindings
+        # Resolve known framework families first, then run a conservative literal-key
+        # registration/dispatch fallback for custom libraries and other languages.
+        # Exact static bindings continue to concrete symbols; dynamic/ambiguous bindings
         # become UNRESOLVED_DYNAMIC_TARGET frontiers so negative-evidence reasoning
         # cannot confuse a framework boundary with the end of the product flow.
         FrameworkBoundaryResolver(workspace_path).enrich(program)
@@ -58,6 +60,7 @@ class ProgramGraphAssembler:
         PythonFrameworkAdapters(workspace_path).enrich(program)
         JavaScriptArchitectureResolver(workspace_path).enrich(program)
         ManagedArchitectureResolver(workspace_path).enrich(program)
+        GenericDispatchResolver(workspace_path).enrich(program)
         normalize_framework_binding_metadata(program)
 
         # Test/spec/fixture sources are not product behavior. Remove them before stable
