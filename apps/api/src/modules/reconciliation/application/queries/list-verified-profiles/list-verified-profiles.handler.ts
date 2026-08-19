@@ -1,13 +1,8 @@
-import {
-  AUDIT_DECISIONS,
-  AUDIT_RESOURCE_TYPES,
-} from "@lcsp/contracts/audit";
+import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 
-import {
-  fromPrismaVerifiedProfileStatus,
-} from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
+import { fromPrismaVerifiedProfileStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { ListVerifiedProfilesQuery } from "./list-verified-profiles.query.js";
@@ -34,9 +29,10 @@ type VerifiedProfileHistoryResponse = {
 };
 
 @QueryHandler(ListVerifiedProfilesQuery)
-export class ListVerifiedProfilesHandler
-  implements IQueryHandler<ListVerifiedProfilesQuery, VerifiedProfileHistoryResponse>
-{
+export class ListVerifiedProfilesHandler implements IQueryHandler<
+  ListVerifiedProfilesQuery,
+  VerifiedProfileHistoryResponse
+> {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditWriter: AuditWriterService,
@@ -103,4 +99,3 @@ export class ListVerifiedProfilesHandler
     };
   }
 }
-

@@ -98,7 +98,17 @@ function buildHandler(pending = false) {
     "org-1",
     "corr-1",
   );
-  return { handler, command, create, update, updateMany, writeInTx, enqueue, tx, flow };
+  return {
+    handler,
+    command,
+    create,
+    update,
+    updateMany,
+    writeInTx,
+    enqueue,
+    tx,
+    flow,
+  };
 }
 
 describe("ReconcileProfileToVerifiedProfileHandler", () => {
@@ -188,7 +198,8 @@ describe("ReconcileProfileToVerifiedProfileHandler", () => {
   });
 
   it("creates a new version and marks the old profile STALE when rerun produces a new flow", async () => {
-    const { handler, command, create, updateMany, writeInTx, enqueue, tx } = buildHandler();
+    const { handler, command, create, updateMany, writeInTx, enqueue, tx } =
+      buildHandler();
     tx.verifiedProfile.findFirst
       .mockImplementationOnce(() => Promise.resolve(null))
       .mockImplementationOnce(() =>
@@ -225,7 +236,9 @@ describe("ReconcileProfileToVerifiedProfileHandler", () => {
       }),
     );
     expect(updateMany).toHaveBeenCalledTimes(1);
-    const updateCall = updateMany.mock.calls[0][0] as { data: Record<string, unknown> };
+    const updateCall = updateMany.mock.calls[0][0] as {
+      data: Record<string, unknown>;
+    };
     expect(updateCall.data).not.toHaveProperty("aiUsageFlowId");
     expect(updateCall.data).not.toHaveProperty("approvedAt");
     expect(updateCall.data).not.toHaveProperty("version");
@@ -252,15 +265,21 @@ describe("ReconcileProfileToVerifiedProfileHandler", () => {
 
     await handler.execute(command);
 
-    const auditCalls = writeInTx.mock.calls as Array<[{ eventType: string; payload: Record<string, unknown> }]>;
-    const staleCall = auditCalls.find(([arg]) => arg.eventType === "VERIFIED_PROFILE_STALE");
+    const auditCalls = writeInTx.mock.calls as Array<
+      [{ eventType: string; payload: Record<string, unknown> }]
+    >;
+    const staleCall = auditCalls.find(
+      ([arg]) => arg.eventType === "VERIFIED_PROFILE_STALE",
+    );
     expect(staleCall).toBeDefined();
     expect(staleCall![0].payload).toMatchObject({
       verifiedProfileId: "verified-existing",
       staleReason: "NEW_EVIDENCE_RERUN",
     });
     expect(staleCall![0].payload.supersededBy).toBeTruthy();
-    const persistedCall = auditCalls.find(([arg]) => arg.eventType === "VERIFIED_PROFILE_PERSISTED");
+    const persistedCall = auditCalls.find(
+      ([arg]) => arg.eventType === "VERIFIED_PROFILE_PERSISTED",
+    );
     expect(persistedCall).toBeDefined();
     expect(persistedCall![0].payload).toMatchObject({
       supersededProfileId: "verified-existing",

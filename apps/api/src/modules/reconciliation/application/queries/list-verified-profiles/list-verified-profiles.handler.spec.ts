@@ -1,5 +1,8 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import { SCAN_EVENT_TYPES, VERIFIED_PROFILE_STATUSES } from "@lcsp/contracts/scan";
+import {
+  SCAN_EVENT_TYPES,
+  VERIFIED_PROFILE_STATUSES,
+} from "@lcsp/contracts/scan";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -7,15 +10,25 @@ import { ListVerifiedProfilesHandler } from "./list-verified-profiles.handler.js
 import { ListVerifiedProfilesQuery } from "./list-verified-profiles.query.js";
 
 function buildHandler(rows: object[] = [], totalCount: number = 0) {
-  const findMany = jest.fn<(args: unknown) => Promise<object[]>>().mockResolvedValue(rows);
-  const count = jest.fn<(args: unknown) => Promise<number>>().mockResolvedValue(totalCount);
-  const write = jest.fn<(event: unknown) => Promise<void>>().mockResolvedValue(undefined);
+  const findMany = jest
+    .fn<(args: unknown) => Promise<object[]>>()
+    .mockResolvedValue(rows);
+  const count = jest
+    .fn<(args: unknown) => Promise<number>>()
+    .mockResolvedValue(totalCount);
+  const write = jest
+    .fn<(event: unknown) => Promise<void>>()
+    .mockResolvedValue(undefined);
   const prisma = {
     verifiedProfile: { findMany, count },
   } as unknown as PrismaService;
   const auditWriter = { write } as unknown as AuditWriterService;
   const handler = new ListVerifiedProfilesHandler(prisma, auditWriter);
-  const query = new ListVerifiedProfilesQuery("assessment-1", "org-1", "corr-1");
+  const query = new ListVerifiedProfilesQuery(
+    "assessment-1",
+    "org-1",
+    "corr-1",
+  );
   return { handler, query, findMany, count, write };
 }
 
@@ -57,7 +70,9 @@ describe("ListVerifiedProfilesHandler", () => {
     expect(result.profiles[0].id).toBe("vp-1");
     expect(result.profiles[0].status).toBe(VERIFIED_PROFILE_STATUSES.stale);
     expect(result.profiles[1].id).toBe("vp-2");
-    expect(result.profiles[1].status).toBe(VERIFIED_PROFILE_STATUSES.pendingApproval);
+    expect(result.profiles[1].status).toBe(
+      VERIFIED_PROFILE_STATUSES.pendingApproval,
+    );
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { assessmentId: "assessment-1", organizationId: "org-1" },

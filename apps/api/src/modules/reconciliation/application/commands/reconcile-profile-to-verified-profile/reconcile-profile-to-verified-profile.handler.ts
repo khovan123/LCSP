@@ -247,9 +247,7 @@ export class ReconcileProfileToVerifiedProfileHandler implements ICommandHandler
         const staleStatusForUpdate = staleStatus;
         const approvedStatuses = new Set([
           toPrismaVerifiedProfileStatus(VERIFIED_PROFILE_STATUSES.approved),
-          toPrismaVerifiedProfileStatus(
-            VERIFIED_PROFILE_STATUSES.autoApproved,
-          ),
+          toPrismaVerifiedProfileStatus(VERIFIED_PROFILE_STATUSES.autoApproved),
         ]);
         if (approvedStatuses.has(existing.status)) {
           throw problemException(
