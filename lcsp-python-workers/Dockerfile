@@ -14,10 +14,13 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
     | sh -s -- -b /usr/local/bin "v${SYFT_VERSION}" \
-    && npm install --global "knip@${KNIP_VERSION}"
+    && npm install --global "knip@${KNIP_VERSION}" \
+    && ln -sf "$(command -v knip)" /usr/local/bin/knip
 
 WORKDIR /app
 COPY lcsp-python-workers /app/lcsp-python-workers
+COPY reports/legal-corpus-ocr/lcsp-precompiled-engineering-rules-vn-2026-08.json \
+    /app/reports/legal-corpus-ocr/lcsp-precompiled-engineering-rules-vn-2026-08.json
 
 RUN cd /app/lcsp-python-workers/src/lcsp_workers/scanner/ts_js_bridge/ts-js-analyzer \
     && rm -f package-lock.json \
