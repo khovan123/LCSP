@@ -84,13 +84,50 @@ def test_unresolved_required_criterion_keeps_rule_unknown() -> None:
     assert ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"] in result.limitations
 
 
-def test_unscoped_claim_in_multi_criterion_rule_fails_closed_to_unknown() -> None:
+def test_evidence_less_generic_unresolved_does_not_poison_closed_required_criteria() -> None:
     result = EngineeringRuleEvaluator().evaluate(
         _rule("A", "B"),
         [
-            _claim("A", ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]),
-            _claim("B", ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"]),
-            _claim(None, ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"], evidence=None),
+            _claim("A", ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"], evidence="evidence:a"),
+            _claim("B", ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"], evidence="evidence:b"),
+            _claim(
+                None,
+                ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"],
+                evidence=None,
+                limitations=(ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],),
+            ),
+        ],
+    )
+
+    assert result.status == ENGINEERING_RULE_EVALUATION_STATUSES["compliant"]
+    assert ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"] not in result.limitations
+
+
+def test_evidence_less_scoped_unresolved_does_not_override_backed_met_same_criterion() -> None:
+    result = EngineeringRuleEvaluator().evaluate(
+        _rule("A"),
+        [
+            _claim("A", ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"], evidence="evidence:a"),
+            _claim(
+                "A",
+                ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"],
+                evidence=None,
+                limitations=(ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"],),
+            ),
+        ],
+    )
+
+    assert result.status == ENGINEERING_RULE_EVALUATION_STATUSES["compliant"]
+    assert ENGINEERING_LIMITATION_CODES["engineering_evidence_insufficient"] not in result.limitations
+
+
+def test_provenance_backed_unscoped_claim_in_multi_criterion_rule_fails_closed() -> None:
+    result = EngineeringRuleEvaluator().evaluate(
+        _rule("A", "B"),
+        [
+            _claim("A", ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"], evidence="evidence:a"),
+            _claim("B", ENGINEERING_EVIDENCE_CLAIM_TYPES["requirement_met"], evidence="evidence:b"),
+            _claim(None, ENGINEERING_EVIDENCE_CLAIM_TYPES["unresolved"], evidence="evidence:unknown"),
         ],
     )
 
