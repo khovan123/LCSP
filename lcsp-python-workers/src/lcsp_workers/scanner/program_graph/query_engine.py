@@ -10,6 +10,8 @@ from .vocabulary import (
     BUSINESS_ACTION_NODE_TYPES,
     DATA_FLOW_EDGES,
     DECISION_EDGE_TYPES,
+    FRAMEWORK_BOUNDARY_NODE_TYPES,
+    FRAMEWORK_CONTINUATION_EDGES,
     HUMAN_CONTROL_NODE_TYPES,
 )
 
@@ -170,21 +172,8 @@ class ProgramGraphQueryEngine:
         max_results: int = 100,
     ) -> GraphQueryResult:
         follow = set(edge_types) or (
-            {
-                "CALLS",
-                "RESOLVES_TO",
-                "TRIGGERS",
-                "AFFECTS",
-                "HANDLED_BY",
-                "PUBLISHES_EVENT",
-                "CONSUMES_EVENT",
-                "PUBLISHES_TO_QUEUE",
-                "CONSUMES_FROM_QUEUE",
-                "PUBLISHES_COMMAND",
-                "HANDLES_COMMAND",
-                "PUBLISHES_QUERY",
-                "HANDLES_QUERY",
-            }
+            {"CALLS", "TRIGGERS", "AFFECTS"}
+            | set(FRAMEWORK_CONTINUATION_EDGES)
             | set(DATA_FLOW_EDGES)
             | set(DECISION_EDGE_TYPES)
         )
@@ -214,7 +203,9 @@ class ProgramGraphQueryEngine:
             max_results,
             max_results * 5,
             set(),
-            set(DATA_FLOW_EDGES) | {"CALLS", "RESOLVES_TO"},
+            set(DATA_FLOW_EDGES)
+            | {"CALLS"}
+            | set(FRAMEWORK_CONTINUATION_EDGES),
             set(),
         )
 
@@ -246,16 +237,8 @@ class ProgramGraphQueryEngine:
             set(),
             set(DATA_FLOW_EDGES)
             | set(DECISION_EDGE_TYPES)
-            | {
-                "CALLS",
-                "RESOLVES_TO",
-                "TRIGGERS",
-                "HANDLED_BY",
-                "PUBLISHES_EVENT",
-                "CONSUMES_EVENT",
-                "PUBLISHES_TO_QUEUE",
-                "CONSUMES_FROM_QUEUE",
-            },
+            | {"CALLS", "TRIGGERS"}
+            | set(FRAMEWORK_CONTINUATION_EDGES),
             stops,
         )
 
@@ -433,13 +416,28 @@ class ProgramGraphQueryEngine:
         while queue:
             node_id, depth, path = queue.popleft()
             node = self.nodes[node_id]
-            if node.get("node_type") == "UNRESOLVED_DYNAMIC_TARGET":
+            node_type = str(node.get("node_type") or "")
+            if node_type == "UNRESOLVED_DYNAMIC_TARGET":
                 unresolved.add(node_id)
-            if stop_types and node_id != seed and node.get("node_type") in stop_types:
+            if stop_types and node_id != seed and node_type in stop_types:
                 paths.append(path)
                 continue
 
             neighbors = self._neighbors(node_id, direction, edge_types)
+
+            # Backward compatibility for persisted ProgramGraph v2 artifacts created
+            # before method-level framework resolution existed. EVENT/QUEUE/COMMAND/
+            # QUERY are continuation boundaries; ending there (or at their legacy
+            # module-only handler target) is analysis uncertainty, not proof of absence.
+            if not neighbors and node_id != seed:
+                if node_type in FRAMEWORK_BOUNDARY_NODE_TYPES:
+                    unresolved.add(node_id)
+                elif node_type == "MODULE" and len(path) >= 2:
+                    previous_id = path[-2]
+                    previous = self.nodes.get(previous_id) or {}
+                    if previous.get("node_type") in FRAMEWORK_BOUNDARY_NODE_TYPES:
+                        unresolved.add(previous_id)
+
             if depth >= depth_limit:
                 if neighbors:
                     truncated = True
