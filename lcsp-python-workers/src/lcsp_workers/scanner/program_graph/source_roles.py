@@ -41,6 +41,7 @@ _TEST_FILE_PATTERNS = (
     re.compile(r"^conftest\.py$", re.IGNORECASE),
     re.compile(r"^.+\.(test|spec)\.(js|jsx|ts|tsx|mjs|cjs)$", re.IGNORECASE),
 )
+_ORPHANABLE_FRAMEWORK_TYPES = frozenset({"EVENT", "QUEUE", "COMMAND", "QUERY"})
 
 
 def normalize_source_path(value: str | None) -> str:
@@ -84,21 +85,42 @@ def is_material_source_path(value: str | None) -> bool:
 
 
 def exclude_test_sources_from_semantic_program(program: SemanticProgram) -> int:
-    """Remove test-backed semantic nodes and all incident edges before graph IDs are built."""
+    """Remove test-backed semantic nodes, incident edges and test-created boundary orphans."""
     removed = {
         node.key
         for node in program.nodes
         if node.file_path and is_test_source_path(node.file_path)
     }
-    if not removed:
-        return 0
-    program.nodes = [node for node in program.nodes if node.key not in removed]
-    program.edges = [
-        edge
+    if removed:
+        program.nodes = [node for node in program.nodes if node.key not in removed]
+        program.edges = [
+            edge
+            for edge in program.edges
+            if edge.source_key not in removed and edge.target_key not in removed
+        ]
+
+    # EVENT/QUEUE/COMMAND/QUERY identities have no source path by design. A test can
+    # create one and then disappear when its file-backed producer/consumer is removed.
+    # Prune only identities with no remaining incident production edge so planner/search
+    # cannot observe a ghost framework boundary created exclusively by test code.
+    incident = {
+        key
         for edge in program.edges
-        if edge.source_key not in removed and edge.target_key not in removed
-    ]
-    return len(removed)
+        for key in (edge.source_key, edge.target_key)
+    }
+    orphans = {
+        node.key
+        for node in program.nodes
+        if node.node_type in _ORPHANABLE_FRAMEWORK_TYPES
+        and not node.file_path
+        and node.key not in incident
+    }
+    if orphans:
+        program.nodes = [node for node in program.nodes if node.key not in orphans]
+        program.unresolved_frontiers = [
+            value for value in program.unresolved_frontiers if value not in orphans
+        ]
+    return len(removed) + len(orphans)
 
 
 def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenceGraph:
@@ -106,7 +128,8 @@ def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenc
 
     Newly scanned graphs are already filtered in the semantic assembler. This second
     boundary intentionally also protects classification reruns over older persisted
-    graph artifacts that may still contain test/spec nodes.
+    graph artifacts that may still contain test/spec nodes. Source-less framework
+    identities left orphaned by that removal are pruned as well.
     """
     kept_nodes = [
         node
@@ -116,15 +139,45 @@ def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenc
         )
     ]
     kept_ids = {str(node.get("node_id")) for node in kept_nodes if node.get("node_id")}
-    if len(kept_nodes) == len(graph.nodes):
-        return graph
-
     kept_edges = [
         edge
         for edge in graph.edges
         if str(edge.get("source_node_id")) in kept_ids
         and str(edge.get("target_node_id")) in kept_ids
     ]
+
+    incident_ids = {
+        value
+        for edge in kept_edges
+        for value in (
+            str(edge.get("source_node_id") or ""),
+            str(edge.get("target_node_id") or ""),
+        )
+        if value
+    }
+    orphan_ids = {
+        str(node.get("node_id"))
+        for node in kept_nodes
+        if node.get("node_type") in _ORPHANABLE_FRAMEWORK_TYPES
+        and not str((node.get("source") or {}).get("file_path") or "")
+        and str(node.get("node_id") or "") not in incident_ids
+    }
+    if orphan_ids:
+        kept_nodes = [
+            node for node in kept_nodes if str(node.get("node_id")) not in orphan_ids
+        ]
+        kept_ids -= orphan_ids
+        kept_edges = [
+            edge
+            for edge in kept_edges
+            if str(edge.get("source_node_id")) in kept_ids
+            and str(edge.get("target_node_id")) in kept_ids
+        ]
+
+    changed = len(kept_nodes) != len(graph.nodes) or len(kept_edges) != len(graph.edges)
+    if not changed:
+        return graph
+
     kept_anchors = [
         anchor
         for anchor in graph.source_anchors
@@ -152,6 +205,7 @@ def filter_program_evidence_graph(graph: ProgramEvidenceGraph) -> ProgramEvidenc
     )
     provenance = dict(graph.provenance)
     provenance["test_source_policy"] = "EXCLUDED"
+    provenance["test_boundary_orphan_policy"] = "PRUNED"
     body: dict[str, Any] = {
         "schema_version": graph.schema_version,
         "snapshot_id": graph.snapshot_id,
