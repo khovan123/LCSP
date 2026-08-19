@@ -25,6 +25,49 @@ test("classification concepts render through the selected locale", () => {
   );
 });
 
+test("current Vietnamese classification catalog has explicit readable labels", () => {
+  const cases: Array<[string, string]> = [
+    [
+      "RISK_RECLASSIFICATION_TRIGGER",
+      "Kích hoạt phân loại lại khi rủi ro thay đổi",
+    ],
+    [
+      "DIRECT_AI_INTERACTION_DISCLOSURE",
+      "Thông báo khi tương tác trực tiếp với AI",
+    ],
+    [
+      "PUBLIC_AI_CONTENT_NOTICE",
+      "Thông báo nội dung do AI tạo ra khi cung cấp công khai",
+    ],
+    ["DEEPFAKE_VISIBLE_LABEL", "Gắn nhãn dễ nhận biết cho nội dung deepfake"],
+    [
+      "TRANSPARENCY_CONTINUITY",
+      "Duy trì thông tin minh bạch trong suốt quá trình cung cấp",
+    ],
+    [
+      "AI_INCIDENT_DETECTION_AND_REMEDIATION",
+      "Phát hiện và khắc phục sự cố AI",
+    ],
+    [
+      "SERIOUS_AI_INCIDENT_CONTAINMENT",
+      "Khoanh vùng và xử lý sự cố AI nghiêm trọng",
+    ],
+    ["INCIDENT_RECORDING_AND_REPORTING", "Ghi nhận và báo cáo sự cố"],
+    [
+      "DIGITAL_INDUSTRY_IP_COMPLIANCE",
+      "Tuân thủ sở hữu trí tuệ trong công nghiệp công nghệ số",
+    ],
+    [
+      "CONTROLLED_TESTING_SUPPORT_FRAUD",
+      "Gian dối để hưởng hỗ trợ hoặc loại trừ trách nhiệm trong thử nghiệm có kiểm soát",
+    ],
+  ];
+
+  for (const [concept, expected] of cases) {
+    assert.equal(formatEngineeringConcept("vi", concept), expected);
+  }
+});
+
 test("unknown machine labels still use a locale-aware fallback", () => {
   assert.equal(
     formatEngineeringConcept("vi", "AI_SECURITY_RISK_ASSESSMENT"),
