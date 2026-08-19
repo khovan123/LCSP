@@ -290,15 +290,17 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
                 name="repo_map",
                 description=(
                     "Read a hierarchical repository/file/symbol map without implementation source. "
-                    "Use cursor when truncated=true."
+                    "Use only when the EngineeringRule retrieval hints do not already give a targeted "
+                    "search term or path clue; use cursor when truncated=true."
                 ),
                 input_schema=cls._closed_schema({"cursor": {"type": "string"}}),
             ),
             LLMToolDefinition(
                 name="search_code",
                 description=(
-                    "Hybrid search over AST/CST symbol chunks using lexical, hashed-vector, exact-symbol, "
-                    "path and graph-proximity reranking. Start with query; use cursor for the next stable page."
+                    "Hybrid search over AST/CST symbol chunks using the EngineeringRule keywords, APIs, "
+                    "libraries and patterns. Results are candidates: inspect the most relevant production "
+                    "symbol with get_code before using implementation behavior as evidence."
                 ),
                 input_schema=cls._closed_schema(
                     {
@@ -325,8 +327,9 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
             LLMToolDefinition(
                 name="get_code",
                 description=(
-                    "Read one bounded source page inside a semantic symbol chunk. The chunk boundary is a "
-                    "function/method/class/etc., never an arbitrary character split. Use nextCursor until done."
+                    "Read one bounded source page inside a semantic symbol chunk. Use this after search_code "
+                    "or get_symbol when implementation behavior is relevant. The chunk boundary is a "
+                    "function/method/class/etc.; use nextCursor until the needed behavior is visible."
                 ),
                 input_schema=cls._closed_schema(
                     {
@@ -434,16 +437,21 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
         payload = json.loads(super()._prompt(packet, ledger, working_results, step))
         payload["lcspCodeContextProtocol"] = "AST_SYMBOL_CHUNKS_V1"
         payload["codeInvestigationFlow"] = [
-            "SEARCH: use repo_map/search_code to identify relevant commit-pinned symbols",
-            "IDENTIFY: use get_symbol/get_file_outline before requesting implementation",
-            "EXPAND: use get_code only for the exact semantic symbol needed",
+            "SEARCH: first use EngineeringRule retrievalHints with search_code; use repo_map only when no targeted clue exists",
+            "IDENTIFY: search_code preview already exposes candidate symbolId/chunkId; use get_symbol only when caller/callee metadata is needed",
+            "EXPAND: call get_code on the most relevant production candidate when implementation behavior matters",
             "FOLLOW_REFERENCES: use find_references and graph tools for callers/callees/data/decision paths",
-            "REMEMBER: pin important symbols/hypotheses with workspace_update",
+            "REMEMBER: pin important symbols/hypotheses with workspace_update when useful",
             "FINISH: reference EvidenceLedger observations only; LCSP derives provenance",
         ]
         payload["codeContextRules"] = [
+            "requiredEvidence/supportingEvidence/negativeEvidence are criterion labels, not graph node types or default code-search queries.",
+            "Prefer the EngineeringRule retrievalHints keywords/commonApis/commonLibraries/patterns and canonical start/target node types.",
+            "search_code results are candidate metadata, not proof of implementation behavior; when source is available and behavior matters, inspect a relevant symbol with get_code before finishing MET/NOT_MET.",
+            "Prefer runtime/production source. Tests, specs, mocks, fixtures and examples may corroborate behavior but must not by themselves prove production behavior unless the EngineeringRule explicitly targets them.",
+            "Every EvidenceLedger summary contains availableSections. Use those exact names and do not guess sections from another observation type.",
             "Never request an entire repository or file when a symbol/chunk is sufficient.",
-            "Source pages are bounded inside AST/CST symbol boundaries; follow nextCursor when truncated=true.",
+            "Source pages are bounded inside AST/CST symbol boundaries; follow nextCursor when truncated=true and more source is still necessary.",
             "search_code cursors are stable for this commit and search session.",
             "Do not infer search semantics from max_hops/max_results/node/edge/neighbor limits; those guards are internal.",
         ]
@@ -460,7 +468,8 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
         payload["lcspCodeContextProtocol"] = "AST_SYMBOL_CHUNKS_V1"
         payload["codeContextRule"] = (
             "Do not mark a criterion unresolved merely because a bounded code/search page is truncated "
-            "when concrete observation evidence already proves the criterion."
+            "when concrete observation evidence already proves the criterion. Search-result metadata alone "
+            "does not prove implementation behavior when source was available but never inspected."
         )
         return cls._render_prompt(payload)
 
@@ -487,8 +496,8 @@ class CodeContextLawGuidedInvestigator(LawGuidedInvestigator):
             "observationId": observation.observation_id,
             "summary": ledger.summary(observation),
             "instruction": (
-                "Full result is retained by LCSP. Use inspect_observation or the returned cursor "
-                "to progressively disclose more context."
+                "Full result is retained by LCSP. The summary advertises availableSections; "
+                "use those exact sections or the returned cursor when more context is needed."
             ),
         }
         if expose_result:
