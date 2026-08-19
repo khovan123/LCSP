@@ -20,7 +20,6 @@ RESOLUTION_STATES = frozenset({"OBSERVED", "CORROBORATED", "INFERRED", "UNRESOLV
 
 NODE_TYPES = frozenset(
     {
-        # Repository/source/code structure.
         "REPOSITORY",
         "FILE",
         "MODULE",
@@ -47,7 +46,6 @@ NODE_TYPES = frozenset(
         "PARSER",
         "VALIDATOR",
         "SERIALIZER",
-        # Runtime/protocol/framework.
         "HTTP_ROUTE",
         "HTTP_REQUEST",
         "HTTP_RESPONSE",
@@ -61,7 +59,6 @@ NODE_TYPES = frozenset(
         "WEBHOOK",
         "PROTOCOL_MESSAGE",
         "DATA_CONTRACT",
-        # Persistence/integration.
         "DATABASE",
         "TABLE",
         "ENTITY",
@@ -71,7 +68,6 @@ NODE_TYPES = frozenset(
         "EXTERNAL_SERVICE",
         "EXTERNAL_API",
         "SDK_CLIENT",
-        # First-class data lineage.
         "DATA_OBJECT",
         "DATA_ASSET",
         "MEDIA_OBJECT",
@@ -79,7 +75,6 @@ NODE_TYPES = frozenset(
         "PERSONAL_DATA",
         "SENSITIVE_DATA",
         "SECRET",
-        # AI runtime/system lifecycle.
         "AI_SYSTEM",
         "AI_CAPABILITY",
         "AI_PROVIDER",
@@ -99,7 +94,6 @@ NODE_TYPES = frozenset(
         "MODEL_MONITORING",
         "MODEL_DRIFT_SIGNAL",
         "RETRAINING_JOB",
-        # Business semantics and user impact.
         "BUSINESS_PROCESS",
         "PROCESS_STEP",
         "BUSINESS_DECISION",
@@ -114,10 +108,8 @@ NODE_TYPES = frozenset(
         "RANKING",
         "RECOMMENDATION",
         "NOTIFICATION",
-        # Human governance.
         "HUMAN_REVIEW",
         "HUMAN_OVERRIDE",
-        # Evidence/coverage.
         "SOURCE_ANCHOR",
         "COVERAGE_GAP",
         "UNRESOLVED_DYNAMIC_TARGET",
@@ -126,7 +118,6 @@ NODE_TYPES = frozenset(
 
 EDGE_TYPES = frozenset(
     {
-        # Existing structural/data/control vocabulary.
         "CONTAINS",
         "DECLARES",
         "IMPORTS",
@@ -192,7 +183,6 @@ EDGE_TYPES = frozenset(
         "CORROBORATES",
         "SUPPORTED_BY",
         "HAS_LIMITATION",
-        # Unified data-lineage vocabulary.
         "DECLARES_DATA",
         "CARRIES_DATA",
         "DERIVES_FROM",
@@ -200,7 +190,6 @@ EDGE_TYPES = frozenset(
         "DECODES",
         "FLOWS_TO",
         "USES_DATA",
-        # Business semantic vocabulary.
         "PART_OF_PROCESS",
         "PRECEDES",
         "PERFORMED_BY",
@@ -210,7 +199,6 @@ EDGE_TYPES = frozenset(
         "WRITES_BUSINESS_STATE",
         "PRODUCES_OUTCOME",
         "REQUIRES_HUMAN_REVIEW",
-        # AI lifecycle vocabulary.
         "TRAINS_MODEL_WITH",
         "FINE_TUNES",
         "EVALUATES_MODEL",
@@ -294,6 +282,10 @@ AI_LIFECYCLE_EDGES = frozenset(
 
 FRAMEWORK_CONTINUATION_EDGES = frozenset(
     {
+        # Dynamic calls are traversal continuations too: the concrete target may be
+        # unresolved, but decision/data inspection must reach the explicit frontier
+        # instead of silently treating the call site as a closed path.
+        "CALLS_DYNAMICALLY",
         "RESOLVES_TO",
         "HANDLED_BY",
         "PUBLISHES_EVENT",
