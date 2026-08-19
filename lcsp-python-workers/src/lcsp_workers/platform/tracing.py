@@ -1,26 +1,31 @@
-"""Phoenix tracing module for 100% account-free OpenTelemetry tracing."""
+"""Phoenix tracing module for OpenTelemetry tracing."""
 
 import functools
+import os
 from typing import Any, Callable
 
-from openinference.instrumentation.langchain import LangChainInstrumentor
-from openinference.instrumentation.openai import OpenAIInstrumentor
-from opentelemetry import trace
-from phoenix.otel import register
+_ENABLE_TRACING = os.getenv("PHOENIX_TRACING", "false").lower() in ("true", "1") or os.getenv("LOCAL_TRACING", "false").lower() in ("true", "1")
 
-# Automatically register Phoenix collector endpoint (http://localhost:6006/v1/traces)
-register(
-    project_name="lcsp-python-workers",
-    endpoint="http://localhost:6006/v1/traces",
-)
+_tracer = None
+if _ENABLE_TRACING:
+    try:
+        from openinference.instrumentation.langchain import LangChainInstrumentor
+        from openinference.instrumentation.openai import OpenAIInstrumentor
+        from opentelemetry import trace
+        from phoenix.otel import register
 
-try:
-    LangChainInstrumentor().instrument()
-    OpenAIInstrumentor().instrument()
-except Exception:
-    pass
-
-_tracer = trace.get_tracer("lcsp_workers")
+        register(
+            project_name="lcsp-python-workers",
+            endpoint=os.getenv("PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006/v1/traces"),
+        )
+        try:
+            LangChainInstrumentor().instrument()
+            OpenAIInstrumentor().instrument()
+        except Exception:
+            pass
+        _tracer = trace.get_tracer("lcsp_workers")
+    except Exception:
+        _tracer = None
 
 
 def traceable(
@@ -37,13 +42,15 @@ def traceable(
 
         @functools.wraps(func)
         def wrapper(*w_args: Any, **w_kwargs: Any) -> Any:
-            with _tracer.start_as_current_span(target_name) as span:
-                if run_type:
-                    span.set_attribute("openinference.span.kind", run_type.upper())
-                if metadata:
-                    for k, v in metadata.items():
-                        span.set_attribute(f"metadata.{k}", str(v))
-                return func(*w_args, **w_kwargs)
+            if _tracer is not None:
+                with _tracer.start_as_current_span(target_name) as span:
+                    if run_type:
+                        span.set_attribute("openinference.span.kind", run_type.upper())
+                    if metadata:
+                        for k, v in metadata.items():
+                            span.set_attribute(f"metadata.{k}", str(v))
+                    return func(*w_args, **w_kwargs)
+            return func(*w_args, **w_kwargs)
 
         return wrapper
 
