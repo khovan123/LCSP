@@ -6,8 +6,11 @@
 
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { createHash } from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { ArtifactStorageService } from "../../../../../platform/storage/artifact-storage.service.js";
 import { ClusterBuilderService } from "../../services/graph/cluster-builder.service.js";
 import { EvidenceGraphMapperService } from "../../services/graph/evidence-graph-mapper.service.js";
 import { EvidenceGraphRedactorService } from "../../services/graph/evidence-graph-redactor.service.js";
@@ -174,6 +177,96 @@ describe("GetEvidenceGraphHandler", () => {
   });
 
   describe("evidence report fetching", () => {
+    it("reads and maps a valid worker evidence graph artifact", async () => {
+      const storagePath = path.join(
+        process.cwd(),
+        "tmp",
+        "evidence-graph-handler-test",
+      );
+      const storageKey = "graphs/user-1/assessment-1/graph-1.json";
+      const graph = {
+        schema_version: "1",
+        snapshot_id: "snapshot-1",
+        commit_sha: "commit-1",
+        nodes: [
+          {
+            node_id: "worker:file:1",
+            node_type: "FILE",
+            label: "app.ts",
+            source: { file_path: "src/app.ts", start_line: 12 },
+            evidence_refs: ["evidence:1"],
+          },
+        ],
+        edges: [],
+        source_anchors: [],
+        indexes: {},
+        unresolved_frontiers: [],
+        coverage_state: "COMPLETE",
+        coverage_notes: [],
+        provenance: {},
+        evidence_refs: ["evidence:1"],
+      };
+      const graphHash = `sha256:${createHash("sha256")
+        .update(canonicalJson(graph))
+        .digest("hex")}`;
+      const artifact = { ...graph, graph_hash: graphHash };
+      const artifactPath = path.join(storagePath, storageKey);
+      const previousStoragePath = process.env.LCSP_ARTIFACT_STORAGE_PATH;
+
+      process.env.LCSP_ARTIFACT_STORAGE_PATH = storagePath;
+      fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
+      fs.writeFileSync(artifactPath, JSON.stringify(artifact), "utf8");
+
+      try {
+        prisma.technicalEvidenceReport.findFirst.mockResolvedValue({
+          id: "report-1",
+          assessmentId: "assessment-1",
+          organizationId: "org-1",
+          evidencePayload: {
+            evidence_graph: { evidence_graph_ref: storageKey },
+          },
+          createdAt: new Date(),
+        });
+        handler = new GetEvidenceGraphHandler(
+          prisma as unknown as PrismaService,
+          mapper,
+          redactor,
+          clusterBuilder,
+          audit as unknown as AuditWriterService,
+          new ArtifactStorageService(),
+        );
+
+        const result = await handler.execute(
+          new GetEvidenceGraphQuery(
+            "assessment-1",
+            "org-1",
+            "user-1",
+            "MANAGER",
+            "overview",
+            undefined,
+            "corr-123",
+          ),
+        );
+
+        expect(result.meta.source).toBe("WORKER_ARTIFACT");
+        expect(result.nodes).toEqual([
+          expect.objectContaining({
+            id: "worker:file:1",
+            type: "file",
+            label: "app.ts",
+          }),
+        ]);
+        expect(result.edges).toEqual([]);
+      } finally {
+        fs.rmSync(storagePath, { recursive: true, force: true });
+        if (previousStoragePath === undefined) {
+          delete process.env.LCSP_ARTIFACT_STORAGE_PATH;
+        } else {
+          process.env.LCSP_ARTIFACT_STORAGE_PATH = previousStoragePath;
+        }
+      }
+    });
+
     it("should fetch TechnicalEvidenceReport for assessment and org", async () => {
       prisma.technicalEvidenceReport.findFirst.mockResolvedValue({
         id: "report-1",
@@ -679,3 +772,17 @@ describe("GetEvidenceGraphHandler", () => {
     });
   });
 });
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
