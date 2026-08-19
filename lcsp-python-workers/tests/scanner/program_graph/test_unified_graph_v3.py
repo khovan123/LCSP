@@ -58,9 +58,35 @@ def run(x):
     ]
     assert biometric_nodes
     assert any(node.get("resolution_state") == "CORROBORATED" for node in biometric_nodes)
-    # No identifier in the fixture itself provides the legacy semantic taxonomy hint.
     assert any(
         str((node.get("source") or {}).get("file_path") or "") == "verify.py"
+        for node in biometric_nodes
+    )
+
+
+def test_biometric_identifier_alone_remains_weak_inferred_seed(tmp_path: Path) -> None:
+    (tmp_path / "profile.py").write_text(
+        '''
+def store(fingerprint):
+    value = fingerprint
+    return value
+''',
+        encoding="utf-8",
+    )
+
+    graph = _assemble(tmp_path)
+
+    biometric_nodes = [
+        node
+        for node in graph.nodes
+        if node.get("node_type") == "DATA_OBJECT"
+        and "SENSITIVE.BIOMETRIC" in (node.get("semantic_types") or [])
+    ]
+    assert biometric_nodes
+    assert all(node.get("resolution_state") != "CORROBORATED" for node in biometric_nodes)
+    assert all(
+        "BIOMETRIC_PROCESSING"
+        not in ((node.get("attributes") or {}).get("corroboratedCapabilities") or [])
         for node in biometric_nodes
     )
 
@@ -102,6 +128,75 @@ service IdentityService {
         node.get("node_type") == "GRPC_METHOD" and node.get("label") == "Verify"
         for node in graph.nodes
     )
+
+
+def test_grpc_method_resolves_to_unique_concrete_implementation(tmp_path: Path) -> None:
+    (tmp_path / "identity.proto").write_text(
+        '''
+syntax = "proto3";
+message VerifyRequest { bytes payload = 1; }
+message VerifyReply { bool accepted = 1; }
+service IdentityService { rpc Verify(VerifyRequest) returns (VerifyReply); }
+''',
+        encoding="utf-8",
+    )
+    (tmp_path / "service.py").write_text(
+        '''
+def Verify(request):
+    return handle(request)
+''',
+        encoding="utf-8",
+    )
+
+    graph = _assemble(tmp_path)
+    grpc = next(node for node in graph.nodes if node.get("node_type") == "GRPC_METHOD")
+    resolved = [
+        edge
+        for edge in graph.edges
+        if edge.get("source_node_id") == grpc.get("node_id")
+        and edge.get("edge_type") == "RESOLVES_TO"
+    ]
+
+    assert len(resolved) == 1
+    target = next(
+        node
+        for node in graph.nodes
+        if node.get("node_id") == resolved[0].get("target_node_id")
+    )
+    assert target.get("node_type") in {"FUNCTION", "METHOD"}
+    assert target.get("label") == "Verify"
+    assert resolved[0].get("resolution_state") == "CORROBORATED"
+
+
+def test_unresolved_grpc_method_is_explicit_frontier(tmp_path: Path) -> None:
+    (tmp_path / "identity.proto").write_text(
+        '''
+syntax = "proto3";
+message VerifyRequest { bytes payload = 1; }
+message VerifyReply { bool accepted = 1; }
+service IdentityService { rpc Verify(VerifyRequest) returns (VerifyReply); }
+''',
+        encoding="utf-8",
+    )
+
+    graph = _assemble(tmp_path)
+    grpc = next(node for node in graph.nodes if node.get("node_type") == "GRPC_METHOD")
+    resolved = [
+        edge
+        for edge in graph.edges
+        if edge.get("source_node_id") == grpc.get("node_id")
+        and edge.get("edge_type") == "RESOLVES_TO"
+    ]
+
+    assert len(resolved) == 1
+    target = next(
+        node
+        for node in graph.nodes
+        if node.get("node_id") == resolved[0].get("target_node_id")
+    )
+    assert target.get("node_type") == "UNRESOLVED_DYNAMIC_TARGET"
+    assert target.get("resolution_state") == "UNRESOLVED"
+    assert target.get("node_id") in graph.unresolved_frontiers
 
 
 def test_repository_training_lifecycle_is_not_collapsed_into_inference(tmp_path: Path) -> None:
