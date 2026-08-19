@@ -5,6 +5,8 @@
  */
 
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
+import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
