@@ -13,9 +13,9 @@ from .models import ProgramEvidenceGraph
 
 logger = get_logger(__name__)
 
-# Keep one entrypoint family from monopolizing the bounded LLM cluster budget when
-# other technical entrypoint types are present. With a 16-cluster budget this leaves
-# capacity for HTTP plus event/queue/CQRS/gRPC/GraphQL/model-lifecycle flows.
+# When multiple entrypoint families exist, one family may contribute at most four
+# clusters. Unused capacity is intentionally left unused rather than re-filling the
+# budget with HTTP routes and reintroducing the same semantic sampling bias.
 _MAX_CLUSTERS_PER_ENTRYPOINT_TYPE_WHEN_DIVERSE = 4
 
 
@@ -119,8 +119,15 @@ class DiverseBusinessSemanticEnricher(BusinessSemanticEnricher):
         cursors = {value: 0 for value in ordered_types}
         selected: list[tuple[set[str], dict[str, Any]]] = []
         selected_counts: Counter[str] = Counter()
+        diverse = len(ordered_types) > 1
 
         def add_next(entrypoint_type: str) -> bool:
+            if (
+                diverse
+                and selected_counts[entrypoint_type]
+                >= _MAX_CLUSTERS_PER_ENTRYPOINT_TYPE_WHEN_DIVERSE
+            ):
+                return False
             rows = groups[entrypoint_type]
             while cursors[entrypoint_type] < len(rows):
                 entrypoint = rows[cursors[entrypoint_type]]
@@ -148,35 +155,16 @@ class DiverseBusinessSemanticEnricher(BusinessSemanticEnricher):
                 return True
             return False
 
-        # Pass 1: reserve one slot for every entrypoint type that can produce a valid,
-        # non-overlapping cluster. This directly prevents 16/16 HTTP selection when an
-        # event, queue, command, gRPC, lifecycle, or other runtime flow exists.
+        # Pass 1 reserves one slot for every entrypoint family before any family can
+        # consume a second slot.
         for entrypoint_type in ordered_types:
             if len(selected) >= base._MAX_CLUSTERS:
                 break
             add_next(entrypoint_type)
 
-        # Pass 2: round-robin the remaining budget with a per-type cap while there are
-        # multiple entrypoint types. This keeps diversity even when HTTP routes are much
-        # more numerous than the rest of the repository's runtime surfaces.
-        diverse = len([value for value in ordered_types if groups[value]]) > 1
-        progress = True
-        while len(selected) < base._MAX_CLUSTERS and progress:
-            progress = False
-            for entrypoint_type in ordered_types:
-                if len(selected) >= base._MAX_CLUSTERS:
-                    break
-                if (
-                    diverse
-                    and selected_counts[entrypoint_type]
-                    >= _MAX_CLUSTERS_PER_ENTRYPOINT_TYPE_WHEN_DIVERSE
-                ):
-                    continue
-                if add_next(entrypoint_type):
-                    progress = True
-
-        # Pass 3: if diversity caps left unused budget because other types were fully
-        # exhausted/overlapping, relax the cap rather than wasting useful LLM capacity.
+        # Pass 2 round-robins the remaining budget. The per-family cap is hard whenever
+        # the repository exposes more than one family; fewer than 16 LLM calls is better
+        # than filling the remainder with one dominant transport such as HTTP.
         progress = True
         while len(selected) < base._MAX_CLUSTERS and progress:
             progress = False
@@ -197,5 +185,8 @@ class DiverseBusinessSemanticEnricher(BusinessSemanticEnricher):
             selected_entrypoint_counts=dict(selected_counts),
             selected_cluster_count=len(selected),
             cluster_budget=base._MAX_CLUSTERS,
+            per_type_quota=(
+                _MAX_CLUSTERS_PER_ENTRYPOINT_TYPE_WHEN_DIVERSE if diverse else None
+            ),
         )
         return [context for _, context in selected]
