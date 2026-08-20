@@ -21,10 +21,22 @@ import {
 } from "../../../infrastructure/github/github-app.client.js";
 import type {
   SnapshotArchiveCache,
+  SnapshotArchiveCacheCaptureInput,
   SnapshotArchiveCacheHit,
+  SnapshotArchiveCacheLookup,
 } from "../../../infrastructure/github/snapshot-archive-cache.js";
 import { StreamSnapshotArchiveHandler } from "./stream-snapshot-archive.handler.js";
 import { StreamSnapshotArchiveQuery } from "./stream-snapshot-archive.query.js";
+
+type RepositoryScanJobStatus =
+  (typeof REPOSITORY_SCAN_JOB_STATUSES)[keyof typeof REPOSITORY_SCAN_JOB_STATUSES];
+
+type ScanJobFixture = {
+  id: string;
+  snapshotId: string;
+  organizationId: string;
+  status: RepositoryScanJobStatus;
+};
 
 describe("StreamSnapshotArchiveHandler", () => {
   const snapshot = {
@@ -36,7 +48,7 @@ describe("StreamSnapshotArchiveHandler", () => {
     status: REPOSITORY_SNAPSHOT_STATUSES.ready,
   };
 
-  const scanJob = {
+  const scanJob: ScanJobFixture = {
     id: "scan-job-1",
     snapshotId: "snapshot-1",
     organizationId: "org-1",
@@ -51,7 +63,7 @@ describe("StreamSnapshotArchiveHandler", () => {
   };
 
   function buildHandler(options?: {
-    scanJob?: typeof scanJob | null;
+    scanJob?: ScanJobFixture | null;
     snapshot?: typeof snapshot | null;
     connection?: typeof connection | null;
     archive?: {
@@ -68,14 +80,15 @@ describe("StreamSnapshotArchiveHandler", () => {
     ): boolean =>
       Boolean(options && Object.prototype.hasOwnProperty.call(options, key));
 
+    const claimScanJobMock = jest
+      .fn<() => Promise<{ count: number }>>()
+      .mockResolvedValue({ count: options?.claimCount ?? 1 });
     const prisma = {
       repositoryScanJob: {
         findUnique: jest
-          .fn<() => Promise<typeof scanJob | null | undefined>>()
+          .fn<() => Promise<ScanJobFixture | null | undefined>>()
           .mockResolvedValue(hasOption("scanJob") ? options?.scanJob : scanJob),
-        updateMany: jest
-          .fn<() => Promise<{ count: number }>>()
-          .mockResolvedValue({ count: options?.claimCount ?? 1 }),
+        updateMany: claimScanJobMock,
       },
       repositorySnapshot: {
         findUnique: jest
@@ -108,11 +121,15 @@ describe("StreamSnapshotArchiveHandler", () => {
     } as unknown as GitHubAppClient;
 
     const cacheGetMock = jest
-      .fn<() => Promise<SnapshotArchiveCacheHit | null>>()
+      .fn<
+        (
+          lookup: SnapshotArchiveCacheLookup,
+        ) => Promise<SnapshotArchiveCacheHit | null>
+      >()
       .mockResolvedValue(options?.cacheHit ?? null);
     const cacheCaptureMock = jest
       .fn<
-        (input: { source: NodeJS.ReadableStream }) => Promise<{
+        (input: SnapshotArchiveCacheCaptureInput) => Promise<{
           stream: NodeJS.ReadableStream;
           completion: Promise<void>;
         }>
@@ -137,6 +154,7 @@ describe("StreamSnapshotArchiveHandler", () => {
       downloadRepositoryArchiveMock,
       cacheGetMock,
       cacheCaptureMock,
+      claimScanJobMock,
     };
   }
 
@@ -194,13 +212,37 @@ describe("StreamSnapshotArchiveHandler", () => {
   });
 
   it("claims a queued scan job before streaming its archive", async () => {
-    const { handler } = buildHandler();
+    const { handler, claimScanJobMock } = buildHandler();
 
     await expect(
       handler.execute(
         new StreamSnapshotArchiveQuery("snapshot-1", "scan-job-1", "corr-1"),
       ),
     ).resolves.toMatchObject({ snapshotId: "snapshot-1" });
+    expect(claimScanJobMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows a completed scan to reuse its immutable pinned archive without reclaiming", async () => {
+    const { handler, claimScanJobMock } = buildHandler({
+      scanJob: {
+        ...scanJob,
+        status: REPOSITORY_SCAN_JOB_STATUSES.completed,
+      },
+    });
+
+    await expect(
+      handler.execute(
+        new StreamSnapshotArchiveQuery(
+          "snapshot-1",
+          "scan-job-1",
+          "corr-completed",
+        ),
+      ),
+    ).resolves.toMatchObject({
+      snapshotId: "snapshot-1",
+      commitSha: "a".repeat(40),
+    });
+    expect(claimScanJobMock).not.toHaveBeenCalled();
   });
 
   it("rejects a queued scan job claimed by another worker", async () => {
