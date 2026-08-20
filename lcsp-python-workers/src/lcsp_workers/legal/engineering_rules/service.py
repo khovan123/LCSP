@@ -64,22 +64,6 @@ class EngineeringRuleService:
         if inactive:
             raise ValueError(f"legal rule references repealed chunks: {inactive}")
 
-        hashes = {
-            str(item["id"]): str(item.get("contentSha256") or "")
-            for item in context
-        }
-        fingerprint = engineering_rule_fingerprint(
-            legal_rule=legal_rule,
-            legal_corpus_version_id=legal_corpus_version_id,
-            chunk_hashes=hashes,
-            schema_version=ENGINEERING_RULE_SCHEMA_VERSION,
-            prompt_version=PROMPT_VERSION,
-            compiler_version=COMPILER_VERSION,
-        )
-        cached = self.cache.get(fingerprint)
-        if cached:
-            return cached, True
-
         rule_family = str(
             legal_rule.get("ruleFamily") or legal_rule.get("rule_family") or ""
         ).strip()
@@ -89,6 +73,32 @@ class EngineeringRuleService:
             or legal_rule.get("id")
             or "unknown"
         )
+
+        hashes = {
+            str(item["id"]): str(item.get("contentSha256") or "")
+            for item in context
+        }
+        fingerprint_compiler_version = COMPILER_VERSION
+        if rule_family == DEV_ENGINEERING_RULE_BOOTSTRAP_RULE_FAMILY:
+            # The governed precompiled technical overlay is part of the effective
+            # EngineeringRule contract. Include its version in the cache fingerprint so
+            # a prior broad transparency rule cannot survive a contract hardening change
+            # merely because the underlying legal chunk hashes did not change.
+            fingerprint_compiler_version = (
+                f"{COMPILER_VERSION}|precompiled-contract:"
+                f"{self.precompiled_registry.contract_version}"
+            )
+        fingerprint = engineering_rule_fingerprint(
+            legal_rule=legal_rule,
+            legal_corpus_version_id=legal_corpus_version_id,
+            chunk_hashes=hashes,
+            schema_version=ENGINEERING_RULE_SCHEMA_VERSION,
+            prompt_version=PROMPT_VERSION,
+            compiler_version=fingerprint_compiler_version,
+        )
+        cached = self.cache.get(fingerprint)
+        if cached:
+            return cached, True
 
         # DEV bootstrap LegalRules are governed identities for the checked-in,
         # precompiled legal-chunk -> EngineeringRule bundle. The Chroma collection is
@@ -109,6 +119,7 @@ class EngineeringRuleService:
                 "ENGINEERING_RULE_PRECOMPILED_CACHE_RECOVERED",
                 legal_rule_id=legal_rule_id,
                 engineering_rule_count=len(recovered),
+                precompiled_contract_version=self.precompiled_registry.contract_version,
                 source_fingerprint=fingerprint,
                 workflow_run_id=workflow_run_id,
                 correlationId=correlation_id,
