@@ -83,9 +83,32 @@ class SemanticIntegrityFinalizer:
     """Suppress semantic escalation that is not supported by concrete static behavior."""
 
     def enrich(self, program: SemanticProgram) -> SemanticProgram:
+        normalized = [self._normalize_finding_node(node) for node in program.nodes]
+
+        # SemanticProgram deliberately allows duplicate facts for the same stable key.
+        # ProgramGraphBuilder later unions semantic types and keeps the strongest node
+        # resolution state. Therefore a weak inferred sensitive fact plus an unrelated
+        # OBSERVED duplicate would otherwise become OBSERVED/CORROBORATED after merge.
+        # Resolve trust at the stable key level before the builder sees those duplicates.
+        strong_sensitive_keys = {
+            node.key
+            for node in normalized
+            if self._has_strong_sensitive_capability(node)
+        }
+        weak_sensitive_keys = {
+            node.key
+            for node in normalized
+            if self._has_high_impact_sensitive_semantic(node)
+            and node.key not in strong_sensitive_keys
+        }
         normalized = [
-            self._normalize_sensitive_trust(self._normalize_finding_node(node))
-            for node in program.nodes
+            (
+                replace(node, resolution_state="INFERRED")
+                if node.key in weak_sensitive_keys
+                and node.resolution_state != "UNRESOLVED"
+                else node
+            )
+            for node in normalized
         ]
 
         # A semantic key may have been emitted by more than one high-recall pass. Treat
@@ -171,33 +194,27 @@ class SemanticIntegrityFinalizer:
         return replace(node, node_type=node_type, attributes=attrs)
 
     @staticmethod
-    def _normalize_sensitive_trust(node: SemanticNodeFact) -> SemanticNodeFact:
-        """Do not persist strong biometric/GOV-ID semantics without processor proof.
+    def _has_high_impact_sensitive_semantic(node: SemanticNodeFact) -> bool:
+        semantics = set(node.semantic_types)
+        return any(semantic in semantics for semantic in _SENSITIVE_CAPABILITY)
 
-        The earlier lineage gate owns the expensive source-local corroboration. This
-        final pass is intentionally structural: if a strong pre-builder fact still
-        carries one of these high-impact semantic categories, it must also carry the
-        capability marker produced by that gate. Downstream sinks receive the semantic
-        later through the builder only from a trusted source, so downgrading an
-        unmarked source here cannot suppress a valid propagated path.
-        """
-        if node.resolution_state == "UNRESOLVED":
-            return node
-        semantic_types = set(node.semantic_types)
+    @staticmethod
+    def _has_strong_sensitive_capability(node: SemanticNodeFact) -> bool:
+        if node.resolution_state != "CORROBORATED":
+            return False
+        semantics = set(node.semantic_types)
         required = {
             capability
             for semantic, capability in _SENSITIVE_CAPABILITY.items()
-            if semantic in semantic_types
+            if semantic in semantics
         }
         if not required:
-            return node
+            return False
         attrs = dict(node.attributes or {})
         capabilities = set(
             attrs.get("corroboratedCapabilities") or attrs.get("capabilities") or []
         )
-        if required.issubset(capabilities):
-            return node
-        return replace(node, resolution_state="INFERRED")
+        return required.issubset(capabilities)
 
     @staticmethod
     def _trusted_ai_invocation(node: SemanticNodeFact) -> bool:
