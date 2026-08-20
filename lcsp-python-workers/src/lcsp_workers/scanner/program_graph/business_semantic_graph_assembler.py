@@ -4,6 +4,7 @@ from __future__ import annotations
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
 
 from .assembler import ProgramGraphAssembler
+from .business_semantic_cluster_policy import DiverseBusinessSemanticEnricher
 from .business_semantic_enrichment import BusinessSemanticEnricher
 
 
@@ -18,7 +19,7 @@ class BusinessSemanticProgramGraphAssembler:
         enricher: BusinessSemanticEnricher | None = None,
     ) -> None:
         self._base = base_assembler or ProgramGraphAssembler()
-        self._enricher = enricher or BusinessSemanticEnricher(llm_client)
+        self._enricher = enricher or DiverseBusinessSemanticEnricher(llm_client)
 
     def assemble(self, **kwargs):
         graph = self._base.assemble(**kwargs)
