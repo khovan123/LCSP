@@ -10,6 +10,7 @@ from lcsp_workers.scanner.program_graph.source_roles import filter_program_evide
 
 from .code_context import CodeContextSession
 from .code_context_investigator import CodeContextLawGuidedInvestigator
+from .deterministic_investigator import DeterministicCodeContextLawGuidedInvestigator
 from .engineering_rule_planner import EngineeringRulePlanner
 from .material_scope import material_planning_packet
 from .models import (
@@ -49,7 +50,9 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             retriever=retriever,
             rule_service=rule_service,
             query_executor=query_executor,
-            investigator=investigator,
+            investigator=(
+                investigator or DeterministicCodeContextLawGuidedInvestigator(llm_client)
+            ),
             evaluator=evaluator,
         )
         self._planner = planner or ScopedMaterialEngineeringRulePlanner(llm_client)
