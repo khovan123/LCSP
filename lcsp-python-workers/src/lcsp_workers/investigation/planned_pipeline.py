@@ -20,9 +20,10 @@ from .models import (
 )
 from .pipeline import EngineeringInvestigationPipeline, EngineeringInvestigationResult
 from .plan_audit_result import PlannedEngineeringInvestigationResult
-from .planning_scope import (
-    ScopedEngineeringRulePlanningCandidate,
-    ScopedMaterialEngineeringRulePlanner,
+from .planning_business_scope import (
+    BusinessAwareScopedEngineeringRulePlanningCandidate,
+    BusinessAwareScopedMaterialEngineeringRulePlanner,
+    RulePlanningBusinessScopeProjector,
 )
 from .selected_rule_orchestration import augment_selected_rule_packet
 
@@ -56,7 +57,9 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             ),
             evaluator=evaluator,
         )
-        self._planner = planner or ScopedMaterialEngineeringRulePlanner(llm_client)
+        self._planner = planner or BusinessAwareScopedMaterialEngineeringRulePlanner(
+            llm_client
+        )
 
     def run(
         self,
@@ -183,15 +186,22 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             )
 
         # Planner does not receive every broad start-node hit. Each packet is projected
-        # into rule-specific material production signals first; the original packet is
-        # retained for the investigator after the rule passes the plan gate. Coverage is
-        # also derived from that material packet, never inherited from graph-global LIMITED.
+        # into rule-specific material production signals first. A single graph projector
+        # then expands only those material seeds through bounded executable/business/data
+        # edges so the Planner receives concrete business process/subject/capability/
+        # decision context rather than only hit counts and node-type names. The original
+        # packet is retained for the investigator after the rule passes the plan gate.
+        material_prepared = tuple(
+            (rule, material_planning_packet(rule, packet)) for rule, packet in prepared
+        )
+        business_scope_projector = RulePlanningBusinessScopeProjector(graph)
         candidates = tuple(
-            ScopedEngineeringRulePlanningCandidate.from_rule_packet(
+            BusinessAwareScopedEngineeringRulePlanningCandidate.from_rule_packet(
                 rule,
-                material_planning_packet(rule, packet),
+                material_packet,
+                business_scope_projector,
             )
-            for rule, packet in prepared
+            for rule, material_packet in material_prepared
         )
         plan = self._planner.plan(
             candidates=candidates,
@@ -215,8 +225,9 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         # P0 observability: persist and log one decision row per EngineeringRule. This
         # answers not only which rules were SELECTed, but whether SELECT came from the
         # model, a deterministic fail-closed override, material source evidence, Wizard
-        # scope, or scoped uncertainty. This metadata is investigation-scope diagnostics,
-        # never legal applicability/risk/compliance authority.
+        # scope, scoped uncertainty, or the provenance-gated business scope supplied to
+        # the model. This metadata is investigation-scope diagnostics, never legal
+        # applicability/risk/compliance authority.
         candidate_by_id = {
             candidate.engineering_rule_id: candidate for candidate in candidates
         }
@@ -249,6 +260,11 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     candidate.scoped_unresolved_frontier_count
                     if candidate is not None
                     else 0
+                ),
+                "planning_business_scope": (
+                    candidate.planning_business_scope.to_prompt_dict()
+                    if candidate is not None
+                    else {}
                 ),
             }
             planner_decisions.append(decision_row)
