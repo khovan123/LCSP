@@ -23,6 +23,44 @@ class DiverseBusinessSemanticEnricher(BusinessSemanticEnricher):
     """Select bounded business clusters with deterministic entrypoint diversity."""
 
     @classmethod
+    def _context_from_ids(
+        cls,
+        graph: ProgramEvidenceGraph,
+        *,
+        node_ids: set[str],
+        edge_ids: set[str],
+        cluster_id: str,
+        entrypoint: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        context = super()._context_from_ids(
+            graph,
+            node_ids=node_ids,
+            edge_ids=edge_ids,
+            cluster_id=cluster_id,
+            entrypoint=entrypoint,
+        )
+        scoped_nodes = [
+            node
+            for node in graph.nodes
+            if str(node.get("node_id") or "") in node_ids
+        ]
+        scoped_edges = [
+            edge
+            for edge in graph.edges
+            if str(edge.get("edge_id") or "") in edge_ids
+        ]
+        scoped_unresolved = context.get("unresolvedFrontiers") or []
+        scoped_limited = bool(scoped_unresolved) or any(
+            str(item.get("coverage_state") or "SUFFICIENT") == "LIMITED"
+            for item in [*scoped_nodes, *scoped_edges]
+        )
+        # Do not inject repository-global LIMITED into every business cluster. The LLM
+        # sees only coverage that intersects this bounded technical subgraph.
+        context["coverageState"] = "LIMITED" if scoped_limited else "SUFFICIENT"
+        context["coverageScope"] = "BUSINESS_CLUSTER"
+        return context
+
+    @classmethod
     def _cluster_contexts(cls, graph: ProgramEvidenceGraph) -> list[dict[str, Any]]:
         node_by_id = {
             str(node.get("node_id")): node
@@ -140,7 +178,9 @@ class DiverseBusinessSemanticEnricher(BusinessSemanticEnricher):
 
         logger.info(
             "BUSINESS_SEMANTIC_CLUSTER_SELECTION",
-            candidate_entrypoint_counts=dict(Counter(str(node.get("node_type")) for node in entrypoints)),
+            candidate_entrypoint_counts=dict(
+                Counter(str(node.get("node_type")) for node in entrypoints)
+            ),
             selected_entrypoint_counts=dict(selected_counts),
             selected_cluster_count=len(selected),
             cluster_budget=base._MAX_CLUSTERS,
