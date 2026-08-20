@@ -26,6 +26,7 @@ class LlmRuntimeConfig:
     monthly_token_cap: int = 1_000_000
     provider_timeout_seconds: float = 30.0
     fallback_on_codes: tuple[str, ...] = (
+        "AUTH",
         "RATE_LIMIT",
         "QUOTA",
         "NETWORK",
@@ -200,7 +201,7 @@ def _load_llm_runtime_config() -> LlmRuntimeConfig:
         provider_timeout_seconds=_read_float("LLM_PROVIDER_TIMEOUT_SECONDS", 30.0),
         fallback_on_codes=_read_csv(
             "LLM_FALLBACK_ON_CODES",
-            ("RATE_LIMIT", "QUOTA", "NETWORK", "TIMEOUT"),
+            ("AUTH", "RATE_LIMIT", "QUOTA", "NETWORK", "TIMEOUT"),
         ),
         max_provider_attempts=_read_int("LLM_MAX_PROVIDER_ATTEMPTS", 3),
         redis_url=_optional_text("LLM_BUDGET_REDIS_URL"),
