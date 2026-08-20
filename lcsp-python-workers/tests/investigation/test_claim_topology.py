@@ -9,8 +9,6 @@ from lcsp_workers.investigation.evidence_claim_validator import (
 from lcsp_workers.investigation.models import EvidenceClaim
 from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
 
-# LCSP-220 regression coverage: path-oriented claims must prove graph topology.
-
 
 def _node(node_id: str, node_type: str, label: str) -> dict:
     return {
@@ -107,6 +105,42 @@ def test_ai_output_path_closes_only_with_explicit_topology() -> None:
     assert "edge:receives" in validated.graph_path_refs
 
 
+def test_downstream_path_keeps_topology_refs_even_without_lexical_overlap() -> None:
+    output = _node("node:output", "AI_OUTPUT", "result")
+    decision = _node("node:decision", "BUSINESS_DECISION", "eligibility")
+    effect = _node("node:effect", "REPOSITORY_ACCESS", "repository.save")
+    influence = _edge(
+        "edge:influence", "INFLUENCES_DECISION", "node:output", "node:decision"
+    )
+    write = _edge(
+        "edge:write", "WRITES_BUSINESS_STATE", "node:decision", "node:effect"
+    )
+    graph = _graph([output, decision, effect], [influence, write])
+
+    validated = EvidenceClaimValidator().validate(
+        EvidenceClaim(
+            claim_id="claim-downstream",
+            engineering_rule_id="eng-1",
+            claim_type="RULE_REQUIREMENT_MET",
+            value=True,
+            evidence_refs=(),
+            graph_path_refs=(
+                "node:output",
+                "edge:influence",
+                "node:decision",
+                "edge:write",
+                "node:effect",
+            ),
+            confidence=0.9,
+            criterion="DOWNSTREAM_ACTION_PATH",
+        ),
+        graph,
+    )
+
+    assert "edge:influence" in validated.graph_path_refs
+    assert "edge:write" in validated.graph_path_refs
+
+
 def test_human_control_state_requires_review_edge_on_same_path() -> None:
     decision = _node("node:decision", "BUSINESS_DECISION", "eligibility decision")
     review = _node("node:review", "HUMAN_REVIEW", "manual review")
@@ -124,6 +158,63 @@ def test_human_control_state_requires_review_edge_on_same_path() -> None:
                 graph_path_refs=("node:decision", "edge:flow", "node:review"),
                 confidence=0.9,
                 criterion="human control state",
+            ),
+            graph,
+        )
+
+
+def test_human_control_absence_requires_bounded_decision_effect_path() -> None:
+    decision = _node("node:decision", "BUSINESS_DECISION", "eligibility")
+    effect = _node("node:effect", "REPOSITORY_ACCESS", "repository.save")
+    write = _edge(
+        "edge:write", "WRITES_BUSINESS_STATE", "node:decision", "node:effect"
+    )
+    graph = _graph([decision, effect], [write])
+
+    validated = EvidenceClaimValidator().validate(
+        EvidenceClaim(
+            claim_id="claim-human-absent",
+            engineering_rule_id="eng-1",
+            claim_type="RULE_REQUIREMENT_NOT_MET",
+            value=False,
+            evidence_refs=(),
+            graph_path_refs=("node:decision", "edge:write", "node:effect"),
+            confidence=0.9,
+            criterion="HUMAN_CONTROL_STATE",
+        ),
+        graph,
+    )
+
+    assert "edge:write" in validated.graph_path_refs
+
+
+def test_human_control_absence_rejects_attached_review() -> None:
+    decision = _node("node:decision", "BUSINESS_DECISION", "eligibility")
+    effect = _node("node:effect", "REPOSITORY_ACCESS", "repository.save")
+    review = _node("node:review", "HUMAN_REVIEW", "manual review")
+    write = _edge(
+        "edge:write", "WRITES_BUSINESS_STATE", "node:decision", "node:effect"
+    )
+    reviewed = _edge("edge:review", "REVIEWED_BY", "node:decision", "node:review")
+    graph = _graph([decision, effect, review], [write, reviewed])
+
+    with pytest.raises(EvidenceClaimValidationError, match="conflicts"):
+        EvidenceClaimValidator().validate(
+            EvidenceClaim(
+                claim_id="claim-human-conflict",
+                engineering_rule_id="eng-1",
+                claim_type="RULE_REQUIREMENT_NOT_MET",
+                value=False,
+                evidence_refs=(),
+                graph_path_refs=(
+                    "node:decision",
+                    "edge:write",
+                    "node:effect",
+                    "edge:review",
+                    "node:review",
+                ),
+                confidence=0.9,
+                criterion="HUMAN_CONTROL_STATE",
             ),
             graph,
         )
