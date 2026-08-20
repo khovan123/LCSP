@@ -45,6 +45,10 @@ class RateLimitError(Exception):
     status_code = 429
 
 
+class AuthError(Exception):
+    status_code = 401
+
+
 class ProviderBadRequestError(Exception):
     status_code = 400
     request_id = "req_direct_123"
@@ -75,6 +79,29 @@ def test_primary_then_fallback_uses_second_provider_on_retryable_error() -> None
         "hello",
         workflow_run_id="wf-1",
         node_name="node-1",
+    )
+
+    assert result == "ok"
+    assert primary.calls == 1
+    assert fallback.calls == 1
+
+
+def test_primary_then_fallback_uses_second_provider_on_configured_auth_error() -> None:
+    primary = FakeClient(error=AuthError("invalid api key"))
+    fallback = FakeClient(result="ok")
+    client = PrimaryThenFallbackLLMClient(
+        (
+            LlmProviderCandidate(name="openai", client=primary),
+            LlmProviderCandidate(name="anthropic", client=fallback),
+        ),
+        fallback_on_codes=("AUTH", "RATE_LIMIT", "NETWORK"),
+        max_provider_attempts=2,
+    )
+
+    result = client.complete(
+        "hello",
+        workflow_run_id="wf-auth",
+        node_name="plan_engineering_rules",
     )
 
     assert result == "ok"
