@@ -28,20 +28,23 @@ def redact(value):
 
     graph = _assemble(tmp_path)
 
-    suspicious = [
+    # AST value-reference nodes may legitimately retain the dotted symbol as VARIABLE
+    # metadata. The invariant is that the executable call itself is demoted and no
+    # inference/input/output semantic is materialized from the provider-shaped name.
+    call_nodes = [
         node
         for node in graph.nodes
-        if "ANTHROPIC_KEY_PATTERN.sub" in str(node.get("label") or "")
+        if node.get("node_type") == "CALL_SITE"
+        and str(node.get("label") or "") == "ANTHROPIC_KEY_PATTERN.sub"
     ]
-    assert suspicious
-    assert all(node.get("node_type") == "CALL_SITE" for node in suspicious)
+    assert call_nodes
     assert all(
         (node.get("attributes") or {}).get("semanticSuppressedRole")
         == "AI_MODEL_INVOCATION"
-        for node in suspicious
+        for node in call_nodes
     )
     assert not any(
-        node.get("node_type") == "AI_OUTPUT"
+        node.get("node_type") in {"AI_MODEL_INVOCATION", "AI_INPUT", "AI_OUTPUT"}
         and "ANTHROPIC_KEY_PATTERN.sub" in str(node.get("label") or "")
         for node in graph.nodes
     )
@@ -60,16 +63,21 @@ def build_client():
 
     graph = _assemble(tmp_path)
 
-    client_calls = [
+    call_nodes = [
         node
         for node in graph.nodes
-        if str(node.get("label") or "").lower() == "openai.openai"
+        if node.get("node_type") == "CALL_SITE"
+        and str(node.get("label") or "").lower() == "openai.openai"
     ]
-    assert client_calls
-    assert all(node.get("node_type") == "CALL_SITE" for node in client_calls)
+    assert call_nodes
+    assert all(
+        (node.get("attributes") or {}).get("semanticSuppressedRole")
+        == "AI_MODEL_INVOCATION"
+        for node in call_nodes
+    )
     assert not any(
-        node.get("node_type") == "AI_OUTPUT"
-        and "openai.OpenAI" in str(node.get("label") or "")
+        node.get("node_type") in {"AI_MODEL_INVOCATION", "AI_INPUT", "AI_OUTPUT"}
+        and "openai.openai" in str(node.get("label") or "").lower()
         for node in graph.nodes
     )
 
