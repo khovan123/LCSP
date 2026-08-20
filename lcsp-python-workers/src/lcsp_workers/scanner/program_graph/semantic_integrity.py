@@ -73,13 +73,25 @@ _FINDING_NODE_TYPES = {
     "UNSUPPORTED_DYNAMIC_FLOW": "COVERAGE_GAP",
 }
 
+_SENSITIVE_CAPABILITY = {
+    "SENSITIVE.BIOMETRIC": "BIOMETRIC_PROCESSING",
+    "PII.GOVERNMENT_ID": "IDENTITY_DOCUMENT_PROCESSING",
+}
+
 
 class SemanticIntegrityFinalizer:
     """Suppress semantic escalation that is not supported by concrete static behavior."""
 
     def enrich(self, program: SemanticProgram) -> SemanticProgram:
-        normalized = [self._normalize_finding_node(node) for node in program.nodes]
+        normalized = [
+            self._normalize_sensitive_trust(self._normalize_finding_node(node))
+            for node in program.nodes
+        ]
 
+        # A semantic key may have been emitted by more than one high-recall pass. Treat
+        # the key as the unit of identity: once its concrete call shape is shown not to
+        # be inference, every duplicate fact for that key must be prevented from winning
+        # the builder's first-node-type merge semantics.
         false_ai_keys = {
             node.key
             for node in normalized
@@ -157,6 +169,35 @@ class SemanticIntegrityFinalizer:
         attrs = dict(node.attributes or {})
         attrs["projectedFindingNodeType"] = node_type
         return replace(node, node_type=node_type, attributes=attrs)
+
+    @staticmethod
+    def _normalize_sensitive_trust(node: SemanticNodeFact) -> SemanticNodeFact:
+        """Do not persist strong biometric/GOV-ID semantics without processor proof.
+
+        The earlier lineage gate owns the expensive source-local corroboration. This
+        final pass is intentionally structural: if a strong pre-builder fact still
+        carries one of these high-impact semantic categories, it must also carry the
+        capability marker produced by that gate. Downstream sinks receive the semantic
+        later through the builder only from a trusted source, so downgrading an
+        unmarked source here cannot suppress a valid propagated path.
+        """
+        if node.resolution_state == "UNRESOLVED":
+            return node
+        semantic_types = set(node.semantic_types)
+        required = {
+            capability
+            for semantic, capability in _SENSITIVE_CAPABILITY.items()
+            if semantic in semantic_types
+        }
+        if not required:
+            return node
+        attrs = dict(node.attributes or {})
+        capabilities = set(
+            attrs.get("corroboratedCapabilities") or attrs.get("capabilities") or []
+        )
+        if required.issubset(capabilities):
+            return node
+        return replace(node, resolution_state="INFERRED")
 
     @staticmethod
     def _trusted_ai_invocation(node: SemanticNodeFact) -> bool:
