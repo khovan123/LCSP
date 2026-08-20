@@ -13,6 +13,7 @@ from lcsp_workers.scanner.program_graph.source_roles import (
     source_role,
 )
 
+from .claim_topology import ClaimTopologyValidationError, validate_claim_topology
 from .models import ENGINEERING_EVIDENCE_CLAIM_TYPES, EvidenceClaim
 
 
@@ -87,6 +88,8 @@ class EvidenceClaimValidator:
     allowed to retain only a small, criterion-ranked set of production/material refs.
     Test/spec/script/example evidence cannot close MET/NOT_MET, and test-only refs from
     older graph artifacts are removed even when the graph itself predates test filtering.
+    Path-oriented criteria additionally require their supplied graph refs to prove the
+    asserted topology rather than merely naming individually valid nodes.
     """
 
     def validate(
@@ -140,6 +143,16 @@ class EvidenceClaimValidator:
             raise EvidenceClaimValidationError(
                 "zero-confidence engineering claim cannot close a criterion"
             )
+
+        if claim.claim_type in _CLOSED_CLAIM_TYPES:
+            try:
+                validate_claim_topology(
+                    criterion=claim.criterion,
+                    graph_path_refs=claim.graph_path_refs,
+                    graph=value,
+                )
+            except ClaimTopologyValidationError as error:
+                raise EvidenceClaimValidationError(str(error)) from error
 
         selected = self._criterion_scoped_material_refs(claim, value)
         if claim.claim_type in _CLOSED_CLAIM_TYPES and not any(selected.values()):
