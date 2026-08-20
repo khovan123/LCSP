@@ -3,7 +3,7 @@
 Identifier taxonomy is intentionally retained as an INFERRED seed, but it is not enough
 to promote a value or downstream sink to trusted sensitive-data evidence. This pass
 normalizes identifier-derived PII/SENSITIVE semantics to INFERRED and preserves a strong
-CORROBORATED state only when explicit processing behavior supports it.
+CORROBORATED state only when explicit, local processing behavior and lineage support it.
 """
 from __future__ import annotations
 
@@ -23,11 +23,18 @@ _BIOMETRIC_REPRESENTATION = re.compile(
     re.I,
 )
 _IDENTITY_MATCH = re.compile(
-    r"compare|similarity|verify|verification|match|identify|identity",
+    r"compare|similarity|verify|verification|match|identify",
     re.I,
 )
+# Deliberately require a processing verb/capability next to the modality. Generic
+# software/configuration terms such as fingerprintToken/latestFingerprint must not be
+# interpreted as biometric processing.
 _NON_VISUAL_BIOMETRIC = re.compile(
-    r"fingerprint|finger[_ .-]?print|voiceprint|speaker[_ .-]?(?:embed|verify|recogn)|iris|retina|palm[_ .-]?print",
+    r"finger(?:print)?[_ .-]?(?:scan|template|match|verify|recogn|feature|extract)|"
+    r"voiceprint|speaker[_ .-]?(?:embed|verify|recogn)|"
+    r"iris[_ .-]?(?:scan|match|verify|recogn|template)|"
+    r"retina[_ .-]?(?:scan|match|verify|recogn|template)|"
+    r"palm[_ .-]?(?:print|scan|match|verify|recogn|template)",
     re.I,
 )
 _OCR = re.compile(r"ocr|tesseract|textract|document[_ .-]?ai|vision[_ .-]?text", re.I)
@@ -46,16 +53,37 @@ _IDENTIFIER_CARRIER_TYPES = frozenset(
         "MEDIA_OBJECT",
     }
 )
+_LINEAGE_EDGE_TYPES = frozenset(
+    {
+        "FLOWS_TO",
+        "CARRIES_DATA",
+        "DECLARES_DATA",
+        "DERIVES_FROM",
+        "ENCODES",
+        "DECODES",
+        "PASSES_ARGUMENT",
+        "RECEIVES_RETURN",
+        "READS_FROM",
+        "WRITES_TO",
+        "PERSISTS_TO",
+        "SENDS_TO_AI",
+        "RECEIVES_FROM_AI",
+        "SENDS_TO_EXTERNAL",
+        "RECEIVES_FROM_EXTERNAL",
+    }
+)
+_LOCAL_CONTEXT_RADIUS = 16
 
 
 class SensitiveLineageGate:
-    """Keep taxonomy hints inferred and promote only behavior-corroborated data."""
+    """Keep taxonomy hints inferred and promote only path-local corroborated data."""
 
     def __init__(self, workspace_path: str | Path) -> None:
         self.workspace = Path(workspace_path).resolve(strict=False)
 
     def enrich(self, program: SemanticProgram) -> SemanticProgram:
         source_cache: dict[str, str] = {}
+        lineage_keys = self._lineage_keys(program)
         replacements: list[SemanticNodeFact] = []
         for node in program.nodes:
             if node.node_type not in _IDENTIFIER_CARRIER_TYPES:
@@ -94,15 +122,21 @@ class SensitiveLineageGate:
             if text is None:
                 text = self._read(node.file_path)
                 source_cache[node.file_path] = text
+            local_text = self._local_context(text, node.start_line, node.end_line)
 
-            allowed = set(capabilities)
-            if "BIOMETRIC_PROCESSING" in allowed and not self._biometric_behavior(text):
+            # DATA_OBJECT/MEDIA_OBJECT facts must participate in an actual lineage edge.
+            # Synthetic DATA_ASSET facts are allowed to stand on the local processor
+            # behavior that created them because there may be no named carrier to link.
+            lineage_supported = node.node_type == "DATA_ASSET" or node.key in lineage_keys
+            allowed = set(capabilities) if lineage_supported else set()
+
+            if "BIOMETRIC_PROCESSING" in allowed and not self._biometric_behavior(local_text):
                 allowed.discard("BIOMETRIC_PROCESSING")
                 if "SENSITIVE.BIOMETRIC" in semantics:
                     resolution = "INFERRED"
             if (
                 "IDENTITY_DOCUMENT_PROCESSING" in allowed
-                and not self._identity_document_behavior(text)
+                and not self._identity_document_behavior(local_text)
             ):
                 allowed.discard("IDENTITY_DOCUMENT_PROCESSING")
                 if "PII.GOVERNMENT_ID" in semantics:
@@ -117,7 +151,10 @@ class SensitiveLineageGate:
                 attrs[attr_key] = sorted(allowed)
                 resolution = "CORROBORATED"
             else:
-                attrs.pop(attr_key, None)
+                attrs.pop("corroboratedCapabilities", None)
+                attrs.pop("capabilities", None)
+                if sensitive_semantics and resolution != "UNRESOLVED":
+                    resolution = "INFERRED"
 
             replacements.append(
                 node
@@ -130,6 +167,28 @@ class SensitiveLineageGate:
             )
         program.nodes = replacements
         return program
+
+    @staticmethod
+    def _lineage_keys(program: SemanticProgram) -> set[str]:
+        keys: set[str] = set()
+        for edge in program.edges:
+            if edge.edge_type not in _LINEAGE_EDGE_TYPES:
+                continue
+            keys.add(edge.source_key)
+            keys.add(edge.target_key)
+        return keys
+
+    @staticmethod
+    def _local_context(text: str, start_line: int | None, end_line: int | None) -> str:
+        if not text:
+            return ""
+        if not start_line:
+            return ""
+        lines = text.splitlines()
+        start = max(0, start_line - 1 - _LOCAL_CONTEXT_RADIUS)
+        end_anchor = max(start_line, end_line or start_line)
+        end = min(len(lines), end_anchor + _LOCAL_CONTEXT_RADIUS)
+        return "\n".join(lines[start:end])
 
     @staticmethod
     def _biometric_behavior(text: str) -> bool:
