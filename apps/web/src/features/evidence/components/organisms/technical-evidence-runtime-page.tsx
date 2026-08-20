@@ -1,28 +1,32 @@
 "use client";
 
-import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
-import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import {
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
 } from "@lcsp/contracts/evidence";
+import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
+import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { resolveMessage } from "@lcsp/i18n";
 import { ActivityIcon, ClockIcon, RotateCcwIcon } from "lucide-react";
+import { Suspense } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { appLocale } from "@/lib/locale";
-import { useRerunRepositoryScanMutation } from "@/lib/api/assessment-queries";
+import { GraphLoadingSkeleton } from "@/features/evidence/components/atoms/GraphLoadingSkeleton";
+import { EvidenceGraphPage } from "@/features/evidence/pages/EvidenceGraphPage";
 import { useWorkspaceRuntime } from "@/features/workspace/components/organisms/workspace-runtime-provider";
 import {
   WORKSPACE_RUNTIME_CONNECTION_STATES,
-  type WorkspaceRuntimeActivityItem,
   type WorkspaceRuntimeActiveTool,
+  type WorkspaceRuntimeActivityItem,
   type WorkspaceRuntimeConnectionState,
   type WorkspaceRuntimeRun,
   type WorkspaceRuntimeSummaryValue,
 } from "@/features/workspace/types/workspace-runtime.types";
+import { useRerunRepositoryScanMutation } from "@/lib/api/assessment-queries";
+import { isEvidenceGraphMockEnabled } from "@/lib/api/evidence-graph-client";
+import { appLocale } from "@/lib/locale";
 
 export function TechnicalEvidenceRuntimePage({
   assessmentId,
@@ -47,9 +51,14 @@ export function TechnicalEvidenceRuntimePage({
   const showOrchestration =
     activeCurrentRun !== null || activeActivity.length > 0;
   const rerunMutation = useRerunRepositoryScanMutation(assessmentId);
+  const acceptedReport = reports.find(
+    (r) => r.status === TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+  );
+  const showEvidenceGraph =
+    acceptedReport !== undefined || isEvidenceGraphMockEnabled();
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:px-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 lg:px-6">
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">
@@ -211,6 +220,28 @@ export function TechnicalEvidenceRuntimePage({
           </ul>
         )}
       </section>
+
+      {showEvidenceGraph ? (
+        <section className="overflow-hidden rounded-lg border">
+          <div className="border-b bg-muted/30 px-4 py-3">
+            <h2 className="text-sm font-medium">
+              {t("pages.technicalEvidence.graphVisualizationTitle")}
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("pages.technicalEvidence.graphVisualizationDescription")}
+            </p>
+          </div>
+          <div className="bg-background p-4">
+            <Suspense fallback={<GraphLoadingSkeleton className="min-h-96" />}>
+              <EvidenceGraphPage
+                assessmentId={assessmentId}
+                scope="overview"
+                className="min-h-96"
+              />
+            </Suspense>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -222,7 +253,9 @@ function CurrentRunPanel({ run }: { run: WorkspaceRuntimeRun }) {
         <Badge variant={runtimeStatusBadgeVariant(run.status)}>
           {runtimeStatusLabel(run.status)}
         </Badge>
-        <span className="text-sm font-medium">{runtimeStageLabel(run.stage)}</span>
+        <span className="text-sm font-medium">
+          {runtimeStageLabel(run.stage)}
+        </span>
         <span className="text-xs text-muted-foreground">
           {t("pages.technicalEvidence.updatedAt")}: {formatDate(run.updatedAt)}
         </span>
@@ -231,10 +264,7 @@ function CurrentRunPanel({ run }: { run: WorkspaceRuntimeRun }) {
       {run.activeTools.length > 0 ? (
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {run.activeTools.map((tool) => (
-            <ActiveToolItem
-              key={`${run.runId}-${tool.toolName}`}
-              tool={tool}
-            />
+            <ActiveToolItem key={`${run.runId}-${tool.toolName}`} tool={tool} />
           ))}
         </div>
       ) : null}
@@ -412,7 +442,8 @@ function runtimeStageLabel(stage: string) {
   const stages = ASSESSMENT_RUNTIME_STAGE_CODES;
   if (stage === stages.snapshot)
     return t("pages.technicalEvidence.runtimeStages.snapshot");
-  if (stage === stages.scan) return t("pages.technicalEvidence.runtimeStages.scan");
+  if (stage === stages.scan)
+    return t("pages.technicalEvidence.runtimeStages.scan");
   if (stage === stages.technicalEvidence)
     return t("pages.technicalEvidence.runtimeStages.technicalEvidence");
   if (stage === stages.technicalProfile)
