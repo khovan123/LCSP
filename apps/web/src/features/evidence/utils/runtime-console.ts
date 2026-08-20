@@ -45,7 +45,17 @@ export function selectRuntimeConsoleActivity({
 export function buildRuntimeConsoleModel(
   activity: WorkspaceRuntimeActivityItem[],
 ): RuntimeConsoleModel {
-  const steps = [...activity]
+  const latestByCorrelation = new Map<string, WorkspaceRuntimeActivityItem>();
+  
+  for (const item of activity) {
+    const key = `${item.correlationId}:${item.stage}:${item.toolName || ""}`;
+    const existing = latestByCorrelation.get(key);
+    if (!existing || compareRuntimeActivity(item, existing) > 0) {
+      latestByCorrelation.set(key, item);
+    }
+  }
+
+  const steps = Array.from(latestByCorrelation.values())
     .sort(compareRuntimeActivity)
     .map((item): RuntimeConsoleStep => {
       const isActive = isActiveRuntimeStep(item);

@@ -1000,6 +1000,7 @@ export type PagesMessages = {
     skippedStepsLabel: string;
     noActiveStep: string;
     nonBlockingFailureLabel: string;
+    logDetailsHint: string;
     messageLabel: string;
     reasonLabel: string;
     valueLabel: string;
@@ -1048,6 +1049,8 @@ export type PagesMessages = {
       runCompleted: string;
       runFailed: string;
     };
+    runtimeToolLabels: Record<string, string>;
+    runtimeToolDetail: Record<string, string>;
   };
   classification: {
     metadataTitle: string;

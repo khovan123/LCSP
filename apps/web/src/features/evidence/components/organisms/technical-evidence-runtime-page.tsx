@@ -1,41 +1,158 @@
 "use client";
 
-import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
-import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import {
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   ASSESSMENT_RUNTIME_STAGE_CODES,
 } from "@lcsp/contracts/evidence";
+import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
+import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { resolveMessage } from "@lcsp/i18n";
-import {
-  ActivityIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  ClockIcon,
-  RotateCcwIcon,
-} from "lucide-react";
-import { useState } from "react";
+import { ActivityIcon, BotIcon, RotateCcwIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { appLocale } from "@/lib/locale";
-import { useRerunRepositoryScanMutation } from "@/lib/api/assessment-queries";
-import { useWorkspaceRuntime } from "@/features/workspace/components/organisms/workspace-runtime-provider";
 import {
   buildRuntimeConsoleModel,
   isActiveRuntimeStatus,
   selectRuntimeConsoleActivity,
   type RuntimeConsoleStep,
 } from "@/features/evidence/utils/runtime-console";
+import { useWorkspaceRuntime } from "@/features/workspace/components/organisms/workspace-runtime-provider";
 import {
   WORKSPACE_RUNTIME_CONNECTION_STATES,
   type WorkspaceRuntimeActivityItem,
-  type WorkspaceRuntimeActiveTool,
   type WorkspaceRuntimeConnectionState,
-  type WorkspaceRuntimeRun,
   type WorkspaceRuntimeSummaryValue,
 } from "@/features/workspace/types/workspace-runtime.types";
+import { useRerunRepositoryScanMutation } from "@/lib/api/assessment-queries";
+import { appLocale } from "@/lib/locale";
+
+function SemanticSummary({ item, expanded }: { item: WorkspaceRuntimeActivityItem; expanded: boolean }) {
+  const input = (item.inputSummary || {}) as Record<string, any>;
+  const output = (item.outputSummary || {}) as Record<string, any>;
+  const tool = input.tool || output.tool || item.toolName;
+  const isLlm = input.operation === "complete_with_tools" || output.operation === "complete_with_tools" || item.eventType === "LLM_REQUEST" || item.eventType === "LLM_RESPONSE";
+  
+  let summary = item.summary;
+  
+  if (isLlm) {
+    summary = "Agent reasoning with LLM";
+  } else if (tool === "search_nodes") {
+    const args = input.arguments || output.arguments || input;
+    const text = args?.text;
+    summary = text ? `Search graph for: ${text}` : "Search graph";
+  } else if (tool === "list_observations") {
+    summary = "List retrieved observations";
+  }
+
+  if (!summary) return null;
+
+  return (
+    <p
+      className={
+        expanded
+          ? "mt-0.5 font-mono text-xs leading-relaxed text-zinc-500"
+          : "mt-0.5 truncate font-mono text-xs text-zinc-400"
+      }
+    >
+      {summary}
+    </p>
+  );
+}
+
+function SemanticRuntimeDetails({ item }: { item: WorkspaceRuntimeActivityItem }) {
+  const input = (item.inputSummary || {}) as Record<string, any>;
+  const output = (item.outputSummary || {}) as Record<string, any>;
+  
+  const isLlm = input.operation === "complete_with_tools" || output.operation === "complete_with_tools" || item.eventType === "LLM_REQUEST" || item.eventType === "LLM_RESPONSE";
+  const tool = input.tool || output.tool || item.toolName;
+
+  if (isLlm) {
+    const isResponse = !!output.output_tokens || !!output.request_id || item.eventType === 'toolCompleted' || item.eventType === 'LLM_RESPONSE';
+    const model = output.model || input.model || (input.model_chain ? input.model_chain[0] : "unknown-model");
+    const nodeName = input.node_name || output.node_name;
+    const toolCount = output.tool_call_count;
+    const toolNames = input.tool_names || [];
+
+    return (
+      <div className="px-4 pb-3 md:pl-36">
+        <div className="rounded-md border border-indigo-200 bg-indigo-50/50 p-3 font-mono text-xs text-indigo-900 shadow-sm">
+          <div className="flex items-center gap-2 font-semibold">
+            <BotIcon className="size-4 text-indigo-600" />
+            <span>LLM Reasoning Workflow</span>
+          </div>
+          <div className="mt-2 space-y-1.5 opacity-90">
+            <p>
+              Model: <span className="font-semibold text-indigo-700">{model}</span>
+            </p>
+            {nodeName ? (
+              <p>
+                Analyzing Node: <span className="text-indigo-700">{nodeName}</span>
+              </p>
+            ) : null}
+            {!isResponse ? (
+              <p>
+                Available Tools: <span className="text-indigo-700">{toolNames.join(", ")}</span>
+              </p>
+            ) : (
+              <p>
+                Agent executed <span className="font-semibold text-indigo-700">{toolCount || 0}</span> tool call(s).
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (tool === "search_nodes" || tool === "list_observations") {
+    const args = input.arguments || output.arguments || input;
+    const result = output.result || output;
+    
+    let actionText: React.ReactNode = "";
+    let resultText: React.ReactNode = "";
+    
+    if (tool === "search_nodes") {
+      actionText = args?.text 
+        ? <>Searched graph for: <span className="font-semibold text-blue-700">"{args.text}"</span></>
+        : <>Executed graph search</>;
+        
+      if (result?.observationId) {
+        resultText = <>Retrieved observation <span className="font-semibold text-emerald-700">{result.observationId}</span>.</>;
+      } else if (result?.error) {
+        resultText = <span className="text-red-600">Error: {result.error}</span>;
+      }
+    } else if (tool === "list_observations") {
+      actionText = args?.limit
+        ? <>Requested up to <span className="font-semibold text-blue-700">{args.limit}</span> observations.</>
+        : <>Requested list of observations.</>;
+        
+      if (result?.total !== undefined) {
+        resultText = <>Found <span className="font-semibold text-emerald-700">{result.total}</span> total observations.</>;
+      }
+    }
+
+    return (
+      <div className="px-4 pb-3 md:pl-36">
+        <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 font-mono text-xs text-blue-900 shadow-sm">
+          <div className="flex items-center gap-2 font-semibold">
+            <ActivityIcon className="size-4 text-blue-600" />
+            <span>{tool === "search_nodes" ? "Graph Search" : "List Observations"}</span>
+          </div>
+          <div className="mt-2 space-y-1.5 opacity-90">
+            <p>{actionText}</p>
+            {resultText ? <p>{resultText}</p> : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback
+  return <RuntimeDetailList item={item} />;
+}
 
 export function TechnicalEvidenceRuntimePage({
   assessmentId,
@@ -97,10 +214,6 @@ export function TechnicalEvidenceRuntimePage({
                 : `${t("pages.technicalEvidence.lastUpdated")}: ${formatDate(timeline.lastEmittedAt)}`}
             </span>
           </div>
-
-          {activeCurrentRun !== null ? (
-            <CurrentRunPanel run={activeCurrentRun} />
-          ) : null}
 
           {consoleModel.steps.length === 0 ? (
             <p className="px-4 py-6 text-sm text-muted-foreground">
@@ -229,104 +342,95 @@ export function TechnicalEvidenceRuntimePage({
   );
 }
 
-function CurrentRunPanel({ run }: { run: WorkspaceRuntimeRun }) {
-  return (
-    <div className="border-b px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={runtimeStatusBadgeVariant(run.status)}>
-          {runtimeStatusLabel(run.status)}
-        </Badge>
-        <span className="text-sm font-medium">
-          {runtimeStageLabel(run.stage)}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {t("pages.technicalEvidence.updatedAt")}: {formatDate(run.updatedAt)}
-        </span>
-      </div>
-
-      {run.activeTools.length > 0 ? (
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          {run.activeTools.map((tool) => (
-            <ActiveToolItem key={`${run.runId}-${tool.toolName}`} tool={tool} />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ActiveToolItem({ tool }: { tool: WorkspaceRuntimeActiveTool }) {
-  return (
-    <div className="rounded-md border bg-muted/20 px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <p className="truncate text-sm font-medium">{tool.toolName}</p>
-        <Badge variant={runtimeStatusBadgeVariant(tool.status)}>
-          {runtimeStatusLabel(tool.status)}
-        </Badge>
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">{tool.summary}</p>
-      {tool.startedAt !== null || tool.attempt !== null ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {tool.startedAt !== null ? formatDate(tool.startedAt) : null}
-          {tool.startedAt !== null && tool.attempt !== null ? " / " : null}
-          {tool.attempt !== null
-            ? `${t("pages.technicalEvidence.attemptLabel")} ${tool.attempt}`
-            : null}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 function RuntimeConsole({
   model,
 }: {
   model: ReturnType<typeof buildRuntimeConsoleModel>;
 }) {
+  const activeTitle =
+    model.activeStep === null
+      ? t("pages.technicalEvidence.noActiveStep")
+      : runtimeStepTitle(model.activeStep.item);
+  const activeSummary =
+    model.activeStep === null ? null : model.activeStep.item.summary;
+
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [model.steps.length]);
+
   return (
-    <div>
-      <div className="grid gap-2 border-b bg-background px-4 py-3 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-5">
-        <RuntimeMetric
-          label={t("pages.technicalEvidence.activeStepLabel")}
-          value={
-            model.activeStep === null
-              ? t("pages.technicalEvidence.noActiveStep")
-              : runtimeStepTitle(model.activeStep.item)
-          }
-        />
-        <RuntimeMetric
-          label={t("pages.technicalEvidence.runningStepsLabel")}
-          value={String(model.runningCount)}
-        />
-        <RuntimeMetric
-          label={t("pages.technicalEvidence.completedStepsLabel")}
-          value={String(model.completedCount)}
-        />
-        <RuntimeMetric
-          label={t("pages.technicalEvidence.failedStepsLabel")}
-          value={String(model.failedCount)}
-        />
-        <RuntimeMetric
-          label={t("pages.technicalEvidence.skippedStepsLabel")}
-          value={String(model.skippedCount)}
-        />
+    <div className="bg-white text-zinc-800">
+      {/* Status bar */}
+      <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              className={
+                model.activeStep === null
+                  ? "size-2 shrink-0 rounded-full bg-zinc-400"
+                  : "size-2 shrink-0 animate-pulse rounded-full bg-emerald-500"
+              }
+            />
+            <div className="min-w-0">
+              <p className="truncate font-mono text-sm font-semibold text-zinc-800">
+                {activeTitle}
+                {model.activeStep !== null ? <AnimatedDots /> : null}
+              </p>
+              {activeSummary !== null ? (
+                <p className="mt-0.5 truncate font-mono text-xs text-zinc-500">
+                  {activeSummary}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-3 font-mono text-xs">
+            <span className="text-emerald-600">
+              {model.runningCount > 0 ? `${model.runningCount} running` : null}
+            </span>
+            <span className="text-zinc-400">
+              {model.completedCount} done
+            </span>
+            {model.failedCount > 0 ? (
+              <span className="text-amber-600">{model.failedCount} failed</span>
+            ) : null}
+            {model.skippedCount > 0 ? (
+              <span className="text-zinc-400">{model.skippedCount} skipped</span>
+            ) : null}
+          </div>
+        </div>
       </div>
-      <ul className="divide-y">
-        {model.steps.map((step) => (
-          <RuntimeConsoleStepItem key={step.id} step={step} />
-        ))}
-      </ul>
+
+      {/* Fixed-height scrollable log area — new entries appear at bottom */}
+      <div className="relative">
+        {/* Fade-out at top to hint scrollability */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-white to-transparent" />
+        <div
+          className="h-96 overflow-y-auto scroll-smooth py-2"
+          style={{ scrollbarColor: "#d4d4d8 transparent", scrollbarWidth: "thin" }}
+        >
+          <ul className="flex flex-col">
+            {model.steps.map((step) => (
+              <RuntimeConsoleStepItem
+                key={`${step.id}:${step.isActive ? "active" : "idle"}`}
+                step={step}
+              />
+            ))}
+          </ul>
+          {/* Invisible anchor element — always scrolled into view */}
+          <div ref={logEndRef} />
+        </div>
+      </div>
     </div>
   );
 }
 
 function RuntimeMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md bg-muted/30 px-3 py-2">
-      <p className="text-xs uppercase tracking-wide">{label}</p>
-      <p className="mt-1 truncate text-sm font-medium text-foreground">
-        {value}
-      </p>
+    <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2">
+      <p className="text-zinc-500">{label}</p>
+      <p className="mt-1 truncate text-sm font-semibold text-zinc-100">{value}</p>
     </div>
   );
 }
@@ -336,69 +440,107 @@ function RuntimeConsoleStepItem({ step }: { step: RuntimeConsoleStep }) {
   const item = step.item;
   const durationLabel =
     item.durationMs === null ? null : formatDuration(item.durationMs);
+  const detailCount = runtimeDetailCount(item);
+
+  const prefixColor = step.isActive
+    ? "text-emerald-600"
+    : step.isFailed
+      ? "text-amber-600"
+      : "text-zinc-400";
+
+  const titleColor = step.isActive
+    ? "text-zinc-900 font-semibold"
+    : step.isFailed
+      ? "text-amber-700"
+      : "text-zinc-500";
+
+  let badgeStatus: string;
+  if (item.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped) {
+    badgeStatus = "skipped";
+  } else if (
+    item.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed ||
+    item.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.runFailed ||
+    step.isFailed
+  ) {
+    badgeStatus = ASSESSMENT_RUNTIME_RUN_STATUSES.failed;
+  } else if (
+    item.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput ||
+    (step.isActive && item.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.waiting)
+  ) {
+    badgeStatus = ASSESSMENT_RUNTIME_RUN_STATUSES.waiting;
+  } else if (
+    item.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted ||
+    item.eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted ||
+    item.runStatus === ASSESSMENT_RUNTIME_RUN_STATUSES.completed ||
+    !step.isActive
+  ) {
+    badgeStatus = ASSESSMENT_RUNTIME_RUN_STATUSES.completed;
+  } else {
+    badgeStatus = ASSESSMENT_RUNTIME_RUN_STATUSES.running;
+  }
 
   return (
     <li
       className={
         step.isActive
-          ? "bg-primary/5"
+          ? "border-l-2 border-emerald-500 bg-emerald-50"
           : step.isFailed
-            ? "bg-destructive/5"
-            : "bg-background"
+            ? "border-l-2 border-amber-400/60 bg-amber-50/40"
+            : "border-l-2 border-transparent bg-white"
       }
     >
       <button
         aria-expanded={expanded}
-        className="flex w-full flex-col gap-2 px-4 py-3 text-left md:flex-row md:items-start"
+        className="group flex w-full items-start gap-3 px-4 py-2 text-left transition-colors hover:bg-zinc-50"
         onClick={() => setExpanded((current) => !current)}
         type="button"
       >
-        <div className="flex items-center gap-2 text-xs text-muted-foreground md:w-40 md:shrink-0">
-          <ClockIcon className="size-3.5" />
-          <span>{formatDate(item.emittedAt)}</span>
-        </div>
+        {/* Timestamp column */}
+        <span className="mt-0.5 shrink-0 font-mono text-xs tabular-nums text-zinc-400">
+          {formatTime(item.emittedAt)}
+        </span>
+
+        {/* Stage pill */}
+        <span className="mt-0.5 shrink-0 rounded bg-zinc-100 px-1.5 py-px font-mono text-xs text-zinc-500">
+          {runtimeStageLabel(item.stage)}
+        </span>
+
+        {/* Main content */}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {expanded ? (
-              <ChevronDownIcon className="size-4 text-muted-foreground" />
-            ) : (
-              <ChevronRightIcon className="size-4 text-muted-foreground" />
-            )}
-            <p className="truncate text-sm font-medium">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+            <span className={`font-mono text-xs ${prefixColor}`}>›</span>
+            <span className={`min-w-0 truncate font-mono text-sm ${titleColor}`}>
               {runtimeStepTitle(item)}
-            </p>
-            <span className="text-xs text-muted-foreground">
-              {runtimeStageLabel(item.stage)}
+              {step.isActive ? <AnimatedDots /> : null}
             </span>
             {durationLabel !== null ? (
-              <span className="text-xs text-muted-foreground">
-                {durationLabel}
+              <span className="shrink-0 font-mono text-xs text-zinc-400">
+                [{durationLabel}]
               </span>
             ) : null}
           </div>
-          <p
-            className={
-              expanded
-                ? "mt-1 text-sm text-muted-foreground"
-                : "mt-1 truncate text-sm text-muted-foreground"
-            }
-          >
-            {item.summary}
-          </p>
+          <SemanticSummary item={item} expanded={expanded} />
+          {!expanded && detailCount > 0 ? (
+            <p className="mt-0.5 font-mono text-xs text-zinc-400">
+              {t("pages.technicalEvidence.logDetailsHint")}
+            </p>
+          ) : null}
         </div>
-        <div className="flex items-center gap-2 md:shrink-0">
+
+        {/* Status badges */}
+        <div className="flex shrink-0 items-center gap-1.5">
           {step.isFailed &&
           item.runStatus !== ASSESSMENT_RUNTIME_RUN_STATUSES.failed ? (
-            <Badge variant="secondary">
+            <Badge className="border-amber-500/40 bg-amber-50 text-amber-700 text-xs">
               {t("pages.technicalEvidence.nonBlockingFailureLabel")}
             </Badge>
           ) : null}
-          <Badge variant={runtimeStatusBadgeVariant(item.runStatus)}>
-            {runtimeStatusLabel(item.runStatus)}
+          <Badge variant={runtimeStatusBadgeVariant(badgeStatus)} className="text-xs">
+            {runtimeStatusLabel(badgeStatus)}
           </Badge>
         </div>
       </button>
-      {expanded ? <RuntimeDetailList item={item} /> : null}
+      {expanded ? <SemanticRuntimeDetails item={item} /> : null}
     </li>
   );
 }
@@ -446,24 +588,21 @@ function RuntimeDetailList({ item }: { item: WorkspaceRuntimeActivityItem }) {
   }
 
   return (
-    <div className="px-4 pb-4 md:pl-48">
-      <dl className="grid gap-3 text-xs md:grid-cols-2">
+    <div className="px-4 pb-3 md:pl-36">
+      <dl className="grid gap-2 border-l border-zinc-200 pl-4 font-mono text-xs">
         {details.map((detail) => (
-          <div
-            className="grid gap-2 rounded-md border bg-muted/20 p-3"
-            key={detail.label}
-          >
-            <dt className="font-medium text-foreground">{detail.label}</dt>
-            <dd className="grid gap-1.5">
+          <div className="grid gap-1.5" key={detail.label}>
+            <dt className="text-zinc-400">{detail.label}</dt>
+            <dd className="grid gap-1">
               {detail.values.map((entry) => (
                 <div
-                  className="grid gap-1 rounded-sm bg-background px-2 py-1.5 sm:flex sm:items-start"
+                  className="grid gap-1 rounded bg-zinc-50 px-2 py-1.5 sm:flex sm:items-start"
                   key={`${detail.label}-${entry.label}`}
                 >
-                  <span className="truncate text-muted-foreground sm:w-36 sm:shrink-0">
+                  <span className="truncate text-zinc-400 sm:w-40 sm:shrink-0">
                     {entry.label}
                   </span>
-                  <span className="break-words font-mono text-foreground">
+                  <span className="break-words text-zinc-700">
                     {entry.value}
                   </span>
                 </div>
@@ -476,8 +615,37 @@ function RuntimeDetailList({ item }: { item: WorkspaceRuntimeActivityItem }) {
   );
 }
 
+function AnimatedDots() {
+  return (
+    <span aria-hidden="true" className="inline-flex w-6 overflow-hidden">
+      <span className="animate-pulse">...</span>
+    </span>
+  );
+}
+
+function runtimeDetailCount(item: WorkspaceRuntimeActivityItem) {
+  return [
+    item.inputSummary,
+    item.outputSummary,
+    item.errorSummary,
+    item.waitingReason,
+  ].filter((value) => value !== null).length;
+}
+
 function runtimeStepTitle(item: WorkspaceRuntimeActivityItem) {
-  return item.toolName ?? runtimeEventLabel(item.eventType);
+  if (item.toolName) {
+    try {
+      const toolKey = `pages.technicalEvidence.runtimeToolLabels.${item.toolName}` as any;
+      const label = t(toolKey);
+      if (label && !label.includes("runtimeToolLabels")) {
+        return label;
+      }
+    } catch {
+      // Ignore
+    }
+    return item.toolName;
+  }
+  return runtimeEventLabel(item.eventType);
 }
 
 function formatSummaryEntries(value: WorkspaceRuntimeSummaryValue) {
@@ -591,6 +759,8 @@ function runtimeStatusLabel(status: string) {
     return t("pages.technicalEvidence.runtimeStatuses.completed");
   if (status === statuses.failed)
     return t("pages.technicalEvidence.runtimeStatuses.failed");
+  if (status === "skipped")
+    return "Skipped";
   return status;
 }
 
@@ -660,6 +830,14 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat(appLocale, {
     dateStyle: "medium",
     timeStyle: "medium",
+  }).format(new Date(value));
+}
+
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat(appLocale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   }).format(new Date(value));
 }
 
