@@ -19,6 +19,7 @@ from .models import (
     EvidenceClaim,
 )
 from .pipeline import EngineeringInvestigationPipeline, EngineeringInvestigationResult
+from .plan_audit_result import PlannedEngineeringInvestigationResult
 from .planning_scope import (
     ScopedEngineeringRulePlanningCandidate,
     ScopedMaterialEngineeringRulePlanner,
@@ -211,43 +212,49 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             correlationId=correlation_id,
         )
 
-        # P0 observability: emit one queryable decision event per EngineeringRule. This
+        # P0 observability: persist and log one decision row per EngineeringRule. This
         # answers not only which rules were SELECTed, but whether SELECT came from the
         # model, a deterministic fail-closed override, material source evidence, Wizard
-        # scope, or scoped uncertainty.
+        # scope, or scoped uncertainty. This metadata is investigation-scope diagnostics,
+        # never legal applicability/risk/compliance authority.
         candidate_by_id = {
             candidate.engineering_rule_id: candidate for candidate in candidates
         }
+        planner_decisions: list[dict[str, Any]] = []
         for audit in plan.decision_audit:
             candidate = candidate_by_id.get(audit.engineering_rule_id)
-            logger.info(
-                "ENGINEERING_RULE_PLAN_DECISION",
-                engineering_rule_id=audit.engineering_rule_id,
-                requested_decision=audit.requested_decision,
-                final_decision=audit.final_decision,
-                reason_code=audit.reason_code,
-                basis=list(audit.basis),
-                validation_override=audit.validation_override,
-                material_source_hit_count=(
+            decision_row = {
+                "engineering_rule_id": audit.engineering_rule_id,
+                "requested_decision": audit.requested_decision,
+                "final_decision": audit.final_decision,
+                "reason_code": audit.reason_code,
+                "basis": list(audit.basis),
+                "validation_override": audit.validation_override,
+                "material_source_hit_count": (
                     candidate.source_hit_count if candidate is not None else 0
                 ),
-                material_source_evidence_count=(
+                "material_source_evidence_count": (
                     candidate.source_evidence_count if candidate is not None else 0
                 ),
-                material_source_node_types=(
+                "material_source_node_types": (
                     list(candidate.source_node_types) if candidate is not None else []
                 ),
-                scope_coverage_state=(
+                "scope_coverage_state": (
                     candidate.scope_coverage_state if candidate is not None else "UNKNOWN"
                 ),
-                scoped_truncated_query_count=(
+                "scoped_truncated_query_count": (
                     candidate.scoped_truncated_query_count if candidate is not None else 0
                 ),
-                scoped_unresolved_frontier_count=(
+                "scoped_unresolved_frontier_count": (
                     candidate.scoped_unresolved_frontier_count
                     if candidate is not None
                     else 0
                 ),
+            }
+            planner_decisions.append(decision_row)
+            logger.info(
+                "ENGINEERING_RULE_PLAN_DECISION",
+                **decision_row,
                 workflow_run_id=workflow_run_id,
                 correlationId=correlation_id,
             )
@@ -328,7 +335,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         elif limitations:
             status = "PARTIAL"
 
-        return EngineeringInvestigationResult(
+        return PlannedEngineeringInvestigationResult(
             status=status,
             legal_rule_catalog_version_id=catalog_version_id,
             legal_corpus_version_id=corpus_version_id,
@@ -339,4 +346,6 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             evaluations=tuple(evaluations),
             limitations=tuple(dict.fromkeys(limitations)),
             technical_evidence_by_rule=technical_evidence_by_rule,
+            planner_fallback_used=plan.fallback_used,
+            planner_decisions=tuple(planner_decisions),
         )
