@@ -13,7 +13,11 @@ from lcsp_workers.scanner.program_graph.source_roles import (
     source_role,
 )
 
-from .claim_topology import ClaimTopologyValidationError, validate_claim_topology
+from .claim_topology import (
+    ClaimTopologyValidationError,
+    topology_criterion_kind,
+    validate_claim_topology,
+)
 from .models import ENGINEERING_EVIDENCE_CLAIM_TYPES, EvidenceClaim
 
 
@@ -125,8 +129,6 @@ class EvidenceClaimValidator:
                 f"source anchor does not resolve: {sorted(missing_anchors)}"
             )
 
-        # ProgramGraph v2 has no separate path registry. A graphPathRef therefore
-        # must resolve to a persisted node/edge/anchor/evidence identity.
         unknown_paths = [ref for ref in claim.graph_path_refs if ref not in known]
         if unknown_paths:
             raise EvidenceClaimValidationError(
@@ -150,6 +152,7 @@ class EvidenceClaimValidator:
                     criterion=claim.criterion,
                     graph_path_refs=claim.graph_path_refs,
                     graph=value,
+                    claim_value=claim.value,
                 )
             except ClaimTopologyValidationError as error:
                 raise EvidenceClaimValidationError(str(error)) from error
@@ -198,6 +201,7 @@ class EvidenceClaimValidator:
                 evidence_to_edges.setdefault(str(ref), []).append(edge)
 
         criterion_tokens = cls._tokens(claim.criterion or "") - _GENERIC_CRITERION_TOKENS
+        topology_kind = topology_criterion_kind(claim.criterion)
         candidates: list[tuple[int, int, str, str]] = []
 
         def add(kind: str, ref: str, rank: int) -> None:
@@ -225,11 +229,21 @@ class EvidenceClaimValidator:
         positive = [row for row in candidates if row[0] > 0]
         fallback = [row for row in candidates if row[0] == 0]
 
-        # Specific criteria must be backed by refs whose graph/source metadata actually
-        # overlaps that criterion. Only a genuinely generic criterion may use a tiny
-        # material fallback, preserving backwards compatibility without reintroducing
-        # whole-observation provenance inflation.
-        if criterion_tokens:
+        if topology_kind:
+            # Topology validation already proved the structural relation. Preserve the
+            # bounded material graph refs even when labels do not literally contain
+            # criterion words such as "downstream" or "path"; lexical scoring is only
+            # ranking here, not a second authority that can erase the proven path.
+            graph_candidates = [row for row in candidates if row[2] == "graph"]
+            chosen = graph_candidates[:_MAX_CLAIM_PROVENANCE_REFS]
+            if len(chosen) < _MAX_CLAIM_PROVENANCE_REFS:
+                chosen.extend(
+                    row
+                    for row in [*positive, *fallback]
+                    if row not in chosen
+                )
+                chosen = chosen[:_MAX_CLAIM_PROVENANCE_REFS]
+        elif criterion_tokens:
             chosen = positive[:_MAX_CLAIM_PROVENANCE_REFS]
         else:
             chosen = fallback[:2]
@@ -288,8 +302,6 @@ class EvidenceClaimValidator:
         if SOURCE_ROLE_TEST in roles and roles == {SOURCE_ROLE_TEST}:
             return False, ""
         if paths and SOURCE_ROLE_PRODUCTION not in roles:
-            # Scripts/examples/generated files can explain an investigation, but they
-            # are not sufficient on their own to close a product control.
             return False, ""
 
         node_types = {str(node.get("node_type") or "") for node in nodes}
