@@ -9,6 +9,8 @@ from lcsp_workers.investigation.evidence_claim_validator import (
 from lcsp_workers.investigation.models import EvidenceClaim
 from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
 
+# LCSP-220 regression coverage: path-oriented claims must prove graph topology.
+
 
 def _node(node_id: str, node_type: str, label: str) -> dict:
     return {
