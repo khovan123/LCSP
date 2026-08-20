@@ -243,15 +243,14 @@ class SensitiveLineageGate:
     def _signals(node: SemanticNodeFact | None) -> set[str]:
         if node is None:
             return set()
+        # Never use previously inferred sensitive semantic types or prior
+        # corroboratedCapabilities as proof of themselves. Those values may have come
+        # from a high-recall/file-level pass. Only concrete symbol/operation identity on
+        # the connected lineage path may contribute corroborating behavior here.
         text = " ".join(
             [
                 str(node.label or ""),
                 str(node.symbol_ref or ""),
-                " ".join(str(value) for value in node.semantic_types),
-                " ".join(
-                    str(value)
-                    for value in (node.attributes or {}).get("capabilities") or []
-                ),
             ]
         )
         result: set[str] = set()
