@@ -29,9 +29,24 @@ import {
 import { useRerunRepositoryScanMutation } from "@/lib/api/assessment-queries";
 import { appLocale } from "@/lib/locale";
 
+type SummaryRecord = {
+  tool?: string;
+  operation?: string;
+  arguments?: { text?: string; limit?: number; [key: string]: unknown };
+  result?: { observationId?: string; error?: string; [key: string]: unknown };
+  output_tokens?: number;
+  request_id?: string;
+  model?: string;
+  model_chain?: string[];
+  node_name?: string;
+  tool_call_count?: number;
+  tool_names?: string[];
+  [key: string]: unknown;
+};
+
 function SemanticSummary({ item, expanded }: { item: WorkspaceRuntimeActivityItem; expanded: boolean }) {
-  const input = (item.inputSummary || {}) as Record<string, any>;
-  const output = (item.outputSummary || {}) as Record<string, any>;
+  const input = (item.inputSummary || {}) as SummaryRecord;
+  const output = (item.outputSummary || {}) as SummaryRecord;
   const tool = input.tool || output.tool || item.toolName;
   const isLlm = input.operation === "complete_with_tools" || output.operation === "complete_with_tools" || item.eventType === "LLM_REQUEST" || item.eventType === "LLM_RESPONSE";
   
@@ -63,8 +78,8 @@ function SemanticSummary({ item, expanded }: { item: WorkspaceRuntimeActivityIte
 }
 
 function SemanticRuntimeDetails({ item }: { item: WorkspaceRuntimeActivityItem }) {
-  const input = (item.inputSummary || {}) as Record<string, any>;
-  const output = (item.outputSummary || {}) as Record<string, any>;
+  const input = (item.inputSummary || {}) as SummaryRecord;
+  const output = (item.outputSummary || {}) as SummaryRecord;
   
   const isLlm = input.operation === "complete_with_tools" || output.operation === "complete_with_tools" || item.eventType === "LLM_REQUEST" || item.eventType === "LLM_RESPONSE";
   const tool = input.tool || output.tool || item.toolName;
@@ -116,7 +131,7 @@ function SemanticRuntimeDetails({ item }: { item: WorkspaceRuntimeActivityItem }
     
     if (tool === "search_nodes") {
       actionText = args?.text 
-        ? <>Searched graph for: <span className="font-semibold text-blue-700">"{args.text}"</span></>
+        ? <>Searched graph for: <span className="font-semibold text-blue-700">&quot;{args.text}&quot;</span></>
         : <>Executed graph search</>;
         
       if (result?.observationId) {
@@ -426,14 +441,7 @@ function RuntimeConsole({
   );
 }
 
-function RuntimeMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2">
-      <p className="text-zinc-500">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-zinc-100">{value}</p>
-    </div>
-  );
-}
+
 
 function RuntimeConsoleStepItem({ step }: { step: RuntimeConsoleStep }) {
   const [expanded, setExpanded] = useState(step.defaultExpanded);
@@ -635,7 +643,7 @@ function runtimeDetailCount(item: WorkspaceRuntimeActivityItem) {
 function runtimeStepTitle(item: WorkspaceRuntimeActivityItem) {
   if (item.toolName) {
     try {
-      const toolKey = `pages.technicalEvidence.runtimeToolLabels.${item.toolName}` as any;
+      const toolKey = `pages.technicalEvidence.runtimeToolLabels.${item.toolName}`;
       const label = t(toolKey);
       if (label && !label.includes("runtimeToolLabels")) {
         return label;
