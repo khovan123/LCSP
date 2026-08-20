@@ -26,8 +26,16 @@ _IDENTITY_MATCH = re.compile(
     r"(?:^|[._ -])(?:compare|similarity|verify|verification|match|identify|recognize)(?:$|[._ -])",
     re.I,
 )
+# Modality words alone are ambiguous (software/config fingerprints are common). Require
+# an adjacent biometric-processing operation before the modality contributes a strong
+# path signal.
 _NON_VISUAL_BIOMETRIC = re.compile(
-    r"finger[_ .-]?print|voiceprint|speaker[_ .-]?(?:embed|verify|recogn)|iris|retina|palm[_ .-]?print",
+    r"finger(?:print)?[_ .-]?(?:scan|template|match|verify|recogn|feature|extract)|"
+    r"voiceprint[_ .-]?(?:match|verify|recogn|template|feature|extract)|"
+    r"speaker[_ .-]?(?:embed|verify|recogn)|"
+    r"iris[_ .-]?(?:scan|match|verify|recogn|template)|"
+    r"retina[_ .-]?(?:scan|match|verify|recogn|template)|"
+    r"palm[_ .-]?(?:print|scan|match|verify|recogn|template)",
     re.I,
 )
 _OCR = re.compile(
@@ -90,8 +98,6 @@ class SensitiveLineageGate:
     """Keep taxonomy hints inferred and promote only path-corroborated data."""
 
     def __init__(self, workspace_path: str | Path) -> None:
-        # Constructor compatibility only. This gate intentionally reasons over the
-        # already normalized Semantic IR instead of re-reading source text.
         self.workspace = Path(workspace_path).resolve(strict=False)
 
     def enrich(self, program: SemanticProgram) -> SemanticProgram:
@@ -192,8 +198,6 @@ class SensitiveLineageGate:
         reverse: dict[str, set[str]],
         capability: str,
     ) -> bool:
-        # A carrier may be observed before or after the processor. Test one directed
-        # path in each direction; never union signals from unrelated sibling branches.
         return cls._walk_has_capability(
             start,
             node_by_key=node_by_key,
