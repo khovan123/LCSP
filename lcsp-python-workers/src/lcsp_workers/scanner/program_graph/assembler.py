@@ -26,6 +26,7 @@ from .python_architecture_resolution import PythonArchitectureResolver
 from .python_consumer_resolution import PythonConsumerBoundaryResolver
 from .python_framework_adapters import PythonFrameworkAdapters
 from .redux_extended_resolution import ReduxExtendedResolver
+from .semantic_integrity import SemanticIntegrityFinalizer
 from .semantic_ir import SemanticEdgeFact, SemanticNodeFact
 from .sensitive_lineage_gate import SensitiveLineageGate
 from .source_roles import (
@@ -262,6 +263,12 @@ class ProgramGraphAssembler:
                     "CONTAINS", f"file:{path}", key, evidence_refs=evidence
                 )
             )
+
+        # High-recall extractors and legacy technical findings may use broad lexical
+        # categories. Normalize them only after every additive evidence source has been
+        # attached, so weak provider/config/action vocabulary cannot become trusted
+        # AI inference or business-decision semantics in the persisted graph.
+        SemanticIntegrityFinalizer().enrich(program)
 
         builder = ProgramGraphBuilder(
             workspace_path,
