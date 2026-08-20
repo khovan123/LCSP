@@ -42,7 +42,13 @@ def _engineering_rule() -> EngineeringRule:
     )
 
 
-def _service(*, cached=None, recovered=None, recovery_error: Exception | None = None):
+def _service(
+    *,
+    cached=None,
+    recovered=None,
+    recovery_error: Exception | None = None,
+    contract_version: str = "test-contract-v1",
+):
     compiler = MagicMock()
     retriever = MagicMock()
     retriever.retrieve_exact_context.return_value = [
@@ -56,6 +62,7 @@ def _service(*, cached=None, recovered=None, recovery_error: Exception | None = 
     cache = MagicMock()
     cache.get.return_value = list(cached or [])
     registry = MagicMock()
+    registry.contract_version = contract_version
     if recovery_error is not None:
         registry.materialize.side_effect = recovery_error
     else:
@@ -133,6 +140,31 @@ def test_bootstrap_rule_fails_closed_when_governed_bundle_cannot_recover() -> No
     assert cache.put.call_count == 0
     registry.materialize.assert_called_once()
     compiler.compile.assert_not_called()
+
+
+def test_bootstrap_contract_version_changes_cache_fingerprint() -> None:
+    service_v1, _, cache_v1, _ = _service(
+        cached=[_engineering_rule()],
+        contract_version="transparency-v1",
+    )
+    service_v2, _, cache_v2, _ = _service(
+        cached=[_engineering_rule()],
+        contract_version="transparency-v2",
+    )
+
+    for service in (service_v1, service_v2):
+        service.get_or_compile(
+            legal_rule=_legal_rule(
+                family=DEV_ENGINEERING_RULE_BOOTSTRAP_RULE_FAMILY
+            ),
+            legal_rule_catalog_version_id="catalog-1",
+            legal_corpus_version_id="corpus-1",
+            workflow_run_id="run-1",
+        )
+
+    fingerprint_v1 = cache_v1.get.call_args.args[0]
+    fingerprint_v2 = cache_v2.get.call_args.args[0]
+    assert fingerprint_v1 != fingerprint_v2
 
 
 def test_non_bootstrap_rule_can_compile_on_cache_miss() -> None:
