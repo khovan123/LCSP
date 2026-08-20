@@ -54,6 +54,8 @@ _GENERIC_CRITERION_TOKENS = frozenset(
         "ensures",
         "must",
         "shall",
+        "output",
+        "surface",
         "with",
         "from",
         "that",
@@ -63,6 +65,146 @@ _GENERIC_CRITERION_TOKENS = frozenset(
         "for",
     }
 )
+
+# Certain governed requiredEvidence labels intentionally use stable business-neutral
+# names while production code commonly uses protocol/library vocabulary instead. Map
+# only those criteria to concrete implementation terms so valid C2PA/watermark/notice
+# evidence can rank, while generic LLM token/accounting nodes cannot satisfy a
+# transparency control merely because their label contains "output" or "AI".
+_CRITERION_EVIDENCE_TOKENS: dict[str, frozenset[str]] = {
+    "AI_OUTPUT_SURFACE": frozenset(
+        {
+            "response",
+            "notification",
+            "publication",
+            "publish",
+            "file",
+            "storage",
+            "stream",
+            "websocket",
+            "endpoint",
+            "route",
+            "download",
+            "export",
+            "render",
+        }
+    ),
+    "DIRECT_AI_INTERACTION_SURFACE": frozenset(
+        {
+            "chatbot",
+            "assistant",
+            "bot",
+            "chat",
+            "conversation",
+            "message",
+            "reply",
+            "response",
+        }
+    ),
+    "AI_INTERACTION_DISCLOSURE_CONTROL": frozenset(
+        {"disclosure", "disclose", "notice", "label", "banner", "badge", "powered"}
+    ),
+    "AI_MEDIA_OUTPUT_SURFACE": frozenset(
+        {
+            "image",
+            "audio",
+            "video",
+            "media",
+            "frame",
+            "codec",
+            "mime",
+            "render",
+            "thumbnail",
+            "file",
+            "blob",
+        }
+    ),
+    "MACHINE_READABLE_MARK_CONTROL": frozenset(
+        {
+            "machine",
+            "readable",
+            "mark",
+            "watermark",
+            "metadata",
+            "provenance",
+            "c2pa",
+            "manifest",
+            "xmp",
+            "iptc",
+            "exif",
+            "credential",
+            "credentials",
+        }
+    ),
+    "PUBLIC_AI_CONTENT_SURFACE": frozenset(
+        {"public", "publish", "publication", "post", "feed", "article", "broadcast", "share"}
+    ),
+    "PUBLIC_AI_CONTENT_NOTICE_CONTROL": frozenset(
+        {"notice", "disclosure", "label", "badge", "banner", "generated", "synthetic"}
+    ),
+    "DEEPFAKE_OR_SIMULATED_MEDIA_SURFACE": frozenset(
+        {
+            "deepfake",
+            "faceswap",
+            "face",
+            "swap",
+            "voice",
+            "clone",
+            "cloning",
+            "lipsync",
+            "simulated",
+            "synthetic",
+            "impersonation",
+        }
+    ),
+    "VISIBLE_DEEPFAKE_LABEL_CONTROL": frozenset(
+        {"visible", "label", "overlay", "badge", "banner", "caption", "notice", "watermark"}
+    ),
+    "TRANSPARENCY_CONTROL_PRESENT": frozenset(
+        {
+            "disclosure",
+            "notice",
+            "label",
+            "watermark",
+            "provenance",
+            "metadata",
+            "c2pa",
+            "badge",
+            "banner",
+        }
+    ),
+    "TRANSPARENCY_CONTROL_CONTINUITY": frozenset(
+        {
+            "preserve",
+            "preserved",
+            "retain",
+            "retained",
+            "strip",
+            "remove",
+            "transcode",
+            "export",
+            "publish",
+            "copy",
+            "metadata",
+            "watermark",
+            "provenance",
+        }
+    ),
+    "ARTICLE_11_TRANSPARENCY_CONTROL": frozenset(
+        {
+            "disclosure",
+            "notice",
+            "label",
+            "watermark",
+            "provenance",
+            "metadata",
+            "c2pa",
+            "badge",
+            "banner",
+        }
+    ),
+}
+
 _MATERIAL_RESOURCE_NODE_TYPES = frozenset(
     {
         "PACKAGE_DEPENDENCY",
@@ -200,7 +342,11 @@ class EvidenceClaimValidator:
             for ref in edge.get("evidence_refs") or []:
                 evidence_to_edges.setdefault(str(ref), []).append(edge)
 
-        criterion_tokens = cls._tokens(claim.criterion or "") - _GENERIC_CRITERION_TOKENS
+        criterion_name = str(claim.criterion or "").strip().upper()
+        derived_tokens = cls._tokens(claim.criterion or "") - _GENERIC_CRITERION_TOKENS
+        criterion_tokens = set(
+            _CRITERION_EVIDENCE_TOKENS.get(criterion_name, frozenset(derived_tokens))
+        )
         topology_kind = topology_criterion_kind(claim.criterion)
         candidates: list[tuple[int, int, str, str]] = []
 
