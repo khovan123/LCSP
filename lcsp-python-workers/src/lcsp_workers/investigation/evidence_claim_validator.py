@@ -1,7 +1,6 @@
 """Fail closed when an LLM claim is not backed by material immutable provenance."""
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import replace
 from typing import Any
@@ -70,15 +69,15 @@ _GENERIC_CRITERION_TOKENS = frozenset(
 # names while production code commonly uses protocol/library vocabulary instead. Map
 # only those criteria to concrete implementation terms so valid C2PA/watermark/notice
 # evidence can rank, while generic LLM token/accounting nodes cannot satisfy a
-# transparency control merely because their label contains "output" or "AI".
+# transparency control merely because their label contains "output", "response", or
+# an internal metadata field.
 _CRITERION_EVIDENCE_TOKENS: dict[str, frozenset[str]] = {
     "AI_OUTPUT_SURFACE": frozenset(
         {
-            "response",
+            "http",
             "notification",
             "publication",
             "publish",
-            "file",
             "storage",
             "stream",
             "websocket",
@@ -98,7 +97,6 @@ _CRITERION_EVIDENCE_TOKENS: dict[str, frozenset[str]] = {
             "conversation",
             "message",
             "reply",
-            "response",
         }
     ),
     "AI_INTERACTION_DISCLOSURE_CONTROL": frozenset(
@@ -115,8 +113,6 @@ _CRITERION_EVIDENCE_TOKENS: dict[str, frozenset[str]] = {
             "mime",
             "render",
             "thumbnail",
-            "file",
-            "blob",
         }
     ),
     "MACHINE_READABLE_MARK_CONTROL": frozenset(
@@ -125,7 +121,6 @@ _CRITERION_EVIDENCE_TOKENS: dict[str, frozenset[str]] = {
             "readable",
             "mark",
             "watermark",
-            "metadata",
             "provenance",
             "c2pa",
             "manifest",
@@ -140,7 +135,7 @@ _CRITERION_EVIDENCE_TOKENS: dict[str, frozenset[str]] = {
         {"public", "publish", "publication", "post", "feed", "article", "broadcast", "share"}
     ),
     "PUBLIC_AI_CONTENT_NOTICE_CONTROL": frozenset(
-        {"notice", "disclosure", "label", "badge", "banner", "generated", "synthetic"}
+        {"notice", "disclosure", "label", "badge", "banner"}
     ),
     "DEEPFAKE_OR_SIMULATED_MEDIA_SURFACE": frozenset(
         {
@@ -167,7 +162,6 @@ _CRITERION_EVIDENCE_TOKENS: dict[str, frozenset[str]] = {
             "label",
             "watermark",
             "provenance",
-            "metadata",
             "c2pa",
             "badge",
             "banner",
@@ -180,12 +174,9 @@ _CRITERION_EVIDENCE_TOKENS: dict[str, frozenset[str]] = {
             "retain",
             "retained",
             "strip",
-            "remove",
             "transcode",
             "export",
-            "publish",
             "copy",
-            "metadata",
             "watermark",
             "provenance",
         }
@@ -197,7 +188,6 @@ _CRITERION_EVIDENCE_TOKENS: dict[str, frozenset[str]] = {
             "label",
             "watermark",
             "provenance",
-            "metadata",
             "c2pa",
             "badge",
             "banner",
@@ -413,6 +403,7 @@ class EvidenceClaimValidator:
     ) -> tuple[bool, str]:
         nodes: list[dict[str, Any]] = []
         anchors: list[dict[str, Any]] = []
+        evidence_edges: list[dict[str, Any]] = []
         edge = edge_by_id.get(ref)
         if ref in node_by_id:
             nodes.append(node_by_id[ref])
@@ -423,12 +414,14 @@ class EvidenceClaimValidator:
             if linked:
                 nodes.append(linked)
         if edge:
+            evidence_edges.append(edge)
             for key in ("source_node_id", "target_node_id"):
                 linked = node_by_id.get(str(edge.get(key) or ""))
                 if linked:
                     nodes.append(linked)
         nodes.extend(evidence_to_nodes.get(ref, []))
         for evidence_edge in evidence_to_edges.get(ref, []):
+            evidence_edges.append(evidence_edge)
             for key in ("source_node_id", "target_node_id"):
                 linked = node_by_id.get(str(evidence_edge.get(key) or ""))
                 if linked:
@@ -457,26 +450,80 @@ class EvidenceClaimValidator:
         if not material:
             return False, ""
 
-        text = json.dumps(
-            {
-                "nodes": [
-                    {
-                        "type": node.get("node_type"),
-                        "label": node.get("label"),
-                        "attributes": node.get("attributes") or {},
-                        "semanticTypes": node.get("semantic_types") or [],
-                        "source": node.get("source") or {},
-                    }
-                    for node in nodes[:12]
-                ],
-                "anchors": anchors[:8],
-                "edge": edge or {},
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-            default=str,
-        )
-        return True, text
+        # Criterion relevance must be derived from evidence VALUES only. Serializing
+        # dictionaries with their field names caused generic keys such as `file_path`
+        # and `metadata` to look like implementation evidence for media/mark controls.
+        # Keep structural/materiality checks above, then rank only the concrete node,
+        # source, semantic, attribute-value and edge-type values that the scanner saw.
+        text_values: list[str] = []
+        seen_nodes: set[str] = set()
+        for node in nodes[:12]:
+            node_id = str(node.get("node_id") or "")
+            if node_id and node_id in seen_nodes:
+                continue
+            if node_id:
+                seen_nodes.add(node_id)
+            source = node.get("source") if isinstance(node.get("source"), dict) else {}
+            text_values.extend(
+                value
+                for value in (
+                    str(node.get("node_type") or ""),
+                    str(node.get("label") or ""),
+                    str(source.get("file_path") or ""),
+                    str(source.get("symbol_ref") or ""),
+                )
+                if value
+            )
+            text_values.extend(
+                str(value) for value in node.get("semantic_types") or [] if value
+            )
+            text_values.extend(cls._semantic_values(node.get("attributes") or {}))
+
+        for anchor in anchors[:8]:
+            text_values.extend(
+                value
+                for value in (
+                    str(anchor.get("file_path") or ""),
+                    str(anchor.get("symbol_ref") or ""),
+                )
+                if value
+            )
+
+        seen_edges: set[str] = set()
+        for evidence_edge in evidence_edges[:12]:
+            edge_id = str(evidence_edge.get("edge_id") or "")
+            if edge_id and edge_id in seen_edges:
+                continue
+            if edge_id:
+                seen_edges.add(edge_id)
+            edge_type = str(evidence_edge.get("edge_type") or "")
+            if edge_type:
+                text_values.append(edge_type)
+            text_values.extend(
+                cls._semantic_values(evidence_edge.get("attributes") or {})
+            )
+
+        return True, " ".join(text_values)
+
+    @classmethod
+    def _semantic_values(cls, value: Any, *, depth: int = 4) -> list[str]:
+        """Flatten bounded primitive values without leaking schema/key names into scoring."""
+        if depth <= 0 or value is None:
+            return []
+        if isinstance(value, dict):
+            result: list[str] = []
+            for item in list(value.values())[:32]:
+                result.extend(cls._semantic_values(item, depth=depth - 1))
+            return result
+        if isinstance(value, (list, tuple, set, frozenset)):
+            result = []
+            for item in list(value)[:32]:
+                result.extend(cls._semantic_values(item, depth=depth - 1))
+            return result
+        if isinstance(value, (str, int, float, bool)):
+            rendered = str(value).strip()
+            return [rendered] if rendered else []
+        return []
 
     @staticmethod
     def _tokens(value: str) -> set[str]:
