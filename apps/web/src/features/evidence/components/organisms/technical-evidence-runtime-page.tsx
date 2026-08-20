@@ -262,15 +262,15 @@ export function TechnicalEvidenceRuntimePage({
             {t("pages.technicalEvidence.noScanJobs")}
           </p>
         ) : (
-          <ul className="divide-y">
-            {scanJobs.map((scanJob) => (
+          <ul className="max-h-80 divide-y overflow-y-auto">
+            {scanJobs.map((scanJob, index) => (
               <li
                 className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                 key={scanJob.id}
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
-                    {t("pages.technicalEvidence.scanJobLabel")} {scanJob.id}
+                    {t("pages.technicalEvidence.scanJobLabel")} #{scanJobs.length - index}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {t("pages.technicalEvidence.updatedAt")}:{" "}
@@ -302,8 +302,8 @@ export function TechnicalEvidenceRuntimePage({
             {t("pages.technicalEvidence.noEvidenceReports")}
           </p>
         ) : (
-          <ul className="divide-y">
-            {reports.map((report) => (
+          <ul className="max-h-80 divide-y overflow-y-auto">
+            {reports.map((report, index) => (
               <li
                 className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                 key={report.id}
@@ -311,7 +311,7 @@ export function TechnicalEvidenceRuntimePage({
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
                     {t("pages.technicalEvidence.evidenceReportLabel")}{" "}
-                    {report.id}
+                    #{reports.length - index}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {t("pages.technicalEvidence.createdAt")}:{" "}

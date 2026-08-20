@@ -184,11 +184,11 @@ test("runtime console model sorts scan steps and expands active or failed steps"
     model.steps.map((step) => step.id),
     ["tool-started", "tool-completed", "tool-failed"],
   );
-  assert.equal(model.runningCount, 0);
+  assert.equal(model.runningCount, 1);
   assert.equal(model.completedCount, 1);
   assert.equal(model.failedCount, 1);
-  assert.equal(model.activeStep, null);
-  assert.equal(model.steps[0]?.defaultExpanded, false);
+  assert.equal(model.activeStep?.id, "tool-started");
+  assert.equal(model.steps[0]?.defaultExpanded, true);
   assert.equal(model.steps[1]?.defaultExpanded, false);
   assert.equal(model.steps[2]?.defaultExpanded, true);
 });
