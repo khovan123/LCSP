@@ -43,7 +43,6 @@ def heading_only(content: str) -> bool:
     return len(lines) == 1 and bool(re.fullmatch(r"Điều\s+\d+\..+", lines[0], re.I))
 
 
-
 def psycopg_connection_info(database_url: str) -> tuple[str, str | None]:
     """Convert a Prisma PostgreSQL URL into a psycopg-compatible URL.
 
@@ -101,6 +100,7 @@ def main() -> int:
     from lcsp_workers.legal.engineering_rules.compiler import COMPILER_VERSION, PROMPT_VERSION
     from lcsp_workers.legal.engineering_rules.fingerprint import engineering_rule_fingerprint
     from lcsp_workers.legal.engineering_rules.models import ENGINEERING_RULE_SCHEMA_VERSION, EngineeringRule
+    from lcsp_workers.legal.engineering_rules.precompiled_registry import PrecompiledEngineeringRuleRegistry
     from lcsp_workers.legal.engineering_rules.validator import validate_engineering_rule
 
     expected = (
@@ -111,6 +111,14 @@ def main() -> int:
     current = (ENGINEERING_RULE_SCHEMA_VERSION, COMPILER_VERSION, PROMPT_VERSION)
     if expected != current:
         raise SystemExit(f"Bundle/runtime contract mismatch: bundle={expected}, runtime={current}")
+
+    contract_registry = PrecompiledEngineeringRuleRegistry(bundle_path=args.bundle)
+    templates, contract_version = contract_registry.templates_for_bundle(bundle)
+    fingerprint_compiler_version = (
+        COMPILER_VERSION
+        if contract_version == "base"
+        else f"{COMPILER_VERSION}|precompiled-contract:{contract_version}"
+    )
 
     corpus_version = args.corpus_version or bundle.get("legalCorpusVersionHint")
     if not corpus_version:
@@ -183,7 +191,6 @@ def main() -> int:
 
     retriever = ChromaDbCitationRetriever()
     cache = EngineeringRuleCache()
-    templates = list(bundle.get("templates") or [])
     matched_templates_global: set[str] = set()
 
     stats = {
@@ -282,7 +289,7 @@ def main() -> int:
             expected_hash = str(expected_hashes.get(cid) or "")
             actual_hash = str(x.get("contentSha256") or "")
             if expected_hash != actual_hash:
-                mismatches.append({"id":cid,"expected":expected_hash,"actual":actual_hash})
+                mismatches.append({"id": cid, "expected": expected_hash, "actual": actual_hash})
         if mismatches:
             print(f"SKIP {row['legalRuleId']}: source hash mismatch={mismatches}")
             stats["skippedHashMismatchRules"] += 1
@@ -295,7 +302,7 @@ def main() -> int:
             chunk_hashes=hashes,
             schema_version=ENGINEERING_RULE_SCHEMA_VERSION,
             prompt_version=PROMPT_VERSION,
-            compiler_version=COMPILER_VERSION,
+            compiler_version=fingerprint_compiler_version,
         )
 
         source_ids = [str(x["id"]) for x in context]
@@ -347,6 +354,7 @@ def main() -> int:
     print("\n=== IMPORT SUMMARY ===")
     print(f"Corpus:  {corpus['version']} ({corpus['id']})")
     print(f"Catalog: {catalog['version']} ({catalog['id']})")
+    print(f"EngineeringRule contract: {contract_version}")
     print(f"Chroma:  {os.getenv('LEGAL_CHROMA_PATH', '/tmp/lcsp-chroma')}")
     for k, v in stats.items():
         print(f"{k}: {v}")
