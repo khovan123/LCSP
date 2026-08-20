@@ -10,17 +10,19 @@ from lcsp_workers.scanner.program_graph.source_roles import filter_program_evide
 
 from .code_context import CodeContextSession
 from .code_context_investigator import CodeContextLawGuidedInvestigator
-from .engineering_rule_planner import (
-    EngineeringRulePlanner,
-    EngineeringRulePlanningCandidate,
-)
-from .material_scope import MaterialEngineeringRulePlanner, material_planning_packet
+from .engineering_rule_planner import EngineeringRulePlanner
+from .material_scope import material_planning_packet
 from .models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
     ENGINEERING_LIMITATION_CODES,
     EvidenceClaim,
 )
 from .pipeline import EngineeringInvestigationPipeline, EngineeringInvestigationResult
+from .planning_scope import (
+    ScopedEngineeringRulePlanningCandidate,
+    ScopedMaterialEngineeringRulePlanner,
+)
+from .selected_rule_orchestration import augment_selected_rule_packet
 
 
 logger = get_logger(__name__)
@@ -50,7 +52,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             investigator=investigator,
             evaluator=evaluator,
         )
-        self._planner = planner or MaterialEngineeringRulePlanner(llm_client)
+        self._planner = planner or ScopedMaterialEngineeringRulePlanner(llm_client)
 
     def run(
         self,
@@ -178,9 +180,10 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
 
         # Planner does not receive every broad start-node hit. Each packet is projected
         # into rule-specific material production signals first; the original packet is
-        # retained for the investigator after the rule passes the plan gate.
+        # retained for the investigator after the rule passes the plan gate. Coverage is
+        # also derived from that material packet, never inherited from graph-global LIMITED.
         candidates = tuple(
-            EngineeringRulePlanningCandidate.from_rule_packet(
+            ScopedEngineeringRulePlanningCandidate.from_rule_packet(
                 rule,
                 material_planning_packet(rule, packet),
             )
@@ -205,6 +208,47 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             correlationId=correlation_id,
         )
 
+        # P0 observability: emit one queryable decision event per EngineeringRule. This
+        # answers not only which rules were SELECTed, but whether SELECT came from the
+        # model, a deterministic fail-closed override, material source evidence, Wizard
+        # scope, or scoped uncertainty.
+        candidate_by_id = {
+            candidate.engineering_rule_id: candidate for candidate in candidates
+        }
+        for audit in plan.decision_audit:
+            candidate = candidate_by_id.get(audit.engineering_rule_id)
+            logger.info(
+                "ENGINEERING_RULE_PLAN_DECISION",
+                engineering_rule_id=audit.engineering_rule_id,
+                requested_decision=audit.requested_decision,
+                final_decision=audit.final_decision,
+                reason_code=audit.reason_code,
+                basis=list(audit.basis),
+                validation_override=audit.validation_override,
+                material_source_hit_count=(
+                    candidate.source_hit_count if candidate is not None else 0
+                ),
+                material_source_evidence_count=(
+                    candidate.source_evidence_count if candidate is not None else 0
+                ),
+                material_source_node_types=(
+                    list(candidate.source_node_types) if candidate is not None else []
+                ),
+                scope_coverage_state=(
+                    candidate.scope_coverage_state if candidate is not None else "UNKNOWN"
+                ),
+                scoped_truncated_query_count=(
+                    candidate.scoped_truncated_query_count if candidate is not None else 0
+                ),
+                scoped_unresolved_frontier_count=(
+                    candidate.scoped_unresolved_frontier_count
+                    if candidate is not None
+                    else 0
+                ),
+                workflow_run_id=workflow_run_id,
+                correlationId=correlation_id,
+            )
+
         claims: list[EvidenceClaim] = []
         evaluations = []
         technical_evidence_by_rule: dict[str, tuple[dict[str, Any], ...]] = {}
@@ -213,6 +257,17 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         for engineering_rule, packet in prepared:
             if engineering_rule.engineering_rule_id not in selected_ids:
                 continue
+
+            # P1 deterministic orchestration: only selected rules receive a few bounded
+            # contract-owned graph traces before the first LLM turn. This reduces model
+            # tool retries/invalid ref calls and gives the model enough concrete topology
+            # to finish naturally without restoring the old eager fan-out.
+            packet = augment_selected_rule_packet(
+                packet,
+                graph,
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
+            )
             try:
                 if isinstance(self._investigator, CodeContextLawGuidedInvestigator):
                     rule_claims = self._investigator.investigate(
