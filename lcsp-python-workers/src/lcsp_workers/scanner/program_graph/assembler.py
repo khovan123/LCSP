@@ -6,6 +6,7 @@ from typing import Iterable
 
 from lcsp_workers.scanner.dependencies.dependency_fact import normalize_package_name
 
+from .ai_invocation_gate import AIInvocationSemanticGate
 from .ai_lifecycle import AILifecycleExtractor
 from .api_boundary_resolution import ApiBoundaryResolver
 from .builder import ProgramGraphBuilder
@@ -71,6 +72,12 @@ class ProgramGraphAssembler:
         ManagedArchitectureResolver(workspace_path).enrich(program)
         GenericDispatchResolver(workspace_path).enrich(program)
         normalize_framework_binding_metadata(program)
+
+        # P0 semantic boundary: high-recall provider-name detection is not inference.
+        # Normalize executable call semantics before any AI input/output lineage is
+        # materialized so false provider/config/redaction calls cannot create derived
+        # AI_OUTPUT nodes that later look corroborated to Planner/Investigator.
+        AIInvocationSemanticGate().enrich(program)
 
         # Normalize concrete repository evidence for model ownership/lifecycle before
         # data-lineage enrichment. Dependency presence alone is not a lifecycle stage.
@@ -263,6 +270,11 @@ class ProgramGraphAssembler:
                     "CONTAINS", f"file:{path}", key, evidence_refs=evidence
                 )
             )
+
+        # Apply the same semantic contract to additive analyzer findings. This second
+        # pass cannot create AI lineage (lineage is already complete); it prevents broad
+        # legacy finding categories from persisting under AI_MODEL_INVOCATION identity.
+        AIInvocationSemanticGate().enrich(program)
 
         # High-recall extractors and legacy technical findings may use broad lexical
         # categories. Normalize them only after every additive evidence source has been
