@@ -4,6 +4,8 @@ from pathlib import Path
 
 from lcsp_workers.scanner.program_graph.assembler import ProgramGraphAssembler
 
+# LCSP-220 P0 regressions: semantic trust must follow bounded structural evidence.
+
 
 def _assemble(tmp_path: Path):
     return ProgramGraphAssembler().assemble(
