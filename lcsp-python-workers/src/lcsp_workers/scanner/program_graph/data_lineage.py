@@ -284,7 +284,6 @@ class SemanticDataLineageExtractor:
             )
 
     def _link_ai_inputs_outputs(self, program: SemanticProgram) -> None:
-        node_by_key = {node.key: node for node in program.nodes}
         edges = tuple(program.edges)
         for ai in tuple(program.nodes):
             if ai.node_type != "AI_MODEL_INVOCATION":
@@ -528,3 +527,7 @@ class SemanticDataLineageExtractor:
     @staticmethod
     def _data_key(source_key: str) -> str:
         return f"data-object:{source_key}"
+
+
+def _line(text: str, offset: int) -> int:
+    return text.count("\n", 0, max(0, offset)) + 1
