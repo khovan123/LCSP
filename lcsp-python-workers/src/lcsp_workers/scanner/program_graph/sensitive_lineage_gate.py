@@ -1,21 +1,21 @@
-"""Fail closed on weak sensitive-data semantics after lineage extraction.
+"""Promote high-impact sensitive semantics only from bounded data-lineage paths.
 
-Identifier taxonomy is intentionally retained as an INFERRED seed, but it is not enough
-to promote a value or downstream sink to trusted sensitive-data evidence. This pass
-normalizes identifier-derived PII/SENSITIVE semantics to INFERRED and preserves a strong
-CORROBORATED state only when explicit, local processing behavior and lineage support it.
+Identifier/contract taxonomy remains a weak seed. A field named ``fingerprint`` or
+``document_id`` is not trusted sensitive evidence by itself, and lexical co-occurrence in
+the same file is not corroboration. Promotion requires one connected lineage path whose
+processing operations establish the semantic capability.
 """
 from __future__ import annotations
 
 import re
+from collections import deque
 from dataclasses import replace
 from pathlib import Path
 
 from .semantic_ir import SemanticNodeFact, SemanticProgram
-from .source_roles import is_test_source_path
 
 _VISUAL_BIOMETRIC = re.compile(
-    r"face[_ .-]?(?:detect|recogn|encod|embed|feature)|rekognition|facenet|deepface|insightface|biometric",
+    r"face[_ .-]?(?:detect|recogn|encod|embed|feature)|rekognition|facenet|deepface|insightface",
     re.I,
 )
 _BIOMETRIC_REPRESENTATION = re.compile(
@@ -23,202 +23,260 @@ _BIOMETRIC_REPRESENTATION = re.compile(
     re.I,
 )
 _IDENTITY_MATCH = re.compile(
-    r"compare|similarity|verify|verification|match|identify",
+    r"(?:^|[._ -])(?:compare|similarity|verify|verification|match|identify|recognize)(?:$|[._ -])",
     re.I,
 )
-# Deliberately require a processing verb/capability next to the modality. Generic
-# software/configuration terms such as fingerprintToken/latestFingerprint must not be
-# interpreted as biometric processing.
 _NON_VISUAL_BIOMETRIC = re.compile(
-    r"finger(?:print)?[_ .-]?(?:scan|template|match|verify|recogn|feature|extract)|"
-    r"voiceprint|speaker[_ .-]?(?:embed|verify|recogn)|"
-    r"iris[_ .-]?(?:scan|match|verify|recogn|template)|"
-    r"retina[_ .-]?(?:scan|match|verify|recogn|template)|"
-    r"palm[_ .-]?(?:print|scan|match|verify|recogn|template)",
+    r"finger[_ .-]?print|voiceprint|speaker[_ .-]?(?:embed|verify|recogn)|iris|retina|palm[_ .-]?print",
     re.I,
 )
-_OCR = re.compile(r"ocr|tesseract|textract|document[_ .-]?ai|vision[_ .-]?text", re.I)
+_OCR = re.compile(
+    r"(?:^|[._ -])(?:ocr|tesseract|textract|document[_ .-]?ai|vision[_ .-]?text)(?:$|[._ -])",
+    re.I,
+)
 _ID_DOCUMENT = re.compile(
-    r"kyc|identity[_ .-]?(?:document|verification)|government[_ .-]?id|national[_ .-]?id|passport|mrz|document[_ .-]?(?:number|verify)",
+    r"kyc|identity[_ .-]?(?:document|verification)|government[_ .-]?id|national[_ .-]?id|"
+    r"passport|mrz|citizen[_ .-]?id|id[_ .-]?card",
     re.I,
 )
-_IDENTIFIER_CARRIER_TYPES = frozenset(
+
+_DATA_CARRIER_TYPES = frozenset(
     {
         "PARAMETER",
+        "RETURN_VALUE",
         "VARIABLE",
         "PROPERTY",
         "DTO_FIELD",
         "DATA_OBJECT",
         "DATA_ASSET",
         "MEDIA_OBJECT",
+        "AI_INPUT",
+        "AI_OUTPUT",
     }
 )
-_LINEAGE_EDGE_TYPES = frozenset(
+_LINEAGE_EDGES = frozenset(
     {
         "FLOWS_TO",
-        "CARRIES_DATA",
-        "DECLARES_DATA",
+        "PASSES_ARGUMENT",
+        "RECEIVES_RETURN",
+        "ASSIGNS",
+        "ALIASES",
+        "READS_PROPERTY",
+        "WRITES_PROPERTY",
+        "MAPS_TO",
+        "PARSES",
+        "SERIALIZES",
+        "DESERIALIZES",
+        "TRANSFORMS",
         "DERIVES_FROM",
         "ENCODES",
         "DECODES",
-        "PASSES_ARGUMENT",
-        "RECEIVES_RETURN",
+        "CARRIES_DATA",
+        "DECLARES_DATA",
         "READS_FROM",
+        "LOADS_FROM",
         "WRITES_TO",
         "PERSISTS_TO",
-        "SENDS_TO_AI",
-        "RECEIVES_FROM_AI",
         "SENDS_TO_EXTERNAL",
         "RECEIVES_FROM_EXTERNAL",
+        "SENDS_TO_AI",
+        "RECEIVES_FROM_AI",
     }
 )
-_LOCAL_CONTEXT_RADIUS = 16
+_MAX_HOPS = 12
 
 
 class SensitiveLineageGate:
-    """Keep taxonomy hints inferred and promote only path-local corroborated data."""
+    """Keep taxonomy hints inferred and promote only path-corroborated data."""
 
     def __init__(self, workspace_path: str | Path) -> None:
+        # Constructor compatibility only. This gate intentionally reasons over the
+        # already normalized Semantic IR instead of re-reading source text.
         self.workspace = Path(workspace_path).resolve(strict=False)
 
     def enrich(self, program: SemanticProgram) -> SemanticProgram:
-        source_cache: dict[str, str] = {}
-        lineage_keys = self._lineage_keys(program)
+        node_by_key = {node.key: node for node in program.nodes}
+        forward: dict[str, set[str]] = {}
+        reverse: dict[str, set[str]] = {}
+        for edge in program.edges:
+            if edge.edge_type not in _LINEAGE_EDGES:
+                continue
+            if edge.source_key not in node_by_key or edge.target_key not in node_by_key:
+                continue
+            forward.setdefault(edge.source_key, set()).add(edge.target_key)
+            reverse.setdefault(edge.target_key, set()).add(edge.source_key)
+
         replacements: list[SemanticNodeFact] = []
         for node in program.nodes:
-            if node.node_type not in _IDENTIFIER_CARRIER_TYPES:
+            if node.node_type not in _DATA_CARRIER_TYPES:
                 replacements.append(node)
                 continue
 
-            attrs = dict(node.attributes or {})
             semantics = set(node.semantic_types)
-            sensitive_semantics = {
-                value
-                for value in semantics
-                if value.startswith("PII.") or value.startswith("SENSITIVE.")
+            biometric = self._path_supports(
+                node.key,
+                node_by_key=node_by_key,
+                forward=forward,
+                reverse=reverse,
+                capability="BIOMETRIC_PROCESSING",
+            )
+            identity_document = self._path_supports(
+                node.key,
+                node_by_key=node_by_key,
+                forward=forward,
+                reverse=reverse,
+                capability="IDENTITY_DOCUMENT_PROCESSING",
+            )
+
+            if biometric:
+                semantics.add("SENSITIVE.BIOMETRIC")
+            if identity_document:
+                semantics.add("PII.GOVERNMENT_ID")
+
+            attrs = dict(node.attributes or {})
+            attrs.pop("corroboratedCapabilities", None)
+            existing_capabilities = {
+                str(value) for value in attrs.get("capabilities") or [] if value
             }
-            capabilities = set(
-                attrs.get("corroboratedCapabilities")
-                or attrs.get("capabilities")
-                or []
+            existing_capabilities.difference_update(
+                {"BIOMETRIC_PROCESSING", "IDENTITY_DOCUMENT_PROCESSING"}
             )
-
-            # Identifier/contract taxonomy is a cheap seed only. Without an explicit
-            # corroborated processing capability it must never become trusted merely
-            # because the symbol/field happens to be named fingerprint/cccd/email/etc.
-            resolution = node.resolution_state
-            if sensitive_semantics and not capabilities and resolution != "UNRESOLVED":
-                resolution = "INFERRED"
-
-            if not capabilities or not node.file_path:
-                replacements.append(
-                    node
-                    if resolution == node.resolution_state
-                    else replace(node, resolution_state=resolution)
-                )
-                continue
-
-            text = source_cache.get(node.file_path)
-            if text is None:
-                text = self._read(node.file_path)
-                source_cache[node.file_path] = text
-            local_text = self._local_context(text, node.start_line, node.end_line)
-
-            # DATA_OBJECT/MEDIA_OBJECT facts must participate in an actual lineage edge.
-            # Synthetic DATA_ASSET facts are allowed to stand on the local processor
-            # behavior that created them because there may be no named carrier to link.
-            lineage_supported = node.node_type == "DATA_ASSET" or node.key in lineage_keys
-            allowed = set(capabilities) if lineage_supported else set()
-
-            if "BIOMETRIC_PROCESSING" in allowed and not self._biometric_behavior(local_text):
-                allowed.discard("BIOMETRIC_PROCESSING")
-                if "SENSITIVE.BIOMETRIC" in semantics:
-                    resolution = "INFERRED"
-            if (
-                "IDENTITY_DOCUMENT_PROCESSING" in allowed
-                and not self._identity_document_behavior(local_text)
-            ):
-                allowed.discard("IDENTITY_DOCUMENT_PROCESSING")
-                if "PII.GOVERNMENT_ID" in semantics:
-                    resolution = "INFERRED"
-
-            attr_key = (
-                "corroboratedCapabilities"
-                if "corroboratedCapabilities" in attrs
-                else "capabilities"
-            )
-            if allowed:
-                attrs[attr_key] = sorted(allowed)
-                resolution = "CORROBORATED"
+            if existing_capabilities:
+                attrs["capabilities"] = sorted(existing_capabilities)
             else:
-                attrs.pop("corroboratedCapabilities", None)
                 attrs.pop("capabilities", None)
-                if sensitive_semantics and resolution != "UNRESOLVED":
-                    resolution = "INFERRED"
+
+            corroborated = []
+            if biometric:
+                corroborated.append("BIOMETRIC_PROCESSING")
+            if identity_document:
+                corroborated.append("IDENTITY_DOCUMENT_PROCESSING")
+            if corroborated:
+                attrs["corroboratedCapabilities"] = corroborated
+
+            high_impact_present = bool(
+                semantics.intersection({"SENSITIVE.BIOMETRIC", "PII.GOVERNMENT_ID"})
+            )
+            if corroborated:
+                resolution = "CORROBORATED"
+            elif high_impact_present and node.resolution_state != "UNRESOLVED":
+                resolution = "INFERRED"
+            else:
+                resolution = node.resolution_state
 
             replacements.append(
                 node
-                if attrs == node.attributes and resolution == node.resolution_state
+                if (
+                    tuple(sorted(semantics)) == tuple(sorted(node.semantic_types))
+                    and attrs == node.attributes
+                    and resolution == node.resolution_state
+                )
                 else replace(
                     node,
+                    semantic_types=tuple(sorted(semantics)),
                     attributes=attrs,
                     resolution_state=resolution,
                 )
             )
+
         program.nodes = replacements
         return program
 
-    @staticmethod
-    def _lineage_keys(program: SemanticProgram) -> set[str]:
-        keys: set[str] = set()
-        for edge in program.edges:
-            if edge.edge_type not in _LINEAGE_EDGE_TYPES:
+    @classmethod
+    def _path_supports(
+        cls,
+        start: str,
+        *,
+        node_by_key: dict[str, SemanticNodeFact],
+        forward: dict[str, set[str]],
+        reverse: dict[str, set[str]],
+        capability: str,
+    ) -> bool:
+        # A carrier may be observed before or after the processor. Test one directed
+        # path in each direction; never union signals from unrelated sibling branches.
+        return cls._walk_has_capability(
+            start,
+            node_by_key=node_by_key,
+            adjacency=forward,
+            capability=capability,
+        ) or cls._walk_has_capability(
+            start,
+            node_by_key=node_by_key,
+            adjacency=reverse,
+            capability=capability,
+        )
+
+    @classmethod
+    def _walk_has_capability(
+        cls,
+        start: str,
+        *,
+        node_by_key: dict[str, SemanticNodeFact],
+        adjacency: dict[str, set[str]],
+        capability: str,
+    ) -> bool:
+        initial = cls._signals(node_by_key.get(start))
+        queue = deque([(start, 0, initial)])
+        seen: set[tuple[str, tuple[str, ...]]] = set()
+        while queue:
+            current, depth, signals = queue.popleft()
+            state = (current, tuple(sorted(signals)))
+            if state in seen:
                 continue
-            keys.add(edge.source_key)
-            keys.add(edge.target_key)
-        return keys
+            seen.add(state)
+            if cls._satisfies(signals, capability):
+                return True
+            if depth >= _MAX_HOPS:
+                continue
+            for nxt in sorted(adjacency.get(current, set())):
+                node = node_by_key.get(nxt)
+                if node is None:
+                    continue
+                queue.append((nxt, depth + 1, signals | cls._signals(node)))
+        return False
 
     @staticmethod
-    def _local_context(text: str, start_line: int | None, end_line: int | None) -> str:
-        if not text:
-            return ""
-        if not start_line:
-            return ""
-        lines = text.splitlines()
-        start = max(0, start_line - 1 - _LOCAL_CONTEXT_RADIUS)
-        end_anchor = max(start_line, end_line or start_line)
-        end = min(len(lines), end_anchor + _LOCAL_CONTEXT_RADIUS)
-        return "\n".join(lines[start:end])
-
-    @staticmethod
-    def _biometric_behavior(text: str) -> bool:
-        visual = bool(
-            _VISUAL_BIOMETRIC.search(text)
-            and _BIOMETRIC_REPRESENTATION.search(text)
-            and _IDENTITY_MATCH.search(text)
+    def _signals(node: SemanticNodeFact | None) -> set[str]:
+        if node is None:
+            return set()
+        text = " ".join(
+            [
+                str(node.label or ""),
+                str(node.symbol_ref or ""),
+                " ".join(str(value) for value in node.semantic_types),
+                " ".join(
+                    str(value)
+                    for value in (node.attributes or {}).get("capabilities") or []
+                ),
+            ]
         )
-        non_visual = bool(
-            _NON_VISUAL_BIOMETRIC.search(text)
-            and (
-                _BIOMETRIC_REPRESENTATION.search(text)
-                or _IDENTITY_MATCH.search(text)
+        result: set[str] = set()
+        if _VISUAL_BIOMETRIC.search(text):
+            result.add("VISUAL_BIOMETRIC")
+        if _NON_VISUAL_BIOMETRIC.search(text):
+            result.add("NON_VISUAL_BIOMETRIC")
+        if _BIOMETRIC_REPRESENTATION.search(text):
+            result.add("BIOMETRIC_REPRESENTATION")
+        if _IDENTITY_MATCH.search(text):
+            result.add("IDENTITY_MATCH")
+        if _OCR.search(text):
+            result.add("OCR")
+        if _ID_DOCUMENT.search(text):
+            result.add("IDENTITY_DOCUMENT")
+        return result
+
+    @staticmethod
+    def _satisfies(signals: set[str], capability: str) -> bool:
+        if capability == "BIOMETRIC_PROCESSING":
+            visual = {
+                "VISUAL_BIOMETRIC",
+                "BIOMETRIC_REPRESENTATION",
+                "IDENTITY_MATCH",
+            }.issubset(signals)
+            non_visual = "NON_VISUAL_BIOMETRIC" in signals and bool(
+                signals.intersection({"BIOMETRIC_REPRESENTATION", "IDENTITY_MATCH"})
             )
-        )
-        return visual or non_visual
-
-    @staticmethod
-    def _identity_document_behavior(text: str) -> bool:
-        return bool(_OCR.search(text) and _ID_DOCUMENT.search(text))
-
-    def _read(self, relative: str) -> str:
-        if is_test_source_path(relative):
-            return ""
-        path = (self.workspace / relative).resolve(strict=False)
-        try:
-            path.relative_to(self.workspace)
-        except ValueError:
-            return ""
-        try:
-            return path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            return ""
+            return visual or non_visual
+        if capability == "IDENTITY_DOCUMENT_PROCESSING":
+            return {"OCR", "IDENTITY_DOCUMENT"}.issubset(signals)
+        return False
