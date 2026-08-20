@@ -49,13 +49,26 @@ class DiverseBusinessSemanticEnricher(BusinessSemanticEnricher):
             for edge in graph.edges
             if str(edge.get("edge_id") or "") in edge_ids
         ]
-        scoped_unresolved = context.get("unresolvedFrontiers") or []
+        scoped_unresolved = sorted(
+            {
+                str(ref)
+                for ref in graph.unresolved_frontiers
+                if str(ref) in node_ids
+            }
+            | {
+                str(node.get("node_id"))
+                for node in scoped_nodes
+                if str(node.get("resolution_state") or "") == "UNRESOLVED"
+            }
+        )[:20]
         scoped_limited = bool(scoped_unresolved) or any(
             str(item.get("coverage_state") or "SUFFICIENT") == "LIMITED"
             for item in [*scoped_nodes, *scoped_edges]
         )
-        # Do not inject repository-global LIMITED into every business cluster. The LLM
-        # sees only coverage that intersects this bounded technical subgraph.
+        # Base enrichment retains repository diagnostics for backward compatibility.
+        # Replace them here with only the uncertainty that intersects this cluster;
+        # non-node/global diagnostics must not make every cluster LIMITED.
+        context["unresolvedFrontiers"] = scoped_unresolved
         context["coverageState"] = "LIMITED" if scoped_limited else "SUFFICIENT"
         context["coverageScope"] = "BUSINESS_CLUSTER"
         return context
