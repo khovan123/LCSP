@@ -131,21 +131,21 @@ function SemanticRuntimeDetails({ item }: { item: WorkspaceRuntimeActivityItem }
     
     if (tool === "search_nodes") {
       actionText = args?.text 
-        ? <>Searched graph for: <span className="font-semibold text-blue-700">&quot;{args.text}&quot;</span></>
+        ? <>Searched graph for: <span className="font-semibold text-blue-700">&quot;{String(args.text)}&quot;</span></>
         : <>Executed graph search</>;
         
       if (result?.observationId) {
-        resultText = <>Retrieved observation <span className="font-semibold text-emerald-700">{result.observationId}</span>.</>;
+        resultText = <>Retrieved observation <span className="font-semibold text-emerald-700">{String(result.observationId)}</span>.</>;
       } else if (result?.error) {
-        resultText = <span className="text-red-600">Error: {result.error}</span>;
+        resultText = <span className="text-red-600">Error: {String(result.error)}</span>;
       }
     } else if (tool === "list_observations") {
       actionText = args?.limit
-        ? <>Requested up to <span className="font-semibold text-blue-700">{args.limit}</span> observations.</>
+        ? <>Requested up to <span className="font-semibold text-blue-700">{String(args.limit)}</span> observations.</>
         : <>Requested list of observations.</>;
         
       if (result?.total !== undefined) {
-        resultText = <>Found <span className="font-semibold text-emerald-700">{result.total}</span> total observations.</>;
+        resultText = <>Found <span className="font-semibold text-emerald-700">{String(result.total)}</span> total observations.</>;
       }
     }
 
