@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Iterable
 
 from lcsp_workers.legal.engineering_rules.models import EngineeringRule
@@ -127,12 +127,25 @@ class EngineeringRulePlanningCandidate:
 
 
 @dataclass(frozen=True)
+class EngineeringRulePlanDecisionAudit:
+    """Observed planner decision plus deterministic validation outcome for one rule."""
+
+    engineering_rule_id: str
+    requested_decision: str
+    final_decision: str
+    reason_code: str
+    basis: tuple[str, ...]
+    validation_override: str | None = None
+
+
+@dataclass(frozen=True)
 class EngineeringRulePlan:
     """Validated plan consumed by the deterministic investigation pipeline."""
 
     selected_rule_ids: tuple[str, ...]
     skipped_rule_ids: tuple[str, ...]
     fallback_used: bool = False
+    decision_audit: tuple[EngineeringRulePlanDecisionAudit, ...] = ()
 
 
 class EngineeringRulePlanner:
@@ -159,7 +172,20 @@ class EngineeringRulePlanner:
         if not rows:
             return EngineeringRulePlan((), ())
         if len(rows) == 1:
-            return EngineeringRulePlan((rows[0].engineering_rule_id,), ())
+            rule_id = rows[0].engineering_rule_id
+            return EngineeringRulePlan(
+                (rule_id,),
+                (),
+                decision_audit=(
+                    EngineeringRulePlanDecisionAudit(
+                        engineering_rule_id=rule_id,
+                        requested_decision="AUTO_SELECT",
+                        final_decision="SELECT",
+                        reason_code="SINGLE_CANDIDATE",
+                        basis=(),
+                    ),
+                ),
+            )
 
         try:
             response = self._llm.complete_with_tools(
@@ -178,12 +204,26 @@ class EngineeringRulePlanner:
             if len(calls) != 1:
                 raise ValueError("planner must submit exactly one EngineeringRule plan")
             plan = self._validate_plan(rows, calls[0].arguments)
+            requested = Counter(row.requested_decision for row in plan.decision_audit)
+            reasons = Counter(row.reason_code or "MISSING" for row in plan.decision_audit)
+            basis = Counter(value for row in plan.decision_audit for value in row.basis)
+            overrides = Counter(
+                row.validation_override
+                for row in plan.decision_audit
+                if row.validation_override
+            )
             logger.info(
                 "ENGINEERING_RULE_PLAN_READY",
                 candidate_count=len(rows),
                 selected_count=len(plan.selected_rule_ids),
                 skipped_count=len(plan.skipped_rule_ids),
                 fallback_used=plan.fallback_used,
+                planner_requested_select_count=requested.get("SELECT", 0),
+                planner_requested_skip_count=requested.get("SKIP", 0),
+                validation_override_count=sum(overrides.values()),
+                validation_override_counts=dict(overrides),
+                reason_code_counts=dict(reasons),
+                basis_counts=dict(basis),
                 workflow_run_id=workflow_run_id,
                 correlationId=correlation_id,
             )
@@ -203,6 +243,17 @@ class EngineeringRulePlanner:
                 tuple(row.engineering_rule_id for row in rows),
                 (),
                 fallback_used=True,
+                decision_audit=tuple(
+                    EngineeringRulePlanDecisionAudit(
+                        engineering_rule_id=row.engineering_rule_id,
+                        requested_decision="FALLBACK",
+                        final_decision="SELECT",
+                        reason_code="PLANNER_FAILURE",
+                        basis=(),
+                        validation_override="FALLBACK_ALL",
+                    )
+                    for row in rows
+                ),
             )
 
     @staticmethod
@@ -243,26 +294,82 @@ class EngineeringRulePlanner:
 
         selected: list[str] = []
         skipped: list[str] = []
+        audits: dict[str, EngineeringRulePlanDecisionAudit] = {}
+
+        def choose(
+            *,
+            rule_id: str,
+            requested: str,
+            final: str,
+            reason_code: str,
+            basis: set[str],
+            override: str | None = None,
+        ) -> None:
+            audits[rule_id] = EngineeringRulePlanDecisionAudit(
+                engineering_rule_id=rule_id,
+                requested_decision=requested or "MISSING",
+                final_decision=final,
+                reason_code=reason_code or "MISSING",
+                basis=tuple(sorted(basis)),
+                validation_override=override,
+            )
+            (selected if final == "SELECT" else skipped).append(rule_id)
+
         for candidate in candidates:
             rule_id = candidate.engineering_rule_id
             row = decisions.get(rule_id)
             # Missing or duplicate decisions fail closed to SELECT rather than
             # allowing a model formatting mistake to suppress an investigation.
-            if row is None or rule_id in duplicates:
-                selected.append(rule_id)
+            if row is None:
+                choose(
+                    rule_id=rule_id,
+                    requested="MISSING",
+                    final="SELECT",
+                    reason_code="MISSING",
+                    basis=set(),
+                    override="MISSING_DECISION",
+                )
                 continue
-            decision, reason_code, basis = row
+            decision, reason_code, decision_basis = row
+            if rule_id in duplicates:
+                choose(
+                    rule_id=rule_id,
+                    requested=decision,
+                    final="SELECT",
+                    reason_code=reason_code,
+                    basis=decision_basis,
+                    override="DUPLICATE_DECISION",
+                )
+                continue
             if decision == ENGINEERING_RULE_PLAN_DECISIONS["select"]:
-                if reason_code not in _SELECT_REASONS:
-                    selected.append(rule_id)
-                    continue
-                selected.append(rule_id)
+                choose(
+                    rule_id=rule_id,
+                    requested=decision,
+                    final="SELECT",
+                    reason_code=reason_code,
+                    basis=decision_basis,
+                    override=(None if reason_code in _SELECT_REASONS else "INVALID_SELECT_REASON"),
+                )
                 continue
             if decision != ENGINEERING_RULE_PLAN_DECISIONS["skip"]:
-                selected.append(rule_id)
+                choose(
+                    rule_id=rule_id,
+                    requested=decision,
+                    final="SELECT",
+                    reason_code=reason_code,
+                    basis=decision_basis,
+                    override="INVALID_DECISION",
+                )
                 continue
             if reason_code not in _SKIP_REASONS:
-                selected.append(rule_id)
+                choose(
+                    rule_id=rule_id,
+                    requested=decision,
+                    final="SELECT",
+                    reason_code=reason_code,
+                    basis=decision_basis,
+                    override="INVALID_SKIP_REASON",
+                )
                 continue
 
             # A rule with repository seed hits may be skipped only when the plan
@@ -270,18 +377,38 @@ class EngineeringRulePlanner:
             # case where Wizard declarations alone suppress contradictory code facts.
             if (
                 candidate.source_hit_count > 0
-                and ENGINEERING_RULE_PLAN_BASIS["source"] not in basis
+                and ENGINEERING_RULE_PLAN_BASIS["source"] not in decision_basis
             ):
-                selected.append(rule_id)
+                choose(
+                    rule_id=rule_id,
+                    requested=decision,
+                    final="SELECT",
+                    reason_code=reason_code,
+                    basis=decision_basis,
+                    override="SOURCE_BASIS_REQUIRED",
+                )
                 continue
             if (
                 candidate.source_hit_count > 0
                 and reason_code
                 == ENGINEERING_RULE_PLAN_REASON_CODES["wizard_scope_excludes"]
             ):
-                selected.append(rule_id)
+                choose(
+                    rule_id=rule_id,
+                    requested=decision,
+                    final="SELECT",
+                    reason_code=reason_code,
+                    basis=decision_basis,
+                    override="SOURCE_CONTRADICTS_WIZARD_EXCLUSION",
+                )
                 continue
-            skipped.append(rule_id)
+            choose(
+                rule_id=rule_id,
+                requested=decision,
+                final="SKIP",
+                reason_code=reason_code,
+                basis=decision_basis,
+            )
 
         if not selected:
             # An all-SKIP plan is never trusted blindly. Prefer source-backed rules;
@@ -289,14 +416,28 @@ class EngineeringRulePlanner:
             source_backed = [
                 row.engineering_rule_id for row in candidates if row.source_hit_count > 0
             ]
-            if source_backed:
-                selected = source_backed
-                skipped = [rule_id for rule_id in known if rule_id not in set(selected)]
-            else:
-                selected = [row.engineering_rule_id for row in candidates]
-                skipped = []
+            selected = source_backed or [row.engineering_rule_id for row in candidates]
+            selected_set = set(selected)
+            skipped = [rule_id for rule_id in known if rule_id not in selected_set]
+            for rule_id in selected:
+                current = audits.get(rule_id)
+                if current is None:
+                    continue
+                audits[rule_id] = replace(
+                    current,
+                    final_decision="SELECT",
+                    validation_override=(
+                        "ALL_SKIP_SOURCE_BACKED_RECOVERY"
+                        if source_backed
+                        else "ALL_SKIP_FALLBACK_ALL"
+                    ),
+                )
 
-        return EngineeringRulePlan(tuple(selected), tuple(skipped))
+        return EngineeringRulePlan(
+            tuple(selected),
+            tuple(skipped),
+            decision_audit=tuple(audits[row.engineering_rule_id] for row in candidates),
+        )
 
     @staticmethod
     def _graph_summary(graph: ProgramEvidenceGraph) -> dict[str, Any]:
