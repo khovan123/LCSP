@@ -1,19 +1,83 @@
-"""Connect data lineage to deterministic business-decision and human-control facts."""
+"""Connect data lineage to structurally proven business decisions and human controls."""
 from __future__ import annotations
+
+import re
+from collections import deque
 
 from .semantic_ir import SemanticEdgeFact, SemanticNodeFact, SemanticProgram
 
 _ACTION_EDGES = frozenset({"APPROVES", "REJECTS", "RANKS", "RECOMMENDS", "UPDATES_STATUS"})
-_ACTION_TYPES = frozenset({"APPROVAL", "REJECTION", "RANKING", "RECOMMENDATION", "STATUS_CHANGE", "BUSINESS_ACTION"})
+_ACTION_TYPES = frozenset(
+    {"APPROVAL", "REJECTION", "RANKING", "RECOMMENDATION", "STATUS_CHANGE", "BUSINESS_ACTION"}
+)
+_FLOW_EDGES = frozenset(
+    {
+        "FLOWS_TO",
+        "PASSES_ARGUMENT",
+        "RECEIVES_RETURN",
+        "ASSIGNS",
+        "ALIASES",
+        "MAPS_TO",
+        "TRANSFORMS",
+        "PARSES",
+        "VALIDATES",
+        "SERIALIZES",
+        "DESERIALIZES",
+        "CALLS",
+        "CALLS_DYNAMICALLY",
+        "RESOLVES_TO",
+        "HANDLED_BY",
+        "PUBLISHES_COMMAND",
+        "HANDLES_COMMAND",
+        "PUBLISHES_QUERY",
+        "HANDLES_QUERY",
+        "PUBLISHES_EVENT",
+        "CONSUMES_EVENT",
+        "PUBLISHES_TO_QUEUE",
+        "CONSUMES_FROM_QUEUE",
+        "WRITES_TO",
+        "PERSISTS_TO",
+        "SENDS_TO_EXTERNAL",
+    }
+)
+_EFFECT_EDGES = frozenset(
+    {
+        "WRITES_TO",
+        "PERSISTS_TO",
+        "SENDS_TO_EXTERNAL",
+        "PUBLISHES_EVENT",
+        "PUBLISHES_TO_QUEUE",
+    }
+)
+_EFFECT_TYPES = frozenset(
+    {
+        "REPOSITORY_ACCESS",
+        "DATABASE",
+        "TABLE",
+        "ENTITY",
+        "EXTERNAL_API",
+        "EXTERNAL_SERVICE",
+        "FILE_STORAGE",
+        "QUEUE",
+        "EVENT",
+    }
+)
+_READ_LIKE_ACTION_RE = re.compile(
+    r"(?:^|[.$_])(?:get|fetch|read|find|list|load|lookup|search|query|assert|is|has|exists|"
+    r"require|get_accepted|accepted_)[A-Za-z0-9_$.-]*",
+    re.I,
+)
+_MAX_EFFECT_HOPS = 10
 
 
 class DecisionInfluenceEnricher:
-    """Materialize decision nodes where code structure proves a business action call.
+    """Materialize BUSINESS_DECISION only when a business action reaches a real effect.
 
-    This pass does not decide whether the action is legally automated. It only links the
-    data consumed by a business-action call to a BUSINESS_DECISION node, links that
-    decision to the action/outcome and to returned business-state data, and attaches
-    human-review/override calls when they consume that decision state.
+    Lexical action hints are high-recall candidates only. A call such as
+    ``get_accepted_technical_profile`` may contain ``accept`` but is a read, not a
+    decision. Promotion requires a bounded structural path from the action call to a
+    persistence/external/event effect. This pass remains technical evidence only and
+    never decides legal automation or risk tier.
     """
 
     def enrich(self, program: SemanticProgram) -> SemanticProgram:
@@ -21,7 +85,7 @@ class DecisionInfluenceEnricher:
         edges = tuple(program.edges)
         incoming_data = self._incoming_data(edges)
         outgoing_data = self._outgoing_data(edges)
-        decision_by_output_data: dict[str, list[str]] = {}
+        adjacency = self._adjacency(edges)
 
         for edge in edges:
             if edge.edge_type not in _ACTION_EDGES:
@@ -29,6 +93,18 @@ class DecisionInfluenceEnricher:
             call = node_by_key.get(edge.source_key)
             action = node_by_key.get(edge.target_key)
             if not call or not action or action.node_type not in _ACTION_TYPES:
+                continue
+            if self._read_like(call.label):
+                continue
+
+            effect_keys = self._reachable_effects(
+                call.key,
+                node_by_key=node_by_key,
+                adjacency=adjacency,
+            )
+            if not effect_keys:
+                # A lexical approve/reject/rank/recommend token without a bounded
+                # business-state effect remains a candidate action node only.
                 continue
 
             decision_key = f"business-decision:{action.key}"
@@ -44,6 +120,7 @@ class DecisionInfluenceEnricher:
                     attributes={
                         "actionCategory": action.node_type,
                         "derivedFromAction": action.key,
+                        "effectCount": len(effect_keys),
                     },
                     semantic_types=action.semantic_types,
                     evidence_refs=action.evidence_refs,
@@ -71,36 +148,62 @@ class DecisionInfluenceEnricher:
                         resolution_state="CORROBORATED",
                     )
                 )
-            for data_key in outgoing_data.get(call.key, []):
+
+            # Bind the semantic decision directly to concrete bounded side effects.
+            # This gives query/claim topology a real path instead of treating the
+            # returned value itself as proof that business state was written.
+            for effect_key in sorted(effect_keys):
                 program.add_edge(
                     SemanticEdgeFact(
                         "WRITES_BUSINESS_STATE",
+                        decision_key,
+                        effect_key,
+                        origin="DATA_LINEAGE",
+                        resolution_state="CORROBORATED",
+                    )
+                )
+
+            reachable = self._reachable_nodes(call.key, adjacency)
+            for human_key in sorted(reachable):
+                human = node_by_key.get(human_key)
+                if not human or human.node_type not in {"HUMAN_REVIEW", "HUMAN_OVERRIDE"}:
+                    continue
+                program.add_edge(
+                    SemanticEdgeFact(
+                        "REVIEWED_BY"
+                        if human.node_type == "HUMAN_REVIEW"
+                        else "OVERRIDDEN_BY",
+                        decision_key,
+                        human.key,
+                        origin="DATA_LINEAGE",
+                        resolution_state="CORROBORATED",
+                    )
+                )
+
+            # Preserve returned state as lineage context, but do not equate it with
+            # persistence. The effect edge above is the authoritative decision effect.
+            for data_key in outgoing_data.get(call.key, []):
+                program.add_edge(
+                    SemanticEdgeFact(
+                        "PRODUCES_OUTCOME",
                         decision_key,
                         data_key,
                         origin="DATA_LINEAGE",
                         resolution_state="CORROBORATED",
                     )
                 )
-                decision_by_output_data.setdefault(data_key, []).append(decision_key)
-
-        # Human review/override is a separate structural fact. Bind it to a decision
-        # only when the human-control call consumes the state produced by that decision.
-        refreshed_nodes = {node.key: node for node in program.nodes}
-        for human in refreshed_nodes.values():
-            if human.node_type not in {"HUMAN_REVIEW", "HUMAN_OVERRIDE"}:
-                continue
-            for data_key in incoming_data.get(human.key, []):
-                for decision_key in decision_by_output_data.get(data_key, []):
-                    program.add_edge(
-                        SemanticEdgeFact(
-                            "REVIEWED_BY" if human.node_type == "HUMAN_REVIEW" else "OVERRIDDEN_BY",
-                            decision_key,
-                            human.key,
-                            origin="DATA_LINEAGE",
-                            resolution_state="CORROBORATED",
-                        )
-                    )
         return program
+
+    @staticmethod
+    def _read_like(label: str) -> bool:
+        normalized = str(label or "").strip()
+        if not normalized:
+            return True
+        lowered = normalized.lower()
+        if "get_accepted" in lowered or "accepted_" in lowered:
+            return True
+        leaf = re.split(r"[.$]", normalized)[-1]
+        return bool(_READ_LIKE_ACTION_RE.match(leaf))
 
     @staticmethod
     def _incoming_data(edges: tuple[SemanticEdgeFact, ...]) -> dict[str, list[str]]:
@@ -119,3 +222,64 @@ class DecisionInfluenceEnricher:
                 continue
             result.setdefault(edge.source_key, []).append(edge.target_key)
         return result
+
+    @staticmethod
+    def _adjacency(
+        edges: tuple[SemanticEdgeFact, ...],
+    ) -> dict[str, list[tuple[str, str]]]:
+        result: dict[str, list[tuple[str, str]]] = {}
+        for edge in edges:
+            if edge.edge_type not in _FLOW_EDGES:
+                continue
+            result.setdefault(edge.source_key, []).append(
+                (edge.target_key, edge.edge_type)
+            )
+        return result
+
+    @classmethod
+    def _reachable_effects(
+        cls,
+        start: str,
+        *,
+        node_by_key: dict[str, SemanticNodeFact],
+        adjacency: dict[str, list[tuple[str, str]]],
+    ) -> set[str]:
+        queue = deque([(start, 0)])
+        seen = {start}
+        effects: set[str] = set()
+        while queue:
+            current, depth = queue.popleft()
+            if depth >= _MAX_EFFECT_HOPS:
+                continue
+            for nxt, edge_type in adjacency.get(current, []):
+                node = node_by_key.get(nxt)
+                if node is None:
+                    continue
+                if edge_type in _EFFECT_EDGES and node.node_type in _EFFECT_TYPES:
+                    if node.node_type != "REPOSITORY_ACCESS" or str(
+                        (node.attributes or {}).get("operation") or ""
+                    ).upper() != "READ":
+                        effects.add(nxt)
+                if nxt not in seen:
+                    seen.add(nxt)
+                    queue.append((nxt, depth + 1))
+        return effects
+
+    @classmethod
+    def _reachable_nodes(
+        cls,
+        start: str,
+        adjacency: dict[str, list[tuple[str, str]]],
+    ) -> set[str]:
+        queue = deque([(start, 0)])
+        seen = {start}
+        while queue:
+            current, depth = queue.popleft()
+            if depth >= _MAX_EFFECT_HOPS:
+                continue
+            for nxt, _ in adjacency.get(current, []):
+                if nxt in seen:
+                    continue
+                seen.add(nxt)
+                queue.append((nxt, depth + 1))
+        return seen
