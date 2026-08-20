@@ -2,12 +2,12 @@
 
 The base repository extractor owns language syntax. This pass consumes its Semantic IR
 and adds stable DATA_OBJECT flow identities around values, calls, AI invocations and
-framework boundaries. It also reads protocol contracts (currently protobuf) and uses
-bounded behavior corroboration for biometric/identity-document semantics.
+framework boundaries. It also reads protocol contracts (currently protobuf).
 
-Identifier taxonomy remains a weak seed. Corroborated sensitive-data semantics require
-processing behavior and lineage evidence; generic names such as ``payload`` or ``x`` do
-not prevent the flow from being represented.
+Identifier taxonomy remains a weak seed. Trusted biometric/government-ID semantics are
+promoted later by ``SensitiveLineageGate`` only when one bounded lineage path contains
+the required processing behavior; this extractor never promotes sensitive semantics from
+file-level lexical co-occurrence.
 """
 from __future__ import annotations
 
@@ -89,33 +89,9 @@ _PROTO_RPC_RE = re.compile(
     r"\brpc\s+([A-Za-z_][\w]*)\s*\(\s*(?:stream\s+)?([.A-Za-z_][\w.]*)\s*\)\s*returns\s*\(\s*(?:stream\s+)?([.A-Za-z_][\w.]*)\s*\)"
 )
 
-# Behavior signals deliberately require composition. A generic image, OCR call or
-# embedding call alone is not enough to close a sensitive-data semantic.
-_VISUAL_BIOMETRIC = re.compile(
-    r"face[_ .-]?(?:detect|recogn|encod|embed|feature)|rekognition|facenet|deepface|insightface|biometric",
-    re.I,
-)
-_BIOMETRIC_REPRESENTATION = re.compile(
-    r"embedding|encoding|feature[_ .-]?(?:vector|extract)|template",
-    re.I,
-)
-_IDENTITY_MATCH = re.compile(
-    r"compare|similarity|verify|verification|match|identify|identity",
-    re.I,
-)
-_FINGERPRINT_OR_VOICE = re.compile(
-    r"fingerprint|finger[_ .-]?print|voiceprint|speaker[_ .-]?(?:embed|verify|recogn)|iris|retina|palm[_ .-]?print",
-    re.I,
-)
-_OCR = re.compile(r"ocr|tesseract|textract|document[_ .-]?ai|vision[_ .-]?text", re.I)
-_ID_DOCUMENT = re.compile(
-    r"kyc|identity[_ .-]?(?:document|verification)|government[_ .-]?id|national[_ .-]?id|passport|mrz|document[_ .-]?(?:number|verify)",
-    re.I,
-)
-
 
 class SemanticDataLineageExtractor:
-    """Enrich Semantic IR with lineage identities and protocol/behavior evidence."""
+    """Enrich Semantic IR with lineage identities and protocol contract evidence."""
 
     def __init__(self, workspace_path: str | Path) -> None:
         self.workspace = Path(workspace_path).resolve(strict=False)
@@ -126,7 +102,10 @@ class SemanticDataLineageExtractor:
         self._link_framework_boundary_payloads(program)
         self._link_ai_inputs_outputs(program)
         self._extract_protobuf_contracts(program)
-        self._corroborate_sensitive_processing(program)
+        # Do not infer biometric/government-ID processing from same-file vocabulary.
+        # SensitiveLineageGate runs after contract/DB lineage is complete and is the
+        # single authority that may promote those weak seeds to CORROBORATED by proving
+        # the required operation composition on one connected data-flow path.
         return program
 
     def _materialize_data_objects(self, program: SemanticProgram) -> None:
@@ -529,109 +508,6 @@ class SemanticDataLineageExtractor:
                         )
                     )
 
-    def _corroborate_sensitive_processing(self, program: SemanticProgram) -> None:
-        data_by_file: dict[str, list[SemanticNodeFact]] = {}
-        for node in program.nodes:
-            if node.node_type == "DATA_OBJECT" and node.file_path:
-                data_by_file.setdefault(node.file_path, []).append(node)
-
-        for path in self._files({".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java", ".kt", ".go", ".cs", ".rs"}):
-            rel = path.relative_to(self.workspace).as_posix()
-            try:
-                text = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            biometric = self._biometric_behavior(text)
-            identity_document = self._identity_document_behavior(text)
-            if not biometric and not identity_document:
-                continue
-            behavior_lines = self._behavior_lines(text, biometric, identity_document)
-            candidates = data_by_file.get(rel, [])
-            for data in candidates:
-                if data.start_line and behavior_lines and min(
-                    abs(data.start_line - line) for line in behavior_lines
-                ) > 40:
-                    continue
-                semantic_types = set(data.semantic_types)
-                capabilities: list[str] = []
-                if biometric:
-                    semantic_types.add("SENSITIVE.BIOMETRIC")
-                    capabilities.append("BIOMETRIC_PROCESSING")
-                if identity_document:
-                    semantic_types.add("PII.GOVERNMENT_ID")
-                    capabilities.append("IDENTITY_DOCUMENT_PROCESSING")
-                program.add_node(
-                    SemanticNodeFact(
-                        data.key,
-                        "DATA_OBJECT",
-                        data.label,
-                        data.file_path,
-                        data.start_line,
-                        data.end_line,
-                        data.symbol_ref,
-                        attributes={"corroboratedCapabilities": capabilities},
-                        semantic_types=tuple(sorted(semantic_types)),
-                        origin="DATA_LINEAGE",
-                        resolution_state="CORROBORATED",
-                    )
-                )
-
-            # Preserve behavior evidence even when syntax did not expose a named value.
-            # This remains a candidate data asset, not proof that every value in file is PII.
-            if not candidates:
-                line = min(behavior_lines) if behavior_lines else 1
-                semantics = []
-                capabilities = []
-                if biometric:
-                    semantics.append("SENSITIVE.BIOMETRIC")
-                    capabilities.append("BIOMETRIC_PROCESSING")
-                if identity_document:
-                    semantics.append("PII.GOVERNMENT_ID")
-                    capabilities.append("IDENTITY_DOCUMENT_PROCESSING")
-                program.add_node(
-                    SemanticNodeFact(
-                        f"data-asset:behavior:{rel}:{line}",
-                        "DATA_ASSET",
-                        "corroborated sensitive processing input",
-                        rel,
-                        line,
-                        line,
-                        attributes={"capabilities": capabilities},
-                        semantic_types=tuple(sorted(semantics)),
-                        origin="DATA_LINEAGE",
-                        resolution_state="CORROBORATED",
-                    )
-                )
-
-    @staticmethod
-    def _biometric_behavior(text: str) -> bool:
-        direct = bool(_FINGERPRINT_OR_VOICE.search(text))
-        composed_face = bool(
-            _VISUAL_BIOMETRIC.search(text)
-            and _BIOMETRIC_REPRESENTATION.search(text)
-            and _IDENTITY_MATCH.search(text)
-        )
-        return direct or composed_face
-
-    @staticmethod
-    def _identity_document_behavior(text: str) -> bool:
-        return bool(_OCR.search(text) and _ID_DOCUMENT.search(text))
-
-    @staticmethod
-    def _behavior_lines(text: str, biometric: bool, identity_document: bool) -> list[int]:
-        patterns = []
-        if biometric:
-            patterns.extend(
-                [_VISUAL_BIOMETRIC, _BIOMETRIC_REPRESENTATION, _IDENTITY_MATCH, _FINGERPRINT_OR_VOICE]
-            )
-        if identity_document:
-            patterns.extend([_OCR, _ID_DOCUMENT])
-        result = []
-        for number, line in enumerate(text.splitlines(), start=1):
-            if any(pattern.search(line) for pattern in patterns):
-                result.append(number)
-        return result
-
     def _files(self, extensions: set[str]) -> tuple[Path, ...]:
         result = []
         for path in self.workspace.rglob("*"):
@@ -652,7 +528,3 @@ class SemanticDataLineageExtractor:
     @staticmethod
     def _data_key(source_key: str) -> str:
         return f"data-object:{source_key}"
-
-
-def _line(text: str, offset: int) -> int:
-    return text.count("\n", 0, max(0, offset)) + 1
