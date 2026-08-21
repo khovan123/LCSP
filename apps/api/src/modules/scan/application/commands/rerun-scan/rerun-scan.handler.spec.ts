@@ -451,13 +451,16 @@ describe("RerunScanHandler", () => {
 
     expect(result.status).toBe(REPOSITORY_SCAN_JOB_STATUSES.queued);
     expect(result.replaces_scan_job_id).toBe("stale-job");
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(prisma.repositoryScanJob.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ["stale-job"] } },
       data: expect.objectContaining({
         status: REPOSITORY_SCAN_JOB_STATUSES.failed,
       }),
     });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(prisma.repositoryScanJob.create).toHaveBeenCalled();
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(outbox.enqueue).toHaveBeenCalled();
   });
 
@@ -495,9 +498,11 @@ describe("RerunScanHandler", () => {
     const result = await handler.execute(defaultCommand);
 
     expect(result.replaces_scan_job_id).toBe("old-job");
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(prisma.technicalEvidenceReport.deleteMany).toHaveBeenCalledWith({
       where: { id: { in: ["report-1"] } },
     });
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(prisma.repositoryScanJob.deleteMany).toHaveBeenCalledWith({
       where: { id: { in: ["old-job"] } },
     });
