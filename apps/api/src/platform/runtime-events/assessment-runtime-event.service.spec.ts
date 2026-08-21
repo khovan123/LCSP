@@ -7,6 +7,9 @@ import {
 
 import { AssessmentRuntimeEventService } from "./assessment-runtime-event.service.js";
 
+const freshRuntimeEvent = () =>
+  Promise.resolve({ createdAt: new Date("2099-01-01T00:00:00.000Z") });
+
 describe("AssessmentRuntimeEventService", () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -16,6 +19,7 @@ describe("AssessmentRuntimeEventService", () => {
     const prisma = {
       assessmentRuntimeEvent: {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositoryScanJob: {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
@@ -78,6 +82,7 @@ describe("AssessmentRuntimeEventService", () => {
     const prisma = {
       assessmentRuntimeEvent: {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+        findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositoryScanJob: {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
@@ -200,6 +205,7 @@ describe("AssessmentRuntimeEventService", () => {
             createdAt: new Date("2026-08-14T08:00:00.000Z"),
           },
         ]),
+        findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
       repositoryScanJob: {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
