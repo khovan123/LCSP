@@ -72,8 +72,8 @@ class LegalCorpusRecoveryDriver:
     def run(self, message: dict[str, Any], correlationId: str) -> dict[str, Any]:
         """Execute corpus rebuild, canonical validation/activation, and resume."""
         idempotency_key = required_string(message, "idempotencyKey")
-        manifests = self._resolve_source_manifests()
-        reviewed_dir = self._resolve_reviewed_dir()
+        manifests = self._resolve_source_manifests(message)
+        reviewed_dir = self._resolve_reviewed_dir(message)
         builder = _load_script_module("build_reviewed_legal_corpus.py")
         orchestrator = _load_script_module("orchestrate_reviewed_legal_corpus.py")
 
@@ -85,18 +85,27 @@ class LegalCorpusRecoveryDriver:
         draft = self._api_client.ingest_validated_legal_corpus_draft(enriched_payload)
         corpus_id = required_response_string(draft, "id", "corpus ingest response")
         if bool(draft.get("noChanges")):
+            resumed = self._api_client.resume_waiting_runs(
+                corpus_id,
+                {
+                    "maxRuns": int(message.get("maxRuns") or 500),
+                    "idempotencyKey": f"{idempotency_key}:resume:{version}",
+                },
+            )
+            resumed_count = int((resumed.get("result") or {}).get("resumedRunCount") or 0)
             logger.info(
                 "LEGAL_CORPUS_RECOVERY_SKIPPED_UNCHANGED",
                 corpus_version_id=corpus_id,
                 corpus_version=str(draft.get("version") or ""),
                 change_set=draft.get("changeSet") or {},
+                resumed_run_count=resumed_count,
                 correlationId=correlationId,
             )
             return {
                 "status": "READY",
                 "corpusVersionId": corpus_id,
                 "retrievalIndexId": None,
-                "resumedRunCount": 0,
+                "resumedRunCount": resumed_count,
                 "correlationId": correlationId,
                 "noChanges": True,
             }
@@ -169,34 +178,41 @@ class LegalCorpusRecoveryDriver:
             payload=payload,
         )
 
-    def _resolve_source_manifests(self) -> list[Path]:
-        """Resolve official-source manifests from explicit paths, env, or repo reports."""
+    def _resolve_source_manifests(self, message: dict[str, Any]) -> list[Path]:
+        """Resolve official-source manifests from runtime crawl artifacts."""
         if self._source_manifest_paths:
             return self._source_manifest_paths
-        raw = os.getenv("AO6_LEGAL_CORPUS_SOURCE_MANIFESTS", "")
-        if raw.strip():
-            paths = [Path(part.strip()) for part in raw.split(",") if part.strip()]
-        else:
-            paths = sorted(_repo_root().glob("reports/legal-corpus-source/*.source.json"))
-        if not paths:
-            raise RuntimeError(
-                "AO6 legal corpus recovery has no source manifests. Set "
-                "AO6_LEGAL_CORPUS_SOURCE_MANIFESTS."
-            )
-        return paths
+        message_paths = message.get("sourceManifestPaths")
+        if isinstance(message_paths, list):
+            paths = [
+                Path(str(part).strip())
+                for part in message_paths
+                if isinstance(part, str) and part.strip()
+            ]
+            if paths:
+                return paths
+        raise RuntimeError(
+            "AO6 legal corpus recovery has no source manifests from the crawl "
+            "pipeline. Provide sourceManifestPaths in the recovery command."
+        )
 
-    def _resolve_reviewed_dir(self) -> Path:
-        """Resolve the reviewed legal artifact directory and require it to exist."""
+    def _resolve_reviewed_dir(self, message: dict[str, Any]) -> Path:
+        """Resolve the reviewed legal artifact directory from runtime crawl artifacts."""
         if self._reviewed_dir is not None:
             return self._reviewed_dir
-        raw = os.getenv("AO6_LEGAL_CORPUS_REVIEWED_DIR", "")
-        path = Path(raw) if raw.strip() else _repo_root() / "reports/legal-corpus-ocr"
-        if not path.is_dir():
-            raise RuntimeError(
-                "AO6 legal corpus recovery has no reviewed artifact directory. "
-                "Set AO6_LEGAL_CORPUS_REVIEWED_DIR."
-            )
-        return path
+        message_reviewed_dir = message.get("reviewedDir")
+        if isinstance(message_reviewed_dir, str) and message_reviewed_dir.strip():
+            path = Path(message_reviewed_dir.strip())
+            if not path.is_dir():
+                raise RuntimeError(
+                    "AO6 legal corpus recovery reviewedDir does not exist: "
+                    f"{message_reviewed_dir}"
+                )
+            return path
+        raise RuntimeError(
+            "AO6 legal corpus recovery has no reviewed artifact directory from the "
+            "crawl pipeline. Provide reviewedDir in the recovery command."
+        )
 
     def _corpus_version(self, manifests: list[Path], reviewed_dir: Path) -> str:
         """Derive a content-addressed corpus version from manifests and reviewed files."""
@@ -240,11 +256,6 @@ def _load_script_module(filename: str):
 def _worker_root() -> Path:
     """Return the root directory of the Python worker package/project."""
     return Path(__file__).resolve().parents[3]
-
-
-def _repo_root() -> Path:
-    """Return the LCSP monorepo root containing reports and worker project."""
-    return _worker_root().parent
 
 
 def _sha256_text(value: str) -> str:

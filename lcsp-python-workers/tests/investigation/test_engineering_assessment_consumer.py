@@ -8,6 +8,7 @@ import pytest
 from lcsp_workers.investigation.engineering_assessment_consumer import (
     EngineeringAssessmentConsumer,
 )
+from lcsp_workers.investigation.pipeline import EngineeringInvestigationResult
 from lcsp_workers.platform.api_client import WorkerCallbackError
 from lcsp_workers.platform.queue_consumer import NonRetryableWorkerError
 
@@ -101,3 +102,40 @@ def test_retryable_callback_failure_is_preserved_for_outer_retry_policy() -> Non
             {"evidenceReportId": "ter-1", "workflowRunId": "scan-1"},
             "corr-1",
         )
+
+
+def test_waiting_investigation_does_not_submit_classification_callback() -> None:
+    api_client = MagicMock()
+    api_client.get_accepted_technical_evidence_report.return_value = {
+        "id": "ter-1",
+        "assessment_id": "assessment-1",
+        "snapshot_id": "snapshot-1",
+        "scan_job_id": "scan-1",
+    }
+    api_client.get_wizard_profile_for_assessment.return_value = None
+
+    pipeline = MagicMock()
+    pipeline.run.return_value = EngineeringInvestigationResult(
+        status="WAITING",
+        legal_rule_catalog_version_id="catalog-v1",
+        legal_corpus_version_id="corpus-v1",
+        rules_considered=0,
+        engineering_rules_executed=0,
+        engineering_rule_cache_hits=0,
+        limitations=("NO_ENGINEERING_RULE_SOURCE_RULES",),
+    )
+
+    consumer = EngineeringAssessmentConsumer(
+        _config(),
+        api_client=api_client,
+        investigation_pipeline=pipeline,
+    )
+
+    with pytest.raises(RuntimeError, match="waiting for legal rule source rebuild"):
+        consumer.handle(
+            {"evidenceReportId": "ter-1", "workflowRunId": "scan-1"},
+            "corr-1",
+        )
+
+    api_client.post_scan_runtime_event.assert_called_once()
+    api_client.post_classification_callback.assert_not_called()

@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from lcsp_workers.legal.legal_corpus_recovery_driver import LegalCorpusRecoveryDriver
 
 
@@ -103,8 +105,45 @@ def test_recovery_driver_skips_validation_activation_when_corpus_unchanged(
 
     assert result["noChanges"] is True
     assert result["corpusVersionId"] == "corpus-active"
-    assert result["resumedRunCount"] == 0
-    assert [name for name, _payload in api_client.calls] == ["ingest"]
+    assert result["resumedRunCount"] == 1
+    assert [name for name, _payload in api_client.calls] == ["ingest", "resume"]
+
+
+def test_recovery_driver_uses_runtime_crawl_artifacts_from_message(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    manifest = reviewed_manifest(tmp_path, "LAW-TEST", "Điều 1. Test\n")
+    api_client = FakeApiClient()
+    driver = LegalCorpusRecoveryDriver(api_client=api_client)
+    monkeypatch.setattr(driver, "_validate_retrieval_index", lambda *_args: None)
+
+    result = driver.run(
+        {
+            "idempotencyKey": "vp-1:command.legal-corpus.recovery.requested.v1",
+            "sourceManifestPaths": [str(manifest)],
+            "reviewedDir": str(tmp_path),
+        },
+        "corr-1",
+    )
+
+    assert result["status"] == "READY"
+    assert [name for name, _payload in api_client.calls] == [
+        "ingest",
+        "register_index",
+        "activate",
+        "resume",
+    ]
+
+
+def test_recovery_driver_does_not_fallback_to_repository_reports() -> None:
+    driver = LegalCorpusRecoveryDriver(api_client=FakeApiClient())
+
+    with pytest.raises(RuntimeError, match="source manifests from the crawl pipeline"):
+        driver.run(
+            {"idempotencyKey": "vp-1:command.legal-corpus.recovery.requested.v1"},
+            "corr-1",
+        )
 
 
 def reviewed_manifest(tmp_path: Path, document_id: str, text: str) -> Path:

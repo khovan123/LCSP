@@ -833,6 +833,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 "ENGINEERING_RULE_SOURCE_RECOVERY_FAILED",
                 reason=reason,
                 error_type=type(error).__name__,
+                error_message=str(error)[:500],
                 workflow_run_id=workflow_run_id,
                 correlationId=correlation_id,
             )

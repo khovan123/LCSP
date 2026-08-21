@@ -2,6 +2,7 @@
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -88,6 +89,11 @@ class WorkerConfig:
     tracing: TracingConfig = TracingConfig()
 
 
+def default_legal_source_storage_root() -> str:
+    """Return the repo-local runtime corpus artifact root."""
+    return str(Path(__file__).resolve().parents[4] / ".corpus")
+
+
 def load_config() -> WorkerConfig:
     """Load environment-backed worker configuration and validate required values.
 
@@ -114,7 +120,10 @@ def load_config() -> WorkerConfig:
         worker_api_key=os.getenv("WORKER_API_KEY"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         max_retries=int(os.getenv("MAX_RETRIES", "3")),
-        legal_source_storage_root=os.getenv("LEGAL_SOURCE_STORAGE_ROOT"),
+        legal_source_storage_root=os.getenv(
+            "LEGAL_SOURCE_STORAGE_ROOT",
+            default_legal_source_storage_root(),
+        ),
         langgraph_checkpoint_database_url=os.getenv(
             "LANGGRAPH_CHECKPOINT_DATABASE_URL"
         ),
