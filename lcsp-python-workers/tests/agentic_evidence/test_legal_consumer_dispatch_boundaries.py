@@ -124,7 +124,7 @@ def test_recovery_validation_crosses_canonical_dispatcher() -> None:
 
 def test_recovery_activation_crosses_canonical_dispatcher() -> None:
     """Corpus activation must remain behind the canonical protected API entrypoint."""
-    source = inspect.getsource(LegalCorpusRecoveryDriver.run)
+    source = inspect.getsource(LegalCorpusRecoveryDriver._run_locked)
 
     assert "_legal_dispatcher.dispatch(" in source
     assert '"activate_validated_corpus_version"' in source
