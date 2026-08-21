@@ -578,6 +578,57 @@ def test_planned_pipeline_stops_before_planner_when_corpus_triage_still_missing(
     investigator.investigate.assert_not_called()
 
 
+def test_planned_pipeline_waits_when_catalog_has_no_source_rules_after_recovery(
+    tmp_path,
+) -> None:
+    api_client = MagicMock()
+    api_client.get_active_legal_rule_catalog.return_value = {
+        "versionId": "catalog-v1",
+        "rules": [],
+    }
+    api_client.get_active_legal_corpus.return_value = {"versionId": "corpus-v1"}
+    api_client.get_legal_corpus_chunks.return_value = {
+        "chunks": [{"id": "LAW:A1", "content": "approved legal text"}]
+    }
+
+    recovery_driver = MagicMock()
+    recovery_driver.run.return_value = {
+        "status": "READY",
+        "corpusVersionId": "corpus-v1",
+    }
+    rule_service = MagicMock()
+    planner = MagicMock()
+    investigator = MagicMock()
+
+    pipeline = PlannedEngineeringInvestigationPipeline(
+        api_client=api_client,
+        llm_client=MagicMock(),
+        retriever=MagicMock(),
+        rule_service=rule_service,
+        query_executor=MagicMock(),
+        investigator=investigator,
+        evaluator=MagicMock(),
+        planner=planner,
+        corpus_recovery_driver=recovery_driver,
+    )
+
+    result = pipeline.run(
+        evidence_report={"evidence_payload": {"evidence_graph": _graph().to_dict()}},
+        workflow_run_id="workflow-1",
+        correlation_id="corr-1",
+        workspace_path=tmp_path,
+    )
+
+    assert result.status == "WAITING"
+    assert result.limitations == (
+        ENGINEERING_LIMITATION_CODES["no_engineering_rule_source_rules"],
+    )
+    recovery_driver.run.assert_called_once()
+    rule_service.get_or_compile.assert_not_called()
+    planner.plan.assert_not_called()
+    investigator.investigate.assert_not_called()
+
+
 def test_planned_pipeline_stops_before_planner_when_engineering_rule_triage_finds_none(
     tmp_path,
 ) -> None:

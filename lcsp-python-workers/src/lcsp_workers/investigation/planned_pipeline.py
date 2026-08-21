@@ -167,7 +167,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     reason="NO_APPROVED_ENGINEERING_RULE_SOURCE_RULES",
                 )
         if not rules:
-            return self._blocked_before_llm(
+            return self._waiting_before_llm(
                 catalog_version_id=catalog_version_id,
                 corpus_version_id=corpus_version_id,
                 rules_considered=0,
@@ -214,6 +214,26 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 )
                 if not corpus_version_id or not corpus_chunks or not rules:
                     reset_deep_agent_runtime_context(context_token)
+                    if corpus_version_id and corpus_chunks and not rules:
+                        return self._waiting_before_llm(
+                            catalog_version_id=catalog_version_id,
+                            corpus_version_id=corpus_version_id,
+                            rules_considered=len(rules),
+                            cache_hits=cache_hits,
+                            limitations=tuple(
+                                dict.fromkeys(
+                                    [
+                                        *limitations,
+                                        ENGINEERING_LIMITATION_CODES[
+                                            "no_engineering_rule_source_rules"
+                                        ],
+                                    ]
+                                )
+                            ),
+                            reason="ENGINEERING_RULE_SOURCE_RECOVERY_INCOMPLETE",
+                            workflow_run_id=workflow_run_id,
+                            correlation_id=correlation_id,
+                        )
                     return self._blocked_before_llm(
                         catalog_version_id=catalog_version_id,
                         corpus_version_id=corpus_version_id,
@@ -683,6 +703,36 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         )
         return EngineeringInvestigationResult(
             status="BLOCKED",
+            legal_rule_catalog_version_id=catalog_version_id,
+            legal_corpus_version_id=corpus_version_id,
+            rules_considered=rules_considered,
+            engineering_rules_executed=0,
+            engineering_rule_cache_hits=cache_hits,
+            limitations=tuple(dict.fromkeys(limitations)),
+        )
+
+    def _waiting_before_llm(
+        self,
+        *,
+        catalog_version_id: str,
+        corpus_version_id: str,
+        rules_considered: int,
+        cache_hits: int,
+        limitations: tuple[str, ...] | list[str],
+        reason: str,
+        workflow_run_id: str,
+        correlation_id: str | None,
+    ) -> EngineeringInvestigationResult:
+        logger.warning(
+            "ENGINEERING_INVESTIGATION_WAITING_FOR_RULE_SOURCE_REBUILD",
+            reason=reason,
+            limitations=list(dict.fromkeys(limitations)),
+            rules_considered=rules_considered,
+            workflow_run_id=workflow_run_id,
+            correlationId=correlation_id,
+        )
+        return EngineeringInvestigationResult(
+            status="WAITING",
             legal_rule_catalog_version_id=catalog_version_id,
             legal_corpus_version_id=corpus_version_id,
             rules_considered=rules_considered,
