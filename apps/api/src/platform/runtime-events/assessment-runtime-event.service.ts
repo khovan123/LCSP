@@ -18,6 +18,10 @@ import { Injectable, Logger } from "@nestjs/common";
 
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import {
+  failStaleRepositoryScanJobs,
+  STALE_REPOSITORY_SCAN_BLOCKED_REASON,
+} from "../scan/repository-scan-staleness.js";
+import {
   FALLBACK_SUMMARY,
   sanitizeRuntimeSummaryText,
   sanitizeRuntimeSummaryValue,
@@ -96,6 +100,13 @@ type RuntimeScanJobSnapshot = {
   attemptCount: number;
   blockedReason: string | null;
   updatedAt: Date;
+};
+
+type RuntimeRepositorySnapshot = {
+  id: string;
+  assessmentId: string;
+  commitSha: string;
+  createdAt: Date;
 };
 
 type RuntimeEvidenceReportSnapshot = {
@@ -309,41 +320,57 @@ export class AssessmentRuntimeEventService {
     organizationId: string,
   ): Promise<AssessmentRuntimeSnapshot> {
     const emittedAt = new Date().toISOString();
-    const [events, scanJobs, evidenceReports] = await Promise.all([
-      this.safeFindMany({
-        where: { organizationId },
-        orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
-        take: 200,
-      }),
-      this.prisma.repositoryScanJob.findMany({
-        where: { organizationId },
-        orderBy: { updatedAt: "desc" },
-        take: 50,
-        select: {
-          id: true,
-          assessmentId: true,
-          snapshotId: true,
-          status: true,
-          attemptCount: true,
-          blockedReason: true,
-          updatedAt: true,
-        },
-      }),
-      this.prisma.technicalEvidenceReport.findMany({
-        where: { organizationId },
-        orderBy: { createdAt: "desc" },
-        take: 50,
-        select: {
-          id: true,
-          assessmentId: true,
-          scanJobId: true,
-          snapshotId: true,
-          status: true,
-          rejectionReason: true,
-          createdAt: true,
-        },
-      }),
-    ]);
+    await failStaleRepositoryScanJobs(this.prisma, {
+      organizationId,
+      now: new Date(emittedAt),
+    });
+    const [events, repositorySnapshots, scanJobs, evidenceReports] =
+      await Promise.all([
+        this.safeFindMany({
+          where: { organizationId },
+          orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
+          take: 200,
+        }),
+        this.prisma.repositorySnapshot.findMany({
+          where: { organizationId },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          select: {
+            id: true,
+            assessmentId: true,
+            commitSha: true,
+            createdAt: true,
+          },
+        }),
+        this.prisma.repositoryScanJob.findMany({
+          where: { organizationId },
+          orderBy: { updatedAt: "desc" },
+          take: 50,
+          select: {
+            id: true,
+            assessmentId: true,
+            snapshotId: true,
+            status: true,
+            attemptCount: true,
+            blockedReason: true,
+            updatedAt: true,
+          },
+        }),
+        this.prisma.technicalEvidenceReport.findMany({
+          where: { organizationId },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          select: {
+            id: true,
+            assessmentId: true,
+            scanJobId: true,
+            snapshotId: true,
+            status: true,
+            rejectionReason: true,
+            createdAt: true,
+          },
+        }),
+      ]);
 
     const persistedActivity = events.map((event) =>
       this.toActivityEvent(event),
@@ -358,12 +385,20 @@ export class AssessmentRuntimeEventService {
     const recentActivity = [...persistedActivity, ...syntheticActivity]
       .sort((left, right) => right.emittedAt.localeCompare(left.emittedAt))
       .slice(0, 50);
-    const runs = deriveRuns(events).slice(0, 20);
+    const runs = deriveRuns(recentActivity).slice(0, 20);
 
     return {
       emittedAt,
       runs,
       recentActivity,
+      repositorySnapshots: repositorySnapshots.map(
+        (snapshot: RuntimeRepositorySnapshot) => ({
+          id: snapshot.id,
+          assessmentId: snapshot.assessmentId,
+          commitSha: snapshot.commitSha,
+          createdAt: snapshot.createdAt.toISOString(),
+        }),
+      ),
       scanJobs: scanJobs.map((scanJob) => ({
         id: scanJob.id,
         assessmentId: scanJob.assessmentId,
@@ -567,7 +602,11 @@ function buildSyntheticRuntimeActivity(
   );
   return [
     ...scanJobs
-      .filter((scanJob) => !scanJobsWithPersistedActivity.has(scanJob.id))
+      .filter(
+        (scanJob) =>
+          !scanJobsWithPersistedActivity.has(scanJob.id) ||
+          isStaleFailedScanJob(scanJob),
+      )
       .map((scanJob) =>
         scanJobToSyntheticRuntimeActivity(
           organizationId,
@@ -579,6 +618,13 @@ function buildSyntheticRuntimeActivity(
       evidenceReportToSyntheticRuntimeActivity(organizationId, report),
     ),
   ].filter((event) => !existingEventIds.has(event.eventId));
+}
+
+function isStaleFailedScanJob(scanJob: RuntimeScanJobSnapshot): boolean {
+  return (
+    scanJob.status === REPOSITORY_SCAN_JOB_STATUSES.failed &&
+    scanJob.blockedReason === STALE_REPOSITORY_SCAN_BLOCKED_REASON
+  );
 }
 
 /**
@@ -737,9 +783,9 @@ function scanJobSummary(scanJob: RuntimeScanJobSnapshot): string {
  * @returns Derived runs sorted by most recent update first.
  */
 function deriveRuns(
-  events: PersistedAssessmentRuntimeEvent[],
+  events: AssessmentRuntimeActivityEvent[],
 ): AssessmentRuntimeRun[] {
-  const byRunId = new Map<string, PersistedAssessmentRuntimeEvent[]>();
+  const byRunId = new Map<string, AssessmentRuntimeActivityEvent[]>();
   for (const event of [...events].reverse()) {
     const group = byRunId.get(event.runId) ?? [];
     group.push(event);
@@ -755,10 +801,10 @@ function deriveRuns(
     runs.push({
       assessmentId: latest.assessmentId,
       runId: latest.runId,
-      stage: latest.stage as AssessmentRuntimeStageCode,
-      status: latest.runStatus as AssessmentRuntimeRunStatus,
+      stage: latest.stage,
+      status: latest.runStatus,
       activeTools: deriveActiveTools(group),
-      updatedAt: latest.createdAt.toISOString(),
+      updatedAt: latest.emittedAt,
     });
   }
 
@@ -774,7 +820,7 @@ function deriveRuns(
  * @returns Tool descriptors that have started but have not completed, failed, skipped, or begun waiting for input.
  */
 function deriveActiveTools(
-  events: PersistedAssessmentRuntimeEvent[],
+  events: AssessmentRuntimeActivityEvent[],
 ): AssessmentRuntimeActiveTool[] {
   const active = new Map<string, AssessmentRuntimeActiveTool>();
   for (const event of events) {
@@ -786,7 +832,7 @@ function deriveActiveTools(
         toolName: event.toolName,
         status: ASSESSMENT_RUNTIME_RUN_STATUSES.running,
         summary: event.summary,
-        startedAt: event.startedAt?.toISOString() ?? null,
+        startedAt: event.startedAt,
         attempt: event.attempt,
       });
       continue;

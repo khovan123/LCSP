@@ -978,6 +978,7 @@ export const enPages = {
     waitingReasonLabel: "Waiting reason",
     activeStepLabel: "Active step",
     runningStepsLabel: "Running",
+    waitingStepsLabel: "Waiting",
     completedStepsLabel: "Completed",
     failedStepsLabel: "Warnings",
     skippedStepsLabel: "Skipped",
@@ -1008,6 +1009,7 @@ export const enPages = {
       waiting: "Waiting",
       completed: "Completed",
       failed: "Failed",
+      skipped: "Skipped",
     },
     runtimeStages: {
       snapshot: "Snapshot",
@@ -1056,7 +1058,8 @@ export const enPages = {
       getReconciliationContext: "Read reconciliation context",
       getVerifiedProfile: "Read verified profile",
       compareWizardClaim: "Compare wizard claim",
-      reconcileProfileToVerifiedProfile: "Reconcile profile to verified profile",
+      reconcileProfileToVerifiedProfile:
+        "Reconcile profile to verified profile",
       getClassificationBaseline: "Read classification baseline",
       getGapRequirements: "Read gap requirements",
       validateClassificationProposal: "Validate classification proposal",
@@ -1064,7 +1067,8 @@ export const enPages = {
       getGapEvidenceTrace: "Read gap evidence trace",
       proposeGapRemediation: "Propose gap remediation",
       submitClassificationForIndependentReview: "Submit for independent review",
-      resolveIndependentClassificationReview: "Resolve independent classification review",
+      resolveIndependentClassificationReview:
+        "Resolve independent classification review",
       getLegalCorpusReadiness: "Check legal corpus readiness",
       retrieveLegalBasis: "Retrieve legal basis",
       getLegalRuleMatch: "Match legal rule",
@@ -1315,7 +1319,6 @@ export const enPages = {
         "The legal matching step completed but found no rules that apply to the verified evidence profile. Classification cannot proceed without an applicable legal basis.",
       legalMatchBlockedSummary:
         "Contact your compliance administrator to review the rule catalog or evidence profile before retrying.",
-
     },
     finalReportRequestedTitle: "Final report request submitted",
     finalReportRequestedDetail:

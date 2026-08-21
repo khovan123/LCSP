@@ -13,6 +13,7 @@ from lcsp_workers.agentic_evidence.dispatcher import ScannerToolDispatcher
 from lcsp_workers.agentic_evidence.scanner_tool_entrypoints import (
     ScannerToolExecutionContext,
 )
+from lcsp_workers.llm import llm_limit_wait_reason
 from lcsp_workers.platform.api_client import WorkerApiClient
 from lcsp_workers.platform.callback_schemas import CallbackResponse
 from lcsp_workers.platform.correlation import set_correlationId
@@ -945,6 +946,16 @@ class ScanConsumer(ConsumerBase):
             self._runtime_scan_job_id = None
             raise
         except Exception as error:
+            wait_reason = llm_limit_wait_reason(error)
+            if wait_reason is not None:
+                self._emit_llm_limit_waiting(envelope.scan_job_id, error, wait_reason)
+                try:
+                    self._finalize_workspace_cleanup(envelope.scan_job_id)
+                except CleanupBlockedError as cleanup_error:
+                    self._runtime_scan_job_id = None
+                    raise cleanup_error from error
+                self._runtime_scan_job_id = None
+                raise
             failed_at = self._utc_timestamp()
             self._emit_runtime_event(
                 envelope.scan_job_id,
@@ -1273,6 +1284,33 @@ class ScanConsumer(ConsumerBase):
         if post_runtime_event is None:
             return
         post_runtime_event(scan_job_id, payload)
+
+    def _emit_llm_limit_waiting(
+        self,
+        scan_job_id: str,
+        error: Exception,
+        wait_reason: str,
+    ) -> None:
+        waiting_at = self._utc_timestamp()
+        self._emit_runtime_event(
+            scan_job_id,
+            event_type="TOOL_WAITING_INPUT",
+            run_status="WAITING",
+            tool_name="build_evidence_graph",
+            summary="LLM token limit exceeded; repository scan is waiting to resume",
+            error_summary=type(error).__name__,
+            completed_at=waiting_at,
+            waiting_reason=wait_reason,
+        )
+        self._emit_runtime_event(
+            scan_job_id,
+            event_type="RUN_STAGE_CHANGED",
+            run_status="WAITING",
+            tool_name="repository_scan",
+            summary="Repository scan is waiting for LLM capacity",
+            error_summary=type(error).__name__,
+            waiting_reason=wait_reason,
+        )
 
     def _duration_ms(self, started_at: str, ended_at: str) -> int:
         started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))

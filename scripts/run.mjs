@@ -9,10 +9,15 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const workerRoot = path.join(repoRoot, "lcsp-python-workers");
 const isWindows = process.platform === "win32";
-const workerPython = process.platform === "win32"
-  ? path.join(workerRoot, ".venv", "Scripts", "python.exe")
-  : path.join(workerRoot, ".venv", "bin", "python");
-const openWikiRuntimeScript = path.join(repoRoot, "scripts", "openwiki_runtime.py");
+const workerPython =
+  process.platform === "win32"
+    ? path.join(workerRoot, ".venv", "Scripts", "python.exe")
+    : path.join(workerRoot, ".venv", "bin", "python");
+const openWikiRuntimeScript = path.join(
+  repoRoot,
+  "scripts",
+  "openwiki_runtime.py",
+);
 const rootEnv = loadDotEnv(path.join(repoRoot, ".env"));
 const defaultWorkerRuntimeVersion =
   process.env.WORKER_RUNTIME_VERSION ??
@@ -24,6 +29,14 @@ const defaultWorkerRuntimeBuildRef =
   detectGitBuildRef();
 const defaultOrchestrationDebug =
   process.env.ORCHESTRATION_DEBUG ?? rootEnv.ORCHESTRATION_DEBUG ?? "false";
+const defaultPhoenixTracing =
+  process.env.PHOENIX_TRACING ?? rootEnv.PHOENIX_TRACING ?? "true";
+const defaultPhoenixCollectorEndpoint =
+  process.env.PHOENIX_COLLECTOR_ENDPOINT ?? "http://localhost:6006/v1/traces";
+const defaultPhoenixProject =
+  process.env.PHOENIX_PROJECT ??
+  rootEnv.PHOENIX_PROJECT ??
+  "lcsp-python-workers";
 const defaultDockerWorkerImage =
   process.env.LCSP_WORKER_DOCKER_IMAGE ??
   rootEnv.LCSP_WORKER_DOCKER_IMAGE ??
@@ -95,7 +108,9 @@ const targets = {
           "-File",
           "fogewise-dev-launchers/windows/fogewise-local-infra-reset-windows.ps1",
         ]
-      : ["./fogewise-dev-launchers/fedora/fogewise-local-infra-reset-fedora.sh"],
+      : [
+          "./fogewise-dev-launchers/fedora/fogewise-local-infra-reset-fedora.sh",
+        ],
     description: "Reset local PostgreSQL + RabbitMQ + Redis",
     oneshot: true,
   },
@@ -112,7 +127,8 @@ const targets = {
     args: ["--dir", "apps/api", "start:dev"],
     env: {
       ...rootEnv,
-      PYTHON_WORKER_BASE_URL: rootEnv.PYTHON_WORKER_BASE_URL_DOCKER ?? "http://127.0.0.1:18081",
+      PYTHON_WORKER_BASE_URL:
+        rootEnv.PYTHON_WORKER_BASE_URL_DOCKER ?? "http://127.0.0.1:18081",
     },
     description: "Start NestJS API in watch mode for Docker-hosted workers",
   },
@@ -303,6 +319,9 @@ function workerTarget(target, description, healthPort) {
       WORKER_RUNTIME_VERSION: defaultWorkerRuntimeVersion,
       WORKER_RUNTIME_BUILD_REF: defaultWorkerRuntimeBuildRef,
       ORCHESTRATION_DEBUG: defaultOrchestrationDebug,
+      PHOENIX_TRACING: defaultPhoenixTracing,
+      PHOENIX_COLLECTOR_ENDPOINT: defaultPhoenixCollectorEndpoint,
+      PHOENIX_PROJECT: defaultPhoenixProject,
       OPENWIKI_RUNTIME_COMMAND: defaultOpenWikiRuntimeCommand,
       OPENWIKI_RUNTIME_TIMEOUT_SECONDS: defaultOpenWikiRuntimeTimeoutSeconds,
     },
@@ -532,7 +551,8 @@ function spawnTarget(target) {
     cwd: target.cwd,
     env: { ...process.env, ...target.env },
     stdio: "inherit",
-    shell: target.shell ?? (process.platform === "win32" && target.cmd === "pnpm"),
+    shell:
+      target.shell ?? (process.platform === "win32" && target.cmd === "pnpm"),
   });
 }
 
@@ -551,7 +571,9 @@ function cleanupDockerWorkerContainer(target) {
   const containerId = existing.status === 0 ? existing.stdout.trim() : "";
   if (!containerId) return;
 
-  console.log(`[run] Removing existing Docker worker container: ${target.containerName}`);
+  console.log(
+    `[run] Removing existing Docker worker container: ${target.containerName}`,
+  );
   const removed = spawnSync("docker", ["rm", "-f", target.containerName], {
     cwd: repoRoot,
     stdio: "inherit",
@@ -631,6 +653,9 @@ function dockerWorkerEnv() {
     "LLM_BUDGET_REDIS_URL",
     "WORKER_RUNTIME_VERSION",
     "WORKER_RUNTIME_BUILD_REF",
+    "PHOENIX_TRACING",
+    "PHOENIX_COLLECTOR_ENDPOINT",
+    "PHOENIX_PROJECT",
     "OPENWIKI_RUNTIME_COMMAND",
     "OPENWIKI_RUNTIME_TIMEOUT_SECONDS",
     "LEGAL_CHROMA_PATH",
@@ -647,11 +672,17 @@ function dockerWorkerEnv() {
       process.env.RABBITMQ_URL ?? rootEnv.RABBITMQ_URL ?? "",
     ),
     RABBITMQ_EXCHANGE:
-      process.env.RABBITMQ_EXCHANGE ?? rootEnv.RABBITMQ_EXCHANGE ?? "lcsp.events",
+      process.env.RABBITMQ_EXCHANGE ??
+      rootEnv.RABBITMQ_EXCHANGE ??
+      "lcsp.events",
     NESTJS_API_BASE_URL: apiBaseUrl,
     LCSP_API_BASE_URL: apiBaseUrl,
-    WORKER_API_KEY:
-      process.env.WORKER_API_KEY ?? rootEnv.WORKER_API_KEY ?? "",
+    WORKER_API_KEY: process.env.WORKER_API_KEY ?? rootEnv.WORKER_API_KEY ?? "",
+    PHOENIX_TRACING: defaultPhoenixTracing,
+    PHOENIX_COLLECTOR_ENDPOINT: dockerizeLocalhost(
+      defaultPhoenixCollectorEndpoint,
+    ),
+    PHOENIX_PROJECT: defaultPhoenixProject,
     HEALTH_PORT: "8080",
     PYTHONPATH: "/app/lcsp-python-workers/src",
     KNIP_BINARY: "/usr/local/bin/knip",
@@ -660,7 +691,9 @@ function dockerWorkerEnv() {
 
 function dockerEnvArgs(env) {
   return Object.entries(env)
-    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .filter(
+      ([, value]) => value !== undefined && value !== null && value !== "",
+    )
     .flatMap(([key, value]) => ["-e", `${key}=${value}`]);
 }
 
@@ -711,7 +744,8 @@ function spawnSyncCompatible(target) {
     cwd: target.cwd,
     env: { ...process.env, ...target.env },
     stdio: "inherit",
-    shell: target.shell ?? (process.platform === "win32" && target.cmd === "pnpm"),
+    shell:
+      target.shell ?? (process.platform === "win32" && target.cmd === "pnpm"),
   });
   if (result.signal) {
     process.kill(process.pid, result.signal);

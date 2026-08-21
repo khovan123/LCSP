@@ -4,6 +4,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from lcsp_workers.llm.deep_agent_client import (
+    reset_deep_agent_runtime_context,
+    set_deep_agent_runtime_context,
+)
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.scanner.program_graph.source_roles import filter_program_evidence_graph
@@ -92,7 +96,59 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         # so search_code/repo_map/get_symbol/get_code cannot surface test/spec symbols
         # even when a classification rerun references an older persisted graph.
         code_context = CodeContextSession(graph, workspace_path=workspace_path)
-        catalog_version_id, corpus_version_id, rules = self._load_legal_rule_sources()
+        (
+            catalog_version_id,
+            corpus_version_id,
+            corpus_chunks,
+            rules,
+        ) = self._load_or_recover_legal_rule_sources(
+            workflow_run_id=workflow_run_id,
+            correlation_id=correlation_id,
+            reason="LEGAL_RULE_SOURCE_LOAD_FAILED",
+        )
+        if not catalog_version_id:
+            return self._blocked_before_llm(
+                catalog_version_id=catalog_version_id,
+                corpus_version_id=corpus_version_id,
+                rules_considered=0,
+                cache_hits=0,
+                limitations=[
+                    ENGINEERING_LIMITATION_CODES["no_legal_rule_catalog"],
+                ],
+                reason="NO_ACTIVE_LEGAL_RULE_CATALOG",
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
+            )
+        if not corpus_version_id or not corpus_chunks:
+            recovered = self._recover_legal_rule_sources(
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
+                reason="NO_ACTIVE_LEGAL_CORPUS_SOURCE",
+            )
+            if recovered:
+                (
+                    catalog_version_id,
+                    corpus_version_id,
+                    corpus_chunks,
+                    rules,
+                ) = self._reload_legal_rule_sources(
+                    workflow_run_id=workflow_run_id,
+                    correlation_id=correlation_id,
+                    reason="NO_ACTIVE_LEGAL_CORPUS_SOURCE",
+                )
+        if not corpus_version_id or not corpus_chunks:
+            return self._blocked_before_llm(
+                catalog_version_id=catalog_version_id,
+                corpus_version_id=corpus_version_id,
+                rules_considered=0,
+                cache_hits=0,
+                limitations=[
+                    ENGINEERING_LIMITATION_CODES["no_legal_corpus_source"],
+                ],
+                reason="NO_ACTIVE_LEGAL_CORPUS_SOURCE",
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
+            )
         if not rules:
             recovered = self._recover_legal_rule_sources(
                 workflow_run_id=workflow_run_id,
@@ -103,21 +159,32 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 (
                     catalog_version_id,
                     corpus_version_id,
+                    corpus_chunks,
                     rules,
-                ) = self._load_legal_rule_sources()
+                ) = self._reload_legal_rule_sources(
+                    workflow_run_id=workflow_run_id,
+                    correlation_id=correlation_id,
+                    reason="NO_APPROVED_ENGINEERING_RULE_SOURCE_RULES",
+                )
         if not rules:
-            return EngineeringInvestigationResult(
-                status="BLOCKED",
-                legal_rule_catalog_version_id=catalog_version_id,
-                legal_corpus_version_id=corpus_version_id,
+            return self._blocked_before_llm(
+                catalog_version_id=catalog_version_id,
+                corpus_version_id=corpus_version_id,
                 rules_considered=0,
-                engineering_rules_executed=0,
-                engineering_rule_cache_hits=0,
+                cache_hits=0,
                 limitations=(
                     ENGINEERING_LIMITATION_CODES["no_engineering_rule_source_rules"],
                 ),
+                reason="NO_APPROVED_ENGINEERING_RULE_SOURCE_RULES",
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
             )
 
+        context_token = set_deep_agent_runtime_context(
+            source_root=workspace_path,
+            legal_chunks=corpus_chunks,
+            legal_rules=rules,
+        )
         limitations, cache_hits, prepared = self._prepare_engineering_rules(
             rules=rules,
             catalog_version_id=catalog_version_id,
@@ -138,8 +205,46 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 (
                     catalog_version_id,
                     corpus_version_id,
+                    corpus_chunks,
                     rules,
-                ) = self._load_legal_rule_sources()
+                ) = self._reload_legal_rule_sources(
+                    workflow_run_id=workflow_run_id,
+                    correlation_id=correlation_id,
+                    reason="NO_ENGINEERING_RULE_CANDIDATES_AFTER_TRIAGE",
+                )
+                if not corpus_version_id or not corpus_chunks or not rules:
+                    reset_deep_agent_runtime_context(context_token)
+                    return self._blocked_before_llm(
+                        catalog_version_id=catalog_version_id,
+                        corpus_version_id=corpus_version_id,
+                        rules_considered=len(rules),
+                        cache_hits=cache_hits,
+                        limitations=tuple(
+                            dict.fromkeys(
+                                [
+                                    *limitations,
+                                    (
+                                        ENGINEERING_LIMITATION_CODES[
+                                            "no_legal_corpus_source"
+                                        ]
+                                        if not corpus_version_id or not corpus_chunks
+                                        else ENGINEERING_LIMITATION_CODES[
+                                            "no_engineering_rule_source_rules"
+                                        ]
+                                    ),
+                                ]
+                            )
+                        ),
+                        reason="ENGINEERING_RULE_SOURCE_RECOVERY_INCOMPLETE",
+                        workflow_run_id=workflow_run_id,
+                        correlation_id=correlation_id,
+                    )
+                reset_deep_agent_runtime_context(context_token)
+                context_token = set_deep_agent_runtime_context(
+                    source_root=workspace_path,
+                    legal_chunks=corpus_chunks,
+                    legal_rules=rules,
+                )
                 limitations, cache_hits, prepared = self._prepare_engineering_rules(
                     rules=rules,
                     catalog_version_id=catalog_version_id,
@@ -151,16 +256,61 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 )
 
         if not prepared:
-            return EngineeringInvestigationResult(
-                status="BLOCKED",
-                legal_rule_catalog_version_id=catalog_version_id,
-                legal_corpus_version_id=corpus_version_id,
+            reset_deep_agent_runtime_context(context_token)
+            return self._blocked_before_llm(
+                catalog_version_id=catalog_version_id,
+                corpus_version_id=corpus_version_id,
                 rules_considered=len(rules),
-                engineering_rules_executed=0,
-                engineering_rule_cache_hits=cache_hits,
-                limitations=tuple(dict.fromkeys(limitations)),
+                cache_hits=cache_hits,
+                limitations=tuple(
+                    dict.fromkeys(
+                        [
+                            *limitations,
+                            ENGINEERING_LIMITATION_CODES[
+                                "no_engineering_rule_candidates"
+                            ],
+                        ]
+                    )
+                ),
+                reason="NO_ENGINEERING_RULE_CANDIDATES_AFTER_TRIAGE",
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
             )
 
+        try:
+            return self._run_planned_investigation(
+                graph=graph,
+                code_context=code_context,
+                rules=rules,
+                prepared=prepared,
+                limitations=limitations,
+                cache_hits=cache_hits,
+                catalog_version_id=catalog_version_id,
+                corpus_version_id=corpus_version_id,
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
+                wizard_context=wizard_context,
+                workspace_path=workspace_path,
+            )
+        finally:
+            reset_deep_agent_runtime_context(context_token)
+
+    def _run_planned_investigation(
+        self,
+        *,
+        graph,
+        code_context: CodeContextSession,
+        rules: list[dict[str, Any]],
+        prepared: list[tuple[Any, Any]],
+        limitations: list[str],
+        cache_hits: int,
+        catalog_version_id: str,
+        corpus_version_id: str,
+        workflow_run_id: str,
+        correlation_id: str | None,
+        wizard_context: dict[str, Any] | None,
+        workspace_path: str | Path | None,
+    ) -> EngineeringInvestigationResult:
         # Planner does not receive every broad start-node hit. Each packet is projected
         # into rule-specific material production signals first. A single graph projector
         # then expands only those material seeds through bounded executable/business/data
@@ -224,6 +374,39 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     for candidate in candidates
                 ),
             )
+
+        # Existing implementation continues below in this helper.
+        return self._finish_planned_investigation(
+            graph=graph,
+            code_context=code_context,
+            prepared=prepared,
+            candidates=candidates,
+            plan=plan,
+            limitations=limitations,
+            cache_hits=cache_hits,
+            catalog_version_id=catalog_version_id,
+            corpus_version_id=corpus_version_id,
+            rules=rules,
+            workflow_run_id=workflow_run_id,
+            correlation_id=correlation_id,
+        )
+
+    def _finish_planned_investigation(
+        self,
+        *,
+        graph,
+        code_context: CodeContextSession,
+        prepared: list[tuple[Any, Any]],
+        candidates: tuple[Any, ...],
+        plan: EngineeringRulePlan,
+        limitations: list[str],
+        cache_hits: int,
+        catalog_version_id: str,
+        corpus_version_id: str,
+        rules: list[dict[str, Any]],
+        workflow_run_id: str,
+        correlation_id: str | None,
+    ) -> EngineeringInvestigationResult:
         selected_ids = set(plan.selected_rule_ids)
         logger.info(
             "ENGINEERING_RULE_PLAN_APPLIED",
@@ -380,7 +563,9 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             planner_decisions=tuple(planner_decisions),
         )
 
-    def _load_legal_rule_sources(self) -> tuple[str, str, list[dict[str, Any]]]:
+    def _load_legal_rule_sources(
+        self,
+    ) -> tuple[str, str, list[dict[str, Any]], list[dict[str, Any]]]:
         catalog = self._api_client.get_active_legal_rule_catalog()
         corpus = self._api_client.get_active_legal_corpus()
         catalog_version_id = self._required_id(
@@ -412,7 +597,99 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             for rule in (catalog.get("rules") or [])
             if isinstance(rule, dict) and self._is_approved_rule(rule)
         ]
-        return catalog_version_id, corpus_version_id, rules
+        return (
+            catalog_version_id,
+            corpus_version_id,
+            [item for item in chunks if isinstance(item, dict)],
+            rules,
+        )
+
+    def _load_or_recover_legal_rule_sources(
+        self,
+        *,
+        workflow_run_id: str,
+        correlation_id: str | None,
+        reason: str,
+    ) -> tuple[str, str, list[dict[str, Any]], list[dict[str, Any]]]:
+        try:
+            return self._load_legal_rule_sources()
+        except Exception as error:
+            logger.warning(
+                "ENGINEERING_RULE_SOURCE_LOAD_FAILED",
+                reason=reason,
+                error_type=type(error).__name__,
+                error_message=str(error)[:500],
+                workflow_run_id=workflow_run_id,
+                correlationId=correlation_id,
+            )
+            recovered = self._recover_legal_rule_sources(
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
+                reason=reason,
+            )
+            if recovered:
+                try:
+                    return self._load_legal_rule_sources()
+                except Exception as retry_error:
+                    logger.warning(
+                        "ENGINEERING_RULE_SOURCE_RELOAD_FAILED",
+                        reason=reason,
+                        error_type=type(retry_error).__name__,
+                        error_message=str(retry_error)[:500],
+                        workflow_run_id=workflow_run_id,
+                        correlationId=correlation_id,
+                    )
+        return ("", "", [], [])
+
+    def _reload_legal_rule_sources(
+        self,
+        *,
+        workflow_run_id: str,
+        correlation_id: str | None,
+        reason: str,
+    ) -> tuple[str, str, list[dict[str, Any]], list[dict[str, Any]]]:
+        try:
+            return self._load_legal_rule_sources()
+        except Exception as error:
+            logger.warning(
+                "ENGINEERING_RULE_SOURCE_RELOAD_FAILED",
+                reason=reason,
+                error_type=type(error).__name__,
+                error_message=str(error)[:500],
+                workflow_run_id=workflow_run_id,
+                correlationId=correlation_id,
+            )
+            return ("", "", [], [])
+
+    def _blocked_before_llm(
+        self,
+        *,
+        catalog_version_id: str,
+        corpus_version_id: str,
+        rules_considered: int,
+        cache_hits: int,
+        limitations: tuple[str, ...] | list[str],
+        reason: str,
+        workflow_run_id: str,
+        correlation_id: str | None,
+    ) -> EngineeringInvestigationResult:
+        logger.warning(
+            "ENGINEERING_INVESTIGATION_STOPPED_BEFORE_PLANNER",
+            reason=reason,
+            limitations=list(dict.fromkeys(limitations)),
+            rules_considered=rules_considered,
+            workflow_run_id=workflow_run_id,
+            correlationId=correlation_id,
+        )
+        return EngineeringInvestigationResult(
+            status="BLOCKED",
+            legal_rule_catalog_version_id=catalog_version_id,
+            legal_corpus_version_id=corpus_version_id,
+            rules_considered=rules_considered,
+            engineering_rules_executed=0,
+            engineering_rule_cache_hits=cache_hits,
+            limitations=tuple(dict.fromkeys(limitations)),
+        )
 
     def _prepare_engineering_rules(
         self,

@@ -7,7 +7,7 @@ from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from lcsp_workers.agentic_evidence import AgenticInvocationContext, AgenticToolResolver
-from lcsp_workers.llm.gateway_client import LLMGatewayClient
+from lcsp_workers.llm import LLMClientProtocol
 
 
 ALLOWED_SUMMARY_FIELDS = {
@@ -23,7 +23,7 @@ class AIUsageFlowModelAssistedProposer:
 
     def __init__(
         self,
-        llm_client: LLMGatewayClient,
+        llm_client: LLMClientProtocol,
         agentic_tool_resolver: AgenticToolResolver | None = None,
     ):
         """Create the proposer with optional read-only agentic evidence tools."""

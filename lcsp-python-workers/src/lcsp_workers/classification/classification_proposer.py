@@ -3,7 +3,7 @@
 import json
 from typing import Any
 
-from lcsp_workers.llm.gateway_client import LLMGatewayClient
+from lcsp_workers.llm import LLMClientProtocol
 
 
 ALLOWED_RISK_LEVELS = {"LOW", "MEDIUM", "HIGH", "BLOCKED"}
@@ -13,11 +13,11 @@ ALLOWED_APPLICABILITY = {"applicable", "partially_applicable", "not_applicable"}
 class ModelAssistedClassificationProposer:
     """Ask an LLM for a structured proposal without granting final authority."""
 
-    def __init__(self, llm_client: LLMGatewayClient):
-        """Create the proposer with the gateway used for bounded LLM calls.
+    def __init__(self, llm_client: LLMClientProtocol):
+        """Create the proposer with the bounded Deep Agents client.
 
         Args:
-            llm_client: Budget- and safety-aware LLM gateway client.
+            llm_client: Budget- and safety-aware model client.
         """
         self.llm_client = llm_client
 

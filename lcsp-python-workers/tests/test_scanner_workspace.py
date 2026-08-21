@@ -613,6 +613,57 @@ def test_scan_consumer_cleanup_runs_on_timeout(
     assert not workspace.workspace_path("job-5").exists()
 
 
+def test_scan_consumer_emits_llm_limit_waiting_runtime_events(
+    workspace_dir: Path,
+) -> None:
+    api_client = MagicMock()
+    consumer = ScanConsumer(
+        WorkerConfig(
+            rabbitmq_url="amqp://guest:guest@localhost/",
+            rabbitmq_exchange="test.events",
+            nestjs_api_base_url="http://api.test",
+            worker_api_key="worker-test-key",
+            log_level="INFO",
+            max_retries=3,
+        ),
+        snapshot_client=MagicMock(spec=SnapshotServiceClient),
+        workspace=ScannerWorkspace(root_path=workspace_dir / "scanner"),
+        api_client=api_client,
+    )
+
+    consumer._emit_llm_limit_waiting(
+        "job-limit",
+        RuntimeError("quota exceeded"),
+        "LLM token quota exceeded; waiting to resume.",
+    )
+
+    runtime_events = [
+        call.args[1]
+        for call in api_client.post_scan_runtime_event.call_args_list
+    ]
+    assert runtime_events == [
+        {
+            "event_type": "TOOL_WAITING_INPUT",
+            "run_status": "WAITING",
+            "stage": "SCAN",
+            "summary": "LLM token limit exceeded; repository scan is waiting to resume",
+            "tool_name": "build_evidence_graph",
+            "error_summary": "RuntimeError",
+            "completed_at": runtime_events[0]["completed_at"],
+            "waiting_reason": "LLM token quota exceeded; waiting to resume.",
+        },
+        {
+            "event_type": "RUN_STAGE_CHANGED",
+            "run_status": "WAITING",
+            "stage": "SCAN",
+            "summary": "Repository scan is waiting for LLM capacity",
+            "tool_name": "repository_scan",
+            "error_summary": "RuntimeError",
+            "waiting_reason": "LLM token quota exceeded; waiting to resume.",
+        },
+    ]
+
+
 @pytest.mark.p0
 def test_scan_consumer_privacy_assertion_aborts_callback_and_cleans_up(
     workspace_dir: Path,

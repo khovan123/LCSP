@@ -995,6 +995,7 @@ export type PagesMessages = {
     waitingReasonLabel: string;
     activeStepLabel: string;
     runningStepsLabel: string;
+    waitingStepsLabel: string;
     completedStepsLabel: string;
     failedStepsLabel: string;
     skippedStepsLabel: string;
@@ -1025,6 +1026,7 @@ export type PagesMessages = {
       waiting: string;
       completed: string;
       failed: string;
+      skipped: string;
     };
     runtimeStages: {
       snapshot: string;

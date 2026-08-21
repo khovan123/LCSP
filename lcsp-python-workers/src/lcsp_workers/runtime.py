@@ -22,7 +22,7 @@ from lcsp_workers.agentic_evidence import (
 from lcsp_workers.agentic_evidence.authorization import ApiPbacToolAuthorizer
 from lcsp_workers.llm import (
     BudgetTracker,
-    LLMGatewayClient,
+    DeepAgentClient,
     LlmProviderCandidate,
     PrimaryThenFallbackLLMClient,
 )
@@ -130,7 +130,7 @@ def _build_llm_client(config):
         providers.append(
             LlmProviderCandidate(
                 name=provider.provider,
-                client=LLMGatewayClient(
+                client=DeepAgentClient(
                     provider=provider.provider,
                     api_key=provider.api_key,
                     model=provider.model,

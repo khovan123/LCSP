@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
+from lcsp_workers.llm.deep_agent_client import deep_agent_runtime_context
 
 from .assembler import ProgramGraphAssembler
 from .business_semantic_cluster_policy import DiverseBusinessSemanticEnricher
@@ -24,7 +25,8 @@ class BusinessSemanticProgramGraphAssembler:
     def assemble(self, **kwargs):
         graph = self._base.assemble(**kwargs)
         scan_job_id = str(kwargs.get("scan_job_id") or "unknown")
-        return self._enricher.enrich(
-            graph,
-            workflow_run_id=f"scan-business-semantics:{scan_job_id}",
-        )
+        with deep_agent_runtime_context(source_root=kwargs.get("workspace_path")):
+            return self._enricher.enrich(
+                graph,
+                workflow_run_id=f"scan-business-semantics:{scan_job_id}",
+            )

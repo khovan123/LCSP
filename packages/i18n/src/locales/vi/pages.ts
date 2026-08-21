@@ -974,6 +974,7 @@ export const viPages = {
     waitingReasonLabel: "Lý do chờ",
     activeStepLabel: "Bước đang chạy",
     runningStepsLabel: "Đang chạy",
+    waitingStepsLabel: "Đang chờ",
     completedStepsLabel: "Hoàn tất",
     failedStepsLabel: "Cảnh báo",
     skippedStepsLabel: "Bỏ qua",
@@ -1004,6 +1005,7 @@ export const viPages = {
       waiting: "Đang chờ",
       completed: "Đã hoàn tất",
       failed: "Thất bại",
+      skipped: "Bỏ qua",
     },
     runtimeStages: {
       snapshot: "Snapshot",
@@ -1060,7 +1062,8 @@ export const viPages = {
       getGapEvidenceTrace: "Đọc dấu vết bằng chứng gap",
       proposeGapRemediation: "Đề xuất khắc phục gap",
       submitClassificationForIndependentReview: "Gửi để xem xét độc lập",
-      resolveIndependentClassificationReview: "Giải quyết xem xét phân loại độc lập",
+      resolveIndependentClassificationReview:
+        "Giải quyết xem xét phân loại độc lập",
       getLegalCorpusReadiness: "Kiểm tra sẵn sàng corpus pháp lý",
       retrieveLegalBasis: "Truy xuất căn cứ pháp lý",
       getLegalRuleMatch: "Đối chiếu quy tắc pháp lý",
@@ -1312,7 +1315,6 @@ export const viPages = {
         "Bước đối chiếu pháp lý đã hoàn tất nhưng không tìm thấy quy tắc nào phù hợp với hồ sơ bằng chứng đã xác minh. Phân loại không thể tiến hành khi thiếu căn cứ pháp lý áp dụng.",
       legalMatchBlockedSummary:
         "Liên hệ quản trị viên tuân thủ để rà soát rule catalog hoặc hồ sơ bằng chứng trước khi thử lại.",
-
     },
     finalReportRequestedTitle: "Yêu cầu báo cáo cuối cùng đã được gửi",
     finalReportRequestedDetail:

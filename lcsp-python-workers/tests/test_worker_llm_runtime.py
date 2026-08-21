@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import sys
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from lcsp_workers.llm import PrimaryThenFallbackLLMClient
+from lcsp_workers.platform import tracing as tracing_module
 from lcsp_workers.platform.config import (
     AgenticRuntimeConfig,
     LlmProviderConfig,
@@ -37,6 +40,43 @@ def _worker_config(*, llm_runtime: LlmRuntimeConfig | None = None) -> WorkerConf
         agentic_runtime=AgenticRuntimeConfig(),
         pbac_preflight=PbacPreflightConfig(),
     )
+
+
+class _FakeSpan:
+    def __init__(self, name: str):
+        self.name = name
+        self.attributes: dict[str, object] = {}
+        self.exceptions: list[Exception] = []
+
+    def set_attribute(self, key: str, value: object) -> None:
+        self.attributes[key] = value
+
+    def record_exception(self, exc: Exception) -> None:
+        self.exceptions.append(exc)
+
+    def set_status(self, status: object) -> None:
+        self.attributes["status"] = status
+
+
+class _FakeSpanContext:
+    def __init__(self, tracer: "_FakeTracer", name: str):
+        self.tracer = tracer
+        self.span = _FakeSpan(name)
+
+    def __enter__(self) -> _FakeSpan:
+        self.tracer.spans.append(self.span)
+        return self.span
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+
+class _FakeTracer:
+    def __init__(self):
+        self.spans: list[_FakeSpan] = []
+
+    def start_as_current_span(self, name: str) -> _FakeSpanContext:
+        return _FakeSpanContext(self, name)
 
 
 def test_load_config_parses_llm_provider_chain(monkeypatch) -> None:
@@ -110,6 +150,103 @@ def test_load_tracing_config_does_not_require_worker_env(monkeypatch) -> None:
     assert config.collector_endpoint == "http://localhost:6006/v1/traces"
 
 
+def test_initialize_tracer_registers_batch_silent_phoenix_once(monkeypatch) -> None:
+    calls = []
+    phoenix_module = ModuleType("phoenix")
+    phoenix_otel_module = ModuleType("phoenix.otel")
+    opentelemetry_module = ModuleType("opentelemetry")
+    trace_module = ModuleType("opentelemetry.trace")
+    trace_module.get_tracer = lambda name: f"tracer:{name}"
+    opentelemetry_module.trace = trace_module
+
+    def register(**kwargs):
+        calls.append(kwargs)
+
+    phoenix_otel_module.register = register
+    monkeypatch.setitem(sys.modules, "phoenix", phoenix_module)
+    monkeypatch.setitem(sys.modules, "phoenix.otel", phoenix_otel_module)
+    monkeypatch.setitem(sys.modules, "opentelemetry", opentelemetry_module)
+    monkeypatch.setitem(sys.modules, "opentelemetry.trace", trace_module)
+    monkeypatch.setattr(
+        tracing_module,
+        "load_tracing_config",
+        lambda: SimpleNamespace(
+            enabled=True,
+            project_name="lcsp-python-workers",
+            collector_endpoint="http://localhost:6006/v1/traces",
+        ),
+    )
+    monkeypatch.setattr(
+        tracing_module,
+        "_instrument_optional_openinference_packages",
+        lambda: None,
+    )
+    monkeypatch.setattr(tracing_module, "_tracing_registered", False)
+    assert tracing_module._initialize_tracer() == "tracer:lcsp_workers"
+    assert tracing_module._initialize_tracer() == "tracer:lcsp_workers"
+
+    assert calls == [
+        {
+            "project_name": "lcsp-python-workers",
+            "endpoint": "http://localhost:6006/v1/traces",
+            "batch": True,
+            "verbose": False,
+        }
+    ]
+
+
+def test_traceable_creates_workflow_parent_and_records_llm_input(monkeypatch) -> None:
+    fake_tracer = _FakeTracer()
+    monkeypatch.setattr(tracing_module, "_tracer", fake_tracer)
+    monkeypatch.setattr(tracing_module, "_current_span_is_valid", lambda: False)
+
+    class Client:
+        provider = "openai"
+        model = "gpt-4o-mini"
+
+    class Response:
+        content = "done"
+        input_tokens = 11
+        output_tokens = 3
+
+    @tracing_module.traceable(
+        name="DeepAgentClient.complete_with_tools",
+        run_type="llm",
+    )
+    def call_llm(
+        self,
+        prompt: str,
+        *,
+        workflow_run_id: str,
+        node_name: str,
+        correlationId: str,
+    ) -> Response:
+        return Response()
+
+    call_llm(
+        Client(),
+        "raw prompt visible in phoenix",
+        workflow_run_id="scan-business-semantics:test",
+        node_name="enrich_business_semantics",
+        correlationId="request-123",
+    )
+
+    parent_span, llm_span = fake_tracer.spans
+    assert parent_span.name == "lcsp.workflow:enrich_business_semantics"
+    assert parent_span.attributes["metadata.correlationId"] == "request-123"
+    assert llm_span.name == "DeepAgentClient.complete_with_tools"
+    assert llm_span.attributes["openinference.span.kind"] == "LLM"
+    assert llm_span.attributes["metadata.workflow_run_id"] == (
+        "scan-business-semantics:test"
+    )
+    assert llm_span.attributes["input.value"] == "raw prompt visible in phoenix"
+    assert llm_span.attributes["llm.input_messages.0.message.content"] == (
+        "raw prompt visible in phoenix"
+    )
+    assert llm_span.attributes["output.value"] == "done"
+    assert llm_span.attributes["llm.token_count.prompt"] == 11
+
+
 def test_build_llm_client_skips_provider_without_api_key() -> None:
     config = _worker_config(
         llm_runtime=LlmRuntimeConfig(
@@ -131,13 +268,13 @@ def test_build_llm_client_skips_provider_without_api_key() -> None:
         )
     )
 
-    with patch("lcsp_workers.runtime.LLMGatewayClient") as gateway_class:
-        gateway_class.return_value = MagicMock()
+    with patch("lcsp_workers.runtime.DeepAgentClient") as deep_agent_class:
+        deep_agent_class.return_value = MagicMock()
         client = _build_llm_client(config)
 
     assert isinstance(client, PrimaryThenFallbackLLMClient)
-    gateway_class.assert_called_once()
-    kwargs = gateway_class.call_args.kwargs
+    deep_agent_class.assert_called_once()
+    kwargs = deep_agent_class.call_args.kwargs
     assert kwargs["provider"] == "anthropic"
     assert kwargs["api_key"] == "sk-ant-test"
 

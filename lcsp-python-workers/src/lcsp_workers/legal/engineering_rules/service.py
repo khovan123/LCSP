@@ -14,6 +14,7 @@ from .models import (
     DEV_ENGINEERING_RULE_BOOTSTRAP_RULE_FAMILY,
     ENGINEERING_RULE_SCHEMA_VERSION,
     EngineeringRule,
+    build_legal_reasoning_contract,
 )
 from .precompiled_registry import PrecompiledEngineeringRuleRegistry
 
@@ -103,7 +104,13 @@ class EngineeringRuleService:
         )
         cached = self.cache.get(fingerprint)
         if cached:
-            return cached, True
+            return self._retarget_cached_rules(
+                cached,
+                legal_rule=legal_rule,
+                legal_rule_catalog_version_id=legal_rule_catalog_version_id,
+                legal_corpus_version_id=legal_corpus_version_id,
+                legal_context=context,
+            ), True
 
         # The normal path compiles from the active legal chunks after LLM triage.
         # The checked-in precompiled bundle is now an explicit operator fallback only;
@@ -152,6 +159,38 @@ class EngineeringRuleService:
             "yes",
             "YES",
         }
+
+    @staticmethod
+    def _retarget_cached_rules(
+        rules: list[EngineeringRule],
+        *,
+        legal_rule: dict[str, Any],
+        legal_rule_catalog_version_id: str,
+        legal_corpus_version_id: str,
+        legal_context: list[dict[str, Any]],
+    ) -> list[EngineeringRule]:
+        retargeted: list[EngineeringRule] = []
+        for rule in rules:
+            if (
+                rule.legal_rule_catalog_version_id == legal_rule_catalog_version_id
+                and rule.legal_corpus_version_id == legal_corpus_version_id
+            ):
+                retargeted.append(rule)
+                continue
+            payload = rule.to_dict()
+            payload["legal_rule_catalog_version_id"] = legal_rule_catalog_version_id
+            payload["legal_corpus_version_id"] = legal_corpus_version_id
+            payload["legal_reasoning_contract"] = build_legal_reasoning_contract(
+                legal_rule=legal_rule,
+                legal_rule_catalog_version_id=legal_rule_catalog_version_id,
+                legal_corpus_version_id=legal_corpus_version_id,
+                legal_context=legal_context,
+                required_evidence=rule.required_evidence,
+                supporting_evidence=rule.supporting_evidence,
+                negative_evidence=rule.negative_evidence,
+            ).to_dict()
+            retargeted.append(EngineeringRule.from_dict(payload))
+        return retargeted
 
     @staticmethod
     def _chunk_ids(legal_rule: dict[str, Any]) -> list[str]:

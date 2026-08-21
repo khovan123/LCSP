@@ -8,7 +8,7 @@ from typing import Any, Iterable
 
 from lcsp_workers.legal.engineering_rules.models import EngineeringRule
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
-from lcsp_workers.llm.gateway_client import LLMToolDefinition
+from lcsp_workers.llm import LLMToolDefinition
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
 

@@ -11,8 +11,7 @@ from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.platform.redaction import redact_string
 
 from .budget_tracker import BudgetExceeded
-from .gateway_client import (
-    LLMGatewayClient,
+from .deep_agent_client import (
     LLMResponse,
     LLMToolDefinition,
     LLMToolResponse,
@@ -72,6 +71,10 @@ class LlmProviderQuotaError(Exception):
     """Raised when a provider account has exhausted its quota."""
 
 
+class LlmProviderTokenLimitError(Exception):
+    """Raised when a provider rejects a request because an LLM token limit was exceeded."""
+
+
 class LlmProviderTimeoutError(Exception):
     """Raised when a provider request exceeds its timeout."""
 
@@ -105,10 +108,10 @@ class LlmProviderUnavailableError(Exception):
 
 @dataclass(frozen=True)
 class LlmProviderCandidate:
-    """Named LLM gateway client considered during provider dispatch."""
+    """Named Deep Agents client considered during provider dispatch."""
 
     name: str
-    client: LLMGatewayClient
+    client: LLMClientProtocol
 
 
 class PrimaryThenFallbackLLMClient:
@@ -338,6 +341,30 @@ class PrimaryThenFallbackLLMClient:
         )
 
 
+def classify_provider_error(exc: Exception) -> str:
+    """Return the public provider-failure classification code for orchestration policy."""
+    return _classify_provider_error(exc)
+
+
+def llm_limit_wait_reason(exc: Exception) -> str | None:
+    """Return an SSE-safe waiting reason when an LLM provider limit can be retried later."""
+    diagnostic_error = (
+        exc.last_error
+        if isinstance(exc, LlmProviderUnavailableError) and exc.last_error is not None
+        else exc
+    )
+    code = _classify_provider_error(diagnostic_error)
+    if isinstance(diagnostic_error, BudgetExceeded):
+        code = "TOKEN_LIMIT"
+    if code == "RATE_LIMIT":
+        return "LLM rate limit exceeded; waiting to resume."
+    if code == "QUOTA":
+        return "LLM token quota exceeded; waiting to resume."
+    if code == "TOKEN_LIMIT":
+        return "LLM token limit exceeded; waiting to resume."
+    return None
+
+
 def _safe_provider_error_details(
     error: Exception,
     *,
@@ -410,6 +437,8 @@ def _classify_provider_error(exc: Exception) -> str:
         return "RATE_LIMIT"
     if isinstance(exc, LlmProviderQuotaError):
         return "QUOTA"
+    if isinstance(exc, LlmProviderTokenLimitError):
+        return "TOKEN_LIMIT"
     if isinstance(exc, LlmProviderTimeoutError):
         return "TIMEOUT"
     if isinstance(exc, LlmProviderNetworkError):
@@ -428,6 +457,8 @@ def _classify_provider_error(exc: Exception) -> str:
             return "AUTH"
         if "quota" in message:
             return "QUOTA"
+        if _is_token_limit_message(message):
+            return "TOKEN_LIMIT"
         return "INVALID_REQUEST"
 
     response = getattr(exc, "response", None)
@@ -445,6 +476,8 @@ def _classify_provider_error(exc: Exception) -> str:
                 return "AUTH"
             if "quota" in message:
                 return "QUOTA"
+            if _is_token_limit_message(message):
+                return "TOKEN_LIMIT"
             return "INVALID_REQUEST"
 
     if isinstance(exc, httpx.TimeoutException):
@@ -455,6 +488,8 @@ def _classify_provider_error(exc: Exception) -> str:
     message = str(exc).lower()
     if "quota" in message or "insufficient_quota" in message:
         return "QUOTA"
+    if _is_token_limit_message(message):
+        return "TOKEN_LIMIT"
     if "rate limit" in message or "too many requests" in message:
         return "RATE_LIMIT"
     if "timeout" in message or "timed out" in message:
@@ -464,6 +499,16 @@ def _classify_provider_error(exc: Exception) -> str:
     if "auth" in message or "invalid api key" in message or "unauthorized" in message:
         return "AUTH"
     return "UNKNOWN"
+
+
+def _is_token_limit_message(message: str) -> bool:
+    if "context_length_exceeded" in message:
+        return False
+    token_markers = ("token limit", "tokens per", "max tokens", "maximum tokens")
+    exceeded_markers = ("exceed", "exceeded", "too many")
+    return any(marker in message for marker in token_markers) and any(
+        marker in message for marker in exceeded_markers
+    )
 
 
 def _provider_status_code(value) -> int | str | None:

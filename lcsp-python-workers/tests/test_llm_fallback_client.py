@@ -14,6 +14,7 @@ from lcsp_workers.llm import (
 from lcsp_workers.llm.fallback_client import (
     _classify_provider_error,
     _safe_provider_error_details,
+    llm_limit_wait_reason,
 )
 
 
@@ -222,3 +223,19 @@ def test_google_style_client_error_status_is_classified() -> None:
 
     assert details["status_code"] == 400
     assert _classify_provider_error(error) == "AUTH"
+
+
+def test_invalid_api_key_is_not_reported_as_resumeable_limit() -> None:
+    error = AuthError("AuthenticationError: API key is invalid.")
+
+    assert _classify_provider_error(error) == "AUTH"
+    assert llm_limit_wait_reason(error) is None
+
+
+def test_quota_error_is_reported_as_resumeable_limit() -> None:
+    error = ProviderResponseError("You exceeded your current quota.")
+
+    assert _classify_provider_error(error) == "QUOTA"
+    assert llm_limit_wait_reason(error) == (
+        "LLM token quota exceeded; waiting to resume."
+    )

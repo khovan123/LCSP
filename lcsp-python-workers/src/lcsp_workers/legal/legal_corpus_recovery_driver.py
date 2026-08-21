@@ -84,6 +84,22 @@ class LegalCorpusRecoveryDriver:
 
         draft = self._api_client.ingest_validated_legal_corpus_draft(enriched_payload)
         corpus_id = required_response_string(draft, "id", "corpus ingest response")
+        if bool(draft.get("noChanges")):
+            logger.info(
+                "LEGAL_CORPUS_RECOVERY_SKIPPED_UNCHANGED",
+                corpus_version_id=corpus_id,
+                corpus_version=str(draft.get("version") or ""),
+                change_set=draft.get("changeSet") or {},
+                correlationId=correlationId,
+            )
+            return {
+                "status": "READY",
+                "corpusVersionId": corpus_id,
+                "retrievalIndexId": None,
+                "resumedRunCount": 0,
+                "correlationId": correlationId,
+                "noChanges": True,
+            }
 
         validation_ref = f"retrieval-validation:{_safe_ref(version)}"
         integrity_ref = f"integrity-manifest:{_safe_ref(version)}"

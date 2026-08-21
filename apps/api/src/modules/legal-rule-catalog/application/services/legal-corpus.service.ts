@@ -86,6 +86,11 @@ const OUTBOX_VISIBLE_STATUSES = [
   OUTBOX_STATUSES.published,
   OUTBOX_STATUSES.failed,
 ] as const;
+const LEGAL_CORPUS_CHANGE_MODES = {
+  fullBuild: "FULL_BUILD",
+  partialUpdate: "PARTIAL_UPDATE",
+  noChanges: "NO_CHANGES",
+} as const;
 
 interface LegalReviewDocumentSignoff {
   documentId: string;
@@ -121,6 +126,21 @@ export class LegalCorpusService {
   async ingestDraft(input: IngestLegalCorpusRequest) {
     const selectedInput = this.selectDatabaseLegalChunks(input);
     this.validateIngest(selectedInput);
+    const changeSet = await this.detectCorpusChanges(selectedInput);
+    if (changeSet.mode === LEGAL_CORPUS_CHANGE_MODES.noChanges) {
+      return {
+        id: changeSet.baseCorpusVersionId,
+        version: changeSet.baseCorpusVersion,
+        status: LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+        documentCount: selectedInput.documents.length,
+        chunkCount: selectedInput.documents.reduce(
+          (count, document) => count + document.chunks.length,
+          0,
+        ),
+        noChanges: true,
+        changeSet,
+      };
+    }
 
     const existing = await this.prisma.legalCorpusVersion.findUnique({
       where: { version: selectedInput.version },
@@ -149,6 +169,7 @@ export class LegalCorpusService {
         retrievedAt: retrievedAt.toISOString(),
         importedAt: new Date().toISOString(),
       },
+      changeSet,
     };
 
     return this.prisma.$transaction(async (tx) => {
@@ -175,6 +196,8 @@ export class LegalCorpusService {
           (count, document) => count + document.chunks.length,
           0,
         ),
+        noChanges: false,
+        changeSet,
       };
     });
   }
@@ -724,6 +747,130 @@ export class LegalCorpusService {
         pageStart: chunk.pageStart,
         pageEnd: chunk.pageEnd,
       })),
+    };
+  }
+
+  private async detectCorpusChanges(input: IngestLegalCorpusRequest) {
+    const base = await this.prisma.legalCorpusVersion.findFirst({
+      where: {
+        status: toPrismaLegalRuleLifecycleStatus(
+          LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+        ),
+        approvedAt: { not: null },
+      },
+      orderBy: [{ approvedAt: "desc" }, { createdAt: "desc" }],
+      include: {
+        documents: true,
+        chunks: true,
+      },
+    });
+    const currentDocuments = new Map(
+      input.documents.map((document) => [document.documentId, document]),
+    );
+    const currentChunks = new Map(
+      input.documents.flatMap((document) =>
+        document.chunks.map((chunk) => [chunk.id, chunk] as const),
+      ),
+    );
+    const currentChunkDocumentIds = new Map(
+      input.documents.flatMap((document) =>
+        document.chunks.map(
+          (chunk) => [chunk.id, document.documentId] as const,
+        ),
+      ),
+    );
+    if (!base) {
+      return {
+        mode: LEGAL_CORPUS_CHANGE_MODES.fullBuild,
+        baseCorpusVersionId: null,
+        baseCorpusVersion: null,
+        changedDocumentIds: [...currentDocuments.keys()].sort(),
+        addedDocumentIds: [...currentDocuments.keys()].sort(),
+        removedDocumentIds: [],
+        unchangedDocumentIds: [],
+        changedChunkIds: [...currentChunks.keys()].sort(),
+        addedChunkIds: [...currentChunks.keys()].sort(),
+        removedChunkIds: [],
+        unchangedChunkIds: [],
+      };
+    }
+
+    const baseDocuments = new Map(
+      base.documents.map((document) => [document.documentId, document]),
+    );
+    const baseChunks = new Map(base.chunks.map((chunk) => [chunk.id, chunk]));
+    const addedDocumentIds: string[] = [];
+    const changedDocumentIds: string[] = [];
+    const unchangedDocumentIds: string[] = [];
+    for (const [documentId, document] of currentDocuments) {
+      const previous = baseDocuments.get(documentId);
+      if (!previous) {
+        addedDocumentIds.push(documentId);
+      } else if (previous.sourceSha256 !== document.sourceSha256) {
+        changedDocumentIds.push(documentId);
+      } else {
+        unchangedDocumentIds.push(documentId);
+      }
+    }
+    const removedDocumentIds = [...baseDocuments.keys()].filter(
+      (documentId) => !currentDocuments.has(documentId),
+    );
+
+    const addedChunkIds: string[] = [];
+    const changedChunkIds: string[] = [];
+    const unchangedChunkIds: string[] = [];
+    const chunkAffectedDocumentIds = new Set<string>();
+    for (const [chunkId, chunk] of currentChunks) {
+      const previous = baseChunks.get(chunkId);
+      if (!previous) {
+        addedChunkIds.push(chunkId);
+        chunkAffectedDocumentIds.add(
+          currentChunkDocumentIds.get(chunkId) ?? "",
+        );
+      } else if (previous.contentSha256 !== chunk.contentSha256) {
+        changedChunkIds.push(chunkId);
+        chunkAffectedDocumentIds.add(
+          currentChunkDocumentIds.get(chunkId) ?? "",
+        );
+      } else {
+        unchangedChunkIds.push(chunkId);
+      }
+    }
+    const removedChunkIds = [...baseChunks.keys()].filter(
+      (chunkId) => !currentChunks.has(chunkId),
+    );
+    for (const chunkId of removedChunkIds) {
+      const previous = baseChunks.get(chunkId);
+      if (previous) {
+        chunkAffectedDocumentIds.add(previous.documentId);
+      }
+    }
+    const affectedChunkIds = [
+      ...new Set([...addedChunkIds, ...changedChunkIds, ...removedChunkIds]),
+    ].sort();
+    const affectedDocumentIds = [
+      ...new Set([
+        ...addedDocumentIds,
+        ...changedDocumentIds,
+        ...removedDocumentIds,
+        ...[...chunkAffectedDocumentIds].filter(Boolean),
+      ]),
+    ].sort();
+    return {
+      mode:
+        affectedChunkIds.length === 0 && affectedDocumentIds.length === 0
+          ? LEGAL_CORPUS_CHANGE_MODES.noChanges
+          : LEGAL_CORPUS_CHANGE_MODES.partialUpdate,
+      baseCorpusVersionId: base.id,
+      baseCorpusVersion: base.version,
+      changedDocumentIds: affectedDocumentIds,
+      addedDocumentIds: addedDocumentIds.sort(),
+      removedDocumentIds: removedDocumentIds.sort(),
+      unchangedDocumentIds: unchangedDocumentIds.sort(),
+      changedChunkIds: affectedChunkIds,
+      addedChunkIds: addedChunkIds.sort(),
+      removedChunkIds: removedChunkIds.sort(),
+      unchangedChunkIds: unchangedChunkIds.sort(),
     };
   }
 

@@ -231,20 +231,22 @@ def test_business_scope_rejects_llm_semantics_without_rule_material_support() ->
     graph = _graph()
     graph.nodes.append(
         _node(
-            "gateway-process",
+            "deep-agent-process",
             "BUSINESS_PROCESS",
-            "LCSP internal LLM gateway operation",
+            "LCSP internal Deep Agent runtime operation",
             origin="LLM_SEMANTIC_ENRICHMENT",
             resolution_state="CORROBORATED",
-            support_refs=["evidence:gateway-runtime"],
+            support_refs=["evidence:deep-agent-runtime"],
         )
     )
-    graph.edges.append(_edge("e-gateway", "PART_OF_PROCESS", "ai", "gateway-process"))
+    graph.edges.append(
+        _edge("e-deep-agent", "PART_OF_PROCESS", "ai", "deep-agent-process")
+    )
 
     scope = RulePlanningBusinessScopeProjector(graph).project(_packet())
 
     assert "Loan application assessment" in scope.business_processes
-    assert "LCSP internal LLM gateway operation" not in scope.business_processes
+    assert "LCSP internal Deep Agent runtime operation" not in scope.business_processes
 
 
 def test_planner_prompt_excludes_internal_llm_runtime_from_graph_summary() -> None:
@@ -256,9 +258,9 @@ def test_planner_prompt_excludes_internal_llm_runtime_from_graph_summary() -> No
             "label": "OpenAI provider used by LCSP worker",
             "source": {
                 "file_path": (
-                    "lcsp-python-workers/src/lcsp_workers/llm/gateway_client.py"
+                    "lcsp-python-workers/src/lcsp_workers/llm/deep_agent_client.py"
                 ),
-                "symbol_ref": "LLMGatewayClient",
+                "symbol_ref": "DeepAgentClient",
             },
             "attributes": {},
             "semantic_types": [],

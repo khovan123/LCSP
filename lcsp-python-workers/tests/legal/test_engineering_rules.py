@@ -99,6 +99,18 @@ def test_changed_legal_chunk_hash_invalidates_fingerprint() -> None:
     assert cached is False and llm.calls == 4
 
 
+def test_same_legal_chunk_hash_reuses_cache_across_corpus_versions() -> None:
+    llm, cache, retriever = FakeLlm(), FakeCache(), FakeRetriever()
+    service = EngineeringRuleService(compiler=EngineeringRuleCompiler(llm), retriever=retriever, cache=cache)
+    service.get_or_compile(legal_rule=LEGAL_RULE, legal_rule_catalog_version_id="catalog-v1", legal_corpus_version_id="corpus-v1", workflow_run_id="run-1")
+    rules, cached = service.get_or_compile(legal_rule=LEGAL_RULE, legal_rule_catalog_version_id="catalog-v1", legal_corpus_version_id="corpus-v2", workflow_run_id="run-2")
+    assert cached is True
+    assert llm.calls == 2
+    assert rules[0].legal_corpus_version_id == "corpus-v2"
+    assert rules[0].legal_reasoning_contract is not None
+    assert rules[0].legal_reasoning_contract.legal_corpus_version_id == "corpus-v2"
+
+
 def test_repealed_legal_context_blocks_compilation() -> None:
     retriever = FakeRetriever([{**CONTEXT[0], "legalStatus": "REPEALED"}]); llm = FakeLlm()
     service = EngineeringRuleService(compiler=EngineeringRuleCompiler(llm), retriever=retriever, cache=FakeCache())

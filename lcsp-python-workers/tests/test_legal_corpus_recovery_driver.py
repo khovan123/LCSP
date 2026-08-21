@@ -5,11 +5,14 @@ from lcsp_workers.legal.legal_corpus_recovery_driver import LegalCorpusRecoveryD
 
 
 class FakeApiClient:
-    def __init__(self) -> None:
+    def __init__(self, *, ingest_response: dict | None = None) -> None:
         self.calls: list[tuple[str, object]] = []
+        self.ingest_response = ingest_response
 
     def ingest_validated_legal_corpus_draft(self, payload: dict) -> dict:
         self.calls.append(("ingest", payload))
+        if self.ingest_response is not None:
+            return self.ingest_response
         return {"id": "corpus-1", "status": "DRAFT"}
 
     def register_validated_retrieval_index(
@@ -64,6 +67,44 @@ def test_recovery_driver_ingests_indexes_activates_and_resumes(
         "activate",
         "resume",
     ]
+
+
+def test_recovery_driver_skips_validation_activation_when_corpus_unchanged(
+    tmp_path: Path,
+    monkeypatch,
+):
+    manifest = reviewed_manifest(tmp_path, "LAW-TEST", "Điều 1. Test\n")
+    api_client = FakeApiClient(
+        ingest_response={
+            "id": "corpus-active",
+            "version": "VN-LEGAL-AO6-existing",
+            "status": "APPROVED",
+            "noChanges": True,
+            "changeSet": {
+                "mode": "NO_CHANGES",
+                "changedChunkIds": [],
+            },
+        }
+    )
+    driver = LegalCorpusRecoveryDriver(
+        api_client=api_client,
+        source_manifest_paths=[manifest],
+        reviewed_dir=tmp_path,
+    )
+    monkeypatch.setattr(driver, "_validate_retrieval_index", lambda *_args: None)
+
+    result = driver.run(
+        {
+            "idempotencyKey": "vp-1:command.legal-corpus.recovery.requested.v1",
+            "maxRuns": 25,
+        },
+        "corr-1",
+    )
+
+    assert result["noChanges"] is True
+    assert result["corpusVersionId"] == "corpus-active"
+    assert result["resumedRunCount"] == 0
+    assert [name for name, _payload in api_client.calls] == ["ingest"]
 
 
 def reviewed_manifest(tmp_path: Path, document_id: str, text: str) -> Path:

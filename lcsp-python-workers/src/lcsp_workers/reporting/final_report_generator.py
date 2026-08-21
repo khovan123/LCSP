@@ -1,12 +1,12 @@
 """Generate final assessment Markdown from direct EngineeringRule results."""
 
-from lcsp_workers.llm.gateway_client import LLMGatewayClient
+from lcsp_workers.llm import LLMClientProtocol
 
 
 class FinalReportGenerator:
     """Render evidence deterministically and use LLM only for bounded narration."""
 
-    def __init__(self, llm_client: LLMGatewayClient):
+    def __init__(self, llm_client: LLMClientProtocol):
         self.llm_client = llm_client
 
     def generate(

@@ -128,8 +128,8 @@ def test_runtime_graph_filter_removes_test_nodes_anchors_and_refs() -> None:
 def test_material_scope_ignores_generic_ai_seed_and_test_health_seed() -> None:
     generic = _node(
         "node:generic",
-        label="gateway complete",
-        path="src/gateway.py",
+        label="internal model runtime complete",
+        path="src/model_runtime.py",
         evidence_ref="evidence:generic",
     )
     health = _node(
@@ -172,12 +172,12 @@ def test_material_scope_ignores_generic_ai_seed_and_test_health_seed() -> None:
     assert material.evidence_refs == ("evidence:health",)
 
 
-def test_material_scope_ignores_internal_llm_gateway_runtime_seed() -> None:
-    gateway_output = _node(
-        "node:gateway-output",
-        label="output from self._openai_client.chat.completions.create",
-        path="khovan123-LCSP-68bba10/lcsp-python-workers/src/lcsp_workers/llm/gateway_client.py",
-        evidence_ref="evidence:gateway-output",
+def test_material_scope_ignores_internal_deep_agent_runtime_seed() -> None:
+    deep_agent_output = _node(
+        "node:deep-agent-output",
+        label="output from DeepAgentClient.complete",
+        path="khovan123-LCSP-68bba10/lcsp-python-workers/src/lcsp_workers/llm/deep_agent_client.py",
+        evidence_ref="evidence:deep-agent-output",
         node_type="AI_OUTPUT",
     )
     product_surface = _node(
@@ -194,9 +194,9 @@ def test_material_scope_ignores_internal_llm_gateway_runtime_seed() -> None:
         initial_results=(
             {
                 "query": "transparency-seed",
-                "nodes": [gateway_output, product_surface],
+                "nodes": [deep_agent_output, product_surface],
                 "evidenceRefs": [
-                    "evidence:gateway-output",
+                    "evidence:deep-agent-output",
                     "evidence:product-chat",
                 ],
             },
