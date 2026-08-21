@@ -25,27 +25,25 @@ def test_safe_llm_and_tool_events_are_mirrored_to_root_tmp(monkeypatch, tmp_path
     writer = PartitionedLogWriter(StringIO())
 
     events = [
-        {"event": "LLM_REQUEST", "operation": "complete_with_tools"},
-        {"event": "LLM_RESPONSE", "tool_call_count": 1},
+        {
+            "event": "LLM_REQUEST",
+            "operation": "complete_with_tools",
+            "tool_names": ["search_nodes", "finish"],
+        },
+        {"event": "LLM_RESPONSE", "tool_call_names": ["search_nodes"]},
         {
             "event": "ENGINEERING_INVESTIGATION_TOOL_CALL",
             "engineering_rule_id": "eng-1",
             "tool": "search_nodes",
-            "call_id": "call-1",
-            "arguments": {"node_types": ["HUMAN_REVIEW"], "max_results": 5},
         },
         {
             "event": "ENGINEERING_INVESTIGATION_TOOL_RESULT",
             "engineering_rule_id": "eng-1",
             "tool": "search_nodes",
-            "call_id": "call-1",
-            "result": [
-                {
-                    "node_id": "node-1",
-                    "node_type": "HUMAN_REVIEW",
-                    "evidence_refs": ["evidence:review-1"],
-                }
-            ],
+            "result_summary": {
+                "observationId": "obs:0001",
+                "preview_count": 1,
+            },
         },
         {
             "event": "ENGINEERING_INVESTIGATION_FINISHED",
@@ -65,9 +63,10 @@ def test_safe_llm_and_tool_events_are_mirrored_to_root_tmp(monkeypatch, tmp_path
         for row in persisted
         if row["event"] == "ENGINEERING_INVESTIGATION_TOOL_RESULT"
     )
-    assert tool_result["call_id"] == "call-1"
-    assert tool_result["result"][0]["node_id"] == "node-1"
-    assert tool_result["result"][0]["evidence_refs"] == ["evidence:review-1"]
+    assert tool_result["result_summary"] == {
+        "observationId": "obs:0001",
+        "preview_count": 1,
+    }
 
 
 def test_root_llm_tool_log_redacts_tool_result_even_when_writer_gets_raw_data(
@@ -137,7 +136,9 @@ def test_llm_tool_log_path_can_be_overridden(monkeypatch, tmp_path) -> None:
 
     configure_logging()
     writer = PartitionedLogWriter(StringIO())
-    writer.write(json.dumps({"event": "LLM_RESPONSE", "tool_call_count": 1}) + "\n")
+    writer.write(
+        json.dumps({"event": "LLM_RESPONSE", "tool_call_names": ["finish"]}) + "\n"
+    )
 
     custom_log = tmp_path / "tmp" / "custom-llm.log"
     assert custom_log.exists()

@@ -1,6 +1,7 @@
 """Cache-aware orchestration for governed LegalRule -> EngineeringRule compilation."""
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from lcsp_workers.legal.chromadb_citation_retriever import ChromaDbCitationRetriever
@@ -79,7 +80,11 @@ class EngineeringRuleService:
             for item in context
         }
         fingerprint_compiler_version = COMPILER_VERSION
-        if rule_family == DEV_ENGINEERING_RULE_BOOTSTRAP_RULE_FAMILY:
+        allow_precompiled_fallback = self._allow_precompiled_fallback()
+        if (
+            allow_precompiled_fallback
+            and rule_family == DEV_ENGINEERING_RULE_BOOTSTRAP_RULE_FAMILY
+        ):
             # The governed precompiled technical overlay is part of the effective
             # EngineeringRule contract. Include its version in the cache fingerprint so
             # a prior broad transparency rule cannot survive a contract hardening change
@@ -100,13 +105,13 @@ class EngineeringRuleService:
         if cached:
             return cached, True
 
-        # DEV bootstrap LegalRules are governed identities for the checked-in,
-        # precompiled legal-chunk -> EngineeringRule bundle. The Chroma collection is
-        # only a cache: a fresh/cleared local cache must not make every assessment
-        # BLOCKED. Recover deterministically from the governed bundle, validate exact
-        # current legal chunk hashes/versions, then repopulate the cache. The LLM is
-        # never used for this sentinel family.
-        if rule_family == DEV_ENGINEERING_RULE_BOOTSTRAP_RULE_FAMILY:
+        # The normal path compiles from the active legal chunks after LLM triage.
+        # The checked-in precompiled bundle is now an explicit operator fallback only;
+        # it must not silently replace the corpus -> chunk -> triage -> compile flow.
+        if (
+            allow_precompiled_fallback
+            and rule_family == DEV_ENGINEERING_RULE_BOOTSTRAP_RULE_FAMILY
+        ):
             recovered = self.precompiled_registry.materialize(
                 legal_rule=legal_rule,
                 legal_rule_catalog_version_id=legal_rule_catalog_version_id,
@@ -137,6 +142,16 @@ class EngineeringRuleService:
         )
         self.cache.put(fingerprint, compiled)
         return compiled, False
+
+    @staticmethod
+    def _allow_precompiled_fallback() -> bool:
+        return os.getenv("ENGINEERING_RULE_ALLOW_PRECOMPILED_FALLBACK", "").strip() in {
+            "1",
+            "true",
+            "TRUE",
+            "yes",
+            "YES",
+        }
 
     @staticmethod
     def _chunk_ids(legal_rule: dict[str, Any]) -> list[str]:

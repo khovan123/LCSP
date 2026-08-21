@@ -21,3 +21,12 @@
 		reverse_proxy 127.0.0.1:{$FOGEWISE_WEB_PORT}
 	}
 }
+
+phoenix.{$FOGEWISE_SUBDOMAIN}.fogewise.io.vn {
+	bind 127.0.0.1
+	tls internal
+
+	handle {
+		reverse_proxy 127.0.0.1:6006
+	}
+}

@@ -69,6 +69,50 @@ def _mock_semgrep_result() -> SemgrepRunResult:
     )
 
 
+def test_scanner_tool_result_summary_uses_tool_specific_counters() -> None:
+    syft_result = SyftRunResult(
+        entries=[MagicMock(), MagicMock()],
+        execution=ToolExecutionResult(
+            tool_name="syft",
+            tool_version="syft v1.0.0",
+            outcome=OUTCOME_SUCCESS,
+            config_hash="sha256:test",
+            messages=[],
+        ),
+    )
+    ts_js_result = TsJsBridgeResult(
+        files_analyzed=3,
+        files_skipped=1,
+        findings=[MagicMock()],
+        unsupported_dynamic_flows=[MagicMock(), MagicMock()],
+        coverage_limitations=[],
+        analyzer_version="test",
+        execution=ToolExecutionResult(
+            tool_name="ts_morph",
+            tool_version="test",
+            outcome=OUTCOME_SUCCESS,
+            config_hash="sha256:test",
+            messages=[],
+        ),
+    )
+
+    assert ScanConsumer._scanner_tool_result_summary(syft_result) == {
+        "dependency_count": 2,
+        "outcome": OUTCOME_SUCCESS,
+    }
+    assert ScanConsumer._scanner_tool_result_summary(ts_js_result) == {
+        "finding_count": 1,
+        "coverage_limitation_count": 0,
+        "dynamic_flow_limitation_count": 2,
+        "file_count": 3,
+        "skipped_file_count": 1,
+        "outcome": OUTCOME_SUCCESS,
+    }
+    assert ScanConsumer._scanner_tool_result_summary([MagicMock(), MagicMock()]) == {
+        "item_count": 2,
+    }
+
+
 def _mock_knip_result() -> KnipRunResult:
     return KnipRunResult(
         facts=[],

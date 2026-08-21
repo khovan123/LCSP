@@ -15,7 +15,11 @@ from typing import Any
 from lcsp_workers.platform.logging_path import get_repo_root
 
 from .compiler import COMPILER_VERSION, PROMPT_VERSION
-from .models import ENGINEERING_RULE_SCHEMA_VERSION, EngineeringRule
+from .models import (
+    ENGINEERING_RULE_SCHEMA_VERSION,
+    EngineeringRule,
+    build_legal_reasoning_contract,
+)
 from .precompiled_contract_overrides import (
     DEFAULT_PRECOMPILED_CONTRACT_OVERRIDES_PATH,
     apply_precompiled_contract_overrides,
@@ -185,6 +189,27 @@ class PrecompiledEngineeringRuleRegistry:
                 "unresolvedConditions": template.get("unresolvedConditions") or [],
                 "sourceChunkIds": list(source_chunk_ids),
                 "sourceLocators": list(source_locators),
+                "legalReasoningContract": build_legal_reasoning_contract(
+                    legal_rule=legal_rule,
+                    legal_rule_catalog_version_id=legal_rule_catalog_version_id,
+                    legal_corpus_version_id=legal_corpus_version_id,
+                    legal_context=legal_context,
+                    required_evidence=tuple(
+                        str(value)
+                        for value in template.get("requiredEvidence") or []
+                        if str(value)
+                    ),
+                    supporting_evidence=tuple(
+                        str(value)
+                        for value in template.get("supportingEvidence") or []
+                        if str(value)
+                    ),
+                    negative_evidence=tuple(
+                        str(value)
+                        for value in template.get("negativeEvidence") or []
+                        if str(value)
+                    ),
+                ),
                 "sourceFingerprint": source_fingerprint,
                 "compilerModel": str(bundle.get("compilerModel") or "precompiled"),
                 "compilerVersion": COMPILER_VERSION,

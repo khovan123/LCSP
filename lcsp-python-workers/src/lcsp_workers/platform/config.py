@@ -222,16 +222,18 @@ def _load_llm_runtime_config() -> LlmRuntimeConfig:
         )
         index += 1
 
+    fallback_on_codes = _read_csv(
+        "LLM_FALLBACK_ON_CODES",
+        ("AUTH", "RATE_LIMIT", "QUOTA", "NETWORK", "TIMEOUT"),
+    )
+
     return LlmRuntimeConfig(
         providers=tuple(providers),
         max_tokens_per_call=_read_int("LLM_MAX_TOKENS_PER_CALL", 4096),
         monthly_budget_usd=_read_float("LLM_MONTHLY_BUDGET_USD", 100.0),
         monthly_token_cap=_read_int("LLM_MONTHLY_TOKEN_CAP", 1_000_000),
         provider_timeout_seconds=_read_float("LLM_PROVIDER_TIMEOUT_SECONDS", 30.0),
-        fallback_on_codes=_read_csv(
-            "LLM_FALLBACK_ON_CODES",
-            ("AUTH", "RATE_LIMIT", "QUOTA", "NETWORK", "TIMEOUT"),
-        ),
+        fallback_on_codes=tuple(dict.fromkeys(("AUTH", *fallback_on_codes))),
         max_provider_attempts=_read_int("LLM_MAX_PROVIDER_ATTEMPTS", 3),
         redis_url=_optional_text("LLM_BUDGET_REDIS_URL"),
     )

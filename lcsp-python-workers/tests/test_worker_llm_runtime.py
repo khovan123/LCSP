@@ -69,7 +69,11 @@ def test_load_config_parses_llm_provider_chain(monkeypatch) -> None:
     assert config.llm_runtime.monthly_budget_usd == 25.0
     assert config.llm_runtime.monthly_token_cap == 500000
     assert config.llm_runtime.provider_timeout_seconds == 15.0
-    assert config.llm_runtime.fallback_on_codes == ("RATE_LIMIT", "NETWORK")
+    assert config.llm_runtime.fallback_on_codes == (
+        "AUTH",
+        "RATE_LIMIT",
+        "NETWORK",
+    )
     assert config.llm_runtime.max_provider_attempts == 2
 
 

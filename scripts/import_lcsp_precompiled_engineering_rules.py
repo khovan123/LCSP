@@ -11,12 +11,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import find_dotenv, load_dotenv
+
+from lcsp_workers.legal.normative_chunk_filter import (
+    is_engineering_rule_source_chunk,
+)
 
 
 def args_parser():
@@ -36,11 +39,6 @@ def j(value: Any) -> Any:
     if isinstance(value, (bytes, bytearray)):
         value = value.decode("utf-8")
     return json.loads(value) if isinstance(value, str) else value
-
-
-def heading_only(content: str) -> bool:
-    lines = [x.strip() for x in str(content).splitlines() if x.strip()]
-    return len(lines) == 1 and bool(re.fullmatch(r"Điều\s+\d+\..+", lines[0], re.I))
 
 
 def psycopg_connection_info(database_url: str) -> tuple[str, str | None]:
@@ -99,7 +97,7 @@ def main() -> int:
     from lcsp_workers.legal.engineering_rules.cache import EngineeringRuleCache
     from lcsp_workers.legal.engineering_rules.compiler import COMPILER_VERSION, PROMPT_VERSION
     from lcsp_workers.legal.engineering_rules.fingerprint import engineering_rule_fingerprint
-    from lcsp_workers.legal.engineering_rules.models import ENGINEERING_RULE_SCHEMA_VERSION, EngineeringRule
+    from lcsp_workers.legal.engineering_rules.models import ENGINEERING_RULE_SCHEMA_VERSION, EngineeringRule, build_legal_reasoning_contract
     from lcsp_workers.legal.engineering_rules.precompiled_registry import PrecompiledEngineeringRuleRegistry
     from lcsp_workers.legal.engineering_rules.validator import validate_engineering_rule
 
@@ -244,10 +242,19 @@ def main() -> int:
             continue
 
         covered = {str(x) for t in matched for x in t.get("matchCitationChunkIds") or []}
-        substantive = {str(x["id"]) for x in primary_rows if not heading_only(str(x["content"]))}
+        substantive = {
+            str(x["id"]) for x in primary_rows if is_engineering_rule_source_chunk(x)
+        }
         uncovered = sorted(substantive - covered)
         if uncovered and not args.allow_uncovered_primary:
             print(f"SKIP {row['legalRuleId']}: uncovered substantive primary citations={uncovered}")
+            stats["skippedUncoveredRules"] += 1
+            continue
+        if primary_rows and not substantive:
+            print(
+                f"SKIP {row['legalRuleId']}: primary citations are context-only, "
+                "not EngineeringRule sources"
+            )
             stats["skippedUncoveredRules"] += 1
             continue
 
@@ -332,6 +339,15 @@ def main() -> int:
                 "unresolvedConditions": t.get("unresolvedConditions") or [],
                 "sourceChunkIds": source_ids,
                 "sourceLocators": source_locators,
+                "legalReasoningContract": build_legal_reasoning_contract(
+                    legal_rule=active_rule,
+                    legal_rule_catalog_version_id=str(catalog["id"]),
+                    legal_corpus_version_id=str(corpus["id"]),
+                    legal_context=context,
+                    required_evidence=tuple(str(v) for v in t.get("requiredEvidence") or [] if str(v)),
+                    supporting_evidence=tuple(str(v) for v in t.get("supportingEvidence") or [] if str(v)),
+                    negative_evidence=tuple(str(v) for v in t.get("negativeEvidence") or [] if str(v)),
+                ),
                 "sourceFingerprint": fingerprint,
                 "compilerModel": str(bundle.get("compilerModel") or "precompiled"),
                 "compilerVersion": COMPILER_VERSION,

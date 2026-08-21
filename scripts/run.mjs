@@ -12,6 +12,7 @@ const isWindows = process.platform === "win32";
 const workerPython = process.platform === "win32"
   ? path.join(workerRoot, ".venv", "Scripts", "python.exe")
   : path.join(workerRoot, ".venv", "bin", "python");
+const openWikiRuntimeScript = path.join(repoRoot, "scripts", "openwiki_runtime.py");
 const rootEnv = loadDotEnv(path.join(repoRoot, ".env"));
 const defaultWorkerRuntimeVersion =
   process.env.WORKER_RUNTIME_VERSION ??
@@ -27,6 +28,14 @@ const defaultDockerWorkerImage =
   process.env.LCSP_WORKER_DOCKER_IMAGE ??
   rootEnv.LCSP_WORKER_DOCKER_IMAGE ??
   "lcsp-python-workers:scanner-tools";
+const defaultOpenWikiRuntimeCommand =
+  process.env.OPENWIKI_RUNTIME_COMMAND ??
+  rootEnv.OPENWIKI_RUNTIME_COMMAND ??
+  `${shellQuote(workerPython)} ${shellQuote(openWikiRuntimeScript)}`;
+const defaultOpenWikiRuntimeTimeoutSeconds =
+  process.env.OPENWIKI_RUNTIME_TIMEOUT_SECONDS ??
+  rootEnv.OPENWIKI_RUNTIME_TIMEOUT_SECONDS ??
+  "180";
 
 const targets = {
   proxy: {
@@ -116,6 +125,14 @@ const targets = {
       PORT: rootEnv.NEXT_PORT ?? "3000",
     },
     description: "Start Next.js web app in dev mode",
+  },
+  phoenix: {
+    cwd: repoRoot,
+    cmd: "uvx",
+    args: ["arize-phoenix", "serve", "--port", "6006"],
+    env: rootEnv,
+    description: "Start Arize Phoenix trace UI",
+    healthPort: 6006,
   },
   scanner: workerTarget(
     "lcsp_workers.scanner.scan_consumer:ScanConsumer",
@@ -236,6 +253,7 @@ const groups = {
     "targeted_reanalysis",
     "final_report",
     "legal_change_detector",
+    "phoenix",
   ],
 };
 
@@ -285,6 +303,8 @@ function workerTarget(target, description, healthPort) {
       WORKER_RUNTIME_VERSION: defaultWorkerRuntimeVersion,
       WORKER_RUNTIME_BUILD_REF: defaultWorkerRuntimeBuildRef,
       ORCHESTRATION_DEBUG: defaultOrchestrationDebug,
+      OPENWIKI_RUNTIME_COMMAND: defaultOpenWikiRuntimeCommand,
+      OPENWIKI_RUNTIME_TIMEOUT_SECONDS: defaultOpenWikiRuntimeTimeoutSeconds,
     },
     description,
     healthPort,
@@ -307,6 +327,8 @@ function stopDevProcesses() {
     "nest start --watch",
     "pnpm --dir apps/web dev",
     "next dev",
+    "uvx arize-phoenix serve --port 6006",
+    "arize-phoenix serve --port 6006",
   ];
   const protectedPids = new Set([
     process.pid,
@@ -343,7 +365,10 @@ function stopDevProcesses() {
 function findMatchingPids(pattern, protectedPids) {
   const result = spawnSync(
     "bash",
-    ["-lc", `ps -eo pid=,args= | grep -F ${shellQuote(pattern)} | grep -v grep`],
+    [
+      "-lc",
+      `ps -eo pid=,args= | grep -F ${shellQuote(pattern)} | grep -v grep`,
+    ],
     { cwd: repoRoot, encoding: "utf8" },
   );
   if (result.status !== 0 || !result.stdout.trim()) return [];
@@ -460,7 +485,9 @@ async function runGroup(name) {
   assertPortsAvailable(longRunningMembers);
 
   if (members.includes("infra") && hasWorkerMember(longRunningMembers)) {
-    console.log("[run] Waiting for local RabbitMQ and Redis to accept connections...");
+    console.log(
+      "[run] Waiting for local RabbitMQ and Redis to accept connections...",
+    );
     await waitForPort("127.0.0.1", 5672, "RabbitMQ");
     await waitForPort("127.0.0.1", 6379, "Redis");
   }
@@ -604,6 +631,8 @@ function dockerWorkerEnv() {
     "LLM_BUDGET_REDIS_URL",
     "WORKER_RUNTIME_VERSION",
     "WORKER_RUNTIME_BUILD_REF",
+    "OPENWIKI_RUNTIME_COMMAND",
+    "OPENWIKI_RUNTIME_TIMEOUT_SECONDS",
     "LEGAL_CHROMA_PATH",
   ];
   const env = Object.fromEntries(
@@ -651,7 +680,9 @@ function assertPortsAvailable(members) {
   }
   if (conflicts.length === 0) return;
 
-  console.error("[run] Cannot start dev group because required ports are already in use:");
+  console.error(
+    "[run] Cannot start dev group because required ports are already in use:",
+  );
   for (const conflict of conflicts) {
     console.error(
       `  - target=${conflict.member} health_port=${conflict.port} owner=${conflict.owner}`,
@@ -667,10 +698,12 @@ function describeListeningPort(port) {
     encoding: "utf8",
   });
   if (result.status !== 0) return null;
-  return result.stdout
-    .split("\n")
-    .map((value) => value.trim())
-    .find(Boolean) ?? null;
+  return (
+    result.stdout
+      .split("\n")
+      .map((value) => value.trim())
+      .find(Boolean) ?? null
+  );
 }
 
 function spawnSyncCompatible(target) {
@@ -748,5 +781,7 @@ function printList() {
 }
 
 function printHelp() {
-  console.log(`Usage:\n\n  node scripts/run.mjs <target>\n\nTargets:\n  fogewise\n  fogewise_reset\n  dev_stop\n  dev_app\n  dev_docker\n  dev\n  docker_worker_build\n  scanner_docker\n\nExamples:\n  pnpm run dev:fogewise\n  pnpm run dev:fogewise:reset\n  pnpm run dev:stop\n  pnpm run dev:app\n  pnpm run dev:docker\n  pnpm run dev:worker:docker:build\n  pnpm run dev:worker:docker\n  pnpm run dev\n`);
+  console.log(
+    `Usage:\n\n  node scripts/run.mjs <target>\n\nTargets:\n  fogewise\n  fogewise_reset\n  dev_stop\n  dev_app\n  dev_docker\n  dev\n  docker_worker_build\n  scanner_docker\n\nExamples:\n  pnpm run dev:fogewise\n  pnpm run dev:fogewise:reset\n  pnpm run dev:stop\n  pnpm run dev:app\n  pnpm run dev:docker\n  pnpm run dev:worker:docker:build\n  pnpm run dev:worker:docker\n  pnpm run dev\n`,
+  );
 }

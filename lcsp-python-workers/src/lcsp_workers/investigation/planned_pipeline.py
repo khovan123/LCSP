@@ -11,13 +11,18 @@ from lcsp_workers.scanner.program_graph.source_roles import filter_program_evide
 from .code_context import CodeContextSession
 from .code_context_investigator import CodeContextLawGuidedInvestigator
 from .deterministic_investigator import DeterministicCodeContextLawGuidedInvestigator
-from .engineering_rule_planner import EngineeringRulePlanner
+from .engineering_rule_planner import (
+    EngineeringRulePlan,
+    EngineeringRulePlanDecisionAudit,
+    EngineeringRulePlanner,
+)
 from .material_scope import material_planning_packet
 from .models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
     ENGINEERING_LIMITATION_CODES,
     EvidenceClaim,
 )
+from .openwiki_context import OpenWikiContextProvider, OpenWikiContextRequiredError
 from .pipeline import EngineeringInvestigationPipeline, EngineeringInvestigationResult
 from .plan_audit_result import PlannedEngineeringInvestigationResult
 from .planning_business_scope import (
@@ -45,6 +50,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         investigator=None,
         evaluator=None,
         planner: EngineeringRulePlanner | None = None,
+        corpus_recovery_driver=None,
     ) -> None:
         super().__init__(
             api_client=api_client,
@@ -60,6 +66,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         self._planner = planner or BusinessAwareScopedMaterialEngineeringRulePlanner(
             llm_client
         )
+        self._corpus_recovery_driver = corpus_recovery_driver
 
     def run(
         self,
@@ -85,38 +92,19 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         # so search_code/repo_map/get_symbol/get_code cannot surface test/spec symbols
         # even when a classification rerun references an older persisted graph.
         code_context = CodeContextSession(graph, workspace_path=workspace_path)
-        catalog = self._api_client.get_active_legal_rule_catalog()
-        corpus = self._api_client.get_active_legal_corpus()
-        catalog_version_id = self._required_id(
-            catalog,
-            "versionId",
-            "version_id",
-            "id",
-            label="legal rule catalog version",
-        )
-        corpus_version_id = self._required_id(
-            corpus,
-            "versionId",
-            "version_id",
-            "corpusVersionId",
-            "corpus_version_id",
-            "id",
-            label="legal corpus version",
-        )
-        corpus_index = self._api_client.get_legal_corpus_chunks(corpus_version_id)
-        chunks = corpus_index.get("chunks") or []
-        if not isinstance(chunks, list):
-            raise ValueError("active legal corpus chunks are invalid")
-        self._retriever.index_corpus(
-            corpus_version_id,
-            [item for item in chunks if isinstance(item, dict)],
-        )
-
-        rules = [
-            rule
-            for rule in (catalog.get("rules") or [])
-            if isinstance(rule, dict) and self._is_approved_rule(rule)
-        ]
+        catalog_version_id, corpus_version_id, rules = self._load_legal_rule_sources()
+        if not rules:
+            recovered = self._recover_legal_rule_sources(
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
+                reason="NO_APPROVED_ENGINEERING_RULE_SOURCE_RULES",
+            )
+            if recovered:
+                (
+                    catalog_version_id,
+                    corpus_version_id,
+                    rules,
+                ) = self._load_legal_rule_sources()
         if not rules:
             return EngineeringInvestigationResult(
                 status="BLOCKED",
@@ -130,49 +118,37 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 ),
             )
 
-        limitations: list[str] = []
-        cache_hits = 0
-        prepared: list[tuple[Any, Any]] = []
+        limitations, cache_hits, prepared = self._prepare_engineering_rules(
+            rules=rules,
+            catalog_version_id=catalog_version_id,
+            corpus_version_id=corpus_version_id,
+            graph=graph,
+            wizard_context=wizard_context,
+            workflow_run_id=workflow_run_id,
+            correlation_id=correlation_id,
+        )
 
-        # Materialize/cache governed EngineeringRule contracts and run deterministic
-        # seed queries against the test-free runtime graph before planning.
-        for rule in rules:
-            legal_rule_id = str(
-                rule.get("legalRuleId")
-                or rule.get("legal_rule_id")
-                or rule.get("id")
-                or "unknown"
+        if not prepared:
+            recovered = self._recover_legal_rule_sources(
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
+                reason="NO_ENGINEERING_RULE_CANDIDATES_AFTER_TRIAGE",
             )
-            try:
-                engineering_rules, cache_hit = self._rule_service.get_or_compile(
-                    legal_rule=rule,
-                    legal_rule_catalog_version_id=catalog_version_id,
-                    legal_corpus_version_id=corpus_version_id,
+            if recovered:
+                (
+                    catalog_version_id,
+                    corpus_version_id,
+                    rules,
+                ) = self._load_legal_rule_sources()
+                limitations, cache_hits, prepared = self._prepare_engineering_rules(
+                    rules=rules,
+                    catalog_version_id=catalog_version_id,
+                    corpus_version_id=corpus_version_id,
+                    graph=graph,
+                    wizard_context=wizard_context,
                     workflow_run_id=workflow_run_id,
                     correlation_id=correlation_id,
                 )
-                if cache_hit:
-                    cache_hits += 1
-            except Exception as error:
-                logger.warning(
-                    "ENGINEERING_RULE_COMPILATION_FAILED",
-                    legal_rule_id=legal_rule_id,
-                    error_type=type(error).__name__,
-                    workflow_run_id=workflow_run_id,
-                    correlationId=correlation_id,
-                )
-                limitations.append(
-                    ENGINEERING_LIMITATION_CODES["engineering_rule_compilation_failed"]
-                )
-                continue
-
-            for engineering_rule in engineering_rules:
-                packet = self._query_executor.execute(
-                    engineering_rule,
-                    graph,
-                    wizard_context=wizard_context,
-                )
-                prepared.append((engineering_rule, packet))
 
         if not prepared:
             return EngineeringInvestigationResult(
@@ -203,13 +179,51 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             )
             for rule, material_packet in material_prepared
         )
-        plan = self._planner.plan(
-            candidates=candidates,
-            wizard_context=wizard_context,
-            graph=graph,
-            workflow_run_id=workflow_run_id,
-            correlation_id=correlation_id,
-        )
+        try:
+            openwiki_context = OpenWikiContextProvider(
+                workspace_path or Path.cwd()
+            ).collect_required_for_candidates(candidates)
+            logger.info(
+                "OPENWIKI_PLANNER_HINTS_READY",
+                hint_count=openwiki_context.get("hintCount", 0),
+                authority=openwiki_context.get("authority"),
+                workflow_run_id=workflow_run_id,
+                correlationId=correlation_id,
+            )
+            plan = self._planner.plan(
+                candidates=candidates,
+                wizard_context=wizard_context,
+                graph=graph,
+                workflow_run_id=workflow_run_id,
+                correlation_id=correlation_id,
+                openwiki_context=openwiki_context,
+            )
+        except OpenWikiContextRequiredError as error:
+            logger.warning(
+                "OPENWIKI_PLANNER_HINTS_REQUIRED_FALLBACK_ALL",
+                reason=str(error),
+                candidate_count=len(candidates),
+                workflow_run_id=workflow_run_id,
+                correlationId=correlation_id,
+            )
+            plan = EngineeringRulePlan(
+                selected_rule_ids=tuple(
+                    candidate.engineering_rule_id for candidate in candidates
+                ),
+                skipped_rule_ids=(),
+                fallback_used=True,
+                decision_audit=tuple(
+                    EngineeringRulePlanDecisionAudit(
+                        engineering_rule_id=candidate.engineering_rule_id,
+                        requested_decision="FALLBACK",
+                        final_decision="SELECT",
+                        reason_code="OPENWIKI_REQUIRED_CONTEXT_UNAVAILABLE",
+                        basis=(),
+                        validation_override="OPENWIKI_REQUIRED_FALLBACK_ALL",
+                    )
+                    for candidate in candidates
+                ),
+            )
         selected_ids = set(plan.selected_rule_ids)
         logger.info(
             "ENGINEERING_RULE_PLAN_APPLIED",
@@ -365,3 +379,145 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
             planner_fallback_used=plan.fallback_used,
             planner_decisions=tuple(planner_decisions),
         )
+
+    def _load_legal_rule_sources(self) -> tuple[str, str, list[dict[str, Any]]]:
+        catalog = self._api_client.get_active_legal_rule_catalog()
+        corpus = self._api_client.get_active_legal_corpus()
+        catalog_version_id = self._required_id(
+            catalog,
+            "versionId",
+            "version_id",
+            "id",
+            label="legal rule catalog version",
+        )
+        corpus_version_id = self._required_id(
+            corpus,
+            "versionId",
+            "version_id",
+            "corpusVersionId",
+            "corpus_version_id",
+            "id",
+            label="legal corpus version",
+        )
+        corpus_index = self._api_client.get_legal_corpus_chunks(corpus_version_id)
+        chunks = corpus_index.get("chunks") or []
+        if not isinstance(chunks, list):
+            raise ValueError("active legal corpus chunks are invalid")
+        self._retriever.index_corpus(
+            corpus_version_id,
+            [item for item in chunks if isinstance(item, dict)],
+        )
+        rules = [
+            rule
+            for rule in (catalog.get("rules") or [])
+            if isinstance(rule, dict) and self._is_approved_rule(rule)
+        ]
+        return catalog_version_id, corpus_version_id, rules
+
+    def _prepare_engineering_rules(
+        self,
+        *,
+        rules: list[dict[str, Any]],
+        catalog_version_id: str,
+        corpus_version_id: str,
+        graph,
+        wizard_context: dict[str, Any] | None,
+        workflow_run_id: str,
+        correlation_id: str | None,
+    ) -> tuple[list[str], int, list[tuple[Any, Any]]]:
+        limitations: list[str] = []
+        cache_hits = 0
+        prepared: list[tuple[Any, Any]] = []
+
+        # Materialize/cache governed EngineeringRule contracts and run deterministic
+        # seed queries against the test-free runtime graph before planning.
+        for rule in rules:
+            legal_rule_id = str(
+                rule.get("legalRuleId")
+                or rule.get("legal_rule_id")
+                or rule.get("id")
+                or "unknown"
+            )
+            try:
+                engineering_rules, cache_hit = self._rule_service.get_or_compile(
+                    legal_rule=rule,
+                    legal_rule_catalog_version_id=catalog_version_id,
+                    legal_corpus_version_id=corpus_version_id,
+                    workflow_run_id=workflow_run_id,
+                    correlation_id=correlation_id,
+                )
+                if cache_hit:
+                    cache_hits += 1
+            except Exception as error:
+                logger.warning(
+                    "ENGINEERING_RULE_COMPILATION_FAILED",
+                    legal_rule_id=legal_rule_id,
+                    error_type=type(error).__name__,
+                    workflow_run_id=workflow_run_id,
+                    correlationId=correlation_id,
+                )
+                limitations.append(
+                    ENGINEERING_LIMITATION_CODES["engineering_rule_compilation_failed"]
+                )
+                continue
+
+            for engineering_rule in engineering_rules:
+                packet = self._query_executor.execute(
+                    engineering_rule,
+                    graph,
+                    wizard_context=wizard_context,
+                )
+                prepared.append((engineering_rule, packet))
+
+        return limitations, cache_hits, prepared
+
+    def _recover_legal_rule_sources(
+        self,
+        *,
+        workflow_run_id: str,
+        correlation_id: str | None,
+        reason: str,
+    ) -> bool:
+        logger.info(
+            "ENGINEERING_RULE_SOURCE_RECOVERY_REQUESTED",
+            reason=reason,
+            workflow_run_id=workflow_run_id,
+            correlationId=correlation_id,
+        )
+        try:
+            driver = self._corpus_recovery_driver
+            if driver is None:
+                from lcsp_workers.legal.legal_corpus_recovery_driver import (
+                    LegalCorpusRecoveryDriver,
+                )
+
+                driver = LegalCorpusRecoveryDriver(api_client=self._api_client)
+            response = driver.run(
+                {
+                    "idempotencyKey": (
+                        f"{workflow_run_id}:engineering-rule-source-recovery"
+                    ),
+                    "maxRuns": 0,
+                },
+                correlation_id or workflow_run_id,
+            )
+        except Exception as error:
+            logger.warning(
+                "ENGINEERING_RULE_SOURCE_RECOVERY_FAILED",
+                reason=reason,
+                error_type=type(error).__name__,
+                workflow_run_id=workflow_run_id,
+                correlationId=correlation_id,
+            )
+            return False
+        logger.info(
+            "ENGINEERING_RULE_SOURCE_RECOVERY_COMPLETED",
+            reason=reason,
+            status=response.get("status") if isinstance(response, dict) else None,
+            corpus_version_id=(
+                response.get("corpusVersionId") if isinstance(response, dict) else None
+            ),
+            workflow_run_id=workflow_run_id,
+            correlationId=correlation_id,
+        )
+        return True

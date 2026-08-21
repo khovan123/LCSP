@@ -172,6 +172,63 @@ def test_material_scope_ignores_generic_ai_seed_and_test_health_seed() -> None:
     assert material.evidence_refs == ("evidence:health",)
 
 
+def test_material_scope_ignores_internal_llm_gateway_runtime_seed() -> None:
+    gateway_output = _node(
+        "node:gateway-output",
+        label="output from self._openai_client.chat.completions.create",
+        path="khovan123-LCSP-68bba10/lcsp-python-workers/src/lcsp_workers/llm/gateway_client.py",
+        evidence_ref="evidence:gateway-output",
+        node_type="AI_OUTPUT",
+    )
+    product_surface = _node(
+        "node:product-chat",
+        label="chat disclosure control",
+        path="apps/web/src/features/chat/components/chat-panel.tsx",
+        evidence_ref="evidence:product-chat",
+        node_type="AI_OUTPUT",
+    )
+    packet = InvestigationPacket(
+        engineering_rule_id="eng-transparency",
+        concept="AI_TRANSPARENCY_DISCLOSURE",
+        investigation_goals=("verify chat disclosure control",),
+        initial_results=(
+            {
+                "query": "transparency-seed",
+                "nodes": [gateway_output, product_surface],
+                "evidenceRefs": [
+                    "evidence:gateway-output",
+                    "evidence:product-chat",
+                ],
+            },
+        ),
+        starting_node_types=("AI_OUTPUT",),
+        keywords=("chat", "disclosure", "transparency"),
+        required_evidence=("AI_OUTPUT_SURFACE", "AI_INTERACTION_DISCLOSURE_CONTROL"),
+    )
+
+    material = material_planning_packet(
+        _rule(
+            engineeringRuleId="eng-transparency",
+            concept="AI_TRANSPARENCY_DISCLOSURE",
+            investigationGoals=["verify chat disclosure control"],
+            startingNodeTypes=["AI_OUTPUT"],
+            targetNodeTypes=["AI_OUTPUT"],
+            keywords=["chat", "disclosure", "transparency"],
+            requiredEvidence=[
+                "AI_OUTPUT_SURFACE",
+                "AI_INTERACTION_DISCLOSURE_CONTROL",
+            ],
+        ),
+        packet,
+    )
+
+    row = material.initial_results[0]
+    assert [node["node_id"] for node in row["nodes"]] == ["node:product-chat"]
+    assert row["rawHitCount"] == 2
+    assert row["materialHitCount"] == 1
+    assert material.evidence_refs == ("evidence:product-chat",)
+
+
 def test_claim_validator_drops_test_evidence_and_minimizes_to_criterion() -> None:
     prod = _node(
         "node:prod",

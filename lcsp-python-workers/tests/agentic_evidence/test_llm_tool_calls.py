@@ -10,7 +10,54 @@ from lcsp_workers.agentic_evidence import (
     AgenticToolRequest,
     build_sprint6_agentic_registry,
 )
+from lcsp_workers.investigation.code_context_investigator import (
+    CodeContextLawGuidedInvestigator,
+)
+from lcsp_workers.investigation.investigator import LawGuidedInvestigator
 from lcsp_workers.llm import BudgetTracker, LLMGatewayClient, LLMToolDefinition
+from lcsp_workers.scanner.program_graph.business_semantic_enrichment import (
+    BusinessSemanticEnricher,
+)
+
+
+GEMINI_SCHEMA_KEYS = {
+    "type",
+    "description",
+    "properties",
+    "required",
+    "items",
+    "enum",
+    "nullable",
+}
+
+
+def _schema_keyword_keys(value, *, parent_key: str | None = None) -> set[str]:
+    if isinstance(value, dict):
+        keys: set[str] = set()
+        for key, child in value.items():
+            if parent_key != "properties":
+                keys.add(str(key))
+            keys.update(_schema_keyword_keys(child, parent_key=str(key)))
+        return keys
+    if isinstance(value, list):
+        keys: set[str] = set()
+        for child in value:
+            keys.update(_schema_keyword_keys(child, parent_key=parent_key))
+        return keys
+    return set()
+
+
+def _assert_required_properties_exist(schema: dict) -> None:
+    if schema.get("type") == "object":
+        properties = schema.get("properties") or {}
+        assert isinstance(properties, dict)
+        assert set(schema.get("required") or []) <= set(properties)
+        for child in properties.values():
+            if isinstance(child, dict):
+                _assert_required_properties_exist(child)
+    items = schema.get("items")
+    if isinstance(items, dict):
+        _assert_required_properties_exist(items)
 
 
 def tool_definition() -> LLMToolDefinition:
@@ -33,24 +80,28 @@ def budget_tracker() -> BudgetTracker:
 
 
 def test_google_tool_call_is_manual_and_registry_validated() -> None:
+    class FunctionCallResponse:
+        response_id = "gemini-tool-1"
+        function_calls = [
+            SimpleNamespace(
+                name="get_scan_coverage",
+                args={"maxResults": 25},
+                id="call-1",
+            )
+        ]
+        usage_metadata = SimpleNamespace(
+            prompt_token_count=12,
+            candidates_token_count=8,
+        )
+
+        @property
+        def text(self):  # pragma: no cover - fails the test if accessed
+            raise AssertionError("function-call responses must not read response.text")
+
     with patch("google.genai.Client") as client_class:
         provider = MagicMock()
         client_class.return_value = provider
-        provider.models.generate_content.return_value = SimpleNamespace(
-            text="",
-            response_id="gemini-tool-1",
-            function_calls=[
-                SimpleNamespace(
-                    name="get_scan_coverage",
-                    args={"maxResults": 25},
-                    id="call-1",
-                )
-            ],
-            usage_metadata=SimpleNamespace(
-                prompt_token_count=12,
-                candidates_token_count=8,
-            ),
-        )
+        provider.models.generate_content.return_value = FunctionCallResponse()
 
         gateway = LLMGatewayClient(
             provider="gemini",
@@ -97,6 +148,52 @@ def test_google_tool_call_is_manual_and_registry_validated() -> None:
         )
         capability = build_sprint6_agentic_registry().validate(request)
         assert capability.name == "get_scan_coverage"
+
+
+def test_google_tool_schema_strips_sdk_incompatible_keywords() -> None:
+    from google.genai import types
+
+    tool = BusinessSemanticEnricher._tool()
+    sanitized = LLMGatewayClient._gemini_tool_schema(tool.input_schema)
+
+    assert "additionalProperties" in str(tool.input_schema)
+    assert "pattern" in str(tool.input_schema)
+    assert "uniqueItems" in str(tool.input_schema)
+    assert _schema_keyword_keys(sanitized) <= GEMINI_SCHEMA_KEYS
+    _assert_required_properties_exist(sanitized)
+    declaration = types.FunctionDeclaration(
+        name=tool.name,
+        description=tool.description,
+        parameters=sanitized,
+    )
+    assert declaration.name == "submit_business_semantics"
+
+
+def test_google_tool_schema_accepts_scanner_and_investigator_catalogs() -> None:
+    from google.genai import types
+
+    tools = [
+        BusinessSemanticEnricher._tool(),
+        *LawGuidedInvestigator._tool_definitions(),
+        *CodeContextLawGuidedInvestigator._code_aware_tool_definitions(),
+    ]
+
+    checked = set()
+    for tool in tools:
+        if tool.name in checked:
+            continue
+        checked.add(tool.name)
+        sanitized = LLMGatewayClient._gemini_tool_schema(tool.input_schema)
+        assert _schema_keyword_keys(sanitized) <= GEMINI_SCHEMA_KEYS
+        _assert_required_properties_exist(sanitized)
+        types.FunctionDeclaration(
+            name=tool.name,
+            description=tool.description,
+            parameters=sanitized,
+        )
+
+    assert "finish" in checked
+    assert "submit_business_semantics" in checked
 
 
 def test_google_undeclared_tool_call_fails_closed() -> None:

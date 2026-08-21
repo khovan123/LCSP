@@ -408,7 +408,7 @@ class LLMGatewayClient:
                         types.FunctionDeclaration(
                             name=tool.name,
                             description=tool.description,
-                            parameters=tool.input_schema,
+                            parameters=self._gemini_tool_schema(tool.input_schema),
                         )
                         for tool in tools
                     ]
@@ -435,7 +435,6 @@ class LLMGatewayClient:
                 config=types.GenerateContentConfig(**config_kwargs),
             )
             request_id = getattr(response, "response_id", None)
-            content = getattr(response, "text", None) or ""
             for call in getattr(response, "function_calls", None) or []:
                 raw_arguments = getattr(call, "args", {}) or {}
                 if not isinstance(raw_arguments, dict):
@@ -573,3 +572,50 @@ class LLMGatewayClient:
                 raise ValueError(
                     f"tool input schema must set additionalProperties=false: {tool.name}"
                 )
+
+    @classmethod
+    def _gemini_tool_schema(cls, schema: dict[str, Any]) -> dict[str, Any]:
+        """Return a google-genai-compatible schema without weakening local gates.
+
+        LCSP keeps provider-neutral JSON Schema as the source of truth and validates
+        tool definitions before each call. Gemini accepts only a subset of JSON
+        Schema for function declarations; constraints such as closed objects,
+        regexes, numeric bounds, and unique array items are still enforced by
+        downstream deterministic validators where they matter. The provider adapter
+        therefore sends only schema hints the SDK/API reliably accepts.
+        """
+        return cls._to_gemini_schema_subset(schema)
+
+    @classmethod
+    def _to_gemini_schema_subset(
+        cls,
+        value: Any,
+        *,
+        parent_key: str | None = None,
+    ) -> Any:
+        supported_keys = {
+            "type",
+            "description",
+            "properties",
+            "required",
+            "items",
+            "enum",
+            "nullable",
+        }
+        if isinstance(value, dict):
+            if parent_key == "properties":
+                return {
+                    key: cls._to_gemini_schema_subset(child)
+                    for key, child in value.items()
+                }
+            return {
+                key: cls._to_gemini_schema_subset(child, parent_key=key)
+                for key, child in value.items()
+                if key in supported_keys
+            }
+        if isinstance(value, list):
+            return [
+                cls._to_gemini_schema_subset(child, parent_key=parent_key)
+                for child in value
+            ]
+        return value

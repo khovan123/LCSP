@@ -8,6 +8,7 @@ from lcsp_workers.legal.engineering_rules.models import EngineeringRule
 from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
 from lcsp_workers.scanner.program_graph.query_engine import ProgramGraphQueryEngine
 
+from .material_scope import is_internal_llm_runtime_node
 from .models import InvestigationPacket
 from .planning_scope import (
     ScopedEngineeringRulePlanningCandidate,
@@ -172,6 +173,7 @@ class RulePlanningBusinessScopeProjector:
         seed_nodes = self._packet_nodes(packet)
         scoped_nodes = dict(seed_nodes)
         material_refs = set(packet.evidence_refs)
+        support_gate_refs = set(material_refs)
         unresolved = set(packet.unresolved_frontiers)
 
         for row in packet.initial_results:
@@ -208,7 +210,10 @@ class RulePlanningBusinessScopeProjector:
             material_refs.update(result.evidence_refs)
             unresolved.update(result.unresolved_frontiers)
             for node in result.nodes:
-                if self._trusted(node) and node.get("node_type") in _BUSINESS_NODE_TYPES:
+                if (
+                    self._trusted(node, support_gate_refs)
+                    and node.get("node_type") in _BUSINESS_NODE_TYPES
+                ):
                     scoped_nodes[str(node["node_id"])] = node
 
         decision_states: set[str] = set()
@@ -222,11 +227,14 @@ class RulePlanningBusinessScopeProjector:
             unresolved.update(result.unresolved_frontiers)
             analysis = result.analysis or {}
             state = str(analysis.get("state") or "DECISION_PATH_UNRESOLVED")
-            if not self._decision_analysis_trusted(analysis):
+            if not self._decision_analysis_trusted(analysis, support_gate_refs):
                 state = "DECISION_PATH_UNRESOLVED"
             decision_states.add(state)
             for node in result.nodes:
-                if self._trusted(node) and node.get("node_type") in _BUSINESS_NODE_TYPES:
+                if (
+                    self._trusted(node, support_gate_refs)
+                    and node.get("node_type") in _BUSINESS_NODE_TYPES
+                ):
                     scoped_nodes[str(node["node_id"])] = node
 
         decision_state = self._aggregate_decision_state(decision_states)
@@ -244,23 +252,43 @@ class RulePlanningBusinessScopeProjector:
         )
 
     @staticmethod
-    def _trusted(node: dict[str, Any]) -> bool:
+    def _trusted(
+        node: dict[str, Any],
+        material_refs: set[str] | None = None,
+    ) -> bool:
+        if is_internal_llm_runtime_node(node):
+            return False
         state = str(node.get("resolution_state") or "OBSERVED")
         origin = str(node.get("origin") or "STATIC_ANALYSIS")
         if state not in _STRONG_RESOLUTION_STATES:
             return False
         if origin == "LLM_SEMANTIC_ENRICHMENT":
-            return state == "CORROBORATED" and bool(node.get("support_refs"))
+            support_refs = {
+                str(value) for value in node.get("support_refs") or [] if value
+            }
+            if material_refs is None:
+                return state == "CORROBORATED" and bool(support_refs)
+            return state == "CORROBORATED" and bool(
+                support_refs.intersection(material_refs)
+            )
         return True
 
-    def _decision_analysis_trusted(self, analysis: dict[str, Any]) -> bool:
+    def _decision_analysis_trusted(
+        self,
+        analysis: dict[str, Any],
+        material_refs: set[str],
+    ) -> bool:
         refs = {
             str(value)
             for key in ("decisionNodeRefs", "effectNodeRefs", "humanControlRefs")
             for value in analysis.get(key) or []
             if value
         }
-        return all(self._trusted(self._nodes[ref]) for ref in refs if ref in self._nodes)
+        return all(
+            self._trusted(self._nodes[ref], material_refs)
+            for ref in refs
+            if ref in self._nodes
+        )
 
     def _packet_nodes(self, packet: InvestigationPacket) -> dict[str, dict[str, Any]]:
         rows: dict[str, dict[str, Any]] = {}
@@ -397,6 +425,7 @@ class BusinessAwareScopedEngineeringRulePlanningCandidate(
             legal_intent=base.legal_intent,
             investigation_goals=base.investigation_goals,
             required_evidence=base.required_evidence,
+            legal_reasoning_contract=base.legal_reasoning_contract,
             starting_node_types=base.starting_node_types,
             target_node_types=base.target_node_types,
             source_hit_count=base.source_hit_count,
@@ -426,6 +455,7 @@ class BusinessAwareScopedMaterialEngineeringRulePlanner(
         candidates,
         wizard_context: dict[str, Any] | None,
         graph: ProgramEvidenceGraph,
+        openwiki_context: dict[str, Any] | None = None,
     ) -> str:
         return (
             "Business-scope rule: use each rule's planningBusinessScope to distinguish "
@@ -437,5 +467,5 @@ class BusinessAwareScopedMaterialEngineeringRulePlanner(
             "not generalize one process/domain signal to unrelated rules. Empty fields are "
             "not proof of absence when planningBusinessScope.unresolvedFrontiers is non-empty "
             "or scopeCoverage is UNRESOLVED.\n\n"
-            + super()._prompt(candidates, wizard_context, graph)
+            + super()._prompt(candidates, wizard_context, graph, openwiki_context)
         )

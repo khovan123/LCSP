@@ -11,7 +11,10 @@ from lcsp_workers.llm import (
     PrimaryThenFallbackLLMClient,
     PromptSafetyViolation,
 )
-from lcsp_workers.llm.fallback_client import _safe_provider_error_details
+from lcsp_workers.llm.fallback_client import (
+    _classify_provider_error,
+    _safe_provider_error_details,
+)
 
 
 class FakeClient:
@@ -61,6 +64,10 @@ class ProviderResponseError(Exception):
             status_code=400,
             headers={"X-Request-Id": "req_header_456"},
         )
+
+
+class GoogleStyleClientError(Exception):
+    status = "400"
 
 
 def test_primary_then_fallback_uses_second_provider_on_retryable_error() -> None:
@@ -206,3 +213,12 @@ def test_safe_provider_error_details_read_request_id_header_and_redact_api_key()
     assert api_key not in str(details["error_message"])
     assert "[REDACTED" in str(details["error_message"])
     assert "context_length_exceeded" in str(details["error_message"])
+
+
+def test_google_style_client_error_status_is_classified() -> None:
+    error = GoogleStyleClientError("invalid api key supplied")
+
+    details = _safe_provider_error_details(error)
+
+    assert details["status_code"] == 400
+    assert _classify_provider_error(error) == "AUTH"

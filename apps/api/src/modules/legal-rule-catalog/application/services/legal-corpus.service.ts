@@ -46,6 +46,41 @@ const INDEPENDENT_AUDIT_PRINCIPAL_POLICY =
   "TECHNICAL_AUDIT_PRINCIPALS_INDEPENDENT";
 const SAFE_MANIFEST_REF = /^[a-z][a-z0-9-]{0,63}:[A-Za-z0-9._:-]{1,180}$/;
 const LEGAL_CORPUS_ACTIVATION_SERVICE = "legal-corpus-activation-service";
+const LEGAL_CHUNK_NORMATIVE_CLASSES = {
+  engineeringRuleCandidate: "ENGINEERING_RULE_CANDIDATE",
+  contextOnly: "CONTEXT_ONLY",
+  excludeFromDatabase: "EXCLUDE_FROM_DATABASE",
+} as const;
+const LEGAL_CONTEXT_ONLY_ARTICLE_TITLE_TERMS = [
+  "phạm vi điều chỉnh",
+  "đối tượng áp dụng",
+  "giải thích từ ngữ",
+  "nguyên tắc cơ bản",
+  "chính sách của nhà nước",
+] as const;
+const LEGAL_ENGINEERING_OBLIGATION_TERMS = [
+  "phải",
+  "không được",
+  "bị nghiêm cấm",
+  "nghiêm cấm",
+  "có trách nhiệm",
+  "nghĩa vụ",
+  "bảo đảm",
+  "duy trì",
+  "thiết lập",
+  "kiểm tra",
+  "giám sát",
+  "đánh giá",
+  "quản lý rủi ro",
+  "thông báo",
+  "công bố",
+  "báo cáo",
+  "lưu trữ",
+  "ghi nhận",
+  "kiểm soát",
+  "can thiệp",
+  "tuân thủ",
+] as const;
 const OUTBOX_VISIBLE_STATUSES = [
   OUTBOX_STATUSES.pending,
   OUTBOX_STATUSES.published,
@@ -84,27 +119,28 @@ export class LegalCorpusService {
   ) {}
 
   async ingestDraft(input: IngestLegalCorpusRequest) {
-    this.validateIngest(input);
+    const selectedInput = this.selectDatabaseLegalChunks(input);
+    this.validateIngest(selectedInput);
 
     const existing = await this.prisma.legalCorpusVersion.findUnique({
-      where: { version: input.version },
+      where: { version: selectedInput.version },
       select: { id: true },
     });
     if (existing) {
       throw problemException(
         LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
         "legal-corpus-ingest",
-        { status: HttpStatus.CONFLICT, meta: { version: input.version } },
+        { status: HttpStatus.CONFLICT, meta: { version: selectedInput.version } },
       );
     }
 
     // Capture ingestion provenance metadata
-    const ingestionRunId = input.ingestionRunId || randomUUID();
-    const retrievedAt = input.retrievedAt
-      ? new Date(input.retrievedAt)
+    const ingestionRunId = selectedInput.ingestionRunId || randomUUID();
+    const retrievedAt = selectedInput.retrievedAt
+      ? new Date(selectedInput.retrievedAt)
       : new Date();
     const enrichedManifest = {
-      ...input.sourceManifest,
+      ...selectedInput.sourceManifest,
       ingestionMetadata: {
         ingestionRunId,
         retrievedAt: retrievedAt.toISOString(),
@@ -115,7 +151,7 @@ export class LegalCorpusService {
     return this.prisma.$transaction(async (tx) => {
       const corpus = await tx.legalCorpusVersion.create({
         data: {
-          version: input.version,
+          version: selectedInput.version,
           sourceManifest: enrichedManifest,
           status: toPrismaLegalRuleLifecycleStatus(
             LEGAL_RULE_LIFECYCLE_STATUSES.draft,
@@ -123,7 +159,7 @@ export class LegalCorpusService {
         },
       });
 
-      for (const document of input.documents) {
+      for (const document of selectedInput.documents) {
         await this.createDocument(tx, corpus.id, document);
       }
 
@@ -131,8 +167,8 @@ export class LegalCorpusService {
         id: corpus.id,
         version: corpus.version,
         status: LEGAL_RULE_LIFECYCLE_STATUSES.draft,
-        documentCount: input.documents.length,
-        chunkCount: input.documents.reduce(
+        documentCount: selectedInput.documents.length,
+        chunkCount: selectedInput.documents.reduce(
           (count, document) => count + document.chunks.length,
           0,
         ),
@@ -724,6 +760,65 @@ export class LegalCorpusService {
     });
   }
 
+  private selectDatabaseLegalChunks(
+    input: IngestLegalCorpusRequest,
+  ): IngestLegalCorpusRequest {
+    return {
+      ...input,
+      sourceManifest: {
+        ...input.sourceManifest,
+        chunkSelectionPolicy:
+          "Persist only hierarchy-addressable legal chunks; exclude formal headers/preamble. Context-only chunks are retained but not EngineeringRule source candidates.",
+      },
+      documents: input.documents.map((document) => ({
+        ...document,
+        chunks: (Array.isArray(document.chunks) ? document.chunks : [])
+          .map((chunk) => {
+            const normativeClass = this.legalChunkNormativeClass(chunk);
+            return {
+              ...chunk,
+              hierarchy: {
+                ...chunk.hierarchy,
+                normativeClass,
+              },
+            };
+          })
+          .filter(
+            (chunk) =>
+              chunk.hierarchy.normativeClass !==
+              LEGAL_CHUNK_NORMATIVE_CLASSES.excludeFromDatabase,
+          ),
+      })),
+    };
+  }
+
+  private legalChunkNormativeClass(chunk: LegalCorpusDocumentInput["chunks"][number]) {
+    const rawContent = chunk.content;
+    const content = normalizeLegalText(rawContent);
+    if (!content) return LEGAL_CHUNK_NORMATIVE_CLASSES.excludeFromDatabase;
+    if (isLegalHeadingOnly(rawContent) || isLegalPreambleOnly(rawContent)) {
+      return LEGAL_CHUNK_NORMATIVE_CLASSES.excludeFromDatabase;
+    }
+    const articleTitle = normalizeLegalText(
+      typeof chunk.hierarchy.articleTitle === "string"
+        ? chunk.hierarchy.articleTitle
+        : "",
+    );
+    if (
+      LEGAL_CONTEXT_ONLY_ARTICLE_TITLE_TERMS.some((term) =>
+        articleTitle.includes(term),
+      )
+    ) {
+      return LEGAL_CHUNK_NORMATIVE_CLASSES.contextOnly;
+    }
+    if (
+      LEGAL_ENGINEERING_OBLIGATION_TERMS.some((term) => content.includes(term))
+    ) {
+      return LEGAL_CHUNK_NORMATIVE_CLASSES.engineeringRuleCandidate;
+    }
+    return LEGAL_CHUNK_NORMATIVE_CLASSES.contextOnly;
+  }
+
   private validateIngest(input: IngestLegalCorpusRequest): void {
     const valid =
       Boolean(input.version?.trim()) &&
@@ -878,6 +973,35 @@ function hash(content: string): string {
 
 function isSha256(value: unknown): value is string {
   return typeof value === "string" && /^sha256:[a-f0-9]{64}$/i.test(value);
+}
+
+function normalizeLegalText(value: string): string {
+  return value.toLocaleLowerCase("vi-VN").split(/\s+/u).join(" ").trim();
+}
+
+function isLegalHeadingOnly(content: string): boolean {
+  const lines = content
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return (
+    lines.length === 1 &&
+    /^chương\s+[ivxlc0-9]+\b.*$/iu.test(lines[0])
+  );
+}
+
+function isLegalPreambleOnly(content: string): boolean {
+  const lines = content
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return true;
+  if (lines.some((line) => line.toLocaleLowerCase("vi-VN").startsWith("điều "))) {
+    return false;
+  }
+  return /quốc hội|cộng hòa xã hội chủ nghĩa việt nam|độc lập\s*-\s*tự do|luật số|căn cứ hiến pháp|quốc hội ban hành|chủ tịch quốc hội/iu.test(
+    lines.join(" "),
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

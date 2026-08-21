@@ -225,3 +225,61 @@ def test_business_aware_candidate_exposes_semantics_to_planner_prompt() -> None:
     assert "planningBusinessScope" in prompt
     assert "Loan application assessment" in prompt
     assert "not legal applicability" in prompt
+
+
+def test_business_scope_rejects_llm_semantics_without_rule_material_support() -> None:
+    graph = _graph()
+    graph.nodes.append(
+        _node(
+            "gateway-process",
+            "BUSINESS_PROCESS",
+            "LCSP internal LLM gateway operation",
+            origin="LLM_SEMANTIC_ENRICHMENT",
+            resolution_state="CORROBORATED",
+            support_refs=["evidence:gateway-runtime"],
+        )
+    )
+    graph.edges.append(_edge("e-gateway", "PART_OF_PROCESS", "ai", "gateway-process"))
+
+    scope = RulePlanningBusinessScopeProjector(graph).project(_packet())
+
+    assert "Loan application assessment" in scope.business_processes
+    assert "LCSP internal LLM gateway operation" not in scope.business_processes
+
+
+def test_planner_prompt_excludes_internal_llm_runtime_from_graph_summary() -> None:
+    graph = _graph()
+    graph.nodes.append(
+        {
+            "node_id": "internal-provider",
+            "node_type": "AI_PROVIDER",
+            "label": "OpenAI provider used by LCSP worker",
+            "source": {
+                "file_path": (
+                    "lcsp-python-workers/src/lcsp_workers/llm/gateway_client.py"
+                ),
+                "symbol_ref": "LLMGatewayClient",
+            },
+            "attributes": {},
+            "semantic_types": [],
+            "evidence_refs": ["evidence:internal-provider"],
+            "coverage_state": "SUFFICIENT",
+            "origin": "STATIC_ANALYSIS",
+            "resolution_state": "OBSERVED",
+            "support_refs": [],
+        }
+    )
+    candidate = BusinessAwareScopedEngineeringRulePlanningCandidate.from_rule_packet(
+        _rule(),
+        _packet(),
+        RulePlanningBusinessScopeProjector(graph),
+    )
+
+    prompt = BusinessAwareScopedMaterialEngineeringRulePlanner._prompt(
+        (candidate,),
+        {"sector": "FINANCIAL_SERVICES"},
+        graph,
+    )
+
+    assert '"AI_PROVIDER"' not in prompt
+    assert "internalRuntimePolicy" in prompt
