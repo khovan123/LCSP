@@ -62,22 +62,28 @@ class _ProvisionMarkupParser(HTMLParser):
         self._parts = []
 
 
-def detect_effects(*, source_manifest_path: Path, output_path: Path) -> Path:
-    manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
-    document_id = required(manifest, "documentId")
-    html_path = source_manifest_path.parent / required(manifest, "htmlFile")
-    html = html_path.read_text(encoding="utf-8")
+def detect_effects_from_html(document_id: str, html: str) -> dict[str, Any]:
     paragraphs = parse_paragraphs(html)
     observations = build_observations(document_id, paragraphs)
-    payload = {
+    return {
         "documentId": document_id,
-        "sourceManifest": str(source_manifest_path),
-        "htmlFile": str(html_path),
         "htmlSha256": sha256(html),
         "typeCodeMapping": TYPE_CODE_EFFECTS,
         "summary": summarize(observations),
         "observations": observations,
     }
+
+
+def detect_effects(*, source_manifest_path: Path, output_path: Path) -> Path:
+    manifest = json.loads(source_manifest_path.read_text(encoding="utf-8"))
+    document_id = required(manifest, "documentId")
+    html_path = source_manifest_path.parent / required(manifest, "htmlFile")
+    html = html_path.read_text(encoding="utf-8")
+    
+    payload = detect_effects_from_html(document_id, html)
+    payload["sourceManifest"] = str(source_manifest_path)
+    payload["htmlFile"] = str(html_path)
+    
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
