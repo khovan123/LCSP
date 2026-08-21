@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 
 from lcsp_workers.investigation.evidence_claim_validator import (
@@ -15,9 +12,6 @@ from lcsp_workers.legal.engineering_rules.precompiled_contract_overrides import 
     PrecompiledContractOverrideError,
     apply_precompiled_contract_overrides,
     load_precompiled_contract_overrides,
-)
-from lcsp_workers.legal.engineering_rules.precompiled_registry import (
-    DEFAULT_PRECOMPILED_BUNDLE_PATH,
 )
 from lcsp_workers.scanner.program_graph.models import ProgramEvidenceGraph
 
@@ -98,13 +92,33 @@ def _claim(*, criterion: str, evidence_ref: str) -> EvidenceClaim:
     )
 
 
+def _base_transparency_bundle() -> dict:
+    """Minimal governed-bundle shape needed to verify the technical overlay.
+
+    The generated precompiled bundle is optional runtime fallback data and is no longer
+    required to be checked into the repository. This test owns only the stable template
+    identities needed to prove that the checked-in override tightens each contract.
+    """
+    return {
+        "bundleId": "VN-AI-ENGINEERING-RULES-2026-08-PRECOMPILED",
+        "templates": [
+            {
+                "templateId": template_id,
+                "requiredEvidence": ["AI_OUTPUT_SURFACE"],
+            }
+            for template_id in _EXPECTED_REQUIRED
+        ],
+    }
+
+
 def test_governed_overlay_tightens_all_target_transparency_templates() -> None:
-    bundle = json.loads(Path(DEFAULT_PRECOMPILED_BUNDLE_PATH).read_text(encoding="utf-8"))
     overrides = load_precompiled_contract_overrides(
         DEFAULT_PRECOMPILED_CONTRACT_OVERRIDES_PATH
     )
 
-    templates, contract_version = apply_precompiled_contract_overrides(bundle, overrides)
+    templates, contract_version = apply_precompiled_contract_overrides(
+        _base_transparency_bundle(), overrides
+    )
     by_id = {str(row["templateId"]): row for row in templates}
 
     assert contract_version == "transparency-controls/2026-08-20.1"
