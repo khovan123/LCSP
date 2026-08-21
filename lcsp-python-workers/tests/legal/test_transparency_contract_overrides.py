@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from lcsp_workers.investigation.evidence_claim_validator import (
@@ -8,7 +11,6 @@ from lcsp_workers.investigation.evidence_claim_validator import (
 )
 from lcsp_workers.investigation.models import EvidenceClaim
 from lcsp_workers.legal.engineering_rules.precompiled_contract_overrides import (
-    DEFAULT_PRECOMPILED_CONTRACT_OVERRIDES_PATH,
     PrecompiledContractOverrideError,
     apply_precompiled_contract_overrides,
     load_precompiled_contract_overrides,
@@ -93,12 +95,7 @@ def _claim(*, criterion: str, evidence_ref: str) -> EvidenceClaim:
 
 
 def _base_transparency_bundle() -> dict:
-    """Minimal governed-bundle shape needed to verify the technical overlay.
-
-    The generated precompiled bundle is optional runtime fallback data and is no longer
-    required to be checked into the repository. This test owns only the stable template
-    identities needed to prove that the checked-in override tightens each contract.
-    """
+    """Minimal governed-bundle shape needed to verify the technical overlay."""
     return {
         "bundleId": "VN-AI-ENGINEERING-RULES-2026-08-PRECOMPILED",
         "templates": [
@@ -111,9 +108,33 @@ def _base_transparency_bundle() -> dict:
     }
 
 
-def test_governed_overlay_tightens_all_target_transparency_templates() -> None:
+def _write_transparency_overrides(tmp_path: Path) -> Path:
+    """Own the governed contract fixture instead of requiring generated repo artifacts."""
+    path = tmp_path / "contract-overrides.json"
+    path.write_text(
+        json.dumps(
+            {
+                "bundleId": "VN-AI-ENGINEERING-RULES-2026-08-PRECOMPILED",
+                "contractVersion": "transparency-controls/2026-08-20.1",
+                "templates": [
+                    {
+                        "templateId": template_id,
+                        "requiredEvidence": list(required),
+                    }
+                    for template_id, required in _EXPECTED_REQUIRED.items()
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_governed_overlay_tightens_all_target_transparency_templates(
+    tmp_path: Path,
+) -> None:
     overrides = load_precompiled_contract_overrides(
-        DEFAULT_PRECOMPILED_CONTRACT_OVERRIDES_PATH
+        str(_write_transparency_overrides(tmp_path))
     )
 
     templates, contract_version = apply_precompiled_contract_overrides(
