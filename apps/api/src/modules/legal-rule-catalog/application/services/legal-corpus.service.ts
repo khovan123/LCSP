@@ -130,7 +130,10 @@ export class LegalCorpusService {
       throw problemException(
         LEGAL_RULE_ERROR_CODES.corpusIngestInvalid,
         "legal-corpus-ingest",
-        { status: HttpStatus.CONFLICT, meta: { version: selectedInput.version } },
+        {
+          status: HttpStatus.CONFLICT,
+          meta: { version: selectedInput.version },
+        },
       );
     }
 
@@ -792,7 +795,9 @@ export class LegalCorpusService {
     };
   }
 
-  private legalChunkNormativeClass(chunk: LegalCorpusDocumentInput["chunks"][number]) {
+  private legalChunkNormativeClass(
+    chunk: LegalCorpusDocumentInput["chunks"][number],
+  ) {
     const rawContent = chunk.content;
     const content = normalizeLegalText(rawContent);
     if (!content) return LEGAL_CHUNK_NORMATIVE_CLASSES.excludeFromDatabase;
@@ -984,10 +989,7 @@ function isLegalHeadingOnly(content: string): boolean {
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter(Boolean);
-  return (
-    lines.length === 1 &&
-    /^chương\s+[ivxlc0-9]+\b.*$/iu.test(lines[0])
-  );
+  return lines.length === 1 && /^chương\s+[ivxlc0-9]+\b.*$/iu.test(lines[0]);
 }
 
 function isLegalPreambleOnly(content: string): boolean {
@@ -996,7 +998,9 @@ function isLegalPreambleOnly(content: string): boolean {
     .map((line) => line.trim())
     .filter(Boolean);
   if (lines.length === 0) return true;
-  if (lines.some((line) => line.toLocaleLowerCase("vi-VN").startsWith("điều "))) {
+  if (
+    lines.some((line) => line.toLocaleLowerCase("vi-VN").startsWith("điều "))
+  ) {
     return false;
   }
   return /quốc hội|cộng hòa xã hội chủ nghĩa việt nam|độc lập\s*-\s*tự do|luật số|căn cứ hiến pháp|quốc hội ban hành|chủ tịch quốc hội/iu.test(
