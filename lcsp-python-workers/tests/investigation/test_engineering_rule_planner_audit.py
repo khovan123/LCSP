@@ -13,6 +13,7 @@ def _candidate(rule_id: str, *, source_hits: int = 0) -> EngineeringRulePlanning
         legal_intent={},
         investigation_goals=(),
         required_evidence=(),
+        legal_reasoning_contract={},
         starting_node_types=(),
         target_node_types=(),
         source_hit_count=source_hits,
