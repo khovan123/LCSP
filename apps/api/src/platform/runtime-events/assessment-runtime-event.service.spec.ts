@@ -10,6 +10,10 @@ import { AssessmentRuntimeEventService } from "./assessment-runtime-event.servic
 const freshRuntimeEvent = () =>
   Promise.resolve({ createdAt: new Date("2099-01-01T00:00:00.000Z") });
 
+const emptyRepositorySnapshots = () => ({
+  findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
+});
+
 describe("AssessmentRuntimeEventService", () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -21,6 +25,7 @@ describe("AssessmentRuntimeEventService", () => {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
+      repositorySnapshot: emptyRepositorySnapshots(),
       repositoryScanJob: {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
           {
@@ -84,6 +89,7 @@ describe("AssessmentRuntimeEventService", () => {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([]),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
+      repositorySnapshot: emptyRepositorySnapshots(),
       repositoryScanJob: {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
           {
@@ -207,6 +213,7 @@ describe("AssessmentRuntimeEventService", () => {
         ]),
         findFirst: jest.fn().mockImplementation(freshRuntimeEvent),
       },
+      repositorySnapshot: emptyRepositorySnapshots(),
       repositoryScanJob: {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
           {
