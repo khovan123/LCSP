@@ -6,10 +6,14 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
+import fcntl
 
 from structlog import get_logger
 
@@ -18,6 +22,7 @@ from lcsp_workers.agentic_evidence.legal_tool_entrypoints import (
     LegalToolExecutionContext,
 )
 from lcsp_workers.platform.api_client import WorkerApiClient
+from lcsp_workers.platform.config import default_legal_source_storage_root
 
 logger = get_logger(__name__)
 
@@ -25,6 +30,8 @@ LEGAL_CORPUS_RECOVERY_COMMAND = "command.legal-corpus.recovery.requested.v1"
 LEGAL_CORPUS_RECOVERY_QUEUE = "lcsp.legal-corpus-recovery.v1"
 DEFAULT_VERSION_PREFIX = "VN-LEGAL-AO6"
 DEFAULT_INDEX_CONFIG = "chromadb-vectorless-legal-retriever-v1"
+SOURCE_CRAWL_DIR = "source-crawl"
+RECOVERY_LOCK_FILE = "legal-corpus-recovery.lock"
 
 
 @dataclass(frozen=True)
@@ -72,12 +79,28 @@ class LegalCorpusRecoveryDriver:
     def run(self, message: dict[str, Any], correlationId: str) -> dict[str, Any]:
         """Execute corpus rebuild, canonical validation/activation, and resume."""
         idempotency_key = required_string(message, "idempotencyKey")
+        storage_root = self._resolve_storage_root(message)
+        with _exclusive_recovery_lock(storage_root):
+            return self._run_locked(message, correlationId, idempotency_key)
+
+    def _run_locked(
+        self,
+        message: dict[str, Any],
+        correlationId: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Run recovery while holding the per-core corpus recovery lock."""
         manifests = self._resolve_source_manifests(message)
         reviewed_dir = self._resolve_reviewed_dir(message)
         builder = _load_script_module("build_reviewed_legal_corpus.py")
         orchestrator = _load_script_module("orchestrate_reviewed_legal_corpus.py")
-
         version = self._corpus_version(manifests, reviewed_dir)
+        reviewed_dir = self._prepare_reviewed_dir(
+            manifests=manifests,
+            reviewed_dir=reviewed_dir,
+            storage_root=self._resolve_storage_root(message),
+            version=version,
+        )
         payload = builder.build_payload(manifests, version, reviewed_dir=reviewed_dir)
         signoff = orchestrator.build_review_signoff(payload, reviewed_dir=reviewed_dir)
         enriched_payload = orchestrator.enrich_payload_with_signoff(payload, signoff)
@@ -191,6 +214,19 @@ class LegalCorpusRecoveryDriver:
             ]
             if paths:
                 return paths
+        storage_root = self._resolve_storage_root(message)
+        paths = sorted(
+            path
+            for path in (storage_root / SOURCE_CRAWL_DIR).glob("**/*.source.json")
+            if path.is_file()
+        )
+        if paths:
+            logger.info(
+                "LEGAL_CORPUS_RECOVERY_USING_CRAWL_ARTIFACTS",
+                source_manifest_count=len(paths),
+                storage_root=str(storage_root),
+            )
+            return paths
         raise RuntimeError(
             "AO6 legal corpus recovery has no source manifests from the crawl "
             "pipeline. Provide sourceManifestPaths in the recovery command."
@@ -209,6 +245,10 @@ class LegalCorpusRecoveryDriver:
                     f"{message_reviewed_dir}"
                 )
             return path
+        storage_root = self._resolve_storage_root(message)
+        crawl_root = storage_root / SOURCE_CRAWL_DIR
+        if crawl_root.is_dir():
+            return crawl_root
         raise RuntimeError(
             "AO6 legal corpus recovery has no reviewed artifact directory from the "
             "crawl pipeline. Provide reviewedDir in the recovery command."
@@ -219,11 +259,79 @@ class LegalCorpusRecoveryDriver:
         digest = hashlib.sha256()
         for path in sorted(manifests):
             digest.update(path.read_bytes())
-        for path in sorted(reviewed_dir.glob("*.reviewed.txt")):
-            digest.update(path.read_bytes())
-        for path in sorted(reviewed_dir.glob("*.hierarchy-review.json")):
+        for path in self._review_artifact_paths(manifests, reviewed_dir):
             digest.update(path.read_bytes())
         return f"{DEFAULT_VERSION_PREFIX}-{digest.hexdigest()[:16]}"
+
+    def _review_artifact_paths(
+        self,
+        manifests: list[Path],
+        reviewed_dir: Path,
+    ) -> list[Path]:
+        """Resolve reviewed artifacts declared by crawl manifests plus flat fallback files."""
+        paths: list[Path] = []
+        for manifest_path in sorted(manifests):
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    f"{manifest_path}: invalid source manifest JSON"
+                ) from exc
+            for key in ("reviewedTextFile", "hierarchyReviewFile"):
+                declared = manifest.get(key)
+                if isinstance(declared, str) and declared.strip():
+                    paths.append((manifest_path.parent / declared).resolve())
+        paths.extend(path.resolve() for path in reviewed_dir.glob("*.reviewed.txt"))
+        paths.extend(
+            path.resolve() for path in reviewed_dir.glob("*.hierarchy-review.json")
+        )
+        return sorted(dict.fromkeys(paths))
+
+    def _prepare_reviewed_dir(
+        self,
+        *,
+        manifests: list[Path],
+        reviewed_dir: Path,
+        storage_root: Path,
+        version: str,
+    ) -> Path:
+        """Build a flat reviewed artifact view for canonical review signoff."""
+        if (
+            self._reviewed_dir is not None
+            or reviewed_dir != storage_root / SOURCE_CRAWL_DIR
+        ):
+            return reviewed_dir
+        staging_dir = storage_root / "recovery-input" / _safe_ref(version)
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        for manifest_path in manifests:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            document_id = required_manifest_string(
+                manifest,
+                "documentId",
+                source=str(manifest_path),
+            )
+            for key, suffix in (
+                ("reviewedTextFile", "reviewed.txt"),
+                ("hierarchyReviewFile", "hierarchy-review.json"),
+            ):
+                declared = manifest.get(key)
+                if not isinstance(declared, str) or not declared.strip():
+                    continue
+                source_path = (manifest_path.parent / declared).resolve()
+                target_path = staging_dir / f"{document_id}.{suffix}"
+                if source_path != target_path:
+                    shutil.copy2(source_path, target_path)
+        return staging_dir
+
+    def _resolve_storage_root(self, message: dict[str, Any]) -> Path:
+        """Resolve the runtime corpus artifact root used by crawl/recovery."""
+        raw = message.get("storageRoot")
+        if isinstance(raw, str) and raw.strip():
+            return Path(raw.strip()).resolve()
+        raw_env = os.getenv("LEGAL_SOURCE_STORAGE_ROOT")
+        if raw_env and raw_env.strip():
+            return Path(raw_env.strip()).resolve()
+        return Path(default_legal_source_storage_root()).resolve()
 
 
 def required_string(values: dict[str, Any], key: str) -> str:
@@ -236,6 +344,14 @@ def required_string(values: dict[str, Any], key: str) -> str:
 
 def required_response_string(values: dict[str, Any], key: str, source: str) -> str:
     """Read a required non-empty string from an internal API response."""
+    value = values.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeError(f"{source} is missing {key}")
+    return value.strip()
+
+
+def required_manifest_string(values: dict[str, Any], key: str, source: str) -> str:
+    """Read a required non-empty string from a local crawl manifest."""
     value = values.get(key)
     if not isinstance(value, str) or not value.strip():
         raise RuntimeError(f"{source} is missing {key}")
@@ -272,3 +388,17 @@ def _sha256_json(value: Any) -> str:
 def _safe_ref(value: str) -> str:
     """Normalize a bounded identifier for validation/integrity manifest references."""
     return "".join(ch if ch.isalnum() or ch in "._:-" else "-" for ch in value)[:128]
+
+
+@contextmanager
+def _exclusive_recovery_lock(storage_root: Path) -> Iterator[None]:
+    """Serialize corpus recovery on one repo/core so waiting runs share one rebuild."""
+    lock_dir = storage_root / "locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = lock_dir / RECOVERY_LOCK_FILE
+    with lock_path.open("w", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)

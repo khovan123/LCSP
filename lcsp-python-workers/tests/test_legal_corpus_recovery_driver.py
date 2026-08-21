@@ -136,12 +136,45 @@ def test_recovery_driver_uses_runtime_crawl_artifacts_from_message(
     ]
 
 
-def test_recovery_driver_does_not_fallback_to_repository_reports() -> None:
+def test_recovery_driver_discovers_runtime_crawl_artifacts_from_corpus_store(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    storage_root = tmp_path / ".corpus"
+    artifact_dir = storage_root / "source-crawl" / "corpus-draft" / "LAW-TEST"
+    artifact_dir.mkdir(parents=True)
+    reviewed_manifest(artifact_dir, "LAW-TEST", "Điều 1. Test\n")
+    api_client = FakeApiClient()
+    driver = LegalCorpusRecoveryDriver(api_client=api_client)
+    monkeypatch.setattr(driver, "_validate_retrieval_index", lambda *_args: None)
+
+    result = driver.run(
+        {
+            "idempotencyKey": "vp-1:command.legal-corpus.recovery.requested.v1",
+            "storageRoot": str(storage_root),
+        },
+        "corr-1",
+    )
+
+    assert result["status"] == "READY"
+    assert (storage_root / "locks" / "legal-corpus-recovery.lock").is_file()
+    assert [name for name, _payload in api_client.calls] == [
+        "ingest",
+        "register_index",
+        "activate",
+        "resume",
+    ]
+
+
+def test_recovery_driver_does_not_fallback_to_repository_reports(tmp_path: Path) -> None:
     driver = LegalCorpusRecoveryDriver(api_client=FakeApiClient())
 
     with pytest.raises(RuntimeError, match="source manifests from the crawl pipeline"):
         driver.run(
-            {"idempotencyKey": "vp-1:command.legal-corpus.recovery.requested.v1"},
+            {
+                "idempotencyKey": "vp-1:command.legal-corpus.recovery.requested.v1",
+                "storageRoot": str(tmp_path / ".corpus"),
+            },
             "corr-1",
         )
 
