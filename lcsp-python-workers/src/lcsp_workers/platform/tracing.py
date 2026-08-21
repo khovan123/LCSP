@@ -1,31 +1,40 @@
 """Phoenix tracing module for OpenTelemetry tracing."""
 
 import functools
-import os
 from typing import Any, Callable
 
-_ENABLE_TRACING = os.getenv("PHOENIX_TRACING", "false").lower() in ("true", "1") or os.getenv("LOCAL_TRACING", "false").lower() in ("true", "1")
+from lcsp_workers.platform.config import load_tracing_config
 
 _tracer = None
-if _ENABLE_TRACING:
+
+
+def _initialize_tracer() -> Any:
+    """Initialize Phoenix tracing when enabled by worker configuration."""
     try:
+        config = load_tracing_config()
+        if not config.enabled:
+            return None
+
         from openinference.instrumentation.langchain import LangChainInstrumentor
         from openinference.instrumentation.openai import OpenAIInstrumentor
         from opentelemetry import trace
         from phoenix.otel import register
 
         register(
-            project_name="lcsp-python-workers",
-            endpoint=os.getenv("PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006/v1/traces"),
+            project_name=config.project_name,
+            endpoint=config.collector_endpoint,
         )
         try:
             LangChainInstrumentor().instrument()
             OpenAIInstrumentor().instrument()
         except Exception:
             pass
-        _tracer = trace.get_tracer("lcsp_workers")
+        return trace.get_tracer("lcsp_workers")
     except Exception:
-        _tracer = None
+        return None
+
+
+_tracer = _initialize_tracer()
 
 
 def traceable(

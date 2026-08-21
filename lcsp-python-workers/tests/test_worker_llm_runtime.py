@@ -10,6 +10,7 @@ from lcsp_workers.platform.config import (
     PbacPreflightConfig,
     WorkerConfig,
     load_config,
+    load_tracing_config,
 )
 from lcsp_workers.platform.queue_consumer import ConsumerBase
 from lcsp_workers.runtime import _build_consumer, _build_llm_client
@@ -70,6 +71,39 @@ def test_load_config_parses_llm_provider_chain(monkeypatch) -> None:
     assert config.llm_runtime.provider_timeout_seconds == 15.0
     assert config.llm_runtime.fallback_on_codes == ("RATE_LIMIT", "NETWORK")
     assert config.llm_runtime.max_provider_attempts == 2
+
+
+def test_load_config_parses_tracing_settings(monkeypatch) -> None:
+    _base_env(monkeypatch)
+    monkeypatch.setenv("PHOENIX_TRACING", "true")
+    monkeypatch.setenv("PHOENIX_PROJECT", "lcsp-fogewise-workers")
+    monkeypatch.setenv(
+        "PHOENIX_COLLECTOR_ENDPOINT",
+        "http://phoenix.test/v1/traces",
+    )
+
+    config = load_config()
+
+    assert config.tracing.enabled is True
+    assert config.tracing.project_name == "lcsp-fogewise-workers"
+    assert config.tracing.collector_endpoint == "http://phoenix.test/v1/traces"
+
+
+def test_load_tracing_config_does_not_require_worker_env(monkeypatch) -> None:
+    monkeypatch.delenv("RABBITMQ_URL", raising=False)
+    monkeypatch.delenv("NESTJS_API_BASE_URL", raising=False)
+    monkeypatch.delenv("WORKER_API_KEY", raising=False)
+    monkeypatch.setenv("LOCAL_TRACING", "1")
+    monkeypatch.setenv(
+        "PHOENIX_COLLECTOR_ENDPOINT",
+        "http://localhost:6006/v1/traces",
+    )
+
+    config = load_tracing_config()
+
+    assert config.enabled is True
+    assert config.project_name == "lcsp-python-workers"
+    assert config.collector_endpoint == "http://localhost:6006/v1/traces"
 
 
 def test_build_llm_client_skips_provider_without_api_key() -> None:

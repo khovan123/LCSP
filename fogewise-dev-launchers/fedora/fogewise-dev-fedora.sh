@@ -172,6 +172,11 @@ ensure_caddyfile() {
     bind 127.0.0.1
     tls internal
 
+    @phoenix_traces path /v1/traces /v1/traces/*
+    handle @phoenix_traces {
+        reverse_proxy 127.0.0.1:6006
+    }
+
     @backend path /backend /backend/*
     handle @backend {
         reverse_proxy 127.0.0.1:{$FOGEWISE_API_PORT}

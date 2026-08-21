@@ -62,6 +62,15 @@ class PbacPreflightConfig:
 
 
 @dataclass(frozen=True)
+class TracingConfig:
+    """Phoenix/OpenTelemetry tracing settings for worker instrumentation."""
+
+    enabled: bool = False
+    project_name: str = "lcsp-python-workers"
+    collector_endpoint: str = "http://localhost:6006/v1/traces"
+
+
+@dataclass(frozen=True)
 class WorkerConfig:
     """Complete immutable runtime configuration shared by worker consumers."""
 
@@ -76,6 +85,7 @@ class WorkerConfig:
     llm_runtime: LlmRuntimeConfig = LlmRuntimeConfig()
     agentic_runtime: AgenticRuntimeConfig = AgenticRuntimeConfig()
     pbac_preflight: PbacPreflightConfig = PbacPreflightConfig()
+    tracing: TracingConfig = TracingConfig()
 
 
 def load_config() -> WorkerConfig:
@@ -130,6 +140,25 @@ def load_config() -> WorkerConfig:
                 os.getenv("PBAC_PREFLIGHT_TIMEOUT_SECONDS", "5.0")
             )
         ),
+        tracing=_load_tracing_config(),
+    )
+
+
+def load_tracing_config() -> TracingConfig:
+    """Load tracing-only config without requiring the full worker environment."""
+    load_dotenv()
+    return _load_tracing_config()
+
+
+def _load_tracing_config() -> TracingConfig:
+    """Load optional Phoenix tracing settings from the environment."""
+    return TracingConfig(
+        enabled=_read_bool("PHOENIX_TRACING", False)
+        or _read_bool("LOCAL_TRACING", False),
+        project_name=_optional_text("PHOENIX_PROJECT")
+        or "lcsp-python-workers",
+        collector_endpoint=_optional_text("PHOENIX_COLLECTOR_ENDPOINT")
+        or "http://localhost:6006/v1/traces",
     )
 
 
