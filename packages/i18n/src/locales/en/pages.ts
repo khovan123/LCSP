@@ -1242,7 +1242,6 @@ export const enPages = {
         "The legal matching step completed but found no rules that apply to the verified evidence profile. Classification cannot proceed without an applicable legal basis.",
       legalMatchBlockedSummary:
         "Contact your compliance administrator to review the rule catalog or evidence profile before retrying.",
-
     },
     finalReportRequestedTitle: "Final report request submitted",
     finalReportRequestedDetail:

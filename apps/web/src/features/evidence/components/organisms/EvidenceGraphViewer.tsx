@@ -18,6 +18,7 @@ import type {
   EvidenceGraphNode,
   OverviewCluster,
 } from "@/features/evidence/types/evidence-graph.types";
+import { projectImportantGraph } from "@/features/evidence/utils/important-graph-projection";
 import { useMemo, useState } from "react";
 import { EvidenceGraph2D } from "./EvidenceGraph2D";
 import { EvidenceGraph3D } from "./EvidenceGraph3D";
@@ -52,7 +53,6 @@ export interface EvidenceGraphViewerProps {
  *   clusters={graphData.clusters}
  *   isLoading={isLoading}
  *   error={error}
- *   onRefresh={refetch}
  * />
  */
 export function EvidenceGraphViewer({
@@ -71,12 +71,16 @@ export function EvidenceGraphViewer({
     useState(layoutRevision);
   const { viewMode } = state;
   const { filters } = state;
+  const projection = useMemo(
+    () => projectImportantGraph(nodes, edges, clusters),
+    [clusters, edges, nodes],
+  );
   const handleRefresh = () => {
     setCurrentLayoutRevision((revision) => revision + 1);
     onRefresh?.();
   };
   const { visibleNodes, visibleEdges } = useMemo(() => {
-    const visibleNodes = nodes.filter((node) => {
+    const visibleNodes = projection.nodes.filter((node) => {
       const matchesType = filters.nodeTypes[node.type];
       const matchesSeverity =
         node.metadata.severity === undefined ||
@@ -96,7 +100,7 @@ export function EvidenceGraphViewer({
       );
     });
     const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
-    const visibleEdges = edges.filter(
+    const visibleEdges = projection.edges.filter(
       (edge) =>
         filters.edgeTypes[edge.type] &&
         (edge.metadata.severity === undefined ||
@@ -106,7 +110,7 @@ export function EvidenceGraphViewer({
     );
 
     return { visibleNodes, visibleEdges };
-  }, [edges, filters, nodes]);
+  }, [filters, projection.edges, projection.nodes]);
 
   // Show loading state
   if (isLoading) {
@@ -163,7 +167,7 @@ export function EvidenceGraphViewer({
             <EvidenceGraph3D
               nodes={visibleNodes}
               edges={visibleEdges}
-              clusters={clusters}
+              clusters={projection.clusters}
               layoutRevision={currentLayoutRevision}
             />
           )}
@@ -195,7 +199,18 @@ export function EvidenceGraphViewer({
       <div className="flex gap-4 text-xs text-gray-600">
         <span>Nodes: {visibleNodes.length}</span>
         <span>Edges: {visibleEdges.length}</span>
-        {clusters && <span>Clusters: {clusters.length}</span>}
+        {projection.clusters && (
+          <span>Clusters: {projection.clusters.length}</span>
+        )}
+        {projection.truncated && (
+          <span>
+            Showing topology flow from {projection.totalNodes} nodes /{" "}
+            {projection.totalEdges} edges
+          </span>
+        )}
+        {projection.limitations.length > 0 && (
+          <span title={projection.limitations.join(" ")}>Partial topology</span>
+        )}
         <span className="ml-auto">
           Last updated: {new Date().toLocaleTimeString()}
         </span>

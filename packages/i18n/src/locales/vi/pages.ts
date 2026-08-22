@@ -1239,7 +1239,6 @@ export const viPages = {
         "Bước đối chiếu pháp lý đã hoàn tất nhưng không tìm thấy quy tắc nào phù hợp với hồ sơ bằng chứng đã xác minh. Phân loại không thể tiến hành khi thiếu căn cứ pháp lý áp dụng.",
       legalMatchBlockedSummary:
         "Liên hệ quản trị viên tuân thủ để rà soát rule catalog hoặc hồ sơ bằng chứng trước khi thử lại.",
-
     },
     finalReportRequestedTitle: "Yêu cầu báo cáo cuối cùng đã được gửi",
     finalReportRequestedDetail:

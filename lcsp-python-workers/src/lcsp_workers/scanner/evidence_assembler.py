@@ -222,21 +222,18 @@ class EvidenceAssembler:
                 "LCSP_ARTIFACT_STORAGE_PATH",
                 os.path.join(get_repo_root(), "tmp", "lcsp-storage"),
             )
+            safe_graph_id = re.sub(r"[^a-zA-Z0-9_.-]", "-", str(graph_id))
             storage_key = os.path.join(
                 "graphs",
                 f"user_{user_id}",
                 f"assessment_{assessment_id}",
-                f"lcsp-evidence-graph-{graph_id}.json",
+                f"lcsp-evidence-graph-{safe_graph_id}.json",
             ).replace(os.sep, "/")
             ref_path = os.path.join(storage_root, storage_key)
-            
-            import json
-            try:
-                os.makedirs(os.path.dirname(ref_path), exist_ok=True)
-                with open(ref_path, "w") as f:
-                    json.dump(full_graph_dict, f)
-            except Exception:
-                pass
+
+            os.makedirs(os.path.dirname(ref_path), exist_ok=True)
+            with open(ref_path, "w", encoding="utf-8") as f:
+                json.dump(full_graph_dict, f)
                 
             evidence_payload["evidence_graph"] = {
                 "graph_id": graph_id,

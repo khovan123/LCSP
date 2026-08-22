@@ -480,6 +480,7 @@ export class EvidenceGraphMapperService {
       type,
       label: stringValue(raw.label) || nodeId,
       metadata: {
+        semanticType: nodeType || undefined,
         filePath: filePath || undefined,
         lineNumber: numberValue(source.start_line ?? source.startLine),
         provider: provider || undefined,
@@ -506,6 +507,7 @@ export class EvidenceGraphMapperService {
       target,
       type: mapWorkerEdgeType(stringValue(raw.edge_type ?? raw.edgeType)),
       metadata: {
+        semanticType: stringValue(raw.edge_type ?? raw.edgeType) || undefined,
         requiresReview: false,
       },
     };
