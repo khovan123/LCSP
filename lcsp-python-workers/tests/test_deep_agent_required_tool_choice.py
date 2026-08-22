@@ -117,10 +117,17 @@ def _required_tool() -> LLMToolDefinition:
         input_schema={
             "type": "object",
             "additionalProperties": False,
-            "properties": {},
+            "properties": {"decision": {"type": "string"}},
+            "required": ["decision"],
         },
         tool_choice_required=True,
     )
+
+
+def _invoke_capture_tool(tool, **arguments):
+    if hasattr(tool, "invoke"):
+        return tool.invoke(arguments)
+    return tool(**arguments)
 
 
 def test_required_tool_definition_is_captured_by_deep_agent() -> None:
@@ -129,7 +136,10 @@ def test_required_tool_definition_is_captured_by_deep_agent() -> None:
     class FakeAgent:
         def invoke(self, _payload, config=None):
             del config
-            next(tool for tool in created["tools"] if tool.__name__ == "finish")()
+            _invoke_capture_tool(
+                next(tool for tool in created["tools"] if tool.__name__ == "finish"),
+                decision="SELECT",
+            )
             return {
                 "messages": [
                     SimpleNamespace(
@@ -159,7 +169,66 @@ def test_required_tool_definition_is_captured_by_deep_agent() -> None:
         )
 
     assert response.tool_calls[0].name == "finish"
-    assert response.tool_calls[0].arguments == {}
+    assert response.tool_calls[0].arguments == {"decision": "SELECT"}
     assert created["tools"][0].__name__ == "lcsp_search_source_code"
     assert created["tools"][-1].__name__ == "finish"
+    assert created["tools"][-1].args_schema is not None
     assert "You must call one of the provided tools" in created["system_prompt"]
+
+
+def test_required_empty_tool_call_retries_with_schema_payload() -> None:
+    attempts = 0
+    tool = LLMToolDefinition(
+        name="finish",
+        description="Submit the terminal structured result.",
+        input_schema={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"decision": {"type": "string"}},
+        },
+        tool_choice_required=True,
+    )
+
+    class FakeAgent:
+        def __init__(self, capture_tool):
+            self._capture_tool = capture_tool
+
+        def invoke(self, _payload, config=None):
+            nonlocal attempts
+            del config
+            attempts += 1
+            if attempts == 1:
+                _invoke_capture_tool(self._capture_tool)
+            else:
+                _invoke_capture_tool(self._capture_tool, decision="SELECT")
+            return {
+                "messages": [
+                    SimpleNamespace(
+                        content="done",
+                        usage_metadata={"input_tokens": 10, "output_tokens": 5},
+                    )
+                ]
+            }
+
+    def fake_create_deep_agent(**kwargs):
+        return FakeAgent(
+            next(tool for tool in kwargs["tools"] if tool.__name__ == "finish")
+        )
+
+    client = DeepAgentClient(
+        provider="openai",
+        api_key="sk-test-key",
+        model="gpt-4o",
+        budget_tracker=_tracker(),
+    )
+
+    with _fake_deepagents(fake_create_deep_agent):
+        response = client.complete_with_tools(
+            "Finish now.",
+            tools=[tool],
+            workflow_run_id="workflow-1",
+            node_name="investigate_engineering_rule_finish",
+        )
+
+    assert attempts == 2
+    assert response.tool_calls[0].arguments == {"decision": "SELECT"}

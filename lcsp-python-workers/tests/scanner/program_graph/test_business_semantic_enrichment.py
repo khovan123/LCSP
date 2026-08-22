@@ -96,6 +96,92 @@ def test_unknown_support_ref_rejects_semantic_proposal(tmp_path: Path) -> None:
     assert edge_count == 0
 
 
+def test_business_semantic_proposal_diagnostics_are_safe_counters(
+    tmp_path: Path,
+) -> None:
+    graph = _graph(tmp_path)
+    support = next(
+        node["node_id"]
+        for node in graph.nodes
+        if node.get("node_type") == "APPROVAL"
+    )
+    payload = {
+        "nodes": [
+            {
+                "proposalNodeId": "customer_onboarding",
+                "nodeType": "BUSINESS_PROCESS",
+                "label": "Customer onboarding",
+                "supportRefs": [support],
+            },
+            {
+                "proposalNodeId": "duplicate_onboarding",
+                "nodeType": "BUSINESS_PROCESS",
+                "label": "Customer onboarding",
+                "supportRefs": [support],
+            },
+            {
+                "proposalNodeId": "bad_support",
+                "nodeType": "BUSINESS_PROCESS",
+                "label": "Unsupported process",
+                "supportRefs": ["node:missing"],
+            },
+            {
+                "proposalNodeId": "bad_type",
+                "nodeType": "LEGAL_CONCLUSION",
+                "label": "Unsupported legal conclusion",
+                "supportRefs": [support],
+            },
+        ],
+        "edges": [
+            {
+                "edgeType": "PART_OF_PROCESS",
+                "sourceRef": "proposal:customer_onboarding",
+                "targetRef": "node:missing",
+                "supportRefs": [support],
+            },
+            {
+                "edgeType": "UNKNOWN_EDGE",
+                "sourceRef": support,
+                "targetRef": "proposal:customer_onboarding",
+                "supportRefs": [support],
+            },
+        ],
+    }
+
+    _enriched, node_count, edge_count, diagnostics = (
+        BusinessSemanticEnricher._validate_and_merge_with_diagnostics(graph, payload)
+    )
+
+    assert node_count == 1
+    assert edge_count == 0
+    assert diagnostics.raw_node_count == 4
+    assert diagnostics.raw_edge_count == 2
+    assert diagnostics.dropped_node_count == 3
+    assert diagnostics.dropped_edge_count == 2
+    assert diagnostics.drop_reasons["DUPLICATE_SEMANTIC"] == 1
+    assert diagnostics.drop_reasons["INVALID_SUPPORT_REF"] == 1
+    assert diagnostics.drop_reasons["INVALID_NODE_TYPE"] == 1
+    assert diagnostics.drop_reasons["INVALID_TARGET_REF"] == 1
+    assert diagnostics.drop_reasons["INVALID_EDGE_TYPE"] == 1
+
+
+def test_empty_business_semantic_proposal_records_drop_reason(tmp_path: Path) -> None:
+    graph = _graph(tmp_path)
+
+    _enriched, node_count, edge_count, diagnostics = (
+        BusinessSemanticEnricher._validate_and_merge_with_diagnostics(
+            graph,
+            {"nodes": [], "edges": []},
+        )
+    )
+
+    assert node_count == 0
+    assert edge_count == 0
+    assert diagnostics.raw_node_count == 0
+    assert diagnostics.raw_edge_count == 0
+    assert diagnostics.drop_reasons == {"EMPTY_PROPOSAL": 1}
+
+
 def test_legal_or_risk_tier_conclusion_is_not_business_semantic_node(tmp_path: Path) -> None:
     graph = _graph(tmp_path)
     support = graph.nodes[0]["node_id"]

@@ -281,6 +281,14 @@ class WorkerApiClient:
                 )
             safe_payload["evidence_payload"] = safe_evidence_payload
         redacted_payload = redact_dict(safe_payload)
+        for provenance_key in ("tools_version", "config_hash"):
+            provenance = safe_payload.get(provenance_key)
+            if isinstance(provenance, dict):
+                redacted_payload[provenance_key] = {
+                    str(key): str(value)
+                    for key, value in provenance.items()
+                    if str(key).strip() and str(value).strip()
+                }
         privacy_flags = safe_payload.get("privacy_flags")
         if isinstance(privacy_flags, dict):
             redacted_payload["privacy_flags"] = {

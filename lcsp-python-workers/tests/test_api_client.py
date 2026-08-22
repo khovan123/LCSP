@@ -225,6 +225,35 @@ def test_scan_callback_preserves_boolean_privacy_flags(client):
         assert kwargs["json"]["privacy_flags"] == payload.privacy_flags
 
 
+def test_scan_callback_preserves_secret_detection_tool_provenance(client):
+    payload = ScanCallbackPayload(
+        status="SUCCESS",
+        scan_job_id="job123",
+        tools_version={"semgrep_secret_detect": "1.173.0"},
+        config_hash={"semgrep_secret_detect": "sha256:abc123"},
+        evidence_payload={"metadata": {"api_key": "secret-key-value"}},
+        privacy_flags={"containsSourceCode": False, "secretsRedacted": True},
+    )
+
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"success": True}
+        mock_post.return_value = mock_resp
+
+        client.post_scan_callback("job123", payload)
+
+        _, kwargs = mock_post.call_args
+        serialized_payload = kwargs["json"]
+        assert serialized_payload["tools_version"] == {
+            "semgrep_secret_detect": "1.173.0"
+        }
+        assert serialized_payload["config_hash"] == {
+            "semgrep_secret_detect": "sha256:abc123"
+        }
+        assert serialized_payload["evidence_payload"]["metadata"]["api_key"] == ""
+
+
 def test_requeue_targeted_reanalysis_request_uses_internal_worker_endpoint(client):
     with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
         mock_resp = MagicMock()

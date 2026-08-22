@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 from collections import deque
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from lcsp_workers.llm.fallback_client import LLMClientProtocol
@@ -16,6 +16,36 @@ from .models import ProgramEvidenceGraph
 from .validator import validate_program_graph
 
 logger = get_logger(__name__)
+
+_DROP_EMPTY_PROPOSAL = "EMPTY_PROPOSAL"
+_DROP_NON_OBJECT_NODE = "NON_OBJECT_NODE"
+_DROP_INVALID_PROPOSAL_ID = "INVALID_PROPOSAL_ID"
+_DROP_INVALID_NODE_TYPE = "INVALID_NODE_TYPE"
+_DROP_INVALID_LABEL = "INVALID_LABEL"
+_DROP_INVALID_SUPPORT_REF = "INVALID_SUPPORT_REF"
+_DROP_DUPLICATE_SEMANTIC = "DUPLICATE_SEMANTIC"
+_DROP_NON_OBJECT_EDGE = "NON_OBJECT_EDGE"
+_DROP_INVALID_EDGE_TYPE = "INVALID_EDGE_TYPE"
+_DROP_INVALID_SOURCE_REF = "INVALID_SOURCE_REF"
+_DROP_INVALID_TARGET_REF = "INVALID_TARGET_REF"
+_DROP_DUPLICATE_EDGE = "DUPLICATE_EDGE"
+
+
+@dataclass
+class BusinessSemanticProposalDiagnostics:
+    raw_node_count: int = 0
+    raw_edge_count: int = 0
+    dropped_node_count: int = 0
+    dropped_edge_count: int = 0
+    drop_reasons: dict[str, int] = field(default_factory=dict)
+
+    def record_node_drop(self, reason: str) -> None:
+        self.dropped_node_count += 1
+        self.drop_reasons[reason] = self.drop_reasons.get(reason, 0) + 1
+
+    def record_edge_drop(self, reason: str) -> None:
+        self.dropped_edge_count += 1
+        self.drop_reasons[reason] = self.drop_reasons.get(reason, 0) + 1
 
 _ALLOWED_NODE_TYPES = frozenset(
     {
@@ -221,7 +251,12 @@ class BusinessSemanticEnricher:
                         "business semantic enricher requires exactly one proposal call"
                     )
                 proposal = self._namespace_payload(calls[0].arguments, cluster_id)
-                enriched, added_nodes, added_edges = self.validate_and_merge(
+                (
+                    enriched,
+                    added_nodes,
+                    added_edges,
+                    diagnostics,
+                ) = self._validate_and_merge_with_diagnostics(
                     enriched,
                     proposal,
                     trusted_support_refs=trusted_support_refs,
@@ -234,6 +269,11 @@ class BusinessSemanticEnricher:
                         cluster_id=cluster_id,
                         entrypoint_type=context.get("entrypointType"),
                         entrypoint_label=context.get("entrypointLabel"),
+                        raw_node_count=diagnostics.raw_node_count,
+                        raw_edge_count=diagnostics.raw_edge_count,
+                        dropped_node_count=diagnostics.dropped_node_count,
+                        dropped_edge_count=diagnostics.dropped_edge_count,
+                        drop_reasons=diagnostics.drop_reasons,
                         workflow_run_id=workflow_run_id,
                         correlationId=correlation_id,
                     )
@@ -248,6 +288,11 @@ class BusinessSemanticEnricher:
                     entrypoint_label=context.get("entrypointLabel"),
                     accepted_node_count=added_nodes,
                     accepted_edge_count=added_edges,
+                    raw_node_count=diagnostics.raw_node_count,
+                    raw_edge_count=diagnostics.raw_edge_count,
+                    dropped_node_count=diagnostics.dropped_node_count,
+                    dropped_edge_count=diagnostics.dropped_edge_count,
+                    drop_reasons=diagnostics.drop_reasons,
                     workflow_run_id=workflow_run_id,
                     correlationId=correlation_id,
                 )
@@ -287,12 +332,43 @@ class BusinessSemanticEnricher:
         base_graph_id: str | None = None,
     ) -> tuple[ProgramEvidenceGraph, int, int]:
         """Validate one model proposal payload and return a new immutable graph value."""
+        enriched, added_nodes, added_edges, _diagnostics = (
+            cls._validate_and_merge_with_diagnostics(
+                graph,
+                payload,
+                trusted_support_refs=trusted_support_refs,
+                base_graph_id=base_graph_id,
+            )
+        )
+        return enriched, added_nodes, added_edges
+
+    @classmethod
+    def _validate_and_merge_with_diagnostics(
+        cls,
+        graph: ProgramEvidenceGraph,
+        payload: dict[str, Any],
+        *,
+        trusted_support_refs: set[str] | None = None,
+        base_graph_id: str | None = None,
+    ) -> tuple[
+        ProgramEvidenceGraph,
+        int,
+        int,
+        BusinessSemanticProposalDiagnostics,
+    ]:
+        """Validate one proposal and return merge counts plus safe drop diagnostics."""
         if graph.schema_version != "3.0.0":
             raise ValueError("business semantic enrichment requires graph v3")
         raw_nodes = payload.get("nodes")
         raw_edges = payload.get("edges")
         if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
             raise ValueError("business semantic proposal arrays are required")
+        diagnostics = BusinessSemanticProposalDiagnostics(
+            raw_node_count=len(raw_nodes),
+            raw_edge_count=len(raw_edges),
+        )
+        if not raw_nodes and not raw_edges:
+            diagnostics.drop_reasons[_DROP_EMPTY_PROPOSAL] = 1
 
         authority_refs = (
             set(trusted_support_refs)
@@ -313,22 +389,29 @@ class BusinessSemanticEnricher:
         existing_semantic = cls._existing_semantic_nodes(graph)
         for raw in raw_nodes[:40]:
             if not isinstance(raw, dict):
+                diagnostics.record_node_drop(_DROP_NON_OBJECT_NODE)
                 continue
             proposal_id = str(raw.get("proposalNodeId") or "")
             node_type = str(raw.get("nodeType") or "")
             label = cls._label(raw.get("label"))
             support_refs = cls._support_refs(raw.get("supportRefs"), authority_refs)
-            if (
-                not _PROPOSAL_ID_RE.fullmatch(proposal_id)
-                or node_type not in _ALLOWED_NODE_TYPES
-                or not label
-                or not support_refs
-            ):
+            if not _PROPOSAL_ID_RE.fullmatch(proposal_id):
+                diagnostics.record_node_drop(_DROP_INVALID_PROPOSAL_ID)
+                continue
+            if node_type not in _ALLOWED_NODE_TYPES:
+                diagnostics.record_node_drop(_DROP_INVALID_NODE_TYPE)
+                continue
+            if not label:
+                diagnostics.record_node_drop(_DROP_INVALID_LABEL)
+                continue
+            if not support_refs:
+                diagnostics.record_node_drop(_DROP_INVALID_SUPPORT_REF)
                 continue
 
             semantic_key = cls._semantic_identity(node_type, label, support_refs)
             existing_id = existing_semantic.get(semantic_key)
             if existing_id:
+                diagnostics.record_node_drop(_DROP_DUPLICATE_SEMANTIC)
                 proposal_endpoint_ids[proposal_id] = existing_id
                 continue
 
@@ -378,20 +461,27 @@ class BusinessSemanticEnricher:
         seen_edge_keys: set[tuple[str, str, str]] = set()
         for raw in raw_edges[:80]:
             if not isinstance(raw, dict):
+                diagnostics.record_edge_drop(_DROP_NON_OBJECT_EDGE)
                 continue
             edge_type = str(raw.get("edgeType") or "")
             source = endpoint_map.get(str(raw.get("sourceRef") or ""))
             target = endpoint_map.get(str(raw.get("targetRef") or ""))
             support_refs = cls._support_refs(raw.get("supportRefs"), authority_refs)
-            if (
-                edge_type not in _ALLOWED_EDGE_TYPES
-                or not source
-                or not target
-                or not support_refs
-            ):
+            if edge_type not in _ALLOWED_EDGE_TYPES:
+                diagnostics.record_edge_drop(_DROP_INVALID_EDGE_TYPE)
+                continue
+            if not source:
+                diagnostics.record_edge_drop(_DROP_INVALID_SOURCE_REF)
+                continue
+            if not target:
+                diagnostics.record_edge_drop(_DROP_INVALID_TARGET_REF)
+                continue
+            if not support_refs:
+                diagnostics.record_edge_drop(_DROP_INVALID_SUPPORT_REF)
                 continue
             key = (edge_type, source, target)
             if key in seen_edge_keys or key in existing_edge_keys:
+                diagnostics.record_edge_drop(_DROP_DUPLICATE_EDGE)
                 continue
             seen_edge_keys.add(key)
             new_edges.append(
@@ -420,11 +510,16 @@ class BusinessSemanticEnricher:
             )
 
         if not proposal_nodes and not new_edges:
-            return graph, 0, 0
+            return graph, 0, 0, diagnostics
         nodes = [*graph.nodes, *proposal_nodes.values()]
         edges = [*graph.edges, *new_edges]
         enriched = cls._rebuild(graph, nodes, edges)
-        return validate_program_graph(enriched), len(proposal_nodes), len(new_edges)
+        return (
+            validate_program_graph(enriched),
+            len(proposal_nodes),
+            len(new_edges),
+            diagnostics,
+        )
 
     @classmethod
     def _cluster_contexts(cls, graph: ProgramEvidenceGraph) -> list[dict[str, Any]]:

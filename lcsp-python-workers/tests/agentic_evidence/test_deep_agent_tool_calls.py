@@ -139,6 +139,12 @@ def _client() -> DeepAgentClient:
     )
 
 
+def _invoke_capture_tool(tool, **arguments):
+    if hasattr(tool, "invoke"):
+        return tool.invoke(arguments)
+    return tool(**arguments)
+
+
 def test_deep_agent_tool_call_is_manual_and_registry_validated() -> None:
     class FakeAgent:
         def __init__(self, capture_tool):
@@ -146,7 +152,7 @@ def test_deep_agent_tool_call_is_manual_and_registry_validated() -> None:
 
         def invoke(self, _payload, config=None):
             del config
-            self._capture_tool(maxResults=25)
+            _invoke_capture_tool(self._capture_tool, maxResults=25)
             return {
                 "messages": [
                     SimpleNamespace(

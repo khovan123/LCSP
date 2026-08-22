@@ -172,6 +172,12 @@ class _FakeAgent:
         }
 
 
+def _invoke_capture_tool(tool, **arguments):
+    if hasattr(tool, "invoke"):
+        return tool.invoke(arguments)
+    return tool(**arguments)
+
+
 def test_deep_agent_complete_uses_create_deep_agent() -> None:
     created = {}
 
@@ -268,8 +274,9 @@ def test_deep_agent_required_tool_is_captured_not_executed() -> None:
 
     def fake_create_deep_agent(**kwargs):
         captured_tools["tools"] = kwargs["tools"]
-        next(tool for tool in kwargs["tools"] if tool.__name__ == "finish")(
-            decision="SELECT"
+        _invoke_capture_tool(
+            next(tool for tool in kwargs["tools"] if tool.__name__ == "finish"),
+            decision="SELECT",
         )
         return _FakeAgent(tool_name="finish")
 
@@ -295,6 +302,7 @@ def test_deep_agent_required_tool_is_captured_not_executed() -> None:
     assert response.tool_calls[0].name == "finish"
     assert response.tool_calls[0].arguments == {"decision": "SELECT"}
     assert captured_tools["tools"][-1].__name__ == "finish"
+    assert captured_tools["tools"][-1].args_schema is not None
 
 
 def test_deep_agent_enables_hitl_for_conflict_capture_tools() -> None:

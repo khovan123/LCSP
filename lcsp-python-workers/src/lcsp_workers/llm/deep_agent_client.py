@@ -16,9 +16,10 @@ import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import uuid4
 
+from pydantic import BaseModel, ConfigDict, Field, create_model
 import tiktoken
 
 from lcsp_workers.llm.budget_tracker import BudgetTracker
@@ -257,34 +258,49 @@ class DeepAgentClient:
             max_tokens=max_tokens,
             correlationId=correlationId,
         )
-        captured_calls: list[LLMToolCall] = []
-        agent = self._create_agent(
-            tools=_capture_tools(tools, captured_calls),
-            system_prompt=_tool_completion_prompt(tools, require_tool_call),
-            workflow_run_id=workflow_run_id,
-            node_name=node_name,
-            prompt=safe_prompt,
-            capture_tool_names=[tool.name for tool in tools],
+        _result, content, captured_calls, input_tokens, output_tokens = (
+            self._invoke_tool_capture_attempt(
+                prompt=safe_prompt,
+                tools=tools,
+                require_tool_call=require_tool_call,
+                workflow_run_id=workflow_run_id,
+                node_name=node_name,
+                correlationId=correlationId,
+                max_tokens=max_tokens_to_use,
+            )
         )
-        result = self._invoke_agent(
-            agent,
-            safe_prompt,
-            workflow_run_id=workflow_run_id,
-            node_name=node_name,
-            correlationId=correlationId,
-            max_tokens=max_tokens_to_use,
-        )
-        content = _last_message_content(result)
         allowed_names = {tool.name for tool in tools}
         if any(call.name not in allowed_names for call in captured_calls):
             raise ValueError("Deep Agent returned an undeclared tool call")
         if require_tool_call and not captured_calls:
             raise ValueError("Deep Agent returned no tool call in required mode")
-        input_tokens, output_tokens = _usage_from_agent_result(
-            result,
-            safe_prompt,
-            content,
-        )
+        if require_tool_call and _has_empty_tool_arguments(captured_calls):
+            retry_prompt = _required_tool_retry_prompt(safe_prompt)
+            (
+                _result,
+                content,
+                captured_calls,
+                retry_input_tokens,
+                retry_output_tokens,
+            ) = self._invoke_tool_capture_attempt(
+                prompt=retry_prompt,
+                tools=tools,
+                require_tool_call=require_tool_call,
+                workflow_run_id=workflow_run_id,
+                node_name=node_name,
+                correlationId=correlationId,
+                max_tokens=max_tokens_to_use,
+            )
+            input_tokens += retry_input_tokens
+            output_tokens += retry_output_tokens
+            if not captured_calls:
+                raise ValueError("Deep Agent returned no tool call in required mode")
+            if any(call.name not in allowed_names for call in captured_calls):
+                raise ValueError("Deep Agent returned an undeclared tool call")
+            if _has_empty_tool_arguments(captured_calls):
+                raise ValueError(
+                    "Deep Agent returned empty tool arguments in required mode"
+                )
         self._record_actual_usage(input_tokens, output_tokens)
         self._update_run_tree_usage(input_tokens, output_tokens)
         return LLMToolResponse(
@@ -296,6 +312,42 @@ class DeepAgentClient:
             provider=self.provider,
             request_id=str(uuid4()),
         )
+
+    def _invoke_tool_capture_attempt(
+        self,
+        *,
+        prompt: str,
+        tools: list[LLMToolDefinition],
+        require_tool_call: bool,
+        workflow_run_id: str,
+        node_name: str,
+        correlationId: Optional[str],
+        max_tokens: int,
+    ) -> tuple[Any, str, list[LLMToolCall], int, int]:
+        captured_calls: list[LLMToolCall] = []
+        agent = self._create_agent(
+            tools=_capture_tools(tools, captured_calls),
+            system_prompt=_tool_completion_prompt(tools, require_tool_call),
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            prompt=prompt,
+            capture_tool_names=[tool.name for tool in tools],
+        )
+        result = self._invoke_agent(
+            agent,
+            prompt,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            correlationId=correlationId,
+            max_tokens=max_tokens,
+        )
+        content = _last_message_content(result)
+        input_tokens, output_tokens = _usage_from_agent_result(
+            result,
+            prompt,
+            content,
+        )
+        return result, content, captured_calls, input_tokens, output_tokens
 
     def _create_agent(
         self,
@@ -500,6 +552,13 @@ def _capture_tools(
     tools: list[LLMToolDefinition],
     captured_calls: list[LLMToolCall],
 ) -> list[Any]:
+    try:
+        from langchain_core.tools import StructuredTool
+    except ImportError as exc:
+        raise RuntimeError(
+            "langchain-core is required for structured Deep Agent capture tools"
+        ) from exc
+
     captured_tools = []
     for definition in tools:
 
@@ -507,10 +566,13 @@ def _capture_tools(
             _definition: LLMToolDefinition = definition,
             **arguments: Any,
         ) -> str:
+            normalized_arguments = {
+                key: value for key, value in arguments.items() if value is not None
+            }
             captured_calls.append(
                 LLMToolCall(
                     name=_definition.name,
-                    arguments=dict(arguments),
+                    arguments=normalized_arguments,
                     call_id=str(uuid4()),
                 )
             )
@@ -519,10 +581,114 @@ def _capture_tools(
                 "dispatch. Do not treat this as executed domain action."
             )
 
-        capture_tool.__name__ = definition.name
-        capture_tool.__doc__ = definition.description
-        captured_tools.append(capture_tool)
+        args_schema = _tool_args_schema(definition)
+        structured_tool = StructuredTool.from_function(
+            func=capture_tool,
+            name=definition.name,
+            description=definition.description,
+            args_schema=args_schema,
+        )
+        setattr(structured_tool, "__name__", definition.name)
+        captured_tools.append(structured_tool)
     return captured_tools
+
+
+def _tool_args_schema(definition: LLMToolDefinition) -> type[BaseModel]:
+    return _json_schema_to_model(
+        f"{definition.name.title().replace('_', '')}Args",
+        definition.input_schema,
+    )
+
+
+def _json_schema_to_model(name: str, schema: dict[str, Any]) -> type[BaseModel]:
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        properties = {}
+    required = schema.get("required")
+    required_fields = (
+        {str(item) for item in required} if isinstance(required, list) else set()
+    )
+    fields: dict[str, tuple[Any, Any]] = {}
+    for field_name, field_schema in properties.items():
+        if not isinstance(field_name, str) or not isinstance(field_schema, dict):
+            continue
+        field_type = _json_schema_type(
+            field_schema,
+            f"{name}{field_name[:1].upper()}{field_name[1:]}",
+        )
+        default = ... if field_name in required_fields else None
+        field_kwargs: dict[str, Any] = {}
+        description = field_schema.get("description")
+        if isinstance(description, str) and description.strip():
+            field_kwargs["description"] = description
+        if "minimum" in field_schema:
+            field_kwargs["ge"] = field_schema["minimum"]
+        if "maximum" in field_schema:
+            field_kwargs["le"] = field_schema["maximum"]
+        if "minLength" in field_schema:
+            field_kwargs["min_length"] = field_schema["minLength"]
+        if "maxLength" in field_schema:
+            field_kwargs["max_length"] = field_schema["maxLength"]
+        if "minItems" in field_schema:
+            field_kwargs["min_length"] = field_schema["minItems"]
+        if "maxItems" in field_schema:
+            field_kwargs["max_length"] = field_schema["maxItems"]
+        fields[field_name] = (field_type, Field(default, **field_kwargs))
+
+    config = ConfigDict(
+        extra="forbid" if schema.get("additionalProperties") is False else "allow"
+    )
+    return create_model(name, __config__=config, **fields)
+
+
+def _json_schema_type(schema: dict[str, Any], name: str) -> Any:
+    enum_values = schema.get("enum")
+    if isinstance(enum_values, list) and enum_values:
+        return Literal.__getitem__(tuple(enum_values))
+
+    schema_type = schema.get("type")
+    if isinstance(schema_type, list):
+        non_null_types = [item for item in schema_type if item != "null"]
+        if len(non_null_types) == 1:
+            schema_type = non_null_types[0]
+
+    if schema_type == "string":
+        return str
+    if schema_type == "integer":
+        return int
+    if schema_type == "number":
+        return float
+    if schema_type == "boolean":
+        return bool
+    if schema_type == "array":
+        item_schema = schema.get("items")
+        item_type = (
+            _json_schema_type(item_schema, f"{name}Item")
+            if isinstance(item_schema, dict)
+            else Any
+        )
+        return list[item_type]
+    if schema_type == "object":
+        return _json_schema_to_model(name, schema)
+    return Any
+
+
+def _has_empty_tool_arguments(captured_calls: Iterable[LLMToolCall]) -> bool:
+    return any(not call.arguments for call in captured_calls)
+
+
+def _required_tool_retry_prompt(prompt: str) -> str:
+    return "\n\n".join(
+        [
+            prompt,
+            (
+                "Required capture-tool retry: the previous tool call had empty "
+                "arguments. Call the required capture tool again with schema-valid, "
+                "non-empty arguments grounded in retrieved evidence. Do not include "
+                "source code or prompt text in the tool payload."
+            ),
+        ]
+    )
 
 
 def _plain_completion_prompt() -> str:
