@@ -34,6 +34,7 @@ export type GraphUserRole = "MANAGER" | "DEVELOPER";
  * For Developer scope, filePath and lineNumber are redacted (set to null).
  */
 export interface EvidenceGraphNodeMetadata {
+  semanticType?: string;
   filePath?: string | null; // Relative path; null if redacted
   lineNumber?: number | null; // Null if redacted
   provider?: string; // AI provider ("OPENAI", "GOOGLE", etc.)
@@ -60,6 +61,7 @@ export interface EvidenceGraphNode {
  * Metadata attached to graph edges.
  */
 export interface EvidenceGraphEdgeMetadata {
+  semanticType?: string;
   severity?: Severity; // Edge-level severity (if applicable)
   requiresReview?: boolean; // True if no human review evidence found
   label?: string; // Display label (optional)

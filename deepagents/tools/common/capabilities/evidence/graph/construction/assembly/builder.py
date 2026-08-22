@@ -296,8 +296,14 @@ class ProgramGraphBuilder:
             "provenance": self.provenance,
             "evidence_refs": refs,
         }
+        hash_body = _normalize_json_numbers(body)
         graph_hash = "sha256:" + hashlib.sha256(
-            json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+            json.dumps(
+                hash_body,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
         ).hexdigest()
         return ProgramEvidenceGraph(
             self._stable_id("program-graph", body),
@@ -423,3 +429,13 @@ class ProgramGraphBuilder:
             payload, sort_keys=True, separators=(",", ":"), default=str
         ).encode()
         return f"{kind}:" + hashlib.sha256(encoded).hexdigest()[:32]
+
+
+def _normalize_json_numbers(value: object) -> object:
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, list):
+        return [_normalize_json_numbers(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _normalize_json_numbers(item) for key, item in value.items()}
+    return value
