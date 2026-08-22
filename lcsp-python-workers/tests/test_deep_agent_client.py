@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import json
+import pathlib
+import warnings
 from contextlib import contextmanager
 from types import ModuleType
 from types import SimpleNamespace
@@ -12,6 +14,7 @@ import pytest
 from lcsp_workers.llm import BudgetTracker, DeepAgentClient, LLMToolDefinition
 from lcsp_workers.llm.deep_agent_client import (
     _api_key_env_name,
+    _lcsp_skill_paths,
     _select_subagent_mode,
     deep_agent_runtime_context,
     lcsp_search_engineering_rules,
@@ -83,6 +86,11 @@ class _FakeRubricMiddleware:
         max_iterations=3,
         on_evaluation=None,
     ):
+        warnings.warn(
+            "The middleware `RubricMiddleware` is in beta.",
+            UserWarning,
+            stacklevel=2,
+        )
         self.model = model
         self.system_prompt = system_prompt
         self.tools = tools
@@ -91,7 +99,12 @@ class _FakeRubricMiddleware:
 
 
 class _FakeCodeInterpreterMiddleware:
-    pass
+    def __init__(self):
+        warnings.warn(
+            "The class `CodeInterpreterMiddleware` is in beta.",
+            UserWarning,
+            stacklevel=2,
+        )
 
 
 class _FakeAsyncSubAgent(dict):
@@ -178,6 +191,8 @@ def test_deep_agent_complete_uses_create_deep_agent() -> None:
     assert created["name"] == "lcsp-deep-agent"
     assert created["tools"][0].__name__ == "lcsp_search_source_code"
     assert "lcsp" in "\n".join(created["skills"])
+    assert all(path.endswith("/deep_agent_skills/lcsp") for path in created["skills"])
+    assert all((pathlib.Path(path) / "SKILL.md").exists() for path in created["skills"])
     assert type(created["backend"]).__name__ == "_FakeCompositeBackend"
     assert type(created["backend"].default).__name__ == "DockerSandboxBackend"
     assert created["backend"].default.config.per_workflow is False
@@ -191,6 +206,19 @@ def test_deep_agent_complete_uses_create_deep_agent() -> None:
         "lcsp-openwiki-agent",
         "lcsp-engineering-rule-agent",
     }
+    assert all(
+        path.endswith("/deep_agent_skills/lcsp")
+        for agent in created["subagents"]
+        for path in agent["skills"]
+    )
+
+
+def test_lcsp_deep_agent_skill_path_points_to_leaf_skill() -> None:
+    paths = _lcsp_skill_paths()
+
+    assert len(paths) == 1
+    assert paths[0].endswith("/deep_agent_skills/lcsp")
+    assert (pathlib.Path(paths[0]) / "SKILL.md").exists()
 
 
 def test_deep_agent_mounts_workspace_only_from_runtime_context(tmp_path) -> None:
@@ -297,6 +325,27 @@ def test_deep_agent_dynamic_subagent_policy_adds_code_interpreter() -> None:
         type(item).__name__ == "_FakeCodeInterpreterMiddleware"
         for item in created["middleware"]
     )
+
+
+def test_deep_agent_suppresses_known_beta_middleware_warnings() -> None:
+    def fake_create_deep_agent(**_kwargs):
+        return _FakeAgent()
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with _fake_deepagents(fake_create_deep_agent, quickjs=True):
+            _client().complete(
+                "candidate_count 48 selected_rule_ids fan-out",
+                workflow_run_id="workflow-1",
+                node_name="plan_engineering_rules",
+            )
+
+    assert not [
+        warning
+        for warning in caught
+        if "RubricMiddleware" in str(warning.message)
+        or "CodeInterpreterMiddleware" in str(warning.message)
+    ]
 
 
 def test_deep_agent_async_policy_ignores_remote_async_subagents(monkeypatch) -> None:

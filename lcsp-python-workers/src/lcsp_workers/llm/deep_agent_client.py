@@ -12,6 +12,7 @@ import contextvars
 import json
 import os
 import re
+import warnings
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,6 +91,7 @@ _TOOL_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _LCSP_SKILLS_DIR = _PACKAGE_ROOT / "llm" / "deep_agent_skills"
+_LCSP_SKILL_DIR = _LCSP_SKILLS_DIR / "lcsp"
 _TEXT_EXTENSIONS = {
     ".md",
     ".py",
@@ -345,7 +347,7 @@ class DeepAgentClient:
                     subagent_mode=subagent_mode,
                 ),
                 memory=_existing_paths(_default_memory_paths()),
-                skills=_existing_paths([_LCSP_SKILLS_DIR]),
+                skills=_lcsp_skill_paths(),
                 backend=_lcsp_backend(
                     CompositeBackend=CompositeBackend,
                     FilesystemBackend=FilesystemBackend,
@@ -628,6 +630,13 @@ def _existing_paths(paths: list[Path]) -> list[str]:
     return [str(path) for path in paths if path.exists()]
 
 
+def _lcsp_skill_paths() -> list[str]:
+    """Return concrete Deep Agents skill roots included in the worker package."""
+    if (_LCSP_SKILL_DIR / "SKILL.md").exists():
+        return [str(_LCSP_SKILL_DIR)]
+    return []
+
+
 def _default_memory_paths() -> list[Path]:
     return [
         _REPO_ROOT / "AGENTS.md",
@@ -646,7 +655,7 @@ def _base_retrieval_tools() -> list[Any]:
 
 
 def _lcsp_subagents(retrieval_tools: list[Any]) -> list[dict[str, Any]]:
-    skill_paths = _existing_paths([_LCSP_SKILLS_DIR])
+    skill_paths = _lcsp_skill_paths()
     return [
         {
             "name": "lcsp-source-code-agent",
@@ -786,18 +795,23 @@ def _lcsp_middleware(*, model: str, subagent_mode: str) -> list[Any]:
         except ImportError:
             RubricMiddleware = None
         if RubricMiddleware is not None:
-            middleware.append(
-                RubricMiddleware(
-                    model=os.environ.get("LCSP_DEEP_AGENT_RUBRIC_MODEL", model),
-                    system_prompt=_lcsp_rubric_prompt(),
-                    max_iterations=_env_int(
-                        "LCSP_DEEP_AGENT_RUBRIC_MAX_ITERATIONS",
-                        default=2,
-                        minimum=1,
-                        maximum=5,
-                    ),
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r".*RubricMiddleware.*beta.*",
                 )
-            )
+                middleware.append(
+                    RubricMiddleware(
+                        model=os.environ.get("LCSP_DEEP_AGENT_RUBRIC_MODEL", model),
+                        system_prompt=_lcsp_rubric_prompt(),
+                        max_iterations=_env_int(
+                            "LCSP_DEEP_AGENT_RUBRIC_MAX_ITERATIONS",
+                            default=2,
+                            minimum=1,
+                            maximum=5,
+                        ),
+                    )
+                )
     if subagent_mode == "dynamic" and _env_flag(
         "LCSP_DEEP_AGENT_DYNAMIC_SUBAGENTS",
         default=True,
@@ -807,7 +821,12 @@ def _lcsp_middleware(*, model: str, subagent_mode: str) -> list[Any]:
         except ImportError:
             CodeInterpreterMiddleware = None
         if CodeInterpreterMiddleware is not None:
-            middleware.append(CodeInterpreterMiddleware())
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r".*CodeInterpreterMiddleware.*beta.*",
+                )
+                middleware.append(CodeInterpreterMiddleware())
     return middleware
 
 
