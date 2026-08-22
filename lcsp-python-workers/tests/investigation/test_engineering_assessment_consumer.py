@@ -104,7 +104,7 @@ def test_retryable_callback_failure_is_preserved_for_outer_retry_policy() -> Non
         )
 
 
-def test_waiting_investigation_does_not_submit_classification_callback() -> None:
+def test_waiting_investigation_submits_blocked_classification_callback() -> None:
     api_client = MagicMock()
     api_client.get_accepted_technical_evidence_report.return_value = {
         "id": "ter-1",
@@ -131,11 +131,16 @@ def test_waiting_investigation_does_not_submit_classification_callback() -> None
         investigation_pipeline=pipeline,
     )
 
-    with pytest.raises(RuntimeError, match="waiting for legal rule source rebuild"):
-        consumer.handle(
-            {"evidenceReportId": "ter-1", "workflowRunId": "scan-1"},
-            "corr-1",
-        )
+    consumer.handle(
+        {"evidenceReportId": "ter-1", "workflowRunId": "scan-1"},
+        "corr-1",
+    )
 
     api_client.post_scan_runtime_event.assert_called_once()
-    api_client.post_classification_callback.assert_not_called()
+    api_client.post_classification_callback.assert_called_once()
+    payload = api_client.post_classification_callback.call_args.args[0]
+    assert payload.guardrail_status == "BLOCKED"
+    assert payload.classification_data["status"] == "WAITING"
+    assert payload.classification_data["limitations"] == [
+        "NO_ENGINEERING_RULE_SOURCE_RULES"
+    ]

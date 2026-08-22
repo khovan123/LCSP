@@ -785,9 +785,12 @@ class BusinessSemanticEnricher:
             "not invent source facts. If the entrypoint label, adjacent data contracts, handlers, "
             "commands, queues, or AI invocation nodes reveal a business action, propose at least one "
             "business semantic node grounded in those refs; omit proposals only when the business "
-            "meaning is genuinely ambiguous. Existing technical node IDs may be edge endpoints "
-            "directly; proposed semantic node endpoints use proposal:<proposalNodeId>. Submit "
-            "exactly one native tool call.\n\n"
+            "meaning is genuinely ambiguous. For a selected cluster, an empty nodes array is not "
+            "a valid proposal; if there is not enough evidence for at least one supported business "
+            "semantic node, do not call the tool so the cluster is skipped instead of accepted as "
+            "empty. Existing technical node IDs may be edge endpoints directly; proposed semantic "
+            "node endpoints use proposal:<proposalNodeId>. Submit exactly one native tool call "
+            "only with a non-empty supported proposal.\n\n"
             + json.dumps(context, ensure_ascii=False, separators=(",", ":"))
         )
 
@@ -808,6 +811,7 @@ class BusinessSemanticEnricher:
                 "properties": {
                     "nodes": {
                         "type": "array",
+                        "minItems": 1,
                         "maxItems": 40,
                         "items": {
                             "type": "object",

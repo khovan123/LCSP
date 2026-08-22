@@ -123,9 +123,6 @@ class EngineeringAssessmentConsumer(ConsumerBase):
                     result=result,
                     correlation_id=correlationId,
                 )
-                raise RuntimeError(
-                    "engineering assessment is waiting for legal rule source rebuild"
-                )
             result_data = result.to_assessment_data()
             guardrail_status = self._guardrail_status(result.status)
 

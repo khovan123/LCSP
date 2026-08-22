@@ -182,6 +182,16 @@ def test_empty_business_semantic_proposal_records_drop_reason(tmp_path: Path) ->
     assert diagnostics.drop_reasons == {"EMPTY_PROPOSAL": 1}
 
 
+def test_business_semantic_tool_requires_at_least_one_node() -> None:
+    schema = BusinessSemanticEnricher._tool().input_schema
+
+    nodes_schema = schema["properties"]["nodes"]
+    edges_schema = schema["properties"]["edges"]
+
+    assert nodes_schema["minItems"] == 1
+    assert "minItems" not in edges_schema
+
+
 def test_legal_or_risk_tier_conclusion_is_not_business_semantic_node(tmp_path: Path) -> None:
     graph = _graph(tmp_path)
     support = graph.nodes[0]["node_id"]
