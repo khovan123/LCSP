@@ -67,7 +67,8 @@ export type RecordWorkerRuntimeEventInput = Omit<
 };
 
 export type RecordWorkerRuntimeEventResult =
-  { recorded: true } | { recorded: false; reason: "not_found" | "inactive" };
+  | { recorded: true }
+  | { recorded: false; reason: "not_found" | "inactive" | "terminal" };
 
 type PersistedAssessmentRuntimeEvent = {
   id: string;
@@ -283,6 +284,9 @@ export class AssessmentRuntimeEventService {
     });
     if (!scanJob) {
       return { recorded: false, reason: "not_found" };
+    }
+    if (isTerminalScanRuntimeStatus(scanJob.status)) {
+      return { recorded: false, reason: "terminal" };
     }
     if (!isActiveScanRuntimeStatus(scanJob.status)) {
       return { recorded: false, reason: "inactive" };
@@ -753,6 +757,15 @@ function isActiveScanRuntimeStatus(status: string): boolean {
   return (
     status === REPOSITORY_SCAN_JOB_STATUSES.queued ||
     status === REPOSITORY_SCAN_JOB_STATUSES.running
+  );
+}
+
+function isTerminalScanRuntimeStatus(status: string): boolean {
+  return (
+    status === REPOSITORY_SCAN_JOB_STATUSES.completed ||
+    status === REPOSITORY_SCAN_JOB_STATUSES.failed ||
+    status === REPOSITORY_SCAN_JOB_STATUSES.blocked ||
+    status === REPOSITORY_SCAN_JOB_STATUSES.blockedMapping
   );
 }
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import json
-import pathlib
 import warnings
 from contextlib import contextmanager
 from types import ModuleType
@@ -13,8 +12,10 @@ import pytest
 
 from lcsp_workers.llm import BudgetTracker, DeepAgentClient, LLMToolDefinition
 from lcsp_workers.llm.deep_agent_client import (
+    _LCSP_SKILLS_DIR,
     _api_key_env_name,
-    _lcsp_skill_paths,
+    _lcsp_backend,
+    _lcsp_skill_sources,
     _select_subagent_mode,
     deep_agent_runtime_context,
     lcsp_search_engineering_rules,
@@ -190,13 +191,12 @@ def test_deep_agent_complete_uses_create_deep_agent() -> None:
     assert created["model"] == "openai:gpt-4o-mini"
     assert created["name"] == "lcsp-deep-agent"
     assert created["tools"][0].__name__ == "lcsp_search_source_code"
-    assert "lcsp" in "\n".join(created["skills"])
-    assert all(path.endswith("/deep_agent_skills/lcsp") for path in created["skills"])
-    assert all((pathlib.Path(path) / "SKILL.md").exists() for path in created["skills"])
+    assert created["skills"] == ["/skills/"]
     assert type(created["backend"]).__name__ == "_FakeCompositeBackend"
     assert type(created["backend"].default).__name__ == "DockerSandboxBackend"
     assert created["backend"].default.config.per_workflow is False
     assert "/workspace/" not in created["backend"].routes
+    assert created["backend"].routes["/skills/"].root_dir == _LCSP_SKILLS_DIR
     assert "/memories/" in created["backend"].routes
     assert type(created["checkpointer"]).__name__ == "_FakeMemorySaver"
     assert type(created["store"]).__name__ == "_FakeInMemoryStore"
@@ -207,18 +207,41 @@ def test_deep_agent_complete_uses_create_deep_agent() -> None:
         "lcsp-engineering-rule-agent",
     }
     assert all(
-        path.endswith("/deep_agent_skills/lcsp")
+        path == "/skills/"
         for agent in created["subagents"]
         for path in agent["skills"]
     )
 
 
-def test_lcsp_deep_agent_skill_path_points_to_leaf_skill() -> None:
-    paths = _lcsp_skill_paths()
+def test_lcsp_deep_agent_skill_source_points_to_backend_route() -> None:
+    sources = _lcsp_skill_sources()
 
-    assert len(paths) == 1
-    assert paths[0].endswith("/deep_agent_skills/lcsp")
-    assert (pathlib.Path(paths[0]) / "SKILL.md").exists()
+    assert sources == ["/skills/"]
+    assert (_LCSP_SKILLS_DIR / "lcsp" / "SKILL.md").exists()
+
+
+def test_lcsp_backend_exposes_skill_source_route() -> None:
+    from deepagents.backends import CompositeBackend, FilesystemBackend, StoreBackend
+    from langgraph.store.memory import InMemoryStore
+
+    store = InMemoryStore()
+    backend = _lcsp_backend(
+        CompositeBackend=CompositeBackend,
+        FilesystemBackend=FilesystemBackend,
+        StoreBackend=StoreBackend,
+        store=store,
+        workflow_run_id="workflow-1",
+        node_name="plan_engineering_rules",
+    )
+
+    listed = backend.ls("/skills/")
+    assert listed.error is None
+    assert any(entry["path"] == "/skills/lcsp/" for entry in listed.entries or [])
+
+    [skill] = backend.download_files(["/skills/lcsp/SKILL.md"])
+    assert skill.error is None
+    assert skill.content is not None
+    assert b"name: lcsp" in skill.content
 
 
 def test_deep_agent_mounts_workspace_only_from_runtime_context(tmp_path) -> None:
@@ -504,7 +527,7 @@ def test_deep_agent_api_key_not_in_logs(caplog) -> None:
         assert "SECRET_API_KEY_123" not in record.message
 
 
-def test_deep_agent_response_is_redacted() -> None:
+def test_deep_agent_response_strips_secret_values() -> None:
     class SecretAgent:
         def invoke(self, _payload, config=None):
             del config
@@ -525,10 +548,9 @@ def test_deep_agent_response_is_redacted() -> None:
         )
 
     assert "sk-ant-12345" not in response.content
-    assert "[REDACTED" in response.content
 
 
-def test_deep_agent_redacts_prompt_before_invoke() -> None:
+def test_deep_agent_strips_secrets_from_prompt_before_invoke() -> None:
     observed = {}
 
     class ObservingAgent:
@@ -552,7 +574,6 @@ def test_deep_agent_redacts_prompt_before_invoke() -> None:
         )
 
     assert "123456789012345678901234567890123456" not in observed["prompt"]
-    assert "[REDACTED:GITHUB_TOKEN]" in observed["prompt"]
 
 
 def test_deep_agent_invoke_sets_langgraph_thread_id() -> None:

@@ -196,6 +196,7 @@ class BusinessSemanticEnricher:
         accepted_node_count = 0
         accepted_edge_count = 0
         succeeded_clusters = 0
+        empty_clusters = 0
         failed_clusters = 0
 
         for index, context in enumerate(contexts):
@@ -226,6 +227,17 @@ class BusinessSemanticEnricher:
                     trusted_support_refs=trusted_support_refs,
                     base_graph_id=base_graph.graph_id,
                 )
+                if added_nodes == 0 and added_edges == 0:
+                    empty_clusters += 1
+                    logger.warning(
+                        "BUSINESS_SEMANTIC_CLUSTER_EMPTY",
+                        cluster_id=cluster_id,
+                        entrypoint_type=context.get("entrypointType"),
+                        entrypoint_label=context.get("entrypointLabel"),
+                        workflow_run_id=workflow_run_id,
+                        correlationId=correlation_id,
+                    )
+                    continue
                 accepted_node_count += added_nodes
                 accepted_edge_count += added_edges
                 succeeded_clusters += 1
@@ -254,6 +266,7 @@ class BusinessSemanticEnricher:
             "BUSINESS_SEMANTIC_GRAPH_ENRICHMENT_READY",
             cluster_count=len(contexts),
             succeeded_cluster_count=succeeded_clusters,
+            empty_cluster_count=empty_clusters,
             failed_cluster_count=failed_clusters,
             accepted_node_count=accepted_node_count,
             accepted_edge_count=accepted_edge_count,
@@ -674,9 +687,12 @@ class BusinessSemanticEnricher:
             "when concrete graph refs in THIS cluster support them. Every proposed node and edge "
             "must cite supportRefs that already exist in the supplied cluster. Do not decide legal "
             "applicability, compliance/non-compliance, prohibited practice, or legal risk tier. Do "
-            "not invent source facts. If business meaning is ambiguous, omit the proposal. Existing "
-            "technical node IDs may be edge endpoints directly; proposed semantic node endpoints use "
-            "proposal:<proposalNodeId>. Submit exactly one native tool call.\n\n"
+            "not invent source facts. If the entrypoint label, adjacent data contracts, handlers, "
+            "commands, queues, or AI invocation nodes reveal a business action, propose at least one "
+            "business semantic node grounded in those refs; omit proposals only when the business "
+            "meaning is genuinely ambiguous. Existing technical node IDs may be edge endpoints "
+            "directly; proposed semantic node endpoints use proposal:<proposalNodeId>. Submit "
+            "exactly one native tool call.\n\n"
             + json.dumps(context, ensure_ascii=False, separators=(",", ":"))
         )
 

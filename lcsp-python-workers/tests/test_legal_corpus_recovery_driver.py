@@ -39,6 +39,15 @@ class FakeApiClient:
         self.calls.append(("resume", (corpus_version_id, payload)))
         return {"result": {"resumedRunCount": 1}}
 
+    def recover_legal_rules_from_active_corpus(self, payload: dict) -> dict:
+        self.calls.append(("recover_rules", payload))
+        return {
+            "id": "catalog-1",
+            "status": "APPROVED",
+            "ruleCount": 3,
+            "corpusVersionId": "corpus-1",
+        }
+
 
 def test_recovery_driver_ingests_indexes_activates_and_resumes(
     tmp_path: Path,
@@ -67,6 +76,7 @@ def test_recovery_driver_ingests_indexes_activates_and_resumes(
         "ingest",
         "register_index",
         "activate",
+        "recover_rules",
         "resume",
     ]
 
@@ -105,8 +115,14 @@ def test_recovery_driver_skips_validation_activation_when_corpus_unchanged(
 
     assert result["noChanges"] is True
     assert result["corpusVersionId"] == "corpus-active"
+    assert result["legalRuleCatalogVersionId"] == "catalog-1"
+    assert result["legalRuleCount"] == 3
     assert result["resumedRunCount"] == 1
-    assert [name for name, _payload in api_client.calls] == ["ingest", "resume"]
+    assert [name for name, _payload in api_client.calls] == [
+        "ingest",
+        "recover_rules",
+        "resume",
+    ]
 
 
 def test_recovery_driver_uses_runtime_crawl_artifacts_from_message(
@@ -132,6 +148,7 @@ def test_recovery_driver_uses_runtime_crawl_artifacts_from_message(
         "ingest",
         "register_index",
         "activate",
+        "recover_rules",
         "resume",
     ]
 
@@ -162,6 +179,7 @@ def test_recovery_driver_discovers_runtime_crawl_artifacts_from_corpus_store(
         "ingest",
         "register_index",
         "activate",
+        "recover_rules",
         "resume",
     ]
 
@@ -177,6 +195,29 @@ def test_recovery_driver_does_not_fallback_to_repository_reports(tmp_path: Path)
             },
             "corr-1",
         )
+
+
+def test_recovery_driver_can_recover_rules_from_active_corpus_without_artifacts(
+    tmp_path: Path,
+) -> None:
+    api_client = FakeApiClient()
+    driver = LegalCorpusRecoveryDriver(api_client=api_client)
+
+    result = driver.run(
+        {
+            "idempotencyKey": "vp-1:command.legal-corpus.recovery.requested.v1",
+            "storageRoot": str(tmp_path / ".corpus"),
+            "recoverLegalRulesOnly": True,
+            "maxRuns": 0,
+        },
+        "corr-1",
+    )
+
+    assert result["status"] == "READY"
+    assert result["legalRuleOnly"] is True
+    assert result["legalRuleCatalogVersionId"] == "catalog-1"
+    assert result["legalRuleCount"] == 3
+    assert [name for name, _payload in api_client.calls] == ["recover_rules"]
 
 
 def reviewed_manifest(tmp_path: Path, document_id: str, text: str) -> Path:

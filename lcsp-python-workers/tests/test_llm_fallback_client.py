@@ -212,7 +212,6 @@ def test_safe_provider_error_details_read_request_id_header_and_redact_api_key()
     assert details["status_code"] == 400
     assert details["request_id"] == "req_header_456"
     assert api_key not in str(details["error_message"])
-    assert "[REDACTED" in str(details["error_message"])
     assert "context_length_exceeded" in str(details["error_message"])
 
 

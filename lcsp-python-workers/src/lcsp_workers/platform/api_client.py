@@ -66,7 +66,7 @@ class WorkerApiClient:
         self._max_retries = 3
 
     def _post_with_retry(self, path: str, payload: dict) -> dict:
-        """POST a redacted payload with exponential retry for network/5xx failures.
+        """POST a sanitized payload with exponential retry for network/5xx failures.
 
         Known 409 duplicate codes are treated as idempotent success. Other 4xx
         responses fail immediately; transport and 5xx failures retry up to the
@@ -544,6 +544,16 @@ class WorkerApiClient:
         )
         if not isinstance(data, dict):
             raise WorkerCallbackError("Legal corpus ingest response was invalid.")
+        return data
+
+    def recover_legal_rules_from_active_corpus(self, payload: dict) -> dict:
+        """Create approved LegalRule source rows from active corpus candidate chunks."""
+        data = self._post_with_retry(
+            "/internal/legal-rule-catalog/rules/recover-from-active-corpus",
+            payload,
+        )
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Legal rule recovery response was invalid.")
         return data
 
     def register_validated_retrieval_index(

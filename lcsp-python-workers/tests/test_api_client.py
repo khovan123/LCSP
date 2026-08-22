@@ -132,7 +132,7 @@ def test_scan_runtime_event_posts_best_effort_metadata(client):
         assert kwargs["headers"]["X-Worker-Api-Key"] == "test-api-key"
         assert kwargs["headers"]["X-Correlation-Id"] == "runtime-cid-1"
         assert kwargs["timeout"] == 3.0
-        assert kwargs["json"]["input_summary"]["api_key"] == "[REDACTED]"
+        assert kwargs["json"]["input_summary"]["api_key"] == ""
 
 
 def test_scan_runtime_event_failure_does_not_fail_scan(client):
@@ -163,8 +163,8 @@ def test_t07_raw_source_code_rejected():
         )
 
 
-def test_callback_payload_is_redacted_before_serialization(client):
-    """MW-pyp-003: callback payloads are redacted before httpx serialization."""
+def test_callback_payload_strips_raw_source_and_secret_values(client):
+    """MW-pyp-003: callback payloads strip raw source and secrets before serialization."""
     payload = ScanCallbackPayload(
         status="COMPLETED",
         findings=[
@@ -193,8 +193,8 @@ def test_callback_payload_is_redacted_before_serialization(client):
         assert serialized_payload["findings"] == [
             {
                 "finding_type": "SAFE",
-                "description": "saw Bearer [REDACTED]",
-                "metadata": {"api_key": "[REDACTED]"},
+                "description": "saw Bearer",
+                "metadata": {"api_key": ""},
             }
         ]
 
@@ -358,6 +358,27 @@ def test_resume_waiting_runs_uses_internal_legal_catalog_endpoint(client):
         assert response["resumedRunCount"] == 3
         assert mock_post.call_args.args[0] == (
             "http://testserver/internal/legal-rule-catalog/corpus/corpus-1/resume-waiting-runs"
+        )
+
+
+def test_recover_legal_rules_from_active_corpus_uses_internal_worker_endpoint(client):
+    with patch("lcsp_workers.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "ok": True,
+            "data": {"id": "catalog-1", "ruleCount": 3},
+        }
+        mock_post.return_value = mock_resp
+
+        response = client.recover_legal_rules_from_active_corpus(
+            {"idempotencyKey": "recover-legal-rules-1"}
+        )
+
+        assert response["id"] == "catalog-1"
+        assert response["ruleCount"] == 3
+        assert mock_post.call_args.args[0] == (
+            "http://testserver/internal/legal-rule-catalog/rules/recover-from-active-corpus"
         )
 
 

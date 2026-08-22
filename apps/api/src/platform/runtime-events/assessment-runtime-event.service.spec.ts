@@ -184,6 +184,47 @@ describe("AssessmentRuntimeEventService", () => {
     });
   });
 
+  it("skips late scanner-worker runtime events after the scan job is terminal", async () => {
+    const assessmentRuntimeEvent = {
+      findFirst: jest.fn().mockImplementation(() => Promise.resolve(null)),
+      create: jest.fn().mockImplementation(() => Promise.resolve({})),
+    };
+    const prisma = {
+      repositoryScanJob: {
+        findUnique: jest.fn().mockImplementation(() =>
+          Promise.resolve({
+            id: "scan-1",
+            assessmentId: "assessment-1",
+            organizationId: "org-1",
+            correlationId: "corr-1",
+            status: "COMPLETED",
+          }),
+        ),
+      },
+      $transaction: jest.fn(
+        (
+          handler: (tx: {
+            assessmentRuntimeEvent: typeof assessmentRuntimeEvent;
+          }) => unknown,
+        ) => Promise.resolve(handler({ assessmentRuntimeEvent })),
+      ),
+    };
+    const service = new AssessmentRuntimeEventService(prisma as never);
+
+    await expect(
+      service.recordScanWorkerEvent({
+        scanJobId: "scan-1",
+        eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted,
+        runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.completed,
+        stage: ASSESSMENT_RUNTIME_STAGE_CODES.scan,
+        toolName: "repository_scan",
+        summary: "Repository scan completed",
+      }),
+    ).resolves.toEqual({ recorded: false, reason: "terminal" });
+
+    expect(assessmentRuntimeEvent.create).not.toHaveBeenCalled();
+  });
+
   it("does not build synthetic scan activity when persisted worker activity exists", async () => {
     const prisma = {
       assessmentRuntimeEvent: {

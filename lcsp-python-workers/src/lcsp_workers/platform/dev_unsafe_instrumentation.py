@@ -39,7 +39,7 @@ def install_dev_unsafe_instrumentation() -> None:
     emit_dev_unsafe_trace(
         "DEV_UNSAFE_TRACE_INSTALLED",
         warning=(
-            "UNREDACTED development tracing is active; logs may contain credentials, "
+            "Raw development tracing is active; logs may contain credentials, "
             "source code, prompts, model responses, idempotency keys, PII, and tokens."
         ),
     )

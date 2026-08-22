@@ -8,6 +8,7 @@ import threading
 from typing import Any, Callable
 
 from lcsp_workers.platform.config import load_tracing_config
+from lcsp_workers.platform.redaction import redact_string
 
 logger = logging.getLogger(__name__)
 _tracer = None
@@ -73,14 +74,20 @@ def traceable(
                 ) as parent_span:
                     parent_span.set_attribute("openinference.span.kind", "CHAIN")
                     _set_parent_span_attributes(parent_span, w_kwargs)
-                    return _run_traced_call(
-                        func=func,
-                        target_name=target_name,
-                        run_type=run_type,
-                        metadata=metadata,
-                        w_args=w_args,
-                        w_kwargs=w_kwargs,
-                    )
+                    try:
+                        result = _run_traced_call(
+                            func=func,
+                            target_name=target_name,
+                            run_type=run_type,
+                            metadata=metadata,
+                            w_args=w_args,
+                            w_kwargs=w_kwargs,
+                        )
+                        _set_span_status(parent_span, "ok")
+                        return result
+                    except Exception as exc:
+                        _set_span_status(parent_span, "error", str(exc))
+                        raise
             return func(*w_args, **w_kwargs)
 
         return wrapper
@@ -107,15 +114,10 @@ def _run_traced_call(
         try:
             result = func(*w_args, **w_kwargs)
             _set_output_span_attributes(span, result)
+            _set_span_status(span, "ok")
             return result
         except Exception as exc:
-            try:
-                from opentelemetry.trace import Status, StatusCode
-
-                span.record_exception(exc)
-                span.set_status(Status(StatusCode.ERROR, str(exc)))
-            except Exception:
-                pass
+            _set_span_status(span, "error", str(exc), exception=exc)
             raise
 
 
@@ -181,7 +183,7 @@ def _set_common_span_attributes(
 
     prompt = _extract_prompt(args, kwargs)
     if prompt is not None:
-        prompt_text = str(prompt)
+        prompt_text = redact_string(str(prompt))
         span.set_attribute("input.mime_type", "text/plain")
         span.set_attribute("input.value", prompt_text)
         span.set_attribute("llm.input_messages.0.message.role", "user")
@@ -217,6 +219,7 @@ def _set_output_span_attributes(span: Any, result: Any) -> None:
         output_value = None
 
     if output_value is not None:
+        output_value = redact_string(output_value)
         span.set_attribute("output.mime_type", "text/plain")
         span.set_attribute("output.value", output_value)
 
@@ -226,6 +229,26 @@ def _set_output_span_attributes(span: Any, result: Any) -> None:
         span.set_attribute("llm.token_count.prompt", int(input_tokens))
     if output_tokens is not None:
         span.set_attribute("llm.token_count.completion", int(output_tokens))
+
+
+def _set_span_status(
+    span: Any,
+    status: str,
+    description: str | None = None,
+    *,
+    exception: Exception | None = None,
+) -> None:
+    try:
+        from opentelemetry.trace import Status, StatusCode
+
+        if exception is not None:
+            span.record_exception(exception)
+        if status == "ok":
+            span.set_status(Status(StatusCode.OK))
+            return
+        span.set_status(Status(StatusCode.ERROR, description or "error"))
+    except Exception:
+        pass
 
 
 def _instrument_optional_openinference_packages() -> None:

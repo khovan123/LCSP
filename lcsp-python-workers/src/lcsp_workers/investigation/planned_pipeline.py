@@ -825,6 +825,9 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                         f"{workflow_run_id}:engineering-rule-source-recovery"
                     ),
                     "maxRuns": 0,
+                    "recoverLegalRulesOnly": (
+                        reason == "NO_APPROVED_ENGINEERING_RULE_SOURCE_RULES"
+                    ),
                 },
                 correlation_id or workflow_run_id,
             )

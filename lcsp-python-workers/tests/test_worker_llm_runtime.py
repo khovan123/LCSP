@@ -205,7 +205,7 @@ def test_traceable_creates_workflow_parent_and_records_llm_input(monkeypatch) ->
         model = "gpt-4o-mini"
 
     class Response:
-        content = "done"
+        content = "done Authorization: Bearer secret-output-token"
         input_tokens = 11
         output_tokens = 3
 
@@ -225,7 +225,7 @@ def test_traceable_creates_workflow_parent_and_records_llm_input(monkeypatch) ->
 
     call_llm(
         Client(),
-        "raw prompt visible in phoenix",
+        "raw prompt Authorization: Bearer secret-input-token visible in phoenix",
         workflow_run_id="scan-business-semantics:test",
         node_name="enrich_business_semantics",
         correlationId="request-123",
@@ -234,16 +234,20 @@ def test_traceable_creates_workflow_parent_and_records_llm_input(monkeypatch) ->
     parent_span, llm_span = fake_tracer.spans
     assert parent_span.name == "lcsp.workflow:enrich_business_semantics"
     assert parent_span.attributes["metadata.correlationId"] == "request-123"
+    assert "status" in parent_span.attributes
     assert llm_span.name == "DeepAgentClient.complete_with_tools"
     assert llm_span.attributes["openinference.span.kind"] == "LLM"
     assert llm_span.attributes["metadata.workflow_run_id"] == (
         "scan-business-semantics:test"
     )
-    assert llm_span.attributes["input.value"] == "raw prompt visible in phoenix"
-    assert llm_span.attributes["llm.input_messages.0.message.content"] == (
-        "raw prompt visible in phoenix"
+    assert llm_span.attributes["input.value"] == (
+        "raw prompt Authorization: Bearer visible in phoenix"
     )
-    assert llm_span.attributes["output.value"] == "done"
+    assert llm_span.attributes["llm.input_messages.0.message.content"] == (
+        "raw prompt Authorization: Bearer visible in phoenix"
+    )
+    assert llm_span.attributes["output.value"] == "done Authorization: Bearer"
+    assert "status" in llm_span.attributes
     assert llm_span.attributes["llm.token_count.prompt"] == 11
 
 

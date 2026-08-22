@@ -90,6 +90,12 @@ class LegalCorpusRecoveryDriver:
         idempotency_key: str,
     ) -> dict[str, Any]:
         """Run recovery while holding the per-core corpus recovery lock."""
+        if bool(message.get("recoverLegalRulesOnly")):
+            return self._run_legal_rule_only_recovery(
+                message=message,
+                correlationId=correlationId,
+                idempotency_key=idempotency_key,
+            )
         manifests = self._resolve_source_manifests(message)
         reviewed_dir = self._resolve_reviewed_dir(message)
         builder = _load_script_module("build_reviewed_legal_corpus.py")
@@ -108,6 +114,11 @@ class LegalCorpusRecoveryDriver:
         draft = self._api_client.ingest_validated_legal_corpus_draft(enriched_payload)
         corpus_id = required_response_string(draft, "id", "corpus ingest response")
         if bool(draft.get("noChanges")):
+            catalog = self._recover_legal_rule_catalog(
+                idempotency_key=idempotency_key,
+                version=version,
+                correlationId=correlationId,
+            )
             resumed = self._api_client.resume_waiting_runs(
                 corpus_id,
                 {
@@ -115,18 +126,24 @@ class LegalCorpusRecoveryDriver:
                     "idempotencyKey": f"{idempotency_key}:resume:{version}",
                 },
             )
-            resumed_count = int((resumed.get("result") or {}).get("resumedRunCount") or 0)
+            resumed_count = int(
+                (resumed.get("result") or {}).get("resumedRunCount") or 0
+            )
             logger.info(
                 "LEGAL_CORPUS_RECOVERY_SKIPPED_UNCHANGED",
                 corpus_version_id=corpus_id,
                 corpus_version=str(draft.get("version") or ""),
                 change_set=draft.get("changeSet") or {},
+                legal_rule_catalog_version_id=catalog.get("id"),
+                legal_rule_count=catalog.get("ruleCount"),
                 resumed_run_count=resumed_count,
                 correlationId=correlationId,
             )
             return {
                 "status": "READY",
                 "corpusVersionId": corpus_id,
+                "legalRuleCatalogVersionId": catalog.get("id"),
+                "legalRuleCount": catalog.get("ruleCount"),
                 "retrievalIndexId": None,
                 "resumedRunCount": resumed_count,
                 "correlationId": correlationId,
@@ -165,6 +182,11 @@ class LegalCorpusRecoveryDriver:
             str((approved.get("artifactVersions") or {}).get("corpusVersionId") or "")
             or corpus_id
         )
+        catalog = self._recover_legal_rule_catalog(
+            idempotency_key=idempotency_key,
+            version=version,
+            correlationId=correlationId,
+        )
         resumed = self._api_client.resume_waiting_runs(
             active_corpus_id,
             {
@@ -179,6 +201,8 @@ class LegalCorpusRecoveryDriver:
         logger.info(
             "LEGAL_CORPUS_RECOVERY_COMPLETED",
             corpus_version_id=active_corpus_id,
+            legal_rule_catalog_version_id=catalog.get("id"),
+            legal_rule_count=catalog.get("ruleCount"),
             retrieval_index_id=retrieval_index_id,
             resumed_run_count=resumed_count,
             correlationId=correlationId,
@@ -186,6 +210,8 @@ class LegalCorpusRecoveryDriver:
         return {
             "status": "READY",
             "corpusVersionId": active_corpus_id,
+            "legalRuleCatalogVersionId": catalog.get("id"),
+            "legalRuleCount": catalog.get("ruleCount"),
             "retrievalIndexId": retrieval_index_id,
             "resumedRunCount": resumed_count,
             "correlationId": correlationId,
@@ -200,6 +226,79 @@ class LegalCorpusRecoveryDriver:
             corpus_version_id=corpus_version_id,
             payload=payload,
         )
+
+    def _run_legal_rule_only_recovery(
+        self,
+        *,
+        message: dict[str, Any],
+        correlationId: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Recover LegalRule rows from the active corpus without local crawl files."""
+        catalog = self._recover_legal_rule_catalog(
+            idempotency_key=idempotency_key,
+            version="active-corpus",
+            correlationId=correlationId,
+        )
+        corpus_id = str(catalog.get("corpusVersionId") or "")
+        resumed_count = 0
+        if corpus_id and int(message.get("maxRuns") or 0) > 0:
+            resumed = self._api_client.resume_waiting_runs(
+                corpus_id,
+                {
+                    "maxRuns": int(message.get("maxRuns") or 500),
+                    "idempotencyKey": f"{idempotency_key}:resume:active-corpus",
+                },
+            )
+            resumed_count = int(
+                (resumed.get("result") or {}).get("resumedRunCount") or 0
+            )
+        logger.info(
+            "LEGAL_RULE_ONLY_RECOVERY_COMPLETED",
+            legal_rule_catalog_version_id=catalog.get("id"),
+            legal_rule_count=catalog.get("ruleCount"),
+            corpus_version_id=corpus_id or None,
+            resumed_run_count=resumed_count,
+            correlationId=correlationId,
+        )
+        return {
+            "status": "READY",
+            "corpusVersionId": corpus_id or None,
+            "legalRuleCatalogVersionId": catalog.get("id"),
+            "legalRuleCount": catalog.get("ruleCount"),
+            "retrievalIndexId": None,
+            "resumedRunCount": resumed_count,
+            "correlationId": correlationId,
+            "legalRuleOnly": True,
+        }
+
+    def _recover_legal_rule_catalog(
+        self,
+        *,
+        idempotency_key: str,
+        version: str,
+        correlationId: str,
+    ) -> dict[str, Any]:
+        """Recover approved LegalRule source rows after corpus chunks are ready."""
+        response = self._api_client.recover_legal_rules_from_active_corpus(
+            {
+                "idempotencyKey": f"{idempotency_key}:legal-rules:{version}",
+            }
+        )
+        rule_count = int(response.get("ruleCount") or 0)
+        if rule_count <= 0:
+            raise RuntimeError(
+                "legal rule source recovery produced no approved LegalRule rows"
+            )
+        logger.info(
+            "LEGAL_RULE_SOURCE_RECOVERY_COMPLETED",
+            legal_rule_catalog_version_id=response.get("id"),
+            legal_rule_count=rule_count,
+            corpus_version_id=response.get("corpusVersionId"),
+            no_changes=bool(response.get("noChanges")),
+            correlationId=correlationId,
+        )
+        return response
 
     def _resolve_source_manifests(self, message: dict[str, Any]) -> list[Path]:
         """Resolve official-source manifests from runtime crawl artifacts."""

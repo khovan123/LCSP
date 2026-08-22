@@ -385,7 +385,7 @@ def _safe_provider_error_details(
     message = redact_string(str(error)).strip() or type(error).__name__
     for api_key in api_keys:
         if api_key:
-            message = message.replace(api_key, "[REDACTED:API_KEY]")
+            message = message.replace(api_key, "")
     if len(message) > _MAX_PROVIDER_ERROR_MESSAGE_CHARS:
         message = message[:_MAX_PROVIDER_ERROR_MESSAGE_CHARS] + "…"
 

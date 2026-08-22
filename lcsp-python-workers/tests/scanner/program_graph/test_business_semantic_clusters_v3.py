@@ -47,6 +47,22 @@ class _FakeLlm:
         )
 
 
+class _EmptyProposalLlm:
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def complete_with_tools(self, prompt: str, **kwargs):
+        self.call_count += 1
+        return SimpleNamespace(
+            tool_calls=[
+                SimpleNamespace(
+                    name="submit_business_semantics",
+                    arguments={"nodes": [], "edges": []},
+                )
+            ]
+        )
+
+
 def _graph(tmp_path: Path):
     (tmp_path / "app.py").write_text(
         '''
@@ -88,6 +104,25 @@ def test_business_enrichment_clusters_independent_entrypoints(tmp_path: Path) ->
     ]
     assert len(semantic) >= 2
     assert all(node.get("support_refs") for node in semantic)
+
+
+def test_empty_business_semantic_proposals_do_not_mutate_graph(
+    tmp_path: Path,
+) -> None:
+    graph = _graph(tmp_path)
+    llm = _EmptyProposalLlm()
+
+    enriched = BusinessSemanticEnricher(llm).enrich(
+        graph,
+        workflow_run_id="workflow-empty",
+    )
+
+    assert llm.call_count >= 1
+    assert enriched is graph
+    assert not any(
+        node.get("origin") == "LLM_SEMANTIC_ENRICHMENT"
+        for node in enriched.nodes
+    )
 
 
 def test_later_cluster_cannot_use_prior_llm_node_as_provenance(tmp_path: Path) -> None:

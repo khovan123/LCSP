@@ -92,6 +92,7 @@ _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _LCSP_SKILLS_DIR = _PACKAGE_ROOT / "llm" / "deep_agent_skills"
 _LCSP_SKILL_DIR = _LCSP_SKILLS_DIR / "lcsp"
+_LCSP_SKILL_SOURCE = "/skills/"
 _TEXT_EXTENSIONS = {
     ".md",
     ".py",
@@ -347,7 +348,7 @@ class DeepAgentClient:
                     subagent_mode=subagent_mode,
                 ),
                 memory=_existing_paths(_default_memory_paths()),
-                skills=_lcsp_skill_paths(),
+                skills=_lcsp_skill_sources(),
                 backend=_lcsp_backend(
                     CompositeBackend=CompositeBackend,
                     FilesystemBackend=FilesystemBackend,
@@ -630,10 +631,14 @@ def _existing_paths(paths: list[Path]) -> list[str]:
     return [str(path) for path in paths if path.exists()]
 
 
-def _lcsp_skill_paths() -> list[str]:
-    """Return concrete Deep Agents skill roots included in the worker package."""
-    if (_LCSP_SKILL_DIR / "SKILL.md").exists():
-        return [str(_LCSP_SKILL_DIR)]
+def _lcsp_skill_available() -> bool:
+    return (_LCSP_SKILL_DIR / "SKILL.md").exists()
+
+
+def _lcsp_skill_sources() -> list[str]:
+    """Return backend-visible Deep Agents skill source roots."""
+    if _lcsp_skill_available():
+        return [_LCSP_SKILL_SOURCE]
     return []
 
 
@@ -655,7 +660,7 @@ def _base_retrieval_tools() -> list[Any]:
 
 
 def _lcsp_subagents(retrieval_tools: list[Any]) -> list[dict[str, Any]]:
-    skill_paths = _lcsp_skill_paths()
+    skill_paths = _lcsp_skill_sources()
     return [
         {
             "name": "lcsp-source-code-agent",
@@ -770,6 +775,11 @@ def _lcsp_backend(
     if openwiki_root:
         routes["/openwiki/"] = FilesystemBackend(
             root_dir=openwiki_root,
+            virtual_mode=True,
+        )
+    if _lcsp_skill_available():
+        routes[_LCSP_SKILL_SOURCE] = FilesystemBackend(
+            root_dir=_LCSP_SKILLS_DIR,
             virtual_mode=True,
         )
     routes["/memories/"] = StoreBackend(
