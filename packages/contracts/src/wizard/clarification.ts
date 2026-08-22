@@ -1,5 +1,6 @@
 import { WIZARD_FIELD_CONTROLS } from "./catalog.ts";
 import type { WizardFieldControl } from "./catalog.ts";
+import type { WizardAnswer } from "./wizard-answer.ts";
 
 export const WIZARD_CLARIFICATION_SCOPES = {
   preScan: "PRE_SCAN",
@@ -182,3 +183,114 @@ export type WizardClarificationRequest = {
   reasonCode: string;
   questionIds: WizardClarificationQuestionId[];
 };
+
+/**
+ * Agent-generated clarification layer.
+ *
+ * The fixed questions above remain the deterministic fallback. The Deep Agent
+ * may additionally generate free-form questions grounded in assessment context
+ * (wizard answers, program-graph business scope, detected conflicts). Question
+ * text is agent-authored dynamic content in the assessment language, so it is
+ * carried as data; every static label rendered around it stays behind i18n keys.
+ */
+export const WIZARD_CLARIFICATION_AGENT_TARGET_KINDS = {
+  wizardField: "WIZARD_FIELD",
+  postGraphContext: "POST_GRAPH_CONTEXT",
+  plannerScope: "PLANNER_SCOPE",
+  generalContext: "GENERAL_CONTEXT",
+} as const;
+
+export type WizardClarificationAgentTargetKind =
+  (typeof WIZARD_CLARIFICATION_AGENT_TARGET_KINDS)[keyof typeof WIZARD_CLARIFICATION_AGENT_TARGET_KINDS];
+
+export const WIZARD_CLARIFICATION_AGENT_SEVERITIES = {
+  low: "LOW",
+  medium: "MEDIUM",
+  high: "HIGH",
+} as const;
+
+export type WizardClarificationAgentSeverity =
+  (typeof WIZARD_CLARIFICATION_AGENT_SEVERITIES)[keyof typeof WIZARD_CLARIFICATION_AGENT_SEVERITIES];
+
+export const WIZARD_CLARIFICATION_AGENT_STATUSES = {
+  pending: "PENDING",
+  answered: "ANSWERED",
+  dismissed: "DISMISSED",
+} as const;
+
+export type WizardClarificationAgentStatus =
+  (typeof WIZARD_CLARIFICATION_AGENT_STATUSES)[keyof typeof WIZARD_CLARIFICATION_AGENT_STATUSES];
+
+export const WIZARD_CLARIFICATION_AGENT_REASON_CODES = {
+  missingBusinessContext: "MISSING_BUSINESS_CONTEXT",
+  conflictsWithSourceEvidence: "CONFLICTS_WITH_SOURCE_EVIDENCE",
+  doubtfulAnswer: "DOUBTFUL_ANSWER",
+  ruleScopeAmbiguous: "RULE_SCOPE_AMBIGUOUS",
+  graphContextMissing: "GRAPH_CONTEXT_MISSING",
+  businessSemanticsUnclear: "BUSINESS_SEMANTICS_UNCLEAR",
+} as const;
+
+export type WizardClarificationAgentReasonCode =
+  (typeof WIZARD_CLARIFICATION_AGENT_REASON_CODES)[keyof typeof WIZARD_CLARIFICATION_AGENT_REASON_CODES];
+
+export const WIZARD_CLARIFICATION_ROUTING_METHODS = {
+  transformerEmbedding: "TRANSFORMER_EMBEDDING",
+  keywordFallback: "KEYWORD_FALLBACK",
+  agentHint: "AGENT_HINT",
+} as const;
+
+export type WizardClarificationRoutingMethod =
+  (typeof WIZARD_CLARIFICATION_ROUTING_METHODS)[keyof typeof WIZARD_CLARIFICATION_ROUTING_METHODS];
+
+export type WizardClarificationAgentQuestion = {
+  id: string;
+  text: string;
+  language: string;
+  targetKind: WizardClarificationAgentTargetKind;
+  /** Wizard answer field the question clarifies, when targetKind is WIZARD_FIELD. */
+  targetFieldName?: string;
+  severity: WizardClarificationAgentSeverity;
+  reasonCode: WizardClarificationAgentReasonCode;
+  evidenceRefs: string[];
+  status: WizardClarificationAgentStatus;
+  routingMethod: WizardClarificationRoutingMethod;
+  routingConfidence: number;
+  answerControl: WizardFieldControl;
+  optionSet?: string;
+};
+
+export type WizardClarificationAgentAnswer = {
+  questionId: string;
+  targetFieldName?: string;
+  questionText: string;
+  answerText: string;
+  severity: WizardClarificationAgentSeverity;
+  reasonCode: WizardClarificationAgentReasonCode;
+  evidenceRefs: string[];
+  answeredAt: string;
+};
+
+export type WizardClarificationAgentRound = {
+  kind: typeof WIZARD_CLARIFICATION_REQUEST_KIND;
+  scope: WizardClarificationScope;
+  requestedBy: WizardClarificationRequester;
+  questions: WizardClarificationAgentQuestion[];
+  fallbackUsed: boolean;
+  generatedAt: string;
+};
+
+export const WIZARD_CLARIFICATION_ASK_MODES = {
+  prePlanner: "PRE_PLANNER",
+  wizardDraft: "WIZARD_DRAFT",
+} as const;
+
+export type WizardClarificationAskMode =
+  (typeof WIZARD_CLARIFICATION_ASK_MODES)[keyof typeof WIZARD_CLARIFICATION_ASK_MODES];
+
+export type WizardClarificationQuestionRequest = {
+  answers: WizardAnswer[];
+  mode?: WizardClarificationAskMode;
+  maxQuestions?: number;
+};
+
+export type WizardClarificationQuestionResponse = WizardClarificationAgentRound;

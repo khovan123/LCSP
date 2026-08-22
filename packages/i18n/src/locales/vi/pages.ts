@@ -868,6 +868,19 @@ export const viPages = {
       description:
         "Trả lời các câu hỏi có giới hạn này để các agent sau dùng dữ kiện bạn cung cấp thay vì suy diễn ý nghĩa nghiệp vụ từ tên code.",
       badge: "Ask mode",
+      askAction: "Hỏi thêm",
+      askRunning: "Đang hỏi",
+      askReady: "Đã tạo câu hỏi làm rõ",
+      agentTitle: "Câu hỏi làm rõ từ agent",
+      agentDescription:
+        "Các câu hỏi này được tạo từ ngữ cảnh assessment hiện tại và được route vào đúng field của Wizard.",
+      agentBadge: "Agent ask",
+      agentReasonLabel: "Lý do",
+      agentAnswerLabel: "Câu trả lời",
+      agentAnswerDescription:
+        "Chỉ trả lời bằng ngữ cảnh nghiệp vụ. Không dán source code hoặc prompt.",
+      agentAnswerPlaceholder:
+        "Bổ sung ngữ cảnh còn thiếu để tiếp tục planner hoặc investigation.",
       rules: {
         businessProcess:
           "Chỉ thu thập quy trình nghiệp vụ bằng ngôn ngữ công việc hằng ngày, không thu cấu trúc code.",
@@ -938,6 +951,7 @@ export const viPages = {
     errors: {
       loadTitle: "Không thể tải Wizard này",
       loadDetail: "Hiện chưa thể tải trạng thái assessment.",
+      clarificationFailed: "Không thể tạo câu hỏi làm rõ. Vui lòng thử lại.",
       saveFailed: "Không thể lưu bản nháp. Vui lòng thử lại.",
       submitFailed:
         "Không thể gửi Wizard. Hãy kiểm tra lại các câu trả lời đang được đánh dấu rồi thử lại.",

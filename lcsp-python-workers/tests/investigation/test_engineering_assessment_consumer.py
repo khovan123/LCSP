@@ -149,6 +149,14 @@ def test_waiting_investigation_submits_blocked_classification_callback() -> None
         "MISSING_GRAPH_CONTEXT",
         "MISSING_HUMAN_REVIEW_BOUNDARY",
     ]
+    assert [
+        question["targetFieldName"]
+        for question in runtime_payload["output_summary"]["questions"]
+    ] == [
+        "postGraphRuleScope",
+        "postGraphContext",
+        "postGraphHumanReviewBoundary",
+    ]
     api_client.post_classification_callback.assert_called_once()
     payload = api_client.post_classification_callback.call_args.args[0]
     assert payload.guardrail_status == "BLOCKED"

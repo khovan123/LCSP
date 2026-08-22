@@ -873,6 +873,19 @@ export const enPages = {
       description:
         "Answer these bounded questions so later agents use supplied facts instead of inferring business intent from code names.",
       badge: "Ask mode",
+      askAction: "Ask follow-up",
+      askRunning: "Asking",
+      askReady: "Follow-up questions ready",
+      agentTitle: "Follow-up questions from the agent",
+      agentDescription:
+        "These questions were generated from the current assessment context and routed to the matching Wizard fields.",
+      agentBadge: "Agent ask",
+      agentReasonLabel: "Reason",
+      agentAnswerLabel: "Answer",
+      agentAnswerDescription:
+        "Answer with business context only. Do not paste source code or prompts.",
+      agentAnswerPlaceholder:
+        "Add the missing context needed to continue planning or investigation.",
       rules: {
         businessProcess:
           "Collect the everyday business workflow in user language, not code structure.",
@@ -944,6 +957,8 @@ export const enPages = {
     errors: {
       loadTitle: "Unable to load this Wizard",
       loadDetail: "The assessment state could not be loaded right now.",
+      clarificationFailed:
+        "Follow-up questions could not be generated. Try again.",
       saveFailed: "The draft could not be saved. Try again.",
       submitFailed:
         "The Wizard could not be submitted. Review the highlighted answers and try again.",

@@ -274,6 +274,14 @@ def test_consumer_waits_without_callback_when_engineering_rules_are_rebuilding()
         "MISSING_GRAPH_CONTEXT",
         "MISSING_HUMAN_REVIEW_BOUNDARY",
     ]
+    assert [
+        question["targetFieldName"]
+        for question in runtime_payload["output_summary"]["questions"]
+    ] == [
+        "postGraphRuleScope",
+        "postGraphContext",
+        "postGraphHumanReviewBoundary",
+    ]
     api_client.post_technical_profile_callback.assert_not_called()
 
 

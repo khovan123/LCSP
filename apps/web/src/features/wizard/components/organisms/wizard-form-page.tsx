@@ -32,7 +32,13 @@ import {
   validateStep,
   writeLocalDraft,
 } from "@/features/wizard/lib/wizard-form";
+import {
+  getWizardAgentClarificationPrompts,
+  toWizardAgentClarificationPrompts,
+} from "@/features/wizard/lib/wizard-agent-clarification";
+import type { WizardAgentClarificationPrompt } from "@/features/wizard/lib/wizard-agent-clarification";
 import { t } from "@/features/wizard/lib/wizard-i18n";
+import { useWorkspaceRuntime } from "@/features/workspace/components/organisms/workspace-runtime-provider";
 import { wizardDraftSchema } from "@/features/wizard/schemas/wizard-form.schema";
 import type { WizardFormValues } from "@/features/wizard/schemas/wizard-form.schema";
 import type { WizardHelperKey } from "@/features/wizard/types/wizard-form.types";
@@ -41,16 +47,20 @@ import type { WizardAnswers } from "@/features/wizard/types/wizard.types";
 import {
   useSaveWizardDraftMutation,
   useSubmitWizardMutation,
+  useGenerateWizardClarificationQuestionsMutation,
   useWizardAssessmentQuery,
   useReadinessStatusQuery,
 } from "@/lib/api/assessment-queries";
 
 export function WizardFormPage({ assessmentId }: WizardFormPageProps) {
   const router = useRouter();
+  const runtime = useWorkspaceRuntime();
   const assessmentQuery = useWizardAssessmentQuery(assessmentId);
   const readinessQuery = useReadinessStatusQuery(assessmentId);
   const saveDraftMutation = useSaveWizardDraftMutation(assessmentId);
   const submitWizardMutation = useSubmitWizardMutation(assessmentId);
+  const generateClarificationMutation =
+    useGenerateWizardClarificationQuestionsMutation(assessmentId);
   const [initialAnswers] = useState<WizardFormValues>(() =>
     normalizeAnswers(readLocalDraft(assessmentId)),
   );
@@ -60,6 +70,15 @@ export function WizardFormPage({ assessmentId }: WizardFormPageProps) {
   });
   const answers = normalizeAnswers(
     useWatch({ control: form.control }) ?? initialAnswers,
+  );
+  const runtimeAgentClarificationPrompts = getWizardAgentClarificationPrompts(
+    runtime.getAssessmentRuntime(assessmentId).recentActivity,
+  );
+  const [liveAgentClarificationPrompts, setLiveAgentClarificationPrompts] =
+    useState<WizardAgentClarificationPrompt[]>([]);
+  const agentClarificationPrompts = mergeAgentClarificationPrompts(
+    liveAgentClarificationPrompts,
+    runtimeAgentClarificationPrompts,
   );
   const [selectedStep, setSelectedStep] = useState<number | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
@@ -109,9 +128,7 @@ export function WizardFormPage({ assessmentId }: WizardFormPageProps) {
       ? assessmentQuery.data.assessment
       : null;
   const readinessViewModel =
-    readinessQuery.data?.kind === "loaded"
-      ? readinessQuery.data.data
-      : null;
+    readinessQuery.data?.kind === "loaded" ? readinessQuery.data.data : null;
   const isRepoConnected = readinessViewModel
     ? !readinessViewModel.missingEvidence.some(
         (e) => e.type === "repository_connection",
@@ -205,6 +222,33 @@ export function WizardFormPage({ assessmentId }: WizardFormPageProps) {
     setRootErrorKey(null);
     setStatusKey("pages.wizard.draftDirty");
     form.clearErrors(name);
+  }
+
+  async function handleAskClarification() {
+    if (!assessment || effectiveIsReadOnly) {
+      return;
+    }
+
+    setRootErrorKey(null);
+    await saveDraftEvent(serializeAnswers(latestAnswersRef.current));
+    const outcome = await generateClarificationMutation.mutateAsync(
+      serializeAnswers(latestAnswersRef.current),
+    );
+
+    if (outcome.kind === "redirect") {
+      router.replace(outcome.location);
+      return;
+    }
+
+    if (outcome.kind === "error") {
+      setRootErrorKey(outcome.detailKey);
+      return;
+    }
+
+    setLiveAgentClarificationPrompts(
+      toWizardAgentClarificationPrompts(outcome.questions),
+    );
+    setStatusKey("pages.wizard.clarification.askReady");
   }
 
   function handleContinueToDetailed() {
@@ -330,9 +374,14 @@ export function WizardFormPage({ assessmentId }: WizardFormPageProps) {
                   currentStep={currentStep}
                   effectiveIsReadOnly={effectiveIsReadOnly}
                   answers={answers}
+                  agentClarificationPrompts={agentClarificationPrompts}
+                  isAskingClarification={
+                    generateClarificationMutation.isPending
+                  }
                   onFieldBlur={handleFieldBlur}
                   onFieldChange={handleFieldChange}
                   onHelperOpen={(nextHelperKey) => setHelperKey(nextHelperKey)}
+                  onAskClarification={() => void handleAskClarification()}
                 />
                 <WizardNavigationActions
                   currentStep={currentStep}
@@ -367,4 +416,21 @@ export function WizardFormPage({ assessmentId }: WizardFormPageProps) {
       </div>
     </FormProvider>
   );
+}
+
+function mergeAgentClarificationPrompts(
+  primary: WizardAgentClarificationPrompt[],
+  secondary: WizardAgentClarificationPrompt[],
+): WizardAgentClarificationPrompt[] {
+  const seen = new Set<string>();
+  const merged: WizardAgentClarificationPrompt[] = [];
+  for (const prompt of [...primary, ...secondary]) {
+    const key = `${prompt.targetFieldName}:${prompt.text}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push(prompt);
+  }
+  return merged;
 }

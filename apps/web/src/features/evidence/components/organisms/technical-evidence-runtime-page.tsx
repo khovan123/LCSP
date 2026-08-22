@@ -15,6 +15,7 @@ import {
   WIZARD_CLARIFICATION_SCOPES,
 } from "@lcsp/contracts/wizard";
 import type {
+  WizardClarificationAgentQuestion,
   WizardClarificationQuestion,
   WizardClarificationQuestionId,
   WizardClarificationRequester,
@@ -64,6 +65,7 @@ type RuntimeClarificationRequest = Omit<
   "questionIds"
 > & {
   questionIds: WizardClarificationQuestionId[];
+  questions: WizardClarificationAgentQuestion[];
 };
 
 const RUNTIME_STEP_STATUS_SKIPPED = "skipped";
@@ -282,6 +284,7 @@ function RuntimeClarificationRequestCard({
   const questions = request.questionIds
     .map(findClarificationQuestion)
     .filter(isClarificationQuestion);
+  const agentQuestions = request.questions;
 
   return (
     <div className="px-4 pb-3 md:pl-36">
@@ -335,6 +338,26 @@ function RuntimeClarificationRequestCard({
                     "pages.technicalEvidence.clarificationCollectionRuleLabel",
                   )}
                   : {t(question.collectionRuleKey)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {agentQuestions.length > 0 ? (
+          <ul className="mt-3 grid gap-2">
+            {agentQuestions.map((question) => (
+              <li
+                className="rounded border border-sky-200 bg-white/80 px-3 py-2"
+                key={question.id}
+              >
+                <p className="font-semibold text-sky-950">{question.text}</p>
+                <p className="mt-1 text-sky-900/80">
+                  {t("pages.technicalEvidence.clarificationRequestReasonLabel")}
+                  : {question.reasonCode}
+                </p>
+                <p className="mt-1 text-sky-700/80">
+                  {question.targetFieldName ?? question.targetKind} ·{" "}
+                  {Math.round(question.routingConfidence * 100)}%
                 </p>
               </li>
             ))}
@@ -859,13 +882,14 @@ function parseClarificationRequest(
     if (typeof candidate.reasonCode !== "string") {
       continue;
     }
-    if (!Array.isArray(candidate.questionIds)) {
-      continue;
-    }
+    const questionIds = Array.isArray(candidate.questionIds)
+      ? candidate.questionIds.filter(isClarificationQuestionId)
+      : [];
+    const questions = Array.isArray(candidate.questions)
+      ? candidate.questions.filter(isAgentQuestion)
+      : [];
 
-    const questionIds = candidate.questionIds.filter(isClarificationQuestionId);
-
-    if (questionIds.length === 0) {
+    if (questionIds.length === 0 && questions.length === 0) {
       continue;
     }
 
@@ -875,6 +899,7 @@ function parseClarificationRequest(
       requestedBy: candidate.requestedBy,
       reasonCode: candidate.reasonCode,
       questionIds,
+      questions,
     };
   }
 
@@ -917,6 +942,28 @@ function isClarificationRequester(
     Object.values(WIZARD_CLARIFICATION_REQUESTERS).includes(
       value as WizardClarificationRequester,
     )
+  );
+}
+
+function isAgentQuestion(
+  value: WorkspaceRuntimeSummaryValue,
+): value is WizardClarificationAgentQuestion {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  return (
+    typeof value.id === "string" &&
+    typeof value.text === "string" &&
+    typeof value.language === "string" &&
+    typeof value.targetKind === "string" &&
+    typeof value.severity === "string" &&
+    typeof value.reasonCode === "string" &&
+    Array.isArray(value.evidenceRefs) &&
+    value.evidenceRefs.every((item) => typeof item === "string") &&
+    typeof value.status === "string" &&
+    typeof value.routingMethod === "string" &&
+    typeof value.routingConfidence === "number" &&
+    typeof value.answerControl === "string"
   );
 }
 

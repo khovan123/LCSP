@@ -903,6 +903,16 @@ export type PagesMessages = {
       title: string;
       description: string;
       badge: string;
+      askAction: string;
+      askRunning: string;
+      askReady: string;
+      agentTitle: string;
+      agentDescription: string;
+      agentBadge: string;
+      agentReasonLabel: string;
+      agentAnswerLabel: string;
+      agentAnswerDescription: string;
+      agentAnswerPlaceholder: string;
       rules: {
         businessProcess: string;
         useCase: string;
@@ -947,6 +957,7 @@ export type PagesMessages = {
     errors: {
       loadTitle: string;
       loadDetail: string;
+      clarificationFailed: string;
       saveFailed: string;
       submitFailed: string;
       alreadySubmitted: string;

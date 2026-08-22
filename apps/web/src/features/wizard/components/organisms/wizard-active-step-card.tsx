@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { WizardAgentClarificationCard } from "@/features/wizard/components/molecules/wizard-agent-clarification-card";
 import { WizardClarificationCard } from "@/features/wizard/components/molecules/wizard-clarification-card";
 import {
   Card,
@@ -29,9 +30,12 @@ export function WizardActiveStepCard({
   currentStep,
   effectiveIsReadOnly,
   answers,
+  agentClarificationPrompts = [],
+  isAskingClarification = false,
   onFieldBlur,
   onFieldChange,
   onHelperOpen,
+  onAskClarification,
 }: WizardActiveStepCardProps) {
   if (currentStep === 0) {
     return (
@@ -116,6 +120,14 @@ export function WizardActiveStepCard({
           <>
             <WizardClarificationCard
               prompts={getBusinessContextClarificationPrompts(answers)}
+              disabled={effectiveIsReadOnly}
+              isAsking={isAskingClarification}
+              onBlur={onFieldBlur}
+              onValueChange={onFieldChange}
+              onAskClarification={onAskClarification}
+            />
+            <WizardAgentClarificationCard
+              prompts={agentClarificationPrompts}
               disabled={effectiveIsReadOnly}
               onBlur={onFieldBlur}
               onValueChange={onFieldChange}
