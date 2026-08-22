@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Literal, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 import tiktoken
 
 from lcsp_workers.llm.budget_tracker import BudgetTracker
@@ -68,6 +68,10 @@ class LLMToolResponse(LLMResponse):
     """Completion response that may include captured structured tool calls."""
 
     tool_calls: tuple[LLMToolCall, ...] = ()
+
+
+class LLMToolSchemaInvalidError(ValueError):
+    """Raised when a required capture tool call cannot satisfy its declared schema."""
 
 
 DEFAULT_MODEL_PRICING = {
@@ -258,48 +262,78 @@ class DeepAgentClient:
             max_tokens=max_tokens,
             correlationId=correlationId,
         )
-        _result, content, captured_calls, input_tokens, output_tokens = (
-            self._invoke_tool_capture_attempt(
-                prompt=safe_prompt,
-                tools=tools,
-                require_tool_call=require_tool_call,
-                workflow_run_id=workflow_run_id,
-                node_name=node_name,
-                correlationId=correlationId,
-                max_tokens=max_tokens_to_use,
+        tool_validation_failed = False
+        try:
+            _result, content, captured_calls, input_tokens, output_tokens = (
+                self._invoke_tool_capture_attempt(
+                    prompt=safe_prompt,
+                    tools=tools,
+                    require_tool_call=require_tool_call,
+                    workflow_run_id=workflow_run_id,
+                    node_name=node_name,
+                    correlationId=correlationId,
+                    max_tokens=max_tokens_to_use,
+                )
             )
-        )
+        except ValidationError:
+            if not require_tool_call:
+                raise
+            content = ""
+            captured_calls = []
+            input_tokens = 0
+            output_tokens = 0
+            tool_validation_failed = True
         allowed_names = {tool.name for tool in tools}
         if any(call.name not in allowed_names for call in captured_calls):
             raise ValueError("Deep Agent returned an undeclared tool call")
-        if require_tool_call and not captured_calls:
+        if require_tool_call and not captured_calls and not tool_validation_failed:
             raise ValueError("Deep Agent returned no tool call in required mode")
-        if require_tool_call and _has_empty_tool_arguments(captured_calls):
-            retry_prompt = _required_tool_retry_prompt(safe_prompt)
-            (
-                _result,
-                content,
-                captured_calls,
-                retry_input_tokens,
-                retry_output_tokens,
-            ) = self._invoke_tool_capture_attempt(
-                prompt=retry_prompt,
+        validation_errors = (
+            ["tool invocation failed provider schema validation"]
+            if tool_validation_failed
+            else _required_tool_validation_errors(captured_calls, tools)
+        )
+        if require_tool_call and validation_errors:
+            retry_prompt = _required_tool_retry_prompt(
+                safe_prompt,
                 tools=tools,
-                require_tool_call=require_tool_call,
-                workflow_run_id=workflow_run_id,
-                node_name=node_name,
-                correlationId=correlationId,
-                max_tokens=max_tokens_to_use,
+                validation_errors=validation_errors,
             )
+            try:
+                (
+                    _result,
+                    content,
+                    captured_calls,
+                    retry_input_tokens,
+                    retry_output_tokens,
+                ) = self._invoke_tool_capture_attempt(
+                    prompt=retry_prompt,
+                    tools=tools,
+                    require_tool_call=require_tool_call,
+                    workflow_run_id=workflow_run_id,
+                    node_name=node_name,
+                    correlationId=correlationId,
+                    max_tokens=max_tokens_to_use,
+                )
+            except ValidationError as exc:
+                raise LLMToolSchemaInvalidError(
+                    "Deep Agent returned schema-invalid tool arguments in required "
+                    "mode: provider rejected the tool payload"
+                ) from exc
             input_tokens += retry_input_tokens
             output_tokens += retry_output_tokens
             if not captured_calls:
                 raise ValueError("Deep Agent returned no tool call in required mode")
             if any(call.name not in allowed_names for call in captured_calls):
                 raise ValueError("Deep Agent returned an undeclared tool call")
-            if _has_empty_tool_arguments(captured_calls):
-                raise ValueError(
-                    "Deep Agent returned empty tool arguments in required mode"
+            retry_validation_errors = _required_tool_validation_errors(
+                captured_calls,
+                tools,
+            )
+            if retry_validation_errors:
+                raise LLMToolSchemaInvalidError(
+                    "Deep Agent returned schema-invalid tool arguments in required "
+                    f"mode: {_error_summary(retry_validation_errors)}"
                 )
         self._record_actual_usage(input_tokens, output_tokens)
         self._update_run_tree_usage(input_tokens, output_tokens)
@@ -567,7 +601,9 @@ def _capture_tools(
             **arguments: Any,
         ) -> str:
             normalized_arguments = {
-                key: value for key, value in arguments.items() if value is not None
+                key: _normalize_tool_argument(value)
+                for key, value in arguments.items()
+                if value is not None
             }
             captured_calls.append(
                 LLMToolCall(
@@ -591,6 +627,20 @@ def _capture_tools(
         setattr(structured_tool, "__name__", definition.name)
         captured_tools.append(structured_tool)
     return captured_tools
+
+
+def _normalize_tool_argument(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json", exclude_none=True)
+    if isinstance(value, list):
+        return [_normalize_tool_argument(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_tool_argument(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    return value
 
 
 def _tool_args_schema(definition: LLMToolDefinition) -> type[BaseModel]:
@@ -673,21 +723,232 @@ def _json_schema_type(schema: dict[str, Any], name: str) -> Any:
     return Any
 
 
-def _has_empty_tool_arguments(captured_calls: Iterable[LLMToolCall]) -> bool:
-    return any(not call.arguments for call in captured_calls)
+def _required_tool_validation_errors(
+    captured_calls: Iterable[LLMToolCall],
+    tools: Iterable[LLMToolDefinition],
+) -> list[str]:
+    definitions = {tool.name: tool for tool in tools if tool.tool_choice_required}
+    errors: list[str] = []
+    for call in captured_calls:
+        definition = definitions.get(call.name)
+        if definition is None:
+            continue
+        if not call.arguments:
+            errors.append(f"{call.name}: empty arguments")
+            continue
+        for error in _json_schema_validation_errors(
+            call.arguments,
+            definition.input_schema,
+        ):
+            errors.append(f"{call.name}{error.removeprefix('$')}")
+    return errors
 
 
-def _required_tool_retry_prompt(prompt: str) -> str:
+def _json_schema_validation_errors(
+    value: Any,
+    schema: dict[str, Any],
+    *,
+    path: str = "$",
+) -> list[str]:
+    errors: list[str] = []
+    schema_type = schema.get("type")
+    if isinstance(schema_type, list):
+        schema_type = next((item for item in schema_type if item != "null"), None)
+
+    if schema_type == "object":
+        if not isinstance(value, dict):
+            return [f"{path}: expected object"]
+        properties = schema.get("properties")
+        if not isinstance(properties, dict):
+            properties = {}
+        required = schema.get("required")
+        if isinstance(required, list):
+            for field_name in required:
+                if isinstance(field_name, str) and field_name not in value:
+                    errors.append(f"{path}.{field_name}: required")
+        if schema.get("additionalProperties") is False:
+            for field_name in value:
+                if field_name not in properties:
+                    errors.append(f"{path}.{field_name}: additional property")
+        for field_name, field_schema in properties.items():
+            if (
+                isinstance(field_name, str)
+                and isinstance(field_schema, dict)
+                and field_name in value
+            ):
+                errors.extend(
+                    _json_schema_validation_errors(
+                        value[field_name],
+                        field_schema,
+                        path=f"{path}.{field_name}",
+                    )
+                )
+        return errors
+
+    if schema_type == "array":
+        if not isinstance(value, list):
+            return [f"{path}: expected array"]
+        min_items = schema.get("minItems")
+        if isinstance(min_items, int) and len(value) < min_items:
+            errors.append(f"{path}: minItems")
+        max_items = schema.get("maxItems")
+        if isinstance(max_items, int) and len(value) > max_items:
+            errors.append(f"{path}: maxItems")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, item in enumerate(value):
+                errors.extend(
+                    _json_schema_validation_errors(
+                        item,
+                        item_schema,
+                        path=f"{path}[{index}]",
+                    )
+                )
+        return errors
+
+    if schema_type == "string":
+        if not isinstance(value, str):
+            return [f"{path}: expected string"]
+        min_length = schema.get("minLength")
+        if isinstance(min_length, int) and len(value) < min_length:
+            errors.append(f"{path}: minLength")
+        max_length = schema.get("maxLength")
+        if isinstance(max_length, int) and len(value) > max_length:
+            errors.append(f"{path}: maxLength")
+        enum_values = schema.get("enum")
+        if isinstance(enum_values, list) and enum_values and value not in enum_values:
+            errors.append(f"{path}: enum")
+        pattern = schema.get("pattern")
+        if isinstance(pattern, str) and re.fullmatch(pattern, value) is None:
+            errors.append(f"{path}: pattern")
+        return errors
+
+    if schema_type == "integer":
+        if not isinstance(value, int) or isinstance(value, bool):
+            return [f"{path}: expected integer"]
+        return errors
+
+    if schema_type == "number":
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            return [f"{path}: expected number"]
+        return errors
+
+    if schema_type == "boolean" and not isinstance(value, bool):
+        return [f"{path}: expected boolean"]
+
+    return errors
+
+
+def _required_tool_retry_prompt(
+    prompt: str,
+    *,
+    tools: list[LLMToolDefinition],
+    validation_errors: list[str],
+) -> str:
+    required_tools = [tool for tool in tools if tool.tool_choice_required]
     return "\n\n".join(
         [
             prompt,
             (
-                "Required capture-tool retry: the previous tool call had empty "
-                "arguments. Call the required capture tool again with schema-valid, "
-                "non-empty arguments grounded in retrieved evidence. Do not include "
-                "source code or prompt text in the tool payload."
+                "Required capture-tool retry: the previous tool call had empty or "
+                "schema-invalid arguments. Call the required capture tool again "
+                "with schema-valid, non-empty arguments grounded in retrieved "
+                "evidence. Do not include source code or prompt text in the tool "
+                "payload."
+            ),
+            "Validation errors:\n" + _bounded_lines(validation_errors, limit=12),
+            "Required tool schemas:\n"
+            + _bounded_lines(
+                [
+                    _tool_retry_schema_summary(tool)
+                    for tool in (required_tools or tools)
+                ],
+                limit=8,
             ),
         ]
+    )
+
+
+def _bounded_lines(values: list[str], *, limit: int) -> str:
+    lines = [value for value in values if value.strip()]
+    if not lines:
+        return "- none"
+    visible = lines[:limit]
+    suffix = [f"... {len(lines) - limit} more"] if len(lines) > limit else []
+    return "\n".join([f"- {line}" for line in [*visible, *suffix]])
+
+
+def _error_summary(values: list[str], *, limit: int = 6) -> str:
+    lines = [value for value in values if value.strip()]
+    if not lines:
+        return "unknown schema violation"
+    visible = "; ".join(lines[:limit])
+    if len(lines) > limit:
+        return f"{visible}; ... {len(lines) - limit} more"
+    return visible
+
+
+def _tool_retry_schema_summary(tool: LLMToolDefinition) -> str:
+    return f"{tool.name}: {_schema_retry_summary(tool.input_schema)}"
+
+
+def _schema_retry_summary(schema: dict[str, Any], *, depth: int = 0) -> str:
+    schema_type = schema.get("type")
+    if isinstance(schema_type, list):
+        schema_type = next((item for item in schema_type if item != "null"), None)
+    enum_values = schema.get("enum")
+    enum_summary = ""
+    if isinstance(enum_values, list) and enum_values:
+        enum_summary = " enum=" + ",".join(str(item) for item in enum_values[:12])
+    if schema_type == "object":
+        properties = schema.get("properties")
+        if not isinstance(properties, dict):
+            properties = {}
+        required = schema.get("required")
+        required_names = (
+            [str(item) for item in required if isinstance(item, str)]
+            if isinstance(required, list)
+            else []
+        )
+        field_summaries = []
+        for name, field_schema in list(properties.items())[:10]:
+            if not isinstance(name, str) or not isinstance(field_schema, dict):
+                continue
+            marker = "*" if name in required_names else ""
+            if depth >= 2:
+                field_summaries.append(f"{name}{marker}")
+                continue
+            field_summaries.append(
+                f"{name}{marker}:{_schema_retry_summary(field_schema, depth=depth + 1)}"
+            )
+        required_summary = (
+            f" required={','.join(required_names)}" if required_names else ""
+        )
+        return "object{" + ", ".join(field_summaries) + "}" + required_summary
+    if schema_type == "array":
+        item_schema = schema.get("items")
+        item_summary = (
+            _schema_retry_summary(item_schema, depth=depth + 1)
+            if isinstance(item_schema, dict)
+            else "any"
+        )
+        constraints = []
+        if isinstance(schema.get("minItems"), int):
+            constraints.append(f"minItems={schema['minItems']}")
+        if isinstance(schema.get("maxItems"), int):
+            constraints.append(f"maxItems={schema['maxItems']}")
+        return "array<" + item_summary + ">" + (
+            " " + " ".join(constraints) if constraints else ""
+        )
+    constraints = []
+    if isinstance(schema.get("minLength"), int):
+        constraints.append(f"minLength={schema['minLength']}")
+    if isinstance(schema.get("maxLength"), int):
+        constraints.append(f"maxLength={schema['maxLength']}")
+    if isinstance(schema.get("pattern"), str):
+        constraints.append("pattern=required")
+    return str(schema_type or "any") + enum_summary + (
+        " " + " ".join(constraints) if constraints else ""
     )
 
 
@@ -1060,7 +1321,6 @@ def _select_subagent_mode(
             "investigate_engineering_rule",
             "candidate_count",
             "selected_rule_ids",
-            "business-cluster",
             "fan-out",
         )
     ):

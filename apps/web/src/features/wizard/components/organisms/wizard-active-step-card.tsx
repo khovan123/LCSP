@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { WizardClarificationCard } from "@/features/wizard/components/molecules/wizard-clarification-card";
 import {
   Card,
   CardContent,
@@ -18,6 +19,7 @@ import {
   wizardSteps,
 } from "@/features/wizard/config/wizard-config";
 import {
+  getBusinessContextClarificationPrompts,
   sectionCardClassName,
 } from "@/features/wizard/lib/wizard-form";
 import { t } from "@/features/wizard/lib/wizard-i18n";
@@ -112,32 +114,11 @@ export function WizardActiveStepCard({
       <CardContent className="flex flex-col gap-6">
         {currentStep === 1 ? (
           <>
-            <WizardTextareaField
-              name="businessProcess"
+            <WizardClarificationCard
+              prompts={getBusinessContextClarificationPrompts(answers)}
               disabled={effectiveIsReadOnly}
-              labelKey="pages.wizard.fields.businessProcessLabel"
-              descriptionKey="pages.wizard.fields.businessProcessDescription"
-              placeholderKey="pages.wizard.fields.businessProcessPlaceholder"
               onBlur={onFieldBlur}
               onValueChange={onFieldChange}
-            />
-            <WizardTextareaField
-              name="aiPurpose"
-              disabled={effectiveIsReadOnly}
-              labelKey="pages.wizard.fields.aiPurposeLabel"
-              descriptionKey="pages.wizard.fields.aiPurposeDescription"
-              placeholderKey="pages.wizard.fields.aiPurposePlaceholder"
-              onBlur={onFieldBlur}
-              onValueChange={onFieldChange}
-            />
-            <WizardSelectField
-              name="sector"
-              disabled={effectiveIsReadOnly}
-              labelKey="pages.wizard.fields.sectorLabel"
-              descriptionKey="pages.wizard.fields.sectorDescription"
-              onBlur={onFieldBlur}
-              onValueChange={onFieldChange}
-              options={selectOptions.sector}
             />
           </>
         ) : null}
@@ -209,9 +190,7 @@ export function WizardActiveStepCard({
         ) : null}
 
         {currentStep === 4 ? (
-          <WizardFieldWithHelper
-            onHelperClick={() => onHelperOpen("provider")}
-          >
+          <WizardFieldWithHelper onHelperClick={() => onHelperOpen("provider")}>
             <WizardSelectField
               name="externalLlmUsage"
               disabled={effectiveIsReadOnly}

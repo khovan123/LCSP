@@ -85,29 +85,15 @@ def _build_consumer(target: str) -> ConsumerBase:
             max_tool_calls=config.agentic_runtime.max_tool_calls,
         )
 
-    # Build one shared provider chain when either the consumer itself requires an LLM
-    # or its ProgramGraph assembler can persist provenance-gated business semantics.
+    # Build one shared provider chain only for consumers that explicitly accept an
+    # LLM client. Scanner graph assembly stays deterministic; business context is
+    # collected through the wizard instead of inferred by scan-time LLM enrichment.
     llm_client = None
-    if (
-        "llm_client" in constructor.parameters
-        or "evidence_graph_assembler" in constructor.parameters
-    ):
+    if "llm_client" in constructor.parameters:
         llm_client = _build_llm_client(config)
 
     if "llm_client" in constructor.parameters and llm_client is not None:
         kwargs["llm_client"] = llm_client
-
-    if "evidence_graph_assembler" in constructor.parameters and llm_client is not None:
-        # Import lazily so non-scanner workers do not couple their startup path to the
-        # scanner package. The decorator always builds deterministic graph v3 first;
-        # provider/schema failure returns that base graph unchanged.
-        from lcsp_workers.scanner.program_graph.business_semantic_graph_assembler import (
-            BusinessSemanticProgramGraphAssembler,
-        )
-
-        kwargs["evidence_graph_assembler"] = BusinessSemanticProgramGraphAssembler(
-            llm_client
-        )
 
     return consumer_type(config, **kwargs)
 

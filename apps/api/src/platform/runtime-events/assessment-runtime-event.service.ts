@@ -28,6 +28,9 @@ import {
   summarizeRuntimeError,
 } from "./runtime-summary-sanitizer.js";
 
+const RUNTIME_EVENT_SEQUENCE_RETRY_ATTEMPTS = 8;
+const RUNTIME_EVENT_SEQUENCE_RETRY_DELAY_MS = 5;
+
 type RecordRuntimeEventInput = {
   organizationId: string;
   assessmentId: string;
@@ -264,6 +267,22 @@ export class AssessmentRuntimeEventService {
   }
 
   /**
+   * Records failed completion of an assessment runtime run.
+   *
+   * @param input - Runtime event data excluding the event type and run status supplied by this method.
+   * @returns A promise that resolves after the run-failed event is persisted.
+   */
+  async recordRunFailed(
+    input: Omit<RecordRuntimeEventInput, "eventType" | "runStatus">,
+  ): Promise<void> {
+    await this.recordEvent({
+      ...input,
+      eventType: ASSESSMENT_RUNTIME_EVENT_TYPES.runFailed,
+      runStatus: ASSESSMENT_RUNTIME_RUN_STATUSES.failed,
+    });
+  }
+
+  /**
    * Records a scanner-worker runtime progress event after resolving tenant and assessment identity from the scan job.
    *
    * @param input - Worker supplied runtime metadata plus the scan-job identifier.
@@ -285,10 +304,11 @@ export class AssessmentRuntimeEventService {
     if (!scanJob) {
       return { recorded: false, reason: "not_found" };
     }
-    if (isTerminalScanRuntimeStatus(scanJob.status)) {
+    const isTerminalWorkerEvent = isTerminalWorkerRuntimeEvent(input.eventType);
+    if (isTerminalScanRuntimeStatus(scanJob.status) && !isTerminalWorkerEvent) {
       return { recorded: false, reason: "terminal" };
     }
-    if (!isActiveScanRuntimeStatus(scanJob.status)) {
+    if (!isActiveScanRuntimeStatus(scanJob.status) && !isTerminalWorkerEvent) {
       return { recorded: false, reason: "inactive" };
     }
 
@@ -425,7 +445,7 @@ export class AssessmentRuntimeEventService {
   }
 
   /**
-   * Sanitizes and persists one runtime event with a per-run sequence number, retrying sequence collisions up to three times.
+   * Sanitizes and persists one runtime event with a per-run sequence number, retrying sequence collisions from concurrent writers.
    *
    * @param input - Complete runtime event data to sanitize and persist.
    * @returns A promise that resolves after persistence, or silently degrades when the runtime-event table has not been migrated yet.
@@ -441,7 +461,11 @@ export class AssessmentRuntimeEventService {
         ? null
         : sanitizeRuntimeSummaryText(input.errorSummary);
 
-    for (let index = 0; index < 3; index += 1) {
+    for (
+      let index = 0;
+      index < RUNTIME_EVENT_SEQUENCE_RETRY_ATTEMPTS;
+      index += 1
+    ) {
       try {
         await this.prisma.$transaction(async (tx) => {
           const latest = (await runtimeEventDelegate(tx).findFirst({
@@ -482,9 +506,13 @@ export class AssessmentRuntimeEventService {
           this.logRuntimeEventTableMissing("recordEvent", error);
           return;
         }
-        if (!isUniqueSequenceViolation(error) || index === 2) {
+        if (
+          !isUniqueSequenceViolation(error) ||
+          index === RUNTIME_EVENT_SEQUENCE_RETRY_ATTEMPTS - 1
+        ) {
           throw error;
         }
+        await delayRuntimeEventSequenceRetry(index);
       }
     }
   }
@@ -769,6 +797,19 @@ function isTerminalScanRuntimeStatus(status: string): boolean {
   );
 }
 
+function isTerminalWorkerRuntimeEvent(
+  eventType: AssessmentRuntimeEventType,
+): boolean {
+  return (
+    eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.runCompleted ||
+    eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.runFailed ||
+    eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolCompleted ||
+    eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolFailed ||
+    eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolSkipped ||
+    eventType === ASSESSMENT_RUNTIME_EVENT_TYPES.toolWaitingInput
+  );
+}
+
 /**
  * Builds a concise human-readable summary for a repository scan job.
  *
@@ -884,7 +925,46 @@ function toJsonOrNull(
  * @returns True when the error identifies the `runId_sequence_key` constraint.
  */
 function isUniqueSequenceViolation(error: unknown): boolean {
-  return error instanceof Error && error.message.includes("runId_sequence_key");
+  if (!isObject(error)) {
+    return false;
+  }
+  if (error.code === "P2002" && isUniqueSequenceTarget(error.meta)) {
+    return true;
+  }
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return (
+    error.message.includes("runId_sequence_key") ||
+    (error.message.includes("Unique constraint failed") &&
+      error.message.includes("runId") &&
+      error.message.includes("sequence"))
+  );
+}
+
+function isUniqueSequenceTarget(meta: unknown): boolean {
+  if (!isObject(meta)) {
+    return false;
+  }
+  const target = meta.target;
+  if (Array.isArray(target)) {
+    return target.includes("runId") && target.includes("sequence");
+  }
+  return (
+    typeof target === "string" &&
+    target.includes("runId") &&
+    target.includes("sequence")
+  );
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+async function delayRuntimeEventSequenceRetry(index: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, RUNTIME_EVENT_SEQUENCE_RETRY_DELAY_MS * (index + 1));
+  });
 }
 
 /**

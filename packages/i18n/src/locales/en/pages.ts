@@ -720,17 +720,40 @@ export const enPages = {
         "For example: hiring, access, eligibility, pricing, or service outcomes.",
       businessProcessLabel: "What business process does this system support?",
       businessProcessDescription:
-        "Describe the main task in everyday business language.",
+        "Describe the main business process, compliance/risk goal, and business users who benefit.",
       businessProcessPlaceholder:
-        "Example: Help a support team draft replies for customer requests.",
+        "Example: Help an organization assess AI-system compliance and risk before production use.",
+      useCaseLabel: "What is the primary use case?",
+      useCaseDescription:
+        "Describe the actor goal, main flow, and boundary of this use case without listing implementation details.",
+      useCasePlaceholder:
+        "Example: A support agent opens a customer request, reviews suggested context, edits a draft reply, and sends it.",
+      primaryActorsLabel: "Who participates in this use case?",
+      primaryActorsDescription:
+        "Name the human actors, system actors, and affected people involved in the workflow.",
+      primaryActorsPlaceholder:
+        "Example: Support agent, customer, customer support system, AI drafting service.",
+      businessTriggerLabel: "What starts this workflow?",
+      businessTriggerDescription:
+        "Describe the event, user action, or scheduled condition that begins the use case.",
+      businessTriggerPlaceholder:
+        "Example: A customer submits a new support request or reopens an existing case.",
+      expectedOutcomeLabel: "What outcome should the workflow produce?",
+      expectedOutcomeDescription:
+        "Describe the business result after the workflow completes, including what must not be decided by the AI.",
+      expectedOutcomePlaceholder:
+        "Example: The customer receives a staff-approved response; the AI does not close the case by itself.",
       aiPurposeLabel: "What role does the AI play in this process?",
       aiPurposeDescription:
-        "Describe the specific role of the AI system in the process mentioned above.",
+        "Describe what the AI is used for and which decisions it must not approve by itself.",
       aiPurposePlaceholder:
-        "Example: Summarize chat history and suggest 3 draft replies.",
+        "Example: Support investigation planning, interpret evidence against approved rules, and propose cited conclusions.",
+      autonomyLevelLabel: "How autonomous is the system in this use case?",
+      autonomyLevelDescription:
+        "Choose the strongest option that still matches the real workflow.",
       sectorLabel: "Which business context fits this system best?",
       sectorDescription:
-        "Choose the closest primary context for this assessment.",
+        "Choose the closest sector; LCSP usually fits governance, risk and compliance.",
       dataTypeLabel: "What kinds of data does the system use or analyze?",
       dataTypeDescription:
         "Select every category that applies to the AI workflow.",
@@ -788,6 +811,8 @@ export const enPages = {
       sectorEducation: "Education or training",
       sectorHealthcare: "Healthcare or wellness",
       sectorPublicServices: "Public services or regulated access",
+      sectorGovernanceRiskCompliance:
+        "Governance, Risk and Compliance / Legal-tech",
       dataTypePersonal: "Personal profile data",
       dataTypeSensitive: "Sensitive or special-category data",
       dataTypeBiometric: "Biometric data",
@@ -819,6 +844,14 @@ export const enPages = {
         "The result usually takes effect without meaningful review",
       humanOversightNotApplicable:
         "Not applicable because the AI does not influence a final decision",
+      autonomyHumanAssisted:
+        "Human-assisted only; people decide and execute the outcome",
+      autonomyHumanApprovalRequired:
+        "Automation prepares an outcome, but human approval is required",
+      autonomyConditionalAutomation:
+        "Automation can act in defined conditions or low-risk cases",
+      autonomyFullAutomation:
+        "The system can complete the outcome without human approval",
       externalNone: "No external calls",
       externalPossible: "Possible external service calls",
       externalConfirmed: "Confirmed external AI usage",
@@ -834,6 +867,68 @@ export const enPages = {
       prohibitedManipulation: "Behavioral manipulation",
       prohibitedScoring: "Social scoring",
       prohibitedSensitiveInference: "Inferring sensitive traits",
+    },
+    clarification: {
+      title: "Context needed before scan",
+      description:
+        "Answer these bounded questions so later agents use supplied facts instead of inferring business intent from code names.",
+      badge: "Ask mode",
+      rules: {
+        businessProcess:
+          "Collect the everyday business workflow in user language, not code structure.",
+        useCase:
+          "Collect one primary actor goal, main flow, and boundary for this assessment.",
+        primaryActors:
+          "Collect only roles that act in or are affected by the use case.",
+        businessTrigger:
+          "Collect the business event that starts the flow; do not infer it from route names alone.",
+        expectedOutcome:
+          "Collect the intended business output and any decision that needs human authority.",
+        autonomyLevel:
+          "Collect one bounded automation level from the approved option set.",
+        aiPurpose:
+          "Collect what AI is used for and what it must not decide alone.",
+        sector: "Collect the closest sector from the approved option set.",
+        postGraphContext:
+          "Ask only for missing domain context that the code graph cannot prove.",
+        postGraphRuleScope:
+          "Ask only which business scope or rule area should be evaluated next.",
+        postGraphHumanReview:
+          "Ask only where human review or approval sits in the business flow.",
+      },
+      useCaseQuestion: "What is the primary use case?",
+      useCaseDetail:
+        "Include the actor goal, main flow, and boundary. Do not include source code or implementation details.",
+      primaryActorsQuestion: "List the actors involved.",
+      primaryActorsDetail:
+        "Include human actors, system actors, and affected people. Use plain role names.",
+      businessTriggerQuestion: "What starts this flow?",
+      businessTriggerDetail:
+        "Name the user action, event, queue message, schedule, or external condition that begins the use case.",
+      expectedOutcomeQuestion: "What outcome should this flow produce?",
+      expectedOutcomeDetail:
+        "State the business result and call out decisions that AI must not make alone.",
+      autonomyLevelQuestion: "How autonomous is the system in this use case?",
+      autonomyLevelDetail:
+        "Select whether the AI only assists, needs approval, can act conditionally, or fully automates the result.",
+      postGraphContextQuestion:
+        "What business context is missing from the code graph?",
+      postGraphContextDetail:
+        "Add only domain facts needed to interpret the scanned technical evidence.",
+      postGraphContextPlaceholder:
+        "Example: This route is used only by compliance operators during evidence review.",
+      postGraphRuleScopeQuestion:
+        "Which rule area should the planner evaluate next?",
+      postGraphRuleScopeDetail:
+        "Name the business obligation, control area, or approved corpus scope that should guide the next investigation.",
+      postGraphRuleScopePlaceholder:
+        "Example: Human oversight and auditability for AI-assisted classification.",
+      postGraphHumanReviewQuestion:
+        "Where does human review happen in this flow?",
+      postGraphHumanReviewDetail:
+        "State who reviews, when the review happens, and what authority they have.",
+      postGraphHumanReviewPlaceholder:
+        "Example: Legal Operator reviews blocked classifications before final approval.",
     },
     helpers: {
       decisionTitle: "How to answer the decision question",
@@ -864,7 +959,14 @@ export const enPages = {
         "Please indicate whether the AI output affects an important decision before continuing.",
       businessProcessRequired:
         "Describe the main business process before continuing.",
+      useCaseRequired: "Describe the primary use case before continuing.",
+      primaryActorsRequired: "Describe the actors involved before continuing.",
+      businessTriggerRequired:
+        "Describe what starts the workflow before continuing.",
+      expectedOutcomeRequired:
+        "Describe the expected outcome before continuing.",
       aiPurposeRequired: "Describe the AI purpose before continuing.",
+      autonomyLevelRequired: "Choose the autonomy boundary before continuing.",
       sectorRequired: "Choose the primary business context before continuing.",
       dataTypesRequired: "Select at least one data category before continuing.",
       affectedSubjectsRequired:
@@ -989,9 +1091,17 @@ export const enPages = {
     reasonLabel: "Reason",
     valueLabel: "Value",
     emptyValueLabel: "Empty",
+    notApplicableValueLabel: "Not applicable",
     rerunScan: "Run scan again",
     rerunningScan: "Creating new scan",
     rerunError: "Unable to create a new scan. Please try again.",
+    clarificationRequestTitle: "Additional context requested",
+    clarificationRequestDescription:
+      "The pipeline has paused on bounded questions. Answer them in the Wizard so later agents use supplied facts.",
+    clarificationRequestScopeLabel: "Scope",
+    clarificationRequestReasonLabel: "Reason",
+    clarificationRequestOpenWizard: "Open Wizard",
+    clarificationCollectionRuleLabel: "Collection rule",
     scanStatuses: {
       queued: "Queued",
       running: "Analyzing",

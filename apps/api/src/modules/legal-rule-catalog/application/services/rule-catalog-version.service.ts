@@ -19,6 +19,38 @@ const LEGAL_RULE_RECOVERY_SERVICE = "legal-rule-source-recovery-service";
 const LEGAL_UNKNOWN_FACT_POLICY = "BLOCK_ON_UNKNOWN";
 const LEGAL_REPEALED_CHUNK_STATUS = "REPEALED";
 const LEGAL_ENGINEERING_CANDIDATE_CLASS = "ENGINEERING_RULE_CANDIDATE";
+const LEGAL_CONTEXT_ONLY_CLASS = "CONTEXT_ONLY";
+const LEGAL_EXCLUDE_FROM_DATABASE_CLASS = "EXCLUDE_FROM_DATABASE";
+const LEGAL_CONTEXT_ONLY_ARTICLE_TITLE_TERMS = [
+  "phạm vi điều chỉnh",
+  "đối tượng áp dụng",
+  "giải thích từ ngữ",
+  "nguyên tắc cơ bản",
+  "chính sách của nhà nước",
+] as const;
+const LEGAL_ENGINEERING_OBLIGATION_TERMS = [
+  "phải",
+  "không được",
+  "bị nghiêm cấm",
+  "nghiêm cấm",
+  "có trách nhiệm",
+  "nghĩa vụ",
+  "bảo đảm",
+  "duy trì",
+  "thiết lập",
+  "kiểm tra",
+  "giám sát",
+  "đánh giá",
+  "quản lý rủi ro",
+  "thông báo",
+  "công bố",
+  "báo cáo",
+  "lưu trữ",
+  "ghi nhận",
+  "kiểm soát",
+  "can thiệp",
+  "tuân thủ",
+] as const;
 
 export interface RecoverApprovedRulesFromActiveCorpusInput {
   idempotencyKey: string;
@@ -104,7 +136,7 @@ export class RuleCatalogVersionService {
     const candidateChunks = corpus.chunks.filter(
       (chunk) =>
         chunk.legalStatus !== LEGAL_REPEALED_CHUNK_STATUS &&
-        normativeClass(chunk.hierarchy) === LEGAL_ENGINEERING_CANDIDATE_CLASS,
+        normativeClass(chunk) === LEGAL_ENGINEERING_CANDIDATE_CLASS,
     );
     if (candidateChunks.length === 0) {
       return {
@@ -233,12 +265,70 @@ export class RuleCatalogVersionService {
   }
 }
 
-function normativeClass(value: Prisma.JsonValue): string {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return "";
+function normativeClass(chunk: {
+  hierarchy: Prisma.JsonValue;
+  content?: string | null;
+  locator?: string | null;
+}): string {
+  const hierarchy = chunk.hierarchy;
+  if (hierarchy && typeof hierarchy === "object" && !Array.isArray(hierarchy)) {
+    const raw = (hierarchy as Record<string, unknown>).normativeClass;
+    if (typeof raw === "string" && raw.trim()) {
+      return normalizeNormativeClass(raw);
+    }
   }
-  const raw = (value as Record<string, unknown>).normativeClass;
-  return typeof raw === "string" ? raw : "";
+  return inferNormativeClass(chunk);
+}
+
+function inferNormativeClass(chunk: {
+  hierarchy: Prisma.JsonValue;
+  content?: string | null;
+  locator?: string | null;
+}): string {
+  const content = normalizeLegalText(chunk.content ?? "");
+  if (!content) return LEGAL_EXCLUDE_FROM_DATABASE_CLASS;
+  const hierarchy =
+    chunk.hierarchy && typeof chunk.hierarchy === "object"
+      ? (chunk.hierarchy as Record<string, unknown>)
+      : {};
+  const articleTitle = normalizeLegalText(
+    typeof hierarchy.articleTitle === "string" ? hierarchy.articleTitle : "",
+  );
+  if (
+    LEGAL_CONTEXT_ONLY_ARTICLE_TITLE_TERMS.some((term) =>
+      articleTitle.includes(term),
+    )
+  ) {
+    return LEGAL_CONTEXT_ONLY_CLASS;
+  }
+  if (
+    LEGAL_ENGINEERING_OBLIGATION_TERMS.some((term) => content.includes(term))
+  ) {
+    return LEGAL_ENGINEERING_CANDIDATE_CLASS;
+  }
+  return LEGAL_CONTEXT_ONLY_CLASS;
+}
+
+function normalizeLegalText(value: string): string {
+  return value.toLocaleLowerCase("vi").split(/\s+/u).filter(Boolean).join(" ");
+}
+
+function normalizeNormativeClass(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/[\s-]+/g, "_")
+    .toLocaleUpperCase("en-US");
+  if (normalized === LEGAL_ENGINEERING_CANDIDATE_CLASS) {
+    return LEGAL_ENGINEERING_CANDIDATE_CLASS;
+  }
+  if (normalized === LEGAL_CONTEXT_ONLY_CLASS) {
+    return LEGAL_CONTEXT_ONLY_CLASS;
+  }
+  if (normalized === LEGAL_EXCLUDE_FROM_DATABASE_CLASS) {
+    return LEGAL_EXCLUDE_FROM_DATABASE_CLASS;
+  }
+  return normalized;
 }
 
 function sourceDigest(corpusId: string, parts: string[]): string {

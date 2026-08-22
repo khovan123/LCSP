@@ -137,6 +137,18 @@ def test_waiting_investigation_submits_blocked_classification_callback() -> None
     )
 
     api_client.post_scan_runtime_event.assert_called_once()
+    runtime_payload = api_client.post_scan_runtime_event.call_args.args[1]
+    assert runtime_payload["output_summary"]["kind"] == "WIZARD_CONTEXT_REQUEST"
+    assert runtime_payload["output_summary"]["scope"] == "POST_GRAPH"
+    assert runtime_payload["output_summary"]["requestedBy"] == "PLANNER"
+    assert runtime_payload["output_summary"]["reasonCode"] == (
+        "NO_ENGINEERING_RULE_SOURCE_RULES"
+    )
+    assert runtime_payload["output_summary"]["questionIds"] == [
+        "MISSING_RULE_SCOPE",
+        "MISSING_GRAPH_CONTEXT",
+        "MISSING_HUMAN_REVIEW_BOUNDARY",
+    ]
     api_client.post_classification_callback.assert_called_once()
     payload = api_client.post_classification_callback.call_args.args[0]
     assert payload.guardrail_status == "BLOCKED"

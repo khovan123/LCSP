@@ -12,6 +12,7 @@ from lcsp_workers.platform.redaction import redact_string
 
 from .budget_tracker import BudgetExceeded
 from .deep_agent_client import (
+    LLMToolSchemaInvalidError,
     LLMResponse,
     LLMToolDefinition,
     LLMToolResponse,
@@ -443,6 +444,10 @@ def _classify_provider_error(exc: Exception) -> str:
         return "TIMEOUT"
     if isinstance(exc, LlmProviderNetworkError):
         return "NETWORK"
+    if isinstance(exc, LLMToolSchemaInvalidError):
+        return "TOOL_SCHEMA_INVALID"
+    if "schema-invalid tool arguments" in str(exc).lower():
+        return "TOOL_SCHEMA_INVALID"
 
     status_code = _provider_status_code(exc)
     if status_code == 401 or status_code == 403:

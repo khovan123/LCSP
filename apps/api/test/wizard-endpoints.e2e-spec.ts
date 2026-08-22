@@ -181,6 +181,30 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
           ],
         });
 
@@ -202,12 +226,42 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
             {
               questionId: "aiPurpose",
               value: "Finance",
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "autonomyLevel",
+        value: "HUMAN_APPROVAL_REQUIRED",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
             {
               questionId: "dataTypes",
               value: ["PII"],
@@ -259,6 +313,30 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
           ],
         });
       assert.equal(res1.status, 200);
@@ -275,6 +353,30 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
           ],
         });
       assert.equal(res2.status, 200);
@@ -323,6 +425,30 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
           ],
         });
       assert.equal(res.status, 409);
@@ -357,6 +483,30 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
           ],
         });
       assert.equal(res.status, 200);
@@ -375,6 +525,30 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
           ],
         });
       assert.equal(res.status, 404);
@@ -393,6 +567,30 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
           ],
         });
       assert.equal(res.status, 403);
@@ -411,12 +609,42 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
             {
               questionId: "aiPurpose",
               value: "Healthcare",
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "autonomyLevel",
+        value: "HUMAN_APPROVAL_REQUIRED",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
           ],
         });
 
@@ -431,6 +659,12 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "autonomyLevel",
+        value: "HUMAN_APPROVAL_REQUIRED",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
           ],
         });
 
@@ -459,6 +693,30 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
               answerState: "ANSWERED",
               updatedAt: "2026-07-31T00:00:00.000Z",
             },
+      {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
           ],
         });
 
@@ -488,8 +746,38 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         updatedAt: "2026-07-31T00:00:00.000Z",
       },
       {
+        questionId: "useCase",
+        value: "User completes the primary workflow with AI assistance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "primaryActors",
+        value: "User, reviewer, AI system",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "businessTrigger",
+        value: "User starts the workflow",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "expectedOutcome",
+        value: "Human-reviewed result is produced",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
         questionId: "aiPurpose",
         value: "Finance",
+        answerState: "ANSWERED",
+        updatedAt: "2026-07-31T00:00:00.000Z",
+      },
+      {
+        questionId: "autonomyLevel",
+        value: "HUMAN_APPROVAL_REQUIRED",
         answerState: "ANSWERED",
         updatedAt: "2026-07-31T00:00:00.000Z",
       },

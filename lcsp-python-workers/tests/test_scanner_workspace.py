@@ -7,8 +7,10 @@ import tarfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
+from lcsp_workers.platform.api_client import WorkerCallbackError
 from lcsp_workers.platform.config import WorkerConfig
 from lcsp_workers.scanner import scan_consumer as scan_consumer_module
 from lcsp_workers.scanner.evidence_assembler import PrivacyAssertionError
@@ -111,6 +113,47 @@ def test_scanner_tool_result_summary_uses_tool_specific_counters() -> None:
     assert ScanConsumer._scanner_tool_result_summary([MagicMock(), MagicMock()]) == {
         "item_count": 2,
     }
+
+
+def test_scan_terminal_client_errors_are_non_retryable() -> None:
+    wrong_state = WorkerCallbackError(
+        "SCAN_JOB_WRONG_STATE: Callback failed with client error 409."
+    )
+    mismatch_response = httpx.Response(
+        409,
+        json={
+            "ok": False,
+            "problem": {
+                "code": "SNAPSHOT_SCAN_MISMATCH",
+                "status": 409,
+            },
+        },
+        request=httpx.Request(
+            "GET",
+            "http://test/internal/repository-snapshots/snapshot/archive",
+        ),
+    )
+    mismatch = httpx.HTTPStatusError(
+        "snapshot mismatch",
+        request=mismatch_response.request,
+        response=mismatch_response,
+    )
+    server_response = httpx.Response(
+        500,
+        request=httpx.Request("GET", "http://test/internal/error"),
+    )
+    server_error = httpx.HTTPStatusError(
+        "server error",
+        request=server_response.request,
+        response=server_response,
+    )
+
+    assert ScanConsumer._is_terminal_scan_client_error(wrong_state)
+    assert ScanConsumer._is_terminal_scan_client_error(mismatch)
+    assert not ScanConsumer._is_terminal_scan_client_error(server_error)
+    assert not ScanConsumer._is_terminal_scan_client_error(
+        WorkerCallbackError("Callback failed with client error 422.")
+    )
 
 
 def _mock_knip_result() -> KnipRunResult:

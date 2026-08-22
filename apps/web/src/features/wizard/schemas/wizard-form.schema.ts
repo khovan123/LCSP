@@ -16,7 +16,12 @@ export const wizardDraftSchema = z.object({
   ps_003_personal_or_sensitive_data: textField,
   ps_004_decision_importance: textField,
   businessProcess: textField,
+  useCase: textField,
+  primaryActors: textField,
+  businessTrigger: textField,
+  expectedOutcome: textField,
   aiPurpose: textField,
+  autonomyLevel: textField,
   sector: textField,
   dataTypes: arrayField,
   affectedSubjects: arrayField,
@@ -48,7 +53,12 @@ export const wizardPreScreenSchema = z.object({
 export const wizardStepSchemas = [
   z.object({
     businessProcess: requiredText("pages.wizard.errors.businessProcessRequired"),
+    useCase: requiredText("pages.wizard.errors.useCaseRequired"),
+    primaryActors: requiredText("pages.wizard.errors.primaryActorsRequired"),
+    businessTrigger: requiredText("pages.wizard.errors.businessTriggerRequired"),
+    expectedOutcome: requiredText("pages.wizard.errors.expectedOutcomeRequired"),
     aiPurpose: requiredText("pages.wizard.errors.aiPurposeRequired"),
+    autonomyLevel: requiredText("pages.wizard.errors.autonomyLevelRequired"),
     sector: requiredText("pages.wizard.errors.sectorRequired"),
   }),
   z.object({

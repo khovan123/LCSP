@@ -16,6 +16,9 @@ from lcsp_workers.llm.fallback_client import LLMClientProtocol
 from lcsp_workers.platform.api_client import WorkerApiClient
 from lcsp_workers.platform.callback_schemas import TechnicalProfileCallbackPayload
 from lcsp_workers.platform.queue_consumer import ConsumerBase
+from lcsp_workers.platform.wizard_clarification import (
+    engineering_rule_source_clarification_summary,
+)
 
 from .technical_profile_builder import TechnicalProfileBuilder
 
@@ -292,15 +295,17 @@ class TechnicalProfileConsumer(ConsumerBase):
                     "corpus chunk triage and EngineeringRule rebuild"
                 ),
                 "waiting_reason": "NO_ENGINEERING_RULE_SOURCE_RULES",
-                "output_summary": {
-                    "status": investigation.status,
-                    "legalRuleCatalogVersionId": (
-                        investigation.legal_rule_catalog_version_id
-                    ),
-                    "legalCorpusVersionId": investigation.legal_corpus_version_id,
-                    "limitations": list(investigation.limitations),
-                    "correlationId": correlation_id,
-                },
+                "output_summary": engineering_rule_source_clarification_summary(
+                    base_summary={
+                        "status": investigation.status,
+                        "legalRuleCatalogVersionId": (
+                            investigation.legal_rule_catalog_version_id
+                        ),
+                        "legalCorpusVersionId": investigation.legal_corpus_version_id,
+                        "limitations": list(investigation.limitations),
+                        "correlationId": correlation_id,
+                    },
+                ),
             },
         )
 

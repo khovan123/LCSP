@@ -230,8 +230,6 @@ def _per_workflow_sandbox_node(node_name: str) -> bool:
             "investigate_engineering_rule",
             "plan_engineering_rules",
             "build_evidence_graph",
-            "business_semantics",
-            "business-cluster",
         )
     )
 

@@ -1,5 +1,9 @@
 import type { ZodError } from "zod";
-import { ANSWER_STATES } from "@lcsp/contracts/wizard";
+import {
+  ANSWER_STATES,
+  WIZARD_CLARIFICATION_QUESTIONS,
+  WIZARD_CLARIFICATION_SCOPES,
+} from "@lcsp/contracts/wizard";
 import type { WizardAnswer, AnswerState } from "@lcsp/contracts/wizard";
 
 import {
@@ -17,6 +21,17 @@ import type { WizardHelperKey } from "@/features/wizard/types/wizard-form.types"
 import { t } from "./wizard-i18n";
 
 export const sectionCardClassName = "border-border bg-card shadow-sm";
+
+export type WizardClarificationPrompt = {
+  id: string;
+  fieldName: keyof WizardAnswers;
+  control: string;
+  optionSet?: keyof typeof selectOptions;
+  questionKey: string;
+  detailKey: string;
+  placeholderKey?: string;
+  collectionRuleKey: string;
+};
 
 export function getHelperCopy(helperKey: WizardHelperKey) {
   switch (helperKey) {
@@ -163,15 +178,46 @@ export function normalizeAnswers(answers: WizardAnswers): WizardAnswers {
   return {
     ...answers,
     dataTypes: Array.isArray(answers.dataTypes) ? answers.dataTypes : [],
-    affectedSubjects: Array.isArray(answers.affectedSubjects) ? answers.affectedSubjects : [],
-    highImpactIndicators: Array.isArray(answers.highImpactIndicators) ? answers.highImpactIndicators : [],
-    transparencyIndicators: Array.isArray(answers.transparencyIndicators) ? answers.transparencyIndicators : [],
-    prohibitedRiskSignals: Array.isArray(answers.prohibitedRiskSignals) ? answers.prohibitedRiskSignals : [],
-    deploymentContext: Array.isArray(answers.deploymentContext) ? answers.deploymentContext : [],
+    affectedSubjects: Array.isArray(answers.affectedSubjects)
+      ? answers.affectedSubjects
+      : [],
+    highImpactIndicators: Array.isArray(answers.highImpactIndicators)
+      ? answers.highImpactIndicators
+      : [],
+    transparencyIndicators: Array.isArray(answers.transparencyIndicators)
+      ? answers.transparencyIndicators
+      : [],
+    prohibitedRiskSignals: Array.isArray(answers.prohibitedRiskSignals)
+      ? answers.prohibitedRiskSignals
+      : [],
+    deploymentContext: Array.isArray(answers.deploymentContext)
+      ? answers.deploymentContext
+      : [],
     ps_002_affected_people: Array.isArray(answers.ps_002_affected_people)
       ? answers.ps_002_affected_people
       : [],
   };
+}
+
+export function getBusinessContextClarificationPrompts(
+  _answers: WizardAnswers,
+): WizardClarificationPrompt[] {
+  return WIZARD_CLARIFICATION_QUESTIONS.filter(
+    (question) => question.scope === WIZARD_CLARIFICATION_SCOPES.preScan,
+  ).map((question) => ({
+    id: question.id,
+    fieldName: question.fieldName as keyof WizardAnswers,
+    control: question.control,
+    optionSet:
+      "optionSet" in question
+        ? (question.optionSet as keyof typeof selectOptions)
+        : undefined,
+    questionKey: question.labelKey,
+    detailKey: question.detailKey,
+    placeholderKey:
+      "placeholderKey" in question ? question.placeholderKey : undefined,
+    collectionRuleKey: question.collectionRuleKey,
+  }));
 }
 
 export function serializeAnswers(answers: WizardAnswers): WizardAnswer[] {
@@ -195,17 +241,16 @@ export function serializeAnswers(answers: WizardAnswers): WizardAnswer[] {
         answerState: ANSWER_STATES.answered,
         updatedAt: now,
       });
-    } else if (key === "humanReview" && answers.decisionRole === "NO_DECISION_SUPPORT") {
+    } else if (
+      key === "humanReview" &&
+      answers.decisionRole === "NO_DECISION_SUPPORT"
+    ) {
       // Handled above
       return;
     } else {
       let state: AnswerState = ANSWER_STATES.answered;
       const finalValue = value;
-      if (
-        value === "unknown" ||
-        value === "UNKNOWN" ||
-        value === "UNCLEAR"
-      ) {
+      if (value === "unknown" || value === "UNKNOWN" || value === "UNCLEAR") {
         state = ANSWER_STATES.explicitUnknown;
       } else if (Array.isArray(value) && value.includes("unknown")) {
         // if array includes unknown, the whole array might just be unknown, but the contract says value is unknown.
@@ -244,6 +289,39 @@ export function getSummaryItems(answers: WizardAnswers) {
     items.push({
       label: t("pages.wizard.fields.businessProcessLabel"),
       value: answers.businessProcess,
+    });
+  }
+  if (answers.useCase) {
+    items.push({
+      label: t("pages.wizard.fields.useCaseLabel"),
+      value: answers.useCase,
+    });
+  }
+  if (answers.primaryActors) {
+    items.push({
+      label: t("pages.wizard.fields.primaryActorsLabel"),
+      value: answers.primaryActors,
+    });
+  }
+  if (answers.businessTrigger) {
+    items.push({
+      label: t("pages.wizard.fields.businessTriggerLabel"),
+      value: answers.businessTrigger,
+    });
+  }
+  if (answers.expectedOutcome) {
+    items.push({
+      label: t("pages.wizard.fields.expectedOutcomeLabel"),
+      value: answers.expectedOutcome,
+    });
+  }
+  if (answers.autonomyLevel) {
+    items.push({
+      label: t("pages.wizard.fields.autonomyLevelLabel"),
+      value: getOptionDisplayLabel(
+        selectOptions.autonomyLevel,
+        answers.autonomyLevel,
+      ),
     });
   }
   if (answers.sector) {

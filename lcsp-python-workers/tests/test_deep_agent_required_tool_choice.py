@@ -232,3 +232,95 @@ def test_required_empty_tool_call_retries_with_schema_payload() -> None:
 
     assert attempts == 2
     assert response.tool_calls[0].arguments == {"decision": "SELECT"}
+
+
+def test_required_schema_invalid_tool_call_retries_with_valid_payload() -> None:
+    attempts = 0
+    prompts: list[str] = []
+    tool = LLMToolDefinition(
+        name="submit_planner_selection",
+        description="Submit planner selection.",
+        input_schema={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["nodes", "edges"],
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["proposalNodeId"],
+                        "properties": {
+                            "proposalNodeId": {
+                                "type": "string",
+                                "pattern": r"^[a-z][a-z0-9_-]{1,63}$",
+                            }
+                        },
+                    },
+                },
+                "edges": {"type": "array"},
+            },
+        },
+        tool_choice_required=True,
+    )
+
+    class FakeAgent:
+        def __init__(self, capture_tool):
+            self._capture_tool = capture_tool
+
+        def invoke(self, _payload, config=None):
+            nonlocal attempts
+            del config
+            prompts.append(_payload["messages"][0]["content"])
+            attempts += 1
+            if attempts == 1:
+                _invoke_capture_tool(self._capture_tool, nodes=[], edges=[])
+            else:
+                _invoke_capture_tool(
+                    self._capture_tool,
+                    nodes=[{"proposalNodeId": "business_action"}],
+                    edges=[],
+                )
+            return {
+                "messages": [
+                    SimpleNamespace(
+                        content="done",
+                        usage_metadata={"input_tokens": 10, "output_tokens": 5},
+                    )
+                ]
+            }
+
+    def fake_create_deep_agent(**kwargs):
+        return FakeAgent(
+            next(
+                tool
+                for tool in kwargs["tools"]
+                if tool.__name__ == "submit_planner_selection"
+            )
+        )
+
+    client = DeepAgentClient(
+        provider="openai",
+        api_key="sk-test-key",
+        model="gpt-4o",
+        budget_tracker=_tracker(),
+    )
+
+    with _fake_deepagents(fake_create_deep_agent):
+        response = client.complete_with_tools(
+            "Submit planner selection.",
+            tools=[tool],
+            workflow_run_id="workflow-1",
+            node_name="plan_engineering_rules",
+        )
+
+    assert attempts == 2
+    assert "submit_planner_selection: object" in prompts[1]
+    assert "nodes" in prompts[1]
+    assert "minItems=1" in prompts[1]
+    assert response.tool_calls[0].arguments == {
+        "nodes": [{"proposalNodeId": "business_action"}],
+        "edges": [],
+    }

@@ -715,16 +715,40 @@ export const viPages = {
         "Ví dụ: tuyển dụng, tiếp cận dịch vụ, đủ điều kiện, định giá hoặc kết quả phục vụ.",
       businessProcessLabel: "Hệ thống này đang hỗ trợ quy trình nghiệp vụ nào?",
       businessProcessDescription:
-        "Mô tả quy trình nghiệp vụ chính bằng ngôn ngữ công việc hằng ngày.",
+        "Mô tả quy trình nghiệp vụ chính, mục tiêu tuân thủ/rủi ro và người dùng nghiệp vụ hưởng lợi.",
       businessProcessPlaceholder:
-        "Ví dụ: Hỗ trợ nhóm chăm sóc khách hàng soạn phản hồi cho yêu cầu hỗ trợ.",
+        "Ví dụ: Hỗ trợ tổ chức đánh giá mức độ tuân thủ và rủi ro của hệ thống AI trước khi đưa vào vận hành.",
+      useCaseLabel: "Use case chính là gì?",
+      useCaseDescription:
+        "Mô tả mục tiêu của actor, luồng chính và phạm vi use case, không liệt kê chi tiết triển khai.",
+      useCasePlaceholder:
+        "Ví dụ: Nhân viên hỗ trợ mở yêu cầu của khách hàng, xem ngữ cảnh được gợi ý, chỉnh sửa bản nháp và gửi phản hồi.",
+      primaryActorsLabel: "Ai tham gia use case này?",
+      primaryActorsDescription:
+        "Nêu actor con người, actor hệ thống và nhóm người bị ảnh hưởng trong luồng.",
+      primaryActorsPlaceholder:
+        "Ví dụ: Nhân viên hỗ trợ, khách hàng, hệ thống chăm sóc khách hàng, dịch vụ AI soạn nháp.",
+      businessTriggerLabel: "Điều gì bắt đầu luồng này?",
+      businessTriggerDescription:
+        "Mô tả sự kiện, hành động người dùng hoặc điều kiện theo lịch khởi động use case.",
+      businessTriggerPlaceholder:
+        "Ví dụ: Khách hàng gửi yêu cầu hỗ trợ mới hoặc mở lại một case hiện có.",
+      expectedOutcomeLabel: "Luồng này cần tạo ra kết quả gì?",
+      expectedOutcomeDescription:
+        "Mô tả kết quả nghiệp vụ sau khi luồng hoàn tất, bao gồm điều AI không được tự quyết.",
+      expectedOutcomePlaceholder:
+        "Ví dụ: Khách hàng nhận phản hồi đã được nhân viên phê duyệt; AI không tự đóng case.",
       aiPurposeLabel: "AI đóng vai trò gì trong quy trình này?",
       aiPurposeDescription:
-        "Mô tả vai trò cụ thể của hệ thống AI trong quy trình được nêu ở trên.",
+        "Mô tả AI được dùng để làm gì và quyết định nào AI không được tự phê duyệt.",
       aiPurposePlaceholder:
-        "Ví dụ: Tóm tắt lịch sử hội thoại và đề xuất 3 câu trả lời dự kiến.",
+        "Ví dụ: AI hỗ trợ lập kế hoạch điều tra, diễn giải bằng chứng theo rule đã phê duyệt và đề xuất kết luận có trích dẫn.",
+      autonomyLevelLabel: "Hệ thống tự động tới mức nào trong use case này?",
+      autonomyLevelDescription:
+        "Chọn phương án mạnh nhất nhưng vẫn đúng với luồng thực tế.",
       sectorLabel: "Bối cảnh nghiệp vụ nào phù hợp nhất với hệ thống này?",
-      sectorDescription: "Chọn bối cảnh chính gần nhất cho assessment này.",
+      sectorDescription:
+        "Chọn lĩnh vực gần nhất; với LCSP thường là governance, risk and compliance.",
       dataTypeLabel: "Hệ thống dùng hoặc phân tích những loại dữ liệu nào?",
       dataTypeDescription:
         "Chọn tất cả nhóm dữ liệu có liên quan tới luồng AI này.",
@@ -782,6 +806,8 @@ export const viPages = {
       sectorEducation: "Giáo dục hoặc đào tạo",
       sectorHealthcare: "Y tế hoặc chăm sóc sức khỏe",
       sectorPublicServices: "Dịch vụ công hoặc quyền truy cập có điều kiện",
+      sectorGovernanceRiskCompliance:
+        "Governance, Risk and Compliance / Legal-tech",
       dataTypePersonal: "Dữ liệu hồ sơ cá nhân",
       dataTypeSensitive: "Dữ liệu nhạy cảm hoặc đặc biệt",
       dataTypeBiometric: "Dữ liệu sinh trắc học",
@@ -813,6 +839,14 @@ export const viPages = {
         "Kết quả thường có hiệu lực mà không có bước kiểm tra thực chất",
       humanOversightNotApplicable:
         "Không áp dụng vì AI không ảnh hưởng tới quyết định cuối cùng",
+      autonomyHumanAssisted:
+        "Chỉ hỗ trợ con người; con người quyết định và thực hiện kết quả",
+      autonomyHumanApprovalRequired:
+        "Tự động chuẩn bị kết quả nhưng phải có người phê duyệt",
+      autonomyConditionalAutomation:
+        "Có thể tự động hành động trong điều kiện đã định nghĩa hoặc ca rủi ro thấp",
+      autonomyFullAutomation:
+        "Hệ thống có thể hoàn tất kết quả mà không cần người phê duyệt",
       externalNone: "Không gọi dịch vụ ngoài",
       externalPossible: "Có khả năng gọi dịch vụ ngoài",
       externalConfirmed: "Xác nhận có dùng AI bên ngoài",
@@ -828,6 +862,67 @@ export const viPages = {
       prohibitedManipulation: "Thao túng hành vi người dùng",
       prohibitedScoring: "Chấm điểm xã hội",
       prohibitedSensitiveInference: "Suy diễn các đặc điểm nhạy cảm",
+    },
+    clarification: {
+      title: "Thông tin cần có trước khi scan",
+      description:
+        "Trả lời các câu hỏi có giới hạn này để các agent sau dùng dữ kiện bạn cung cấp thay vì suy diễn ý nghĩa nghiệp vụ từ tên code.",
+      badge: "Ask mode",
+      rules: {
+        businessProcess:
+          "Chỉ thu thập quy trình nghiệp vụ bằng ngôn ngữ công việc hằng ngày, không thu cấu trúc code.",
+        useCase:
+          "Chỉ thu thập một mục tiêu actor chính, luồng chính và ranh giới cho assessment này.",
+        primaryActors:
+          "Chỉ thu thập các vai trò tham gia hoặc bị ảnh hưởng bởi use case.",
+        businessTrigger:
+          "Thu thập sự kiện nghiệp vụ bắt đầu luồng; không suy diễn chỉ từ tên route.",
+        expectedOutcome:
+          "Thu thập kết quả nghiệp vụ mong muốn và quyết định nào cần thẩm quyền con người.",
+        autonomyLevel:
+          "Chỉ chọn một mức tự động hóa từ bộ option đã phê duyệt.",
+        aiPurpose:
+          "Thu thập AI được dùng để làm gì và không được tự quyết định điều gì.",
+        sector: "Chỉ chọn lĩnh vực gần nhất từ bộ option đã phê duyệt.",
+        postGraphContext:
+          "Chỉ hỏi ngữ cảnh nghiệp vụ mà code graph không chứng minh được.",
+        postGraphRuleScope:
+          "Chỉ hỏi phạm vi nghiệp vụ hoặc nhóm rule cần đánh giá tiếp.",
+        postGraphHumanReview:
+          "Chỉ hỏi vị trí review hoặc phê duyệt của con người trong luồng nghiệp vụ.",
+      },
+      useCaseQuestion: "Use case chính là gì?",
+      useCaseDetail:
+        "Bao gồm mục tiêu của actor, luồng chính và ranh giới. Không đưa source code hoặc chi tiết triển khai.",
+      primaryActorsQuestion: "Ai tham gia use case này?",
+      primaryActorsDetail:
+        "Bao gồm actor con người, actor hệ thống và người bị ảnh hưởng. Dùng tên vai trò rõ ràng.",
+      businessTriggerQuestion: "Điều gì bắt đầu luồng này?",
+      businessTriggerDetail:
+        "Nêu hành động người dùng, event, queue message, lịch chạy hoặc điều kiện bên ngoài khởi động use case.",
+      expectedOutcomeQuestion: "Luồng này cần tạo ra kết quả gì?",
+      expectedOutcomeDetail:
+        "Nêu kết quả nghiệp vụ và chỉ rõ quyết định nào AI không được tự làm một mình.",
+      autonomyLevelQuestion: "Hệ thống tự động tới mức nào trong use case này?",
+      autonomyLevelDetail:
+        "Chọn AI chỉ hỗ trợ, cần phê duyệt, được hành động có điều kiện hoặc tự động hoàn toàn.",
+      postGraphContextQuestion: "Code graph đang thiếu ngữ cảnh nghiệp vụ nào?",
+      postGraphContextDetail:
+        "Chỉ bổ sung dữ kiện nghiệp vụ cần thiết để diễn giải bằng chứng kỹ thuật đã scan.",
+      postGraphContextPlaceholder:
+        "Ví dụ: Route này chỉ dùng bởi compliance operator trong bước review bằng chứng.",
+      postGraphRuleScopeQuestion:
+        "Planner nên đánh giá nhóm rule nào tiếp theo?",
+      postGraphRuleScopeDetail:
+        "Nêu nghĩa vụ nghiệp vụ, nhóm kiểm soát hoặc phạm vi corpus đã phê duyệt cần dùng cho investigation tiếp theo.",
+      postGraphRuleScopePlaceholder:
+        "Ví dụ: Human oversight và auditability cho phân loại được AI hỗ trợ.",
+      postGraphHumanReviewQuestion:
+        "Review của con người nằm ở đâu trong luồng này?",
+      postGraphHumanReviewDetail:
+        "Nêu ai review, review xảy ra khi nào và người review có quyền gì.",
+      postGraphHumanReviewPlaceholder:
+        "Ví dụ: Legal Operator review các phân loại bị blocked trước khi phê duyệt cuối.",
     },
     helpers: {
       decisionTitle: "Cách trả lời câu hỏi về vai trò trong quyết định",
@@ -857,8 +952,15 @@ export const viPages = {
         "Vui lòng cho biết kết quả AI có ảnh hưởng tới quyết định quan trọng không trước khi tiếp tục.",
       businessProcessRequired:
         "Hãy mô tả quy trình nghiệp vụ chính trước khi tiếp tục.",
+      useCaseRequired: "Hãy mô tả use case chính trước khi tiếp tục.",
+      primaryActorsRequired: "Hãy mô tả các actor tham gia trước khi tiếp tục.",
+      businessTriggerRequired:
+        "Hãy mô tả điều khởi động workflow trước khi tiếp tục.",
+      expectedOutcomeRequired: "Hãy mô tả kết quả mong đợi trước khi tiếp tục.",
       aiPurposeRequired:
         "Hãy mô tả mục đích của hệ thống AI trước khi tiếp tục.",
+      autonomyLevelRequired:
+        "Hãy chọn ranh giới tự động hóa trước khi tiếp tục.",
       sectorRequired: "Hãy chọn bối cảnh nghiệp vụ chính trước khi tiếp tục.",
       dataTypesRequired:
         "Hãy chọn ít nhất một nhóm dữ liệu trước khi tiếp tục.",
@@ -985,9 +1087,17 @@ export const viPages = {
     reasonLabel: "Lý do",
     valueLabel: "Giá trị",
     emptyValueLabel: "Trống",
+    notApplicableValueLabel: "Không áp dụng",
     rerunScan: "Chạy lại scan",
     rerunningScan: "Đang tạo scan mới",
     rerunError: "Không thể tạo scan mới. Hãy thử lại sau.",
+    clarificationRequestTitle: "Cần bổ sung ngữ cảnh",
+    clarificationRequestDescription:
+      "Pipeline đang chờ các câu hỏi có giới hạn. Trả lời trong Wizard để agent sau dùng dữ kiện đã cung cấp.",
+    clarificationRequestScopeLabel: "Phạm vi",
+    clarificationRequestReasonLabel: "Lý do",
+    clarificationRequestOpenWizard: "Mở Wizard",
+    clarificationCollectionRuleLabel: "Quy tắc thu thập",
     scanStatuses: {
       queued: "Đang chờ chạy",
       running: "Đang phân tích",

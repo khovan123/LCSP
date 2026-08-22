@@ -9,16 +9,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+import httpx
+
 from lcsp_workers.agentic_evidence.dispatcher import ScannerToolDispatcher
 from lcsp_workers.agentic_evidence.scanner_tool_entrypoints import (
     ScannerToolExecutionContext,
 )
 from lcsp_workers.llm import llm_limit_wait_reason
-from lcsp_workers.platform.api_client import WorkerApiClient
+
+from lcsp_workers.platform.api_client import WorkerApiClient, WorkerCallbackError
 from lcsp_workers.platform.callback_schemas import CallbackResponse
 from lcsp_workers.platform.correlation import set_correlationId
 from lcsp_workers.platform.logging import get_logger
-from lcsp_workers.platform.queue_consumer import ConsumerBase
+from lcsp_workers.platform.queue_consumer import ConsumerBase, NonRetryableWorkerError
 
 from .analyzers.ai_invocation_detector import AIInvocationDetector
 from .analyzers.ai_pattern_rules import AI_RULE_TABLE
@@ -60,6 +63,12 @@ from .workspace import ArchiveMaterializationError, ScannerWorkspace
 logger = get_logger(__name__)
 
 NOT_APPLICABLE_RULESET_HASH = "sha256:not-applicable"
+_TERMINAL_SCAN_CLIENT_ERROR_CODES = frozenset(
+    {
+        "SCAN_JOB_WRONG_STATE",
+        "SNAPSHOT_SCAN_MISMATCH",
+    }
+)
 PYTHON_ANALYZER_CONFIG_HASH = "sha256:" + hashlib.sha256(
     b"lcsp-python-analyzer:max-l3-hops=1"
 ).hexdigest()
@@ -260,6 +269,8 @@ class ScanConsumer(ConsumerBase):
                 duration_ms=self._duration_ms(archive_started_at, archive_ended_at),
             )
             self._runtime_scan_job_id = None
+            if self._is_terminal_scan_client_error(error):
+                raise NonRetryableWorkerError(str(error)) from error
             raise
 
         result = None
@@ -887,10 +898,15 @@ class ScanConsumer(ConsumerBase):
                 output_summary={"status": callback_payload.status},
                 started_at=callback_started_at,
             )
-            callback_response = self._api_client.post_scan_callback(
-                envelope.scan_job_id,
-                callback_payload,
-            )
+            try:
+                callback_response = self._api_client.post_scan_callback(
+                    envelope.scan_job_id,
+                    callback_payload,
+                )
+            except WorkerCallbackError as error:
+                if self._is_terminal_scan_client_error(error):
+                    raise NonRetryableWorkerError(str(error)) from error
+                raise
             callback_ended_at = self._utc_timestamp()
             self._emit_runtime_event(
                 envelope.scan_job_id,
@@ -973,6 +989,33 @@ class ScanConsumer(ConsumerBase):
                 raise cleanup_error from error
             self._runtime_scan_job_id = None
             raise
+
+    @classmethod
+    def _is_terminal_scan_client_error(cls, error: Exception) -> bool:
+        code = cls._scan_client_error_code(error)
+        return code in _TERMINAL_SCAN_CLIENT_ERROR_CODES
+
+    @staticmethod
+    def _scan_client_error_code(error: Exception) -> str | None:
+        if isinstance(error, WorkerCallbackError):
+            message = str(error)
+            if ":" in message:
+                return message.split(":", 1)[0].strip() or None
+            return None
+        if isinstance(error, httpx.HTTPStatusError):
+            try:
+                data = error.response.json()
+            except ValueError:
+                return None
+            if not isinstance(data, dict):
+                return None
+            problem = data.get("problem")
+            if isinstance(problem, dict):
+                value = problem.get("code") or problem.get("error_code")
+                return str(value) if value else None
+            value = data.get("error_code") or data.get("errorCode")
+            return str(value) if value else None
+        return None
 
     def _finalize_workspace_cleanup(self, job_id: str) -> None:
         workspace_path = self._workspace.workspace_path(job_id)

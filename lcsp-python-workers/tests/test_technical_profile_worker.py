@@ -262,6 +262,18 @@ def test_consumer_waits_without_callback_when_engineering_rules_are_rebuilding()
         consumer.handle({"evidenceReportId": "ter-1"}, correlationId="corr-1")
 
     api_client.post_scan_runtime_event.assert_called_once()
+    runtime_payload = api_client.post_scan_runtime_event.call_args.args[1]
+    assert runtime_payload["output_summary"]["kind"] == "WIZARD_CONTEXT_REQUEST"
+    assert runtime_payload["output_summary"]["scope"] == "POST_GRAPH"
+    assert runtime_payload["output_summary"]["requestedBy"] == "PLANNER"
+    assert runtime_payload["output_summary"]["reasonCode"] == (
+        "NO_ENGINEERING_RULE_SOURCE_RULES"
+    )
+    assert runtime_payload["output_summary"]["questionIds"] == [
+        "MISSING_RULE_SCOPE",
+        "MISSING_GRAPH_CONTEXT",
+        "MISSING_HUMAN_REVIEW_BOUNDARY",
+    ]
     api_client.post_technical_profile_callback.assert_not_called()
 
 

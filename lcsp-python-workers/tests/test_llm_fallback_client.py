@@ -11,6 +11,7 @@ from lcsp_workers.llm import (
     PrimaryThenFallbackLLMClient,
     PromptSafetyViolation,
 )
+from lcsp_workers.llm.deep_agent_client import LLMToolSchemaInvalidError
 from lcsp_workers.llm.fallback_client import (
     _classify_provider_error,
     _safe_provider_error_details,
@@ -238,3 +239,11 @@ def test_quota_error_is_reported_as_resumeable_limit() -> None:
     assert llm_limit_wait_reason(error) == (
         "LLM token quota exceeded; waiting to resume."
     )
+
+
+def test_tool_schema_invalid_error_is_classified() -> None:
+    error = LLMToolSchemaInvalidError(
+        "Deep Agent returned schema-invalid tool arguments in required mode"
+    )
+
+    assert _classify_provider_error(error) == "TOOL_SCHEMA_INVALID"

@@ -9,6 +9,9 @@ from lcsp_workers.platform.api_client import WorkerApiClient, WorkerCallbackErro
 from lcsp_workers.platform.callback_schemas import ClassificationCallbackPayload
 from lcsp_workers.platform.logging import get_logger
 from lcsp_workers.platform.queue_consumer import ConsumerBase, NonRetryableWorkerError
+from lcsp_workers.platform.wizard_clarification import (
+    engineering_rule_source_clarification_summary,
+)
 from lcsp_workers.scanner.snapshot_service_client import (
     SnapshotArchiveRequest,
     SnapshotServiceClient,
@@ -294,17 +297,19 @@ class EngineeringAssessmentConsumer(ConsumerBase):
                     "corpus chunk triage and EngineeringRule rebuild"
                 ),
                 "waiting_reason": "NO_ENGINEERING_RULE_SOURCE_RULES",
-                "output_summary": {
-                    "status": str(getattr(result, "status", "WAITING")),
-                    "legalRuleCatalogVersionId": str(
-                        getattr(result, "legal_rule_catalog_version_id", "")
-                    ),
-                    "legalCorpusVersionId": str(
-                        getattr(result, "legal_corpus_version_id", "")
-                    ),
-                    "limitations": list(getattr(result, "limitations", ())),
-                    "correlationId": correlation_id,
-                },
+                "output_summary": engineering_rule_source_clarification_summary(
+                    base_summary={
+                        "status": str(getattr(result, "status", "WAITING")),
+                        "legalRuleCatalogVersionId": str(
+                            getattr(result, "legal_rule_catalog_version_id", "")
+                        ),
+                        "legalCorpusVersionId": str(
+                            getattr(result, "legal_corpus_version_id", "")
+                        ),
+                        "limitations": list(getattr(result, "limitations", ())),
+                        "correlationId": correlation_id,
+                    },
+                ),
             },
         )
 

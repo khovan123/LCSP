@@ -7,12 +7,27 @@ import {
 } from "@lcsp/contracts/evidence";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
+import {
+  WIZARD_CLARIFICATION_QUESTION_IDS,
+  WIZARD_CLARIFICATION_QUESTIONS,
+  WIZARD_CLARIFICATION_REQUEST_KIND,
+  WIZARD_CLARIFICATION_REQUESTERS,
+  WIZARD_CLARIFICATION_SCOPES,
+} from "@lcsp/contracts/wizard";
+import type {
+  WizardClarificationQuestion,
+  WizardClarificationQuestionId,
+  WizardClarificationRequester,
+  WizardClarificationRequest,
+  WizardClarificationScope,
+} from "@lcsp/contracts/wizard";
 import { resolveMessage } from "@lcsp/i18n";
 import { ActivityIcon, BotIcon, RotateCcwIcon } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   buildRuntimeConsoleModel,
   isActiveRuntimeStatus,
@@ -44,7 +59,15 @@ type SummaryRecord = {
   [key: string]: unknown;
 };
 
+type RuntimeClarificationRequest = Omit<
+  WizardClarificationRequest,
+  "questionIds"
+> & {
+  questionIds: WizardClarificationQuestionId[];
+};
+
 const RUNTIME_STEP_STATUS_SKIPPED = "skipped";
+const NOT_APPLICABLE_PROVENANCE_HASH = "sha256:not-applicable";
 const REPOSITORY_SCAN_STALE_AFTER_MS = 5 * 60 * 1000;
 
 function SemanticSummary({
@@ -97,6 +120,16 @@ function SemanticRuntimeDetails({
 }) {
   const input = (item.inputSummary || {}) as SummaryRecord;
   const output = (item.outputSummary || {}) as SummaryRecord;
+  const clarificationRequest = parseClarificationRequest(item);
+
+  if (clarificationRequest !== null) {
+    return (
+      <RuntimeClarificationRequestCard
+        item={item}
+        request={clarificationRequest}
+      />
+    );
+  }
 
   const isLlm =
     input.operation === "complete_with_tools" ||
@@ -237,6 +270,79 @@ function SemanticRuntimeDetails({
 
   // Fallback
   return <RuntimeDetailList item={item} />;
+}
+
+function RuntimeClarificationRequestCard({
+  item,
+  request,
+}: {
+  item: WorkspaceRuntimeActivityItem;
+  request: RuntimeClarificationRequest;
+}) {
+  const questions = request.questionIds
+    .map(findClarificationQuestion)
+    .filter(isClarificationQuestion);
+
+  return (
+    <div className="px-4 pb-3 md:pl-36">
+      <div className="rounded-md border border-sky-200 bg-sky-50/70 p-3 font-mono text-xs text-sky-950 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 font-semibold">
+              <ActivityIcon className="size-4 text-sky-600" />
+              <span>
+                {t("pages.technicalEvidence.clarificationRequestTitle")}
+              </span>
+            </div>
+            <p className="mt-1 max-w-3xl text-sky-900/80">
+              {t("pages.technicalEvidence.clarificationRequestDescription")}
+            </p>
+          </div>
+          <Link
+            className={buttonVariants({ size: "sm", variant: "outline" })}
+            href={`/assessments/${encodeURIComponent(item.assessmentId)}/wizard`}
+          >
+            {t("pages.technicalEvidence.clarificationRequestOpenWizard")}
+          </Link>
+        </div>
+        <dl className="mt-3 grid gap-1.5 text-sky-900/90 sm:grid-cols-2">
+          <div className="grid gap-0.5">
+            <dt className="text-sky-700/80">
+              {t("pages.technicalEvidence.clarificationRequestScopeLabel")}
+            </dt>
+            <dd>{request.scope}</dd>
+          </div>
+          <div className="grid gap-0.5">
+            <dt className="text-sky-700/80">
+              {t("pages.technicalEvidence.clarificationRequestReasonLabel")}
+            </dt>
+            <dd>{request.reasonCode}</dd>
+          </div>
+        </dl>
+        {questions.length > 0 ? (
+          <ul className="mt-3 grid gap-2">
+            {questions.map((question) => (
+              <li
+                className="rounded border border-sky-200 bg-white/80 px-3 py-2"
+                key={question.id}
+              >
+                <p className="font-semibold text-sky-950">
+                  {t(question.labelKey)}
+                </p>
+                <p className="mt-1 text-sky-900/80">{t(question.detailKey)}</p>
+                <p className="mt-2 text-sky-700/80">
+                  {t(
+                    "pages.technicalEvidence.clarificationCollectionRuleLabel",
+                  )}
+                  : {t(question.collectionRuleKey)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 export function TechnicalEvidenceRuntimePage({
@@ -733,6 +839,101 @@ function RuntimeDetailList({ item }: { item: WorkspaceRuntimeActivityItem }) {
   );
 }
 
+function parseClarificationRequest(
+  item: WorkspaceRuntimeActivityItem,
+): RuntimeClarificationRequest | null {
+  const candidates = [item.outputSummary, item.inputSummary];
+  for (const candidate of candidates) {
+    if (!isSummaryRecord(candidate)) {
+      continue;
+    }
+    if (candidate.kind !== WIZARD_CLARIFICATION_REQUEST_KIND) {
+      continue;
+    }
+    if (!isClarificationScope(candidate.scope)) {
+      continue;
+    }
+    if (!isClarificationRequester(candidate.requestedBy)) {
+      continue;
+    }
+    if (typeof candidate.reasonCode !== "string") {
+      continue;
+    }
+    if (!Array.isArray(candidate.questionIds)) {
+      continue;
+    }
+
+    const questionIds = candidate.questionIds.filter(isClarificationQuestionId);
+
+    if (questionIds.length === 0) {
+      continue;
+    }
+
+    return {
+      kind: WIZARD_CLARIFICATION_REQUEST_KIND,
+      scope: candidate.scope,
+      requestedBy: candidate.requestedBy,
+      reasonCode: candidate.reasonCode,
+      questionIds,
+    };
+  }
+
+  return null;
+}
+
+function isSummaryRecord(
+  value: WorkspaceRuntimeSummaryValue | null,
+): value is Record<string, WorkspaceRuntimeSummaryValue> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isClarificationQuestionId(
+  value: WorkspaceRuntimeSummaryValue,
+): value is WizardClarificationQuestionId {
+  return (
+    typeof value === "string" &&
+    Object.values(WIZARD_CLARIFICATION_QUESTION_IDS).includes(
+      value as WizardClarificationQuestionId,
+    )
+  );
+}
+
+function isClarificationScope(
+  value: WorkspaceRuntimeSummaryValue,
+): value is WizardClarificationScope {
+  return (
+    typeof value === "string" &&
+    Object.values(WIZARD_CLARIFICATION_SCOPES).includes(
+      value as WizardClarificationScope,
+    )
+  );
+}
+
+function isClarificationRequester(
+  value: WorkspaceRuntimeSummaryValue,
+): value is WizardClarificationRequester {
+  return (
+    typeof value === "string" &&
+    Object.values(WIZARD_CLARIFICATION_REQUESTERS).includes(
+      value as WizardClarificationRequester,
+    )
+  );
+}
+
+function findClarificationQuestion(
+  questionId: WizardClarificationQuestionId,
+): WizardClarificationQuestion | undefined {
+  return WIZARD_CLARIFICATION_QUESTIONS.find(
+    (question) => question.id === questionId,
+  );
+}
+
+function isClarificationQuestion(
+  value: WizardClarificationQuestion | undefined,
+): value is WizardClarificationQuestion {
+  return value !== undefined;
+}
+
 function AnimatedDots() {
   return (
     <span aria-hidden="true" className="inline-flex w-6 overflow-hidden">
@@ -862,7 +1063,9 @@ function scanStatusLabel(status: string) {
 }
 
 function isFreshActiveScanJob(scanJob: { status: string; updatedAt: string }) {
-  return isActiveScanJobStatus(scanJob.status) && !isStaleActiveScanJob(scanJob);
+  return (
+    isActiveScanJobStatus(scanJob.status) && !isStaleActiveScanJob(scanJob)
+  );
 }
 
 function isStaleActiveScanJob(scanJob: { status: string; updatedAt: string }) {
@@ -960,6 +1163,9 @@ function runtimeEventLabel(eventType: string) {
 
 function formatSummaryValue(value: WorkspaceRuntimeSummaryValue) {
   if (typeof value === "string") {
+    if (value === NOT_APPLICABLE_PROVENANCE_HASH) {
+      return t("pages.technicalEvidence.notApplicableValueLabel");
+    }
     return value;
   }
   if (value === null) {

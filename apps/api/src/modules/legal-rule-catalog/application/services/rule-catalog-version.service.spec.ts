@@ -55,8 +55,8 @@ describe("RuleCatalogVersionService", () => {
           ],
         } as never),
       },
-      $transaction: jest.fn(async (callback: (client: typeof tx) => unknown) =>
-        callback(tx),
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
       ),
     };
 
@@ -127,5 +127,142 @@ describe("RuleCatalogVersionService", () => {
       ruleCount: 7,
       noChanges: true,
     });
+  });
+
+  it("recovers approved LegalRule rows from legacy active corpus chunks without stored normative class", async () => {
+    const tx = {
+      legalRuleCatalogVersion: {
+        create: jest.fn().mockResolvedValue({
+          id: "catalog-new",
+          version: "AUTO-ENGINEERING-RULES-LEGACY",
+        } as never),
+      },
+      legalRule: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 } as never),
+      },
+      ruleApprovalRecord: {
+        create: jest.fn().mockResolvedValue({ id: "approval-1" } as never),
+      },
+    };
+    const prisma = {
+      legalRuleCatalogVersion: {
+        findMany: jest.fn().mockResolvedValue([] as never),
+        findFirst: jest.fn().mockResolvedValue(null as never),
+      },
+      legalRule: {
+        count: jest.fn().mockResolvedValue(0 as never),
+      },
+      legalCorpusVersion: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "corpus-legacy",
+          version: "VN-LEGAL-AO6-legacy",
+          chunks: [
+            {
+              id: "LAW-134:art-11::cl-2",
+              documentId: "LAW-134",
+              locator: "art-11::cl-2",
+              content:
+                "Hệ thống trí tuệ nhân tạo phải bảo đảm khả năng kiểm tra, giám sát và lưu trữ.",
+              contentSha256: "sha256:legacy",
+              legalStatus: "ACTIVE",
+              hierarchy: { articleTitle: "Nghĩa vụ quản lý hệ thống" },
+            },
+          ],
+        } as never),
+      },
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+
+    const service = new RuleCatalogVersionService(prisma as any);
+    const result = await service.recoverApprovedRulesFromActiveCorpus({
+      idempotencyKey: "recover-legacy",
+      correlationId: "corr-1",
+    });
+
+    expect(result.status).toBe(LEGAL_RULE_LIFECYCLE_STATUSES.approved);
+    expect(result.ruleCount).toBe(1);
+    expect(tx.legalRule.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [
+          expect.objectContaining({
+            legalRuleCatalogVersionId: "catalog-new",
+            citationLocatorRefs: [
+              expect.objectContaining({
+                legalCorpusVersionId: "corpus-legacy",
+                id: "LAW-134:art-11::cl-2",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("normalizes legacy normative class metadata before recovering approved rules", async () => {
+    const tx = {
+      legalRuleCatalogVersion: {
+        create: jest.fn().mockResolvedValue({
+          id: "catalog-new",
+          version: "AUTO-ENGINEERING-RULES-NORMALIZED",
+        } as never),
+      },
+      legalRule: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 } as never),
+      },
+      ruleApprovalRecord: {
+        create: jest.fn().mockResolvedValue({ id: "approval-1" } as never),
+      },
+    };
+    const prisma = {
+      legalRuleCatalogVersion: {
+        findMany: jest.fn().mockResolvedValue([] as never),
+        findFirst: jest.fn().mockResolvedValue(null as never),
+      },
+      legalRule: {
+        count: jest.fn().mockResolvedValue(0 as never),
+      },
+      legalCorpusVersion: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "corpus-normalized",
+          version: "VN-LEGAL-AO6-normalized",
+          chunks: [
+            {
+              id: "LAW-134:art-12::cl-1",
+              documentId: "LAW-134",
+              locator: "art-12::cl-1",
+              contentSha256: "sha256:normalized",
+              legalStatus: "ACTIVE",
+              hierarchy: { normativeClass: "engineering-rule-candidate" },
+            },
+          ],
+        } as never),
+      },
+      $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+        Promise.resolve(callback(tx)),
+      ),
+    };
+
+    const service = new RuleCatalogVersionService(prisma as any);
+    const result = await service.recoverApprovedRulesFromActiveCorpus({
+      idempotencyKey: "recover-normalized",
+      correlationId: "corr-1",
+    });
+
+    expect(result.status).toBe(LEGAL_RULE_LIFECYCLE_STATUSES.approved);
+    expect(result.ruleCount).toBe(1);
+    expect(tx.legalRule.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [
+          expect.objectContaining({
+            legalRuleCatalogVersionId: "catalog-new",
+            status: toPrismaLegalRuleLifecycleStatus(
+              LEGAL_RULE_LIFECYCLE_STATUSES.approved,
+            ),
+          }),
+        ],
+      }),
+    );
   });
 });

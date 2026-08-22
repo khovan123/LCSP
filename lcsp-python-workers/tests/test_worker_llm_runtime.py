@@ -17,9 +17,6 @@ from lcsp_workers.platform.config import (
 )
 from lcsp_workers.platform.queue_consumer import ConsumerBase
 from lcsp_workers.runtime import _build_consumer, _build_llm_client
-from lcsp_workers.scanner.program_graph.business_semantic_graph_assembler import (
-    BusinessSemanticProgramGraphAssembler,
-)
 
 
 def _base_env(monkeypatch) -> None:
@@ -226,19 +223,19 @@ def test_traceable_creates_workflow_parent_and_records_llm_input(monkeypatch) ->
     call_llm(
         Client(),
         "raw prompt Authorization: Bearer secret-input-token visible in phoenix",
-        workflow_run_id="scan-business-semantics:test",
-        node_name="enrich_business_semantics",
+        workflow_run_id="engineering-rule-planner:test",
+        node_name="plan_engineering_rules",
         correlationId="request-123",
     )
 
     parent_span, llm_span = fake_tracer.spans
-    assert parent_span.name == "lcsp.workflow:enrich_business_semantics"
+    assert parent_span.name == "lcsp.workflow:plan_engineering_rules"
     assert parent_span.attributes["metadata.correlationId"] == "request-123"
     assert "status" in parent_span.attributes
     assert llm_span.name == "DeepAgentClient.complete_with_tools"
     assert llm_span.attributes["openinference.span.kind"] == "LLM"
     assert llm_span.attributes["metadata.workflow_run_id"] == (
-        "scan-business-semantics:test"
+        "engineering-rule-planner:test"
     )
     assert llm_span.attributes["input.value"] == (
         "raw prompt Authorization: Bearer visible in phoenix"
@@ -300,7 +297,7 @@ def test_build_llm_client_returns_none_when_no_provider_has_key() -> None:
     assert _build_llm_client(config) is None
 
 
-def test_build_consumer_injects_business_semantic_graph_assembler_when_llm_enabled() -> None:
+def test_build_consumer_keeps_graph_assembler_deterministic_when_llm_enabled() -> None:
     class GraphConsumer(ConsumerBase):
         queue_name = "test"
         routing_key = "test"
@@ -313,19 +310,15 @@ def test_build_consumer_injects_business_semantic_graph_assembler_when_llm_enabl
             return None
 
     config = _worker_config()
-    llm_client = MagicMock()
-
     with (
         patch("lcsp_workers.runtime.load_config", return_value=config),
         patch("lcsp_workers.runtime._load_consumer", return_value=GraphConsumer),
-        patch("lcsp_workers.runtime._build_llm_client", return_value=llm_client),
+        patch("lcsp_workers.runtime._build_llm_client") as build_llm_client,
     ):
         consumer = _build_consumer("ignored:GraphConsumer")
 
-    assert isinstance(
-        consumer.evidence_graph_assembler,
-        BusinessSemanticProgramGraphAssembler,
-    )
+    build_llm_client.assert_not_called()
+    assert consumer.evidence_graph_assembler is None
 
 
 def test_build_consumer_keeps_deterministic_default_when_llm_disabled() -> None:

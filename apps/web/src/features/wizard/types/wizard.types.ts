@@ -4,7 +4,12 @@ export type WizardAnswers = {
   ps_003_personal_or_sensitive_data?: string;
   ps_004_decision_importance?: string;
   businessProcess?: string;
+  useCase?: string;
+  primaryActors?: string;
+  businessTrigger?: string;
+  expectedOutcome?: string;
   aiPurpose?: string;
+  autonomyLevel?: string;
   sector?: string;
   dataTypes?: string[];
   affectedSubjects?: string[];
