@@ -72,9 +72,8 @@ export class RuleCatalogVersionService {
     const approvedStatus = toPrismaLegalRuleLifecycleStatus(
       LEGAL_RULE_LIFECYCLE_STATUSES.approved,
     );
-    const existing = await this.findLatestApprovedCatalogWithRules(
-      approvedStatus,
-    );
+    const existing =
+      await this.findLatestApprovedCatalogWithRules(approvedStatus);
     if (existing) {
       return {
         id: existing.id,
@@ -122,10 +121,12 @@ export class RuleCatalogVersionService {
       corpus.id,
       candidateChunks.map((chunk) => `${chunk.id}:${chunk.contentSha256}`),
     )}`;
-    const existingVersion = await this.prisma.legalRuleCatalogVersion.findFirst({
-      where: { version },
-      select: { id: true, version: true, status: true },
-    });
+    const existingVersion = await this.prisma.legalRuleCatalogVersion.findFirst(
+      {
+        where: { version },
+        select: { id: true, version: true, status: true },
+      },
+    );
     if (existingVersion) {
       const ruleCount = await this.prisma.legalRule.count({
         where: {
@@ -153,7 +154,7 @@ export class RuleCatalogVersionService {
             legalRuleId: legalRuleIdForChunk(corpus.version, chunk.id),
             legalCorpusVersionId: corpus.id,
             chunkId: chunk.id,
-          })) as unknown as Prisma.InputJsonValue,
+          })),
         },
       });
 
@@ -167,9 +168,9 @@ export class RuleCatalogVersionService {
               field: "aiDetected",
               expectedValue: "confirmed",
             },
-          ] as unknown as Prisma.InputJsonValue,
-          optionalFacts: [] as unknown as Prisma.InputJsonValue,
-          blockingFacts: [] as unknown as Prisma.InputJsonValue,
+          ],
+          optionalFacts: [],
+          blockingFacts: [],
           unknownFactPolicy: LEGAL_UNKNOWN_FACT_POLICY,
           citationLocatorRefs: [
             {
@@ -178,7 +179,7 @@ export class RuleCatalogVersionService {
               locator: chunk.locator,
               id: chunk.id,
             },
-          ] as unknown as Prisma.InputJsonValue,
+          ],
           status: approvedStatus,
           authoredBy: LEGAL_RULE_RECOVERY_SERVICE,
         })),

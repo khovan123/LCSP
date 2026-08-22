@@ -16,7 +16,9 @@ describe("RuleCatalogVersionService", () => {
           version: "AUTO-ENGINEERING-RULES-ABCDEF0123456789",
         } as never),
       },
-      legalRule: { createMany: jest.fn().mockResolvedValue({ count: 1 } as never) },
+      legalRule: {
+        createMany: jest.fn().mockResolvedValue({ count: 1 } as never),
+      },
       ruleApprovalRecord: {
         create: jest.fn().mockResolvedValue({ id: "approval-1" } as never),
       },
@@ -102,9 +104,11 @@ describe("RuleCatalogVersionService", () => {
   it("returns existing approved catalog when it already has rules", async () => {
     const prisma = {
       legalRuleCatalogVersion: {
-        findMany: jest.fn().mockResolvedValue([
-          { id: "catalog-existing", version: "existing" },
-        ] as never),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: "catalog-existing", version: "existing" },
+          ] as never),
       },
       legalRule: {
         count: jest.fn().mockResolvedValue(7 as never),
