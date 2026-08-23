@@ -8,7 +8,7 @@ import pytest
 
 script_path = (
     Path(__file__).parents[1]
-    / "tools"
+    / "runtime"
     / "legal"
     / "scripts"
     / "build_reviewed_legal_corpus.py"
