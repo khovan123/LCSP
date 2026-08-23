@@ -12,7 +12,6 @@ module_path = (
     Path(__file__).parents[1]
     / "runtime"
     / "legal"
-    / "legal"
     / "official_text_extraction.py"
 )
 spec = importlib.util.spec_from_file_location("official_text_extraction", module_path)
