@@ -19,14 +19,6 @@ const openWikiRuntimeScript = path.join(
   "openwiki_runtime.py",
 );
 const rootEnv = loadDotEnv(path.join(repoRoot, ".env"));
-const defaultWorkerRuntimeVersion =
-  process.env.WORKER_RUNTIME_VERSION ??
-  rootEnv.WORKER_RUNTIME_VERSION ??
-  "2026.08.13";
-const defaultWorkerRuntimeBuildRef =
-  process.env.WORKER_RUNTIME_BUILD_REF ??
-  rootEnv.WORKER_RUNTIME_BUILD_REF ??
-  detectGitBuildRef();
 const defaultOrchestrationDebug =
   process.env.ORCHESTRATION_DEBUG ?? rootEnv.ORCHESTRATION_DEBUG ?? "false";
 const defaultPhoenixTracing =
@@ -125,12 +117,8 @@ const targets = {
     cwd: repoRoot,
     cmd: "pnpm",
     args: ["--dir", "apps/api", "start:dev"],
-    env: {
-      ...rootEnv,
-      PYTHON_WORKER_BASE_URL:
-        rootEnv.PYTHON_WORKER_BASE_URL_DOCKER ?? "http://127.0.0.1:18081",
-    },
-    description: "Start NestJS API in watch mode for Docker-hosted workers",
+    env: rootEnv,
+    description: "Start NestJS API in watch mode for Docker-hosted agent tools",
   },
   web: {
     cwd: repoRoot,
@@ -150,41 +138,22 @@ const targets = {
     description: "Start Arize Phoenix trace UI",
     healthPort: 6006,
   },
-  scanner: workerTarget(
-    "lcsp_workers.scanner.scan_consumer:ScanConsumer",
-    "Start scanner worker",
-    18081,
-  ),
-  engineering_assessment: workerTarget(
-    "lcsp_workers.investigation.engineering_assessment_consumer:EngineeringAssessmentConsumer",
-    "Start direct EngineeringRule assessment worker",
-    18082,
-  ),
-  gap_analysis: workerTarget(
-    "lcsp_workers.reporting.gap_analysis_consumer:GapAnalysisConsumer",
-    "Start gap analysis worker",
-    18088,
-  ),
-  legal_corpus_recovery: workerTarget(
-    "lcsp_workers.legal.legal_corpus_recovery_consumer:LegalCorpusRecoveryConsumer",
-    "Start legal corpus recovery worker",
-    18089,
-  ),
-  targeted_reanalysis: workerTarget(
-    "lcsp_workers.scanner.targeted_reanalysis_consumer:TargetedReanalysisConsumer",
-    "Start targeted reanalysis worker",
-    18090,
-  ),
-  final_report: workerTarget(
-    "lcsp_workers.reporting.final_report_consumer:FinalReportConsumer",
-    "Start final report worker",
-    18091,
-  ),
-  legal_change_detector: workerTarget(
-    "lcsp_workers.legal.legal_change_detector_consumer:LegalChangeDetectorConsumer",
-    "Start legal change detector worker",
-    18092,
-  ),
+  managed_agent: {
+    cwd: workerRoot,
+    cmd: "uv",
+    args: ["run", "mda", "dev", "."],
+    env: {
+      ...rootEnv,
+      PYTHONPATH: "src:.",
+      ORCHESTRATION_DEBUG: defaultOrchestrationDebug,
+      PHOENIX_TRACING: defaultPhoenixTracing,
+      PHOENIX_COLLECTOR_ENDPOINT: defaultPhoenixCollectorEndpoint,
+      PHOENIX_PROJECT: defaultPhoenixProject,
+      OPENWIKI_RUNTIME_COMMAND: defaultOpenWikiRuntimeCommand,
+      OPENWIKI_RUNTIME_TIMEOUT_SECONDS: defaultOpenWikiRuntimeTimeoutSeconds,
+    },
+    description: "Start LCSP Managed Deep Agent in local dev mode",
+  },
   docker_worker_build: {
     cwd: repoRoot,
     cmd: "docker",
@@ -196,52 +165,11 @@ const targets = {
       defaultDockerWorkerImage,
       ".",
     ],
-    description: `Build Python worker Docker image (${defaultDockerWorkerImage})`,
+    description: `Build Managed Deep Agent Docker image (${defaultDockerWorkerImage})`,
     oneshot: true,
     shell: false,
   },
-  scanner_docker: dockerWorkerTarget(
-    "scanner",
-    "lcsp_workers.scanner.scan_consumer:ScanConsumer",
-    "Start scanner worker in Docker",
-    18081,
-  ),
-  engineering_assessment_docker: dockerWorkerTarget(
-    "engineering-assessment",
-    "lcsp_workers.investigation.engineering_assessment_consumer:EngineeringAssessmentConsumer",
-    "Start direct EngineeringRule assessment worker in Docker",
-    18082,
-  ),
-  gap_analysis_docker: dockerWorkerTarget(
-    "gap-analysis",
-    "lcsp_workers.reporting.gap_analysis_consumer:GapAnalysisConsumer",
-    "Start gap analysis worker in Docker",
-    18088,
-  ),
-  legal_corpus_recovery_docker: dockerWorkerTarget(
-    "legal-corpus-recovery",
-    "lcsp_workers.legal.legal_corpus_recovery_consumer:LegalCorpusRecoveryConsumer",
-    "Start legal corpus recovery worker in Docker",
-    18089,
-  ),
-  targeted_reanalysis_docker: dockerWorkerTarget(
-    "targeted-reanalysis",
-    "lcsp_workers.scanner.targeted_reanalysis_consumer:TargetedReanalysisConsumer",
-    "Start targeted reanalysis worker in Docker",
-    18090,
-  ),
-  final_report_docker: dockerWorkerTarget(
-    "final-report",
-    "lcsp_workers.reporting.final_report_consumer:FinalReportConsumer",
-    "Start final report worker in Docker",
-    18091,
-  ),
-  legal_change_detector_docker: dockerWorkerTarget(
-    "legal-change-detector",
-    "lcsp_workers.legal.legal_change_detector_consumer:LegalChangeDetectorConsumer",
-    "Start legal change detector worker in Docker",
-    18092,
-  ),
+  managed_agent_docker: dockerManagedAgentTarget(),
 };
 
 const groups = {
@@ -251,24 +179,12 @@ const groups = {
   dev_docker: [
     "api_docker_workers",
     "web",
-    "scanner_docker",
-    "engineering_assessment_docker",
-    "gap_analysis_docker",
-    "legal_corpus_recovery_docker",
-    "targeted_reanalysis_docker",
-    "final_report_docker",
-    "legal_change_detector_docker",
+    "managed_agent_docker",
   ],
   dev: [
     "api",
     "web",
-    "scanner",
-    "engineering_assessment",
-    "gap_analysis",
-    "legal_corpus_recovery",
-    "targeted_reanalysis",
-    "final_report",
-    "legal_change_detector",
+    "managed_agent",
     "phoenix",
   ],
 };
@@ -307,45 +223,13 @@ async function main() {
   process.exit(1);
 }
 
-function workerTarget(target, description, healthPort) {
-  return {
-    cwd: workerRoot,
-    cmd: workerPython,
-    args: ["-m", "lcsp_workers.runtime", target],
-    env: {
-      ...rootEnv,
-      PYTHONPATH: "src",
-      HEALTH_PORT: String(healthPort),
-      WORKER_RUNTIME_VERSION: defaultWorkerRuntimeVersion,
-      WORKER_RUNTIME_BUILD_REF: defaultWorkerRuntimeBuildRef,
-      ORCHESTRATION_DEBUG: defaultOrchestrationDebug,
-      PHOENIX_TRACING: defaultPhoenixTracing,
-      PHOENIX_COLLECTOR_ENDPOINT: defaultPhoenixCollectorEndpoint,
-      PHOENIX_PROJECT: defaultPhoenixProject,
-      OPENWIKI_RUNTIME_COMMAND: defaultOpenWikiRuntimeCommand,
-      OPENWIKI_RUNTIME_TIMEOUT_SECONDS: defaultOpenWikiRuntimeTimeoutSeconds,
-    },
-    description,
-    healthPort,
-  };
-}
-
-function detectGitBuildRef() {
-  const result = spawnSync("git", ["rev-parse", "--short", "HEAD"], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  });
-  const value = result.status === 0 ? result.stdout?.trim() : "";
-  return value ? `git:${value}` : "local";
-}
-
 function stopDevProcesses() {
   const patterns = [
     "pnpm dev:fogewise",
     "node scripts/run.mjs fogewise",
     "node scripts/run.mjs dev",
     "node scripts/run.mjs dev_app",
-    "lcsp_workers.runtime",
+    "mda dev .",
     "pnpm --dir apps/api start:dev",
     "nest start --watch",
     "apps/api/dist/src/main",
@@ -519,17 +403,8 @@ function loadDotEnv(filePath) {
   return env;
 }
 
-function logWorkerRuntimeBanner(name, target) {
-  if (target.cmd !== workerPython) return;
-  console.log(
-    `[run] Worker runtime -> name=${name} health_port=${target.env?.HEALTH_PORT ?? "unknown"} version=${target.env?.WORKER_RUNTIME_VERSION ?? defaultWorkerRuntimeVersion} build_ref=${target.env?.WORKER_RUNTIME_BUILD_REF ?? defaultWorkerRuntimeBuildRef}`,
-  );
-}
-
 function runTarget(name) {
   const target = targets[name];
-  assertWorkerPython(target);
-  logWorkerRuntimeBanner(name, target);
   cleanupDockerWorkerContainer(target);
   console.log(`[run] Starting ${name}: ${target.description}`);
   const child = spawnTarget(target);
@@ -556,7 +431,6 @@ async function runGroup(name) {
 
   for (const member of members) {
     const target = targets[member];
-    assertWorkerPython(target);
     if (target.oneshot) {
       console.log(`[run] Running ${member}: ${target.description}`);
       const status = spawnSyncCompatible(target);
@@ -568,17 +442,8 @@ async function runGroup(name) {
 
   assertPortsAvailable(longRunningMembers);
 
-  if (members.includes("infra") && hasWorkerMember(longRunningMembers)) {
-    console.log(
-      "[run] Waiting for local RabbitMQ and Redis to accept connections...",
-    );
-    await waitForPort("127.0.0.1", 5672, "RabbitMQ");
-    await waitForPort("127.0.0.1", 6379, "Redis");
-  }
-
   for (const member of longRunningMembers) {
     const target = targets[member];
-    logWorkerRuntimeBanner(member, target);
     cleanupDockerWorkerContainer(target);
     console.log(`[run] Starting ${member}: ${target.description}`);
     children.push(spawnTarget(target));
@@ -599,15 +464,6 @@ async function runGroup(name) {
       if (signal) process.kill(process.pid, signal);
       else process.exit(code ?? 0);
     });
-  }
-}
-
-function assertWorkerPython(target) {
-  if (target.cmd === workerPython && !existsSync(workerPython)) {
-    console.error(
-      `[run] Missing worker virtualenv python at ${workerPython}. Create/sync lcsp-python-workers/.venv first.`,
-    );
-    process.exit(1);
   }
 }
 
@@ -649,8 +505,8 @@ function cleanupDockerWorkerContainer(target) {
   }
 }
 
-function dockerWorkerTarget(name, target, description, healthPort) {
-  const containerName = `lcsp-worker-${name}`;
+function dockerManagedAgentTarget() {
+  const containerName = "lcsp-managed-agent";
   return {
     cwd: repoRoot,
     cmd: "docker",
@@ -661,20 +517,12 @@ function dockerWorkerTarget(name, target, description, healthPort) {
       containerName,
       "--add-host",
       "host.docker.internal:host-gateway",
-      "-p",
-      `${healthPort}:8080`,
-      "--entrypoint",
-      "python",
       ...dockerEnvArgs(dockerWorkerEnv()),
       defaultDockerWorkerImage,
-      "-m",
-      "lcsp_workers.runtime",
-      target,
     ],
     kind: "docker_worker",
     containerName,
-    description,
-    healthPort,
+    description: "Start LCSP Managed Deep Agent in Docker",
     shell: false,
   };
 }
@@ -825,10 +673,6 @@ function shutdown(children) {
   }
 }
 
-function hasWorkerMember(members) {
-  return members.some((member) => targets[member]?.cmd === workerPython);
-}
-
 function waitForPort(host, port, label, timeoutMs = 30_000) {
   const startedAt = Date.now();
   return new Promise((resolve, reject) => {
@@ -881,6 +725,6 @@ function printList() {
 
 function printHelp() {
   console.log(
-    `Usage:\n\n  node scripts/run.mjs <target>\n\nTargets:\n  fogewise\n  fogewise_reset\n  dev_stop\n  dev_app\n  dev_docker\n  dev\n  docker_worker_build\n  scanner_docker\n\nExamples:\n  pnpm run dev:fogewise\n  pnpm run dev:fogewise:reset\n  pnpm run dev:stop\n  pnpm run dev:app\n  pnpm run dev:docker\n  pnpm run dev:worker:docker:build\n  pnpm run dev:worker:docker\n  pnpm run dev\n`,
+    `Usage:\n\n  node scripts/run.mjs <target>\n\nTargets:\n  fogewise\n  fogewise_reset\n  dev_stop\n  dev_app\n  dev_docker\n  dev\n  docker_worker_build\n  managed_agent\n  managed_agent_docker\n\nExamples:\n  pnpm run dev:fogewise\n  pnpm run dev:fogewise:reset\n  pnpm run dev:stop\n  pnpm run dev:app\n  pnpm run dev:docker\n  pnpm run dev:agent:docker:build\n  pnpm run dev:agent:docker\n  pnpm run dev\n`,
   );
 }

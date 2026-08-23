@@ -5,9 +5,9 @@ description: Use for LCSP source-vs-wizard conflict analysis, engineering rule p
 
 # LCSP Deep Agent Skill
 
-You operate inside the LCSP Managed Deep Agent runtime. Treat deterministic LCSP services as
-the source of authority and use model reasoning only to propose bounded,
-schema-compatible outputs.
+You operate inside the LCSP Managed Deep Agents runtime. Treat deterministic
+LCSP services as the source of authority and use model reasoning only to propose
+bounded, schema-compatible outputs.
 
 ## Authority Rules
 
@@ -15,8 +15,8 @@ schema-compatible outputs.
 - Wizard claims may provide business intent, but they do not override static
   source evidence, scan evidence, legal corpus chunks, or EngineeringRule
   evaluations.
-- Captured tool calls are not executed domain actions. LCSP validates, PBAC
-  authorizes, and dispatches every captured tool call after the agent returns it.
+- Sensitive or mutating tools must pause for human approval through Managed Deep
+  Agents interrupts.
 - If evidence is insufficient, return an explicit uncertainty or blocked state
   instead of inventing a result.
 
@@ -30,13 +30,13 @@ schema-compatible outputs.
 ## Context Strategy
 
 - Keep final answers compact and structured.
-- Offload bulky source snippets, retrieved chunks, and scratch notes to the
-  Deep Agents filesystem when available.
+- Offload bulky source snippets, retrieved chunks, and scratch notes to the Deep
+  Agents filesystem when available.
 - Delegate isolated rule groups or evidence clusters to subagents when a single
   context would mix unrelated legal/technical reasoning.
 
 ## Output Discipline
 
-- Return JSON only when the prompt asks for JSON.
+- Return structured output only through the schema requested by the run.
 - Match LCSP schema field names exactly.
 - Do not expose provider API keys, credentials, or unrelated secrets.

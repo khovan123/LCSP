@@ -1,12 +1,12 @@
 import { AGENTIC_TOOL_NAMES } from "@lcsp/contracts/evidence";
 import { jest } from "@jest/globals";
+import type { CommandBus } from "@nestjs/cqrs";
 
-import type { PythonWorkerRuntimeClient } from "../../application/services/evidence/python-worker-runtime.client.js";
 import {
-  dispatchAgenticToolWorkerBridge,
+  dispatchAgenticToolInternalCommand,
   request_targeted_reanalysis,
   resume_waiting_runs,
-} from "./agentic-tool-worker-bridge-dispatcher.js";
+} from "./agentic-tool-internal-dispatcher.js";
 
 const baseArgs = {
   assessmentId: "assessment-1",
@@ -15,21 +15,17 @@ const baseArgs = {
   correlationId: "correlation-1",
 };
 
-describe("agentic worker bridge dispatcher", () => {
-  it("exports exact same-name bridge functions", () => {
+describe("agentic internal command dispatcher", () => {
+  it("exports exact same-name command functions", () => {
     expect(request_targeted_reanalysis.name).toBe(
       "request_targeted_reanalysis",
     );
     expect(resume_waiting_runs.name).toBe("resume_waiting_runs");
   });
 
-  it("routes request_targeted_reanalysis through PythonWorkerRuntimeClient", async () => {
-    const requestTargetedReanalysis = jest.fn(() =>
-      Promise.resolve({ status: "READY" }),
-    );
-    const client = {
-      requestTargetedReanalysis,
-    } as unknown as PythonWorkerRuntimeClient;
+  it("routes request_targeted_reanalysis through CommandBus", async () => {
+    const execute = jest.fn(() => Promise.resolve({ status: "READY" }));
+    const commandBus = { execute } as unknown as CommandBus;
     const args = {
       ...baseArgs,
       toolName: AGENTIC_TOOL_NAMES.requestTargetedReanalysis,
@@ -42,18 +38,14 @@ describe("agentic worker bridge dispatcher", () => {
       },
     };
 
-    await dispatchAgenticToolWorkerBridge(args, client);
+    await dispatchAgenticToolInternalCommand(args, commandBus);
 
-    expect(requestTargetedReanalysis).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 
-  it("routes resume_waiting_runs through PythonWorkerRuntimeClient", async () => {
-    const resumeWaitingRuns = jest.fn(() =>
-      Promise.resolve({ status: "READY" }),
-    );
-    const client = {
-      resumeWaitingRuns,
-    } as unknown as PythonWorkerRuntimeClient;
+  it("routes resume_waiting_runs through CommandBus", async () => {
+    const execute = jest.fn(() => Promise.resolve({ status: "READY" }));
+    const commandBus = { execute } as unknown as CommandBus;
     const args = {
       ...baseArgs,
       toolName: AGENTIC_TOOL_NAMES.resumeWaitingRuns,
@@ -64,8 +56,8 @@ describe("agentic worker bridge dispatcher", () => {
       },
     };
 
-    await dispatchAgenticToolWorkerBridge(args, client);
+    await dispatchAgenticToolInternalCommand(args, commandBus);
 
-    expect(resumeWaitingRuns).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });

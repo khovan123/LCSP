@@ -2,12 +2,15 @@ import {
   AGENTIC_TOOL_NAMES,
   EVIDENCE_ERROR_CODES,
 } from "@lcsp/contracts/evidence";
+import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import { HttpStatus } from "@nestjs/common";
+import type { CommandBus } from "@nestjs/cqrs";
 
 import { problemException } from "../../../../platform/problems/problem-factory.js";
-import type { PythonWorkerRuntimeClient } from "../../application/services/evidence/python-worker-runtime.client.js";
+import { ResumeWaitingRunsCommand } from "../../../legal-rule-catalog/application/commands/resume-waiting-runs/resume-waiting-runs.command.js";
+import { RequestTargetedReanalysisCommand } from "../../../scan/application/commands/request-targeted-reanalysis/request-targeted-reanalysis.command.js";
 
-export type AgenticToolWorkerBridgeArgs = {
+export type AgenticToolInternalDispatchArgs = {
   toolName: string;
   assessmentId: string;
   organizationId: string;
@@ -17,29 +20,31 @@ export type AgenticToolWorkerBridgeArgs = {
   input: Record<string, unknown>;
 };
 
-const WORKER_BRIDGE_TOOL_NAMES = new Set<string>([
+const INTERNAL_COMMAND_TOOL_NAMES = new Set<string>([
   AGENTIC_TOOL_NAMES.requestTargetedReanalysis,
   AGENTIC_TOOL_NAMES.resumeWaitingRuns,
 ]);
 
-/** Return true only for tools whose execution crosses the Python worker bridge. */
-export function isAgenticToolWorkerBridge(toolName: string): boolean {
-  return WORKER_BRIDGE_TOOL_NAMES.has(toolName);
+const AGENT_RUNTIME_SESSION_ID = "managed-deep-agent-runtime";
+
+/** Return true only for tools handled directly by Nest command handlers. */
+export function isAgenticToolInternalCommand(toolName: string): boolean {
+  return INTERNAL_COMMAND_TOOL_NAMES.has(toolName);
 }
 
 /**
- * Single worker-bridge routing table. Each case delegates to a real exported
- * function whose name exactly matches the canonical snake_case tool name.
+ * Route agent tool requests to local command handlers instead of an external
+ * runtime HTTP bridge.
  */
-export async function dispatchAgenticToolWorkerBridge(
-  args: AgenticToolWorkerBridgeArgs,
-  client: PythonWorkerRuntimeClient,
+export async function dispatchAgenticToolInternalCommand(
+  args: AgenticToolInternalDispatchArgs,
+  commandBus: CommandBus,
 ): Promise<unknown> {
   switch (args.toolName) {
     case AGENTIC_TOOL_NAMES.requestTargetedReanalysis:
-      return request_targeted_reanalysis(args, client);
+      return request_targeted_reanalysis(args, commandBus);
     case AGENTIC_TOOL_NAMES.resumeWaitingRuns:
-      return resume_waiting_runs(args, client);
+      return resume_waiting_runs(args, commandBus);
     default:
       throw problemException(
         EVIDENCE_ERROR_CODES.notFound,
@@ -53,53 +58,61 @@ export async function dispatchAgenticToolWorkerBridge(
 
 /** Canonical execution adapter for `request_targeted_reanalysis`. */
 export function request_targeted_reanalysis(
-  args: AgenticToolWorkerBridgeArgs,
-  client: PythonWorkerRuntimeClient,
+  args: AgenticToolInternalDispatchArgs,
+  commandBus: CommandBus,
 ): Promise<unknown> {
-  return client.requestTargetedReanalysis(
-    {
-      assessmentId: args.assessmentId,
-      organizationId: args.organizationId,
-      userId: args.userId,
-      inputArtifactVersion: requiredArtifactVersion(
-        args.artifactVersions,
-        "technicalEvidenceReportId",
-        args.correlationId,
-      ),
-      analyzerId: requiredString(args.input.analyzerId, args.correlationId),
-      scope: requiredScope(args.input.scope, args.correlationId),
-      reasonRequirementId: requiredString(
-        args.input.reasonRequirementId,
-        args.correlationId,
-      ),
-      idempotencyKey: requiredString(
-        args.input.idempotencyKey,
-        args.correlationId,
-      ),
-    },
-    args.correlationId,
+  return commandBus.execute(
+    new RequestTargetedReanalysisCommand(
+      {
+        assessmentId: args.assessmentId,
+        inputArtifactVersion: requiredArtifactVersion(
+          args.artifactVersions,
+          "technicalEvidenceReportId",
+          args.correlationId,
+        ),
+        analyzerId: requiredString(args.input.analyzerId, args.correlationId),
+        scope: requiredScope(args.input.scope, args.correlationId),
+        reasonRequirementId: requiredString(
+          args.input.reasonRequirementId,
+          args.correlationId,
+        ),
+        idempotencyKey: requiredString(
+          args.input.idempotencyKey,
+          args.correlationId,
+        ),
+      },
+      {
+        userId: args.userId,
+        sessionId: AGENT_RUNTIME_SESSION_ID,
+        organizationId: args.organizationId,
+        subjectRole: SUBJECT_ROLES.manager,
+        scope: args.assessmentId,
+        grantedActions: [PBAC_ACTIONS.technicalEvidenceReanalyze],
+        selectedAction: PBAC_ACTIONS.technicalEvidenceReanalyze,
+        policyId: AGENT_RUNTIME_SESSION_ID,
+        policyVersion: AGENT_RUNTIME_SESSION_ID,
+      },
+      args.correlationId,
+    ),
   );
 }
 
 /** Canonical execution adapter for `resume_waiting_runs`. */
 export function resume_waiting_runs(
-  args: AgenticToolWorkerBridgeArgs,
-  client: PythonWorkerRuntimeClient,
+  args: AgenticToolInternalDispatchArgs,
+  commandBus: CommandBus,
 ): Promise<unknown> {
-  return client.resumeWaitingRuns(
-    {
-      corpusVersionId: requiredArtifactVersion(
+  return commandBus.execute(
+    new ResumeWaitingRunsCommand(
+      requiredArtifactVersion(
         args.artifactVersions,
         "corpusVersionId",
         args.correlationId,
       ),
-      maxRuns: numberWithDefault(args.input.maxRuns, 25),
-      idempotencyKey: requiredString(
-        args.input.idempotencyKey,
-        args.correlationId,
-      ),
-    },
-    args.correlationId,
+      numberWithDefault(args.input.maxRuns, 25),
+      requiredString(args.input.idempotencyKey, args.correlationId),
+      args.correlationId,
+    ),
   );
 }
 

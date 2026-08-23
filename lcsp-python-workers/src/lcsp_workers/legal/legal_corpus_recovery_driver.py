@@ -469,7 +469,7 @@ def _load_script_module(filename: str):
 
 
 def _worker_root() -> Path:
-    """Return the root directory of the Python worker package/project."""
+    """Return the root directory of the Managed Agent package/project."""
     return Path(__file__).resolve().parents[3]
 
 

@@ -16,7 +16,7 @@ from lcsp_workers.platform.config import (
     load_tracing_config,
 )
 from lcsp_workers.platform.queue_consumer import ConsumerBase
-from lcsp_workers.runtime import _build_consumer, _build_llm_client
+from lcsp_workers.managed.invocation import build_consumer, build_llm_client
 
 
 def _base_env(monkeypatch) -> None:
@@ -269,9 +269,9 @@ def test_build_llm_client_skips_provider_without_api_key() -> None:
         )
     )
 
-    with patch("lcsp_workers.runtime.DeepAgentClient") as deep_agent_class:
+    with patch("lcsp_workers.managed.invocation.DeepAgentClient") as deep_agent_class:
         deep_agent_class.return_value = MagicMock()
-        client = _build_llm_client(config)
+        client = build_llm_client(config)
 
     assert isinstance(client, PrimaryThenFallbackLLMClient)
     deep_agent_class.assert_called_once()
@@ -294,7 +294,7 @@ def test_build_llm_client_returns_none_when_no_provider_has_key() -> None:
         )
     )
 
-    assert _build_llm_client(config) is None
+    assert build_llm_client(config) is None
 
 
 def test_build_consumer_keeps_graph_assembler_deterministic_when_llm_enabled() -> None:
@@ -311,11 +311,11 @@ def test_build_consumer_keeps_graph_assembler_deterministic_when_llm_enabled() -
 
     config = _worker_config()
     with (
-        patch("lcsp_workers.runtime.load_config", return_value=config),
-        patch("lcsp_workers.runtime._load_consumer", return_value=GraphConsumer),
-        patch("lcsp_workers.runtime._build_llm_client") as build_llm_client,
+        patch("lcsp_workers.managed.invocation.load_config", return_value=config),
+        patch("lcsp_workers.managed.invocation.load_consumer", return_value=GraphConsumer),
+        patch("lcsp_workers.managed.invocation.build_llm_client") as build_llm_client,
     ):
-        consumer = _build_consumer("ignored:GraphConsumer")
+        consumer = build_consumer("ignored:GraphConsumer")
 
     build_llm_client.assert_not_called()
     assert consumer.evidence_graph_assembler is None
@@ -335,10 +335,10 @@ def test_build_consumer_keeps_deterministic_default_when_llm_disabled() -> None:
 
     config = _worker_config()
     with (
-        patch("lcsp_workers.runtime.load_config", return_value=config),
-        patch("lcsp_workers.runtime._load_consumer", return_value=GraphConsumer),
-        patch("lcsp_workers.runtime._build_llm_client", return_value=None),
+        patch("lcsp_workers.managed.invocation.load_config", return_value=config),
+        patch("lcsp_workers.managed.invocation.load_consumer", return_value=GraphConsumer),
+        patch("lcsp_workers.managed.invocation.build_llm_client", return_value=None),
     ):
-        consumer = _build_consumer("ignored:GraphConsumer")
+        consumer = build_consumer("ignored:GraphConsumer")
 
     assert consumer.evidence_graph_assembler is None

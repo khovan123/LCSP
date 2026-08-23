@@ -98,7 +98,9 @@ def test_test_source_path_policy_covers_common_python_and_js_specs() -> None:
     assert is_test_source_path("apps/web/__tests__/route.test.tsx")
     assert is_test_source_path("lcsp-python-workers/fixtures/sample.py")
     assert not is_test_source_path("apps/api/src/foo.handler.ts")
-    assert not is_test_source_path("lcsp-python-workers/src/lcsp_workers/runtime.py")
+    assert not is_test_source_path(
+        "lcsp-python-workers/src/lcsp_workers/managed/invocation.py"
+    )
 
 
 def test_runtime_graph_filter_removes_test_nodes_anchors_and_refs() -> None:
