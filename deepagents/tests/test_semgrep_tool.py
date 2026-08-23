@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from tools.graph.scanner.tools.semgrep_tool import (
+from runtime.scanner.tools.semgrep_tool import (
     AI_USAGE_TOOL_NAME,
     SECRET_DETECT_TOOL_NAME,
     SemgrepTool,
 )
-from tools.graph.scanner.tools.tool_base import (
+from runtime.scanner.tools.tool_base import (
     OUTCOME_SUCCESS,
     OUTCOME_TOOL_TIMEOUT,
 )
@@ -417,8 +417,7 @@ def test_semgrep_tool_parses_full_ruleset_metadata_and_strips_source_fields(
 def test_semgrep_full_ai_ruleset_declares_required_groups_and_metadata() -> None:
     ruleset = (
         Path(__file__).parents[1]
-        / "tools"
-        / "graph"
+        / "runtime"
         / "scanner"
         / "rulesets"
         / "lcsp-ai-usage.yaml"
