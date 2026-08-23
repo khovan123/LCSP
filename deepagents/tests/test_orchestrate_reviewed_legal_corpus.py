@@ -8,7 +8,7 @@ import pytest
 
 _SCRIPT_PATH = (
     Path(__file__).resolve().parents[1]
-    / "tools"
+    / "runtime"
     / "legal"
     / "scripts"
     / "orchestrate_reviewed_legal_corpus.py"
