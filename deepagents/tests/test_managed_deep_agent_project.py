@@ -85,14 +85,14 @@ def test_managed_project_separates_authored_tools_from_runtime() -> None:
         "resolver",
         "orchestration",
     }
-    assert {
-        "graph",
-        "scanner",
+    assert runtime_packages == {
+        "evidence",
         "legal",
-        "engineering_rule",
-        "classification",
+        "assessment",
+        "workflow",
         "reporting",
-    }.issubset(runtime_packages)
+        "infrastructure",
+    }
     assert (PROJECT_ROOT / "channels").is_dir()
     assert (PROJECT_ROOT / "connectors").is_dir()
     assert (PROJECT_ROOT / "evals" / "tasks").is_dir()
