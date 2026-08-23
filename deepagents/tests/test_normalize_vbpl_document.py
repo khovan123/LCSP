@@ -8,6 +8,7 @@ script_path = (
     Path(__file__).parents[1]
     / "runtime"
     / "legal"
+    / "sources"
     / "scripts"
     / "normalize_vbpl_document.py"
 )
