@@ -1,11 +1,5 @@
-"""LCSP agent-facing authored tool namespace.
+"""Agent-facing authored tool namespace plus migration-only legacy import bootstrap."""
 
-Only model-callable capability packages live physically under ``tools/``.
-Historical implementation imports are redirected by migration plumbing owned by
-``runtime``; new code must import canonical ``runtime.*`` paths directly.
-"""
+from runtime import install_legacy_aliases
 
-from runtime.compat import install_runtime_aliases
-
-
-install_runtime_aliases()
+install_legacy_aliases()
