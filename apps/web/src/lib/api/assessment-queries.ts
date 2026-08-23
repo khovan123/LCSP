@@ -223,3 +223,48 @@ export function useRequestGapAnalysisMutation(assessmentId: string) {
     },
   });
 }
+
+export function useSystemGraphQuery(assessmentId: string) {
+  return useQuery({
+    queryKey: ['system-graph', assessmentId],
+    queryFn: () => import('./evidence-client').then(m => m.getSystemGraph(assessmentId)),
+    enabled: assessmentId.length > 0,
+  });
+}
+
+export function useArchitectureScopeQuery(assessmentId: string) {
+  return useQuery({
+    queryKey: ["architecture-scope", assessmentId],
+    queryFn: () => import("./evidence-client").then((m) => m.getArchitectureScope(assessmentId)),
+    enabled: assessmentId.length > 0,
+  });
+}
+
+export function useSaveArchitectureScopeMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      globalDeclaration: string;
+      repositories: { connectionId: string; declaration: string }[];
+    }) => import("./evidence-client").then((m) => m.saveArchitectureScope(assessmentId, data)),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["architecture-scope", assessmentId],
+      });
+    },
+  });
+}
+
+export function useStartMultiRepoScanMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => import("./evidence-client").then((m) => m.triggerMultiRepoScan(assessmentId)),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["scan-jobs", assessmentId] });
+      await queryClient.invalidateQueries({ queryKey: ["assessment", assessmentId] });
+    },
+  });
+}
+

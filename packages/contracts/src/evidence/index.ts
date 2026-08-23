@@ -22,3 +22,8 @@ export * from "./validate-chunk-integrity.ts";
 export * from "./build-legal-retrieval-index.ts";
 export * from "./wizard-agentic-evidence.ts";
 export * from "./gap-requirements-agentic-evidence.ts";
+export * from "./ao4-agentic-evidence.ts";
+export * from "./ao5-agentic-evidence.ts";
+export * from "./ao3-agentic-evidence.ts";
+export * from "./evidence-graph.constants.ts";
+export * from "./evidence-graph.dto.ts";

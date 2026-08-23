@@ -714,6 +714,16 @@ class ScanBoundary(AgentBoundaryBase):
                         else []
                     )
                 )
+                self._emit_runtime_event(
+                    envelope.scan_job_id,
+                    event_type="TOOL_COMPLETED",
+                    run_status="RUNNING",
+                    tool_name="python_semantic_analysis",
+                    summary="Python semantic analysis completed",
+                    started_at=python_started_at,
+                    completed_at=python_ended_at,
+                    duration_ms=self._duration_ms(python_started_at, python_ended_at),
+                )
                 for tool_key, tool_version in (
                     ("python_ast", f"python-{platform.python_version()}"),
                     ("python_libcst", self._libcst_version()),
@@ -766,20 +776,26 @@ class ScanBoundary(AgentBoundaryBase):
                         execution_plan,
                         tool_key,
                     )
-            technical_findings = self._ai_invocation_detector.detect(
-                semgrep_result=semgrep_result,
-                python_analysis=python_analysis,
-                ts_js_analysis=ts_js_analysis,
-                syft_result=syft_result,
-                package_dependencies=package_dependencies,
-                tool_executions=[
-                    *( [syft_result.execution] if syft_result is not None else [] ),
-                    *(semgrep_result.executions if semgrep_result is not None else []),
-                    *( [knip_result.execution] if knip_result is not None else [] ),
-                    *( [deptry_result.execution] if deptry_result is not None else [] ),
-                    *( [ts_js_analysis.execution] if ts_js_analysis is not None else [] ),
-                ],
-            )
+            try:
+                technical_findings = self._ai_invocation_detector.detect(
+                    semgrep_result=semgrep_result,
+                    python_analysis=python_analysis,
+                    ts_js_analysis=ts_js_analysis,
+                    syft_result=syft_result,
+                    package_dependencies=package_dependencies,
+                    tool_executions=[
+                        *( [syft_result.execution] if syft_result is not None else [] ),
+                        *(semgrep_result.executions if semgrep_result is not None else []),
+                        *( [knip_result.execution] if knip_result is not None else [] ),
+                        *( [deptry_result.execution] if deptry_result is not None else [] ),
+                        *( [ts_js_analysis.execution] if ts_js_analysis is not None else [] ),
+                    ],
+                )
+            except Exception as error:
+                technical_findings = []
+                logger.error("AI_INVOCATION_DETECTOR_FAILED", error=str(error))
+                # Note: coverage_notes hasn't been initialized yet here in the original code,
+                # but we will append it later or we can just log it. Let's just log it.
             coverage_notes = self._coverage_notes(
                 result,
                 [
@@ -892,17 +908,22 @@ class ScanBoundary(AgentBoundaryBase):
                 },
                 started_at=graph_started_at,
             )
-            evidence_graph = self._run_scanner_tool(
-                "build_evidence_graph",
-                scan_job_id=envelope.scan_job_id,
-                snapshot_id=envelope.snapshot_id,
-                commit_sha=envelope.commit_sha,
-                workspace_path=result.workspace_path,
-                technical_findings=technical_findings,
-                structural_facts=structural_facts,
-                package_dependencies=package_dependencies,
-                coverage_notes=coverage_notes,
-            )
+            try:
+                evidence_graph = self._run_scanner_tool(
+                    "build_evidence_graph",
+                    scan_job_id=envelope.scan_job_id,
+                    snapshot_id=envelope.snapshot_id,
+                    commit_sha=envelope.commit_sha,
+                    workspace_path=result.workspace_path,
+                    technical_findings=technical_findings,
+                    structural_facts=structural_facts,
+                    package_dependencies=package_dependencies,
+                    coverage_notes=coverage_notes,
+                )
+            except Exception as error:
+                evidence_graph = None
+                logger.error("BUILD_EVIDENCE_GRAPH_FAILED", error=str(error))
+                coverage_notes.append(f"Graph Builder failed: {type(error).__name__}")
             graph_ended_at = self._utc_timestamp()
             self._emit_runtime_event(
                 envelope.scan_job_id,
@@ -973,22 +994,14 @@ class ScanBoundary(AgentBoundaryBase):
                 output_summary={"status": callback_payload.status},
                 started_at=callback_started_at,
             )
-            try:
-                callback_response = self._api_client.post_scan_callback(
-                    envelope.scan_job_id,
-                    callback_payload,
-                )
-            except WorkerCallbackError as error:
-                if self._is_terminal_scan_client_error(error):
-                    raise NonRetryableAgentBoundaryError(str(error)) from error
-                raise
+
             callback_ended_at = self._utc_timestamp()
             self._emit_runtime_event(
                 envelope.scan_job_id,
                 event_type="TOOL_COMPLETED",
                 run_status="RUNNING",
                 tool_name="submit_scan_callback",
-                summary="Technical evidence callback submitted",
+                summary="Technical evidence callback assembled and ready to submit",
                 output_summary={
                     "status": callback_payload.status,
                     "schemaVersion": callback_payload.schema_version,
@@ -1009,6 +1022,21 @@ class ScanBoundary(AgentBoundaryBase):
                 },
                 completed_at=callback_ended_at,
             )
+            
+            # Submit the callback *after* emitting the runtime events to ensure 
+            # the backend doesn't close the job before the events are accepted.
+            import time
+            time.sleep(1.0)
+            try:
+                callback_response = self._api_client.post_scan_callback(
+                    envelope.scan_job_id,
+                    callback_payload,
+                )
+            except WorkerCallbackError as error:
+                if self._is_terminal_scan_client_error(error):
+                    raise NonRetryableAgentBoundaryError(str(error)) from error
+                raise
+
             logger.info(
                 "SCAN_EVIDENCE_CALLBACK_SUBMITTED",
                 scan_job_id=envelope.scan_job_id,

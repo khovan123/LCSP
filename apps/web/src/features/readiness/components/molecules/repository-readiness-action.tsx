@@ -18,10 +18,12 @@ import { useStartRepositoryAnalysisMutation } from "@/lib/api/assessment-queries
 
 type RepositoryReadinessActionProps = {
   assessmentId: string;
+  isConnected: boolean;
 };
 
 export function RepositoryReadinessAction({
   assessmentId,
+  isConnected,
 }: RepositoryReadinessActionProps) {
   const repositoriesQuery = useAuthRepositoriesQuery();
   const analysisMutation = useStartRepositoryAnalysisMutation(assessmentId);
@@ -75,8 +77,9 @@ export function RepositoryReadinessAction({
     <section className="rounded-lg border border-dashed p-4">
       <h2 className="text-sm font-medium">Repository cho assessment</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Chọn repository đã kết nối trong Settings. LCSP sẽ pin commit mới nhất
-        của branch mặc định cho assessment này và bắt đầu scan.
+        {isConnected
+          ? "Assessment đã được kết nối với repository. Bạn có thể chọn repository khác hoặc nhánh khác để phân tích lại (sẽ thay thế snapshot hiện tại)."
+          : "Chọn repository đã kết nối trong Settings. LCSP sẽ pin commit mới nhất của branch mặc định cho assessment này và bắt đầu scan."}
       </p>
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -115,8 +118,10 @@ export function RepositoryReadinessAction({
           }}
         >
           {analysisMutation.isPending
-            ? "Đang tạo snapshot và bắt đầu scan..."
-            : "Chọn repository"}
+            ? "Đang xử lý..."
+            : isConnected
+              ? "Thay đổi Repository"
+              : "Chọn repository"}
         </Button>
       </div>
 

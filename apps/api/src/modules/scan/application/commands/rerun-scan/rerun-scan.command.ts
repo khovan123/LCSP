@@ -21,5 +21,7 @@ export class RerunScanCommand {
     public readonly pbacContext: PbacRequestContext,
     public readonly correlationId: string,
     public readonly reason?: string,
+    public readonly includePaths?: string[],
+    public readonly excludePaths?: string[],
   ) {}
 }

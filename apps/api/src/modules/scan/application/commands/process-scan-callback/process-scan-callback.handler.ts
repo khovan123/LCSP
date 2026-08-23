@@ -49,6 +49,8 @@ import { AssessmentRuntimeEventService } from "../../../../../platform/runtime-e
 import type { ScanCallbackDto } from "../../contracts/scan/scan-callback.contract.js";
 import { EvidenceSchemaValidatorService } from "../../services/scan/evidence-schema-validator.service.js";
 import { ArtifactStorageService } from "../../../../../platform/storage/artifact-storage.service.js";
+import { GraphBuilderService } from "../../services/graph/graph-builder.service.js";
+import { ReconciliationEngineService } from "../../services/graph/reconciliation-engine.service.js";
 import { ProcessScanCallbackCommand } from "./process-scan-callback.command.js";
 
 const SCANNER_WORKER_ACTOR_ID = AUDIT_ACTOR_IDS.scannerWorker;
@@ -74,6 +76,8 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
     private readonly auditWriter: AuditWriterService,
     private readonly storageService: ArtifactStorageService,
     private readonly runtimeEvents: AssessmentRuntimeEventService,
+    private readonly graphBuilder: GraphBuilderService,
+    private readonly reconciliationEngine: ReconciliationEngineService,
   ) {}
 
   /**
@@ -334,6 +338,18 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
     );
 
     await this.recordAcceptedCallbackRuntimeClose(command, job, isRejected);
+
+    if (!isRejected) {
+      const repoSubgraph = command.payload.evidence_payload?.repo_subgraph;
+      if (repoSubgraph) {
+        // Run graph building in background or await it based on requirements
+        // Doing it sequentially for now
+        await this.graphBuilder.buildAndPersist(job.assessmentId, job.snapshotId, repoSubgraph);
+        
+        // Trigger Reconciliation Engine to compute gaps
+        await this.reconciliationEngine.reconcile(job.assessmentId);
+      }
+    }
 
     return {
       accepted: !isRejected,

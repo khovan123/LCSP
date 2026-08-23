@@ -19,6 +19,7 @@ from tools.common.capabilities.evidence.scanner.dependencies.dependency_fact imp
 from tools.common.capabilities.evidence.scanner.inventory.language.language_types import LanguageClassification
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
 from tools.common.capabilities.evidence.scanner.ts_js_bridge.bridge_types import TsJsBridgeResult
+from tools.common.capabilities.evidence.scanner.graph.evidence_graph_builder import EvidenceGraphBuilder
 
 from tools.common.capabilities.evidence.scanner.parsers.structural.structural_types import StructuralFact
 from tools.common.capabilities.evidence.scanner.toolchain.tool_registry import ToolProvenance
@@ -185,6 +186,15 @@ class EvidenceAssembler:
         redacted_findings = redact_source_code(findings)
         source_stripped = len(redacted_findings) == len(findings)
 
+        repo_subgraph_dict = None
+        if evidence_graph is not None:
+            builder = EvidenceGraphBuilder(
+                commit_sha=evidence_graph.commit_sha,
+                snapshot_id=evidence_graph.snapshot_id
+            )
+            repo_subgraph = builder.build_from_program_graph(evidence_graph)
+            repo_subgraph_dict = repo_subgraph.model_dump()
+
         evidence_payload = {
             "sbom_entries": [
                 asdict(entry) for entry in (syft_result.entries if syft_result is not None else [])
@@ -198,6 +208,7 @@ class EvidenceAssembler:
             "technical_findings": [
                 asdict(finding) for finding in (technical_findings or [])
             ],
+            "repo_subgraph": repo_subgraph_dict,
             "structural_facts": [
                 asdict(fact) for fact in (structural_facts or [])
             ],
