@@ -44,6 +44,14 @@ def _directory_names(path: Path) -> set[str]:
     }
 
 
+def _implementation_files(path: Path) -> set[str]:
+    return {
+        entry.name
+        for entry in path.iterdir()
+        if entry.is_file() and entry.suffix == ".py" and entry.name != "__init__.py"
+    }
+
+
 def _authored_tool_layout() -> dict[str, tuple[str, ...]]:
     return {
         "common": COMMON_TOOL_NAMES,
@@ -209,20 +217,72 @@ def test_runtime_owns_non_model_callable_implementation_domains() -> None:
         "dispatch",
     }
 
+    assert _directory_names(runtime / "assessment" / "claims") == {
+        "ai_usage_flow",
+        "conflict_detection",
+        "evidence_claim",
+        "technical_profile",
+        "verified_profile",
+    }
+    assert _directory_names(runtime / "assessment" / "evaluation") == {
+        "classification",
+        "engineering_rule",
+    }
+    assert _directory_names(runtime / "assessment" / "investigation") == {
+        "engineering_rule",
+    }
+    assert _directory_names(runtime / "assessment" / "planning") == {
+        "engineering_rule",
+    }
+
+    for category in (
+        runtime / "assessment" / "claims",
+        runtime / "assessment" / "evaluation",
+        runtime / "assessment" / "investigation",
+        runtime / "assessment" / "planning",
+    ):
+        assert _implementation_files(category) == set()
+
     assert (runtime / "evidence" / "graph" / "query_engine.py").is_file()
     assert (runtime / "evidence" / "scanner" / "scan_boundary.py").is_file()
     assert not (runtime / "evidence" / "scanner" / "program_graph").exists()
     assert (
-        runtime / "assessment" / "planning" / "engineering_rule_planner.py"
+        runtime
+        / "assessment"
+        / "planning"
+        / "engineering_rule"
+        / "engineering_rule_planner.py"
     ).is_file()
     assert (
-        runtime / "assessment" / "evaluation" / "rule_evaluator.py"
+        runtime
+        / "assessment"
+        / "evaluation"
+        / "engineering_rule"
+        / "rule_evaluator.py"
+    ).is_file()
+    assert (
+        runtime
+        / "assessment"
+        / "evaluation"
+        / "classification"
+        / "classification_boundary.py"
+    ).is_file()
+    assert (
+        runtime
+        / "assessment"
+        / "claims"
+        / "ai_usage_flow"
+        / "ai_usage_flow_boundary.py"
+    ).is_file()
+    assert (
+        runtime
+        / "assessment"
+        / "claims"
+        / "evidence_claim"
+        / "evidence_claim_validator.py"
     ).is_file()
     assert (
         runtime / "legal" / "sources" / "official_text_extraction.py"
-    ).is_file()
-    assert (
-        runtime / "assessment" / "evaluation" / "classification_boundary.py"
     ).is_file()
     assert (
         runtime / "reporting" / "report" / "final_report_boundary.py"
@@ -241,6 +301,58 @@ def test_runtime_owns_non_model_callable_implementation_domains() -> None:
         "compat.py",
     ):
         assert not (runtime / historical_name).exists()
+
+
+@pytest.mark.parametrize(
+    ("legacy", "canonical"),
+    (
+        (
+            "runtime.assessment.claims.ai_usage_flow_rule_engine",
+            "runtime.assessment.claims.ai_usage_flow.ai_usage_flow_rule_engine",
+        ),
+        (
+            "runtime.assessment.claims.conflict_detector",
+            "runtime.assessment.claims.conflict_detection.conflict_detector",
+        ),
+        (
+            "runtime.assessment.claims.evidence_claim_validator",
+            "runtime.assessment.claims.evidence_claim.evidence_claim_validator",
+        ),
+        (
+            "runtime.assessment.claims.technical_profile_builder",
+            "runtime.assessment.claims.technical_profile.technical_profile_builder",
+        ),
+        (
+            "runtime.assessment.claims.verified_profile_boundary",
+            "runtime.assessment.claims.verified_profile.verified_profile_boundary",
+        ),
+        (
+            "runtime.assessment.evaluation.classification_graph",
+            "runtime.assessment.evaluation.classification.classification_graph",
+        ),
+        (
+            "runtime.assessment.evaluation.rule_evaluator",
+            "runtime.assessment.evaluation.engineering_rule.rule_evaluator",
+        ),
+        (
+            "runtime.assessment.investigation.pipeline",
+            "runtime.assessment.investigation.engineering_rule.pipeline",
+        ),
+        (
+            "runtime.assessment.planning.engineering_rule_planner",
+            "runtime.assessment.planning.engineering_rule.engineering_rule_planner",
+        ),
+    ),
+)
+def test_assessment_flat_imports_route_to_capability_packages(
+    legacy: str,
+    canonical: str,
+) -> None:
+    legacy_module = importlib.import_module(legacy)
+    canonical_module = importlib.import_module(canonical)
+    assert Path(str(legacy_module.__file__)).resolve() == Path(
+        str(canonical_module.__file__)
+    ).resolve()
 
 
 def test_generic_boundary_invocation_is_not_root_agent_surface() -> None:

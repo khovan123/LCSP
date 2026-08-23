@@ -1,9 +1,19 @@
-"""Evidence claims, provenance-backed claim validation, and legacy claim intelligence."""
+"""Assessment claim capabilities grouped by the artifact they own."""
 
-from .evidence_claim_validator import EvidenceClaimValidationError, EvidenceClaimValidator
-from .evidence_ledger import EvidenceLedger, EvidenceLedgerObservation, ObservationProvenance
-from .models import EvidenceClaim, InvestigationPacket
-from .verified_profile_boundary import PendingConflictsExist, VerifiedProfileBoundary
+from .evidence_claim.evidence_claim_validator import (
+    EvidenceClaimValidationError,
+    EvidenceClaimValidator,
+)
+from .evidence_claim.evidence_ledger import (
+    EvidenceLedger,
+    EvidenceLedgerObservation,
+    ObservationProvenance,
+)
+from .evidence_claim.models import EvidenceClaim, InvestigationPacket
+from .verified_profile.verified_profile_boundary import (
+    PendingConflictsExist,
+    VerifiedProfileBoundary,
+)
 
 __all__ = [
     "EvidenceClaimValidationError",

@@ -2,7 +2,7 @@
 
 The physical tree is canonical. A temporary import bridge keeps historical
 ``runtime.*`` and ``tools.*`` implementation imports working while callers are
-migrated to the responsibility-oriented namespaces.
+migrated to the capability-oriented namespaces.
 """
 from __future__ import annotations
 
@@ -24,15 +24,53 @@ _INVESTIGATION_MODULES: Final[frozenset[str]] = frozenset({
     "code_context",
     "code_context_investigator",
     "deterministic_investigator",
+    "engineering_assessment_boundary",
     "initial_query_executor",
     "investigator",
     "openwiki_context",
+    "pipeline",
+    "planned_pipeline",
+    "selected_rule_orchestration",
 })
-_CLAIM_MODULES: Final[frozenset[str]] = frozenset({
+_AI_USAGE_FLOW_MODULES: Final[frozenset[str]] = frozenset({
+    "ai_usage_flow_boundary",
+    "ai_usage_flow_graph",
+    "ai_usage_flow_proposer",
+    "ai_usage_flow_rule_engine",
+    "confidence_calculator",
+    "conflict_candidate_builder",
+    "engineering_claim_adapter",
+})
+_CONFLICT_DETECTION_MODULES: Final[frozenset[str]] = frozenset({
+    "conflict_detection_boundary",
+    "conflict_detector",
+    "conflict_score_calculator",
+})
+_EVIDENCE_CLAIM_MODULES: Final[frozenset[str]] = frozenset({
     "claim_topology",
     "evidence_claim_validator",
     "evidence_ledger",
     "models",
+})
+_TECHNICAL_PROFILE_MODULES: Final[frozenset[str]] = frozenset({
+    "evidence_quality_evaluator",
+    "technical_profile_boundary",
+    "technical_profile_builder",
+})
+_VERIFIED_PROFILE_MODULES: Final[frozenset[str]] = frozenset({
+    "verified_profile_boundary",
+})
+_CLASSIFICATION_MODULES: Final[frozenset[str]] = frozenset({
+    "citation_guardrail",
+    "classification_boundary",
+    "classification_graph",
+    "classification_proposer",
+    "overclaim_detector",
+    "rationale_narrator",
+    "risk_tier_calculator",
+})
+_ENGINEERING_RULE_EVALUATION_MODULES: Final[frozenset[str]] = frozenset({
+    "rule_evaluator",
 })
 _RETRIEVAL_MODULES: Final[frozenset[str]] = frozenset({
     "chroma_path",
@@ -92,17 +130,53 @@ def _suffix(fullname: str, prefix: str) -> str:
     return fullname[len(prefix):].lstrip(".")
 
 
+def _join_module(base: str, tail: str) -> str:
+    return f"{base}.{tail}" if tail else base
+
+
+def _route_claim_module(module: str) -> str | None:
+    head, _, tail = module.partition(".")
+    if head in _AI_USAGE_FLOW_MODULES:
+        base = f"runtime.assessment.claims.ai_usage_flow.{head}"
+    elif head in _CONFLICT_DETECTION_MODULES:
+        base = f"runtime.assessment.claims.conflict_detection.{head}"
+    elif head in _EVIDENCE_CLAIM_MODULES:
+        base = f"runtime.assessment.claims.evidence_claim.{head}"
+    elif head in _TECHNICAL_PROFILE_MODULES:
+        base = f"runtime.assessment.claims.technical_profile.{head}"
+    elif head in _VERIFIED_PROFILE_MODULES:
+        base = f"runtime.assessment.claims.verified_profile.{head}"
+    else:
+        return None
+    return _join_module(base, tail)
+
+
+def _route_evaluation_module(module: str) -> str | None:
+    head, _, tail = module.partition(".")
+    if head in _CLASSIFICATION_MODULES:
+        base = f"runtime.assessment.evaluation.classification.{head}"
+    elif head in _ENGINEERING_RULE_EVALUATION_MODULES:
+        base = f"runtime.assessment.evaluation.engineering_rule.{head}"
+    else:
+        return None
+    return _join_module(base, tail)
+
+
 def _route_assessment_module(module: str) -> str | None:
     head, _, tail = module.partition(".")
     if head in _PLANNING_MODULES:
-        base = f"runtime.assessment.planning.{head}"
+        base = f"runtime.assessment.planning.engineering_rule.{head}"
     elif head in _INVESTIGATION_MODULES:
-        base = f"runtime.assessment.investigation.{head}"
-    elif head in _CLAIM_MODULES:
-        base = f"runtime.assessment.claims.{head}"
+        base = f"runtime.assessment.investigation.engineering_rule.{head}"
     else:
+        routed = _route_claim_module(module)
+        if routed is not None:
+            return routed
+        routed = _route_evaluation_module(module)
+        if routed is not None:
+            return routed
         return None
-    return f"{base}.{tail}" if tail else base
+    return _join_module(base, tail)
 
 
 def _route_legal(module: str) -> str:
@@ -115,7 +189,7 @@ def _route_legal(module: str) -> str:
         base = f"runtime.legal.sources.{head}"
     else:
         base = f"runtime.legal.corpus.{head}"
-    return f"{base}.{tail}" if tail else base
+    return _join_module(base, tail)
 
 
 def _route_platform_core(module: str) -> str | None:
@@ -128,12 +202,30 @@ def _route_platform_core(module: str) -> str | None:
         base = f"runtime.infrastructure.dispatch.{head}"
     else:
         return None
-    return f"{base}.{tail}" if tail else base
+    return _join_module(base, tail)
 
 
 def _canonical_name(fullname: str) -> str | None:
-    # Reporting gap used to be nested as gap/reporting. Preserve that import
-    # shape without reintroducing the historical physical directory.
+    assessment_routes = (
+        ("runtime.assessment.claims", _route_claim_module),
+        ("runtime.assessment.evaluation", _route_evaluation_module),
+    )
+    for prefix, router in assessment_routes:
+        if fullname.startswith(f"{prefix}."):
+            routed = router(_suffix(fullname, prefix))
+            if routed is not None:
+                return routed
+
+    for prefix, capability, modules in (
+        ("runtime.assessment.planning", "engineering_rule", _PLANNING_MODULES),
+        ("runtime.assessment.investigation", "engineering_rule", _INVESTIGATION_MODULES),
+    ):
+        if fullname.startswith(f"{prefix}."):
+            module = _suffix(fullname, prefix)
+            head, _, tail = module.partition(".")
+            if head in modules:
+                return _join_module(f"{prefix}.{capability}.{head}", tail)
+
     legacy_gap = "runtime.reporting.gap.reporting"
     if fullname == legacy_gap or fullname.startswith(f"{legacy_gap}."):
         return "runtime.reporting.gap" + fullname[len(legacy_gap):]
@@ -154,13 +246,41 @@ def _canonical_name(fullname: str) -> str | None:
     ):
         return None
 
+    for prefix in (
+        "runtime.engineering_rule.intelligence",
+        "tools.engineer_rule.intelligence",
+    ):
+        if fullname == prefix:
+            return "runtime.assessment.claims"
+        if fullname.startswith(f"{prefix}."):
+            routed = _route_claim_module(_suffix(fullname, prefix))
+            if routed is not None:
+                return routed
+
+    for prefix in (
+        "runtime.engineering_rule.investigation",
+        "tools.engineer_rule.investigation",
+    ):
+        if fullname == prefix:
+            return "runtime.assessment.investigation"
+        if fullname.startswith(f"{prefix}.rule_evaluator"):
+            return (
+                "runtime.assessment.evaluation.engineering_rule.rule_evaluator"
+                + fullname[len(f"{prefix}.rule_evaluator"):]
+            )
+        if fullname.startswith(f"{prefix}."):
+            module = _suffix(fullname, prefix)
+            head, _, tail = module.partition(".")
+            if head in _INVESTIGATION_MODULES:
+                return _join_module(
+                    f"runtime.assessment.investigation.engineering_rule.{head}",
+                    tail,
+                )
+
     prefix_aliases = (
         ("runtime.graph", "runtime.evidence.graph"),
         ("runtime.scanner", "runtime.evidence.scanner"),
-        ("runtime.classification", "runtime.assessment.evaluation"),
-        ("runtime.engineering_rule.intelligence", "runtime.assessment.claims"),
-        ("runtime.engineering_rule.investigation.rule_evaluator", "runtime.assessment.evaluation.rule_evaluator"),
-        ("runtime.engineering_rule.investigation", "runtime.assessment.investigation"),
+        ("runtime.classification", "runtime.assessment.evaluation.classification"),
         ("runtime.engineering_rule.clarification.investigation.clarification", "runtime.workflow.recovery.clarification"),
         ("runtime.orchestration.context", "runtime.workflow.state"),
         ("runtime.orchestration.control", "runtime.workflow.recovery"),
@@ -172,8 +292,8 @@ def _canonical_name(fullname: str) -> str | None:
         ("runtime.platform.scripts", "runtime.infrastructure.dispatch.scripts"),
         ("runtime.platform.tool_dispatch", "runtime.infrastructure.dispatch.tool_dispatch"),
         ("tools.clarification.investigation.clarification", "runtime.workflow.recovery.clarification"),
-        ("tools.classification.classification", "runtime.assessment.evaluation"),
-        ("tools.classification", "runtime.assessment.evaluation"),
+        ("tools.classification.classification", "runtime.assessment.evaluation.classification"),
+        ("tools.classification", "runtime.assessment.evaluation.classification"),
         ("tools.context", "runtime.workflow.state"),
         ("tools.control", "runtime.workflow.recovery"),
         ("tools.gap.reporting", "runtime.reporting.gap"),
@@ -220,12 +340,6 @@ def _canonical_name(fullname: str) -> str | None:
 
     if fullname == "tools.engineer_rule":
         return "runtime.assessment"
-    if fullname.startswith("tools.engineer_rule.intelligence"):
-        return "runtime.assessment.claims" + fullname[len("tools.engineer_rule.intelligence"):]
-    if fullname.startswith("tools.engineer_rule.investigation.rule_evaluator"):
-        return "runtime.assessment.evaluation.rule_evaluator" + fullname[len("tools.engineer_rule.investigation.rule_evaluator"):]
-    if fullname.startswith("tools.engineer_rule.investigation"):
-        return "runtime.assessment.investigation" + fullname[len("tools.engineer_rule.investigation"):]
 
     if fullname.startswith("runtime.reporting.") and not fullname.startswith(
         ("runtime.reporting.gap", "runtime.reporting.report")
