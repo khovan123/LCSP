@@ -6,8 +6,8 @@ retrieval, but stores no embeddings and performs only exact fingerprint/ID looku
 from __future__ import annotations
 import json
 from typing import Iterable
-from ..chroma_path import resolve_legal_chroma_path
-from ..chroma_vectorless import zero_embeddings
+from runtime.legal.retrieval.chroma_path import resolve_legal_chroma_path
+from runtime.legal.retrieval.chroma_vectorless import zero_embeddings
 from .models import EngineeringRule
 from .validator import validate_engineering_rule
 
