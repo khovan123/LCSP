@@ -10,6 +10,7 @@ _SCRIPT_PATH = (
     Path(__file__).resolve().parents[1]
     / "runtime"
     / "legal"
+    / "sources"
     / "scripts"
     / "orchestrate_reviewed_legal_corpus.py"
 )
