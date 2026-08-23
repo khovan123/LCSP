@@ -166,6 +166,9 @@ class _ProgressBoundLLMClient:
             ),
         )
 
+    def complete_structured(self, prompt: str, **kwargs):
+        return self._delegate.complete_structured(prompt=prompt, **kwargs)
+
     @staticmethod
     def _signature(call: LLMToolCall) -> str:
         arguments = json.dumps(

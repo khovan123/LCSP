@@ -18,6 +18,9 @@ class FinalReportGenerator:
         citations: list | None = None,
         limitations: str = "",
         evidence_provenance: str = "",
+        workflow_run_id: str = "final-report:local",
+        node_name: str = "final_report.executive_summary",
+        correlationId: str | None = None,
         **legacy,
     ) -> str:
         # Temporary call compatibility for historical tests/consumers while the
@@ -30,6 +33,9 @@ class FinalReportGenerator:
             assessment_name,
             assessment_context,
             rule_evaluations,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            correlationId=correlationId,
         )
 
         content = [
@@ -83,6 +89,10 @@ class FinalReportGenerator:
         assessment_name: str,
         context: str,
         rule_evaluations: list,
+        *,
+        workflow_run_id: str,
+        node_name: str,
+        correlationId: str | None,
     ) -> str:
         prompt = f"""
         You are an engineering assessment reporting assistant.
@@ -98,5 +108,11 @@ class FinalReportGenerator:
         - Do not claim legal certification, legal approval, legal compliance, or a court-level violation conclusion.
         - Do not include raw source code.
         """
-        response = self.llm_client.complete(prompt=prompt, max_tokens=300)
+        response = self.llm_client.complete(
+            prompt=prompt,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            max_tokens=300,
+            correlationId=correlationId,
+        )
         return response.content

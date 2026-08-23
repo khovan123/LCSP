@@ -777,6 +777,7 @@ export type PagesMessages = {
       backToWorkspace: string;
       previous: string;
       saveAndContinue: string;
+      continueToDeepResearch: string;
       continueToDetailed: string;
       submit: string;
       openClassification: string;
@@ -788,6 +789,7 @@ export type PagesMessages = {
       provider: string;
       deployment: string;
       risk: string;
+      deepResearch: string;
     };
     fields: {
       preAiScopeLabel: string;
@@ -906,6 +908,11 @@ export type PagesMessages = {
       askAction: string;
       askRunning: string;
       askReady: string;
+      approveAction: string;
+      approveDescription: string;
+      approveIncomplete: string;
+      approveReady: string;
+      noMoreQuestions: string;
       agentTitle: string;
       agentDescription: string;
       agentBadge: string;
@@ -945,6 +952,15 @@ export type PagesMessages = {
       postGraphHumanReviewQuestion: string;
       postGraphHumanReviewDetail: string;
       postGraphHumanReviewPlaceholder: string;
+    };
+    deepResearch: {
+      badge: string;
+      description: string;
+      lockedDescription: string;
+      lockedError: string;
+      agentTitle: string;
+      agentDescription: string;
+      askAction: string;
     };
     helpers: {
       decisionTitle: string;

@@ -17,20 +17,7 @@ export type WizardAgentClarificationPrompt =
     targetFieldName: keyof WizardAnswers;
   };
 
-const WIZARD_AGENT_CLARIFICATION_LIMIT = 5;
-
 const WIZARD_ANSWER_FIELD_NAMES = {
-  businessProcess: "businessProcess",
-  useCase: "useCase",
-  primaryActors: "primaryActors",
-  businessTrigger: "businessTrigger",
-  expectedOutcome: "expectedOutcome",
-  aiPurpose: "aiPurpose",
-  autonomyLevel: "autonomyLevel",
-  sector: "sector",
-  decisionRole: "decisionRole",
-  humanReview: "humanReview",
-  externalLlmUsage: "externalLlmUsage",
   postGraphContext: "postGraphContext",
   postGraphRuleScope: "postGraphRuleScope",
   postGraphHumanReviewBoundary: "postGraphHumanReviewBoundary",
@@ -45,6 +32,7 @@ export function getWizardAgentClarificationPrompts(
 ): WizardAgentClarificationPrompt[] {
   const prompts: WizardAgentClarificationPrompt[] = [];
   const seen = new Set<string>();
+  const seenTargetFields = new Set<string>();
 
   for (const item of activity) {
     const questions = extractAgentQuestions(item);
@@ -52,15 +40,13 @@ export function getWizardAgentClarificationPrompts(
       if (!isWizardFieldTarget(question)) {
         continue;
       }
-      const key = `${question.targetFieldName}:${question.text}`;
-      if (seen.has(key)) {
+      const key = `${question.targetFieldName}:${normalizeQuestionText(question.text)}`;
+      if (seen.has(key) || seenTargetFields.has(question.targetFieldName)) {
         continue;
       }
       seen.add(key);
+      seenTargetFields.add(question.targetFieldName);
       prompts.push(question);
-      if (prompts.length >= WIZARD_AGENT_CLARIFICATION_LIMIT) {
-        return prompts;
-      }
     }
   }
 
@@ -72,19 +58,18 @@ export function toWizardAgentClarificationPrompts(
 ): WizardAgentClarificationPrompt[] {
   const prompts: WizardAgentClarificationPrompt[] = [];
   const seen = new Set<string>();
+  const seenTargetFields = new Set<string>();
   for (const question of questions) {
     if (!isWizardFieldTarget(question)) {
       continue;
     }
-    const key = `${question.targetFieldName}:${question.text}`;
-    if (seen.has(key)) {
+    const key = `${question.targetFieldName}:${normalizeQuestionText(question.text)}`;
+    if (seen.has(key) || seenTargetFields.has(question.targetFieldName)) {
       continue;
     }
     seen.add(key);
+    seenTargetFields.add(question.targetFieldName);
     prompts.push(question);
-    if (prompts.length >= WIZARD_AGENT_CLARIFICATION_LIMIT) {
-      return prompts;
-    }
   }
   return prompts;
 }
@@ -169,4 +154,8 @@ function isWizardFieldTarget(
     question.targetFieldName !== undefined &&
     WIZARD_ANSWER_FIELD_NAME_SET.has(question.targetFieldName)
   );
+}
+
+function normalizeQuestionText(text: string) {
+  return text.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 }

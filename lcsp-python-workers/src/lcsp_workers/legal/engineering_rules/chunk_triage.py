@@ -45,18 +45,26 @@ class LegalChunkEngineeringRuleTriage:
     ) -> list[LegalChunkTriageDecision]:
         if not legal_context:
             return []
-        response = self.llm.complete(
+        response = self.llm.complete_structured(
             prompt=self._prompt(legal_rule, legal_context),
+            response_format=_triage_response_schema(),
             workflow_run_id=workflow_run_id,
             node_name="triage_legal_chunks_for_engineering_rules",
             max_tokens=5000,
             correlationId=correlation_id,
         )
-        payload = _json_object(response.content)
+        return self._parse_decisions(response.structured_response, legal_context)
+
+    @staticmethod
+    def _parse_decisions(
+        payload: dict[str, Any] | list[Any] | None,
+        legal_context: list[dict[str, Any]],
+    ) -> list[LegalChunkTriageDecision]:
+        if not isinstance(payload, dict):
+            raise ValueError("legal chunk triage structured response must be object")
         raw_rows = payload.get("chunkAnalyses")
         if not isinstance(raw_rows, list):
             raise ValueError("legal chunk triage must return chunkAnalyses")
-
         known = {str(chunk.get("id")): chunk for chunk in legal_context if chunk.get("id")}
         decisions: dict[str, LegalChunkTriageDecision] = {}
         for raw in raw_rows:
@@ -185,7 +193,7 @@ class LegalChunkEngineeringRuleTriage:
                 ]
             },
         }
-        return "Return JSON only.\n" + json.dumps(
+        return "Use the configured structured response format only.\n" + json.dumps(
             contract,
             ensure_ascii=False,
             sort_keys=True,
@@ -200,6 +208,55 @@ def legal_context_normative_class(chunk: dict[str, Any]) -> str:
     return CHUNK_NORMATIVE_CLASSES["context_only"]
 
 
+def _triage_response_schema() -> dict[str, Any]:
+    return {
+        "title": "LegalChunkTriageResponse",
+        "description": "Engineering-rule eligibility triage for approved legal chunks.",
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "chunkAnalyses": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "chunkId": {
+                            "type": "string",
+                            "description": "Exact legal context chunk id.",
+                        },
+                        "verdict": {
+                            "type": "string",
+                            "enum": list(CHUNK_TRIAGE_VERDICTS.values()),
+                        },
+                        "reason": {
+                            "type": "string",
+                            "description": "Short grounded reason for the verdict.",
+                        },
+                        "engineeringObligation": {
+                            "type": "string",
+                            "description": "Empty unless the verdict is ENGINEERING_RULE_CANDIDATE.",
+                        },
+                        "verificationTargets": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Repository or runtime evidence targets for candidate chunks.",
+                        },
+                    },
+                    "required": [
+                        "chunkId",
+                        "verdict",
+                        "reason",
+                        "engineeringObligation",
+                        "verificationTargets",
+                    ],
+                },
+            }
+        },
+        "required": ["chunkAnalyses"],
+    }
+
+
 def _locator_granularity(locator: str) -> str:
     if "::pt-" in locator:
         return "POINT"
@@ -208,13 +265,3 @@ def _locator_granularity(locator: str) -> str:
     if locator.startswith("art-"):
         return "ARTICLE"
     return "UNKNOWN"
-
-
-def _json_object(text: str) -> dict[str, Any]:
-    start, end = text.find("{"), text.rfind("}")
-    if start < 0 or end < start:
-        raise ValueError("legal chunk triage output is not JSON")
-    value = json.loads(text[start : end + 1])
-    if not isinstance(value, dict):
-        raise ValueError("legal chunk triage output must be object")
-    return value

@@ -257,6 +257,15 @@ export type WizardClarificationAgentQuestion = {
   routingConfidence: number;
   answerControl: WizardFieldControl;
   optionSet?: string;
+  conflictOptions?: WizardClarificationConflictOption[];
+};
+
+export type WizardClarificationConflictOption = {
+  id: string;
+  label: string;
+  targetFieldName: string;
+  value: string | string[];
+  summary: string;
 };
 
 export type WizardClarificationAgentAnswer = {

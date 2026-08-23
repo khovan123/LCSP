@@ -3,25 +3,31 @@
 import { WIZARD_FIELD_CONTROLS } from "@lcsp/contracts/wizard";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { WizardSelectField } from "@/features/wizard/components/molecules/wizard-select-field";
 import { WizardTextareaField } from "@/features/wizard/components/molecules/wizard-textarea-field";
 import { selectOptions } from "@/features/wizard/config/wizard-config";
 import { t } from "@/features/wizard/lib/wizard-i18n";
 import type { WizardAgentClarificationPrompt } from "@/features/wizard/lib/wizard-agent-clarification";
 import type { WizardAnswers } from "@/features/wizard/types/wizard.types";
+import { CheckIcon } from "lucide-react";
 
 type WizardAgentClarificationCardProps = {
   prompts: WizardAgentClarificationPrompt[];
   disabled?: boolean;
+  canApprove?: boolean;
   onBlur?: () => void;
   onValueChange?: (name: keyof WizardAnswers) => void;
+  onApprove?: () => void;
 };
 
 export function WizardAgentClarificationCard({
   prompts,
   disabled,
+  canApprove = false,
   onBlur,
   onValueChange,
+  onApprove,
 }: WizardAgentClarificationCardProps) {
   if (prompts.length === 0) {
     return null;
@@ -86,6 +92,22 @@ export function WizardAgentClarificationCard({
           );
         })}
       </div>
+      {onApprove ? (
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-sky-200 pt-4">
+          <p className="text-xs text-sky-900/80">
+            {t("pages.wizard.clarification.approveDescription")}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            disabled={disabled || !canApprove}
+            onClick={onApprove}
+          >
+            <CheckIcon className="size-4" aria-hidden />
+            {t("pages.wizard.clarification.approveAction")}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }

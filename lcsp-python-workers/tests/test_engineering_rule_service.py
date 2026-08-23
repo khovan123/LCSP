@@ -213,3 +213,21 @@ def test_non_bootstrap_rule_can_compile_on_cache_miss() -> None:
     compiler.compile.assert_called_once()
     cache.put.assert_called_once()
     registry.materialize.assert_not_called()
+
+
+def test_empty_compilation_result_is_not_cached() -> None:
+    service, compiler, cache, registry = _service(cached=[])
+    compiler.compile.return_value = []
+
+    rules, cache_hit = service.get_or_compile(
+        legal_rule=_legal_rule(),
+        legal_rule_catalog_version_id="catalog-1",
+        legal_corpus_version_id="corpus-1",
+        workflow_run_id="run-1",
+    )
+
+    assert rules == []
+    assert cache_hit is False
+    compiler.compile.assert_called_once()
+    cache.put.assert_not_called()
+    registry.materialize.assert_not_called()

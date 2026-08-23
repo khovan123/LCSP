@@ -1,9 +1,5 @@
 import type { ZodError } from "zod";
-import {
-  ANSWER_STATES,
-  WIZARD_CLARIFICATION_QUESTIONS,
-  WIZARD_CLARIFICATION_SCOPES,
-} from "@lcsp/contracts/wizard";
+import { ANSWER_STATES } from "@lcsp/contracts/wizard";
 import type { WizardAnswer, AnswerState } from "@lcsp/contracts/wizard";
 
 import {
@@ -21,17 +17,6 @@ import type { WizardHelperKey } from "@/features/wizard/types/wizard-form.types"
 import { t } from "./wizard-i18n";
 
 export const sectionCardClassName = "border-border bg-card shadow-sm";
-
-export type WizardClarificationPrompt = {
-  id: string;
-  fieldName: keyof WizardAnswers;
-  control: string;
-  optionSet?: keyof typeof selectOptions;
-  questionKey: string;
-  detailKey: string;
-  placeholderKey?: string;
-  collectionRuleKey: string;
-};
 
 export function getHelperCopy(helperKey: WizardHelperKey) {
   switch (helperKey) {
@@ -197,27 +182,6 @@ export function normalizeAnswers(answers: WizardAnswers): WizardAnswers {
       ? answers.ps_002_affected_people
       : [],
   };
-}
-
-export function getBusinessContextClarificationPrompts(
-  _answers: WizardAnswers,
-): WizardClarificationPrompt[] {
-  return WIZARD_CLARIFICATION_QUESTIONS.filter(
-    (question) => question.scope === WIZARD_CLARIFICATION_SCOPES.preScan,
-  ).map((question) => ({
-    id: question.id,
-    fieldName: question.fieldName as keyof WizardAnswers,
-    control: question.control,
-    optionSet:
-      "optionSet" in question
-        ? (question.optionSet as keyof typeof selectOptions)
-        : undefined,
-    questionKey: question.labelKey,
-    detailKey: question.detailKey,
-    placeholderKey:
-      "placeholderKey" in question ? question.placeholderKey : undefined,
-    collectionRuleKey: question.collectionRuleKey,
-  }));
 }
 
 export function serializeAnswers(answers: WizardAnswers): WizardAnswer[] {

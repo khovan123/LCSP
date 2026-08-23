@@ -70,6 +70,13 @@ class LLMToolResponse(LLMResponse):
     tool_calls: tuple[LLMToolCall, ...] = ()
 
 
+@dataclass
+class LLMStructuredResponse(LLMResponse):
+    """Completion response whose payload came from LangChain structured output."""
+
+    structured_response: dict[str, Any] | list[Any] | None = None
+
+
 class LLMToolSchemaInvalidError(ValueError):
     """Raised when a required capture tool call cannot satisfy its declared schema."""
 
@@ -347,6 +354,60 @@ class DeepAgentClient:
             request_id=str(uuid4()),
         )
 
+    @traceable(run_type="llm", name="DeepAgentClient.complete_structured")
+    def complete_structured(
+        self,
+        prompt: str,
+        *,
+        response_format: dict[str, Any] | type[Any],
+        workflow_run_id: str,
+        node_name: str,
+        max_tokens: Optional[int] = None,
+        correlationId: Optional[str] = None,
+    ) -> LLMStructuredResponse:
+        safe_prompt, max_tokens_to_use, _extra_headers = self._prepare_request(
+            prompt=prompt,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            max_tokens=max_tokens,
+            correlationId=correlationId,
+        )
+        agent = self._create_agent(
+            system_prompt=_structured_completion_prompt(),
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            prompt=safe_prompt,
+            response_format=_tool_strategy_response_format(response_format),
+        )
+        result = self._invoke_agent(
+            agent,
+            safe_prompt,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            correlationId=correlationId,
+            max_tokens=max_tokens_to_use,
+        )
+        structured_response = _normalized_structured_response(result)
+        if structured_response is None:
+            raise ValueError("Deep Agent returned no structured_response")
+        content = _last_message_content(result)
+        input_tokens, output_tokens = _usage_from_agent_result(
+            result,
+            safe_prompt,
+            content,
+        )
+        self._record_actual_usage(input_tokens, output_tokens)
+        self._update_run_tree_usage(input_tokens, output_tokens)
+        return LLMStructuredResponse(
+            content=redact_string(content),
+            structured_response=structured_response,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=self.model,
+            provider=self.provider,
+            request_id=str(uuid4()),
+        )
+
     def _invoke_tool_capture_attempt(
         self,
         *,
@@ -392,6 +453,7 @@ class DeepAgentClient:
         node_name: str,
         prompt: str,
         capture_tool_names: list[str] | None = None,
+        response_format: Any | None = None,
     ) -> Any:
         try:
             from deepagents import (
@@ -448,6 +510,7 @@ class DeepAgentClient:
                 subagents=subagents,
                 middleware=middleware,
                 interrupt_on=_lcsp_interrupt_on(capture_tool_names or []),
+                response_format=response_format,
                 name="lcsp-deep-agent",
             )
 
@@ -959,6 +1022,14 @@ def _plain_completion_prompt() -> str:
     )
 
 
+def _structured_completion_prompt() -> str:
+    return (
+        "You are the LCSP Deep Agent runtime. Use LCSP retrieval tools, skills, "
+        "memory, and subagents as needed, then finalize only through the configured "
+        "LangChain structured output response format."
+    )
+
+
 def _tool_completion_prompt(
     tools: list[LLMToolDefinition],
     require_tool_call: bool,
@@ -976,6 +1047,16 @@ def _tool_completion_prompt(
         f"tools to inspect source code, OpenWiki chunks, and engineering-rule "
         f"context before choosing a capture tool. {required}"
     )
+
+
+def _tool_strategy_response_format(response_format: dict[str, Any] | type[Any]) -> Any:
+    try:
+        from langchain.agents.structured_output import ToolStrategy
+    except ImportError as exc:
+        raise RuntimeError(
+            "langchain structured output is required for Deep Agent structured responses"
+        ) from exc
+    return ToolStrategy(schema=response_format, handle_errors=True)
 
 
 def _context_engineered_prompt(
@@ -1017,6 +1098,29 @@ def _last_message_content(result: Any) -> str:
     if isinstance(content, list):
         return "".join(str(part) for part in content)
     return str(content or "")
+
+
+def _normalized_structured_response(result: Any) -> dict[str, Any] | list[Any] | None:
+    if not isinstance(result, dict) or "structured_response" not in result:
+        return None
+    value = _normalize_structured_value(result.get("structured_response"))
+    if isinstance(value, dict | list):
+        return value
+    return None
+
+
+def _normalize_structured_value(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json", exclude_none=True)
+    if isinstance(value, list):
+        return [_normalize_structured_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_structured_value(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    return value
 
 
 def _usage_from_agent_result(

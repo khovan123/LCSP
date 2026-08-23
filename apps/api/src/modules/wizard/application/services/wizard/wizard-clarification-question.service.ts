@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import {
   ANSWER_STATES,
+  DECISION_ROLES,
   WIZARD_CLARIFICATION_AGENT_REASON_CODES,
   WIZARD_CLARIFICATION_AGENT_SEVERITIES,
   WIZARD_CLARIFICATION_AGENT_STATUSES,
@@ -28,7 +29,6 @@ type ClarificationTarget = {
   optionSet?: string;
 };
 
-const DEFAULT_MAX_QUESTIONS = 5;
 const MIN_MEANINGFUL_TEXT_LENGTH = 24;
 
 const PURPOSE_FIELDS = {
@@ -48,6 +48,34 @@ const DECISION_FIELDS = {
   externalLlmUsage: "externalLlmUsage",
 } as const;
 
+const DEEP_RESEARCH_FIELDS = {
+  postGraphContext: "postGraphContext",
+  postGraphRuleScope: "postGraphRuleScope",
+  postGraphHumanReviewBoundary: "postGraphHumanReviewBoundary",
+} as const;
+
+const REQUIRED_BASE_FIELDS = [
+  PURPOSE_FIELDS.businessProcess,
+  PURPOSE_FIELDS.useCase,
+  PURPOSE_FIELDS.primaryActors,
+  PURPOSE_FIELDS.businessTrigger,
+  PURPOSE_FIELDS.expectedOutcome,
+  PURPOSE_FIELDS.aiPurpose,
+  PURPOSE_FIELDS.autonomyLevel,
+  PURPOSE_FIELDS.sector,
+  "dataTypes",
+  "affectedSubjects",
+  "userImpact",
+  DECISION_FIELDS.decisionRole,
+  DECISION_FIELDS.humanReview,
+  DECISION_FIELDS.externalLlmUsage,
+  "deploymentContext",
+  "specialCategoryData",
+  "biometricData",
+  "highImpactIndicators",
+  "prohibitedRiskSignals",
+] as const;
+
 @Injectable()
 export class WizardClarificationQuestionService {
   generate(
@@ -56,11 +84,16 @@ export class WizardClarificationQuestionService {
     maxQuestions: number | undefined,
   ): WizardClarificationQuestionResponse {
     const answerMap = this.answerMap(answers);
-    const targets = this.collectTargets(answerMap);
+    const isPrePlannerMode = mode === WIZARD_CLARIFICATION_ASK_MODES.prePlanner;
+    const targets = isPrePlannerMode
+      ? this.collectDeepResearchTargets(answerMap)
+      : this.collectTargets(answerMap);
     const limit = this.maxQuestions(maxQuestions);
-    const questions = targets
-      .slice(0, limit)
-      .map((target, index) => this.toAgentQuestion(target, index));
+    const selectedTargets =
+      limit === undefined ? targets : targets.slice(0, limit);
+    const questions = selectedTargets.map((target, index) =>
+      this.toAgentQuestion(target, index),
+    );
 
     return {
       kind: WIZARD_CLARIFICATION_REQUEST_KIND,
@@ -151,6 +184,40 @@ export class WizardClarificationQuestionService {
     }
 
     this.pushDecisionBoundaryTargets(targets, answerMap);
+
+    return this.dedupeTargets(targets);
+  }
+
+  private collectDeepResearchTargets(
+    answerMap: Map<string, WizardAnswerValue>,
+  ): ClarificationTarget[] {
+    if (!this.hasCompletedBaseWizard(answerMap)) {
+      return [];
+    }
+
+    const targets: ClarificationTarget[] = [];
+    this.pushTextTargetIfWeak(targets, answerMap, {
+      fieldName: DEEP_RESEARCH_FIELDS.postGraphContext,
+      text: "Code graph hoặc bằng chứng kỹ thuật đang cần thêm ngữ cảnh nghiệp vụ nào để diễn giải đúng các câu trả lời wizard đã có?",
+      severity: WIZARD_CLARIFICATION_AGENT_SEVERITIES.high,
+      reasonCode: WIZARD_CLARIFICATION_AGENT_REASON_CODES.graphContextMissing,
+      answerControl: WIZARD_FIELD_CONTROLS.textarea,
+    });
+    this.pushTextTargetIfWeak(targets, answerMap, {
+      fieldName: DEEP_RESEARCH_FIELDS.postGraphRuleScope,
+      text: "Từ các câu trả lời wizard hiện tại, Deep Agents nên ưu tiên nhóm rule, nghĩa vụ hoặc phạm vi kiểm soát nào trong bước nghiên cứu sâu?",
+      severity: WIZARD_CLARIFICATION_AGENT_SEVERITIES.medium,
+      reasonCode: WIZARD_CLARIFICATION_AGENT_REASON_CODES.ruleScopeAmbiguous,
+      answerControl: WIZARD_FIELD_CONTROLS.textarea,
+    });
+    this.pushTextTargetIfWeak(targets, answerMap, {
+      fieldName: DEEP_RESEARCH_FIELDS.postGraphHumanReviewBoundary,
+      text: "Ranh giới review của con người nào cần được Deep Agents kiểm chứng thêm sau khi đối chiếu câu trả lời wizard với bằng chứng kỹ thuật?",
+      severity: WIZARD_CLARIFICATION_AGENT_SEVERITIES.medium,
+      reasonCode:
+        WIZARD_CLARIFICATION_AGENT_REASON_CODES.businessSemanticsUnclear,
+      answerControl: WIZARD_FIELD_CONTROLS.textarea,
+    });
 
     return this.dedupeTargets(targets);
   }
@@ -275,10 +342,25 @@ export class WizardClarificationQuestionService {
     );
   }
 
-  private maxQuestions(value: number | undefined): number {
+  private hasCompletedBaseWizard(
+    answerMap: Map<string, WizardAnswerValue>,
+  ): boolean {
+    return REQUIRED_BASE_FIELDS.every((fieldName) => {
+      if (
+        fieldName === DECISION_FIELDS.humanReview &&
+        answerMap.get(DECISION_FIELDS.decisionRole) ===
+          DECISION_ROLES.noDecisionSupport
+      ) {
+        return true;
+      }
+      return !this.needsValue(answerMap.get(fieldName));
+    });
+  }
+
+  private maxQuestions(value: number | undefined): number | undefined {
     return typeof value === "number" && Number.isInteger(value) && value > 0
-      ? Math.min(value, DEFAULT_MAX_QUESTIONS)
-      : DEFAULT_MAX_QUESTIONS;
+      ? value
+      : undefined;
   }
 
   private dedupeTargets(targets: ClarificationTarget[]): ClarificationTarget[] {

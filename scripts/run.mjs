@@ -341,9 +341,14 @@ function detectGitBuildRef() {
 
 function stopDevProcesses() {
   const patterns = [
+    "pnpm dev:fogewise",
+    "node scripts/run.mjs fogewise",
+    "node scripts/run.mjs dev",
+    "node scripts/run.mjs dev_app",
     "lcsp_workers.runtime",
     "pnpm --dir apps/api start:dev",
     "nest start --watch",
+    "apps/api/dist/src/main",
     "pnpm --dir apps/web dev",
     "next dev",
     "uvx arize-phoenix serve --port 6006",
@@ -354,14 +359,40 @@ function stopDevProcesses() {
     process.ppid,
     ...listParentPids(process.pid),
   ]);
+  const protectedProcessGroups = new Set(
+    [...protectedPids]
+      .map((pid) => readProcessGroupId(pid))
+      .filter((pid) => Number.isInteger(pid) && pid > 0),
+  );
   const killed = [];
 
   for (const signal of ["SIGTERM", "SIGKILL"]) {
     for (const pattern of patterns) {
-      for (const pid of findMatchingPids(pattern, protectedPids)) {
+      for (const entry of findMatchingProcesses(pattern, protectedPids)) {
+        const groupKilled = killProcessGroup(
+          entry,
+          signal,
+          protectedProcessGroups,
+        );
+        if (groupKilled) {
+          killed.push({
+            pid: entry.pid,
+            pgid: entry.pgid,
+            signal,
+            pattern,
+            scope: "process-group",
+          });
+          continue;
+        }
         try {
-          process.kill(pid, signal);
-          killed.push({ pid, signal, pattern });
+          process.kill(entry.pid, signal);
+          killed.push({
+            pid: entry.pid,
+            pgid: entry.pgid,
+            signal,
+            pattern,
+            scope: "process",
+          });
         } catch {}
       }
     }
@@ -376,30 +407,54 @@ function stopDevProcesses() {
   console.log("[run] Stopped local LCSP dev processes:");
   for (const entry of killed) {
     console.log(
-      `  - pid=${entry.pid} signal=${entry.signal} pattern=${entry.pattern}`,
+      `  - ${entry.scope} pid=${entry.pid} pgid=${entry.pgid ?? "unknown"} signal=${entry.signal} pattern=${entry.pattern}`,
     );
   }
 }
 
-function findMatchingPids(pattern, protectedPids) {
+function findMatchingProcesses(pattern, protectedPids) {
   const result = spawnSync(
     "bash",
     [
       "-lc",
-      `ps -eo pid=,args= | grep -F ${shellQuote(pattern)} | grep -v grep`,
+      `ps -eo pid=,pgid=,args= | grep -F ${shellQuote(pattern)} | grep -v grep`,
     ],
     { cwd: repoRoot, encoding: "utf8" },
   );
   if (result.status !== 0 || !result.stdout.trim()) return [];
 
-  const pids = [];
+  const processes = [];
+  const seen = new Set();
   for (const line of result.stdout.split("\n")) {
-    const pid = Number.parseInt(line.trim().split(/\s+/, 1)[0], 10);
-    if (Number.isInteger(pid) && pid > 0 && !protectedPids.has(pid)) {
-      pids.push(pid);
+    const [rawPid, rawPgid] = line.trim().split(/\s+/, 2);
+    const pid = Number.parseInt(rawPid, 10);
+    const pgid = Number.parseInt(rawPgid, 10);
+    if (
+      Number.isInteger(pid) &&
+      pid > 0 &&
+      !protectedPids.has(pid) &&
+      !seen.has(pid)
+    ) {
+      processes.push({
+        pid,
+        pgid: Number.isInteger(pgid) && pgid > 0 ? pgid : null,
+      });
+      seen.add(pid);
     }
   }
-  return [...new Set(pids)];
+  return processes;
+}
+
+function killProcessGroup(entry, signal, protectedProcessGroups) {
+  if (isWindows || !entry.pgid || protectedProcessGroups.has(entry.pgid)) {
+    return false;
+  }
+  try {
+    process.kill(-entry.pgid, signal);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function listParentPids(startPid) {
@@ -416,6 +471,16 @@ function listParentPids(startPid) {
 
 function readParentPid(pid) {
   const result = spawnSync("ps", ["-o", "ppid=", "-p", String(pid)], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) return null;
+  const value = Number.parseInt(result.stdout.trim(), 10);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function readProcessGroupId(pid) {
+  const result = spawnSync("ps", ["-o", "pgid=", "-p", String(pid)], {
     cwd: repoRoot,
     encoding: "utf8",
   });

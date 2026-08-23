@@ -1,5 +1,4 @@
 from __future__ import annotations
-import json
 from types import SimpleNamespace
 import pytest
 
@@ -45,7 +44,7 @@ CONTEXT = [
 
 class FakeLlm:
     def __init__(self) -> None: self.calls = 0
-    def complete(self, **kwargs):
+    def complete_structured(self, **kwargs):
         self.calls += 1
         if kwargs.get("node_name") == "triage_legal_chunks_for_engineering_rules":
             payload = {
@@ -59,9 +58,9 @@ class FakeLlm:
                     }
                 ]
             }
-            return SimpleNamespace(content=json.dumps(payload), model="fake-llm")
+            return SimpleNamespace(structured_response=payload, content="", model="fake-llm")
         payload = {"engineeringRules": [{"engineeringRuleId": "VN-AI-134-14-HUMAN-OVERSIGHT::ENG::1", "concept": "HUMAN_OVERSIGHT", "legalIntent": {"requirement": "HUMAN_MONITORING_AND_INTERVENTION"}, "investigationGoals": ["Trace AI output to consequential business action", "Find human review or override before final action"], "startingNodeTypes": ["AI_MODEL_INVOCATION"], "targetNodeTypes": ["HUMAN_REVIEW", "HUMAN_OVERRIDE", "REJECTION", "APPROVAL"], "edgeStrategies": ["CALLS", "RETURNS", "ASSIGNS", "PASSES_ARGUMENT", "BRANCHES_ON", "REVIEWED_BY", "OVERRIDDEN_BY"], "graphQueries": [{"name": "trace_ai_to_action", "startNodeTypes": ["AI_MODEL_INVOCATION"], "direction": "FORWARD", "followEdges": ["CALLS", "RETURNS", "ASSIGNS", "PASSES_ARGUMENT", "BRANCHES_ON"], "stopNodeTypes": ["REJECTION", "APPROVAL"], "semanticTypes": []}], "keywords": ["review", "approve", "override"], "requiredEvidence": ["AI_OUTPUT_PATH", "DOWNSTREAM_BUSINESS_ACTION"], "supportingEvidence": ["HUMAN_REVIEW_PATH"], "negativeEvidence": ["NO_HUMAN_CONTROL_ON_BOUNDED_PATH"], "unresolvedConditions": ["DYNAMIC_DISPATCH"]}]}
-        return SimpleNamespace(content=json.dumps(payload), model="fake-llm")
+        return SimpleNamespace(structured_response=payload, content="", model="fake-llm")
 
 class FakeRetriever:
     def __init__(self, context=None) -> None: self.context = list(context or CONTEXT); self.calls = 0
@@ -118,28 +117,27 @@ def test_repealed_legal_context_blocks_compilation() -> None:
     assert llm.calls == 0
 
 
-def test_context_only_chunk_cannot_be_promoted_to_engineering_rule() -> None:
+def test_context_only_chunk_is_skipped_without_compilation_failure() -> None:
     class OvereagerLlm(FakeLlm):
-        def complete(self, **kwargs):
+        def complete_structured(self, **kwargs):
             self.calls += 1
             if kwargs.get("node_name") == "triage_legal_chunks_for_engineering_rules":
                 return SimpleNamespace(
-                    content=json.dumps(
-                        {
-                            "chunkAnalyses": [
-                                {
-                                    "chunkId": "LAW134:art-3",
-                                    "verdict": "ENGINEERING_RULE_CANDIDATE",
-                                    "reason": "Mentions AI system definition.",
-                                    "engineeringObligation": "Treat definition as control.",
-                                    "verificationTargets": ["AI system"],
-                                }
-                            ]
-                        }
-                    ),
+                    structured_response={
+                        "chunkAnalyses": [
+                            {
+                                "chunkId": "LAW134:art-3",
+                                "verdict": "ENGINEERING_RULE_CANDIDATE",
+                                "reason": "Mentions AI system definition.",
+                                "engineeringObligation": "Treat definition as control.",
+                                "verificationTargets": ["AI system"],
+                            }
+                        ]
+                    },
+                    content="",
                     model="fake-llm",
                 )
-            return super().complete(**kwargs)
+            return super().complete_structured(**kwargs)
 
     llm = OvereagerLlm()
     context = [
@@ -162,15 +160,85 @@ def test_context_only_chunk_cannot_be_promoted_to_engineering_rule() -> None:
         cache=FakeCache(),
     )
 
-    with pytest.raises(ValueError, match="no chunks eligible"):
-        service.get_or_compile(
-            legal_rule={**LEGAL_RULE, "citationLocatorRefs": [{"chunkId": "LAW134:art-3"}]},
-            legal_rule_catalog_version_id="catalog-v1",
-            legal_corpus_version_id="corpus-v1",
+    rules, cached = service.get_or_compile(
+        legal_rule={**LEGAL_RULE, "citationLocatorRefs": [{"chunkId": "LAW134:art-3"}]},
+        legal_rule_catalog_version_id="catalog-v1",
+        legal_corpus_version_id="corpus-v1",
+        workflow_run_id="run-1",
+    )
+
+    assert rules == []
+    assert cached is False
+    assert llm.calls == 1
+    assert service.cache.put_calls == 0
+
+
+def test_chunk_triage_rejects_invalid_structured_response() -> None:
+    class InvalidTriageLlm:
+        def complete_structured(self, **kwargs):
+            assert kwargs.get("node_name") == "triage_legal_chunks_for_engineering_rules"
+            return SimpleNamespace(
+                structured_response={"unexpected": []},
+                content="",
+                model="fake-llm",
+            )
+
+    with pytest.raises(ValueError, match="chunkAnalyses"):
+        LegalChunkEngineeringRuleTriage(InvalidTriageLlm()).analyze(
+            legal_rule=LEGAL_RULE,
+            legal_context=CONTEXT,
             workflow_run_id="run-1",
         )
 
-    assert llm.calls == 1
+
+def test_compiler_empty_rule_output_is_skipped_without_failure() -> None:
+    class EmptyCompilerLlm(FakeLlm):
+        def complete_structured(self, **kwargs):
+            self.calls += 1
+            if kwargs.get("node_name") == "triage_legal_chunks_for_engineering_rules":
+                payload = {
+                    "chunkAnalyses": [
+                        {
+                            "chunkId": "LAW134:art-14::cl-1::pt-d",
+                            "verdict": "ENGINEERING_RULE_CANDIDATE",
+                            "reason": "Chunk imposes provider monitoring and intervention obligations.",
+                            "engineeringObligation": "Maintain human monitoring and intervention controls.",
+                            "verificationTargets": [
+                                "human review",
+                                "override",
+                                "monitoring",
+                            ],
+                        }
+                    ]
+                }
+                return SimpleNamespace(
+                    structured_response=payload,
+                    content="",
+                    model="fake-llm",
+                )
+            return SimpleNamespace(
+                structured_response={"engineeringRules": []},
+                content="",
+                model="fake-llm",
+            )
+
+    llm = EmptyCompilerLlm()
+    service = EngineeringRuleService(
+        compiler=EngineeringRuleCompiler(llm),
+        retriever=FakeRetriever(),
+        cache=FakeCache(),
+    )
+
+    rules, cached = service.get_or_compile(
+        legal_rule=LEGAL_RULE,
+        legal_rule_catalog_version_id="catalog-v1",
+        legal_corpus_version_id="corpus-v1",
+        workflow_run_id="run-1",
+    )
+
+    assert rules == []
+    assert cached is False
+    assert service.cache.put_calls == 0
 
 
 def test_chunk_triage_prompt_carries_compile_gate_and_locator_granularity() -> None:
@@ -197,6 +265,37 @@ def test_chunk_triage_prompt_carries_compile_gate_and_locator_granularity() -> N
     assert '"deterministicGate": "PASS"' in prompt
     assert '"deterministicGate": "BLOCK"' in prompt
     assert "Definitions can supply vocabulary" in prompt
+
+
+def test_chunk_triage_uses_deep_agent_structured_response() -> None:
+    class StructuredTriageLlm:
+        def complete_structured(self, **kwargs):
+            assert kwargs.get("node_name") == "triage_legal_chunks_for_engineering_rules"
+            payload = {
+                "chunkAnalyses": [
+                    {
+                        "chunkId": "LAW134:art-14::cl-1::pt-d",
+                        "verdict": "ENGINEERING_RULE_CANDIDATE",
+                        "reason": "Chunk imposes provider monitoring and intervention obligations.",
+                        "engineeringObligation": "Maintain human monitoring and intervention controls.",
+                        "verificationTargets": ["human review", "override", "monitoring"],
+                    }
+                ]
+            }
+            return SimpleNamespace(
+                structured_response=payload,
+                content="ignored free-form model text",
+                model="fake-llm",
+            )
+
+    decisions = LegalChunkEngineeringRuleTriage(StructuredTriageLlm()).analyze(
+        legal_rule=LEGAL_RULE,
+        legal_context=CONTEXT,
+        workflow_run_id="run-1",
+    )
+
+    assert len(decisions) == 1
+    assert decisions[0].verdict == "ENGINEERING_RULE_CANDIDATE"
 
 
 def test_validator_rejects_hallucinated_graph_vocabulary() -> None:

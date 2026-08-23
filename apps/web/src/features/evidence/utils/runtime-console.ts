@@ -49,7 +49,7 @@ export function buildRuntimeConsoleModel(
   const latestByCorrelation = new Map<string, WorkspaceRuntimeActivityItem>();
 
   for (const item of activity) {
-    const key = `${item.correlationId}:${item.stage}:${item.toolName || ""}`;
+    const key = `${item.runId}:${item.stage}:${item.toolName || ""}`;
     const existing = latestByCorrelation.get(key);
     if (!existing || compareRuntimeActivity(item, existing) > 0) {
       latestByCorrelation.set(key, item);

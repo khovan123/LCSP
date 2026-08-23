@@ -176,6 +176,65 @@ def _install_llm_trace() -> None:
 
     deep_agent_client.DeepAgentClient.complete_with_tools = traced_complete_with_tools
 
+    original_complete_structured = deep_agent_client.DeepAgentClient.complete_structured
+
+    @functools.wraps(original_complete_structured)
+    def traced_complete_structured(
+        self,
+        prompt: str,
+        *,
+        response_format,
+        workflow_run_id: str,
+        node_name: str,
+        max_tokens=None,
+        correlationId=None,
+    ):
+        emit_dev_unsafe_trace(
+            "DEV_LLM_REQUEST_RAW",
+            operation="complete_structured",
+            provider=self.provider,
+            model=self.model,
+            api_key=self.api_key,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            max_tokens=max_tokens,
+            correlationId=correlationId,
+            prompt=prompt,
+            response_format=response_format,
+        )
+        try:
+            response = original_complete_structured(
+                self,
+                prompt,
+                response_format=response_format,
+                workflow_run_id=workflow_run_id,
+                node_name=node_name,
+                max_tokens=max_tokens,
+                correlationId=correlationId,
+            )
+        except Exception as exc:
+            emit_dev_unsafe_trace(
+                "DEV_LLM_ERROR_RAW",
+                operation="complete_structured",
+                provider=self.provider,
+                model=self.model,
+                error_type=type(exc).__name__,
+                error=str(exc),
+                exception=exc,
+            )
+            raise
+        emit_dev_unsafe_trace(
+            "DEV_LLM_RESPONSE_NORMALIZED",
+            operation="complete_structured",
+            provider=self.provider,
+            model=self.model,
+            response=response,
+            structured_response=getattr(response, "structured_response", None),
+        )
+        return response
+
+    deep_agent_client.DeepAgentClient.complete_structured = traced_complete_structured
+
     original_fallback_dispatch = fallback_client.PrimaryThenFallbackLLMClient._dispatch
 
     @functools.wraps(original_fallback_dispatch)

@@ -45,6 +45,12 @@ class FakeClient:
             raise self.error
         return self.result
 
+    def complete_structured(self, **kwargs):
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.result
+
 
 class RateLimitError(Exception):
     status_code = 429
@@ -86,6 +92,30 @@ def test_primary_then_fallback_uses_second_provider_on_retryable_error() -> None
 
     result = client.complete(
         "hello",
+        workflow_run_id="wf-1",
+        node_name="node-1",
+    )
+
+    assert result == "ok"
+    assert primary.calls == 1
+    assert fallback.calls == 1
+
+
+def test_primary_then_fallback_dispatches_structured_completion() -> None:
+    primary = FakeClient(error=RateLimitError("too many requests"))
+    fallback = FakeClient(result="ok")
+    client = PrimaryThenFallbackLLMClient(
+        (
+            LlmProviderCandidate(name="openai", client=primary),
+            LlmProviderCandidate(name="anthropic", client=fallback),
+        ),
+        fallback_on_codes=("RATE_LIMIT", "NETWORK"),
+        max_provider_attempts=2,
+    )
+
+    result = client.complete_structured(
+        "hello",
+        response_format={"type": "object", "properties": {}, "required": []},
         workflow_run_id="wf-1",
         node_name="node-1",
     )

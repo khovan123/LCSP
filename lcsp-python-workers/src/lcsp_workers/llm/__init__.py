@@ -1,6 +1,7 @@
 from .deep_agent_client import (
     DeepAgentClient,
     LLMResponse,
+    LLMStructuredResponse,
     LLMToolCall,
     LLMToolDefinition,
     LLMToolResponse,
@@ -19,6 +20,7 @@ from .budget_tracker import BudgetTracker, BudgetExceeded
 __all__ = [
     "DeepAgentClient",
     "LLMResponse",
+    "LLMStructuredResponse",
     "LLMToolCall",
     "LLMToolDefinition",
     "LLMToolResponse",

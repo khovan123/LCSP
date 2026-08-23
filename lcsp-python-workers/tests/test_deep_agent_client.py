@@ -219,6 +219,46 @@ def test_deep_agent_complete_uses_create_deep_agent() -> None:
     )
 
 
+def test_deep_agent_structured_completion_uses_response_format() -> None:
+    created = {}
+
+    class StructuredAgent:
+        def invoke(self, payload, config=None):
+            del payload, config
+            return {
+                "messages": [
+                    SimpleNamespace(
+                        content="ignored text",
+                        usage_metadata={"input_tokens": 7, "output_tokens": 3},
+                    )
+                ],
+                "structured_response": {"answer": "ok"},
+            }
+
+    def fake_create_deep_agent(**kwargs):
+        created.update(kwargs)
+        return StructuredAgent()
+
+    with _fake_deepagents(fake_create_deep_agent):
+        response = _client().complete_structured(
+            "Return a structured answer",
+            response_format={
+                "title": "Answer",
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"answer": {"type": "string"}},
+                "required": ["answer"],
+            },
+            workflow_run_id="workflow-1",
+            node_name="structured_node",
+        )
+
+    assert response.structured_response == {"answer": "ok"}
+    assert response.provider == "openai"
+    assert created["response_format"] is not None
+    assert type(created["response_format"]).__name__ == "ToolStrategy"
+
+
 def test_lcsp_deep_agent_skill_source_points_to_backend_route() -> None:
     sources = _lcsp_skill_sources()
 

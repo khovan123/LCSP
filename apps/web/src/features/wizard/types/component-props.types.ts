@@ -10,10 +10,12 @@ export type WizardActiveStepCardProps = {
   answers: WizardAnswers;
   agentClarificationPrompts?: WizardAgentClarificationPrompt[];
   isAskingClarification?: boolean;
+  canApproveAgentClarifications?: boolean;
+  canAskDeepResearch?: boolean;
   onFieldBlur: () => void;
   onFieldChange: (name: keyof WizardAnswers) => void;
   onHelperOpen: (helperKey: Exclude<WizardHelperKey, null>) => void;
-  onAskClarification?: () => void;
+  onApproveAgentClarifications?: () => void;
 };
 
 export type WizardFieldWithHelperProps = {

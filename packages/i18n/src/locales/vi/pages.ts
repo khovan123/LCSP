@@ -684,6 +684,7 @@ export const viPages = {
       backToWorkspace: "Quay lại workspace",
       previous: "Quay lại",
       saveAndContinue: "Lưu và tiếp tục",
+      continueToDeepResearch: "Sang Nghiên cứu sâu",
       continueToDetailed: "Sang phần khai báo chi tiết",
       submit: "Gửi Wizard",
       openClassification: "Mở bước tiếp theo",
@@ -695,6 +696,7 @@ export const viPages = {
       provider: "Sử dụng AI bên ngoài",
       deployment: "Môi trường triển khai",
       risk: "Tín hiệu cần lưu ý thêm",
+      deepResearch: "Nghiên cứu sâu",
     },
     fields: {
       preAiScopeLabel:
@@ -871,6 +873,14 @@ export const viPages = {
       askAction: "Hỏi thêm",
       askRunning: "Đang hỏi",
       askReady: "Đã tạo câu hỏi làm rõ",
+      approveAction: "Approve",
+      approveDescription:
+        "Approve đợt câu hỏi này sau khi đã trả lời đủ để Deep Agents tiếp tục phân tích.",
+      approveIncomplete:
+        "Vui lòng trả lời đủ các câu hỏi trong đợt hiện tại trước khi approve.",
+      approveReady:
+        "Đã approve đợt câu hỏi, Deep Agents sẽ tiếp tục phân tích.",
+      noMoreQuestions: "Deep Agents không còn câu hỏi nghiên cứu sâu mới.",
       agentTitle: "Câu hỏi làm rõ từ agent",
       agentDescription:
         "Các câu hỏi này được tạo từ ngữ cảnh assessment hiện tại và được route vào đúng field của Wizard.",
@@ -936,6 +946,19 @@ export const viPages = {
         "Nêu ai review, review xảy ra khi nào và người review có quyền gì.",
       postGraphHumanReviewPlaceholder:
         "Ví dụ: Legal Operator review các phân loại bị blocked trước khi phê duyệt cuối.",
+    },
+    deepResearch: {
+      badge: "Deep Agents",
+      description:
+        "Deep Agents tự tạo câu hỏi sau khi các phần khai báo phía trên đã hoàn tất, dựa trên câu trả lời đã có và không route lại vào field Wizard có sẵn.",
+      lockedDescription:
+        "Hoàn tất toàn bộ các phần khai báo phía trên để Deep Agents tự bắt đầu nghiên cứu sâu.",
+      lockedError:
+        "Vui lòng hoàn tất các phần khai báo phía trên trước khi yêu cầu Deep Agents nghiên cứu sâu.",
+      agentTitle: "Nghiên cứu sâu tự động",
+      agentDescription:
+        "Deep Agents đọc context Wizard hiện có và tự bổ sung câu hỏi hậu-scan khi không còn câu hỏi đang chờ trả lời.",
+      askAction: "Tạo câu hỏi",
     },
     helpers: {
       decisionTitle: "Cách trả lời câu hỏi về vai trò trong quyết định",

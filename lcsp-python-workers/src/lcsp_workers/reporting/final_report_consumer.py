@@ -140,6 +140,9 @@ class FinalReportConsumer(ConsumerBase):
                         ),
                     }
                 ),
+                workflow_run_id=f"final-report:{document_id}:{correlationId}",
+                node_name="final_report.executive_summary",
+                correlationId=correlationId,
             )
         except Exception as error:
             logger.error(

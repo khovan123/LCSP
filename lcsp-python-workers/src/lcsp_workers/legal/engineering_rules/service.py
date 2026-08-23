@@ -147,6 +147,15 @@ class EngineeringRuleService:
             workflow_run_id=workflow_run_id,
             correlation_id=correlation_id,
         )
+        if not compiled:
+            logger.info(
+                "ENGINEERING_RULE_COMPILATION_SKIPPED",
+                legal_rule_id=legal_rule_id,
+                reason="NO_ENGINEERING_RULE_CANDIDATES_AFTER_TRIAGE",
+                workflow_run_id=workflow_run_id,
+                correlationId=correlation_id,
+            )
+            return [], False
         self.cache.put(fingerprint, compiled)
         return compiled, False
 

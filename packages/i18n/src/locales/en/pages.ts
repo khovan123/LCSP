@@ -689,6 +689,7 @@ export const enPages = {
       backToWorkspace: "Back to workspace",
       previous: "Previous",
       saveAndContinue: "Save and continue",
+      continueToDeepResearch: "Continue to deep research",
       continueToDetailed: "Continue to detailed intake",
       submit: "Submit Wizard",
       openClassification: "Open next step",
@@ -700,6 +701,7 @@ export const enPages = {
       provider: "External AI usage",
       deployment: "Deployment context",
       risk: "Special risk signals",
+      deepResearch: "Deep research",
     },
     fields: {
       preAiScopeLabel:
@@ -876,6 +878,14 @@ export const enPages = {
       askAction: "Ask follow-up",
       askRunning: "Asking",
       askReady: "Follow-up questions ready",
+      approveAction: "Approve",
+      approveDescription:
+        "Approve this question batch after all answers are complete so Deep Agents can continue analysis.",
+      approveIncomplete:
+        "Answer every question in the current batch before approving.",
+      approveReady:
+        "Question batch approved. Deep Agents will continue analysis.",
+      noMoreQuestions: "Deep Agents have no new deep research questions.",
       agentTitle: "Follow-up questions from the agent",
       agentDescription:
         "These questions were generated from the current assessment context and routed to the matching Wizard fields.",
@@ -942,6 +952,19 @@ export const enPages = {
         "State who reviews, when the review happens, and what authority they have.",
       postGraphHumanReviewPlaceholder:
         "Example: Legal Operator reviews blocked classifications before final approval.",
+    },
+    deepResearch: {
+      badge: "Deep Agents",
+      description:
+        "Deep Agents automatically generate questions after the sections above are complete, based on existing answers and without routing back into existing Wizard fields.",
+      lockedDescription:
+        "Complete every section above so Deep Agents can start deep research automatically.",
+      lockedError:
+        "Complete every section above before asking Deep Agents for deep research.",
+      agentTitle: "Automatic deep research",
+      agentDescription:
+        "Deep Agents read the current Wizard context and add post-scan questions when no generated question is waiting for an answer.",
+      askAction: "Generate questions",
     },
     helpers: {
       decisionTitle: "How to answer the decision question",

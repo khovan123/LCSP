@@ -30,7 +30,8 @@
     "typecheck": "pnpm --filter @lcsp/api prisma:generate && pnpm exec tsc -b",
     "seed:legal-corpus:dev:dry": "node scripts/seed-legal-dev.mjs corpus --dry-run",
     "seed:legal-corpus:dev": "node scripts/seed-legal-dev.mjs corpus",
-    "seed:legal:dev": "node scripts/seed-legal-dev.mjs all"
+    "seed:legal:dev": "node scripts/seed-legal-dev.mjs all",
+    "delete:assessment": "node scripts/delete-assessment.mjs"
   },
   "devDependencies": {
     "@lcsp/contracts": "workspace:*",

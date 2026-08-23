@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import httpx
 
@@ -14,6 +14,7 @@ from .budget_tracker import BudgetExceeded
 from .deep_agent_client import (
     LLMToolSchemaInvalidError,
     LLMResponse,
+    LLMStructuredResponse,
     LLMToolDefinition,
     LLMToolResponse,
 )
@@ -57,6 +58,19 @@ class LLMClientProtocol(Protocol):
         correlationId: str | None = None,
     ) -> LLMToolResponse:
         """Execute a completion request that may return structured tool calls."""
+        ...
+
+    def complete_structured(
+        self,
+        prompt: str,
+        *,
+        response_format: dict[str, Any] | type[Any],
+        workflow_run_id: str,
+        node_name: str,
+        max_tokens: int | None = None,
+        correlationId: str | None = None,
+    ) -> LLMStructuredResponse:
+        """Execute a Deep Agent request with LangChain structured output."""
         ...
 
 
@@ -233,6 +247,55 @@ class PrimaryThenFallbackLLMClient:
             raise
         self._log_response(
             operation="complete_with_tools",
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            correlation_id=correlationId,
+            response=result,
+        )
+        return result
+
+    def complete_structured(
+        self,
+        prompt: str,
+        *,
+        response_format: dict[str, Any] | type[Any],
+        workflow_run_id: str,
+        node_name: str,
+        max_tokens: int | None = None,
+        correlationId: str | None = None,
+    ) -> LLMStructuredResponse:
+        """Dispatch a structured completion and emit safe request telemetry."""
+        self._log_request(
+            operation="complete_structured",
+            prompt=prompt,
+            workflow_run_id=workflow_run_id,
+            node_name=node_name,
+            max_tokens=max_tokens,
+            correlation_id=correlationId,
+        )
+        try:
+            result = self._dispatch(
+                lambda client: client.complete_structured(
+                    prompt=prompt,
+                    response_format=response_format,
+                    workflow_run_id=workflow_run_id,
+                    node_name=node_name,
+                    max_tokens=max_tokens,
+                    correlationId=correlationId,
+                )
+            )
+        except Exception as exc:
+            self._log_failure(
+                operation="complete_structured",
+                workflow_run_id=workflow_run_id,
+                node_name=node_name,
+                correlation_id=correlationId,
+                tool_names=[],
+                error=exc,
+            )
+            raise
+        self._log_response(
+            operation="complete_structured",
             workflow_run_id=workflow_run_id,
             node_name=node_name,
             correlation_id=correlationId,

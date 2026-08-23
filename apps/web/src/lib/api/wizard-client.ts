@@ -117,8 +117,7 @@ export async function generateWizardClarificationQuestions(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         answers,
-        mode: WIZARD_CLARIFICATION_ASK_MODES.wizardDraft,
-        maxQuestions: 5,
+        mode: WIZARD_CLARIFICATION_ASK_MODES.prePlanner,
       }),
     },
   );
