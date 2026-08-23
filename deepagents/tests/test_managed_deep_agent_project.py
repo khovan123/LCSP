@@ -8,10 +8,13 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tools.context import get_assessment_context, retrieve_legal_basis
-from tools.control import request_targeted_reanalysis, resume_waiting_runs
-from tools.invocation import invoke_lcsp_boundary
-from tools.common.managed.invocation import invocation_boundary_manifest
+from runtime.orchestration.managed.invocation import invocation_boundary_manifest
+from tools.common.get_assessment_context.code import get_assessment_context
+from tools.common.get_legal_corpus_readiness.code import get_legal_corpus_readiness
+from tools.common.retrieve_legal_basis.code import retrieve_legal_basis
+from tools.orchestration.request_targeted_reanalysis.code import (
+    request_targeted_reanalysis,
+)
 
 
 def test_managed_deep_agent_project_exports_single_root_agent() -> None:
@@ -48,47 +51,48 @@ def test_managed_schedule_exports_static_schedule_declaration() -> None:
     assert "load_config" not in source
 
 
-def test_managed_tools_have_explicit_input_schema() -> None:
-    lcsp_server_tools = (
+def test_authored_managed_tools_have_explicit_input_schema() -> None:
+    authored_tools = (
         get_assessment_context,
+        get_legal_corpus_readiness,
         retrieve_legal_basis,
         request_targeted_reanalysis,
-        resume_waiting_runs,
     )
 
-    for managed_tool in lcsp_server_tools:
+    for managed_tool in authored_tools:
         schema = managed_tool.args_schema.model_json_schema()
         assert schema["additionalProperties"] is False
         assert "assessment_id" in schema["properties"]
         assert "input" in schema["properties"]
 
-    invocation_schema = invoke_lcsp_boundary.args_schema.model_json_schema()
-    assert invocation_schema["additionalProperties"] is False
-    assert "boundary_name" in invocation_schema["properties"]
-    assert "message" in invocation_schema["properties"]
 
-
-def test_managed_project_uses_foldered_tool_application_structure() -> None:
+def test_managed_project_separates_authored_tools_from_runtime() -> None:
     tool_packages = {
         path.name
         for path in (PROJECT_ROOT / "tools").iterdir()
         if path.is_dir() and not path.name.startswith("__")
     }
-
-    assert tool_packages >= {
-        "clarification",
-        "legal",
-        "engineer_rule",
-        "graph",
-        "planner",
-        "classification",
-        "gap",
-        "reports",
-        "common",
-        "context",
-        "control",
-        "invocation",
+    runtime_packages = {
+        path.name
+        for path in (PROJECT_ROOT / "runtime").iterdir()
+        if path.is_dir() and not path.name.startswith("__")
     }
+
+    assert tool_packages == {
+        "common",
+        "planner",
+        "investigator",
+        "resolver",
+        "orchestration",
+    }
+    assert {
+        "graph",
+        "scanner",
+        "legal",
+        "engineering_rule",
+        "classification",
+        "reporting",
+    }.issubset(runtime_packages)
     assert (PROJECT_ROOT / "channels").is_dir()
     assert (PROJECT_ROOT / "connectors").is_dir()
     assert (PROJECT_ROOT / "evals" / "tasks").is_dir()
@@ -106,9 +110,12 @@ def test_managed_project_uses_foldered_tool_application_structure() -> None:
         path.name
         for path in (PROJECT_ROOT / "tools").glob("*.py")
     } == {"__init__.py"}
+    assert not (PROJECT_ROOT / "tools" / "legal").exists()
+    assert not (PROJECT_ROOT / "tools" / "graph").exists()
+    assert not (PROJECT_ROOT / "tools" / "classification").exists()
 
 
-def test_all_former_consumers_have_managed_invocation_boundaries() -> None:
+def test_all_former_consumers_remain_internal_managed_invocation_boundaries() -> None:
     manifest = invocation_boundary_manifest()
 
     assert len(manifest) == 23
