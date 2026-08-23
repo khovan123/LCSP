@@ -1,4 +1,4 @@
-"""Shared LCSP dispatch helpers for Managed Deep Agents tools."""
+"""Shared LCSP dispatch helpers for authored Managed Deep Agents tools."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from tools.common.platform.api_client import WorkerApiClient
-from tools.common.platform.config import load_config
+from runtime.platform.core.api_client import WorkerApiClient
+from runtime.platform.core.config import load_config
 
 
 class LcspToolEnvelope(BaseModel):

@@ -1,11 +1,16 @@
-"""Scanner worker package with lazy public exports.
+"""Scanner runtime with Program Evidence Graph split into ``runtime.graph``.
 
-Scanner internals are imported by the canonical agentic runtime. Eagerly importing
-`ScanBoundary` here creates a dispatcher -> program_graph -> scanner -> dispatcher
-cycle, so package-level exports resolve lazily instead.
+Legacy scanner modules still import ``.program_graph``. Keep that import path as a
+runtime-only compatibility alias while the implementation lives canonically in
+``runtime.graph``.
 """
 from __future__ import annotations
+
+import importlib
+import sys
 from typing import Any
+
+sys.modules[f"{__name__}.program_graph"] = importlib.import_module("runtime.graph")
 
 __all__ = [
     "ScanBoundary",

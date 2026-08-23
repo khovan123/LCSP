@@ -35,6 +35,14 @@ def _names(tools: list[object]) -> tuple[str, ...]:
     return tuple(str(getattr(tool, "name")) for tool in tools)
 
 
+def _directory_names(path: Path) -> set[str]:
+    return {
+        entry.name
+        for entry in path.iterdir()
+        if entry.is_dir() and entry.name != "__pycache__"
+    }
+
+
 def test_canonical_flow_keeps_needs_input_resume_and_deterministic_gate() -> None:
     assert FLOW_ORDER == (
         "plan",
@@ -124,9 +132,56 @@ def test_agent_facing_tools_follow_node_tool_code_layout() -> None:
         "orchestration": ORCHESTRATION_TOOL_NAMES,
     }.items():
         for tool_name in tool_names:
-            assert (
-                PROJECT_ROOT / "tools" / node / tool_name / "code.py"
-            ).is_file()
+            assert (PROJECT_ROOT / "tools" / node / tool_name / "code.py").is_file()
+
+
+def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
+    assert _directory_names(PROJECT_ROOT / "tools") == {
+        "common",
+        "planner",
+        "investigator",
+        "resolver",
+        "orchestration",
+    }
+    assert _directory_names(PROJECT_ROOT / "tools" / "common") == set(COMMON_TOOL_NAMES)
+    assert _directory_names(PROJECT_ROOT / "tools" / "planner") == {"get_scan_coverage"}
+    assert _directory_names(PROJECT_ROOT / "tools" / "investigator") == {
+        "trace_static_flow",
+        "inspect_data_path",
+        "inspect_decision_path",
+        "inspect_human_review_path",
+        "get_symbol_context",
+        "find_provider_invocations",
+    }
+    assert _directory_names(PROJECT_ROOT / "tools" / "resolver") == {"compare_wizard_claim"}
+    assert _directory_names(PROJECT_ROOT / "tools" / "orchestration") == set(
+        ORCHESTRATION_TOOL_NAMES
+    )
+
+
+def test_runtime_owns_non_model_callable_implementation_domains() -> None:
+    runtime = PROJECT_ROOT / "runtime"
+    assert {
+        "graph",
+        "scanner",
+        "legal",
+        "engineering_rule",
+        "classification",
+        "reporting",
+    }.issubset(_directory_names(runtime))
+    assert (runtime / "graph" / "query_engine.py").is_file()
+    assert (runtime / "scanner" / "scan_boundary.py").is_file()
+    assert not (runtime / "scanner" / "program_graph").exists()
+    assert (
+        runtime
+        / "engineering_rule"
+        / "planner"
+        / "investigation"
+        / "engineering_rule_planner.py"
+    ).is_file()
+    assert (
+        runtime / "reporting" / "reporting" / "final_report_boundary.py"
+    ).is_file()
 
 
 def test_generic_boundary_invocation_is_not_root_agent_surface() -> None:
