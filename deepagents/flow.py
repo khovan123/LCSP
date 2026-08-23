@@ -59,6 +59,32 @@ FLOW_STEPS: tuple[FlowStep, ...] = (
 
 FLOW_ORDER: tuple[str, ...] = tuple(step.name for step in FLOW_STEPS)
 
+# Flow transitions are declared independently from prompts so the orchestrator can
+# enforce the same state machine once durable state wiring is introduced.
+ALLOWED_FLOW_TRANSITIONS: dict[str, frozenset[str]] = {
+    "plan": frozenset({"investigate"}),
+    "investigate": frozenset({"needs_input", "gate"}),
+    "needs_input": frozenset({"resolve"}),
+    "resolve": frozenset({"resume"}),
+    "resume": frozenset({"investigate"}),
+    "gate": frozenset({"gap"}),
+    "gap": frozenset({"report"}),
+    "report": frozenset(),
+}
+
+
+def assert_flow_transition(current: str, next_step: str) -> None:
+    """Reject orchestration transitions outside the canonical LCSP flow."""
+    allowed = ALLOWED_FLOW_TRANSITIONS.get(current)
+    if allowed is None:
+        raise ValueError(f"unknown LCSP flow step: {current}")
+    if next_step not in allowed:
+        raise ValueError(
+            f"invalid LCSP flow transition: {current} -> {next_step}; "
+            f"allowed={sorted(allowed)}"
+        )
+
+
 COMMON_TOOL_NAMES: tuple[str, ...] = (
     "get_assessment_context",
     "get_legal_corpus_readiness",

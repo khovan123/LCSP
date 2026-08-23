@@ -3,16 +3,20 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from flow import (
+    ALLOWED_FLOW_TRANSITIONS,
     COMMON_TOOL_NAMES,
     FLOW_ORDER,
     NODE_TOOL_NAMES,
     NON_MODEL_FLOW_STEPS,
     ORCHESTRATION_TOOL_NAMES,
+    assert_flow_transition,
 )
 from harness import (
     HIDDEN_BUILTIN_TOOLS,
@@ -49,6 +53,33 @@ def test_canonical_flow_keeps_needs_input_resume_and_deterministic_gate() -> Non
         "gap",
         "report",
     )
+
+
+def test_canonical_flow_declares_only_expected_transitions() -> None:
+    assert ALLOWED_FLOW_TRANSITIONS == {
+        "plan": frozenset({"investigate"}),
+        "investigate": frozenset({"needs_input", "gate"}),
+        "needs_input": frozenset({"resolve"}),
+        "resolve": frozenset({"resume"}),
+        "resume": frozenset({"investigate"}),
+        "gate": frozenset({"gap"}),
+        "gap": frozenset({"report"}),
+        "report": frozenset(),
+    }
+
+    assert_flow_transition("plan", "investigate")
+    assert_flow_transition("investigate", "needs_input")
+    assert_flow_transition("needs_input", "resolve")
+    assert_flow_transition("resolve", "resume")
+    assert_flow_transition("resume", "investigate")
+    assert_flow_transition("investigate", "gate")
+    assert_flow_transition("gate", "gap")
+    assert_flow_transition("gap", "report")
+
+    with pytest.raises(ValueError, match="invalid LCSP flow transition"):
+        assert_flow_transition("plan", "gate")
+    with pytest.raises(ValueError, match="unknown LCSP flow step"):
+        assert_flow_transition("unknown", "plan")
 
 
 def test_subagents_receive_fixed_minimal_tool_surfaces() -> None:
