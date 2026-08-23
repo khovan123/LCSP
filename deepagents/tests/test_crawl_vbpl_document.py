@@ -10,6 +10,7 @@ script_path = (
     Path(__file__).parents[1]
     / "runtime"
     / "legal"
+    / "sources"
     / "scripts"
     / "crawl_vbpl_document.py"
 )
