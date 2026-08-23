@@ -391,14 +391,8 @@ def temporary_response_limit(module: ModuleType, max_bytes: int):
 
 @lru_cache(maxsize=4)
 def load_script_module(script_name: str) -> ModuleType:
-    """Load and cache an approved crawler script from the legal tool boundary."""
-    script_path = (
-        Path(__file__).resolve().parents[3]
-        / "tools"
-        / "legal"
-        / "scripts"
-        / script_name
-    )
+    """Load and cache an approved crawler script from the legal runtime."""
+    script_path = Path(__file__).resolve().parent / "scripts" / script_name
     module_name = script_name.replace(".py", "")
     spec = importlib.util.spec_from_file_location(module_name, script_path)
     if spec is None or spec.loader is None:
