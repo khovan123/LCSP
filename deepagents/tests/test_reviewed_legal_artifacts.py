@@ -8,7 +8,7 @@ from pathlib import Path
 
 SCRIPT_PATH = (
     Path(__file__).parents[1]
-    / "tools"
+    / "runtime"
     / "legal"
     / "scripts"
     / "build_reviewed_legal_corpus.py"
