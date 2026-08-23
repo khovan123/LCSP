@@ -10,7 +10,7 @@ import pytest
 
 module_path = (
     Path(__file__).parents[1]
-    / "tools"
+    / "runtime"
     / "legal"
     / "legal"
     / "official_text_extraction.py"
