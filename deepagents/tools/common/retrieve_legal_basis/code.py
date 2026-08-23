@@ -6,7 +6,7 @@ from typing import Any
 
 from langchain.tools import tool
 
-from tools.common.dispatch import LcspToolEnvelope, dispatch_lcsp_tool
+from tools.common import LcspToolEnvelope, dispatch_lcsp_tool
 
 
 @tool(args_schema=LcspToolEnvelope, parse_docstring=True)

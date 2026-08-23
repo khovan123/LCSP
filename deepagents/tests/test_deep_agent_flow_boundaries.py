@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 
@@ -40,6 +41,23 @@ def _directory_names(path: Path) -> set[str]:
         entry.name
         for entry in path.iterdir()
         if entry.is_dir() and entry.name != "__pycache__"
+    }
+
+
+def _authored_tool_layout() -> dict[str, tuple[str, ...]]:
+    return {
+        "common": COMMON_TOOL_NAMES,
+        "planner": ("get_scan_coverage",),
+        "investigator": (
+            "trace_static_flow",
+            "inspect_data_path",
+            "inspect_decision_path",
+            "inspect_human_review_path",
+            "get_symbol_context",
+            "find_provider_invocations",
+        ),
+        "resolver": ("compare_wizard_claim",),
+        "orchestration": ORCHESTRATION_TOOL_NAMES,
     }
 
 
@@ -117,22 +135,22 @@ def test_common_and_orchestration_tools_are_classified_explicitly() -> None:
 
 
 def test_agent_facing_tools_follow_node_tool_code_layout() -> None:
-    for node, tool_names in {
-        "common": COMMON_TOOL_NAMES,
-        "planner": ("get_scan_coverage",),
-        "investigator": (
-            "trace_static_flow",
-            "inspect_data_path",
-            "inspect_decision_path",
-            "inspect_human_review_path",
-            "get_symbol_context",
-            "find_provider_invocations",
-        ),
-        "resolver": ("compare_wizard_claim",),
-        "orchestration": ORCHESTRATION_TOOL_NAMES,
-    }.items():
+    for node, tool_names in _authored_tool_layout().items():
         for tool_name in tool_names:
             assert (PROJECT_ROOT / "tools" / node / tool_name / "code.py").is_file()
+
+
+def test_all_authored_tool_modules_use_canonical_envelope_and_import() -> None:
+    for node, tool_names in _authored_tool_layout().items():
+        for tool_name in tool_names:
+            code_path = PROJECT_ROOT / "tools" / node / tool_name / "code.py"
+            source = code_path.read_text(encoding="utf-8")
+            assert "tools.common.dispatch" not in source
+            assert "from tools.common import LcspToolEnvelope, dispatch_lcsp_tool" in source
+
+            module = importlib.import_module(f"tools.{node}.{tool_name}.code")
+            authored_tool = getattr(module, tool_name)
+            assert getattr(authored_tool, "name") == tool_name
 
 
 def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
