@@ -179,9 +179,12 @@ def test_runtime_owns_non_model_callable_implementation_domains() -> None:
         / "investigation"
         / "engineering_rule_planner.py"
     ).is_file()
-    assert (
-        runtime / "reporting" / "reporting" / "final_report_boundary.py"
-    ).is_file()
+    assert (runtime / "legal" / "official_text_extraction.py").is_file()
+    assert (runtime / "classification" / "classification_boundary.py").is_file()
+    assert (runtime / "reporting" / "final_report_boundary.py").is_file()
+    assert not (runtime / "legal" / "legal").exists()
+    assert not (runtime / "classification" / "classification").exists()
+    assert not (runtime / "reporting" / "reporting").exists()
 
 
 def test_generic_boundary_invocation_is_not_root_agent_surface() -> None:
