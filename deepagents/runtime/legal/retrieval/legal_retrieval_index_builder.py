@@ -6,13 +6,18 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Protocol
 
-from .chunk_integrity_repository import ChunkIntegrityRepository
+from runtime.legal.corpus.chunk_integrity_repository import ChunkIntegrityRepository
 from .chroma_path import default_legal_chroma_path
 from .chroma_vectorless import zero_embeddings
-from .legal_chunk_repository import LegalChunkRepository, LegalChunkSetRecord
+from runtime.legal.corpus.legal_chunk_repository import (
+    LegalChunkRepository,
+    LegalChunkSetRecord,
+)
 from .legal_retrieval_index_repository import LegalRetrievalIndexRecord
-from .official_text_extraction import _sha256_bytes
-from .relationship_manifest_repository import RelationshipManifestRepository
+from runtime.legal.sources.official_text_extraction import _sha256_bytes
+from runtime.legal.corpus.relationship_manifest_repository import (
+    RelationshipManifestRepository,
+)
 
 LEGAL_RETRIEVAL_INDEX_TOOL = {
     "name": "build_legal_retrieval_index",
