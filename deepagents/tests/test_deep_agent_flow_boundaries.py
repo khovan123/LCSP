@@ -14,6 +14,11 @@ from flow import (
     NON_MODEL_FLOW_STEPS,
     ORCHESTRATION_TOOL_NAMES,
 )
+from harness import (
+    HIDDEN_BUILTIN_TOOLS,
+    LCSP_FILESYSTEM_PERMISSIONS,
+    LCSP_HARNESS_PROFILE,
+)
 from subagents import (
     FLOW_SUBAGENTS,
     INVESTIGATOR_TOOLS,
@@ -98,3 +103,37 @@ def test_generic_boundary_invocation_is_not_root_agent_surface() -> None:
     assert "invoke_lcsp_boundary" not in agent_source
     assert "list_lcsp_invocation_boundaries" not in agent_source
     assert "resume_waiting_runs" not in agent_source
+
+
+def test_default_general_purpose_subagent_is_disabled() -> None:
+    assert LCSP_HARNESS_PROFILE.general_purpose_subagent is not None
+    assert LCSP_HARNESS_PROFILE.general_purpose_subagent.enabled is False
+
+
+def test_harness_hides_non_skill_filesystem_and_execute_tools() -> None:
+    assert HIDDEN_BUILTIN_TOOLS == frozenset(
+        {
+            "ls",
+            "write_file",
+            "edit_file",
+            "delete",
+            "glob",
+            "grep",
+            "execute",
+        }
+    )
+    assert "read_file" not in HIDDEN_BUILTIN_TOOLS
+    assert "task" not in HIDDEN_BUILTIN_TOOLS
+
+
+def test_filesystem_permissions_only_allow_reading_managed_skills() -> None:
+    assert len(LCSP_FILESYSTEM_PERMISSIONS) == 2
+
+    skill_read, deny_all = LCSP_FILESYSTEM_PERMISSIONS
+    assert skill_read.operations == ["read"]
+    assert skill_read.paths == ["/skills/**"]
+    assert skill_read.mode == "allow"
+
+    assert deny_all.operations == ["read", "write"]
+    assert deny_all.paths == ["/**"]
+    assert deny_all.mode == "deny"
