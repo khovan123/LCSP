@@ -132,6 +132,12 @@ def _route_platform_core(module: str) -> str | None:
 
 
 def _canonical_name(fullname: str) -> str | None:
+    # Reporting gap used to be nested as gap/reporting. Preserve that import
+    # shape without reintroducing the historical physical directory.
+    legacy_gap = "runtime.reporting.gap.reporting"
+    if fullname == legacy_gap or fullname.startswith(f"{legacy_gap}."):
+        return "runtime.reporting.gap" + fullname[len(legacy_gap):]
+
     canonical_roots = (
         "runtime.evidence",
         "runtime.legal.corpus",
@@ -162,13 +168,14 @@ def _canonical_name(fullname: str) -> str | None:
         ("runtime.orchestration.managed", "runtime.workflow.checkpoint"),
         ("runtime.platform.agentic_evidence", "runtime.evidence.provenance"),
         ("runtime.platform.llm", "runtime.infrastructure.llm"),
-        ("runtime.platform.package", "runtime.infrastructure.dispatch.package"),
+        ("runtime.platform.package", "runtime.infrastructure.dispatch"),
         ("runtime.platform.scripts", "runtime.infrastructure.dispatch.scripts"),
         ("runtime.platform.tool_dispatch", "runtime.infrastructure.dispatch.tool_dispatch"),
         ("tools.classification.classification", "runtime.assessment.evaluation"),
         ("tools.classification", "runtime.assessment.evaluation"),
         ("tools.context", "runtime.workflow.state"),
         ("tools.control", "runtime.workflow.recovery"),
+        ("tools.gap.reporting", "runtime.reporting.gap"),
         ("tools.gap", "runtime.reporting.gap"),
         ("tools.invocation", "runtime.workflow.resume"),
         ("tools.reports.reporting", "runtime.reporting.report"),
@@ -178,7 +185,7 @@ def _canonical_name(fullname: str) -> str | None:
         ("tools.common.dossiers", "runtime.reporting.report.dossiers"),
         ("tools.common.llm", "runtime.infrastructure.llm"),
         ("tools.common.managed", "runtime.workflow.checkpoint"),
-        ("tools.common.package", "runtime.infrastructure.dispatch.package"),
+        ("tools.common.package", "runtime.infrastructure.dispatch"),
         ("tools.common.scripts", "runtime.infrastructure.dispatch.scripts"),
         ("tools.graph.scanner.program_graph", "runtime.evidence.graph"),
         ("tools.graph.scanner", "runtime.evidence.scanner"),
