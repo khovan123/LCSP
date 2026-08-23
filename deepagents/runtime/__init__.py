@@ -206,6 +206,21 @@ def _route_platform_core(module: str) -> str | None:
 
 
 def _canonical_name(fullname: str) -> str | None:
+    # These two relative names are emitted when implementation blobs that used to
+    # share one flat package execute under their new capability package identity.
+    # Keep them virtual during the structural migration; no shim files are added to
+    # the physical tree.
+    moved_relative_dependencies = {
+        "runtime.assessment.investigation.rule_evaluator": (
+            "runtime.assessment.evaluation.engineering_rule.rule_evaluator"
+        ),
+        "runtime.assessment.planning.models": (
+            "runtime.assessment.claims.evidence_claim.models"
+        ),
+    }
+    if fullname in moved_relative_dependencies:
+        return moved_relative_dependencies[fullname]
+
     assessment_routes = (
         ("runtime.assessment.claims", _route_claim_module),
         ("runtime.assessment.evaluation", _route_evaluation_module),
