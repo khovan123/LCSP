@@ -10,6 +10,7 @@ SCRIPT_PATH = (
     Path(__file__).parents[1]
     / "runtime"
     / "legal"
+    / "sources"
     / "scripts"
     / "build_reviewed_legal_corpus.py"
 )
