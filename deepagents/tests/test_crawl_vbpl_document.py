@@ -8,7 +8,7 @@ import pytest
 
 script_path = (
     Path(__file__).parents[1]
-    / "tools"
+    / "runtime"
     / "legal"
     / "scripts"
     / "crawl_vbpl_document.py"
