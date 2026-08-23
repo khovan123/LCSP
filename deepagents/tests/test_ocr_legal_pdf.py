@@ -7,7 +7,12 @@ import pytest
 
 
 script_path = (
-    Path(__file__).parents[1] / "runtime" / "legal" / "scripts" / "ocr_legal_pdf.py"
+    Path(__file__).parents[1]
+    / "runtime"
+    / "legal"
+    / "sources"
+    / "scripts"
+    / "ocr_legal_pdf.py"
 )
 spec = importlib.util.spec_from_file_location("ocr_legal_pdf", script_path)
 assert spec and spec.loader
