@@ -179,30 +179,68 @@ def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
 
 def test_runtime_owns_non_model_callable_implementation_domains() -> None:
     runtime = PROJECT_ROOT / "runtime"
-    assert {
+    assert _directory_names(runtime) == {
+        "evidence",
+        "legal",
+        "assessment",
+        "workflow",
+        "reporting",
+        "infrastructure",
+    }
+    assert _directory_names(runtime / "evidence") == {"graph", "scanner", "provenance"}
+    assert _directory_names(runtime / "legal") == {"corpus", "retrieval", "sources"}
+    assert _directory_names(runtime / "assessment") == {
+        "planning",
+        "investigation",
+        "claims",
+        "evaluation",
+    }
+    assert _directory_names(runtime / "workflow") == {
+        "state",
+        "checkpoint",
+        "recovery",
+        "resume",
+    }
+    assert _directory_names(runtime / "reporting") == {"gap", "report"}
+    assert _directory_names(runtime / "infrastructure") == {
+        "api",
+        "auth",
+        "llm",
+        "dispatch",
+    }
+
+    assert (runtime / "evidence" / "graph" / "query_engine.py").is_file()
+    assert (runtime / "evidence" / "scanner" / "scan_boundary.py").is_file()
+    assert not (runtime / "evidence" / "scanner" / "program_graph").exists()
+    assert (
+        runtime / "assessment" / "planning" / "engineering_rule_planner.py"
+    ).is_file()
+    assert (
+        runtime / "assessment" / "evaluation" / "rule_evaluator.py"
+    ).is_file()
+    assert (
+        runtime / "legal" / "sources" / "official_text_extraction.py"
+    ).is_file()
+    assert (
+        runtime / "assessment" / "evaluation" / "classification_boundary.py"
+    ).is_file()
+    assert (
+        runtime / "reporting" / "report" / "final_report_boundary.py"
+    ).is_file()
+    assert (
+        runtime / "infrastructure" / "dispatch" / "tool_dispatch.py"
+    ).is_file()
+
+    for historical_name in (
         "graph",
         "scanner",
-        "legal",
         "engineering_rule",
         "classification",
-        "reporting",
-    }.issubset(_directory_names(runtime))
-    assert (runtime / "graph" / "query_engine.py").is_file()
-    assert (runtime / "scanner" / "scan_boundary.py").is_file()
-    assert not (runtime / "scanner" / "program_graph").exists()
-    assert (
-        runtime
-        / "engineering_rule"
-        / "planner"
-        / "investigation"
-        / "engineering_rule_planner.py"
-    ).is_file()
-    assert (runtime / "legal" / "official_text_extraction.py").is_file()
-    assert (runtime / "classification" / "classification_boundary.py").is_file()
-    assert (runtime / "reporting" / "final_report_boundary.py").is_file()
-    assert not (runtime / "legal" / "legal").exists()
-    assert not (runtime / "classification" / "classification").exists()
-    assert not (runtime / "reporting" / "reporting").exists()
+        "orchestration",
+        "platform",
+        "compat.py",
+    ):
+        assert not (runtime / historical_name).exists()
 
 
 def test_generic_boundary_invocation_is_not_root_agent_surface() -> None:
