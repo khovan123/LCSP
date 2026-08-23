@@ -17,12 +17,12 @@ import fcntl
 
 from structlog import get_logger
 
-from tools.common.agentic_evidence.dispatcher import LegalToolDispatcher
-from tools.common.agentic_evidence.legal_tool_entrypoints import (
+from runtime.platform.agentic_evidence.dispatcher import LegalToolDispatcher
+from runtime.platform.agentic_evidence.legal_tool_entrypoints import (
     LegalToolExecutionContext,
 )
-from tools.common.platform.api_client import WorkerApiClient
-from tools.common.platform.config import default_legal_source_storage_root
+from runtime.platform.core.api_client import WorkerApiClient
+from runtime.platform.core.config import default_legal_source_storage_root
 
 logger = get_logger(__name__)
 
@@ -458,8 +458,8 @@ def required_manifest_string(values: dict[str, Any], key: str, source: str) -> s
 
 
 def _load_script_module(filename: str):
-    """Load an AO-6 corpus build/orchestration script from the legal tool boundary."""
-    path = _worker_root() / "tools" / "legal" / "scripts" / filename
+    """Load an AO-6 corpus build/orchestration script from the legal runtime."""
+    path = Path(__file__).resolve().parent / "scripts" / filename
     spec = importlib.util.spec_from_file_location(filename.removesuffix(".py"), path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load AO-6 script: {path}")
@@ -470,7 +470,7 @@ def _load_script_module(filename: str):
 
 def _worker_root() -> Path:
     """Return the root directory of the Managed Agent package/project."""
-    return Path(__file__).resolve().parents[3]
+    return Path(__file__).resolve().parents[2]
 
 
 def _sha256_text(value: str) -> str:
