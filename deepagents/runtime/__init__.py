@@ -171,6 +171,7 @@ def _canonical_name(fullname: str) -> str | None:
         ("runtime.platform.package", "runtime.infrastructure.dispatch"),
         ("runtime.platform.scripts", "runtime.infrastructure.dispatch.scripts"),
         ("runtime.platform.tool_dispatch", "runtime.infrastructure.dispatch.tool_dispatch"),
+        ("tools.clarification.investigation.clarification", "runtime.workflow.recovery.clarification"),
         ("tools.classification.classification", "runtime.assessment.evaluation"),
         ("tools.classification", "runtime.assessment.evaluation"),
         ("tools.context", "runtime.workflow.state"),
@@ -225,8 +226,6 @@ def _canonical_name(fullname: str) -> str | None:
         return "runtime.assessment.evaluation.rule_evaluator" + fullname[len("tools.engineer_rule.investigation.rule_evaluator"):]
     if fullname.startswith("tools.engineer_rule.investigation"):
         return "runtime.assessment.investigation" + fullname[len("tools.engineer_rule.investigation"):]
-    if fullname.startswith("tools.clarification"):
-        return "runtime.workflow.recovery.clarification" + fullname[len("tools.clarification"):]
 
     if fullname.startswith("runtime.reporting.") and not fullname.startswith(
         ("runtime.reporting.gap", "runtime.reporting.report")
@@ -244,6 +243,8 @@ _VIRTUAL_PACKAGES: Final[frozenset[str]] = frozenset({
     "runtime.engineering_rule.clarification",
     "runtime.engineering_rule.clarification.investigation",
     "runtime.orchestration",
+    "tools.clarification",
+    "tools.clarification.investigation",
     "tools.graph",
 })
 
