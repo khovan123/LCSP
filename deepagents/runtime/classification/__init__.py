@@ -1,1 +1,3 @@
-"""Deterministic classification runtime."""
+"""
+Classification worker module.
+"""

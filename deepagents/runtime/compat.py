@@ -15,13 +15,17 @@ from typing import Final
 
 _RUNTIME_ALIASES: Final[dict[str, str]] = {
     "tools.clarification": "runtime.engineering_rule.clarification",
+    "tools.classification.classification": "runtime.classification",
     "tools.classification": "runtime.classification",
     "tools.context": "runtime.orchestration.context",
     "tools.control": "runtime.orchestration.control",
     "tools.engineer_rule": "runtime.engineering_rule",
     "tools.gap": "runtime.reporting.gap",
     "tools.invocation": "runtime.orchestration.invocation",
+    "tools.legal.legal": "runtime.legal",
+    "tools.legal.scripts": "runtime.legal.scripts",
     "tools.legal": "runtime.legal",
+    "tools.reports.reporting": "runtime.reporting",
     "tools.reports": "runtime.reporting",
     "tools.common.agentic_evidence": "runtime.platform.agentic_evidence",
     "tools.common.dispatch": "runtime.platform.tool_dispatch",

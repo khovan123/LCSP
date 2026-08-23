@@ -1,1 +1,1 @@
-"""Deterministic reporting, gap, dossier, and final-output runtime."""
+"""Final report and export tools."""
