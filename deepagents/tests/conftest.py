@@ -3,6 +3,7 @@ Shared fixtures for deepagents test suite.
 
 All fixtures default to isolated, ephemeral state. No shared mutable state between tests.
 """
+import importlib.util
 import os
 import sys
 import tempfile
@@ -16,6 +17,41 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 ROOT_PATH = str(ROOT_DIR)
 if ROOT_PATH not in sys.path:
     sys.path.insert(0, ROOT_PATH)
+
+
+# Migration-only test bridge for historical tests that load legal utilities by
+# physical file path instead of importing the runtime package. Production code
+# does not expose or recreate runtime/legal/scripts.
+_original_spec_from_file_location = importlib.util.spec_from_file_location
+
+
+def _canonical_test_module_path(location: object) -> object:
+    if not isinstance(location, (str, bytes, Path)):
+        return location
+    path = Path(location)
+    legacy_scripts = ROOT_DIR / "runtime" / "legal" / "scripts"
+    legacy_extraction = ROOT_DIR / "runtime" / "legal" / "official_text_extraction.py"
+    try:
+        relative_script = path.relative_to(legacy_scripts)
+    except ValueError:
+        relative_script = None
+    if relative_script is not None:
+        return ROOT_DIR / "runtime" / "legal" / "sources" / "scripts" / relative_script
+    if path == legacy_extraction:
+        return ROOT_DIR / "runtime" / "legal" / "sources" / "official_text_extraction.py"
+    return location
+
+
+def _spec_from_file_location(name, location, *args, **kwargs):
+    return _original_spec_from_file_location(
+        name,
+        _canonical_test_module_path(location),
+        *args,
+        **kwargs,
+    )
+
+
+importlib.util.spec_from_file_location = _spec_from_file_location
 
 
 @pytest.fixture
