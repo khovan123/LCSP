@@ -244,7 +244,9 @@ def test_runtime_owns_non_model_callable_implementation_domains() -> None:
         assert _implementation_files(category) == set()
 
     assert (runtime / "evidence" / "graph" / "query" / "query_engine.py").is_file()
-    assert (runtime / "evidence" / "scanner" / "scan_boundary.py").is_file()
+    assert (
+        runtime / "evidence" / "scanner" / "scanning" / "scan_boundary.py"
+    ).is_file()
     assert not (runtime / "evidence" / "scanner" / "program_graph").exists()
     assert (
         runtime
@@ -282,10 +284,14 @@ def test_runtime_owns_non_model_callable_implementation_domains() -> None:
         / "evidence_claim_validator.py"
     ).is_file()
     assert (
-        runtime / "legal" / "sources" / "official_text_extraction.py"
+        runtime / "legal" / "sources" / "extraction" / "official_text_extraction.py"
     ).is_file()
     assert (
-        runtime / "reporting" / "report" / "final_report_boundary.py"
+        runtime
+        / "reporting"
+        / "report"
+        / "final_report"
+        / "final_report_boundary.py"
     ).is_file()
     assert (
         runtime / "infrastructure" / "dispatch" / "tool_dispatch.py"
