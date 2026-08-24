@@ -31,6 +31,8 @@ def test_managed_deep_agent_project_exports_single_root_agent() -> None:
 
     assert "agent" in assigned_names
     assert "agents" not in assigned_names
+    assert "system_prompt=" not in source
+    assert "context_schema=LCSPRunContext" in source
 
 
 def test_managed_schedule_exports_static_schedule_declaration() -> None:
@@ -93,13 +95,18 @@ def test_managed_project_separates_authored_tools_from_runtime() -> None:
         "reporting",
         "infrastructure",
     }
+    assert (PROJECT_ROOT / "orchestration").is_dir()
+    assert (PROJECT_ROOT / "subagents").is_dir()
+    assert not (PROJECT_ROOT / "subagents.py").exists()
     assert (PROJECT_ROOT / "channels").is_dir()
     assert (PROJECT_ROOT / "connectors").is_dir()
     assert (PROJECT_ROOT / "evals" / "tasks").is_dir()
     assert (PROJECT_ROOT / "evals" / "scaffold").is_dir()
     assert (PROJECT_ROOT / "instructions.md").is_file()
     assert (PROJECT_ROOT / "identity.py").is_file()
-    assert (PROJECT_ROOT / "memory.py").is_file()
+    # MDA deployment-shared long-term memory is intentionally disabled for LCSP.
+    assert not (PROJECT_ROOT / "memory.py").exists()
+    assert (PROJECT_ROOT / "orchestration" / "memory.py").is_file()
     assert (PROJECT_ROOT / "middleware").is_dir()
     assert (PROJECT_ROOT / "sandbox" / "__init__.py").is_file()
     assert (PROJECT_ROOT / "skills" / "lcsp" / "SKILL.md").is_file()
