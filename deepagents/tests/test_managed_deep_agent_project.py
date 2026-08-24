@@ -86,6 +86,7 @@ def test_managed_project_separates_authored_tools_from_runtime() -> None:
         "investigator",
         "resolver",
         "orchestration",
+        "triage",
     }
     assert runtime_packages == {
         "evidence",
