@@ -181,7 +181,7 @@ def _route_assessment_module(module: str) -> str | None:
 
 def _route_legal(module: str) -> str:
     head, _, tail = module.partition(".")
-    if head in {"corpus", "retrieval", "sources"}:
+    if head in {"corpus", "retrieval", "sources", "maintenance"}:
         return f"runtime.legal.{module}"
     if head in _RETRIEVAL_MODULES:
         base = f"runtime.legal.retrieval.{head}"
@@ -250,6 +250,7 @@ def _canonical_name(fullname: str) -> str | None:
         "runtime.legal.corpus",
         "runtime.legal.retrieval",
         "runtime.legal.sources",
+        "runtime.legal.maintenance",
         "runtime.assessment",
         "runtime.workflow",
         "runtime.reporting.gap",
@@ -296,7 +297,10 @@ def _canonical_name(fullname: str) -> str | None:
         ("runtime.graph", "runtime.evidence.graph"),
         ("runtime.scanner", "runtime.evidence.scanner"),
         ("runtime.classification", "runtime.assessment.evaluation.classification"),
-        ("runtime.engineering_rule.clarification.investigation.clarification", "runtime.workflow.recovery.clarification"),
+        (
+            "runtime.engineering_rule.clarification.investigation.clarification",
+            "runtime.workflow.recovery.clarification",
+        ),
         ("runtime.orchestration.context", "runtime.workflow.state"),
         ("runtime.orchestration.control", "runtime.workflow.recovery"),
         ("runtime.orchestration.invocation", "runtime.workflow.resume"),
@@ -305,9 +309,18 @@ def _canonical_name(fullname: str) -> str | None:
         ("runtime.platform.llm", "runtime.infrastructure.llm"),
         ("runtime.platform.package", "runtime.infrastructure.dispatch"),
         ("runtime.platform.scripts", "runtime.infrastructure.dispatch.scripts"),
-        ("runtime.platform.tool_dispatch", "runtime.infrastructure.dispatch.tool_dispatch"),
-        ("tools.clarification.investigation.clarification", "runtime.workflow.recovery.clarification"),
-        ("tools.classification.classification", "runtime.assessment.evaluation.classification"),
+        (
+            "runtime.platform.tool_dispatch",
+            "runtime.infrastructure.dispatch.tool_dispatch",
+        ),
+        (
+            "tools.clarification.investigation.clarification",
+            "runtime.workflow.recovery.clarification",
+        ),
+        (
+            "tools.classification.classification",
+            "runtime.assessment.evaluation.classification",
+        ),
         ("tools.classification", "runtime.assessment.evaluation.classification"),
         ("tools.context", "runtime.workflow.state"),
         ("tools.control", "runtime.workflow.recovery"),
