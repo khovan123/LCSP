@@ -30,7 +30,11 @@ from subagents import (
     INVESTIGATOR_TOOLS,
     PLANNER_TOOLS,
     RESOLVER_TOOLS,
+    TRIAGE_TOOLS,
 )
+
+
+TRIAGE_TOOL_NAMES: tuple[str, ...] = ("maintain_legal_catalog",)
 
 
 def _names(tools: list[object]) -> tuple[str, ...]:
@@ -53,7 +57,7 @@ def _implementation_files(path: Path) -> set[str]:
     }
 
 
-def _authored_tool_layout() -> dict[str, tuple[str, ...]]:
+def _assessment_authored_tool_layout() -> dict[str, tuple[str, ...]]:
     return {
         "common": COMMON_TOOL_NAMES,
         "planner": ("get_scan_coverage",),
@@ -70,9 +74,11 @@ def _authored_tool_layout() -> dict[str, tuple[str, ...]]:
     }
 
 
-def test_canonical_flow_keeps_context_needs_input_resume_and_deterministic_gate() -> None:
+def test_canonical_flow_separates_wizard_and_investigation_needs_input_loops() -> None:
     assert FLOW_ORDER == (
         "context_wizard",
+        "wizard_needs_input",
+        "wizard_resume",
         "plan",
         "investigate",
         "needs_input",
@@ -83,6 +89,8 @@ def test_canonical_flow_keeps_context_needs_input_resume_and_deterministic_gate(
         "report",
     )
     assert NON_MODEL_FLOW_STEPS == (
+        "wizard_needs_input",
+        "wizard_resume",
         "needs_input",
         "resume",
         "gate",
@@ -93,7 +101,9 @@ def test_canonical_flow_keeps_context_needs_input_resume_and_deterministic_gate(
 
 def test_canonical_flow_declares_only_expected_transitions() -> None:
     assert ALLOWED_FLOW_TRANSITIONS == {
-        "context_wizard": frozenset({"plan"}),
+        "context_wizard": frozenset({"plan", "wizard_needs_input"}),
+        "wizard_needs_input": frozenset({"wizard_resume"}),
+        "wizard_resume": frozenset({"context_wizard"}),
         "plan": frozenset({"investigate", "needs_input"}),
         "investigate": frozenset({"needs_input", "gate"}),
         "needs_input": frozenset({"resolve"}),
@@ -105,6 +115,9 @@ def test_canonical_flow_declares_only_expected_transitions() -> None:
     }
 
     assert_flow_transition("context_wizard", "plan")
+    assert_flow_transition("context_wizard", "wizard_needs_input")
+    assert_flow_transition("wizard_needs_input", "wizard_resume")
+    assert_flow_transition("wizard_resume", "context_wizard")
     assert_flow_transition("plan", "investigate")
     assert_flow_transition("plan", "needs_input")
     assert_flow_transition("investigate", "needs_input")
@@ -118,11 +131,14 @@ def test_canonical_flow_declares_only_expected_transitions() -> None:
 
     with pytest.raises(ValueError, match="invalid LCSP flow transition"):
         assert_flow_transition("context_wizard", "investigate")
+    with pytest.raises(ValueError, match="invalid LCSP flow transition"):
+        assert_flow_transition("wizard_needs_input", "plan")
     with pytest.raises(ValueError, match="unknown LCSP flow step"):
         assert_flow_transition("unknown", "context_wizard")
 
 
 def test_subagents_receive_fixed_minimal_tool_surfaces() -> None:
+    assert _names(TRIAGE_TOOLS) == TRIAGE_TOOL_NAMES
     assert _names(CONTEXT_WIZARD_TOOLS) == NODE_TOOL_NAMES["context_wizard"]
     assert _names(PLANNER_TOOLS) == NODE_TOOL_NAMES["planner"]
     assert _names(INVESTIGATOR_TOOLS) == NODE_TOOL_NAMES["investigator"]
@@ -130,25 +146,37 @@ def test_subagents_receive_fixed_minimal_tool_surfaces() -> None:
 
     by_name = {item["name"]: item for item in FLOW_SUBAGENTS}
     assert tuple(by_name) == (
+        "triage",
         "context_wizard",
         "planner",
         "investigator",
         "resolver",
     )
-    for role in by_name:
+    assert _names(by_name["triage"]["tools"]) == TRIAGE_TOOL_NAMES
+    for role in ("context_wizard", "planner", "investigator", "resolver"):
         assert _names(by_name[role]["tools"]) == NODE_TOOL_NAMES[role]
+
+
+def test_triage_is_specialist_not_assessment_pipeline_node() -> None:
+    assert "triage" not in NODE_TOOL_NAMES
+    triage_prompt = str(
+        next(item for item in FLOW_SUBAGENTS if item["name"] == "triage")["system_prompt"]
+    )
+    assert "LEGAL_MAINTENANCE" in triage_prompt
+    assert "Never select law for a customer assessment" in triage_prompt
 
 
 def test_subagent_definitions_are_owned_by_role_directories() -> None:
     subagents_root = PROJECT_ROOT / "subagents"
     assert _directory_names(subagents_root) == {
+        "triage",
         "context_wizard",
         "planner",
         "investigator",
         "resolver",
     }
     assert not (PROJECT_ROOT / "subagents.py").exists()
-    for role in ("context_wizard", "planner", "investigator", "resolver"):
+    for role in ("triage", "context_wizard", "planner", "investigator", "resolver"):
         assert (subagents_root / role / "definition.py").is_file()
 
 
@@ -175,14 +203,18 @@ def test_legal_hydration_stops_before_planner_and_investigator() -> None:
     assert "get_assessment_context" not in NODE_TOOL_NAMES["investigator"]
 
 
-def test_agent_facing_tools_follow_node_tool_code_layout() -> None:
-    for node, tool_names in _authored_tool_layout().items():
+def test_agent_facing_assessment_tools_follow_node_tool_code_layout() -> None:
+    for node, tool_names in _assessment_authored_tool_layout().items():
         for tool_name in tool_names:
             assert (PROJECT_ROOT / "tools" / node / tool_name / "code.py").is_file()
 
+    assert (
+        PROJECT_ROOT / "tools" / "triage" / "maintain_legal_catalog" / "code.py"
+    ).is_file()
 
-def test_all_authored_tool_modules_use_canonical_envelope_and_import() -> None:
-    for node, tool_names in _authored_tool_layout().items():
+
+def test_assessment_authored_tool_modules_use_canonical_envelope_and_import() -> None:
+    for node, tool_names in _assessment_authored_tool_layout().items():
         for tool_name in tool_names:
             code_path = PROJECT_ROOT / "tools" / node / tool_name / "code.py"
             source = code_path.read_text(encoding="utf-8")
@@ -194,6 +226,22 @@ def test_all_authored_tool_modules_use_canonical_envelope_and_import() -> None:
             assert getattr(authored_tool, "name") == tool_name
 
 
+def test_triage_tool_is_bounded_to_approved_legal_sources() -> None:
+    code_path = PROJECT_ROOT / "tools" / "triage" / "maintain_legal_catalog" / "code.py"
+    source = code_path.read_text(encoding="utf-8")
+
+    assert "MaintainLegalCatalogInput" in source
+    assert "LegalIntelligenceMaintenanceService" in source
+    assert "max_runs" in source
+    assert "correlation_id" in source
+    assert "source_url" not in source
+    assert "document_id" not in source
+    assert "gateway_document_id" not in source
+
+    module = importlib.import_module("tools.triage.maintain_legal_catalog.code")
+    assert getattr(module.maintain_legal_catalog, "name") == "maintain_legal_catalog"
+
+
 def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
     assert _directory_names(PROJECT_ROOT / "tools") == {
         "common",
@@ -201,6 +249,7 @@ def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
         "investigator",
         "resolver",
         "orchestration",
+        "triage",
     }
     assert _directory_names(PROJECT_ROOT / "tools" / "common") == set(COMMON_TOOL_NAMES)
     assert _directory_names(PROJECT_ROOT / "tools" / "planner") == {"get_scan_coverage"}
@@ -216,6 +265,7 @@ def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
     assert _directory_names(PROJECT_ROOT / "tools" / "orchestration") == set(
         ORCHESTRATION_TOOL_NAMES
     )
+    assert _directory_names(PROJECT_ROOT / "tools" / "triage") == set(TRIAGE_TOOL_NAMES)
 
 
 def test_runtime_owns_non_model_callable_implementation_domains() -> None:
@@ -229,7 +279,12 @@ def test_runtime_owns_non_model_callable_implementation_domains() -> None:
         "infrastructure",
     }
     assert _directory_names(runtime / "evidence") == {"graph", "scanner", "provenance"}
-    assert _directory_names(runtime / "legal") == {"corpus", "retrieval", "sources"}
+    assert _directory_names(runtime / "legal") == {
+        "corpus",
+        "retrieval",
+        "sources",
+        "maintenance",
+    }
     assert _directory_names(runtime / "assessment") == {
         "planning",
         "investigation",
@@ -318,6 +373,9 @@ def test_runtime_owns_non_model_callable_implementation_domains() -> None:
     ).is_file()
     assert (
         runtime / "legal" / "sources" / "extraction" / "official_text_extraction.py"
+    ).is_file()
+    assert (
+        runtime / "legal" / "maintenance" / "service.py"
     ).is_file()
     assert (
         runtime
