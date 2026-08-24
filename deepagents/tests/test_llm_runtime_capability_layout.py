@@ -69,6 +69,21 @@ def test_flat_llm_support_imports_route_to_capability_packages() -> None:
     )
 
 
+def test_tools_common_llm_legacy_submodules_route_to_capability_files() -> None:
+    _assert_alias(
+        "tools.common.llm.budget_tracker",
+        "runtime.infrastructure.llm.budget.budget_tracker",
+    )
+    _assert_alias(
+        "tools.common.llm.prompt_safety",
+        "runtime.infrastructure.llm.safety.prompt_safety",
+    )
+    _assert_alias(
+        "tools.common.llm.docker_sandbox",
+        "runtime.infrastructure.llm.sandbox.docker_sandbox",
+    )
+
+
 def test_deep_agent_client_remains_root_entrypoint_for_skill_paths() -> None:
     module = importlib.import_module("runtime.infrastructure.llm.deep_agent_client")
     module_path = Path(str(module.__file__)).resolve()
