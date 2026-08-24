@@ -57,7 +57,7 @@ def test_scanner_root_only_contains_capability_packages() -> None:
         "tool_registry.py",
         "toolchain_execution.py",
     }
-    assert (scanner / "syft-config.yaml").is_file()
+    assert (scanner / "tools" / "syft-config.yaml").is_file()
 
 
 def _assert_alias(legacy: str, canonical: str) -> None:
