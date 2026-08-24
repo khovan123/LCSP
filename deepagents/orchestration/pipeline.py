@@ -16,7 +16,17 @@ FLOW_STEPS: tuple[FlowStep, ...] = (
     FlowStep(
         "context_wizard",
         "context_wizard",
-        "Hydrate pinned Wizard/assessment context and active EngineeringRules before planning.",
+        "Hydrate pinned rules/context and proactively identify missing business facts.",
+    ),
+    FlowStep(
+        "wizard_needs_input",
+        "orchestrator",
+        "Persist the generated Wizard clarification round and wait for user answers before planning.",
+    ),
+    FlowStep(
+        "wizard_resume",
+        "orchestrator",
+        "Resume Context Wizard from checkpoint after Wizard answers are saved.",
     ),
     FlowStep(
         "plan",
@@ -31,7 +41,7 @@ FLOW_STEPS: tuple[FlowStep, ...] = (
     FlowStep(
         "needs_input",
         "orchestrator",
-        "Record the exact unresolved fact and pause the current investigation branch.",
+        "Record an investigation-time unresolved fact and pause the current investigation branch.",
     ),
     FlowStep(
         "resolve",
@@ -48,22 +58,16 @@ FLOW_STEPS: tuple[FlowStep, ...] = (
         "deterministic-runtime",
         "Validate claims and evaluate EngineeringRules deterministically.",
     ),
-    FlowStep(
-        "gap",
-        "application-runtime",
-        "Build evidence-backed gaps from deterministic EngineeringRule outcomes.",
-    ),
-    FlowStep(
-        "report",
-        "application-runtime",
-        "Produce guarded report and audit artifacts.",
-    ),
+    FlowStep("gap", "application-runtime", "Build evidence-backed gaps from deterministic EngineeringRule outcomes."),
+    FlowStep("report", "application-runtime", "Produce guarded report and audit artifacts."),
 )
 
 FLOW_ORDER: tuple[str, ...] = tuple(step.name for step in FLOW_STEPS)
 
 ALLOWED_FLOW_TRANSITIONS: dict[str, frozenset[str]] = {
-    "context_wizard": frozenset({"plan"}),
+    "context_wizard": frozenset({"plan", "wizard_needs_input"}),
+    "wizard_needs_input": frozenset({"wizard_resume"}),
+    "wizard_resume": frozenset({"context_wizard"}),
     "plan": frozenset({"investigate", "needs_input"}),
     "investigate": frozenset({"needs_input", "gate"}),
     "needs_input": frozenset({"resolve"}),
@@ -81,12 +85,10 @@ def assert_flow_transition(current: str, next_step: str) -> None:
         raise ValueError(f"unknown LCSP flow step: {current}")
     if next_step not in allowed:
         raise ValueError(
-            f"invalid LCSP flow transition: {current} -> {next_step}; "
-            f"allowed={sorted(allowed)}"
+            f"invalid LCSP flow transition: {current} -> {next_step}; allowed={sorted(allowed)}"
         )
 
 
-# Physical authored tools under tools/common. Exposure is assigned per pipeline role below.
 COMMON_TOOL_NAMES: tuple[str, ...] = (
     "get_assessment_context",
     "get_legal_corpus_readiness",
@@ -100,10 +102,7 @@ NODE_TOOL_NAMES: dict[str, tuple[str, ...]] = {
         "get_legal_corpus_readiness",
         "retrieve_legal_basis",
     ),
-    "planner": (
-        "search_program_graph",
-        "get_scan_coverage",
-    ),
+    "planner": ("search_program_graph", "get_scan_coverage"),
     "investigator": (
         "search_program_graph",
         "trace_static_flow",
@@ -113,15 +112,14 @@ NODE_TOOL_NAMES: dict[str, tuple[str, ...]] = {
         "get_symbol_context",
         "find_provider_invocations",
     ),
-    "resolver": (
-        "get_assessment_context",
-        "compare_wizard_claim",
-    ),
+    "resolver": ("get_assessment_context", "compare_wizard_claim"),
 }
 
 ORCHESTRATION_TOOL_NAMES: tuple[str, ...] = ("request_targeted_reanalysis",)
 
 NON_MODEL_FLOW_STEPS: tuple[str, ...] = (
+    "wizard_needs_input",
+    "wizard_resume",
     "needs_input",
     "resume",
     "gate",
