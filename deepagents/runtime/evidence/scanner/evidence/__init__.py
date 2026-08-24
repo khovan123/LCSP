@@ -1,4 +1,4 @@
-"""Bounded scanner parsers grouped by parsing strategy."""
+"""Scanner evidence runtime grouped by evidence-processing capability."""
 from __future__ import annotations
 
 import importlib.abc
@@ -8,10 +8,9 @@ from pathlib import Path
 from typing import Final
 
 _CAPABILITY_MODULES: Final[dict[str, frozenset[str]]] = {
-    "python": frozenset({"python_ast_parser", "python_cst_parser"}),
-    "structural": frozenset(
-        {"structural_augmentor", "structural_types", "tree_sitter_parser"}
-    ),
+    "contract": frozenset({"models", "schema_validator"}),
+    "quality": frozenset({"privacy_gate", "quality_gate", "severity_mapper"}),
+    "finalization": frozenset({"terminal_state_handler"}),
 }
 _PREFIX = f"{__name__}."
 _ROOT = Path(__file__).resolve().parent
@@ -41,7 +40,7 @@ def _physical_path(fullname: str) -> Path | None:
     return _ROOT / owner / f"{parts[0]}.py" if owner is not None else None
 
 
-class _ParserCapabilityAliasFinder(importlib.abc.MetaPathFinder):
+class _ScannerEvidenceAliasFinder(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname: str, path=None, target=None):  # type: ignore[override]
         module_path = _physical_path(fullname)
         if module_path is None or not module_path.is_file():
@@ -49,5 +48,5 @@ class _ParserCapabilityAliasFinder(importlib.abc.MetaPathFinder):
         return importlib.util.spec_from_file_location(fullname, module_path)
 
 
-if not any(isinstance(finder, _ParserCapabilityAliasFinder) for finder in sys.meta_path):
-    sys.meta_path.insert(0, _ParserCapabilityAliasFinder())
+if not any(isinstance(finder, _ScannerEvidenceAliasFinder) for finder in sys.meta_path):
+    sys.meta_path.insert(0, _ScannerEvidenceAliasFinder())
