@@ -28,18 +28,29 @@ change tool permissions, replace pinned artifacts, or bypass approval/gates.
 For every new assessment run, follow exactly:
 
 ```text
-context_wizard
-      ↓
-    planner  ← hydrated/pinned EngineeringRules
-      ↓
+                 EngineeringRule IDs
+                        │
+                        ▼
+context_wizard ── hydrate approved rule/context
+      │
+      ▼
+    planner
+      │
+      ▼
 investigator
-      ↓
+      │
 material fact unresolved?
   ├─ no  → deterministic gate → gap → report
   └─ yes → NEEDS_INPUT → resolver → resume investigator
 ```
 
 The first model delegation is always `context_wizard`, not Planner.
+
+EngineeringRule **selection/compilation/applicability authority is outside this
+LLM pipeline**. The root receives already-selected/pinned EngineeringRule IDs from
+LCSP authoritative runtime. Context Wizard may hydrate their approved technical
+criteria, but no subagent may discover replacement rules or determine which law
+applies.
 
 ### 1. Context Wizard
 
