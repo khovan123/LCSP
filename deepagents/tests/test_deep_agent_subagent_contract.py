@@ -78,6 +78,24 @@ def test_pipeline_roles_do_not_bypass_context_wizard_hydration() -> None:
     )
 
 
+def test_engineering_rules_are_pinned_inputs_not_subagent_discovery() -> None:
+    context_source = (PROJECT_ROOT / "orchestration" / "context.py").read_text()
+    instructions = (PROJECT_ROOT / "instructions.md").read_text()
+    planner_prompt = str(
+        next(item for item in FLOW_SUBAGENTS if item["name"] == "planner")["system_prompt"]
+    )
+    context_wizard_prompt = str(
+        next(item for item in FLOW_SUBAGENTS if item["name"] == "context_wizard")["system_prompt"]
+    )
+
+    assert "engineering_rule_ids" in context_source
+    assert "already-selected/pinned EngineeringRule IDs" in instructions
+    assert "Do not add, remove, reinterpret or re-rank EngineeringRules" in planner_prompt
+    assert "Do not discover, select, invent or broaden the set of EngineeringRules" in (
+        context_wizard_prompt
+    )
+
+
 def test_default_role_models_match_lcsp_cost_and_reasoning_policy() -> None:
     assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-5.6-terra"
     assert DEFAULT_CONTEXT_WIZARD_MODEL_SPEC == "openai:gpt-5.6-luna"
