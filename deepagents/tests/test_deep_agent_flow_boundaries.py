@@ -25,6 +25,7 @@ from harness import (
     LCSP_HARNESS_PROFILE,
 )
 from subagents import (
+    CONTEXT_WIZARD_TOOLS,
     FLOW_SUBAGENTS,
     INVESTIGATOR_TOOLS,
     PLANNER_TOOLS,
@@ -69,8 +70,9 @@ def _authored_tool_layout() -> dict[str, tuple[str, ...]]:
     }
 
 
-def test_canonical_flow_keeps_needs_input_resume_and_deterministic_gate() -> None:
+def test_canonical_flow_keeps_context_needs_input_resume_and_deterministic_gate() -> None:
     assert FLOW_ORDER == (
+        "context_wizard",
         "plan",
         "investigate",
         "needs_input",
@@ -91,41 +93,63 @@ def test_canonical_flow_keeps_needs_input_resume_and_deterministic_gate() -> Non
 
 def test_canonical_flow_declares_only_expected_transitions() -> None:
     assert ALLOWED_FLOW_TRANSITIONS == {
-        "plan": frozenset({"investigate"}),
+        "context_wizard": frozenset({"plan"}),
+        "plan": frozenset({"investigate", "needs_input"}),
         "investigate": frozenset({"needs_input", "gate"}),
         "needs_input": frozenset({"resolve"}),
-        "resolve": frozenset({"resume"}),
+        "resolve": frozenset({"resume", "needs_input"}),
         "resume": frozenset({"investigate"}),
         "gate": frozenset({"gap"}),
         "gap": frozenset({"report"}),
         "report": frozenset(),
     }
 
+    assert_flow_transition("context_wizard", "plan")
     assert_flow_transition("plan", "investigate")
+    assert_flow_transition("plan", "needs_input")
     assert_flow_transition("investigate", "needs_input")
     assert_flow_transition("needs_input", "resolve")
     assert_flow_transition("resolve", "resume")
+    assert_flow_transition("resolve", "needs_input")
     assert_flow_transition("resume", "investigate")
     assert_flow_transition("investigate", "gate")
     assert_flow_transition("gate", "gap")
     assert_flow_transition("gap", "report")
 
     with pytest.raises(ValueError, match="invalid LCSP flow transition"):
-        assert_flow_transition("plan", "gate")
+        assert_flow_transition("context_wizard", "investigate")
     with pytest.raises(ValueError, match="unknown LCSP flow step"):
-        assert_flow_transition("unknown", "plan")
+        assert_flow_transition("unknown", "context_wizard")
 
 
 def test_subagents_receive_fixed_minimal_tool_surfaces() -> None:
+    assert _names(CONTEXT_WIZARD_TOOLS) == NODE_TOOL_NAMES["context_wizard"]
     assert _names(PLANNER_TOOLS) == NODE_TOOL_NAMES["planner"]
     assert _names(INVESTIGATOR_TOOLS) == NODE_TOOL_NAMES["investigator"]
     assert _names(RESOLVER_TOOLS) == NODE_TOOL_NAMES["resolver"]
 
     by_name = {item["name"]: item for item in FLOW_SUBAGENTS}
-    assert tuple(by_name) == ("planner", "investigator", "resolver")
-    assert _names(by_name["planner"]["tools"]) == NODE_TOOL_NAMES["planner"]
-    assert _names(by_name["investigator"]["tools"]) == NODE_TOOL_NAMES["investigator"]
-    assert _names(by_name["resolver"]["tools"]) == NODE_TOOL_NAMES["resolver"]
+    assert tuple(by_name) == (
+        "context_wizard",
+        "planner",
+        "investigator",
+        "resolver",
+    )
+    for role in by_name:
+        assert _names(by_name[role]["tools"]) == NODE_TOOL_NAMES[role]
+
+
+def test_subagent_definitions_are_owned_by_role_directories() -> None:
+    subagents_root = PROJECT_ROOT / "subagents"
+    assert _directory_names(subagents_root) == {
+        "context_wizard",
+        "planner",
+        "investigator",
+        "resolver",
+    }
+    assert not (PROJECT_ROOT / "subagents.py").exists()
+    for role in ("context_wizard", "planner", "investigator", "resolver"):
+        assert (subagents_root / role / "definition.py").is_file()
 
 
 def test_common_and_orchestration_tools_are_classified_explicitly() -> None:
@@ -137,9 +161,18 @@ def test_common_and_orchestration_tools_are_classified_explicitly() -> None:
     )
     assert ORCHESTRATION_TOOL_NAMES == ("request_targeted_reanalysis",)
     for tool_name in ORCHESTRATION_TOOL_NAMES:
+        assert tool_name not in NODE_TOOL_NAMES["context_wizard"]
         assert tool_name not in NODE_TOOL_NAMES["planner"]
         assert tool_name not in NODE_TOOL_NAMES["investigator"]
         assert tool_name not in NODE_TOOL_NAMES["resolver"]
+
+
+def test_legal_hydration_stops_before_planner_and_investigator() -> None:
+    assert "retrieve_legal_basis" in NODE_TOOL_NAMES["context_wizard"]
+    assert "retrieve_legal_basis" not in NODE_TOOL_NAMES["planner"]
+    assert "retrieve_legal_basis" not in NODE_TOOL_NAMES["investigator"]
+    assert "get_assessment_context" not in NODE_TOOL_NAMES["planner"]
+    assert "get_assessment_context" not in NODE_TOOL_NAMES["investigator"]
 
 
 def test_agent_facing_tools_follow_node_tool_code_layout() -> None:
@@ -387,6 +420,7 @@ def test_harness_hides_non_skill_filesystem_and_execute_tools() -> None:
     )
     assert "read_file" not in HIDDEN_BUILTIN_TOOLS
     assert "task" not in HIDDEN_BUILTIN_TOOLS
+    assert "write_todos" not in HIDDEN_BUILTIN_TOOLS
 
 
 def test_filesystem_permissions_only_allow_reading_managed_skills() -> None:
