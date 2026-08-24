@@ -459,7 +459,7 @@ def required_manifest_string(values: dict[str, Any], key: str, source: str) -> s
 
 def _load_script_module(filename: str):
     """Load an AO-6 corpus build/orchestration script from the legal runtime."""
-    path = Path(__file__).resolve().parent / "scripts" / filename
+    path = Path(__file__).resolve().parents[2] / "scripts" / filename
     spec = importlib.util.spec_from_file_location(filename.removesuffix(".py"), path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load AO-6 script: {path}")
@@ -470,7 +470,7 @@ def _load_script_module(filename: str):
 
 def _worker_root() -> Path:
     """Return the root directory of the Managed Agent package/project."""
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[4]
 
 
 def _sha256_text(value: str) -> str:

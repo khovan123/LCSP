@@ -23,6 +23,14 @@ _CAPABILITY_MODULES: Final[dict[str, frozenset[str]]] = {
     "partial_update": frozenset({"partial_update_context_builder"}),
     "relationships": frozenset({"relationship_manifest_repository"}),
 }
+_EXTERNAL_SOURCE_MODULES: Final[dict[str, str]] = {
+    "official_text_extraction": "runtime.legal.sources.extraction.official_text_extraction",
+    "official_text_extraction_repository": (
+        "runtime.legal.sources.extraction.official_text_extraction_repository"
+    ),
+    "ocr_fallback_repository": "runtime.legal.sources.ocr_fallback.ocr_fallback_repository",
+    "ocr_quality_repository": "runtime.legal.sources.ocr_quality.ocr_quality_repository",
+}
 _PREFIX = f"{__name__}."
 
 
@@ -37,14 +45,30 @@ def _canonical_corpus_name(fullname: str) -> str | None:
     if not fullname.startswith(_PREFIX):
         return None
     parts = fullname[len(_PREFIX) :].split(".")
-    if not parts or parts[0] in {*_CAPABILITY_MODULES, "engineering_rules", "models"}:
-        if len(parts) >= 2 and parts[0] in _CAPABILITY_MODULES:
+    if not parts:
+        return None
+
+    if parts[0] in _CAPABILITY_MODULES:
+        if len(parts) >= 2:
+            external = _EXTERNAL_SOURCE_MODULES.get(parts[1])
+            if external is not None:
+                tail = ".".join(parts[2:])
+                return f"{external}.{tail}" if tail else external
             owner = _owner(parts[1])
             if owner is not None and owner != parts[0]:
                 target = f"{_PREFIX}{owner}.{parts[1]}"
                 tail = ".".join(parts[2:])
                 return f"{target}.{tail}" if tail else target
         return None
+
+    if parts[0] in {"engineering_rules", "models"}:
+        return None
+
+    external = _EXTERNAL_SOURCE_MODULES.get(parts[0])
+    if external is not None:
+        tail = ".".join(parts[1:])
+        return f"{external}.{tail}" if tail else external
+
     owner = _owner(parts[0])
     if owner is None:
         return None

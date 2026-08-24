@@ -89,39 +89,67 @@ def test_program_graph_runtime_groups_owned_capabilities() -> None:
         "source_roles.py",
         "vocabulary.py",
     }
-    assert _implementation_files(root / "construction") == {
+
+    construction = root / "construction"
+    assert _directories(construction) == {"assembly", "extraction", "validation"}
+    assert _implementation_files(construction) == set()
+    assert _implementation_files(construction / "assembly") == {
         "assembler.py",
         "builder.py",
+    }
+    assert _implementation_files(construction / "extraction") == {
         "extractor.py",
-        "semantic_integrity.py",
         "source_evidence.py",
+    }
+    assert _implementation_files(construction / "validation") == {
+        "semantic_integrity.py",
         "validator.py",
     }
-    assert _implementation_files(root / "lineage") == {
+
+    lineage = root / "lineage"
+    assert _directories(lineage) == {"ai", "contract", "data", "sensitive", "decision"}
+    assert _implementation_files(lineage) == set()
+    assert _implementation_files(lineage / "ai") == {
         "ai_invocation_gate.py",
         "ai_lifecycle.py",
+    }
+    assert _implementation_files(lineage / "contract") == {
         "contract_flow.py",
         "contract_lineage.py",
+    }
+    assert _implementation_files(lineage / "data") == {
         "data_lineage.py",
         "database_lineage.py",
-        "decision_influence.py",
+    }
+    assert _implementation_files(lineage / "sensitive") == {
         "sensitive_data.py",
         "sensitive_lineage_gate.py",
     }
-    assert _implementation_files(root / "resolution") == {
+    assert _implementation_files(lineage / "decision") == {"decision_influence.py"}
+
+    resolution = root / "resolution"
+    assert _directories(resolution) == {"boundary", "framework", "architecture", "dispatch"}
+    assert _implementation_files(resolution) == set()
+    assert _implementation_files(resolution / "boundary") == {
         "api_boundary_resolution.py",
+        "python_agent_boundary_resolution.py",
+    }
+    assert _implementation_files(resolution / "framework") == {
         "framework_boundary_finalizer.py",
         "framework_links.py",
         "framework_metadata.py",
         "framework_resolution.py",
-        "generic_dispatch_resolution.py",
+        "python_framework_adapters.py",
+    }
+    assert _implementation_files(resolution / "architecture") == {
         "javascript_architecture_resolution.py",
         "managed_architecture_resolution.py",
-        "protocol_resolution.py",
-        "python_agent_boundary_resolution.py",
         "python_architecture_resolution.py",
-        "python_framework_adapters.py",
         "redux_extended_resolution.py",
+    }
+    assert _implementation_files(resolution / "dispatch") == {
+        "generic_dispatch_resolution.py",
+        "protocol_resolution.py",
     }
     assert _implementation_files(root / "query") == {"query_engine.py"}
 
