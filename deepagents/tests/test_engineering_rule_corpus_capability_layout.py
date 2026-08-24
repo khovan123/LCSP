@@ -73,3 +73,25 @@ def test_flat_engineering_rule_imports_route_to_lifecycle_packages() -> None:
         "runtime.legal.corpus.engineering_rules.service",
         "runtime.legal.corpus.engineering_rules.orchestration.service",
     )
+
+
+def test_moved_lifecycle_relative_imports_route_to_contract_owner() -> None:
+    _assert_alias(
+        "runtime.legal.corpus.engineering_rules.registry.models",
+        "runtime.legal.corpus.engineering_rules.contract.models",
+    )
+    _assert_alias(
+        "runtime.legal.corpus.engineering_rules.compilation.models",
+        "runtime.legal.corpus.engineering_rules.contract.models",
+    )
+
+
+def test_legacy_engineering_rule_relative_imports_route_to_contract_owner() -> None:
+    legacy = importlib.import_module("tools.legal.legal.engineering_rules.registry.models")
+    canonical = importlib.import_module(
+        "runtime.legal.corpus.engineering_rules.contract.models"
+    )
+    assert Path(str(legacy.__file__)).resolve() == Path(
+        str(canonical.__file__)
+    ).resolve()
+    assert legacy.EngineeringRule.__name__ == "EngineeringRule"
