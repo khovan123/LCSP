@@ -1,4 +1,4 @@
-"""Consume legal catalog check-update commands and trigger partial updates if changes are detected."""
+"""Consume legal catalog checks and return bounded partial-update handoffs."""
 
 from __future__ import annotations
 
@@ -10,9 +10,7 @@ from typing import Any
 from structlog import get_logger
 
 from tools.common.agentic_evidence.dispatcher import LegalToolDispatcher
-from tools.common.agentic_evidence.legal_tool_entrypoints import (
-    LegalToolExecutionContext,
-)
+from tools.common.agentic_evidence.legal_tool_entrypoints import LegalToolExecutionContext
 from tools.legal.legal.partial_update_context_builder import build_partial_update_context
 from tools.common.platform.api_client import WorkerApiClient
 from tools.common.managed.boundary import AgentBoundaryBase, NonRetryableAgentBoundaryError
@@ -27,7 +25,7 @@ PARTIAL_UPDATE_EXCHANGE = "lcsp.legal-partial-updates"
 @dataclass(frozen=True)
 class CheckUpdatesEnvelope:
     """Validated command fields needed to check updates for a document."""
-    
+
     document_id: str
     catalog_source_ref: str
     source_url: str
@@ -40,29 +38,45 @@ class CheckUpdatesEnvelope:
     max_bytes: int
 
 
+@dataclass(frozen=True)
+class LegalChangeCheckResult:
+    """Direct handoff from source-change detection to legal intelligence orchestration."""
+
+    status: str
+    document_id: str
+    changed: bool
+    partial_update_context: dict[str, Any] | None = None
+    snapshot_ref: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "documentId": self.document_id,
+            "changed": self.changed,
+            "partialUpdateContext": self.partial_update_context,
+            "snapshotRef": self.snapshot_ref,
+        }
+
+
 class LegalChangeDetectorBoundary(AgentBoundaryBase):
-    """Detect changes in legal sources and emit partial update context if needed."""
+    """Detect changes and return the partial-update context to the caller.
+
+    RabbitMQ publication is retained only as a compatibility side effect when a
+    legacy channel is attached. Managed Deep Agents callers consume the return
+    value directly, so partial updates cannot disappear when no broker exists.
+    """
 
     boundary_source = LEGAL_CHANGE_DETECTOR_BOUNDARY_SOURCE
     source_event = LEGAL_CHANGE_DETECTOR_COMMAND
     requires_pbac = False
     retry_delays_seconds = (30, 120, 600)
 
-    def __init__(
-        self,
-        config,
-        pbac_client=None,
-        api_client: WorkerApiClient | None = None,
-        snapshot_fetcher=None,
-    ) -> None:
+    def __init__(self, config, pbac_client=None, api_client: WorkerApiClient | None = None, snapshot_fetcher=None) -> None:
         super().__init__(config, pbac_client)
-        self._api_client = api_client or WorkerApiClient(
-            config.nestjs_api_base_url,
-            config.worker_api_key,
-        )
+        self._api_client = api_client or WorkerApiClient(config.nestjs_api_base_url, config.worker_api_key)
         self._snapshot_fetcher = snapshot_fetcher
 
-    def handle(self, message: dict[str, Any], correlationId: str) -> None:
+    def handle(self, message: dict[str, Any], correlationId: str) -> dict[str, Any]:
         envelope = self._read_envelope(message)
         storage_root = self._storage_root()
         output_dir = self._source_output_dir(storage_root=storage_root, envelope=envelope)
@@ -74,12 +88,7 @@ class LegalChangeDetectorBoundary(AgentBoundaryBase):
             )
         )
 
-        # 1. Fetch new snapshot (similar to ingestion)
-        logger.info(
-            "FETCHING_NEW_SNAPSHOT_FOR_UPDATE_CHECK",
-            document_id=envelope.document_id,
-            output_dir=str(output_dir),
-        )
+        logger.info("FETCHING_NEW_SNAPSHOT_FOR_UPDATE_CHECK", document_id=envelope.document_id, output_dir=str(output_dir))
         result = dispatcher.dispatch(
             "fetch_official_source_snapshot",
             document_id=envelope.document_id,
@@ -91,10 +100,7 @@ class LegalChangeDetectorBoundary(AgentBoundaryBase):
             source_effect_status=None,
             expected_document_number=envelope.expected_document_number,
         )
-        old_html = self._read_base_snapshot_html(
-            storage_root=storage_root,
-            snapshot_ref=envelope.base_snapshot_ref,
-        )
+        old_html = self._read_base_snapshot_html(storage_root=storage_root, snapshot_ref=envelope.base_snapshot_ref)
 
         html_path = next(output_dir.glob("*.html"), None)
         if not html_path:
@@ -109,60 +115,57 @@ class LegalChangeDetectorBoundary(AgentBoundaryBase):
             old_html=old_html,
             new_html=new_html,
         )
-
-        if context:
-            registered = result.register_with_api(
-                api_client=self._api_client,
-                admin_catalog_version=envelope.admin_catalog_version,
-                catalog_source_ref=envelope.catalog_source_ref,
-                expected_document_number=envelope.expected_document_number,
-            )
-
-            final_context = build_partial_update_context(
+        if not context:
+            logger.info("NO_LEGAL_CHANGE_DETECTED", document_id=envelope.document_id, correlationId=correlationId)
+            return LegalChangeCheckResult(
+                status="UNCHANGED",
                 document_id=envelope.document_id,
-                source_url=envelope.source_url,
-                base_snapshot_ref=envelope.base_snapshot_ref,
-                new_snapshot_ref=registered.get("snapshotRef", "UNKNOWN"),
-                old_html=old_html,
-                new_html=new_html,
-            )
+                changed=False,
+            ).to_dict()
 
-            if final_context:
-                self._publish_partial_update(final_context.to_dict(), correlationId)
+        registered = result.register_with_api(
+            api_client=self._api_client,
+            admin_catalog_version=envelope.admin_catalog_version,
+            catalog_source_ref=envelope.catalog_source_ref,
+            expected_document_number=envelope.expected_document_number,
+        )
+        snapshot_ref = str(registered.get("snapshotRef") or "UNKNOWN")
+        final_context = build_partial_update_context(
+            document_id=envelope.document_id,
+            source_url=envelope.source_url,
+            base_snapshot_ref=envelope.base_snapshot_ref,
+            new_snapshot_ref=snapshot_ref,
+            old_html=old_html,
+            new_html=new_html,
+        )
+        if final_context is None:
+            raise NonRetryableAgentBoundaryError("changed legal source produced no partial update context")
 
-            logger.info(
-                "LEGAL_CHANGE_DETECTED",
-                document_id=envelope.document_id,
-                correlationId=correlationId,
-            )
-        else:
-            logger.info(
-                "NO_LEGAL_CHANGE_DETECTED",
-                document_id=envelope.document_id,
-                correlationId=correlationId,
-            )
+        payload = final_context.to_dict()
+        self._publish_partial_update(payload, correlationId)
+        logger.info("LEGAL_CHANGE_DETECTED", document_id=envelope.document_id, correlationId=correlationId)
+        return LegalChangeCheckResult(
+            status="CHANGED",
+            document_id=envelope.document_id,
+            changed=True,
+            partial_update_context=payload,
+            snapshot_ref=snapshot_ref,
+        ).to_dict()
 
     def _publish_partial_update(self, payload: dict[str, Any], correlationId: str) -> None:
-        """Publish the partial update context to the exchange."""
-        # Assuming the base class or channel has publish mechanism.
-        # This is a generic representation.
-        logger.info(
-            "PUBLISHING_PARTIAL_UPDATE_CONTEXT",
-            document_id=payload.get("documentId"),
-            correlationId=correlationId,
-        )
+        """Publish only for legacy broker-backed callers; MDA consumes the return value."""
+        logger.info("PUBLISHING_PARTIAL_UPDATE_CONTEXT", document_id=payload.get("documentId"), correlationId=correlationId)
         if hasattr(self, "channel") and self.channel:
             self.channel.basic_publish(
                 exchange=PARTIAL_UPDATE_EXCHANGE,
                 source_event="event.legal-catalog.partial-update.v1",
-                body=json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             )
 
     def _read_envelope(self, message: dict[str, Any]) -> CheckUpdatesEnvelope:
         document_id = str(message.get("documentId") or "")
         if not document_id:
             raise NonRetryableAgentBoundaryError("missing documentId")
-            
         return CheckUpdatesEnvelope(
             document_id=document_id,
             catalog_source_ref=str(message.get("catalogSourceRef") or ""),
@@ -177,28 +180,15 @@ class LegalChangeDetectorBoundary(AgentBoundaryBase):
         )
 
     def _storage_root(self) -> Path:
-        """Resolve the runtime legal corpus artifact root or fail terminally."""
         root = getattr(self._config, "legal_source_storage_root", None)
         if not isinstance(root, str) or not root.strip():
             raise NonRetryableAgentBoundaryError("LEGAL_SOURCE_STORAGE_ROOT is not configured")
         return Path(root).resolve()
 
-    def _source_output_dir(
-        self,
-        *,
-        storage_root: Path,
-        envelope: CheckUpdatesEnvelope,
-    ) -> Path:
-        """Build the cron crawl artifact directory under .corpus."""
-        return (
-            storage_root
-            / "source-crawl"
-            / "cron"
-            / _safe_path_segment(envelope.document_id)
-        )
+    def _source_output_dir(self, *, storage_root: Path, envelope: CheckUpdatesEnvelope) -> Path:
+        return storage_root / "source-crawl" / "cron" / _safe_path_segment(envelope.document_id)
 
     def _read_base_snapshot_html(self, *, storage_root: Path, snapshot_ref: str) -> str:
-        """Read the prior source snapshot object from the runtime corpus store."""
         if not snapshot_ref.strip():
             raise NonRetryableAgentBoundaryError("missing baseSnapshotRef")
         record = self._api_client.get_official_source_snapshot(snapshot_ref=snapshot_ref)
@@ -211,12 +201,9 @@ class LegalChangeDetectorBoundary(AgentBoundaryBase):
         except ValueError as exc:
             raise NonRetryableAgentBoundaryError("base snapshot object key escapes storage root") from exc
         if not object_path.is_file():
-            raise NonRetryableAgentBoundaryError(
-                f"base snapshot object is missing from corpus store: {object_key}"
-            )
+            raise NonRetryableAgentBoundaryError(f"base snapshot object is missing from corpus store: {object_key}")
         return object_path.read_text(encoding="utf-8")
 
 
 def _safe_path_segment(value: str) -> str:
-    """Normalize a runtime identifier for a bounded artifact directory segment."""
     return "".join(ch if ch.isalnum() or ch in "._:-" else "-" for ch in value)[:160]
