@@ -13,8 +13,11 @@ from deepagents import (
     register_harness_profile,
 )
 
+from model_policy import ALL_LCSP_MODEL_SPECS, ROOT_MODEL_SPEC
 
-LCSP_MODEL_SPEC = "openai:gpt-5"
+
+# Backward-compatible name used by the managed entrypoint/tests.
+LCSP_MODEL_SPEC = ROOT_MODEL_SPEC
 
 # Deep Agents injects filesystem tools in addition to authored tools. LCSP keeps
 # only read_file visible because Managed Skills use it for progressive disclosure.
@@ -54,5 +57,6 @@ LCSP_FILESYSTEM_PERMISSIONS = [
 
 
 def configure_lcsp_harness() -> None:
-    """Register the LCSP harness profile before Managed Deep Agents compiles the graph."""
-    register_harness_profile(LCSP_MODEL_SPEC, LCSP_HARNESS_PROFILE)
+    """Register identical LCSP restrictions for root and role-specific model specs."""
+    for model_spec in ALL_LCSP_MODEL_SPECS:
+        register_harness_profile(model_spec, LCSP_HARNESS_PROFILE)

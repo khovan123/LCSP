@@ -8,6 +8,7 @@ from managed_deepagents import define_deep_agent
 
 from flow import ORCHESTRATION_TOOL_NAMES
 from harness import LCSP_FILESYSTEM_PERMISSIONS, LCSP_MODEL_SPEC, configure_lcsp_harness
+from orchestrator import ROOT_ORCHESTRATOR_SYSTEM_PROMPT
 from subagents import FLOW_SUBAGENTS
 from tools.orchestration.request_targeted_reanalysis.code import (
     request_targeted_reanalysis,
@@ -22,15 +23,15 @@ if tuple(tool.name for tool in ROOT_TOOLS) != ORCHESTRATION_TOOL_NAMES:
     raise RuntimeError("root orchestration tools drifted from the canonical flow manifest")
 
 
-# Deep Agents tools are additive to harness tools. Register the LCSP profile first
-# so the managed graph has no default general-purpose subagent and no unrestricted
-# filesystem/shell surface.
+# Deep Agents tools are additive to harness tools. Register the LCSP profile for
+# every role-specific model before the managed graph compiles subagent stacks.
 configure_lcsp_harness()
 
 
 agent = define_deep_agent(
     name="lcsp-agent",
     model=LCSP_MODEL_SPEC,
+    system_prompt=ROOT_ORCHESTRATOR_SYSTEM_PROMPT,
     tools=ROOT_TOOLS,
     subagents=FLOW_SUBAGENTS,
     permissions=LCSP_FILESYSTEM_PERMISSIONS,
