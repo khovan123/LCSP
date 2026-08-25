@@ -1,15 +1,15 @@
 import {
-  AO4_AGENTIC_TOOL_EVENT_TYPES,
-  AO4_AGENTIC_TOOL_NAMES,
-} from "./agentic-tool-ao4.ts";
+  WIZARD_AGENTIC_TOOL_EVENT_TYPES,
+  WIZARD_AGENTIC_TOOL_NAMES,
+} from "./agentic-tool-wizard.ts";
 import {
-  AO5_AGENTIC_TOOL_EVENT_TYPES,
-  AO5_AGENTIC_TOOL_NAMES,
-} from "./agentic-tool-ao5.ts";
+  GAP_REQUIREMENTS_AGENTIC_TOOL_EVENT_TYPES,
+  GAP_REQUIREMENTS_AGENTIC_TOOL_NAMES,
+} from "./agentic-tool-gap-requirements.ts";
 import {
-  AO6_AGENTIC_TOOL_EVENT_TYPES,
-  AO6_AGENTIC_TOOL_NAMES,
-} from "./agentic-tool-ao6.ts";
+  ADMIN_SOURCE_CATALOG_AGENTIC_TOOL_EVENT_TYPES,
+  ADMIN_SOURCE_CATALOG_AGENTIC_TOOL_NAMES,
+} from "./agentic-tool-admin-source-catalog.ts";
 
 /** Shared value sets for the first protected agentic-evidence tools. */
 export const AGENTIC_TOOL_NAMES = {
@@ -43,9 +43,9 @@ export const AGENTIC_TOOL_NAMES = {
   buildLegalRetrievalIndex: "build_legal_retrieval_index",
   resumeWaitingRuns: "resume_waiting_runs",
   requestTargetedReanalysis: "request_targeted_reanalysis",
-  ...AO6_AGENTIC_TOOL_NAMES,
-  ...AO4_AGENTIC_TOOL_NAMES,
-  ...AO5_AGENTIC_TOOL_NAMES,
+  ...ADMIN_SOURCE_CATALOG_AGENTIC_TOOL_NAMES,
+  ...WIZARD_AGENTIC_TOOL_NAMES,
+  ...GAP_REQUIREMENTS_AGENTIC_TOOL_NAMES,
 } as const;
 
 export type AgenticToolName =
@@ -123,7 +123,7 @@ export const AGENTIC_TOOL_EVENT_TYPES = {
   similarSymbolsRead: "AGENTIC_TOOL_SIMILAR_SYMBOLS_READ",
   deploymentContextRead: "AGENTIC_TOOL_DEPLOYMENT_CONTEXT_READ",
   missingTargetProposalRead: "AGENTIC_TOOL_MISSING_TARGET_PROPOSAL_READ",
-  ...AO6_AGENTIC_TOOL_EVENT_TYPES,
-  ...AO4_AGENTIC_TOOL_EVENT_TYPES,
-  ...AO5_AGENTIC_TOOL_EVENT_TYPES,
+  ...ADMIN_SOURCE_CATALOG_AGENTIC_TOOL_EVENT_TYPES,
+  ...WIZARD_AGENTIC_TOOL_EVENT_TYPES,
+  ...GAP_REQUIREMENTS_AGENTIC_TOOL_EVENT_TYPES,
 } as const;

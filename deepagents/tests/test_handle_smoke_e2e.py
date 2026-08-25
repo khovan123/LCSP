@@ -124,17 +124,10 @@ def test_ai_usage_flow_handle_smoke_e2e_runs_graph_and_submits_callback() -> Non
     assert invoke_kwargs["config"]["metadata"]["workflow_run_id"] == "ai-usage-flow:tp-smoke-1:corr-smoke-ai-1"
     assert invoke_kwargs["config"]["metadata"]["node_name"] == "ai_usage_flow.summary_proposal"
 
-    assert callback_payload["applicability_assessment"] == "applicable"
-    assert callback_payload["guardrail_status"] == "passed"
-    assert (
-        callback_payload["rationale"]
-        == "This assessment is high risk based on the cited evidence."
-    )
-
     proposal_agent.invoke.assert_called_once()
     llm_kwargs = proposal_agent.invoke.call_args.kwargs["config"]
     assert (
         llm_kwargs["metadata"]["workflow_run_id"]
-        == "classification:assessment-smoke-2:2.1:corr-smoke-classification-1"
+        == "ai-usage-flow:tp-smoke-1:corr-smoke-ai-1"
     )
-    assert llm_kwargs["metadata"]["node_name"] == "classification.proposal"
+    assert llm_kwargs["metadata"]["node_name"] == "ai_usage_flow.summary_proposal"

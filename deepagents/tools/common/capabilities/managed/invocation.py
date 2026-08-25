@@ -10,7 +10,7 @@ from typing import Any, Type
 from tools.common.capabilities.agentic_evidence import (
     AgenticToolResolver,
     bind_runtime_handlers,
-    build_sprint6_agentic_registry,
+    build_engineering_rule_agentic_registry,
 )
 from tools.common.capabilities.agentic_evidence.governance.authorization import ApiPbacToolAuthorizer
 from tools.common.capabilities.platform.pbac_client import PbacClient
@@ -202,7 +202,7 @@ def build_boundary(target: str) -> AgentBoundaryBase:
             config.nestjs_api_base_url,
             config.worker_api_key,
         )
-        registry = build_sprint6_agentic_registry()
+        registry = build_engineering_rule_agentic_registry()
         bind_runtime_handlers(
             registry,
             api_client=api_client,
