@@ -302,10 +302,8 @@ export async function seedLegalClassificationParents(
   prisma: PrismaClient,
   input: LegalClassificationParentsInput = {},
 ): Promise<void> {
-  const corpusVersionId =
-    input.corpusVersionId ?? "LCSP-LEGAL-CORPUS-v0.1.0";
-  const catalogVersionId =
-    input.catalogVersionId ?? "LCSP-RULE-CATALOG-v0.1.0";
+  const corpusVersionId = input.corpusVersionId ?? "LCSP-LEGAL-CORPUS-v0.1.0";
+  const catalogVersionId = input.catalogVersionId ?? "LCSP-RULE-CATALOG-v0.1.0";
 
   await prisma.legalCorpusVersion.upsert({
     where: { id: corpusVersionId },
