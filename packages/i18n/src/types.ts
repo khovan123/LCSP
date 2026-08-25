@@ -140,7 +140,6 @@ export type PagesMessages = {
     submitting: string;
     divider: string;
     oauthGoogle: string;
-    oauthGitHub: string;
     accessHelp: string;
     createAccount: string;
     forgotPassword: string;
@@ -490,7 +489,6 @@ export type PagesMessages = {
         sendRecovery: string;
         updatePassword: string;
         revoke: string;
-        linkGitHub: string;
         linkGoogle: string;
         connectGitHubRepository: string;
         manageGitHubRepositoryAccess: string;

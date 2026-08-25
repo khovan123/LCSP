@@ -45,7 +45,6 @@ import { AuthAuditService } from "./application/services/auth-workspace/auth-aud
 import { AuthWorkspaceSupportService } from "./application/services/auth-workspace/auth-workspace-support.service.ts";
 import { AuthWorkspaceFacade } from "./application/services/auth-workspace/auth-workspace.facade.ts";
 import { RecoveryEmailNotifierService } from "./infrastructure/notification/recovery-email-notifier.service.ts";
-import { GitHubOAuthProvider } from "./infrastructure/oauth/github-oauth.provider.ts";
 import { GoogleOAuthProvider } from "./infrastructure/oauth/google-oauth.provider.ts";
 import { OAuthProviderRegistry } from "./infrastructure/oauth/oauth-provider.registry.ts";
 import {
@@ -158,7 +157,6 @@ function handlerProvider<T>(
       provide: AUTH_WORKSPACE_RECOVERY_NOTIFIER,
       useClass: RecoveryEmailNotifierService,
     },
-    GitHubOAuthProvider,
     GoogleOAuthProvider,
     OAuthProviderRegistry,
     AuthAuditService,
