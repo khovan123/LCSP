@@ -49,42 +49,6 @@ AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
         "event.technical-evidence.accepted.v1",
     ),
     AgentInvocationBoundary(
-        "technical_profile_requested",
-        "tools.common.capabilities.assessment.claims.technical_profile.technical_profile_boundary:TechnicalProfileBoundary",
-        "intelligence.evidence-accepted",
-        "event.technical-evidence.accepted.v1",
-    ),
-    AgentInvocationBoundary(
-        "ai_usage_flow_requested",
-        "tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_boundary:AIUsageFlowBoundary",
-        "intelligence.technical-profile-ready",
-        "event.technical-profile.ready.v1",
-    ),
-    AgentInvocationBoundary(
-        "conflict_detection_requested",
-        "tools.common.capabilities.assessment.claims.conflict_detection.conflict_detection_boundary:ConflictDetectionBoundary",
-        "intelligence.ai-usage-flow-ready",
-        "event.ai-usage-flow.ready.v1",
-    ),
-    AgentInvocationBoundary(
-        "verified_profile_requested",
-        "tools.common.capabilities.assessment.claims.verified_profile.verified_profile_boundary:VerifiedProfileBoundary",
-        "intelligence.all-conflicts-resolved",
-        "event.reconciliation.all-conflicts-resolved.v1",
-    ),
-    AgentInvocationBoundary(
-        "classification_requested",
-        "tools.common.capabilities.assessment.evaluation.classification.classification_boundary:ClassificationBoundary",
-        "classification.legal-rule-match-ready",
-        "event.legal-rule-match.ready.v1",
-    ),
-    AgentInvocationBoundary(
-        "legal_retrieval_requested",
-        "tools.legal.retrieval.legal_basis.legal_retrieval_boundary:LegalRetrievalBoundary",
-        "legal.legal-matching-requested",
-        "command.legal-matching.requested.v1",
-    ),
-    AgentInvocationBoundary(
         "legal_change_detection_requested",
         "tools.legal.sources.change_detection.legal_change_detector_boundary:LegalChangeDetectorBoundary",
         "legal.legal-change-detector",

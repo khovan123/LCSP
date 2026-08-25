@@ -15,12 +15,9 @@ from ..entrypoints.remediation_tool_entrypoints import propose_gap_remediation
 from ..entrypoints.tool_entrypoints import (
     AgenticToolExecutionContext, compare_wizard_claim, evaluate_gap_matrix,
     get_admin_source_catalog, get_artifact_chain, get_assessment_context,
-    get_classification_baseline, get_gap_evidence_trace, get_gap_requirements,
-    get_legal_corpus_readiness, get_legal_rule_match, get_reconciliation_context,
-    get_verified_profile, reconcile_profile_to_verified_profile,
-    request_targeted_reanalysis, resolve_independent_classification_review,
-    resume_waiting_runs, retrieve_legal_basis, submit_classification_for_independent_review,
-    validate_citation_set, validate_classification_proposal,
+    get_gap_evidence_trace, get_gap_requirements, get_legal_corpus_readiness,
+    get_reconciliation_context, request_targeted_reanalysis,
+    resume_waiting_runs, retrieve_legal_basis, validate_citation_set,
 )
 from ..entrypoints.scanner_tool_entrypoints import (
     ScannerToolExecutionContext, build_evidence_graph, classify_workspace_languages,
@@ -78,23 +75,15 @@ SPRINT6_AGENTIC_TOOL_BINDINGS = (
 
 NEST_CQRS_DISCOVERY_BINDINGS = (
     _binding("get_assessment_context", ToolRuntimeTarget.NEST_CQRS, get_assessment_context, "GetAssessmentContextQuery"),
-    _binding("get_verified_profile", ToolRuntimeTarget.NEST_CQRS, get_verified_profile, "GetVerifiedProfileQuery"),
     _binding("compare_wizard_claim", ToolRuntimeTarget.NEST_CQRS, compare_wizard_claim, "CompareWizardClaimQuery"),
-    _binding("get_classification_baseline", ToolRuntimeTarget.NEST_CQRS, get_classification_baseline, "GetClassificationBaselineQuery"),
     _binding("get_gap_requirements", ToolRuntimeTarget.NEST_CQRS, get_gap_requirements, "GetGapRequirementsQuery"),
-    _binding("validate_classification_proposal", ToolRuntimeTarget.NEST_CQRS, validate_classification_proposal, "ValidateClassificationProposalQuery"),
     _binding("evaluate_gap_matrix", ToolRuntimeTarget.NEST_CQRS, evaluate_gap_matrix, "EvaluateGapMatrixQuery"),
     _binding("get_admin_source_catalog", ToolRuntimeTarget.NEST_CQRS, get_admin_source_catalog, "GetAdminSourceCatalogQuery"),
     _binding("get_legal_corpus_readiness", ToolRuntimeTarget.NEST_CQRS, get_legal_corpus_readiness, "GetLegalCorpusReadinessQuery"),
     _binding("retrieve_legal_basis", ToolRuntimeTarget.NEST_CQRS, retrieve_legal_basis, "RetrieveLegalBasisQuery"),
-    _binding("get_legal_rule_match", ToolRuntimeTarget.NEST_CQRS, get_legal_rule_match, "GetLegalRuleMatchQuery"),
     _binding("validate_citation_set", ToolRuntimeTarget.NEST_CQRS, validate_citation_set, "ValidateCitationSetQuery"),
 )
-PROTECTED_COMMAND_BINDINGS = (
-    _binding("reconcile_profile_to_verified_profile", ToolRuntimeTarget.NEST_COMMAND, reconcile_profile_to_verified_profile, "ReconcileProfileToVerifiedProfileCommand"),
-    _binding("submit_classification_for_independent_review", ToolRuntimeTarget.NEST_COMMAND, submit_classification_for_independent_review, "SubmitClassificationReviewCommand"),
-    _binding("resolve_independent_classification_review", ToolRuntimeTarget.NEST_COMMAND, resolve_independent_classification_review, "ResolveClassificationReviewCommand"),
-)
+PROTECTED_COMMAND_BINDINGS = ()
 AO1_SCANNER_TOOL_BINDINGS = (
     _binding("materialize_snapshot", ToolRuntimeTarget.PYTHON_LOCAL, materialize_snapshot, "ScannerWorkspace.materialize"),
     _binding("classify_workspace_languages", ToolRuntimeTarget.PYTHON_LOCAL, classify_workspace_languages, "LanguageClassifier.classify_workspace"),

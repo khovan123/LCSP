@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain.messages import AIMessage
 
-from tools.common.capabilities.assessment.evaluation.classification.classification_boundary import ClassificationBoundary
 from tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_boundary import AIUsageFlowBoundary
 from tools.common.capabilities.platform.config import WorkerConfig
 
@@ -125,49 +124,6 @@ def test_ai_usage_flow_handle_smoke_e2e_runs_graph_and_submits_callback() -> Non
     assert invoke_kwargs["config"]["metadata"]["workflow_run_id"] == "ai-usage-flow:tp-smoke-1:corr-smoke-ai-1"
     assert invoke_kwargs["config"]["metadata"]["node_name"] == "ai_usage_flow.summary_proposal"
 
-
-@pytest.mark.integration
-@pytest.mark.e2e
-def test_classification_handle_smoke_e2e_runs_graph_and_submits_callback() -> None:
-    proposal_agent = MagicMock()
-    proposal_agent.invoke.return_value = {
-        "messages": [AIMessage(content="")],
-        "structured_response": {
-            "risk_level": "HIGH",
-            "applicability_assessment": "applicable",
-            "rationale": "This assessment is high risk based on the cited evidence.",
-        },
-    }
-
-    boundary = ClassificationBoundary(config=MagicMock())
-
-    with (
-        patch.object(boundary, "_submit_callback") as mock_submit,
-        patch(
-            "tools.common.capabilities.assessment.evaluation.classification.classification_proposer.create_agent",
-            return_value=proposal_agent,
-        ),
-    ):
-        boundary.handle(
-            {
-                "assessment_id": "assessment-smoke-2",
-                "classification_version": "2.1",
-                "usage_claims": [{"claim_category": "MODEL_INVOCATION"}],
-                "applicable_rules": [
-                    {
-                        "confidence": 0.92,
-                        "coverage_status": "COMPLETE_CITATION",
-                        "citation_chunk_ids": ["ref-smoke-1"],
-                    }
-                ],
-                "citation_allowlist": ["ref-smoke-1"],
-            },
-            correlationId="corr-smoke-classification-1",
-        )
-
-    mock_submit.assert_called_once()
-    callback_payload = mock_submit.call_args.args[0]
-    assert callback_payload["risk_level"] == "HIGH"
     assert callback_payload["applicability_assessment"] == "applicable"
     assert callback_payload["guardrail_status"] == "passed"
     assert (
