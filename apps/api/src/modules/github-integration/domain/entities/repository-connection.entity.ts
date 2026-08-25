@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
   REPOSITORY_CONNECTION_STATUSES,
+  REPOSITORY_AUTHENTICATION_MODES,
+  type RepositoryAuthenticationMode,
   type RepositoryConnectionStatus,
 } from "@lcsp/contracts/github-integration";
 
@@ -8,7 +10,9 @@ type RepositoryConnectionProps = {
   id: string;
   assessmentId: string | null;
   userId: string;
-  installationId: string;
+  installationId: string | null;
+  authenticationMode?: RepositoryAuthenticationMode;
+  credentialAuthorizationId?: string | null;
   repositoryId: string;
   repositoryName: string;
   repositoryFullName: string;
@@ -56,6 +60,8 @@ export class RepositoryConnection {
       assessmentId: input.assessmentId,
       userId: input.userId,
       installationId: input.installationId,
+      authenticationMode: REPOSITORY_AUTHENTICATION_MODES.githubApp,
+      credentialAuthorizationId: null,
       repositoryId: input.repositoryId,
       repositoryName: input.repositoryName,
       repositoryFullName: input.repositoryFullName,
@@ -98,7 +104,25 @@ export class RepositoryConnection {
 
   /** @returns The GitHub App installation identifier used for authenticated API access. */
   get installationId(): string {
+    if (!this.props.installationId) {
+      throw new Error("github_app_installation_id_unavailable");
+    }
     return this.props.installationId;
+  }
+
+  /** Nullable persistence value used when representing a CLI-authenticated connection. */
+  get installationIdOrNull(): string | null {
+    return this.props.installationId;
+  }
+
+  get authenticationMode(): RepositoryAuthenticationMode {
+    return (
+      this.props.authenticationMode ?? REPOSITORY_AUTHENTICATION_MODES.githubApp
+    );
+  }
+
+  get credentialAuthorizationId(): string | null {
+    return this.props.credentialAuthorizationId ?? null;
   }
 
   /** @returns The GitHub repository identifier. */

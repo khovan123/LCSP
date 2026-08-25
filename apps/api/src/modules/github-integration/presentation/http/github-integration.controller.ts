@@ -3,6 +3,8 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -30,6 +32,13 @@ import type { TriggerScanDto } from "../../application/contracts/github-integrat
 import { PinSnapshotRequest } from "./dto/pin-snapshot.request.js";
 import { TriggerScanRequest } from "./dto/trigger-scan.request.js";
 import {
+  GitHubCliRepositoryConnectionRequest,
+  GitHubRepositoryDiscoveryRequest,
+} from "./dto/github-credential.request.js";
+import { GitHubCredentialRequestGuard } from "./github-credential-request.guard.js";
+import { DiscoverGitHubRepositoriesCommand } from "../../application/commands/discover-github-repositories/discover-github-repositories.command.js";
+import { ConnectGitHubCliRepositoryCommand } from "../../application/commands/connect-github-cli-repository/connect-github-cli-repository.command.js";
+import {
   ScanTriggerGuard,
   type ScanTriggerRequestContext,
 } from "./scan-trigger.guard.js";
@@ -50,6 +59,72 @@ export class GitHubIntegrationController {
    * @param commandBus - Command bus used to start/complete App installation, pin snapshots, and trigger scans.
    */
   constructor(private readonly commandBus: CommandBus) {}
+
+  @Post("github/repository-discoveries")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(PbacGuard, GitHubCredentialRequestGuard)
+  @RequireAction(PBAC_ACTIONS.githubConnect)
+  @ReAuthForSensitiveRoute({
+    routeId: SENSITIVE_ROUTE_IDS.githubCliRepositoryDiscovery,
+    method: "POST",
+    pathTemplate: "/github/repository-discoveries",
+    aliases: [
+      { method: "POST", pathTemplate: "/api/github/repository-discoveries" },
+    ],
+  })
+  async discoverRepositories(
+    @Body() body: GitHubRepositoryDiscoveryRequest,
+    @Req() request: GitHubIntegrationRequest,
+  ) {
+    const context = request.pbacContext as PbacRequestContext;
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new DiscoverGitHubRepositoriesCommand(
+          context.organizationId,
+          context.userId,
+          context.subjectRole,
+          context.sessionId,
+          body.credential,
+          body.limit,
+          body.cursor,
+          request.correlationId as string,
+        ),
+      ),
+    );
+  }
+
+  @Post("github/repository-connections")
+  @UseGuards(PbacGuard, GitHubCredentialRequestGuard)
+  @RequireAction(PBAC_ACTIONS.githubConnect)
+  @ReAuthForSensitiveRoute({
+    routeId: SENSITIVE_ROUTE_IDS.githubCliRepositoryConnect,
+    method: "POST",
+    pathTemplate: "/github/repository-connections",
+    aliases: [
+      { method: "POST", pathTemplate: "/api/github/repository-connections" },
+    ],
+  })
+  async connectCliRepository(
+    @Body() body: GitHubCliRepositoryConnectionRequest,
+    @Req() request: GitHubIntegrationRequest,
+  ) {
+    const context = request.pbacContext as PbacRequestContext;
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ConnectGitHubCliRepositoryCommand(
+          context.organizationId,
+          context.userId,
+          context.subjectRole,
+          context.sessionId,
+          body.credential,
+          body.repository_full_name,
+          body.assessment_id,
+          body.credential_expires_at,
+          request.correlationId as string,
+        ),
+      ),
+    );
+  }
 
   /**
    * Starts or resumes the sensitive GitHub App installation flow for the authenticated organization/user.

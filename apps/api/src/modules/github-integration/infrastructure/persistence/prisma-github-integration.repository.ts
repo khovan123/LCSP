@@ -1,4 +1,9 @@
 import { Injectable } from "@nestjs/common";
+import { RepositoryAuthenticationMode as PrismaRepositoryAuthenticationMode } from "@prisma/client";
+import {
+  REPOSITORY_AUTHENTICATION_MODES,
+  type RepositoryAuthenticationMode,
+} from "@lcsp/contracts/github-integration";
 
 import {
   fromPrismaRepositoryConnectionStatus,
@@ -39,6 +44,8 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
         assessmentId: connection.assessmentId,
         userId: connection.userId,
         installationId: connection.installationId,
+        authenticationMode: PrismaRepositoryAuthenticationMode.GITHUB_APP,
+        credentialAuthorizationId: null,
         repositoryId: connection.repositoryId,
         repositoryName: connection.repositoryName,
         repositoryFullName: connection.repositoryFullName,
@@ -78,6 +85,8 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
       assessmentId: row.assessmentId,
       userId: row.userId,
       installationId: row.installationId,
+      authenticationMode: fromPrismaAuthenticationMode(row.authenticationMode),
+      credentialAuthorizationId: row.credentialAuthorizationId,
       repositoryId: row.repositoryId,
       repositoryName: row.repositoryName,
       repositoryFullName: row.repositoryFullName,
@@ -107,4 +116,12 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
 
     return result.count === 1;
   }
+}
+
+function fromPrismaAuthenticationMode(
+  mode: PrismaRepositoryAuthenticationMode,
+): RepositoryAuthenticationMode {
+  return mode === PrismaRepositoryAuthenticationMode.GITHUB_APP
+    ? REPOSITORY_AUTHENTICATION_MODES.githubApp
+    : REPOSITORY_AUTHENTICATION_MODES.githubCliCredential;
 }
