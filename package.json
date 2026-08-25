@@ -20,6 +20,7 @@
     "check:agentic-tools": "node scripts/check-agentic-tool-runtime.mjs",
     "check:branch": "node scripts/check-branch-name.mjs",
     "check:commit-message": "node scripts/check-commit-message.mjs",
+    "build:runtime-packages": "pnpm --filter @lcsp/contracts build && pnpm --filter @lcsp/i18n build",
     "likec4:build": "likec4 build likec4 -o dist/likec4",
     "likec4:check": "likec4 check likec4",
     "likec4:dev": "likec4 dev likec4 --open false",

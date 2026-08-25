@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@jest/globals";
+import { beforeAll, describe, expect, it } from "@jest/globals";
 
 import { CredentialLease } from "../../application/security/credential-lease.js";
 import { GitHubCliRepositoryProvider } from "./github-cli-repository.provider.js";
@@ -10,17 +10,21 @@ const enabled = Boolean(credential && executablePath && repositoryFullName);
 const describeReal = enabled ? describe : describe.skip;
 
 describeReal("GitHub CLI repository provider (opt-in real GitHub)", () => {
-  const provider = new GitHubCliRepositoryProvider({
-    executablePath: executablePath!,
-    metadataTimeoutMs: 30_000,
-    discoveryTimeoutMs: 60_000,
-    archiveTimeoutMs: 120_000,
-    maxJsonOutputBytes: 1024 * 1024,
-    maxDiscoveryOutputBytes: 10 * 1024 * 1024,
-    maxStderrBytes: 8 * 1024,
-    maxArchiveBytes: 100 * 1024 * 1024,
-    maxConcurrentMetadataProcesses: 2,
-    maxConcurrentArchiveProcesses: 1,
+  let provider: GitHubCliRepositoryProvider;
+
+  beforeAll(() => {
+    provider = new GitHubCliRepositoryProvider({
+      executablePath: executablePath!,
+      metadataTimeoutMs: 30_000,
+      discoveryTimeoutMs: 60_000,
+      archiveTimeoutMs: 120_000,
+      maxJsonOutputBytes: 1024 * 1024,
+      maxDiscoveryOutputBytes: 10 * 1024 * 1024,
+      maxStderrBytes: 8 * 1024,
+      maxArchiveBytes: 100 * 1024 * 1024,
+      maxConcurrentMetadataProcesses: 2,
+      maxConcurrentArchiveProcesses: 1,
+    });
   });
 
   it("validates identity without global GitHub CLI state", async () => {
