@@ -50,7 +50,7 @@ model AuthUser {
   recoveryEmail             String?
   primaryEmailAddressPolicy AuthPrimaryEmailAddressPolicy @default(ACCOUNT_EMAIL)
   backupEmailPolicy         AuthBackupEmailPolicy         @default(RECOVERY_EMAIL)
-  role                      AuthUserRole                  @default(CUSTOMER)
+  role                      AuthUserRole                  @default(MANAGER)
   mfaRequired               Boolean                       @default(false)
   createdAt                 DateTime                      @default(now())
   updatedAt                 DateTime                      @updatedAt
@@ -366,7 +366,7 @@ enum AuthDecision {
 
 enum AuthUserRole {
   ADMIN
-  CUSTOMER
+  MANAGER
 }
 
 enum AuditResourceType {
