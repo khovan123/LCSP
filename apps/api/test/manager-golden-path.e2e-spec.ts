@@ -7,7 +7,6 @@ import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
-import { AUTH_INVITATION_STATES } from "@lcsp/contracts/auth";
 import { DOCUMENT_REQUEST_STATUSES } from "@lcsp/contracts/document";
 import {
   REPOSITORY_CONNECTION_STATUSES,
@@ -64,18 +63,9 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
   });
 
   it("lets an approved Manager complete the direct assessment path without legacy profile stages", async () => {
-    const accepted = await httpRequest(app)
-      .post("/auth/register-approved-path")
-      .send({
-        invite_id: "invite-approved",
-        password: "DeveloperPass123!",
-      });
-    assert.equal(accepted.status, 201, JSON.stringify(accepted.body));
-    assert.equal((accepted.body as { ok?: boolean }).ok, true);
-
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
-      email: "invitee@acme.test",
-      password: "DeveloperPass123!",
+      email: "manager@acme.test",
+      password: "CorrectHorseBatteryStaple!",
       organization_id: "org-1",
     });
     assert.equal(signIn.status, 200);
@@ -95,10 +85,6 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       created,
     ).assessment_id;
     assert.ok(assessmentId);
-    assert.doesNotMatch(
-      JSON.stringify(successBody<object>(created)),
-      /developer/i,
-    );
 
     const wizard = await httpRequest(app)
       .post(`/assessments/${assessmentId}/wizard/submit`)
@@ -227,15 +213,9 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       "https://example.test/files/manager-final-report.pdf",
     );
 
-    const [invitation, managerMembership] = await Promise.all([
-      prisma.authInvitation.findUniqueOrThrow({
-        where: { id: "invite-approved" },
-      }),
-      prisma.authMembership.findFirstOrThrow({
-        where: { user: { email: "invitee@acme.test" } },
-      }),
-    ]);
-    assert.equal(invitation.state, AUTH_INVITATION_STATES.consumed);
+    const managerMembership = await prisma.authMembership.findFirstOrThrow({
+      where: { user: { email: "manager@acme.test" } },
+    });
     assert.equal(
       (managerMembership.subjectAttributes as { role: string }).role,
       SUBJECT_ROLES.manager,

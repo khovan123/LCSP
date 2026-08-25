@@ -82,7 +82,6 @@ describe("Self sign-up endpoint (e2e)", () => {
     assert.ok(body.session_token);
     assert.equal(Number.isNaN(Date.parse(body.expires_at)), false);
     assert.ok(body.allowed_actions.includes(PBAC_ACTIONS.workspaceRead));
-    assert.ok(body.allowed_actions.includes(PBAC_ACTIONS.inviteDeveloper));
 
     const user = await prisma.authUser.findUniqueOrThrow({
       where: { id: body.user_id },

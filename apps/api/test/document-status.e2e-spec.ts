@@ -223,25 +223,25 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     assert.equal(problemCode(response), DOCUMENT_ERROR_CODES.documentNotFound);
   });
 
-  it("T07 denies a Developer with redacted read when accessing FinalReport", async () => {
+  it("T07 denies a SystemAdmin with redacted read when accessing FinalReport", async () => {
     await seedDocumentRequest(prisma, {
       id: "doc-final-report-1",
       status: DOCUMENT_REQUEST_STATUSES.ready,
       documentType: DOCUMENT_TYPES.finalReport,
       documentUrl: "https://example.test/files/final-report.pdf",
     });
-    await seedDeveloper(prisma, PBAC_ACTIONS.documentReadRedacted);
+    await seedSystemAdmin(prisma, PBAC_ACTIONS.documentReadRedacted);
 
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
-      email: "developer@acme.test",
-      password: "DeveloperPass123!",
+      email: "system-admin@acme.test",
+      password: "SystemAdminPass123!",
       organization_id: "org-1",
     });
-    const developerToken = successBody<SignInSuccess>(signIn).session_token;
+    const systemAdminToken = successBody<SignInSuccess>(signIn).session_token;
 
     const response = await getDocumentStatus(
       app,
-      developerToken,
+      systemAdminToken,
       "doc-final-report-1",
     );
 
@@ -249,25 +249,25 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
   });
 
-  it("allows a scoped Developer with redacted read to view GapAnalysis and download it", async () => {
+  it("allows a scoped SystemAdmin with redacted read to view GapAnalysis and download it", async () => {
     await seedDocumentRequest(prisma, {
       id: "doc-gap-redacted-1",
       status: DOCUMENT_REQUEST_STATUSES.ready,
       documentType: DOCUMENT_TYPES.gapAnalysis,
       documentUrl: "https://example.test/files/redacted-gap.pdf",
     });
-    await seedDeveloper(prisma, PBAC_ACTIONS.documentReadRedacted);
+    await seedSystemAdmin(prisma, PBAC_ACTIONS.documentReadRedacted);
 
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
-      email: "developer@acme.test",
-      password: "DeveloperPass123!",
+      email: "system-admin@acme.test",
+      password: "SystemAdminPass123!",
       organization_id: "org-1",
     });
-    const developerToken = successBody<SignInSuccess>(signIn).session_token;
+    const systemAdminToken = successBody<SignInSuccess>(signIn).session_token;
 
     const response = await getDocumentStatus(
       app,
-      developerToken,
+      systemAdminToken,
       "doc-gap-redacted-1",
     );
     const body = successBody<SuccessResponse>(response);
@@ -307,12 +307,12 @@ async function enableManagerDocumentRead(prisma: PrismaClient) {
   });
 }
 
-async function seedDeveloper(prisma: PrismaClient, action: string) {
+async function seedSystemAdmin(prisma: PrismaClient, action: string) {
   await prisma.authUser.create({
     data: {
-      id: "developer-1",
-      email: "developer@acme.test",
-      passwordHash: hashSecret("DeveloperPass123!"),
+      id: "system-admin-1",
+      email: "system-admin@acme.test",
+      passwordHash: hashSecret("SystemAdminPass123!"),
       emailVerified: true,
       failedLoginCount: 0,
     },
@@ -320,10 +320,10 @@ async function seedDeveloper(prisma: PrismaClient, action: string) {
 
   await prisma.authPolicy.create({
     data: {
-      id: `policy-developer-${action.replace(/[^a-z]/gi, "-")}`,
+      id: `policy-system-admin-${action.replace(/[^a-z]/gi, "-")}`,
       version: "2026-07-28",
       actions: [action],
-      subjectRole: SUBJECT_ROLES.developer,
+      subjectRole: SUBJECT_ROLES.systemAdmin,
       stateGate: PBAC_STATE_GATES.membershipActive,
       organizationId: "org-1",
     },
@@ -331,15 +331,15 @@ async function seedDeveloper(prisma: PrismaClient, action: string) {
 
   await prisma.authMembership.create({
     data: {
-      id: "membership-developer-document-read",
-      userId: "developer-1",
+      id: "membership-systemAdmin-document-read",
+      userId: "system-admin-1",
       organizationId: "org-1",
       status: AUTH_MEMBERSHIP_STATUSES.active,
       subjectAttributes: {
-        role: SUBJECT_ROLES.developer,
+        role: SUBJECT_ROLES.systemAdmin,
         scope: "assessment-1",
       },
-      policyId: `policy-developer-${action.replace(/[^a-z]/gi, "-")}`,
+      policyId: `policy-system-admin-${action.replace(/[^a-z]/gi, "-")}`,
       policyVersion: "2026-07-28",
     },
   });

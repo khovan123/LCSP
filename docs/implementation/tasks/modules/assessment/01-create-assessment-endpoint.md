@@ -15,7 +15,7 @@ depends_on:
 
 ## Outcome
 
-Allow an authenticated Manager to create a Manager-owned assessment in their organization. Assessment starts in `WIZARD_IN_PROGRESS` state. Audited. No Developer required.
+Allow an authenticated Manager to create a Manager-owned assessment in their organization. Assessment starts in `WIZARD_IN_PROGRESS` state. Audited. No external collaborator required.
 
 ## Module Files
 
@@ -85,7 +85,7 @@ model Assessment {
 2. `ownerId = request.pbacContext.userId`.
 3. `organizationId = request.pbacContext.organizationId`.
 4. `status = WIZARD_IN_PROGRESS` on creation. No other state allowed at creation.
-5. No Developer assignment required or allowed at creation.
+5. No external collaborator assignment required or allowed at creation.
 6. Emit `ASSESSMENT_CREATED` audit event with assessment ID, org ID, owner ID. No name content in payload (may be PII).
 7. Write outbox message `assessment.created` for downstream notification (optional in Phase 1 — log only if no consumer).
 
@@ -112,11 +112,11 @@ Manager must have `assessment:create` in their `AuthPolicy.actions`. Applied via
 | T05 | `ownerId` = Manager's userId                  | DB row verified         |
 | T06 | `organizationId` from session context         | DB row verified         |
 | T07 | Audit event has no `name` content             | Clean payload           |
-| T08 | No Developer assignment in response           | No developer fields     |
+| T08 | No collaborator assignment in response        | No collaborator fields  |
 
 ## Definition of Done
 
 - Assessment created with `WIZARD_IN_PROGRESS` status, correct owner, org.
 - PBAC guard enforced via `@RequireAction('assessment:create')`.
 - `ASSESSMENT_CREATED` audit event written with no name/description in payload.
-- No Developer required.
+- No external collaborator required.

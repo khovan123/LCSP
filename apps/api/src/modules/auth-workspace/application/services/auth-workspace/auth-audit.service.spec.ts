@@ -121,7 +121,7 @@ describe("AuthAuditService", () => {
 
     await service.writeInTx(
       {
-        eventType: AUTH_AUDIT_EVENT_TYPES.authDeveloperRevoked,
+        eventType: AUTH_AUDIT_EVENT_TYPES.authSessionRevoked,
         actorId: "manager-1",
         organizationId: "org-1",
         correlationId: "corr-1",

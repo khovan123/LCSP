@@ -34,6 +34,8 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedLegalClassificationParents,
+  seedVerifiedProfileGraph,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
 
@@ -205,11 +207,18 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
   });
 
   it("returns 404 ASSESSMENT_NOT_FOUND for assessment outside session organization", async () => {
+    await prisma.authOrganization.create({
+      data: {
+        id: "org-foreign",
+        slug: "foreign",
+        name: "Foreign Organization",
+      },
+    });
     await prisma.assessment.create({
       data: {
         id: "assessment-foreign",
         organizationId: "org-foreign",
-        ownerId: "user-x",
+        ownerId: "user-1",
         name: "Foreign assessment",
       },
     });
@@ -271,6 +280,9 @@ async function seedClassification(
 ): Promise<{ classificationResultId: string }> {
   const matchId = `lrm-${guardrailStatus}`;
   const classificationResultId = `classification-${guardrailStatus}`;
+
+  await seedVerifiedProfileGraph(prisma, { verifiedProfileId: "vp-1" });
+  await seedLegalClassificationParents(prisma);
 
   await prisma.legalRuleMatch.create({
     data: {

@@ -102,10 +102,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
     const isManagerOwner =
       command.subjectRole === SUBJECT_ROLES.manager &&
       assessment.ownerId === command.actorId;
-    const isScopedDeveloper =
-      command.subjectRole === SUBJECT_ROLES.developer &&
-      command.scope === command.assessmentId;
-    if (!isManagerOwner && !isScopedDeveloper) {
+    if (!isManagerOwner) {
       await this.auditDenied(command, AUTH_ERROR_CODES.pbacDenied);
       throw problemException(
         AUTH_ERROR_CODES.pbacDenied,

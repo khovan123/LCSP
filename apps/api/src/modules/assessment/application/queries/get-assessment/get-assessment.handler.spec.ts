@@ -342,14 +342,14 @@ describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  it("allows Developer read after PBAC without exposing removed Manager review chain", async () => {
+  it("rejects non-Manager assessment reads after PBAC", async () => {
     const assessment = makeAssessment({ ownerId: "user-2" });
     const handler = buildHandler({ assessment });
 
-    const result = await handler.execute(
-      query(assessment.id, SUBJECT_ROLES.developer, "developer-1"),
-    );
-    expect(result.assessment_id).toBe(assessment.id);
-    expect(result.verified_profile_review).toBeNull();
+    await expect(
+      handler.execute(
+        query(assessment.id, SUBJECT_ROLES.systemAdmin, "system-admin-1"),
+      ),
+    ).rejects.toThrow(NotFoundException);
   });
 });

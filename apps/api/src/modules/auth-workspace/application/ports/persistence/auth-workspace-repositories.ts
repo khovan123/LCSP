@@ -1,6 +1,5 @@
 import type { AuditEventRepository } from "./audit-event.repository.ts";
 import type { AuthorizationDecisionRepository } from "./authorization-decision.repository.ts";
-import type { InvitationRepository } from "./invitation.repository.ts";
 import type { MembershipRepository } from "./membership.repository.ts";
 import type {
   MfaEnrollmentRepository,
@@ -20,7 +19,6 @@ export type AuthWorkspaceRepositories = {
   organizations: OrganizationRepository;
   users: UserRepository;
   memberships: MembershipRepository;
-  invitations: InvitationRepository;
   sessions: SessionRepository;
   policies: PolicyRepository;
   auditEvents: AuditEventRepository;

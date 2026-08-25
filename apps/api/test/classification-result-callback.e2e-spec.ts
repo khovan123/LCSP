@@ -30,6 +30,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositoryScanGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
@@ -335,6 +336,10 @@ async function seedAssessmentAndEvidence(prisma: PrismaClient): Promise<void> {
       name: "Direct Engineering Assessment",
       status: ASSESSMENT_STATUS_CODES.scanInProgress,
     },
+  });
+  await seedRepositoryScanGraph(prisma, {
+    scanJobId: "scan-1",
+    snapshotId: "snapshot-1",
   });
   await prisma.technicalEvidenceReport.create({
     data: {

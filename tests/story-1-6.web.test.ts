@@ -22,8 +22,6 @@ test("Story 1.6 manager-only action set covers accountable Manager authority", (
     PBAC_ACTIONS.finalReportGenerate,
     PBAC_ACTIONS.complianceDossierExport,
     PBAC_ACTIONS.managerDecisionChange,
-    PBAC_ACTIONS.inviteDeveloper,
-    PBAC_ACTIONS.membershipRevoke,
     PBAC_ACTIONS.assessmentSettingsManage,
     PBAC_ACTIONS.legalCorpusIngest,
     PBAC_ACTIONS.legalCorpusApprove,

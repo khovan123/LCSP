@@ -14,7 +14,7 @@ depends_on:
 
 ## Outcome
 
-Return status of a document request and, when ready, a signed download URL for the generated document artifact. Manager and scoped Developer can view status. Developer cannot download Manager-only documents. URLs are pre-signed and time-limited.
+Return status of a document request and, when ready, a signed download URL for the generated document artifact. The owning Manager can view status and download allowed documents. URLs are pre-signed and time-limited.
 
 ## Module Files
 
@@ -48,10 +48,10 @@ Return status of a document request and, when ready, a signed download URL for t
 
 **Error responses:**
 
-| HTTP | `error_code`         | Meaning                                                           |
-| ---- | -------------------- | ----------------------------------------------------------------- |
-| 403  | `PBAC_DENIED`        | Actor lacks `document:read` or developer accessing restricted doc |
-| 404  | `DOCUMENT_NOT_FOUND` | Not found or not in org                                           |
+| HTTP | `error_code`         | Meaning                     |
+| ---- | -------------------- | --------------------------- |
+| 403  | `PBAC_DENIED`        | Actor lacks `document:read` |
+| 404  | `DOCUMENT_NOT_FOUND` | Not found or not in org     |
 
 ## Business Rules
 
@@ -60,7 +60,7 @@ Return status of a document request and, when ready, a signed download URL for t
 3. When `status = READY`: generate pre-signed URL with 5-minute TTL via `DocumentStorageService`. URL is per-request (not stored).
 4. When `status = BLOCKED`: include `blocked_reason` in business language (no implementation details).
 5. `guardrail_status` reflects the output guardrail result.
-6. Developer with `document:read:redacted` scope cannot download `FinalReport` type (Manager-only document).
+6. FinalReport download is Manager-only.
 
 ## Prisma Models Used
 
@@ -78,14 +78,14 @@ Return status of a document request and, when ready, a signed download URL for t
 | T04 | Download URL expires after 5 min      | URL TTL verified                             |
 | T05 | Actor lacks `document:read`           | 403 `PBAC_DENIED`                            |
 | T06 | Document not in org                   | 404 `DOCUMENT_NOT_FOUND`                     |
-| T07 | Developer accessing FinalReport       | 403 `PBAC_DENIED`                            |
+| T07 | Non-Manager accessing FinalReport     | 403 `PBAC_DENIED`                            |
 | T08 | `blocked_reason` is business language | No technical terms                           |
 
 ## Definition of Done
 
 - Pre-signed URL generated per-request (5-min TTL) when status is READY.
 - `blocked_reason` is business-language only.
-- Developer access limited by PBAC (`document:read:redacted` scope).
+- Non-Manager access is denied by PBAC unless a future explicit policy is approved.
 - FinalReport download restricted to Manager.
 
 ## Dev Agent Record
@@ -100,9 +100,9 @@ Return status of a document request and, when ready, a signed download URL for t
 
 - Added protected `GET /assessments/:assessmentId/documents/:documentRequestId` status endpoint with PBAC support for both `document:read` and `document:read:redacted`.
 - Added signed download proxy route `GET /assessments/:assessmentId/documents/:documentRequestId/download?token=...` backed by `DocumentStorageService` with 5-minute HMAC-signed URLs.
-- Enforced assessment scope for redacted Developer reads and denied Manager-only `FinalReport` access for `document:read:redacted`.
+- Enforced assessment scope and denied non-Manager `FinalReport` access.
 - Sanitized technical blocked reasons into business-language messaging and projected `guardrail_status`, timestamps, and correlation id.
-- Added end-to-end coverage for READY, QUEUED, BLOCKED, 5-minute TTL, PBAC deny, org isolation, redacted Developer deny on `FinalReport`, and redacted Developer allow on `GapAnalysis`.
+- Added end-to-end coverage for READY, QUEUED, BLOCKED, 5-minute TTL, PBAC deny, org isolation, and non-Manager denial paths.
 
 ### File List
 

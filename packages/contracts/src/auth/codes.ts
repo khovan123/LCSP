@@ -25,35 +25,14 @@ export const AUTH_ERROR_CODES = {
   accountNotFound: "ACCOUNT_NOT_FOUND",
 } as const;
 
-export const ACCEPT_INVITATION_ERROR_CODES = {
-  invitationInvalid: "INVITATION_INVALID",
-  invitationNotApproved: "INVITATION_NOT_APPROVED",
-  emailAlreadyExists: "EMAIL_ALREADY_EXISTS",
-  passwordTooShort: "PASSWORD_TOO_SHORT",
-  invalidRequest: "INVALID_REQUEST",
-} as const;
-
 export const SIGN_UP_ERROR_CODES = {
   emailAlreadyExists: "EMAIL_ALREADY_EXISTS",
   passwordTooShort: "PASSWORD_TOO_SHORT",
   invalidRequest: "INVALID_REQUEST",
 } as const;
 
-export const INVITE_DEVELOPER_ERROR_CODES = {
-  invalidActions: "INVALID_ACTIONS",
-  assessmentNotOwned: "ASSESSMENT_NOT_OWNED",
-  invalidEmail: "INVALID_EMAIL",
-  invalidRequest: "INVALID_REQUEST",
-} as const;
-
 export const ORGANIZATION_SCOPE_ERROR_CODES = {
   mismatch: "ORG_SCOPE_MISMATCH",
-} as const;
-
-export const REVOKE_MEMBERSHIP_ERROR_CODES = {
-  membershipNotFound: "MEMBERSHIP_NOT_FOUND",
-  cannotSelfRevoke: "CANNOT_SELF_REVOKE",
-  organizationScopeMismatch: ORGANIZATION_SCOPE_ERROR_CODES.mismatch,
 } as const;
 
 export const WORKSPACE_ERROR_CODES = {

@@ -1,7 +1,6 @@
 import * as crypto from "node:crypto";
 
 import {
-  AUTH_INVITATION_STATES,
   AUTH_MEMBERSHIP_STATUSES,
   authAuditReadDecision,
   authAuditReadNullableString,
@@ -15,7 +14,6 @@ import {
   toPrismaAuditResourceType,
   toPrismaAuthBackupEmailPolicy,
   toPrismaAuthDecision,
-  toPrismaAuthInvitationState,
   toPrismaAuthMembershipStatus,
   toPrismaAuthorizationReasonCode,
   toPrismaAuthPrimaryEmailAddressPolicy,
@@ -23,7 +21,6 @@ import {
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditEventRepository } from "../../application/ports/persistence/audit-event.repository.ts";
 import type { AuthorizationDecisionRepository } from "../../application/ports/persistence/authorization-decision.repository.ts";
-import type { InvitationRepository } from "../../application/ports/persistence/invitation.repository.ts";
 import type { MembershipRepository } from "../../application/ports/persistence/membership.repository.ts";
 import type {
   MfaEnrollmentRepository,
@@ -43,7 +40,6 @@ import { DuplicateEmailError } from "../../application/ports/persistence/user.re
 import type {
   AuditEvent,
   AuthorizationDecision,
-  Invitation,
   Membership,
   MfaEnrollment,
   MfaRateLimit,
@@ -58,7 +54,6 @@ import type {
 import {
   dateFromEpochMs,
   dateFromEpochMsRequired,
-  mapInvitationRecord,
   mapMembershipRecord,
   mapMfaEnrollmentRecord,
   mapMfaRateLimitRecord,
@@ -254,72 +249,6 @@ export class PrismaMembershipRepository implements MembershipRepository {
     });
 
     return records.map(mapMembershipRecord);
-  }
-}
-
-@Injectable()
-export class PrismaInvitationRepository implements InvitationRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  nextId(): string {
-    return crypto.randomUUID();
-  }
-
-  async save(invitation: Invitation): Promise<void> {
-    await this.prisma.authInvitation.upsert({
-      where: { id: invitation.id },
-      create: {
-        id: invitation.id,
-        email: invitation.email.toString(),
-        organizationId: invitation.organizationId,
-        state: toPrismaAuthInvitationState(invitation.state),
-        emailVerified: invitation.emailVerified,
-        membershipStatus: toPrismaAuthMembershipStatus(
-          invitation.membershipStatus,
-        ),
-        subjectAttributes: subjectAttributesToJson(
-          invitation.subjectAttributes,
-        ),
-        policyId: invitation.policyId,
-        policyVersion: invitation.policyVersion,
-        expiresAt: dateFromEpochMsRequired(invitation.expiresAt),
-      },
-      update: {
-        email: invitation.email.toString(),
-        state: toPrismaAuthInvitationState(invitation.state),
-        emailVerified: invitation.emailVerified,
-        membershipStatus: toPrismaAuthMembershipStatus(
-          invitation.membershipStatus,
-        ),
-        subjectAttributes: subjectAttributesToJson(
-          invitation.subjectAttributes,
-        ),
-        policyId: invitation.policyId,
-        policyVersion: invitation.policyVersion,
-        expiresAt: dateFromEpochMsRequired(invitation.expiresAt),
-      },
-    });
-  }
-
-  async findById(id: string): Promise<Invitation | null> {
-    const record = await this.prisma.authInvitation.findUnique({
-      where: { id },
-    });
-
-    return record ? mapInvitationRecord(record) : null;
-  }
-
-  async tryConsume(id: string): Promise<boolean> {
-    const result = await this.prisma.authInvitation.updateMany({
-      where: {
-        id,
-        state: toPrismaAuthInvitationState(AUTH_INVITATION_STATES.approved),
-      },
-      data: {
-        state: toPrismaAuthInvitationState(AUTH_INVITATION_STATES.consumed),
-      },
-    });
-    return result.count > 0;
   }
 }
 

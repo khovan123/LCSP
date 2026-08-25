@@ -85,10 +85,10 @@ describe("DocumentController dispatch", () => {
     await controller.getDocument("assessment-1", "doc-1", {
       correlationId: "corr-1",
       pbacContext: {
-        userId: "developer-1",
+        userId: "system-admin-1",
         sessionId: "session-1",
         organizationId: "org-1",
-        subjectRole: SUBJECT_ROLES.developer,
+        subjectRole: SUBJECT_ROLES.systemAdmin,
         scope: "assessment-1",
         grantedActions: [PBAC_ACTIONS.documentReadRedacted],
         selectedAction: PBAC_ACTIONS.documentReadRedacted,

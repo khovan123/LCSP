@@ -54,8 +54,8 @@ async getWorkspace() { ... }
 
 // Session + PBAC action check
 @UseGuards(PbacGuard)
-@RequireAction('invite:developer')
-async inviteDeveloper() { ... }
+@RequireAction('workspace:read')
+async getWorkspace() { ... }
 ```
 
 ## Request Context Injection

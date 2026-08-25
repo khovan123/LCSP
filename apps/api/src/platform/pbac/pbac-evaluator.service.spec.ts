@@ -66,7 +66,7 @@ describe("PbacEvaluatorService", () => {
 
   it("T04: subject role mismatch → deny SUBJECT_ROLE_MISMATCH", () => {
     const result = service.evaluate(
-      buildContext({ subject: { role: SUBJECT_ROLES.developer } }),
+      buildContext({ subject: { role: SUBJECT_ROLES.systemAdmin } }),
     );
 
     expect(result.decision).toBe(PBAC_DECISION.deny);

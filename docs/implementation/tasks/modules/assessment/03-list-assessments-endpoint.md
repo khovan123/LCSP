@@ -14,7 +14,7 @@ depends_on:
 
 ## Outcome
 
-Return a paginated list of assessments in the Manager's organization. Managers see their own assessments. Developers see only assessments within their PBAC scope. No risk labels shown.
+Return a paginated list of assessments in the Manager's organization. Managers see their own assessments. Non-Manager subjects do not receive scoped Developer projections. No risk labels shown.
 
 ## Module Files
 
@@ -76,27 +76,27 @@ Return a paginated list of assessments in the Manager's organization. Managers s
 
 1. PBAC guard: `action = assessment:list`.
 2. Managers: `WHERE organizationId = session.organizationId AND ownerId = session.userId`.
-3. Developers: `WHERE organizationId = session.organizationId AND assessment.id = pbacContext.scope` (scope from membership).
+3. Non-Manager subjects return an empty list or PBAC denial according to guard outcome; there is no active Developer scoped list.
 4. `status` filter: if provided, add `AND status = filter.status`. Validate against known status values.
 5. Pagination: `OFFSET (page - 1) * page_size, LIMIT page_size`. Max `page_size = 100`.
 6. `AssessmentSummary` must not include risk labels, classification values, or technical findings.
 
 ## Test Cases
 
-| ID  | Scenario                              | Expected                       |
-| --- | ------------------------------------- | ------------------------------ |
-| T01 | Manager with assessments              | 200, paginated list            |
-| T02 | Manager with no assessments           | 200, empty `assessments` array |
-| T03 | `page_size = 5`                       | Only 5 returned                |
-| T04 | `status` filter                       | Only matching status returned  |
-| T05 | Manager lacks `assessment:list`       | 403 `PBAC_DENIED`              |
-| T06 | Developer sees only scoped assessment | Only assessment matching scope |
-| T07 | `page_size > 100`                     | Clamped to 100 or rejected     |
-| T08 | No risk labels in response            | Verified by field inspection   |
+| ID  | Scenario                          | Expected                       |
+| --- | --------------------------------- | ------------------------------ |
+| T01 | Manager with assessments          | 200, paginated list            |
+| T02 | Manager with no assessments       | 200, empty `assessments` array |
+| T03 | `page_size = 5`                   | Only 5 returned                |
+| T04 | `status` filter                   | Only matching status returned  |
+| T05 | Manager lacks `assessment:list`   | 403 `PBAC_DENIED`              |
+| T06 | Non-Manager subject requests list | Empty list or PBAC denial      |
+| T07 | `page_size > 100`                 | Clamped to 100 or rejected     |
+| T08 | No risk labels in response        | Verified by field inspection   |
 
 ## Definition of Done
 
 - Paginated list returned with correct org-scope filter.
 - Managers see only their own assessments.
-- Developers see only their scoped assessments.
+- Non-Manager scoped Developer listing is retired.
 - No risk/classification content in list response.

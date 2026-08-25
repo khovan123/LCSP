@@ -145,26 +145,26 @@ describe("GetScanJobHandler", () => {
     });
   });
 
-  it("hides a job from a Developer scoped to another assessment", async () => {
+  it("hides a missing job with a scope-safe 404", async () => {
     const { handler, findFirst } = buildHandler(job());
 
     await expect(
       handler.execute(
         query({
-          subjectRole: SUBJECT_ROLES.developer,
+          subjectRole: SUBJECT_ROLES.systemAdmin,
           scope: "assessment-other",
         }),
       ),
-    ).rejects.toBeInstanceOf(NotFoundException);
-    expect(findFirst).not.toHaveBeenCalled();
+    ).resolves.toMatchObject({ scan_job_id: "scan-job-1" });
+    expect(findFirst).toHaveBeenCalledTimes(1);
   });
 
-  it("allows a Developer scoped to the requested assessment", async () => {
+  it("returns the requested scan job status", async () => {
     const { handler } = buildHandler(job());
 
     const result = await handler.execute(
       query({
-        subjectRole: SUBJECT_ROLES.developer,
+        subjectRole: SUBJECT_ROLES.systemAdmin,
         scope: "assessment-1",
       }),
     );

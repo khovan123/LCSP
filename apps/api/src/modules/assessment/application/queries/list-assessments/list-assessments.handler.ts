@@ -78,9 +78,7 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
       correlationId: query.correlationId,
     });
 
-    // Developer (or any non-Manager role) with no scope on their membership has
-    // nothing to see — fail closed rather than falling through to an org-wide query.
-    if (query.subjectRole !== SUBJECT_ROLES.manager && !query.scope) {
+    if (query.subjectRole !== SUBJECT_ROLES.manager) {
       return emptyResult();
     }
 
@@ -89,9 +87,7 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
       status,
       page,
       pageSize,
-      ...(query.subjectRole === SUBJECT_ROLES.manager
-        ? { ownerId: query.sessionUserId }
-        : { assessmentId: query.scope as string }),
+      ownerId: query.sessionUserId,
     };
 
     const { items, total } = await this.assessmentRepository.findMany(criteria);

@@ -4,7 +4,6 @@ import {
   AuditResourceType as PrismaAuditResourceType,
   AuthBackupEmailPolicy as PrismaAuthBackupEmailPolicy,
   AuthDecision as PrismaAuthDecision,
-  AuthInvitationState as PrismaAuthInvitationState,
   AuthMembershipStatus as PrismaAuthMembershipStatus,
   AuthPrimaryEmailAddressPolicy as PrismaAuthPrimaryEmailAddressPolicy,
   AuthStateGate as PrismaAuthStateGate,
@@ -45,12 +44,10 @@ import {
 import {
   AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_ERROR_CODES,
-  AUTH_INVITATION_STATES,
   AUTH_MEMBERSHIP_STATUSES,
   AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
   type AuthBackupEmailPolicy,
   type AuthErrorCode,
-  type AuthInvitationState,
   type AuthMembershipStatus,
   type AuthPrimaryEmailAddressPolicy,
 } from "@lcsp/contracts/auth";
@@ -126,18 +123,6 @@ const PRISMA_AUTH_MEMBERSHIP_STATUS_TO_CONTRACT = {
   [PrismaAuthMembershipStatus.ACTIVE]: AUTH_MEMBERSHIP_STATUSES.active,
   [PrismaAuthMembershipStatus.REVOKED]: AUTH_MEMBERSHIP_STATUSES.revoked,
 } as const satisfies Record<PrismaAuthMembershipStatus, AuthMembershipStatus>;
-
-const AUTH_INVITATION_STATE_TO_PRISMA = {
-  [AUTH_INVITATION_STATES.approved]: PrismaAuthInvitationState.APPROVED,
-  [AUTH_INVITATION_STATES.pending]: PrismaAuthInvitationState.PENDING,
-  [AUTH_INVITATION_STATES.consumed]: PrismaAuthInvitationState.CONSUMED,
-} as const satisfies Record<AuthInvitationState, PrismaAuthInvitationState>;
-
-const PRISMA_AUTH_INVITATION_STATE_TO_CONTRACT = {
-  [PrismaAuthInvitationState.APPROVED]: AUTH_INVITATION_STATES.approved,
-  [PrismaAuthInvitationState.PENDING]: AUTH_INVITATION_STATES.pending,
-  [PrismaAuthInvitationState.CONSUMED]: AUTH_INVITATION_STATES.consumed,
-} as const satisfies Record<PrismaAuthInvitationState, AuthInvitationState>;
 
 const AUTH_BACKUP_EMAIL_POLICY_TO_PRISMA = {
   [AUTH_BACKUP_EMAIL_POLICIES.allVerified]:
@@ -1097,20 +1082,6 @@ export function fromPrismaAuthPrimaryEmailAddressPolicy(
   policy: PrismaAuthPrimaryEmailAddressPolicy,
 ): AuthPrimaryEmailAddressPolicy {
   return PRISMA_AUTH_PRIMARY_EMAIL_ADDRESS_POLICY_TO_CONTRACT[policy];
-}
-
-/** Maps auth invitation state from the contract layer to Prisma. @param state - Contract invitation state. @returns Prisma invitation state. */
-export function toPrismaAuthInvitationState(
-  state: AuthInvitationState,
-): PrismaAuthInvitationState {
-  return AUTH_INVITATION_STATE_TO_PRISMA[state];
-}
-
-/** Maps auth invitation state from Prisma to the contract layer. @param state - Prisma invitation state. @returns Contract invitation state. */
-export function fromPrismaAuthInvitationState(
-  state: PrismaAuthInvitationState,
-): AuthInvitationState {
-  return PRISMA_AUTH_INVITATION_STATE_TO_CONTRACT[state];
 }
 
 /** Maps an audit authorization decision from the contract layer to Prisma. @param decision - Contract audit decision. @returns Prisma auth decision. */

@@ -36,7 +36,7 @@ describe("ScanController", () => {
     });
   });
 
-  it("dispatches GetScanJobQuery with organization and Developer scope", async () => {
+  it("dispatches GetScanJobQuery with organization and PBAC scope", async () => {
     const execute = jest.fn<(query: unknown) => Promise<unknown>>();
     execute.mockResolvedValue({ scan_job_id: "scan-job-1" });
     const controller = new ScanController(
@@ -47,14 +47,14 @@ describe("ScanController", () => {
     await controller.getScanJob("assessment-1", "scan-job-1", {
       correlationId: "corr-1",
       pbacContext: {
-        userId: "developer-1",
+        userId: "system-admin-1",
         sessionId: "session-1",
         organizationId: "org-1",
-        subjectRole: SUBJECT_ROLES.developer,
+        subjectRole: SUBJECT_ROLES.systemAdmin,
         scope: "assessment-1",
         grantedActions: [PBAC_ACTIONS.scanRead],
         selectedAction: PBAC_ACTIONS.scanRead,
-        policyId: "policy-developer",
+        policyId: "policy-system-admin",
         policyVersion: "v1",
       },
     });
@@ -65,7 +65,7 @@ describe("ScanController", () => {
       assessmentId: "assessment-1",
       scanJobId: "scan-job-1",
       organizationId: "org-1",
-      subjectRole: SUBJECT_ROLES.developer,
+      subjectRole: SUBJECT_ROLES.systemAdmin,
       scope: "assessment-1",
       correlationId: "corr-1",
     });

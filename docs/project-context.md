@@ -1,8 +1,8 @@
 ---
-project_name: 'LCSP — Legal Compliance Support Platform'
-user_name: 'lcsp-team'
-date: '2026-06-26T10:52:59+07:00'
-sections_completed: ['technology_stack', 'critical_rules']
+project_name: "LCSP — Legal Compliance Support Platform"
+user_name: "lcsp-team"
+date: "2026-06-26T10:52:59+07:00"
+sections_completed: ["technology_stack", "critical_rules"]
 existing_patterns_found: 14
 ---
 
@@ -30,15 +30,15 @@ _File này chứa các rule ngắn, có tính thực thi cao, dành cho AI agent
 
 ### 2. PBAC Is the Source of Truth
 
-- PBAC thay RBAC làm authorization source of truth. Role label `Manager` và `Developer` chỉ là subject attributes hoặc policy templates. [Source: docs/product/prd.md] [Source: docs/specs/functional-requirements.md]
+- PBAC thay RBAC làm authorization source of truth. Role label như `Manager` chỉ là subject attributes hoặc policy templates. [Source: docs/product/prd.md] [Source: docs/specs/functional-requirements.md]
 - Mọi protected action phải evaluate `subject + organization + resource + action + runtime context + policy version + state gate`. [Source: docs/implementation/decisions/pbac-runtime-decision.md]
 - Default là deny. Thiếu policy, thiếu attributes, org mismatch, resource mismatch, cache/evaluator failure, hoặc unavailable state gate đều fail closed. [Source: docs/implementation/decisions/pbac-runtime-decision.md]
 - UI capability chỉ là hint từ backend projection; không bao giờ là authority.
 
 ### 3. Manager Golden Path Must Stay Intact
 
-- Manager phải có thể hoàn tất active MVP golden path mà không phụ thuộc Developer.
-- Developer luôn là optional scoped collaborator, không được trở thành workflow blocker trừ khi authority mới nói khác. [Source: docs/product/system-context.md] [Source: docs/architecture/architecture.md]
+- Manager phải có thể hoàn tất active MVP golden path mà không phụ thuộc cộng tác viên bên ngoài.
+- Developer invitation/task workspace đã retired khỏi active MVP; reintroduction cần authority mới. [Source: docs/product/system-context.md] [Source: docs/architecture/architecture.md]
 
 ### 4. OAuth/OIDC and Repository Access Are Separate
 

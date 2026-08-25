@@ -343,7 +343,7 @@ describe("SubmitWizardHandler", () => {
           command.correlationId,
           {
             ...command.authorization,
-            subjectRole: SUBJECT_ROLES.developer,
+            subjectRole: SUBJECT_ROLES.systemAdmin,
           },
         ),
       ),

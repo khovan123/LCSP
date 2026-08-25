@@ -81,12 +81,6 @@ function buildRepositories(input: {
       findByUserAndOrganization: () => Promise.resolve(null),
       findActiveByUserId: () => Promise.resolve(input.activeMemberships),
     },
-    invitations: {
-      nextId: () => "unused",
-      save: () => Promise.resolve(),
-      findById: () => Promise.resolve(null),
-      tryConsume: () => Promise.resolve(false),
-    },
     sessions: {
       nextId: () => "session-1",
       save: () => Promise.resolve(),

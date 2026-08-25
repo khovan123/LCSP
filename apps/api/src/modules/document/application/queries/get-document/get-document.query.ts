@@ -12,7 +12,7 @@ export class GetDocumentQuery extends Query<DocumentStatusDto> {
    * @param assessmentId - Assessment that must own the document request.
    * @param documentRequestId - Document request identifier to retrieve.
    * @param organizationId - Organization boundary for the lookup.
-   * @param scope - PBAC resource scope used for redacted developer reads.
+   * @param scope - PBAC resource scope forwarded from the request context.
    * @param selectedAction - PBAC action selected by the authorization guard.
    * @param correlationId - Correlation identifier propagated to authorization and lookup errors.
    */

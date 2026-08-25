@@ -32,8 +32,8 @@ import type { PbacRequestContext } from "./interfaces/pbac-request.interface.js"
 import type { PbacDecisionResult } from "./pbac.types.js";
 
 class DummyController {
-  @RequireAction(PBAC_ACTIONS.inviteDeveloper)
-  inviteDeveloper(this: void): void {}
+  @RequireAction(PBAC_ACTIONS.workspaceRead)
+  getWorkspaceRead(this: void): void {}
 
   @RequireSession()
   getWorkspace(this: void): void {}
@@ -94,7 +94,7 @@ function makePolicy(): Policy {
   return Policy.rehydrate({
     id: "policy-1",
     version: "v1",
-    actions: [PBAC_ACTIONS.inviteDeveloper],
+    actions: [PBAC_ACTIONS.workspaceRead],
     subjectRole: SUBJECT_ROLES.manager,
     stateGate: PBAC_STATE_GATES.membershipActive,
     organizationId: "org-1",
@@ -146,7 +146,7 @@ describe("PbacGuard", () => {
   it("T01: valid session + active membership + action in policy allows and logs the decision", async () => {
     const { guard, append } = makeGuard();
     const { context, request } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer valid-token",
     });
 
@@ -159,7 +159,7 @@ describe("PbacGuard", () => {
         resource_id:
           "POST /assessments/:assessmentId/conflicts/:conflictId/resolve",
         decision: PBAC_DECISION.allow,
-        action: PBAC_ACTIONS.inviteDeveloper,
+        action: PBAC_ACTIONS.workspaceRead,
       }),
     );
     expect(
@@ -176,7 +176,7 @@ describe("PbacGuard", () => {
   it("T02: missing Authorization header returns 401 SESSION_INVALID", async () => {
     const { guard, load } = makeGuard();
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
     });
 
     const error = await guard.canActivate(context).catch((e: unknown) => e);
@@ -194,7 +194,7 @@ describe("PbacGuard", () => {
       loadResult: { ok: false, reason: PBAC_REASON_CODE.sessionInvalid },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer expired-token",
     });
 
@@ -212,7 +212,7 @@ describe("PbacGuard", () => {
       loadResult: { ok: false, reason: PBAC_REASON_CODE.mfaRequired },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
 
@@ -230,7 +230,7 @@ describe("PbacGuard", () => {
       loadResult: { ok: false, reason: PBAC_REASON_CODE.membershipMissing },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
 
@@ -253,7 +253,7 @@ describe("PbacGuard", () => {
       },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
 
@@ -277,7 +277,7 @@ describe("PbacGuard", () => {
       loadResult: { ok: false, reason: PBAC_REASON_CODE.policyNotFound },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
 
@@ -295,7 +295,7 @@ describe("PbacGuard", () => {
       loadResult: { ok: false, reason: PBAC_REASON_CODE.loadError },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
 
@@ -318,7 +318,7 @@ describe("PbacGuard", () => {
       },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
 
@@ -338,7 +338,7 @@ describe("PbacGuard", () => {
   it("T11: request.pbacContext is set on the request after allow", async () => {
     const { guard } = makeGuard();
     const { context, request } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
 
@@ -377,7 +377,7 @@ describe("PbacGuard", () => {
     for (const loadResult of scenarios) {
       const { guard, append } = makeGuard({ loadResult });
       const { context } = makeContext({
-        handler: DummyController.prototype.inviteDeveloper,
+        handler: DummyController.prototype.getWorkspaceRead,
         authorization: "Bearer token",
       });
 
@@ -395,7 +395,7 @@ describe("PbacGuard", () => {
       },
     });
     const { context: denyContext } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
     await denyGuard.canActivate(denyContext).catch(() => undefined);
@@ -407,7 +407,7 @@ describe("PbacGuard", () => {
       appendImpl: () => Promise.reject(new Error("db down")),
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
 
@@ -456,7 +456,7 @@ describe("PbacGuard", () => {
       },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
 
@@ -483,7 +483,7 @@ describe("PbacGuard", () => {
       },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
     });
 
@@ -569,7 +569,7 @@ describe("PbacGuard", () => {
   it("records a domain resource id from route params when present", async () => {
     const { guard, append } = makeGuard();
     const { context } = makeContext({
-      handler: DummyController.prototype.inviteDeveloper,
+      handler: DummyController.prototype.getWorkspaceRead,
       authorization: "Bearer token",
       params: { assessmentId: "assessment-1", conflictId: "conflict-1" },
     });

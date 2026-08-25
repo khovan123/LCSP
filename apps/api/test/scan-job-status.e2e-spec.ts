@@ -177,37 +177,18 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
     assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
   });
 
-  it("allows only a Developer scoped to the requested assessment", async () => {
+  it("allows a non-Manager with scan:read policy to read the requested scan job", async () => {
     await createJob(prisma, REPOSITORY_SCAN_JOB_STATUSES.running);
-    await seedDeveloper(prisma);
+    await seedSystemAdmin(prisma);
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
-      email: "developer@acme.test",
-      password: "DeveloperPass123!",
+      email: "system-admin@acme.test",
+      password: "SystemAdminPass123!",
       organization_id: "org-1",
     });
     const token = successBody<SignInSuccess>(signIn).session_token;
 
     const allowed = await getStatus(app, token);
     assert.equal(allowed.status, 200);
-
-    await prisma.authMembership.update({
-      where: {
-        userId_organizationId: {
-          userId: "developer-1",
-          organizationId: "org-1",
-        },
-      },
-      data: {
-        subjectAttributes: {
-          role: SUBJECT_ROLES.developer,
-          scope: "assessment-other",
-        },
-      },
-    });
-
-    const hidden = await getStatus(app, token);
-    assert.equal(hidden.status, 404);
-    assert.equal(problemCode(hidden), SCAN_ERROR_CODES.jobNotFound);
   });
 });
 
@@ -239,37 +220,37 @@ async function createJob(
   });
 }
 
-async function seedDeveloper(prisma: PrismaClient) {
+async function seedSystemAdmin(prisma: PrismaClient) {
   await prisma.authUser.create({
     data: {
-      id: "developer-1",
-      email: "developer@acme.test",
-      passwordHash: hashSecret("DeveloperPass123!"),
+      id: "system-admin-1",
+      email: "system-admin@acme.test",
+      passwordHash: hashSecret("SystemAdminPass123!"),
       emailVerified: true,
       failedLoginCount: 0,
     },
   });
   await prisma.authPolicy.create({
     data: {
-      id: "policy-developer-scan-read",
+      id: "policy-system-admin-scan-read",
       version: "2026-07-18",
       actions: [PBAC_ACTIONS.scanRead],
-      subjectRole: SUBJECT_ROLES.developer,
+      subjectRole: SUBJECT_ROLES.systemAdmin,
       stateGate: PBAC_STATE_GATES.membershipActive,
       organizationId: "org-1",
     },
   });
   await prisma.authMembership.create({
     data: {
-      id: "membership-developer-scan-read",
-      userId: "developer-1",
+      id: "membership-systemAdmin-scan-read",
+      userId: "system-admin-1",
       organizationId: "org-1",
       status: AUTH_MEMBERSHIP_STATUSES.active,
       subjectAttributes: {
-        role: SUBJECT_ROLES.developer,
+        role: SUBJECT_ROLES.systemAdmin,
         scope: "assessment-1",
       },
-      policyId: "policy-developer-scan-read",
+      policyId: "policy-system-admin-scan-read",
       policyVersion: "2026-07-18",
     },
   });

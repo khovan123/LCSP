@@ -36,14 +36,14 @@ describe("ResolveConflictHandler", () => {
           "assessment-1",
           "conflict-1",
           "org-1",
-          "developer-1",
-          SUBJECT_ROLES.developer,
+          "system-admin-1",
+          SUBJECT_ROLES.systemAdmin,
           CONFLICT_RECORD_STATUSES.resolved,
           null,
           "corr-conflict-deny",
           {
             selectedAction: PBAC_ACTIONS.conflictResolve,
-            policyId: "policy-developer",
+            policyId: "policy-system-admin",
             policyVersion: "2026-06-26",
           },
         ),
@@ -52,7 +52,7 @@ describe("ResolveConflictHandler", () => {
 
     expect(auditWriter.write).toHaveBeenCalledWith({
       eventType: SCAN_EVENT_TYPES.conflictResolvedAudit,
-      actorId: "developer-1",
+      actorId: "system-admin-1",
       organizationId: "org-1",
       assessmentId: "assessment-1",
       resourceType: AUDIT_RESOURCE_TYPES.conflictRecord,
@@ -60,7 +60,7 @@ describe("ResolveConflictHandler", () => {
       correlationId: "corr-conflict-deny",
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.pbacDenied,
-      policyId: "policy-developer",
+      policyId: "policy-system-admin",
       policyVersion: "2026-06-26",
       payload: {
         assessmentId: "assessment-1",

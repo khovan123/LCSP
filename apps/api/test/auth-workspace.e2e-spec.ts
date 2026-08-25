@@ -1,10 +1,8 @@
 import {
   AUTH_BACKUP_EMAIL_POLICIES,
-  AUTH_INVITATION_STATES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
   AUTH_MEMBERSHIP_STATUSES,
   AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
-  REQUIRED_ACTIONS,
 } from "@lcsp/contracts/auth";
 import {
   PBAC_ACTIONS,
@@ -36,7 +34,6 @@ import type {
   ConfirmRecoverySuccess,
   RequestRecoverySuccess,
 } from "../src/modules/auth-workspace/application/contracts/auth-workspace/recovery.contract.js";
-import type { RegisterSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/register-approved-path.contract.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import type { WorkspaceSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/workspace.contract.js";
 import { AUTH_WORKSPACE_RECOVERY_NOTIFIER } from "../src/modules/auth-workspace/application/ports/notification/recovery-notifier.js";
@@ -122,47 +119,6 @@ describe("Auth workspace (e2e)", () => {
     assert.equal(typeof body.session_token, "string");
     assert.equal(body.mfa_required, undefined);
     assert.equal(body.mfa_enrolled, false);
-  });
-
-  it("approved invitation registration creates session through approved path", async () => {
-    const result = await httpRequest(app)
-      .post("/auth/register-approved-path")
-      .send({
-        invite_id: "invite-approved",
-        password: "ApprovedInvite123!",
-      })
-      .expect(201);
-
-    assert.equal(
-      successBody<RegisterSuccess>(result).user.email,
-      "invitee@acme.test",
-    );
-    const invite = await prisma.authInvitation.findUnique({
-      where: { id: "invite-approved" },
-    });
-    assert.equal(invite?.state, AUTH_INVITATION_STATES.consumed);
-  });
-
-  it("approved invitation cannot be replayed after first registration", async () => {
-    const first = await httpRequest(app)
-      .post("/auth/register-approved-path")
-      .send({
-        invite_id: "invite-approved",
-        password: "ApprovedInvite123!",
-      })
-      .expect(201);
-
-    const replay = await httpRequest(app)
-      .post("/auth/register-approved-path")
-      .send({
-        invite_id: "invite-approved",
-        password: "ApprovedInvite123!",
-      })
-      .expect(403);
-
-    assert.equal(successBody<RegisterSuccess>(first).ok, true);
-    const failure = expectFailure(replay.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidInviteState);
   });
 
   it("invalid credentials return stable safe error without echoing secrets", async () => {
@@ -272,49 +228,6 @@ describe("Auth workspace (e2e)", () => {
     const failure = expectFailure(result.body);
     assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidCredentials);
     assert.doesNotMatch(JSON.stringify(failure), /WrongPassword123!/);
-  });
-
-  it("invalid invite state is rejected with safe machine-readable contract", async () => {
-    const result = await httpRequest(app)
-      .post("/auth/register-approved-path")
-      .send({
-        invite_id: "invite-pending",
-        password: "SomePassword123!",
-      })
-      .expect(403);
-
-    const failure = expectFailure(result.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidInviteState);
-    assert.equal(failure.problem.requiredAction, REQUIRED_ACTIONS.acceptInvite);
-  });
-
-  it("approved invitation still blocks registration when email verification is pending", async () => {
-    const result = await httpRequest(app)
-      .post("/auth/register-approved-path")
-      .send({
-        invite_id: "invite-unverified",
-        password: "SomePassword123!",
-      })
-      .expect(403);
-
-    const failure = expectFailure(result.body);
-    assert.equal(
-      failure.problem.code,
-      AUTH_ERROR_CODES.emailVerificationRequired,
-    );
-  });
-
-  it("approved invitation still blocks registration when membership is not active", async () => {
-    const result = await httpRequest(app)
-      .post("/auth/register-approved-path")
-      .send({
-        invite_id: "invite-not-active",
-        password: "SomePassword123!",
-      })
-      .expect(403);
-
-    const failure = expectFailure(result.body);
-    assert.equal(failure.problem.code, AUTH_ERROR_CODES.invalidInviteState);
   });
 
   it("email verification is required before continuing to workspace", async () => {

@@ -204,6 +204,22 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           { status: HttpStatus.TOO_MANY_REQUESTS },
         );
       }
+      await tx.repositoryScanJob.create({
+        data: {
+          id: scanJobId,
+          assessmentId: input.assessmentId,
+          snapshotId: report.snapshotId,
+          organizationId,
+          idempotencyKey: `reanalysis:${input.idempotencyKey}`,
+          triggerSource: toPrismaRepositoryScanTriggerSource(
+            REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
+          ),
+          status: toPrismaRepositoryScanJobStatus(
+            REPOSITORY_SCAN_JOB_STATUSES.queued,
+          ),
+          correlationId,
+        },
+      });
       const row = await tx.targetedReanalysisRequest.create({
         data: {
           id: requestId,
@@ -225,22 +241,6 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
         data: {
           id: checkpointRef,
           requestId,
-          correlationId,
-        },
-      });
-      await tx.repositoryScanJob.create({
-        data: {
-          id: scanJobId,
-          assessmentId: input.assessmentId,
-          snapshotId: report.snapshotId,
-          organizationId,
-          idempotencyKey: `reanalysis:${input.idempotencyKey}`,
-          triggerSource: toPrismaRepositoryScanTriggerSource(
-            REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
-          ),
-          status: toPrismaRepositoryScanJobStatus(
-            REPOSITORY_SCAN_JOB_STATUSES.queued,
-          ),
           correlationId,
         },
       });

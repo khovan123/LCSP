@@ -229,6 +229,13 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
   });
 
   it("T04: connection outside the session organization is hidden", async () => {
+    await prisma.authOrganization.create({
+      data: {
+        id: "org-other",
+        slug: "other",
+        name: "Other Org",
+      },
+    });
     await prisma.repositoryConnection.update({
       where: { id: "connection-1" },
       data: { organizationId: "org-other" },

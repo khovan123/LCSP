@@ -147,24 +147,23 @@ describe("ListAssessmentsHandler", () => {
     ).rejects.toThrow(UnprocessableEntityException);
   });
 
-  // T06
-  it("scopes a Developer to only their scoped assessment id", async () => {
-    const { handler, findMany } = buildHandler({});
-
-    await handler.execute(
-      query({ subjectRole: SUBJECT_ROLES.developer, scope: "assessment-42" }),
-    );
-
-    const criteria = findMany.mock.calls[0][0];
-    expect(criteria.assessmentId).toBe("assessment-42");
-    expect(criteria.ownerId).toBeUndefined();
-  });
-
-  it("returns an empty list without querying when a Developer has no scope", async () => {
+  it("returns an empty list without querying for a non-Manager, even with scope", async () => {
     const { handler, findMany } = buildHandler({});
 
     const result = await handler.execute(
-      query({ subjectRole: SUBJECT_ROLES.developer, scope: null }),
+      query({ subjectRole: SUBJECT_ROLES.systemAdmin, scope: "assessment-42" }),
+    );
+
+    expect(result.assessments).toEqual([]);
+    expect(result.total).toBe(0);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty list without querying when a non-Manager has no scope", async () => {
+    const { handler, findMany } = buildHandler({});
+
+    const result = await handler.execute(
+      query({ subjectRole: SUBJECT_ROLES.systemAdmin, scope: null }),
     );
 
     expect(result.assessments).toEqual([]);

@@ -51,12 +51,10 @@ export type PagesMessages = {
     headerEyebrow: string;
     workspaceTitle: string;
     assessmentTitle: string;
-    developerTitle: string;
     workspaceNavigation: string;
     assessmentNavigation: string;
     chooseAssessmentToView: string;
     selectAssessmentFirst: string;
-    developerNavigation: string;
     overview: string;
     assessments: string;
     recentAssessments: string;
@@ -71,8 +69,6 @@ export type PagesMessages = {
     classification: string;
     documents: string;
     conflicts: string;
-    developer: string;
-    developers: string;
     legalLibrary: string;
     secureWorkspace: string;
     signOut: string;
@@ -285,73 +281,6 @@ export type PagesMessages = {
       passwordTooShort: string;
       requestFailedTitle: string;
       requestFailedDetail: string;
-    };
-  };
-  acceptInvitation: {
-    metadataTitle: string;
-    metadataDescription: string;
-    eyebrow: string;
-    title: string;
-    description: string;
-    loading: string;
-    organizationScope: string;
-    expiresLabel: string;
-    displayNameLabel: string;
-    displayNameDescription: string;
-    passwordLabel: string;
-    passwordDescription: string;
-    submit: string;
-    submitting: string;
-    signInInstead: string;
-    errors: {
-      displayNameRequired: string;
-      displayNameTooLong: string;
-      passwordTooShort: string;
-      invalidTitle: string;
-      invalidDetail: string;
-      emailExistsTitle: string;
-      emailExistsDetail: string;
-      requestTitle: string;
-      requestDetail: string;
-    };
-  };
-  developerTask: {
-    metadataTitle: string;
-    metadataDescription: string;
-    sidebarTitle: string;
-    sidebarDescription: string;
-    sidebarToggle: string;
-    navigationLabel: string;
-    taskNav: string;
-    pageTitle: string;
-    pageDescription: string;
-    selectionTitle: string;
-    selectionDescription: string;
-    openAssessment: string;
-    loading: string;
-    scopeTitle: string;
-    scopeDescription: string;
-    organization: string;
-    assessment: string;
-    organizationScope: string;
-    grantedActions: string;
-    hiddenBoundaryTitle: string;
-    hiddenBoundary: string;
-    findingsTitle: string;
-    findingsDescription: string;
-    emptyTitle: string;
-    emptyDescription: string;
-    revokedTitle: string;
-    revokedDetail: string;
-    errorTitle: string;
-    errorDetail: string;
-    actions: {
-      assessmentList: string;
-      evidenceReadRedacted: string;
-      aiUsageFlowRead: string;
-      findingsReadRedacted: string;
-      conflictComment: string;
-      scanRead: string;
     };
   };
   workspace: {
@@ -767,17 +696,6 @@ export type PagesMessages = {
     cancel: string;
     submit: string;
     submitting: string;
-  };
-  developerManagement: {
-    pageTitle: string;
-    pageDescription: string;
-    inviteTitle: string;
-    emailLabel: string;
-    invite: string;
-    membersTitle: string;
-    scopeLabel: string;
-    revoke: string;
-    empty: string;
   };
   wizard: {
     metadataTitle: string;

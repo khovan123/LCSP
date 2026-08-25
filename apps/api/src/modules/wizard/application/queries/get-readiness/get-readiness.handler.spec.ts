@@ -90,7 +90,7 @@ describe("GetReadinessHandler", () => {
       query.correlationId,
       {
         ...query.authorization,
-        subjectRole: SUBJECT_ROLES.developer,
+        subjectRole: SUBJECT_ROLES.systemAdmin,
         selectedAction: "some:other:action", // wrong action
       },
     );

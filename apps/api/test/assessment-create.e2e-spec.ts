@@ -216,22 +216,6 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
     assert.doesNotMatch(JSON.stringify(audit.payload), /Sensitive detail/);
   });
 
-  // T08
-  it("T08: response contains no Developer assignment fields", async () => {
-    const result = await httpRequest(app)
-      .post("/assessments")
-      .set("Authorization", `Bearer ${managerToken}`)
-      .send({ name: "No Developer Test" });
-    // Intentionally untyped here (not CreateAssessmentDto) — the DTO's whole
-    // point is that it never declares these fields, so checking their absence
-    // needs an escape hatch rather than the strict contract type.
-    const body = result.body as Record<string, unknown>;
-
-    assert.equal(result.status, 201);
-    assert.equal(body.developer_id, undefined);
-    assert.equal(body.developerId, undefined);
-  });
-
   it("Assessment creation enqueues an assessment.created OutboxMessage", async () => {
     const result = await httpRequest(app)
       .post("/assessments")

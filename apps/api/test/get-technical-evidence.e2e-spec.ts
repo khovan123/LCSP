@@ -117,11 +117,11 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
     assert.equal(body.correlationId, "corr-evidence-manager");
   });
 
-  it("T02: scoped Developer receives redacted file and line locations", async () => {
+  it("T02: scoped SystemAdmin receives redacted file and line locations", async () => {
     await createReport();
-    const developerToken = await seedDeveloper(ASSESSMENT_ID);
+    const systemAdminToken = await seedSystemAdmin(ASSESSMENT_ID);
 
-    const result = await getEvidence(developerToken, "corr-evidence-dev");
+    const result = await getEvidence(systemAdminToken, "corr-evidence-dev");
     const body = successBody<EvidenceDetailDto>(result);
 
     assert.equal(result.status, 200);
@@ -135,7 +135,7 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
       },
     });
     assert.equal(decision.action, PBAC_ACTIONS.evidenceReadRedacted);
-    assert.equal(decision.policyId, "policy-evidence-developer");
+    assert.equal(decision.policyId, "policy-evidence-systemAdmin");
     assert.equal(decision.policyVersion, "2026-07-19");
   });
 
@@ -173,9 +173,9 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
 
     await prisma.technicalEvidenceReport.deleteMany();
     await createReport();
-    const developerToken = await seedDeveloper("assessment-not-assigned");
+    const systemAdminToken = await seedSystemAdmin("assessment-not-assigned");
     const outOfScope = await getEvidence(
-      developerToken,
+      systemAdminToken,
       "corr-evidence-out-of-scope",
     );
     assertNotFound(outOfScope.status, outOfScope.body);
@@ -243,38 +243,38 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
     return token;
   }
 
-  async function seedDeveloper(scope: string): Promise<string> {
+  async function seedSystemAdmin(scope: string): Promise<string> {
     await prisma.authPolicy.create({
       data: {
-        id: "policy-evidence-developer",
+        id: "policy-evidence-systemAdmin",
         version: "2026-07-19",
         actions: [PBAC_ACTIONS.evidenceReadRedacted],
-        subjectRole: SUBJECT_ROLES.developer,
+        subjectRole: SUBJECT_ROLES.systemAdmin,
         stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: ORGANIZATION_ID,
       },
     });
     await prisma.authUser.create({
       data: {
-        id: "user-evidence-developer",
-        email: "evidence-developer@acme.test",
-        passwordHash: hashSecret("DeveloperPassword123!"),
+        id: "user-evidence-systemAdmin",
+        email: "evidence-system-admin@acme.test",
+        passwordHash: hashSecret("SystemAdminPassword123!"),
         emailVerified: true,
         failedLoginCount: 0,
       },
     });
     await prisma.authMembership.create({
       data: {
-        id: "membership-evidence-developer",
-        userId: "user-evidence-developer",
+        id: "membership-evidence-systemAdmin",
+        userId: "user-evidence-systemAdmin",
         organizationId: ORGANIZATION_ID,
         status: AUTH_MEMBERSHIP_STATUSES.active,
-        subjectAttributes: { role: SUBJECT_ROLES.developer, scope },
-        policyId: "policy-evidence-developer",
+        subjectAttributes: { role: SUBJECT_ROLES.systemAdmin, scope },
+        policyId: "policy-evidence-systemAdmin",
         policyVersion: "2026-07-19",
       },
     });
-    return signIn("evidence-developer@acme.test", "DeveloperPassword123!");
+    return signIn("evidence-system-admin@acme.test", "SystemAdminPassword123!");
   }
 
   async function createReport(

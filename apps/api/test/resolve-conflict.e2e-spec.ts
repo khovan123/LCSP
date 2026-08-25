@@ -48,7 +48,7 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
   let managerToken: string;
-  let developerToken: string;
+  let systemAdminToken: string;
 
   beforeAll(async () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -68,14 +68,18 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
     await grantManagerConflictResolve(prisma);
-    await seedDeveloper(prisma);
+    await seedSystemAdmin(prisma);
     await seedAssessmentChain(prisma, "assessment-1", "org-1");
     await seedConflicts(prisma, "assessment-1", "org-1", [
       { id: "conflict-1", status: CONFLICT_RECORD_STATUSES.pending },
       { id: "conflict-2", status: CONFLICT_RECORD_STATUSES.pending },
     ]);
     managerToken = await signIn(app, "manager@acme.test", "org-1");
-    developerToken = await signIn(app, "developer-resolve@acme.test", "org-1");
+    systemAdminToken = await signIn(
+      app,
+      "system-admin-resolve@acme.test",
+      "org-1",
+    );
   });
 
   afterAll(async () => {
@@ -190,10 +194,15 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     );
   });
 
-  it("T05 denies Developer resolution", async () => {
-    const response = await resolveConflict(app, developerToken, "conflict-1", {
-      resolution: CONFLICT_RECORD_STATUSES.resolved,
-    });
+  it("T05 denies SystemAdmin resolution", async () => {
+    const response = await resolveConflict(
+      app,
+      systemAdminToken,
+      "conflict-1",
+      {
+        resolution: CONFLICT_RECORD_STATUSES.resolved,
+      },
+    );
 
     assertError(response.status, response.body, 403, PBAC_REASON_CODE.denied);
   });
@@ -294,36 +303,36 @@ async function grantManagerConflictResolve(
   });
 }
 
-async function seedDeveloper(prisma: PrismaClient): Promise<void> {
-  const policyId = "policy-developer-conflict-resolution-denied";
+async function seedSystemAdmin(prisma: PrismaClient): Promise<void> {
+  const policyId = "policy-system-admin-conflict-resolution-denied";
   const policyVersion = "2026-07-22";
   await prisma.authPolicy.create({
     data: {
       id: policyId,
       version: policyVersion,
       actions: [PBAC_ACTIONS.assessmentList],
-      subjectRole: SUBJECT_ROLES.developer,
+      subjectRole: SUBJECT_ROLES.systemAdmin,
       stateGate: PBAC_STATE_GATES.membershipActive,
       organizationId: "org-1",
     },
   });
   await prisma.authUser.create({
     data: {
-      id: "developer-resolve",
-      email: "developer-resolve@acme.test",
-      passwordHash: hashSecret("DeveloperResolve123!"),
+      id: "systemAdmin-resolve",
+      email: "system-admin-resolve@acme.test",
+      passwordHash: hashSecret("SystemAdminResolve123!"),
       emailVerified: true,
       failedLoginCount: 0,
     },
   });
   await prisma.authMembership.create({
     data: {
-      id: "membership-developer-resolve",
-      userId: "developer-resolve",
+      id: "membership-systemAdmin-resolve",
+      userId: "systemAdmin-resolve",
       organizationId: "org-1",
       status: AUTH_MEMBERSHIP_STATUSES.active,
       subjectAttributes: {
-        role: SUBJECT_ROLES.developer,
+        role: SUBJECT_ROLES.systemAdmin,
         scope: "assessment-1",
       },
       policyId,
@@ -422,8 +431,8 @@ async function signIn(
   organizationId: string,
 ): Promise<string> {
   const password =
-    email === "developer-resolve@acme.test"
-      ? "DeveloperResolve123!"
+    email === "system-admin-resolve@acme.test"
+      ? "SystemAdminResolve123!"
       : "CorrectHorseBatteryStaple!";
   const response = await httpRequest(app).post("/auth/sign-in").send({
     email,

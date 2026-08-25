@@ -13,7 +13,7 @@ export class GetAssessmentQuery extends Query<AssessmentDetailDto> {
    * @param assessmentId - Assessment identifier requested by the caller.
    * @param organizationId - Organization boundary within which the assessment must exist.
    * @param sessionUserId - Authenticated user identifier used for owner visibility checks.
-   * @param subjectRole - PBAC subject role used to select manager/developer visibility behavior.
+   * @param subjectRole - PBAC subject role used to enforce manager visibility behavior.
    * @param correlationId - Correlation identifier propagated to response and problem metadata.
    */
   constructor(

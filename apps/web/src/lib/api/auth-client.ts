@@ -1,5 +1,4 @@
 import {
-  ACCEPT_INVITATION_ERROR_CODES,
   AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
   type AuthBackupEmailPolicy,
@@ -43,43 +42,6 @@ type SignInErrorTitleKey =
 
 type SignInErrorDetailKey =
   (typeof SIGN_IN_ERROR_DETAIL_KEYS)[keyof typeof SIGN_IN_ERROR_DETAIL_KEYS];
-
-export const INVITATION_SCOPE_TYPES = {
-  assessment: "assessment",
-  organization: "organization",
-} as const;
-
-export type InvitationScope =
-  | {
-      type: typeof INVITATION_SCOPE_TYPES.assessment;
-      assessment: { id: string; name: string };
-    }
-  | { type: typeof INVITATION_SCOPE_TYPES.organization; assessment: null };
-
-export type InvitationPreview = {
-  organization: { id: string; name: string };
-  scope: InvitationScope;
-  allowed_actions: string[];
-  expires_at: string;
-};
-
-export type InvitationPreviewOutcome =
-  | { kind: typeof API_OUTCOME_KINDS.loaded; preview: InvitationPreview }
-  | { kind: typeof API_OUTCOME_KINDS.invitationInvalid }
-  | { kind: typeof API_OUTCOME_KINDS.error };
-
-export type AcceptInvitationRequest = {
-  invitation_token: string;
-  display_name: string;
-  password: string;
-};
-
-export type AcceptInvitationOutcome =
-  | { kind: typeof API_OUTCOME_KINDS.invitationAccepted; location: string }
-  | { kind: typeof API_OUTCOME_KINDS.invitationInvalid }
-  | { kind: typeof API_OUTCOME_KINDS.emailAlreadyExists }
-  | { kind: typeof API_OUTCOME_KINDS.passwordTooShort }
-  | { kind: typeof API_OUTCOME_KINDS.error };
 
 export type SignInRequest = {
   email: string;
@@ -361,74 +323,6 @@ export function toSignUpOutcome(
     case SIGN_UP_ERROR_CODES.invalidRequest:
     case AUTH_ERROR_CODES.validationFailed:
       return { kind: API_OUTCOME_KINDS.validationError };
-    default:
-      return { kind: API_OUTCOME_KINDS.error };
-  }
-}
-
-export async function previewInvitation(
-  invitationToken: string,
-): Promise<InvitationPreviewOutcome> {
-  const { payload, ok, problemCode } = await apiRequest(
-    "/api/auth/invitations/preview",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ invitation_token: invitationToken }),
-    },
-  );
-
-  return toInvitationPreviewOutcome(payload, ok, problemCode);
-}
-
-export async function acceptInvitation(
-  request: AcceptInvitationRequest,
-): Promise<AcceptInvitationOutcome> {
-  const { payload, ok, problemCode } = await apiRequest(
-    "/api/auth/accept-invitation",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(request),
-    },
-  );
-
-  return toAcceptInvitationOutcome(payload, ok, problemCode);
-}
-
-export function toInvitationPreviewOutcome(
-  payload: unknown,
-  ok: boolean,
-  problemCode = getProblemCode(payload),
-): InvitationPreviewOutcome {
-  if (ok && isInvitationPreview(payload)) {
-    return { kind: API_OUTCOME_KINDS.loaded, preview: payload };
-  }
-
-  return problemCode === ACCEPT_INVITATION_ERROR_CODES.invitationInvalid
-    ? { kind: API_OUTCOME_KINDS.invitationInvalid }
-    : { kind: API_OUTCOME_KINDS.error };
-}
-
-export function toAcceptInvitationOutcome(
-  payload: unknown,
-  ok: boolean,
-  problemCode = getProblemCode(payload),
-): AcceptInvitationOutcome {
-  if (ok && isAcceptedInvitation(payload)) {
-    return {
-      kind: API_OUTCOME_KINDS.invitationAccepted,
-      location: payload.location,
-    };
-  }
-
-  switch (problemCode) {
-    case ACCEPT_INVITATION_ERROR_CODES.invitationInvalid:
-      return { kind: API_OUTCOME_KINDS.invitationInvalid };
-    case ACCEPT_INVITATION_ERROR_CODES.emailAlreadyExists:
-      return { kind: API_OUTCOME_KINDS.emailAlreadyExists };
-    case ACCEPT_INVITATION_ERROR_CODES.passwordTooShort:
-      return { kind: API_OUTCOME_KINDS.passwordTooShort };
     default:
       return { kind: API_OUTCOME_KINDS.error };
   }
@@ -892,40 +786,6 @@ function isSignInSuccess(payload: unknown): payload is {
   }
   const candidate = payload as { ok?: unknown };
   return candidate.ok === undefined || candidate.ok === true;
-}
-
-function isInvitationPreview(payload: unknown): payload is InvitationPreview {
-  if (typeof payload !== "object" || payload === null) {
-    return false;
-  }
-
-  const candidate = payload as InvitationPreview;
-  const scopeIsValid =
-    candidate.scope?.type === INVITATION_SCOPE_TYPES.organization
-      ? candidate.scope.assessment === null
-      : candidate.scope?.type === INVITATION_SCOPE_TYPES.assessment &&
-        typeof candidate.scope.assessment?.id === "string" &&
-        typeof candidate.scope.assessment.name === "string";
-
-  return (
-    typeof candidate.organization?.id === "string" &&
-    typeof candidate.organization.name === "string" &&
-    scopeIsValid &&
-    Array.isArray(candidate.allowed_actions) &&
-    candidate.allowed_actions.every((action) => typeof action === "string") &&
-    typeof candidate.expires_at === "string"
-  );
-}
-
-function isAcceptedInvitation(
-  payload: unknown,
-): payload is { ok: true; location: string } {
-  return (
-    typeof payload === "object" &&
-    payload !== null &&
-    (payload as { ok?: unknown }).ok === true &&
-    typeof (payload as { location?: unknown }).location === "string"
-  );
 }
 
 function isAuthSettingsProfile(

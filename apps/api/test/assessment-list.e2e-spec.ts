@@ -213,7 +213,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
   });
 
   // T06
-  it("T06: Developer sees only their scoped assessment", async () => {
+  it("T06: non-Manager with scope sees an empty assessment list", async () => {
     await createAssessment("Manager Owned 1");
     await createAssessment("Manager Owned 2");
 
@@ -222,110 +222,118 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
         id: "assessment-dev-scoped",
         organizationId: orgId,
         ownerId: "user-1",
-        name: "Developer Scoped Assessment",
+        name: "Scoped Assessment",
         status: ASSESSMENT_STATUS_CODES.wizardInProgress,
       },
     });
 
-    const devPolicyId = "policy-developer-list";
+    const systemAdminPolicyId = "policy-system-admin-list";
     await prisma.authPolicy.create({
       data: {
-        id: devPolicyId,
+        id: systemAdminPolicyId,
         version: "2026-07-10",
         actions: [PBAC_ACTIONS.assessmentList],
-        subjectRole: SUBJECT_ROLES.developer,
+        subjectRole: SUBJECT_ROLES.systemAdmin,
         stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
-    const devUserId = "user-developer-list";
+    const systemAdminUserId = "user-system-admin-list";
     await prisma.authUser.create({
       data: {
-        id: devUserId,
-        email: "developer-list@acme.test",
-        passwordHash: hashSecret("DevPassword123!"),
+        id: systemAdminUserId,
+        email: "system-admin-list@acme.test",
+        passwordHash: hashSecret("SystemAdminPassword123!"),
         emailVerified: true,
         failedLoginCount: 0,
       },
     });
     await prisma.authMembership.create({
       data: {
-        id: "membership-developer-list",
-        userId: devUserId,
+        id: "membership-systemAdmin-list",
+        userId: systemAdminUserId,
         organizationId: orgId,
         status: AUTH_MEMBERSHIP_STATUSES.active,
         subjectAttributes: {
-          role: SUBJECT_ROLES.developer,
+          role: SUBJECT_ROLES.systemAdmin,
           scope: scopedAssessment.id,
         },
-        policyId: devPolicyId,
+        policyId: systemAdminPolicyId,
         policyVersion: "2026-07-10",
       },
     });
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
-      email: "developer-list@acme.test",
-      password: "DevPassword123!",
+      email: "system-admin-list@acme.test",
+      password: "SystemAdminPassword123!",
       organization_id: orgId,
     });
-    const devToken = successBody<SignInSuccess>(signIn).session_token ?? "";
-    assert.ok(devToken, "sign-in must succeed for developer fixture");
+    const systemAdminToken =
+      successBody<SignInSuccess>(signIn).session_token ?? "";
+    assert.ok(
+      systemAdminToken,
+      "sign-in must succeed for system admin fixture",
+    );
 
     const result = await httpRequest(app)
       .get("/assessments")
-      .set("Authorization", `Bearer ${devToken}`);
+      .set("Authorization", `Bearer ${systemAdminToken}`);
     const body = successBody<AssessmentListDto>(result);
 
     assert.equal(result.status, 200);
-    assert.equal(body.assessments.length, 1);
-    assert.equal(body.assessments[0].assessment_id, scopedAssessment.id);
+    assert.equal(scopedAssessment.id, "assessment-dev-scoped");
+    assert.deepEqual(body.assessments, []);
   });
 
-  it("Developer with no scope sees an empty list", async () => {
+  it("non-Manager with no scope sees an empty list", async () => {
     await createAssessment("Manager Owned");
 
-    const devPolicyId = "policy-developer-no-scope";
+    const systemAdminPolicyId = "policy-system-admin-no-scope";
     await prisma.authPolicy.create({
       data: {
-        id: devPolicyId,
+        id: systemAdminPolicyId,
         version: "2026-07-10",
         actions: [PBAC_ACTIONS.assessmentList],
-        subjectRole: SUBJECT_ROLES.developer,
+        subjectRole: SUBJECT_ROLES.systemAdmin,
         stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
-    const devUserId = "user-developer-no-scope";
+    const systemAdminUserId = "user-system-admin-no-scope";
     await prisma.authUser.create({
       data: {
-        id: devUserId,
-        email: "developer-no-scope@acme.test",
-        passwordHash: hashSecret("DevPassword123!"),
+        id: systemAdminUserId,
+        email: "system-admin-no-scope@acme.test",
+        passwordHash: hashSecret("SystemAdminPassword123!"),
         emailVerified: true,
         failedLoginCount: 0,
       },
     });
     await prisma.authMembership.create({
       data: {
-        id: "membership-developer-no-scope",
-        userId: devUserId,
+        id: "membership-systemAdmin-no-scope",
+        userId: systemAdminUserId,
         organizationId: orgId,
         status: AUTH_MEMBERSHIP_STATUSES.active,
-        subjectAttributes: { role: SUBJECT_ROLES.developer },
-        policyId: devPolicyId,
+        subjectAttributes: { role: SUBJECT_ROLES.systemAdmin },
+        policyId: systemAdminPolicyId,
         policyVersion: "2026-07-10",
       },
     });
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
-      email: "developer-no-scope@acme.test",
-      password: "DevPassword123!",
+      email: "system-admin-no-scope@acme.test",
+      password: "SystemAdminPassword123!",
       organization_id: orgId,
     });
-    const devToken = successBody<SignInSuccess>(signIn).session_token ?? "";
-    assert.ok(devToken, "sign-in must succeed for developer fixture");
+    const systemAdminToken =
+      successBody<SignInSuccess>(signIn).session_token ?? "";
+    assert.ok(
+      systemAdminToken,
+      "sign-in must succeed for system admin fixture",
+    );
 
     const result = await httpRequest(app)
       .get("/assessments")
-      .set("Authorization", `Bearer ${devToken}`);
+      .set("Authorization", `Bearer ${systemAdminToken}`);
     const body = successBody<AssessmentListDto>(result);
 
     assert.equal(result.status, 200);

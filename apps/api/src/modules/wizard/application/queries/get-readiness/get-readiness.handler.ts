@@ -96,15 +96,13 @@ export class GetReadinessHandler implements IQueryHandler<
 
   private async assertReadAction(query: GetReadinessQuery): Promise<void> {
     const { authorization } = query;
-    const isManagerOrDev =
-      authorization.subjectRole === SUBJECT_ROLES.manager ||
-      authorization.subjectRole === SUBJECT_ROLES.developer;
+    const isManager = authorization.subjectRole === SUBJECT_ROLES.manager;
     const hasReadAction =
       authorization.selectedAction === PBAC_ACTIONS.assessmentRead;
     const hasPolicy =
       authorization.policyId !== null && authorization.policyVersion !== null;
 
-    if (isManagerOrDev && hasReadAction && hasPolicy) {
+    if (isManager && hasReadAction && hasPolicy) {
       return;
     }
 

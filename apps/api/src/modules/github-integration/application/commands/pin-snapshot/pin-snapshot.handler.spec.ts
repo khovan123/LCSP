@@ -229,14 +229,14 @@ describe("PinSnapshotHandler", () => {
     }
   });
 
-  it("blocks a Developer whose scope does not match the assessment", async () => {
+  it("blocks a non-Manager even when scope does not match the assessment", async () => {
     const { handler, resolveCommit } = buildHandler();
 
     await expect(
       handler.execute(
         command({
-          actorId: "developer-1",
-          subjectRole: SUBJECT_ROLES.developer,
+          actorId: "system-admin-1",
+          subjectRole: SUBJECT_ROLES.systemAdmin,
           scope: "assessment-2",
         }),
       ),
@@ -244,19 +244,21 @@ describe("PinSnapshotHandler", () => {
     expect(resolveCommit).not.toHaveBeenCalled();
   });
 
-  it("allows a Developer scoped to the assessment", async () => {
+  it("blocks a non-Manager even when scope matches the assessment", async () => {
     const { handler, resolveCommit, saveWithCreatedEvent } = buildHandler();
 
-    await handler.execute(
-      command({
-        actorId: "developer-1",
-        subjectRole: SUBJECT_ROLES.developer,
-        scope: "assessment-1",
-      }),
-    );
+    await expect(
+      handler.execute(
+        command({
+          actorId: "system-admin-1",
+          subjectRole: SUBJECT_ROLES.systemAdmin,
+          scope: "assessment-1",
+        }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
 
-    expect(resolveCommit).toHaveBeenCalledTimes(1);
-    expect(saveWithCreatedEvent).toHaveBeenCalledTimes(1);
+    expect(resolveCommit).not.toHaveBeenCalled();
+    expect(saveWithCreatedEvent).not.toHaveBeenCalled();
   });
 
   it("audits an unresolvable ref without creating a snapshot event", async () => {

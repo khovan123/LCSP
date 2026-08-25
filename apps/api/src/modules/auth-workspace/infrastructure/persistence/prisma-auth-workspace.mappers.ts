@@ -1,7 +1,6 @@
 import type {
   AuthAuditEvent,
   AuthDecisionLog,
-  AuthInvitation,
   AuthMembership,
   AuthMfaRateLimit,
   AuthOAuthIdentity,
@@ -17,13 +16,11 @@ import type {
 
 import {
   fromPrismaAuthBackupEmailPolicy,
-  fromPrismaAuthInvitationState,
   fromPrismaAuthMembershipStatus,
   fromPrismaAuthPrimaryEmailAddressPolicy,
   fromPrismaAuthStateGate,
 } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import {
-  Invitation,
   MfaEnrollment,
   MfaRateLimit,
   Membership,
@@ -89,21 +86,6 @@ export function mapMembershipRecord(record: AuthMembership): Membership {
     subjectAttributes: jsonToSubjectAttributes(record.subjectAttributes),
     policyId: record.policyId,
     policyVersion: record.policyVersion,
-  });
-}
-
-export function mapInvitationRecord(record: AuthInvitation): Invitation {
-  return Invitation.rehydrate({
-    id: record.id,
-    email: record.email,
-    organizationId: record.organizationId,
-    state: fromPrismaAuthInvitationState(record.state),
-    emailVerified: record.emailVerified,
-    membershipStatus: fromPrismaAuthMembershipStatus(record.membershipStatus),
-    subjectAttributes: jsonToSubjectAttributes(record.subjectAttributes),
-    policyId: record.policyId,
-    policyVersion: record.policyVersion,
-    expiresAt: record.expiresAt.getTime(),
   });
 }
 

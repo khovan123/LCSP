@@ -346,56 +346,57 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
   });
 
   // T07
-  it("T07: Developer with assessment:read scope -> 200 with scoped projection", async () => {
+  it("T07: non-Manager with assessment:read scope receives 404", async () => {
     const assessmentId = await createAssessment();
 
-    const devPolicyId = "policy-developer-read";
+    const systemAdminPolicyId = "policy-system-admin-read";
     await prisma.authPolicy.create({
       data: {
-        id: devPolicyId,
+        id: systemAdminPolicyId,
         version: "2026-07-10",
         actions: [PBAC_ACTIONS.assessmentRead],
-        subjectRole: SUBJECT_ROLES.developer,
+        subjectRole: SUBJECT_ROLES.systemAdmin,
         stateGate: PBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
-    const devUserId = "user-developer-read";
+    const systemAdminUserId = "user-system-admin-read";
     await prisma.authUser.create({
       data: {
-        id: devUserId,
-        email: "developer-read@acme.test",
-        passwordHash: hashSecret("DevPassword123!"),
+        id: systemAdminUserId,
+        email: "system-admin-read@acme.test",
+        passwordHash: hashSecret("SystemAdminPassword123!"),
         emailVerified: true,
         failedLoginCount: 0,
       },
     });
     await prisma.authMembership.create({
       data: {
-        id: "membership-developer-read",
-        userId: devUserId,
+        id: "membership-systemAdmin-read",
+        userId: systemAdminUserId,
         organizationId: orgId,
         status: AUTH_MEMBERSHIP_STATUSES.active,
-        subjectAttributes: { role: SUBJECT_ROLES.developer },
-        policyId: devPolicyId,
+        subjectAttributes: { role: SUBJECT_ROLES.systemAdmin },
+        policyId: systemAdminPolicyId,
         policyVersion: "2026-07-10",
       },
     });
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
-      email: "developer-read@acme.test",
-      password: "DevPassword123!",
+      email: "system-admin-read@acme.test",
+      password: "SystemAdminPassword123!",
       organization_id: orgId,
     });
-    const devToken = successBody<SignInSuccess>(signIn).session_token ?? "";
-    assert.ok(devToken, "sign-in must succeed for developer fixture");
+    const systemAdminToken =
+      successBody<SignInSuccess>(signIn).session_token ?? "";
+    assert.ok(
+      systemAdminToken,
+      "sign-in must succeed for system admin fixture",
+    );
 
-    const result = await httpRequest(app)
+    await httpRequest(app)
       .get(`/assessments/${assessmentId}`)
-      .set("Authorization", `Bearer ${devToken}`);
-    const body = successBody<AssessmentDetailDto>(result);
-
-    assert.equal(result.status, 200);
-    assert.equal(body.assessment_id, assessmentId);
+      .set("Authorization", `Bearer ${systemAdminToken}`)
+      .expect(404);
   });
 
   // T08

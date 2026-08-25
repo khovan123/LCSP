@@ -15,7 +15,7 @@ depends_on:
 
 ## Outcome
 
-Allow a Manager or scoped Developer to pin a branch/ref/commit SHA to create an immutable `RepositorySnapshot`. Downstream scan jobs reference the snapshot — not the mutable branch. Raw source is not persisted. Failure is audited and safe.
+Allow the owning Manager to pin a branch/ref/commit SHA to create an immutable `RepositorySnapshot`. Downstream scan jobs reference the snapshot — not the mutable branch. Raw source is not persisted. Failure is audited and safe.
 
 ## Module Files
 
@@ -115,7 +115,7 @@ model RepositorySnapshot {
 | T05 | Actor lacks `snapshot:create`             | 403 `PBAC_DENIED`                              |
 | T06 | No raw source in DB                       | `RepositorySnapshot` has no source code fields |
 | T07 | Outbox message created                    | `event.snapshot.created` in `OutboxMessage`    |
-| T08 | Manager can snapshot without Developer    | Manager flow independent                       |
+| T08 | Manager can snapshot without collaborator | Manager flow independent                       |
 
 ## Definition of Done
 

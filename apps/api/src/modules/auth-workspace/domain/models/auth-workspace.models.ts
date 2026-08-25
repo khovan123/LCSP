@@ -2,8 +2,6 @@ import type { AuditResourceType } from "@lcsp/contracts/audit";
 import type { AuthErrorCode } from "@lcsp/contracts/auth";
 import type { PbacDecisionValue, PbacReasonCode } from "@lcsp/contracts/pbac";
 
-export { Invitation } from "../entities/invitation.entity.ts";
-export type { InvitationState } from "../entities/invitation.entity.ts";
 export { Membership } from "../entities/membership.entity.ts";
 export type { MembershipStatus } from "../entities/membership.entity.ts";
 export { MfaEnrollment } from "../entities/mfa-enrollment.entity.ts";

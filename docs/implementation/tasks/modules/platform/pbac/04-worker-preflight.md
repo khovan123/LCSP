@@ -14,7 +14,7 @@ depends_on:
 
 ## Outcome
 
-Before a Python worker processes any task-queue message that requires authorization context, it calls back to the NestJS API via a preflight endpoint to verify the authorization decision is still valid. This prevents stale-membership exploitation: a Developer whose membership was revoked after task dispatch must not have their task executed.
+Before a Python worker processes any task-queue message that requires authorization context, it calls back to the NestJS API via a preflight endpoint to verify the authorization decision is still valid. This prevents stale-membership or stale-policy exploitation after task dispatch.
 
 ## Module Files
 

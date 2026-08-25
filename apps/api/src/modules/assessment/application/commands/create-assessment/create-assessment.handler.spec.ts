@@ -267,30 +267,6 @@ describe("CreateAssessmentHandler", () => {
     expect(JSON.stringify(event.payload)).not.toMatch(/Sensitive description/);
   });
 
-  // T08
-  it("response contains no developer assignment fields", async () => {
-    const { handler } = buildHandler();
-
-    const result = await handler.execute(
-      new CreateAssessmentCommand(
-        "org-1",
-        "user-1",
-        "Name",
-        undefined,
-        "corr-1",
-        {
-          subjectRole: SUBJECT_ROLES.manager,
-          selectedAction: PBAC_ACTIONS.assessmentCreate,
-          policyId: "policy-manager-workspace",
-          policyVersion: "2026-06-26",
-        },
-      ),
-    );
-
-    expect(result).not.toHaveProperty("developer_id");
-    expect(result).not.toHaveProperty("developerId");
-  });
-
   it("enqueues an assessment.created outbox message", async () => {
     const { handler, enqueue, tx } = buildHandler();
 
@@ -361,14 +337,14 @@ describe("CreateAssessmentHandler", () => {
       handler.execute(
         new CreateAssessmentCommand(
           "org-1",
-          "developer-1",
+          "system-admin-1",
           "Denied",
           undefined,
           "corr-deny",
           {
-            subjectRole: SUBJECT_ROLES.developer,
+            subjectRole: SUBJECT_ROLES.systemAdmin,
             selectedAction: PBAC_ACTIONS.assessmentCreate,
-            policyId: "policy-developer",
+            policyId: "policy-system-admin",
             policyVersion: "2026-06-26",
           },
         ),
@@ -380,14 +356,14 @@ describe("CreateAssessmentHandler", () => {
     expect(write).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: ASSESSMENT_EVENT_TYPES.created,
-        actorId: "developer-1",
+        actorId: "system-admin-1",
         organizationId: "org-1",
         resourceType: AUDIT_RESOURCE_TYPES.assessment,
         resourceId: null,
         correlationId: "corr-deny",
         decision: PBAC_DECISION.deny,
         reasonCode: AUTH_ERROR_CODES.pbacDenied,
-        policyId: "policy-developer",
+        policyId: "policy-system-admin",
         policyVersion: "2026-06-26",
       }),
     );

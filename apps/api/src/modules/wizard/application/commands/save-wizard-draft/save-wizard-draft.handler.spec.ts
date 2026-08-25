@@ -255,7 +255,7 @@ describe("SaveWizardDraftHandler", () => {
           new SaveWizardDraftCommand(
             "assessment-123",
             "org-1",
-            "developer-1",
+            "system-admin-1",
             [
               {
                 questionId: "question1",
@@ -266,9 +266,9 @@ describe("SaveWizardDraftHandler", () => {
             ],
             "corr-deny",
             {
-              subjectRole: SUBJECT_ROLES.developer,
+              subjectRole: SUBJECT_ROLES.systemAdmin,
               selectedAction: PBAC_ACTIONS.wizardWrite,
-              policyId: "policy-developer",
+              policyId: "policy-system-admin",
               policyVersion: "2026-06-26",
             },
           ),
@@ -280,14 +280,14 @@ describe("SaveWizardDraftHandler", () => {
       expect(auditWriter.write).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: WIZARD_EVENT_TYPES.draftSaved,
-          actorId: "developer-1",
+          actorId: "system-admin-1",
           organizationId: "org-1",
           resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
           resourceId: null,
           decision: AUDIT_DECISIONS.deny,
           reasonCode: AUTH_ERROR_CODES.pbacDenied,
           correlationId: "corr-deny",
-          policyId: "policy-developer",
+          policyId: "policy-system-admin",
           policyVersion: "2026-06-26",
         }),
       );

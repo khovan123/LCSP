@@ -14,7 +14,7 @@ depends_on:
 
 ## Outcome
 
-Return current status and progress of a `RepositoryScanJob`. Manager and scoped Developer can poll this endpoint. Shows blocked/failed states with business-language next-action. Never shows risk labels or source code content.
+Return current status and progress of a `RepositoryScanJob`. The owning Manager can poll this endpoint. Shows blocked/failed states with business-language next-action. Never shows risk labels or source code content.
 
 ## Module Files
 
@@ -86,7 +86,7 @@ Return current status and progress of a `RepositoryScanJob`. Manager and scoped 
 
 ## Implementation Evidence
 
-- Added the PBAC-protected `GET /assessments/:assessmentId/scan-jobs/:scanJobId` endpoint for Manager and assessment-scoped Developer polling.
+- Added the PBAC-protected `GET /assessments/:assessmentId/scan-jobs/:scanJobId` endpoint for owning Manager polling.
 - The query is constrained by scan job, assessment, and organization; out-of-scope records use the same `SCAN_JOB_NOT_FOUND` response as missing records.
 - The response uses an explicit safe-field projection. Raw blocked reasons, scanner output, source content, file paths, and stack traces are never selected or returned.
 - `QUEUED`, `RUNNING`, `FAILED`, and `BLOCKED` statuses return approved business-language guidance; `COMPLETED` returns no next action.

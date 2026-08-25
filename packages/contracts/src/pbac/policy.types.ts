@@ -4,7 +4,6 @@ import type { PbacReasonCode } from "./decisions.ts";
 
 export const SUBJECT_ROLES = {
   manager: "Manager",
-  developer: "Developer",
   systemAdmin: "SystemAdmin",
 } as const;
 

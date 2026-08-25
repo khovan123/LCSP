@@ -35,6 +35,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositorySnapshotGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
@@ -322,6 +323,7 @@ async function createJob(
   prisma: PrismaClient,
   status: RepositoryScanJobStatus,
 ) {
+  await seedRepositorySnapshotGraph(prisma, { snapshotId: "snapshot-1" });
   await prisma.repositoryScanJob.create({
     data: {
       id: "scan-job-1",

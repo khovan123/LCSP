@@ -16,13 +16,12 @@ LCSP is not a legal chatbot, formal legal opinion product, compliance certificat
 
 ## Target Users
 
-| User | Active MVP responsibility |
-|---|---|
-| Manager | Owns the assessment, Wizard answers, repository connection, conflict resolution, classification request, report generation and audit export. |
-| Developer | Optional scoped technical collaborator who may review redacted technical findings or support repository/evidence correction within PBAC policy. |
-| Internal Legal Operator | Internal API/CLI actor who validates official legal sources, approves corpus versions and triggers legal index builds. No Manager/Developer UX screen is required for this actor in MVP. |
+| User                    | Active MVP responsibility                                                                                                                                                      |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Manager                 | Owns the assessment, Wizard answers, repository connection, conflict resolution, classification request, report generation and audit export.                                   |
+| Internal Legal Operator | Internal API/CLI actor who validates official legal sources, approves corpus versions and triggers legal index builds. No Manager UX screen is required for this actor in MVP. |
 
-Manager is required and sufficient for the active MVP golden path. Developer absence must not block assessment completion.
+Manager is required and sufficient for the active MVP golden path. External collaborator absence must not block assessment completion.
 
 ## Active MVP Workflow
 
@@ -61,7 +60,7 @@ Manager creates assessment
 - Legal corpus ingestion from validated official-source snapshots.
 - Direct EngineeringRule assessment with citation-backed LegalRule provenance.
 - Risk classification, gap analysis, document generation and audit export after gates pass.
-- Optional Developer task participation with scoped PBAC permissions.
+- Developer invitation/task participation is retired from active MVP scope.
 - Real configured LLM provider for A-to-Z acceptance.
 
 ## Out of Scope

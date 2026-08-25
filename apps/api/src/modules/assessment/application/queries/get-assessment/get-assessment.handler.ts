@@ -62,7 +62,7 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       this.throwNotFound(query.correlationId);
     }
     if (
-      query.subjectRole === SUBJECT_ROLES.manager &&
+      query.subjectRole !== SUBJECT_ROLES.manager ||
       assessment.ownerId !== query.sessionUserId
     ) {
       this.throwNotFound(query.correlationId);

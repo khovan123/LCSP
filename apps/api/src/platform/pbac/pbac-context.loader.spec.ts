@@ -56,7 +56,7 @@ function makePolicy(
   return Policy.rehydrate({
     id: "policy-1",
     version: "v1",
-    actions: [PBAC_ACTIONS.inviteDeveloper],
+    actions: [PBAC_ACTIONS.workspaceRead],
     subjectRole: SUBJECT_ROLES.manager,
     stateGate: PBAC_STATE_GATES.membershipActive,
     organizationId: "org-1",

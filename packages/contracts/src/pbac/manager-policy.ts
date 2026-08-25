@@ -13,8 +13,6 @@ export const MANAGER_ONLY_ACTION_VALUES = [
   PBAC_ACTIONS.finalReportGenerate,
   PBAC_ACTIONS.complianceDossierExport,
   PBAC_ACTIONS.managerDecisionChange,
-  PBAC_ACTIONS.inviteDeveloper,
-  PBAC_ACTIONS.membershipRevoke,
   PBAC_ACTIONS.assessmentSettingsManage,
   PBAC_ACTIONS.legalCorpusIngest,
   PBAC_ACTIONS.legalCorpusApprove,

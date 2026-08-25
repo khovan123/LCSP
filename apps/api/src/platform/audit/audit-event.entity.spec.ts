@@ -69,7 +69,7 @@ describe("AuditEventEntity", () => {
   it("rehydrates an event from persisted fields via fromPersistence", () => {
     const fields = {
       id: "audit-5",
-      eventType: AUTH_AUDIT_EVENT_TYPES.authDeveloperRevoked,
+      eventType: AUTH_AUDIT_EVENT_TYPES.authSessionRevoked,
       actorId: "user-2",
       organizationId: "org-2",
       correlationId: "corr-5",

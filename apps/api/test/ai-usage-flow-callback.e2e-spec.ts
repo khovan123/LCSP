@@ -30,6 +30,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositoryScanGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
@@ -72,6 +73,7 @@ describe("AIUsageFlow Callback Endpoint (e2e) [MW-aiuf-001]", () => {
         status: ASSESSMENT_STATUS_CODES.scanInProgress,
       },
     });
+    await seedRepositoryScanGraph(prisma, { scanJobId: "scan-job-1" });
     await createTechnicalProfile(prisma, TECHNICAL_PROFILE_STATUSES.accepted);
   });
 

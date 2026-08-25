@@ -48,7 +48,7 @@ model GitHubAppInstallState {
 ## API Contract
 
 **Endpoint:** `GET /github/app/start`
-**Auth required:** Yes — `@RequireAction('github:connect')` (authenticated Manager or scoped Developer)
+**Auth required:** Yes — `@RequireAction('github:connect')` (authenticated owning Manager)
 
 **Query parameters:**
 

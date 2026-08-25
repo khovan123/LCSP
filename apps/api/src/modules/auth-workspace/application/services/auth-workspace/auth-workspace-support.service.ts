@@ -13,7 +13,6 @@ import {
 import type {
   AuditEvent,
   AuthorizationDecision,
-  Invitation,
   Membership,
   MfaEnrollment,
   Organization,
@@ -33,7 +32,6 @@ import type {
   AuthProblemResult,
   SafeUserProjection,
 } from "../../contracts/auth-workspace/common.contract.ts";
-import type { RegisterPayload } from "../../contracts/auth-workspace/register-approved-path.contract.ts";
 import type { CredentialPayload } from "../../contracts/auth-workspace/sign-in.contract.ts";
 import type { WorkspaceAuthorization } from "../../contracts/auth-workspace/workspace.contract.ts";
 import type { AuthWorkspaceRepositories } from "../../ports/persistence/auth-workspace-repositories.ts";
@@ -151,33 +149,12 @@ export class AuthWorkspaceSupportService {
     );
   }
 
-  normalizeInvitationEmail(invitation: Invitation): string {
-    return invitation.email.toString();
-  }
-
   validateCredentialPayload(
     payload: CredentialPayload,
     correlationId: string,
   ): AuthProblemResult | null {
     if (
       !this.requireString(payload?.email) ||
-      !this.requireString(payload?.password)
-    ) {
-      return createProblemResult(
-        AUTH_ERROR_CODES.validationFailed,
-        correlationId,
-      );
-    }
-
-    return null;
-  }
-
-  validateRegisterPayload(
-    payload: RegisterPayload,
-    correlationId: string,
-  ): AuthProblemResult | null {
-    if (
-      !this.requireString(payload?.invite_id) ||
       !this.requireString(payload?.password)
     ) {
       return createProblemResult(
