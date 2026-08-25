@@ -1,5 +1,6 @@
 import json
 from concurrent.futures import Future
+from threading import Event
 from types import SimpleNamespace
 
 import pytest
@@ -260,3 +261,44 @@ def test_delivery_settlement_does_not_nack_after_ack_loses_connection():
 def test_decode_message_rejects_non_object_payload():
     with pytest.raises(ValueError):
         rabbitmq_consumer._decode_message(json.dumps(["bad"]).encode("utf-8"))
+
+
+def test_wait_for_api_ready_retries_until_health_ok(monkeypatch):
+    calls = []
+
+    def get(url, timeout):
+        calls.append((url, timeout))
+        if len(calls) == 1:
+            raise rabbitmq_consumer.httpx.ConnectError("not ready")
+        return SimpleNamespace(status_code=200)
+
+    monkeypatch.setattr(rabbitmq_consumer.httpx, "get", get)
+
+    rabbitmq_consumer._wait_for_api_ready(
+        api_base_url="http://127.0.0.1:4000/",
+        timeout_seconds=1,
+        stopping=Event(),
+    )
+
+    assert calls == [
+        ("http://127.0.0.1:4000/health", 2.0),
+        ("http://127.0.0.1:4000/health", 2.0),
+    ]
+
+
+def test_wait_for_api_ready_times_out_before_consuming(monkeypatch):
+    def get(_url, timeout):
+        raise rabbitmq_consumer.httpx.ConnectError("not ready")
+
+    monkeypatch.setattr(
+        rabbitmq_consumer.httpx,
+        "get",
+        get,
+    )
+
+    with pytest.raises(RuntimeError, match="Nest API was not ready"):
+        rabbitmq_consumer._wait_for_api_ready(
+            api_base_url="http://127.0.0.1:4000",
+            timeout_seconds=0,
+            stopping=Event(),
+        )

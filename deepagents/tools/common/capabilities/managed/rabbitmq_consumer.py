@@ -10,9 +10,10 @@ from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import partial
 from threading import Event
-from time import sleep
+from time import monotonic, sleep
 from typing import Any, Callable
 
+import httpx
 import pika
 
 from tools.common.capabilities.platform.env import load_runtime_env
@@ -27,6 +28,8 @@ DEFAULT_EXCHANGE = "lcsp.events"
 DEFAULT_QUEUE_PREFIX = "lcsp.mda.boundary"
 DEFAULT_RECONNECT_DELAY_SECONDS = 2.0
 DEFAULT_REQUEUE_DELAY_SECONDS = 2.0
+DEFAULT_API_READY_TIMEOUT_SECONDS = 60.0
+DEFAULT_API_READY_POLL_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,13 @@ def run_consumer() -> None:
             str(DEFAULT_REQUEUE_DELAY_SECONDS),
         )
     )
+    api_base_url = os.getenv("NESTJS_API_BASE_URL")
+    api_ready_timeout_seconds = float(
+        os.getenv(
+            "LCSP_MDA_API_READY_TIMEOUT_SECONDS",
+            str(DEFAULT_API_READY_TIMEOUT_SECONDS),
+        )
+    )
     bindings = boundary_bindings(queue_prefix)
 
     stopping = Event()
@@ -117,6 +127,14 @@ def run_consumer() -> None:
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+
+    _wait_for_api_ready(
+        api_base_url=api_base_url,
+        timeout_seconds=api_ready_timeout_seconds,
+        stopping=stopping,
+    )
+    if stopping.is_set():
+        return
 
     with ThreadPoolExecutor(
         max_workers=prefetch_count,
@@ -163,6 +181,38 @@ def run_consumer() -> None:
 
             if not stopping.is_set():
                 stopping.wait(reconnect_delay_seconds)
+
+
+def _wait_for_api_ready(
+    *,
+    api_base_url: str | None,
+    timeout_seconds: float,
+    stopping: Event,
+) -> None:
+    """Block RabbitMQ consumption until the Nest API can accept callbacks."""
+    if not api_base_url:
+        return
+
+    health_url = f"{api_base_url.rstrip('/')}/health"
+    deadline = monotonic() + max(timeout_seconds, 0)
+    last_error: str | None = None
+
+    while not stopping.is_set():
+        try:
+            response = httpx.get(health_url, timeout=2.0)
+            if response.status_code == 200:
+                return
+            last_error = f"HTTP {response.status_code}"
+        except httpx.HTTPError as error:
+            last_error = error.__class__.__name__
+
+        if monotonic() >= deadline:
+            raise RuntimeError(
+                "Nest API was not ready before starting Managed Agent "
+                f"RabbitMQ consumer: {health_url} ({last_error})"
+            )
+
+        stopping.wait(DEFAULT_API_READY_POLL_SECONDS)
 
 
 def _configure_channel(

@@ -22,7 +22,7 @@ COPY deepagents /app/deepagents
 COPY reports/legal-corpus-ocr/lcsp-precompiled-engineering-rules-vn-2026-08.json \
     /app/reports/legal-corpus-ocr/lcsp-precompiled-engineering-rules-vn-2026-08.json
 
-RUN cd /app/deepagents/runtime/evidence/scanner/ts_js_bridge/ts-js-analyzer \
+RUN cd /app/deepagents/tools/common/capabilities/evidence/scanner/ts_js_bridge/ts-js-analyzer \
     && rm -f package-lock.json \
     && npm install --include=dev \
     && npm run build \

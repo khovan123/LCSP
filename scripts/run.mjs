@@ -21,7 +21,9 @@ const workerMda =
     : path.join(workerRoot, ".venv", "bin", "mda");
 const tsJsAnalyzerRoot = path.join(
   workerRoot,
-  "runtime",
+  "tools",
+  "common",
+  "capabilities",
   "evidence",
   "scanner",
   "ts_js_bridge",
@@ -62,6 +64,7 @@ const defaultOpenWikiRuntimeTimeoutSeconds =
   "180";
 const managedAgentPythonPath = ".";
 const dockerManagedAgentPythonPath = "/app/deepagents";
+const managedAgentEventsModule = "tools.common.capabilities.managed.rabbitmq_consumer";
 
 const targets = {
   proxy: {
@@ -184,13 +187,8 @@ const targets = {
     cwd: workerRoot,
     cmd: existsSync(workerPython) ? workerPython : "uv",
     args: existsSync(workerPython)
-      ? ["-m", "runtime.workflow.checkpoint.rabbitmq_consumer"]
-      : [
-          "run",
-          "python",
-          "-m",
-          "runtime.workflow.checkpoint.rabbitmq_consumer",
-        ],
+      ? ["-m", managedAgentEventsModule]
+      : ["run", "python", "-m", managedAgentEventsModule],
     env: {
       ...rootEnv,
       PYTHONPATH: managedAgentPythonPath,
@@ -324,8 +322,8 @@ function stopDevProcesses() {
     ".venv/Scripts/mda.exe dev --no-reload .",
     "uv run mda dev --no-reload .",
     "uv run mda dev .",
-    "python -m runtime.workflow.checkpoint.rabbitmq_consumer",
-    "uv run python -m runtime.workflow.checkpoint.rabbitmq_consumer",
+    `python -m ${managedAgentEventsModule}`,
+    `uv run python -m ${managedAgentEventsModule}`,
     "mda dev --no-reload .",
     "mda dev .",
     "python entrypoint.py",
