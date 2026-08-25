@@ -1,4 +1,4 @@
-import type { AuthMembershipStatus, AuthUserRole } from "../auth/types.ts";
+import type { AuthUserRole } from "../auth/types.ts";
 import { RBAC_DECISION } from "./decisions.ts";
 import type { RbacReasonCode } from "./decisions.ts";
 
@@ -18,11 +18,9 @@ export interface RbacSubject {
 }
 
 export interface RbacEvaluationContext {
-  organizationId: string;
   action: string;
   subject: RbacSubject;
   grantedActions: readonly string[];
-  membershipStatus: AuthMembershipStatus;
 }
 
 export interface RbacDecisionResult {
