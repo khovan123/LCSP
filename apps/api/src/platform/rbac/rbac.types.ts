@@ -1,4 +1,4 @@
-import type { AuthMembershipStatus, AuthUserRole } from "@lcsp/contracts/auth";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 import type {
   RbacDecision,
   RbacDecisionResult,
@@ -13,10 +13,3 @@ export type {
   RbacSubject,
   AuthUserRole,
 };
-
-export interface RbacMembershipContext {
-  organizationId: string;
-  userId: string;
-  membershipStatus: AuthMembershipStatus;
-  role: AuthUserRole;
-}
