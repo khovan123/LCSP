@@ -244,15 +244,19 @@ const PRISMA_READINESS_EXPORT_STATUS_TO_CONTRACT = {
 
 const RECONCILIATION_STATUS_TO_PRISMA = {
   [RECONCILIATION_STATUSES.confirmed]: PrismaReconciliationStatus.CONFIRMED,
-  [RECONCILIATION_STATUSES.missingInObserved]: PrismaReconciliationStatus.MISSING_IN_OBSERVED,
-  [RECONCILIATION_STATUSES.orphanedInObserved]: PrismaReconciliationStatus.ORPHANED_IN_OBSERVED,
+  [RECONCILIATION_STATUSES.missingInObserved]:
+    PrismaReconciliationStatus.MISSING_IN_OBSERVED,
+  [RECONCILIATION_STATUSES.orphanedInObserved]:
+    PrismaReconciliationStatus.ORPHANED_IN_OBSERVED,
   [RECONCILIATION_STATUSES.conflict]: PrismaReconciliationStatus.CONFLICT,
 } as const satisfies Record<ReconciliationStatus, PrismaReconciliationStatus>;
 
 const PRISMA_RECONCILIATION_STATUS_TO_CONTRACT = {
   [PrismaReconciliationStatus.CONFIRMED]: RECONCILIATION_STATUSES.confirmed,
-  [PrismaReconciliationStatus.MISSING_IN_OBSERVED]: RECONCILIATION_STATUSES.missingInObserved,
-  [PrismaReconciliationStatus.ORPHANED_IN_OBSERVED]: RECONCILIATION_STATUSES.orphanedInObserved,
+  [PrismaReconciliationStatus.MISSING_IN_OBSERVED]:
+    RECONCILIATION_STATUSES.missingInObserved,
+  [PrismaReconciliationStatus.ORPHANED_IN_OBSERVED]:
+    RECONCILIATION_STATUSES.orphanedInObserved,
   [PrismaReconciliationStatus.CONFLICT]: RECONCILIATION_STATUSES.conflict,
 } as const satisfies Record<PrismaReconciliationStatus, ReconciliationStatus>;
 

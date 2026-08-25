@@ -14,9 +14,7 @@ export class SaveArchitectureScopeCommand {
 }
 
 @CommandHandler(SaveArchitectureScopeCommand)
-export class SaveArchitectureScopeCommandHandler
-  implements ICommandHandler<SaveArchitectureScopeCommand>
-{
+export class SaveArchitectureScopeCommandHandler implements ICommandHandler<SaveArchitectureScopeCommand> {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(command: SaveArchitectureScopeCommand): Promise<void> {

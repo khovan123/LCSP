@@ -9,9 +9,7 @@ export class GetArchitectureScopeQuery {
 }
 
 @QueryHandler(GetArchitectureScopeQuery)
-export class GetArchitectureScopeQueryHandler
-  implements IQueryHandler<GetArchitectureScopeQuery>
-{
+export class GetArchitectureScopeQueryHandler implements IQueryHandler<GetArchitectureScopeQuery> {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(query: GetArchitectureScopeQuery) {
@@ -30,10 +28,10 @@ export class GetArchitectureScopeQueryHandler
               select: {
                 repositoryName: true,
                 repositoryFullName: true,
-              }
-            }
-          }
-        }
+              },
+            },
+          },
+        },
       },
     });
 
@@ -48,7 +46,7 @@ export class GetArchitectureScopeQueryHandler
         where: { assessmentId: query.assessmentId, status: "ACTIVE" },
         select: { id: true, repositoryName: true, repositoryFullName: true },
       });
-      legacyRepos = connections.map(c => ({
+      legacyRepos = connections.map((c) => ({
         connectionId: c.id,
         name: c.repositoryName,
         fullName: c.repositoryFullName,
@@ -56,7 +54,7 @@ export class GetArchitectureScopeQueryHandler
       }));
     }
 
-    const scopedRepos = assessment.repositoryScopes.map(scope => ({
+    const scopedRepos = assessment.repositoryScopes.map((scope) => ({
       connectionId: scope.repositoryConnectionId,
       name: scope.repositoryConnection.repositoryName,
       fullName: scope.repositoryConnection.repositoryFullName,
@@ -65,7 +63,8 @@ export class GetArchitectureScopeQueryHandler
 
     return {
       globalDeclaration: assessment.globalArchitectureDeclaration || "",
-      repositories: assessment.repositoryScopes.length > 0 ? scopedRepos : legacyRepos,
+      repositories:
+        assessment.repositoryScopes.length > 0 ? scopedRepos : legacyRepos,
     };
   }
 }

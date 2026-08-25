@@ -1,7 +1,13 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { EvidenceNormalizerService } from "./evidence-normalizer.service.js";
-import { GraphSource, GraphNodeType, GraphEdgeType, EvidenceType, Prisma } from "@prisma/client";
+import {
+  GraphSource,
+  GraphNodeType,
+  GraphEdgeType,
+  EvidenceType,
+  Prisma,
+} from "@prisma/client";
 
 @Injectable()
 export class GraphBuilderService {
@@ -32,7 +38,7 @@ export class GraphBuilderService {
 
       for (const rawNode of nodes) {
         const node = this.normalizer.normalizeNode(rawNode);
-        
+
         // Ensure node properties exist
         const nodeType = (node.type || "SERVICE") as GraphNodeType;
         const canonicalName = node.canonicalName || "unknown";
@@ -43,7 +49,7 @@ export class GraphBuilderService {
             canonicalName,
             type: nodeType,
             source,
-          }
+          },
         });
 
         let dbNodeId = existing?.id;
@@ -59,7 +65,7 @@ export class GraphBuilderService {
               type: nodeType,
               canonicalName,
               properties: (node.properties || {}) as Prisma.InputJsonValue,
-            }
+            },
           });
           dbNodeId = created.id;
           nodeMap.set(node.id, created.id);
@@ -78,7 +84,7 @@ export class GraphBuilderService {
               lineEnd: ev.lineEnd,
               hash: ev.hash,
               rawValue: ev.rawValue,
-            }
+            },
           });
         }
       }
@@ -91,7 +97,7 @@ export class GraphBuilderService {
           if (!sourceId || !targetId) {
             continue; // Missing nodes, skip edge
           }
-          
+
           const edgeType = (edge.type || "CALLS") as GraphEdgeType;
 
           const existingEdge = await tx.evidenceGraphEdge.findFirst({
@@ -101,7 +107,7 @@ export class GraphBuilderService {
               targetId,
               type: edgeType,
               sourceType: source,
-            }
+            },
           });
 
           let edgeId = existingEdge?.id;
@@ -114,9 +120,10 @@ export class GraphBuilderService {
                 targetId,
                 sourceType: source,
                 type: edgeType,
-                confidence: typeof edge.confidence === "number" ? edge.confidence : 1.0,
+                confidence:
+                  typeof edge.confidence === "number" ? edge.confidence : 1.0,
                 properties: (edge.properties || {}) as Prisma.InputJsonValue,
-              }
+              },
             });
             edgeId = createdEdge.id;
           }
@@ -134,13 +141,13 @@ export class GraphBuilderService {
                 lineEnd: ev.lineEnd,
                 hash: ev.hash,
                 rawValue: ev.rawValue,
-              }
+              },
             });
           }
         }
       }
     });
-    
+
     this.logger.log(`Successfully built graph for assessment ${assessmentId}`);
   }
 }

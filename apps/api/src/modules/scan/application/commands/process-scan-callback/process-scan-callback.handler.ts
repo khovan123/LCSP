@@ -344,8 +344,12 @@ export class ProcessScanCallbackHandler implements ICommandHandler<ProcessScanCa
       if (repoSubgraph) {
         // Run graph building in background or await it based on requirements
         // Doing it sequentially for now
-        await this.graphBuilder.buildAndPersist(job.assessmentId, job.snapshotId, repoSubgraph);
-        
+        await this.graphBuilder.buildAndPersist(
+          job.assessmentId,
+          job.snapshotId,
+          repoSubgraph,
+        );
+
         // Trigger Reconciliation Engine to compute gaps
         await this.reconciliationEngine.reconcile(job.assessmentId);
       }

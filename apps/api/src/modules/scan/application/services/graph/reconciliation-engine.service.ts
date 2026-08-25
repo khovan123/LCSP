@@ -13,34 +13,37 @@ export class ReconciliationEngineService {
   /**
    * Reconciles the observed graph vs declared graph for an assessment.
    * Currently implements Tier 1 (Deterministic) matching and orphan/missing categorization.
-   * 
-   * TODO (Phase Advanced): Implement Tier 2 (Structural Matching via Jaccard/Context) 
+   *
+   * TODO (Phase Advanced): Implement Tier 2 (Structural Matching via Jaccard/Context)
    * and Tier 3 (LLM-assisted mapping).
    */
   async reconcile(assessmentId: string): Promise<void> {
-    this.logger.log(`Starting Phase 6 Reconciliation for assessment ${assessmentId}`);
+    this.logger.log(
+      `Starting Phase 6 Reconciliation for assessment ${assessmentId}`,
+    );
 
     // Fetch all nodes
     const observedNodes = await this.prisma.evidenceGraphNode.findMany({
-      where: { assessmentId, source: GraphSource.OBSERVED }
+      where: { assessmentId, source: GraphSource.OBSERVED },
     });
 
     const declaredNodes = await this.prisma.evidenceGraphNode.findMany({
-      where: { assessmentId, source: GraphSource.DECLARED }
+      where: { assessmentId, source: GraphSource.DECLARED },
     });
 
     // We will build a map of canonicalName -> ID for fast Tier 1 matching
-    const declaredNodeMap = new Map<string, typeof declaredNodes[0]>();
+    const declaredNodeMap = new Map<string, (typeof declaredNodes)[0]>();
     for (const d of declaredNodes) {
       declaredNodeMap.set(d.canonicalName, d);
     }
 
-    const observedNodeMap = new Map<string, typeof observedNodes[0]>();
+    const observedNodeMap = new Map<string, (typeof observedNodes)[0]>();
     for (const o of observedNodes) {
       observedNodeMap.set(o.canonicalName, o);
     }
 
-    const resultsToInsert: Prisma.GraphReconciliationResultCreateManyInput[] = [];
+    const resultsToInsert: Prisma.GraphReconciliationResultCreateManyInput[] =
+      [];
 
     // 1. Tier 1 Matching & ORPHANED check
     for (const observed of observedNodes) {
@@ -49,7 +52,9 @@ export class ReconciliationEngineService {
         // CONFIRMED
         resultsToInsert.push({
           assessmentId,
-          status: toPrismaReconciliationStatus(RECONCILIATION_STATUSES.confirmed),
+          status: toPrismaReconciliationStatus(
+            RECONCILIATION_STATUSES.confirmed,
+          ),
           declaredNodeId: matchedDeclared.id,
           observedNodeId: observed.id,
         });
@@ -57,7 +62,9 @@ export class ReconciliationEngineService {
         // ORPHANED_IN_OBSERVED (Code has it, but it's not declared)
         resultsToInsert.push({
           assessmentId,
-          status: toPrismaReconciliationStatus(RECONCILIATION_STATUSES.orphanedInObserved),
+          status: toPrismaReconciliationStatus(
+            RECONCILIATION_STATUSES.orphanedInObserved,
+          ),
           observedNodeId: observed.id,
         });
       }
@@ -68,11 +75,13 @@ export class ReconciliationEngineService {
       const matchedObserved = observedNodeMap.get(declared.canonicalName);
       if (!matchedObserved || matchedObserved.type !== declared.type) {
         // MISSING_IN_OBSERVED (Declared but not found in code)
-        // TODO: Tier 2 and Tier 3 matching could be inserted here to see if this "Missing" 
+        // TODO: Tier 2 and Tier 3 matching could be inserted here to see if this "Missing"
         // node is actually matching an "Orphaned" node under a different alias.
         resultsToInsert.push({
           assessmentId,
-          status: toPrismaReconciliationStatus(RECONCILIATION_STATUSES.missingInObserved),
+          status: toPrismaReconciliationStatus(
+            RECONCILIATION_STATUSES.missingInObserved,
+          ),
           declaredNodeId: declared.id,
         });
       }
@@ -81,16 +90,18 @@ export class ReconciliationEngineService {
     // Run transaction: Delete old reconciliation results, insert new ones
     await this.prisma.$transaction(async (tx) => {
       await tx.graphReconciliationResult.deleteMany({
-        where: { assessmentId }
+        where: { assessmentId },
       });
-      
+
       if (resultsToInsert.length > 0) {
         await tx.graphReconciliationResult.createMany({
-          data: resultsToInsert
+          data: resultsToInsert,
         });
       }
     });
 
-    this.logger.log(`Completed Reconciliation for assessment ${assessmentId}. Inserted ${resultsToInsert.length} results.`);
+    this.logger.log(
+      `Completed Reconciliation for assessment ${assessmentId}. Inserted ${resultsToInsert.length} results.`,
+    );
   }
 }

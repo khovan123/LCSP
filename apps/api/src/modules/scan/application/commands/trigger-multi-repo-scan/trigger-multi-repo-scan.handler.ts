@@ -21,7 +21,10 @@ import {
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
 import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
-import { SCAN_EVENT_TYPES, type ArchitectureScopePayload } from "@lcsp/contracts/scan";
+import {
+  SCAN_EVENT_TYPES,
+  type ArchitectureScopePayload,
+} from "@lcsp/contracts/scan";
 
 import {
   fromPrismaAssessmentStatus,
@@ -41,9 +44,7 @@ export type TriggerMultiRepoScanResponseDto = {
 };
 
 @CommandHandler(TriggerMultiRepoScanCommand)
-export class TriggerMultiRepoScanHandler
-  implements ICommandHandler<TriggerMultiRepoScanCommand>
-{
+export class TriggerMultiRepoScanHandler implements ICommandHandler<TriggerMultiRepoScanCommand> {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditWriter: AuditWriterService,
@@ -100,19 +101,20 @@ export class TriggerMultiRepoScanHandler
     }
 
     // 2. Load repository scope (new multi-repo model, with legacy fallback)
-    const repositoryScopes = await this.prisma.assessmentRepositoryScope.findMany({
-      where: { assessmentId: command.assessmentId },
-      include: {
-        repositoryConnection: {
-          select: {
-            id: true,
-            repositoryName: true,
-            repositoryFullName: true,
-            defaultBranch: true,
+    const repositoryScopes =
+      await this.prisma.assessmentRepositoryScope.findMany({
+        where: { assessmentId: command.assessmentId },
+        include: {
+          repositoryConnection: {
+            select: {
+              id: true,
+              repositoryName: true,
+              repositoryFullName: true,
+              defaultBranch: true,
+            },
           },
         },
-      },
-    });
+      });
 
     // Legacy fallback: if no new scope, use RepositoryConnection.assessmentId
     let repoConnections: {
@@ -129,10 +131,12 @@ export class TriggerMultiRepoScanHandler
       }));
     } else {
       // Legacy: repos connected directly to this assessment
-      const legacyConnections = await this.prisma.repositoryConnection.findMany({
-        where: { assessmentId: command.assessmentId, status: "ACTIVE" },
-        select: { id: true, repositoryFullName: true },
-      });
+      const legacyConnections = await this.prisma.repositoryConnection.findMany(
+        {
+          where: { assessmentId: command.assessmentId, status: "ACTIVE" },
+          select: { id: true, repositoryFullName: true },
+        },
+      );
       repoConnections = legacyConnections.map((c) => ({
         connectionId: c.id,
         repositoryFullName: c.repositoryFullName,
