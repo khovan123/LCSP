@@ -45,7 +45,9 @@ function commandPayload() {
 
 describe("InternalAgenticToolDispatchController protected commands", () => {
   it("rejects retired protected command tools without PBAC or CommandBus execution", async () => {
-    const queryExecute = jest.fn(() => Promise.reject(new Error("retired tool")));
+    const queryExecute = jest.fn(() =>
+      Promise.reject(new Error("retired tool")),
+    );
     const queryBus = { execute: queryExecute } as unknown as QueryBus;
     const commandExecute = jest.fn();
     const commandBus = { execute: commandExecute } as unknown as CommandBus;

@@ -1,6 +1,4 @@
-import {
-  EVIDENCE_ERROR_CODES,
-} from "@lcsp/contracts/evidence";
+import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import type { PbacAction } from "@lcsp/contracts/pbac";
 import { HttpStatus } from "@nestjs/common";
 

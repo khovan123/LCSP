@@ -53,9 +53,7 @@ type ResolveConflictRequest = {
 
 @Controller("internal/reconciliation")
 export class InternalReconciliationController {
-  constructor(
-    private readonly commandBus: CommandBus,
-  ) {}
+  constructor(private readonly commandBus: CommandBus) {}
 
   @Post("conflict-callback")
   @HttpCode(200)
@@ -73,7 +71,6 @@ export class InternalReconciliationController {
       ),
     );
   }
-
 }
 
 @Controller("assessments")
@@ -285,7 +282,6 @@ export class ReconciliationController {
       ),
     );
   }
-
 }
 
 function parseArtifactChainStages(
