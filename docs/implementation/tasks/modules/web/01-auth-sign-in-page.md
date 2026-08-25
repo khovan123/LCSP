@@ -13,26 +13,30 @@ depends_on:
 
 ## Outcome
 
-Render a sign-in form that submits to `POST /auth/sign-in`. Handle MFA pending state (redirect to MFA verify page). Handle account lockout message. Store session token in httpOnly cookie or secure client store. No password or session token in URL params.
+Render a sign-in form that submits to `POST /auth/sign-in`. Handle MFA pending state (redirect to MFA verify page). Handle account lockout message. Link users without an account to the self-signup page. Store session token in httpOnly cookie or secure client store. No password or session token in URL params.
 
 ## Module Files
 
-| File | Action | Notes |
-|---|---|---|
-| `apps/web/app/(auth)/sign-in/page.tsx` | Create | Sign-in page |
-| `apps/web/app/(auth)/sign-in/sign-in-form.tsx` | Create | Form component |
-| `apps/web/lib/api/auth-client.ts` | Create | Client-side API wrapper for auth endpoints |
-| `apps/web/lib/session/session-store.ts` | Create | Session token storage (httpOnly cookie preferred) |
+| File                                           | Action | Notes                                                           |
+| ---------------------------------------------- | ------ | --------------------------------------------------------------- |
+| `apps/web/app/(auth)/sign-in/page.tsx`         | Create | Sign-in page                                                    |
+| `apps/web/app/(auth)/sign-in/sign-in-form.tsx` | Create | Form component                                                  |
+| `apps/web/app/(auth)/sign-up/page.tsx`         | Create | Self-signup page                                                |
+| `apps/web/app/api/auth/sign-up/route.ts`       | Create | BFF route that stores returned session token in httpOnly cookie |
+| `apps/web/lib/api/auth-client.ts`              | Create | Client-side API wrapper for auth endpoints                      |
+| `apps/web/lib/session/session-store.ts`        | Create | Session token storage (httpOnly cookie preferred)               |
 
 ## UI Components
 
-| Component | Notes |
-|---|---|
-| Email input | Standard email validation |
-| Password input | Masked, no autocomplete on shared devices warning |
-| Submit button | Loading state during request |
-| Error message | Business-language: `Invalid credentials`, `Account temporarily locked` |
-| OAuth button | `Sign in with GitHub` → `GET /auth/oauth/start?provider=github` |
+| Component           | Notes                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------- |
+| Email input         | Standard email validation                                                                          |
+| Password input      | Masked, no autocomplete on shared devices warning                                                  |
+| Submit button       | Loading state during request                                                                       |
+| Error message       | Business-language: `Invalid credentials`, `Account temporarily locked`                             |
+| OAuth button        | `Sign in with GitHub` → `GET /auth/oauth/start?provider=github`                                    |
+| Create account link | Routes to `/sign-up`                                                                               |
+| Self-signup form    | Collects name, organization, email, password confirmation, and creates a Manager workspace account |
 
 ## Business Rules
 
@@ -42,17 +46,20 @@ Render a sign-in form that submits to `POST /auth/sign-in`. Handle MFA pending s
 4. Password field must not be stored in component state after form submission.
 5. Session token must not appear in URL, browser history, or console logs.
 6. Error messages must not reveal whether the email exists in the system.
+7. Self-signup success must redirect to `/workspace`; the BFF must not expose the session token to the browser client payload.
 
 ## Test Cases
 
-| ID | Scenario | Expected |
-|---|---|---|
-| T01 | Valid credentials, no MFA | Redirect to `/workspace` |
-| T02 | MFA required | Redirect to `/auth/mfa/verify` |
-| T03 | Invalid credentials | Business-language error, no email hint |
-| T04 | Account locked | Lockout message shown |
-| T05 | Session token not in URL | Browser history inspection |
-| T06 | Loading state on submit | Button disabled during request |
+| ID  | Scenario                         | Expected                                        |
+| --- | -------------------------------- | ----------------------------------------------- |
+| T01 | Valid credentials, no MFA        | Redirect to `/workspace`                        |
+| T02 | MFA required                     | Redirect to `/auth/mfa/verify`                  |
+| T03 | Invalid credentials              | Business-language error, no email hint          |
+| T04 | Account locked                   | Lockout message shown                           |
+| T05 | Session token not in URL         | Browser history inspection                      |
+| T06 | Loading state on submit          | Button disabled during request                  |
+| T07 | User follows create-account link | `/sign-up` form is available                    |
+| T08 | Self-signup success              | Session cookie set and redirect to `/workspace` |
 
 ## Definition of Done
 
@@ -60,10 +67,11 @@ Render a sign-in form that submits to `POST /auth/sign-in`. Handle MFA pending s
 - MFA redirect works correctly.
 - Session token never in URL or console.
 - Business-language error messages only.
+- Self-signup form uses shared contracts/i18n and never exposes returned session token to client code.
 
 ## Known UX Compliance Issue (flagged 2026-07-11, resolved 2026-07-11)
 
-The shipped implementation (`apps/web/src/features/auth/components/organisms/sign-in-page.tsx`) does not follow `DESIGN.md`'s "Brand & Style" rule: *"Avoid marketing hero layouts, decorative illustrations, large emotional gradients, or chatbot-style surfaces."*
+The shipped implementation (`apps/web/src/features/auth/components/organisms/sign-in-page.tsx`) does not follow `DESIGN.md`'s "Brand & Style" rule: _"Avoid marketing hero layouts, decorative illustrations, large emotional gradients, or chatbot-style surfaces."_
 
 Specifics:
 

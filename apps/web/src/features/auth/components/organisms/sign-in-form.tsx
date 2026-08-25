@@ -114,6 +114,14 @@ export function SignInForm() {
             <p className="text-center text-xs">
               <Link
                 className="text-primary underline-offset-4 hover:underline"
+                href={API_REDIRECT_LOCATIONS.signUp}
+              >
+                {resolveMessage(appLocale, "pages.signIn.createAccount")}
+              </Link>
+            </p>
+            <p className="text-center text-xs">
+              <Link
+                className="text-primary underline-offset-4 hover:underline"
                 href={API_REDIRECT_LOCATIONS.recoveryRequest}
               >
                 {resolveMessage(appLocale, "pages.signIn.forgotPassword")}
