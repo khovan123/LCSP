@@ -157,7 +157,6 @@ describe("Worker runtime input endpoints (e2e) [LCSP-155]", () => {
     assert.equal(wizard.status, 200);
     assert.equal(wizardBody.id, "wizard-runtime-1");
     assert.equal(wizardBody.answers.businessProcess, "loan_approval");
-
   });
 
   it("rejects worker runtime reads without the worker API key", async () => {
