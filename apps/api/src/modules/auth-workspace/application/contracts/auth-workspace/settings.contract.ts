@@ -3,6 +3,7 @@ import type {
   AuthPrimaryEmailAddressPolicy,
   AuthUserRole,
 } from "@lcsp/contracts/auth";
+import type { RepositoryAuthenticationMode } from "@lcsp/contracts/github-integration";
 
 import type { AuthProblemResult } from "./common.contract.ts";
 
@@ -45,7 +46,8 @@ export type AuthRepositoriesSuccess = {
   ok: true;
   repositories: Array<{
     id: string;
-    installation_id: string;
+    authentication_mode: RepositoryAuthenticationMode;
+    installation_id: string | null;
     repository_name: string;
     repository_full_name: string;
     default_branch: string;

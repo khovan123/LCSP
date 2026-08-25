@@ -535,6 +535,28 @@ export const viPages = {
         connectFailedTitle: "Kết nối repository thất bại",
         connectFailedDescription:
           "Không thể hoàn tất ủy quyền GitHub App cho workspace này.",
+        dialogTitle: "Kết nối GitHub",
+        dialogClose: "Đóng hộp thoại kết nối GitHub",
+        discoveryDescription:
+          "Nhập personal access token giới hạn quyền đọc. LCSP chỉ dùng token này để tìm repository có thể truy cập.",
+        connectCredentialDescription:
+          "Chọn repository, sau đó nhập lại credential để cấp quyền cho kết nối này.",
+        credentialLabel: "GitHub personal access token",
+        credentialRequired: "Hãy nhập GitHub personal access token.",
+        repositoryLabel: "Repository",
+        discoverAction: "Xác thực và tìm repository",
+        connectAction: "Kết nối repository",
+        requestFailedTitle: "Không thể kết nối GitHub",
+        requestFailedDescription:
+          "Hãy kiểm tra credential và quyền truy cập repository rồi thử lại.",
+        credentialInvalidDescription:
+          "GitHub credential không hợp lệ hoặc đã hết hạn. Hãy nhập credential còn hiệu lực.",
+        approvalRequiredDescription:
+          "Credential này cần được tổ chức GitHub hoặc SSO phê duyệt trước khi truy cập repository.",
+        repositoryDeniedDescription:
+          "Credential không có quyền đọc repository đã chọn.",
+        serviceUnavailableDescription:
+          "Dịch vụ truy cập GitHub tạm thời không khả dụng. Hãy thử lại sau.",
         listTitle: "Repository đã liên kết",
         listDescription:
           "Mỗi repository được hiển thị cạnh assessment đang sử dụng nó.",

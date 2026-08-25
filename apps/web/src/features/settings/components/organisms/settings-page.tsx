@@ -45,6 +45,7 @@ import { EmailSettingsSection } from "./email-settings-section";
 import { NotificationsSettingsSection } from "./notifications-settings-section";
 import { PasswordAuthenticationSettingsSection } from "./password-authentication-settings-section";
 import { RepositoriesSettingsSection } from "./repositories-settings-section";
+import { GitHubRepositoryConnectDialog } from "./github-repository-connect-dialog";
 import { SessionsSettingsSection } from "./sessions-settings-section";
 import { useQrCode } from "../../hooks/use-qr-code";
 import { SETTINGS_SECTION_IDS } from "../../types/settings.types";
@@ -137,6 +138,7 @@ export function SettingsPage() {
     useState<SettingsAlertMessage | null>(null);
   const [confirmAccessPasswordError, setConfirmAccessPasswordError] =
     useState<SettingsAlertMessage | null>(null);
+  const [githubConnectOpen, setGitHubConnectOpen] = useState(false);
 
   const recoveryForm = useForm<RecoveryEmailFormValues>({
     resolver: zodResolver(profileSafetySchema),
@@ -368,8 +370,17 @@ export function SettingsPage() {
   }
 
   function handleConnectGitHubRepository() {
-    void confirmSensitiveRouteBeforeRedirect("/api/github/app/start", {
-      kind: SETTINGS_SENSITIVE_ACTIONS.connectGitHubRepository,
+    void runSensitiveRouteAction({
+      method: "POST",
+      path: "/api/github/repository-discoveries",
+      onReauthRequired: () => {
+        openSensitiveAction({
+          kind: SETTINGS_SENSITIVE_ACTIONS.connectGitHubRepository,
+        });
+      },
+      onAllowed: () => {
+        setGitHubConnectOpen(true);
+      },
     });
   }
 
@@ -400,7 +411,7 @@ export function SettingsPage() {
       case SETTINGS_SENSITIVE_ACTIONS.revokeSession:
         return executeRevokeSession(action.sessionId);
       case SETTINGS_SENSITIVE_ACTIONS.connectGitHubRepository:
-        redirectToGitHubAppStart();
+        setGitHubConnectOpen(true);
         return true;
       case SETTINGS_SENSITIVE_ACTIONS.manageGitHubInstallation:
         redirectToGitHubAppStart(action.installationId);
@@ -701,54 +712,64 @@ export function SettingsPage() {
 
         <div className="flex flex-col gap-6">
           {profile ? (
-            <ConfirmAccessDialog
-              open={confirmAccessOpen}
-              onOpenChange={(open) => {
-                if (open) {
-                  setConfirmAccessOpen(true);
-                  return;
-                }
-                closeConfirmAccessDialog(true);
-              }}
-              onPasswordSubmit={handleConfirmAccessPasswordSubmit}
-              accountLabelKey="pages.workspace.settingsHub.reauth.accountLabel"
-              accountHandle={profile.email}
-              avatarFallback={profile.email.slice(0, 1).toUpperCase()}
-              titleKey="pages.workspace.settingsHub.reauth.title"
-              descriptionKey="pages.workspace.settingsHub.reauth.description"
-              passwordLabelKey="pages.signIn.passwordLabel"
-              passwordPlaceholderKey="pages.workspace.settingsHub.reauth.passwordPlaceholder"
-              forgotPasswordHref={API_REDIRECT_LOCATIONS.recoveryRequest}
-              forgotPasswordLabelKey="pages.signIn.forgotPassword"
-              supportTitleKey="pages.workspace.settingsHub.reauth.supportTitle"
-              confirmLabelKey="pages.workspace.settingsHub.reauth.confirm"
-              confirmingLabelKey="pages.workspace.settingsHub.reauth.confirming"
-              closeLabelKey="pages.workspace.settingsHub.reauth.close"
-              errorTitleKey={confirmAccessPasswordError?.titleKey}
-              errorKey={confirmAccessPasswordError?.detailKey ?? null}
-              mfa={{
-                isEnabled: profile.mfa_enrolled,
-                isConfigured: profile.mfa_enrolled,
-                onSubmit: handleConfirmAccessOtpSubmit,
-                otpLabelKey: "pages.mfaVerify.otpLabel",
-                otpDescriptionKey: "pages.mfaVerify.otpDescription",
-                otpPlaceholderKey:
-                  "pages.workspace.settingsHub.reauth.otpPlaceholder",
-                verifyLabelKey: "pages.workspace.settingsHub.reauth.verify",
-                verifyingLabelKey:
-                  "pages.workspace.settingsHub.reauth.verifying",
-                switchToMfaLabelKey: profile.mfa_enrolled
-                  ? "pages.workspace.settingsHub.reauth.useAuthenticator"
-                  : "pages.workspace.settingsHub.reauth.setUpMfa",
-                switchToPasswordLabelKey:
-                  "pages.workspace.settingsHub.reauth.usePassword",
-                onSetupRequest: () => {
-                  router.push(API_REDIRECT_LOCATIONS.mfaEnroll);
-                },
-                errorTitleKey: confirmAccessMfaError?.titleKey,
-                errorKey: confirmAccessMfaError?.detailKey ?? null,
-              }}
-            />
+            <>
+              <ConfirmAccessDialog
+                open={confirmAccessOpen}
+                onOpenChange={(open) => {
+                  if (open) {
+                    setConfirmAccessOpen(true);
+                    return;
+                  }
+                  closeConfirmAccessDialog(true);
+                }}
+                onPasswordSubmit={handleConfirmAccessPasswordSubmit}
+                accountLabelKey="pages.workspace.settingsHub.reauth.accountLabel"
+                accountHandle={profile.email}
+                avatarFallback={profile.email.slice(0, 1).toUpperCase()}
+                titleKey="pages.workspace.settingsHub.reauth.title"
+                descriptionKey="pages.workspace.settingsHub.reauth.description"
+                passwordLabelKey="pages.signIn.passwordLabel"
+                passwordPlaceholderKey="pages.workspace.settingsHub.reauth.passwordPlaceholder"
+                forgotPasswordHref={API_REDIRECT_LOCATIONS.recoveryRequest}
+                forgotPasswordLabelKey="pages.signIn.forgotPassword"
+                supportTitleKey="pages.workspace.settingsHub.reauth.supportTitle"
+                confirmLabelKey="pages.workspace.settingsHub.reauth.confirm"
+                confirmingLabelKey="pages.workspace.settingsHub.reauth.confirming"
+                closeLabelKey="pages.workspace.settingsHub.reauth.close"
+                errorTitleKey={confirmAccessPasswordError?.titleKey}
+                errorKey={confirmAccessPasswordError?.detailKey ?? null}
+                mfa={{
+                  isEnabled: profile.mfa_enrolled,
+                  isConfigured: profile.mfa_enrolled,
+                  onSubmit: handleConfirmAccessOtpSubmit,
+                  otpLabelKey: "pages.mfaVerify.otpLabel",
+                  otpDescriptionKey: "pages.mfaVerify.otpDescription",
+                  otpPlaceholderKey:
+                    "pages.workspace.settingsHub.reauth.otpPlaceholder",
+                  verifyLabelKey: "pages.workspace.settingsHub.reauth.verify",
+                  verifyingLabelKey:
+                    "pages.workspace.settingsHub.reauth.verifying",
+                  switchToMfaLabelKey: profile.mfa_enrolled
+                    ? "pages.workspace.settingsHub.reauth.useAuthenticator"
+                    : "pages.workspace.settingsHub.reauth.setUpMfa",
+                  switchToPasswordLabelKey:
+                    "pages.workspace.settingsHub.reauth.usePassword",
+                  onSetupRequest: () => {
+                    router.push(API_REDIRECT_LOCATIONS.mfaEnroll);
+                  },
+                  errorTitleKey: confirmAccessMfaError?.titleKey,
+                  errorKey: confirmAccessMfaError?.detailKey ?? null,
+                }}
+              />
+              <GitHubRepositoryConnectDialog
+                open={githubConnectOpen}
+                assessmentId={searchParams.get("assessment_id") ?? undefined}
+                onOpenChange={setGitHubConnectOpen}
+                onConnected={() => {
+                  void repositoriesQuery.refetch();
+                }}
+              />
+            </>
           ) : null}
 
           <Card className="border-border/70">
@@ -854,6 +875,7 @@ export function SettingsPage() {
               githubConnectionStatus={githubConnectionStatus}
               onConnectGitHub={handleConnectGitHubRepository}
               onManageGitHubInstallation={handleManageGitHubInstallation}
+              onReconnectGitHubRepository={handleConnectGitHubRepository}
             />
           ) : null}
         </div>

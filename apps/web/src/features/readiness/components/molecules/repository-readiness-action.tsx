@@ -61,7 +61,11 @@ export function RepositoryReadinessAction({
         </p>
         <Button
           className="mt-3"
-          render={<Link href="/workspace/settings?section=repositories" />}
+          render={
+            <Link
+              href={`/workspace/settings?section=repositories&assessment_id=${encodeURIComponent(assessmentId)}`}
+            />
+          }
           variant="outline"
           nativeButton={false}
         >
@@ -96,7 +100,8 @@ export function RepositoryReadinessAction({
             <SelectContent>
               {availableRepositories.map((repository) => (
                 <SelectItem key={repository.id} value={repository.id}>
-                  {repository.repository_full_name} · {repository.default_branch}
+                  {repository.repository_full_name} ·{" "}
+                  {repository.default_branch}
                 </SelectItem>
               ))}
             </SelectContent>

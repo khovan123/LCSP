@@ -75,4 +75,5 @@ export type RepositoriesSettingsSectionProps = {
   githubConnectionStatus: GitHubConnectionStatus | null;
   onConnectGitHub: () => void;
   onManageGitHubInstallation: (installationId: string) => void;
+  onReconnectGitHubRepository: () => void;
 };

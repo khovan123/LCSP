@@ -523,6 +523,21 @@ export type PagesMessages = {
         listTitle: string;
         listDescription: string;
         summary: string;
+        dialogTitle: string;
+        dialogClose: string;
+        discoveryDescription: string;
+        connectCredentialDescription: string;
+        credentialLabel: string;
+        credentialRequired: string;
+        repositoryLabel: string;
+        discoverAction: string;
+        connectAction: string;
+        requestFailedTitle: string;
+        requestFailedDescription: string;
+        credentialInvalidDescription: string;
+        approvalRequiredDescription: string;
+        repositoryDeniedDescription: string;
+        serviceUnavailableDescription: string;
       };
       errors: {
         profileLoadTitle: string;

@@ -528,9 +528,9 @@ export const enPages = {
         title: "Repositories",
         description:
           "Review repositories linked to this account through the current LCSP GitHub integration.",
-        connectTitle: "GitHub App connection",
+        connectTitle: "Connect GitHub",
         connectDescription:
-          "Start the read-only GitHub App flow and select repositories authorized for trusted scan evidence.",
+          "Validate your GitHub access and select a repository for trusted source evidence.",
         connectSuccessTitle: "Repository connected",
         connectSuccessDescription:
           "LCSP stored the repository metadata without storing raw GitHub tokens.",
@@ -541,6 +541,28 @@ export const enPages = {
         listDescription:
           "Each linked repository is shown beside the assessment that currently uses it.",
         summary: "Linked repositories",
+        dialogTitle: "Connect GitHub",
+        dialogClose: "Close GitHub connection dialog",
+        discoveryDescription:
+          "Enter a fine-grained personal access token with read access. LCSP uses it only to discover accessible repositories.",
+        connectCredentialDescription:
+          "Select a repository, then enter the credential again to authorize this connection.",
+        credentialLabel: "GitHub personal access token",
+        credentialRequired: "Enter a GitHub personal access token.",
+        repositoryLabel: "Repository",
+        discoverAction: "Validate and discover repositories",
+        connectAction: "Connect repository",
+        requestFailedTitle: "Unable to connect GitHub",
+        requestFailedDescription:
+          "Check the credential and repository access, then try again.",
+        credentialInvalidDescription:
+          "The GitHub credential is invalid or expired. Enter a current credential and try again.",
+        approvalRequiredDescription:
+          "This credential requires GitHub organization or SSO approval before it can access repositories.",
+        repositoryDeniedDescription:
+          "The credential cannot read the selected repository.",
+        serviceUnavailableDescription:
+          "GitHub repository access is temporarily unavailable. Try again later.",
       },
       errors: {
         profileLoadTitle: "Unable to load settings",

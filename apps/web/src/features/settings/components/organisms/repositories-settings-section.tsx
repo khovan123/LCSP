@@ -1,6 +1,7 @@
 "use client";
 
 import { resolveMessage } from "@lcsp/i18n";
+import { REPOSITORY_AUTHENTICATION_MODES } from "@lcsp/contracts/github-integration";
 import { RefreshCwIcon } from "lucide-react";
 
 import { SectionHeading } from "@/components/molecules/section-heading";
@@ -31,6 +32,7 @@ export function RepositoriesSettingsSection({
   githubConnectionStatus,
   onConnectGitHub,
   onManageGitHubInstallation,
+  onReconnectGitHubRepository,
 }: RepositoriesSettingsSectionProps) {
   return (
     <section className="flex flex-col gap-4">
@@ -175,9 +177,20 @@ export function RepositoriesSettingsSection({
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        onManageGitHubInstallation(repository.installation_id)
-                      }
+                      onClick={() => {
+                        switch (repository.authentication_mode) {
+                          case REPOSITORY_AUTHENTICATION_MODES.githubApp:
+                            if (repository.installation_id) {
+                              onManageGitHubInstallation(
+                                repository.installation_id,
+                              );
+                            }
+                            break;
+                          case REPOSITORY_AUTHENTICATION_MODES.githubCliCredential:
+                            onReconnectGitHubRepository();
+                            break;
+                        }
+                      }}
                     >
                       {resolveMessage(
                         appLocale,

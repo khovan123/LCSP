@@ -1,6 +1,8 @@
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { AuthRepositoriesSuccess } from "../../contracts/auth-workspace/settings.contract.ts";
 import { ListAuthRepositoriesQuery } from "./list-auth-repositories.query.ts";
+import { RepositoryAuthenticationMode } from "@prisma/client";
+import { REPOSITORY_AUTHENTICATION_MODES } from "@lcsp/contracts/github-integration";
 
 export class ListAuthRepositoriesHandler {
   constructor(private readonly prisma: PrismaService) {}
@@ -32,6 +34,11 @@ export class ListAuthRepositoriesHandler {
       ok: true,
       repositories: connections.map((connection) => ({
         id: connection.id,
+        authentication_mode:
+          connection.authenticationMode ===
+          RepositoryAuthenticationMode.GITHUB_APP
+            ? REPOSITORY_AUTHENTICATION_MODES.githubApp
+            : REPOSITORY_AUTHENTICATION_MODES.githubCliCredential,
         installation_id: connection.installationId,
         repository_name: connection.repositoryName,
         repository_full_name: connection.repositoryFullName,
