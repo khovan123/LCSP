@@ -338,7 +338,9 @@ model RepositoryConnection {
   id                 String                     @id
   assessmentId       String?
   userId             String
-  installationId     String
+  installationId     String?
+  authenticationMode RepositoryAuthenticationMode @default(GITHUB_APP)
+  credentialAuthorizationId String? @unique
   repositoryId       String
   repositoryName     String
   repositoryFullName String
@@ -847,6 +849,31 @@ model LegalRuleMatch {
 enum RepositoryConnectionStatus {
   ACTIVE
   REVOKED
+}
+
+enum CredentialProvider {
+  GITHUB
+}
+
+enum ProviderCredentialStatus {
+  PENDING
+  ACTIVE
+  INVALID
+  EXPIRED
+  REVOKING
+  REVOKED
+  STORAGE_ERROR
+}
+
+enum CredentialAuthorizationStatus {
+  ACTIVE
+  REVOKING
+  REVOKED
+}
+
+enum RepositoryAuthenticationMode {
+  GITHUB_APP
+  GITHUB_CLI_CREDENTIAL
 }
 
 enum RepositorySnapshotStatus {

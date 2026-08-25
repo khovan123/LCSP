@@ -24,6 +24,19 @@ export interface GithubConfig {
   privateKey: string;
 }
 
+export interface GithubCliConfig {
+  executablePath: string;
+  metadataTimeoutMs: number;
+  discoveryTimeoutMs: number;
+  archiveTimeoutMs: number;
+  maxJsonOutputBytes: number;
+  maxDiscoveryOutputBytes: number;
+  maxStderrBytes: number;
+  maxArchiveBytes: number;
+  maxConcurrentMetadataProcesses: number;
+  maxConcurrentArchiveProcesses: number;
+}
+
 export interface RabbitMqConfig {
   url: string;
   exchange: string;
@@ -75,6 +88,7 @@ export interface AppConfig {
   auth: AuthConfig;
   oauth: OAuthConfig;
   github: GithubConfig;
+  githubCli: GithubCliConfig;
   rabbitmq: RabbitMqConfig;
   outbox: OutboxConfig;
   crypto: CryptoConfig;
