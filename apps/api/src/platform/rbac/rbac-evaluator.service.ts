@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { RBAC_DECISION, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 
 import type {
@@ -29,13 +28,6 @@ export class RbacEvaluatorService {
   }
 
   private doEvaluate(ctx: RbacEvaluationContext): RbacDecisionResult {
-    if (ctx.membershipStatus !== AUTH_MEMBERSHIP_STATUSES.active) {
-      return {
-        decision: RBAC_DECISION.deny,
-        reasonCode: RBAC_REASON_CODE.stateGateFailed,
-      };
-    }
-
     if (!ctx.grantedActions.includes(ctx.action)) {
       return {
         decision: RBAC_DECISION.deny,
