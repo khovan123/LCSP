@@ -61,6 +61,7 @@ export function mapUserRecord(record: AuthUser): User {
     backupEmailPolicy: fromPrismaAuthBackupEmailPolicy(
       record.backupEmailPolicy,
     ),
+    role: record.role,
     mfaRequired: record.mfaRequired,
   });
 }
