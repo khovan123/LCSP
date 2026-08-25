@@ -9,7 +9,7 @@ import {
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
@@ -20,7 +20,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { SCAN_ERROR_CODES, SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
 
 import {
@@ -134,7 +134,7 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
     }
 
     const isManagerOwner =
-      rbac.subjectRole === SUBJECT_ROLES.manager &&
+      rbac.role === AUTH_USER_ROLES.customer &&
       rbac.userId === assessment.ownerId;
 
     if (!isManagerOwner) {

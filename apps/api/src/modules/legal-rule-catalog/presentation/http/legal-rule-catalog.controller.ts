@@ -178,10 +178,8 @@ export class LegalRuleCatalogController {
           userId,
           body.legalRuleCatalogVersionId,
           {
-            subjectRole: rbacContext.subjectRole,
+            subjectRole: rbacContext.role,
             selectedAction: rbacContext.selectedAction,
-            policyId: rbacContext.policyId,
-            policyVersion: rbacContext.policyVersion,
           },
           correlationId,
         ),
@@ -286,10 +284,8 @@ export class LegalRuleCatalogController {
           null, // no comments provided in the basic API body yet
           userId,
           {
-            subjectRole: rbacContext.subjectRole,
+            subjectRole: rbacContext.role,
             selectedAction: rbacContext.selectedAction,
-            policyId: rbacContext.policyId,
-            policyVersion: rbacContext.policyVersion,
           },
           correlationId,
         ),

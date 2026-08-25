@@ -1,13 +1,11 @@
 import { Command } from "@nestjs/cqrs";
-import type { SubjectRole } from "@lcsp/contracts/rbac";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 import type { WizardAnswer } from "@lcsp/contracts/wizard";
 import type { SaveWizardDraftResponse } from "../../contracts/wizard/wizard-draft.contract.js";
 
 export type ManagerOnlyAuthorizationContext = {
-  subjectRole: SubjectRole;
+  subjectRole: AuthUserRole;
   selectedAction: string | null;
-  policyId: string | null;
-  policyVersion: string | null;
 };
 
 export class SaveWizardDraftCommand extends Command<SaveWizardDraftResponse> {

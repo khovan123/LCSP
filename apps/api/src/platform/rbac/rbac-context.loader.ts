@@ -1,4 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
+import {
+  AUTH_MEMBERSHIP_STATUSES,
+  type AuthMembershipStatus,
+} from "@lcsp/contracts/auth";
 import { actionsForRole, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import type {
   Session,
@@ -9,10 +13,12 @@ import {
   verifySecret,
 } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
 import {
+  PrismaMembershipRepository,
   PrismaMfaEnrollmentRepository,
   PrismaSessionRepository,
   PrismaUserRepository,
 } from "../../modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.repositories.js";
+import type { MembershipRepository } from "../../modules/auth-workspace/application/ports/persistence/membership.repository.js";
 import type { MfaEnrollmentRepository } from "../../modules/auth-workspace/application/ports/persistence/mfa.repository.js";
 import type { SessionRepository } from "../../modules/auth-workspace/application/ports/persistence/session.repository.js";
 import type { UserRepository } from "../../modules/auth-workspace/application/ports/persistence/user.repository.js";
@@ -20,6 +26,7 @@ import type { UserRepository } from "../../modules/auth-workspace/application/po
 export type RbacContextDenialReason =
   | typeof RBAC_REASON_CODE.sessionInvalid
   | typeof RBAC_REASON_CODE.mfaRequired
+  | typeof RBAC_REASON_CODE.membershipMissing
   | typeof RBAC_REASON_CODE.loadError;
 
 export type RbacContextResult =
@@ -27,6 +34,7 @@ export type RbacContextResult =
       ok: true;
       session: Session;
       user: User;
+      membershipStatus: AuthMembershipStatus;
       grantedActions: readonly string[];
     }
   | {
@@ -45,6 +53,8 @@ export class RbacContextLoader {
     private readonly sessions: SessionRepository,
     @Inject(PrismaUserRepository)
     private readonly users: UserRepository,
+    @Inject(PrismaMembershipRepository)
+    private readonly memberships: MembershipRepository,
     @Inject(PrismaMfaEnrollmentRepository)
     private readonly mfaEnrollments: MfaEnrollmentRepository,
   ) {}
@@ -86,10 +96,22 @@ export class RbacContextLoader {
         return { ok: false, reason: RBAC_REASON_CODE.loadError };
       }
 
+      const membership = await this.memberships.findByUserAndOrganization(
+        session.userId,
+        session.organizationId,
+      );
+      if (
+        !membership ||
+        membership.status !== AUTH_MEMBERSHIP_STATUSES.active
+      ) {
+        return { ok: false, reason: RBAC_REASON_CODE.membershipMissing };
+      }
+
       return {
         ok: true,
         session,
         user,
+        membershipStatus: membership.status,
         grantedActions: actionsForRole(user.role),
       };
     } catch {

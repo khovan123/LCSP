@@ -233,13 +233,15 @@ const PRISMA_AUDIT_EXPORT_STATUS_TO_CONTRACT = {
   [PrismaAuditExportStatus.FAILED]: AUDIT_EXPORT_STATUSES.failed,
 } as const satisfies Record<PrismaAuditExportStatus, AuditExportStatus>;
 
-const AUTH_STATE_GATE_TO_PRISMA = {
-  [RBAC_STATE_GATES.membershipActive]: PrismaAuthStateGate.MEMBERSHIP_ACTIVE,
-} as const satisfies Record<StateGate, PrismaAuthStateGate>;
+const AUTH_USER_ROLE_TO_PRISMA = {
+  [AUTH_USER_ROLES.admin]: PrismaAuthUserRole.ADMIN,
+  [AUTH_USER_ROLES.customer]: PrismaAuthUserRole.CUSTOMER,
+} as const satisfies Record<AuthUserRole, PrismaAuthUserRole>;
 
-const PRISMA_AUTH_STATE_GATE_TO_CONTRACT = {
-  [PrismaAuthStateGate.MEMBERSHIP_ACTIVE]: RBAC_STATE_GATES.membershipActive,
-} as const satisfies Record<PrismaAuthStateGate, StateGate>;
+const PRISMA_AUTH_USER_ROLE_TO_CONTRACT = {
+  [PrismaAuthUserRole.ADMIN]: AUTH_USER_ROLES.admin,
+  [PrismaAuthUserRole.CUSTOMER]: AUTH_USER_ROLES.customer,
+} as const satisfies Record<PrismaAuthUserRole, AuthUserRole>;
 
 const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
   [RBAC_REASON_CODE.actionNotGranted]:
@@ -929,20 +931,6 @@ export function fromPrismaAuditExportStatus(
   return PRISMA_AUDIT_EXPORT_STATUS_TO_CONTRACT[status];
 }
 
-/** Maps a RBAC state gate from the contract layer to Prisma. @param stateGate - Contract RBAC state gate. @returns Prisma state gate. */
-export function toPrismaAuthStateGate(
-  stateGate: StateGate,
-): PrismaAuthStateGate {
-  return AUTH_STATE_GATE_TO_PRISMA[stateGate];
-}
-
-/** Maps a RBAC state gate from Prisma to the contract layer. @param stateGate - Prisma state gate. @returns Contract RBAC state gate. */
-export function fromPrismaAuthStateGate(
-  stateGate: PrismaAuthStateGate,
-): StateGate {
-  return PRISMA_AUTH_STATE_GATE_TO_CONTRACT[stateGate];
-}
-
 /** Maps an authorization reason code from the contract layer to Prisma. @param reasonCode - Contract auth/RBAC reason code. @returns Prisma authorization reason code. */
 export function toPrismaAuthorizationReasonCode(
   reasonCode: AuthorizationReasonCode,
@@ -955,6 +943,16 @@ export function fromPrismaAuthorizationReasonCode(
   reasonCode: PrismaAuthorizationReasonCode,
 ): AuthorizationReasonCode {
   return PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT[reasonCode];
+}
+
+export function toPrismaAuthUserRole(role: AuthUserRole): PrismaAuthUserRole {
+  return AUTH_USER_ROLE_TO_PRISMA[role];
+}
+
+export function fromPrismaAuthUserRole(
+  role: PrismaAuthUserRole,
+): AuthUserRole {
+  return PRISMA_AUTH_USER_ROLE_TO_CONTRACT[role];
 }
 
 /** Maps an audit resource type from the contract layer to Prisma. @param resourceType - Contract audit resource type. @returns Prisma audit resource type. */

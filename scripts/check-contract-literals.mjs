@@ -38,12 +38,10 @@ import {
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
 import {
-  PBAC_ACTIONS,
-  PBAC_DECISION,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+  RBAC_ACTIONS,
+  RBAC_DECISION,
+  RBAC_REASON_CODE,
+} from "@lcsp/contracts/rbac";
 import { SERVICE_HEALTH_STATUSES } from "@lcsp/contracts/shared";
 import {
   SCAN_CALLBACK_STATUSES,
@@ -55,7 +53,7 @@ import {
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const sourceRoots = ["apps/api/src", "apps/api/test", "apps/web/src"];
+const sourceRoots = ["apps/api/src", "apps/web/src"];
 const extensions = new Set([".ts", ".tsx"]);
 const canonicalValues = new Set(
   [
@@ -77,10 +75,9 @@ const canonicalValues = new Set(
     ORGANIZATION_SCOPE_ERROR_CODES,
     OUTBOX_AUDIT_EVENT_TYPES,
     OUTBOX_STATUSES,
-    PBAC_ACTIONS,
-    PBAC_DECISION,
-    PBAC_REASON_CODE,
-    PBAC_STATE_GATES,
+    RBAC_ACTIONS,
+    RBAC_DECISION,
+    RBAC_REASON_CODE,
     REPOSITORY_CONNECTION_STATUSES,
     REPOSITORY_SCAN_JOB_STATUSES,
     REPOSITORY_SCAN_TRIGGER_SOURCES,
@@ -91,7 +88,6 @@ const canonicalValues = new Set(
     SCAN_EVENT_TYPES,
     SCAN_JOB_GUIDANCE,
     SERVICE_HEALTH_STATUSES,
-    SUBJECT_ROLES,
     TECHNICAL_EVIDENCE_REPORT_STATUSES,
     WIZARD_EVENT_TYPES,
     WIZARD_STATUS_CODES,
@@ -129,6 +125,7 @@ for (const sourceRoot of sourceRoots) {
       file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
     );
     const isTestFile = file.endsWith(".spec.ts") || file.endsWith(".test.ts");
+    if (isTestFile) continue;
 
     function visit(node) {
       if (

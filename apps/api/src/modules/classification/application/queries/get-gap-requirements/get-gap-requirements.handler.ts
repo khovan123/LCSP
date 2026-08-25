@@ -17,7 +17,7 @@ import {
   GET_GAP_REQUIREMENTS_TOOL,
   type GetGapRequirementsResponse,
 } from "@lcsp/contracts/evidence";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { RBAC_ACTIONS, roleCanUseAction } from "@lcsp/contracts/rbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -25,7 +25,7 @@ import { problemException } from "../../../../../platform/problems/problem-facto
 import { GetGapRequirementsQuery } from "./get-gap-requirements.query.js";
 
 const CLASSIFICATION_REF_PREFIX = "classification:";
-const POLICY_REF_PREFIX = "policy_";
+const POLICY_REF_PREFIX = "rbac-role_";
 const MATRIX_REF_PREFIX = "matrix:";
 const REQUIREMENT_LOCATORS = {
   applicabilityAssessment: "classification.applicability_assessment",
@@ -174,22 +174,11 @@ export class GetGapRequirementsHandler implements IQueryHandler<
   private async policyMatchesInput(
     query: GetGapRequirementsQuery,
   ): Promise<boolean> {
-    if (!query.policyId || !query.policyVersion) return false;
-    if (
-      query.input.policyProfileVersionId !==
-      policyProfileVersionRef(query.policyId, query.policyVersion)
-    ) {
-      return false;
-    }
-    const policy = await this.prisma.authPolicy.findFirst({
-      where: {
-        id: query.policyId,
-        version: query.policyVersion,
-        organizationId: query.organizationId,
-      },
-      select: { actions: true },
-    });
-    return Boolean(policy?.actions.includes(RBAC_ACTIONS.gapRequirementsRead));
+    return (
+      query.input.policyProfileVersionId ===
+        roleProfileVersionRef(query.actorRole) &&
+      roleCanUseAction(query.actorRole, RBAC_ACTIONS.gapRequirementsRead)
+    );
   }
 
   private async writeAndReturn(
@@ -309,8 +298,8 @@ function idFromRef(ref: string, prefix: string): string {
   return ref.startsWith(prefix) ? ref.slice(prefix.length) : ref;
 }
 
-function policyProfileVersionRef(policyId: string, version: string): string {
-  return `${POLICY_REF_PREFIX}${policyId}_${version}`;
+function roleProfileVersionRef(role: string): string {
+  return `${POLICY_REF_PREFIX}${role}`;
 }
 
 function provenanceRef(correlationId: string): string {

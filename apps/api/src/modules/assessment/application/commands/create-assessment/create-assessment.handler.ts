@@ -7,12 +7,12 @@ import {
   AUDIT_RESOURCE_TYPES,
   AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import {
@@ -86,8 +86,6 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       decision: AUDIT_DECISIONS.allow,
       result: ASSESSMENT_EVENT_TYPES.created,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
-      policyId: command.authorization.policyId,
-      policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId: assessment.id,
         organizationId: assessment.organizationId,
@@ -136,10 +134,8 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
     command: CreateAssessmentCommand,
   ): Promise<void> {
     const allowed =
-      command.authorization.subjectRole === SUBJECT_ROLES.manager &&
-      command.authorization.selectedAction === RBAC_ACTIONS.assessmentCreate &&
-      command.authorization.policyId !== null &&
-      command.authorization.policyVersion !== null;
+      command.authorization.subjectRole === AUTH_USER_ROLES.customer &&
+      command.authorization.selectedAction === RBAC_ACTIONS.assessmentCreate;
 
     if (allowed) return;
 
@@ -152,8 +148,6 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.rbacDenied,
-      policyId: command.authorization.policyId,
-      policyVersion: command.authorization.policyVersion,
       payload: {
         action: RBAC_ACTIONS.assessmentCreate,
         result: AUDIT_DECISIONS.deny,

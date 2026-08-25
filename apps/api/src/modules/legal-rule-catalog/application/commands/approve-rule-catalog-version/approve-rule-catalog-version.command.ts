@@ -1,8 +1,6 @@
 export interface AuthorizationContext {
   subjectRole: string;
   selectedAction: string | null;
-  policyId: string | null;
-  policyVersion: string | null;
 }
 
 export class ApproveRuleCatalogVersionCommand {

@@ -92,8 +92,6 @@ export interface AuditEventInput {
   redactionStatus?: AuditRedactionStatus;
   actor?: AuditActorRef;
   sessionId?: string | null;
-  policyId?: string | null;
-  policyVersion?: string | null;
   decision: AuditDecision | null;
   payload?: Record<string, unknown>;
 }

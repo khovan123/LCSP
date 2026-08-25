@@ -5,6 +5,7 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 import {
+  actionsForRole,
   RBAC_ACTIONS,
   RBAC_DECISION,
   RBAC_REASON_CODE,
@@ -16,12 +17,10 @@ import type {
   Membership,
   MfaEnrollment,
   Organization,
-  Policy,
   Session,
   User,
 } from "../../../domain/models/auth-workspace.models.ts";
 import { Session as SessionEntity } from "../../../domain/models/auth-workspace.models.ts";
-import { WorkspaceAuthorizationDomainService } from "../../../domain/services/workspace-authorization.domain-service.ts";
 import {
   createCorrelationId,
   fingerprintToken,
@@ -42,11 +41,7 @@ const LOCK_WINDOW_MS = 15 * 60_000;
 const SESSION_TTL_MS = 8 * 60 * 60_000;
 
 export class AuthWorkspaceSupportService {
-  private readonly workspaceAuthorization: WorkspaceAuthorizationDomainService;
-
-  constructor(private readonly authAudit?: AuthAuditService) {
-    this.workspaceAuthorization = new WorkspaceAuthorizationDomainService();
-  }
+  constructor(private readonly authAudit?: AuthAuditService) {}
 
   createCorrelationId(): string {
     return createCorrelationId();
@@ -74,11 +69,7 @@ export class AuthWorkspaceSupportService {
       email: user.email.toString(),
       organization_id: organizationId,
       membership_status: membership.status,
-      // Only the role label is client-safe; other subject attributes are
-      // internal RBAC policy-evaluation inputs and must not leak to the client.
-      subject_attributes: membership.hasRole()
-        ? { role: membership.role() }
-        : {},
+      subject_attributes: { role: user.role },
     };
   }
 
@@ -139,16 +130,6 @@ export class AuthWorkspaceSupportService {
     return repositories.organizations.findById(organizationId);
   }
 
-  findPolicy(
-    repositories: AuthWorkspaceRepositories,
-    membership: Membership,
-  ): Promise<Policy | null> {
-    return repositories.policies.findByIdAndVersion(
-      membership.policyId,
-      membership.policyVersion,
-    );
-  }
-
   validateCredentialPayload(
     payload: CredentialPayload,
     correlationId: string,
@@ -189,8 +170,6 @@ export class AuthWorkspaceSupportService {
       decision: AUDIT_DECISIONS.allow,
       correlationId: correlationId,
       session_id: session.id,
-      policy_id: null,
-      policy_version: null,
     });
     return { token, session };
   }
@@ -224,24 +203,15 @@ export class AuthWorkspaceSupportService {
   async authorizeWorkspace(
     repositories: AuthWorkspaceRepositories,
     membership: Membership | null | undefined,
+    user: User | null | undefined,
     correlationId: string,
     organizationId: string,
     resourceId = "workspace-home",
   ): Promise<WorkspaceAuthorization> {
-    const policy = membership
-      ? await this.findPolicy(repositories, membership)
-      : undefined;
-    const domainDecision = this.workspaceAuthorization.authorize(
-      membership ?? undefined,
-      policy ?? undefined,
-      organizationId,
-    );
-    const subjectRole = membership?.role();
-
-    if (!domainDecision.allowed || !membership || !policy || !subjectRole) {
-      const denialCode = domainDecision.allowed
-        ? AUTH_ERROR_CODES.authzEvaluatorFailure
-        : domainDecision.code;
+    if (!membership || !user) {
+      const denialCode = !membership
+        ? AUTH_ERROR_CODES.membershipMissing
+        : AUTH_ERROR_CODES.sessionInvalid;
       const denied = createProblemResult(denialCode, correlationId);
       await this.recordDecision(repositories, {
         actor_id: membership?.userId ?? null,
@@ -252,8 +222,28 @@ export class AuthWorkspaceSupportService {
         action: RBAC_ACTIONS.workspaceRead,
         decision: RBAC_DECISION.deny,
         reason_code: denialCode,
-        policy_id: membership?.policyId ?? null,
-        policy_version: membership?.policyVersion ?? null,
+        correlationId: correlationId,
+      });
+      return denied;
+    }
+
+    if (
+      !membership.isActive() ||
+      !membership.belongsToOrganization(organizationId)
+    ) {
+      const denialCode = !membership.isActive()
+        ? AUTH_ERROR_CODES.authzStateGateBlocked
+        : AUTH_ERROR_CODES.authzTenantScopeMismatch;
+      const denied = createProblemResult(denialCode, correlationId);
+      await this.recordDecision(repositories, {
+        actor_id: membership.userId,
+        session_id: null,
+        organization_id: membership.organizationId,
+        resource_type: AUDIT_RESOURCE_TYPES.workspace,
+        resource_id: resourceId,
+        action: RBAC_ACTIONS.workspaceRead,
+        decision: RBAC_DECISION.deny,
+        reason_code: denialCode,
         correlationId: correlationId,
       });
       return denied;
@@ -268,8 +258,6 @@ export class AuthWorkspaceSupportService {
       action: RBAC_ACTIONS.workspaceRead,
       decision: RBAC_DECISION.allow,
       reason_code: RBAC_REASON_CODE.authorized,
-      policy_id: membership?.policyId ?? null,
-      policy_version: membership?.policyVersion ?? null,
       correlationId: correlationId,
     };
     await this.recordDecision(repositories, allowed);
@@ -277,8 +265,8 @@ export class AuthWorkspaceSupportService {
       ok: true,
       decision: allowed,
       membership_status: membership.status,
-      subject_role: subjectRole,
-      granted_actions: [...policy.actions],
+      role: user.role,
+      granted_actions: [...actionsForRole(user.role)],
     };
   }
 

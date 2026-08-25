@@ -28,8 +28,6 @@ export type AuthAuditEventInput = {
   resourceId?: string | null;
   reasonCode?: string | null;
   sessionId?: string | null;
-  policyId?: string | null;
-  policyVersion?: string | null;
   payload?: Record<string, unknown>;
 };
 
@@ -93,8 +91,6 @@ export class AuthAuditService {
       reasonCode: normalized.reasonCode ?? null,
       correlationId: normalized.correlationId,
       sessionId: normalized.sessionId ?? null,
-      policyId: normalized.policyId ?? null,
-      policyVersion: normalized.policyVersion ?? null,
       decision: normalized.decision,
       payload,
     };
@@ -113,8 +109,6 @@ export class AuthAuditService {
       reasonCode: authAuditReadNullableString(event, "reason_code"),
       correlationId: authAuditReadRequiredString(event, "correlationId"),
       sessionId: authAuditReadNullableString(event, "session_id"),
-      policyId: authAuditReadNullableString(event, "policy_id"),
-      policyVersion: authAuditReadNullableString(event, "policy_version"),
       decision: authAuditReadDecision(event, "decision"),
       payload: { ...event },
     };

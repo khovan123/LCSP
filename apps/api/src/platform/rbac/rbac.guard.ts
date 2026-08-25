@@ -20,9 +20,13 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
+import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
 import type { AuthorizationDecisionRepository } from "../../modules/auth-workspace/application/ports/persistence/authorization-decision.repository.js";
 import { PrismaAuthorizationDecisionRepository } from "../../modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.repositories.js";
 import { createCorrelationId } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
+import { problemException } from "../problems/problem-factory.js";
+import { RE_AUTH_FOR_SENSITIVE_ROUTE_METADATA_KEY } from "../security/decorators/re-auth-for-sensitive-route.decorator.js";
+import { isSensitiveActionVerificationFresh } from "../security/sensitive-route-policy.js";
 import { ALLOW_PENDING_MFA_METADATA_KEY } from "./decorators/allow-pending-mfa.decorator.js";
 import {
   RBAC_METADATA_KEY,
@@ -33,34 +37,14 @@ import {
   type RbacContextDenialReason,
 } from "./rbac-context.loader.js";
 import { RbacEvaluatorService } from "./rbac-evaluator.service.js";
-import type {
-  RbacDecisionResult,
-  RbacEvaluationContext,
-  SubjectRole,
-} from "./rbac.types.js";
-
-import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
-import { problemException } from "../problems/problem-factory.js";
-import { RE_AUTH_FOR_SENSITIVE_ROUTE_METADATA_KEY } from "../security/decorators/re-auth-for-sensitive-route.decorator.js";
-import { isSensitiveActionVerificationFresh } from "../security/sensitive-route-policy.js";
+import type { RbacDecisionResult, RbacEvaluationContext } from "./rbac.types.js";
 
 const DECISION_LOG_RESOURCE_TYPE = AUDIT_RESOURCE_TYPES.httpRoute;
 
-/**
- * Enforces route RBAC metadata by validating session context, membership, policy actions, and optional sensitive-route re-authentication.
- */
 @Injectable()
 export class RbacGuard implements CanActivate {
   private readonly logger = new Logger(RbacGuard.name);
 
-  /**
-   * Creates the guard with metadata lookup, context loading, policy evaluation, and decision logging dependencies.
-   *
-   * @param reflector - Nest reflector used to read route and controller authorization metadata.
-   * @param loader - RBAC context loader that validates session, MFA, membership, and policy state.
-   * @param evaluator - Deterministic evaluator used to decide requested RBAC actions.
-   * @param decisions - Repository used to persist authorization decision logs.
-   */
   constructor(
     private readonly reflector: Reflector,
     private readonly loader: RbacContextLoader,
@@ -69,29 +53,12 @@ export class RbacGuard implements CanActivate {
     private readonly decisions: AuthorizationDecisionRepository,
   ) {}
 
-  /**
-   * Authorizes an incoming HTTP request from route metadata and attaches the resolved RBAC context when allowed.
-   *
-   * @param context - Nest execution context containing handler metadata and the incoming HTTP request.
-   * @returns True when all required session, membership, policy, and sensitive-route checks succeed.
-   * @throws A standardized authentication or RBAC problem when any required check fails.
-   */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const metadata = this.reflector.getAllAndOverride<RbacMetadata | undefined>(
       RBAC_METADATA_KEY,
       [context.getHandler(), context.getClass()],
     );
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const allowPendingMfa =
-      this.reflector.getAllAndOverride<boolean | undefined>(
-        ALLOW_PENDING_MFA_METADATA_KEY,
-        [context.getHandler(), context.getClass()],
-      ) === true;
-    const requiresSensitiveReauth =
-      this.reflector.getAllAndOverride<boolean | undefined>(
-        RE_AUTH_FOR_SENSITIVE_ROUTE_METADATA_KEY,
-        [context.getHandler(), context.getClass()],
-      ) === true;
     const correlationId =
       headerString(request.headers?.["x-correlation-id"]) ??
       createCorrelationId();
@@ -106,8 +73,6 @@ export class RbacGuard implements CanActivate {
         action: RBAC_ACTIONS.metadataCheck,
         decision: RBAC_DECISION.deny,
         reasonCode: RBAC_REASON_CODE.metadataMissing,
-        policyId: null,
-        policyVersion: null,
         correlationId,
       });
       throw this.rbacDenied(correlationId);
@@ -121,8 +86,8 @@ export class RbacGuard implements CanActivate {
           : [];
     const action = candidateActions[0] ?? RBAC_ACTIONS.sessionVerify;
     const resourceId = requestResourceId(request, action);
-
     const token = this.extractToken(request);
+
     if (!token) {
       await this.recordDecision({
         actorId: null,
@@ -132,8 +97,6 @@ export class RbacGuard implements CanActivate {
         action,
         decision: RBAC_DECISION.deny,
         reasonCode: RBAC_REASON_CODE.sessionInvalid,
-        policyId: null,
-        policyVersion: null,
         correlationId,
       });
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId, {
@@ -142,7 +105,11 @@ export class RbacGuard implements CanActivate {
     }
 
     const loaderResult = await this.loader.load(token, Date.now(), {
-      allowPendingMfa,
+      allowPendingMfa:
+        this.reflector.getAllAndOverride<boolean | undefined>(
+          ALLOW_PENDING_MFA_METADATA_KEY,
+          [context.getHandler(), context.getClass()],
+        ) === true,
     });
 
     if (!loaderResult.ok) {
@@ -154,8 +121,6 @@ export class RbacGuard implements CanActivate {
         action,
         decision: RBAC_DECISION.deny,
         reasonCode: loaderResult.reason,
-        policyId: null,
-        policyVersion: null,
         correlationId,
       });
       throw this.exceptionFor(
@@ -165,45 +130,29 @@ export class RbacGuard implements CanActivate {
       );
     }
 
-    const { session, membership, policy } = loaderResult;
-    const subjectRole = membership.role();
-    if (!subjectRole) {
-      await this.recordDecision({
-        actorId: session.userId,
-        sessionId: session.id,
-        organizationId: session.organizationId,
-        resourceId,
-        action,
-        decision: RBAC_DECISION.deny,
-        reasonCode: RBAC_REASON_CODE.subjectAttributeMissing,
-        policyId: policy.id,
-        policyVersion: policy.version,
-        correlationId,
-      });
-      throw this.rbacDenied(correlationId);
-    }
+    const { session, user, membershipStatus, grantedActions } = loaderResult;
+    const requiresSensitiveReauth =
+      this.reflector.getAllAndOverride<boolean | undefined>(
+        RE_AUTH_FOR_SENSITIVE_ROUTE_METADATA_KEY,
+        [context.getHandler(), context.getClass()],
+      ) === true;
 
     if (metadata.type === RBAC_METADATA_TYPES.session) {
-      // @RequireSession() — session + active membership only, no RBAC action gate.
       await this.enforceSensitiveReauth({
         required: requiresSensitiveReauth,
         session,
         resourceId,
         action,
-        policyId: policy.id,
-        policyVersion: policy.version,
         correlationId,
       });
       request.rbacContext = {
         userId: session.userId,
         sessionId: session.id,
         organizationId: session.organizationId,
-        subjectRole: subjectRole as SubjectRole,
-        scope: readStringAttribute(membership.subjectAttributes.scope) ?? null,
-        grantedActions: policy.actions,
+        role: user.role,
+        scope: resourceId,
+        grantedActions,
         selectedAction: null,
-        policyId: policy.id,
-        policyVersion: policy.version,
       };
       await this.recordDecision({
         actorId: session.userId,
@@ -213,8 +162,6 @@ export class RbacGuard implements CanActivate {
         action,
         decision: RBAC_DECISION.allow,
         reasonCode: RBAC_REASON_CODE.authorized,
-        policyId: policy.id,
-        policyVersion: policy.version,
         correlationId,
       });
       return true;
@@ -230,43 +177,11 @@ export class RbacGuard implements CanActivate {
       const evaluationContext: RbacEvaluationContext = {
         organizationId: session.organizationId,
         action: candidateAction,
-        subject: {
-          role: subjectRole as SubjectRole,
-          scope: readStringAttribute(membership.subjectAttributes.scope),
-        },
-        policy: {
-          id: policy.id,
-          organizationId: policy.organizationId,
-          version: policy.version,
-          subjectRole: policy.subjectRole as SubjectRole,
-          stateGate: policy.stateGate,
-          actions: policy.actions,
-        },
-        membershipStatus: membership.status,
+        subject: { role: user.role },
+        grantedActions,
+        membershipStatus,
       };
-
-      let decision: RbacDecisionResult;
-      try {
-        decision = this.evaluator.evaluate(evaluationContext);
-      } catch (error) {
-        this.logger.error(
-          `RBAC evaluator threw — defaulting to deny: ${(error as Error).message}`,
-        );
-        await this.recordDecision({
-          actorId: session.userId,
-          sessionId: session.id,
-          organizationId: session.organizationId,
-          resourceId,
-          action: candidateAction,
-          decision: RBAC_DECISION.deny,
-          reasonCode: RBAC_REASON_CODE.evaluatorError,
-          policyId: policy.id,
-          policyVersion: policy.version,
-          correlationId,
-        });
-        throw this.rbacDenied(correlationId);
-      }
-
+      const decision = this.evaluator.evaluate(evaluationContext);
       if (decision.decision === RBAC_DECISION.allow) {
         allowed = { action: candidateAction, decision };
         break;
@@ -284,8 +199,6 @@ export class RbacGuard implements CanActivate {
           action: denied.action,
           decision: RBAC_DECISION.deny,
           reasonCode: denied.decision.reasonCode ?? RBAC_REASON_CODE.denied,
-          policyId: denied.decision.policyId || null,
-          policyVersion: denied.decision.policyVersion || null,
           correlationId,
         });
       }
@@ -297,23 +210,17 @@ export class RbacGuard implements CanActivate {
       session,
       resourceId,
       action: allowed.action,
-      policyId: allowed.decision.policyId ?? policy.id,
-      policyVersion: allowed.decision.policyVersion ?? policy.version,
       correlationId,
     });
-
     request.rbacContext = {
       userId: session.userId,
       sessionId: session.id,
       organizationId: session.organizationId,
-      subjectRole: subjectRole as SubjectRole,
-      scope: readStringAttribute(membership.subjectAttributes.scope) ?? null,
-      grantedActions: policy.actions,
+      role: user.role,
+      scope: resourceId,
+      grantedActions,
       selectedAction: allowed.action,
-      policyId: allowed.decision.policyId ?? null,
-      policyVersion: allowed.decision.policyVersion ?? null,
     };
-
     await this.recordDecision({
       actorId: session.userId,
       sessionId: session.id,
@@ -322,20 +229,11 @@ export class RbacGuard implements CanActivate {
       action: allowed.action,
       decision: RBAC_DECISION.allow,
       reasonCode: RBAC_REASON_CODE.authorized,
-      policyId: allowed.decision.policyId,
-      policyVersion: allowed.decision.policyVersion,
       correlationId,
     });
-
     return true;
   }
 
-  /**
-   * Extracts a bearer token from the request Authorization header without accepting alternate schemes.
-   *
-   * @param request - Authenticated-request shape containing HTTP headers.
-   * @returns Bearer token value, or null when the header is missing or malformed.
-   */
   private extractToken(request: AuthenticatedRequest): string | null {
     const header = request.headers?.authorization;
     if (typeof header !== "string") return null;
@@ -344,13 +242,6 @@ export class RbacGuard implements CanActivate {
     return token;
   }
 
-  /**
-   * Enforces recent sensitive-action verification for routes marked as requiring re-authentication.
-   *
-   * @param input - Requirement flag, session verification timestamp, resource/action context, policy metadata, and correlation ID.
-   * @returns A promise that resolves when re-authentication is unnecessary or still fresh.
-   * @throws A standardized re-auth-required problem when sensitive verification is stale or absent.
-   */
   private async enforceSensitiveReauth(input: {
     required: boolean;
     session: {
@@ -361,8 +252,6 @@ export class RbacGuard implements CanActivate {
     };
     resourceId: string;
     action: string;
-    policyId: string | null;
-    policyVersion: string | null;
     correlationId: string;
   }): Promise<void> {
     if (
@@ -383,27 +272,15 @@ export class RbacGuard implements CanActivate {
       action: input.action,
       decision: RBAC_DECISION.deny,
       reasonCode: AUTH_ERROR_CODES.reauthRequired,
-      policyId: input.policyId,
-      policyVersion: input.policyVersion,
       correlationId: input.correlationId,
     });
     throw problemException(
       AUTH_ERROR_CODES.reauthRequired,
       input.correlationId,
-      {
-        status: HttpStatus.FORBIDDEN,
-      },
+      { status: HttpStatus.FORBIDDEN },
     );
   }
 
-  /**
-   * Maps RBAC context-loading denial reasons to the external authentication/RBAC exception contract.
-   *
-   * @param denial - Context-loader denial reason and optional MFA enrollment metadata.
-   * @param correlationId - Correlation identifier attached to the resulting problem.
-   * @param membershipMissingAsRbacDenied - Whether missing membership should be hidden behind a generic RBAC denial.
-   * @returns HTTP exception representing the appropriate external denial.
-   */
   private exceptionFor(
     denial:
       | { reason: RbacContextDenialReason; mfaEnrolled?: boolean }
@@ -417,55 +294,34 @@ export class RbacGuard implements CanActivate {
         return problemException(
           AUTH_ERROR_CODES.sessionInvalid,
           correlationId,
-          {
-            status: HttpStatus.UNAUTHORIZED,
-          },
+          { status: HttpStatus.UNAUTHORIZED },
         );
       case RBAC_REASON_CODE.mfaRequired:
         return problemException(AUTH_ERROR_CODES.mfaRequired, correlationId, {
           meta:
             typeof denial === "string"
               ? undefined
-              : {
-                  mfaEnrolled: denial.mfaEnrolled === true,
-                },
+              : { mfaEnrolled: denial.mfaEnrolled === true },
           status: HttpStatus.UNAUTHORIZED,
         });
       case RBAC_REASON_CODE.membershipMissing:
-        if (membershipMissingAsRbacDenied) {
-          return this.rbacDenied(correlationId);
-        }
+        if (membershipMissingAsRbacDenied) return this.rbacDenied(correlationId);
         return problemException(
           AUTH_ERROR_CODES.membershipMissing,
           correlationId,
-          {
-            status: HttpStatus.FORBIDDEN,
-          },
+          { status: HttpStatus.FORBIDDEN },
         );
-      case RBAC_REASON_CODE.policyNotFound:
       case RBAC_REASON_CODE.loadError:
         return this.rbacDenied(correlationId);
     }
   }
 
-  /**
-   * Creates the generic forbidden exception used when detailed RBAC denial information must not be exposed.
-   *
-   * @param correlationId - Correlation identifier attached to the problem response.
-   * @returns Standard RBAC-denied HTTP exception.
-   */
   private rbacDenied(correlationId: string): HttpException {
     return problemException(AUTH_ERROR_CODES.rbacDenied, correlationId, {
       status: HttpStatus.FORBIDDEN,
     });
   }
 
-  /**
-   * Appends an authorization decision log without allowing audit-log failures to change the authorization outcome.
-   *
-   * @param input - Actor, session, organization, resource, action, decision, policy, reason, and correlation metadata.
-   * @returns A promise that always resolves after the append succeeds or its failure is logged.
-   */
   private async recordDecision(input: {
     actorId: string | null;
     sessionId: string | null;
@@ -474,8 +330,6 @@ export class RbacGuard implements CanActivate {
     action: string;
     decision: RbacDecisionValue;
     reasonCode: AuthErrorCode | RbacReasonCode;
-    policyId: string | null;
-    policyVersion: string | null;
     correlationId: string;
   }): Promise<void> {
     try {
@@ -488,8 +342,6 @@ export class RbacGuard implements CanActivate {
         action: input.action,
         decision: input.decision,
         reason_code: input.reasonCode,
-        policy_id: input.policyId,
-        policy_version: input.policyVersion,
         correlationId: input.correlationId,
       });
     } catch (error) {
@@ -500,39 +352,16 @@ export class RbacGuard implements CanActivate {
   }
 }
 
-/**
- * Reads a subject or route attribute only when its runtime value is a string.
- *
- * @param value - Unknown attribute value to inspect.
- * @returns String value when valid; otherwise undefined.
- */
+function headerString(value: string | string[] | undefined): string | null {
+  if (typeof value === "string" && value.trim().length > 0) return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return null;
+}
+
 function readStringAttribute(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-/**
- * Normalizes a correlation header to one non-empty string value.
- *
- * @param value - Raw HTTP header value.
- * @returns First non-empty string value, or null when absent.
- */
-function headerString(value: string | string[] | undefined): string | null {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value;
-  }
-  if (Array.isArray(value) && typeof value[0] === "string") {
-    return value[0];
-  }
-  return null;
-}
-
-/**
- * Derives a stable, human-readable authorization resource identifier from common route parameters or request metadata.
- *
- * @param request - Incoming request containing route params, method, route path, and original URL.
- * @param fallbackAction - Action identifier used when no more specific resource can be derived.
- * @returns Resource identifier used in authorization decision logs.
- */
 function requestResourceId(
   request: AuthenticatedRequest,
   fallbackAction: string,

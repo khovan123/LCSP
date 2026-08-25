@@ -7,7 +7,7 @@ import {
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
@@ -17,7 +17,6 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -100,7 +99,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
     }
 
     const isManagerOwner =
-      command.subjectRole === SUBJECT_ROLES.manager &&
+      command.subjectRole === AUTH_USER_ROLES.customer &&
       assessment.ownerId === command.actorId;
     if (!isManagerOwner) {
       await this.auditDenied(command, AUTH_ERROR_CODES.rbacDenied);

@@ -13,7 +13,8 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { WIZARD_ERROR_CODES, WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import { HttpStatus, Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
@@ -153,8 +154,6 @@ export class SubmitWizardHandler implements ICommandHandler<
           resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
           resourceId: profileId,
           decision: AUDIT_DECISIONS.allow,
-          policyId: command.authorization.policyId,
-          policyVersion: command.authorization.policyVersion,
           payload: {
             assessmentId,
             wizardProfileId: profileId,
@@ -203,10 +202,8 @@ export class SubmitWizardHandler implements ICommandHandler<
     command: SubmitWizardCommand,
   ): Promise<void> {
     const allowed =
-      command.authorization.subjectRole === SUBJECT_ROLES.manager &&
-      command.authorization.selectedAction === RBAC_ACTIONS.wizardSubmit &&
-      command.authorization.policyId !== null &&
-      command.authorization.policyVersion !== null;
+      command.authorization.subjectRole === AUTH_USER_ROLES.customer &&
+      command.authorization.selectedAction === RBAC_ACTIONS.wizardSubmit;
 
     if (allowed) return;
 
@@ -219,8 +216,6 @@ export class SubmitWizardHandler implements ICommandHandler<
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.rbacDenied,
       correlationId: command.correlationId,
-      policyId: command.authorization.policyId,
-      policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId: command.assessmentId,
         action: RBAC_ACTIONS.wizardSubmit,

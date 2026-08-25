@@ -137,9 +137,10 @@ export class GetWorkspaceHandler {
       user.id,
       session.organizationId,
     );
-    const authorization = await this.support.authorizeWorkspace(
+      const authorization = await this.support.authorizeWorkspace(
       repositories,
       membership,
+      user,
       correlationId,
       session.organizationId,
     );
@@ -151,8 +152,6 @@ export class GetWorkspaceHandler {
         decision: AUDIT_DECISIONS.deny,
         reason_code: authorization.problem.code,
         correlationId: correlationId,
-        policy_id: membership?.policyId ?? null,
-        policy_version: membership?.policyVersion ?? null,
       });
       return authorization;
     }
@@ -163,8 +162,6 @@ export class GetWorkspaceHandler {
       organization_id: session.organizationId,
       decision: AUDIT_DECISIONS.allow,
       correlationId: correlationId,
-      policy_id: membership?.policyId ?? null,
-      policy_version: membership?.policyVersion ?? null,
     });
 
     return {
@@ -174,7 +171,7 @@ export class GetWorkspaceHandler {
       user_id: user.id,
       display_name: user.displayName ?? user.email.toString(),
       membership_status: authorization.membership_status,
-      subject_role: authorization.subject_role,
+      role: authorization.role,
       granted_actions: authorization.granted_actions,
       session_expires_at: new Date(session.expiresAt).toISOString(),
       mfa_verified: session.isMfaVerified(),

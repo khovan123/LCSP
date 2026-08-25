@@ -1,13 +1,11 @@
-import type { SubjectRole } from "../rbac.types.js";
+import type { AuthUserRole } from "../rbac.types.js";
 
 export interface RbacRequestContext {
   userId: string;
   sessionId: string;
   organizationId: string;
-  subjectRole: SubjectRole;
+  role: AuthUserRole;
   scope: string | null;
-  grantedActions: string[];
+  grantedActions: readonly string[];
   selectedAction: string | null;
-  policyId: string | null;
-  policyVersion: string | null;
 }

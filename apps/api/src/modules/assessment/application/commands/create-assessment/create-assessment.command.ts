@@ -1,13 +1,11 @@
 import { Command } from "@nestjs/cqrs";
-import type { SubjectRole } from "@lcsp/contracts/rbac";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 
 import type { CreateAssessmentDto } from "../../contracts/assessment/create-assessment.contract.js";
 
 export type ManagerOnlyAuthorizationContext = {
-  subjectRole: SubjectRole;
+  subjectRole: AuthUserRole;
   selectedAction: string | null;
-  policyId: string | null;
-  policyVersion: string | null;
 };
 
 /**

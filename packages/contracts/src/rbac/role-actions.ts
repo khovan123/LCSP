@@ -1,9 +1,9 @@
 import { AUTH_USER_ROLES } from "../auth/roles.ts";
+import type { AuthUserRole } from "../auth/types.ts";
 import { RBAC_ACTIONS } from "./actions.ts";
-import { GAP_REQUIREMENTS_MANAGER_ACTION_VALUES } from "./gap-requirements-role-actions.ts";
-import type { AuthUserRole } from "./policy.types.ts";
+import { GAP_REQUIREMENTS_CUSTOMER_ACTION_VALUES } from "./gap-requirements-role-actions.ts";
 
-export const MANAGER_ACTION_VALUES = [
+export const CUSTOMER_ACTION_VALUES = [
   RBAC_ACTIONS.workspaceRead,
   RBAC_ACTIONS.assessmentCreate,
   RBAC_ACTIONS.assessmentList,
@@ -30,7 +30,7 @@ export const MANAGER_ACTION_VALUES = [
   RBAC_ACTIONS.gapMatrixEvaluate,
   RBAC_ACTIONS.gapEvidenceTraceRead,
   RBAC_ACTIONS.gapRemediationPropose,
-  ...GAP_REQUIREMENTS_MANAGER_ACTION_VALUES,
+  ...GAP_REQUIREMENTS_CUSTOMER_ACTION_VALUES,
 ] as const;
 
 export const ADMIN_ACTION_VALUES = [
@@ -54,7 +54,7 @@ export const ADMIN_ACTION_VALUES = [
 
 export const RBAC_ROLE_ACTIONS = {
   [AUTH_USER_ROLES.admin]: ADMIN_ACTION_VALUES,
-  [AUTH_USER_ROLES.manager]: MANAGER_ACTION_VALUES,
+  [AUTH_USER_ROLES.customer]: CUSTOMER_ACTION_VALUES,
 } as const satisfies Record<AuthUserRole, readonly string[]>;
 
 export function actionsForRole(role: AuthUserRole): readonly string[] {

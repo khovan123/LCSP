@@ -15,6 +15,7 @@ import {
   toPrismaAuthBackupEmailPolicy,
   toPrismaAuthDecision,
   toPrismaAuthMembershipStatus,
+  toPrismaAuthUserRole,
   toPrismaAuthorizationReasonCode,
   toPrismaAuthPrimaryEmailAddressPolicy,
 } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
@@ -32,7 +33,6 @@ import type {
 import type { OAuthIdentityRepository } from "../../application/ports/persistence/oauth-identity.repository.ts";
 import type { OAuthStateRepository } from "../../application/ports/persistence/oauth-state.repository.ts";
 import type { OrganizationRepository } from "../../application/ports/persistence/organization.repository.ts";
-import type { PolicyRepository } from "../../application/ports/persistence/policy.repository.ts";
 import type { RecoveryRequestRepository } from "../../application/ports/persistence/recovery-request.repository.ts";
 import type { SessionRepository } from "../../application/ports/persistence/session.repository.ts";
 import type { UserRepository } from "../../application/ports/persistence/user.repository.ts";
@@ -46,7 +46,6 @@ import type {
   OAuthIdentity,
   OAuthState,
   Organization,
-  Policy,
   RecoveryRequest,
   Session,
   User,
@@ -60,11 +59,9 @@ import {
   mapOAuthIdentityRecord,
   mapOAuthStateRecord,
   mapOrganizationRecord,
-  mapPolicyRecord,
   mapRecoveryRequestRecord,
   mapSessionRecord,
   mapUserRecord,
-  subjectAttributesToJson,
 } from "./prisma-auth-workspace.mappers.ts";
 
 @Injectable()
@@ -124,6 +121,7 @@ export class PrismaUserRepository implements UserRepository {
           backupEmailPolicy: toPrismaAuthBackupEmailPolicy(
             user.backupEmailPolicy,
           ),
+          role: toPrismaAuthUserRole(user.role),
           mfaRequired: user.mfaRequired,
         },
         update: {
@@ -140,6 +138,7 @@ export class PrismaUserRepository implements UserRepository {
           backupEmailPolicy: toPrismaAuthBackupEmailPolicy(
             user.backupEmailPolicy,
           ),
+          role: toPrismaAuthUserRole(user.role),
           mfaRequired: user.mfaRequired,
         },
       });
@@ -207,19 +206,11 @@ export class PrismaMembershipRepository implements MembershipRepository {
         userId: membership.userId,
         organizationId: membership.organizationId,
         status: toPrismaAuthMembershipStatus(membership.status),
-        subjectAttributes: subjectAttributesToJson(
-          membership.subjectAttributes,
-        ),
-        policyId: membership.policyId,
-        policyVersion: membership.policyVersion,
+        revokedAt: dateFromEpochMs(membership.revokedAt),
       },
       update: {
         status: toPrismaAuthMembershipStatus(membership.status),
-        subjectAttributes: subjectAttributesToJson(
-          membership.subjectAttributes,
-        ),
-        policyId: membership.policyId,
-        policyVersion: membership.policyVersion,
+        revokedAt: dateFromEpochMs(membership.revokedAt),
       },
     });
   }
@@ -325,39 +316,6 @@ export class PrismaSessionRepository implements SessionRepository {
 }
 
 @Injectable()
-export class PrismaPolicyRepository implements PolicyRepository {
-  constructor(private readonly prisma: PrismaService) {}
-
-  async findByIdAndVersion(
-    id: string,
-    version: string,
-  ): Promise<Policy | null> {
-    const record = await this.prisma.authPolicy.findUnique({
-      where: {
-        id_version: {
-          id,
-          version,
-        },
-      },
-    });
-
-    return record ? mapPolicyRecord(record) : null;
-  }
-
-  async findLatestByOrganizationAndRole(
-    organizationId: string,
-    subjectRole: string,
-  ): Promise<Policy | null> {
-    const record = await this.prisma.authPolicy.findFirst({
-      where: { organizationId, subjectRole },
-      orderBy: { createdAt: "desc" },
-    });
-
-    return record ? mapPolicyRecord(record) : null;
-  }
-}
-
-@Injectable()
 export class PrismaAuditEventRepository implements AuditEventRepository {
   constructor(private readonly prisma: PrismaService) {}
 
@@ -385,8 +343,6 @@ export class PrismaAuthorizationDecisionRepository implements AuthorizationDecis
         action: decision.action,
         decision: toPrismaAuthDecision(decision.decision),
         reasonCode: toPrismaAuthorizationReasonCode(decision.reason_code),
-        policyId: decision.policy_id,
-        policyVersion: decision.policy_version,
         correlationId: decision.correlationId,
         payload: decision,
       },
@@ -764,8 +720,6 @@ function normalizeAuditEvent(
     reasonCode: authAuditReadNullableString(event, "reason_code"),
     correlationId: authAuditReadString(event, "correlationId"),
     sessionId: authAuditReadNullableString(event, "session_id"),
-    policyId: authAuditReadNullableString(event, "policy_id"),
-    policyVersion: authAuditReadNullableString(event, "policy_version"),
     payload,
   };
 }

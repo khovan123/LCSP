@@ -127,8 +127,6 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
           resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
           resourceId: command.legalRuleCatalogVersionId,
           decision: AUDIT_DECISIONS.allow,
-          policyId: command.authorization.policyId,
-          policyVersion: command.authorization.policyVersion,
           correlationId: command.correlationId,
           payload: {
             legalRuleCatalogVersionId: command.legalRuleCatalogVersionId,
@@ -152,9 +150,7 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
   ): Promise<void> {
     const allowed =
       command.authorization.selectedAction ===
-        RBAC_ACTIONS.legalRuleCatalogApprove &&
-      command.authorization.policyId !== null &&
-      command.authorization.policyVersion !== null;
+      RBAC_ACTIONS.legalRuleCatalogApprove;
 
     if (allowed) return;
 
@@ -167,8 +163,6 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.rbacDenied,
       correlationId: command.correlationId,
-      policyId: command.authorization.policyId,
-      policyVersion: command.authorization.policyVersion,
       payload: {
         action: RBAC_ACTIONS.legalRuleCatalogApprove,
         result: AUDIT_DECISIONS.deny,

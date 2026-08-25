@@ -14,8 +14,8 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
-import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import {
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
@@ -140,7 +140,7 @@ export class ScanController {
           assessmentId,
           scanJobId,
           context.organizationId,
-          context.subjectRole,
+          context.role,
           context.scope,
           request.correlationId,
         ),
@@ -358,12 +358,10 @@ export class InternalScanController {
                 : "worker-runtime",
             sessionId: "worker-runtime",
             organizationId: body.organizationId,
-            subjectRole: SUBJECT_ROLES.manager,
+            role: AUTH_USER_ROLES.customer,
             scope: body.assessmentId,
             grantedActions: [RBAC_ACTIONS.technicalEvidenceReanalyze],
             selectedAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
-            policyId: "worker-runtime",
-            policyVersion: "worker-runtime",
           },
           resolvedCorrelationId,
         ),

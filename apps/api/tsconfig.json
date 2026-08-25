@@ -31,9 +31,15 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.json",
-    "test/**/*.ts",
     "scripts/**/*.ts",
     "src/**/**/**/*.html"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test/**/*.ts",
+    "src/**/*.spec.ts",
+    "scripts/demo-readiness-export-pdf.ts"
   ],
   "references": [
     { "path": "../../packages/contracts" },

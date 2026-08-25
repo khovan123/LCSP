@@ -76,7 +76,7 @@ export class GetAuthProfileHandler {
       ),
       created_at: user.createdAt.toISOString(),
       updated_at: user.updatedAt.toISOString(),
-      membership_role: query.context.subjectRole,
+      membership_role: query.context.role,
       organization_id: query.context.organizationId,
       mfa_enrolled: mfaEnrolled,
       mfa_enrolled_at: mfaEnrolledAt,

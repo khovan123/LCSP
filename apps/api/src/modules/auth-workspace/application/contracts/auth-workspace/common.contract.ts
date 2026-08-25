@@ -1,12 +1,15 @@
-import type { AuthMembershipStatus, ProblemResult } from "@lcsp/contracts/auth";
+import type {
+  AuthMembershipStatus,
+  AuthUserRole,
+  ProblemResult,
+} from "@lcsp/contracts/auth";
 
 export type SafeUserProjection = {
   user_id: string;
   email: string;
   organization_id: string;
   membership_status: AuthMembershipStatus;
-  // Roles are policy-defined and may extend beyond the built-in RBAC roles.
-  subject_attributes: { role?: string };
+  subject_attributes: { role: AuthUserRole };
 };
 
 export type RequestMeta = {

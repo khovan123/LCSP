@@ -96,8 +96,6 @@ export class DraftLegalRuleHandler implements ICommandHandler<
           resourceType: AUDIT_RESOURCE_TYPES.legalRule,
           resourceId: legalRule.id,
           decision: AUDIT_DECISIONS.allow,
-          policyId: command.authorization.policyId,
-          policyVersion: command.authorization.policyVersion,
           correlationId: command.correlationId,
           payload: {
             legalRuleId: command.legalRuleId,
@@ -123,9 +121,7 @@ export class DraftLegalRuleHandler implements ICommandHandler<
   ): Promise<void> {
     const allowed =
       command.authorization.selectedAction ===
-        RBAC_ACTIONS.legalRuleCatalogAuthor &&
-      command.authorization.policyId !== null &&
-      command.authorization.policyVersion !== null;
+      RBAC_ACTIONS.legalRuleCatalogAuthor;
 
     if (allowed) return;
 
@@ -138,8 +134,6 @@ export class DraftLegalRuleHandler implements ICommandHandler<
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.rbacDenied,
       correlationId: command.correlationId,
-      policyId: command.authorization.policyId,
-      policyVersion: command.authorization.policyVersion,
       payload: {
         legalRuleId: command.legalRuleId,
         action: RBAC_ACTIONS.legalRuleCatalogAuthor,

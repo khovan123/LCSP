@@ -15,7 +15,7 @@ import {
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
@@ -27,7 +27,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import { fromPrismaAssessmentStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
@@ -139,7 +139,7 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
     }
 
     const isManagerOwner =
-      command.subjectRole === SUBJECT_ROLES.manager &&
+      command.subjectRole === AUTH_USER_ROLES.customer &&
       command.actorId === assessment.ownerId;
     if (!isTrusted && !isManagerOwner) {
       await this.auditRejected(

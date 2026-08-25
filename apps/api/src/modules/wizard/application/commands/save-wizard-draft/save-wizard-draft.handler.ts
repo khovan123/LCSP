@@ -1,7 +1,7 @@
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import { HttpStatus, Inject } from "@nestjs/common";
 import type { ICommandHandler } from "@nestjs/cqrs";
@@ -91,8 +91,6 @@ export class SaveWizardDraftHandler implements ICommandHandler<
       resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
       resourceId: savedProfile.id,
       decision: AUDIT_DECISIONS.allow,
-      policyId: command.authorization.policyId,
-      policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId,
         wizardProfileId: savedProfile.id,
@@ -115,10 +113,8 @@ export class SaveWizardDraftHandler implements ICommandHandler<
     command: SaveWizardDraftCommand,
   ): Promise<void> {
     const allowed =
-      command.authorization.subjectRole === SUBJECT_ROLES.manager &&
-      command.authorization.selectedAction === RBAC_ACTIONS.wizardWrite &&
-      command.authorization.policyId !== null &&
-      command.authorization.policyVersion !== null;
+      command.authorization.subjectRole === AUTH_USER_ROLES.customer &&
+      command.authorization.selectedAction === RBAC_ACTIONS.wizardWrite;
 
     if (allowed) return;
 
@@ -131,8 +127,6 @@ export class SaveWizardDraftHandler implements ICommandHandler<
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.rbacDenied,
       correlationId: command.correlationId,
-      policyId: command.authorization.policyId,
-      policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId: command.assessmentId,
         action: RBAC_ACTIONS.wizardWrite,

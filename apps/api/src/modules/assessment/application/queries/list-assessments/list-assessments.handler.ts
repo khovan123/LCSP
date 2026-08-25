@@ -5,9 +5,9 @@ import { QueryHandler } from "@nestjs/cqrs";
 import {
   ASSESSMENT_ERROR_CODES,
   ASSESSMENT_STATUS_CODES,
-  SUBJECT_ROLES,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { fromPrismaWizardStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
@@ -78,7 +78,7 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
       correlationId: query.correlationId,
     });
 
-    if (query.subjectRole !== SUBJECT_ROLES.manager) {
+    if (query.subjectRole !== AUTH_USER_ROLES.customer) {
       return emptyResult();
     }
 

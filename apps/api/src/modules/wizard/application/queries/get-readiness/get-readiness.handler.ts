@@ -1,7 +1,8 @@
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { WIZARD_EVENT_TYPES, type WizardAnswer } from "@lcsp/contracts/wizard";
 import { HttpStatus } from "@nestjs/common";
@@ -96,13 +97,11 @@ export class GetReadinessHandler implements IQueryHandler<
 
   private async assertReadAction(query: GetReadinessQuery): Promise<void> {
     const { authorization } = query;
-    const isManager = authorization.subjectRole === SUBJECT_ROLES.manager;
+    const isManager = authorization.subjectRole === AUTH_USER_ROLES.customer;
     const hasReadAction =
       authorization.selectedAction === RBAC_ACTIONS.assessmentRead;
-    const hasPolicy =
-      authorization.policyId !== null && authorization.policyVersion !== null;
 
-    if (isManager && hasReadAction && hasPolicy) {
+    if (isManager && hasReadAction) {
       return;
     }
 
@@ -116,8 +115,6 @@ export class GetReadinessHandler implements IQueryHandler<
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.rbacDenied,
       correlationId: query.correlationId,
-      policyId: authorization.policyId,
-      policyVersion: authorization.policyVersion,
       payload: {
         assessmentId: query.assessmentId,
         action: RBAC_ACTIONS.assessmentRead,

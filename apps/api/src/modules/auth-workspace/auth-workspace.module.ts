@@ -50,7 +50,6 @@ import {
   PrismaOAuthIdentityRepository,
   PrismaOAuthStateRepository,
   PrismaOrganizationRepository,
-  PrismaPolicyRepository,
   PrismaRecoveryRequestRepository,
   PrismaSessionRepository,
   PrismaUserRepository,
@@ -62,7 +61,6 @@ const REPOSITORY_PROVIDERS = [
   PrismaUserRepository,
   PrismaMembershipRepository,
   PrismaSessionRepository,
-  PrismaPolicyRepository,
   PrismaAuditEventRepository,
   PrismaAuthorizationDecisionRepository,
   PrismaMfaEnrollmentRepository,
@@ -106,7 +104,6 @@ function handlerProvider<T>(
         users: PrismaUserRepository,
         memberships: PrismaMembershipRepository,
         sessions: PrismaSessionRepository,
-        policies: PrismaPolicyRepository,
         auditEvents: PrismaAuditEventRepository,
         authorizationDecisions: PrismaAuthorizationDecisionRepository,
         mfaEnrollments: PrismaMfaEnrollmentRepository,
@@ -121,7 +118,6 @@ function handlerProvider<T>(
         users,
         memberships,
         sessions,
-        policies,
         auditEvents,
         authorizationDecisions,
         mfaEnrollments,
@@ -352,12 +348,11 @@ function handlerProvider<T>(
     AuthWorkspaceFacade,
     AuthAuditService,
     // Exposed for platform/rbac's RbacGuard, which needs read access to
-    // sessions/memberships/policies/MFA enrollment and write access to the
-    // decision log — reusing these rather than duplicating the same Prisma
-    // queries in a second, potentially-diverging implementation.
+    // sessions/users/memberships/MFA enrollment and write access to the
+    // decision log.
     PrismaSessionRepository,
+    PrismaUserRepository,
     PrismaMembershipRepository,
-    PrismaPolicyRepository,
     PrismaMfaEnrollmentRepository,
     PrismaAuthorizationDecisionRepository,
   ],

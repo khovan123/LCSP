@@ -3,8 +3,6 @@ import type { CitationLocatorRef } from "../../services/citation-locator-validat
 export interface AuthorizationContext {
   subjectRole: string;
   selectedAction: string | null;
-  policyId: string | null;
-  policyVersion: string | null;
 }
 
 export class DraftLegalRuleCommand {

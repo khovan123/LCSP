@@ -10,8 +10,6 @@ export class ResolveConflictCommand {
     readonly correlationId: string,
     readonly authorization: {
       selectedAction: string | null;
-      policyId: string | null;
-      policyVersion: string | null;
     },
   ) {}
 }

@@ -9,7 +9,8 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   CONFLICT_RECORD_STATUSES,
   SCAN_ERROR_CODES,
@@ -133,8 +134,6 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
           decision: AUDIT_DECISIONS.allow,
           result: resolution,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
-          policyId: command.authorization.policyId,
-          policyVersion: command.authorization.policyVersion,
           payload: {
             conflictId: conflict.id,
             assessmentId: command.assessmentId,
@@ -166,10 +165,8 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
     command: ResolveConflictCommand,
   ): Promise<void> {
     const allowed =
-      command.subjectRole === SUBJECT_ROLES.manager &&
-      command.authorization.selectedAction === RBAC_ACTIONS.conflictResolve &&
-      command.authorization.policyId !== null &&
-      command.authorization.policyVersion !== null;
+      command.subjectRole === AUTH_USER_ROLES.customer &&
+      command.authorization.selectedAction === RBAC_ACTIONS.conflictResolve;
 
     if (allowed) return;
 
@@ -183,8 +180,6 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.rbacDenied,
-      policyId: command.authorization.policyId,
-      policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId: command.assessmentId,
         conflictId: command.conflictId,

@@ -7,7 +7,8 @@ import {
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import {
   READINESS_CLASSIFICATION_STATUSES,
@@ -210,8 +211,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
             : AUDIT_DECISIONS.deny,
           reasonCode: guardrailResult.blockedReason,
           correlationId: command.correlationId,
-          policyId: command.authorization.policyId,
-          policyVersion: command.authorization.policyVersion,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
           payload: {
             exportId,
@@ -319,10 +318,8 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
     command: GenerateReadinessExportCommand,
   ): Promise<void> {
     const allowed =
-      command.authorization.subjectRole === SUBJECT_ROLES.manager &&
-      command.authorization.selectedAction === RBAC_ACTIONS.wizardExport &&
-      command.authorization.policyId !== null &&
-      command.authorization.policyVersion !== null;
+      command.authorization.subjectRole === AUTH_USER_ROLES.customer &&
+      command.authorization.selectedAction === RBAC_ACTIONS.wizardExport;
 
     if (allowed) return;
 
@@ -336,8 +333,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.rbacDenied,
       correlationId: command.correlationId,
-      policyId: command.authorization.policyId,
-      policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId: command.assessmentId,
         action: RBAC_ACTIONS.wizardExport,

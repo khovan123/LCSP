@@ -1,3 +1,4 @@
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 import type { GetGapRequirementsInput } from "@lcsp/contracts/evidence";
 
 export class GetGapRequirementsQuery {
@@ -6,8 +7,7 @@ export class GetGapRequirementsQuery {
     public readonly organizationId: string,
     public readonly input: GetGapRequirementsInput,
     public readonly actorId: string,
-    public readonly policyId: string | null,
-    public readonly policyVersion: string | null,
+    public readonly actorRole: AuthUserRole,
     public readonly correlationId: string,
   ) {}
 }

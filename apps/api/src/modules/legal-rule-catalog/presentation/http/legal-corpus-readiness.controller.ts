@@ -49,8 +49,6 @@ export class LegalCorpusReadinessController {
           input.effectiveDate,
           input.pinnedCorpusVersionId,
           request.rbacContext.userId,
-          request.rbacContext.policyId,
-          request.rbacContext.policyVersion,
           correlationId,
         ),
       ),

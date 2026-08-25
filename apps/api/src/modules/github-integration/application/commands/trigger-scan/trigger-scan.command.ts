@@ -1,5 +1,5 @@
 import type { RepositoryScanTriggerSource } from "@lcsp/contracts/github-integration";
-import type { SubjectRole } from "@lcsp/contracts/rbac";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 
 /**
  * Carries snapshot, trigger provenance, idempotency, and optional authenticated RBAC context into scan-job creation.
@@ -25,7 +25,7 @@ export class TriggerScanCommand {
     public readonly idempotencyKey: string,
     public readonly actorId: string | null,
     public readonly organizationId: string | null,
-    public readonly subjectRole: SubjectRole | null,
+    public readonly subjectRole: AuthUserRole | null,
     public readonly scope: string | undefined,
     public readonly correlationId: string,
   ) {}

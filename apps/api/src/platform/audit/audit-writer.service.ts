@@ -101,8 +101,6 @@ export class AuditWriterService {
           reasonCode: event.reasonCode ?? null,
           correlationId: event.correlationId,
           sessionId: event.sessionId ?? null,
-          policyId: event.policyId ?? null,
-          policyVersion: event.policyVersion ?? null,
           decision: event.decision
             ? toPrismaAuthDecision(event.decision)
             : null,

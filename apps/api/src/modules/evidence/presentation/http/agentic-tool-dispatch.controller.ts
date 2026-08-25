@@ -233,8 +233,6 @@ export class InternalAgenticToolDispatchController {
           assessmentId: args.assessmentId,
           organizationId: args.organizationId,
           userId: args.userId,
-          policyId: policy.policyId,
-          policyVersion: policy.policyVersion,
           correlationId: args.correlationId,
           input: args.input,
         }),
@@ -245,8 +243,6 @@ export class InternalAgenticToolDispatchController {
   }
 
   private async authorizeProtectedCommand(args: ToolExecutionArgs): Promise<{
-    policyId: string;
-    policyVersion: string;
   }> {
     if (!this.rbacPreflight) {
       throw problemException(
@@ -258,26 +254,20 @@ export class InternalAgenticToolDispatchController {
       );
     }
 
-    const authorization = await this.rbacPreflight.evaluateWithPolicy({
+    const authorization = await this.rbacPreflight.evaluate({
       userId: args.userId,
       organizationId: args.organizationId,
       action: agenticToolCommandRbacAction(args.toolName),
       correlationId: args.correlationId,
     });
 
-    if (
-      authorization.decision !== RBAC_DECISION.allow ||
-      !authorization.policyId ||
-      !authorization.policyVersion
-    ) {
+    if (authorization.decision !== RBAC_DECISION.allow) {
       throw problemException(AUTH_ERROR_CODES.rbacDenied, args.correlationId, {
         status: HttpStatus.FORBIDDEN,
       });
     }
 
     return {
-      policyId: authorization.policyId,
-      policyVersion: authorization.policyVersion,
     };
   }
 

@@ -1,5 +1,5 @@
 import { Query } from "@nestjs/cqrs";
-import type { SubjectRole } from "@lcsp/contracts/rbac";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 
 import type { ScanJobStatusDto } from "../../contracts/scan/scan-job-status.contract.js";
 
@@ -21,7 +21,7 @@ export class GetScanJobQuery extends Query<ScanJobStatusDto> {
     public readonly assessmentId: string,
     public readonly scanJobId: string,
     public readonly organizationId: string,
-    public readonly subjectRole: SubjectRole,
+    public readonly subjectRole: AuthUserRole,
     public readonly scope: string | null,
     public readonly correlationId: string,
   ) {

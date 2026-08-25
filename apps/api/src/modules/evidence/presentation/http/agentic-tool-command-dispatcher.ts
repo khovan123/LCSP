@@ -9,8 +9,6 @@ export type AgenticToolCommandDispatchArgs = {
   assessmentId: string;
   organizationId: string;
   userId: string;
-  policyId?: string | null;
-  policyVersion?: string | null;
   correlationId: string;
   input: Record<string, unknown>;
 };

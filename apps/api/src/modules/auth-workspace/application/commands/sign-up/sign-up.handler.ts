@@ -4,14 +4,10 @@ import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   AUTH_AUDIT_EVENT_TYPES,
   AUTH_MEMBERSHIP_STATUSES,
+  AUTH_USER_ROLES,
   SIGN_UP_ERROR_CODES,
 } from "@lcsp/contracts/auth";
-import {
-  MANAGER_ONLY_ACTION_VALUES,
-  RBAC_ACTIONS,
-  RBAC_STATE_GATES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
+import { actionsForRole } from "@lcsp/contracts/rbac";
 import { HttpStatus } from "@nestjs/common";
 
 import { toPrismaAuthMembershipStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
@@ -31,20 +27,6 @@ const SESSION_TTL_MS = 8 * 60 * 60_000;
 const MIN_PASSWORD_LENGTH = 12;
 const MAX_DISPLAY_NAME_LENGTH = 100;
 const MAX_ORGANIZATION_NAME_LENGTH = 120;
-const SELF_SIGN_UP_POLICY_VERSION = "self-sign-up-v1";
-
-const SELF_SIGN_UP_MANAGER_ACTIONS = [
-  RBAC_ACTIONS.workspaceRead,
-  RBAC_ACTIONS.assessmentRead,
-  RBAC_ACTIONS.assessmentList,
-  RBAC_ACTIONS.githubConnect,
-  RBAC_ACTIONS.scanRead,
-  RBAC_ACTIONS.scanTrigger,
-  RBAC_ACTIONS.documentRead,
-  RBAC_ACTIONS.documentGenerate,
-  RBAC_ACTIONS.snapshotCreate,
-  ...MANAGER_ONLY_ACTION_VALUES,
-] as const;
 
 export class SignUpHandler {
   constructor(
@@ -93,12 +75,12 @@ export class SignUpHandler {
     const trimmedOrganizationName = organizationName.trim();
     const organizationId = crypto.randomUUID();
     const userId = crypto.randomUUID();
-    const policyId = crypto.randomUUID();
     const membershipId = crypto.randomUUID();
     const sessionId = crypto.randomUUID();
     const sessionToken = issueOpaqueToken();
     const sessionExpiresAt = new Date(Date.now() + SESSION_TTL_MS);
-    const allowedActions = uniqueActions(SELF_SIGN_UP_MANAGER_ACTIONS);
+    const role = AUTH_USER_ROLES.customer;
+    const allowedActions = uniqueActions(actionsForRole(role));
 
     const existingUser = await this.prisma.authUser.findUnique({
       where: { email: normalizedEmail },
@@ -126,17 +108,6 @@ export class SignUpHandler {
           },
         });
 
-        await tx.authPolicy.create({
-          data: {
-            id: policyId,
-            version: SELF_SIGN_UP_POLICY_VERSION,
-            actions: allowedActions,
-            subjectRole: SUBJECT_ROLES.manager,
-            stateGate: RBAC_STATE_GATES.membershipActive,
-            organizationId,
-          },
-        });
-
         await tx.authUser.create({
           data: {
             id: userId,
@@ -146,6 +117,7 @@ export class SignUpHandler {
             failedLoginCount: 0,
             lockUntil: null,
             displayName: trimmedDisplayName,
+            role,
           },
         });
 
@@ -157,9 +129,6 @@ export class SignUpHandler {
             status: toPrismaAuthMembershipStatus(
               AUTH_MEMBERSHIP_STATUSES.active,
             ),
-            subjectAttributes: { role: SUBJECT_ROLES.manager },
-            policyId,
-            policyVersion: SELF_SIGN_UP_POLICY_VERSION,
           },
         });
 
@@ -185,8 +154,6 @@ export class SignUpHandler {
             decision: AUDIT_DECISIONS.allow,
             correlationId,
             sessionId,
-            policyId,
-            policyVersion: SELF_SIGN_UP_POLICY_VERSION,
             payload: {
               event_type: AUTH_AUDIT_EVENT_TYPES.authSignUpSuccess,
               actor_id: userId,
@@ -194,8 +161,7 @@ export class SignUpHandler {
               decision: AUDIT_DECISIONS.allow,
               correlationId,
               session_id: sessionId,
-              policy_id: policyId,
-              policy_version: SELF_SIGN_UP_POLICY_VERSION,
+              role,
             },
           },
           tx,

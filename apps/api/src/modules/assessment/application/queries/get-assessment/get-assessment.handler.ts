@@ -6,7 +6,7 @@ import {
   WIZARD_STATUS_CODES,
   type AssessmentNextActionKey,
 } from "@lcsp/contracts/assessment";
-import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   CLASSIFICATION_RESULT_STATUSES,
   ENGINEERING_RULE_EVALUATION_STATUSES,
@@ -62,7 +62,7 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       this.throwNotFound(query.correlationId);
     }
     if (
-      query.subjectRole !== SUBJECT_ROLES.manager ||
+      query.subjectRole !== AUTH_USER_ROLES.customer ||
       assessment.ownerId !== query.sessionUserId
     ) {
       this.throwNotFound(query.correlationId);

@@ -6,7 +6,6 @@ import type {
   AuthOAuthIdentity,
   AuthOAuthState,
   AuthOrganization,
-  AuthPolicy,
   AuthRecoveryRequest,
   AuthSession,
   AuthUser,
@@ -18,7 +17,7 @@ import {
   fromPrismaAuthBackupEmailPolicy,
   fromPrismaAuthMembershipStatus,
   fromPrismaAuthPrimaryEmailAddressPolicy,
-  fromPrismaAuthStateGate,
+  fromPrismaAuthUserRole,
 } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import {
   MfaEnrollment,
@@ -27,14 +26,12 @@ import {
   OAuthIdentity,
   OAuthState,
   Organization,
-  Policy,
   RecoveryRequest,
   Session,
   User,
   type AuditEvent,
   type AuthorizationDecision,
 } from "../../domain/models/auth-workspace.models.ts";
-import type { SubjectAttributes } from "../../domain/models/auth-workspace.models.ts";
 
 export function mapOrganizationRecord(record: AuthOrganization): Organization {
   return Organization.rehydrate({
@@ -61,7 +58,7 @@ export function mapUserRecord(record: AuthUser): User {
     backupEmailPolicy: fromPrismaAuthBackupEmailPolicy(
       record.backupEmailPolicy,
     ),
-    role: record.role,
+    role: fromPrismaAuthUserRole(record.role),
     mfaRequired: record.mfaRequired,
   });
 }
@@ -84,9 +81,7 @@ export function mapMembershipRecord(record: AuthMembership): Membership {
     userId: record.userId,
     organizationId: record.organizationId,
     status: fromPrismaAuthMembershipStatus(record.status),
-    subjectAttributes: jsonToSubjectAttributes(record.subjectAttributes),
-    policyId: record.policyId,
-    policyVersion: record.policyVersion,
+    revokedAt: record.revokedAt?.getTime() ?? null,
   });
 }
 
@@ -118,17 +113,6 @@ export function mapMfaRateLimitRecord(record: AuthMfaRateLimit): MfaRateLimit {
     userId: record.userId,
     failedCount: record.failedCount,
     lockedUntil: record.lockedUntil?.getTime() ?? null,
-  });
-}
-
-export function mapPolicyRecord(record: AuthPolicy): Policy {
-  return Policy.rehydrate({
-    id: record.id,
-    version: record.version,
-    actions: record.actions,
-    subjectRole: record.subjectRole,
-    stateGate: fromPrismaAuthStateGate(record.stateGate),
-    organizationId: record.organizationId,
   });
 }
 
@@ -167,28 +151,12 @@ export function mapAuthorizationDecisionRecord(
   return jsonToAuthorizationDecision(record.payload);
 }
 
-export function subjectAttributesToJson(
-  value: SubjectAttributes,
-): Prisma.InputJsonValue {
-  return value;
-}
-
 export function dateFromEpochMs(value: number | null): Date | null {
   return value === null ? null : new Date(value);
 }
 
 export function dateFromEpochMsRequired(value: number): Date {
   return new Date(value);
-}
-
-export function jsonToSubjectAttributes(
-  value: Prisma.JsonValue,
-): SubjectAttributes {
-  if (!value || Array.isArray(value) || typeof value !== "object") {
-    return {};
-  }
-
-  return value as SubjectAttributes;
 }
 
 function jsonToAuditEvent(value: Prisma.JsonValue): AuditEvent {

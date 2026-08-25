@@ -180,8 +180,6 @@ export class ValidateCitationSetHandler implements IQueryHandler<
       resourceType: AUDIT_RESOURCE_TYPES.assessment,
       resourceId: assessmentId,
       correlationId: query.correlationId,
-      policyId: query.policyId,
-      policyVersion: query.policyVersion,
       decision:
         response.status === AGENTIC_TOOL_STATUSES.ready
           ? AUDIT_DECISIONS.allow

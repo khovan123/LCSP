@@ -5,6 +5,7 @@ import {
   ASSESSMENT_CONTEXT_INCLUDES,
   EVIDENCE_ERROR_CODES,
 } from "@lcsp/contracts/evidence";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { HttpStatus } from "@nestjs/common";
 
 import { problemException } from "../../../../platform/problems/problem-factory.js";
@@ -163,8 +164,7 @@ export function get_gap_requirements(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     args.input as never,
     args.userId,
-    null,
-    null,
+    AUTH_USER_ROLES.customer,
     args.correlationId,
   );
 }
@@ -192,8 +192,6 @@ export function get_admin_source_catalog(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     args.input,
     args.userId,
-    null,
-    null,
     args.correlationId,
   );
 }
@@ -205,8 +203,6 @@ export function get_legal_corpus_readiness(args: AgenticToolQueryDispatchArgs) {
     new Date(`${requiredString(input.effectiveDate)}T00:00:00.000Z`),
     stripOptionalRef(optionalString(input.pinnedCorpusVersionId), "corpus_"),
     args.userId,
-    null,
-    null,
     args.correlationId,
   );
 }
@@ -216,8 +212,6 @@ export function retrieve_legal_basis(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     args.input as never,
     args.userId,
-    null,
-    null,
     args.correlationId,
   );
 }
@@ -227,8 +221,6 @@ export function validate_citation_set(args: AgenticToolQueryDispatchArgs) {
     args.organizationId,
     args.input as never,
     args.userId,
-    null,
-    null,
     args.correlationId,
   );
 }

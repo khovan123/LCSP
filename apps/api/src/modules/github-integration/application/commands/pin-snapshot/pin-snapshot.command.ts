@@ -1,4 +1,4 @@
-import type { SubjectRole } from "@lcsp/contracts/rbac";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 
 /**
  * Carries repository-connection and Git reference input required to pin an immutable assessment snapshot.
@@ -22,7 +22,7 @@ export class PinSnapshotCommand {
     public readonly assessmentId: string,
     public readonly organizationId: string,
     public readonly actorId: string,
-    public readonly subjectRole: SubjectRole,
+    public readonly subjectRole: AuthUserRole,
     public readonly scope: string | undefined,
     public readonly connectionId: string,
     public readonly branch: string | undefined,

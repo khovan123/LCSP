@@ -53,7 +53,7 @@ export class User {
       AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES.accountEmail;
     this.backupEmailPolicy =
       input.backupEmailPolicy ?? AUTH_BACKUP_EMAIL_POLICIES.recoveryEmail;
-    this.role = input.role ?? AUTH_USER_ROLES.manager;
+    this.role = input.role ?? AUTH_USER_ROLES.customer;
     this.mfaRequired = input.mfaRequired ?? false;
   }
 

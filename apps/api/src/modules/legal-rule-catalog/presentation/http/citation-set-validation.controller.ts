@@ -56,8 +56,6 @@ export class CitationSetValidationController {
           request.rbacContext.organizationId,
           input,
           request.rbacContext.userId,
-          request.rbacContext.policyId,
-          request.rbacContext.policyVersion,
           correlationId,
         ),
       ),

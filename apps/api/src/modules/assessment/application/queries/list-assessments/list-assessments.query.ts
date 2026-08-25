@@ -1,7 +1,7 @@
 import { Query } from "@nestjs/cqrs";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 
 import type { AssessmentListDto } from "../../contracts/assessment/assessment-list.contract.js";
-import type { SubjectRole } from "../../../../../platform/rbac/rbac.types.js";
 
 /**
  * Requests a paginated assessment list constrained by organization, caller role/scope, and optional status.
@@ -22,7 +22,7 @@ export class ListAssessmentsQuery extends Query<AssessmentListDto> {
   constructor(
     public readonly organizationId: string,
     public readonly sessionUserId: string,
-    public readonly subjectRole: SubjectRole,
+    public readonly subjectRole: AuthUserRole,
     public readonly scope: string | null,
     public readonly page: number | undefined,
     public readonly pageSize: number | undefined,

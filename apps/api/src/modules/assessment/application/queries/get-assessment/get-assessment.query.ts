@@ -1,7 +1,7 @@
 import { Query } from "@nestjs/cqrs";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 
 import type { AssessmentDetailDto } from "../../contracts/assessment/assessment-detail.contract.js";
-import type { SubjectRole } from "../../../../../platform/rbac/rbac.types.js";
 
 /**
  * Requests one assessment detail view within the caller's organization and RBAC subject context.
@@ -20,7 +20,7 @@ export class GetAssessmentQuery extends Query<AssessmentDetailDto> {
     public readonly assessmentId: string,
     public readonly organizationId: string,
     public readonly sessionUserId: string,
-    public readonly subjectRole: SubjectRole,
+    public readonly subjectRole: AuthUserRole,
     public readonly correlationId: string,
   ) {
     super();

@@ -50,7 +50,7 @@ model AuthUser {
   recoveryEmail             String?
   primaryEmailAddressPolicy AuthPrimaryEmailAddressPolicy @default(ACCOUNT_EMAIL)
   backupEmailPolicy         AuthBackupEmailPolicy         @default(RECOVERY_EMAIL)
-  role                      AuthUserRole                  @default(MANAGER)
+  role                      AuthUserRole                  @default(CUSTOMER)
   mfaRequired               Boolean                       @default(false)
   createdAt                 DateTime                      @default(now())
   updatedAt                 DateTime                      @updatedAt
@@ -366,7 +366,7 @@ enum AuthDecision {
 
 enum AuthUserRole {
   ADMIN
-  MANAGER
+  CUSTOMER
 }
 
 enum AuditResourceType {
@@ -424,8 +424,8 @@ enum AuthorizationReasonCode {
   OAUTH_CALLBACK_INVALID
   OAUTH_STATE_INVALID
   ORGANIZATION_MISMATCH
-  PBAC_DENIED
-  PBAC_METADATA_MISSING
+  RBAC_DENIED
+  RBAC_METADATA_MISSING
   POLICY_NOT_FOUND
   REAUTH_REQUIRED
   RECOVERY_INVALID

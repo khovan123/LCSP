@@ -3,6 +3,7 @@ import {
   AUTH_ERROR_CODES,
   AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
+  AUTH_USER_ROLES,
   REQUIRED_ACTIONS,
 } from "@lcsp/contracts/auth";
 
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
         AUTH_BACKUP_EMAIL_POLICIES.recoveryEmail,
       created_at: new Date("2026-07-01T08:00:00.000Z").toISOString(),
       updated_at: new Date("2026-07-31T20:00:00.000Z").toISOString(),
-      membership_role: "MANAGER",
+      membership_role: AUTH_USER_ROLES.customer,
       organization_id: "org-demo-1",
       mfa_enrolled: true,
       mfa_enrolled_at: new Date("2026-07-31T19:10:00.000Z").toISOString(),
