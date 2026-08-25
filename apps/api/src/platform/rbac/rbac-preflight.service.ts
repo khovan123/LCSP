@@ -9,11 +9,9 @@ import {
 import { Inject, Injectable, Logger } from "@nestjs/common";
 
 import type { AuthorizationDecisionRepository } from "../../modules/auth-workspace/application/ports/persistence/authorization-decision.repository.js";
-import type { MembershipRepository } from "../../modules/auth-workspace/application/ports/persistence/membership.repository.js";
 import type { UserRepository } from "../../modules/auth-workspace/application/ports/persistence/user.repository.js";
 import {
   PrismaAuthorizationDecisionRepository,
-  PrismaMembershipRepository,
   PrismaUserRepository,
 } from "../../modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.repositories.js";
 import { RbacEvaluatorService } from "./rbac-evaluator.service.js";
@@ -39,8 +37,6 @@ export class RbacPreflightService {
   private readonly logger = new Logger(RbacPreflightService.name);
 
   constructor(
-    @Inject(PrismaMembershipRepository)
-    private readonly memberships: MembershipRepository,
     @Inject(PrismaUserRepository)
     private readonly users: UserRepository,
     private readonly evaluator: RbacEvaluatorService,
@@ -50,26 +46,15 @@ export class RbacPreflightService {
 
   async evaluate(input: RbacPreflightInput): Promise<RbacPreflightResult> {
     try {
-      const [membership, user] = await Promise.all([
-        this.memberships.findByUserAndOrganization(
-          input.userId,
-          input.organizationId,
-        ),
-        this.users.findById(input.userId),
-      ]);
-      if (!membership) {
-        return this.deny(input, RBAC_REASON_CODE.membershipMissing);
-      }
+      const user = await this.users.findById(input.userId);
       if (!user) {
         return this.deny(input, RBAC_REASON_CODE.loadError);
       }
 
       const evaluationContext: RbacEvaluationContext = {
-        organizationId: input.organizationId,
         action: input.action,
         subject: { role: user.role },
         grantedActions: actionsForRole(user.role),
-        membershipStatus: membership.status,
       };
       const result = this.evaluator.evaluate(evaluationContext);
       const reasonCode =
