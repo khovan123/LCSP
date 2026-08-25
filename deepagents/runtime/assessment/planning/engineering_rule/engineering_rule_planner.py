@@ -6,9 +6,11 @@ from collections import Counter
 from dataclasses import dataclass, replace
 from typing import Any, Iterable
 
+from langchain.agents import create_agent
+
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from model_policy import PLANNER_MODEL_SPEC
 from tools.legal.legal.engineering_rules.models import EngineeringRule
-from tools.common.llm.fallback_client import LLMClientProtocol
-from tools.common.llm import LLMToolDefinition
 from tools.common.platform.logging import get_logger
 from tools.graph.scanner.program_graph.models import ProgramEvidenceGraph
 
@@ -171,8 +173,8 @@ class EngineeringRulePlanner:
     plan is validated against the immutable candidate set before execution.
     """
 
-    def __init__(self, llm_client: LLMClientProtocol) -> None:
-        self._llm = llm_client
+    def __init__(self, model: str = PLANNER_MODEL_SPEC) -> None:
+        self._model = model
 
     def plan(
         self,
@@ -204,22 +206,28 @@ class EngineeringRulePlanner:
             )
 
         try:
-            response = self._llm.complete_with_tools(
-                self._prompt(rows, wizard_context, graph, openwiki_context),
-                tools=[self._plan_tool()],
-                workflow_run_id=workflow_run_id,
-                node_name="plan_engineering_rules",
-                max_tokens=5000,
-                correlationId=correlation_id,
+            agent = create_agent(
+                model=self._model,
+                system_prompt=(
+                    "Plan the bounded technical investigation only. Do not make "
+                    "legal applicability, risk, or compliance decisions."
+                ),
+                response_format=self._plan_response_schema(),
+                middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+                name="lcsp-engineering-rule-planner",
             )
-            calls = [
-                call
-                for call in response.tool_calls
-                if call.name == "submit_engineering_rule_plan"
-            ]
-            if len(calls) != 1:
-                raise ValueError("planner must submit exactly one EngineeringRule plan")
-            plan = self._validate_plan(rows, calls[0].arguments)
+            response = agent.invoke(
+                {"messages": [{"role": "user", "content": self._prompt(rows, wizard_context, graph, openwiki_context)}]},
+                config={
+                    "metadata": {
+                        "workflow_run_id": workflow_run_id,
+                        "node_name": "plan_engineering_rules",
+                        "correlationId": correlation_id,
+                    },
+                    "configurable": {"thread_id": workflow_run_id},
+                },
+            )
+            plan = self._validate_plan(rows, response.get("structured_response") or {})
             requested = Counter(row.requested_decision for row in plan.decision_audit)
             reasons = Counter(row.reason_code or "MISSING" for row in plan.decision_audit)
             basis = Counter(value for row in plan.decision_audit for value in row.basis)
@@ -525,45 +533,42 @@ class EngineeringRulePlanner:
         )
 
     @staticmethod
-    def _plan_tool() -> LLMToolDefinition:
+    def _plan_response_schema() -> dict[str, Any]:
         decision_values = list(ENGINEERING_RULE_PLAN_DECISIONS.values())
         reason_values = list(ENGINEERING_RULE_PLAN_REASON_CODES.values())
         basis_values = list(ENGINEERING_RULE_PLAN_BASIS.values())
-        return LLMToolDefinition(
-            name="submit_engineering_rule_plan",
-            description=(
-                "Submit exactly one relevance decision for every candidate "
-                "EngineeringRule. This plans technical investigation only."
+        return {
+            "title": "EngineeringRulePlanResponse",
+            "description": (
+                "Exactly one relevance decision per candidate EngineeringRule. "
+                "This plans technical investigation only."
             ),
-            input_schema={
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["decisions"],
-                "properties": {
-                    "decisions": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": [
-                                "engineeringRuleId",
-                                "decision",
-                                "reasonCode",
-                                "basis",
-                            ],
-                            "properties": {
-                                "engineeringRuleId": {"type": "string", "minLength": 1},
-                                "decision": {"type": "string", "enum": decision_values},
-                                "reasonCode": {"type": "string", "enum": reason_values},
-                                "basis": {
-                                    "type": "array",
-                                    "items": {"type": "string", "enum": basis_values},
-                                    "uniqueItems": True,
-                                },
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["decisions"],
+            "properties": {
+                "decisions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": [
+                            "engineeringRuleId",
+                            "decision",
+                            "reasonCode",
+                            "basis",
+                        ],
+                        "properties": {
+                            "engineeringRuleId": {"type": "string", "minLength": 1},
+                            "decision": {"type": "string", "enum": decision_values},
+                            "reasonCode": {"type": "string", "enum": reason_values},
+                            "basis": {
+                                "type": "array",
+                                "items": {"type": "string", "enum": basis_values},
+                                "uniqueItems": True,
                             },
                         },
-                    }
-                },
+                    },
+                }
             },
-            tool_choice_required=True,
-        )
+        }

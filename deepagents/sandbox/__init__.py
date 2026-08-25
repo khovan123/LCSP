@@ -1,3 +1,12 @@
-"""Managed Deep Agents sandbox configuration for LCSP."""
+"""Managed sandbox declaration for the LCSP Deep Agent."""
 
-sandbox = None
+from managed_deepagents import define_sandbox
+
+
+sandbox = define_sandbox(
+    scope="thread",
+    default_timeout=300,
+)
+
+
+__all__ = ["sandbox"]

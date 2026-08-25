@@ -75,7 +75,7 @@ class SemgrepTool:
         secret_ruleset_path: str | Path | None = None,
         pinned_version: str = DEFAULT_PINNED_VERSION,
     ) -> None:
-        base_dir = Path(__file__).resolve().parent.parent / "rulesets"
+        base_dir = Path(__file__).resolve().parent.parent.parent / "rulesets"
         self._semgrep_binary = semgrep_binary
         self._timeout_seconds = timeout_seconds
         self._ai_ruleset_path = (

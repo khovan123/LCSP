@@ -1,13 +1,16 @@
 """Generate final assessment Markdown from direct EngineeringRule results."""
 
-from tools.common.llm import LLMClientProtocol
+from langchain.agents import create_agent
+
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from model_policy import RESOLVER_MODEL_SPEC
 
 
 class FinalReportGenerator:
     """Render evidence deterministically and use LLM only for bounded narration."""
 
-    def __init__(self, llm_client: LLMClientProtocol):
-        self.llm_client = llm_client
+    def __init__(self, model: str = RESOLVER_MODEL_SPEC):
+        self._model = model
 
     def generate(
         self,
@@ -108,11 +111,30 @@ class FinalReportGenerator:
         - Do not claim legal certification, legal approval, legal compliance, or a court-level violation conclusion.
         - Do not include raw source code.
         """
-        response = self.llm_client.complete(
-            prompt=prompt,
-            workflow_run_id=workflow_run_id,
-            node_name=node_name,
-            max_tokens=300,
-            correlationId=correlationId,
+        agent = create_agent(
+            model=self._model,
+            system_prompt=(
+                "You draft bounded LCSP assessment narration. Never make a legal "
+                "certification, approval, or compliance conclusion."
+            ),
+            middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+            name="lcsp-final-report-narrator",
         )
-        return response.content
+        result = agent.invoke(
+            {"messages": [{"role": "user", "content": prompt}]},
+            config={
+                "metadata": {
+                    "workflow_run_id": workflow_run_id,
+                    "node_name": node_name,
+                    "correlationId": correlationId,
+                },
+                "configurable": {"thread_id": workflow_run_id},
+            },
+        )
+        messages = result.get("messages") or []
+        if not messages:
+            raise ValueError("LangChain agent returned no report narration")
+        content = getattr(messages[-1], "content", "")
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("LangChain agent returned an empty report narration")
+        return content

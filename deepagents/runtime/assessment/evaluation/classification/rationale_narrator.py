@@ -1,18 +1,17 @@
 """Narrate an already-computed classification decision without changing it."""
 
-from tools.common.llm import LLMClientProtocol
+from langchain.agents import create_agent
+
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from model_policy import RESOLVER_MODEL_SPEC
 
 
 class RationaleNarrator:
     """Use an LLM only to explain deterministic classification results."""
 
-    def __init__(self, llm_client: LLMClientProtocol):
-        """Create a narrator backed by the worker Deep Agents runtime.
-
-        Args:
-            llm_client: Safety- and budget-aware client used for narration.
-        """
-        self.llm_client = llm_client
+    def __init__(self, model: str = RESOLVER_MODEL_SPEC):
+        """Create a narrator backed by LangChain's standard agent runtime."""
+        self._model = model
 
     def generate_rationale(
         self,
@@ -62,25 +61,43 @@ class RationaleNarrator:
         """
 
         try:
-            response = self.llm_client.complete(
-                prompt=prompt,
-                workflow_run_id=workflow_run_id,
-                node_name=node_name,
-                max_tokens=256,
-                correlationId=correlationId,
+            agent = create_agent(
+                model=self._model,
+                system_prompt=(
+                    "You explain an existing LCSP decision without changing it or "
+                    "making legal conclusions."
+                ),
+                middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+                name="lcsp-classification-rationale-narrator",
             )
+            result = agent.invoke(
+                {"messages": [{"role": "user", "content": prompt}]},
+                config={
+                    "metadata": {
+                        "workflow_run_id": workflow_run_id,
+                        "node_name": node_name,
+                        "correlationId": correlationId,
+                    },
+                    "configurable": {"thread_id": workflow_run_id},
+                },
+            )
+            messages = result.get("messages") or []
+            if not messages:
+                return None
+            content = getattr(messages[-1], "content", "")
+            if not isinstance(content, str) or not content.strip():
+                return None
 
             # Simple check if LLM contradicts the computed decision
             # (In a real system, you might use a more robust parser or specific formatting)
-            lower_response = response.content.lower()
+            lower_response = content.lower()
             if "low" in lower_response and risk_level != "LOW":
                 # Very basic rejection if it contradicts
                 return None
             if "high" in lower_response and risk_level != "HIGH":
                 return None
 
-            return response.content
+            return content
         except Exception:
-            # BudgetExceeded or PromptSafetyViolation
-            # Rationale is optional, so we return None and proceed
+            # Rationale is optional; deterministic classification still proceeds.
             return None

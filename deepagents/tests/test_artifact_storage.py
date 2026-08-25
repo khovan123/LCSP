@@ -73,17 +73,11 @@ def test_api_client_callback_chunking(monkeypatch) -> None:
     shutil.rmtree(client_storage_path, ignore_errors=True)
 
 
-def test_legacy_budget_exception_does_not_restore_budget_result_semantics() -> None:
-    """Legacy BudgetExceeded imports must not resurrect removed monthly-budget outcomes."""
+def test_provider_failure_uses_compilation_failure_semantics() -> None:
     from tools.planner.investigation.models import ENGINEERING_LIMITATION_CODES
     from tools.engineer_rule.investigation.pipeline import EngineeringInvestigationPipeline
-    from tools.common.llm.budget_tracker import BudgetExceeded
-
-    llm_client = MagicMock()
     rule_service = MagicMock()
-    rule_service.get_or_compile.side_effect = BudgetExceeded(
-        "Legacy monthly token cap exceeded."
-    )
+    rule_service.get_or_compile.side_effect = RuntimeError("provider failed")
 
     api_client = MagicMock()
     api_client.get_active_legal_rule_catalog.return_value = {
@@ -99,7 +93,7 @@ def test_legacy_budget_exception_does_not_restore_budget_result_semantics() -> N
 
     pipeline = EngineeringInvestigationPipeline(
         api_client=api_client,
-        llm_client=llm_client,
+        model="test:model",
         rule_service=rule_service,
     )
 

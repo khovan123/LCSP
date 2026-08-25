@@ -5,8 +5,12 @@ from __future__ import annotations
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from langchain.agents import create_agent
+from langchain.agents.middleware import ToolCallLimitMiddleware
+
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from model_policy import RESOLVER_MODEL_SPEC
 from tools.common.agentic_evidence import AgenticInvocationContext, AgenticToolResolver
-from tools.common.llm import LLMClientProtocol
 
 
 ALLOWED_SUMMARY_FIELDS = {
@@ -22,12 +26,12 @@ class AIUsageFlowModelAssistedProposer:
 
     def __init__(
         self,
-        llm_client: LLMClientProtocol,
         agentic_tool_resolver: AgenticToolResolver | None = None,
+        model: str = RESOLVER_MODEL_SPEC,
     ):
         """Create the proposer with optional read-only agentic evidence tools."""
-        self.llm_client = llm_client
         self.agentic_tool_resolver = agentic_tool_resolver
+        self._model = model
 
     def generate_summary_proposal(
         self,
@@ -179,74 +183,27 @@ class AIUsageFlowModelAssistedProposer:
         Any LLM/tool failure is converted to ``None`` so deterministic baseline
         processing can continue without model assistance.
         """
-        if self.agentic_tool_resolver is None:
-            try:
-                return self.llm_client.complete_structured(
-                    prompt=prompt,
-                    response_format=_summary_proposal_response_schema(),
-                    workflow_run_id=workflow_run_id,
-                    node_name=node_name,
-                    max_tokens=256,
-                    correlationId=correlationId,
-                )
-            except Exception:
-                return None
-
         try:
-            tool_response = self.llm_client.complete_with_tools(
-                prompt=prompt,
-                tools=self.agentic_tool_resolver.tool_definitions(),
-                workflow_run_id=workflow_run_id,
-                node_name=node_name,
-                max_tokens=256,
-                correlationId=correlationId,
-            )
-        except Exception:
-            return None
-
-        if not tool_response.tool_calls:
-            try:
-                return self.llm_client.complete_structured(
-                    prompt=prompt,
-                    response_format=_summary_proposal_response_schema(),
-                    workflow_run_id=workflow_run_id,
-                    node_name=node_name,
-                    max_tokens=256,
-                    correlationId=correlationId,
-                )
-            except Exception:
-                return None
-
-        try:
-            tool_results = self.agentic_tool_resolver.invoke_tool_calls(
-                tool_response.tool_calls,
-                context=self._tool_context(
+            tools = []
+            middleware = list(MODEL_GOVERNANCE_MIDDLEWARE)
+            if self.agentic_tool_resolver:
+                tools = self.agentic_tool_resolver.as_langchain_tools(context=self._tool_context(
                     assessment_id=assessment_id,
                     evidence_report_id=evidence_report_id,
                     organization_id=organization_id,
                     workflow_run_id=workflow_run_id,
                     correlationId=correlationId,
-                ),
+                ))
+                middleware.append(ToolCallLimitMiddleware(run_limit=self.agentic_tool_resolver.max_tool_calls, exit_behavior="error"))
+            agent = create_agent(
+                model=self._model, tools=tools,
+                system_prompt="Propose bounded AIUsageFlow summary fields only. Use governed read tools only when necessary.",
+                response_format=_summary_proposal_response_schema(), middleware=middleware,
+                name="lcsp-ai-usage-flow-proposer",
             )
-            return self.llm_client.complete_structured(
-                prompt=self._build_final_prompt(
-                    baseline_summary=baseline_summary,
-                    wizard_profile=wizard_profile,
-                    validated_claims=validated_claims,
-                    tool_results=[
-                        {
-                            "tool_name": result.tool_name,
-                            "authorized_action": result.authorized_action,
-                            "response": result.response,
-                        }
-                        for result in tool_results
-                    ],
-                ),
-                response_format=_summary_proposal_response_schema(),
-                workflow_run_id=workflow_run_id,
-                node_name=node_name,
-                max_tokens=256,
-                correlationId=correlationId,
+            return agent.invoke(
+                {"messages": [{"role": "user", "content": prompt}]},
+                config={"metadata": {"workflow_run_id": workflow_run_id, "node_name": node_name, "correlationId": correlationId}, "configurable": {"thread_id": workflow_run_id}},
             )
         except Exception:
             return None
@@ -254,7 +211,7 @@ class AIUsageFlowModelAssistedProposer:
     @staticmethod
     def _parse_summary_proposal(response: Any) -> dict[str, Any] | None:
         """Validate structured output and reject updates outside the allowlist."""
-        proposal = getattr(response, "structured_response", None)
+        proposal = response.get("structured_response") if isinstance(response, dict) else None
         if not isinstance(proposal, dict):
             return None
 
@@ -267,7 +224,7 @@ class AIUsageFlowModelAssistedProposer:
 
         return {
             "summary_updates": summary_updates,
-            "request_id": response.request_id,
+            "request_id": None,
         }
 
     @staticmethod

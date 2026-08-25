@@ -131,7 +131,7 @@ def test_material_scope_ignores_generic_ai_seed_and_test_health_seed() -> None:
     generic = _node(
         "node:generic",
         label="internal model runtime complete",
-        path="src/model_runtime.py",
+        path="src/native_agent_runtime.py",
         evidence_ref="evidence:generic",
     )
     health = _node(
@@ -177,8 +177,11 @@ def test_material_scope_ignores_generic_ai_seed_and_test_health_seed() -> None:
 def test_material_scope_ignores_internal_deep_agent_runtime_seed() -> None:
     deep_agent_output = _node(
         "node:deep-agent-output",
-        label="output from DeepAgentClient.complete",
-        path="khovan123-LCSP-68bba10/deepagents/tools/common/llm/deep_agent_client.py",
+        label="output from LangChainAgent.invoke",
+        path=(
+            "khovan123-LCSP-68bba10/deepagents/runtime/assessment/"
+            "investigation/engineering_rule/investigator.py"
+        ),
         evidence_ref="evidence:deep-agent-output",
         node_type="AI_OUTPUT",
     )

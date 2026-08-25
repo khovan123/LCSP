@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from tools.common.llm import LLMToolDefinition
 
 AgenticToolExposure = Literal["LLM_CALLABLE", "ORCHESTRATOR_ONLY", "SYSTEM_ONLY"]
 
@@ -873,14 +872,3 @@ def llm_callable_tool_specs() -> tuple[AgenticToolSpec, ...]:
     return tuple(
         spec for spec in AGENTIC_TOOL_SPECS if spec.exposure == "LLM_CALLABLE"
     )
-
-
-def build_llm_tool_definitions() -> list[LLMToolDefinition]:
-    return [
-        LLMToolDefinition(
-            name=spec.name,
-            description=spec.description,
-            input_schema=spec.input_schema,
-        )
-        for spec in llm_callable_tool_specs()
-    ]

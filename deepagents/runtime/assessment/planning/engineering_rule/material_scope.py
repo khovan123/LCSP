@@ -106,7 +106,13 @@ _MATERIAL_RESOURCE_NODE_TYPES = frozenset(
 )
 _STRONG_RESOLUTION_STATES = frozenset({"OBSERVED", "CORROBORATED"})
 _INTERNAL_LLM_RUNTIME_PATH_MARKERS = (
-    "deepagents/tools/common/llm/",
+    "deepagents/agent.py",
+    "deepagents/subagents/",
+    "deepagents/middleware/model_governance.py",
+    "deepagents/runtime/assessment/investigation/engineering_rule/investigator.py",
+    "deepagents/runtime/assessment/investigation/engineering_rule/code_context_investigator.py",
+    "deepagents/runtime/assessment/planning/engineering_rule/engineering_rule_planner.py",
+    "deepagents/runtime/legal/corpus/engineering_rules/compilation/",
 )
 _INTERNAL_LLM_RUNTIME_NODE_TYPES = frozenset(
     {

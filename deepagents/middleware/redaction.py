@@ -1,4 +1,4 @@
-"""Redact credentials and raw source fragments before worker data leaves trust boundaries."""
+"""Deterministic redaction guardrails for model and non-model data boundaries."""
 
 import re
 from collections.abc import Mapping, Sequence

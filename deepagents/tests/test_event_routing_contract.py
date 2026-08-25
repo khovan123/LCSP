@@ -60,8 +60,8 @@ def test_production_pm2_starts_managed_deep_agent_not_worker_processes():
     }
 
     assert '"lcsp-managed-deep-agent"' in ecosystem
-    assert '"dev"' in ecosystem
-    assert ".venv/bin/mda" in ecosystem
+    assert "entrypoint.py" in ecosystem
+    assert ".venv/bin/python" in ecosystem
     assert all(f'"{process}"' not in ecosystem for process in removed_processes)
 
 

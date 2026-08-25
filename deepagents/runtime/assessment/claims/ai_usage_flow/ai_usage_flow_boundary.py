@@ -7,7 +7,6 @@ from typing import Any
 from tools.common.agentic_evidence import AgenticToolResolver
 from structlog import get_logger
 
-from tools.common.llm import LLMClientProtocol
 from tools.common.platform.api_client import WorkerApiClient
 from tools.common.managed.boundary import AgentBoundaryBase
 
@@ -33,7 +32,6 @@ class AIUsageFlowBoundary(AgentBoundaryBase):
         pbac_client=None,
         api_client: WorkerApiClient | None = None,
         rule_engine: AIUsageFlowRuleEngine | None = None,
-        llm_client: LLMClientProtocol | None = None,
         agentic_tool_resolver: AgenticToolResolver | None = None,
     ) -> None:
         """Create the boundary with deterministic rules and optional model assistance.
@@ -43,7 +41,6 @@ class AIUsageFlowBoundary(AgentBoundaryBase):
             pbac_client: Optional base-boundary PBAC dependency.
             api_client: Optional internal API client override.
             rule_engine: Optional deterministic AI-usage rule engine override.
-            llm_client: Optional LLM client used for bounded proposals only.
             agentic_tool_resolver: Optional read-only agentic evidence resolver made
                 available to the model-assisted proposer.
         """
@@ -59,11 +56,8 @@ class AIUsageFlowBoundary(AgentBoundaryBase):
             api_client=self._api_client,
             rule_engine=self._rule_engine,
             proposer=AIUsageFlowModelAssistedProposer(
-                llm_client,
                 agentic_tool_resolver=agentic_tool_resolver,
-            )
-            if llm_client
-            else None,
+            ),
             checkpoint_url=config.langgraph_checkpoint_database_url,
             logger=logger,
         )

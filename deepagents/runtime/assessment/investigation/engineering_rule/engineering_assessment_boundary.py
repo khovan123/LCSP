@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from tools.common.llm.fallback_client import LLMClientProtocol
+from model_policy import INVESTIGATOR_MODEL_SPEC, PLANNER_MODEL_SPEC
 from tools.common.platform.api_client import WorkerApiClient, WorkerCallbackError
 from tools.common.platform.callback_schemas import ClassificationCallbackPayload
 from tools.common.platform.logging import get_logger
@@ -39,7 +39,8 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
         config,
         pbac_client=None,
         api_client: WorkerApiClient | None = None,
-        llm_client: LLMClientProtocol | None = None,
+        model: str = INVESTIGATOR_MODEL_SPEC,
+        planner_model: str = PLANNER_MODEL_SPEC,
         investigation_pipeline: EngineeringInvestigationPipeline | None = None,
         snapshot_client: SnapshotServiceClient | None = None,
         code_workspace: ScannerWorkspace | None = None,
@@ -56,13 +57,12 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
         self._code_workspace = code_workspace or ScannerWorkspace()
         if investigation_pipeline is not None:
             self._pipeline = investigation_pipeline
-        elif llm_client is not None:
+        else:
             self._pipeline = PlannedEngineeringInvestigationPipeline(
                 api_client=self._api_client,
-                llm_client=llm_client,
+                model=model,
+                planner_model=planner_model,
             )
-        else:
-            self._pipeline = None
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         evidence_report_id = self._evidence_report_id(message)
@@ -80,54 +80,38 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
             raise ValueError("accepted evidence report is missing assessment_id")
 
         wizard_context = self._wizard_context(assessment_id, correlationId)
-        if self._pipeline is None:
-            result_data = {
-                "mode": "ENGINEERING_RULE_EVALUATION",
-                "status": "BLOCKED",
-                "summary": {
-                    "compliant": 0,
-                    "non_compliant": 0,
-                    "unknown": 0,
-                    "total": 0,
-                },
-                "evaluations": [],
-                "claims": [],
-                "limitations": ["ENGINEERING_ASSESSMENT_LLM_RUNTIME_DISABLED"],
-            }
-            guardrail_status = "BLOCKED"
-        else:
-            workspace_job_id = f"investigation-{correlationId}"
-            workspace_path = self._materialize_code_workspace(
+        workspace_job_id = f"investigation-{correlationId}"
+        workspace_path = self._materialize_code_workspace(
+            evidence_report=evidence_report,
+            workspace_job_id=workspace_job_id,
+            correlation_id=correlationId,
+        )
+        try:
+            result = self._pipeline.run(
                 evidence_report=evidence_report,
-                workspace_job_id=workspace_job_id,
+                workflow_run_id=self._workflow_run_id(
+                    message, evidence_report, evidence_report_id
+                ),
+                correlation_id=correlationId,
+                wizard_context=wizard_context,
+                workspace_path=workspace_path,
+            )
+        finally:
+            if workspace_path is not None:
+                self._code_workspace.cleanup(workspace_job_id)
+        if result.status in WAITING_ENGINEERING_INVESTIGATION_STATUSES:
+            self._emit_investigation_waiting_runtime_event(
+                scan_job_id=str(
+                    evidence_report.get("scan_job_id")
+                    or evidence_report.get("scanJobId")
+                    or ""
+                )
+                or None,
+                result=result,
                 correlation_id=correlationId,
             )
-            try:
-                result = self._pipeline.run(
-                    evidence_report=evidence_report,
-                    workflow_run_id=self._workflow_run_id(
-                        message, evidence_report, evidence_report_id
-                    ),
-                    correlation_id=correlationId,
-                    wizard_context=wizard_context,
-                    workspace_path=workspace_path,
-                )
-            finally:
-                if workspace_path is not None:
-                    self._code_workspace.cleanup(workspace_job_id)
-            if result.status in WAITING_ENGINEERING_INVESTIGATION_STATUSES:
-                self._emit_investigation_waiting_runtime_event(
-                    scan_job_id=str(
-                        evidence_report.get("scan_job_id")
-                        or evidence_report.get("scanJobId")
-                        or ""
-                    )
-                    or None,
-                    result=result,
-                    correlation_id=correlationId,
-                )
-            result_data = result.to_assessment_data()
-            guardrail_status = self._guardrail_status(result.status)
+        result_data = result.to_assessment_data()
+        guardrail_status = self._guardrail_status(result.status)
 
         # correlationId is the direct assessment run identity. Re-delivery of the
         # same event remains idempotent; an explicit rerun receives a new correlation

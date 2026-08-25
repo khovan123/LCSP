@@ -57,6 +57,7 @@ NODE_TYPES = frozenset(
         "QUERY",
         "CRON",
         "WEBHOOK",
+        "AGENT_BOUNDARY_SOURCE",
         "PROTOCOL_MESSAGE",
         "DATA_CONTRACT",
         "DATABASE",
@@ -162,6 +163,7 @@ EDGE_TYPES = frozenset(
         "HANDLES_COMMAND",
         "PUBLISHES_QUERY",
         "HANDLES_QUERY",
+        "INVOKES_BOUNDARY",
         "READS_FROM",
         "WRITES_TO",
         "PERSISTS_TO",
@@ -296,9 +298,12 @@ FRAMEWORK_CONTINUATION_EDGES = frozenset(
         "HANDLES_COMMAND",
         "PUBLISHES_QUERY",
         "HANDLES_QUERY",
+        "INVOKES_BOUNDARY",
     }
 )
-FRAMEWORK_BOUNDARY_NODE_TYPES = frozenset({"EVENT", "QUEUE", "COMMAND", "QUERY"})
+FRAMEWORK_BOUNDARY_NODE_TYPES = frozenset(
+    {"EVENT", "QUEUE", "COMMAND", "QUERY", "AGENT_BOUNDARY_SOURCE"}
+)
 HUMAN_CONTROL_NODE_TYPES = frozenset({"HUMAN_REVIEW", "HUMAN_OVERRIDE"})
 BUSINESS_ACTION_NODE_TYPES = frozenset(
     {

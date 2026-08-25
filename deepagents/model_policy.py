@@ -5,12 +5,12 @@ from __future__ import annotations
 import os
 
 
-DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-5.6-terra"
-DEFAULT_TRIAGE_MODEL_SPEC = "openai:gpt-5.6-sol"
-DEFAULT_CONTEXT_WIZARD_MODEL_SPEC = "openai:gpt-5.6-luna"
-DEFAULT_PLANNER_MODEL_SPEC = "openai:gpt-5.6-sol"
-DEFAULT_INVESTIGATOR_MODEL_SPEC = "openai:gpt-5.6-terra"
-DEFAULT_RESOLVER_MODEL_SPEC = "openai:gpt-5.6-luna"
+DEFAULT_ROOT_MODEL_SPEC = "openai:gpt-4o"
+DEFAULT_TRIAGE_MODEL_SPEC = "openai:gpt-4o"
+DEFAULT_CONTEXT_WIZARD_MODEL_SPEC = "openai:gpt-4o"
+DEFAULT_PLANNER_MODEL_SPEC = "openai:gpt-4o"
+DEFAULT_INVESTIGATOR_MODEL_SPEC = "openai:gpt-4o"
+DEFAULT_RESOLVER_MODEL_SPEC = "openai:gpt-4o"
 
 
 def _model_spec(env_name: str, default: str) -> str:

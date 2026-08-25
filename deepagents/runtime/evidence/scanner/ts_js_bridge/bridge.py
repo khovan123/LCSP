@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable
 
 from tools.common.platform.logging import get_logger
-from tools.common.platform.redaction import SENSITIVE_KEY_PATTERN, redact_string
+from middleware.redaction import SENSITIVE_KEY_PATTERN, redact_string
 from tools.graph.scanner.tools.tool_base import (
     NOT_RUN_VERSION,
     OUTCOME_SUCCESS,

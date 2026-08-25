@@ -17,7 +17,7 @@ from tools.common.package.contract.api_client_contracts import (
     unexpected_error_message,
 )
 from tools.common.platform.correlation import get_correlationId
-from tools.common.platform.redaction import redact_dict, redact_source_code
+from middleware.redaction import redact_dict, redact_source_code
 from tools.common.platform.callback_schemas import (
     CallbackResponse,
     ScanCallbackPayload,

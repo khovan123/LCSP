@@ -37,7 +37,6 @@ def test_dispatch_runtime_groups_support_capabilities() -> None:
     assert _implementation_files(root) == {"tool_dispatch.py", "graph_runtime.py"}
     assert _implementation_files(root / "observability") == {
         "correlation.py",
-        "dev_unsafe_instrumentation.py",
         "dev_unsafe_trace.py",
         "logging.py",
         "logging_config.py",

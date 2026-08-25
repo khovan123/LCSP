@@ -12,7 +12,6 @@ from tools.engineer_rule.investigation.pipeline import (
     EngineeringInvestigationPipeline,
     EngineeringInvestigationResult,
 )
-from tools.common.llm.fallback_client import LLMClientProtocol
 from tools.common.platform.api_client import WorkerApiClient
 from tools.common.platform.callback_schemas import TechnicalProfileCallbackPayload
 from tools.common.managed.boundary import AgentBoundaryBase
@@ -48,7 +47,6 @@ class TechnicalProfileBoundary(AgentBoundaryBase):
         pbac_client=None,
         api_client: WorkerApiClient | None = None,
         profile_builder: TechnicalProfileBuilder | None = None,
-        llm_client: LLMClientProtocol | None = None,
         investigation_pipeline: EngineeringInvestigationPipeline | None = None,
     ) -> None:
         """Create the boundary and its deterministic/profile investigation dependencies."""
@@ -59,11 +57,6 @@ class TechnicalProfileBoundary(AgentBoundaryBase):
         )
         self._profile_builder = profile_builder or TechnicalProfileBuilder()
         self._investigation_pipeline = investigation_pipeline
-        if self._investigation_pipeline is None and llm_client is not None:
-            self._investigation_pipeline = EngineeringInvestigationPipeline(
-                api_client=self._api_client,
-                llm_client=llm_client,
-            )
 
     def handle(self, message: dict, correlationId: str) -> None:
         """Fetch accepted evidence, investigate it, build a profile, and callback the API."""

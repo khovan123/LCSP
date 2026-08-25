@@ -13,7 +13,7 @@ from tools.common.platform.dev_unsafe_trace import (
     unsafe_dev_trace_enabled,
     unsafe_dev_unfiltered_enabled,
 )
-from tools.common.platform.redaction import redact_dict
+from middleware.redaction import redact_dict
 
 
 _original_open = open

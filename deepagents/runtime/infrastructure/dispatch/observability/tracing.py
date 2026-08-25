@@ -8,7 +8,7 @@ import threading
 from typing import Any, Callable
 
 from tools.common.platform.config import load_tracing_config
-from tools.common.platform.redaction import redact_string
+from middleware.redaction import redact_string
 
 logger = logging.getLogger(__name__)
 _tracer = None

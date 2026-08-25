@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from tools.common.llm import LLMClientProtocol
 from tools.common.platform.api_client import WorkerApiClient
 from tools.common.platform.callback_schemas import ClassificationCallbackPayload
 from tools.common.platform.logging import get_logger
@@ -30,14 +29,12 @@ class ClassificationBoundary(AgentBoundaryBase):
     def __init__(
         self,
         config,
-        llm_client: LLMClientProtocol | None = None,
         api_client: WorkerApiClient | None = None,
     ) -> None:
         """Create the classification boundary and optional LLM assistants.
 
         Args:
             config: Managed Agent runtime configuration.
-            llm_client: Optional LLM client used only for proposal/narration nodes.
             api_client: Optional API client override, primarily for tests.
         """
         super().__init__(config)
@@ -46,10 +43,8 @@ class ClassificationBoundary(AgentBoundaryBase):
             config.worker_api_key,
         )
         self.graph = ClassificationGraph(
-            proposer=ModelAssistedClassificationProposer(llm_client)
-            if llm_client
-            else None,
-            narrator=RationaleNarrator(llm_client) if llm_client else None,
+            proposer=ModelAssistedClassificationProposer(),
+            narrator=RationaleNarrator(),
             persister=self._persist_graph_result,
             checkpoint_url=getattr(
                 config, "langgraph_checkpoint_database_url", None

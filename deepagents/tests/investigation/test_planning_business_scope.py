@@ -258,9 +258,10 @@ def test_planner_prompt_excludes_internal_llm_runtime_from_graph_summary() -> No
             "label": "OpenAI provider used by LCSP worker",
             "source": {
                 "file_path": (
-                    "deepagents/tools/common/llm/deep_agent_client.py"
+                    "deepagents/runtime/assessment/investigation/"
+                    "engineering_rule/investigator.py"
                 ),
-                "symbol_ref": "DeepAgentClient",
+                "symbol_ref": "LangChainAgent",
             },
             "attributes": {},
             "semantic_types": [],

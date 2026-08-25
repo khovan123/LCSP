@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
-from tools.common.platform.redaction import redact_string
+from middleware.redaction import redact_string
 
 from .confidence_calculator import calculate_claim_confidence, lifecycle_for_confidence
 from .conflict_candidate_builder import ConflictCandidateBuilder

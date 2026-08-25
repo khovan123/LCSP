@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 from uuid import UUID, uuid4
 
-from tools.common.llm import LLMToolCall, LLMToolDefinition
+from langchain.tools import BaseTool, tool
 
 from .authorization import AgenticToolAuthorizer
-from .catalog import build_llm_tool_definitions
+from .catalog import llm_callable_tool_specs
 from .registry import AgenticToolRegistry, AgenticToolRequest, AgenticToolValidationError
 
 
@@ -24,16 +24,6 @@ class AgenticInvocationContext:
     organization_id: str
     artifact_versions: dict[str, str]
     scope: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class AgenticToolCallResult:
-    """One authorized tool result returned to model orchestration."""
-
-    call_id: str | None
-    tool_name: str
-    authorized_action: str
-    response: Mapping[str, Any]
 
 
 class AgenticToolResolver:
@@ -68,90 +58,40 @@ class AgenticToolResolver:
         self._authorizer = authorizer
         self._max_tool_calls = max_tool_calls
 
-    def tool_definitions(self) -> list[LLMToolDefinition]:
-        """Return provider-facing definitions after checking catalog/registry drift.
+    @property
+    def max_tool_calls(self) -> int:
+        return self._max_tool_calls
 
-        Returns:
-            Tool definitions for exactly the registered model-callable tools.
-
-        Raises:
-            AgenticToolValidationError: If catalog definitions and runtime
-                registry exposure no longer match.
-        """
-        definitions = build_llm_tool_definitions()
-        registered = set(self._registry.model_callable_names())
-        definition_names = {definition.name for definition in definitions}
-        if definition_names != registered:
+    def as_langchain_tools(self, *, context: AgenticInvocationContext) -> list[BaseTool]:
+        """Bind catalog capabilities as native LangChain tools for one agent run."""
+        specs = llm_callable_tool_specs()
+        if {spec.name for spec in specs} != set(self._registry.model_callable_names()):
             raise AgenticToolValidationError("AGENTIC_TOOL_CATALOG_REGISTRY_DRIFT")
-        return definitions
+        tools: list[BaseTool] = []
+        for spec in specs:
+            capability = self._registry.capability(spec.name)
+            tools.append(self._langchain_tool(spec.name, spec.description, spec.input_schema, capability, context))
+        return tools
 
-    def invoke_tool_calls(
-        self,
-        tool_calls: tuple[LLMToolCall, ...] | list[LLMToolCall],
-        *,
-        context: AgenticInvocationContext,
-    ) -> tuple[AgenticToolCallResult, ...]:
-        """Validate and execute a bounded sequence of model-requested tool calls.
+    def _langchain_tool(self, name, description, schema, capability, context) -> BaseTool:
+        @tool(name, description=description, args_schema=schema)
+        def invoke_capability(**arguments: Any) -> dict[str, Any]:
+            """Run one PBAC-authorized evidence capability."""
+            return self._invoke_capability(name, capability, arguments, context)
 
-        Validation occurs before PBAC and before any data access. Requested
-        result/depth budgets are clamped to server capability limits, then each
-        call is independently authorized and dispatched.
+        return invoke_capability
 
-        Args:
-            tool_calls: Structured calls emitted by the LLM provider.
-            context: Assessment, tenant, workflow, and artifact execution context.
-
-        Returns:
-            Ordered immutable results for each executed tool call.
-
-        Raises:
-            AgenticToolValidationError: If call count, schema, exposure, budget,
-                authorization, or runtime registration checks fail.
-        """
-        if len(tool_calls) > self._max_tool_calls:
-            raise AgenticToolValidationError("AGENTIC_TOOL_CALL_BUDGET_EXCEEDED")
-
-        results: list[AgenticToolCallResult] = []
-        for call in tool_calls:
-            capability = self._registry.capability(call.name)
-            request = AgenticToolRequest.model_validate(
-                {
-                    "toolName": call.name,
-                    "requestId": str(uuid4()),
-                    "assessmentId": str(context.assessment_id),
-                    "workflowRunId": str(context.workflow_run_id),
-                    "artifactVersions": context.artifact_versions,
-                    "correlationId": str(context.correlationId),
-                    "scope": context.scope,
-                    "budget": {
-                        "maxItems": _requested_max_items(call.arguments, capability.max_items),
-                        "maxDepth": _requested_max_depth(call.arguments, capability.max_depth),
-                        "maxBytes": capability.max_bytes,
-                        "maxDurationMs": capability.max_duration_ms,
-                    },
-                    "input": call.arguments,
-                }
-            )
-
-            # Validate exposure/schema/budget before making any authorization or data call.
-            self._registry.validate_model_request(request)
-            authorization = self._authorizer.authorize(
-                tool_name=call.name,
-                user_id=context.user_id,
-                organization_id=context.organization_id,
-                correlationId=context.correlationId,
-            )
-            response = self._registry.invoke_model_tool(request)
-            results.append(
-                AgenticToolCallResult(
-                    call_id=call.call_id,
-                    tool_name=call.name,
-                    authorized_action=authorization.action,
-                    response=response,
-                )
-            )
-        return tuple(results)
-
+    def _invoke_capability(self, name, capability, arguments, context) -> dict[str, Any]:
+        request = AgenticToolRequest.model_validate({
+            "toolName": name, "requestId": str(uuid4()), "assessmentId": str(context.assessment_id),
+            "workflowRunId": str(context.workflow_run_id), "artifactVersions": context.artifact_versions,
+            "correlationId": str(context.correlationId), "scope": context.scope,
+            "budget": {"maxItems": _requested_max_items(arguments, capability.max_items), "maxDepth": _requested_max_depth(arguments, capability.max_depth), "maxBytes": capability.max_bytes, "maxDurationMs": capability.max_duration_ms},
+            "input": arguments,
+        })
+        self._registry.validate_model_request(request)
+        self._authorizer.authorize(tool_name=name, user_id=context.user_id, organization_id=context.organization_id, correlationId=context.correlationId)
+        return self._registry.invoke_model_tool(request)
 
 def _requested_max_items(arguments: dict[str, Any], server_cap: int) -> int:
     """Clamp provider-requested result counts to a positive server capability."""

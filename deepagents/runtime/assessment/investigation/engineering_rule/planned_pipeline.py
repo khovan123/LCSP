@@ -4,11 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from tools.common.llm.deep_agent_client import (
-    reset_deep_agent_runtime_context,
-    set_deep_agent_runtime_context,
-)
-from tools.common.llm.fallback_client import LLMClientProtocol
+from model_policy import INVESTIGATOR_MODEL_SPEC, PLANNER_MODEL_SPEC
 from tools.common.platform.logging import get_logger
 from tools.graph.scanner.program_graph.source_roles import filter_program_evidence_graph
 
@@ -47,7 +43,8 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
         self,
         *,
         api_client,
-        llm_client: LLMClientProtocol,
+        model: str = INVESTIGATOR_MODEL_SPEC,
+        planner_model: str = PLANNER_MODEL_SPEC,
         retriever=None,
         rule_service=None,
         query_executor=None,
@@ -58,17 +55,18 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
     ) -> None:
         super().__init__(
             api_client=api_client,
-            llm_client=llm_client,
+            model=model,
+            compiler_model=planner_model,
             retriever=retriever,
             rule_service=rule_service,
             query_executor=query_executor,
             investigator=(
-                investigator or DeterministicCodeContextLawGuidedInvestigator(llm_client)
+                investigator or DeterministicCodeContextLawGuidedInvestigator(model)
             ),
             evaluator=evaluator,
         )
         self._planner = planner or BusinessAwareScopedMaterialEngineeringRulePlanner(
-            llm_client
+            planner_model
         )
         self._corpus_recovery_driver = corpus_recovery_driver
 
@@ -180,11 +178,6 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 correlation_id=correlation_id,
             )
 
-        context_token = set_deep_agent_runtime_context(
-            source_root=workspace_path,
-            legal_chunks=corpus_chunks,
-            legal_rules=rules,
-        )
         limitations, cache_hits, prepared = self._prepare_engineering_rules(
             rules=rules,
             catalog_version_id=catalog_version_id,
@@ -213,7 +206,6 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     reason="NO_ENGINEERING_RULE_CANDIDATES_AFTER_TRIAGE",
                 )
                 if not corpus_version_id or not corpus_chunks or not rules:
-                    reset_deep_agent_runtime_context(context_token)
                     if corpus_version_id and corpus_chunks and not rules:
                         return self._waiting_before_llm(
                             catalog_version_id=catalog_version_id,
@@ -259,12 +251,6 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                         workflow_run_id=workflow_run_id,
                         correlation_id=correlation_id,
                     )
-                reset_deep_agent_runtime_context(context_token)
-                context_token = set_deep_agent_runtime_context(
-                    source_root=workspace_path,
-                    legal_chunks=corpus_chunks,
-                    legal_rules=rules,
-                )
                 limitations, cache_hits, prepared = self._prepare_engineering_rules(
                     rules=rules,
                     catalog_version_id=catalog_version_id,
@@ -276,7 +262,6 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 )
 
         if not prepared:
-            reset_deep_agent_runtime_context(context_token)
             return self._blocked_before_llm(
                 catalog_version_id=catalog_version_id,
                 corpus_version_id=corpus_version_id,
@@ -297,23 +282,20 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 correlation_id=correlation_id,
             )
 
-        try:
-            return self._run_planned_investigation(
-                graph=graph,
-                code_context=code_context,
-                rules=rules,
-                prepared=prepared,
-                limitations=limitations,
-                cache_hits=cache_hits,
-                catalog_version_id=catalog_version_id,
-                corpus_version_id=corpus_version_id,
-                workflow_run_id=workflow_run_id,
-                correlation_id=correlation_id,
-                wizard_context=wizard_context,
-                workspace_path=workspace_path,
-            )
-        finally:
-            reset_deep_agent_runtime_context(context_token)
+        return self._run_planned_investigation(
+            graph=graph,
+            code_context=code_context,
+            rules=rules,
+            prepared=prepared,
+            limitations=limitations,
+            cache_hits=cache_hits,
+            catalog_version_id=catalog_version_id,
+            corpus_version_id=corpus_version_id,
+            workflow_run_id=workflow_run_id,
+            correlation_id=correlation_id,
+            wizard_context=wizard_context,
+            workspace_path=workspace_path,
+        )
 
     def _run_planned_investigation(
         self,

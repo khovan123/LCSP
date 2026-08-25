@@ -2,7 +2,10 @@
 
 from typing import Any
 
-from tools.common.llm import LLMClientProtocol
+from langchain.agents import create_agent
+
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from model_policy import RESOLVER_MODEL_SPEC
 
 
 ALLOWED_RISK_LEVELS = {"LOW", "MEDIUM", "HIGH", "BLOCKED"}
@@ -12,13 +15,9 @@ ALLOWED_APPLICABILITY = {"applicable", "partially_applicable", "not_applicable"}
 class ModelAssistedClassificationProposer:
     """Ask an LLM for a structured proposal without granting final authority."""
 
-    def __init__(self, llm_client: LLMClientProtocol):
-        """Create the proposer with the bounded Deep Agents client.
-
-        Args:
-            llm_client: Budget- and safety-aware model client.
-        """
-        self.llm_client = llm_client
+    def __init__(self, model: str = RESOLVER_MODEL_SPEC):
+        """Create the proposer with a LangChain provider:model specification."""
+        self._model = model
 
     def generate_proposal(
         self,
@@ -75,18 +74,31 @@ class ModelAssistedClassificationProposer:
         """
 
         try:
-            response = self.llm_client.complete_structured(
-                prompt=prompt,
+            agent = create_agent(
+                model=self._model,
+                system_prompt=(
+                    "You propose bounded classification fields only. Deterministic "
+                    "LCSP evaluation remains authoritative."
+                ),
                 response_format=_classification_proposal_response_schema(),
-                workflow_run_id=workflow_run_id,
-                node_name=node_name,
-                max_tokens=256,
-                correlationId=correlationId,
+                middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+                name="lcsp-classification-proposer",
+            )
+            result = agent.invoke(
+                {"messages": [{"role": "user", "content": prompt}]},
+                config={
+                    "metadata": {
+                        "workflow_run_id": workflow_run_id,
+                        "node_name": node_name,
+                        "correlationId": correlationId,
+                    },
+                    "configurable": {"thread_id": workflow_run_id},
+                },
             )
         except Exception:
             return None
 
-        proposal = response.structured_response
+        proposal = result.get("structured_response")
         if not isinstance(proposal, dict):
             return None
 
@@ -105,7 +117,7 @@ class ModelAssistedClassificationProposer:
             "risk_level": risk_level,
             "applicability_assessment": applicability,
             "rationale": rationale,
-            "request_id": response.request_id,
+            "request_id": None,
         }
 
 

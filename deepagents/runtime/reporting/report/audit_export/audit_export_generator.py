@@ -7,7 +7,7 @@ from typing import Any
 from structlog import get_logger
 
 from tools.common.platform.api_client import WorkerApiClient
-from tools.common.platform.redaction import redact_dict
+from middleware.redaction import redact_dict
 
 logger = get_logger(__name__)
 

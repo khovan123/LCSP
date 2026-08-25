@@ -1,6 +1,7 @@
 """Direct LegalRule -> EngineeringRule -> graph investigation -> rule evaluation runtime."""
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -8,8 +9,7 @@ from typing import Any
 from tools.legal.legal.chromadb_citation_retriever import ChromaDbCitationRetriever
 from tools.legal.legal.engineering_rules.compiler import EngineeringRuleCompiler
 from tools.legal.legal.engineering_rules.service import EngineeringRuleService
-from tools.common.llm.deep_agent_client import deep_agent_runtime_context
-from tools.common.llm.fallback_client import LLMClientProtocol
+from model_policy import INVESTIGATOR_MODEL_SPEC, PLANNER_MODEL_SPEC
 from tools.common.platform.api_client import WorkerApiClient
 from tools.common.platform.logging import get_logger
 from tools.graph.scanner.program_graph.models import ProgramEvidenceGraph
@@ -108,7 +108,8 @@ class EngineeringInvestigationPipeline:
         self,
         *,
         api_client: WorkerApiClient,
-        llm_client: LLMClientProtocol,
+        model: str = INVESTIGATOR_MODEL_SPEC,
+        compiler_model: str = PLANNER_MODEL_SPEC,
         retriever: ChromaDbCitationRetriever | None = None,
         rule_service: EngineeringRuleService | None = None,
         query_executor: InitialQueryExecutor | None = None,
@@ -118,11 +119,11 @@ class EngineeringInvestigationPipeline:
         self._api_client = api_client
         self._retriever = retriever or ChromaDbCitationRetriever()
         self._rule_service = rule_service or EngineeringRuleService(
-            compiler=EngineeringRuleCompiler(llm_client),
+            compiler=EngineeringRuleCompiler(compiler_model),
             retriever=self._retriever,
         )
         self._query_executor = query_executor or InitialQueryExecutor()
-        self._investigator = investigator or CodeContextLawGuidedInvestigator(llm_client)
+        self._investigator = investigator or CodeContextLawGuidedInvestigator(model)
         self._evaluator = evaluator or EngineeringRuleEvaluator()
 
     def run(
@@ -190,11 +191,7 @@ class EngineeringInvestigationPipeline:
                 ),
             )
 
-        with deep_agent_runtime_context(
-            source_root=workspace_path,
-            legal_chunks=[item for item in chunks if isinstance(item, dict)],
-            legal_rules=rules,
-        ):
+        with nullcontext():
             for rule in rules:
                 legal_rule_id = str(
                     rule.get("legalRuleId")

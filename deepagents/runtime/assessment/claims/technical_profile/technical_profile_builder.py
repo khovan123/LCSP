@@ -2,7 +2,7 @@
 from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
-from tools.common.platform.redaction import redact_string
+from middleware.redaction import redact_string
 from tools.graph.scanner.dependencies.dependency_fact import is_ai_package
 from .evidence_quality_evaluator import EvidenceQualityEvaluator
 

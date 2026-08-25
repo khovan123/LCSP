@@ -107,7 +107,7 @@ def test_managed_project_separates_authored_tools_from_runtime() -> None:
     assert (PROJECT_ROOT / "identity.py").is_file()
     # MDA deployment-shared long-term memory is intentionally disabled for LCSP.
     assert not (PROJECT_ROOT / "memory.py").exists()
-    assert (PROJECT_ROOT / "orchestration" / "memory.py").is_file()
+    assert not (PROJECT_ROOT / "orchestration" / "memory.py").exists()
     assert (PROJECT_ROOT / "middleware").is_dir()
     assert (PROJECT_ROOT / "sandbox" / "__init__.py").is_file()
     assert (PROJECT_ROOT / "skills" / "lcsp" / "SKILL.md").is_file()

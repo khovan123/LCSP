@@ -5,8 +5,12 @@ import hashlib
 import json
 from typing import Any, Callable
 
-from tools.common.llm import LLMToolDefinition
-from tools.common.llm.fallback_client import LLMClientProtocol
+from langchain.agents import create_agent
+from langchain.agents.middleware import ToolCallLimitMiddleware
+from langchain.tools import BaseTool, tool
+
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from model_policy import INVESTIGATOR_MODEL_SPEC
 from tools.common.platform.logging import get_logger
 from tools.common.platform.tracing import traceable
 from tools.graph.scanner.program_graph.query_engine import ProgramGraphQueryEngine
@@ -29,7 +33,6 @@ MAX_GRAPH_TOOL_STEPS = 4
 MAX_WORKING_RESULTS = 4
 MAX_WORKING_RESULT_CHARS = 24_000
 MAX_PROMPT_CHARS = 110_000
-FINISH_TOOL_NAME = "finish"
 GRAPH_TOOL_NAMES = (
     "search_nodes",
     "trace_static_flow",
@@ -99,8 +102,8 @@ class LawGuidedInvestigator:
     of truth and no observation is silently dropped to satisfy provider context limits.
     """
 
-    def __init__(self, llm_client: LLMClientProtocol) -> None:
-        self.llm = llm_client
+    def __init__(self, model: str = INVESTIGATOR_MODEL_SPEC) -> None:
+        self._model = model
         self.validator = EvidenceClaimValidator()
 
     @traceable(run_type="chain", name="LawGuidedInvestigator.investigate")
@@ -119,172 +122,204 @@ class LawGuidedInvestigator:
         if packet.wizard_context:
             ledger.add(source="wizard_context", result=dict(packet.wizard_context))
 
-        tools = self._tool_definitions()
-        graph_tool_calls_used = 0
-        working_results: list[dict[str, Any]] = []
-
-        for step in range(MAX_INVESTIGATION_STEPS):
-            response = self.llm.complete_with_tools(
-                prompt=self._prompt(packet, ledger, working_results, step),
-                tools=tools,
+        native_tools = self._native_tools(engine=engine, ledger=ledger)
+        agent = create_agent(
+            model=self._model,
+            tools=native_tools,
+            system_prompt=(
+                "Investigate one EngineeringRule using only the supplied native tools and "
+                "EvidenceLedger observation IDs. Produce one structured claim per required "
+                "criterion. Never invent graph, source, or observation references."
+            ),
+            response_format=self._claims_response_schema(),
+            middleware=[
+                *MODEL_GOVERNANCE_MIDDLEWARE,
+                ToolCallLimitMiddleware(
+                    run_limit=MAX_INVESTIGATION_STEPS,
+                    exit_behavior="error",
+                ),
+            ],
+            name="law_guided_investigator",
+        )
+        try:
+            response = agent.invoke(
+                {"messages": [{"role": "user", "content": self._agent_prompt(packet, ledger)}]},
+                config={
+                    "metadata": {
+                        "workflow_run_id": workflow_run_id,
+                        "correlation_id": correlation_id,
+                        "engineering_rule_id": packet.engineering_rule_id,
+                    }
+                },
+            )
+            payload = response.get("structured_response") or {}
+            if hasattr(payload, "model_dump"):
+                payload = payload.model_dump()
+            claims = self._claims_from_payload(payload, packet, graph, ledger)
+        except Exception as error:
+            logger.warning(
+                "ENGINEERING_INVESTIGATION_NATIVE_AGENT_FAILED",
+                engineering_rule_id=packet.engineering_rule_id,
+                error_type=type(error).__name__,
+                error_message=str(error)[:2000],
                 workflow_run_id=workflow_run_id,
-                node_name="investigate_engineering_rule",
-                max_tokens=3500,
                 correlationId=correlation_id,
             )
+            claims = self._claims_from_payload({}, packet, graph, ledger)
 
-            if not response.tool_calls:
-                logger.warning(
-                    "ENGINEERING_INVESTIGATION_NO_NATIVE_TOOL_CALL",
-                    engineering_rule_id=packet.engineering_rule_id,
-                    step=step + 1,
-                    workflow_run_id=workflow_run_id,
-                    correlationId=correlation_id,
-                )
-                continue
-
-            for call in response.tool_calls:
-                logger.info(
-                    "ENGINEERING_INVESTIGATION_TOOL_CALL",
-                    engineering_rule_id=packet.engineering_rule_id,
-                    step=step + 1,
-                    tool=call.name,
-                    workflow_run_id=workflow_run_id,
-                    correlationId=correlation_id,
-                )
-
-                if call.name == FINISH_TOOL_NAME:
-                    claims = self._claims_from_finish_arguments(
-                        call.arguments,
-                        packet,
-                        graph,
-                        ledger,
-                    )
-                    self._log_finish(
-                        packet=packet,
-                        claims=claims,
-                        workflow_run_id=workflow_run_id,
-                        correlation_id=correlation_id,
-                        forced=False,
-                        ledger=ledger,
-                    )
-                    return claims
-
-                if call.name in GRAPH_TOOL_NAMES:
-                    if graph_tool_calls_used >= MAX_GRAPH_TOOL_STEPS:
-                        tool_result = {
-                            "error": "GRAPH_TOOL_BUDGET_EXHAUSTED",
-                            "graphToolCallsUsed": graph_tool_calls_used,
-                        }
-                    else:
-                        graph_tool_calls_used += 1
-                        raw_result = self._execute_graph_tool(
-                            engine,
-                            call.name,
-                            call.arguments,
-                        )
-                        observation = ledger.add(
-                            source="graph_tool",
-                            tool=call.name,
-                            call_id=call.call_id,
-                            arguments=dict(call.arguments),
-                            result=raw_result,
-                        )
-                        tool_result = {
-                            "observationId": observation.observation_id,
-                            "summary": ledger.summary(observation),
-                            "preview": ledger.preview(observation.observation_id, limit=6),
-                            "instruction": (
-                                "Full result is retained by LCSP. Use the availableSections in "
-                                "the observation summary when more detail is required."
-                            ),
-                        }
-                elif call.name == "list_observations":
-                    tool_result = ledger.index(
-                        offset=int(call.arguments.get("offset") or 0),
-                        limit=int(call.arguments.get("limit") or 20),
-                    )
-                elif call.name == "inspect_observation":
-                    try:
-                        tool_result = ledger.inspect(
-                            str(call.arguments.get("observation_id") or ""),
-                            section=(
-                                str(call.arguments.get("section"))
-                                if call.arguments.get("section")
-                                else None
-                            ),
-                            offset=int(call.arguments.get("offset") or 0),
-                            limit=int(call.arguments.get("limit") or 12),
-                        )
-                    except KeyError as error:
-                        tool_result = {
-                            "error": "UNKNOWN_OBSERVATION_REF",
-                            "detail": str(error),
-                        }
-                else:
-                    tool_result = {
-                        "error": "UNKNOWN_INVESTIGATION_TOOL",
-                        "allowedTools": sorted(
-                            {*GRAPH_TOOL_NAMES, *STATE_TOOL_NAMES, FINISH_TOOL_NAME}
-                        ),
-                    }
-
-                working_result = self._fit_working_result(tool_result)
-                logger.info(
-                    "ENGINEERING_INVESTIGATION_TOOL_RESULT",
-                    engineering_rule_id=packet.engineering_rule_id,
-                    step=step + 1,
-                    tool=call.name,
-                    result_summary=summarize_investigation_tool_result(working_result),
-                    graph_tool_calls_used=graph_tool_calls_used,
-                    ledger_observation_count=ledger.total,
-                    workflow_run_id=workflow_run_id,
-                    correlationId=correlation_id,
-                )
-                working_results.append(
-                    {
-                        "step": step + 1,
-                        "tool": call.name,
-                        "callId": call.call_id,
-                        "result": working_result,
-                    }
-                )
-                working_results = working_results[-MAX_WORKING_RESULTS:]
-
-        response = self.llm.complete_with_tools(
-            prompt=self._finish_prompt(packet, ledger, working_results),
-            tools=[self._finish_tool_definition()],
+        self._log_finish(
+            packet=packet,
+            claims=claims,
             workflow_run_id=workflow_run_id,
-            node_name="investigate_engineering_rule_finish",
-            max_tokens=3000,
-            correlationId=correlation_id,
+            correlation_id=correlation_id,
+            forced=False,
+            ledger=ledger,
         )
-        for call in response.tool_calls:
-            if call.name == FINISH_TOOL_NAME:
-                claims = self._claims_from_finish_arguments(
-                    call.arguments,
-                    packet,
-                    graph,
-                    ledger,
-                )
-                self._log_finish(
-                    packet=packet,
-                    claims=claims,
-                    workflow_run_id=workflow_run_id,
-                    correlation_id=correlation_id,
-                    forced=True,
-                    ledger=ledger,
-                )
-                return claims
+        return claims
 
-        logger.warning(
-            "ENGINEERING_INVESTIGATION_FINISH_MISSING",
-            engineering_rule_id=packet.engineering_rule_id,
-            ledger_observation_count=ledger.total,
-            workflow_run_id=workflow_run_id,
-            correlationId=correlation_id,
-        )
-        return self._claims_from_payload({}, packet, graph, ledger)
+    def _native_tools(
+        self,
+        *,
+        engine: ProgramGraphQueryEngine,
+        ledger: EvidenceLedger,
+    ) -> list[BaseTool]:
+        graph_calls = {"used": 0}
+
+        def run_graph(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+            prepared, reference_error = self._prepare_graph_arguments(
+                tool_name,
+                arguments,
+                ledger,
+            )
+            if reference_error is not None:
+                return reference_error
+            if graph_calls["used"] >= self._graph_tool_limit():
+                return {
+                    "error": "GRAPH_TOOL_BUDGET_EXHAUSTED",
+                    "graphToolCallsUsed": graph_calls["used"],
+                }
+            graph_calls["used"] += 1
+            raw_result = self._execute_graph_tool(engine, tool_name, prepared)
+            observation = ledger.add(
+                source="graph_tool",
+                tool=tool_name,
+                arguments=prepared,
+                result=raw_result,
+            )
+            result = {
+                "observationId": observation.observation_id,
+                "summary": ledger.summary(observation),
+                "preview": ledger.preview(observation.observation_id, limit=6),
+            }
+            logger.info(
+                "ENGINEERING_INVESTIGATION_TOOL_RESULT",
+                tool=tool_name,
+                result_summary=summarize_investigation_tool_result(result),
+                graph_tool_calls_used=graph_calls["used"],
+                ledger_observation_count=ledger.total,
+            )
+            return result
+
+        @tool
+        def search_nodes(
+            node_types: list[str] | None = None,
+            text: str | None = None,
+            path_prefixes: list[str] | None = None,
+            semantic_types: list[str] | None = None,
+        ) -> dict[str, Any]:
+            """Search bounded Program Evidence Graph nodes by canonical type, path, semantic type, or text."""
+            return run_graph("search_nodes", locals())
+
+        @tool
+        def trace_static_flow(
+            start_ref: str,
+            direction: str = "FORWARD",
+            edge_types: list[str] | None = None,
+            stop_node_types: list[str] | None = None,
+        ) -> dict[str, Any]:
+            """Trace bounded static control, data, or event flow from one concrete graph node ref."""
+            return run_graph("trace_static_flow", locals())
+
+        @tool
+        def inspect_data_path(start_ref: str, direction: str = "FORWARD") -> dict[str, Any]:
+            """Inspect bounded data-flow evidence from one concrete graph node ref."""
+            return run_graph("inspect_data_path", locals())
+
+        @tool
+        def inspect_decision_path(
+            start_ref: str,
+            action_categories: list[str] | None = None,
+        ) -> dict[str, Any]:
+            """Inspect bounded decision and action flow from one concrete graph node ref."""
+            return run_graph("inspect_decision_path", locals())
+
+        @tool
+        def inspect_human_review_path(start_ref: str) -> dict[str, Any]:
+            """Inspect bounded human-review and override evidence from one graph node ref."""
+            return run_graph("inspect_human_review_path", locals())
+
+        @tool
+        def symbol_context(symbol_ref: str) -> dict[str, Any]:
+            """Resolve one symbol ref and return bounded neighboring graph context."""
+            return run_graph("symbol_context", locals())
+
+        @tool
+        def provider_invocations(provider: str | None = None) -> dict[str, Any]:
+            """Return bounded AI provider invocation nodes, optionally filtered by provider."""
+            return run_graph("provider_invocations", locals())
+
+        @tool
+        def list_observations(offset: int = 0, limit: int = 20) -> dict[str, Any]:
+            """Page the LCSP EvidenceLedger observation index."""
+            return ledger.index(offset=offset, limit=limit)
+
+        @tool
+        def inspect_observation(
+            observation_id: str,
+            section: str | None = None,
+            offset: int = 0,
+            limit: int = 12,
+        ) -> dict[str, Any]:
+            """Page one EvidenceLedger observation using an advertised section name."""
+            try:
+                return ledger.inspect(
+                    observation_id,
+                    section=section,
+                    offset=offset,
+                    limit=limit,
+                )
+            except KeyError as error:
+                return {"error": "UNKNOWN_OBSERVATION_REF", "detail": str(error)}
+
+        return [
+            search_nodes,
+            trace_static_flow,
+            inspect_data_path,
+            inspect_decision_path,
+            inspect_human_review_path,
+            symbol_context,
+            provider_invocations,
+            list_observations,
+            inspect_observation,
+        ]
+
+    def _agent_prompt(
+        self,
+        packet: InvestigationPacket,
+        ledger: EvidenceLedger,
+    ) -> str:
+        return self._prompt(packet, ledger, [], 0)
+
+    def _graph_tool_limit(self) -> int:
+        return MAX_GRAPH_TOOL_STEPS
+
+    def _prepare_graph_arguments(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        ledger: EvidenceLedger,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        return dict(arguments), None
 
     def _execute_graph_tool(
         self,
@@ -371,279 +406,35 @@ class LawGuidedInvestigator:
             )
 
     @classmethod
-    def _tool_definitions(cls) -> list[LLMToolDefinition]:
-        string_array = {"type": "array", "items": {"type": "string"}}
-        node_type_array = {
-            "type": "array",
-            "items": {"type": "string", "enum": sorted(NODE_TYPES)},
-        }
-        edge_type_array = {
-            "type": "array",
-            "items": {"type": "string", "enum": sorted(EDGE_TYPES)},
-        }
-        graph_tools = [
-            LLMToolDefinition(
-                name="search_nodes",
-                description=(
-                    "Search bounded Program Evidence Graph nodes by canonical structural node type, "
-                    "source path, semantic type, or text. requiredEvidence/supportingEvidence labels "
-                    "are not node types. Results expose a canonical truncated flag."
-                ),
-                input_schema=cls._closed_schema(
-                    {
-                        "node_types": node_type_array,
-                        "text": {"type": "string"},
-                        "path_prefixes": string_array,
-                        "semantic_types": string_array,
-                        "max_results": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 25,
-                        },
-                    }
-                ),
-            ),
-            LLMToolDefinition(
-                name="trace_static_flow",
-                description=(
-                    "Trace bounded static control/data/event flow from a graph node ref using only "
-                    "canonical edge/node vocabulary. Use result.truncated rather than resource limits."
-                ),
-                input_schema=cls._closed_schema(
-                    {
-                        "start_ref": {"type": "string"},
-                        "direction": {
-                            "type": "string",
-                            "enum": ["FORWARD", "BACKWARD", "BOTH"],
-                        },
-                        "max_hops": {"type": "integer", "minimum": 1, "maximum": 12},
-                        "edge_types": edge_type_array,
-                        "stop_node_types": node_type_array,
-                        "max_results": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 80,
-                        },
-                    },
-                    required=("start_ref",),
-                ),
-            ),
-            LLMToolDefinition(
-                name="inspect_data_path",
-                description=(
-                    "Inspect bounded data-flow evidence from a graph node ref. "
-                    "Use result.truncated as the only search-completeness signal."
-                ),
-                input_schema=cls._closed_schema(
-                    {
-                        "start_ref": {"type": "string"},
-                        "direction": {
-                            "type": "string",
-                            "enum": ["FORWARD", "BACKWARD", "BOTH"],
-                        },
-                        "max_hops": {"type": "integer", "minimum": 1, "maximum": 10},
-                        "max_results": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 80,
-                        },
-                    },
-                    required=("start_ref",),
-                ),
-            ),
-            LLMToolDefinition(
-                name="inspect_decision_path",
-                description=(
-                    "Inspect bounded decision/action flow evidence from a graph node ref. "
-                    "Use result.truncated as the only search-completeness signal."
-                ),
-                input_schema=cls._closed_schema(
-                    {
-                        "start_ref": {"type": "string"},
-                        "max_hops": {"type": "integer", "minimum": 1, "maximum": 12},
-                        "action_categories": string_array,
-                        "max_results": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 80,
-                        },
-                    },
-                    required=("start_ref",),
-                ),
-            ),
-            LLMToolDefinition(
-                name="inspect_human_review_path",
-                description=(
-                    "Inspect bounded human-review/override evidence from a graph node ref. "
-                    "Use result.truncated as the only search-completeness signal."
-                ),
-                input_schema=cls._closed_schema(
-                    {
-                        "start_ref": {"type": "string"},
-                        "max_hops": {"type": "integer", "minimum": 1, "maximum": 12},
-                        "max_results": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 80,
-                        },
-                    },
-                    required=("start_ref",),
-                ),
-            ),
-            LLMToolDefinition(
-                name="symbol_context",
-                description=(
-                    "Resolve one symbol/node ref and return bounded neighboring context with "
-                    "the same truncated search contract."
-                ),
-                input_schema=cls._closed_schema(
-                    {
-                        "symbol_ref": {"type": "string"},
-                        "max_neighbors": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 50,
-                        },
-                    },
-                    required=("symbol_ref",),
-                ),
-            ),
-            LLMToolDefinition(
-                name="provider_invocations",
-                description=(
-                    "Return bounded AI model invocation nodes, optionally by provider, with "
-                    "the same truncated search contract."
-                ),
-                input_schema=cls._closed_schema(
-                    {
-                        "provider": {"type": "string"},
-                        "max_results": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 80,
-                        },
-                    }
-                ),
-            ),
-        ]
-        state_tools = [
-            LLMToolDefinition(
-                name="list_observations",
-                description=(
-                    "Page the LCSP EvidenceLedger index. Every summary advertises exact "
-                    "availableSections; use those names rather than guessing a section shape."
-                ),
-                input_schema=cls._closed_schema(
-                    {
-                        "offset": {"type": "integer", "minimum": 0},
-                        "limit": {"type": "integer", "minimum": 1, "maximum": 40},
-                    }
-                ),
-            ),
-            LLMToolDefinition(
-                name="inspect_observation",
-                description=(
-                    "Page one EvidenceLedger observation. If section is supplied it must be one of "
-                    "that observation summary's availableSections; pages are automatically char-bounded."
-                ),
-                input_schema=cls._closed_schema(
-                    {
-                        "observation_id": {"type": "string"},
-                        "section": {"type": "string"},
-                        "offset": {"type": "integer", "minimum": 0},
-                        "limit": {"type": "integer", "minimum": 1, "maximum": 40},
-                    },
-                    required=("observation_id",),
-                ),
-            ),
-        ]
-        return [*graph_tools, *state_tools, cls._finish_tool_definition()]
-
-    @classmethod
-    def _finish_tool_definition(cls) -> LLMToolDefinition:
+    def _claims_response_schema(cls) -> dict[str, Any]:
         claim_schema = cls._closed_schema(
             {
-                "criterion": {
-                    "type": "string",
-                    "description": (
-                        "Exact requiredEvidence criterion label this claim resolves. "
-                        "Use one of the labels provided in the EngineeringRule prompt."
-                    ),
-                },
-                "claimType": {
-                    "type": "string",
-                    "enum": sorted(CANONICAL_CLAIM_TYPES),
-                },
-                "observationRefs": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "maxItems": 12,
-                },
+                "criterion": {"type": "string"},
+                "claimType": {"type": "string", "enum": sorted(CANONICAL_CLAIM_TYPES)},
+                "observationRefs": {"type": "array", "items": {"type": "string"}, "maxItems": 12},
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                 "limitations": {
                     "type": "array",
-                    "items": {
-                        "type": "string",
-                        "enum": sorted(MODEL_SELECTABLE_LIMITATION_CODES),
-                    },
+                    "items": {"type": "string", "enum": sorted(MODEL_SELECTABLE_LIMITATION_CODES)},
                 },
             },
-            required=(
-                "criterion",
-                "claimType",
-                "observationRefs",
-                "confidence",
-                "limitations",
-            ),
+            required=("criterion", "claimType", "observationRefs", "confidence", "limitations"),
         )
-        return LLMToolDefinition(
-            name=FINISH_TOOL_NAME,
-            description=(
-                "Finish with one technical claim per requiredEvidence criterion. Reference LCSP "
-                "observation IDs only; LCSP derives immutable graph/source provenance."
-            ),
-            input_schema=cls._closed_schema(
-                {
-                    "claims": {
-                        "type": "array",
-                        "items": claim_schema,
-                        "minItems": 1,
-                        "maxItems": 12,
-                    }
-                },
-                required=("claims",),
-            ),
-            tool_choice_required=True,
+        return cls._closed_schema(
+            {"claims": {"type": "array", "items": claim_schema, "minItems": 1, "maxItems": 12}},
+            required=("claims",),
         )
 
     @staticmethod
     def _closed_schema(
-        properties: dict[str, Any],
-        *,
-        required: tuple[str, ...] = (),
+        properties: dict[str, Any], *, required: tuple[str, ...] = ()
     ) -> dict[str, Any]:
         schema: dict[str, Any] = {
-            "type": "object",
-            "additionalProperties": False,
-            "properties": properties,
+            "type": "object", "additionalProperties": False, "properties": properties
         }
         if required:
             schema["required"] = list(required)
         return schema
-
-    def _claims_from_finish_arguments(
-        self,
-        arguments: dict[str, Any],
-        packet: InvestigationPacket,
-        graph,
-        ledger: EvidenceLedger,
-    ) -> list[EvidenceClaim]:
-        return self._claims_from_payload(
-            {"claims": arguments.get("claims")},
-            packet,
-            graph,
-            ledger,
-        )
 
     def _claims_from_payload(
         self,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from tools.graph.scanner.program_graph.python_agent_boundary_resolution import (
     PythonAgentBoundaryResolver,
 )
+from tools.graph.scanner.program_graph.builder import ProgramGraphBuilder
 from tools.graph.scanner.program_graph.semantic_ir import SemanticProgram
 
 
@@ -46,6 +47,19 @@ class EvidenceBoundary(AgentBoundaryBase):
         handle,
     ) in _edges(program)
     assert not program.unresolved_frontiers
+
+    builder = ProgramGraphBuilder(
+        tmp_path,
+        scan_job_id="scan-agent-boundary",
+        snapshot_id="snapshot-agent-boundary",
+        commit_sha="commit-agent-boundary",
+    )
+    builder.add_program(program)
+    graph = builder.build()
+
+    assert any(
+        node["node_type"] == "AGENT_BOUNDARY_SOURCE" for node in graph.nodes
+    )
 
 
 def test_agent_boundary_without_concrete_handle_is_unresolved(tmp_path) -> None:

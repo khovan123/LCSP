@@ -111,10 +111,9 @@ _API_MODULES: Final[frozenset[str]] = frozenset({
     "callback_schemas",
     "config",
 })
-_AUTH_MODULES: Final[frozenset[str]] = frozenset({"pbac_client", "redaction"})
+_AUTH_MODULES: Final[frozenset[str]] = frozenset({"pbac_client"})
 _DISPATCH_MODULES: Final[frozenset[str]] = frozenset({
     "correlation",
-    "dev_unsafe_instrumentation",
     "dev_unsafe_trace",
     "graph_runtime",
     "logging",
@@ -301,12 +300,8 @@ def _canonical_name(fullname: str) -> str | None:
             "runtime.engineering_rule.clarification.investigation.clarification",
             "runtime.workflow.recovery.clarification",
         ),
-        ("runtime.orchestration.context", "runtime.workflow.state"),
-        ("runtime.orchestration.control", "runtime.workflow.recovery"),
-        ("runtime.orchestration.invocation", "runtime.workflow.resume"),
         ("runtime.orchestration.managed", "runtime.workflow.checkpoint"),
         ("runtime.platform.agentic_evidence", "runtime.evidence.provenance"),
-        ("runtime.platform.llm", "runtime.infrastructure.llm"),
         ("runtime.platform.package", "runtime.infrastructure.dispatch"),
         ("runtime.platform.scripts", "runtime.infrastructure.dispatch.scripts"),
         (
@@ -322,17 +317,13 @@ def _canonical_name(fullname: str) -> str | None:
             "runtime.assessment.evaluation.classification",
         ),
         ("tools.classification", "runtime.assessment.evaluation.classification"),
-        ("tools.context", "runtime.workflow.state"),
-        ("tools.control", "runtime.workflow.recovery"),
         ("tools.gap.reporting", "runtime.reporting.gap"),
         ("tools.gap", "runtime.reporting.gap"),
-        ("tools.invocation", "runtime.workflow.resume"),
         ("tools.reports.reporting", "runtime.reporting.report"),
         ("tools.reports", "runtime.reporting.report"),
         ("tools.common.agentic_evidence", "runtime.evidence.provenance"),
         ("tools.common.dispatch", "runtime.infrastructure.dispatch.tool_dispatch"),
         ("tools.common.dossiers", "runtime.reporting.report.dossiers"),
-        ("tools.common.llm", "runtime.infrastructure.llm"),
         ("tools.common.managed", "runtime.workflow.checkpoint"),
         ("tools.common.package", "runtime.infrastructure.dispatch"),
         ("tools.common.scripts", "runtime.infrastructure.dispatch.scripts"),

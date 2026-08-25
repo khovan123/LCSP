@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 from urllib.parse import quote
 
-from tools.common.platform.redaction import redact_string
+from middleware.redaction import redact_string
 from tools.graph.scanner.program_graph.models import ProgramEvidenceGraph
 
 

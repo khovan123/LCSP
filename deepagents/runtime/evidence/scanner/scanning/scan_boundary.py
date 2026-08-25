@@ -15,8 +15,6 @@ from tools.common.agentic_evidence.dispatcher import ScannerToolDispatcher
 from tools.common.agentic_evidence.scanner_tool_entrypoints import (
     ScannerToolExecutionContext,
 )
-from tools.common.llm import llm_limit_wait_reason
-
 from tools.common.platform.api_client import WorkerApiClient, WorkerCallbackError
 from tools.common.platform.callback_schemas import CallbackResponse
 from tools.common.platform.correlation import set_correlationId
@@ -82,6 +80,25 @@ PYTHON_RULESET_HASH = "sha256:" + hashlib.sha256(
 STRUCTURAL_CONFIG_HASH = "sha256:" + hashlib.sha256(
     b"lcsp-structural-custom-parser:file-limit=100"
 ).hexdigest()
+
+
+def _llm_limit_wait_reason(error: Exception) -> str | None:
+    """Map native provider limit failures to the scan waiting-state contract."""
+    response = getattr(error, "response", None)
+    status = getattr(error, "status_code", None) or getattr(
+        response, "status_code", None
+    )
+    message = str(error).lower()
+    if any(marker in message for marker in ("quota", "insufficient_quota")):
+        return "LLM token quota exceeded; waiting to resume."
+    if status == 429 or "rate limit" in message:
+        return "LLM rate limit exceeded; waiting to resume."
+    if any(
+        marker in message
+        for marker in ("context length", "token limit", "maximum context")
+    ):
+        return "LLM token limit exceeded; waiting to resume."
+    return None
 
 
 TARGETED_REANALYSIS_ANALYZER_IDS = {
@@ -474,12 +491,35 @@ class ScanBoundary(AgentBoundaryBase):
                     "run_semgrep_rules",
                     workspace_path=result.workspace_path,
                 )
+                semgrep_ended_at = self._utc_timestamp()
                 self._record_semgrep_executions(
                     tool_registry,
                     semgrep_result,
                     started_at=semgrep_started_at,
-                    ended_at=self._utc_timestamp(),
+                    ended_at=semgrep_ended_at,
                     language_profile=execution_plan.language_profile,
+                )
+                self._emit_runtime_event(
+                    envelope.scan_job_id,
+                    event_type="TOOL_COMPLETED",
+                    run_status="RUNNING",
+                    tool_name=APPROVED_TOOL_NAMES["semgrep"],
+                    summary="Semgrep analysis completed",
+                    output_summary={
+                        "executions": len(semgrep_result.executions),
+                        "findings": len(semgrep_result.findings),
+                        "nonBlockingFailures": sum(
+                            execution.outcome != OUTCOME_SUCCESS
+                            for execution in semgrep_result.executions
+                        ),
+                        "redactionApplied": semgrep_result.redaction_applied,
+                    },
+                    started_at=semgrep_started_at,
+                    completed_at=semgrep_ended_at,
+                    duration_ms=self._duration_ms(
+                        semgrep_started_at,
+                        semgrep_ended_at,
+                    ),
                 )
             else:
                 semgrep_result = SemgrepRunResult(
@@ -676,6 +716,25 @@ class ScanBoundary(AgentBoundaryBase):
                         language_profile=execution_plan.language_profile,
                         coverage_limitations=python_limitations,
                     )
+                self._emit_runtime_event(
+                    envelope.scan_job_id,
+                    event_type="TOOL_COMPLETED",
+                    run_status="RUNNING",
+                    tool_name="python_semantic_analysis",
+                    summary="Python semantic analysis completed",
+                    output_summary={
+                        "filesAnalyzed": python_analysis.files_analyzed,
+                        "filesSkipped": python_analysis.files_skipped,
+                        "aiCallSites": len(python_analysis.ai_call_sites),
+                        "coverageLimitations": len(python_limitations),
+                    },
+                    started_at=python_started_at,
+                    completed_at=python_ended_at,
+                    duration_ms=self._duration_ms(
+                        python_started_at,
+                        python_ended_at,
+                    ),
+                )
             else:
                 python_analysis = PythonAnalysisResult(
                     files_analyzed=0,
@@ -962,7 +1021,7 @@ class ScanBoundary(AgentBoundaryBase):
             self._runtime_scan_job_id = None
             raise
         except Exception as error:
-            wait_reason = llm_limit_wait_reason(error)
+            wait_reason = _llm_limit_wait_reason(error)
             if wait_reason is not None:
                 self._emit_llm_limit_waiting(envelope.scan_job_id, error, wait_reason)
                 try:

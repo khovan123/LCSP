@@ -432,6 +432,29 @@ def test_scan_boundary_uses_internal_snapshot_service_and_cleans_up(
         "materialize_snapshot",
     ]
     assert runtime_events[-1]["event_type"] == "RUN_COMPLETED"
+    semgrep_events = [
+        event for event in runtime_events if event.get("tool_name") == "semgrep"
+    ]
+    assert [event["event_type"] for event in semgrep_events] == [
+        "TOOL_STARTED",
+        "TOOL_COMPLETED",
+    ]
+    assert semgrep_events[-1]["output_summary"] == {
+        "executions": 2,
+        "findings": 0,
+        "nonBlockingFailures": 0,
+        "redactionApplied": False,
+    }
+    python_events = [
+        event
+        for event in runtime_events
+        if event.get("tool_name") == "python_semantic_analysis"
+    ]
+    assert [event["event_type"] for event in python_events] == [
+        "TOOL_STARTED",
+        "TOOL_COMPLETED",
+    ]
+    assert python_events[-1]["output_summary"]["filesAnalyzed"] == 1
     api_client.post_scan_callback.assert_called_once()
     posted_payload = api_client.post_scan_callback.call_args.args[1]
     assert posted_payload.privacy_flags["containsSourceCode"] is False

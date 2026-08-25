@@ -13,14 +13,9 @@ from tools.common.agentic_evidence import (
     build_sprint6_agentic_registry,
 )
 from tools.common.agentic_evidence.authorization import ApiPbacToolAuthorizer
-from tools.common.llm import (
-    BudgetTracker,
-    DeepAgentClient,
-    LlmProviderCandidate,
-    PrimaryThenFallbackLLMClient,
-)
+from runtime.infrastructure.auth.pbac_client import PbacClient
 from tools.common.platform.api_client import WorkerApiClient
-from tools.common.platform.config import WorkerConfig, load_config
+from tools.common.platform.config import load_config
 from tools.common.managed.boundary import AgentBoundaryBase
 
 
@@ -233,8 +228,6 @@ def build_boundary(target: str) -> AgentBoundaryBase:
     kwargs: dict[str, object] = {}
 
     if "pbac_client" in constructor.parameters:
-        from tools.common.platform.pbac_client import PbacClient
-
         kwargs["pbac_client"] = PbacClient(
             config.nestjs_api_base_url,
             config.worker_api_key,
@@ -255,57 +248,13 @@ def build_boundary(target: str) -> AgentBoundaryBase:
         kwargs["agentic_tool_resolver"] = AgenticToolResolver(
             registry,
             ApiPbacToolAuthorizer(
-                base_url=config.nestjs_api_base_url,
-                worker_api_key=config.worker_api_key,
-                timeout_seconds=config.pbac_preflight.timeout_seconds,
+                pbac_client=PbacClient(
+                    config.nestjs_api_base_url,
+                    config.worker_api_key,
+                    timeout_seconds=config.pbac_preflight.timeout_seconds,
+                ),
             ),
             max_tool_calls=config.agentic_runtime.max_tool_calls,
         )
 
-    llm_client = None
-    if "llm_client" in constructor.parameters:
-        llm_client = build_llm_client(config)
-
-    if "llm_client" in constructor.parameters and llm_client is not None:
-        kwargs["llm_client"] = llm_client
-
     return boundary_type(config, **kwargs)
-
-
-def build_llm_client(config: WorkerConfig):
-    """Build the primary/fallback LLM client when enabled."""
-    runtime = config.llm_runtime
-    if not runtime.enabled:
-        return None
-
-    budget_tracker = BudgetTracker(
-        monthly_budget_usd=runtime.monthly_budget_usd,
-        monthly_token_cap=runtime.monthly_token_cap,
-        redis_url=runtime.redis_url,
-    )
-    providers: list[LlmProviderCandidate] = []
-    for provider in runtime.providers:
-        if not provider.api_key:
-            continue
-        providers.append(
-            LlmProviderCandidate(
-                name=provider.provider,
-                client=DeepAgentClient(
-                    provider=provider.provider,
-                    api_key=provider.api_key,
-                    model=provider.model,
-                    budget_tracker=budget_tracker,
-                    max_tokens_per_call=runtime.max_tokens_per_call,
-                    timeout_seconds=runtime.provider_timeout_seconds,
-                ),
-            )
-        )
-
-    if not providers:
-        return None
-
-    return PrimaryThenFallbackLLMClient(
-        tuple(providers),
-        fallback_on_codes=runtime.fallback_on_codes,
-        max_provider_attempts=runtime.max_provider_attempts,
-    )

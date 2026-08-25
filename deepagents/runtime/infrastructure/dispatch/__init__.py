@@ -14,7 +14,6 @@ from typing import Final
 _OBSERVABILITY_MODULES: Final[frozenset[str]] = frozenset(
     {
         "correlation",
-        "dev_unsafe_instrumentation",
         "dev_unsafe_trace",
         "logging",
         "logging_config",

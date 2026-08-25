@@ -12,7 +12,7 @@ from tools.common.platform.callback_schemas import (
     ScanCallbackPayload,
 )
 from tools.common.platform.logging import get_logger
-from tools.common.platform.redaction import redact_dict, redact_source_code
+from middleware.redaction import redact_dict, redact_source_code
 from tools.graph.scanner.analyzers.ai_invocation_detector import TechnicalFinding
 from tools.graph.scanner.analyzers.python_analyzer import PythonAnalysisResult
 from tools.graph.scanner.dependencies.dependency_fact import PackageDependency

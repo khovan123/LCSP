@@ -8,6 +8,7 @@ from uuid import UUID
 
 import httpx
 
+from runtime.infrastructure.auth.pbac_client import PbacClient
 from .registry import AgenticToolValidationError
 
 
@@ -57,35 +58,19 @@ class AgenticToolAuthorizer(Protocol):
 
 
 class ApiPbacToolAuthorizer:
-    """Re-evaluate user PBAC through the trusted worker preflight API."""
+    """Map a native tool call to PBAC actions and fail closed on denial."""
 
     def __init__(
         self,
         *,
-        base_url: str,
-        worker_api_key: str,
-        timeout_seconds: float = 5.0,
-        client: httpx.Client | None = None,
+        pbac_client: PbacClient,
     ) -> None:
         """Create the API-backed authorizer.
 
         Args:
-            base_url: Base URL for the NestJS API.
-            worker_api_key: Internal worker credential used for PBAC preflight.
-            timeout_seconds: Maximum preflight request duration.
-            client: Optional injected HTTP client for connection reuse/testing.
-
-        Raises:
-            ValueError: If the API URL or worker credential is empty.
+            pbac_client: Shared worker-side PBAC preflight transport.
         """
-        if not base_url.strip():
-            raise ValueError("base_url is required")
-        if not worker_api_key.strip():
-            raise ValueError("worker_api_key is required")
-        self._base_url = base_url.rstrip("/")
-        self._worker_api_key = worker_api_key
-        self._timeout_seconds = timeout_seconds
-        self._client = client
+        self._pbac_client = pbac_client
 
     def authorize(
         self,
@@ -121,88 +106,20 @@ class ApiPbacToolAuthorizer:
         if not user_id.strip() or not organization_id.strip():
             raise AgenticToolValidationError("AGENTIC_TOOL_PBAC_CONTEXT_REQUIRED")
 
-        last_reason: str | None = None
         for action in actions:
-            decision, reason = self._preflight(
-                user_id=user_id,
-                organization_id=organization_id,
-                action=action,
-                correlationId=correlationId,
-            )
-            if decision == "ALLOW":
+            try:
+                decision = self._pbac_client.check(
+                    user_id=user_id,
+                    organization_id=organization_id,
+                    action=action,
+                    correlationId=str(correlationId),
+                )
+            except (ConnectionError, httpx.HTTPError) as exc:
+                raise AgenticToolValidationError(
+                    "AGENTIC_TOOL_PBAC_PREFLIGHT_FAILED"
+                ) from exc
+            if decision == "allow":
                 return AgenticAuthorizationResult(action=action)
-            last_reason = reason
 
         # Keep denial typed and safe; do not leak membership or policy internals to the LLM.
-        raise AgenticToolValidationError(
-            "AGENTIC_TOOL_PBAC_BLOCKED"
-            if last_reason is not None
-            else "AGENTIC_TOOL_PBAC_PREFLIGHT_FAILED"
-        )
-
-    def _preflight(
-        self,
-        *,
-        user_id: str,
-        organization_id: str,
-        action: str,
-        correlationId: UUID,
-    ) -> tuple[str, str | None]:
-        """Call PBAC preflight and validate the response contract strictly.
-
-        Returns:
-            A ``(decision, reason_code)`` tuple with decision ALLOW or DENY.
-
-        Raises:
-            AgenticToolValidationError: On transport, HTTP, JSON, or response
-                contract failures.
-        """
-        payload = {
-            "user_id": user_id,
-            "organization_id": organization_id,
-            "action": action,
-            "correlationId": str(correlationId),
-        }
-        headers = {
-            "x-worker-api-key": self._worker_api_key,
-            "x-correlation-id": str(correlationId),
-        }
-        try:
-            if self._client is not None:
-                response = self._client.post(
-                    f"{self._base_url}/internal/pbac/preflight",
-                    json=payload,
-                    headers=headers,
-                    timeout=self._timeout_seconds,
-                )
-            else:
-                response = httpx.post(
-                    f"{self._base_url}/internal/pbac/preflight",
-                    json=payload,
-                    headers=headers,
-                    timeout=self._timeout_seconds,
-                )
-        except httpx.RequestError as exc:
-            raise AgenticToolValidationError(
-                "AGENTIC_TOOL_PBAC_PREFLIGHT_FAILED"
-            ) from exc
-
-        if response.status_code != 200:
-            raise AgenticToolValidationError("AGENTIC_TOOL_PBAC_PREFLIGHT_FAILED")
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise AgenticToolValidationError(
-                "AGENTIC_TOOL_PBAC_PREFLIGHT_FAILED"
-            ) from exc
-
-        if not isinstance(body, dict):
-            raise AgenticToolValidationError("AGENTIC_TOOL_PBAC_PREFLIGHT_FAILED")
-        data = body.get("data") if body.get("ok") is True else body
-        if not isinstance(data, dict):
-            raise AgenticToolValidationError("AGENTIC_TOOL_PBAC_PREFLIGHT_FAILED")
-        decision = data.get("decision")
-        reason = data.get("reason_code")
-        if decision not in {"ALLOW", "DENY"}:
-            raise AgenticToolValidationError("AGENTIC_TOOL_PBAC_PREFLIGHT_FAILED")
-        return decision, str(reason) if reason is not None else None
+        raise AgenticToolValidationError("AGENTIC_TOOL_PBAC_BLOCKED")

@@ -5,11 +5,14 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from langchain.agents import create_agent
+
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from model_policy import TRIAGE_MODEL_SPEC
 from tools.legal.legal.normative_chunk_filter import (
     CHUNK_NORMATIVE_CLASSES,
     is_engineering_rule_source_chunk,
 )
-from tools.common.llm.fallback_client import LLMClientProtocol
 
 
 CHUNK_TRIAGE_VERDICTS = {
@@ -32,8 +35,8 @@ class LegalChunkTriageDecision:
 class LegalChunkEngineeringRuleTriage:
     """Classify approved legal chunks into compile-safe EngineeringRule sources."""
 
-    def __init__(self, llm_client: LLMClientProtocol) -> None:
-        self.llm = llm_client
+    def __init__(self, model: str = TRIAGE_MODEL_SPEC) -> None:
+        self._model = model
 
     def analyze(
         self,
@@ -45,15 +48,35 @@ class LegalChunkEngineeringRuleTriage:
     ) -> list[LegalChunkTriageDecision]:
         if not legal_context:
             return []
-        response = self.llm.complete_structured(
-            prompt=self._prompt(legal_rule, legal_context),
-            response_format=_triage_response_schema(),
-            workflow_run_id=workflow_run_id,
-            node_name="triage_legal_chunks_for_engineering_rules",
-            max_tokens=5000,
-            correlationId=correlation_id,
+        chunk_ids = tuple(
+            dict.fromkeys(
+                str(chunk["id"])
+                for chunk in legal_context
+                if chunk.get("id")
+            )
         )
-        return self._parse_decisions(response.structured_response, legal_context)
+        agent = create_agent(
+            model=self._model,
+            system_prompt=(
+                "Classify approved legal chunks only. Do not make legal conclusions "
+                "or invent repository evidence."
+            ),
+            response_format=_triage_response_schema(chunk_ids),
+            middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+            name="lcsp-legal-chunk-triage",
+        )
+        result = agent.invoke(
+            {"messages": [{"role": "user", "content": self._prompt(legal_rule, legal_context)}]},
+            config={
+                "metadata": {
+                    "workflow_run_id": workflow_run_id,
+                    "node_name": "triage_legal_chunks_for_engineering_rules",
+                    "correlationId": correlation_id,
+                },
+                "configurable": {"thread_id": workflow_run_id},
+            },
+        )
+        return self._parse_decisions(result.get("structured_response"), legal_context)
 
     @staticmethod
     def _parse_decisions(
@@ -208,7 +231,7 @@ def legal_context_normative_class(chunk: dict[str, Any]) -> str:
     return CHUNK_NORMATIVE_CLASSES["context_only"]
 
 
-def _triage_response_schema() -> dict[str, Any]:
+def _triage_response_schema(chunk_ids: tuple[str, ...]) -> dict[str, Any]:
     return {
         "title": "LegalChunkTriageResponse",
         "description": "Engineering-rule eligibility triage for approved legal chunks.",
@@ -217,12 +240,15 @@ def _triage_response_schema() -> dict[str, Any]:
         "properties": {
             "chunkAnalyses": {
                 "type": "array",
+                "minItems": len(chunk_ids),
+                "maxItems": len(chunk_ids),
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
                     "properties": {
                         "chunkId": {
                             "type": "string",
+                            "enum": list(chunk_ids),
                             "description": "Exact legal context chunk id.",
                         },
                         "verdict": {

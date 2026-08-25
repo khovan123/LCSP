@@ -4,7 +4,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from tools.common.llm.fallback_client import LLMClientProtocol
+from langchain.agents import create_agent
+
+from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
+from model_policy import PLANNER_MODEL_SPEC
 from tools.graph.scanner.program_graph.vocabulary import EDGE_TYPES, NODE_TYPES
 
 from .chunk_triage import LegalChunkEngineeringRuleTriage
@@ -13,7 +16,7 @@ from .models import (
     EngineeringRule,
     build_legal_reasoning_contract,
 )
-from .validator import validate_engineering_rule
+from .validator import ALLOWED_DIRECTIONS, validate_engineering_rule
 
 
 COMPILER_VERSION = "engineering-rule-compiler/1.0.0"
@@ -21,9 +24,9 @@ PROMPT_VERSION = "legal-to-engineering/v1"
 
 
 class EngineeringRuleCompiler:
-    def __init__(self, llm_client: LLMClientProtocol) -> None:
-        self.llm = llm_client
-        self.triage = LegalChunkEngineeringRuleTriage(llm_client)
+    def __init__(self, model: str = PLANNER_MODEL_SPEC) -> None:
+        self._model = model
+        self.triage = LegalChunkEngineeringRuleTriage(model)
 
     def compile(
         self,
@@ -48,15 +51,28 @@ class EngineeringRuleCompiler:
         )
         if not compile_context:
             return []
-        response = self.llm.complete_structured(
-            prompt=self._prompt(legal_rule, compile_context),
+        agent = create_agent(
+            model=self._model,
+            system_prompt=(
+                "Compile approved legal evidence into bounded EngineeringRules only. "
+                "Do not make compliance or legal applicability decisions."
+            ),
             response_format=_engineering_rules_response_schema(),
-            workflow_run_id=workflow_run_id,
-            node_name="compile_engineering_rules",
-            max_tokens=6000,
-            correlationId=correlation_id,
+            middleware=MODEL_GOVERNANCE_MIDDLEWARE,
+            name="lcsp-engineering-rule-compiler",
         )
-        payload = response.structured_response
+        result = agent.invoke(
+            {"messages": [{"role": "user", "content": self._prompt(legal_rule, compile_context)}]},
+            config={
+                "metadata": {
+                    "workflow_run_id": workflow_run_id,
+                    "node_name": "compile_engineering_rules",
+                    "correlationId": correlation_id,
+                },
+                "configurable": {"thread_id": workflow_run_id},
+            },
+        )
+        payload = result.get("structured_response")
         if not isinstance(payload, dict):
             raise ValueError("compiler structured response must be object")
         rows = payload.get("engineeringRules")
@@ -103,7 +119,7 @@ class EngineeringRuleCompiler:
                         negative_evidence=negative_evidence,
                     ),
                     "sourceFingerprint": source_fingerprint,
-                    "compilerModel": getattr(response, "model", "configured"),
+                    "compilerModel": self._model,
                     "compilerVersion": COMPILER_VERSION,
                     "promptVersion": PROMPT_VERSION,
                     "schemaVersion": ENGINEERING_RULE_SCHEMA_VERSION,
@@ -124,6 +140,17 @@ class EngineeringRuleCompiler:
                 "Do not invent requirements outside supplied legal context.",
                 "Keywords are discovery hints only, never proof.",
                 "Split distinct technical controls into separate rules.",
+                (
+                    "Use only exact nodeTypes values for startingNodeTypes, "
+                    "targetNodeTypes, graphQueries.startNodeTypes, and "
+                    "graphQueries.stopNodeTypes."
+                ),
+                (
+                    "Use only exact edgeTypes values for edgeStrategies and "
+                    "graphQueries.followEdges; put traversal explanations in "
+                    "investigationGoals instead."
+                ),
+                "Use FORWARD, BACKWARD, or BOTH for graphQueries.direction.",
             ],
             "nodeTypes": sorted(NODE_TYPES),
             "edgeTypes": sorted(EDGE_TYPES),
@@ -170,18 +197,26 @@ class EngineeringRuleCompiler:
 
 def _engineering_rules_response_schema() -> dict[str, Any]:
     string_array_schema = {"type": "array", "items": {"type": "string"}}
+    node_type_array_schema = {
+        "type": "array",
+        "items": {"type": "string", "enum": sorted(NODE_TYPES)},
+    }
+    edge_type_array_schema = {
+        "type": "array",
+        "items": {"type": "string", "enum": sorted(EDGE_TYPES)},
+    }
     graph_query_schema = {
         "type": "object",
         "additionalProperties": False,
         "properties": {
             "name": {"type": "string"},
-            "startNodeTypes": string_array_schema,
+            "startNodeTypes": node_type_array_schema,
             "direction": {
                 "type": "string",
-                "enum": ["FORWARD", "BACKWARD", "BIDIRECTIONAL"],
+                "enum": sorted(ALLOWED_DIRECTIONS),
             },
-            "followEdges": string_array_schema,
-            "stopNodeTypes": string_array_schema,
+            "followEdges": edge_type_array_schema,
+            "stopNodeTypes": node_type_array_schema,
             "semanticTypes": string_array_schema,
         },
         "required": [
@@ -201,9 +236,9 @@ def _engineering_rules_response_schema() -> dict[str, Any]:
             "concept": {"type": "string"},
             "legalIntent": {"type": "object", "additionalProperties": True},
             "investigationGoals": string_array_schema,
-            "startingNodeTypes": string_array_schema,
-            "targetNodeTypes": string_array_schema,
-            "edgeStrategies": string_array_schema,
+            "startingNodeTypes": node_type_array_schema,
+            "targetNodeTypes": node_type_array_schema,
+            "edgeStrategies": edge_type_array_schema,
             "graphQueries": {"type": "array", "items": graph_query_schema},
             "keywords": string_array_schema,
             "commonApis": string_array_schema,

@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from tools.common.llm import LLMClientProtocol
 from tools.common.platform.logging import get_logger
 from tools.common.managed.boundary import AgentBoundaryBase
 
@@ -31,19 +30,14 @@ class FinalReportBoundary(AgentBoundaryBase):
     def __init__(
         self,
         config,
-        llm_client: LLMClientProtocol | None = None,
         document_client: DocumentRuntimeClient | None = None,
     ) -> None:
         super().__init__(config)
-        if llm_client is None:
-            raise ValueError(
-                "FinalReportBoundary requires an injected llm_client from runtime configuration."
-            )
         self._document_client = document_client or DocumentRuntimeClient(
             config.nestjs_api_base_url,
             config.worker_api_key,
         )
-        self._generator = FinalReportGenerator(llm_client)
+        self._generator = FinalReportGenerator()
 
     def handle(self, message: dict, correlationId: str) -> None:
         document_id = self._document_request_id(message)

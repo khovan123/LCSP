@@ -92,7 +92,6 @@ from .governance.authorization import (
 from .governance.catalog import (
     AgenticToolSpec,
     AGENTIC_TOOL_SPECS,
-    build_llm_tool_definitions,
     llm_callable_tool_specs,
 )
 from .dispatch.dispatcher import (
@@ -124,7 +123,6 @@ from .governance.registry import (
 )
 from .governance.resolver import (
     AgenticInvocationContext,
-    AgenticToolCallResult,
     AgenticToolResolver,
 )
 from .dispatch.runtime_binding import bind_runtime_handlers
@@ -143,7 +141,6 @@ __all__ = [
     "AgenticToolAuthorizer",
     "AgenticToolBinding",
     "AgenticToolBudget",
-    "AgenticToolCallResult",
     "AgenticToolCapability",
     "AgenticToolDispatcher",
     "AgenticToolExecutionContext",
@@ -164,7 +161,6 @@ __all__ = [
     "ToolBinding",
     "ToolRuntimeTarget",
     "bind_runtime_handlers",
-    "build_llm_tool_definitions",
     "build_sprint6_agentic_registry",
     "llm_callable_tool_specs",
     "runtime_binding",

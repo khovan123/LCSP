@@ -27,7 +27,7 @@ def test_safe_llm_and_tool_events_are_mirrored_to_root_tmp(monkeypatch, tmp_path
     events = [
         {
             "event": "LLM_REQUEST",
-            "operation": "complete_with_tools",
+            "operation": "native_agent_invoke",
             "tool_names": ["search_nodes", "finish"],
         },
         {"event": "LLM_RESPONSE", "tool_call_names": ["search_nodes"]},

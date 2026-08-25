@@ -17,6 +17,13 @@ from runtime.evidence.scanner.tools.tool_base import (
 )
 
 
+def test_default_rulesets_resolve_from_scanner_package() -> None:
+    tool = SemgrepTool()
+
+    assert tool._ai_ruleset_path.is_file()
+    assert tool._secret_ruleset_path.is_file()
+
+
 def _completed(
     args: list[str],
     returncode: int,
