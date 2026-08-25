@@ -37,7 +37,10 @@ import {
   type RbacContextDenialReason,
 } from "./rbac-context.loader.js";
 import { RbacEvaluatorService } from "./rbac-evaluator.service.js";
-import type { RbacDecisionResult, RbacEvaluationContext } from "./rbac.types.js";
+import type {
+  RbacDecisionResult,
+  RbacEvaluationContext,
+} from "./rbac.types.js";
 
 const DECISION_LOG_RESOURCE_TYPE = AUDIT_RESOURCE_TYPES.httpRoute;
 
@@ -305,7 +308,8 @@ export class RbacGuard implements CanActivate {
           status: HttpStatus.UNAUTHORIZED,
         });
       case RBAC_REASON_CODE.membershipMissing:
-        if (membershipMissingAsRbacDenied) return this.rbacDenied(correlationId);
+        if (membershipMissingAsRbacDenied)
+          return this.rbacDenied(correlationId);
         return problemException(
           AUTH_ERROR_CODES.membershipMissing,
           correlationId,

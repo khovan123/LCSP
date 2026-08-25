@@ -949,9 +949,7 @@ export function toPrismaAuthUserRole(role: AuthUserRole): PrismaAuthUserRole {
   return AUTH_USER_ROLE_TO_PRISMA[role];
 }
 
-export function fromPrismaAuthUserRole(
-  role: PrismaAuthUserRole,
-): AuthUserRole {
+export function fromPrismaAuthUserRole(role: PrismaAuthUserRole): AuthUserRole {
   return PRISMA_AUTH_USER_ROLE_TO_CONTRACT[role];
 }
 

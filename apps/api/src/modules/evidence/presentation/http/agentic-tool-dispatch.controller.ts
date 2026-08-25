@@ -242,8 +242,9 @@ export class InternalAgenticToolDispatchController {
     return this.queryBus.execute(buildAgenticToolQuery(args));
   }
 
-  private async authorizeProtectedCommand(args: ToolExecutionArgs): Promise<{
-  }> {
+  private async authorizeProtectedCommand(
+    args: ToolExecutionArgs,
+  ): Promise<{}> {
     if (!this.rbacPreflight) {
       throw problemException(
         EVIDENCE_ERROR_CODES.notFound,
@@ -267,8 +268,7 @@ export class InternalAgenticToolDispatchController {
       });
     }
 
-    return {
-    };
+    return {};
   }
 
   private requireCommandBus(correlationId: string): CommandBus {

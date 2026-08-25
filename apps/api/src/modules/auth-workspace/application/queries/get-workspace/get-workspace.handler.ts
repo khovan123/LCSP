@@ -137,7 +137,7 @@ export class GetWorkspaceHandler {
       user.id,
       session.organizationId,
     );
-      const authorization = await this.support.authorizeWorkspace(
+    const authorization = await this.support.authorizeWorkspace(
       repositories,
       membership,
       user,
