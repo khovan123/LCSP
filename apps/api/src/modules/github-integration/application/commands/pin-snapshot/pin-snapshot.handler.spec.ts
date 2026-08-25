@@ -5,7 +5,7 @@ import {
   GITHUB_REPOSITORY_PERMISSION_LEVELS,
   REPOSITORY_SNAPSHOT_STATUSES,
 } from "@lcsp/contracts/github-integration";
-import { PBAC_DECISION } from "@lcsp/contracts/pbac";
+import { RBAC_DECISION } from "@lcsp/contracts/rbac";
 import {
   BadRequestException,
   ForbiddenException,
@@ -14,7 +14,7 @@ import {
 } from "@nestjs/common";
 
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -185,7 +185,7 @@ describe("PinSnapshotHandler", () => {
     expect(write).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
-        decision: PBAC_DECISION.allow,
+        decision: RBAC_DECISION.allow,
       }),
     );
   });
@@ -282,7 +282,7 @@ describe("PinSnapshotHandler", () => {
     expect(write).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotPinFailedAudit,
-        decision: PBAC_DECISION.deny,
+        decision: RBAC_DECISION.deny,
         payload: expect.not.objectContaining({ source: expect.anything() }),
       }),
     );

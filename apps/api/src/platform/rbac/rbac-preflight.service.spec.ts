@@ -1,10 +1,10 @@
 import {
-  PBAC_ACTIONS,
-  PBAC_DECISION,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_DECISION,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { jest } from "@jest/globals";
 
@@ -14,11 +14,11 @@ import type { AuthorizationDecision } from "../../modules/auth-workspace/domain/
 import type { AuthorizationDecisionRepository } from "../../modules/auth-workspace/application/ports/persistence/authorization-decision.repository.js";
 import type { MembershipRepository } from "../../modules/auth-workspace/application/ports/persistence/membership.repository.js";
 import type { PolicyRepository } from "../../modules/auth-workspace/application/ports/persistence/policy.repository.js";
-import { PbacEvaluatorService } from "./pbac-evaluator.service.js";
+import { RbacEvaluatorService } from "./rbac-evaluator.service.js";
 import {
-  PbacPreflightService,
-  type PbacPreflightInput,
-} from "./pbac-preflight.service.js";
+  RbacPreflightService,
+  type RbacPreflightInput,
+} from "./rbac-preflight.service.js";
 
 function makeMembership(
   overrides: Partial<ConstructorParameters<typeof Membership>[0]> = {},
@@ -41,21 +41,21 @@ function makePolicy(
   return Policy.rehydrate({
     id: "policy-1",
     version: "v1",
-    actions: [PBAC_ACTIONS.scanTrigger],
+    actions: [RBAC_ACTIONS.scanTrigger],
     subjectRole: SUBJECT_ROLES.manager,
-    stateGate: PBAC_STATE_GATES.membershipActive,
+    stateGate: RBAC_STATE_GATES.membershipActive,
     organizationId: "org-1",
     ...overrides,
   });
 }
 
 function makeInput(
-  overrides: Partial<PbacPreflightInput> = {},
-): PbacPreflightInput {
+  overrides: Partial<RbacPreflightInput> = {},
+): RbacPreflightInput {
   return {
     userId: "user-1",
     organizationId: "org-1",
-    action: PBAC_ACTIONS.scanTrigger,
+    action: RBAC_ACTIONS.scanTrigger,
     correlationId: "corr-1",
     ...overrides,
   };
@@ -91,14 +91,14 @@ function makeService(
     );
   const policies = { findByIdAndVersion } as unknown as PolicyRepository;
 
-  const evaluator = new PbacEvaluatorService();
+  const evaluator = new RbacEvaluatorService();
 
   const append = jest
     .fn<AuthorizationDecisionRepository["append"]>()
     .mockImplementation(overrides.appendImpl ?? (() => Promise.resolve()));
   const decisions = { append } as unknown as AuthorizationDecisionRepository;
 
-  const service = new PbacPreflightService(
+  const service = new RbacPreflightService(
     memberships,
     policies,
     evaluator,
@@ -108,14 +108,14 @@ function makeService(
   return { service, findByUserAndOrganization, findByIdAndVersion, append };
 }
 
-describe("PbacPreflightService", () => {
+describe("RbacPreflightService", () => {
   it("T01: valid membership + action granted returns allow and logs it", async () => {
     const { service, append } = makeService();
 
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
       reasonCode: null,
       correlationId: "corr-1",
     });
@@ -124,10 +124,10 @@ describe("PbacPreflightService", () => {
         actor_id: "user-1",
         session_id: null,
         organization_id: "org-1",
-        resource_id: PBAC_ACTIONS.scanTrigger,
-        decision: PBAC_DECISION.allow,
-        reason_code: PBAC_REASON_CODE.authorized,
-        action: PBAC_ACTIONS.scanTrigger,
+        resource_id: RBAC_ACTIONS.scanTrigger,
+        decision: RBAC_DECISION.allow,
+        reason_code: RBAC_REASON_CODE.authorized,
+        action: RBAC_ACTIONS.scanTrigger,
       }),
     );
   });
@@ -140,14 +140,14 @@ describe("PbacPreflightService", () => {
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: PBAC_DECISION.deny,
-      reasonCode: PBAC_REASON_CODE.stateGateFailed,
+      decision: RBAC_DECISION.deny,
+      reasonCode: RBAC_REASON_CODE.stateGateFailed,
       correlationId: "corr-1",
     });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: PBAC_DECISION.deny,
-        reason_code: PBAC_REASON_CODE.stateGateFailed,
+        decision: RBAC_DECISION.deny,
+        reason_code: RBAC_REASON_CODE.stateGateFailed,
       }),
     );
   });
@@ -160,8 +160,8 @@ describe("PbacPreflightService", () => {
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: PBAC_DECISION.deny,
-      reasonCode: PBAC_REASON_CODE.actionNotGranted,
+      decision: RBAC_DECISION.deny,
+      reasonCode: RBAC_REASON_CODE.actionNotGranted,
       correlationId: "corr-1",
     });
   });
@@ -172,8 +172,8 @@ describe("PbacPreflightService", () => {
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: PBAC_DECISION.deny,
-      reasonCode: PBAC_REASON_CODE.membershipMissing,
+      decision: RBAC_DECISION.deny,
+      reasonCode: RBAC_REASON_CODE.membershipMissing,
       correlationId: "corr-1",
     });
     expect(findByIdAndVersion).not.toHaveBeenCalled();
@@ -185,8 +185,8 @@ describe("PbacPreflightService", () => {
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: PBAC_DECISION.deny,
-      reasonCode: PBAC_REASON_CODE.policyNotFound,
+      decision: RBAC_DECISION.deny,
+      reasonCode: RBAC_REASON_CODE.policyNotFound,
       correlationId: "corr-1",
     });
   });
@@ -198,7 +198,7 @@ describe("PbacPreflightService", () => {
 
     expect(append).toHaveBeenCalledTimes(1);
     expect(append.mock.calls[0][0]).toMatchObject({
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
     });
   });
 
@@ -211,7 +211,7 @@ describe("PbacPreflightService", () => {
 
     expect(append).toHaveBeenCalledTimes(1);
     expect(append.mock.calls[0][0]).toMatchObject({
-      decision: PBAC_DECISION.deny,
+      decision: RBAC_DECISION.deny,
     });
   });
 
@@ -223,8 +223,8 @@ describe("PbacPreflightService", () => {
     const result = await service.evaluate(makeInput());
 
     expect(result).toEqual({
-      decision: PBAC_DECISION.deny,
-      reasonCode: PBAC_REASON_CODE.loadError,
+      decision: RBAC_DECISION.deny,
+      reasonCode: RBAC_REASON_CODE.loadError,
       correlationId: "corr-1",
     });
   });
@@ -239,8 +239,8 @@ describe("PbacPreflightService", () => {
     );
 
     expect(result).toEqual({
-      decision: PBAC_DECISION.deny,
-      reasonCode: PBAC_REASON_CODE.organizationMismatch,
+      decision: RBAC_DECISION.deny,
+      reasonCode: RBAC_REASON_CODE.organizationMismatch,
       correlationId: "corr-1",
     });
     expect(append).toHaveBeenCalledWith(
@@ -259,7 +259,7 @@ describe("PbacPreflightService", () => {
     });
 
     await expect(service.evaluate(makeInput())).resolves.toEqual({
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
       reasonCode: null,
       correlationId: "corr-1",
     });

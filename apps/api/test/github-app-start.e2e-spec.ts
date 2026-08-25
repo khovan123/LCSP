@@ -11,11 +11,11 @@ import {
   GITHUB_INTEGRATION_EVENT_TYPES,
 } from "@lcsp/contracts/github-integration";
 import {
-  PBAC_ACTIONS,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 /**
  * MW-gh-001: GitHub App OAuth Start Endpoint.
  * Test cases T01-T08 from docs/implementation/tasks/modules/github-integration/01-github-app-oauth-start-endpoint.md
@@ -107,15 +107,15 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
   });
 
   // T02
-  it("T02: Actor lacks github:connect -> 403 PBAC_DENIED", async () => {
+  it("T02: Actor lacks github:connect -> 403 RBAC_DENIED", async () => {
     const restrictedPolicyId = "policy-no-github-connect";
     await prisma.authPolicy.create({
       data: {
         id: restrictedPolicyId,
         version: "2026-07-17",
-        actions: [PBAC_ACTIONS.workspaceRead],
+        actions: [RBAC_ACTIONS.workspaceRead],
         subjectRole: SUBJECT_ROLES.manager,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -158,7 +158,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
       .set("Authorization", `Bearer ${restrictedToken}`);
 
     assert.equal(result.status, 403);
-    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), RBAC_REASON_CODE.denied);
   });
 
   // T03

@@ -14,7 +14,7 @@ LCSP is an evidence-based compliance support platform for businesses using AI in
 
 ## Phase 5.2L Product Corrections
 
-- PBAC replaces RBAC as authorization source of truth. Roles are attributes/templates only.
+- RBAC replaces RBAC as authorization source of truth. Roles are attributes/templates only.
 - Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP` and removed from active product scope.
 - Compliance certification, formal legal opinion, direct regulator submission, and manual technical evidence JSON upload (`FR-051`) are `REMOVED_FROM_PRODUCT`.
 - `FR-050` is `AUTOMATIC_TRUSTED_SCAN_INITIATION`, not Local/CI scanner report upload.

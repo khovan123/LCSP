@@ -8,11 +8,11 @@ import {
 } from "@lcsp/contracts/assessment";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import {
-  PBAC_ACTIONS,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_STATUSES,
@@ -278,7 +278,7 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
   });
 
   // T05
-  it("T05: Manager lacks assessment:read -> 403 PBAC_DENIED", async () => {
+  it("T05: Manager lacks assessment:read -> 403 RBAC_DENIED", async () => {
     const assessmentId = await createAssessment();
 
     const restrictedPolicyId = "policy-no-assessment-read";
@@ -286,9 +286,9 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
       data: {
         id: restrictedPolicyId,
         version: "2026-07-10",
-        actions: [PBAC_ACTIONS.workspaceRead, ASSESSMENT_ACTIONS.create],
+        actions: [RBAC_ACTIONS.workspaceRead, ASSESSMENT_ACTIONS.create],
         subjectRole: SUBJECT_ROLES.manager,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -327,7 +327,7 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
       .set("Authorization", `Bearer ${restrictedToken}`);
 
     assert.equal(result.status, 403);
-    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), RBAC_REASON_CODE.denied);
   });
 
   // T06
@@ -354,9 +354,9 @@ describe("Get Assessment Endpoint (e2e) [MW-asmt-002]", () => {
       data: {
         id: systemAdminPolicyId,
         version: "2026-07-10",
-        actions: [PBAC_ACTIONS.assessmentRead],
+        actions: [RBAC_ACTIONS.assessmentRead],
         subjectRole: SUBJECT_ROLES.systemAdmin,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });

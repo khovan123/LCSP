@@ -12,7 +12,7 @@ Canonical active use-case catalog for the A-to-Z runnable MVP. Detailed user int
 - Manager completes the golden path without external collaborator participation.
 - Structured attestation under historical `FR-045/FR-046` is removed from active MVP.
 - Delegated free-form clarification under `FR-052` is Deferred.
-- PBAC is the authorization source of truth. Role labels are not final authorization authority.
+- RBAC is the authorization source of truth. Role labels are not final authorization authority.
 - Internal legal corpus operations are API/CLI-only for MVP, not Manager product UX.
 
 ## Inventory
@@ -20,7 +20,7 @@ Canonical active use-case catalog for the A-to-Z runnable MVP. Detailed user int
 | UC     | Name                                                  | Primary Actor                    | FRs                                    | ACs                                              |
 | ------ | ----------------------------------------------------- | -------------------------------- | -------------------------------------- | ------------------------------------------------ |
 | UC-001 | Authenticate and Manage Account                       | Manager                          | FR-001..FR-006                         | AC-021, AC-023                                   |
-| UC-002 | Manage Organization and PBAC Policy Scope             | Manager                          | FR-007..FR-012                         | AC-024..AC-026                                   |
+| UC-002 | Manage Organization and RBAC Policy Scope             | Manager                          | FR-007..FR-012                         | AC-024..AC-026                                   |
 | UC-003 | Create Assessment                                     | Manager                          | FR-013                                 | AC-001                                           |
 | UC-004 | Complete WizardProfile and Readiness                  | Manager                          | FR-014, FR-015, FR-040                 | AC-002, AC-003                                   |
 | UC-005 | Connect Repository                                    | Manager                          | FR-006, FR-016                         | AC-004, AC-023                                   |
@@ -43,7 +43,7 @@ Goal: establish a safe organization-scoped session through approved password/MFA
 
 ## UC-002 Manage Organization and Roles
 
-Goal: maintain tenant membership, PBAC policy scope, and Manager accountability. Cross-tenant actions and non-Manager attempts at Manager-only actions are denied by server-side PBAC.
+Goal: maintain tenant membership, RBAC policy scope, and Manager accountability. Cross-tenant actions and non-Manager attempts at Manager-only actions are denied by server-side RBAC.
 
 ## UC-003 Create Assessment
 

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import type {
   Membership,
   Policy,
@@ -20,27 +20,27 @@ import type { MfaEnrollmentRepository } from "../../modules/auth-workspace/appli
 import type { PolicyRepository } from "../../modules/auth-workspace/application/ports/persistence/policy.repository.js";
 import type { SessionRepository } from "../../modules/auth-workspace/application/ports/persistence/session.repository.js";
 
-export type PbacContextDenialReason =
-  | typeof PBAC_REASON_CODE.sessionInvalid
-  | typeof PBAC_REASON_CODE.mfaRequired
-  | typeof PBAC_REASON_CODE.membershipMissing
-  | typeof PBAC_REASON_CODE.policyNotFound
-  | typeof PBAC_REASON_CODE.loadError;
+export type RbacContextDenialReason =
+  | typeof RBAC_REASON_CODE.sessionInvalid
+  | typeof RBAC_REASON_CODE.mfaRequired
+  | typeof RBAC_REASON_CODE.membershipMissing
+  | typeof RBAC_REASON_CODE.policyNotFound
+  | typeof RBAC_REASON_CODE.loadError;
 
-export type PbacContextResult =
+export type RbacContextResult =
   | { ok: true; session: Session; membership: Membership; policy: Policy }
   | {
       ok: false;
-      reason: PbacContextDenialReason;
+      reason: RbacContextDenialReason;
       mfaEnrolled?: boolean;
     };
 
 /**
- * Loads the authenticated PBAC context in session → MFA → membership → policy order.
- * Reuses the auth-workspace repositories instead of querying Prisma directly so session and membership semantics remain consistent across authentication and PBAC paths.
+ * Loads the authenticated RBAC context in session → MFA → membership → policy order.
+ * Reuses the auth-workspace repositories instead of querying Prisma directly so session and membership semantics remain consistent across authentication and RBAC paths.
  */
 @Injectable()
-export class PbacContextLoader {
+export class RbacContextLoader {
   /**
    * Creates the loader with the repositories needed to resolve authorization context.
    *
@@ -61,18 +61,18 @@ export class PbacContextLoader {
   ) {}
 
   /**
-   * Validates a session token and resolves the active membership plus policy required for PBAC evaluation.
+   * Validates a session token and resolves the active membership plus policy required for RBAC evaluation.
    *
    * @param token - Raw bearer token presented by the request.
    * @param now - Current time in milliseconds used to evaluate session activity.
    * @param options - Loading options, including whether a pending-MFA session is temporarily acceptable.
-   * @returns A resolved PBAC context or a fail-closed denial reason.
+   * @returns A resolved RBAC context or a fail-closed denial reason.
    */
   async load(
     token: string,
     now: number,
     options: { allowPendingMfa?: boolean } = {},
-  ): Promise<PbacContextResult> {
+  ): Promise<RbacContextResult> {
     try {
       const fingerprint = fingerprintToken(token);
       const session = await this.sessions.findByFingerprint(fingerprint);
@@ -81,7 +81,7 @@ export class PbacContextLoader {
         !verifySecret(token, session.tokenHash) ||
         !session.isActive(now)
       ) {
-        return { ok: false, reason: PBAC_REASON_CODE.sessionInvalid };
+        return { ok: false, reason: RBAC_REASON_CODE.sessionInvalid };
       }
 
       const mfaEnrollment = await this.mfaEnrollments.findByUserId(
@@ -95,7 +95,7 @@ export class PbacContextLoader {
       ) {
         return {
           ok: false,
-          reason: PBAC_REASON_CODE.mfaRequired,
+          reason: RBAC_REASON_CODE.mfaRequired,
           mfaEnrolled: true,
         };
       }
@@ -105,7 +105,7 @@ export class PbacContextLoader {
         session.organizationId,
       );
       if (!membership || !membership.isActive()) {
-        return { ok: false, reason: PBAC_REASON_CODE.membershipMissing };
+        return { ok: false, reason: RBAC_REASON_CODE.membershipMissing };
       }
 
       const policy = await this.policies.findByIdAndVersion(
@@ -113,13 +113,13 @@ export class PbacContextLoader {
         membership.policyVersion,
       );
       if (!policy) {
-        return { ok: false, reason: PBAC_REASON_CODE.policyNotFound };
+        return { ok: false, reason: RBAC_REASON_CODE.policyNotFound };
       }
 
       return { ok: true, session, membership, policy };
     } catch {
       // Any unexpected DB failure at any stage — deny, never allow on error.
-      return { ok: false, reason: PBAC_REASON_CODE.loadError };
+      return { ok: false, reason: RBAC_REASON_CODE.loadError };
     }
   }
 }

@@ -15,10 +15,10 @@ import {
 } from "./support/auth-workspace-test-helpers.js";
 
 import {
-  PBAC_ACTIONS,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
@@ -91,9 +91,9 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       data: {
         id: restrictedPolicyId,
         version: "2026-07-10",
-        actions: [PBAC_ACTIONS.workspaceRead], // Only workspace read
+        actions: [RBAC_ACTIONS.workspaceRead], // Only workspace read
         subjectRole: SUBJECT_ROLES.manager,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -555,7 +555,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
       assert.equal(problemCode(res), ASSESSMENT_ERROR_CODES.notFound);
     });
 
-    it("T06: Actor lacks wizard:write -> 403 PBAC_DENIED", async () => {
+    it("T06: Actor lacks wizard:write -> 403 RBAC_DENIED", async () => {
       const res = await httpRequest(app)
         .put(`/assessments/${assessmentId}/wizard/draft`)
         .set("Authorization", `Bearer ${restrictedToken}`)
@@ -594,7 +594,7 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
           ],
         });
       assert.equal(res.status, 403);
-      assert.equal(problemCode(res), AUTH_ERROR_CODES.pbacDenied);
+      assert.equal(problemCode(res), AUTH_ERROR_CODES.rbacDenied);
     });
 
     it("T07: Partial save preserves existing fields", async () => {

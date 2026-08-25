@@ -1,9 +1,9 @@
-import { PBAC_DECISION } from "@lcsp/contracts/pbac";
+import { RBAC_DECISION } from "@lcsp/contracts/rbac";
 import { jest } from "@jest/globals";
 
-import { PbacPreflightService } from "./pbac-preflight.service.js";
+import { RbacPreflightService } from "./rbac-preflight.service.js";
 
-describe("PbacPreflightService trusted policy context", () => {
+describe("RbacPreflightService trusted policy context", () => {
   function buildService() {
     const memberships = {
       findByUserAndOrganization: jest.fn(() =>
@@ -30,7 +30,7 @@ describe("PbacPreflightService trusted policy context", () => {
     };
     const evaluator = {
       evaluate: jest.fn(() => ({
-        decision: PBAC_DECISION.allow,
+        decision: RBAC_DECISION.allow,
         reasonCode: null,
         policyId: "policy-1",
         policyVersion: "v7",
@@ -41,7 +41,7 @@ describe("PbacPreflightService trusted policy context", () => {
     };
 
     return {
-      service: new PbacPreflightService(
+      service: new RbacPreflightService(
         memberships as never,
         policies as never,
         evaluator as never,
@@ -62,7 +62,7 @@ describe("PbacPreflightService trusted policy context", () => {
 
     const enriched = await service.evaluateWithPolicy(input);
     expect(enriched).toEqual({
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
       reasonCode: null,
       correlationId: "correlation-1",
       policyId: "policy-1",
@@ -71,7 +71,7 @@ describe("PbacPreflightService trusted policy context", () => {
 
     const publicResult = await service.evaluate(input);
     expect(publicResult).toEqual({
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
       reasonCode: null,
       correlationId: "correlation-1",
     });

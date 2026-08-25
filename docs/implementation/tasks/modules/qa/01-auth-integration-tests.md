@@ -7,14 +7,14 @@ status: DONE
 epic_story: 1.1
 depends_on:
   - auth-workspace/14-audit-event-writer.md
-  - platform/pbac/03-nestjs-guard.md
+  - platform/rbac/03-nestjs-guard.md
 ---
 
 # Auth Integration Test Suite
 
 ## Outcome
 
-End-to-end integration tests for all auth-workspace endpoints running against a real Prisma + PostgreSQL test database. Tests cover complete golden paths and all denial paths. No mocking of DB or PBAC.
+End-to-end integration tests for all auth-workspace endpoints running against a real Prisma + PostgreSQL test database. Tests cover complete golden paths and all denial paths. No mocking of DB or RBAC.
 
 ## Module Files
 
@@ -46,7 +46,7 @@ End-to-end integration tests for all auth-workspace endpoints running against a 
 - User signs up → Manager membership/session created
 - Duplicate or invalid account input fails closed
 
-**PBAC Guard:**
+**RBAC Guard:**
 
 - Valid session + action → 200
 - Any deny condition (revoked, expired, no policy) → 403
@@ -56,7 +56,7 @@ End-to-end integration tests for all auth-workspace endpoints running against a 
 
 - Active auth-workspace endpoints covered by integration tests.
 - Tests run against real DB (not mocked).
-- PBAC guard deny paths all tested.
+- RBAC guard deny paths all tested.
 - `AuthDecisionLog` presence verified for all allow/deny decisions.
 
 ## Verification

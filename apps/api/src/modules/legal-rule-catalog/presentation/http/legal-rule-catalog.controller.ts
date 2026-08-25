@@ -10,7 +10,7 @@ import {
   Query,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { DraftLegalRuleRequest } from "../../application/contracts/draft-legal-rule.contract.js";
 import type { ApproveRuleCatalogVersionRequest } from "../../application/contracts/approve-catalog-version.contract.js";
@@ -29,8 +29,8 @@ import { ResumeWaitingRunsCommand } from "../../application/commands/resume-wait
 import { GetActiveRuleCatalogQuery } from "../../application/queries/get-active-rule-catalog/get-active-rule-catalog.query.js";
 import { GetActiveLegalCorpusQuery } from "../../application/queries/get-active-legal-corpus/get-active-legal-corpus.query.js";
 
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
-import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
+import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { randomUUID } from "node:crypto";
@@ -51,8 +51,8 @@ export class LegalRuleCatalogController {
 
   @Post("versions")
   @HttpCode(201)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.legalRuleCatalogAuthor)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.legalRuleCatalogAuthor)
   async createVersion(
     @Body() body: CreateRuleCatalogVersionRequest,
     @Req() req: AuthenticatedRequest,
@@ -67,8 +67,8 @@ export class LegalRuleCatalogController {
 
   @Post("corpus")
   @HttpCode(201)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.legalCorpusIngest)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.legalCorpusIngest)
   async ingestCorpus(@Body() body: IngestLegalCorpusRequest) {
     return resultEnvelope(
       await this.legalCorpus.ingestDraft({
@@ -155,14 +155,14 @@ export class LegalRuleCatalogController {
 
   @Post("rules")
   @HttpCode(201)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.legalRuleCatalogAuthor)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.legalRuleCatalogAuthor)
   async draftRule(
     @Body() body: DraftLegalRuleRequest,
     @Req() req: AuthenticatedRequest,
   ) {
-    const { userId } = req.pbacContext;
-    const pbacContext = req.pbacContext;
+    const { userId } = req.rbacContext;
+    const rbacContext = req.rbacContext;
     const correlationId = req.correlationId || randomUUID();
 
     return resultEnvelope(
@@ -178,10 +178,10 @@ export class LegalRuleCatalogController {
           userId,
           body.legalRuleCatalogVersionId,
           {
-            subjectRole: pbacContext.subjectRole,
-            selectedAction: pbacContext.selectedAction,
-            policyId: pbacContext.policyId,
-            policyVersion: pbacContext.policyVersion,
+            subjectRole: rbacContext.subjectRole,
+            selectedAction: rbacContext.selectedAction,
+            policyId: rbacContext.policyId,
+            policyVersion: rbacContext.policyVersion,
           },
           correlationId,
         ),
@@ -266,15 +266,15 @@ export class LegalRuleCatalogController {
 
   @Post("versions/:versionId/approve")
   @HttpCode(200)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.legalRuleCatalogApprove)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.legalRuleCatalogApprove)
   async approveVersion(
     @Param("versionId") versionId: string,
     @Body() body: ApproveRuleCatalogVersionRequest,
     @Req() req: AuthenticatedRequest,
   ) {
-    const { userId } = req.pbacContext;
-    const pbacContext = req.pbacContext;
+    const { userId } = req.rbacContext;
+    const rbacContext = req.rbacContext;
     const correlationId = req.correlationId || randomUUID();
 
     // Passing some default values for scopeDescription since they are not in the contract body
@@ -286,10 +286,10 @@ export class LegalRuleCatalogController {
           null, // no comments provided in the basic API body yet
           userId,
           {
-            subjectRole: pbacContext.subjectRole,
-            selectedAction: pbacContext.selectedAction,
-            policyId: pbacContext.policyId,
-            policyVersion: pbacContext.policyVersion,
+            subjectRole: rbacContext.subjectRole,
+            selectedAction: rbacContext.selectedAction,
+            policyId: rbacContext.policyId,
+            policyVersion: rbacContext.policyVersion,
           },
           correlationId,
         ),

@@ -1,6 +1,6 @@
 import { SetMetadata } from "@nestjs/common";
 
-export const ALLOW_PENDING_MFA_METADATA_KEY = "pbac:allow_pending_mfa";
+export const ALLOW_PENDING_MFA_METADATA_KEY = "rbac:allow_pending_mfa";
 
 /**
  * Marks a controller or route as accessible while the authenticated session is still pending MFA completion.

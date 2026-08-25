@@ -5,7 +5,7 @@ export type SafeUserProjection = {
   email: string;
   organization_id: string;
   membership_status: AuthMembershipStatus;
-  // Roles are policy-defined and may extend beyond the built-in PBAC roles.
+  // Roles are policy-defined and may extend beyond the built-in RBAC roles.
   subject_attributes: { role?: string };
 };
 

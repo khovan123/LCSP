@@ -1,4 +1,4 @@
-import { PBAC_DECISION, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_DECISION, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import {
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
   AUTH_MEMBERSHIP_STATUSES,
@@ -393,7 +393,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: PBAC_DECISION.deny,
+        decision: RBAC_DECISION.deny,
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
@@ -411,7 +411,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: PBAC_DECISION.deny,
+        decision: RBAC_DECISION.deny,
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
@@ -460,7 +460,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: PBAC_DECISION.deny,
+        decision: RBAC_DECISION.deny,
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
@@ -479,7 +479,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: PBAC_DECISION.deny,
+        decision: RBAC_DECISION.deny,
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
@@ -553,7 +553,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: PBAC_DECISION.deny,
+        decision: RBAC_DECISION.deny,
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
@@ -581,7 +581,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: PBAC_DECISION.deny,
+        decision: RBAC_DECISION.deny,
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginFailed,
       }),
     );
@@ -593,7 +593,7 @@ describe("OAuthCallbackHandler — missing params, state, identity and membershi
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: PBAC_DECISION.allow,
+        decision: RBAC_DECISION.allow,
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLoginSucceeded,
       }),
     );
@@ -705,7 +705,7 @@ describe("OAuthLinkCallbackHandler", () => {
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: PBAC_DECISION.allow,
+        decision: RBAC_DECISION.allow,
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLinkSucceeded,
         actor_id: user.id,
       }),
@@ -741,7 +741,7 @@ describe("OAuthLinkCallbackHandler", () => {
     expect(recordAuditSpy).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        decision: PBAC_DECISION.deny,
+        decision: RBAC_DECISION.deny,
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthLinkFailed,
       }),
     );

@@ -1,4 +1,4 @@
-import type { PbacRequestContext } from "../../../../../platform/pbac/interfaces/pbac-request.interface.ts";
+import type { RbacRequestContext } from "../../../../../platform/rbac/interfaces/rbac-request.interface.ts";
 import { ConfirmPasswordRecoveryCommand } from "../../commands/confirm-password-recovery/confirm-password-recovery.command.ts";
 import { ConfirmPasswordRecoveryHandler } from "../../commands/confirm-password-recovery/confirm-password-recovery.handler.ts";
 import { DisableMfaCommand } from "../../commands/disable-mfa/disable-mfa.command.ts";
@@ -117,7 +117,7 @@ export class AuthWorkspaceFacade {
 
   revokeOwnedSession(
     sessionId: string,
-    context: PbacRequestContext,
+    context: RbacRequestContext,
     requestMeta: RequestMeta = {},
   ) {
     return this.revokeOwnedSessionHandler.execute(
@@ -125,19 +125,19 @@ export class AuthWorkspaceFacade {
     );
   }
 
-  getProfile(context: PbacRequestContext, correlationId: string) {
+  getProfile(context: RbacRequestContext, correlationId: string) {
     return this.getAuthProfileHandler.execute(
       new GetAuthProfileQuery(context, correlationId),
     );
   }
 
-  listSessions(context: PbacRequestContext) {
+  listSessions(context: RbacRequestContext) {
     return this.listAuthSessionsHandler.execute(
       new ListAuthSessionsQuery(context),
     );
   }
 
-  listRepositories(context: PbacRequestContext) {
+  listRepositories(context: RbacRequestContext) {
     return this.listAuthRepositoriesHandler.execute(
       new ListAuthRepositoriesQuery(context),
     );
@@ -252,7 +252,7 @@ export class AuthWorkspaceFacade {
 
   oauthLinkStart(
     payload: OAuthLinkStartPayload,
-    context: PbacRequestContext,
+    context: RbacRequestContext,
     requestMeta: RequestMeta = {},
   ) {
     return this.oauthLinkStartHandler.execute(
@@ -267,7 +267,7 @@ export class AuthWorkspaceFacade {
 
   oauthLinkCallback(
     payload: OAuthLinkCallbackPayload,
-    context: PbacRequestContext,
+    context: RbacRequestContext,
     requestMeta: RequestMeta = {},
   ) {
     return this.oauthLinkCallbackHandler.execute(

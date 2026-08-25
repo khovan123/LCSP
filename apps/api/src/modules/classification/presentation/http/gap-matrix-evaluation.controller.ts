@@ -16,11 +16,11 @@ import {
   EVALUATE_GAP_MATRIX_TOOL,
   type EvaluateGapMatrixInput,
 } from "@lcsp/contracts/evidence";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
-import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { EvaluateGapMatrixQuery } from "../../application/queries/evaluate-gap-matrix/evaluate-gap-matrix.query.js";
@@ -35,8 +35,8 @@ export class GapMatrixEvaluationController {
 
   @Post(":assessmentId/gap-matrix-evaluation")
   @HttpCode(HttpStatus.OK)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.gapMatrixEvaluate)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.gapMatrixEvaluate)
   async evaluateGapMatrix(
     @Param("assessmentId") assessmentId: string,
     @Body() body: unknown,
@@ -48,9 +48,9 @@ export class GapMatrixEvaluationController {
       await this.queryBus.execute(
         new EvaluateGapMatrixQuery(
           assessmentId,
-          request.pbacContext.organizationId,
+          request.rbacContext.organizationId,
           input,
-          request.pbacContext.userId,
+          request.rbacContext.userId,
           correlationId,
         ),
       ),

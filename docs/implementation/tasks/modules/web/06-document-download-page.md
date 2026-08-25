@@ -58,5 +58,5 @@ Show all documents for an assessment (GapAnalysis, FinalReport, ReadinessExport)
 
 - Status polling active for QUEUED/GENERATING.
 - Download via pre-signed URL (refetch if stale).
-- FinalReport restricted by PBAC scope.
+- FinalReport restricted by RBAC scope.
 - Blocked/failed states with business-language message.

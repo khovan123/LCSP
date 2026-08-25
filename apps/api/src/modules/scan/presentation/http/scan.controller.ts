@@ -14,8 +14,8 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import {
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
@@ -42,9 +42,9 @@ import {
   type TargetedReanalysisTerminalState,
 } from "@lcsp/contracts/scan";
 
-import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
-import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import type { ScanCallbackRequest } from "../../application/contracts/scan/scan-callback.contract.js";
 import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
@@ -61,7 +61,7 @@ import { ORCHESTRATION_RUNTIME_LOG_EVENTS } from "../../../../platform/logging/o
 import { formatOrchestrationRuntimeLog } from "../../../../platform/logging/orchestration-runtime-log.js";
 
 interface ScanStatusRequest {
-  pbacContext: PbacRequestContext;
+  rbacContext: RbacRequestContext;
   correlationId: string;
 }
 
@@ -102,7 +102,7 @@ interface WorkerRuntimeEventRequest {
 }
 
 /**
- * Exposes PBAC-protected scan status, manual rerun, and targeted-reanalysis endpoints for assessments.
+ * Exposes RBAC-protected scan status, manual rerun, and targeted-reanalysis endpoints for assessments.
  */
 @Controller("assessments/:assessmentId/scan-jobs")
 export class ScanController {
@@ -118,22 +118,22 @@ export class ScanController {
   ) {}
 
   /**
-   * Retrieves one scan-job status view under the caller's organization and PBAC scope.
+   * Retrieves one scan-job status view under the caller's organization and RBAC scope.
    *
    * @param assessmentId - Assessment identifier from the route.
    * @param scanJobId - Scan-job identifier from the route.
-   * @param request - Authenticated request containing PBAC and correlation context.
+   * @param request - Authenticated request containing RBAC and correlation context.
    * @returns The standard result envelope containing normalized scan-job status and guidance.
    */
   @Get(":scanJobId")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.scanRead)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.scanRead)
   async getScanJob(
     @Param("assessmentId") assessmentId: string,
     @Param("scanJobId") scanJobId: string,
     @Req() request: ScanStatusRequest,
   ) {
-    const context = request.pbacContext;
+    const context = request.rbacContext;
     return resultEnvelope(
       await this.queryBus.execute(
         new GetScanJobQuery(
@@ -153,13 +153,13 @@ export class ScanController {
    *
    * @param assessmentId - Assessment identifier from the route.
    * @param payload - Snapshot, idempotency key, and optional business reason for the rerun.
-   * @param request - Authenticated request containing PBAC and correlation context.
+   * @param request - Authenticated request containing RBAC and correlation context.
    * @returns The standard result envelope containing the queued or deduplicated rerun job.
    */
   @Post("rerun")
   @HttpCode(201)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.scanTrigger)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.scanTrigger)
   async rerunScan(
     @Param("assessmentId") assessmentId: string,
     @Body() payload: RerunScanRequestDto,
@@ -171,7 +171,7 @@ export class ScanController {
           assessmentId,
           payload.snapshot_id,
           payload.idempotency_key,
-          request.pbacContext,
+          request.rbacContext,
           request.correlationId,
           payload.reason,
         ),
@@ -185,14 +185,14 @@ export class ScanController {
    * @param assessmentId - Assessment identifier associated with the evidence artifact.
    * @param evidenceReportId - Input technical evidence report that must match the request body artifact version.
    * @param body - Unknown HTTP body validated into the bounded targeted-reanalysis contract.
-   * @param request - Authenticated request containing PBAC and correlation context.
+   * @param request - Authenticated request containing RBAC and correlation context.
    * @returns The standard result envelope containing agentic-tool queue metadata.
    * @throws When the request body violates the strict targeted-reanalysis contract.
    */
   @Post(":assessmentId/evidence-reports/:evidenceReportId/targeted-reanalysis")
   @HttpCode(200)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.technicalEvidenceReanalyze)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.technicalEvidenceReanalyze)
   async requestTargetedReanalysis(
     @Param("assessmentId") assessmentId: string,
     @Param("evidenceReportId") evidenceReportId: string,
@@ -212,7 +212,7 @@ export class ScanController {
             assessmentId,
             ...input,
           },
-          request.pbacContext,
+          request.rbacContext,
           correlationId,
         ),
       ),
@@ -303,7 +303,7 @@ export class InternalScanController {
   }
 
   /**
-   * Creates targeted reanalysis from the trusted worker/runtime path using a synthetic manager PBAC context.
+   * Creates targeted reanalysis from the trusted worker/runtime path using a synthetic manager RBAC context.
    *
    * @param body - Internal assessment/organization identity and bounded targeted-reanalysis input.
    * @param correlationId - Optional upstream correlation identifier; a UUID is generated when absent.
@@ -360,8 +360,8 @@ export class InternalScanController {
             organizationId: body.organizationId,
             subjectRole: SUBJECT_ROLES.manager,
             scope: body.assessmentId,
-            grantedActions: [PBAC_ACTIONS.technicalEvidenceReanalyze],
-            selectedAction: PBAC_ACTIONS.technicalEvidenceReanalyze,
+            grantedActions: [RBAC_ACTIONS.technicalEvidenceReanalyze],
+            selectedAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
             policyId: "worker-runtime",
             policyVersion: "worker-runtime",
           },

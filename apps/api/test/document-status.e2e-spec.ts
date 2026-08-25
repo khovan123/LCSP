@@ -11,11 +11,11 @@ import {
   type DocumentType,
 } from "@lcsp/contracts/document";
 import {
-  PBAC_ACTIONS,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_STATUSES,
@@ -196,13 +196,13 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
           version: "2026-06-26",
         },
       },
-      data: { actions: [PBAC_ACTIONS.workspaceRead] },
+      data: { actions: [RBAC_ACTIONS.workspaceRead] },
     });
 
     const response = await getDocumentStatus(app, managerToken, "doc-denied-1");
 
     assert.equal(response.status, 403);
-    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
   });
 
   it("T06 hides a document outside the session organization", async () => {
@@ -230,7 +230,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
       documentType: DOCUMENT_TYPES.finalReport,
       documentUrl: "https://example.test/files/final-report.pdf",
     });
-    await seedSystemAdmin(prisma, PBAC_ACTIONS.documentReadRedacted);
+    await seedSystemAdmin(prisma, RBAC_ACTIONS.documentReadRedacted);
 
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "system-admin@acme.test",
@@ -246,7 +246,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     );
 
     assert.equal(response.status, 403);
-    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
   });
 
   it("allows a scoped SystemAdmin with redacted read to view GapAnalysis and download it", async () => {
@@ -256,7 +256,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
       documentType: DOCUMENT_TYPES.gapAnalysis,
       documentUrl: "https://example.test/files/redacted-gap.pdf",
     });
-    await seedSystemAdmin(prisma, PBAC_ACTIONS.documentReadRedacted);
+    await seedSystemAdmin(prisma, RBAC_ACTIONS.documentReadRedacted);
 
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "system-admin@acme.test",
@@ -299,9 +299,9 @@ async function enableManagerDocumentRead(prisma: PrismaClient) {
     },
     data: {
       actions: [
-        PBAC_ACTIONS.workspaceRead,
-        PBAC_ACTIONS.documentGenerate,
-        PBAC_ACTIONS.documentRead,
+        RBAC_ACTIONS.workspaceRead,
+        RBAC_ACTIONS.documentGenerate,
+        RBAC_ACTIONS.documentRead,
       ],
     },
   });
@@ -324,7 +324,7 @@ async function seedSystemAdmin(prisma: PrismaClient, action: string) {
       version: "2026-07-28",
       actions: [action],
       subjectRole: SUBJECT_ROLES.systemAdmin,
-      stateGate: PBAC_STATE_GATES.membershipActive,
+      stateGate: RBAC_STATE_GATES.membershipActive,
       organizationId: "org-1",
     },
   });

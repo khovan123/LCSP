@@ -1,6 +1,6 @@
 import { HttpException } from "@nestjs/common";
 import { jest } from "@jest/globals";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import type { QueryBus } from "@nestjs/cqrs";
@@ -10,14 +10,14 @@ import { LegalCorpusReadinessController } from "./legal-corpus-readiness.control
 function request(): AuthenticatedRequest {
   return {
     correlationId: "correlation-1",
-    pbacContext: {
+    rbacContext: {
       userId: "user-1",
       sessionId: "session-1",
       organizationId: "organization-1",
       subjectRole: "Manager",
       scope: null,
-      grantedActions: [PBAC_ACTIONS.legalCorpusRead],
-      selectedAction: PBAC_ACTIONS.legalCorpusRead,
+      grantedActions: [RBAC_ACTIONS.legalCorpusRead],
+      selectedAction: RBAC_ACTIONS.legalCorpusRead,
       policyId: "policy-1",
       policyVersion: "1",
     },

@@ -1,5 +1,5 @@
 import { Command } from "@nestjs/cqrs";
-import type { SubjectRole } from "@lcsp/contracts/pbac";
+import type { SubjectRole } from "@lcsp/contracts/rbac";
 
 import type { CreateAssessmentDto } from "../../contracts/assessment/create-assessment.contract.js";
 
@@ -11,7 +11,7 @@ export type ManagerOnlyAuthorizationContext = {
 };
 
 /**
- * Carries assessment-creation input together with the PBAC decision context required for the manager-only operation.
+ * Carries assessment-creation input together with the RBAC decision context required for the manager-only operation.
  */
 export class CreateAssessmentCommand extends Command<CreateAssessmentDto> {
   /**
@@ -22,7 +22,7 @@ export class CreateAssessmentCommand extends Command<CreateAssessmentDto> {
    * @param name - Requested assessment name.
    * @param description - Optional assessment description.
    * @param correlationId - Correlation identifier propagated to audit, outbox, and response metadata.
-   * @param authorization - PBAC role, selected action, and policy version used to authorize the manager-only mutation.
+   * @param authorization - RBAC role, selected action, and policy version used to authorize the manager-only mutation.
    */
   constructor(
     public readonly organizationId: string,

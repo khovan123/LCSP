@@ -1,12 +1,12 @@
-"""PBAC preflight client used by worker-side authorization boundaries."""
+"""RBAC preflight client used by worker-side authorization boundaries."""
 
 from typing import Literal
 
 import httpx
 
 
-class PbacClient:
-    """Call the NestJS PBAC preflight endpoint for worker actions."""
+class RbacClient:
+    """Call the NestJS RBAC preflight endpoint for worker actions."""
 
     def __init__(
         self,
@@ -16,7 +16,7 @@ class PbacClient:
         timeout_seconds: float = 5.0,
         client: httpx.Client | None = None,
     ) -> None:
-        """Create a PBAC client.
+        """Create a RBAC client.
 
         Args:
             base_url: Base URL of the LCSP NestJS API.
@@ -34,7 +34,7 @@ class PbacClient:
         action: str,
         correlationId: str,
     ) -> Literal["allow", "deny"]:
-        """Evaluate whether a worker action is allowed by PBAC.
+        """Evaluate whether a worker action is allowed by RBAC.
 
         The client fails closed for any successful response that does not
         explicitly contain the ``ALLOW`` decision. Transport failures remain
@@ -43,7 +43,7 @@ class PbacClient:
         Args:
             user_id: User or technical principal requesting the action.
             organization_id: Tenant boundary for the authorization decision.
-            action: PBAC action identifier to evaluate.
+            action: RBAC action identifier to evaluate.
             correlationId: Correlation identifier propagated to the API.
 
         Returns:
@@ -51,7 +51,7 @@ class PbacClient:
             ``"deny"``.
 
         Raises:
-            ConnectionError: If the PBAC service cannot be reached.
+            ConnectionError: If the RBAC service cannot be reached.
             httpx.HTTPStatusError: If the service returns a non-success status.
         """
         try:
@@ -67,12 +67,12 @@ class PbacClient:
             }
             if self._client is None:
                 resp = httpx.post(
-                    f"{self._base_url}/internal/pbac/preflight",
+                    f"{self._base_url}/internal/rbac/preflight",
                     **request,
                 )
             else:
                 resp = self._client.post(
-                    f"{self._base_url}/internal/pbac/preflight",
+                    f"{self._base_url}/internal/rbac/preflight",
                     **request,
                 )
             resp.raise_for_status()
@@ -81,4 +81,4 @@ class PbacClient:
             decision = result.get("decision") if isinstance(result, dict) else None
             return "allow" if decision == "ALLOW" else "deny"
         except httpx.RequestError as e:
-            raise ConnectionError("PBAC preflight unreachable") from e
+            raise ConnectionError("RBAC preflight unreachable") from e

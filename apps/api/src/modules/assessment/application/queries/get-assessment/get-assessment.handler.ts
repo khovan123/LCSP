@@ -6,7 +6,7 @@ import {
   WIZARD_STATUS_CODES,
   type AssessmentNextActionKey,
 } from "@lcsp/contracts/assessment";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import {
   CLASSIFICATION_RESULT_STATUSES,
   ENGINEERING_RULE_EVALUATION_STATUSES,

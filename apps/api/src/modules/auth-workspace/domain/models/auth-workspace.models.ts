@@ -1,6 +1,6 @@
 import type { AuditResourceType } from "@lcsp/contracts/audit";
 import type { AuthErrorCode } from "@lcsp/contracts/auth";
-import type { PbacDecisionValue, PbacReasonCode } from "@lcsp/contracts/pbac";
+import type { RbacDecisionValue, RbacReasonCode } from "@lcsp/contracts/rbac";
 
 export { Membership } from "../entities/membership.entity.ts";
 export type { MembershipStatus } from "../entities/membership.entity.ts";
@@ -9,11 +9,9 @@ export { MfaRateLimit } from "../entities/mfa-rate-limit.entity.ts";
 export { OAuthIdentity } from "../entities/oauth-identity.entity.ts";
 export { OAuthState } from "../entities/oauth-state.entity.ts";
 export { Organization } from "../entities/organization.entity.ts";
-export { Policy } from "../entities/policy.entity.ts";
 export { RecoveryRequest } from "../entities/recovery-request.entity.ts";
 export { Session } from "../entities/session.entity.ts";
 export { User } from "../entities/user.entity.ts";
-export type { SubjectAttributesRecord as SubjectAttributes } from "../value-objects/subject-attributes.value-object.ts";
 
 export type AuthorizationDecision = {
   actor_id?: string | null;
@@ -22,10 +20,8 @@ export type AuthorizationDecision = {
   resource_type: AuditResourceType;
   resource_id: string;
   action: string;
-  decision: PbacDecisionValue;
-  reason_code: AuthErrorCode | PbacReasonCode;
-  policy_id: string | null;
-  policy_version: string | null;
+  decision: RbacDecisionValue;
+  reason_code: AuthErrorCode | RbacReasonCode;
   correlationId: string;
 };
 

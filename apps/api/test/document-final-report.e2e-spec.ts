@@ -9,7 +9,7 @@ import {
   DOCUMENT_TYPES,
 } from "@lcsp/contracts/document";
 import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
-import { PBAC_ACTIONS, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_STATUSES,
@@ -236,7 +236,7 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
     );
   });
 
-  it("returns 403 PBAC_DENIED when manager policy does not include document:generate", async () => {
+  it("returns 403 RBAC_DENIED when manager policy does not include document:generate", async () => {
     await seedClassification(prisma, CLASSIFICATION_GUARDRAIL_STATUSES.passed);
 
     await prisma.authPolicy.update({
@@ -247,7 +247,7 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
         },
       },
       data: {
-        actions: [PBAC_ACTIONS.workspaceRead],
+        actions: [RBAC_ACTIONS.workspaceRead],
       },
     });
 
@@ -258,7 +258,7 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
     );
 
     assert.equal(response.status, 403);
-    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
   });
 });
 

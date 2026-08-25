@@ -3,7 +3,7 @@ import {
   AUTH_AUDIT_EVENT_TYPES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
 } from "@lcsp/contracts/auth";
-import { PBAC_DECISION, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { RBAC_DECISION, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import type { Prisma } from "@prisma/client";
 
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -36,7 +36,7 @@ describe("AuthAuditService", () => {
       actorId: "user-1",
       organizationId: "org-1",
       correlationId: "corr-1",
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
       payload: { email_domain: "example.test" },
     });
 
@@ -51,7 +51,7 @@ describe("AuthAuditService", () => {
       sessionId: null,
       policyId: null,
       policyVersion: null,
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
       payload: { email_domain: "example.test" },
     });
   });
@@ -68,7 +68,7 @@ describe("AuthAuditService", () => {
       actorId: "user-1",
       organizationId: "org-1",
       correlationId: "corr-1",
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
       payload: {
         password: "p",
         sessionToken: "t",
@@ -106,7 +106,7 @@ describe("AuthAuditService", () => {
         actorId: null,
         organizationId: "org-1",
         correlationId: "corr-1",
-        decision: PBAC_DECISION.deny,
+        decision: RBAC_DECISION.deny,
       }),
     ).rejects.toThrow("db unavailable");
 
@@ -125,7 +125,7 @@ describe("AuthAuditService", () => {
         actorId: "manager-1",
         organizationId: "org-1",
         correlationId: "corr-1",
-        decision: PBAC_DECISION.allow,
+        decision: RBAC_DECISION.allow,
       },
       tx,
     );
@@ -144,7 +144,7 @@ describe("AuthAuditService", () => {
         actorId: null,
         organizationId: null,
         correlationId: "corr-1",
-        decision: PBAC_DECISION.allow,
+        decision: RBAC_DECISION.allow,
       });
     }
 
@@ -159,7 +159,7 @@ describe("AuthAuditService", () => {
       actorId: null,
       organizationId: "org-1",
       correlationId: "corr-1",
-      decision: PBAC_DECISION.deny,
+      decision: RBAC_DECISION.deny,
     });
 
     expect(write).toHaveBeenCalledWith(
@@ -178,9 +178,9 @@ describe("AuthAuditService", () => {
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
       actor_id: "user-1",
       organization_id: "org-1",
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
       correlationId: "corr-1",
-      reason_code: PBAC_REASON_CODE.authorized,
+      reason_code: RBAC_REASON_CODE.authorized,
       session_id: "session-1",
       policy_id: "policy-1",
       policy_version: "v1",
@@ -194,19 +194,19 @@ describe("AuthAuditService", () => {
       organizationId: "org-1",
       resourceType: null,
       resourceId: null,
-      reasonCode: PBAC_REASON_CODE.authorized,
+      reasonCode: RBAC_REASON_CODE.authorized,
       correlationId: "corr-1",
       sessionId: "session-1",
       policyId: "policy-1",
       policyVersion: "v1",
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
       payload: {
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
         actor_id: "user-1",
         organization_id: "org-1",
-        decision: PBAC_DECISION.allow,
+        decision: RBAC_DECISION.allow,
         correlationId: "corr-1",
-        reason_code: PBAC_REASON_CODE.authorized,
+        reason_code: RBAC_REASON_CODE.authorized,
         session_id: "session-1",
         policy_id: "policy-1",
         policy_version: "v1",

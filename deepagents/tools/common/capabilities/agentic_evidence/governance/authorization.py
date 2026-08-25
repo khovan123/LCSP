@@ -1,4 +1,4 @@
-"""Map model-callable tools to PBAC actions and authorize every invocation."""
+"""Map model-callable tools to RBAC actions and authorize every invocation."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from uuid import UUID
 
 import httpx
 
-from tools.common.capabilities.platform.pbac_client import PbacClient
+from tools.common.capabilities.platform.rbac_client import RbacClient
 from ..governance.registry import AgenticToolValidationError
 
 
-# Mirrors the canonical PBAC actions currently enforced by the NestJS controllers.
+# Mirrors the canonical RBAC actions currently enforced by the NestJS controllers.
 # Technical evidence routes accept either full or redacted evidence read authority.
-TOOL_PBAC_ACTIONS: dict[str, tuple[str, ...]] = {
+TOOL_RBAC_ACTIONS: dict[str, tuple[str, ...]] = {
     "propose_gap_remediation": ("gap-remediation:propose",),
     "get_gap_evidence_trace": ("gap-evidence-trace:read",),
     "get_reconciliation_context": ("conflict:read",),
@@ -37,7 +37,7 @@ TOOL_PBAC_ACTIONS: dict[str, tuple[str, ...]] = {
 
 @dataclass(frozen=True)
 class AgenticAuthorizationResult:
-    """PBAC action that authorized a model-requested tool call."""
+    """RBAC action that authorized a model-requested tool call."""
 
     action: str
 
@@ -57,20 +57,20 @@ class AgenticToolAuthorizer(Protocol):
         ...
 
 
-class ApiPbacToolAuthorizer:
-    """Map a native tool call to PBAC actions and fail closed on denial."""
+class ApiRbacToolAuthorizer:
+    """Map a native tool call to RBAC actions and fail closed on denial."""
 
     def __init__(
         self,
         *,
-        pbac_client: PbacClient,
+        rbac_client: RbacClient,
     ) -> None:
         """Create the API-backed authorizer.
 
         Args:
-            pbac_client: Shared worker-side PBAC preflight transport.
+            rbac_client: Shared worker-side RBAC preflight transport.
         """
-        self._pbac_client = pbac_client
+        self._rbac_client = rbac_client
 
     def authorize(
         self,
@@ -80,7 +80,7 @@ class ApiPbacToolAuthorizer:
         organization_id: str,
         correlationId: UUID,
     ) -> AgenticAuthorizationResult:
-        """Authorize a cataloged model-callable tool through PBAC.
+        """Authorize a cataloged model-callable tool through RBAC.
 
         Multiple actions may be acceptable for a tool, such as full or redacted
         evidence-read authority. The first explicit ALLOW wins; every other
@@ -94,21 +94,21 @@ class ApiPbacToolAuthorizer:
             correlationId: End-to-end trace identifier.
 
         Returns:
-            The PBAC action that produced an ALLOW decision.
+            The RBAC action that produced an ALLOW decision.
 
         Raises:
             AgenticToolValidationError: If the tool is unmapped, context is
                 incomplete, preflight fails, or all allowed actions are denied.
         """
-        actions = TOOL_PBAC_ACTIONS.get(tool_name)
+        actions = TOOL_RBAC_ACTIONS.get(tool_name)
         if not actions:
-            raise AgenticToolValidationError("AGENTIC_TOOL_PBAC_ACTION_UNREGISTERED")
+            raise AgenticToolValidationError("AGENTIC_TOOL_RBAC_ACTION_UNREGISTERED")
         if not user_id.strip() or not organization_id.strip():
-            raise AgenticToolValidationError("AGENTIC_TOOL_PBAC_CONTEXT_REQUIRED")
+            raise AgenticToolValidationError("AGENTIC_TOOL_RBAC_CONTEXT_REQUIRED")
 
         for action in actions:
             try:
-                decision = self._pbac_client.check(
+                decision = self._rbac_client.check(
                     user_id=user_id,
                     organization_id=organization_id,
                     action=action,
@@ -116,10 +116,10 @@ class ApiPbacToolAuthorizer:
                 )
             except (ConnectionError, httpx.HTTPError) as exc:
                 raise AgenticToolValidationError(
-                    "AGENTIC_TOOL_PBAC_PREFLIGHT_FAILED"
+                    "AGENTIC_TOOL_RBAC_PREFLIGHT_FAILED"
                 ) from exc
             if decision == "allow":
                 return AgenticAuthorizationResult(action=action)
 
         # Keep denial typed and safe; do not leak membership or policy internals to the LLM.
-        raise AgenticToolValidationError("AGENTIC_TOOL_PBAC_BLOCKED")
+        raise AgenticToolValidationError("AGENTIC_TOOL_RBAC_BLOCKED")

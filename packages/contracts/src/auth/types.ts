@@ -6,6 +6,7 @@ import type {
   WORKSPACE_CAPABILITY_SOURCES,
 } from "./states.ts";
 import type { AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES } from "./primary-email-address-policy.ts";
+import type { AUTH_USER_ROLES } from "./roles.ts";
 
 export type RequiredAction =
   (typeof REQUIRED_ACTIONS)[keyof typeof REQUIRED_ACTIONS];
@@ -27,3 +28,6 @@ export type AuthBackupEmailPolicy =
 
 export type AuthPrimaryEmailAddressPolicy =
   (typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES)[keyof typeof AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES];
+
+export type AuthUserRole =
+  (typeof AUTH_USER_ROLES)[keyof typeof AUTH_USER_ROLES];

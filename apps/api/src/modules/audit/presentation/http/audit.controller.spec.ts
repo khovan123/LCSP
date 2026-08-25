@@ -1,10 +1,10 @@
 import { AUDIT_ERROR_CODES } from "@lcsp/contracts/audit";
-import { PBAC_ACTIONS, PBAC_METADATA_TYPES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, RBAC_METADATA_TYPES } from "@lcsp/contracts/rbac";
 import { jest } from "@jest/globals";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
 import type { Response } from "express";
 
-import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-metadata.js";
+import { RBAC_METADATA_KEY } from "../../../../platform/rbac/decorators/rbac-metadata.js";
 import { ExportAuditTrailCommand } from "../../application/commands/export-audit-trail/export-audit-trail.command.js";
 import { GetAuditExportArtifactQuery } from "../../application/queries/get-audit-export-artifact/get-audit-export-artifact.query.js";
 import { GetAuditExportQuery } from "../../application/queries/get-audit-export/get-audit-export.query.js";
@@ -13,17 +13,17 @@ import { AuditExportStorageService } from "../../infrastructure/storage/audit-ex
 import { AuditController } from "./audit.controller.js";
 
 describe("AuditController", () => {
-  it("requires the audit:read PBAC action", () => {
+  it("requires the audit:read RBAC action", () => {
     const metadata = Reflect.getMetadata(
-      PBAC_METADATA_KEY,
+      RBAC_METADATA_KEY,
       // Reading decorator metadata requires the unbound prototype method.
       // eslint-disable-next-line @typescript-eslint/unbound-method
       AuditController.prototype.listAuditEvents,
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: PBAC_METADATA_TYPES.action,
-      action: PBAC_ACTIONS.auditRead,
+      type: RBAC_METADATA_TYPES.action,
+      action: RBAC_ACTIONS.auditRead,
     });
   });
 
@@ -46,7 +46,7 @@ describe("AuditController", () => {
       "2",
       "10",
       {
-        pbacContext: { organizationId: "org-1" },
+        rbacContext: { organizationId: "org-1" },
         correlationId: "corr-1",
       } as never,
     );
@@ -64,16 +64,16 @@ describe("AuditController", () => {
     });
   });
 
-  it("requires the audit:export PBAC action for export request", () => {
+  it("requires the audit:export RBAC action for export request", () => {
     const metadata = Reflect.getMetadata(
-      PBAC_METADATA_KEY,
+      RBAC_METADATA_KEY,
       // eslint-disable-next-line @typescript-eslint/unbound-method
       AuditController.prototype.exportAuditTrail,
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: PBAC_METADATA_TYPES.action,
-      action: PBAC_ACTIONS.auditExport,
+      type: RBAC_METADATA_TYPES.action,
+      action: RBAC_ACTIONS.auditExport,
     });
   });
 
@@ -94,7 +94,7 @@ describe("AuditController", () => {
         to_date: "2026-07-31T23:59:59.999Z",
       },
       {
-        pbacContext: { organizationId: "org-1", userId: "user-1" },
+        rbacContext: { organizationId: "org-1", userId: "user-1" },
         correlationId: "corr-1",
       } as never,
     );
@@ -119,7 +119,7 @@ describe("AuditController", () => {
     );
 
     await controller.getAuditExport("org-1", "export-1", {
-      pbacContext: { organizationId: "org-1" },
+      rbacContext: { organizationId: "org-1" },
       correlationId: "corr-1",
     } as never);
 

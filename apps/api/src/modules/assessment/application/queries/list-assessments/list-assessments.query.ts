@@ -1,7 +1,7 @@
 import { Query } from "@nestjs/cqrs";
 
 import type { AssessmentListDto } from "../../contracts/assessment/assessment-list.contract.js";
-import type { SubjectRole } from "../../../../../platform/pbac/pbac.types.js";
+import type { SubjectRole } from "../../../../../platform/rbac/rbac.types.js";
 
 /**
  * Requests a paginated assessment list constrained by organization, caller role/scope, and optional status.
@@ -12,7 +12,7 @@ export class ListAssessmentsQuery extends Query<AssessmentListDto> {
    *
    * @param organizationId - Organization boundary for all returned assessments.
    * @param sessionUserId - Authenticated user used for manager ownership filtering.
-   * @param subjectRole - PBAC subject role used to choose owner or scoped-assessment visibility.
+   * @param subjectRole - RBAC subject role used to choose owner or scoped-assessment visibility.
    * @param scope - Membership scope for non-manager callers, or null when no resource scope is granted.
    * @param page - Optional requested 1-based page number.
    * @param pageSize - Optional requested page size.

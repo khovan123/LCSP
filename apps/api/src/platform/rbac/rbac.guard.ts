@@ -2,13 +2,13 @@ import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import type { AuthErrorCode } from "@lcsp/contracts/auth";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
-  PBAC_ACTIONS,
-  PBAC_DECISION,
-  PBAC_METADATA_TYPES,
-  PBAC_REASON_CODE,
-  type PbacDecisionValue,
-  type PbacReasonCode,
-} from "@lcsp/contracts/pbac";
+  RBAC_ACTIONS,
+  RBAC_DECISION,
+  RBAC_METADATA_TYPES,
+  RBAC_REASON_CODE,
+  type RbacDecisionValue,
+  type RbacReasonCode,
+} from "@lcsp/contracts/rbac";
 import {
   HttpStatus,
   Inject,
@@ -25,19 +25,19 @@ import { PrismaAuthorizationDecisionRepository } from "../../modules/auth-worksp
 import { createCorrelationId } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
 import { ALLOW_PENDING_MFA_METADATA_KEY } from "./decorators/allow-pending-mfa.decorator.js";
 import {
-  PBAC_METADATA_KEY,
-  type PbacMetadata,
-} from "./decorators/pbac-metadata.js";
+  RBAC_METADATA_KEY,
+  type RbacMetadata,
+} from "./decorators/rbac-metadata.js";
 import {
-  PbacContextLoader,
-  type PbacContextDenialReason,
-} from "./pbac-context.loader.js";
-import { PbacEvaluatorService } from "./pbac-evaluator.service.js";
+  RbacContextLoader,
+  type RbacContextDenialReason,
+} from "./rbac-context.loader.js";
+import { RbacEvaluatorService } from "./rbac-evaluator.service.js";
 import type {
-  PbacDecisionResult,
-  PbacEvaluationContext,
+  RbacDecisionResult,
+  RbacEvaluationContext,
   SubjectRole,
-} from "./pbac.types.js";
+} from "./rbac.types.js";
 
 import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
 import { problemException } from "../problems/problem-factory.js";
@@ -47,38 +47,38 @@ import { isSensitiveActionVerificationFresh } from "../security/sensitive-route-
 const DECISION_LOG_RESOURCE_TYPE = AUDIT_RESOURCE_TYPES.httpRoute;
 
 /**
- * Enforces route PBAC metadata by validating session context, membership, policy actions, and optional sensitive-route re-authentication.
+ * Enforces route RBAC metadata by validating session context, membership, policy actions, and optional sensitive-route re-authentication.
  */
 @Injectable()
-export class PbacGuard implements CanActivate {
-  private readonly logger = new Logger(PbacGuard.name);
+export class RbacGuard implements CanActivate {
+  private readonly logger = new Logger(RbacGuard.name);
 
   /**
    * Creates the guard with metadata lookup, context loading, policy evaluation, and decision logging dependencies.
    *
    * @param reflector - Nest reflector used to read route and controller authorization metadata.
-   * @param loader - PBAC context loader that validates session, MFA, membership, and policy state.
-   * @param evaluator - Deterministic evaluator used to decide requested PBAC actions.
+   * @param loader - RBAC context loader that validates session, MFA, membership, and policy state.
+   * @param evaluator - Deterministic evaluator used to decide requested RBAC actions.
    * @param decisions - Repository used to persist authorization decision logs.
    */
   constructor(
     private readonly reflector: Reflector,
-    private readonly loader: PbacContextLoader,
-    private readonly evaluator: PbacEvaluatorService,
+    private readonly loader: RbacContextLoader,
+    private readonly evaluator: RbacEvaluatorService,
     @Inject(PrismaAuthorizationDecisionRepository)
     private readonly decisions: AuthorizationDecisionRepository,
   ) {}
 
   /**
-   * Authorizes an incoming HTTP request from route metadata and attaches the resolved PBAC context when allowed.
+   * Authorizes an incoming HTTP request from route metadata and attaches the resolved RBAC context when allowed.
    *
    * @param context - Nest execution context containing handler metadata and the incoming HTTP request.
    * @returns True when all required session, membership, policy, and sensitive-route checks succeed.
-   * @throws A standardized authentication or PBAC problem when any required check fails.
+   * @throws A standardized authentication or RBAC problem when any required check fails.
    */
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const metadata = this.reflector.getAllAndOverride<PbacMetadata | undefined>(
-      PBAC_METADATA_KEY,
+    const metadata = this.reflector.getAllAndOverride<RbacMetadata | undefined>(
+      RBAC_METADATA_KEY,
       [context.getHandler(), context.getClass()],
     );
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
@@ -102,24 +102,24 @@ export class PbacGuard implements CanActivate {
         actorId: null,
         sessionId: null,
         organizationId: null,
-        resourceId: requestResourceId(request, PBAC_ACTIONS.metadataCheck),
-        action: PBAC_ACTIONS.metadataCheck,
-        decision: PBAC_DECISION.deny,
-        reasonCode: PBAC_REASON_CODE.metadataMissing,
+        resourceId: requestResourceId(request, RBAC_ACTIONS.metadataCheck),
+        action: RBAC_ACTIONS.metadataCheck,
+        decision: RBAC_DECISION.deny,
+        reasonCode: RBAC_REASON_CODE.metadataMissing,
         policyId: null,
         policyVersion: null,
         correlationId,
       });
-      throw this.pbacDenied(correlationId);
+      throw this.rbacDenied(correlationId);
     }
 
     const candidateActions =
-      metadata.type === PBAC_METADATA_TYPES.action
+      metadata.type === RBAC_METADATA_TYPES.action
         ? [metadata.action]
-        : metadata.type === PBAC_METADATA_TYPES.actionAny
+        : metadata.type === RBAC_METADATA_TYPES.actionAny
           ? metadata.actions
           : [];
-    const action = candidateActions[0] ?? PBAC_ACTIONS.sessionVerify;
+    const action = candidateActions[0] ?? RBAC_ACTIONS.sessionVerify;
     const resourceId = requestResourceId(request, action);
 
     const token = this.extractToken(request);
@@ -130,8 +130,8 @@ export class PbacGuard implements CanActivate {
         organizationId: null,
         resourceId,
         action,
-        decision: PBAC_DECISION.deny,
-        reasonCode: PBAC_REASON_CODE.sessionInvalid,
+        decision: RBAC_DECISION.deny,
+        reasonCode: RBAC_REASON_CODE.sessionInvalid,
         policyId: null,
         policyVersion: null,
         correlationId,
@@ -152,7 +152,7 @@ export class PbacGuard implements CanActivate {
         organizationId: null,
         resourceId,
         action,
-        decision: PBAC_DECISION.deny,
+        decision: RBAC_DECISION.deny,
         reasonCode: loaderResult.reason,
         policyId: null,
         policyVersion: null,
@@ -161,7 +161,7 @@ export class PbacGuard implements CanActivate {
       throw this.exceptionFor(
         loaderResult,
         correlationId,
-        metadata.membershipMissingAsPbacDenied === true,
+        metadata.membershipMissingAsRbacDenied === true,
       );
     }
 
@@ -174,17 +174,17 @@ export class PbacGuard implements CanActivate {
         organizationId: session.organizationId,
         resourceId,
         action,
-        decision: PBAC_DECISION.deny,
-        reasonCode: PBAC_REASON_CODE.subjectAttributeMissing,
+        decision: RBAC_DECISION.deny,
+        reasonCode: RBAC_REASON_CODE.subjectAttributeMissing,
         policyId: policy.id,
         policyVersion: policy.version,
         correlationId,
       });
-      throw this.pbacDenied(correlationId);
+      throw this.rbacDenied(correlationId);
     }
 
-    if (metadata.type === PBAC_METADATA_TYPES.session) {
-      // @RequireSession() — session + active membership only, no PBAC action gate.
+    if (metadata.type === RBAC_METADATA_TYPES.session) {
+      // @RequireSession() — session + active membership only, no RBAC action gate.
       await this.enforceSensitiveReauth({
         required: requiresSensitiveReauth,
         session,
@@ -194,7 +194,7 @@ export class PbacGuard implements CanActivate {
         policyVersion: policy.version,
         correlationId,
       });
-      request.pbacContext = {
+      request.rbacContext = {
         userId: session.userId,
         sessionId: session.id,
         organizationId: session.organizationId,
@@ -211,8 +211,8 @@ export class PbacGuard implements CanActivate {
         organizationId: session.organizationId,
         resourceId,
         action,
-        decision: PBAC_DECISION.allow,
-        reasonCode: PBAC_REASON_CODE.authorized,
+        decision: RBAC_DECISION.allow,
+        reasonCode: RBAC_REASON_CODE.authorized,
         policyId: policy.id,
         policyVersion: policy.version,
         correlationId,
@@ -222,12 +222,12 @@ export class PbacGuard implements CanActivate {
 
     const deniedDecisions: Array<{
       action: string;
-      decision: PbacDecisionResult;
+      decision: RbacDecisionResult;
     }> = [];
-    let allowed: { action: string; decision: PbacDecisionResult } | undefined;
+    let allowed: { action: string; decision: RbacDecisionResult } | undefined;
 
     for (const candidateAction of candidateActions) {
-      const evaluationContext: PbacEvaluationContext = {
+      const evaluationContext: RbacEvaluationContext = {
         organizationId: session.organizationId,
         action: candidateAction,
         subject: {
@@ -245,12 +245,12 @@ export class PbacGuard implements CanActivate {
         membershipStatus: membership.status,
       };
 
-      let decision: PbacDecisionResult;
+      let decision: RbacDecisionResult;
       try {
         decision = this.evaluator.evaluate(evaluationContext);
       } catch (error) {
         this.logger.error(
-          `PBAC evaluator threw — defaulting to deny: ${(error as Error).message}`,
+          `RBAC evaluator threw — defaulting to deny: ${(error as Error).message}`,
         );
         await this.recordDecision({
           actorId: session.userId,
@@ -258,16 +258,16 @@ export class PbacGuard implements CanActivate {
           organizationId: session.organizationId,
           resourceId,
           action: candidateAction,
-          decision: PBAC_DECISION.deny,
-          reasonCode: PBAC_REASON_CODE.evaluatorError,
+          decision: RBAC_DECISION.deny,
+          reasonCode: RBAC_REASON_CODE.evaluatorError,
           policyId: policy.id,
           policyVersion: policy.version,
           correlationId,
         });
-        throw this.pbacDenied(correlationId);
+        throw this.rbacDenied(correlationId);
       }
 
-      if (decision.decision === PBAC_DECISION.allow) {
+      if (decision.decision === RBAC_DECISION.allow) {
         allowed = { action: candidateAction, decision };
         break;
       }
@@ -282,14 +282,14 @@ export class PbacGuard implements CanActivate {
           organizationId: session.organizationId,
           resourceId,
           action: denied.action,
-          decision: PBAC_DECISION.deny,
-          reasonCode: denied.decision.reasonCode ?? PBAC_REASON_CODE.denied,
+          decision: RBAC_DECISION.deny,
+          reasonCode: denied.decision.reasonCode ?? RBAC_REASON_CODE.denied,
           policyId: denied.decision.policyId || null,
           policyVersion: denied.decision.policyVersion || null,
           correlationId,
         });
       }
-      throw this.pbacDenied(correlationId);
+      throw this.rbacDenied(correlationId);
     }
 
     await this.enforceSensitiveReauth({
@@ -302,7 +302,7 @@ export class PbacGuard implements CanActivate {
       correlationId,
     });
 
-    request.pbacContext = {
+    request.rbacContext = {
       userId: session.userId,
       sessionId: session.id,
       organizationId: session.organizationId,
@@ -320,8 +320,8 @@ export class PbacGuard implements CanActivate {
       organizationId: session.organizationId,
       resourceId,
       action: allowed.action,
-      decision: PBAC_DECISION.allow,
-      reasonCode: PBAC_REASON_CODE.authorized,
+      decision: RBAC_DECISION.allow,
+      reasonCode: RBAC_REASON_CODE.authorized,
       policyId: allowed.decision.policyId,
       policyVersion: allowed.decision.policyVersion,
       correlationId,
@@ -381,7 +381,7 @@ export class PbacGuard implements CanActivate {
       organizationId: input.session.organizationId,
       resourceId: input.resourceId,
       action: input.action,
-      decision: PBAC_DECISION.deny,
+      decision: RBAC_DECISION.deny,
       reasonCode: AUTH_ERROR_CODES.reauthRequired,
       policyId: input.policyId,
       policyVersion: input.policyVersion,
@@ -397,23 +397,23 @@ export class PbacGuard implements CanActivate {
   }
 
   /**
-   * Maps PBAC context-loading denial reasons to the external authentication/PBAC exception contract.
+   * Maps RBAC context-loading denial reasons to the external authentication/RBAC exception contract.
    *
    * @param denial - Context-loader denial reason and optional MFA enrollment metadata.
    * @param correlationId - Correlation identifier attached to the resulting problem.
-   * @param membershipMissingAsPbacDenied - Whether missing membership should be hidden behind a generic PBAC denial.
+   * @param membershipMissingAsRbacDenied - Whether missing membership should be hidden behind a generic RBAC denial.
    * @returns HTTP exception representing the appropriate external denial.
    */
   private exceptionFor(
     denial:
-      | { reason: PbacContextDenialReason; mfaEnrolled?: boolean }
-      | PbacContextDenialReason,
+      | { reason: RbacContextDenialReason; mfaEnrolled?: boolean }
+      | RbacContextDenialReason,
     correlationId: string,
-    membershipMissingAsPbacDenied = false,
+    membershipMissingAsRbacDenied = false,
   ): HttpException {
     const reason = typeof denial === "string" ? denial : denial.reason;
     switch (reason) {
-      case PBAC_REASON_CODE.sessionInvalid:
+      case RBAC_REASON_CODE.sessionInvalid:
         return problemException(
           AUTH_ERROR_CODES.sessionInvalid,
           correlationId,
@@ -421,7 +421,7 @@ export class PbacGuard implements CanActivate {
             status: HttpStatus.UNAUTHORIZED,
           },
         );
-      case PBAC_REASON_CODE.mfaRequired:
+      case RBAC_REASON_CODE.mfaRequired:
         return problemException(AUTH_ERROR_CODES.mfaRequired, correlationId, {
           meta:
             typeof denial === "string"
@@ -431,9 +431,9 @@ export class PbacGuard implements CanActivate {
                 },
           status: HttpStatus.UNAUTHORIZED,
         });
-      case PBAC_REASON_CODE.membershipMissing:
-        if (membershipMissingAsPbacDenied) {
-          return this.pbacDenied(correlationId);
+      case RBAC_REASON_CODE.membershipMissing:
+        if (membershipMissingAsRbacDenied) {
+          return this.rbacDenied(correlationId);
         }
         return problemException(
           AUTH_ERROR_CODES.membershipMissing,
@@ -442,20 +442,20 @@ export class PbacGuard implements CanActivate {
             status: HttpStatus.FORBIDDEN,
           },
         );
-      case PBAC_REASON_CODE.policyNotFound:
-      case PBAC_REASON_CODE.loadError:
-        return this.pbacDenied(correlationId);
+      case RBAC_REASON_CODE.policyNotFound:
+      case RBAC_REASON_CODE.loadError:
+        return this.rbacDenied(correlationId);
     }
   }
 
   /**
-   * Creates the generic forbidden exception used when detailed PBAC denial information must not be exposed.
+   * Creates the generic forbidden exception used when detailed RBAC denial information must not be exposed.
    *
    * @param correlationId - Correlation identifier attached to the problem response.
-   * @returns Standard PBAC-denied HTTP exception.
+   * @returns Standard RBAC-denied HTTP exception.
    */
-  private pbacDenied(correlationId: string): HttpException {
-    return problemException(AUTH_ERROR_CODES.pbacDenied, correlationId, {
+  private rbacDenied(correlationId: string): HttpException {
+    return problemException(AUTH_ERROR_CODES.rbacDenied, correlationId, {
       status: HttpStatus.FORBIDDEN,
     });
   }
@@ -472,8 +472,8 @@ export class PbacGuard implements CanActivate {
     organizationId: string | null;
     resourceId: string;
     action: string;
-    decision: PbacDecisionValue;
-    reasonCode: AuthErrorCode | PbacReasonCode;
+    decision: RbacDecisionValue;
+    reasonCode: AuthErrorCode | RbacReasonCode;
     policyId: string | null;
     policyVersion: string | null;
     correlationId: string;

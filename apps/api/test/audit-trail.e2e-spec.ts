@@ -1,5 +1,5 @@
 import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
-import { PBAC_DECISION } from "@lcsp/contracts/pbac";
+import { RBAC_DECISION } from "@lcsp/contracts/rbac";
 /**
  * AC-020: Complete audit trail for all state-changing operations.
  *
@@ -101,7 +101,7 @@ describe("Audit trail completeness (e2e) [AC-020]", () => {
     assert.doesNotMatch(JSON.stringify(audit), SENSITIVE_PATTERNS);
   });
 
-  it("AC-020: PBAC denial writes AuthDecisionLog with decision=deny", async () => {
+  it("AC-020: RBAC denial writes AuthDecisionLog with decision=deny", async () => {
     if (!managerToken) return;
     // Make a request that will be denied (attempt something not in Manager policy)
     await httpRequest(app)
@@ -110,12 +110,12 @@ describe("Audit trail completeness (e2e) [AC-020]", () => {
       .send({});
 
     const decisionLog = await prisma.authDecisionLog.findFirst({
-      where: { decision: PBAC_DECISION.deny },
+      where: { decision: RBAC_DECISION.deny },
       orderBy: { createdAt: "desc" },
     });
     // May or may not have denied — but any denial must be logged
     if (decisionLog) {
-      assert.equal(decisionLog.decision, PBAC_DECISION.deny);
+      assert.equal(decisionLog.decision, RBAC_DECISION.deny);
       assert.doesNotMatch(JSON.stringify(decisionLog), SENSITIVE_PATTERNS);
     }
   });
@@ -137,7 +137,7 @@ describe("Audit trail completeness (e2e) [AC-020]", () => {
   });
 
   it("AC-020: AuthDecisionLog never exposes policyId or policy internals in user-facing response", async () => {
-    // The PBAC response to end user must not leak policy details
+    // The RBAC response to end user must not leak policy details
     // This tests the boundary between internal logging (OK to have policyId) and API response (NOT OK)
     if (!managerToken) return;
     const result = await httpRequest(app)

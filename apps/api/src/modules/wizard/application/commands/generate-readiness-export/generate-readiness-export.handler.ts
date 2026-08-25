@@ -7,7 +7,7 @@ import {
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import {
   READINESS_CLASSIFICATION_STATUSES,
@@ -320,7 +320,7 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
   ): Promise<void> {
     const allowed =
       command.authorization.subjectRole === SUBJECT_ROLES.manager &&
-      command.authorization.selectedAction === PBAC_ACTIONS.wizardExport &&
+      command.authorization.selectedAction === RBAC_ACTIONS.wizardExport &&
       command.authorization.policyId !== null &&
       command.authorization.policyVersion !== null;
 
@@ -334,18 +334,18 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       resourceId: null,
       assessmentId: command.assessmentId,
       decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      reasonCode: AUTH_ERROR_CODES.rbacDenied,
       correlationId: command.correlationId,
       policyId: command.authorization.policyId,
       policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId: command.assessmentId,
-        action: PBAC_ACTIONS.wizardExport,
+        action: RBAC_ACTIONS.wizardExport,
         result: AUDIT_DECISIONS.deny,
       },
     });
 
-    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+    throw problemException(AUTH_ERROR_CODES.rbacDenied, command.correlationId, {
       status: HttpStatus.FORBIDDEN,
     });
   }

@@ -7,7 +7,7 @@ import {
   OUTBOX_ERROR_CODES,
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { OutboxRepository } from "./outbox.repository.js";
 import { AuditWriterService } from "../audit/audit-writer.service.js";
@@ -91,7 +91,7 @@ export class OutboxDlqService {
         payload: {
           originalEventType: message.eventType,
           aggregateId: message.aggregateId,
-          replayAuthority: PBAC_ACTIONS.outboxReplay,
+          replayAuthority: RBAC_ACTIONS.outboxReplay,
         },
       });
       throw error;
@@ -109,7 +109,7 @@ export class OutboxDlqService {
       payload: {
         originalEventType: message.eventType,
         aggregateId: message.aggregateId,
-        replayAuthority: PBAC_ACTIONS.outboxReplay,
+        replayAuthority: RBAC_ACTIONS.outboxReplay,
       },
     });
   }

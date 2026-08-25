@@ -44,7 +44,7 @@ End-to-end test covering the complete Manager workflow from registration to fina
 - Manager completes full flow without external collaborator
 - No risk labels appear at any step
 - Session token never in URL
-- All PBAC-gated actions allowed for Manager
+- All RBAC-gated actions allowed for Manager
 - Classification lock removed after evidence accepted
 - Final report download available after `guardrail = passed`
 
@@ -53,4 +53,4 @@ End-to-end test covering the complete Manager workflow from registration to fina
 - Full golden path passes in CI.
 - Manager-only flow validated end-to-end.
 - No risk labels at any UI step.
-- PBAC enforce verified at each server call.
+- RBAC enforce verified at each server call.

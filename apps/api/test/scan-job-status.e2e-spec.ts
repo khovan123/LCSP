@@ -10,11 +10,11 @@ import {
   type RepositoryScanJobStatus,
 } from "@lcsp/contracts/github-integration";
 import {
-  PBAC_ACTIONS,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import { SCAN_ERROR_CODES, SCAN_JOB_GUIDANCE } from "@lcsp/contracts/scan";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
@@ -168,13 +168,13 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
           version: "2026-06-26",
         },
       },
-      data: { actions: [PBAC_ACTIONS.workspaceRead] },
+      data: { actions: [RBAC_ACTIONS.workspaceRead] },
     });
 
     const response = await getStatus(app, managerToken);
 
     assert.equal(response.status, 403);
-    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
   });
 
   it("allows a non-Manager with scan:read policy to read the requested scan job", async () => {
@@ -234,9 +234,9 @@ async function seedSystemAdmin(prisma: PrismaClient) {
     data: {
       id: "policy-system-admin-scan-read",
       version: "2026-07-18",
-      actions: [PBAC_ACTIONS.scanRead],
+      actions: [RBAC_ACTIONS.scanRead],
       subjectRole: SUBJECT_ROLES.systemAdmin,
-      stateGate: PBAC_STATE_GATES.membershipActive,
+      stateGate: RBAC_STATE_GATES.membershipActive,
       organizationId: "org-1",
     },
   });

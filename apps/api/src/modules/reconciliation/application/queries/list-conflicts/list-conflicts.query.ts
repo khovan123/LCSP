@@ -1,7 +1,7 @@
 import { Query } from "@nestjs/cqrs";
 
 import type { ConflictListDto } from "../../contracts/reconciliation/conflict-list.contract.js";
-import type { SubjectRole } from "../../../../../platform/pbac/pbac.types.js";
+import type { SubjectRole } from "../../../../../platform/rbac/rbac.types.js";
 
 export class ListConflictsQuery extends Query<ConflictListDto> {
   constructor(

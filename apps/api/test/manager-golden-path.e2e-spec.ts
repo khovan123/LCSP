@@ -14,7 +14,7 @@ import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import {
   ASSESSMENT_RESULT_MODES,
   CLASSIFICATION_GUARDRAIL_STATUSES,
@@ -307,7 +307,7 @@ async function grantGoldenPathActions(prisma: PrismaClient): Promise<void> {
   await prisma.authPolicy.update({
     where: { id_version: { id: policy.id, version: policy.version } },
     data: {
-      actions: [...new Set([...policy.actions, PBAC_ACTIONS.documentRead])],
+      actions: [...new Set([...policy.actions, RBAC_ACTIONS.documentRead])],
     },
   });
 }

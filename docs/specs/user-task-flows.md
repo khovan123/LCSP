@@ -13,7 +13,7 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 - Delegated technical clarification under `FR-052` is Deferred and must not appear as an active screen or task.
 - `FR-050` is `AUTOMATIC_TRUSTED_SCAN_INITIATION`; there is no manual scanner report upload UI/API.
 - `FR-051` manual technical evidence JSON upload is `REMOVED_FROM_PRODUCT`.
-- PBAC is the final server-side authorization source of truth.
+- RBAC is the final server-side authorization source of truth.
 - Legal corpus administration is an internal operations/API/CLI flow, not Manager product UX.
 - UI states must use plain business language and expose actionable blocked/failed outcomes.
 
@@ -189,7 +189,7 @@ This document defines canonical user-facing and system task flows for the A-to-Z
 | Field             | Content                                                                                                                                              |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status            | Active only as a server-side redaction/privacy behavior, not as a Developer task workspace.                                                          |
-| Required behavior | Authorized Manager-facing evidence views show redacted metadata and evidence refs; unauthorized or non-Manager access is denied or narrowed by PBAC. |
+| Required behavior | Authorized Manager-facing evidence views show redacted metadata and evidence refs; unauthorized or non-Manager access is denied or narrowed by RBAC. |
 | Traceability      | UC-007, UC-017; FR-048; AC-007, AC-022                                                                                                               |
 
 ### 16. Removed Structured Technical Attestation

@@ -11,7 +11,7 @@ import { PrismaService } from "../../../../../infrastructure/prisma/prisma.servi
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { CitationLocatorValidatorService } from "../../services/citation-locator-validator.service.js";
 import { ApproveRuleCatalogVersionCommand } from "./approve-rule-catalog-version.command.js";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { LEGAL_RULE_LIFECYCLE_STATUSES } from "@lcsp/contracts/legal-rule-catalog";
 import { toPrismaLegalRuleLifecycleStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 
@@ -83,7 +83,7 @@ describe("ApproveRuleCatalogVersionHandler", () => {
       "user123",
       {
         subjectRole: "manager",
-        selectedAction: PBAC_ACTIONS.legalRuleCatalogApprove,
+        selectedAction: RBAC_ACTIONS.legalRuleCatalogApprove,
         policyId: "pol1",
         policyVersion: "1.0",
       },
@@ -131,7 +131,7 @@ describe("ApproveRuleCatalogVersionHandler", () => {
     await expect(handler.execute(command)).rejects.toThrow(ConflictException);
   });
 
-  it("T06: Actor lacks legal-rule-catalog:approve -> 403 PBAC_DENIED", async () => {
+  it("T06: Actor lacks legal-rule-catalog:approve -> 403 RBAC_DENIED", async () => {
     const command = createCommand();
     command.authorization.selectedAction = "some:other:action";
 

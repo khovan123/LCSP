@@ -15,7 +15,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   ARTIFACT_CHAIN_STAGES,
   ASSESSMENT_CONTEXT_ANSWER_FIELDS,
@@ -27,8 +27,8 @@ import {
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
-import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
@@ -81,8 +81,8 @@ export class ReconciliationController {
   ) {}
 
   @Get(":assessmentId/conflicts")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.conflictRead)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.conflictRead)
   async listConflicts(
     @Param("assessmentId") assessmentId: string,
     @Query("status") status: string | undefined,
@@ -90,15 +90,15 @@ export class ReconciliationController {
     @Query("page_size") pageSize: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext;
+    const rbacContext = request.rbacContext;
 
     return resultEnvelope(
       await this.queryBus.execute(
         new ListConflictsQuery(
           assessmentId,
-          pbacContext.organizationId,
-          pbacContext.userId,
-          pbacContext.subjectRole,
+          rbacContext.organizationId,
+          rbacContext.userId,
+          rbacContext.subjectRole,
           page !== undefined ? Number(page) : undefined,
           pageSize !== undefined ? Number(pageSize) : undefined,
           status,
@@ -109,8 +109,8 @@ export class ReconciliationController {
   }
 
   @Get(":assessmentId/artifact-chain")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.assessmentRead)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.assessmentRead)
   async getArtifactChain(
     @Param("assessmentId") assessmentId: string,
     @Query("artifact_ref") artifactRefRaw: string | undefined,
@@ -118,7 +118,7 @@ export class ReconciliationController {
     @Query("exact_versions") exactVersionsRaw: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext;
+    const rbacContext = request.rbacContext;
     const artifactRef = parseArtifactRefQuery(
       artifactRefRaw,
       request.correlationId as string,
@@ -132,7 +132,7 @@ export class ReconciliationController {
       await this.queryBus.execute(
         new GetArtifactChainQuery(
           assessmentId,
-          pbacContext.organizationId,
+          rbacContext.organizationId,
           request.correlationId as string,
           artifactRef,
           requiredStages,
@@ -143,8 +143,8 @@ export class ReconciliationController {
   }
 
   @Get(":assessmentId/reconciliation-context")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.conflictRead)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.conflictRead)
   async getReconciliationContext(
     @Param("assessmentId") assessmentId: string,
     @Query("flow_ref") flowRef: string | undefined,
@@ -154,7 +154,7 @@ export class ReconciliationController {
     @Query("max_results") maxResultsRaw: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext;
+    const rbacContext = request.rbacContext;
     const correlationId = request.correlationId as string;
     const flowId = parseOptionalFlowRef(flowRef, correlationId);
     const conflictIds = parseConflictIds(conflictIdsRaw, correlationId);
@@ -169,7 +169,7 @@ export class ReconciliationController {
       await this.queryBus.execute(
         new GetReconciliationContextQuery(
           assessmentId,
-          pbacContext.organizationId,
+          rbacContext.organizationId,
           correlationId,
           flowId,
           conflictIds,
@@ -182,8 +182,8 @@ export class ReconciliationController {
   }
 
   @Get(":assessmentId/missing-targets")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.assessmentRead)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.assessmentRead)
   async proposeMissingTargets(
     @Param("assessmentId") assessmentId: string,
     @Query("wizard_profile_id") wizardProfileId: string,
@@ -207,7 +207,7 @@ export class ReconciliationController {
       await this.queryBus.execute(
         new ProposeMissingTargetsQuery(
           assessmentId,
-          request.pbacContext.organizationId,
+          request.rbacContext.organizationId,
           wizardProfileId,
           evidenceReportId,
           candidateKinds,
@@ -221,8 +221,8 @@ export class ReconciliationController {
   }
 
   @Get(":assessmentId/assessment-context")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.assessmentRead)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.assessmentRead)
   async getAssessmentContext(
     @Param("assessmentId") assessmentId: string,
     @Query("wizard_profile_id") wizardProfileId: string,
@@ -241,7 +241,7 @@ export class ReconciliationController {
       await this.queryBus.execute(
         new GetAssessmentContextQuery(
           assessmentId,
-          request.pbacContext.organizationId,
+          request.rbacContext.organizationId,
           wizardProfileId,
           includes,
           answerFields,
@@ -252,31 +252,31 @@ export class ReconciliationController {
   }
 
   @Patch(":assessmentId/conflicts/:conflictId/resolve")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.conflictResolve)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.conflictResolve)
   async resolveConflict(
     @Param("assessmentId") assessmentId: string,
     @Param("conflictId") conflictId: string,
     @Body() body: ResolveConflictRequest,
     @Req() request: AuthenticatedRequest,
   ) {
-    const pbacContext = request.pbacContext;
+    const rbacContext = request.rbacContext;
 
     return resultEnvelope(
       await this.commandBus.execute(
         new ResolveConflictCommand(
           assessmentId,
           conflictId,
-          pbacContext.organizationId,
-          pbacContext.userId,
-          pbacContext.subjectRole,
+          rbacContext.organizationId,
+          rbacContext.userId,
+          rbacContext.subjectRole,
           body.resolution,
           body.resolution_note,
           request.correlationId as string,
           {
-            selectedAction: pbacContext.selectedAction,
-            policyId: pbacContext.policyId,
-            policyVersion: pbacContext.policyVersion,
+            selectedAction: rbacContext.selectedAction,
+            policyId: rbacContext.policyId,
+            policyVersion: rbacContext.policyVersion,
           },
         ),
       ),

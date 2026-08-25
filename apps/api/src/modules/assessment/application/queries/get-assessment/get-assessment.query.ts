@@ -1,10 +1,10 @@
 import { Query } from "@nestjs/cqrs";
 
 import type { AssessmentDetailDto } from "../../contracts/assessment/assessment-detail.contract.js";
-import type { SubjectRole } from "../../../../../platform/pbac/pbac.types.js";
+import type { SubjectRole } from "../../../../../platform/rbac/rbac.types.js";
 
 /**
- * Requests one assessment detail view within the caller's organization and PBAC subject context.
+ * Requests one assessment detail view within the caller's organization and RBAC subject context.
  */
 export class GetAssessmentQuery extends Query<AssessmentDetailDto> {
   /**
@@ -13,7 +13,7 @@ export class GetAssessmentQuery extends Query<AssessmentDetailDto> {
    * @param assessmentId - Assessment identifier requested by the caller.
    * @param organizationId - Organization boundary within which the assessment must exist.
    * @param sessionUserId - Authenticated user identifier used for owner visibility checks.
-   * @param subjectRole - PBAC subject role used to enforce manager visibility behavior.
+   * @param subjectRole - RBAC subject role used to enforce manager visibility behavior.
    * @param correlationId - Correlation identifier propagated to response and problem metadata.
    */
   constructor(

@@ -20,12 +20,12 @@ import {
   MFA_RECOVERY_CODE_ACCESS_ACTIONS,
   type MfaRecoveryCodeAccessAction,
 } from "@lcsp/contracts/auth";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
-import { AllowPendingMfa } from "../../../../platform/pbac/decorators/allow-pending-mfa.decorator.js";
-import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
-import { RequireSession } from "../../../../platform/pbac/decorators/require-session.decorator.js";
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { AllowPendingMfa } from "../../../../platform/rbac/decorators/allow-pending-mfa.decorator.js";
+import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireSession } from "../../../../platform/rbac/decorators/require-session.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { ReAuthForSensitiveRoute } from "../../../../platform/security/decorators/re-auth-for-sensitive-route.decorator.js";
@@ -115,7 +115,7 @@ export class AuthWorkspaceController {
   }
 
   @Get("workspace")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   async getWorkspace(
     @Req() request: AuthenticatedRequest,
@@ -133,7 +133,7 @@ export class AuthWorkspaceController {
   }
 
   @Post("auth/mfa/enroll")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   @AllowPendingMfa()
   async enrollMfa(
@@ -150,7 +150,7 @@ export class AuthWorkspaceController {
   }
 
   @Delete("auth/mfa")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   async disableMfa(
     @Body() body: { session_token?: string },
@@ -194,7 +194,7 @@ export class AuthWorkspaceController {
   }
 
   @Post("auth/mfa/recovery-codes")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   @ReAuthForSensitiveRoute({
     routeId: SENSITIVE_ROUTE_IDS.mfaRecoveryCodesGenerate,
@@ -216,7 +216,7 @@ export class AuthWorkspaceController {
   }
 
   @Post("auth/mfa/recovery-codes/access")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   async recordMfaRecoveryCodeAccess(
     @Body() body: MfaRecoveryCodeAccessPayload,
@@ -249,7 +249,7 @@ export class AuthWorkspaceController {
   }
 
   @Post("auth/re-auth/password")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   @AllowPendingMfa()
   async reauthenticatePassword(
@@ -270,7 +270,7 @@ export class AuthWorkspaceController {
 
   @Post("auth/sensitive-route/check")
   @HttpCode(HttpStatus.OK)
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   @AllowPendingMfa()
   async checkSensitiveRoute(
@@ -299,7 +299,7 @@ export class AuthWorkspaceController {
         SensitiveRouteCheckDto
       >(
         new CheckSensitiveRouteQuery(
-          request.pbacContext.sessionId,
+          request.rbacContext.sessionId,
           method,
           route,
         ),
@@ -308,7 +308,7 @@ export class AuthWorkspaceController {
   }
 
   @Patch("auth/profile")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   async updateProfile(
     @Body() body: UpdateProfilePayload & { session_token?: string },
@@ -326,28 +326,28 @@ export class AuthWorkspaceController {
   }
 
   @Get("auth/profile")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   async getProfile(@Req() request: AuthenticatedRequest) {
     return resultEnvelope(
       await this.authWorkspaceFacade.getProfile(
-        request.pbacContext,
+        request.rbacContext,
         request.correlationId!,
       ),
     );
   }
 
   @Get("auth/sessions")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   async listSessions(@Req() request: AuthenticatedRequest) {
     return resultEnvelope(
-      await this.authWorkspaceFacade.listSessions(request.pbacContext),
+      await this.authWorkspaceFacade.listSessions(request.rbacContext),
     );
   }
 
   @Delete("auth/sessions/:sessionId")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   async revokeOwnedSession(
     @Param("sessionId") sessionId: string,
@@ -356,18 +356,18 @@ export class AuthWorkspaceController {
     return resultEnvelope(
       await this.authWorkspaceFacade.revokeOwnedSession(
         sessionId,
-        request.pbacContext,
+        request.rbacContext,
         requestMeta(request.correlationId),
       ),
     );
   }
 
   @Get("auth/repositories")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   async listRepositories(@Req() request: AuthenticatedRequest) {
     return resultEnvelope(
-      await this.authWorkspaceFacade.listRepositories(request.pbacContext),
+      await this.authWorkspaceFacade.listRepositories(request.rbacContext),
     );
   }
 
@@ -433,7 +433,7 @@ export class AuthWorkspaceController {
   }
 
   @Get("auth/oauth/link/start")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   async oauthLinkStart(
     @Req() request: AuthenticatedRequest,
@@ -448,14 +448,14 @@ export class AuthWorkspaceController {
     return resultEnvelope(
       await this.authWorkspaceFacade.oauthLinkStart(
         payload,
-        request.pbacContext,
+        request.rbacContext,
         requestMeta(correlationId),
       ),
     );
   }
 
   @Get("auth/oauth/link/callback")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireSession()
   async oauthLinkCallback(
     @Req() request: AuthenticatedRequest,
@@ -468,7 +468,7 @@ export class AuthWorkspaceController {
     return resultEnvelope(
       await this.authWorkspaceFacade.oauthLinkCallback(
         payload,
-        request.pbacContext,
+        request.rbacContext,
         requestMeta(correlationId),
       ),
     );

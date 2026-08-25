@@ -12,7 +12,7 @@ import {
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
 import { OUTBOX_MESSAGE_SCHEMA_VERSION } from "@lcsp/contracts/outbox";
-import { PBAC_ACTIONS, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 /** MW-gh-003: Pin Commit Snapshot Endpoint. */
 
 import * as assert from "node:assert/strict";
@@ -253,7 +253,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
     );
   });
 
-  it("T05: actor without snapshot:create is denied by PBAC", async () => {
+  it("T05: actor without snapshot:create is denied by RBAC", async () => {
     await prisma.authPolicy.update({
       where: {
         id_version: {
@@ -261,7 +261,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
           version: "2026-06-26",
         },
       },
-      data: { actions: [PBAC_ACTIONS.workspaceRead] },
+      data: { actions: [RBAC_ACTIONS.workspaceRead] },
     });
 
     const response = await httpRequest(app)
@@ -270,7 +270,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       .send({ connection_id: "connection-1", branch: "main" });
 
     assert.equal(response.status, 403);
-    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
     assert.equal(await prisma.repositorySnapshot.count(), 0);
   });
 

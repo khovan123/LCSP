@@ -17,7 +17,7 @@ export const AUTH_ERROR_CODES = {
   mfaInvalid: "MFA_INVALID",
   mfaRateLimited: "MFA_RATE_LIMITED",
   recoveryInvalid: "RECOVERY_INVALID",
-  pbacDenied: "PBAC_DENIED",
+  rbacDenied: "RBAC_DENIED",
   unsupportedProvider: "UNSUPPORTED_PROVIDER",
   invalidRedirectUri: "INVALID_REDIRECT_URI",
   oauthStateInvalid: "OAUTH_STATE_INVALID",

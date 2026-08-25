@@ -3,7 +3,7 @@ import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { SCAN_ERROR_CODES, SCAN_JOB_GUIDANCE } from "@lcsp/contracts/scan";
 import { NotFoundException } from "@nestjs/common";
 

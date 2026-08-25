@@ -5,7 +5,7 @@ import {
   AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
-import { PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
 import type { AuditEventInput } from "@lcsp/contracts/audit";
@@ -175,7 +175,7 @@ describe("AuditWriterService", () => {
 
     await service.write(
       makeEvent({
-        reasonCode: PBAC_REASON_CODE.authorized,
+        reasonCode: RBAC_REASON_CODE.authorized,
         sessionId: "session-1",
         policyId: "policy-1",
         policyVersion: "v1",
@@ -186,7 +186,7 @@ describe("AuditWriterService", () => {
       { data: Record<string, unknown> },
     ];
     expect(data).toMatchObject({
-      reasonCode: PBAC_REASON_CODE.authorized,
+      reasonCode: RBAC_REASON_CODE.authorized,
       sessionId: "session-1",
       policyId: "policy-1",
       policyVersion: "v1",

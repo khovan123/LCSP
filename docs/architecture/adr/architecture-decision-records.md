@@ -37,7 +37,7 @@ The system uses deterministic orchestration, state machines, evidence gates, and
 4. ADR-025 overrides local JSONL corpus seed as the legal source architecture.
 5. ADR-026 overrides pgvector, embedding-index, hybrid-vector and unspecified legal retrieval wording for MVP.
 6. Product scope and canonical requirements remain governed by PRD, FR/NFR catalogs, and Project Owner decisions propagated into active docs.
-7. Phase 5.2L supersedes older wording: PBAC replaces RBAC, structured attestation is removed from active MVP, `FR-050` is Automatic Trusted Scan Initiation, `FR-051` is removed from product scope, and Node.js downstream workers are superseded.
+7. Phase 5.2L supersedes older wording: RBAC replaces RBAC, structured attestation is removed from active MVP, `FR-050` is Automatic Trusted Scan Initiation, `FR-051` is removed from product scope, and Node.js downstream workers are superseded.
 
 ## Active Decision Summary
 
@@ -65,7 +65,7 @@ The system uses deterministic orchestration, state machines, evidence gates, and
 The active decision is:
 
 ```text
-NestJS API handles synchronous HTTP, PBAC enforcement boundary, job/trigger creation, and query surfaces.
+NestJS API handles synchronous HTTP, RBAC enforcement boundary, job/trigger creation, and query surfaces.
 Python Worker Platform owns all asynchronous domain workloads.
 Python Scanner Worker owns Repository Scan lifecycle.
 Bounded Node.js CLI owns only TS/JS `ts-morph` analyzer adaptation invoked by Python Scanner Worker.
@@ -107,13 +107,13 @@ cleanup-verified terminal event
 ### Authorization
 
 ```text
-PBAC source of truth
+RBAC source of truth
 roles as subject attributes/templates only
 deny-by-default
 tenant-scoped
 server-side enforced
 versioned/auditable decisions
-engine/storage/cache/invalidation/topology/failure behavior: resolved by docs/implementation/decisions/pbac-runtime-decision.md
+engine/storage/cache/invalidation/topology/failure behavior: resolved by docs/implementation/decisions/rbac-runtime-decision.md
 ```
 
 ### LLM

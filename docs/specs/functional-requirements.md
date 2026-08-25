@@ -10,7 +10,7 @@ Canonical IDs are `FR-001..FR-056`. Phase 5.2L supersedes the previous active/de
 - `FR-052` delegated free-form clarification remains inactive and is `DEFERRED_POST_MVP` unless separately approved.
 - Legacy `FR-E*` and `FR-057..FR-082` values are source aliases only.
 
-PBAC is the authorization source of truth for every active requirement. Role labels may appear only as subject attributes, grouping labels, or policy templates.
+RBAC is the authorization source of truth for every active requirement. Role labels may appear only as subject attributes, grouping labels, or policy templates.
 
 ## Catalog
 
@@ -26,8 +26,8 @@ PBAC is the authorization source of truth for every active requirement. Role lab
 | FR-008 | Manage organization members.                                                                                   |   Y | UC-002                                 | BR-015                         | AC-024                         | NFR-008, NFR-009                                     |
 | FR-009 | Assign Manager subject attributes and policy templates.                                                        |   Y | UC-002                                 | BR-016                         | AC-024                         | NFR-008, NFR-009                                     |
 | FR-010 | Historical Developer invitation flow.                                                                          |   N | —                                      | —                              | —                              | `RETIRED_FROM_ACTIVE_MVP`                            |
-| FR-011 | Historical Developer PBAC policy scope and revocation flow.                                                    |   N | —                                      | —                              | —                              | `RETIRED_FROM_ACTIVE_MVP`                            |
-| FR-012 | Enforce PBAC-protected Manager-only actions.                                                                   |   Y | UC-002, UC-010, UC-011, UC-013, UC-014 | BR-018, BR-019, BR-089, BR-091 | AC-025, AC-026                 | NFR-008, NFR-009                                     |
+| FR-011 | Historical Developer RBAC policy scope and revocation flow.                                                    |   N | —                                      | —                              | —                              | `RETIRED_FROM_ACTIVE_MVP`                            |
+| FR-012 | Enforce RBAC-protected Manager-only actions.                                                                   |   Y | UC-002, UC-010, UC-011, UC-013, UC-014 | BR-018, BR-019, BR-089, BR-091 | AC-025, AC-026                 | NFR-008, NFR-009                                     |
 | FR-013 | Create Manager-owned assessment.                                                                               |   Y | UC-003                                 | BR-018, BR-023, BR-024, BR-089 | AC-001                         | NFR-008, NFR-010                                     |
 | FR-014 | Complete WizardProfile.                                                                                        |   Y | UC-004                                 | BR-026..BR-029, BR-031         | AC-002                         | NFR-028                                              |
 | FR-015 | Show readiness without risk level.                                                                             |   Y | UC-004, UC-014                         | BR-030, BR-065                 | AC-003                         | NFR-018, NFR-020, NFR-022, NFR-028                   |

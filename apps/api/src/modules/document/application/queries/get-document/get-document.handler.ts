@@ -5,7 +5,7 @@ import {
   DOCUMENT_TYPES,
   type DocumentRequestStatus,
 } from "@lcsp/contracts/document";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { HttpStatus } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 
@@ -25,7 +25,7 @@ const GENERIC_BLOCKED_REASON =
   "Document generation is blocked until the required review items are resolved.";
 
 /**
- * Resolves one PBAC-filtered document status, hides restricted report types, and issues signed downloads for ready artifacts.
+ * Resolves one RBAC-filtered document status, hides restricted report types, and issues signed downloads for ready artifacts.
  */
 @QueryHandler(GetDocumentQuery)
 export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
@@ -43,14 +43,14 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
   /**
    * Applies full/redacted read semantics, retrieves one document request, and projects safe status/download metadata.
    *
-   * @param query - Assessment/document identity, tenant scope, PBAC scope/action, and correlation context.
+   * @param query - Assessment/document identity, tenant scope, RBAC scope/action, and correlation context.
    * @returns Document status DTO with business-safe blocked reason and optional signed download.
    * @throws When the read action is unauthorized or the document is outside the caller's permitted scope.
    */
   async execute(query: GetDocumentQuery): Promise<DocumentStatusDto> {
     const allowRedactedRead =
-      query.selectedAction === PBAC_ACTIONS.documentReadRedacted;
-    const allowFullRead = query.selectedAction === PBAC_ACTIONS.documentRead;
+      query.selectedAction === RBAC_ACTIONS.documentReadRedacted;
+    const allowFullRead = query.selectedAction === RBAC_ACTIONS.documentRead;
     if (!allowFullRead && !allowRedactedRead) {
       this.forbidden(query.correlationId);
     }
@@ -173,13 +173,13 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
   }
 
   /**
-   * Throws the standardized PBAC-denied problem for unauthorized document read modes.
+   * Throws the standardized RBAC-denied problem for unauthorized document read modes.
    *
    * @param correlationId - Correlation identifier attached to the problem response.
-   * @throws Always throws the PBAC-denied problem.
+   * @throws Always throws the RBAC-denied problem.
    */
   private forbidden(correlationId: string): never {
-    throw problemException(AUTH_ERROR_CODES.pbacDenied, correlationId, {
+    throw problemException(AUTH_ERROR_CODES.rbacDenied, correlationId, {
       status: HttpStatus.FORBIDDEN,
     });
   }

@@ -17,7 +17,7 @@ import {
   GET_GAP_REQUIREMENTS_TOOL,
   type GetGapRequirementsResponse,
 } from "@lcsp/contracts/evidence";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -189,7 +189,7 @@ export class GetGapRequirementsHandler implements IQueryHandler<
       },
       select: { actions: true },
     });
-    return Boolean(policy?.actions.includes(PBAC_ACTIONS.gapRequirementsRead));
+    return Boolean(policy?.actions.includes(RBAC_ACTIONS.gapRequirementsRead));
   }
 
   private async writeAndReturn(

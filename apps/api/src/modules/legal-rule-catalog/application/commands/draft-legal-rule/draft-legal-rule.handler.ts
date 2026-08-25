@@ -2,7 +2,7 @@ import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { HttpStatus } from "@nestjs/common";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   LEGAL_RULE_EVENT_TYPES,
   LEGAL_RULE_ERROR_CODES,
@@ -123,7 +123,7 @@ export class DraftLegalRuleHandler implements ICommandHandler<
   ): Promise<void> {
     const allowed =
       command.authorization.selectedAction ===
-        PBAC_ACTIONS.legalRuleCatalogAuthor &&
+        RBAC_ACTIONS.legalRuleCatalogAuthor &&
       command.authorization.policyId !== null &&
       command.authorization.policyVersion !== null;
 
@@ -136,18 +136,18 @@ export class DraftLegalRuleHandler implements ICommandHandler<
       resourceType: AUDIT_RESOURCE_TYPES.legalRule,
       resourceId: null,
       decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      reasonCode: AUTH_ERROR_CODES.rbacDenied,
       correlationId: command.correlationId,
       policyId: command.authorization.policyId,
       policyVersion: command.authorization.policyVersion,
       payload: {
         legalRuleId: command.legalRuleId,
-        action: PBAC_ACTIONS.legalRuleCatalogAuthor,
+        action: RBAC_ACTIONS.legalRuleCatalogAuthor,
         result: AUDIT_DECISIONS.deny,
       },
     });
 
-    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+    throw problemException(AUTH_ERROR_CODES.rbacDenied, command.correlationId, {
       status: HttpStatus.FORBIDDEN,
     });
   }

@@ -3,7 +3,7 @@ import {
   ASSESSMENT_STATUS_CODES,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import { SUBJECT_ROLES, type SubjectRole } from "@lcsp/contracts/pbac";
+import { SUBJECT_ROLES, type SubjectRole } from "@lcsp/contracts/rbac";
 import { UnprocessableEntityException } from "@nestjs/common";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";

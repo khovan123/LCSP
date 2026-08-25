@@ -1,5 +1,5 @@
 import { AUTH_ERROR_CODES, type AuthErrorCode } from "@lcsp/contracts/auth";
-import { PBAC_ACTIONS, PBAC_STATE_GATES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, RBAC_STATE_GATES } from "@lcsp/contracts/rbac";
 
 import { Membership } from "../entities/membership.entity.ts";
 import { Policy } from "../entities/policy.entity.ts";
@@ -37,7 +37,7 @@ export class WorkspaceAuthorizationDomainService {
     }
 
     if (
-      policy.stateGate === PBAC_STATE_GATES.membershipActive &&
+      policy.stateGate === RBAC_STATE_GATES.membershipActive &&
       !membership.isActive()
     ) {
       return { allowed: false, code: AUTH_ERROR_CODES.authzStateGateBlocked };
@@ -45,7 +45,7 @@ export class WorkspaceAuthorizationDomainService {
 
     if (
       policy.subjectRole !== membership.role() ||
-      !policy.allows(PBAC_ACTIONS.workspaceRead)
+      !policy.allows(RBAC_ACTIONS.workspaceRead)
     ) {
       return { allowed: false, code: AUTH_ERROR_CODES.authzEvaluatorFailure };
     }

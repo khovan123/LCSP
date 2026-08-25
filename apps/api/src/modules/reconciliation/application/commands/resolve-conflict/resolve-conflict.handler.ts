@@ -9,7 +9,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import {
   CONFLICT_RECORD_STATUSES,
   SCAN_ERROR_CODES,
@@ -167,7 +167,7 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
   ): Promise<void> {
     const allowed =
       command.subjectRole === SUBJECT_ROLES.manager &&
-      command.authorization.selectedAction === PBAC_ACTIONS.conflictResolve &&
+      command.authorization.selectedAction === RBAC_ACTIONS.conflictResolve &&
       command.authorization.policyId !== null &&
       command.authorization.policyVersion !== null;
 
@@ -182,18 +182,18 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
       resourceId: command.conflictId,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      reasonCode: AUTH_ERROR_CODES.rbacDenied,
       policyId: command.authorization.policyId,
       policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId: command.assessmentId,
         conflictId: command.conflictId,
-        action: PBAC_ACTIONS.conflictResolve,
+        action: RBAC_ACTIONS.conflictResolve,
         result: AUDIT_DECISIONS.deny,
       },
     });
 
-    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+    throw problemException(AUTH_ERROR_CODES.rbacDenied, command.correlationId, {
       status: HttpStatus.FORBIDDEN,
     });
   }

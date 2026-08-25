@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type { StateGate } from "@lcsp/contracts/pbac";
+import type { StateGate } from "@lcsp/contracts/rbac";
 
 type PolicyInput = {
   version: string;

@@ -9,8 +9,8 @@ export class ListDocumentsQuery extends Query<unknown[]> {
    *
    * @param assessmentId - Assessment whose document requests should be listed.
    * @param organizationId - Organization boundary for the read.
-   * @param scope - PBAC resource scope used for redacted reads.
-   * @param selectedAction - PBAC action selected by the authorization guard.
+   * @param scope - RBAC resource scope used for redacted reads.
+   * @param selectedAction - RBAC action selected by the authorization guard.
    * @param correlationId - Correlation identifier propagated to authorization and lookup errors.
    */
   constructor(

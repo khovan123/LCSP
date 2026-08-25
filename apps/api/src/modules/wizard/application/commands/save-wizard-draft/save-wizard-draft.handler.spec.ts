@@ -1,6 +1,6 @@
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 /* eslint-disable @typescript-eslint/unbound-method */
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
@@ -75,7 +75,7 @@ describe("SaveWizardDraftHandler", () => {
       "corr-id-1",
       {
         subjectRole: SUBJECT_ROLES.manager,
-        selectedAction: PBAC_ACTIONS.wizardWrite,
+        selectedAction: RBAC_ACTIONS.wizardWrite,
         policyId: "policy-manager-workspace",
         policyVersion: "2026-06-26",
       },
@@ -249,7 +249,7 @@ describe("SaveWizardDraftHandler", () => {
       });
     });
 
-    it("denies service-level draft save when PBAC context is not Manager wizard:write", async () => {
+    it("denies service-level draft save when RBAC context is not Manager wizard:write", async () => {
       await expect(
         handler.execute(
           new SaveWizardDraftCommand(
@@ -267,7 +267,7 @@ describe("SaveWizardDraftHandler", () => {
             "corr-deny",
             {
               subjectRole: SUBJECT_ROLES.systemAdmin,
-              selectedAction: PBAC_ACTIONS.wizardWrite,
+              selectedAction: RBAC_ACTIONS.wizardWrite,
               policyId: "policy-system-admin",
               policyVersion: "2026-06-26",
             },
@@ -285,7 +285,7 @@ describe("SaveWizardDraftHandler", () => {
           resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
           resourceId: null,
           decision: AUDIT_DECISIONS.deny,
-          reasonCode: AUTH_ERROR_CODES.pbacDenied,
+          reasonCode: AUTH_ERROR_CODES.rbacDenied,
           correlationId: "corr-deny",
           policyId: "policy-system-admin",
           policyVersion: "2026-06-26",

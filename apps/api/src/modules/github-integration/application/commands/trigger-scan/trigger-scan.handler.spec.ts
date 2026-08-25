@@ -11,7 +11,7 @@ import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";

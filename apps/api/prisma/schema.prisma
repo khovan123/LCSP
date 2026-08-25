@@ -27,7 +27,6 @@ model AuthOrganization {
   gitHubAppInstallStates     GitHubAppInstallState[]
   legalRuleMatches           LegalRuleMatch[]
   memberships                AuthMembership[]
-  policies                   AuthPolicy[]
   readinessExports           ReadinessExport[]
   repositoryConnections      RepositoryConnection[]
   repositoryScanJobs         RepositoryScanJob[]
@@ -51,6 +50,7 @@ model AuthUser {
   recoveryEmail             String?
   primaryEmailAddressPolicy AuthPrimaryEmailAddressPolicy @default(ACCOUNT_EMAIL)
   backupEmailPolicy         AuthBackupEmailPolicy         @default(RECOVERY_EMAIL)
+  role                      AuthUserRole                  @default(CUSTOMER)
   mfaRequired               Boolean                       @default(false)
   createdAt                 DateTime                      @default(now())
   updatedAt                 DateTime                      @updatedAt
@@ -76,38 +76,16 @@ model AuthUser {
   wizardProfiles            WizardProfile[]               @relation("WizardProfileOwner")
 }
 
-model AuthPolicy {
-  id             String
-  version        String
-  actions        String[]
-  subjectRole    String
-  stateGate      AuthStateGate
-  conditions     Json?
-  organizationId String
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  memberships    AuthMembership[]
-  organization   AuthOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@id([id, version])
-  @@unique([organizationId, subjectRole, version])
-  @@index([organizationId])
-}
-
 model AuthMembership {
-  id                String               @id
-  userId            String
-  organizationId    String
-  status            AuthMembershipStatus
-  subjectAttributes Json
-  policyId          String
-  policyVersion     String
-  revokedAt         DateTime?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  organization      AuthOrganization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  policy            AuthPolicy           @relation(fields: [policyId, policyVersion], references: [id, version])
-  user              AuthUser             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String               @id
+  userId         String
+  organizationId String
+  status         AuthMembershipStatus
+  revokedAt      DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   AuthOrganization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           AuthUser             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, organizationId])
   @@index([organizationId])
@@ -235,8 +213,6 @@ model AuthAuditEvent {
   reasonCode     String?
   correlationId  String
   sessionId      String?
-  policyId       String?
-  policyVersion  String?
   payload        Json
   createdAt      DateTime           @default(now())
   organization   AuthOrganization?  @relation(fields: [organizationId], references: [id])
@@ -257,8 +233,6 @@ model AuthDecisionLog {
   action         String
   decision       AuthDecision
   reasonCode     AuthorizationReasonCode
-  policyId       String?
-  policyVersion  String?
   correlationId  String
   payload        Json
   createdAt      DateTime                @default(now())
@@ -390,8 +364,9 @@ enum AuthDecision {
   DENY
 }
 
-enum AuthStateGate {
-  MEMBERSHIP_ACTIVE
+enum AuthUserRole {
+  ADMIN
+  CUSTOMER
 }
 
 enum AuditResourceType {

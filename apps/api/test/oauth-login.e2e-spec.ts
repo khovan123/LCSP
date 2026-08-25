@@ -1,10 +1,10 @@
 import type { AuthMembershipStatus } from "@lcsp/contracts/auth";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import {
-  PBAC_ACTIONS,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import * as assert from "node:assert/strict";
 
 import type { INestApplication } from "@nestjs/common";
@@ -475,9 +475,9 @@ describe("OAuth login (e2e)", () => {
       create: {
         id: "policy-oauth-workspace",
         version: "2026-07-10",
-        actions: [PBAC_ACTIONS.workspaceRead],
+        actions: [RBAC_ACTIONS.workspaceRead],
         subjectRole: SUBJECT_ROLES.manager,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId,
       },
       update: {},

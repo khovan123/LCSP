@@ -1,6 +1,6 @@
 import { HttpException } from "@nestjs/common";
 import { jest } from "@jest/globals";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { QueryBus } from "@nestjs/cqrs";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
@@ -10,14 +10,14 @@ import { GapEvidenceTraceController } from "./gap-evidence-trace.controller.js";
 function request(): AuthenticatedRequest {
   return {
     correlationId: "correlation-1",
-    pbacContext: {
+    rbacContext: {
       userId: "user-1",
       sessionId: "session-1",
       organizationId: "organization-1",
       subjectRole: "Manager",
       scope: null,
-      grantedActions: [PBAC_ACTIONS.gapEvidenceTraceRead],
-      selectedAction: PBAC_ACTIONS.gapEvidenceTraceRead,
+      grantedActions: [RBAC_ACTIONS.gapEvidenceTraceRead],
+      selectedAction: RBAC_ACTIONS.gapEvidenceTraceRead,
     },
   } as AuthenticatedRequest;
 }

@@ -12,7 +12,7 @@ import {
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import {
   READINESS_CLASSIFICATION_STATUSES,
@@ -263,14 +263,14 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
         },
       },
       data: {
-        actions: [PBAC_ACTIONS.workspaceRead, PBAC_ACTIONS.assessmentRead],
+        actions: [RBAC_ACTIONS.workspaceRead, RBAC_ACTIONS.assessmentRead],
       },
     });
 
     const response = await requestExport(app, managerToken);
 
     assert.equal(response.status, 403);
-    assert.equal(problemCode(response), AUTH_ERROR_CODES.pbacDenied);
+    assert.equal(problemCode(response), AUTH_ERROR_CODES.rbacDenied);
   });
 
   it("T08 creates a new immutable row for each generated export", async () => {

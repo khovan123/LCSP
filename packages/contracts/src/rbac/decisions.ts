@@ -1,16 +1,16 @@
-export const PBAC_DECISION = {
+export const RBAC_DECISION = {
   allow: "ALLOW",
   deny: "DENY",
 } as const;
 
-export const PBAC_REASON_CODE = {
+export const RBAC_REASON_CODE = {
   actionNotGranted: "ACTION_NOT_GRANTED",
   authorized: "AUTHORIZED",
-  denied: "PBAC_DENIED",
+  denied: "RBAC_DENIED",
   evaluatorError: "EVALUATOR_ERROR",
   loadError: "LOAD_ERROR",
   membershipMissing: "MEMBERSHIP_MISSING",
-  metadataMissing: "PBAC_METADATA_MISSING",
+  metadataMissing: "RBAC_METADATA_MISSING",
   mfaRequired: "MFA_REQUIRED",
   organizationMismatch: "ORGANIZATION_MISMATCH",
   policyNotFound: "POLICY_NOT_FOUND",
@@ -20,8 +20,8 @@ export const PBAC_REASON_CODE = {
   subjectAttributeMissing: "SUBJECT_ATTRIBUTE_MISSING",
 } as const;
 
-export type PbacDecisionValue =
-  (typeof PBAC_DECISION)[keyof typeof PBAC_DECISION];
+export type RbacDecisionValue =
+  (typeof RBAC_DECISION)[keyof typeof RBAC_DECISION];
 
-export type PbacReasonCode =
-  (typeof PBAC_REASON_CODE)[keyof typeof PBAC_REASON_CODE];
+export type RbacReasonCode =
+  (typeof RBAC_REASON_CODE)[keyof typeof RBAC_REASON_CODE];

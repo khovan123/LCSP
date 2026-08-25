@@ -6,7 +6,7 @@ import {
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { WIZARD_EVENT_TYPES, type WizardAnswer } from "@lcsp/contracts/wizard";
 import {
   ConflictException,
@@ -179,7 +179,7 @@ describe("SubmitWizardHandler", () => {
     "corr-id-1",
     {
       subjectRole: SUBJECT_ROLES.manager,
-      selectedAction: PBAC_ACTIONS.wizardSubmit,
+      selectedAction: RBAC_ACTIONS.wizardSubmit,
       policyId: "policy-manager",
       policyVersion: "v1",
     },
@@ -332,7 +332,7 @@ describe("SubmitWizardHandler", () => {
     });
   });
 
-  it("denies access if not manager or wrong PBAC action", async () => {
+  it("denies access if not manager or wrong RBAC action", async () => {
     await expect(
       handler.execute(
         new SubmitWizardCommand(

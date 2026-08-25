@@ -1,12 +1,12 @@
 import {
-  PBAC_DECISION,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_DECISION,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
-import { PbacEvaluatorService } from "./pbac-evaluator.service.js";
-import type { PbacEvaluationContext, PolicyDocument } from "./pbac.types.js";
+import { RbacEvaluatorService } from "./rbac-evaluator.service.js";
+import type { RbacEvaluationContext, PolicyDocument } from "./rbac.types.js";
 
 function buildPolicy(overrides: Partial<PolicyDocument> = {}): PolicyDocument {
   return {
@@ -14,15 +14,15 @@ function buildPolicy(overrides: Partial<PolicyDocument> = {}): PolicyDocument {
     organizationId: "org-1",
     version: "1",
     subjectRole: SUBJECT_ROLES.manager,
-    stateGate: PBAC_STATE_GATES.membershipActive,
+    stateGate: RBAC_STATE_GATES.membershipActive,
     actions: ["assessment.create"],
     ...overrides,
   };
 }
 
 function buildContext(
-  overrides: Partial<PbacEvaluationContext> = {},
-): PbacEvaluationContext {
+  overrides: Partial<RbacEvaluationContext> = {},
+): RbacEvaluationContext {
   return {
     organizationId: "org-1",
     action: "assessment.create",
@@ -33,14 +33,14 @@ function buildContext(
   };
 }
 
-describe("PbacEvaluatorService", () => {
-  const service = new PbacEvaluatorService();
+describe("RbacEvaluatorService", () => {
+  const service = new RbacEvaluatorService();
 
   it("T01: all checks pass → allow", () => {
     const result = service.evaluate(buildContext());
 
     expect(result).toEqual({
-      decision: PBAC_DECISION.allow,
+      decision: RBAC_DECISION.allow,
       policyId: "policy-1",
       policyVersion: "1",
     });
@@ -51,8 +51,8 @@ describe("PbacEvaluatorService", () => {
       buildContext({ policy: null as unknown as PolicyDocument }),
     );
 
-    expect(result.decision).toBe(PBAC_DECISION.deny);
-    expect(result.reasonCode).toBe(PBAC_REASON_CODE.policyNotFound);
+    expect(result.decision).toBe(RBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(RBAC_REASON_CODE.policyNotFound);
   });
 
   it("T03: stateGate membership_active, membership not active → deny STATE_GATE_FAILED", () => {
@@ -60,8 +60,8 @@ describe("PbacEvaluatorService", () => {
       buildContext({ membershipStatus: AUTH_MEMBERSHIP_STATUSES.invited }),
     );
 
-    expect(result.decision).toBe(PBAC_DECISION.deny);
-    expect(result.reasonCode).toBe(PBAC_REASON_CODE.stateGateFailed);
+    expect(result.decision).toBe(RBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(RBAC_REASON_CODE.stateGateFailed);
   });
 
   it("T04: subject role mismatch → deny SUBJECT_ROLE_MISMATCH", () => {
@@ -69,8 +69,8 @@ describe("PbacEvaluatorService", () => {
       buildContext({ subject: { role: SUBJECT_ROLES.systemAdmin } }),
     );
 
-    expect(result.decision).toBe(PBAC_DECISION.deny);
-    expect(result.reasonCode).toBe(PBAC_REASON_CODE.subjectRoleMismatch);
+    expect(result.decision).toBe(RBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(RBAC_REASON_CODE.subjectRoleMismatch);
   });
 
   it("T05: action not in policy.actions → deny ACTION_NOT_GRANTED", () => {
@@ -78,8 +78,8 @@ describe("PbacEvaluatorService", () => {
       buildContext({ action: "assessment.delete" }),
     );
 
-    expect(result.decision).toBe(PBAC_DECISION.deny);
-    expect(result.reasonCode).toBe(PBAC_REASON_CODE.actionNotGranted);
+    expect(result.decision).toBe(RBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(RBAC_REASON_CODE.actionNotGranted);
   });
 
   it("T06: evaluator throws internally → caught, returns deny", () => {
@@ -92,7 +92,7 @@ describe("PbacEvaluatorService", () => {
 
     const result = service.evaluate(buildContext({ policy: brokenPolicy }));
 
-    expect(result.decision).toBe(PBAC_DECISION.deny);
+    expect(result.decision).toBe(RBAC_DECISION.deny);
   });
 
   it("T07: multiple actions in policy, one matches → allow", () => {
@@ -105,7 +105,7 @@ describe("PbacEvaluatorService", () => {
       }),
     );
 
-    expect(result.decision).toBe(PBAC_DECISION.allow);
+    expect(result.decision).toBe(RBAC_DECISION.allow);
   });
 
   it("T08: empty policy.actions array → deny ACTION_NOT_GRANTED", () => {
@@ -113,8 +113,8 @@ describe("PbacEvaluatorService", () => {
       buildContext({ policy: buildPolicy({ actions: [] }) }),
     );
 
-    expect(result.decision).toBe(PBAC_DECISION.deny);
-    expect(result.reasonCode).toBe(PBAC_REASON_CODE.actionNotGranted);
+    expect(result.decision).toBe(RBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(RBAC_REASON_CODE.actionNotGranted);
   });
 
   it("denies when the policy belongs to a different organization", () => {
@@ -125,8 +125,8 @@ describe("PbacEvaluatorService", () => {
       }),
     );
 
-    expect(result.decision).toBe(PBAC_DECISION.deny);
-    expect(result.reasonCode).toBe(PBAC_REASON_CODE.organizationMismatch);
+    expect(result.decision).toBe(RBAC_DECISION.deny);
+    expect(result.reasonCode).toBe(RBAC_REASON_CODE.organizationMismatch);
     expect(result.policyId).toBe("policy-1");
     expect(result.policyVersion).toBe("1");
   });

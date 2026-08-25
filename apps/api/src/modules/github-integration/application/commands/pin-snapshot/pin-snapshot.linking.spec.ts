@@ -2,7 +2,7 @@ import {
   GITHUB_REPOSITORY_PERMISSION_LEVELS,
   REPOSITORY_CONNECTION_STATUSES,
 } from "@lcsp/contracts/github-integration";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { describe, expect, it, jest } from "@jest/globals";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";

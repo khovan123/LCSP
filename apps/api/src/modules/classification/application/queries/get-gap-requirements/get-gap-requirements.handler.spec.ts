@@ -5,7 +5,7 @@ import {
   AGENTIC_TOOL_STATUSES,
   GAP_REQUIREMENT_LIMITATION_CODES,
 } from "@lcsp/contracts/evidence";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -41,7 +41,7 @@ function createHandler(input?: {
         .fn<() => Promise<{ actions: string[] } | null>>()
         .mockResolvedValue(
           input?.authPolicy === undefined
-            ? { actions: [PBAC_ACTIONS.gapRequirementsRead] }
+            ? { actions: [RBAC_ACTIONS.gapRequirementsRead] }
             : input.authPolicy,
         ),
     },

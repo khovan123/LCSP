@@ -1,4 +1,4 @@
-import { PBAC_STATE_GATES, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_STATE_GATES, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import {
   GITHUB_REPOSITORY_PERMISSION_LEVELS,
@@ -20,7 +20,7 @@ import {
   VerifiedProfileStatus,
 } from "@prisma/client";
 
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import {
   encryptMfaSecret,
@@ -467,21 +467,21 @@ export async function seedAuthWorkspaceFixture(
       id: policyId,
       version: policyVersion,
       actions: [
-        PBAC_ACTIONS.workspaceRead,
-        PBAC_ACTIONS.assessmentCreate,
-        PBAC_ACTIONS.assessmentRead,
-        PBAC_ACTIONS.assessmentList,
-        PBAC_ACTIONS.githubConnect,
-        PBAC_ACTIONS.scanRead,
-        PBAC_ACTIONS.scanTrigger,
-        PBAC_ACTIONS.documentGenerate,
-        PBAC_ACTIONS.snapshotCreate,
-        PBAC_ACTIONS.wizardWrite,
-        PBAC_ACTIONS.wizardSubmit,
-        PBAC_ACTIONS.wizardExport,
+        RBAC_ACTIONS.workspaceRead,
+        RBAC_ACTIONS.assessmentCreate,
+        RBAC_ACTIONS.assessmentRead,
+        RBAC_ACTIONS.assessmentList,
+        RBAC_ACTIONS.githubConnect,
+        RBAC_ACTIONS.scanRead,
+        RBAC_ACTIONS.scanTrigger,
+        RBAC_ACTIONS.documentGenerate,
+        RBAC_ACTIONS.snapshotCreate,
+        RBAC_ACTIONS.wizardWrite,
+        RBAC_ACTIONS.wizardSubmit,
+        RBAC_ACTIONS.wizardExport,
       ],
       subjectRole: SUBJECT_ROLES.manager,
-      stateGate: PBAC_STATE_GATES.membershipActive,
+      stateGate: RBAC_STATE_GATES.membershipActive,
       organizationId,
     },
   });

@@ -82,7 +82,7 @@ describe("WorkspaceRuntimeEventsController", () => {
     } as unknown as AssessmentRuntimeEventService);
 
     const event = await firstValueFrom(
-      controller.stream({ pbacContext: { organizationId: "org-1" } } as never),
+      controller.stream({ rbacContext: { organizationId: "org-1" } } as never),
     );
 
     expect(buildWorkspaceSnapshot).toHaveBeenCalledWith("org-1");
@@ -156,7 +156,7 @@ describe("WorkspaceRuntimeEventsController", () => {
     const events: unknown[] = [];
 
     const subscription = controller
-      .stream({ pbacContext: { organizationId: "org-1" } } as never)
+      .stream({ rbacContext: { organizationId: "org-1" } } as never)
       .subscribe((event) => events.push(event));
 
     expect(buildWorkspaceSnapshot).toHaveBeenCalledTimes(1);

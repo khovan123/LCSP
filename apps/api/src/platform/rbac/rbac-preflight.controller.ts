@@ -6,7 +6,7 @@ import { ConfigService } from "@nestjs/config";
 
 import { problemException } from "../problems/problem-factory.js";
 import { resultEnvelope } from "../problems/result-envelope.js";
-import { PbacPreflightService } from "./pbac-preflight.service.js";
+import { RbacPreflightService } from "./rbac-preflight.service.js";
 
 interface PreflightRequestBody {
   user_id?: string;
@@ -16,23 +16,23 @@ interface PreflightRequestBody {
 }
 
 /**
- * Exposes the internal worker preflight endpoint used to re-evaluate PBAC immediately before task execution.
+ * Exposes the internal worker preflight endpoint used to re-evaluate RBAC immediately before task execution.
  */
-@Controller("internal/pbac")
-export class PbacPreflightController {
+@Controller("internal/rbac")
+export class RbacPreflightController {
   /**
-   * Creates the controller with PBAC evaluation and worker authentication dependencies.
+   * Creates the controller with RBAC evaluation and worker authentication dependencies.
    *
    * @param preflightService - Service that re-evaluates worker task authorization.
    * @param configService - Configuration source for the expected worker API key.
    */
   constructor(
-    private readonly preflightService: PbacPreflightService,
+    private readonly preflightService: RbacPreflightService,
     private readonly configService: ConfigService,
   ) {}
 
   /**
-   * Authenticates the worker and performs PBAC preflight evaluation for one queued action.
+   * Authenticates the worker and performs RBAC preflight evaluation for one queued action.
    *
    * @param body - Worker-provided user, organization, action, and correlation context.
    * @param apiKey - Worker API key supplied through the `x-worker-api-key` header.

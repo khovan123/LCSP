@@ -4,12 +4,12 @@ import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
 import {
-  PBAC_ACTIONS,
-  PBAC_DECISION,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_DECISION,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import {
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
   type TechnicalEvidenceReportStatus,
@@ -70,7 +70,7 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
     await seedAuthWorkspaceFixture(prisma);
     await prisma.authPolicy.updateMany({
       where: { id: "policy-manager-workspace" },
-      data: { actions: [PBAC_ACTIONS.evidenceRead] },
+      data: { actions: [RBAC_ACTIONS.evidenceRead] },
     });
     await prisma.assessment.create({
       data: {
@@ -131,10 +131,10 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: {
         correlationId: "corr-evidence-dev",
-        decision: PBAC_DECISION.allow,
+        decision: RBAC_DECISION.allow,
       },
     });
-    assert.equal(decision.action, PBAC_ACTIONS.evidenceReadRedacted);
+    assert.equal(decision.action, RBAC_ACTIONS.evidenceReadRedacted);
     assert.equal(decision.policyId, "policy-evidence-systemAdmin");
     assert.equal(decision.policyVersion, "2026-07-19");
   });
@@ -153,14 +153,14 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
 
     const result = await getEvidence(managerToken, "corr-evidence-denied");
     assert.equal(result.status, 403);
-    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), RBAC_REASON_CODE.denied);
     const decisions = await prisma.authDecisionLog.findMany({
       where: { correlationId: "corr-evidence-denied" },
       orderBy: { createdAt: "asc" },
     });
     assert.deepEqual(
       decisions.map((decision) => decision.action),
-      [PBAC_ACTIONS.evidenceRead, PBAC_ACTIONS.evidenceReadRedacted],
+      [RBAC_ACTIONS.evidenceRead, RBAC_ACTIONS.evidenceReadRedacted],
     );
     assert.ok(decisions.every((decision) => decision.policyId));
     assert.ok(decisions.every((decision) => decision.policyVersion));
@@ -248,9 +248,9 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
       data: {
         id: "policy-evidence-systemAdmin",
         version: "2026-07-19",
-        actions: [PBAC_ACTIONS.evidenceReadRedacted],
+        actions: [RBAC_ACTIONS.evidenceReadRedacted],
         subjectRole: SUBJECT_ROLES.systemAdmin,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: ORGANIZATION_ID,
       },
     });

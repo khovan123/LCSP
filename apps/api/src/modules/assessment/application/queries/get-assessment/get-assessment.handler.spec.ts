@@ -4,7 +4,7 @@ import {
   ASSESSMENT_MISSING_EVIDENCE_CODES,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { CLASSIFICATION_GUARDRAIL_STATUSES } from "@lcsp/contracts/scan";
 import { NotFoundException } from "@nestjs/common";
 
@@ -342,7 +342,7 @@ describe("GetAssessmentHandler direct EngineeringRule runtime", () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  it("rejects non-Manager assessment reads after PBAC", async () => {
+  it("rejects non-Manager assessment reads after RBAC", async () => {
     const assessment = makeAssessment({ ownerId: "user-2" });
     const handler = buildHandler({ assessment });
 

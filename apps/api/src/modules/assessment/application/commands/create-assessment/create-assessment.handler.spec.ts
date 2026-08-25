@@ -8,10 +8,10 @@ import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
 import {
-  PBAC_ACTIONS,
-  PBAC_DECISION,
+  RBAC_ACTIONS,
+  RBAC_DECISION,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import {
   ForbiddenException,
   UnprocessableEntityException,
@@ -94,7 +94,7 @@ describe("CreateAssessmentHandler", () => {
         "corr-1",
         {
           subjectRole: SUBJECT_ROLES.manager,
-          selectedAction: PBAC_ACTIONS.assessmentCreate,
+          selectedAction: RBAC_ACTIONS.assessmentCreate,
           policyId: "policy-manager-workspace",
           policyVersion: "2026-06-26",
         },
@@ -121,7 +121,7 @@ describe("CreateAssessmentHandler", () => {
           "corr-1",
           {
             subjectRole: SUBJECT_ROLES.manager,
-            selectedAction: PBAC_ACTIONS.assessmentCreate,
+            selectedAction: RBAC_ACTIONS.assessmentCreate,
             policyId: "policy-manager-workspace",
             policyVersion: "2026-06-26",
           },
@@ -139,7 +139,7 @@ describe("CreateAssessmentHandler", () => {
           "corr-1",
           {
             subjectRole: SUBJECT_ROLES.manager,
-            selectedAction: PBAC_ACTIONS.assessmentCreate,
+            selectedAction: RBAC_ACTIONS.assessmentCreate,
             policyId: "policy-manager-workspace",
             policyVersion: "2026-06-26",
           },
@@ -173,7 +173,7 @@ describe("CreateAssessmentHandler", () => {
           "corr-1",
           {
             subjectRole: SUBJECT_ROLES.manager,
-            selectedAction: PBAC_ACTIONS.assessmentCreate,
+            selectedAction: RBAC_ACTIONS.assessmentCreate,
             policyId: "policy-manager-workspace",
             policyVersion: "2026-06-26",
           },
@@ -197,7 +197,7 @@ describe("CreateAssessmentHandler", () => {
           "corr-1",
           {
             subjectRole: SUBJECT_ROLES.manager,
-            selectedAction: PBAC_ACTIONS.assessmentCreate,
+            selectedAction: RBAC_ACTIONS.assessmentCreate,
             policyId: "policy-manager-workspace",
             policyVersion: "2026-06-26",
           },
@@ -220,7 +220,7 @@ describe("CreateAssessmentHandler", () => {
         "corr-1",
         {
           subjectRole: SUBJECT_ROLES.manager,
-          selectedAction: PBAC_ACTIONS.assessmentCreate,
+          selectedAction: RBAC_ACTIONS.assessmentCreate,
           policyId: "policy-manager-workspace",
           policyVersion: "2026-06-26",
         },
@@ -245,7 +245,7 @@ describe("CreateAssessmentHandler", () => {
         "corr-1",
         {
           subjectRole: SUBJECT_ROLES.manager,
-          selectedAction: PBAC_ACTIONS.assessmentCreate,
+          selectedAction: RBAC_ACTIONS.assessmentCreate,
           policyId: "policy-manager-workspace",
           policyVersion: "2026-06-26",
         },
@@ -262,7 +262,7 @@ describe("CreateAssessmentHandler", () => {
     expect(event.correlationId).toBe("corr-1");
     expect(event.policyId).toBe("policy-manager-workspace");
     expect(event.policyVersion).toBe("2026-06-26");
-    expect(event.decision).toBe(PBAC_DECISION.allow);
+    expect(event.decision).toBe(RBAC_DECISION.allow);
     expect(JSON.stringify(event.payload)).not.toMatch(/Secret Project Name/);
     expect(JSON.stringify(event.payload)).not.toMatch(/Sensitive description/);
   });
@@ -279,7 +279,7 @@ describe("CreateAssessmentHandler", () => {
         "corr-1",
         {
           subjectRole: SUBJECT_ROLES.manager,
-          selectedAction: PBAC_ACTIONS.assessmentCreate,
+          selectedAction: RBAC_ACTIONS.assessmentCreate,
           policyId: "policy-manager-workspace",
           policyVersion: "2026-06-26",
         },
@@ -317,7 +317,7 @@ describe("CreateAssessmentHandler", () => {
         "corr-1",
         {
           subjectRole: SUBJECT_ROLES.manager,
-          selectedAction: PBAC_ACTIONS.assessmentCreate,
+          selectedAction: RBAC_ACTIONS.assessmentCreate,
           policyId: "policy-manager-workspace",
           policyVersion: "2026-06-26",
         },
@@ -330,7 +330,7 @@ describe("CreateAssessmentHandler", () => {
     expect(enqueue.mock.calls[0][1]).toBe(tx);
   });
 
-  it("denies service-level assessment creation when PBAC context is not Manager assessment:create", async () => {
+  it("denies service-level assessment creation when RBAC context is not Manager assessment:create", async () => {
     const { handler, saveInTx, write, enqueue } = buildHandler();
 
     await expect(
@@ -343,7 +343,7 @@ describe("CreateAssessmentHandler", () => {
           "corr-deny",
           {
             subjectRole: SUBJECT_ROLES.systemAdmin,
-            selectedAction: PBAC_ACTIONS.assessmentCreate,
+            selectedAction: RBAC_ACTIONS.assessmentCreate,
             policyId: "policy-system-admin",
             policyVersion: "2026-06-26",
           },
@@ -361,8 +361,8 @@ describe("CreateAssessmentHandler", () => {
         resourceType: AUDIT_RESOURCE_TYPES.assessment,
         resourceId: null,
         correlationId: "corr-deny",
-        decision: PBAC_DECISION.deny,
-        reasonCode: AUTH_ERROR_CODES.pbacDenied,
+        decision: RBAC_DECISION.deny,
+        reasonCode: AUTH_ERROR_CODES.rbacDenied,
         policyId: "policy-system-admin",
         policyVersion: "2026-06-26",
       }),

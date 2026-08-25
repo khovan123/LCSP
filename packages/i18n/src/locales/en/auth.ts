@@ -74,7 +74,7 @@ export const enAuth = {
       title: "Recovery link invalid",
       detail: "This recovery link is invalid or has expired."
     },
-    pbacDenied: {
+    rbacDenied: {
       title: "Action not permitted",
       detail: "You do not have permission to perform this action."
     },

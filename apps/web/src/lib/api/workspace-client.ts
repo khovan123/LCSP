@@ -4,7 +4,7 @@ import {
   type WizardStatusCode,
 } from "@lcsp/contracts/assessment";
 import { AUTH_ERROR_CODES, WORKSPACE_ERROR_CODES } from "@lcsp/contracts/auth";
-import { canUseManagerOnlyAction, PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { canUseManagerOnlyAction, RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import type { MessageKey } from "@lcsp/i18n";
 
 import { PUBLIC_ENTRY_ROUTES } from "../../auth-entry.ts";
@@ -55,7 +55,7 @@ export type WorkspaceSelectionPayload = {
 };
 
 export function canCreateAssessment(grantedActions: readonly string[]) {
-  return canUseManagerOnlyAction(grantedActions, PBAC_ACTIONS.assessmentCreate);
+  return canUseManagerOnlyAction(grantedActions, RBAC_ACTIONS.assessmentCreate);
 }
 
 export function getAssessmentStatusLabelKey(

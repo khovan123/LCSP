@@ -12,7 +12,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import {
@@ -57,9 +57,9 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
   /**
    * Authorizes, validates, creates, and transactionally persists a new assessment.
    *
-   * @param command - Assessment input plus manager-only PBAC and correlation context.
+   * @param command - Assessment input plus manager-only RBAC and correlation context.
    * @returns The external assessment-creation DTO.
-   * @throws When PBAC authorization fails or the requested name/description is invalid.
+   * @throws When RBAC authorization fails or the requested name/description is invalid.
    */
   async execute(
     command: CreateAssessmentCommand,
@@ -128,16 +128,16 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
   /**
    * Enforces the manager-only assessment-create action and records a deny audit event before rejecting unauthorized requests.
    *
-   * @param command - Creation command containing the evaluated PBAC context.
+   * @param command - Creation command containing the evaluated RBAC context.
    * @returns A promise that resolves only when the manager/action/policy requirements are satisfied.
-   * @throws A PBAC-denied problem when the authorization context is incomplete or not manager-approved.
+   * @throws A RBAC-denied problem when the authorization context is incomplete or not manager-approved.
    */
   private async assertManagerOnlyAction(
     command: CreateAssessmentCommand,
   ): Promise<void> {
     const allowed =
       command.authorization.subjectRole === SUBJECT_ROLES.manager &&
-      command.authorization.selectedAction === PBAC_ACTIONS.assessmentCreate &&
+      command.authorization.selectedAction === RBAC_ACTIONS.assessmentCreate &&
       command.authorization.policyId !== null &&
       command.authorization.policyVersion !== null;
 
@@ -151,17 +151,17 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       resourceId: null,
       correlationId: command.correlationId,
       decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      reasonCode: AUTH_ERROR_CODES.rbacDenied,
       policyId: command.authorization.policyId,
       policyVersion: command.authorization.policyVersion,
       payload: {
-        action: PBAC_ACTIONS.assessmentCreate,
+        action: RBAC_ACTIONS.assessmentCreate,
         result: AUDIT_DECISIONS.deny,
         correlationId: command.correlationId,
       },
     });
 
-    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+    throw problemException(AUTH_ERROR_CODES.rbacDenied, command.correlationId, {
       status: HttpStatus.FORBIDDEN,
     });
   }

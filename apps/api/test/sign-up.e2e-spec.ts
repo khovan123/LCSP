@@ -3,10 +3,10 @@ import {
   SIGN_UP_ERROR_CODES,
 } from "@lcsp/contracts/auth";
 import {
-  PBAC_ACTIONS,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import * as assert from "node:assert/strict";
 
 import type { INestApplication } from "@nestjs/common";
@@ -81,7 +81,7 @@ describe("Self sign-up endpoint (e2e)", () => {
     assert.ok(body.organization_id);
     assert.ok(body.session_token);
     assert.equal(Number.isNaN(Date.parse(body.expires_at)), false);
-    assert.ok(body.allowed_actions.includes(PBAC_ACTIONS.workspaceRead));
+    assert.ok(body.allowed_actions.includes(RBAC_ACTIONS.workspaceRead));
 
     const user = await prisma.authUser.findUniqueOrThrow({
       where: { id: body.user_id },
@@ -102,8 +102,8 @@ describe("Self sign-up endpoint (e2e)", () => {
         subjectRole: SUBJECT_ROLES.manager,
       },
     });
-    assert.equal(policy.stateGate, PBAC_STATE_GATES.membershipActive);
-    assert.ok(policy.actions.includes(PBAC_ACTIONS.workspaceRead));
+    assert.equal(policy.stateGate, RBAC_STATE_GATES.membershipActive);
+    assert.ok(policy.actions.includes(RBAC_ACTIONS.workspaceRead));
 
     const membership = await prisma.authMembership.findUniqueOrThrow({
       where: {
@@ -144,7 +144,7 @@ describe("Self sign-up endpoint (e2e)", () => {
     );
     assert.equal(workspaceBody.subject_role, SUBJECT_ROLES.manager);
     assert.ok(
-      workspaceBody.granted_actions.includes(PBAC_ACTIONS.workspaceRead),
+      workspaceBody.granted_actions.includes(RBAC_ACTIONS.workspaceRead),
     );
   });
 

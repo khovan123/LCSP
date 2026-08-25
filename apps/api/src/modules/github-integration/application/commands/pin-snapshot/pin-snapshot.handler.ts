@@ -17,7 +17,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -65,9 +65,9 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
   ) {}
 
   /**
-   * Validates tenant/PBAC scope and revision syntax, resolves the exact GitHub commit, persists the immutable snapshot, and audits the result.
+   * Validates tenant/RBAC scope and revision syntax, resolves the exact GitHub commit, persists the immutable snapshot, and audits the result.
    *
-   * @param command - Assessment, actor/PBAC, repository connection, revision selectors, and correlation context.
+   * @param command - Assessment, actor/RBAC, repository connection, revision selectors, and correlation context.
    * @returns Persisted snapshot metadata including the immutable commit SHA.
    * @throws When the connection/assessment is unavailable, authorization fails, or the requested revision cannot be safely resolved.
    */
@@ -103,9 +103,9 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       command.subjectRole === SUBJECT_ROLES.manager &&
       assessment.ownerId === command.actorId;
     if (!isManagerOwner) {
-      await this.auditDenied(command, AUTH_ERROR_CODES.pbacDenied);
+      await this.auditDenied(command, AUTH_ERROR_CODES.rbacDenied);
       throw problemException(
-        AUTH_ERROR_CODES.pbacDenied,
+        AUTH_ERROR_CODES.rbacDenied,
         command.correlationId,
         {
           status: HttpStatus.FORBIDDEN,

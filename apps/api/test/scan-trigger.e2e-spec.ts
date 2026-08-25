@@ -9,7 +9,7 @@ import {
   REPOSITORY_SNAPSHOT_STATUSES,
 } from "@lcsp/contracts/github-integration";
 import { OUTBOX_MESSAGE_SCHEMA_VERSION } from "@lcsp/contracts/outbox";
-import { PBAC_ACTIONS, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 /** MW-gh-004: Scan Trigger Endpoint. */
 
 import * as assert from "node:assert/strict";
@@ -215,7 +215,7 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
     );
   });
 
-  it("T05: PBAC denies a Manager without scan:trigger", async () => {
+  it("T05: RBAC denies a Manager without scan:trigger", async () => {
     await prisma.authPolicy.update({
       where: {
         id_version: {
@@ -223,13 +223,13 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
           version: "2026-06-26",
         },
       },
-      data: { actions: [PBAC_ACTIONS.workspaceRead] },
+      data: { actions: [RBAC_ACTIONS.workspaceRead] },
     });
 
     const response = await triggerManual(app, managerToken);
 
     assert.equal(response.status, 403);
-    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
     assert.equal(await prisma.repositoryScanJob.count(), 0);
   });
 

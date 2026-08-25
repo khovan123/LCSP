@@ -7,7 +7,7 @@ import {
   type AssessmentRuntimeStageCode,
   EVIDENCE_ERROR_CODES,
 } from "@lcsp/contracts/evidence";
-import { PBAC_DECISION } from "@lcsp/contracts/pbac";
+import { RBAC_DECISION } from "@lcsp/contracts/rbac";
 import {
   Body,
   Controller,
@@ -27,7 +27,7 @@ import {
   ORCHESTRATION_RUNTIME_LOG_EVENTS,
   sanitizeOrchestrationLogValue,
 } from "../../../../platform/logging/orchestration-runtime-log.js";
-import { PbacPreflightService } from "../../../../platform/pbac/pbac-preflight.service.js";
+import { RbacPreflightService } from "../../../../platform/rbac/rbac-preflight.service.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import {
@@ -36,7 +36,7 @@ import {
 } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import {
-  agenticToolCommandPbacAction,
+  agenticToolCommandRbacAction,
   buildAgenticToolCommand,
   isAgenticToolCommand,
 } from "./agentic-tool-command-dispatcher.js";
@@ -82,7 +82,7 @@ export class InternalAgenticToolDispatchController {
     private readonly configService: ConfigService<AppConfig, true>,
     private readonly runtimeEvents: AssessmentRuntimeEventService,
     @Optional() private readonly commandBus?: CommandBus,
-    @Optional() private readonly pbacPreflight?: PbacPreflightService,
+    @Optional() private readonly rbacPreflight?: RbacPreflightService,
   ) {}
 
   @Post("dispatch")
@@ -248,7 +248,7 @@ export class InternalAgenticToolDispatchController {
     policyId: string;
     policyVersion: string;
   }> {
-    if (!this.pbacPreflight) {
+    if (!this.rbacPreflight) {
       throw problemException(
         EVIDENCE_ERROR_CODES.notFound,
         args.correlationId,
@@ -258,19 +258,19 @@ export class InternalAgenticToolDispatchController {
       );
     }
 
-    const authorization = await this.pbacPreflight.evaluateWithPolicy({
+    const authorization = await this.rbacPreflight.evaluateWithPolicy({
       userId: args.userId,
       organizationId: args.organizationId,
-      action: agenticToolCommandPbacAction(args.toolName),
+      action: agenticToolCommandRbacAction(args.toolName),
       correlationId: args.correlationId,
     });
 
     if (
-      authorization.decision !== PBAC_DECISION.allow ||
+      authorization.decision !== RBAC_DECISION.allow ||
       !authorization.policyId ||
       !authorization.policyVersion
     ) {
-      throw problemException(AUTH_ERROR_CODES.pbacDenied, args.correlationId, {
+      throw problemException(AUTH_ERROR_CODES.rbacDenied, args.correlationId, {
         status: HttpStatus.FORBIDDEN,
       });
     }

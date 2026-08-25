@@ -1,7 +1,7 @@
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { WIZARD_EVENT_TYPES, type WizardAnswer } from "@lcsp/contracts/wizard";
 import { HttpStatus } from "@nestjs/common";
@@ -98,7 +98,7 @@ export class GetReadinessHandler implements IQueryHandler<
     const { authorization } = query;
     const isManager = authorization.subjectRole === SUBJECT_ROLES.manager;
     const hasReadAction =
-      authorization.selectedAction === PBAC_ACTIONS.assessmentRead;
+      authorization.selectedAction === RBAC_ACTIONS.assessmentRead;
     const hasPolicy =
       authorization.policyId !== null && authorization.policyVersion !== null;
 
@@ -114,18 +114,18 @@ export class GetReadinessHandler implements IQueryHandler<
       resourceType: AUDIT_RESOURCE_TYPES.assessmentRecord,
       resourceId: query.assessmentId,
       decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      reasonCode: AUTH_ERROR_CODES.rbacDenied,
       correlationId: query.correlationId,
       policyId: authorization.policyId,
       policyVersion: authorization.policyVersion,
       payload: {
         assessmentId: query.assessmentId,
-        action: PBAC_ACTIONS.assessmentRead,
+        action: RBAC_ACTIONS.assessmentRead,
         result: AUDIT_DECISIONS.deny,
       },
     });
 
-    throw problemException(AUTH_ERROR_CODES.pbacDenied, query.correlationId, {
+    throw problemException(AUTH_ERROR_CODES.rbacDenied, query.correlationId, {
       status: HttpStatus.FORBIDDEN,
     });
   }

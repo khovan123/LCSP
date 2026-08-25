@@ -7,14 +7,14 @@ status: DONE
 epic_story: 3.5
 depends_on:
   - scan/02-scan-job-callback-endpoint.md
-  - platform/pbac/03-nestjs-guard.md
+  - platform/rbac/03-nestjs-guard.md
 ---
 
 # Get Technical Evidence Report Endpoint
 
 ## Outcome
 
-Return the accepted `TechnicalEvidenceReport` for an assessment. Manager sees redacted findings for owned assessments. Any non-Manager evidence projection requires explicit PBAC policy and remains redacted. Never returns source code, secrets, or raw tool output. Provenance metadata included.
+Return the accepted `TechnicalEvidenceReport` for an assessment. Manager sees redacted findings for owned assessments. Any non-Manager evidence projection requires explicit RBAC policy and remains redacted. Never returns source code, secrets, or raw tool output. Provenance metadata included.
 
 ## Module Files
 
@@ -63,12 +63,12 @@ Return the accepted `TechnicalEvidenceReport` for an assessment. Manager sees re
 
 | HTTP | `error_code`         | Meaning                             |
 | ---- | -------------------- | ----------------------------------- |
-| 403  | `PBAC_DENIED`        | Actor lacks required action         |
+| 403  | `RBAC_DENIED`        | Actor lacks required action         |
 | 404  | `EVIDENCE_NOT_FOUND` | No accepted evidence for assessment |
 
 ## Business Rules
 
-1. PBAC guard: `action = evidence:read`.
+1. RBAC guard: `action = evidence:read`.
 2. Org-scope guard: `evidence.organizationId = session.organizationId`.
 3. Redaction removes or nulls source-location fields when policy requires narrowed evidence access.
 4. Raw source code must never appear in findings — validated at evidence acceptance (scan callback). But double-check: redactor removes any field matching known source-code patterns.
@@ -88,7 +88,7 @@ Return the accepted `TechnicalEvidenceReport` for an assessment. Manager sees re
 | T01 | Manager reads evidence         | All findings including file_path |
 | T02 | Narrowed redacted projection   | `file_path`, `line_number` null  |
 | T03 | No accepted evidence           | 404 `EVIDENCE_NOT_FOUND`         |
-| T04 | Actor lacks required action    | 403 `PBAC_DENIED`                |
+| T04 | Actor lacks required action    | 403 `RBAC_DENIED`                |
 | T05 | Evidence from different org    | 404 `EVIDENCE_NOT_FOUND`         |
 | T06 | Rejected evidence not returned | Only `status = accepted` visible |
 | T07 | No source code in findings     | Field inspection                 |

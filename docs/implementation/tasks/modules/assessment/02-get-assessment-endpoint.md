@@ -7,7 +7,7 @@ status: READY_FOR_DEV
 epic_story: 2.3
 depends_on:
   - assessment/01-create-assessment-endpoint.md
-  - platform/pbac/03-nestjs-guard.md
+  - platform/rbac/03-nestjs-guard.md
 ---
 
 # Get Assessment Endpoint
@@ -64,7 +64,7 @@ Return the full assessment state for the owning Manager. Includes current status
 
 | HTTP | `error_code`           | Meaning                            |
 | ---- | ---------------------- | ---------------------------------- |
-| 403  | `PBAC_DENIED`          | Actor lacks `assessment:read`      |
+| 403  | `RBAC_DENIED`          | Actor lacks `assessment:read`      |
 | 404  | `ASSESSMENT_NOT_FOUND` | ID not found or not in session org |
 
 ## Prisma Models Used
@@ -77,7 +77,7 @@ Return the full assessment state for the owning Manager. Includes current status
 
 ## Business Rules
 
-1. PBAC guard: `action = assessment:read`.
+1. RBAC guard: `action = assessment:read`.
 2. Verify `assessment.organizationId = session.organizationId`. If mismatch → `ASSESSMENT_NOT_FOUND`.
 3. If Manager's `ownerId ≠ session.userId` → `ASSESSMENT_NOT_FOUND` (Managers see own assessments only).
 4. `classification_locked = true` when no accepted `TechnicalEvidenceReport` linked to assessment.
@@ -93,9 +93,9 @@ Return the full assessment state for the owning Manager. Includes current status
 | T02 | No technical evidence → `classification_locked = true`     | `lock_reason = LOCKED_EVIDENCE_REQUIRED` |
 | T03 | Accepted evidence exists → `classification_locked = false` | Lock reason null                         |
 | T04 | Assessment not in session org                              | 404 `ASSESSMENT_NOT_FOUND`               |
-| T05 | Manager lacks `assessment:read`                            | 403 `PBAC_DENIED`                        |
+| T05 | Manager lacks `assessment:read`                            | 403 `RBAC_DENIED`                        |
 | T06 | Response has no risk/severity/non-compliant wording        | Verified by field inspection             |
-| T07 | Non-owner or non-Manager subject                           | 404 or PBAC denial                       |
+| T07 | Non-owner or non-Manager subject                           | 404 or RBAC denial                       |
 | T08 | `next_action` is business language                         | Verified by content                      |
 
 ## Definition of Done

@@ -1,5 +1,5 @@
 import { Command } from "@nestjs/cqrs";
-import type { SubjectRole } from "@lcsp/contracts/pbac";
+import type { SubjectRole } from "@lcsp/contracts/rbac";
 import type { WizardAnswer } from "@lcsp/contracts/wizard";
 import type { SaveWizardDraftResponse } from "../../contracts/wizard/wizard-draft.contract.js";
 

@@ -92,7 +92,7 @@ Node.js downstream domain workers are `SUPERSEDED_FOR_ACTIVE_MVP`. Node.js remai
 
 ## Phase 5.2L Locked Corrections
 
-- PBAC is the authorization source of truth. Roles may remain only as subject attributes, grouping labels, or policy templates; roles are not the final authorization authority.
+- RBAC is the authorization source of truth. Roles may remain only as subject attributes, grouping labels, or policy templates; roles are not the final authorization authority.
 - Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP` and removed from active MVP use cases, requirements, UX, entities, events, audit/report dependencies, and delivery tasks.
 - Compliance certification, formal legal opinion, direct regulator submission, and `FR-051` manual technical evidence JSON upload are `REMOVED_FROM_PRODUCT`.
 - `FR-050` no longer means Local/CI scanner report upload. It is redefined as `AUTOMATIC_TRUSTED_SCAN_INITIATION`.

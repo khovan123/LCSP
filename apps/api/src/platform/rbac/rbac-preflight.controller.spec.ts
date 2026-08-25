@@ -1,36 +1,36 @@
 import { jest } from "@jest/globals";
-import { PBAC_DECISION, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { RBAC_DECISION, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import { UnauthorizedException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 
-import { PbacPreflightController } from "./pbac-preflight.controller.js";
-import type { PbacPreflightService } from "./pbac-preflight.service.js";
+import { RbacPreflightController } from "./rbac-preflight.controller.js";
+import type { RbacPreflightService } from "./rbac-preflight.service.js";
 
 const VALID_KEY = "correct-worker-api-key-value-1234";
 
 function makeController(
   overrides: {
-    evaluateImpl?: PbacPreflightService["evaluate"];
+    evaluateImpl?: RbacPreflightService["evaluate"];
   } = {},
 ) {
   const evaluate = jest
-    .fn<PbacPreflightService["evaluate"]>()
+    .fn<RbacPreflightService["evaluate"]>()
     .mockImplementation(
       overrides.evaluateImpl ??
         (() =>
           Promise.resolve({
-            decision: PBAC_DECISION.allow,
+            decision: RBAC_DECISION.allow,
             reasonCode: null,
             correlationId: "corr-1",
           })),
     );
-  const preflightService = { evaluate } as unknown as PbacPreflightService;
+  const preflightService = { evaluate } as unknown as RbacPreflightService;
 
   const configService = {
     get: (_key: string, fallback?: unknown) => VALID_KEY ?? fallback,
   } as unknown as ConfigService;
 
-  const controller = new PbacPreflightController(
+  const controller = new RbacPreflightController(
     preflightService,
     configService,
   );
@@ -38,7 +38,7 @@ function makeController(
   return { controller, evaluate };
 }
 
-describe("PbacPreflightController", () => {
+describe("RbacPreflightController", () => {
   it("T04: missing X-Worker-Api-Key returns 401", async () => {
     const { controller } = makeController();
 
@@ -82,7 +82,7 @@ describe("PbacPreflightController", () => {
     expect(response).toEqual({
       ok: true,
       data: {
-        decision: PBAC_DECISION.allow,
+        decision: RBAC_DECISION.allow,
         reason_code: null,
         correlationId: "corr-1",
       },
@@ -93,8 +93,8 @@ describe("PbacPreflightController", () => {
     const { controller } = makeController({
       evaluateImpl: () =>
         Promise.resolve({
-          decision: PBAC_DECISION.deny,
-          reasonCode: PBAC_REASON_CODE.actionNotGranted,
+          decision: RBAC_DECISION.deny,
+          reasonCode: RBAC_REASON_CODE.actionNotGranted,
           correlationId: "corr-1",
         }),
     });
@@ -107,8 +107,8 @@ describe("PbacPreflightController", () => {
     expect(response).toEqual({
       ok: true,
       data: {
-        decision: PBAC_DECISION.deny,
-        reason_code: PBAC_REASON_CODE.actionNotGranted,
+        decision: RBAC_DECISION.deny,
+        reason_code: RBAC_REASON_CODE.actionNotGranted,
         correlationId: "corr-1",
       },
     });

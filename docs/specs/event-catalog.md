@@ -11,7 +11,7 @@ Canonical command and event names for the A-to-Z runnable MVP.
 - Payloads contain IDs, versions, statuses, hashes, and metadata references only.
 - Every message includes message ID, schema version, correlation ID, causation ID, aggregate reference, timestamp, and idempotency key.
 - Exhausted messages route to the matching DLQ.
-- PBAC decisions are audited with actor/service identity, organization, resource, action, policy ID/version, decision, safe context refs and correlation ID.
+- RBAC decisions are audited with actor/service identity, organization, resource, action, policy ID/version, decision, safe context refs and correlation ID.
 - Structured attestation events are `SUPERSEDED_FOR_ACTIVE_MVP` and must not appear in active command/event choreography.
 
 ## Commands and Queues
@@ -48,7 +48,7 @@ Canonical command and event names for the A-to-Z runnable MVP.
 | Event                                    | Required Guard                                                                                                 |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `event.scan.completed.v1`                | quality-valid report persisted, ScanJob completed, workspace cleanup verified                                  |
-| `event.scan-trigger.ready.v1`            | trusted source verified, PBAC allowed, unique tenant/repository/assessment/branch/commit mapping exists        |
+| `event.scan-trigger.ready.v1`            | trusted source verified, RBAC allowed, unique tenant/repository/assessment/branch/commit mapping exists        |
 | `event.legal-source.ingest.completed.v1` | source validated, snapshot/hash persisted, document staged in DRAFT corpus                                     |
 | `event.legal-index-build.completed.v1`   | corpus approved, ChromaDB records written, legal hierarchy/xref metadata verified and citation allowlist-ready |
 | `event.classification.completed.v1`      | direct EngineeringRule assessment result persisted with legal rule provenance and evidence refs                |
@@ -74,7 +74,7 @@ Canonical command and event names for the A-to-Z runnable MVP.
 - `SCAN_TRIGGER_BLOCKED_MAPPING`
 - `SCAN_TRIGGER_WAITING_FOR_CONTEXT`
 - `SCAN_TRIGGER_REJECTED`
-- `PBAC_DECISION_RECORDED`
+- `RBAC_DECISION_RECORDED`
 - `LEGAL_SOURCE_VALIDATED`
 - `LEGAL_SOURCE_INGESTED`
 - `LEGAL_SOURCE_INGEST_FAILED`

@@ -1,8 +1,8 @@
 import type { RepositoryScanTriggerSource } from "@lcsp/contracts/github-integration";
-import type { SubjectRole } from "@lcsp/contracts/pbac";
+import type { SubjectRole } from "@lcsp/contracts/rbac";
 
 /**
- * Carries snapshot, trigger provenance, idempotency, and optional authenticated PBAC context into scan-job creation.
+ * Carries snapshot, trigger provenance, idempotency, and optional authenticated RBAC context into scan-job creation.
  */
 export class TriggerScanCommand {
   /**
@@ -14,8 +14,8 @@ export class TriggerScanCommand {
    * @param idempotencyKey - Key used to deduplicate equivalent scan-trigger requests.
    * @param actorId - Authenticated actor identifier, or null for trusted system-triggered work.
    * @param organizationId - Organization context, or null when it must be derived from trusted snapshot state.
-   * @param subjectRole - PBAC subject role when the trigger originated from a user request.
-   * @param scope - Optional PBAC assessment scope for non-manager callers.
+   * @param subjectRole - RBAC subject role when the trigger originated from a user request.
+   * @param scope - Optional RBAC assessment scope for non-manager callers.
    * @param correlationId - Correlation identifier propagated to persistence, audit, outbox, and errors.
    */
   constructor(

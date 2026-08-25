@@ -13,11 +13,11 @@ import {
 import { QueryBus } from "@nestjs/cqrs";
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import type { GetGapRequirementsInput } from "@lcsp/contracts/evidence";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
-import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { GetGapRequirementsQuery } from "../../application/queries/get-gap-requirements/get-gap-requirements.query.js";
@@ -32,8 +32,8 @@ export class GapRequirementsController {
 
   @Post(":assessmentId/gap-requirements")
   @HttpCode(HttpStatus.OK)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.gapRequirementsRead)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.gapRequirementsRead)
   async getGapRequirements(
     @Param("assessmentId") assessmentId: string,
     @Body() body: unknown,
@@ -45,11 +45,11 @@ export class GapRequirementsController {
       await this.queryBus.execute(
         new GetGapRequirementsQuery(
           assessmentId,
-          request.pbacContext.organizationId,
+          request.rbacContext.organizationId,
           input,
-          request.pbacContext.userId,
-          request.pbacContext.policyId,
-          request.pbacContext.policyVersion,
+          request.rbacContext.userId,
+          request.rbacContext.policyId,
+          request.rbacContext.policyVersion,
           correlationId,
         ),
       ),

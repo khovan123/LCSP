@@ -5,10 +5,10 @@ import {
   createProblemResult,
 } from "@lcsp/contracts/auth";
 import {
-  PBAC_ACTIONS,
-  PBAC_DECISION,
-  PBAC_REASON_CODE,
-} from "@lcsp/contracts/pbac";
+  RBAC_ACTIONS,
+  RBAC_DECISION,
+  RBAC_REASON_CODE,
+} from "@lcsp/contracts/rbac";
 
 import type {
   AuditEvent,
@@ -75,7 +75,7 @@ export class AuthWorkspaceSupportService {
       organization_id: organizationId,
       membership_status: membership.status,
       // Only the role label is client-safe; other subject attributes are
-      // internal PBAC policy-evaluation inputs and must not leak to the client.
+      // internal RBAC policy-evaluation inputs and must not leak to the client.
       subject_attributes: membership.hasRole()
         ? { role: membership.role() }
         : {},
@@ -249,8 +249,8 @@ export class AuthWorkspaceSupportService {
         organization_id: membership?.organizationId ?? null,
         resource_type: AUDIT_RESOURCE_TYPES.workspace,
         resource_id: resourceId,
-        action: PBAC_ACTIONS.workspaceRead,
-        decision: PBAC_DECISION.deny,
+        action: RBAC_ACTIONS.workspaceRead,
+        decision: RBAC_DECISION.deny,
         reason_code: denialCode,
         policy_id: membership?.policyId ?? null,
         policy_version: membership?.policyVersion ?? null,
@@ -265,9 +265,9 @@ export class AuthWorkspaceSupportService {
       organization_id: organizationId,
       resource_type: AUDIT_RESOURCE_TYPES.workspace,
       resource_id: resourceId,
-      action: PBAC_ACTIONS.workspaceRead,
-      decision: PBAC_DECISION.allow,
-      reason_code: PBAC_REASON_CODE.authorized,
+      action: RBAC_ACTIONS.workspaceRead,
+      decision: RBAC_DECISION.allow,
+      reason_code: RBAC_REASON_CODE.authorized,
       policy_id: membership?.policyId ?? null,
       policy_version: membership?.policyVersion ?? null,
       correlationId: correlationId,

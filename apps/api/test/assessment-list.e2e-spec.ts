@@ -6,11 +6,11 @@ import {
 } from "@lcsp/contracts/assessment";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import {
-  PBAC_ACTIONS,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 /**
  * MW-asmt-003: List Assessments Endpoint.
  */
@@ -162,15 +162,15 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
   });
 
   // T05
-  it("T05: Manager lacks assessment:list -> 403 PBAC_DENIED", async () => {
+  it("T05: Manager lacks assessment:list -> 403 RBAC_DENIED", async () => {
     const restrictedPolicyId = "policy-no-assessment-list";
     await prisma.authPolicy.create({
       data: {
         id: restrictedPolicyId,
         version: "2026-07-10",
-        actions: [PBAC_ACTIONS.workspaceRead, ASSESSMENT_ACTIONS.create],
+        actions: [RBAC_ACTIONS.workspaceRead, ASSESSMENT_ACTIONS.create],
         subjectRole: SUBJECT_ROLES.manager,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -209,7 +209,7 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       .set("Authorization", `Bearer ${restrictedToken}`);
 
     assert.equal(result.status, 403);
-    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), RBAC_REASON_CODE.denied);
   });
 
   // T06
@@ -232,9 +232,9 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       data: {
         id: systemAdminPolicyId,
         version: "2026-07-10",
-        actions: [PBAC_ACTIONS.assessmentList],
+        actions: [RBAC_ACTIONS.assessmentList],
         subjectRole: SUBJECT_ROLES.systemAdmin,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -292,9 +292,9 @@ describe("List Assessments Endpoint (e2e) [MW-asmt-003]", () => {
       data: {
         id: systemAdminPolicyId,
         version: "2026-07-10",
-        actions: [PBAC_ACTIONS.assessmentList],
+        actions: [RBAC_ACTIONS.assessmentList],
         subjectRole: SUBJECT_ROLES.systemAdmin,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });

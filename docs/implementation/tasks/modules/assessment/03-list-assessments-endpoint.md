@@ -7,7 +7,7 @@ status: READY_FOR_DEV
 epic_story: 2.1
 depends_on:
   - assessment/01-create-assessment-endpoint.md
-  - platform/pbac/03-nestjs-guard.md
+  - platform/rbac/03-nestjs-guard.md
 ---
 
 # List Assessments Endpoint
@@ -63,7 +63,7 @@ Return a paginated list of assessments in the Manager's organization. Managers s
 
 | HTTP | `error_code`  | Meaning                       |
 | ---- | ------------- | ----------------------------- |
-| 403  | `PBAC_DENIED` | Actor lacks `assessment:list` |
+| 403  | `RBAC_DENIED` | Actor lacks `assessment:list` |
 
 ## Prisma Models Used
 
@@ -74,9 +74,9 @@ Return a paginated list of assessments in the Manager's organization. Managers s
 
 ## Business Rules
 
-1. PBAC guard: `action = assessment:list`.
+1. RBAC guard: `action = assessment:list`.
 2. Managers: `WHERE organizationId = session.organizationId AND ownerId = session.userId`.
-3. Non-Manager subjects return an empty list or PBAC denial according to guard outcome; there is no active Developer scoped list.
+3. Non-Manager subjects return an empty list or RBAC denial according to guard outcome; there is no active Developer scoped list.
 4. `status` filter: if provided, add `AND status = filter.status`. Validate against known status values.
 5. Pagination: `OFFSET (page - 1) * page_size, LIMIT page_size`. Max `page_size = 100`.
 6. `AssessmentSummary` must not include risk labels, classification values, or technical findings.
@@ -89,8 +89,8 @@ Return a paginated list of assessments in the Manager's organization. Managers s
 | T02 | Manager with no assessments       | 200, empty `assessments` array |
 | T03 | `page_size = 5`                   | Only 5 returned                |
 | T04 | `status` filter                   | Only matching status returned  |
-| T05 | Manager lacks `assessment:list`   | 403 `PBAC_DENIED`              |
-| T06 | Non-Manager subject requests list | Empty list or PBAC denial      |
+| T05 | Manager lacks `assessment:list`   | 403 `RBAC_DENIED`              |
+| T06 | Non-Manager subject requests list | Empty list or RBAC denial      |
 | T07 | `page_size > 100`                 | Clamped to 100 or rejected     |
 | T08 | No risk labels in response        | Verified by field inspection   |
 

@@ -25,7 +25,7 @@ import {
   OUTBOX_AGGREGATE_TYPES,
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { LegalRetrievalIndexStatus, Prisma } from "@prisma/client";
 import { VERIFIED_PROFILE_STATUSES } from "@lcsp/contracts/scan";
 
@@ -371,7 +371,7 @@ export class LegalCorpusService {
         },
         result: AGENTIC_TOOL_STATUSES.ready,
         redactionStatus: AUDIT_REDACTION_STATUSES.none,
-        authorizationAction: PBAC_ACTIONS.legalCorpusActivate,
+        authorizationAction: RBAC_ACTIONS.legalCorpusActivate,
         idempotencyKey: `${corpus.id}:${input.idempotencyKey}:activation`,
         payload: {
           corpusVersionRef: `corpus-version:${corpus.id}`,
@@ -701,7 +701,7 @@ export class LegalCorpusService {
         },
         result: LEGAL_MATCHING_REQUEST_COMMAND,
         redactionStatus: AUDIT_REDACTION_STATUSES.none,
-        authorizationAction: PBAC_ACTIONS.legalCorpusActivate,
+        authorizationAction: RBAC_ACTIONS.legalCorpusActivate,
         idempotencyKey: `${profile.id}:${LEGAL_MATCHING_REQUEST_COMMAND}:${input.corpusVersionId}`,
         payload: {
           verifiedProfileId: profile.id,

@@ -6,7 +6,7 @@ import {
   AuthDecision as PrismaAuthDecision,
   AuthMembershipStatus as PrismaAuthMembershipStatus,
   AuthPrimaryEmailAddressPolicy as PrismaAuthPrimaryEmailAddressPolicy,
-  AuthStateGate as PrismaAuthStateGate,
+  AuthUserRole as PrismaAuthUserRole,
   AuthorizationReasonCode as PrismaAuthorizationReasonCode,
   ClassificationGuardrailStatus as PrismaClassificationGuardrailStatus,
   ConflictRecordStatus as PrismaConflictRecordStatus,
@@ -46,10 +46,12 @@ import {
   AUTH_ERROR_CODES,
   AUTH_MEMBERSHIP_STATUSES,
   AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
+  AUTH_USER_ROLES,
   type AuthBackupEmailPolicy,
   type AuthErrorCode,
   type AuthMembershipStatus,
   type AuthPrimaryEmailAddressPolicy,
+  type AuthUserRole,
 } from "@lcsp/contracts/auth";
 import {
   DOCUMENT_REQUEST_STATUSES,
@@ -76,11 +78,9 @@ import {
   type OutboxStatus,
 } from "@lcsp/contracts/outbox";
 import {
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
-  type PbacReasonCode,
-  type StateGate,
-} from "@lcsp/contracts/pbac";
+  RBAC_REASON_CODE,
+  type RbacReasonCode,
+} from "@lcsp/contracts/rbac";
 import {
   CONFLICT_RECORD_STATUSES,
   CLASSIFICATION_GUARDRAIL_STATUSES,
@@ -104,7 +104,7 @@ import {
   type ReadinessExportStatus,
 } from "@lcsp/contracts/wizard";
 
-type AuthorizationReasonCode = AuthErrorCode | PbacReasonCode;
+type AuthorizationReasonCode = AuthErrorCode | RbacReasonCode;
 type EvidenceAcceptanceContractStatus =
   | TechnicalEvidenceReportStatus
   | TechnicalProfileStatus
@@ -237,19 +237,19 @@ const PRISMA_AUDIT_EXPORT_STATUS_TO_CONTRACT = {
 } as const satisfies Record<PrismaAuditExportStatus, AuditExportStatus>;
 
 const AUTH_STATE_GATE_TO_PRISMA = {
-  [PBAC_STATE_GATES.membershipActive]: PrismaAuthStateGate.MEMBERSHIP_ACTIVE,
+  [RBAC_STATE_GATES.membershipActive]: PrismaAuthStateGate.MEMBERSHIP_ACTIVE,
 } as const satisfies Record<StateGate, PrismaAuthStateGate>;
 
 const PRISMA_AUTH_STATE_GATE_TO_CONTRACT = {
-  [PrismaAuthStateGate.MEMBERSHIP_ACTIVE]: PBAC_STATE_GATES.membershipActive,
+  [PrismaAuthStateGate.MEMBERSHIP_ACTIVE]: RBAC_STATE_GATES.membershipActive,
 } as const satisfies Record<PrismaAuthStateGate, StateGate>;
 
 const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
-  [PBAC_REASON_CODE.actionNotGranted]:
+  [RBAC_REASON_CODE.actionNotGranted]:
     PrismaAuthorizationReasonCode.ACTION_NOT_GRANTED,
   [AUTH_ERROR_CODES.accountNotFound]:
     PrismaAuthorizationReasonCode.ACCOUNT_NOT_FOUND,
-  [PBAC_REASON_CODE.authorized]: PrismaAuthorizationReasonCode.AUTHORIZED,
+  [RBAC_REASON_CODE.authorized]: PrismaAuthorizationReasonCode.AUTHORIZED,
   [AUTH_ERROR_CODES.authzEvaluatorFailure]:
     PrismaAuthorizationReasonCode.AUTHZ_EVALUATOR_FAILURE,
   [AUTH_ERROR_CODES.authzPolicyUnavailable]:
@@ -263,7 +263,7 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
   [AUTH_ERROR_CODES.authRequired]: PrismaAuthorizationReasonCode.AUTH_REQUIRED,
   [AUTH_ERROR_CODES.emailVerificationRequired]:
     PrismaAuthorizationReasonCode.EMAIL_VERIFICATION_REQUIRED,
-  [PBAC_REASON_CODE.evaluatorError]:
+  [RBAC_REASON_CODE.evaluatorError]:
     PrismaAuthorizationReasonCode.EVALUATOR_ERROR,
   [AUTH_ERROR_CODES.invalidCredentials]:
     PrismaAuthorizationReasonCode.INVALID_CREDENTIALS,
@@ -271,8 +271,8 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
     PrismaAuthorizationReasonCode.INVALID_INVITE_STATE,
   [AUTH_ERROR_CODES.invalidRedirectUri]:
     PrismaAuthorizationReasonCode.INVALID_REDIRECT_URI,
-  [PBAC_REASON_CODE.loadError]: PrismaAuthorizationReasonCode.LOAD_ERROR,
-  [PBAC_REASON_CODE.membershipMissing]:
+  [RBAC_REASON_CODE.loadError]: PrismaAuthorizationReasonCode.LOAD_ERROR,
+  [RBAC_REASON_CODE.membershipMissing]:
     PrismaAuthorizationReasonCode.MEMBERSHIP_MISSING,
   [AUTH_ERROR_CODES.mfaRequired]: PrismaAuthorizationReasonCode.MFA_REQUIRED,
   [AUTH_ERROR_CODES.mfaInvalid]: PrismaAuthorizationReasonCode.MFA_INVALID,
@@ -282,24 +282,24 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
     PrismaAuthorizationReasonCode.OAUTH_CALLBACK_INVALID,
   [AUTH_ERROR_CODES.oauthStateInvalid]:
     PrismaAuthorizationReasonCode.OAUTH_STATE_INVALID,
-  [PBAC_REASON_CODE.organizationMismatch]:
+  [RBAC_REASON_CODE.organizationMismatch]:
     PrismaAuthorizationReasonCode.ORGANIZATION_MISMATCH,
-  [PBAC_REASON_CODE.denied]: PrismaAuthorizationReasonCode.PBAC_DENIED,
-  [PBAC_REASON_CODE.metadataMissing]:
-    PrismaAuthorizationReasonCode.PBAC_METADATA_MISSING,
-  [PBAC_REASON_CODE.policyNotFound]:
+  [RBAC_REASON_CODE.denied]: PrismaAuthorizationReasonCode.RBAC_DENIED,
+  [RBAC_REASON_CODE.metadataMissing]:
+    PrismaAuthorizationReasonCode.RBAC_METADATA_MISSING,
+  [RBAC_REASON_CODE.policyNotFound]:
     PrismaAuthorizationReasonCode.POLICY_NOT_FOUND,
   [AUTH_ERROR_CODES.reauthRequired]:
     PrismaAuthorizationReasonCode.REAUTH_REQUIRED,
   [AUTH_ERROR_CODES.recoveryInvalid]:
     PrismaAuthorizationReasonCode.RECOVERY_INVALID,
-  [PBAC_REASON_CODE.sessionInvalid]:
+  [RBAC_REASON_CODE.sessionInvalid]:
     PrismaAuthorizationReasonCode.SESSION_INVALID,
-  [PBAC_REASON_CODE.stateGateFailed]:
+  [RBAC_REASON_CODE.stateGateFailed]:
     PrismaAuthorizationReasonCode.STATE_GATE_FAILED,
-  [PBAC_REASON_CODE.subjectRoleMismatch]:
+  [RBAC_REASON_CODE.subjectRoleMismatch]:
     PrismaAuthorizationReasonCode.SUBJECT_ROLE_MISMATCH,
-  [PBAC_REASON_CODE.subjectAttributeMissing]:
+  [RBAC_REASON_CODE.subjectAttributeMissing]:
     PrismaAuthorizationReasonCode.SUBJECT_ATTRIBUTE_MISSING,
   [AUTH_ERROR_CODES.temporaryLock]:
     PrismaAuthorizationReasonCode.TEMPORARY_LOCKED,
@@ -314,10 +314,10 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
 
 const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
   [PrismaAuthorizationReasonCode.ACTION_NOT_GRANTED]:
-    PBAC_REASON_CODE.actionNotGranted,
+    RBAC_REASON_CODE.actionNotGranted,
   [PrismaAuthorizationReasonCode.ACCOUNT_NOT_FOUND]:
     AUTH_ERROR_CODES.accountNotFound,
-  [PrismaAuthorizationReasonCode.AUTHORIZED]: PBAC_REASON_CODE.authorized,
+  [PrismaAuthorizationReasonCode.AUTHORIZED]: RBAC_REASON_CODE.authorized,
   [PrismaAuthorizationReasonCode.AUTHZ_EVALUATOR_FAILURE]:
     AUTH_ERROR_CODES.authzEvaluatorFailure,
   [PrismaAuthorizationReasonCode.AUTHZ_POLICY_UNAVAILABLE]:
@@ -332,16 +332,16 @@ const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
   [PrismaAuthorizationReasonCode.EMAIL_VERIFICATION_REQUIRED]:
     AUTH_ERROR_CODES.emailVerificationRequired,
   [PrismaAuthorizationReasonCode.EVALUATOR_ERROR]:
-    PBAC_REASON_CODE.evaluatorError,
+    RBAC_REASON_CODE.evaluatorError,
   [PrismaAuthorizationReasonCode.INVALID_CREDENTIALS]:
     AUTH_ERROR_CODES.invalidCredentials,
   [PrismaAuthorizationReasonCode.INVALID_INVITE_STATE]:
     AUTH_ERROR_CODES.invalidInviteState,
   [PrismaAuthorizationReasonCode.INVALID_REDIRECT_URI]:
     AUTH_ERROR_CODES.invalidRedirectUri,
-  [PrismaAuthorizationReasonCode.LOAD_ERROR]: PBAC_REASON_CODE.loadError,
+  [PrismaAuthorizationReasonCode.LOAD_ERROR]: RBAC_REASON_CODE.loadError,
   [PrismaAuthorizationReasonCode.MEMBERSHIP_MISSING]:
-    PBAC_REASON_CODE.membershipMissing,
+    RBAC_REASON_CODE.membershipMissing,
   [PrismaAuthorizationReasonCode.MFA_REQUIRED]: AUTH_ERROR_CODES.mfaRequired,
   [PrismaAuthorizationReasonCode.MFA_INVALID]: AUTH_ERROR_CODES.mfaInvalid,
   [PrismaAuthorizationReasonCode.MFA_RATE_LIMITED]:
@@ -351,24 +351,24 @@ const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
   [PrismaAuthorizationReasonCode.OAUTH_STATE_INVALID]:
     AUTH_ERROR_CODES.oauthStateInvalid,
   [PrismaAuthorizationReasonCode.ORGANIZATION_MISMATCH]:
-    PBAC_REASON_CODE.organizationMismatch,
-  [PrismaAuthorizationReasonCode.PBAC_DENIED]: PBAC_REASON_CODE.denied,
-  [PrismaAuthorizationReasonCode.PBAC_METADATA_MISSING]:
-    PBAC_REASON_CODE.metadataMissing,
+    RBAC_REASON_CODE.organizationMismatch,
+  [PrismaAuthorizationReasonCode.RBAC_DENIED]: RBAC_REASON_CODE.denied,
+  [PrismaAuthorizationReasonCode.RBAC_METADATA_MISSING]:
+    RBAC_REASON_CODE.metadataMissing,
   [PrismaAuthorizationReasonCode.POLICY_NOT_FOUND]:
-    PBAC_REASON_CODE.policyNotFound,
+    RBAC_REASON_CODE.policyNotFound,
   [PrismaAuthorizationReasonCode.REAUTH_REQUIRED]:
     AUTH_ERROR_CODES.reauthRequired,
   [PrismaAuthorizationReasonCode.RECOVERY_INVALID]:
     AUTH_ERROR_CODES.recoveryInvalid,
   [PrismaAuthorizationReasonCode.SESSION_INVALID]:
-    PBAC_REASON_CODE.sessionInvalid,
+    RBAC_REASON_CODE.sessionInvalid,
   [PrismaAuthorizationReasonCode.STATE_GATE_FAILED]:
-    PBAC_REASON_CODE.stateGateFailed,
+    RBAC_REASON_CODE.stateGateFailed,
   [PrismaAuthorizationReasonCode.SUBJECT_ROLE_MISMATCH]:
-    PBAC_REASON_CODE.subjectRoleMismatch,
+    RBAC_REASON_CODE.subjectRoleMismatch,
   [PrismaAuthorizationReasonCode.SUBJECT_ATTRIBUTE_MISSING]:
-    PBAC_REASON_CODE.subjectAttributeMissing,
+    RBAC_REASON_CODE.subjectAttributeMissing,
   [PrismaAuthorizationReasonCode.TEMPORARY_LOCKED]:
     AUTH_ERROR_CODES.temporaryLock,
   [PrismaAuthorizationReasonCode.UNSUPPORTED_PROVIDER]:
@@ -932,28 +932,28 @@ export function fromPrismaAuditExportStatus(
   return PRISMA_AUDIT_EXPORT_STATUS_TO_CONTRACT[status];
 }
 
-/** Maps a PBAC state gate from the contract layer to Prisma. @param stateGate - Contract PBAC state gate. @returns Prisma state gate. */
+/** Maps a RBAC state gate from the contract layer to Prisma. @param stateGate - Contract RBAC state gate. @returns Prisma state gate. */
 export function toPrismaAuthStateGate(
   stateGate: StateGate,
 ): PrismaAuthStateGate {
   return AUTH_STATE_GATE_TO_PRISMA[stateGate];
 }
 
-/** Maps a PBAC state gate from Prisma to the contract layer. @param stateGate - Prisma state gate. @returns Contract PBAC state gate. */
+/** Maps a RBAC state gate from Prisma to the contract layer. @param stateGate - Prisma state gate. @returns Contract RBAC state gate. */
 export function fromPrismaAuthStateGate(
   stateGate: PrismaAuthStateGate,
 ): StateGate {
   return PRISMA_AUTH_STATE_GATE_TO_CONTRACT[stateGate];
 }
 
-/** Maps an authorization reason code from the contract layer to Prisma. @param reasonCode - Contract auth/PBAC reason code. @returns Prisma authorization reason code. */
+/** Maps an authorization reason code from the contract layer to Prisma. @param reasonCode - Contract auth/RBAC reason code. @returns Prisma authorization reason code. */
 export function toPrismaAuthorizationReasonCode(
   reasonCode: AuthorizationReasonCode,
 ): PrismaAuthorizationReasonCode {
   return AUTHORIZATION_REASON_CODE_TO_PRISMA[reasonCode];
 }
 
-/** Maps an authorization reason code from Prisma to the contract layer. @param reasonCode - Prisma authorization reason code. @returns Contract auth/PBAC reason code. */
+/** Maps an authorization reason code from Prisma to the contract layer. @param reasonCode - Prisma authorization reason code. @returns Contract auth/RBAC reason code. */
 export function fromPrismaAuthorizationReasonCode(
   reasonCode: PrismaAuthorizationReasonCode,
 ): AuthorizationReasonCode {

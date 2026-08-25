@@ -12,12 +12,12 @@ import {
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { DOCUMENT_ERROR_CODES } from "@lcsp/contracts/document";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
-import { RequireAnyAction } from "../../../../platform/pbac/decorators/require-any-action.decorator.js";
-import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { RequireAnyAction } from "../../../../platform/rbac/decorators/require-any-action.decorator.js";
+import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { RequestFinalReportCommand } from "../../application/commands/request-final-report/request-final-report.command.js";
@@ -27,7 +27,7 @@ import { ListDocumentsQuery } from "../../application/queries/list-documents/lis
 import { DocumentStorageService } from "../../infrastructure/storage/document-storage.service.js";
 
 /**
- * Exposes PBAC-protected document generation/read endpoints and verifies signed document download redirects.
+ * Exposes RBAC-protected document generation/read endpoints and verifies signed document download redirects.
  */
 @Controller("assessments")
 export class DocumentController {
@@ -53,8 +53,8 @@ export class DocumentController {
    */
   @Post(":assessmentId/documents/final-report")
   @HttpCode(202)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.documentGenerate)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.documentGenerate)
   async requestFinalReport(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
@@ -68,8 +68,8 @@ export class DocumentController {
       await this.commandBus.execute(
         new RequestFinalReportCommand(
           assessmentId,
-          request.pbacContext.organizationId,
-          request.pbacContext.userId,
+          request.rbacContext.organizationId,
+          request.rbacContext.userId,
           correlationId,
         ),
       ),
@@ -85,8 +85,8 @@ export class DocumentController {
    */
   @Post(":assessmentId/documents/gap-analysis")
   @HttpCode(202)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.documentGenerate)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.documentGenerate)
   async requestGapAnalysis(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
@@ -100,8 +100,8 @@ export class DocumentController {
       await this.commandBus.execute(
         new RequestGapAnalysisCommand(
           assessmentId,
-          request.pbacContext.organizationId,
-          request.pbacContext.userId,
+          request.rbacContext.organizationId,
+          request.rbacContext.userId,
           correlationId,
         ),
       ),
@@ -109,7 +109,7 @@ export class DocumentController {
   }
 
   /**
-   * Retrieves one document status view using the full or redacted PBAC read mode selected by the guard.
+   * Retrieves one document status view using the full or redacted RBAC read mode selected by the guard.
    *
    * @param assessmentId - Assessment identifier from the route.
    * @param documentRequestId - Document request identifier from the route.
@@ -117,17 +117,17 @@ export class DocumentController {
    * @returns The standard result envelope containing document status/download metadata.
    */
   @Get(":assessmentId/documents/:documentRequestId")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireAnyAction(
-    PBAC_ACTIONS.documentRead,
-    PBAC_ACTIONS.documentReadRedacted,
+    RBAC_ACTIONS.documentRead,
+    RBAC_ACTIONS.documentReadRedacted,
   )
   async getDocument(
     @Param("assessmentId") assessmentId: string,
     @Param("documentRequestId") documentRequestId: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    const context = request.pbacContext;
+    const context = request.rbacContext;
     return resultEnvelope(
       await this.queryBus.execute(
         new GetDocumentQuery(
@@ -150,16 +150,16 @@ export class DocumentController {
    * @returns The standard result envelope containing visible document request records.
    */
   @Get(":assessmentId/documents")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireAnyAction(
-    PBAC_ACTIONS.documentRead,
-    PBAC_ACTIONS.documentReadRedacted,
+    RBAC_ACTIONS.documentRead,
+    RBAC_ACTIONS.documentReadRedacted,
   )
   async listDocuments(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    const context = request.pbacContext;
+    const context = request.rbacContext;
     return resultEnvelope(
       await this.queryBus.execute(
         new ListDocumentsQuery(

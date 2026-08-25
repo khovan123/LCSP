@@ -75,7 +75,7 @@ Retired Developer invitation/revocation audit event names are not active runtime
 
 This service IS the event sink. Not a command handler.
 
-## PBAC
+## RBAC
 
 Not applicable. Called post-authorization only.
 

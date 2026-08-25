@@ -1,9 +1,9 @@
 import {
-  PBAC_ACTIONS,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { jest } from "@jest/globals";
 
@@ -16,7 +16,7 @@ import type { MfaEnrollmentRepository } from "../../modules/auth-workspace/appli
 import type { PolicyRepository } from "../../modules/auth-workspace/application/ports/persistence/policy.repository.js";
 import type { SessionRepository } from "../../modules/auth-workspace/application/ports/persistence/session.repository.js";
 import { hashSecret } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
-import { PbacContextLoader } from "./pbac-context.loader.js";
+import { RbacContextLoader } from "./rbac-context.loader.js";
 
 const NOW = 1_700_000_000_000;
 
@@ -56,9 +56,9 @@ function makePolicy(
   return Policy.rehydrate({
     id: "policy-1",
     version: "v1",
-    actions: [PBAC_ACTIONS.workspaceRead],
+    actions: [RBAC_ACTIONS.workspaceRead],
     subjectRole: SUBJECT_ROLES.manager,
-    stateGate: PBAC_STATE_GATES.membershipActive,
+    stateGate: RBAC_STATE_GATES.membershipActive,
     organizationId: "org-1",
     ...overrides,
   });
@@ -117,10 +117,10 @@ function makeLoader(
       overrides.mfaEnrollments?.deleteByUserId ?? (() => Promise.resolve()),
   };
 
-  return new PbacContextLoader(sessions, memberships, policies, mfaEnrollments);
+  return new RbacContextLoader(sessions, memberships, policies, mfaEnrollments);
 }
 
-describe("PbacContextLoader", () => {
+describe("RbacContextLoader", () => {
   it("resolves session, membership, and policy on the happy path", async () => {
     const loader = makeLoader();
     const result = await loader.load("raw-token", NOW, {
@@ -148,7 +148,7 @@ describe("PbacContextLoader", () => {
 
     expect(result).toEqual({
       ok: false,
-      reason: PBAC_REASON_CODE.sessionInvalid,
+      reason: RBAC_REASON_CODE.sessionInvalid,
     });
   });
 
@@ -165,7 +165,7 @@ describe("PbacContextLoader", () => {
 
     expect(result).toEqual({
       ok: false,
-      reason: PBAC_REASON_CODE.sessionInvalid,
+      reason: RBAC_REASON_CODE.sessionInvalid,
     });
   });
 
@@ -184,7 +184,7 @@ describe("PbacContextLoader", () => {
 
     expect(result).toEqual({
       ok: false,
-      reason: PBAC_REASON_CODE.sessionInvalid,
+      reason: RBAC_REASON_CODE.sessionInvalid,
     });
   });
 
@@ -201,7 +201,7 @@ describe("PbacContextLoader", () => {
 
     expect(result).toEqual({
       ok: false,
-      reason: PBAC_REASON_CODE.sessionInvalid,
+      reason: RBAC_REASON_CODE.sessionInvalid,
     });
   });
 
@@ -245,7 +245,7 @@ describe("PbacContextLoader", () => {
 
     expect(result).toEqual({
       ok: false,
-      reason: PBAC_REASON_CODE.mfaRequired,
+      reason: RBAC_REASON_CODE.mfaRequired,
       mfaEnrolled: true,
     });
   });
@@ -311,7 +311,7 @@ describe("PbacContextLoader", () => {
 
     expect(result).toEqual({
       ok: false,
-      reason: PBAC_REASON_CODE.membershipMissing,
+      reason: RBAC_REASON_CODE.membershipMissing,
     });
   });
 
@@ -332,7 +332,7 @@ describe("PbacContextLoader", () => {
 
     expect(result).toEqual({
       ok: false,
-      reason: PBAC_REASON_CODE.membershipMissing,
+      reason: RBAC_REASON_CODE.membershipMissing,
     });
   });
 
@@ -351,7 +351,7 @@ describe("PbacContextLoader", () => {
 
     expect(result).toEqual({
       ok: false,
-      reason: PBAC_REASON_CODE.policyNotFound,
+      reason: RBAC_REASON_CODE.policyNotFound,
     });
   });
 
@@ -366,6 +366,6 @@ describe("PbacContextLoader", () => {
 
     const result = await loader.load("raw-token", NOW);
 
-    expect(result).toEqual({ ok: false, reason: PBAC_REASON_CODE.loadError });
+    expect(result).toEqual({ ok: false, reason: RBAC_REASON_CODE.loadError });
   });
 });

@@ -58,7 +58,7 @@ See `docs/specs/legal-rule-catalog-spec.md`.
 
 - Manager owns assessment business truth and final conflict resolution.
 - Developer invitation/task workspace is retired from the active MVP. Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP`.
-- PBAC is the authorization source of truth. Roles are subject attributes/templates only.
+- RBAC is the authorization source of truth. Roles are subject attributes/templates only.
 - Python Worker Platform owns all asynchronous domain workloads.
 - Python Scanner Worker owns Repository Scan lifecycle and scanner evidence entities.
 - Internal Legal Operator owns corpus review/approval actions through internal API/CLI for MVP.
@@ -96,7 +96,7 @@ Relationships: has memberships, users, assessments, repository connections, and 
 | membershipId            | UUIDv7 |      Yes | Membership identity                              |
 | organizationId / userId | UUIDv7 |      Yes | Tenant/user link                                 |
 | role                    | enum   |      Yes | Manager subject label for active MVP             |
-| policyScope             | JSON   |       No | PBAC policy scope references for delegated tasks |
+| policyScope             | JSON   |       No | RBAC policy scope references for delegated tasks |
 | status                  | enum   |      Yes | invited/active/revoked                           |
 
 ### Policy / PolicyVersion
@@ -111,7 +111,7 @@ Relationships: has memberships, users, assessments, repository connections, and 
 | actions          | JSON           |      Yes | Allowed/denied action set                    |
 | status           | enum           |      Yes | active/superseded/revoked                    |
 
-Concrete PBAC engine, storage, cache, invalidation, evaluation topology and failure behavior are governed by `docs/implementation/decisions/pbac-runtime-decision.md`.
+Concrete RBAC engine, storage, cache, invalidation, evaluation topology and failure behavior are governed by `docs/implementation/decisions/rbac-runtime-decision.md`.
 
 ### AuthorizationDecision
 

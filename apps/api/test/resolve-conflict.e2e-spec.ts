@@ -6,11 +6,11 @@ import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import {
-  PBAC_ACTIONS,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import {
   AI_USAGE_FLOW_STATUSES,
   CONFLICT_RECORD_STATUSES,
@@ -204,7 +204,7 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
       },
     );
 
-    assertError(response.status, response.body, 403, PBAC_REASON_CODE.denied);
+    assertError(response.status, response.body, 403, RBAC_REASON_CODE.denied);
   });
 
   it("T06 returns not found for a conflict outside the session organization", async () => {
@@ -299,7 +299,7 @@ async function grantManagerConflictResolve(
   });
   await prisma.authPolicy.update({
     where: { id_version: { id: policy.id, version: policy.version } },
-    data: { actions: [...policy.actions, PBAC_ACTIONS.conflictResolve] },
+    data: { actions: [...policy.actions, RBAC_ACTIONS.conflictResolve] },
   });
 }
 
@@ -310,9 +310,9 @@ async function seedSystemAdmin(prisma: PrismaClient): Promise<void> {
     data: {
       id: policyId,
       version: policyVersion,
-      actions: [PBAC_ACTIONS.assessmentList],
+      actions: [RBAC_ACTIONS.assessmentList],
       subjectRole: SUBJECT_ROLES.systemAdmin,
-      stateGate: PBAC_STATE_GATES.membershipActive,
+      stateGate: RBAC_STATE_GATES.membershipActive,
       organizationId: "org-1",
     },
   });

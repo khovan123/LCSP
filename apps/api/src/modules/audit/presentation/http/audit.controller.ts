@@ -13,12 +13,12 @@ import {
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { AUDIT_ERROR_CODES } from "@lcsp/contracts/audit";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import type { Response } from "express";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
-import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import type { AuditExportArtifact } from "../../application/contracts/audit/audit-export.contract.js";
@@ -61,12 +61,12 @@ export class AuditController {
    * @param toDate - Optional inclusive date-range end.
    * @param page - Optional page number query value.
    * @param pageSize - Optional page-size query value.
-   * @param request - Authenticated request containing PBAC and correlation context.
+   * @param request - Authenticated request containing RBAC and correlation context.
    * @returns The standard result envelope containing a paginated audit event list.
    */
   @Get()
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.auditRead)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.auditRead)
   async listAuditEvents(
     @Param("orgId") organizationId: string,
     @Query("event_type") eventType: string | undefined,
@@ -77,7 +77,7 @@ export class AuditController {
     @Query("page_size") pageSize: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    const context = request.pbacContext;
+    const context = request.rbacContext;
 
     return resultEnvelope(
       await this.queryBus.execute(
@@ -106,8 +106,8 @@ export class AuditController {
    */
   @Post("export")
   @HttpCode(202)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.auditExport)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.auditExport)
   async exportAuditTrail(
     @Param("orgId") organizationId: string,
     @Body() body: AuditExportBody,
@@ -122,8 +122,8 @@ export class AuditController {
       await this.commandBus.execute(
         new ExportAuditTrailCommand(
           organizationId,
-          request.pbacContext.organizationId,
-          request.pbacContext.userId,
+          request.rbacContext.organizationId,
+          request.rbacContext.userId,
           body.from_date,
           body.to_date,
           correlationId,
@@ -141,8 +141,8 @@ export class AuditController {
    * @returns The standard result envelope containing export status metadata.
    */
   @Get("export/:exportRequestId")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.auditExport)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.auditExport)
   async getAuditExport(
     @Param("orgId") organizationId: string,
     @Param("exportRequestId") exportRequestId: string,
@@ -152,7 +152,7 @@ export class AuditController {
       await this.queryBus.execute(
         new GetAuditExportQuery(
           organizationId,
-          request.pbacContext.organizationId,
+          request.rbacContext.organizationId,
           exportRequestId,
           request.correlationId as string,
         ),

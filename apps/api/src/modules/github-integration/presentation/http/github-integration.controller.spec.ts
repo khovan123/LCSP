@@ -7,28 +7,28 @@ import {
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
 import {
-  PBAC_ACTIONS,
-  PBAC_METADATA_TYPES,
+  RBAC_ACTIONS,
+  RBAC_METADATA_TYPES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 
-import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-metadata.js";
+import { RBAC_METADATA_KEY } from "../../../../platform/rbac/decorators/rbac-metadata.js";
 import { PinSnapshotCommand } from "../../application/commands/pin-snapshot/pin-snapshot.command.js";
 import { TriggerScanCommand } from "../../application/commands/trigger-scan/trigger-scan.command.js";
 import type { TriggerScanDto } from "../../application/contracts/github-integration/trigger-scan.contract.js";
 import { GitHubIntegrationController } from "./github-integration.controller.js";
 
 describe("GitHubIntegrationController.pinSnapshot", () => {
-  it("requires the snapshot:create PBAC action", () => {
+  it("requires the snapshot:create RBAC action", () => {
     const metadata = Reflect.getMetadata(
-      PBAC_METADATA_KEY,
+      RBAC_METADATA_KEY,
       // eslint-disable-next-line @typescript-eslint/unbound-method
       GitHubIntegrationController.prototype.pinSnapshot,
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: PBAC_METADATA_TYPES.action,
-      action: PBAC_ACTIONS.snapshotCreate,
+      type: RBAC_METADATA_TYPES.action,
+      action: RBAC_ACTIONS.snapshotCreate,
     });
   });
 
@@ -48,7 +48,7 @@ describe("GitHubIntegrationController.pinSnapshot", () => {
       },
       {
         correlationId: "corr-1",
-        pbacContext: {
+        rbacContext: {
           organizationId: "org-1",
           userId: "manager-1",
           subjectRole: SUBJECT_ROLES.manager,
@@ -71,16 +71,16 @@ describe("GitHubIntegrationController.pinSnapshot", () => {
 });
 
 describe("GitHubIntegrationController.triggerScan", () => {
-  it("requires the scan:trigger PBAC action", () => {
+  it("requires the scan:trigger RBAC action", () => {
     const metadata = Reflect.getMetadata(
-      PBAC_METADATA_KEY,
+      RBAC_METADATA_KEY,
       // eslint-disable-next-line @typescript-eslint/unbound-method
       GitHubIntegrationController.prototype.triggerScan,
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: PBAC_METADATA_TYPES.action,
-      action: PBAC_ACTIONS.scanTrigger,
+      type: RBAC_METADATA_TYPES.action,
+      action: RBAC_ACTIONS.scanTrigger,
     });
   });
 
@@ -107,7 +107,7 @@ describe("GitHubIntegrationController.triggerScan", () => {
       {
         correlationId: "corr-1",
         scanTriggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
-        pbacContext: {
+        rbacContext: {
           organizationId: "org-1",
           userId: "manager-1",
           subjectRole: SUBJECT_ROLES.manager,

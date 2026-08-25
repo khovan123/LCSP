@@ -23,7 +23,7 @@ Summarize canonical requirement and planning traceability after Phase 5.2L activ
 
 ## Active Scope
 
-- PBAC is the authorization source of truth; roles are attributes/templates only.
+- RBAC is the authorization source of truth; roles are attributes/templates only.
 - GitHub App read-only Repository Scan is the golden technical-evidence path.
 - `FR-050` automatically creates or resumes scan workflows from trusted integration context.
 - Python Worker Platform owns all asynchronous domain workloads.
@@ -72,7 +72,7 @@ CANONICAL_ACCEPTANCE_CRITERIA_NORMALIZED
 LEGAL_CORPUS_UX_BOUNDARY_LOCKED
 PYTHON_WORKER_PLATFORM_IMPLEMENTATION_CONSOLIDATED
 SCANNER_BEHAVIOR_AUTHORITY_CONSOLIDATED
-PBAC_AUTHORIZATION_MODEL_ALIGNED
+RBAC_AUTHORIZATION_MODEL_ALIGNED
 FR_050_AUTOMATIC_TRUSTED_SCAN_INITIATION_TRACED
 FR_051_REMOVED_FROM_PRODUCT
 STRUCTURED_ATTESTATION_SUPERSEDED_FOR_ACTIVE_MVP

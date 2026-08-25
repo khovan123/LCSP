@@ -5,7 +5,7 @@ import {
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { jest } from "@jest/globals";
@@ -118,7 +118,7 @@ describe("OutboxDlqService", () => {
       const replayAuditEvent = writeAudit.mock.calls[0]?.[0];
       expect(replayAuditEvent?.payload).toEqual(
         expect.objectContaining({
-          replayAuthority: PBAC_ACTIONS.outboxReplay,
+          replayAuthority: RBAC_ACTIONS.outboxReplay,
         }),
       );
     });

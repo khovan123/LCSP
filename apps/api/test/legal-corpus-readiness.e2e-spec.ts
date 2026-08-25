@@ -4,7 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { LegalRetrievalIndexStatus, PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import { AppModule } from "../src/app.module.js";
 import {
@@ -64,7 +64,7 @@ describe("Legal corpus readiness endpoint (e2e)", () => {
           version: "2026-06-26",
         },
       },
-      data: { actions: [...policy.actions, PBAC_ACTIONS.legalCorpusRead] },
+      data: { actions: [...policy.actions, RBAC_ACTIONS.legalCorpusRead] },
     });
     await prisma.assessment.create({
       data: {
@@ -122,7 +122,7 @@ describe("Legal corpus readiness endpoint (e2e)", () => {
     );
   });
 
-  it("TC-03: PBAC denial is fail-closed and recorded", async () => {
+  it("TC-03: RBAC denial is fail-closed and recorded", async () => {
     await prisma.authPolicy.update({
       where: {
         id_version: {
@@ -130,7 +130,7 @@ describe("Legal corpus readiness endpoint (e2e)", () => {
           version: "2026-06-26",
         },
       },
-      data: { actions: [PBAC_ACTIONS.assessmentRead] },
+      data: { actions: [RBAC_ACTIONS.assessmentRead] },
     });
 
     const response = await httpRequest(app)
@@ -141,7 +141,7 @@ describe("Legal corpus readiness endpoint (e2e)", () => {
 
     assert.equal(response.status, 403);
     const decision = await prisma.authDecisionLog.findFirst({
-      where: { action: PBAC_ACTIONS.legalCorpusRead },
+      where: { action: RBAC_ACTIONS.legalCorpusRead },
       orderBy: { createdAt: "desc" },
     });
     assert.equal(decision?.decision, "DENY");

@@ -9,7 +9,7 @@ import {
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -23,14 +23,14 @@ describe("RerunScanHandler", () => {
   let auditWriter: jest.Mocked<AuditWriterService>;
   let outbox: jest.Mocked<OutboxRepository>;
 
-  const defaultPbac = {
+  const defaultRbac = {
     userId: "user-1",
     sessionId: "sess",
     organizationId: "org-1",
     subjectRole: SUBJECT_ROLES.manager,
     scope: "assessment-1",
     grantedActions: [],
-    selectedAction: PBAC_ACTIONS.scanTrigger,
+    selectedAction: RBAC_ACTIONS.scanTrigger,
     policyId: "pol",
     policyVersion: "1",
   };
@@ -39,7 +39,7 @@ describe("RerunScanHandler", () => {
     "assessment-1",
     "snapshot-1",
     "idempotency-key",
-    defaultPbac,
+    defaultRbac,
     "corr-id",
     "reason",
   );
@@ -212,7 +212,7 @@ describe("RerunScanHandler", () => {
       "assessment-1",
       "snapshot-1",
       "",
-      defaultPbac,
+      defaultRbac,
       "corr",
     );
     await expect(handler.execute(cmd)).rejects.toThrow(BadRequestException);

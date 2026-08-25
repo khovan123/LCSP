@@ -23,7 +23,7 @@ const GENERIC_BLOCKED_REASON =
   "Document generation is blocked until the required review items are resolved.";
 
 /**
- * Lists assessment documents with full/redacted PBAC visibility, business-safe blocked reasons, and signed ready-artifact downloads.
+ * Lists assessment documents with full/redacted RBAC visibility, business-safe blocked reasons, and signed ready-artifact downloads.
  */
 @QueryHandler(ListDocumentsQuery)
 export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
@@ -39,9 +39,9 @@ export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
   ) {}
 
   /**
-   * Applies PBAC read semantics, hides final reports from redacted readers, and projects visible document request status.
+   * Applies RBAC read semantics, hides final reports from redacted readers, and projects visible document request status.
    *
-   * @param query - Assessment, tenant, PBAC scope/action, and correlation context.
+   * @param query - Assessment, tenant, RBAC scope/action, and correlation context.
    * @returns Visible document status records with optional signed download metadata.
    * @throws When the selected read action is unauthorized or the redacted caller is outside the assessment scope.
    */
@@ -207,13 +207,13 @@ export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
   }
 
   /**
-   * Throws a standardized PBAC-denied problem for unsupported document read actions.
+   * Throws a standardized RBAC-denied problem for unsupported document read actions.
    *
    * @param correlationId - Correlation identifier attached to the problem response.
-   * @throws Always throws the PBAC-denied problem.
+   * @throws Always throws the RBAC-denied problem.
    */
   private forbidden(correlationId: string): never {
-    throw problemException(AUTH_ERROR_CODES.pbacDenied, correlationId, {
+    throw problemException(AUTH_ERROR_CODES.rbacDenied, correlationId, {
       status: HttpStatus.FORBIDDEN,
     });
   }

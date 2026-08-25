@@ -70,8 +70,8 @@ Story 5.3's richer guided-resolution behavior (choose/correct/mark unknown, stal
     - `401`: redirect to sign-in with return URL.
     - `403`: show localized friendly copy: user does not have permission to resolve conflicts for this assessment; include CTA back to assessment list.
     - `404`: show generic not-found/out-of-organization state.
-    - Do not render raw backend error codes such as `PBAC_DENIED` as customer-facing copy.
-12. Non-Manager subjects cannot access this page (PBAC gated — will show 403).
+    - Do not render raw backend error codes such as `RBAC_DENIED` as customer-facing copy.
+12. Non-Manager subjects cannot access this page (RBAC gated — will show 403).
 
 ## Test Cases
 

@@ -15,10 +15,10 @@ import {
 } from "./support/auth-workspace-test-helpers.js";
 
 import {
-  PBAC_ACTIONS,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { LEGAL_RULE_LIFECYCLE_STATUSES } from "@lcsp/contracts/legal-rule-catalog";
 
@@ -73,11 +73,11 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         id: authorPolicyId,
         version: "2026-07-26-author",
         actions: [
-          PBAC_ACTIONS.legalRuleCatalogAuthor,
-          PBAC_ACTIONS.legalCorpusIngest,
+          RBAC_ACTIONS.legalRuleCatalogAuthor,
+          RBAC_ACTIONS.legalCorpusIngest,
         ],
         subjectRole: SUBJECT_ROLES.systemAdmin,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -117,11 +117,11 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         id: approverPolicyId,
         version: "2026-07-26-approver",
         actions: [
-          PBAC_ACTIONS.legalRuleCatalogApprove,
-          PBAC_ACTIONS.legalCorpusApprove,
+          RBAC_ACTIONS.legalRuleCatalogApprove,
+          RBAC_ACTIONS.legalCorpusApprove,
         ],
         subjectRole: SUBJECT_ROLES.systemAdmin,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -161,9 +161,9 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       data: {
         id: restrictedPolicyId,
         version: "2026-07-26-restricted",
-        actions: [PBAC_ACTIONS.workspaceRead],
+        actions: [RBAC_ACTIONS.workspaceRead],
         subjectRole: SUBJECT_ROLES.systemAdmin,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });

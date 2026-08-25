@@ -13,7 +13,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { WIZARD_ERROR_CODES, WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import { HttpStatus, Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
@@ -204,7 +204,7 @@ export class SubmitWizardHandler implements ICommandHandler<
   ): Promise<void> {
     const allowed =
       command.authorization.subjectRole === SUBJECT_ROLES.manager &&
-      command.authorization.selectedAction === PBAC_ACTIONS.wizardSubmit &&
+      command.authorization.selectedAction === RBAC_ACTIONS.wizardSubmit &&
       command.authorization.policyId !== null &&
       command.authorization.policyVersion !== null;
 
@@ -217,18 +217,18 @@ export class SubmitWizardHandler implements ICommandHandler<
       resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
       resourceId: null,
       decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      reasonCode: AUTH_ERROR_CODES.rbacDenied,
       correlationId: command.correlationId,
       policyId: command.authorization.policyId,
       policyVersion: command.authorization.policyVersion,
       payload: {
         assessmentId: command.assessmentId,
-        action: PBAC_ACTIONS.wizardSubmit,
+        action: RBAC_ACTIONS.wizardSubmit,
         result: AUDIT_DECISIONS.deny,
       },
     });
 
-    throw problemException(AUTH_ERROR_CODES.pbacDenied, command.correlationId, {
+    throw problemException(AUTH_ERROR_CODES.rbacDenied, command.correlationId, {
       status: HttpStatus.FORBIDDEN,
     });
   }

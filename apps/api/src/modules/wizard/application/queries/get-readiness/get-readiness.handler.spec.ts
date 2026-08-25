@@ -1,6 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ForbiddenException } from "@nestjs/common";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
@@ -68,7 +68,7 @@ describe("GetReadinessHandler", () => {
     "corr-1",
     {
       subjectRole: SUBJECT_ROLES.manager,
-      selectedAction: PBAC_ACTIONS.assessmentRead,
+      selectedAction: RBAC_ACTIONS.assessmentRead,
       policyId: "pol-1",
       policyVersion: "v1",
     },
@@ -103,7 +103,7 @@ describe("GetReadinessHandler", () => {
     expect(auditWriter.write).toHaveBeenCalledWith(
       expect.objectContaining({
         decision: AUDIT_DECISIONS.deny,
-        reasonCode: AUTH_ERROR_CODES.pbacDenied,
+        reasonCode: AUTH_ERROR_CODES.rbacDenied,
       }),
     );
   });

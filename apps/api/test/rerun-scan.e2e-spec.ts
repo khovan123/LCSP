@@ -6,7 +6,7 @@ import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
-import { PBAC_ACTIONS, PBAC_REASON_CODE } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
@@ -156,13 +156,13 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
           version: "2026-06-26",
         },
       },
-      data: { actions: [PBAC_ACTIONS.workspaceRead] },
+      data: { actions: [RBAC_ACTIONS.workspaceRead] },
     });
 
     const response = await triggerRerun(app, managerToken);
 
     assert.equal(response.status, 403);
-    assert.equal(problemCode(response), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
   });
 
   it("T05: Snapshot not in org returns 404", async () => {

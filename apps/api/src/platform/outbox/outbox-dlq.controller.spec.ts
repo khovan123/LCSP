@@ -1,8 +1,8 @@
 import { jest } from "@jest/globals";
-import { PBAC_ACTIONS, PBAC_METADATA_TYPES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, RBAC_METADATA_TYPES } from "@lcsp/contracts/rbac";
 import { OutboxDlqController } from "./outbox-dlq.controller.js";
 import { OutboxDlqService } from "./outbox-dlq.service.js";
-import { PBAC_METADATA_KEY } from "../pbac/decorators/pbac-metadata.js";
+import { RBAC_METADATA_KEY } from "../rbac/decorators/rbac-metadata.js";
 
 describe("OutboxDlqController", () => {
   let controller: OutboxDlqController;
@@ -36,21 +36,21 @@ describe("OutboxDlqController", () => {
   });
 
   describe("replayMessage", () => {
-    it("requires the outbox:replay PBAC action", () => {
+    it("requires the outbox:replay RBAC action", () => {
       const metadata = Reflect.getMetadata(
-        PBAC_METADATA_KEY,
+        RBAC_METADATA_KEY,
         OutboxDlqController,
       ) as unknown;
 
       expect(metadata).toEqual({
-        type: PBAC_METADATA_TYPES.action,
-        action: PBAC_ACTIONS.outboxReplay,
+        type: RBAC_METADATA_TYPES.action,
+        action: RBAC_ACTIONS.outboxReplay,
       });
     });
 
-    it("should replay message using PBAC context", async () => {
+    it("should replay message using RBAC context", async () => {
       const req = {
-        pbacContext: { userId: "user-123", organizationId: "org-1" },
+        rbacContext: { userId: "user-123", organizationId: "org-1" },
         correlationId: "corr-1",
       } as ControllerRequest;
       const result = await controller.replayMessage("1", req);
@@ -72,9 +72,9 @@ describe("OutboxDlqController", () => {
   });
 
   describe("deleteMessage", () => {
-    it("should delete message using PBAC context", async () => {
+    it("should delete message using RBAC context", async () => {
       const req = {
-        pbacContext: { userId: "user-123", organizationId: "org-1" },
+        rbacContext: { userId: "user-123", organizationId: "org-1" },
         correlationId: "corr-2",
       } as ControllerRequest;
       const result = await controller.deleteMessage("1", req);

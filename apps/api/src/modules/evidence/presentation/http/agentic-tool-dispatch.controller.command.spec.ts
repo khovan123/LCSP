@@ -3,7 +3,7 @@ import type { ConfigService } from "@nestjs/config";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
 
 import type { AppConfig } from "../../../../config/config.types.js";
-import type { PbacPreflightService } from "../../../../platform/pbac/pbac-preflight.service.js";
+import type { RbacPreflightService } from "../../../../platform/rbac/rbac-preflight.service.js";
 import type { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import { InternalAgenticToolDispatchController } from "./agentic-tool-dispatch.controller.js";
 
@@ -44,7 +44,7 @@ function commandPayload() {
 }
 
 describe("InternalAgenticToolDispatchController protected commands", () => {
-  it("rejects retired protected command tools without PBAC or CommandBus execution", async () => {
+  it("rejects retired protected command tools without RBAC or CommandBus execution", async () => {
     const queryExecute = jest.fn(() =>
       Promise.reject(new Error("retired tool")),
     );
@@ -52,16 +52,16 @@ describe("InternalAgenticToolDispatchController protected commands", () => {
     const commandExecute = jest.fn();
     const commandBus = { execute: commandExecute } as unknown as CommandBus;
     const evaluateWithPolicy = jest.fn();
-    const pbacPreflight = {
+    const rbacPreflight = {
       evaluateWithPolicy,
-    } as unknown as PbacPreflightService;
+    } as unknown as RbacPreflightService;
 
     const controller = new InternalAgenticToolDispatchController(
       queryBus,
       configMock(),
       runtimeEventsMock(),
       commandBus,
-      pbacPreflight,
+      rbacPreflight,
     );
 
     await expect(controller.dispatch(commandPayload())).rejects.toBeDefined();

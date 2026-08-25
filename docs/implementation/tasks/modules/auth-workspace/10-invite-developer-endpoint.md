@@ -12,4 +12,4 @@ depends_on: []
 
 Developer invitation is retired from the active MVP.
 
-There is no active API handler, BFF route, client mutation, PBAC action, Prisma table, mock fixture, or delivery task for inviting Developers. Reintroduction requires a new scope decision and a new cross-layer contract.
+There is no active API handler, BFF route, client mutation, RBAC action, Prisma table, mock fixture, or delivery task for inviting Developers. Reintroduction requires a new scope decision and a new cross-layer contract.

@@ -10,7 +10,6 @@ import type {
 import type { OAuthIdentityRepository } from "./oauth-identity.repository.ts";
 import type { OAuthStateRepository } from "./oauth-state.repository.ts";
 import type { OrganizationRepository } from "./organization.repository.ts";
-import type { PolicyRepository } from "./policy.repository.ts";
 import type { RecoveryRequestRepository } from "./recovery-request.repository.ts";
 import type { SessionRepository } from "./session.repository.ts";
 import type { UserRepository } from "./user.repository.ts";
@@ -20,7 +19,6 @@ export type AuthWorkspaceRepositories = {
   users: UserRepository;
   memberships: MembershipRepository;
   sessions: SessionRepository;
-  policies: PolicyRepository;
   auditEvents: AuditEventRepository;
   authorizationDecisions: AuthorizationDecisionRepository;
   mfaEnrollments: MfaEnrollmentRepository;

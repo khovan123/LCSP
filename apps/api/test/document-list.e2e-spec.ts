@@ -12,7 +12,7 @@ import {
   type DocumentRequestStatus,
   type DocumentType,
 } from "@lcsp/contracts/document";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_STATUSES,
@@ -146,9 +146,9 @@ async function enableManagerDocumentRead(prisma: PrismaClient) {
     },
     data: {
       actions: [
-        PBAC_ACTIONS.workspaceRead,
-        PBAC_ACTIONS.documentGenerate,
-        PBAC_ACTIONS.documentRead,
+        RBAC_ACTIONS.workspaceRead,
+        RBAC_ACTIONS.documentGenerate,
+        RBAC_ACTIONS.documentRead,
       ],
     },
   });

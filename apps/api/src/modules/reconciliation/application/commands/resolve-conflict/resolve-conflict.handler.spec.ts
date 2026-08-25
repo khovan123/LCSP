@@ -1,7 +1,7 @@
 import { ForbiddenException } from "@nestjs/common";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import {
   CONFLICT_RECORD_STATUSES,
   SCAN_EVENT_TYPES,
@@ -42,7 +42,7 @@ describe("ResolveConflictHandler", () => {
           null,
           "corr-conflict-deny",
           {
-            selectedAction: PBAC_ACTIONS.conflictResolve,
+            selectedAction: RBAC_ACTIONS.conflictResolve,
             policyId: "policy-system-admin",
             policyVersion: "2026-06-26",
           },
@@ -59,13 +59,13 @@ describe("ResolveConflictHandler", () => {
       resourceId: "conflict-1",
       correlationId: "corr-conflict-deny",
       decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.pbacDenied,
+      reasonCode: AUTH_ERROR_CODES.rbacDenied,
       policyId: "policy-system-admin",
       policyVersion: "2026-06-26",
       payload: {
         assessmentId: "assessment-1",
         conflictId: "conflict-1",
-        action: PBAC_ACTIONS.conflictResolve,
+        action: RBAC_ACTIONS.conflictResolve,
         result: AUDIT_DECISIONS.deny,
       },
     });

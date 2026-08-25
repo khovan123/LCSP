@@ -28,7 +28,7 @@ export const PROBLEM_REQUIRED_ACTIONS: Record<AuthErrorCode, RequiredAction> = {
   [AUTH_ERROR_CODES.mfaInvalid]: REQUIRED_ACTIONS.verifyMfa,
   [AUTH_ERROR_CODES.mfaRateLimited]: REQUIRED_ACTIONS.waitAndRetry,
   [AUTH_ERROR_CODES.recoveryInvalid]: REQUIRED_ACTIONS.retryRecovery,
-  [AUTH_ERROR_CODES.pbacDenied]: REQUIRED_ACTIONS.contactOwner,
+  [AUTH_ERROR_CODES.rbacDenied]: REQUIRED_ACTIONS.contactOwner,
   [AUTH_ERROR_CODES.unsupportedProvider]: REQUIRED_ACTIONS.none,
   [AUTH_ERROR_CODES.invalidRedirectUri]: REQUIRED_ACTIONS.none,
   [AUTH_ERROR_CODES.oauthStateInvalid]: REQUIRED_ACTIONS.signIn,
@@ -152,11 +152,11 @@ export const PROBLEM_DEFAULTS: Record<AuthErrorCode, ProblemDefaults> = {
     titleKey: "auth.errors.recoveryInvalid.title",
     detailKey: "auth.errors.recoveryInvalid.detail"
   },
-  [AUTH_ERROR_CODES.pbacDenied]: {
-    type: "authz/pbac-denied",
+  [AUTH_ERROR_CODES.rbacDenied]: {
+    type: "authz/rbac-denied",
     status: 403,
-    titleKey: "auth.errors.pbacDenied.title",
-    detailKey: "auth.errors.pbacDenied.detail"
+    titleKey: "auth.errors.rbacDenied.title",
+    detailKey: "auth.errors.rbacDenied.detail"
   },
   [AUTH_ERROR_CODES.unsupportedProvider]: {
     type: "auth/oauth-unsupported-provider",

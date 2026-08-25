@@ -1,3 +1,3 @@
-export const GAP_REQUIREMENTS_PBAC_ACTIONS = {
+export const GAP_REQUIREMENTS_RBAC_ACTIONS = {
   gapRequirementsRead: "gap-requirements:read",
 } as const;

@@ -24,7 +24,7 @@ LCSP is a modular, evidence-first compliance platform. The system is intentional
 | Component                            | Why It Exists                                                                                                                                                                                                                                                         | Communicates With                                                                 |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Web Frontend                         | Manager workspace for assessment, repository connection, scan progress, conflict resolution, classification and documents; renders customer-facing auth and blocked-state copy from approved stable keys.                                                             | Backend API, shared contracts/i18n packages.                                      |
-| Backend API                          | Auth, PBAC enforcement boundary, assessment state, synchronous user actions, trusted trigger creation, async work creation; emits safe auth/workspace error contracts with stable keys instead of relying on hardcoded user-facing prose.                             | Web Frontend, shared contracts packages, Persistence, Queue boundary, GitHub App. |
+| Backend API                          | Auth, RBAC enforcement boundary, assessment state, synchronous user actions, trusted trigger creation, async work creation; emits safe auth/workspace error contracts with stable keys instead of relying on hardcoded user-facing prose.                             | Web Frontend, shared contracts packages, Persistence, Queue boundary, GitHub App. |
 | Repository Integration               | Authorizes read-only repository access separately from OAuth/OIDC login.                                                                                                                                                                                              | Backend API, GitHub.                                                              |
 | Python Worker Platform               | Owns all asynchronous domain workloads through bounded consumers/modules, not a monolithic Python process.                                                                                                                                                            | Queue boundary, Persistence, Object Storage, LLM Gateway, Repository Integration. |
 | Python Scanner Worker                | Owns Repository Scan lifecycle and produces static-analysis technical evidence from commit-pinned repository snapshots using Syft, Knip, deptry, `ast`/`libcst`, bounded `ts-morph`, tree-sitter/custom parser, and Semgrep custom rules.                             | Queue boundary, Persistence, Repository Integration, TS/JS analyzer CLI.          |
@@ -101,7 +101,7 @@ Runtime rules:
 ## Mandatory Architectural Invariants
 
 - Manager can complete the active MVP flow without external collaborator assignment.
-- PBAC is the authorization source of truth. Roles are subject attributes/templates only.
+- RBAC is the authorization source of truth. Roles are subject attributes/templates only.
 - OAuth/OIDC login is separate from GitHub App repository authorization.
 - GitHub App read-only Repository Scan is the MVP golden technical-evidence path.
 - `FR-050` is Automatic Trusted Scan Initiation. Local/CI scanner report upload is superseded.
@@ -131,6 +131,6 @@ Runtime rules:
 
 ## Open Technical Decisions
 
-- PBAC engine, policy storage, cache, invalidation, evaluation topology and failure behavior: resolved for implementation planning by `docs/implementation/decisions/pbac-runtime-decision.md`.
+- RBAC engine, policy storage, cache, invalidation, evaluation topology and failure behavior: resolved for implementation planning by `docs/implementation/decisions/rbac-runtime-decision.md`.
 - Automatic trusted scan trigger idempotency, retry/DLQ, replay authority and operator recovery: resolved for implementation planning by `docs/implementation/decisions/trusted-scan-trigger-retry-dlq-replay-decision.md`.
 - Scanner toolchain failure severity table and tool version/config/ruleset hash policy: resolved for implementation planning by `docs/implementation/decisions/scanner-severity-tool-provenance-decision.md`.

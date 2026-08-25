@@ -26,7 +26,7 @@ PRD này không tạo architecture document, backlog, implementation plan hoặc
 
 Phase 5.2L là authority hiện hành cho các điểm sau:
 
-- PBAC thay RBAC làm nguồn quyết định authorization. Role chỉ còn là subject attribute, grouping label hoặc policy template.
+- RBAC thay RBAC làm nguồn quyết định authorization. Role chỉ còn là subject attribute, grouping label hoặc policy template.
 - Structured attestation bị loại khỏi active MVP: `FR-045`, `FR-046`, `UC-018`, `AC-013` và các route/entity/event/audit/report dependency tương ứng là `SUPERSEDED_FOR_ACTIVE_MVP`.
 - Compliance certification, formal legal opinion, direct regulator submission và manual technical evidence JSON upload (`FR-051`) là `REMOVED_FROM_PRODUCT`.
 - `FR-050` không còn là Local/CI scanner report upload. `FR-050` là `AUTOMATIC_TRUSTED_SCAN_INITIATION`.
@@ -52,7 +52,7 @@ Canonical implementation requirement identifiers live in `docs/specs/functional-
 - Thu thập technical evidence qua GitHub App read-only Repository Scan trong workflow do Manager dẫn dắt.
 - Ngăn hệ thống tạo risk level khi chỉ có self-report từ Wizard.
 - Đối chiếu WizardProfile và TechnicalProfile để tạo VerifiedProfile trước classification.
-- Đảm bảo final report có audit trail: wizard answers, evidence metadata, conflict resolution, classification output, legal citation, PBAC decision trace và document version.
+- Đảm bảo final report có audit trail: wizard answers, evidence metadata, conflict resolution, classification output, legal citation, RBAC decision trace và document version.
 - Giữ ranh giới rõ: LCSP hỗ trợ tuân thủ, không phải compliance certification, formal legal opinion hoặc direct regulator submission product.
 
 ### Success Metrics
@@ -61,7 +61,7 @@ Canonical implementation requirement identifiers live in `docs/specs/functional-
 - **SM-2: Evidence-gated classification.** 100% risk classification chỉ chạy khi technical evidence pass schema gate, quality gate, reconciliation tạo VerifiedProfile và không còn material/critical conflict unresolved. Validates FR-E4-1 đến FR-E6-4.
 - **SM-3: No Wizard-only risk level.** 0 màn hình hoặc report hiển thị HIGH/MEDIUM/LOW khi assessment chỉ ở `SELF_DECLARED_READINESS` hoặc `EVIDENCE_PENDING`. Validates FR-E2-3, FR-E2-4.
 - **SM-4: Conflict accountability.** 100% material conflicts có đúng role confirmation và audit trail. Validates FR-E5-3 đến FR-E5-6.
-- **SM-5: Report traceability.** Final report trace được risk result về evidence, rule/citation, conflict resolution, PBAC decision trace và document version. Validates FR-E6-5, FR-E7-2, FR-E8-5.
+- **SM-5: Report traceability.** Final report trace được risk result về evidence, rule/citation, conflict resolution, RBAC decision trace và document version. Validates FR-E6-5, FR-E7-2, FR-E8-5.
 
 ### Counter-Metrics
 
@@ -86,7 +86,7 @@ Manager owns business/legal truth:
 
 ### Cộng tác viên kỹ thuật
 
-Developer invitation/task workspace đã retired khỏi active MVP. Không còn active screen, BFF/API handler, Prisma entity/table, PBAC action, mock fixture hoặc delivery task cho invitation acceptance, scoped task workspace hay membership revocation.
+Developer invitation/task workspace đã retired khỏi active MVP. Không còn active screen, BFF/API handler, Prisma entity/table, RBAC action, mock fixture hoặc delivery task cho invitation acceptance, scoped task workspace hay membership revocation.
 
 ### Non-Users for MVP
 
@@ -94,9 +94,9 @@ Developer invitation/task workspace đã retired khỏi active MVP. Không còn 
 - Organization Admin/IAM administrator như một role riêng.
 - Multi-country compliance operator.
 
-## 4. PBAC Policy Model
+## 4. RBAC Policy Model
 
-MVP chỉ expose user-facing label `Manager`. PBAC là authorization source of truth. Role labels chỉ là subject attributes, grouping labels hoặc policy templates; chúng không phải final authorization authority.
+MVP chỉ expose user-facing label `Manager`. RBAC là authorization source of truth. Role labels chỉ là subject attributes, grouping labels hoặc policy templates; chúng không phải final authorization authority.
 
 Authorization evaluation must include subject, organization, resource, action, request/runtime context, policy and policy version. Enforcement is deny-by-default, tenant-scoped, server-side, versioned and auditable.
 
@@ -119,17 +119,17 @@ Manager policy template grants the assessment owner actions needed to complete a
 - `GENERATE_REPORT`
 - `EXPORT_AUDIT_TRAIL`
 
-Manager is the required and sufficient subject profile for completing an MVP assessment, subject to PBAC evaluation and state gates.
+Manager is the required and sufficient subject profile for completing an MVP assessment, subject to RBAC evaluation and state gates.
 
 ### Retired Developer Policy Scope
 
-The active MVP no longer includes Developer invitation, task acceptance, scoped workspace, policy assignment, or membership revocation flows. Non-Manager subjects without explicit current PBAC policy are denied by default.
+The active MVP no longer includes Developer invitation, task acceptance, scoped workspace, policy assignment, or membership revocation flows. Non-Manager subjects without explicit current RBAC policy are denied by default.
 
 ### MVP Conflict Resolution Rule
 
 Trong MVP, mọi conflict được route thành Manager conflict resolution task. Manager reviews WizardProfile, TechnicalProfile và AIUsageFlow evidence, sau đó resolve hoặc update thông tin liên quan. Structured attestation không phải active MVP input. Delegated technical clarification workflow thuộc `FR-052` và là `DEFERRED_POST_MVP`.
 
-Any reintroduction of delegated technical clarification requires a new scope decision, new PBAC policy contracts, and new persistence/API design.
+Any reintroduction of delegated technical clarification requires a new scope decision, new RBAC policy contracts, and new persistence/API design.
 
 ### OAuth/OIDC Login Boundary
 
@@ -141,7 +141,7 @@ OAuth/OIDC user login is an active MVP authentication capability. OAuth/OIDC log
 | GitHub App Connection | Cấp quyền read-only để LCSP scan repository          |
 | Repository Scan       | Tạo TechnicalEvidenceReport từ repository đã kết nối |
 
-OAuth/OIDC login không tự kết nối GitHub repository, không cấp repository scan permission và không thay thế LCSP PBAC authorization.
+OAuth/OIDC login không tự kết nối GitHub repository, không cấp repository scan permission và không thay thế LCSP RBAC authorization.
 Authentication and blocked-state responses for Web/API must use stable shared keys for title, detail, and next action so Web can render approved user-facing copy without depending on backend hardcoded prose.
 
 Enterprise SSO/SAML/directory federation remains Deferred/Future unless explicitly activated later.
@@ -242,7 +242,7 @@ Developer scoped policy assignment and revocation are retired from active MVP.
 **Consequences:**
 
 - No active `invite:developer` or `membership:revoke` contract.
-- Non-Manager subjects without explicit current PBAC policy fail closed.
+- Non-Manager subjects without explicit current RBAC policy fail closed.
 
 #### FR-E1-4: Restrict Manager-only actions
 
@@ -581,7 +581,7 @@ Human technical attestation audit is `SUPERSEDED_FOR_ACTIVE_MVP` because structu
 
 **Consequences:**
 
-- Active audit requirements cover PBAC decisions, trigger decisions, evidence, conflict, classification and document events.
+- Active audit requirements cover RBAC decisions, trigger decisions, evidence, conflict, classification and document events.
 - Historical records must not be silently deleted.
 
 #### FR-E8-5: Audit classification and generated documents
@@ -790,7 +790,7 @@ Examples:
 LCSP audit trail must record:
 
 - Wizard answers and versions.
-- Assessment owner and PBAC policy decisions.
+- Assessment owner and RBAC policy decisions.
 - Evidence source metadata.
 - Scanner/report version and ruleset version where applicable.
 - Report hash and timestamp.
@@ -798,7 +798,7 @@ LCSP audit trail must record:
 - Evidence gate result and reason.
 - Conflict records, score and required resolver.
 - Manager conflict resolutions and safe context references that materially influence a decision.
-- PBAC policy ID/version and decision trace for material authorization decisions.
+- RBAC policy ID/version and decision trace for material authorization decisions.
 - Automatic scan trigger source, delivery/correlation refs, and mapping decision.
 - VerifiedProfile version.
 - Classification output and rule/citation trace.
@@ -860,13 +860,13 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - Create scenario/evaluation fixtures with expected risk, rules and citations.
 - Validate citation accuracy before final PRD signoff for classification scope.
 
-### A3. PBAC and trusted-trigger abuse risk
+### A3. RBAC and trusted-trigger abuse risk
 
-**Risk:** A subject, service identity, role label, or integration trigger could be misused to bypass PBAC or start a scan for the wrong tenant, repository, or assessment.
+**Risk:** A subject, service identity, role label, or integration trigger could be misused to bypass RBAC or start a scan for the wrong tenant, repository, or assessment.
 
 **PRD Requirements:**
 
-- PBAC must evaluate subject, organization, resource, action, request/runtime context, policy and policy version.
+- RBAC must evaluate subject, organization, resource, action, request/runtime context, policy and policy version.
 - Authorization must be deny-by-default, tenant-scoped, server-side enforced, versioned and auditable.
 - Trusted scan triggers must validate source identity, organization, repository connection, assessment mapping, configured branch and commit SHA.
 - Missing or ambiguous mapping must produce `PENDING_MAPPING`, `BLOCKED_MAPPING` or `WAITING_FOR_CONTEXT` instead of scanning.
@@ -875,7 +875,7 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 
 **Validation Plan:**
 
-- Define PBAC policy model and engine decision before implementation.
+- Define RBAC policy model and engine decision before implementation.
 - Test abuse cases: wrong tenant, ambiguous assessment mapping, revoked repository connection, duplicate trigger, out-of-order trigger, policy unavailable, service identity overreach.
 - Verify no role label alone grants final authority.
 - Verify no trigger can scan the wrong repository or assessment.
@@ -907,7 +907,7 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 ### Attestation
 
 - Exact list of optional human-attestable claims remains historical and out of active MVP.
-- PBAC engine/storage/cache/invalidation/topology/failure behavior is `TECHNICAL_DECISION_REQUIRED`.
+- RBAC engine/storage/cache/invalidation/topology/failure behavior is `TECHNICAL_DECISION_REQUIRED`.
 - Scanner tool failure severity table is `TECHNICAL_DECISION_REQUIRED`.
 
 ### Reporting
@@ -929,8 +929,8 @@ Audit trail must support the question: "Why did LCSP reach this conclusion, base
 - AC-8: Conflict handling uses binary MVP routing: conflict exists or not. Conflict Score may explain seriousness but does not create multiple routes.
 - AC-9: Human assertion, role label, or untrusted upload cannot replace machine-generated metadata listed in A3.
 - AC-10: Final report includes legal citation/rule trace or is not final.
-- AC-11: Final report has no attestation dependency and discloses evidence, legal basis, PBAC/trigger trace and limitations.
-- AC-12: Audit trail records wizard, evidence, conflict, PBAC/trigger decisions, classification and document generation events.
+- AC-11: Final report has no attestation dependency and discloses evidence, legal basis, RBAC/trigger trace and limitations.
+- AC-12: Audit trail records wizard, evidence, conflict, RBAC/trigger decisions, classification and document generation events.
 
 ### PRD Acceptance Criteria
 
@@ -955,7 +955,7 @@ Before final architecture signoff, product must validate or carry forward these 
 
 1. Wizard question model can collect enough business/legal truth without technical wording.
 2. Legal corpus/rule reliability can support cited, traceable classification.
-3. PBAC and trusted-trigger guardrails prevent authorization and scan-initiation bypass.
+3. RBAC and trusted-trigger guardrails prevent authorization and scan-initiation bypass.
 
 Recommended next step:
 

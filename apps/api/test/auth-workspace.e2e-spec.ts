@@ -5,10 +5,10 @@ import {
   AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
 } from "@lcsp/contracts/auth";
 import {
-  PBAC_ACTIONS,
-  PBAC_DECISION,
+  RBAC_ACTIONS,
+  RBAC_DECISION,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import * as assert from "node:assert/strict";
 
 import type { INestApplication } from "@nestjs/common";
@@ -274,7 +274,7 @@ describe("Auth workspace (e2e)", () => {
     const decision = await prisma.authDecisionLog.findFirstOrThrow({
       where: { correlationId: "corr-workspace-no-session" },
     });
-    assert.equal(decision.decision, PBAC_DECISION.deny);
+    assert.equal(decision.decision, RBAC_DECISION.deny);
   });
 
   it("workspace access fails closed when request organization does not match session scope", async () => {
@@ -324,7 +324,7 @@ describe("Auth workspace (e2e)", () => {
       .set("Authorization", `Bearer ${signIn.session_token}`)
       .expect(403);
 
-    assert.equal(problemCode(result), AUTH_ERROR_CODES.pbacDenied);
+    assert.equal(problemCode(result), AUTH_ERROR_CODES.rbacDenied);
   });
 
   it("deny-by-default blocks workspace access when policy state gate is not satisfied", async () => {
@@ -362,7 +362,7 @@ describe("Auth workspace (e2e)", () => {
     );
   });
 
-  it("returns the active Manager organization context and safe PBAC action projection", async () => {
+  it("returns the active Manager organization context and safe RBAC action projection", async () => {
     const signIn = await signInAndVerifyApprovedUser();
 
     const result = await httpRequest(app)
@@ -382,18 +382,18 @@ describe("Auth workspace (e2e)", () => {
     assert.equal(body.membership_status, AUTH_MEMBERSHIP_STATUSES.active);
     assert.equal(body.subject_role, SUBJECT_ROLES.manager);
     assert.deepEqual(body.granted_actions, [
-      PBAC_ACTIONS.workspaceRead,
-      PBAC_ACTIONS.assessmentCreate,
-      PBAC_ACTIONS.assessmentRead,
-      PBAC_ACTIONS.assessmentList,
-      PBAC_ACTIONS.githubConnect,
-      PBAC_ACTIONS.scanRead,
-      PBAC_ACTIONS.scanTrigger,
-      PBAC_ACTIONS.documentGenerate,
-      PBAC_ACTIONS.snapshotCreate,
-      PBAC_ACTIONS.wizardWrite,
-      PBAC_ACTIONS.wizardSubmit,
-      PBAC_ACTIONS.wizardExport,
+      RBAC_ACTIONS.workspaceRead,
+      RBAC_ACTIONS.assessmentCreate,
+      RBAC_ACTIONS.assessmentRead,
+      RBAC_ACTIONS.assessmentList,
+      RBAC_ACTIONS.githubConnect,
+      RBAC_ACTIONS.scanRead,
+      RBAC_ACTIONS.scanTrigger,
+      RBAC_ACTIONS.documentGenerate,
+      RBAC_ACTIONS.snapshotCreate,
+      RBAC_ACTIONS.wizardWrite,
+      RBAC_ACTIONS.wizardSubmit,
+      RBAC_ACTIONS.wizardExport,
     ]);
     assert.equal(body.mfa_verified, true);
     assert.equal(body.correlationId, "corr-manager-workspace-context");
@@ -411,8 +411,8 @@ describe("Auth workspace (e2e)", () => {
     assert.equal(decision.organizationId, fixture.organizationId);
     assert.equal(decision.resourceType, AUDIT_RESOURCE_TYPES.workspace);
     assert.equal(decision.resourceId, "workspace-home");
-    assert.equal(decision.action, PBAC_ACTIONS.workspaceRead);
-    assert.equal(decision.decision, PBAC_DECISION.allow);
+    assert.equal(decision.action, RBAC_ACTIONS.workspaceRead);
+    assert.equal(decision.decision, RBAC_DECISION.allow);
     assert.equal(decision.policyId, "policy-manager-workspace");
     assert.equal(decision.policyVersion, "2026-06-26");
     assert.equal(decision.correlationId, "corr-manager-workspace-context");
@@ -463,7 +463,7 @@ describe("Auth workspace (e2e)", () => {
     const allowDecision = await prisma.authDecisionLog.findFirstOrThrow({
       where: { correlationId: "corr-workspace-allow" },
     });
-    assert.equal(allowDecision.decision, PBAC_DECISION.allow);
+    assert.equal(allowDecision.decision, RBAC_DECISION.allow);
 
     await httpRequest(app)
       .post("/auth/revoke-session")
@@ -962,7 +962,7 @@ describe("Auth workspace (e2e)", () => {
     assert.equal(successBody<WorkspaceSuccess>(result).ok, true);
   });
 
-  it("client-facing user projection only exposes role, not other PBAC subject attributes", async () => {
+  it("client-facing user projection only exposes role, not other RBAC subject attributes", async () => {
     const result = await httpRequest(app)
       .post("/auth/sign-in")
       .send({

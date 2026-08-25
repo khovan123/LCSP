@@ -351,7 +351,7 @@ function handlerProvider<T>(
   exports: [
     AuthWorkspaceFacade,
     AuthAuditService,
-    // Exposed for platform/pbac's PbacGuard, which needs read access to
+    // Exposed for platform/rbac's RbacGuard, which needs read access to
     // sessions/memberships/policies/MFA enrollment and write access to the
     // decision log — reusing these rather than duplicating the same Prisma
     // queries in a second, potentially-diverging implementation.

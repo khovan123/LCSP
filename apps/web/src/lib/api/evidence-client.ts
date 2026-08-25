@@ -62,7 +62,7 @@ export function toEvidenceOutcome(
       location: API_REDIRECT_LOCATIONS.signIn,
     };
   }
-  if (status === 403 || problemCode === AUTH_ERROR_CODES.pbacDenied) {
+  if (status === 403 || problemCode === AUTH_ERROR_CODES.rbacDenied) {
     return { kind: API_OUTCOME_KINDS.accessRevoked };
   }
   if (status === 404 && problemCode === EVIDENCE_ERROR_CODES.notFound) {

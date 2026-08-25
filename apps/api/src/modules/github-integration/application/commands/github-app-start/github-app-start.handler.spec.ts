@@ -4,7 +4,7 @@ import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
 } from "@lcsp/contracts/github-integration";
-import { PBAC_DECISION } from "@lcsp/contracts/pbac";
+import { RBAC_DECISION } from "@lcsp/contracts/rbac";
 import { BadRequestException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 
@@ -348,7 +348,7 @@ describe("GitHubAppStartHandler", () => {
     expect(event.actorId).toBe("user-1");
     expect(event.organizationId).toBe("org-1");
     expect(event.correlationId).toBe("corr-1");
-    expect(event.decision).toBe(PBAC_DECISION.allow);
+    expect(event.decision).toBe(RBAC_DECISION.allow);
     expect(JSON.stringify(event.payload)).not.toMatch(savedState.state);
   });
 });

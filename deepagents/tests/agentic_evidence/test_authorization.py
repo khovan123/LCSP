@@ -6,9 +6,9 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from tools.common.capabilities.agentic_evidence.governance.authorization import ApiPbacToolAuthorizer
+from tools.common.capabilities.agentic_evidence.governance.authorization import ApiRbacToolAuthorizer
 from tools.common.capabilities.agentic_evidence.governance.registry import AgenticToolValidationError
-from tools.common.capabilities.platform.pbac_client import PbacClient
+from tools.common.capabilities.platform.rbac_client import RbacClient
 
 
 def response(decision: str, reason: str | None = None) -> httpx.Response:
@@ -37,8 +37,8 @@ def test_technical_tool_accepts_redacted_read_when_full_read_is_denied() -> None
         return response("ALLOW")
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    authorizer = ApiPbacToolAuthorizer(
-        pbac_client=PbacClient(
+    authorizer = ApiRbacToolAuthorizer(
+        rbac_client=RbacClient(
             "http://api.local",
             "worker-secret",
             client=client,
@@ -56,21 +56,21 @@ def test_technical_tool_accepts_redacted_read_when_full_read_is_denied() -> None
     assert result.action == "evidence:read:redacted"
 
 
-def test_pbac_denial_is_safe_and_terminal() -> None:
+def test_rbac_denial_is_safe_and_terminal() -> None:
     client = httpx.Client(
         transport=httpx.MockTransport(
             lambda _request: response("DENY", "MEMBERSHIP_MISSING")
         )
     )
-    authorizer = ApiPbacToolAuthorizer(
-        pbac_client=PbacClient(
+    authorizer = ApiRbacToolAuthorizer(
+        rbac_client=RbacClient(
             "http://api.local",
             "worker-secret",
             client=client,
         ),
     )
 
-    with pytest.raises(AgenticToolValidationError, match="AGENTIC_TOOL_PBAC_BLOCKED"):
+    with pytest.raises(AgenticToolValidationError, match="AGENTIC_TOOL_RBAC_BLOCKED"):
         authorizer.authorize(
             tool_name="propose_gap_remediation",
             user_id="user-1",
@@ -79,7 +79,7 @@ def test_pbac_denial_is_safe_and_terminal() -> None:
         )
 
 
-def test_unregistered_pbac_action_fails_closed_without_network_call() -> None:
+def test_unregistered_rbac_action_fails_closed_without_network_call() -> None:
     called = False
 
     def handler(_request: httpx.Request) -> httpx.Response:
@@ -88,8 +88,8 @@ def test_unregistered_pbac_action_fails_closed_without_network_call() -> None:
         return response("ALLOW")
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    authorizer = ApiPbacToolAuthorizer(
-        pbac_client=PbacClient(
+    authorizer = ApiRbacToolAuthorizer(
+        rbac_client=RbacClient(
             "http://api.local",
             "worker-secret",
             client=client,
@@ -98,7 +98,7 @@ def test_unregistered_pbac_action_fails_closed_without_network_call() -> None:
 
     with pytest.raises(
         AgenticToolValidationError,
-        match="AGENTIC_TOOL_PBAC_ACTION_UNREGISTERED",
+        match="AGENTIC_TOOL_RBAC_ACTION_UNREGISTERED",
     ):
         authorizer.authorize(
             tool_name="resume_waiting_runs",
@@ -109,13 +109,13 @@ def test_unregistered_pbac_action_fails_closed_without_network_call() -> None:
     assert called is False
 
 
-def test_pbac_network_failure_does_not_dispatch_as_allow() -> None:
+def test_rbac_network_failure_does_not_dispatch_as_allow() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("offline", request=request)
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    authorizer = ApiPbacToolAuthorizer(
-        pbac_client=PbacClient(
+    authorizer = ApiRbacToolAuthorizer(
+        rbac_client=RbacClient(
             "http://api.local",
             "worker-secret",
             client=client,
@@ -124,7 +124,7 @@ def test_pbac_network_failure_does_not_dispatch_as_allow() -> None:
 
     with pytest.raises(
         AgenticToolValidationError,
-        match="AGENTIC_TOOL_PBAC_PREFLIGHT_FAILED",
+        match="AGENTIC_TOOL_RBAC_PREFLIGHT_FAILED",
     ):
         authorizer.authorize(
             tool_name="get_scan_coverage",

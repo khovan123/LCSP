@@ -13,11 +13,11 @@ import {
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
 import {
-  PBAC_ACTIONS,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 /**
  * MW-asmt-001: Create Assessment Endpoint.
  * Test cases T01-T08 from docs/implementation/tasks/modules/assessment/01-create-assessment-endpoint.md
@@ -102,15 +102,15 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
   });
 
   // T02
-  it("T02: Manager lacking assessment:create -> 403 PBAC_DENIED", async () => {
+  it("T02: Manager lacking assessment:create -> 403 RBAC_DENIED", async () => {
     const restrictedPolicyId = "policy-no-assessment-create";
     await prisma.authPolicy.create({
       data: {
         id: restrictedPolicyId,
         version: "2026-07-10",
-        actions: [PBAC_ACTIONS.workspaceRead],
+        actions: [RBAC_ACTIONS.workspaceRead],
         subjectRole: SUBJECT_ROLES.manager,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -153,7 +153,7 @@ describe("Create Assessment Endpoint (e2e) [MW-asmt-001]", () => {
       .send({ name: "Should Be Denied" });
 
     assert.equal(result.status, 403);
-    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), RBAC_REASON_CODE.denied);
   });
 
   // T03

@@ -40,7 +40,7 @@ Manager creates assessment
 
 ## Product Principles
 
-- PBAC is the authorization source of truth. Role labels are subject attributes/templates only.
+- RBAC is the authorization source of truth. Role labels are subject attributes/templates only.
 - Risk classification requires evidence gates, direct EngineeringRule evaluations, legal citation traceability and unresolved-conflict checks.
 - Wizard-only assessments may show readiness/preliminary indicators, but must not show HIGH/MEDIUM/LOW risk classification.
 - Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP`.

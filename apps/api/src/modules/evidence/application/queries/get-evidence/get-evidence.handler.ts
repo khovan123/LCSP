@@ -1,5 +1,5 @@
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   SCAN_EVIDENCE_SCHEMA_VERSIONS,
   TECHNICAL_EVIDENCE_REPORT_STATUSES,
@@ -26,9 +26,9 @@ export class GetEvidenceHandler implements IQueryHandler<GetEvidenceQuery> {
 
   async execute(query: GetEvidenceQuery): Promise<EvidenceDetailDto> {
     const redactLocations =
-      query.selectedAction === PBAC_ACTIONS.evidenceReadRedacted;
+      query.selectedAction === RBAC_ACTIONS.evidenceReadRedacted;
     if (
-      query.selectedAction !== PBAC_ACTIONS.evidenceRead &&
+      query.selectedAction !== RBAC_ACTIONS.evidenceRead &&
       !redactLocations
     ) {
       this.throwNotFound(query.correlationId);

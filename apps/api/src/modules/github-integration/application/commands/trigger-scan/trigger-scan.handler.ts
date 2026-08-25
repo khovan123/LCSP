@@ -27,7 +27,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 
 import { fromPrismaAssessmentStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
@@ -42,7 +42,7 @@ import {
 import { TriggerScanCommand } from "./trigger-scan.command.js";
 
 /**
- * Creates idempotent repository scan jobs after validating snapshot, assessment, PBAC ownership, lifecycle, and mapping readiness.
+ * Creates idempotent repository scan jobs after validating snapshot, assessment, RBAC ownership, lifecycle, and mapping readiness.
  */
 @CommandHandler(TriggerScanCommand)
 export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
@@ -63,9 +63,9 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
   /**
    * Validates the trigger request, deduplicates by idempotency key, handles mapping readiness, and persists the scan-trigger outbox event.
    *
-   * @param command - Assessment/snapshot, trigger provenance, actor/PBAC, idempotency, and correlation context.
+   * @param command - Assessment/snapshot, trigger provenance, actor/RBAC, idempotency, and correlation context.
    * @returns Scan-job metadata indicating whether a new job was created.
-   * @throws When required idempotency/snapshot/assessment/PBAC/lifecycle constraints are not satisfied.
+   * @throws When required idempotency/snapshot/assessment/RBAC/lifecycle constraints are not satisfied.
    */
   async execute(command: TriggerScanCommand): Promise<TriggerScanDto> {
     const snapshotId = clean(command.snapshotId);
@@ -144,11 +144,11 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
     if (!isTrusted && !isManagerOwner) {
       await this.auditRejected(
         command,
-        AUTH_ERROR_CODES.pbacDenied,
+        AUTH_ERROR_CODES.rbacDenied,
         snapshot.organizationId,
       );
       throw new ForbiddenException(
-        this.errorBody(command, AUTH_ERROR_CODES.pbacDenied),
+        this.errorBody(command, AUTH_ERROR_CODES.rbacDenied),
       );
     }
 
@@ -233,7 +233,7 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       },
       result: GITHUB_INTEGRATION_EVENT_TYPES.scanJobTriggeredAudit,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
-      authorizationAction: PBAC_ACTIONS.scanTrigger,
+      authorizationAction: RBAC_ACTIONS.scanTrigger,
       idempotencyKey: job.idempotencyKey,
       payload: {
         scanJobId: job.id,
@@ -385,7 +385,7 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
    * Builds the standard problem payload used by scan-trigger HTTP exceptions.
    *
    * @param command - Trigger command supplying the correlation identifier.
-   * @param errorCode - Stable GitHub integration or PBAC error code.
+   * @param errorCode - Stable GitHub integration or RBAC error code.
    * @returns Standard bad-request-shaped problem result.
    */
   private errorBody(command: TriggerScanCommand, errorCode: string) {

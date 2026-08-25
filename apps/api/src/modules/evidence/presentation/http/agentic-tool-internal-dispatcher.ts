@@ -2,7 +2,7 @@ import {
   AGENTIC_TOOL_NAMES,
   EVIDENCE_ERROR_CODES,
 } from "@lcsp/contracts/evidence";
-import { PBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import { HttpStatus } from "@nestjs/common";
 import type { CommandBus } from "@nestjs/cqrs";
 
@@ -87,8 +87,8 @@ export function request_targeted_reanalysis(
         organizationId: args.organizationId,
         subjectRole: SUBJECT_ROLES.manager,
         scope: args.assessmentId,
-        grantedActions: [PBAC_ACTIONS.technicalEvidenceReanalyze],
-        selectedAction: PBAC_ACTIONS.technicalEvidenceReanalyze,
+        grantedActions: [RBAC_ACTIONS.technicalEvidenceReanalyze],
+        selectedAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
         policyId: AGENT_RUNTIME_SESSION_ID,
         policyVersion: AGENT_RUNTIME_SESSION_ID,
       },

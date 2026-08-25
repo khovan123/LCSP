@@ -8,11 +8,11 @@ import {
 } from "@lcsp/contracts/assessment";
 import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import {
-  PBAC_ACTIONS,
-  PBAC_REASON_CODE,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_REASON_CODE,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import {
   CONFLICT_RECORD_STATUSES,
   type ConflictRecordStatus,
@@ -68,16 +68,16 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
       },
       data: {
         actions: [
-          PBAC_ACTIONS.workspaceRead,
-          PBAC_ACTIONS.assessmentCreate,
-          PBAC_ACTIONS.assessmentRead,
-          PBAC_ACTIONS.assessmentList,
-          PBAC_ACTIONS.githubConnect,
-          PBAC_ACTIONS.scanRead,
-          PBAC_ACTIONS.scanTrigger,
-          PBAC_ACTIONS.documentGenerate,
-          PBAC_ACTIONS.snapshotCreate,
-          PBAC_ACTIONS.conflictRead,
+          RBAC_ACTIONS.workspaceRead,
+          RBAC_ACTIONS.assessmentCreate,
+          RBAC_ACTIONS.assessmentRead,
+          RBAC_ACTIONS.assessmentList,
+          RBAC_ACTIONS.githubConnect,
+          RBAC_ACTIONS.scanRead,
+          RBAC_ACTIONS.scanTrigger,
+          RBAC_ACTIONS.documentGenerate,
+          RBAC_ACTIONS.snapshotCreate,
+          RBAC_ACTIONS.conflictRead,
         ],
       },
     });
@@ -187,15 +187,15 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
   });
 
   // T04
-  it("T04: actor lacks conflict:read -> 403 PBAC_DENIED", async () => {
+  it("T04: actor lacks conflict:read -> 403 RBAC_DENIED", async () => {
     const restrictedPolicyId = "policy-no-conflict-read";
     await prisma.authPolicy.create({
       data: {
         id: restrictedPolicyId,
         version: "2026-07-10",
-        actions: [PBAC_ACTIONS.workspaceRead],
+        actions: [RBAC_ACTIONS.workspaceRead],
         subjectRole: SUBJECT_ROLES.manager,
-        stateGate: PBAC_STATE_GATES.membershipActive,
+        stateGate: RBAC_STATE_GATES.membershipActive,
         organizationId: orgId,
       },
     });
@@ -232,7 +232,7 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
       .set("Authorization", `Bearer ${restrictedToken}`);
 
     assert.equal(result.status, 403);
-    assert.equal(problemCode(result), PBAC_REASON_CODE.denied);
+    assert.equal(problemCode(result), RBAC_REASON_CODE.denied);
   });
 
   // T05

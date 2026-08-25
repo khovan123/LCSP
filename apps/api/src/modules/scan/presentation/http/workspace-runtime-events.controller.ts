@@ -1,6 +1,6 @@
 import { Controller, Logger, Req, Sse, UseGuards } from "@nestjs/common";
 import type { MessageEvent } from "@nestjs/common";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   EMPTY,
   catchError,
@@ -12,12 +12,12 @@ import {
 } from "rxjs";
 
 import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
-import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
-import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 
 interface WorkspaceRuntimeRequest {
-  pbacContext: PbacRequestContext;
+  rbacContext: RbacRequestContext;
 }
 
 /**
@@ -37,14 +37,14 @@ export class WorkspaceRuntimeEventsController {
   /**
    * Emits an immediate workspace runtime snapshot and refreshes it every two seconds for the caller's organization.
    *
-   * @param request - Authenticated request containing the organization-scoped PBAC context.
+   * @param request - Authenticated request containing the organization-scoped RBAC context.
    * @returns RxJS stream of `workspace.runtime` SSE messages.
    */
   @Sse()
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.workspaceRead)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.workspaceRead)
   stream(@Req() request: WorkspaceRuntimeRequest) {
-    const organizationId = request.pbacContext.organizationId;
+    const organizationId = request.rbacContext.organizationId;
 
     return interval(2_000).pipe(
       startWith(0),

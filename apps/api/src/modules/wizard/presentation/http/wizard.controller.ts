@@ -11,7 +11,7 @@ import {
   Res,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { SaveWizardDraftRequest } from "../../application/contracts/wizard/wizard-draft.contract.js";
 import type { SubmitWizardRequest } from "../../application/contracts/wizard/wizard-submit.contract.js";
@@ -26,8 +26,8 @@ import { GenerateReadinessExportCommand } from "../../application/commands/gener
 import { GetReadinessQuery } from "../../application/queries/get-readiness/get-readiness.query.js";
 import { DownloadReadinessExportQuery } from "../../application/queries/download-readiness-export/download-readiness-export.query.js";
 import { WizardClarificationQuestionService } from "../../application/services/wizard/wizard-clarification-question.service.js";
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
-import { RequireAction } from "../../../../platform/pbac/decorators/require-action.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
+import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { randomUUID } from "node:crypto";
 
@@ -43,15 +43,15 @@ export class WizardController {
   ) {}
 
   @Put(":assessmentId/wizard/draft")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.wizardWrite)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.wizardWrite)
   async saveWizardDraft(
     @Param("assessmentId") assessmentId: string,
     @Body() body: SaveWizardDraftRequest,
     @Req() req: AuthenticatedRequest,
   ) {
-    const { userId, organizationId } = req.pbacContext;
-    const pbacContext = req.pbacContext;
+    const { userId, organizationId } = req.rbacContext;
+    const rbacContext = req.rbacContext;
     const correlationId = req.correlationId || randomUUID();
 
     return resultEnvelope(
@@ -63,10 +63,10 @@ export class WizardController {
           body.answers,
           correlationId,
           {
-            subjectRole: pbacContext.subjectRole,
-            selectedAction: pbacContext.selectedAction,
-            policyId: pbacContext.policyId,
-            policyVersion: pbacContext.policyVersion,
+            subjectRole: rbacContext.subjectRole,
+            selectedAction: rbacContext.selectedAction,
+            policyId: rbacContext.policyId,
+            policyVersion: rbacContext.policyVersion,
           },
         ),
       ),
@@ -75,15 +75,15 @@ export class WizardController {
 
   @Post(":assessmentId/wizard/submit")
   @HttpCode(200)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.wizardSubmit)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.wizardSubmit)
   async submitWizard(
     @Param("assessmentId") assessmentId: string,
     @Body() body: SubmitWizardRequest,
     @Req() req: AuthenticatedRequest,
   ) {
-    const { userId, organizationId } = req.pbacContext;
-    const pbacContext = req.pbacContext;
+    const { userId, organizationId } = req.rbacContext;
+    const rbacContext = req.rbacContext;
     const correlationId = req.correlationId || randomUUID();
 
     return resultEnvelope(
@@ -95,10 +95,10 @@ export class WizardController {
           body.answers,
           correlationId,
           {
-            subjectRole: pbacContext.subjectRole,
-            selectedAction: pbacContext.selectedAction,
-            policyId: pbacContext.policyId,
-            policyVersion: pbacContext.policyVersion,
+            subjectRole: rbacContext.subjectRole,
+            selectedAction: rbacContext.selectedAction,
+            policyId: rbacContext.policyId,
+            policyVersion: rbacContext.policyVersion,
           },
         ),
       ),
@@ -107,8 +107,8 @@ export class WizardController {
 
   @Post(":assessmentId/wizard/clarification-questions")
   @HttpCode(200)
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.wizardWrite)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.wizardWrite)
   async generateClarificationQuestions(
     @Body() body: Partial<WizardClarificationQuestionRequest> | undefined,
   ) {
@@ -123,14 +123,14 @@ export class WizardController {
   }
 
   @Get(":assessmentId/readiness")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.assessmentRead)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.assessmentRead)
   async getReadiness(
     @Param("assessmentId") assessmentId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    const { userId, organizationId } = req.pbacContext;
-    const pbacContext = req.pbacContext;
+    const { userId, organizationId } = req.rbacContext;
+    const rbacContext = req.rbacContext;
     const correlationId = req.correlationId || randomUUID();
 
     return resultEnvelope(
@@ -141,10 +141,10 @@ export class WizardController {
           userId,
           correlationId,
           {
-            subjectRole: pbacContext.subjectRole,
-            selectedAction: pbacContext.selectedAction,
-            policyId: pbacContext.policyId,
-            policyVersion: pbacContext.policyVersion,
+            subjectRole: rbacContext.subjectRole,
+            selectedAction: rbacContext.selectedAction,
+            policyId: rbacContext.policyId,
+            policyVersion: rbacContext.policyVersion,
           },
         ),
       ),
@@ -152,14 +152,14 @@ export class WizardController {
   }
 
   @Post(":assessmentId/wizard/readiness-export")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.wizardExport)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.wizardExport)
   async generateReadinessExport(
     @Param("assessmentId") assessmentId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    const { userId, organizationId } = req.pbacContext;
-    const pbacContext = req.pbacContext;
+    const { userId, organizationId } = req.rbacContext;
+    const rbacContext = req.rbacContext;
     const correlationId = req.correlationId || randomUUID();
 
     return resultEnvelope(
@@ -170,10 +170,10 @@ export class WizardController {
           userId,
           correlationId,
           {
-            subjectRole: pbacContext.subjectRole,
-            selectedAction: pbacContext.selectedAction,
-            policyId: pbacContext.policyId,
-            policyVersion: pbacContext.policyVersion,
+            subjectRole: rbacContext.subjectRole,
+            selectedAction: rbacContext.selectedAction,
+            policyId: rbacContext.policyId,
+            policyVersion: rbacContext.policyVersion,
           },
         ),
       ),
@@ -181,15 +181,15 @@ export class WizardController {
   }
 
   @Get(":assessmentId/wizard/readiness-exports/:exportId/download")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.wizardExport)
+  @UseGuards(RbacGuard)
+  @RequireAction(RBAC_ACTIONS.wizardExport)
   async downloadReadinessExport(
     @Param("assessmentId") assessmentId: string,
     @Param("exportId") exportId: string,
     @Req() req: AuthenticatedRequest,
     @Res() response: Response,
   ) {
-    const { userId, organizationId } = req.pbacContext;
+    const { userId, organizationId } = req.rbacContext;
     const download = await this.queryBus.execute(
       new DownloadReadinessExportQuery(
         assessmentId,

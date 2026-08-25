@@ -1,7 +1,7 @@
 "use client";
 
 import { resolveMessage } from "@lcsp/i18n";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import {
   ChevronDownIcon,
   LogOutIcon,

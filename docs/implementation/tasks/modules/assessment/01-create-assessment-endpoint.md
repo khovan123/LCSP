@@ -6,7 +6,7 @@ priority: P0
 status: READY_FOR_DEV
 epic_story: 2.1
 depends_on:
-  - platform/pbac/03-nestjs-guard.md
+  - platform/rbac/03-nestjs-guard.md
   - platform/audit-writer/02-audit-writer-service.md
   - platform/outbox/02-outbox-publisher.md
 ---
@@ -76,14 +76,14 @@ model Assessment {
 
 | HTTP | `error_code`      | Meaning                                |
 | ---- | ----------------- | -------------------------------------- |
-| 403  | `PBAC_DENIED`     | Manager lacks `assessment:create`      |
+| 403  | `RBAC_DENIED`     | Manager lacks `assessment:create`      |
 | 422  | `INVALID_REQUEST` | Missing `name` or over character limit |
 
 ## Business Rules
 
-1. PBAC guard: `action = assessment:create`. Source of truth for authorization.
-2. `ownerId = request.pbacContext.userId`.
-3. `organizationId = request.pbacContext.organizationId`.
+1. RBAC guard: `action = assessment:create`. Source of truth for authorization.
+2. `ownerId = request.rbacContext.userId`.
+3. `organizationId = request.rbacContext.organizationId`.
 4. `status = WIZARD_IN_PROGRESS` on creation. No other state allowed at creation.
 5. No external collaborator assignment required or allowed at creation.
 6. Emit `ASSESSMENT_CREATED` audit event with assessment ID, org ID, owner ID. No name content in payload (may be PII).
@@ -97,7 +97,7 @@ model Assessment {
 | `event.assessment.created` | Outbox           | `{ assessmentId, organizationId, ownerId, status, correlationId }` |
 | `ASSESSMENT_CREATED`       | `AuthAuditEvent` | `{ assessmentId, organizationId, ownerId, correlationId }`         |
 
-## PBAC
+## RBAC
 
 Manager must have `assessment:create` in their `AuthPolicy.actions`. Applied via `@RequireAction('assessment:create')`.
 
@@ -106,7 +106,7 @@ Manager must have `assessment:create` in their `AuthPolicy.actions`. Applied via
 | ID  | Scenario                                      | Expected                |
 | --- | --------------------------------------------- | ----------------------- |
 | T01 | Manager with `assessment:create` + valid name | 201, assessment created |
-| T02 | Manager lacks `assessment:create`             | 403 `PBAC_DENIED`       |
+| T02 | Manager lacks `assessment:create`             | 403 `RBAC_DENIED`       |
 | T03 | Missing `name`                                | 422 `INVALID_REQUEST`   |
 | T04 | `status = WIZARD_IN_PROGRESS` in DB           | DB row verified         |
 | T05 | `ownerId` = Manager's userId                  | DB row verified         |
@@ -117,6 +117,6 @@ Manager must have `assessment:create` in their `AuthPolicy.actions`. Applied via
 ## Definition of Done
 
 - Assessment created with `WIZARD_IN_PROGRESS` status, correct owner, org.
-- PBAC guard enforced via `@RequireAction('assessment:create')`.
+- RBAC guard enforced via `@RequireAction('assessment:create')`.
 - `ASSESSMENT_CREATED` audit event written with no name/description in payload.
 - No external collaborator required.

@@ -13,12 +13,12 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
-import { RequireAnyAction } from "../../../../platform/pbac/decorators/require-any-action.decorator.js";
-import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
+import { RequireAnyAction } from "../../../../platform/rbac/decorators/require-any-action.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptTechnicalProfileCommand } from "../../application/commands/accept-technical-profile/accept-technical-profile.command.js";
@@ -37,16 +37,16 @@ export class EvidenceController {
    * NestJS HTTP/CQRS analysis surface was removed so there is one processing owner.
    */
   @Get(":assessmentId/evidence")
-  @UseGuards(PbacGuard)
+  @UseGuards(RbacGuard)
   @RequireAnyAction(
-    PBAC_ACTIONS.evidenceRead,
-    PBAC_ACTIONS.evidenceReadRedacted,
+    RBAC_ACTIONS.evidenceRead,
+    RBAC_ACTIONS.evidenceReadRedacted,
   )
   async getEvidence(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
   ) {
-    const context = request.pbacContext;
+    const context = request.rbacContext;
     return resultEnvelope(
       await this.queryBus.execute(
         new GetEvidenceQuery(

@@ -8,10 +8,10 @@ import {
 } from "@lcsp/contracts/auth";
 import {
   MANAGER_ONLY_ACTION_VALUES,
-  PBAC_ACTIONS,
-  PBAC_STATE_GATES,
+  RBAC_ACTIONS,
+  RBAC_STATE_GATES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import { HttpStatus } from "@nestjs/common";
 
 import { toPrismaAuthMembershipStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
@@ -34,15 +34,15 @@ const MAX_ORGANIZATION_NAME_LENGTH = 120;
 const SELF_SIGN_UP_POLICY_VERSION = "self-sign-up-v1";
 
 const SELF_SIGN_UP_MANAGER_ACTIONS = [
-  PBAC_ACTIONS.workspaceRead,
-  PBAC_ACTIONS.assessmentRead,
-  PBAC_ACTIONS.assessmentList,
-  PBAC_ACTIONS.githubConnect,
-  PBAC_ACTIONS.scanRead,
-  PBAC_ACTIONS.scanTrigger,
-  PBAC_ACTIONS.documentRead,
-  PBAC_ACTIONS.documentGenerate,
-  PBAC_ACTIONS.snapshotCreate,
+  RBAC_ACTIONS.workspaceRead,
+  RBAC_ACTIONS.assessmentRead,
+  RBAC_ACTIONS.assessmentList,
+  RBAC_ACTIONS.githubConnect,
+  RBAC_ACTIONS.scanRead,
+  RBAC_ACTIONS.scanTrigger,
+  RBAC_ACTIONS.documentRead,
+  RBAC_ACTIONS.documentGenerate,
+  RBAC_ACTIONS.snapshotCreate,
   ...MANAGER_ONLY_ACTION_VALUES,
 ] as const;
 
@@ -132,7 +132,7 @@ export class SignUpHandler {
             version: SELF_SIGN_UP_POLICY_VERSION,
             actions: allowedActions,
             subjectRole: SUBJECT_ROLES.manager,
-            stateGate: PBAC_STATE_GATES.membershipActive,
+            stateGate: RBAC_STATE_GATES.membershipActive,
             organizationId,
           },
         });

@@ -1,6 +1,6 @@
-import type { SubjectRole } from "../pbac.types.js";
+import type { SubjectRole } from "../rbac.types.js";
 
-export interface PbacRequestContext {
+export interface RbacRequestContext {
   userId: string;
   sessionId: string;
   organizationId: string;

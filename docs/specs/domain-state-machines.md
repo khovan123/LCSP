@@ -12,7 +12,7 @@ Canonical state transitions for the A-to-Z runnable MVP. Physical enums remain o
 - Classification requires direct EngineeringRule evaluation with legal-rule provenance and evidence refs.
 - Final document requires classification, GapAnalysis, citations, and no unresolved conflict.
 - Manager completion never depends on external collaborator participation.
-- PBAC is the authorization source of truth for all user and service transitions.
+- RBAC is the authorization source of truth for all user and service transitions.
 - Structured attestation is `SUPERSEDED_FOR_ACTIVE_MVP` and has no active state machine.
 
 ## Assessment
@@ -42,12 +42,12 @@ CREATED
 | CREATED                                | repository connected (Wizard not yet saved) | GitHub App scope valid                                                | REPOSITORY_CONNECTED                                                               |
 | WIZARD_PROFILE_READY                   | repository connected                        | GitHub App scope valid                                                | REPOSITORY_CONNECTED                                                               |
 | REPOSITORY_CONNECTED                   | Wizard saved                                | required fields valid                                                 | REPOSITORY_CONNECTED (WizardProfile attached; state unchanged, only linkage added) |
-| REPOSITORY_CONNECTED                   | trusted trigger received                    | verified source and PBAC allow                                        | TRUSTED_SCAN_TRIGGERED                                                             |
+| REPOSITORY_CONNECTED                   | trusted trigger received                    | verified source and RBAC allow                                        | TRUSTED_SCAN_TRIGGERED                                                             |
 | TRUSTED_SCAN_TRIGGERED                 | mapping pending                             | required repository/account/assessment mapping missing                | PENDING_MAPPING                                                                    |
 | TRUSTED_SCAN_TRIGGERED                 | mapping blocked                             | ambiguous mapping or unsafe context                                   | BLOCKED_MAPPING                                                                    |
 | TRUSTED_SCAN_TRIGGERED                 | waiting                                     | out-of-order event or incomplete context can safely wait              | WAITING_FOR_CONTEXT                                                                |
 | TRUSTED_SCAN_TRIGGERED                 | snapshot created                            | complete tenant/repository/assessment/branch/commit context exists    | SNAPSHOT_CREATED                                                                   |
-| PENDING_MAPPING or WAITING_FOR_CONTEXT | context completed                           | mapping is unique and PBAC allows                                     | SNAPSHOT_CREATED                                                                   |
+| PENDING_MAPPING or WAITING_FOR_CONTEXT | context completed                           | mapping is unique and RBAC allows                                     | SNAPSHOT_CREATED                                                                   |
 | BLOCKED_MAPPING                        | Manager/system correction                   | mapping is resolved and audited                                       | SNAPSHOT_CREATED                                                                   |
 | SNAPSHOT_CREATED                       | scan requested                              | idempotent job/outbox exists                                          | SCAN_REQUESTED                                                                     |
 | SCAN_REQUESTED                         | scan started                                | Python Worker lock acquired                                           | SCAN_RUNNING                                                                       |
@@ -89,7 +89,7 @@ or REJECTED
 ```
 
 - Invalid signature or untrusted source moves to REJECTED and creates no scan.
-- PBAC denial moves to REJECTED and is audited.
+- RBAC denial moves to REJECTED and is audited.
 - Missing mapping moves to PENDING_MAPPING or WAITING_FOR_CONTEXT.
 - Ambiguous mapping moves to BLOCKED_MAPPING.
 - READY_TO_SNAPSHOT may create immutable RepositorySnapshot and RepositoryScanJob.

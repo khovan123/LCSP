@@ -13,7 +13,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   REQUEST_TARGETED_REANALYSIS_TOOL,
   SCAN_ERROR_CODES,
@@ -68,16 +68,16 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
   /**
    * Validates/deduplicates a targeted reanalysis request, resolves its bounded code scope, applies tenant capacity limits, and queues worker execution.
    *
-   * @param command - Requested artifact/analyzer/scope plus authorized PBAC and correlation context.
+   * @param command - Requested artifact/analyzer/scope plus authorized RBAC and correlation context.
    * @returns Agentic-tool response describing the queued or already-queued reanalysis request.
    * @throws When the analyzer/scope is invalid, idempotency conflicts, evidence/snapshot is unavailable, or rate/capacity limits are exhausted.
    */
   async execute(
     command: RequestTargetedReanalysisCommand,
   ): Promise<RequestTargetedReanalysisResponse> {
-    const { input, pbacContext, correlationId } = command;
+    const { input, rbacContext, correlationId } = command;
     this.assertInput(input, correlationId);
-    const organizationId = pbacContext.organizationId;
+    const organizationId = rbacContext.organizationId;
 
     const existing = await this.prisma.targetedReanalysisRequest.findUnique({
       where: {
@@ -253,10 +253,10 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           assessmentId: input.assessmentId,
           correlationId,
           causationId: correlationId,
-          actor: { id: pbacContext.userId, type: AUDIT_ACTOR_TYPES.user },
+          actor: { id: rbacContext.userId, type: AUDIT_ACTOR_TYPES.user },
           result: SCAN_EVENT_TYPES.targetedReanalysisQueuedAudit,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
-          authorizationAction: PBAC_ACTIONS.technicalEvidenceReanalyze,
+          authorizationAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
           idempotencyKey: input.idempotencyKey,
           payload: {
             requestId,
@@ -277,7 +277,7 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
     });
     await this.auditWriter.write({
       eventType: SCAN_EVENT_TYPES.targetedReanalysisQueuedAudit,
-      actorId: pbacContext.userId,
+      actorId: rbacContext.userId,
       organizationId,
       assessmentId: input.assessmentId,
       resourceType: AUDIT_RESOURCE_TYPES.workerTask,

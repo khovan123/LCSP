@@ -1,10 +1,10 @@
 import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
-  PBAC_DECISION,
-  PBAC_REASON_CODE,
-  type PbacDecisionValue,
-  type PbacReasonCode,
-} from "@lcsp/contracts/pbac";
+  RBAC_DECISION,
+  RBAC_REASON_CODE,
+  type RbacDecisionValue,
+  type RbacReasonCode,
+} from "@lcsp/contracts/rbac";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 
 import type { AuthorizationDecisionRepository } from "../../modules/auth-workspace/application/ports/persistence/authorization-decision.repository.js";
@@ -15,19 +15,19 @@ import {
   PrismaMembershipRepository,
   PrismaPolicyRepository,
 } from "../../modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.repositories.js";
-import { PbacEvaluatorService } from "./pbac-evaluator.service.js";
-import type { PbacEvaluationContext, SubjectRole } from "./pbac.types.js";
+import { RbacEvaluatorService } from "./rbac-evaluator.service.js";
+import type { RbacEvaluationContext, SubjectRole } from "./rbac.types.js";
 
-export interface PbacPreflightInput {
+export interface RbacPreflightInput {
   userId: string;
   organizationId: string;
   action: string;
   correlationId: string;
 }
 
-export interface PbacPreflightResult {
-  decision: PbacDecisionValue;
-  reasonCode: PbacReasonCode | null;
+export interface RbacPreflightResult {
+  decision: RbacDecisionValue;
+  reasonCode: RbacReasonCode | null;
   correlationId: string;
 }
 
@@ -35,7 +35,7 @@ export interface PbacPreflightResult {
  * Internal-only enriched preflight result. Policy metadata is returned from the
  * trusted membership/policy lookup, never accepted from a worker payload.
  */
-export interface PbacPreflightPolicyResult extends PbacPreflightResult {
+export interface RbacPreflightPolicyResult extends RbacPreflightResult {
   policyId: string | null;
   policyVersion: string | null;
 }
@@ -43,22 +43,22 @@ export interface PbacPreflightPolicyResult extends PbacPreflightResult {
 const DECISION_LOG_RESOURCE_TYPE = AUDIT_RESOURCE_TYPES.workerTask;
 
 /**
- * Re-evaluates PBAC for a queued worker task immediately before processing so authorization reflects current membership and policy state.
+ * Re-evaluates RBAC for a queued worker task immediately before processing so authorization reflects current membership and policy state.
  *
- * Unlike `PbacGuard`, this service does not reject an existing membership before evaluation solely because its status is no longer active.
- * A membership revoked after task dispatch must still reach `PbacEvaluatorService` so the state-gate rule can produce `STATE_GATE_FAILED`;
+ * Unlike `RbacGuard`, this service does not reject an existing membership before evaluation solely because its status is no longer active.
+ * A membership revoked after task dispatch must still reach `RbacEvaluatorService` so the state-gate rule can produce `STATE_GATE_FAILED`;
  * that case is intentionally distinct from a membership that does not exist at all.
  */
 @Injectable()
-export class PbacPreflightService {
-  private readonly logger = new Logger(PbacPreflightService.name);
+export class RbacPreflightService {
+  private readonly logger = new Logger(RbacPreflightService.name);
 
   constructor(
     @Inject(PrismaMembershipRepository)
     private readonly memberships: MembershipRepository,
     @Inject(PrismaPolicyRepository)
     private readonly policies: PolicyRepository,
-    private readonly evaluator: PbacEvaluatorService,
+    private readonly evaluator: RbacEvaluatorService,
     @Inject(PrismaAuthorizationDecisionRepository)
     private readonly decisions: AuthorizationDecisionRepository,
   ) {}
@@ -67,7 +67,7 @@ export class PbacPreflightService {
    * Preserve the existing worker preflight contract without exposing policy
    * metadata over the public/internal HTTP response shape.
    */
-  async evaluate(input: PbacPreflightInput): Promise<PbacPreflightResult> {
+  async evaluate(input: RbacPreflightInput): Promise<RbacPreflightResult> {
     const result = await this.evaluateWithPolicy(input);
     return {
       decision: result.decision,
@@ -77,20 +77,20 @@ export class PbacPreflightService {
   }
 
   /**
-   * Re-evaluate PBAC and return the trusted policy identifier/version used for
+   * Re-evaluate RBAC and return the trusted policy identifier/version used for
    * an allowed decision. This is intended for in-process protected command
    * dispatch, so mutation handlers never trust caller-supplied policy metadata.
    */
   async evaluateWithPolicy(
-    input: PbacPreflightInput,
-  ): Promise<PbacPreflightPolicyResult> {
+    input: RbacPreflightInput,
+  ): Promise<RbacPreflightPolicyResult> {
     try {
       const membership = await this.memberships.findByUserAndOrganization(
         input.userId,
         input.organizationId,
       );
       if (!membership) {
-        return this.deny(input, PBAC_REASON_CODE.membershipMissing);
+        return this.deny(input, RBAC_REASON_CODE.membershipMissing);
       }
 
       const policy = await this.policies.findByIdAndVersion(
@@ -98,10 +98,10 @@ export class PbacPreflightService {
         membership.policyVersion,
       );
       if (!policy) {
-        return this.deny(input, PBAC_REASON_CODE.policyNotFound);
+        return this.deny(input, RBAC_REASON_CODE.policyNotFound);
       }
 
-      const evaluationContext: PbacEvaluationContext = {
+      const evaluationContext: RbacEvaluationContext = {
         organizationId: input.organizationId,
         action: input.action,
         subject: {
@@ -121,9 +121,9 @@ export class PbacPreflightService {
 
       const result = this.evaluator.evaluate(evaluationContext);
       const reasonCode =
-        result.decision === PBAC_DECISION.deny
-          ? (result.reasonCode ?? PBAC_REASON_CODE.denied)
-          : PBAC_REASON_CODE.authorized;
+        result.decision === RBAC_DECISION.deny
+          ? (result.reasonCode ?? RBAC_REASON_CODE.denied)
+          : RBAC_REASON_CODE.authorized;
       const policyId = result.policyId ?? policy.id;
       const policyVersion = result.policyVersion ?? policy.version;
 
@@ -137,26 +137,26 @@ export class PbacPreflightService {
 
       return {
         decision: result.decision,
-        reasonCode: result.decision === PBAC_DECISION.deny ? reasonCode : null,
+        reasonCode: result.decision === RBAC_DECISION.deny ? reasonCode : null,
         correlationId: input.correlationId,
-        policyId: result.decision === PBAC_DECISION.allow ? policyId : null,
+        policyId: result.decision === RBAC_DECISION.allow ? policyId : null,
         policyVersion:
-          result.decision === PBAC_DECISION.allow ? policyVersion : null,
+          result.decision === RBAC_DECISION.allow ? policyVersion : null,
       };
     } catch (error) {
       this.logger.error(
-        `PBAC preflight evaluation failed (action=${input.action}): ${(error as Error).message}`,
+        `RBAC preflight evaluation failed (action=${input.action}): ${(error as Error).message}`,
       );
       await this.recordDecision(
         input,
-        PBAC_DECISION.deny,
-        PBAC_REASON_CODE.loadError,
+        RBAC_DECISION.deny,
+        RBAC_REASON_CODE.loadError,
         null,
         null,
       );
       return {
-        decision: PBAC_DECISION.deny,
-        reasonCode: PBAC_REASON_CODE.loadError,
+        decision: RBAC_DECISION.deny,
+        reasonCode: RBAC_REASON_CODE.loadError,
         correlationId: input.correlationId,
         policyId: null,
         policyVersion: null,
@@ -165,18 +165,18 @@ export class PbacPreflightService {
   }
 
   private async deny(
-    input: PbacPreflightInput,
-    reasonCode: PbacReasonCode,
-  ): Promise<PbacPreflightPolicyResult> {
+    input: RbacPreflightInput,
+    reasonCode: RbacReasonCode,
+  ): Promise<RbacPreflightPolicyResult> {
     await this.recordDecision(
       input,
-      PBAC_DECISION.deny,
+      RBAC_DECISION.deny,
       reasonCode,
       null,
       null,
     );
     return {
-      decision: PBAC_DECISION.deny,
+      decision: RBAC_DECISION.deny,
       reasonCode,
       correlationId: input.correlationId,
       policyId: null,
@@ -185,9 +185,9 @@ export class PbacPreflightService {
   }
 
   private async recordDecision(
-    input: PbacPreflightInput,
-    decision: PbacDecisionValue,
-    reasonCode: PbacReasonCode,
+    input: RbacPreflightInput,
+    decision: RbacDecisionValue,
+    reasonCode: RbacReasonCode,
     policyId: string | null,
     policyVersion: string | null,
   ): Promise<void> {

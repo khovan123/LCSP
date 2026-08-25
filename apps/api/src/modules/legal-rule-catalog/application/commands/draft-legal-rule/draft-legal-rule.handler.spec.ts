@@ -12,7 +12,7 @@ import { PrismaService } from "../../../../../infrastructure/prisma/prisma.servi
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { CitationLocatorValidatorService } from "../../services/citation-locator-validator.service.js";
 import { DraftLegalRuleCommand } from "./draft-legal-rule.command.js";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   LEGAL_RULE_ERROR_CODES,
   LEGAL_RULE_LIFECYCLE_STATUSES,
@@ -70,7 +70,7 @@ describe("DraftLegalRuleHandler", () => {
       "version-uuid",
       {
         subjectRole: "manager",
-        selectedAction: PBAC_ACTIONS.legalRuleCatalogAuthor,
+        selectedAction: RBAC_ACTIONS.legalRuleCatalogAuthor,
         policyId: "pol1",
         policyVersion: "1.0",
       },
@@ -149,7 +149,7 @@ describe("DraftLegalRuleHandler", () => {
     );
   });
 
-  it("T06: Actor lacks legal-rule-catalog:author -> 403 PBAC_DENIED", async () => {
+  it("T06: Actor lacks legal-rule-catalog:author -> 403 RBAC_DENIED", async () => {
     const command = createCommand();
     command.authorization.selectedAction = "some:other:action";
 

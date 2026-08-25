@@ -28,7 +28,7 @@ const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 
 /**
- * Produces the caller-visible assessment list with fail-closed PBAC scope filtering and wizard-status enrichment.
+ * Produces the caller-visible assessment list with fail-closed RBAC scope filtering and wizard-status enrichment.
  */
 @QueryHandler(ListAssessmentsQuery)
 export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuery> {
@@ -47,7 +47,7 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
   /**
    * Validates pagination/status filters, applies role-aware visibility, and returns enriched assessment summaries.
    *
-   * @param query - Organization, PBAC scope, pagination, status, and correlation context for the list request.
+   * @param query - Organization, RBAC scope, pagination, status, and correlation context for the list request.
    * @returns Paginated assessment summaries visible to the caller.
    * @throws An invalid-request problem when an unknown assessment status is supplied.
    */

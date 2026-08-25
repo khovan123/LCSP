@@ -4,7 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
-import { PBAC_ACTIONS } from "@lcsp/contracts/pbac";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import { AppModule } from "../src/app.module.js";
 import {
@@ -57,7 +57,7 @@ describe("Citation set validation endpoint (e2e)", () => {
         id_version: { id: "policy-manager-workspace", version: "2026-06-26" },
       },
       data: {
-        actions: [...policy.actions, PBAC_ACTIONS.legalCitationValidate],
+        actions: [...policy.actions, RBAC_ACTIONS.legalCitationValidate],
       },
     });
     await prisma.assessment.create({
@@ -105,7 +105,7 @@ describe("Citation set validation endpoint (e2e)", () => {
     );
   });
 
-  it("TC-03/TC-04: rejects an out-of-allowlist citation and PBAC denial fails closed", async () => {
+  it("TC-03/TC-04: rejects an out-of-allowlist citation and RBAC denial fails closed", async () => {
     const invalid = await httpRequest(app)
       .post(`/assessments/${ASSESSMENT_ID}/citation-set-validation`)
       .set("Authorization", `Bearer ${managerToken}`)
@@ -130,7 +130,7 @@ describe("Citation set validation endpoint (e2e)", () => {
       where: {
         id_version: { id: "policy-manager-workspace", version: "2026-06-26" },
       },
-      data: { actions: [PBAC_ACTIONS.assessmentRead] },
+      data: { actions: [RBAC_ACTIONS.assessmentRead] },
     });
     const denied = await httpRequest(app)
       .post(`/assessments/${ASSESSMENT_ID}/citation-set-validation`)

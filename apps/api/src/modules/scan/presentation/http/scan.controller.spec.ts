@@ -1,10 +1,10 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
 import {
-  PBAC_ACTIONS,
-  PBAC_METADATA_TYPES,
+  RBAC_ACTIONS,
+  RBAC_METADATA_TYPES,
   SUBJECT_ROLES,
-} from "@lcsp/contracts/pbac";
+} from "@lcsp/contracts/rbac";
 import { SCAN_CALLBACK_STATUSES, SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 import {
@@ -13,7 +13,7 @@ import {
   ASSESSMENT_RUNTIME_STAGE_CODES,
 } from "@lcsp/contracts/evidence";
 
-import { PBAC_METADATA_KEY } from "../../../../platform/pbac/decorators/pbac-metadata.js";
+import { RBAC_METADATA_KEY } from "../../../../platform/rbac/decorators/rbac-metadata.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
 import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
 import { RerunScanCommand } from "../../application/commands/rerun-scan/rerun-scan.command.js";
@@ -23,20 +23,20 @@ import { InternalTargetedReanalysisController } from "./scan.controller.js";
 import { TARGETED_REANALYSIS_REQUEST_STATES } from "@lcsp/contracts/scan";
 
 describe("ScanController", () => {
-  it("requires the scan:read PBAC action", () => {
+  it("requires the scan:read RBAC action", () => {
     const metadata = Reflect.getMetadata(
-      PBAC_METADATA_KEY,
+      RBAC_METADATA_KEY,
       // eslint-disable-next-line @typescript-eslint/unbound-method
       ScanController.prototype.getScanJob,
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: PBAC_METADATA_TYPES.action,
-      action: PBAC_ACTIONS.scanRead,
+      type: RBAC_METADATA_TYPES.action,
+      action: RBAC_ACTIONS.scanRead,
     });
   });
 
-  it("dispatches GetScanJobQuery with organization and PBAC scope", async () => {
+  it("dispatches GetScanJobQuery with organization and RBAC scope", async () => {
     const execute = jest.fn<(query: unknown) => Promise<unknown>>();
     execute.mockResolvedValue({ scan_job_id: "scan-job-1" });
     const controller = new ScanController(
@@ -46,14 +46,14 @@ describe("ScanController", () => {
 
     await controller.getScanJob("assessment-1", "scan-job-1", {
       correlationId: "corr-1",
-      pbacContext: {
+      rbacContext: {
         userId: "system-admin-1",
         sessionId: "session-1",
         organizationId: "org-1",
         subjectRole: SUBJECT_ROLES.systemAdmin,
         scope: "assessment-1",
-        grantedActions: [PBAC_ACTIONS.scanRead],
-        selectedAction: PBAC_ACTIONS.scanRead,
+        grantedActions: [RBAC_ACTIONS.scanRead],
+        selectedAction: RBAC_ACTIONS.scanRead,
         policyId: "policy-system-admin",
         policyVersion: "v1",
       },
@@ -71,16 +71,16 @@ describe("ScanController", () => {
     });
   });
 
-  it("requires the scan:trigger PBAC action for rerunScan", () => {
+  it("requires the scan:trigger RBAC action for rerunScan", () => {
     const metadata = Reflect.getMetadata(
-      PBAC_METADATA_KEY,
+      RBAC_METADATA_KEY,
       // eslint-disable-next-line @typescript-eslint/unbound-method
       ScanController.prototype.rerunScan,
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: PBAC_METADATA_TYPES.action,
-      action: PBAC_ACTIONS.scanTrigger,
+      type: RBAC_METADATA_TYPES.action,
+      action: RBAC_ACTIONS.scanTrigger,
     });
   });
 
@@ -95,14 +95,14 @@ describe("ScanController", () => {
       { execute } as unknown as CommandBus,
     );
 
-    const pbacContext = {
+    const rbacContext = {
       userId: "manager-1",
       sessionId: "session-1",
       organizationId: "org-1",
       subjectRole: SUBJECT_ROLES.manager,
       scope: "assessment-1",
-      grantedActions: [PBAC_ACTIONS.scanTrigger],
-      selectedAction: PBAC_ACTIONS.scanTrigger,
+      grantedActions: [RBAC_ACTIONS.scanTrigger],
+      selectedAction: RBAC_ACTIONS.scanTrigger,
       policyId: "policy-manager",
       policyVersion: "v1",
     };
@@ -116,7 +116,7 @@ describe("ScanController", () => {
       },
       {
         correlationId: "corr-1",
-        pbacContext,
+        rbacContext,
       },
     );
 
@@ -126,22 +126,22 @@ describe("ScanController", () => {
       assessmentId: "assessment-1",
       snapshotId: "snapshot-1",
       idempotencyKey: "key-1",
-      pbacContext,
+      rbacContext,
       correlationId: "corr-1",
       reason: "Test rerun",
     });
   });
 
-  it("requires the technical-evidence:reanalyze PBAC action for requestTargetedReanalysis", () => {
+  it("requires the technical-evidence:reanalyze RBAC action for requestTargetedReanalysis", () => {
     const metadata = Reflect.getMetadata(
-      PBAC_METADATA_KEY,
+      RBAC_METADATA_KEY,
       // eslint-disable-next-line @typescript-eslint/unbound-method
       ScanController.prototype.requestTargetedReanalysis,
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: PBAC_METADATA_TYPES.action,
-      action: PBAC_ACTIONS.technicalEvidenceReanalyze,
+      type: RBAC_METADATA_TYPES.action,
+      action: RBAC_ACTIONS.technicalEvidenceReanalyze,
     });
   });
 
@@ -156,14 +156,14 @@ describe("ScanController", () => {
       { execute } as unknown as CommandBus,
     );
 
-    const pbacContext = {
+    const rbacContext = {
       userId: "manager-1",
       sessionId: "session-1",
       organizationId: "org-1",
       subjectRole: SUBJECT_ROLES.manager,
       scope: "assessment-1",
-      grantedActions: [PBAC_ACTIONS.technicalEvidenceReanalyze],
-      selectedAction: PBAC_ACTIONS.technicalEvidenceReanalyze,
+      grantedActions: [RBAC_ACTIONS.technicalEvidenceReanalyze],
+      selectedAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
       policyId: "policy-manager",
       policyVersion: "v1",
     };
@@ -180,7 +180,7 @@ describe("ScanController", () => {
       },
       {
         correlationId: "corr-1",
-        pbacContext,
+        rbacContext,
       },
     );
 
@@ -197,7 +197,7 @@ describe("ScanController", () => {
         reasonRequirementId: "requirement:gap_12345678",
         idempotencyKey: "request_targeted_reanalysis_0001",
       },
-      pbacContext,
+      rbacContext,
       correlationId: "corr-1",
     });
   });
@@ -275,10 +275,10 @@ describe("InternalScanController", () => {
         reasonRequirementId: "requirement:gap_12345678",
         idempotencyKey: "request_targeted_reanalysis_0001",
       },
-      pbacContext: expect.objectContaining({
+      rbacContext: expect.objectContaining({
         userId: "user-1",
         organizationId: "org-1",
-        selectedAction: PBAC_ACTIONS.technicalEvidenceReanalyze,
+        selectedAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
       }),
       correlationId: "corr-1",
     });

@@ -1,8 +1,8 @@
 import { ASSESSMENT_ACTIONS } from "../assessment/actions.ts";
 import { DOCUMENT_ACTIONS } from "../document/actions.ts";
-import { GAP_REQUIREMENTS_PBAC_ACTIONS } from "./gap-requirements-actions.ts";
+import { GAP_REQUIREMENTS_RBAC_ACTIONS } from "./gap-requirements-actions.ts";
 
-export const PBAC_ACTIONS = {
+export const RBAC_ACTIONS = {
   assessmentCreate: ASSESSMENT_ACTIONS.create,
   assessmentList: "assessment:list",
   assessmentRead: "assessment:read",
@@ -32,7 +32,7 @@ export const PBAC_ACTIONS = {
   gapEvidenceTraceRead: "gap-evidence-trace:read",
   gapRemediationPropose: "gap-remediation:propose",
   managerDecisionChange: "manager-decision:change",
-  metadataCheck: "pbac:metadata",
+  metadataCheck: "rbac:metadata",
   outboxReplay: "outbox:replay",
   sessionVerify: "session:verify",
   scanRead: "scan:read",
@@ -43,7 +43,7 @@ export const PBAC_ACTIONS = {
   wizardSubmit: "wizard:submit",
   wizardExport: "wizard:export",
   workspaceRead: "workspace:read",
-  ...GAP_REQUIREMENTS_PBAC_ACTIONS,
+  ...GAP_REQUIREMENTS_RBAC_ACTIONS,
 } as const;
 
-export type PbacAction = (typeof PBAC_ACTIONS)[keyof typeof PBAC_ACTIONS];
+export type RbacAction = (typeof RBAC_ACTIONS)[keyof typeof RBAC_ACTIONS];

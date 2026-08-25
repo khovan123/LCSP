@@ -7,7 +7,7 @@ status: REVIEW
 epic_story: 7.3
 depends_on:
   - document/01-generate-gap-analysis-endpoint.md
-  - platform/pbac/03-nestjs-guard.md
+  - platform/rbac/03-nestjs-guard.md
 ---
 
 # Get Document Status and Download Endpoint
@@ -50,12 +50,12 @@ Return status of a document request and, when ready, a signed download URL for t
 
 | HTTP | `error_code`         | Meaning                     |
 | ---- | -------------------- | --------------------------- |
-| 403  | `PBAC_DENIED`        | Actor lacks `document:read` |
+| 403  | `RBAC_DENIED`        | Actor lacks `document:read` |
 | 404  | `DOCUMENT_NOT_FOUND` | Not found or not in org     |
 
 ## Business Rules
 
-1. PBAC guard: `action = document:read`.
+1. RBAC guard: `action = document:read`.
 2. Org-scope guard on assessment.
 3. When `status = READY`: generate pre-signed URL with 5-minute TTL via `DocumentStorageService`. URL is per-request (not stored).
 4. When `status = BLOCKED`: include `blocked_reason` in business language (no implementation details).
@@ -76,16 +76,16 @@ Return status of a document request and, when ready, a signed download URL for t
 | T02 | QUEUED document                       | 200 `download_url = null`                    |
 | T03 | BLOCKED document                      | 200 with `blocked_reason`, no `download_url` |
 | T04 | Download URL expires after 5 min      | URL TTL verified                             |
-| T05 | Actor lacks `document:read`           | 403 `PBAC_DENIED`                            |
+| T05 | Actor lacks `document:read`           | 403 `RBAC_DENIED`                            |
 | T06 | Document not in org                   | 404 `DOCUMENT_NOT_FOUND`                     |
-| T07 | Non-Manager accessing FinalReport     | 403 `PBAC_DENIED`                            |
+| T07 | Non-Manager accessing FinalReport     | 403 `RBAC_DENIED`                            |
 | T08 | `blocked_reason` is business language | No technical terms                           |
 
 ## Definition of Done
 
 - Pre-signed URL generated per-request (5-min TTL) when status is READY.
 - `blocked_reason` is business-language only.
-- Non-Manager access is denied by PBAC unless a future explicit policy is approved.
+- Non-Manager access is denied by RBAC unless a future explicit policy is approved.
 - FinalReport download restricted to Manager.
 
 ## Dev Agent Record
@@ -98,11 +98,11 @@ Return status of a document request and, when ready, a signed download URL for t
 
 ### Completion Notes
 
-- Added protected `GET /assessments/:assessmentId/documents/:documentRequestId` status endpoint with PBAC support for both `document:read` and `document:read:redacted`.
+- Added protected `GET /assessments/:assessmentId/documents/:documentRequestId` status endpoint with RBAC support for both `document:read` and `document:read:redacted`.
 - Added signed download proxy route `GET /assessments/:assessmentId/documents/:documentRequestId/download?token=...` backed by `DocumentStorageService` with 5-minute HMAC-signed URLs.
 - Enforced assessment scope and denied non-Manager `FinalReport` access.
 - Sanitized technical blocked reasons into business-language messaging and projected `guardrail_status`, timestamps, and correlation id.
-- Added end-to-end coverage for READY, QUEUED, BLOCKED, 5-minute TTL, PBAC deny, org isolation, and non-Manager denial paths.
+- Added end-to-end coverage for READY, QUEUED, BLOCKED, 5-minute TTL, RBAC deny, org isolation, and non-Manager denial paths.
 
 ### File List
 
@@ -118,7 +118,7 @@ Return status of a document request and, when ready, a signed download URL for t
 - packages/contracts/src/document/actions.ts
 - packages/contracts/src/document/codes.ts
 - packages/contracts/src/document/types.ts
-- packages/contracts/src/pbac/actions.ts
+- packages/contracts/src/rbac/actions.ts
 
 ### Change Log
 

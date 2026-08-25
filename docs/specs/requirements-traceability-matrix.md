@@ -29,10 +29,10 @@ Legacy `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, and `NFR-032` are alia
 | FR-006 | UC-001, UC-005                         | AC-023                         | user task flows                            | Identity + Repository API                  |
 | FR-007 | UC-002                                 | AC-024                         | domain model                               | Organization API                           |
 | FR-008 | UC-002                                 | AC-024                         | domain model                               | Organization API                           |
-| FR-009 | UC-002                                 | AC-024                         | PBAC subject attributes/templates          | PBAC                                       |
+| FR-009 | UC-002                                 | AC-024                         | RBAC subject attributes/templates          | RBAC                                       |
 | FR-010 | —                                      | —                              | `RETIRED_FROM_ACTIVE_MVP`                  | no active implementation                   |
 | FR-011 | —                                      | —                              | `RETIRED_FROM_ACTIVE_MVP`                  | no active implementation                   |
-| FR-012 | UC-002, UC-010, UC-011, UC-013, UC-014 | AC-025, AC-026                 | PBAC guards                                | PBAC                                       |
+| FR-012 | UC-002, UC-010, UC-011, UC-013, UC-014 | AC-025, AC-026                 | RBAC guards                                | RBAC                                       |
 | FR-013 | UC-003                                 | AC-001                         | Assessment state                           | Assessment API                             |
 | FR-014 | UC-004                                 | AC-002                         | WizardProfile / Assessment                 | Wizard API/UI                              |
 | FR-015 | UC-004, UC-014                         | AC-003                         | system context / document spec             | Assessment UI                              |
@@ -84,7 +84,7 @@ Legacy `UC-MXX-XX`, `FR-E*`, `FR-057..FR-082`, `NFR-031`, and `NFR-032` are alia
 | ---------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | NFR-001..NFR-005 | FR-001..FR-005                                                 | auth/session/MFA/OAuth safety                                          |
 | NFR-006, NFR-007 | FR-006, FR-016, FR-018                                         | identity/repository separation and read-only scope                     |
-| NFR-008..NFR-010 | FR-007..FR-013, FR-028, FR-031, FR-042..FR-044, FR-047, FR-050 | PBAC, scoped collaboration, trigger/audit                              |
+| NFR-008..NFR-010 | FR-007..FR-013, FR-028, FR-031, FR-042..FR-044, FR-047, FR-050 | RBAC, scoped collaboration, trigger/audit                              |
 | NFR-011          | FR-042..FR-044, FR-050                                         | append-oriented audit                                                  |
 | NFR-012..NFR-016 | FR-017..FR-023, FR-043, FR-044, FR-048, FR-055                 | source/privacy/evidence integrity                                      |
 | NFR-017          | FR-032..FR-036, FR-053, FR-054, FR-056                         | legal citation/corpus provenance                                       |

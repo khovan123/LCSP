@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     bearerToken: session.token,
   });
   if (
-    upstream.problemCode === AUTH_ERROR_CODES.pbacDenied &&
+    upstream.problemCode === AUTH_ERROR_CODES.rbacDenied &&
     getProblemRequiredAction(upstream.result) === REQUIRED_ACTIONS.contactOwner
   ) {
     const response = upstreamJson(upstream);

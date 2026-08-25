@@ -12,4 +12,4 @@ depends_on: []
 
 Developer membership revocation UI/API has been removed with the Developer collaboration flow.
 
-Manager-owned workspace access remains enforced through active membership/session state and PBAC. Future delegated access needs a new policy contract and lifecycle design.
+Manager-owned workspace access remains enforced through active membership/session state and RBAC. Future delegated access needs a new policy contract and lifecycle design.
