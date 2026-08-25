@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Readable } from "node:stream";
+import { RepositoryAuthenticationMode } from "@prisma/client";
 
 import {
   REPOSITORY_CONNECTION_STATUSES,
@@ -41,6 +42,8 @@ describe("StreamSnapshotArchiveHandler", () => {
   const snapshot = {
     id: "snapshot-1",
     connectionId: "connection-1",
+    assessmentId: "assessment-1",
+    repositoryId: "repository-1",
     repositoryFullName: "acme/example-repo",
     commitSha: "a".repeat(40),
     status: REPOSITORY_SNAPSHOT_STATUSES.ready,
@@ -56,6 +59,10 @@ describe("StreamSnapshotArchiveHandler", () => {
     id: "connection-1",
     installationId: "installation-1",
     status: REPOSITORY_CONNECTION_STATUSES.active,
+    authenticationMode: RepositoryAuthenticationMode.GITHUB_APP,
+    credentialAuthorizationId: null,
+    repositoryId: "repository-1",
+    repositoryFullName: "acme/example-repo",
   };
 
   function buildHandler(options?: {
@@ -140,12 +147,23 @@ describe("StreamSnapshotArchiveHandler", () => {
       get: cacheGetMock,
       capture: cacheCaptureMock,
     } as unknown as SnapshotArchiveCache;
+    const credentialResolver = {
+      resolveForConnection: jest.fn(),
+      markInvalid: jest.fn(),
+    };
+    const githubArchiveTransport = { downloadArchive: jest.fn() };
+    const configService = {
+      get: jest.fn(() => ({ archiveRetrievalEnabled: false })),
+    };
 
     return {
       handler: new StreamSnapshotArchiveHandler(
         prisma,
         githubAppClient,
         snapshotArchiveCache,
+        credentialResolver as never,
+        githubArchiveTransport as never,
+        configService as never,
       ),
       downloadRepositoryArchiveMock,
       cacheGetMock,
@@ -260,6 +278,32 @@ describe("StreamSnapshotArchiveHandler", () => {
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it.each([
+    RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
+    undefined,
+    "UNKNOWN_MODE",
+  ])(
+    "fails closed for non-App archive authentication mode %s",
+    async (mode) => {
+      const fixture = buildHandler({
+        connection: {
+          ...connection,
+          authenticationMode: mode,
+        } as typeof connection,
+      });
+      await expect(
+        fixture.handler.execute(
+          new StreamSnapshotArchiveQuery(
+            "snapshot-1",
+            "scan-job-1",
+            "corr-mode",
+          ),
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(fixture.downloadRepositoryArchiveMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("maps archive retrieval failure to bad gateway", async () => {
     const loggerError = jest
