@@ -2,13 +2,10 @@ import type { AuditResourceType } from "@lcsp/contracts/audit";
 import type { AuthErrorCode } from "@lcsp/contracts/auth";
 import type { RbacDecisionValue, RbacReasonCode } from "@lcsp/contracts/rbac";
 
-export { Membership } from "../entities/membership.entity.ts";
-export type { MembershipStatus } from "../entities/membership.entity.ts";
 export { MfaEnrollment } from "../entities/mfa-enrollment.entity.ts";
 export { MfaRateLimit } from "../entities/mfa-rate-limit.entity.ts";
 export { OAuthIdentity } from "../entities/oauth-identity.entity.ts";
 export { OAuthState } from "../entities/oauth-state.entity.ts";
-export { Organization } from "../entities/organization.entity.ts";
 export { RecoveryRequest } from "../entities/recovery-request.entity.ts";
 export { Session } from "../entities/session.entity.ts";
 export { User } from "../entities/user.entity.ts";
@@ -16,7 +13,6 @@ export { User } from "../entities/user.entity.ts";
 export type AuthorizationDecision = {
   actor_id?: string | null;
   session_id?: string | null;
-  organization_id: string | null;
   resource_type: AuditResourceType;
   resource_id: string;
   action: string;
