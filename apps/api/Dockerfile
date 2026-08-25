@@ -1,7 +1,19 @@
 FROM node:24-bookworm-slim
 
+ARG GITHUB_CLI_VERSION=2.98.0
+
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates openssl \
+    && apt-get install -y --no-install-recommends ca-certificates curl openssl \
+    && curl --fail --silent --show-error --location --output /tmp/gh.deb \
+      "https://github.com/cli/cli/releases/download/v${GITHUB_CLI_VERSION}/gh_${GITHUB_CLI_VERSION}_linux_amd64.deb" \
+    && curl --fail --silent --show-error --location --output /tmp/gh-checksums.txt \
+      "https://github.com/cli/cli/releases/download/v${GITHUB_CLI_VERSION}/gh_${GITHUB_CLI_VERSION}_checksums.txt" \
+    && grep " gh_${GITHUB_CLI_VERSION}_linux_amd64.deb$" /tmp/gh-checksums.txt \
+      | sed "s# gh_${GITHUB_CLI_VERSION}_linux_amd64.deb# /tmp/gh.deb#" \
+      | sha256sum --check --strict \
+    && apt-get install -y --no-install-recommends /tmp/gh.deb \
+    && gh --version | grep --fixed-strings "gh version ${GITHUB_CLI_VERSION}" \
+    && rm -f /tmp/gh.deb /tmp/gh-checksums.txt \
     && rm -rf /var/lib/apt/lists/* \
     && corepack enable
 
@@ -18,6 +30,7 @@ RUN DATABASE_URL='postgresql://fogewise_build:fogewise_build@127.0.0.1:5432/foge
 
 ENV NODE_ENV=production
 ENV PORT=8080
+ENV GITHUB_CLI_EXECUTABLE_PATH=/usr/bin/gh
 
 EXPOSE 8080
 
