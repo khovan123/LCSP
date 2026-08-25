@@ -126,14 +126,10 @@ export class RbacGuard implements CanActivate {
         reasonCode: loaderResult.reason,
         correlationId,
       });
-      throw this.exceptionFor(
-        loaderResult,
-        correlationId,
-        metadata.membershipMissingAsRbacDenied === true,
-      );
+      throw this.exceptionFor(loaderResult, correlationId);
     }
 
-    const { session, user, membershipStatus, grantedActions } = loaderResult;
+    const { session, user, grantedActions } = loaderResult;
     const requiresSensitiveReauth =
       this.reflector.getAllAndOverride<boolean | undefined>(
         RE_AUTH_FOR_SENSITIVE_ROUTE_METADATA_KEY,
@@ -178,11 +174,9 @@ export class RbacGuard implements CanActivate {
 
     for (const candidateAction of candidateActions) {
       const evaluationContext: RbacEvaluationContext = {
-        organizationId: session.organizationId,
         action: candidateAction,
         subject: { role: user.role },
         grantedActions,
-        membershipStatus,
       };
       const decision = this.evaluator.evaluate(evaluationContext);
       if (decision.decision === RBAC_DECISION.allow) {
@@ -289,7 +283,6 @@ export class RbacGuard implements CanActivate {
       | { reason: RbacContextDenialReason; mfaEnrolled?: boolean }
       | RbacContextDenialReason,
     correlationId: string,
-    membershipMissingAsRbacDenied = false,
   ): HttpException {
     const reason = typeof denial === "string" ? denial : denial.reason;
     switch (reason) {
@@ -307,14 +300,6 @@ export class RbacGuard implements CanActivate {
               : { mfaEnrolled: denial.mfaEnrolled === true },
           status: HttpStatus.UNAUTHORIZED,
         });
-      case RBAC_REASON_CODE.membershipMissing:
-        if (membershipMissingAsRbacDenied)
-          return this.rbacDenied(correlationId);
-        return problemException(
-          AUTH_ERROR_CODES.membershipMissing,
-          correlationId,
-          { status: HttpStatus.FORBIDDEN },
-        );
       case RBAC_REASON_CODE.loadError:
         return this.rbacDenied(correlationId);
     }
