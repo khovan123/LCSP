@@ -3,13 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from tools.planner.investigation.code_context import CodeContextSession
-from tools.planner.investigation.code_context_investigator import (
+from tools.common.capabilities.assessment.investigation.engineering_rule.code_context import CodeContextSession
+from tools.common.capabilities.assessment.investigation.engineering_rule.code_context_investigator import (
     CODE_CONTEXT_TOOL_NAMES,
     CodeContextLawGuidedInvestigator,
 )
-from tools.planner.investigation.evidence_ledger import EvidenceLedger
-from tools.planner.investigation.models import InvestigationPacket
+from tools.common.capabilities.assessment.claims.evidence_claim.evidence_ledger import EvidenceLedger
+from tools.common.capabilities.assessment.claims.evidence_claim.models import InvestigationPacket
 
 
 def _graph() -> dict:
@@ -94,7 +94,7 @@ def test_code_context_is_seeded_and_exposed_as_native_tools(tmp_path: Path) -> N
 
     session = CodeContextSession(_graph(), workspace_path=_workspace(tmp_path))
     with patch(
-        "tools.planner.investigation.investigator.create_agent",
+        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_agent",
         side_effect=fake_create_agent,
     ):
         claims = CodeContextLawGuidedInvestigator("test:model").investigate(

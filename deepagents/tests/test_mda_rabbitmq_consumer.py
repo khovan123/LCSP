@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from runtime.workflow.checkpoint import rabbitmq_consumer
+from tools.common.capabilities.managed import rabbitmq_consumer
 
 
 class FakeChannel:

@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain.messages import AIMessage
 
-from tools.classification.classification.classification_boundary import ClassificationBoundary
-from tools.engineer_rule.intelligence.ai_usage_flow_boundary import AIUsageFlowBoundary
-from tools.common.platform.config import WorkerConfig
+from tools.common.capabilities.assessment.evaluation.classification.classification_boundary import ClassificationBoundary
+from tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_boundary import AIUsageFlowBoundary
+from tools.common.capabilities.platform.config import WorkerConfig
 
 
 def _config() -> WorkerConfig:
@@ -102,7 +102,7 @@ def test_ai_usage_flow_handle_smoke_e2e_runs_graph_and_submits_callback() -> Non
     boundary = AIUsageFlowBoundary(_config(), api_client=api_client)
 
     with patch(
-        "tools.engineer_rule.intelligence.ai_usage_flow_proposer.create_agent",
+        "tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_proposer.create_agent",
         return_value=proposal_agent,
     ):
         boundary.handle(
@@ -144,7 +144,7 @@ def test_classification_handle_smoke_e2e_runs_graph_and_submits_callback() -> No
     with (
         patch.object(boundary, "_submit_callback") as mock_submit,
         patch(
-            "tools.classification.classification.classification_proposer.create_agent",
+            "tools.common.capabilities.assessment.evaluation.classification.classification_proposer.create_agent",
             return_value=proposal_agent,
         ),
     ):

@@ -4,17 +4,17 @@ import json
 
 import pytest
 
-from tools.planner.investigation.code_context_investigator import (
+from tools.common.capabilities.assessment.investigation.engineering_rule.code_context_investigator import (
     CodeContextLawGuidedInvestigator,
 )
-from tools.planner.investigation.evidence_ledger import EvidenceLedger
-from tools.planner.investigation.investigator import LawGuidedInvestigator
-from tools.planner.investigation.models import (
+from tools.common.capabilities.assessment.claims.evidence_claim.evidence_ledger import EvidenceLedger
+from tools.common.capabilities.assessment.investigation.engineering_rule.investigator import LawGuidedInvestigator
+from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_EVIDENCE_CLAIM_TYPES,
     ENGINEERING_LIMITATION_CODES,
     InvestigationPacket,
 )
-from tools.graph.scanner.program_graph.query_engine import ProgramGraphQueryEngine
+from tools.common.capabilities.evidence.graph.query.query_engine import ProgramGraphQueryEngine
 
 
 def _packet() -> InvestigationPacket:

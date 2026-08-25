@@ -3,13 +3,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from tools.planner.investigation.models import (
+from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_LIMITATION_CODES,
     EvidenceClaim,
     InvestigationPacket,
 )
-from tools.engineer_rule.investigation.pipeline import EngineeringInvestigationPipeline
-from tools.graph.scanner.program_graph.models import ProgramEvidenceGraph
+from tools.common.capabilities.assessment.investigation.engineering_rule.pipeline import EngineeringInvestigationPipeline
+from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
 
 
 def _evidence_report() -> dict:

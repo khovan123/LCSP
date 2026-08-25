@@ -2,11 +2,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from langchain.messages import AIMessage
-from tools.classification.classification.risk_tier_calculator import calculate_risk_tier
-from tools.classification.classification.citation_guardrail import check_citations
-from tools.classification.classification.classification_graph import ClassificationGraph
-from tools.classification.classification.overclaim_detector import check_overclaim
-from tools.classification.classification.rationale_narrator import RationaleNarrator
+from tools.common.capabilities.assessment.evaluation.classification.risk_tier_calculator import calculate_risk_tier
+from tools.common.capabilities.assessment.evaluation.classification.citation_guardrail import check_citations
+from tools.common.capabilities.assessment.evaluation.classification.classification_graph import ClassificationGraph
+from tools.common.capabilities.assessment.evaluation.classification.overclaim_detector import check_overclaim
+from tools.common.capabilities.assessment.evaluation.classification.rationale_narrator import RationaleNarrator
 
 
 def _agent_result(*, structured_response=None, content: str = ""):
@@ -46,7 +46,7 @@ def test_t04_rationale_overclaim():
 def test_t08_rationale_contradicts():
     """T08: Rationale draft contradicts decision -> rejected"""
     with patch(
-        "tools.classification.classification.rationale_narrator.create_agent",
+        "tools.common.capabilities.assessment.evaluation.classification.rationale_narrator.create_agent",
         return_value=_agent_result(content="The risk is definitely LOW."),
     ):
         rationale = RationaleNarrator().generate_rationale(
@@ -61,7 +61,7 @@ def test_t09_no_llm_for_risk_tier():
     risk, _, _ = calculate_risk_tier([{"confidence": 0.6, "coverage_status": "COMPLETE_CITATION"}])
     assert risk == "MEDIUM"
 
-from tools.classification.classification.classification_boundary import ClassificationBoundary
+from tools.common.capabilities.assessment.evaluation.classification.classification_boundary import ClassificationBoundary
 
 def test_t05_classification_not_started_when_blocked():
     """T05: LegalRuleMatch.guardrailStatus = blocked -> Classification not started"""
@@ -86,7 +86,7 @@ def test_t06_agent_failure_omits_optional_rationale():
         pass
         
     with patch(
-        "tools.classification.classification.rationale_narrator.create_agent",
+        "tools.common.capabilities.assessment.evaluation.classification.rationale_narrator.create_agent",
         side_effect=AgentFailure("model call failed"),
     ):
         rationale = RationaleNarrator().generate_rationale(
@@ -110,13 +110,13 @@ def test_t07_budget_exceeded():
         
         # Mock check_citations so it passes and allows the flow to reach the LLM part
         with (
-            patch('tools.classification.classification.classification_graph.check_citations', return_value=("passed", "")),
+            patch('tools.common.capabilities.assessment.evaluation.classification.classification_graph.check_citations', return_value=("passed", "")),
             patch(
-                "tools.classification.classification.classification_proposer.create_agent",
+                "tools.common.capabilities.assessment.evaluation.classification.classification_proposer.create_agent",
                 side_effect=BudgetExceeded("Monthly cap reached"),
             ),
             patch(
-                "tools.classification.classification.rationale_narrator.create_agent",
+                "tools.common.capabilities.assessment.evaluation.classification.rationale_narrator.create_agent",
                 side_effect=BudgetExceeded("Monthly cap reached"),
             ),
         ):
@@ -141,9 +141,9 @@ def test_t10_consumer_derives_workflow_context_for_proposal_node():
 
     with (
         patch.object(boundary, "_submit_callback") as mock_submit,
-        patch("tools.classification.classification.classification_graph.check_citations", return_value=("passed", "")),
+        patch("tools.common.capabilities.assessment.evaluation.classification.classification_graph.check_citations", return_value=("passed", "")),
         patch(
-            "tools.classification.classification.classification_proposer.create_agent",
+            "tools.common.capabilities.assessment.evaluation.classification.classification_proposer.create_agent",
             return_value=agent,
         ),
     ):
@@ -176,9 +176,9 @@ def test_t11_consumer_rejects_mismatched_model_assisted_proposal():
 
     with (
         patch.object(boundary, "_submit_callback") as mock_submit,
-        patch("tools.classification.classification.classification_graph.check_citations", return_value=("passed", "")),
-        patch("tools.classification.classification.classification_proposer.create_agent", return_value=proposal_agent),
-        patch("tools.classification.classification.rationale_narrator.create_agent", return_value=narrator_agent),
+        patch("tools.common.capabilities.assessment.evaluation.classification.classification_graph.check_citations", return_value=("passed", "")),
+        patch("tools.common.capabilities.assessment.evaluation.classification.classification_proposer.create_agent", return_value=proposal_agent),
+        patch("tools.common.capabilities.assessment.evaluation.classification.rationale_narrator.create_agent", return_value=narrator_agent),
     ):
             boundary.handle(
                 {
@@ -205,8 +205,8 @@ def test_t12_consumer_accepts_matching_model_assisted_proposal():
 
     with (
         patch.object(boundary, "_submit_callback") as mock_submit,
-        patch("tools.classification.classification.classification_graph.check_citations", return_value=("passed", "")),
-        patch("tools.classification.classification.classification_proposer.create_agent", return_value=proposal_agent),
+        patch("tools.common.capabilities.assessment.evaluation.classification.classification_graph.check_citations", return_value=("passed", "")),
+        patch("tools.common.capabilities.assessment.evaluation.classification.classification_proposer.create_agent", return_value=proposal_agent),
     ):
             boundary.handle(
                 {

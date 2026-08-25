@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 from langchain.messages import AIMessage
 
-from tools.reports.reporting.final_report_boundary import FinalReportBoundary
-from tools.reports.reporting.final_report_generator import FinalReportGenerator
+from tools.common.capabilities.reporting.report.final_report.final_report_boundary import FinalReportBoundary
+from tools.common.capabilities.reporting.report.final_report.final_report_generator import FinalReportGenerator
 
 
 def _context() -> dict:
@@ -81,7 +81,7 @@ def test_t01_authoritative_context_generates_ready_report():
     boundary, document_client = _boundary()
     boundary._generator.generate = MagicMock(return_value="Summary of system.")
     with patch(
-        "tools.reports.reporting.final_report_boundary.StorageUploader.upload_document",
+        "tools.common.capabilities.reporting.report.final_report.final_report_boundary.StorageUploader.upload_document",
         return_value="https://url",
     ):
         boundary.handle({"documentRequestId": "doc123"}, "corr-id")
@@ -94,7 +94,7 @@ def test_t01_authoritative_context_generates_ready_report():
 def test_t02_report_contains_certified_is_blocked():
     boundary, document_client = _boundary()
     with patch(
-        "tools.reports.reporting.final_report_boundary.FinalReportGenerator.generate",
+        "tools.common.capabilities.reporting.report.final_report.final_report_boundary.FinalReportGenerator.generate",
         return_value="The system is certified.",
     ):
         boundary.handle({"documentRequestId": "doc123"}, "corr-id")
@@ -133,7 +133,7 @@ def test_t05_citation_references():
         invoke=MagicMock(return_value={"messages": [AIMessage(content="Summary.")]})
     )
     with patch(
-        "tools.reports.reporting.final_report_generator.create_agent",
+        "tools.common.capabilities.reporting.report.final_report.final_report_generator.create_agent",
         return_value=agent,
     ):
         content = FinalReportGenerator().generate(
@@ -167,11 +167,11 @@ def test_t06_planner_audit_metadata_is_not_sent_to_final_report_prompt():
 
     with (
         patch(
-            "tools.reports.reporting.final_report_boundary.FinalReportGenerator.generate",
+            "tools.common.capabilities.reporting.report.final_report.final_report_boundary.FinalReportGenerator.generate",
             return_value="Final report.",
         ) as generate,
         patch(
-            "tools.reports.reporting.final_report_boundary.StorageUploader.upload_document",
+            "tools.common.capabilities.reporting.report.final_report.final_report_boundary.StorageUploader.upload_document",
             return_value="https://url",
         ),
     ):

@@ -6,9 +6,9 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from tools.common.agentic_evidence.authorization import ApiPbacToolAuthorizer
-from tools.common.agentic_evidence.registry import AgenticToolValidationError
-from runtime.infrastructure.auth.pbac_client import PbacClient
+from tools.common.capabilities.agentic_evidence.governance.authorization import ApiPbacToolAuthorizer
+from tools.common.capabilities.agentic_evidence.governance.registry import AgenticToolValidationError
+from tools.common.capabilities.platform.pbac_client import PbacClient
 
 
 def response(decision: str, reason: str | None = None) -> httpx.Response:

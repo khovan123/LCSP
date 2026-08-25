@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
-from tools.planner.investigation.evidence_ledger import EvidenceLedger
-from tools.planner.investigation.investigator import (
+from tools.common.capabilities.assessment.claims.evidence_claim.evidence_ledger import EvidenceLedger
+from tools.common.capabilities.assessment.investigation.engineering_rule.investigator import (
     GRAPH_TOOL_NAMES,
     MAX_PROMPT_CHARS,
     STATE_TOOL_NAMES,
     LawGuidedInvestigator,
 )
-from tools.planner.investigation.models import (
+from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_LIMITATION_CODES,
     MODEL_SELECTABLE_LIMITATION_CODES,
     InvestigationPacket,
@@ -78,7 +78,7 @@ def test_investigator_uses_native_tools_and_structured_claims() -> None:
         return Agent()
 
     with patch(
-        "tools.planner.investigation.investigator.create_agent",
+        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_agent",
         side_effect=fake_create_agent,
     ):
         claims = LawGuidedInvestigator("test:model").investigate(
@@ -146,7 +146,7 @@ def test_unknown_observation_ref_fails_closed() -> None:
             }
 
     with patch(
-        "tools.planner.investigation.investigator.create_agent",
+        "tools.common.capabilities.assessment.investigation.engineering_rule.investigator.create_agent",
         return_value=Agent(),
     ):
         claim = LawGuidedInvestigator("test:model").investigate(

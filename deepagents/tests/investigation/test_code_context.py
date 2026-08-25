@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tools.planner.investigation import code_context_investigator as investigator_module
-from tools.planner.investigation.code_context import CodeContextSession
-from tools.planner.investigation.code_context_investigator import (
+from tools.common.capabilities.assessment.investigation.engineering_rule import code_context_investigator as investigator_module
+from tools.common.capabilities.assessment.investigation.engineering_rule.code_context import CodeContextSession
+from tools.common.capabilities.assessment.investigation.engineering_rule.code_context_investigator import (
     CodeContextLawGuidedInvestigator,
 )
-from tools.planner.investigation.evidence_ledger import EvidenceLedger
-from tools.graph.scanner.program_graph.query_engine import ProgramGraphQueryEngine
+from tools.common.capabilities.assessment.claims.evidence_claim.evidence_ledger import EvidenceLedger
+from tools.common.capabilities.evidence.graph.query.query_engine import ProgramGraphQueryEngine
 
 
 def _graph() -> dict:

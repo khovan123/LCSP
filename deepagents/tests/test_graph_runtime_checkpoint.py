@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tools.common.platform.graph_runtime import (
+from tools.common.capabilities.platform.graph_runtime import (
     checkpoint_database_url,
     invoke_graph,
 )

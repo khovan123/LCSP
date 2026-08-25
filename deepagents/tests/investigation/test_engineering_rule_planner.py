@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tools.planner.investigation.engineering_rule_planner import (
+from tools.common.capabilities.assessment.planning.engineering_rule.engineering_rule_planner import (
     ENGINEERING_RULE_PLAN_BASIS,
     ENGINEERING_RULE_PLAN_DECISIONS,
     ENGINEERING_RULE_PLAN_REASON_CODES,
@@ -14,13 +14,13 @@ from tools.planner.investigation.engineering_rule_planner import (
     EngineeringRulePlanner,
     EngineeringRulePlanningCandidate,
 )
-from tools.planner.investigation.models import (
+from tools.common.capabilities.assessment.claims.evidence_claim.models import (
     ENGINEERING_LIMITATION_CODES,
     EvidenceClaim,
     InvestigationPacket,
 )
-from tools.engineer_rule.investigation.planned_pipeline import PlannedEngineeringInvestigationPipeline
-from tools.graph.scanner.program_graph.models import ProgramEvidenceGraph
+from tools.common.capabilities.assessment.investigation.engineering_rule.planned_pipeline import PlannedEngineeringInvestigationPipeline
+from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
 
 
 def _graph() -> ProgramEvidenceGraph:

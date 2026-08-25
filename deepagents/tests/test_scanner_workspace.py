@@ -10,26 +10,26 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from tools.common.platform.api_client import WorkerCallbackError
-from tools.common.platform.config import WorkerConfig
-from tools.graph.scanner import scan_boundary as scan_boundary_module
-from tools.graph.scanner.evidence_assembler import PrivacyAssertionError
-from tools.graph.scanner.scan_boundary import ScanBoundary
-from tools.graph.scanner.snapshot_service_client import (
+from tools.common.capabilities.platform.api_client import WorkerCallbackError
+from tools.common.capabilities.platform.config import WorkerConfig
+from tools.common.capabilities.evidence.scanner.scanning import scan_boundary as scan_boundary_module
+from tools.common.capabilities.evidence.scanner.assembly.evidence_assembler import PrivacyAssertionError
+from tools.common.capabilities.evidence.scanner.scanning.scan_boundary import ScanBoundary
+from tools.common.capabilities.evidence.scanner.snapshot.snapshot_service_client import (
     SnapshotArchiveRequest,
     SnapshotServiceClient,
 )
-from tools.graph.scanner.tools.deptry_tool import DeptryRunResult
-from tools.graph.scanner.tools.knip_tool import KnipRunResult
-from tools.graph.scanner.tools.semgrep_tool import SemgrepRunResult
-from tools.graph.scanner.tools.syft_tool import SyftRunResult
-from tools.graph.scanner.tools.tool_base import OUTCOME_SUCCESS, ToolExecutionResult
-from tools.graph.scanner.ts_js_bridge.bridge_types import (
+from tools.common.capabilities.evidence.scanner.tools.deptry.deptry_tool import DeptryRunResult
+from tools.common.capabilities.evidence.scanner.tools.knip.knip_tool import KnipRunResult
+from tools.common.capabilities.evidence.scanner.tools.semgrep.semgrep_tool import SemgrepRunResult
+from tools.common.capabilities.evidence.scanner.tools.syft.syft_tool import SyftRunResult
+from tools.common.capabilities.evidence.scanner.tools.common.tool_base import OUTCOME_SUCCESS, ToolExecutionResult
+from tools.common.capabilities.evidence.scanner.ts_js_bridge.bridge_types import (
     TsJsBridgeResult,
     TsJsFinding,
 )
-from tools.graph.scanner import workspace as workspace_module
-from tools.graph.scanner.workspace import (
+from tools.common.capabilities.evidence.scanner.snapshot import workspace as workspace_module
+from tools.common.capabilities.evidence.scanner.snapshot.workspace import (
     ArchiveMaterializationError,
     ScannerWorkspace,
 )

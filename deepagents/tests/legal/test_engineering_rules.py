@@ -3,28 +3,28 @@ import sys
 from types import SimpleNamespace
 import pytest
 
-from tools.graph.scanner.program_graph.vocabulary import EDGE_TYPES, NODE_TYPES
-from tools.legal.legal.engineering_rules.compiler import (
+from tools.common.capabilities.evidence.graph.schema.vocabulary import EDGE_TYPES, NODE_TYPES
+from tools.legal.corpus.engineering_rules.compilation.compiler import (
     EngineeringRuleCompiler,
     _engineering_rules_response_schema,
 )
-from tools.legal.legal.engineering_rules.chunk_triage import (
+from tools.legal.corpus.engineering_rules.compilation.chunk_triage import (
     LegalChunkEngineeringRuleTriage,
     _triage_response_schema,
 )
-from tools.legal.legal.engineering_rules.models import (
+from tools.legal.corpus.engineering_rules.contract.models import (
     ENGINEERING_RULE_SCHEMA_VERSION,
     EngineeringRule,
     build_legal_reasoning_contract,
 )
-from tools.legal.legal.engineering_rules.legal_reasoning_contract import (
+from tools.legal.corpus.engineering_rules.contract.legal_reasoning_contract import (
     LEGAL_REASONING_PLANNER_AUTHORITY,
     LegalReasoningContract,
     LegalReasoningContractValidationError,
     validate_legal_reasoning_contract,
 )
-from tools.legal.legal.engineering_rules.service import EngineeringRuleService
-from tools.legal.legal.engineering_rules.validator import (
+from tools.legal.corpus.engineering_rules.orchestration.service import EngineeringRuleService
+from tools.legal.corpus.engineering_rules.contract.validator import (
     ALLOWED_DIRECTIONS,
     EngineeringRuleValidationError,
     validate_engineering_rule,

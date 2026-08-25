@@ -163,13 +163,16 @@ def test_agent_facing_assessment_tools_follow_node_tool_code_layout() -> None:
     ).is_file()
 
 
-def test_assessment_authored_tool_modules_use_canonical_envelope_and_import() -> None:
+def test_assessment_authored_tool_modules_own_their_agentic_port_calls() -> None:
     for node, tool_names in _assessment_authored_tool_layout().items():
         for tool_name in tool_names:
             code_path = PROJECT_ROOT / "tools" / node / tool_name / "code.py"
             source = code_path.read_text(encoding="utf-8")
-            assert "tools.common.dispatch" not in source
-            assert "from tools.common import LcspToolEnvelope, dispatch_lcsp_tool" in source
+            assert "dispatch_lcsp_tool" not in source
+            assert "from runtime" not in source
+            assert "AgenticToolPort" not in source
+            assert "_dispatch_agentic_tool" in source
+            assert "AgenticToolRequest" in source
 
             module = importlib.import_module(f"tools.{node}.{tool_name}.code")
             authored_tool = getattr(module, tool_name)
@@ -181,7 +184,7 @@ def test_triage_tool_is_bounded_to_approved_legal_sources() -> None:
     source = code_path.read_text(encoding="utf-8")
 
     assert "MaintainLegalCatalogInput" in source
-    assert "LegalIntelligenceMaintenanceService" in source
+    assert "MaintainLegalCatalogService" in source
     assert "max_runs" in source
     assert "correlation_id" in source
     assert "source_url" not in source
@@ -195,13 +198,27 @@ def test_triage_tool_is_bounded_to_approved_legal_sources() -> None:
 def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
     assert _directory_names(PROJECT_ROOT / "tools") == {
         "common",
+        "legal",
         "planner",
         "investigator",
         "resolver",
         "orchestration",
         "triage",
     }
-    assert _directory_names(PROJECT_ROOT / "tools" / "common") == set(COMMON_TOOL_NAMES)
+    assert _directory_names(PROJECT_ROOT / "tools" / "common") == set(
+        COMMON_TOOL_NAMES
+    ) | {"capabilities"}
+    assert _directory_names(PROJECT_ROOT / "tools" / "common" / "capabilities") == {
+        "agentic_evidence",
+        "assessment",
+        "evidence",
+        "managed",
+        "package",
+        "platform",
+        "reporting",
+        "scripts",
+        "workflow",
+    }
     assert _directory_names(PROJECT_ROOT / "tools" / "planner") == {"get_scan_coverage"}
     assert _directory_names(PROJECT_ROOT / "tools" / "investigator") == {
         "trace_static_flow",
@@ -218,185 +235,137 @@ def test_tools_tree_contains_only_authored_agent_capabilities() -> None:
     assert _directory_names(PROJECT_ROOT / "tools" / "triage") == set(TRIAGE_TOOL_NAMES)
 
 
-def test_runtime_owns_non_model_callable_implementation_domains() -> None:
+def test_common_tools_own_non_model_callable_implementation_domains() -> None:
     runtime = PROJECT_ROOT / "runtime"
-    assert _directory_names(runtime) == {
-        "evidence",
-        "legal",
-        "assessment",
-        "workflow",
-        "reporting",
-        "infrastructure",
-    }
-    assert _directory_names(runtime / "evidence") == {"graph", "scanner", "provenance"}
-    assert _directory_names(runtime / "legal") == {
+    assert not runtime.exists()
+    common = PROJECT_ROOT / "tools" / "common" / "capabilities"
+    assessment = common / "assessment"
+    evidence = common / "evidence"
+    legal = PROJECT_ROOT / "tools" / "legal"
+    assert _directory_names(legal) == {
         "corpus",
         "retrieval",
         "sources",
-        "maintenance",
     }
-    assert _directory_names(runtime / "assessment") == {
+    assert _directory_names(evidence) == {"graph", "scanner"}
+    assert _directory_names(assessment) == {
         "planning",
         "investigation",
         "claims",
         "evaluation",
     }
-    assert _directory_names(runtime / "workflow") == {
-        "checkpoint",
+    assert _directory_names(common / "workflow") == {
         "recovery",
     }
-    assert _directory_names(runtime / "reporting") == {"gap", "report"}
-    assert _directory_names(runtime / "infrastructure") == {
-        "api",
-        "auth",
-        "dispatch",
-    }
+    assert _directory_names(common / "reporting") == {"gap", "report"}
 
-    assert _directory_names(runtime / "assessment" / "claims") == {
+    assert _directory_names(assessment / "claims") == {
         "ai_usage_flow",
         "conflict_detection",
         "evidence_claim",
         "technical_profile",
         "verified_profile",
     }
-    assert _directory_names(runtime / "assessment" / "evaluation") == {
+    assert _directory_names(assessment / "evaluation") == {
         "classification",
         "engineering_rule",
     }
-    assert _directory_names(runtime / "assessment" / "investigation") == {
+    assert _directory_names(assessment / "investigation") == {
         "engineering_rule",
     }
-    assert _directory_names(runtime / "assessment" / "planning") == {
+    assert _directory_names(assessment / "planning") == {
         "engineering_rule",
     }
 
     for category in (
-        runtime / "assessment" / "claims",
-        runtime / "assessment" / "evaluation",
-        runtime / "assessment" / "investigation",
-        runtime / "assessment" / "planning",
+        assessment / "claims",
+        assessment / "evaluation",
+        assessment / "investigation",
+        assessment / "planning",
     ):
         assert _implementation_files(category) == set()
 
-    assert (runtime / "evidence" / "graph" / "query" / "query_engine.py").is_file()
+    assert (evidence / "graph" / "query" / "query_engine.py").is_file()
     assert (
-        runtime / "evidence" / "scanner" / "scanning" / "scan_boundary.py"
+        evidence / "scanner" / "scanning" / "scan_boundary.py"
     ).is_file()
-    assert not (runtime / "evidence" / "scanner" / "program_graph").exists()
+    assert not (evidence / "scanner" / "program_graph").exists()
     assert (
-        runtime
-        / "assessment"
+        assessment
         / "planning"
         / "engineering_rule"
         / "engineering_rule_planner.py"
     ).is_file()
     assert (
-        runtime
-        / "assessment"
+        assessment
         / "evaluation"
         / "engineering_rule"
         / "rule_evaluator.py"
     ).is_file()
     assert (
-        runtime
-        / "assessment"
+        assessment
         / "evaluation"
         / "classification"
         / "classification_boundary.py"
     ).is_file()
     assert (
-        runtime
-        / "assessment"
+        assessment
         / "claims"
         / "ai_usage_flow"
         / "ai_usage_flow_boundary.py"
     ).is_file()
     assert (
-        runtime
-        / "assessment"
+        assessment
         / "claims"
         / "evidence_claim"
         / "evidence_claim_validator.py"
     ).is_file()
     assert (
-        runtime / "legal" / "sources" / "extraction" / "official_text_extraction.py"
+        legal / "sources" / "extraction" / "official_text_extraction.py"
     ).is_file()
     assert (
-        runtime / "legal" / "maintenance" / "service.py"
+        PROJECT_ROOT
+        / "tools"
+        / "triage"
+        / "maintain_legal_catalog"
+        / "service.py"
     ).is_file()
     assert (
-        runtime
+        common
         / "reporting"
         / "report"
         / "final_report"
         / "final_report_boundary.py"
     ).is_file()
-    assert (
-        runtime / "infrastructure" / "dispatch" / "tool_dispatch.py"
-    ).is_file()
-
     for historical_name in (
+        "runtime",
         "graph",
         "scanner",
         "engineering_rule",
         "classification",
-        "orchestration",
         "platform",
         "compat.py",
     ):
-        assert not (runtime / historical_name).exists()
+        assert not (PROJECT_ROOT / historical_name).exists()
 
 
 @pytest.mark.parametrize(
-    ("legacy", "canonical"),
+    "legacy",
     (
-        (
-            "runtime.assessment.claims.ai_usage_flow_rule_engine",
-            "runtime.assessment.claims.ai_usage_flow.ai_usage_flow_rule_engine",
-        ),
-        (
-            "runtime.assessment.claims.conflict_detector",
-            "runtime.assessment.claims.conflict_detection.conflict_detector",
-        ),
-        (
-            "runtime.assessment.claims.evidence_claim_validator",
-            "runtime.assessment.claims.evidence_claim.evidence_claim_validator",
-        ),
-        (
-            "runtime.assessment.claims.technical_profile_builder",
-            "runtime.assessment.claims.technical_profile.technical_profile_builder",
-        ),
-        (
-            "runtime.assessment.claims.verified_profile_boundary",
-            "runtime.assessment.claims.verified_profile.verified_profile_boundary",
-        ),
-        (
-            "runtime.assessment.evaluation.classification_graph",
-            "runtime.assessment.evaluation.classification.classification_graph",
-        ),
-        (
-            "runtime.assessment.evaluation.rule_evaluator",
-            "runtime.assessment.evaluation.engineering_rule.rule_evaluator",
-        ),
-        (
-            "runtime.assessment.investigation.pipeline",
-            "runtime.assessment.investigation.engineering_rule.pipeline",
-        ),
-        (
-            "runtime.assessment.planning.engineering_rule_planner",
-            "runtime.assessment.planning.engineering_rule.engineering_rule_planner",
-        ),
+        "tools.common.capabilities.assessment.claims.ai_usage_flow_rule_engine",
+        "tools.common.capabilities.assessment.claims.conflict_detector",
+        "tools.common.capabilities.assessment.claims.evidence_claim_validator",
+        "tools.common.capabilities.assessment.claims.technical_profile_builder",
+        "tools.common.capabilities.assessment.claims.verified_profile_boundary",
+        "tools.common.capabilities.assessment.evaluation.classification_graph",
+        "tools.common.capabilities.assessment.evaluation.rule_evaluator",
+        "tools.common.capabilities.assessment.investigation.pipeline",
+        "tools.common.capabilities.assessment.planning.engineering_rule_planner",
     ),
 )
-def test_assessment_flat_imports_route_to_capability_packages(
-    legacy: str,
-    canonical: str,
-) -> None:
-    legacy_module = importlib.import_module(legacy)
-    canonical_module = importlib.import_module(canonical)
-    assert Path(str(legacy_module.__file__)).resolve() == Path(
-        str(canonical_module.__file__)
-    ).resolve()
+def test_assessment_flat_imports_are_not_supported(legacy: str) -> None:
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module(legacy)
 
 
 def test_generic_boundary_invocation_is_not_root_agent_surface() -> None:

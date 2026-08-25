@@ -4,18 +4,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tools.engineer_rule.intelligence.ai_usage_flow_boundary import AIUsageFlowBoundary
-from tools.engineer_rule.intelligence.ai_usage_flow_graph import AIUsageFlowGraph
-from tools.engineer_rule.intelligence.ai_usage_flow_rule_engine import (
+from tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_boundary import AIUsageFlowBoundary
+from tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_graph import AIUsageFlowGraph
+from tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_rule_engine import (
     AIUsageFlowRuleEngine,
     PrivacyAssertionError,
 )
-from tools.engineer_rule.intelligence.confidence_calculator import (
+from tools.common.capabilities.assessment.claims.ai_usage_flow.confidence_calculator import (
     CLAIM_CATEGORY_BASE,
     calculate_claim_confidence,
 )
-from tools.common.platform.callback_schemas import AIUsageFlowCallbackPayload
-from tools.common.platform.config import WorkerConfig
+from tools.common.capabilities.platform.callback_schemas import AIUsageFlowCallbackPayload
+from tools.common.capabilities.platform.config import WorkerConfig
 
 
 def _config() -> WorkerConfig:
@@ -357,7 +357,7 @@ def test_consumer_accepts_summary_proposal_that_matches_wizard_authority() -> No
     }}
     boundary = AIUsageFlowBoundary(_config(), api_client=api_client)
 
-    with patch("tools.engineer_rule.intelligence.ai_usage_flow_proposer.create_agent", return_value=agent): boundary.handle(
+    with patch("tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_proposer.create_agent", return_value=agent): boundary.handle(
         {
             "technicalProfileId": "tp-1",
             "assessmentId": "assessment-1",
@@ -390,7 +390,7 @@ def test_consumer_rejects_summary_proposal_that_conflicts_with_wizard_authority(
     }}
     boundary = AIUsageFlowBoundary(_config(), api_client=api_client)
 
-    with patch("tools.engineer_rule.intelligence.ai_usage_flow_proposer.create_agent", return_value=agent): boundary.handle(
+    with patch("tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_proposer.create_agent", return_value=agent): boundary.handle(
         {
             "technicalProfileId": "tp-1",
             "assessmentId": "assessment-1",
@@ -434,7 +434,7 @@ def test_consumer_routes_summary_proposal_through_agentic_tool_resolver() -> Non
         agentic_tool_resolver=resolver,
     )
 
-    with patch("tools.engineer_rule.intelligence.ai_usage_flow_proposer.create_agent", return_value=agent): boundary.handle(
+    with patch("tools.common.capabilities.assessment.claims.ai_usage_flow.ai_usage_flow_proposer.create_agent", return_value=agent): boundary.handle(
         {
             "technicalProfileId": "tp-1",
             "assessmentId": "assessment-1",

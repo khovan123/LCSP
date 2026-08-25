@@ -1,6 +1,6 @@
 import os
 
-from runtime.infrastructure.api.env import load_runtime_env
+from tools.common.capabilities.platform.env import load_runtime_env
 
 
 def test_runtime_env_loads_dotenv_by_default(monkeypatch, tmp_path):

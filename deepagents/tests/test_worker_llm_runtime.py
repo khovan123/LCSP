@@ -4,16 +4,16 @@ import sys
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
-from tools.common.platform import tracing as tracing_module
-from tools.common.platform.config import (
+from tools.common.capabilities.platform import tracing as tracing_module
+from tools.common.capabilities.platform.config import (
     AgenticRuntimeConfig,
     PbacPreflightConfig,
     WorkerConfig,
     load_config,
     load_tracing_config,
 )
-from tools.common.managed.boundary import AgentBoundaryBase
-from tools.common.managed.invocation import build_boundary
+from tools.common.capabilities.managed.boundary import AgentBoundaryBase
+from tools.common.capabilities.managed.invocation import build_boundary
 
 
 def _base_env(monkeypatch) -> None:
@@ -225,8 +225,8 @@ def test_build_boundary_keeps_graph_assembler_deterministic() -> None:
 
     config = _worker_config()
     with (
-        patch("tools.common.managed.invocation.load_config", return_value=config),
-        patch("tools.common.managed.invocation.load_boundary", return_value=GraphBoundary),
+        patch("tools.common.capabilities.managed.invocation.load_config", return_value=config),
+        patch("tools.common.capabilities.managed.invocation.load_boundary", return_value=GraphBoundary),
     ):
         boundary = build_boundary("ignored:GraphBoundary")
 
@@ -247,8 +247,8 @@ def test_build_boundary_keeps_deterministic_default_without_legacy_llm() -> None
 
     config = _worker_config()
     with (
-        patch("tools.common.managed.invocation.load_config", return_value=config),
-        patch("tools.common.managed.invocation.load_boundary", return_value=GraphBoundary),
+        patch("tools.common.capabilities.managed.invocation.load_config", return_value=config),
+        patch("tools.common.capabilities.managed.invocation.load_boundary", return_value=GraphBoundary),
     ):
         boundary = build_boundary("ignored:GraphBoundary")
 

@@ -3,13 +3,13 @@ import json
 import shutil
 from unittest.mock import MagicMock
 
-from tools.common.platform.artifact_storage import ArtifactStorage
-from tools.common.platform.api_client import WorkerApiClient
-from tools.common.platform.callback_schemas import TechnicalProfileCallbackPayload
+from tools.common.capabilities.platform.artifact_storage import ArtifactStorage
+from tools.common.capabilities.platform.api_client import WorkerApiClient
+from tools.common.capabilities.platform.callback_schemas import TechnicalProfileCallbackPayload
 
 
 def test_artifact_storage_chunking() -> None:
-    from tools.common.platform.logging_path import get_repo_root
+    from tools.common.capabilities.platform.logging_path import get_repo_root
 
     storage_path = os.path.join(get_repo_root(), "tmp", "lcsp-storage-test-python")
     storage = ArtifactStorage(storage_path=storage_path)
@@ -38,7 +38,7 @@ def test_artifact_storage_chunking() -> None:
 
 
 def test_api_client_callback_chunking(monkeypatch) -> None:
-    from tools.common.platform.logging_path import get_repo_root
+    from tools.common.capabilities.platform.logging_path import get_repo_root
 
     client = WorkerApiClient("http://api.test", "key-123")
 
@@ -74,8 +74,8 @@ def test_api_client_callback_chunking(monkeypatch) -> None:
 
 
 def test_provider_failure_uses_compilation_failure_semantics() -> None:
-    from tools.planner.investigation.models import ENGINEERING_LIMITATION_CODES
-    from tools.engineer_rule.investigation.pipeline import EngineeringInvestigationPipeline
+    from tools.common.capabilities.assessment.claims.evidence_claim.models import ENGINEERING_LIMITATION_CODES
+    from tools.common.capabilities.assessment.investigation.engineering_rule.pipeline import EngineeringInvestigationPipeline
     rule_service = MagicMock()
     rule_service.get_or_compile.side_effect = RuntimeError("provider failed")
 

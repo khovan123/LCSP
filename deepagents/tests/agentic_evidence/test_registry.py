@@ -5,8 +5,8 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from tools.common.agentic_evidence.catalog import llm_callable_tool_specs
-from tools.common.agentic_evidence.registry import (
+from tools.common.capabilities.agentic_evidence.governance.catalog import llm_callable_tool_specs
+from tools.common.capabilities.agentic_evidence.governance.registry import (
     AgenticToolRequest,
     AgenticToolValidationError,
     build_sprint6_agentic_registry,

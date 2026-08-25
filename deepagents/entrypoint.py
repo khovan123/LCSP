@@ -19,7 +19,7 @@ def main() -> int:
             (
                 sys.executable,
                 "-m",
-                "runtime.workflow.checkpoint.rabbitmq_consumer",
+                "tools.common.capabilities.managed.rabbitmq_consumer",
             )
         ),
     ]

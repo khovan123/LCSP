@@ -4,13 +4,13 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from tools.common.agentic_evidence import (
+from tools.common.capabilities.agentic_evidence import (
     AgenticInvocationContext,
     AgenticToolResolver,
     AgenticToolValidationError,
     build_sprint6_agentic_registry,
 )
-from tools.common.agentic_evidence.authorization import AgenticAuthorizationResult
+from tools.common.capabilities.agentic_evidence.governance.authorization import AgenticAuthorizationResult
 
 
 class AllowAuthorizer:
