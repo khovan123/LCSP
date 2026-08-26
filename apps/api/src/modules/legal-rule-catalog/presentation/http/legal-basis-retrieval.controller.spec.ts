@@ -13,7 +13,6 @@ function request(): AuthenticatedRequest {
     rbacContext: {
       userId: "user-1",
       sessionId: "session-1",
-      organizationId: "organization-1",
       subjectRole: "Manager",
       scope: null,
       grantedActions: [RBAC_ACTIONS.legalCorpusRead],
@@ -67,7 +66,6 @@ describe("LegalBasisRetrievalController", () => {
     expect(execute).toHaveBeenCalledWith(
       expect.objectContaining({
         assessmentId: "assessment-1",
-        organizationId: "organization-1",
         input: {
           corpusVersionId: "corpus_01234567",
           selectors: { ruleIds: ["rule_123456"] },

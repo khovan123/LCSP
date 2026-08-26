@@ -33,13 +33,12 @@ export class GetReadinessHandler implements IQueryHandler<
   async execute(query: GetReadinessQuery): Promise<ReadinessResponse> {
     await this.assertReadAction(query);
 
-    const { assessmentId, organizationId } = query;
+    const { assessmentId } = query;
 
-    // Verify assessment exists and belongs to organization
+    // Verify assessment exists.
     const assessment = await this.prisma.assessment.findFirst({
       where: {
         id: assessmentId,
-        organizationId,
       },
     });
 
@@ -109,7 +108,6 @@ export class GetReadinessHandler implements IQueryHandler<
     await this.auditWriter.write({
       eventType: WIZARD_EVENT_TYPES.readinessRead,
       actorId: query.userId,
-      organizationId: query.organizationId,
       resourceType: AUDIT_RESOURCE_TYPES.assessmentRecord,
       resourceId: query.assessmentId,
       decision: AUDIT_DECISIONS.deny,

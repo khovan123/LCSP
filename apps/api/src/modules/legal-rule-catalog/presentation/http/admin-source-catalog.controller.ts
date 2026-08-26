@@ -60,7 +60,6 @@ export class AdminSourceCatalogController {
       await this.queryBus.execute(
         new GetAdminSourceCatalogQuery(
           assessmentId,
-          request.rbacContext.organizationId,
           input,
           request.rbacContext.userId,
           correlationId,

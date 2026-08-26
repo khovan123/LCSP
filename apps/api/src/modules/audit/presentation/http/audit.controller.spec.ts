@@ -27,7 +27,7 @@ describe("AuditController", () => {
     });
   });
 
-  it("dispatches the organization-scoped list query", async () => {
+  it("dispatches the audit-event list query", async () => {
     const execute =
       jest.fn<(query: unknown) => Promise<{ events: unknown[] }>>();
     execute.mockResolvedValue({ events: [] });
@@ -38,7 +38,6 @@ describe("AuditController", () => {
     );
 
     await controller.listAuditEvents(
-      "org-1",
       "auth.sign_in",
       "user-1",
       "2026-07-01T00:00:00.000Z",
@@ -46,7 +45,7 @@ describe("AuditController", () => {
       "2",
       "10",
       {
-        rbacContext: { organizationId: "org-1" },
+        rbacContext: { userId: "user-1" },
         correlationId: "corr-1",
       } as never,
     );
@@ -54,8 +53,6 @@ describe("AuditController", () => {
     const dispatched = execute.mock.calls[0]?.[0];
     expect(dispatched).toBeInstanceOf(ListAuditEventsQuery);
     expect(dispatched).toMatchObject({
-      organizationId: "org-1",
-      sessionOrganizationId: "org-1",
       eventType: "auth.sign_in",
       actorId: "user-1",
       page: 2,
@@ -77,7 +74,7 @@ describe("AuditController", () => {
     });
   });
 
-  it("dispatches export command with organization scope", async () => {
+  it("dispatches export command with requester context", async () => {
     const execute = jest
       .fn<(command: unknown) => Promise<{ export_request_id: string }>>()
       .mockResolvedValue({ export_request_id: "export-1" });
@@ -88,21 +85,18 @@ describe("AuditController", () => {
     );
 
     await controller.exportAuditTrail(
-      "org-1",
       {
         from_date: "2026-07-01T00:00:00.000Z",
         to_date: "2026-07-31T23:59:59.999Z",
       },
       {
-        rbacContext: { organizationId: "org-1", userId: "user-1" },
+        rbacContext: { userId: "user-1" },
         correlationId: "corr-1",
       } as never,
     );
 
     expect(execute.mock.calls[0]?.[0]).toBeInstanceOf(ExportAuditTrailCommand);
     expect(execute.mock.calls[0]?.[0]).toMatchObject({
-      organizationId: "org-1",
-      sessionOrganizationId: "org-1",
       requestedById: "user-1",
       correlationId: "corr-1",
     });
@@ -118,8 +112,8 @@ describe("AuditController", () => {
       {} as AuditExportStorageService,
     );
 
-    await controller.getAuditExport("org-1", "export-1", {
-      rbacContext: { organizationId: "org-1" },
+    await controller.getAuditExport("export-1", {
+      rbacContext: { userId: "user-1" },
       correlationId: "corr-1",
     } as never);
 
@@ -134,12 +128,7 @@ describe("AuditController", () => {
     );
 
     await expect(
-      controller.downloadAuditExport(
-        "org-1",
-        "export-1",
-        undefined,
-        {} as Response,
-      ),
+      controller.downloadAuditExport("export-1", undefined, {} as Response),
     ).rejects.toMatchObject({
       response: {
         ok: false,
@@ -155,7 +144,6 @@ describe("AuditController", () => {
     const storage = new AuditExportStorageService();
     const token = storage
       .createSignedDownloadUrl({
-        organizationId: "org-1",
         exportRequestId: "export-1",
         expiresAt: new Date(Date.now() + 60_000),
       })
@@ -168,7 +156,7 @@ describe("AuditController", () => {
       storage,
     );
 
-    await controller.downloadAuditExport("org-1", "export-1", token, {
+    await controller.downloadAuditExport("export-1", token, {
       setHeader,
       send,
     } as never);

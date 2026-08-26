@@ -104,14 +104,13 @@ describe("OutboxDlqService", () => {
       } as OutboxMessageEntity;
       findMessageById.mockResolvedValue(mockMessage);
 
-      await service.replayMessage("1", "actor-1", "org-1", "corr-1");
+      await service.replayMessage("1", "actor-1", "corr-1");
 
       expect(resetMessageForReplay).toHaveBeenCalledWith("1");
       expect(writeAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: OUTBOX_AUDIT_EVENT_TYPES.dlqReplayed,
           actorId: "actor-1",
-          organizationId: "org-1",
           correlationId: "corr-1",
         }),
       );
@@ -212,14 +211,13 @@ describe("OutboxDlqService", () => {
       } as OutboxMessageEntity;
       findMessageById.mockResolvedValue(mockMessage);
 
-      await service.deleteMessage("1", "actor-1", "org-1", "corr-2");
+      await service.deleteMessage("1", "actor-1", "corr-2");
 
       expect(deleteMessage).toHaveBeenCalledWith("1");
       expect(writeAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: OUTBOX_AUDIT_EVENT_TYPES.dlqDiscarded,
           actorId: "actor-1",
-          organizationId: "org-1",
           correlationId: "corr-2",
         }),
       );

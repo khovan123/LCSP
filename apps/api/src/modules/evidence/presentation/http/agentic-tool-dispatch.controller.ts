@@ -49,7 +49,6 @@ import { buildAgenticToolQuery } from "./agentic-tool-query-dispatcher.js";
 type DispatchRequest = {
   tool_name?: unknown;
   assessment_id?: unknown;
-  organization_id?: unknown;
   user_id?: unknown;
   artifact_versions?: unknown;
   input?: unknown;
@@ -63,7 +62,6 @@ type DispatchRequest = {
 type ToolExecutionArgs = {
   toolName: string;
   assessmentId: string;
-  organizationId: string;
   userId: string;
   correlationId: string;
   artifactVersions: Record<string, unknown>;
@@ -90,7 +88,6 @@ export class InternalAgenticToolDispatchController {
   async dispatch(@Body() payload: DispatchRequest) {
     const toolName = requiredString(payload.tool_name);
     const assessmentId = requiredString(payload.assessment_id);
-    const organizationId = requiredString(payload.organization_id);
     const userId = requiredString(payload.user_id);
     const correlationId = requiredString(payload.correlationId);
     const runId =
@@ -117,7 +114,6 @@ export class InternalAgenticToolDispatchController {
             correlationId,
             toolName,
             assessmentId,
-            organizationId,
             artifactVersions,
             input: sanitizeOrchestrationLogValue(input),
           },
@@ -126,7 +122,6 @@ export class InternalAgenticToolDispatchController {
     }
 
     await this.runtimeEvents.recordRunStartedIfMissing({
-      organizationId,
       assessmentId,
       runId,
       correlationId,
@@ -135,7 +130,6 @@ export class InternalAgenticToolDispatchController {
       startedAt,
     });
     await this.runtimeEvents.recordRunStageChangedIfNeeded({
-      organizationId,
       assessmentId,
       runId,
       correlationId,
@@ -145,7 +139,6 @@ export class InternalAgenticToolDispatchController {
       startedAt,
     });
     await this.runtimeEvents.recordToolStarted({
-      organizationId,
       assessmentId,
       runId,
       correlationId,
@@ -161,7 +154,6 @@ export class InternalAgenticToolDispatchController {
       const result = await this.executeTool({
         toolName,
         assessmentId,
-        organizationId,
         userId,
         correlationId,
         artifactVersions,
@@ -170,7 +162,6 @@ export class InternalAgenticToolDispatchController {
 
       if (isNeedsInputResult(result)) {
         await this.runtimeEvents.recordToolWaitingInput({
-          organizationId,
           assessmentId,
           runId,
           correlationId,
@@ -184,7 +175,6 @@ export class InternalAgenticToolDispatchController {
         });
       } else {
         await this.runtimeEvents.recordToolCompleted({
-          organizationId,
           assessmentId,
           runId,
           correlationId,
@@ -201,7 +191,6 @@ export class InternalAgenticToolDispatchController {
       return resultEnvelope(result);
     } catch (error) {
       await this.runtimeEvents.recordToolFailed({
-        organizationId,
         assessmentId,
         runId,
         correlationId,
@@ -231,7 +220,6 @@ export class InternalAgenticToolDispatchController {
         buildAgenticToolCommand({
           toolName: args.toolName,
           assessmentId: args.assessmentId,
-          organizationId: args.organizationId,
           userId: args.userId,
           correlationId: args.correlationId,
           input: args.input,
@@ -257,7 +245,6 @@ export class InternalAgenticToolDispatchController {
 
     const authorization = await this.rbacPreflight.evaluate({
       userId: args.userId,
-      organizationId: args.organizationId,
       action: agenticToolCommandRbacAction(args.toolName),
       correlationId: args.correlationId,
     });

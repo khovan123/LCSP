@@ -6,7 +6,6 @@ import type { ConflictListDto } from "../../contracts/reconciliation/conflict-li
 export class ListConflictsQuery extends Query<ConflictListDto> {
   constructor(
     public readonly assessmentId: string,
-    public readonly organizationId: string,
     public readonly sessionUserId: string,
     public readonly subjectRole: AuthUserRole,
     public readonly page: number | undefined,

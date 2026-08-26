@@ -1,10 +1,7 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
-import {
-  RBAC_ACTIONS,
-  RBAC_METADATA_TYPES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS, RBAC_METADATA_TYPES } from "@lcsp/contracts/rbac";
 import { SCAN_CALLBACK_STATUSES, SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 import {
@@ -36,7 +33,7 @@ describe("ScanController", () => {
     });
   });
 
-  it("dispatches GetScanJobQuery with organization and RBAC scope", async () => {
+  it("dispatches GetScanJobQuery with RBAC scope", async () => {
     const execute = jest.fn<(query: unknown) => Promise<unknown>>();
     execute.mockResolvedValue({ scan_job_id: "scan-job-1" });
     const controller = new ScanController(
@@ -49,13 +46,10 @@ describe("ScanController", () => {
       rbacContext: {
         userId: "system-admin-1",
         sessionId: "session-1",
-        organizationId: "org-1",
-        subjectRole: SUBJECT_ROLES.systemAdmin,
+        role: AUTH_USER_ROLES.admin,
         scope: "assessment-1",
         grantedActions: [RBAC_ACTIONS.scanRead],
         selectedAction: RBAC_ACTIONS.scanRead,
-        policyId: "policy-system-admin",
-        policyVersion: "v1",
       },
     });
 
@@ -64,8 +58,7 @@ describe("ScanController", () => {
     expect(execute.mock.calls[0]?.[0]).toMatchObject({
       assessmentId: "assessment-1",
       scanJobId: "scan-job-1",
-      organizationId: "org-1",
-      subjectRole: SUBJECT_ROLES.systemAdmin,
+      subjectRole: AUTH_USER_ROLES.admin,
       scope: "assessment-1",
       correlationId: "corr-1",
     });
@@ -98,13 +91,10 @@ describe("ScanController", () => {
     const rbacContext = {
       userId: "manager-1",
       sessionId: "session-1",
-      organizationId: "org-1",
-      subjectRole: SUBJECT_ROLES.manager,
+      role: AUTH_USER_ROLES.customer,
       scope: "assessment-1",
       grantedActions: [RBAC_ACTIONS.scanTrigger],
       selectedAction: RBAC_ACTIONS.scanTrigger,
-      policyId: "policy-manager",
-      policyVersion: "v1",
     };
 
     await controller.rerunScan(
@@ -159,13 +149,10 @@ describe("ScanController", () => {
     const rbacContext = {
       userId: "manager-1",
       sessionId: "session-1",
-      organizationId: "org-1",
-      subjectRole: SUBJECT_ROLES.manager,
+      role: AUTH_USER_ROLES.customer,
       scope: "assessment-1",
       grantedActions: [RBAC_ACTIONS.technicalEvidenceReanalyze],
       selectedAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
-      policyId: "policy-manager",
-      policyVersion: "v1",
     };
 
     await controller.requestTargetedReanalysis(
@@ -251,7 +238,6 @@ describe("InternalScanController", () => {
     await controller.createTargetedReanalysis(
       {
         assessmentId: "assessment-1",
-        organizationId: "org-1",
         userId: "user-1",
         inputArtifactVersion: "ter_12345678",
         analyzerId: "RUN_SEMGREP_RULES",
@@ -277,7 +263,6 @@ describe("InternalScanController", () => {
       },
       rbacContext: expect.objectContaining({
         userId: "user-1",
-        organizationId: "org-1",
         selectedAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
       }),
       correlationId: "corr-1",
@@ -388,7 +373,6 @@ describe("InternalTargetedReanalysisController", () => {
   it("claims only a dispatched request while atomically enforcing the per-organization running limit", async () => {
     const findUnique = jest.fn().mockImplementation(() =>
       Promise.resolve({
-        organizationId: "org-1",
         assessmentId: "assessment-1",
         correlationId: "correlation-1",
         state: TARGETED_REANALYSIS_REQUEST_STATES.dispatched,
@@ -437,7 +421,6 @@ describe("InternalTargetedReanalysisController", () => {
     });
     expect(auditWriter.write).toHaveBeenCalledWith(
       expect.objectContaining({
-        organizationId: "org-1",
         assessmentId: "assessment-1",
         correlationId: "correlation-1",
       }),
@@ -447,7 +430,6 @@ describe("InternalTargetedReanalysisController", () => {
   it("does not claim a queued request injected outside the outbox scheduler", async () => {
     const findUnique = jest.fn().mockImplementation(() =>
       Promise.resolve({
-        organizationId: "org-1",
         state: TARGETED_REANALYSIS_REQUEST_STATES.queued,
       }),
     );
@@ -491,7 +473,6 @@ describe("InternalTargetedReanalysisController", () => {
       targetedReanalysisRequest: {
         findUnique: jest.fn().mockImplementation(() =>
           Promise.resolve({
-            organizationId: "org-1",
             assessmentId: "assessment-1",
             correlationId: "correlation-1",
           }),

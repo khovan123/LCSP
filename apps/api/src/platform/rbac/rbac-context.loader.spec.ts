@@ -1,20 +1,13 @@
-import {
-  RBAC_ACTIONS,
-  RBAC_REASON_CODE,
-  RBAC_STATE_GATES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
-import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
 import { jest } from "@jest/globals";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { actionsForRole, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 
-import { Membership } from "../../modules/auth-workspace/domain/entities/membership.entity.js";
-import { MfaEnrollment } from "../../modules/auth-workspace/domain/entities/mfa-enrollment.entity.js";
-import { Policy } from "../../modules/auth-workspace/domain/entities/policy.entity.js";
-import { Session } from "../../modules/auth-workspace/domain/entities/session.entity.js";
-import type { MembershipRepository } from "../../modules/auth-workspace/application/ports/persistence/membership.repository.js";
 import type { MfaEnrollmentRepository } from "../../modules/auth-workspace/application/ports/persistence/mfa.repository.js";
-import type { PolicyRepository } from "../../modules/auth-workspace/application/ports/persistence/policy.repository.js";
 import type { SessionRepository } from "../../modules/auth-workspace/application/ports/persistence/session.repository.js";
+import type { UserRepository } from "../../modules/auth-workspace/application/ports/persistence/user.repository.js";
+import { MfaEnrollment } from "../../modules/auth-workspace/domain/entities/mfa-enrollment.entity.js";
+import { Session } from "../../modules/auth-workspace/domain/entities/session.entity.js";
+import { User } from "../../modules/auth-workspace/domain/entities/user.entity.js";
 import { hashSecret } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
 import { RbacContextLoader } from "./rbac-context.loader.js";
 
@@ -26,7 +19,6 @@ function makeSession(
   return Session.rehydrate({
     id: "session-1",
     userId: "user-1",
-    organizationId: "org-1",
     tokenHash: hashSecret("raw-token"),
     expiresAt: NOW + 60_000,
     revokedAt: null,
@@ -35,31 +27,16 @@ function makeSession(
   });
 }
 
-function makeMembership(
-  overrides: Partial<ConstructorParameters<typeof Membership>[0]> = {},
-): Membership {
-  return Membership.rehydrate({
-    id: "membership-1",
-    userId: "user-1",
-    organizationId: "org-1",
-    status: AUTH_MEMBERSHIP_STATUSES.active,
-    subjectAttributes: { role: SUBJECT_ROLES.manager },
-    policyId: "policy-1",
-    policyVersion: "v1",
-    ...overrides,
-  });
-}
-
-function makePolicy(
-  overrides: Partial<ConstructorParameters<typeof Policy>[0]> = {},
-): Policy {
-  return Policy.rehydrate({
-    id: "policy-1",
-    version: "v1",
-    actions: [RBAC_ACTIONS.workspaceRead],
-    subjectRole: SUBJECT_ROLES.manager,
-    stateGate: RBAC_STATE_GATES.membershipActive,
-    organizationId: "org-1",
+function makeUser(
+  overrides: Partial<Parameters<typeof User.rehydrate>[0]> = {},
+): User {
+  return User.rehydrate({
+    id: "user-1",
+    email: "user@example.com",
+    passwordHash: "hash",
+    emailVerified: true,
+    failedLoginCount: 0,
+    role: AUTH_USER_ROLES.customer,
     ...overrides,
   });
 }
@@ -67,8 +44,7 @@ function makePolicy(
 function makeLoader(
   overrides: {
     sessions?: Partial<SessionRepository>;
-    memberships?: Partial<MembershipRepository>;
-    policies?: Partial<PolicyRepository>;
+    users?: Partial<UserRepository>;
     mfaEnrollments?: Partial<MfaEnrollmentRepository>;
   } = {},
 ) {
@@ -83,28 +59,17 @@ function makeLoader(
     revokeAllForUser:
       overrides.sessions?.revokeAllForUser ?? (() => Promise.resolve()),
   };
-  const memberships: MembershipRepository = {
-    nextId: overrides.memberships?.nextId ?? (() => "membership-1"),
-    save: overrides.memberships?.save ?? (() => Promise.resolve()),
-    findByUserAndOrganization:
-      overrides.memberships?.findByUserAndOrganization ??
-      jest
-        .fn<MembershipRepository["findByUserAndOrganization"]>()
-        .mockResolvedValue(makeMembership()),
-    findActiveByUserId:
-      overrides.memberships?.findActiveByUserId ?? (() => Promise.resolve([])),
-  };
-  const policies: PolicyRepository = {
-    findByIdAndVersion:
-      overrides.policies?.findByIdAndVersion ??
-      jest
-        .fn<PolicyRepository["findByIdAndVersion"]>()
-        .mockResolvedValue(makePolicy()),
-    findLatestByOrganizationAndRole:
-      overrides.policies?.findLatestByOrganizationAndRole ??
-      jest
-        .fn<PolicyRepository["findLatestByOrganizationAndRole"]>()
-        .mockResolvedValue(makePolicy()),
+  const users: UserRepository = {
+    nextId: overrides.users?.nextId ?? (() => "user-1"),
+    save: overrides.users?.save ?? (() => Promise.resolve()),
+    findById:
+      overrides.users?.findById ??
+      jest.fn<UserRepository["findById"]>().mockResolvedValue(makeUser()),
+    findByEmail: overrides.users?.findByEmail ?? (() => Promise.resolve(null)),
+    findByRecoveryEmail:
+      overrides.users?.findByRecoveryEmail ?? (() => Promise.resolve(null)),
+    findByPrimaryEmail:
+      overrides.users?.findByPrimaryEmail ?? (() => Promise.resolve(null)),
   };
   const mfaEnrollments: MfaEnrollmentRepository = {
     findByUserId:
@@ -117,12 +82,13 @@ function makeLoader(
       overrides.mfaEnrollments?.deleteByUserId ?? (() => Promise.resolve()),
   };
 
-  return new RbacContextLoader(sessions, memberships, policies, mfaEnrollments);
+  return new RbacContextLoader(sessions, users, mfaEnrollments);
 }
 
 describe("RbacContextLoader", () => {
-  it("resolves session, membership, and policy on the happy path", async () => {
+  it("resolves session, user role, and granted actions on the happy path", async () => {
     const loader = makeLoader();
+
     const result = await loader.load("raw-token", NOW, {
       allowPendingMfa: true,
     });
@@ -130,12 +96,14 @@ describe("RbacContextLoader", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.session.id).toBe("session-1");
-      expect(result.membership.id).toBe("membership-1");
-      expect(result.policy.id).toBe("policy-1");
+      expect(result.user.id).toBe("user-1");
+      expect(result.grantedActions).toEqual(
+        actionsForRole(AUTH_USER_ROLES.customer),
+      );
     }
   });
 
-  it("SESSION_INVALID when no session matches the token fingerprint", async () => {
+  it("returns SESSION_INVALID when no session matches the token fingerprint", async () => {
     const loader = makeLoader({
       sessions: {
         findByFingerprint: jest
@@ -144,68 +112,34 @@ describe("RbacContextLoader", () => {
       },
     });
 
-    const result = await loader.load("raw-token", NOW);
-
-    expect(result).toEqual({
+    await expect(loader.load("raw-token", NOW)).resolves.toEqual({
       ok: false,
       reason: RBAC_REASON_CODE.sessionInvalid,
     });
   });
 
-  it("SESSION_INVALID when the session has expired", async () => {
-    const loader = makeLoader({
-      sessions: {
-        findByFingerprint: jest
-          .fn<SessionRepository["findByFingerprint"]>()
-          .mockResolvedValue(makeSession({ expiresAt: NOW - 1000 })),
-      },
-    });
+  it("returns SESSION_INVALID when the session is expired, revoked, or token hash mismatches", async () => {
+    for (const session of [
+      makeSession({ expiresAt: NOW - 1000 }),
+      makeSession({ revokedAt: NOW - 1000 }),
+      makeSession({ tokenHash: hashSecret("different-token") }),
+    ]) {
+      const loader = makeLoader({
+        sessions: {
+          findByFingerprint: jest
+            .fn<SessionRepository["findByFingerprint"]>()
+            .mockResolvedValue(session),
+        },
+      });
 
-    const result = await loader.load("raw-token", NOW);
-
-    expect(result).toEqual({
-      ok: false,
-      reason: RBAC_REASON_CODE.sessionInvalid,
-    });
+      await expect(loader.load("raw-token", NOW)).resolves.toEqual({
+        ok: false,
+        reason: RBAC_REASON_CODE.sessionInvalid,
+      });
+    }
   });
 
-  it("SESSION_INVALID when the token hash does not verify", async () => {
-    const loader = makeLoader({
-      sessions: {
-        findByFingerprint: jest
-          .fn<SessionRepository["findByFingerprint"]>()
-          .mockResolvedValue(
-            makeSession({ tokenHash: hashSecret("different-token") }),
-          ),
-      },
-    });
-
-    const result = await loader.load("raw-token", NOW);
-
-    expect(result).toEqual({
-      ok: false,
-      reason: RBAC_REASON_CODE.sessionInvalid,
-    });
-  });
-
-  it("SESSION_INVALID when the session is revoked", async () => {
-    const loader = makeLoader({
-      sessions: {
-        findByFingerprint: jest
-          .fn<SessionRepository["findByFingerprint"]>()
-          .mockResolvedValue(makeSession({ revokedAt: NOW - 1000 })),
-      },
-    });
-
-    const result = await loader.load("raw-token", NOW);
-
-    expect(result).toEqual({
-      ok: false,
-      reason: RBAC_REASON_CODE.sessionInvalid,
-    });
-  });
-
-  it("pending MFA setup does not require verification before first success", async () => {
+  it("does not require verification while MFA setup is still pending", async () => {
     const loader = makeLoader({
       mfaEnrollments: {
         findByUserId: jest
@@ -225,7 +159,7 @@ describe("RbacContextLoader", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("MFA_REQUIRED when MFA has been verified previously but the session has not re-verified it", async () => {
+  it("returns MFA_REQUIRED when verified MFA has not been satisfied by the session", async () => {
     const loader = makeLoader({
       mfaEnrollments: {
         findByUserId: jest
@@ -241,16 +175,14 @@ describe("RbacContextLoader", () => {
       },
     });
 
-    const result = await loader.load("raw-token", NOW);
-
-    expect(result).toEqual({
+    await expect(loader.load("raw-token", NOW)).resolves.toEqual({
       ok: false,
       reason: RBAC_REASON_CODE.mfaRequired,
       mfaEnrolled: true,
     });
   });
 
-  it("allows when MFA is enrolled and the session has verified it", async () => {
+  it("allows when MFA is verified by the session", async () => {
     const loader = makeLoader({
       sessions: {
         findByFingerprint: jest
@@ -271,91 +203,25 @@ describe("RbacContextLoader", () => {
       },
     });
 
-    const result = await loader.load("raw-token", NOW, {
-      allowPendingMfa: true,
-    });
-
-    expect(result.ok).toBe(true);
-  });
-
-  it("allows active sessions when the user has not enrolled MFA", async () => {
-    const loader = makeLoader();
-
     const result = await loader.load("raw-token", NOW);
 
     expect(result.ok).toBe(true);
   });
 
-  it("allows bootstrap routes to use a valid session before MFA is verified", async () => {
-    const loader = makeLoader();
-
-    const result = await loader.load("raw-token", NOW, {
-      allowPendingMfa: true,
-    });
-
-    expect(result.ok).toBe(true);
-  });
-
-  it("MEMBERSHIP_MISSING when no membership exists for the user/org", async () => {
+  it("returns LOAD_ERROR when the user cannot be loaded", async () => {
     const loader = makeLoader({
-      memberships: {
-        findByUserAndOrganization: jest
-          .fn<MembershipRepository["findByUserAndOrganization"]>()
-          .mockResolvedValue(null),
+      users: {
+        findById: jest.fn<UserRepository["findById"]>().mockResolvedValue(null),
       },
     });
 
-    const result = await loader.load("raw-token", NOW, {
-      allowPendingMfa: true,
-    });
-
-    expect(result).toEqual({
+    await expect(loader.load("raw-token", NOW)).resolves.toEqual({
       ok: false,
-      reason: RBAC_REASON_CODE.membershipMissing,
+      reason: RBAC_REASON_CODE.loadError,
     });
   });
 
-  it("MEMBERSHIP_MISSING when the membership exists but is not active", async () => {
-    const loader = makeLoader({
-      memberships: {
-        findByUserAndOrganization: jest
-          .fn<MembershipRepository["findByUserAndOrganization"]>()
-          .mockResolvedValue(
-            makeMembership({ status: AUTH_MEMBERSHIP_STATUSES.revoked }),
-          ),
-      },
-    });
-
-    const result = await loader.load("raw-token", NOW, {
-      allowPendingMfa: true,
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      reason: RBAC_REASON_CODE.membershipMissing,
-    });
-  });
-
-  it("POLICY_NOT_FOUND when the membership's policy cannot be loaded", async () => {
-    const loader = makeLoader({
-      policies: {
-        findByIdAndVersion: jest
-          .fn<PolicyRepository["findByIdAndVersion"]>()
-          .mockResolvedValue(null),
-      },
-    });
-
-    const result = await loader.load("raw-token", NOW, {
-      allowPendingMfa: true,
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      reason: RBAC_REASON_CODE.policyNotFound,
-    });
-  });
-
-  it("LOAD_ERROR (deny, never throw) when a repository throws", async () => {
+  it("returns LOAD_ERROR when a repository throws", async () => {
     const loader = makeLoader({
       sessions: {
         findByFingerprint: jest
@@ -364,8 +230,9 @@ describe("RbacContextLoader", () => {
       },
     });
 
-    const result = await loader.load("raw-token", NOW);
-
-    expect(result).toEqual({ ok: false, reason: RBAC_REASON_CODE.loadError });
+    await expect(loader.load("raw-token", NOW)).resolves.toEqual({
+      ok: false,
+      reason: RBAC_REASON_CODE.loadError,
+    });
   });
 });

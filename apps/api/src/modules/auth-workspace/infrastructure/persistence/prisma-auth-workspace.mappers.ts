@@ -1,11 +1,9 @@
 import type {
   AuthAuditEvent,
   AuthDecisionLog,
-  AuthMembership,
   AuthMfaRateLimit,
   AuthOAuthIdentity,
   AuthOAuthState,
-  AuthOrganization,
   AuthRecoveryRequest,
   AuthSession,
   AuthUser,
@@ -15,32 +13,20 @@ import type {
 
 import {
   fromPrismaAuthBackupEmailPolicy,
-  fromPrismaAuthMembershipStatus,
   fromPrismaAuthPrimaryEmailAddressPolicy,
   fromPrismaAuthUserRole,
 } from "../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import {
   MfaEnrollment,
   MfaRateLimit,
-  Membership,
   OAuthIdentity,
   OAuthState,
-  Organization,
   RecoveryRequest,
   Session,
   User,
   type AuditEvent,
   type AuthorizationDecision,
 } from "../../domain/models/auth-workspace.models.ts";
-
-export function mapOrganizationRecord(record: AuthOrganization): Organization {
-  return Organization.rehydrate({
-    id: record.id,
-    slug: record.slug,
-    name: record.name,
-    mfaRequired: record.mfaRequired,
-  });
-}
 
 export function mapUserRecord(record: AuthUser): User {
   return User.rehydrate({
@@ -75,21 +61,10 @@ export function mapRecoveryRequestRecord(
   });
 }
 
-export function mapMembershipRecord(record: AuthMembership): Membership {
-  return Membership.rehydrate({
-    id: record.id,
-    userId: record.userId,
-    organizationId: record.organizationId,
-    status: fromPrismaAuthMembershipStatus(record.status),
-    revokedAt: record.revokedAt?.getTime() ?? null,
-  });
-}
-
 export function mapSessionRecord(record: AuthSession): Session {
   return Session.rehydrate({
     id: record.id,
     userId: record.userId,
-    organizationId: record.organizationId,
     tokenHash: record.tokenHash,
     expiresAt: record.expiresAt.getTime(),
     revokedAt: record.revokedAt?.getTime() ?? null,

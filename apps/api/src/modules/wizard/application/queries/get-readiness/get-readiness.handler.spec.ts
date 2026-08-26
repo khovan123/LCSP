@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ForbiddenException } from "@nestjs/common";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
@@ -63,18 +64,15 @@ describe("GetReadinessHandler", () => {
 
   const query = new GetReadinessQuery(
     "assessment-123",
-    "org-1",
     "user-1",
     "corr-1",
     {
-      subjectRole: SUBJECT_ROLES.manager,
+      subjectRole: AUTH_USER_ROLES.customer,
       selectedAction: RBAC_ACTIONS.assessmentRead,
-      policyId: "pol-1",
-      policyVersion: "v1",
     },
   );
 
-  it("T07: Assessment not in org -> 404 ASSESSMENT_NOT_FOUND", async () => {
+  it("T07: Assessment not owned by caller -> 404 ASSESSMENT_NOT_FOUND", async () => {
     prismaService.assessment.findFirst.mockResolvedValue(null);
 
     await expect(handler.execute(query)).rejects.toThrow(
@@ -85,12 +83,11 @@ describe("GetReadinessHandler", () => {
   it("denies access and writes audit if not authorized", async () => {
     const invalidQuery = new GetReadinessQuery(
       query.assessmentId,
-      query.organizationId,
       query.userId,
       query.correlationId,
       {
         ...query.authorization,
-        subjectRole: SUBJECT_ROLES.systemAdmin,
+        subjectRole: AUTH_USER_ROLES.admin,
         selectedAction: "some:other:action", // wrong action
       },
     );

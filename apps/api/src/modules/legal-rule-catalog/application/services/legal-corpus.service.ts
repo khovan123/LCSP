@@ -362,7 +362,6 @@ export class LegalCorpusService {
         aggregateType: OUTBOX_AGGREGATE_TYPES.legalCorpusVersion,
         aggregateId: corpus.id,
         eventType: LEGAL_RULE_EVENT_TYPES.corpusVersionActivated,
-        organizationId: null,
         correlationId: input.correlationId,
         causationId: approval.id,
         actor: {
@@ -395,7 +394,6 @@ export class LegalCorpusService {
             id: LEGAL_CORPUS_ACTIVATION_SERVICE,
             type: AUDIT_ACTOR_TYPES.system,
           },
-          organizationId: null,
           resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
           resourceId: corpus.id,
           decision: AUDIT_DECISIONS.allow,
@@ -645,7 +643,6 @@ export class LegalCorpusService {
       select: {
         id: true,
         assessmentId: true,
-        organizationId: true,
       },
     });
     if (approvedProfiles.length === 0) {
@@ -691,7 +688,6 @@ export class LegalCorpusService {
         aggregateType: OUTBOX_AGGREGATE_TYPES.verifiedProfile,
         aggregateId: profile.id,
         eventType: LEGAL_MATCHING_REQUEST_COMMAND,
-        organizationId: profile.organizationId,
         assessmentId: profile.assessmentId,
         correlationId: input.correlationId,
         causationId: input.corpusVersionId,

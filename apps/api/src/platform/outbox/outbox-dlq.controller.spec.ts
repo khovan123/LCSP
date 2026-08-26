@@ -50,7 +50,7 @@ describe("OutboxDlqController", () => {
 
     it("should replay message using RBAC context", async () => {
       const req = {
-        rbacContext: { userId: "user-123", organizationId: "org-1" },
+        rbacContext: { userId: "user-123" },
         correlationId: "corr-1",
       } as ControllerRequest;
       const result = await controller.replayMessage("1", req);
@@ -58,7 +58,6 @@ describe("OutboxDlqController", () => {
       expect(replayMessage).toHaveBeenCalledWith(
         "1",
         "user-123",
-        "org-1",
         "corr-1",
       );
       expect(result).toEqual({
@@ -74,7 +73,7 @@ describe("OutboxDlqController", () => {
   describe("deleteMessage", () => {
     it("should delete message using RBAC context", async () => {
       const req = {
-        rbacContext: { userId: "user-123", organizationId: "org-1" },
+        rbacContext: { userId: "user-123" },
         correlationId: "corr-2",
       } as ControllerRequest;
       const result = await controller.deleteMessage("1", req);
@@ -82,7 +81,6 @@ describe("OutboxDlqController", () => {
       expect(deleteMessage).toHaveBeenCalledWith(
         "1",
         "user-123",
-        "org-1",
         "corr-2",
       );
       expect(result).toEqual({

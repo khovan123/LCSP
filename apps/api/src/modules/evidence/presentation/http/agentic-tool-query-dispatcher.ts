@@ -32,7 +32,6 @@ import {
 export type AgenticToolQueryDispatchArgs = {
   toolName: string;
   assessmentId: string;
-  organizationId: string;
   userId: string;
   correlationId: string;
   artifactVersions: Record<string, unknown>;
@@ -82,7 +81,6 @@ export function get_assessment_context(args: AgenticToolQueryDispatchArgs) {
   const { input, artifactVersions } = args;
   return new GetAssessmentContextQuery(
     args.assessmentId,
-    args.organizationId,
     requiredArtifactVersion(artifactVersions, "wizardProfileId"),
     typedStringArray(input.include, Object.values(ASSESSMENT_CONTEXT_INCLUDES)),
     typedStringArray(
@@ -97,7 +95,6 @@ export function get_artifact_chain(args: AgenticToolQueryDispatchArgs) {
   const { input } = args;
   return new GetArtifactChainQuery(
     args.assessmentId,
-    args.organizationId,
     args.correlationId,
     optionalRecord(input.anchor)
       ? optionalString(optionalRecord(input.anchor)?.artifactRef)
@@ -114,7 +111,6 @@ export function get_reconciliation_context(args: AgenticToolQueryDispatchArgs) {
   const { input } = args;
   return new GetReconciliationContextQuery(
     args.assessmentId,
-    args.organizationId,
     args.correlationId,
     stripOptionalRef(optionalString(input.flowRef), "flow:"),
     stringArray(input.conflictIds).map((value) => stripRef(value, "conflict:")),
@@ -139,7 +135,6 @@ export function compare_wizard_claim(args: AgenticToolQueryDispatchArgs) {
       : (optionalString(input.maxEvidenceRefs) ?? undefined);
   return new CompareWizardClaimQuery(
     args.assessmentId,
-    args.organizationId,
     requiredArtifactVersion(artifactVersions, "wizardProfileId"),
     requiredArtifactVersion(artifactVersions, "technicalEvidenceReportId"),
     parseSingleTargetId(requiredString(input.targetId), args.correlationId),
@@ -161,7 +156,6 @@ export function compare_wizard_claim(args: AgenticToolQueryDispatchArgs) {
 export function get_gap_requirements(args: AgenticToolQueryDispatchArgs) {
   return new GetGapRequirementsQuery(
     args.assessmentId,
-    args.organizationId,
     args.input as never,
     args.userId,
     AUTH_USER_ROLES.customer,
@@ -171,7 +165,6 @@ export function get_gap_requirements(args: AgenticToolQueryDispatchArgs) {
 export function get_gap_evidence_trace(args: AgenticToolQueryDispatchArgs) {
   return new GetGapEvidenceTraceQuery(
     args.assessmentId,
-    args.organizationId,
     args.input as never,
     args.userId,
     args.correlationId,
@@ -180,7 +173,6 @@ export function get_gap_evidence_trace(args: AgenticToolQueryDispatchArgs) {
 export function evaluate_gap_matrix(args: AgenticToolQueryDispatchArgs) {
   return new EvaluateGapMatrixQuery(
     args.assessmentId,
-    args.organizationId,
     args.input as never,
     args.userId,
     args.correlationId,
@@ -189,7 +181,6 @@ export function evaluate_gap_matrix(args: AgenticToolQueryDispatchArgs) {
 export function get_admin_source_catalog(args: AgenticToolQueryDispatchArgs) {
   return new GetAdminSourceCatalogQuery(
     args.assessmentId,
-    args.organizationId,
     args.input,
     args.userId,
     args.correlationId,
@@ -199,7 +190,6 @@ export function get_legal_corpus_readiness(args: AgenticToolQueryDispatchArgs) {
   const { input } = args;
   return new GetLegalCorpusReadinessQuery(
     args.assessmentId,
-    args.organizationId,
     new Date(`${requiredString(input.effectiveDate)}T00:00:00.000Z`),
     stripOptionalRef(optionalString(input.pinnedCorpusVersionId), "corpus_"),
     args.userId,
@@ -209,7 +199,6 @@ export function get_legal_corpus_readiness(args: AgenticToolQueryDispatchArgs) {
 export function retrieve_legal_basis(args: AgenticToolQueryDispatchArgs) {
   return new RetrieveLegalBasisQuery(
     args.assessmentId,
-    args.organizationId,
     args.input as never,
     args.userId,
     args.correlationId,
@@ -218,7 +207,6 @@ export function retrieve_legal_basis(args: AgenticToolQueryDispatchArgs) {
 export function validate_citation_set(args: AgenticToolQueryDispatchArgs) {
   return new ValidateCitationSetQuery(
     args.assessmentId,
-    args.organizationId,
     args.input as never,
     args.userId,
     args.correlationId,

@@ -71,7 +71,6 @@ export class RbacGuard implements CanActivate {
       await this.recordDecision({
         actorId: null,
         sessionId: null,
-        organizationId: null,
         resourceId: requestResourceId(request, RBAC_ACTIONS.metadataCheck),
         action: RBAC_ACTIONS.metadataCheck,
         decision: RBAC_DECISION.deny,
@@ -95,7 +94,6 @@ export class RbacGuard implements CanActivate {
       await this.recordDecision({
         actorId: null,
         sessionId: null,
-        organizationId: null,
         resourceId,
         action,
         decision: RBAC_DECISION.deny,
@@ -119,7 +117,6 @@ export class RbacGuard implements CanActivate {
       await this.recordDecision({
         actorId: null,
         sessionId: null,
-        organizationId: null,
         resourceId,
         action,
         decision: RBAC_DECISION.deny,
@@ -147,7 +144,6 @@ export class RbacGuard implements CanActivate {
       request.rbacContext = {
         userId: session.userId,
         sessionId: session.id,
-        organizationId: session.organizationId,
         role: user.role,
         scope: resourceId,
         grantedActions,
@@ -156,7 +152,6 @@ export class RbacGuard implements CanActivate {
       await this.recordDecision({
         actorId: session.userId,
         sessionId: session.id,
-        organizationId: session.organizationId,
         resourceId,
         action,
         decision: RBAC_DECISION.allow,
@@ -191,7 +186,6 @@ export class RbacGuard implements CanActivate {
         await this.recordDecision({
           actorId: session.userId,
           sessionId: session.id,
-          organizationId: session.organizationId,
           resourceId,
           action: denied.action,
           decision: RBAC_DECISION.deny,
@@ -212,7 +206,6 @@ export class RbacGuard implements CanActivate {
     request.rbacContext = {
       userId: session.userId,
       sessionId: session.id,
-      organizationId: session.organizationId,
       role: user.role,
       scope: resourceId,
       grantedActions,
@@ -221,7 +214,6 @@ export class RbacGuard implements CanActivate {
     await this.recordDecision({
       actorId: session.userId,
       sessionId: session.id,
-      organizationId: session.organizationId,
       resourceId,
       action: allowed.action,
       decision: RBAC_DECISION.allow,
@@ -244,7 +236,6 @@ export class RbacGuard implements CanActivate {
     session: {
       id: string;
       userId: string;
-      organizationId: string;
       sensitiveActionVerifiedAt: number | null;
     };
     resourceId: string;
@@ -264,7 +255,6 @@ export class RbacGuard implements CanActivate {
     await this.recordDecision({
       actorId: input.session.userId,
       sessionId: input.session.id,
-      organizationId: input.session.organizationId,
       resourceId: input.resourceId,
       action: input.action,
       decision: RBAC_DECISION.deny,
@@ -314,7 +304,6 @@ export class RbacGuard implements CanActivate {
   private async recordDecision(input: {
     actorId: string | null;
     sessionId: string | null;
-    organizationId: string | null;
     resourceId: string;
     action: string;
     decision: RbacDecisionValue;
@@ -325,7 +314,6 @@ export class RbacGuard implements CanActivate {
       await this.decisions.append({
         actor_id: input.actorId,
         session_id: input.sessionId,
-        organization_id: input.organizationId,
         resource_type: DECISION_LOG_RESOURCE_TYPE,
         resource_id: input.resourceId,
         action: input.action,
@@ -359,14 +347,11 @@ function requestResourceId(
   const assessmentId = readStringAttribute(params.assessmentId);
   const conflictId = readStringAttribute(params.conflictId);
   const userId = readStringAttribute(params.userId);
-  const orgId =
-    readStringAttribute(params.orgId) ?? readStringAttribute(params.id);
 
   if (assessmentId && conflictId)
     return `assessment:${assessmentId}:conflict:${conflictId}`;
   if (assessmentId) return `assessment:${assessmentId}`;
   if (userId) return `user:${userId}`;
-  if (orgId) return `organization:${orgId}`;
 
   const method = request.method;
   const routePath = readStringAttribute(request.route?.path);

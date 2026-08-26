@@ -44,7 +44,7 @@ export class OutboxDlqController {
    * Resets a DLQ message so the publisher can attempt delivery again.
    *
    * @param id - Identifier of the outbox message to replay.
-   * @param req - Authenticated request providing actor, organization, and correlation context.
+   * @param req - Authenticated request providing actor and correlation context.
    * @returns A standardized success result after the message is queued for replay.
    */
   @Post(":id/replay")
@@ -55,7 +55,6 @@ export class OutboxDlqController {
     await this.dlqService.replayMessage(
       id,
       req.rbacContext.userId,
-      req.rbacContext.organizationId,
       req.correlationId ?? "outbox-dlq-replay",
     );
     return resultEnvelope({
@@ -68,7 +67,7 @@ export class OutboxDlqController {
    * Permanently discards a message from the outbox dead-letter queue.
    *
    * @param id - Identifier of the DLQ message to delete.
-   * @param req - Authenticated request providing actor, organization, and correlation context.
+   * @param req - Authenticated request providing actor and correlation context.
    * @returns A standardized success result after deletion.
    */
   @Delete(":id")
@@ -79,7 +78,6 @@ export class OutboxDlqController {
     await this.dlqService.deleteMessage(
       id,
       req.rbacContext.userId,
-      req.rbacContext.organizationId,
       req.correlationId ?? "outbox-dlq-delete",
     );
     return resultEnvelope({

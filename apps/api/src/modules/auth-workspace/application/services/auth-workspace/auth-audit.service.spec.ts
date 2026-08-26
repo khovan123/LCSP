@@ -34,7 +34,6 @@ describe("AuthAuditService", () => {
     await service.write({
       eventType: AUTH_AUDIT_EVENT_TYPES.authSignInSuccess,
       actorId: "user-1",
-      organizationId: "org-1",
       correlationId: "corr-1",
       decision: RBAC_DECISION.allow,
       payload: { email_domain: "example.test" },
@@ -43,14 +42,11 @@ describe("AuthAuditService", () => {
     expect(write).toHaveBeenCalledWith({
       eventType: AUTH_AUDIT_EVENT_TYPES.authSignInSuccess,
       actorId: "user-1",
-      organizationId: "org-1",
       resourceType: null,
       resourceId: null,
       reasonCode: null,
       correlationId: "corr-1",
       sessionId: null,
-      policyId: null,
-      policyVersion: null,
       decision: RBAC_DECISION.allow,
       payload: { email_domain: "example.test" },
     });
@@ -66,7 +62,6 @@ describe("AuthAuditService", () => {
     await service.write({
       eventType: AUTH_AUDIT_EVENT_TYPES.authMfaEnrolled,
       actorId: "user-1",
-      organizationId: "org-1",
       correlationId: "corr-1",
       decision: RBAC_DECISION.allow,
       payload: {
@@ -104,7 +99,6 @@ describe("AuthAuditService", () => {
       service.write({
         eventType: AUTH_AUDIT_EVENT_TYPES.authSignInFailed,
         actorId: null,
-        organizationId: "org-1",
         correlationId: "corr-1",
         decision: RBAC_DECISION.deny,
       }),
@@ -123,7 +117,6 @@ describe("AuthAuditService", () => {
       {
         eventType: AUTH_AUDIT_EVENT_TYPES.authSessionRevoked,
         actorId: "manager-1",
-        organizationId: "org-1",
         correlationId: "corr-1",
         decision: RBAC_DECISION.allow,
       },
@@ -142,7 +135,6 @@ describe("AuthAuditService", () => {
       await service.write({
         eventType,
         actorId: null,
-        organizationId: null,
         correlationId: "corr-1",
         decision: RBAC_DECISION.allow,
       });
@@ -157,7 +149,6 @@ describe("AuthAuditService", () => {
     await service.write({
       eventType: AUTH_AUDIT_EVENT_TYPES.authSignInFailed,
       actorId: null,
-      organizationId: "org-1",
       correlationId: "corr-1",
       decision: RBAC_DECISION.deny,
     });
@@ -177,13 +168,10 @@ describe("AuthAuditService", () => {
     await service.write({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
       actor_id: "user-1",
-      organization_id: "org-1",
       decision: RBAC_DECISION.allow,
       correlationId: "corr-1",
       reason_code: RBAC_REASON_CODE.authorized,
       session_id: "session-1",
-      policy_id: "policy-1",
-      policy_version: "v1",
       session_token: "must-strip",
       email_domain: "example.test",
     });
@@ -191,25 +179,19 @@ describe("AuthAuditService", () => {
     expect(write).toHaveBeenCalledWith({
       eventType: "LOGIN_SUCCESS",
       actorId: "user-1",
-      organizationId: "org-1",
       resourceType: null,
       resourceId: null,
       reasonCode: RBAC_REASON_CODE.authorized,
       correlationId: "corr-1",
       sessionId: "session-1",
-      policyId: "policy-1",
-      policyVersion: "v1",
       decision: RBAC_DECISION.allow,
       payload: {
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
         actor_id: "user-1",
-        organization_id: "org-1",
         decision: RBAC_DECISION.allow,
         correlationId: "corr-1",
         reason_code: RBAC_REASON_CODE.authorized,
         session_id: "session-1",
-        policy_id: "policy-1",
-        policy_version: "v1",
         email_domain: "example.test",
       },
     });

@@ -60,7 +60,6 @@ export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
     const rows = await this.prisma.documentRequest.findMany({
       where: {
         assessmentId: query.assessmentId,
-        organizationId: query.organizationId,
       },
       select: {
         id: true,

@@ -45,7 +45,6 @@ export class GapRequirementsController {
       await this.queryBus.execute(
         new GetGapRequirementsQuery(
           assessmentId,
-          request.rbacContext.organizationId,
           input,
           request.rbacContext.userId,
           request.rbacContext.role,

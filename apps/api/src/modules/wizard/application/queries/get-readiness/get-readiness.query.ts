@@ -9,7 +9,6 @@ export interface ReadinessAuthorizationContext {
 export class GetReadinessQuery extends Query<ReadinessResponse> {
   constructor(
     public readonly assessmentId: string,
-    public readonly organizationId: string,
     public readonly userId: string,
     public readonly correlationId: string,
     public readonly authorization: ReadinessAuthorizationContext,

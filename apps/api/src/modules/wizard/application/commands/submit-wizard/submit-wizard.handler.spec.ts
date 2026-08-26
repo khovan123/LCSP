@@ -6,7 +6,8 @@ import {
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { WIZARD_EVENT_TYPES, type WizardAnswer } from "@lcsp/contracts/wizard";
 import {
   ConflictException,
@@ -173,15 +174,12 @@ describe("SubmitWizardHandler", () => {
 
   const command = new SubmitWizardCommand(
     "assessment-123",
-    "org-1",
     "owner-1",
     validAnswers,
     "corr-id-1",
     {
-      subjectRole: SUBJECT_ROLES.manager,
+      subjectRole: AUTH_USER_ROLES.customer,
       selectedAction: RBAC_ACTIONS.wizardSubmit,
-      policyId: "policy-manager",
-      policyVersion: "v1",
     },
   );
 
@@ -209,7 +207,6 @@ describe("SubmitWizardHandler", () => {
 
     const invalidCommand = new SubmitWizardCommand(
       command.assessmentId,
-      command.organizationId,
       command.ownerId,
       [
         ...validAnswers.filter((a) => a.questionId !== "businessProcess"),
@@ -235,7 +232,6 @@ describe("SubmitWizardHandler", () => {
 
     const invalidCommand = new SubmitWizardCommand(
       command.assessmentId,
-      command.organizationId,
       command.ownerId,
       [
         ...validAnswers.filter((a) => a.questionId !== "humanReview"),
@@ -337,13 +333,12 @@ describe("SubmitWizardHandler", () => {
       handler.execute(
         new SubmitWizardCommand(
           command.assessmentId,
-          command.organizationId,
           command.ownerId,
           command.answers,
           command.correlationId,
           {
             ...command.authorization,
-            subjectRole: SUBJECT_ROLES.systemAdmin,
+            subjectRole: AUTH_USER_ROLES.admin,
           },
         ),
       ),

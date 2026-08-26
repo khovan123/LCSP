@@ -40,7 +40,6 @@ export class GetEvidenceHandler implements IQueryHandler<GetEvidenceQuery> {
     const report = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
         assessmentId: query.assessmentId,
-        organizationId: query.organizationId,
         status: toPrismaEvidenceAcceptanceStatus(
           TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
         ),

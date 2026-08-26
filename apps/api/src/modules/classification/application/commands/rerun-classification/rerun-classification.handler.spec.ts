@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   CLASSIFICATION_RERUN_STATUSES,
   SCAN_EVENT_TYPES,
@@ -22,8 +23,7 @@ describe("RerunClassificationHandler", () => {
   const rbacContext = {
     userId: "user-1",
     sessionId: "session-1",
-    organizationId: "org-1",
-    subjectRole: SUBJECT_ROLES.manager,
+    subjectRole: AUTH_USER_ROLES.customer,
     scope: "assessment-1",
     grantedActions: [RBAC_ACTIONS.classificationRun],
     selectedAction: RBAC_ACTIONS.classificationRun,
@@ -90,7 +90,6 @@ describe("RerunClassificationHandler", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           assessmentId: "assessment-1",
-          organizationId: "org-1",
         }),
         orderBy: { createdAt: "desc" },
       }),

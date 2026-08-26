@@ -7,7 +7,6 @@ import { problemException } from "../../../../platform/problems/problem-factory.
 export type AgenticToolCommandDispatchArgs = {
   toolName: string;
   assessmentId: string;
-  organizationId: string;
   userId: string;
   correlationId: string;
   input: Record<string, unknown>;

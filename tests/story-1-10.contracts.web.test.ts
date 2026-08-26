@@ -6,11 +6,7 @@ import {
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
-import {
-  AUTH_MEMBERSHIP_STATUSES,
-  AUTH_USER_ROLES,
-  type ProblemResult,
-} from "@lcsp/contracts/auth";
+import { AUTH_USER_ROLES, type ProblemResult } from "@lcsp/contracts/auth";
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
 import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
 import {
@@ -35,11 +31,6 @@ test("shared contracts expose canonical workflow value sets", () => {
     "NOT_STARTED",
     "IN_PROGRESS",
     "SUBMITTED",
-  ]);
-  assert.deepEqual(Object.values(AUTH_MEMBERSHIP_STATUSES), [
-    "INVITED",
-    "ACTIVE",
-    "REVOKED",
   ]);
   assert.deepEqual(Object.values(OUTBOX_STATUSES), [
     "PENDING",

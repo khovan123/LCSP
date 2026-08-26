@@ -119,11 +119,9 @@ export class AuthWorkspaceController {
   @RequireSession()
   async getWorkspace(
     @Req() request: AuthenticatedRequest,
-    @Query("organization_id") organizationId?: string,
     @Headers("authorization") authorization?: string,
   ) {
     const workspaceRequest: WorkspaceRequest = {
-      organization_id: organizationId,
       session_token: bearerToken(authorization),
       correlationId: request.correlationId,
     };

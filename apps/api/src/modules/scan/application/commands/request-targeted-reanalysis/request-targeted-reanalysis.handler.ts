@@ -77,15 +77,9 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
   ): Promise<RequestTargetedReanalysisResponse> {
     const { input, rbacContext, correlationId } = command;
     this.assertInput(input, correlationId);
-    const organizationId = rbacContext.organizationId;
 
     const existing = await this.prisma.targetedReanalysisRequest.findUnique({
-      where: {
-        organizationId_idempotencyKey: {
-          organizationId,
-          idempotencyKey: input.idempotencyKey,
-        },
-      },
+      where: { idempotencyKey: input.idempotencyKey },
     });
     if (existing) {
       if (
@@ -117,7 +111,6 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
       where: {
         id: input.inputArtifactVersion,
         assessmentId: input.assessmentId,
-        organizationId,
         status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
       },
       select: { id: true, evidencePayload: true, snapshotId: true },
@@ -127,7 +120,6 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           where: {
             id: report.snapshotId,
             assessmentId: input.assessmentId,
-            organizationId,
           },
           select: { id: true, commitSha: true },
         })
@@ -148,7 +140,7 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
     const auditRef = `audit:${requestId}`;
     const created = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(hashtext(${organizationId}))
+        SELECT pg_advisory_xact_lock(hashtext(${input.assessmentId}))
       `;
       const now = new Date();
       const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
@@ -156,14 +148,19 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
       const [fifteenMinuteCount, dailyCount, activeCount, queuedCount] =
         await Promise.all([
           tx.targetedReanalysisRequest.count({
-            where: { organizationId, createdAt: { gte: fifteenMinutesAgo } },
-          }),
-          tx.targetedReanalysisRequest.count({
-            where: { organizationId, createdAt: { gte: twentyFourHoursAgo } },
+            where: {
+              assessmentId: input.assessmentId,
+              createdAt: { gte: fifteenMinutesAgo },
+            },
           }),
           tx.targetedReanalysisRequest.count({
             where: {
-              organizationId,
+              assessmentId: input.assessmentId,
+              createdAt: { gte: twentyFourHoursAgo },
+            },
+          }),
+          tx.targetedReanalysisRequest.count({
+            where: {
               state: {
                 in: [
                   TARGETED_REANALYSIS_REQUEST_STATES.queued,
@@ -175,7 +172,6 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           }),
           tx.targetedReanalysisRequest.count({
             where: {
-              organizationId,
               state: TARGETED_REANALYSIS_REQUEST_STATES.queued,
             },
           }),
@@ -209,7 +205,6 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           id: scanJobId,
           assessmentId: input.assessmentId,
           snapshotId: report.snapshotId,
-          organizationId,
           idempotencyKey: `reanalysis:${input.idempotencyKey}`,
           triggerSource: toPrismaRepositoryScanTriggerSource(
             REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
@@ -225,7 +220,6 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           id: requestId,
           scanJobId,
           assessmentId: input.assessmentId,
-          organizationId,
           inputEvidenceReportId: input.inputArtifactVersion,
           snapshotId: report.snapshotId,
           commitSha: snapshot.commitSha,
@@ -249,7 +243,6 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           aggregateType: OUTBOX_AGGREGATE_TYPES.targetedReanalysisRequest,
           aggregateId: requestId,
           eventType: GITHUB_INTEGRATION_EVENT_TYPES.targetedReanalysisRequested,
-          organizationId,
           assessmentId: input.assessmentId,
           correlationId,
           causationId: correlationId,
@@ -278,7 +271,6 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
     await this.auditWriter.write({
       eventType: SCAN_EVENT_TYPES.targetedReanalysisQueuedAudit,
       actorId: rbacContext.userId,
-      organizationId,
       assessmentId: input.assessmentId,
       resourceType: AUDIT_RESOURCE_TYPES.workerTask,
       resourceId: requestId,

@@ -10,7 +10,6 @@ import { RbacPreflightService } from "./rbac-preflight.service.js";
 
 interface PreflightRequestBody {
   user_id?: string;
-  organization_id?: string;
   action?: string;
   correlationId?: string;
 }
@@ -34,7 +33,7 @@ export class RbacPreflightController {
   /**
    * Authenticates the worker and performs RBAC preflight evaluation for one queued action.
    *
-   * @param body - Worker-provided user, organization, action, and correlation context.
+   * @param body - Worker-provided user, action, and correlation context.
    * @param apiKey - Worker API key supplied through the `x-worker-api-key` header.
    * @returns Standardized result envelope containing the authorization decision and reason code.
    */
@@ -47,7 +46,6 @@ export class RbacPreflightController {
 
     const result = await this.preflightService.evaluate({
       userId: body.user_id ?? "",
-      organizationId: body.organization_id ?? "",
       action: body.action ?? "",
       correlationId: body.correlationId ?? body.correlationId ?? "",
     });

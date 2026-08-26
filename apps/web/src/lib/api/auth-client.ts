@@ -1,6 +1,7 @@
 import {
   AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
+  type AuthUserRole,
   type AuthBackupEmailPolicy,
   type AuthPrimaryEmailAddressPolicy,
   AUTH_ERROR_CODES,
@@ -51,7 +52,6 @@ export type SignInRequest = {
 export type SignUpRequest = {
   email: string;
   display_name: string;
-  organization_name: string;
   password: string;
 };
 
@@ -176,8 +176,7 @@ export type AuthSettingsProfile = {
   backup_recovery_email_policy: AuthBackupEmailPolicy;
   created_at: string;
   updated_at: string;
-  membership_role: string;
-  organization_id: string;
+  role: AuthUserRole;
   mfa_enrolled: boolean;
   mfa_enrolled_at: string | null;
   mfa_verified: boolean;
@@ -812,8 +811,7 @@ function isAuthSettingsProfile(
     ) &&
     typeof candidate.created_at === "string" &&
     typeof candidate.updated_at === "string" &&
-    typeof candidate.membership_role === "string" &&
-    typeof candidate.organization_id === "string" &&
+    typeof candidate.role === "string" &&
     typeof candidate.mfa_enrolled === "boolean" &&
     (typeof candidate.mfa_enrolled_at === "string" ||
       candidate.mfa_enrolled_at === null) &&

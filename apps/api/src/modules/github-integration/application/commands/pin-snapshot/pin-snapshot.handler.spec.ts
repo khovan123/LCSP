@@ -14,7 +14,7 @@ import {
 } from "@nestjs/common";
 
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
-import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -29,7 +29,6 @@ import { PinSnapshotCommand } from "./pin-snapshot.command.js";
 import { PinSnapshotHandler } from "./pin-snapshot.handler.js";
 
 function connection(overrides?: {
-  organizationId?: string;
   assessmentId?: string | null;
   status?:
     | typeof REPOSITORY_CONNECTION_STATUSES.active
@@ -38,7 +37,6 @@ function connection(overrides?: {
   return RepositoryConnection.rehydrate({
     id: "connection-1",
     assessmentId: overrides?.assessmentId ?? "assessment-1",
-    organizationId: overrides?.organizationId ?? "org-1",
     userId: "manager-1",
     installationId: "installation-1",
     repositoryId: "repo-1",
@@ -55,9 +53,8 @@ function connection(overrides?: {
 function command(overrides?: Partial<PinSnapshotCommand>) {
   return new PinSnapshotCommand(
     overrides?.assessmentId ?? "assessment-1",
-    overrides?.organizationId ?? "org-1",
     overrides?.actorId ?? "manager-1",
-    overrides?.subjectRole ?? SUBJECT_ROLES.manager,
+    overrides?.subjectRole ?? AUTH_USER_ROLES.customer,
     overrides?.scope,
     overrides?.connectionId ?? "connection-1",
     overrides?.branch,
@@ -69,7 +66,7 @@ function command(overrides?: Partial<PinSnapshotCommand>) {
 
 function buildHandler(options?: {
   connection?: RepositoryConnection | null;
-  assessment?: { id: string; organizationId: string; ownerId: string } | null;
+  assessment?: { id: string; ownerId: string } | null;
   resolveError?: Error;
   resolvedRepositoryFullName?: string;
 }) {
@@ -114,13 +111,12 @@ function buildHandler(options?: {
     .fn<
       () => Promise<{
         id: string;
-        organizationId: string;
         ownerId: string;
       } | null>
     >()
     .mockResolvedValue(
       options?.assessment === undefined
-        ? { id: "assessment-1", organizationId: "org-1", ownerId: "manager-1" }
+        ? { id: "assessment-1", ownerId: "manager-1" }
         : options.assessment,
     );
   const prisma = { assessment: { findUnique } } as unknown as PrismaService;
@@ -211,10 +207,9 @@ describe("PinSnapshotHandler", () => {
     expect(saveWithCreatedEvent).not.toHaveBeenCalled();
   });
 
-  it("hides missing, cross-organization, and revoked connections", async () => {
+  it("hides missing and revoked connections", async () => {
     for (const invalidConnection of [
       null,
-      connection({ organizationId: "org-2" }),
       connection({ status: REPOSITORY_CONNECTION_STATUSES.revoked }),
     ]) {
       const { handler, resolveCommit, saveWithCreatedEvent } = buildHandler({
@@ -229,14 +224,14 @@ describe("PinSnapshotHandler", () => {
     }
   });
 
-  it("blocks a non-Manager even when scope does not match the assessment", async () => {
+  it("blocks an admin even when scope does not match the assessment", async () => {
     const { handler, resolveCommit } = buildHandler();
 
     await expect(
       handler.execute(
         command({
           actorId: "system-admin-1",
-          subjectRole: SUBJECT_ROLES.systemAdmin,
+          subjectRole: AUTH_USER_ROLES.admin,
           scope: "assessment-2",
         }),
       ),
@@ -244,14 +239,14 @@ describe("PinSnapshotHandler", () => {
     expect(resolveCommit).not.toHaveBeenCalled();
   });
 
-  it("blocks a non-Manager even when scope matches the assessment", async () => {
+  it("blocks an admin even when scope matches the assessment", async () => {
     const { handler, resolveCommit, saveWithCreatedEvent } = buildHandler();
 
     await expect(
       handler.execute(
         command({
           actorId: "system-admin-1",
-          subjectRole: SUBJECT_ROLES.systemAdmin,
+          subjectRole: AUTH_USER_ROLES.admin,
           scope: "assessment-1",
         }),
       ),

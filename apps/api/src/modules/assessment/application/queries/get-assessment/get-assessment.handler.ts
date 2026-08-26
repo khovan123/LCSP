@@ -58,7 +58,7 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       query.assessmentId,
     );
 
-    if (!assessment || assessment.organizationId !== query.organizationId) {
+    if (!assessment) {
       this.throwNotFound(query.correlationId);
     }
     if (
@@ -79,7 +79,6 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       await this.prisma.technicalEvidenceReport.findFirst({
         where: {
           assessmentId: assessment.id,
-          organizationId: assessment.organizationId,
           status: toPrismaEvidenceAcceptanceStatus(
             TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
           ),
@@ -92,7 +91,6 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       ? await this.prisma.classificationResult.findFirst({
           where: {
             assessmentId: assessment.id,
-            organizationId: assessment.organizationId,
             status: toPrismaEvidenceAcceptanceStatus(
               CLASSIFICATION_RESULT_STATUSES.accepted,
             ),
@@ -128,7 +126,6 @@ export class GetAssessmentHandler implements IQueryHandler<GetAssessmentQuery> {
       name: assessment.name,
       status: assessment.status,
       owner_id: assessment.ownerId,
-      organization_id: assessment.organizationId,
       wizard_status: wizardStatus,
       readiness_state: readinessState,
       guardrail_status: classificationResult

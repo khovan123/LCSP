@@ -4,7 +4,6 @@ import {
   AuditResourceType as PrismaAuditResourceType,
   AuthBackupEmailPolicy as PrismaAuthBackupEmailPolicy,
   AuthDecision as PrismaAuthDecision,
-  AuthMembershipStatus as PrismaAuthMembershipStatus,
   AuthPrimaryEmailAddressPolicy as PrismaAuthPrimaryEmailAddressPolicy,
   AuthUserRole as PrismaAuthUserRole,
   AuthorizationReasonCode as PrismaAuthorizationReasonCode,
@@ -44,12 +43,10 @@ import {
 import {
   AUTH_BACKUP_EMAIL_POLICIES,
   AUTH_ERROR_CODES,
-  AUTH_MEMBERSHIP_STATUSES,
   AUTH_PRIMARY_EMAIL_ADDRESS_POLICIES,
   AUTH_USER_ROLES,
   type AuthBackupEmailPolicy,
   type AuthErrorCode,
-  type AuthMembershipStatus,
   type AuthPrimaryEmailAddressPolicy,
   type AuthUserRole,
 } from "@lcsp/contracts/auth";
@@ -108,18 +105,6 @@ type EvidenceAcceptanceContractStatus =
   | AIUsageFlowStatus
   | ClassificationResultStatus
   | LegalRuleMatchStatus;
-
-const AUTH_MEMBERSHIP_STATUS_TO_PRISMA = {
-  [AUTH_MEMBERSHIP_STATUSES.invited]: PrismaAuthMembershipStatus.INVITED,
-  [AUTH_MEMBERSHIP_STATUSES.active]: PrismaAuthMembershipStatus.ACTIVE,
-  [AUTH_MEMBERSHIP_STATUSES.revoked]: PrismaAuthMembershipStatus.REVOKED,
-} as const satisfies Record<AuthMembershipStatus, PrismaAuthMembershipStatus>;
-
-const PRISMA_AUTH_MEMBERSHIP_STATUS_TO_CONTRACT = {
-  [PrismaAuthMembershipStatus.INVITED]: AUTH_MEMBERSHIP_STATUSES.invited,
-  [PrismaAuthMembershipStatus.ACTIVE]: AUTH_MEMBERSHIP_STATUSES.active,
-  [PrismaAuthMembershipStatus.REVOKED]: AUTH_MEMBERSHIP_STATUSES.revoked,
-} as const satisfies Record<PrismaAuthMembershipStatus, AuthMembershipStatus>;
 
 const AUTH_BACKUP_EMAIL_POLICY_TO_PRISMA = {
   [AUTH_BACKUP_EMAIL_POLICIES.allVerified]:
@@ -251,14 +236,8 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
   [RBAC_REASON_CODE.authorized]: PrismaAuthorizationReasonCode.AUTHORIZED,
   [AUTH_ERROR_CODES.authzEvaluatorFailure]:
     PrismaAuthorizationReasonCode.AUTHZ_EVALUATOR_FAILURE,
-  [AUTH_ERROR_CODES.authzPolicyUnavailable]:
-    PrismaAuthorizationReasonCode.AUTHZ_POLICY_UNAVAILABLE,
   [AUTH_ERROR_CODES.authzStateGateBlocked]:
     PrismaAuthorizationReasonCode.AUTHZ_STATE_GATE_BLOCKED,
-  [AUTH_ERROR_CODES.authzSubjectIncomplete]:
-    PrismaAuthorizationReasonCode.AUTHZ_SUBJECT_INCOMPLETE,
-  [AUTH_ERROR_CODES.authzTenantScopeMismatch]:
-    PrismaAuthorizationReasonCode.AUTHZ_TENANT_SCOPE_MISMATCH,
   [AUTH_ERROR_CODES.authRequired]: PrismaAuthorizationReasonCode.AUTH_REQUIRED,
   [AUTH_ERROR_CODES.emailVerificationRequired]:
     PrismaAuthorizationReasonCode.EMAIL_VERIFICATION_REQUIRED,
@@ -271,8 +250,6 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
   [AUTH_ERROR_CODES.invalidRedirectUri]:
     PrismaAuthorizationReasonCode.INVALID_REDIRECT_URI,
   [RBAC_REASON_CODE.loadError]: PrismaAuthorizationReasonCode.LOAD_ERROR,
-  [RBAC_REASON_CODE.membershipMissing]:
-    PrismaAuthorizationReasonCode.MEMBERSHIP_MISSING,
   [AUTH_ERROR_CODES.mfaRequired]: PrismaAuthorizationReasonCode.MFA_REQUIRED,
   [AUTH_ERROR_CODES.mfaInvalid]: PrismaAuthorizationReasonCode.MFA_INVALID,
   [AUTH_ERROR_CODES.mfaRateLimited]:
@@ -281,13 +258,9 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
     PrismaAuthorizationReasonCode.OAUTH_CALLBACK_INVALID,
   [AUTH_ERROR_CODES.oauthStateInvalid]:
     PrismaAuthorizationReasonCode.OAUTH_STATE_INVALID,
-  [RBAC_REASON_CODE.organizationMismatch]:
-    PrismaAuthorizationReasonCode.ORGANIZATION_MISMATCH,
   [RBAC_REASON_CODE.denied]: PrismaAuthorizationReasonCode.RBAC_DENIED,
   [RBAC_REASON_CODE.metadataMissing]:
     PrismaAuthorizationReasonCode.RBAC_METADATA_MISSING,
-  [RBAC_REASON_CODE.policyNotFound]:
-    PrismaAuthorizationReasonCode.POLICY_NOT_FOUND,
   [AUTH_ERROR_CODES.reauthRequired]:
     PrismaAuthorizationReasonCode.REAUTH_REQUIRED,
   [AUTH_ERROR_CODES.recoveryInvalid]:
@@ -298,8 +271,6 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
     PrismaAuthorizationReasonCode.STATE_GATE_FAILED,
   [RBAC_REASON_CODE.subjectRoleMismatch]:
     PrismaAuthorizationReasonCode.SUBJECT_ROLE_MISMATCH,
-  [RBAC_REASON_CODE.subjectAttributeMissing]:
-    PrismaAuthorizationReasonCode.SUBJECT_ATTRIBUTE_MISSING,
   [AUTH_ERROR_CODES.temporaryLock]:
     PrismaAuthorizationReasonCode.TEMPORARY_LOCKED,
   [AUTH_ERROR_CODES.unsupportedProvider]:
@@ -319,14 +290,8 @@ const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
   [PrismaAuthorizationReasonCode.AUTHORIZED]: RBAC_REASON_CODE.authorized,
   [PrismaAuthorizationReasonCode.AUTHZ_EVALUATOR_FAILURE]:
     AUTH_ERROR_CODES.authzEvaluatorFailure,
-  [PrismaAuthorizationReasonCode.AUTHZ_POLICY_UNAVAILABLE]:
-    AUTH_ERROR_CODES.authzPolicyUnavailable,
   [PrismaAuthorizationReasonCode.AUTHZ_STATE_GATE_BLOCKED]:
     AUTH_ERROR_CODES.authzStateGateBlocked,
-  [PrismaAuthorizationReasonCode.AUTHZ_SUBJECT_INCOMPLETE]:
-    AUTH_ERROR_CODES.authzSubjectIncomplete,
-  [PrismaAuthorizationReasonCode.AUTHZ_TENANT_SCOPE_MISMATCH]:
-    AUTH_ERROR_CODES.authzTenantScopeMismatch,
   [PrismaAuthorizationReasonCode.AUTH_REQUIRED]: AUTH_ERROR_CODES.authRequired,
   [PrismaAuthorizationReasonCode.EMAIL_VERIFICATION_REQUIRED]:
     AUTH_ERROR_CODES.emailVerificationRequired,
@@ -339,8 +304,6 @@ const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
   [PrismaAuthorizationReasonCode.INVALID_REDIRECT_URI]:
     AUTH_ERROR_CODES.invalidRedirectUri,
   [PrismaAuthorizationReasonCode.LOAD_ERROR]: RBAC_REASON_CODE.loadError,
-  [PrismaAuthorizationReasonCode.MEMBERSHIP_MISSING]:
-    RBAC_REASON_CODE.membershipMissing,
   [PrismaAuthorizationReasonCode.MFA_REQUIRED]: AUTH_ERROR_CODES.mfaRequired,
   [PrismaAuthorizationReasonCode.MFA_INVALID]: AUTH_ERROR_CODES.mfaInvalid,
   [PrismaAuthorizationReasonCode.MFA_RATE_LIMITED]:
@@ -349,13 +312,9 @@ const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
     AUTH_ERROR_CODES.oauthCallbackInvalid,
   [PrismaAuthorizationReasonCode.OAUTH_STATE_INVALID]:
     AUTH_ERROR_CODES.oauthStateInvalid,
-  [PrismaAuthorizationReasonCode.ORGANIZATION_MISMATCH]:
-    RBAC_REASON_CODE.organizationMismatch,
   [PrismaAuthorizationReasonCode.RBAC_DENIED]: RBAC_REASON_CODE.denied,
   [PrismaAuthorizationReasonCode.RBAC_METADATA_MISSING]:
     RBAC_REASON_CODE.metadataMissing,
-  [PrismaAuthorizationReasonCode.POLICY_NOT_FOUND]:
-    RBAC_REASON_CODE.policyNotFound,
   [PrismaAuthorizationReasonCode.REAUTH_REQUIRED]:
     AUTH_ERROR_CODES.reauthRequired,
   [PrismaAuthorizationReasonCode.RECOVERY_INVALID]:
@@ -366,8 +325,6 @@ const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
     RBAC_REASON_CODE.stateGateFailed,
   [PrismaAuthorizationReasonCode.SUBJECT_ROLE_MISMATCH]:
     RBAC_REASON_CODE.subjectRoleMismatch,
-  [PrismaAuthorizationReasonCode.SUBJECT_ATTRIBUTE_MISSING]:
-    RBAC_REASON_CODE.subjectAttributeMissing,
   [PrismaAuthorizationReasonCode.TEMPORARY_LOCKED]:
     AUTH_ERROR_CODES.temporaryLock,
   [PrismaAuthorizationReasonCode.UNSUPPORTED_PROVIDER]:
@@ -388,12 +345,8 @@ const AUDIT_RESOURCE_TYPE_TO_PRISMA = {
     PrismaAuditResourceType.AUDIT_EXPORT_REQUEST,
   [AUDIT_RESOURCE_TYPES.authInvitation]:
     PrismaAuditResourceType.AUTH_INVITATION,
-  [AUDIT_RESOURCE_TYPES.authMembership]:
-    PrismaAuditResourceType.AUTH_MEMBERSHIP,
   [AUDIT_RESOURCE_TYPES.authMfaRecoveryCode]:
     PrismaAuditResourceType.AUTH_MFA_RECOVERY_CODE,
-  [AUDIT_RESOURCE_TYPES.authOrganization]:
-    PrismaAuditResourceType.AUTH_ORGANIZATION,
   [AUDIT_RESOURCE_TYPES.authSession]: PrismaAuditResourceType.AUTH_SESSION,
   [AUDIT_RESOURCE_TYPES.classificationReviewRequest]:
     PrismaAuditResourceType.CLASSIFICATION_REVIEW_REQUEST,
@@ -440,12 +393,8 @@ const PRISMA_AUDIT_RESOURCE_TYPE_TO_CONTRACT = {
     AUDIT_RESOURCE_TYPES.auditExportRequest,
   [PrismaAuditResourceType.AUTH_INVITATION]:
     AUDIT_RESOURCE_TYPES.authInvitation,
-  [PrismaAuditResourceType.AUTH_MEMBERSHIP]:
-    AUDIT_RESOURCE_TYPES.authMembership,
   [PrismaAuditResourceType.AUTH_MFA_RECOVERY_CODE]:
     AUDIT_RESOURCE_TYPES.authMfaRecoveryCode,
-  [PrismaAuditResourceType.AUTH_ORGANIZATION]:
-    AUDIT_RESOURCE_TYPES.authOrganization,
   [PrismaAuditResourceType.AUTH_SESSION]: AUDIT_RESOURCE_TYPES.authSession,
   [PrismaAuditResourceType.CLASSIFICATION_REVIEW_REQUEST]:
     AUDIT_RESOURCE_TYPES.classificationReviewRequest,
@@ -1033,20 +982,6 @@ export function fromPrismaVerifiedProfileStatus(
   status: PrismaVerifiedProfileStatus,
 ): VerifiedProfileStatus {
   return PRISMA_VERIFIED_PROFILE_STATUS_TO_CONTRACT[status];
-}
-
-/** Maps auth membership status from the contract layer to Prisma. @param status - Contract membership status. @returns Prisma membership status. */
-export function toPrismaAuthMembershipStatus(
-  status: AuthMembershipStatus,
-): PrismaAuthMembershipStatus {
-  return AUTH_MEMBERSHIP_STATUS_TO_PRISMA[status];
-}
-
-/** Maps auth membership status from Prisma to the contract layer. @param status - Prisma membership status. @returns Contract membership status. */
-export function fromPrismaAuthMembershipStatus(
-  status: PrismaAuthMembershipStatus,
-): AuthMembershipStatus {
-  return PRISMA_AUTH_MEMBERSHIP_STATUS_TO_CONTRACT[status];
 }
 
 /** Maps backup-email policy from the contract layer to Prisma. @param policy - Contract backup-email policy. @returns Prisma backup-email policy. */

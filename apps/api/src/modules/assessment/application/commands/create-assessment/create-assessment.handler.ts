@@ -34,7 +34,7 @@ import type { CreateAssessmentDto } from "../../contracts/assessment/create-asse
 import { CreateAssessmentCommand } from "./create-assessment.command.js";
 
 /**
- * Creates manager-owned assessments and atomically persists the assessment, audit record, and outbox event.
+ * Creates customer-owned assessments and atomically persists the assessment, audit record, and outbox event.
  */
 @CommandHandler(CreateAssessmentCommand)
 export class CreateAssessmentHandler implements ICommandHandler<CreateAssessmentCommand> {
@@ -57,18 +57,17 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
   /**
    * Authorizes, validates, creates, and transactionally persists a new assessment.
    *
-   * @param command - Assessment input plus manager-only RBAC and correlation context.
+   * @param command - Assessment input plus RBAC and correlation context.
    * @returns The external assessment-creation DTO.
    * @throws When RBAC authorization fails or the requested name/description is invalid.
    */
   async execute(
     command: CreateAssessmentCommand,
   ): Promise<CreateAssessmentDto> {
-    await this.assertManagerOnlyAction(command);
+    await this.assertAssessmentCreateAllowed(command);
     this.assertValid(command);
 
     const assessment = Assessment.create({
-      organizationId: command.organizationId,
       ownerId: command.ownerId,
       name: command.name as string,
       description: command.description,
@@ -77,7 +76,6 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
     const auditEvent = {
       eventType: ASSESSMENT_EVENT_TYPES.created,
       actorId: assessment.ownerId,
-      organizationId: assessment.organizationId,
       assessmentId: assessment.id,
       resourceType: AUDIT_RESOURCE_TYPES.assessment,
       resourceId: assessment.id,
@@ -88,7 +86,6 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
       payload: {
         assessmentId: assessment.id,
-        organizationId: assessment.organizationId,
         ownerId: assessment.ownerId,
         correlationId: command.correlationId,
       },
@@ -97,7 +94,6 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
       aggregateId: assessment.id,
       eventType: ASSESSMENT_EVENT_TYPES.createdOutbox,
-      organizationId: assessment.organizationId,
       assessmentId: assessment.id,
       correlationId: command.correlationId,
       causationId: command.correlationId,
@@ -107,7 +103,6 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
       idempotencyKey: `${assessment.id}:${ASSESSMENT_EVENT_TYPES.createdOutbox}`,
       payload: {
         assessmentId: assessment.id,
-        organizationId: assessment.organizationId,
         ownerId: assessment.ownerId,
         status: assessment.status,
         correlationId: command.correlationId,
@@ -124,13 +119,13 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
   }
 
   /**
-   * Enforces the manager-only assessment-create action and records a deny audit event before rejecting unauthorized requests.
+   * Enforces the assessment-create action and records a deny audit event before rejecting unauthorized requests.
    *
    * @param command - Creation command containing the evaluated RBAC context.
-   * @returns A promise that resolves only when the manager/action/policy requirements are satisfied.
-   * @throws A RBAC-denied problem when the authorization context is incomplete or not manager-approved.
+   * @returns A promise that resolves only when role and action requirements are satisfied.
+   * @throws A RBAC-denied problem when the authorization context is incomplete or not approved.
    */
-  private async assertManagerOnlyAction(
+  private async assertAssessmentCreateAllowed(
     command: CreateAssessmentCommand,
   ): Promise<void> {
     const allowed =
@@ -142,7 +137,6 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
     await this.auditWriter.write({
       eventType: ASSESSMENT_EVENT_TYPES.created,
       actorId: command.ownerId,
-      organizationId: command.organizationId,
       resourceType: AUDIT_RESOURCE_TYPES.assessment,
       resourceId: null,
       correlationId: command.correlationId,

@@ -102,7 +102,6 @@ export class AuthWorkspaceFacade {
       new SignUpCommand({
         email: payload.email,
         displayName: payload.display_name,
-        organizationName: payload.organization_name,
         password: payload.password,
         correlationId: requestMeta.correlationId,
       }),
@@ -275,7 +274,6 @@ export class AuthWorkspaceFacade {
         payload,
         context.userId,
         context.sessionId,
-        context.organizationId,
         requestMeta,
       ),
     );

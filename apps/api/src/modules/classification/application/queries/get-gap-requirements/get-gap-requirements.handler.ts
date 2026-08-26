@@ -47,7 +47,7 @@ export class GetGapRequirementsHandler implements IQueryHandler<
     query: GetGapRequirementsQuery,
   ): Promise<GetGapRequirementsResponse> {
     const assessment = await this.prisma.assessment.findFirst({
-      where: { id: query.assessmentId, organizationId: query.organizationId },
+      where: { id: query.assessmentId },
       select: { id: true },
     });
     if (!assessment) {
@@ -67,7 +67,6 @@ export class GetGapRequirementsHandler implements IQueryHandler<
         where: {
           id: classificationId,
           assessmentId: assessment.id,
-          organizationId: query.organizationId,
           status: EvidenceAcceptanceStatus.ACCEPTED,
         },
         select: {
@@ -189,7 +188,6 @@ export class GetGapRequirementsHandler implements IQueryHandler<
     await this.auditWriter.write({
       eventType: AGENTIC_TOOL_EVENT_TYPES.gapRequirementsRead,
       actorId: query.actorId,
-      organizationId: query.organizationId,
       assessmentId,
       resourceType: AUDIT_RESOURCE_TYPES.assessment,
       resourceId: assessmentId,

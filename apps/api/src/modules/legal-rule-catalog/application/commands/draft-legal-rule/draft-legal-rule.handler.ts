@@ -91,8 +91,7 @@ export class DraftLegalRuleHandler implements ICommandHandler<
       await this.auditWriter.writeInTx(
         {
           eventType: LEGAL_RULE_EVENT_TYPES.drafted,
-          actorId: command.authoredBy,
-          organizationId: null, // Legal catalog is system-wide, no org id.
+          actorId: command.authoredBy, // Legal catalog is system-wide, no org id.
           resourceType: AUDIT_RESOURCE_TYPES.legalRule,
           resourceId: legalRule.id,
           decision: AUDIT_DECISIONS.allow,
@@ -128,7 +127,6 @@ export class DraftLegalRuleHandler implements ICommandHandler<
     await this.auditWriter.write({
       eventType: LEGAL_RULE_EVENT_TYPES.drafted,
       actorId: command.authoredBy,
-      organizationId: null,
       resourceType: AUDIT_RESOURCE_TYPES.legalRule,
       resourceId: null,
       decision: AUDIT_DECISIONS.deny,

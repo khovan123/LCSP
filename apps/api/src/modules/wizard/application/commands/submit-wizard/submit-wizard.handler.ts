@@ -52,15 +52,13 @@ export class SubmitWizardHandler implements ICommandHandler<
   ) {}
 
   async execute(command: SubmitWizardCommand): Promise<SubmitWizardResponse> {
-    const { assessmentId, organizationId, ownerId, answers, correlationId } =
-      command;
+    const { assessmentId, ownerId, answers, correlationId } = command;
 
     await this.assertManagerOnlyAction(command);
 
     // 1. Verify assessment ownership
     const isOwned = await this.wizardRepository.verifyAssessmentOwnership(
       assessmentId,
-      organizationId,
       ownerId,
     );
     if (!isOwned) {
@@ -126,7 +124,6 @@ export class SubmitWizardHandler implements ICommandHandler<
         create: {
           id: profileId,
           assessmentId,
-          organizationId,
           ownerId,
           version,
           status: toPrismaWizardStatus(WIZARD_STATUS_CODES.submitted),
@@ -150,7 +147,6 @@ export class SubmitWizardHandler implements ICommandHandler<
         {
           eventType: WIZARD_EVENT_TYPES.submitted,
           actorId: ownerId,
-          organizationId,
           resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
           resourceId: profileId,
           decision: AUDIT_DECISIONS.allow,
@@ -170,7 +166,6 @@ export class SubmitWizardHandler implements ICommandHandler<
         aggregateType: OUTBOX_AGGREGATE_TYPES.wizardProfile,
         aggregateId: profileId,
         eventType: WIZARD_EVENT_TYPES.submittedOutbox,
-        organizationId,
         assessmentId,
         correlationId,
         causationId: correlationId,
@@ -210,7 +205,6 @@ export class SubmitWizardHandler implements ICommandHandler<
     await this.auditWriter.write({
       eventType: WIZARD_EVENT_TYPES.submitted,
       actorId: command.ownerId,
-      organizationId: command.organizationId,
       resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
       resourceId: null,
       decision: AUDIT_DECISIONS.deny,

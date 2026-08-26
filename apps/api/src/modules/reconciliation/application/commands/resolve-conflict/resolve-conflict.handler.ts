@@ -68,12 +68,10 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
         where: {
           id: command.conflictId,
           assessmentId: command.assessmentId,
-          organizationId: command.organizationId,
         },
         select: {
           id: true,
           assessmentId: true,
-          organizationId: true,
           status: true,
         },
       });
@@ -110,7 +108,6 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
       const remainingPending = await tx.conflictRecord.count({
         where: {
           assessmentId: command.assessmentId,
-          organizationId: command.organizationId,
           status: toPrismaConflictRecordStatus(
             CONFLICT_RECORD_STATUSES.pending,
           ),
@@ -125,7 +122,6 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
               ? SCAN_EVENT_TYPES.conflictDismissedAudit
               : SCAN_EVENT_TYPES.conflictResolvedAudit,
           actorId: command.resolvedById,
-          organizationId: command.organizationId,
           assessmentId: command.assessmentId,
           resourceType: AUDIT_RESOURCE_TYPES.conflictRecord,
           resourceId: conflict.id,
@@ -173,7 +169,6 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
     await this.auditWriter.write({
       eventType: SCAN_EVENT_TYPES.conflictResolvedAudit,
       actorId: command.resolvedById,
-      organizationId: command.organizationId,
       assessmentId: command.assessmentId,
       resourceType: AUDIT_RESOURCE_TYPES.conflictRecord,
       resourceId: command.conflictId,
@@ -201,7 +196,6 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
       aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
       aggregateId: command.assessmentId,
       eventType: SCAN_EVENT_TYPES.reconciliationAllConflictsResolved,
-      organizationId: command.organizationId,
       assessmentId: command.assessmentId,
       correlationId: command.correlationId,
       causationId: command.conflictId,

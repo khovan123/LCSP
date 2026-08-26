@@ -4,7 +4,7 @@ import { RBAC_METADATA_TYPES } from "@lcsp/contracts/rbac";
 import { RBAC_METADATA_KEY, type RbacMetadata } from "./rbac-metadata.js";
 
 /**
- * Requires an authenticated session with active membership without evaluating a specific RBAC action.
+ * Requires an authenticated session without evaluating a specific RBAC action.
  *
  * @returns A Nest class/method decorator containing session-only RBAC metadata.
  */

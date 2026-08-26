@@ -45,7 +45,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
   private readonly logger = new Logger(PinSnapshotHandler.name);
 
   /**
-   * Creates the snapshot handler with connection/snapshot persistence, GitHub resolution, tenant lookup, and audit dependencies.
+   * Creates the snapshot handler with connection/snapshot persistence, GitHub resolution, assessment lookup, and audit dependencies.
    *
    * @param connectionRepository - Repository used to resolve the active GitHub repository connection.
    * @param snapshotRepository - Repository used to atomically persist the snapshot and created outbox event.
@@ -64,7 +64,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
   ) {}
 
   /**
-   * Validates tenant/RBAC scope and revision syntax, resolves the exact GitHub commit, persists the immutable snapshot, and audits the result.
+   * Validates RBAC scope and revision syntax, resolves the exact GitHub commit, persists the immutable snapshot, and audits the result.
    *
    * @param command - Assessment, actor/RBAC, repository connection, revision selectors, and correlation context.
    * @returns Persisted snapshot metadata including the immutable commit SHA.
@@ -74,7 +74,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
     const connectionId = clean(command.connectionId);
     const assessment = await this.prisma.assessment.findUnique({
       where: { id: command.assessmentId },
-      select: { id: true, organizationId: true, ownerId: true },
+      select: { id: true, ownerId: true },
     });
     const connection = connectionId
       ? await this.connectionRepository.findById(connectionId)
@@ -82,9 +82,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
 
     if (
       !assessment ||
-      assessment.organizationId !== command.organizationId ||
       !connection ||
-      connection.organizationId !== command.organizationId ||
       connection.status !== REPOSITORY_CONNECTION_STATUSES.active
     ) {
       await this.auditDenied(
@@ -98,10 +96,10 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       );
     }
 
-    const isManagerOwner =
+    const isCustomerOwner =
       command.subjectRole === AUTH_USER_ROLES.customer &&
       assessment.ownerId === command.actorId;
-    if (!isManagerOwner) {
+    if (!isCustomerOwner) {
       await this.auditDenied(command, AUTH_ERROR_CODES.rbacDenied);
       throw problemException(
         AUTH_ERROR_CODES.rbacDenied,
@@ -165,7 +163,6 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
 
     const snapshot = RepositorySnapshot.create({
       assessmentId: command.assessmentId,
-      organizationId: command.organizationId,
       connectionId: connection.id,
       repositoryId: connection.repositoryId,
       repositoryFullName: connection.repositoryFullName,
@@ -187,7 +184,6 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
         aggregateType: OUTBOX_AGGREGATE_TYPES.repositorySnapshot,
         aggregateId: snapshot.id,
         eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreated,
-        organizationId: snapshot.organizationId,
         assessmentId: snapshot.assessmentId,
         correlationId: command.correlationId,
         causationId: command.correlationId,
@@ -198,7 +194,6 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
         payload: {
           snapshotId: snapshot.id,
           assessmentId: snapshot.assessmentId,
-          organizationId: snapshot.organizationId,
           commitSha: snapshot.commitSha,
           connectionId: snapshot.connectionId,
           correlationId: command.correlationId,
@@ -209,7 +204,6 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
     await this.auditWriter.write({
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
       actorId: command.actorId,
-      organizationId: command.organizationId,
       assessmentId: snapshot.assessmentId,
       resourceType: AUDIT_RESOURCE_TYPES.repositorySnapshot,
       resourceId: snapshot.id,
@@ -221,7 +215,6 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       payload: {
         snapshotId: snapshot.id,
         assessmentId: snapshot.assessmentId,
-        organizationId: snapshot.organizationId,
         commitSha: snapshot.commitSha,
         connectionId: snapshot.connectionId,
         correlationId: command.correlationId,
@@ -242,7 +235,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
   /**
    * Writes a denial audit event for snapshot pin failures before the handler throws the external problem.
    *
-   * @param command - Snapshot command containing actor, tenant, connection, and correlation context.
+   * @param command - Snapshot command containing actor, connection, and correlation context.
    * @param reasonCode - Stable reason explaining the rejected pin attempt.
    * @returns A promise that resolves after the denial audit event is written.
    */
@@ -253,7 +246,6 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
     await this.auditWriter.write({
       eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotPinFailedAudit,
       actorId: command.actorId,
-      organizationId: command.organizationId,
       resourceType: AUDIT_RESOURCE_TYPES.repositoryConnection,
       resourceId: clean(command.connectionId) ?? command.assessmentId,
       correlationId: command.correlationId,

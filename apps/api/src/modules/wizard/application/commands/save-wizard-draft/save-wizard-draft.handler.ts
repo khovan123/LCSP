@@ -34,14 +34,12 @@ export class SaveWizardDraftHandler implements ICommandHandler<
   async execute(
     command: SaveWizardDraftCommand,
   ): Promise<SaveWizardDraftResponse> {
-    const { assessmentId, organizationId, ownerId, answers, correlationId } =
-      command;
+    const { assessmentId, ownerId, answers, correlationId } = command;
     await this.assertManagerOnlyAction(command);
 
     // 1. Verify assessment exists and is owned by caller
     const isOwned = await this.wizardRepository.verifyAssessmentOwnership(
       assessmentId,
-      organizationId,
       ownerId,
     );
     if (!isOwned) {
@@ -72,7 +70,6 @@ export class SaveWizardDraftHandler implements ICommandHandler<
     } else {
       profile = new WizardProfileEntity({
         assessmentId,
-        organizationId,
         ownerId,
         version: 1,
         status: WIZARD_STATUS_CODES.inProgress,
@@ -87,7 +84,6 @@ export class SaveWizardDraftHandler implements ICommandHandler<
     await this.auditWriter.write({
       eventType: WIZARD_EVENT_TYPES.draftSaved,
       actorId: ownerId,
-      organizationId,
       resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
       resourceId: savedProfile.id,
       decision: AUDIT_DECISIONS.allow,
@@ -121,7 +117,6 @@ export class SaveWizardDraftHandler implements ICommandHandler<
     await this.auditWriter.write({
       eventType: WIZARD_EVENT_TYPES.draftSaved,
       actorId: command.ownerId,
-      organizationId: command.organizationId,
       resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
       resourceId: null,
       decision: AUDIT_DECISIONS.deny,

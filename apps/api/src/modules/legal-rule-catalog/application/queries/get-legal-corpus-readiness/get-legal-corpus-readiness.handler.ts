@@ -43,7 +43,7 @@ export class GetLegalCorpusReadinessHandler implements IQueryHandler<
     query: GetLegalCorpusReadinessQuery,
   ): Promise<GetLegalCorpusReadinessResponse> {
     const assessment = await this.prisma.assessment.findFirst({
-      where: { id: query.assessmentId, organizationId: query.organizationId },
+      where: { id: query.assessmentId },
       select: { id: true },
     });
     if (!assessment) {
@@ -300,7 +300,6 @@ export class GetLegalCorpusReadinessHandler implements IQueryHandler<
     await this.auditWriter.write({
       eventType: AGENTIC_TOOL_EVENT_TYPES.legalCorpusReadinessRead,
       actorId: query.actorId,
-      organizationId: query.organizationId,
       assessmentId,
       resourceType: AUDIT_RESOURCE_TYPES.assessment,
       resourceId: assessmentId,

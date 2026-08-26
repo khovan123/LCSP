@@ -43,7 +43,7 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
   /**
    * Applies full/redacted read semantics, retrieves one document request, and projects safe status/download metadata.
    *
-   * @param query - Assessment/document identity, tenant scope, RBAC scope/action, and correlation context.
+   * @param query - Assessment/document identity, RBAC scope/action, and correlation context.
    * @returns Document status DTO with business-safe blocked reason and optional signed download.
    * @throws When the read action is unauthorized or the document is outside the caller's permitted scope.
    */
@@ -63,7 +63,6 @@ export class GetDocumentHandler implements IQueryHandler<GetDocumentQuery> {
       where: {
         id: query.documentRequestId,
         assessmentId: query.assessmentId,
-        organizationId: query.organizationId,
       },
       select: {
         id: true,

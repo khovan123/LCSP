@@ -241,7 +241,6 @@ describe("OutboxPublisherService", () => {
       payload: {
         snapshotId: "snapshot-1",
         assessmentId: "assessment-1",
-        organizationId: "org-1",
         correlationId: "corr-1",
         actor: {
           id: "user-1",
@@ -287,7 +286,6 @@ describe("OutboxPublisherService", () => {
       message.payload,
       {
         user_id: "user-1",
-        organization_id: "org-1",
         action: "scan:trigger",
         "x-correlation-id": "corr-1",
       },
@@ -445,7 +443,6 @@ describe("OutboxPublisherService", () => {
     const message = makeMessage({
       payload: {
         actor: { id: "user-1", type: "USER" },
-        organizationId: "org-1",
         authorizationAction: "scan:trigger",
         correlationId: "corr-1",
       },
@@ -479,7 +476,6 @@ describe("OutboxPublisherService", () => {
       message.payload,
       {
         user_id: "user-1",
-        organization_id: "org-1",
         action: "scan:trigger",
         "x-correlation-id": "corr-1",
       },
@@ -495,7 +491,6 @@ describe("OutboxPublisherService", () => {
         scanJobId: "scan-job-1",
         snapshotId: "snapshot-1",
         assessmentId: "assessment-1",
-        organizationId: "org-1",
         correlationId: "corr-1",
       },
     });

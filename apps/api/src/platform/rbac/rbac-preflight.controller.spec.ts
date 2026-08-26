@@ -46,7 +46,6 @@ describe("RbacPreflightController", () => {
       controller.preflight(
         {
           user_id: "u",
-          organization_id: "o",
           action: "a",
           correlationId: "c",
         },
@@ -62,7 +61,6 @@ describe("RbacPreflightController", () => {
       controller.preflight(
         {
           user_id: "u",
-          organization_id: "o",
           action: "a",
           correlationId: "c",
         },
@@ -75,7 +73,7 @@ describe("RbacPreflightController", () => {
     const { controller } = makeController();
 
     const response = await controller.preflight(
-      { user_id: "u", organization_id: "o", action: "a", correlationId: "c" },
+      { user_id: "u", action: "a", correlationId: "c" },
       VALID_KEY,
     );
 
@@ -100,7 +98,7 @@ describe("RbacPreflightController", () => {
     });
 
     const response = await controller.preflight(
-      { user_id: "u", organization_id: "o", action: "a", correlationId: "c" },
+      { user_id: "u", action: "a", correlationId: "c" },
       VALID_KEY,
     );
 
@@ -120,7 +118,6 @@ describe("RbacPreflightController", () => {
     await controller.preflight(
       {
         user_id: "u",
-        organization_id: "o",
         action: "a",
         correlationId: "camel-corr-1",
       },

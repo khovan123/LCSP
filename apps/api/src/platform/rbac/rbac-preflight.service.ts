@@ -19,7 +19,6 @@ import type { RbacEvaluationContext } from "./rbac.types.js";
 
 export interface RbacPreflightInput {
   userId: string;
-  organizationId: string;
   action: string;
   correlationId: string;
 }
@@ -106,7 +105,6 @@ export class RbacPreflightService {
       await this.decisions.append({
         actor_id: input.userId,
         session_id: null,
-        organization_id: input.organizationId,
         resource_type: DECISION_LOG_RESOURCE_TYPE,
         resource_id: input.action,
         action: input.action,

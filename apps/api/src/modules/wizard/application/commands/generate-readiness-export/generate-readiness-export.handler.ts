@@ -61,12 +61,10 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
     const assessment = await this.prisma.assessment.findFirst({
       where: {
         id: command.assessmentId,
-        organizationId: command.organizationId,
         ownerId: command.ownerId,
       },
       select: {
         id: true,
-        organizationId: true,
         ownerId: true,
         name: true,
         description: true,
@@ -81,7 +79,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       repositorySnapshot,
       technicalEvidence,
       latest,
-      organization,
       owner,
     ] = await Promise.all([
       this.prisma.wizardProfile.findUnique({
@@ -100,7 +97,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       this.prisma.technicalEvidenceReport.findFirst({
         where: {
           assessmentId: command.assessmentId,
-          organizationId: command.organizationId,
           status: toPrismaEvidenceAcceptanceStatus(
             TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
           ),
@@ -111,10 +107,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
         where: { assessmentId: command.assessmentId },
         orderBy: { version: "desc" },
         select: { version: true },
-      }),
-      this.prisma.authOrganization.findUnique({
-        where: { id: command.organizationId },
-        select: { name: true },
       }),
       this.prisma.authUser.findUnique({
         where: { id: command.ownerId },
@@ -170,7 +162,7 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
       readiness.next_action,
       assessment.name,
       assessment.description,
-      organization?.name,
+      undefined,
       owner?.displayName ?? owner?.email,
     );
     const guardrailResult = this.guardrail.check(content);
@@ -184,7 +176,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
         data: {
           id: exportId,
           assessmentId: command.assessmentId,
-          organizationId: command.organizationId,
           ownerId: command.ownerId,
           version,
           status: toPrismaReadinessExportStatus(status),
@@ -202,7 +193,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
             ? WIZARD_EVENT_TYPES.readinessExportGenerated
             : WIZARD_EVENT_TYPES.readinessExportBlocked,
           actorId: command.ownerId,
-          organizationId: command.organizationId,
           resourceType: AUDIT_RESOURCE_TYPES.readinessExport,
           resourceId: exportId,
           assessmentId: command.assessmentId,
@@ -326,7 +316,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
     await this.auditWriter.write({
       eventType: WIZARD_EVENT_TYPES.readinessExportGenerated,
       actorId: command.ownerId,
-      organizationId: command.organizationId,
       resourceType: AUDIT_RESOURCE_TYPES.readinessExport,
       resourceId: null,
       assessmentId: command.assessmentId,

@@ -56,7 +56,6 @@ export class AssessmentController {
     return resultEnvelope(
       await this.commandBus.execute(
         new CreateAssessmentCommand(
-          rbacContext.organizationId,
           rbacContext.userId,
           body.name,
           body.description,
@@ -76,7 +75,7 @@ export class AssessmentController {
    * @param page - Optional 1-based page query parameter.
    * @param pageSize - Optional page-size query parameter.
    * @param status - Optional assessment status filter.
-   * @param request - Authenticated request containing organization, role, scope, and correlation context.
+   * @param request - Authenticated request containing role, scope, and correlation context.
    * @returns The standard result envelope containing the paginated assessment list.
    */
   @Get()
@@ -93,7 +92,6 @@ export class AssessmentController {
     return resultEnvelope(
       await this.queryBus.execute(
         new ListAssessmentsQuery(
-          rbacContext.organizationId,
           rbacContext.userId,
           rbacContext.role,
           rbacContext.scope,
@@ -110,7 +108,7 @@ export class AssessmentController {
    * Retrieves the caller-visible detail view for one assessment.
    *
    * @param assessmentId - Assessment identifier from the route path.
-   * @param request - Authenticated request containing organization, user, role, and correlation context.
+   * @param request - Authenticated request containing user, role, and correlation context.
    * @returns The standard result envelope containing assessment readiness and pipeline detail.
    */
   @Get(":assessmentId")
@@ -126,7 +124,6 @@ export class AssessmentController {
       await this.queryBus.execute(
         new GetAssessmentQuery(
           assessmentId,
-          rbacContext.organizationId,
           rbacContext.userId,
           rbacContext.role,
           request.correlationId as string,

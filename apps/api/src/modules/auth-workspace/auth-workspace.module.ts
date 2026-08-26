@@ -42,14 +42,12 @@ import { OAuthProviderRegistry } from "./infrastructure/oauth/oauth-provider.reg
 import {
   PrismaAuditEventRepository,
   PrismaAuthorizationDecisionRepository,
-  PrismaMembershipRepository,
   PrismaMfaEnrollmentRepository,
   PrismaMfaOtpUsedRepository,
   PrismaMfaRateLimitRepository,
   PrismaMfaRecoveryCodeRepository,
   PrismaOAuthIdentityRepository,
   PrismaOAuthStateRepository,
-  PrismaOrganizationRepository,
   PrismaRecoveryRequestRepository,
   PrismaSessionRepository,
   PrismaUserRepository,
@@ -57,9 +55,7 @@ import {
 import { AuthWorkspaceController } from "./presentation/http/auth-workspace.controller.ts";
 
 const REPOSITORY_PROVIDERS = [
-  PrismaOrganizationRepository,
   PrismaUserRepository,
-  PrismaMembershipRepository,
   PrismaSessionRepository,
   PrismaAuditEventRepository,
   PrismaAuthorizationDecisionRepository,
@@ -100,9 +96,7 @@ function handlerProvider<T>(
       provide: AUTH_WORKSPACE_REPOSITORIES_BAG,
       inject: REPOSITORY_PROVIDERS,
       useFactory: (
-        organizations: PrismaOrganizationRepository,
         users: PrismaUserRepository,
-        memberships: PrismaMembershipRepository,
         sessions: PrismaSessionRepository,
         auditEvents: PrismaAuditEventRepository,
         authorizationDecisions: PrismaAuthorizationDecisionRepository,
@@ -114,9 +108,7 @@ function handlerProvider<T>(
         oauthStates: PrismaOAuthStateRepository,
         oauthIdentities: PrismaOAuthIdentityRepository,
       ): AuthWorkspaceRepositories => ({
-        organizations,
         users,
-        memberships,
         sessions,
         auditEvents,
         authorizationDecisions,
@@ -348,11 +340,10 @@ function handlerProvider<T>(
     AuthWorkspaceFacade,
     AuthAuditService,
     // Exposed for platform/rbac's RbacGuard, which needs read access to
-    // sessions/users/memberships/MFA enrollment and write access to the
+    // sessions/users/MFA enrollment and write access to the
     // decision log.
     PrismaSessionRepository,
     PrismaUserRepository,
-    PrismaMembershipRepository,
     PrismaMfaEnrollmentRepository,
     PrismaAuthorizationDecisionRepository,
   ],

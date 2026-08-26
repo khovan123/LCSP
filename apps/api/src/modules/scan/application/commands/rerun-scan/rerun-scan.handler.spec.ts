@@ -9,7 +9,8 @@ import {
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -26,8 +27,7 @@ describe("RerunScanHandler", () => {
   const defaultRbac = {
     userId: "user-1",
     sessionId: "sess",
-    organizationId: "org-1",
-    subjectRole: SUBJECT_ROLES.manager,
+    subjectRole: AUTH_USER_ROLES.customer,
     scope: "assessment-1",
     grantedActions: [],
     selectedAction: RBAC_ACTIONS.scanTrigger,
@@ -226,7 +226,6 @@ describe("RerunScanHandler", () => {
       status: REPOSITORY_SCAN_JOB_STATUSES.queued,
       assessmentId: "assessment-1",
       snapshotId: "snapshot-1",
-      organizationId: "org-1",
     });
 
     const result = await handler.execute(defaultCommand);
@@ -269,7 +268,6 @@ describe("RerunScanHandler", () => {
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       commitSha: "a".repeat(40),
     });
     (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce(
@@ -290,12 +288,10 @@ describe("RerunScanHandler", () => {
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       commitSha: "a".repeat(40),
     });
     (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
       id: "assessment-1",
-      organizationId: "org-1",
       ownerId: "other-user",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
@@ -314,12 +310,10 @@ describe("RerunScanHandler", () => {
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       commitSha: "a".repeat(40),
     });
     (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
       id: "assessment-1",
-      organizationId: "org-1",
       ownerId: "user-1",
       status: "INVALID_STATE",
     });
@@ -338,12 +332,10 @@ describe("RerunScanHandler", () => {
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       commitSha: "a".repeat(40),
     });
     (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
       id: "assessment-1",
-      organizationId: "org-1",
       ownerId: "user-1",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
@@ -389,12 +381,10 @@ describe("RerunScanHandler", () => {
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       commitSha: "a".repeat(40),
     });
     (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
       id: "assessment-1",
-      organizationId: "org-1",
       ownerId: "user-1",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
@@ -420,12 +410,10 @@ describe("RerunScanHandler", () => {
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       commitSha: "a".repeat(40),
     });
     (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
       id: "assessment-1",
-      organizationId: "org-1",
       ownerId: "user-1",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });
@@ -473,12 +461,10 @@ describe("RerunScanHandler", () => {
     ).mockResolvedValueOnce({
       id: "snapshot-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       commitSha: "a".repeat(40),
     });
     (prisma.assessment.findUnique as jest.Mock<any>).mockResolvedValueOnce({
       id: "assessment-1",
-      organizationId: "org-1",
       ownerId: "user-1",
       status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
     });

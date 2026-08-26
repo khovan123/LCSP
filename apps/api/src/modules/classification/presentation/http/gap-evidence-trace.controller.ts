@@ -47,7 +47,6 @@ export class GapEvidenceTraceController {
       await this.queryBus.execute(
         new GetGapEvidenceTraceQuery(
           assessmentId,
-          request.rbacContext.organizationId,
           input,
           request.rbacContext.userId,
           correlationId,

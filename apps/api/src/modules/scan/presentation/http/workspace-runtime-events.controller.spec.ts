@@ -9,9 +9,9 @@ describe("WorkspaceRuntimeEventsController", () => {
     jest.useRealTimers();
   });
 
-  it("publishes only organization-scoped runtime metadata", async () => {
+  it("publishes workspace runtime metadata", async () => {
     const buildWorkspaceSnapshot = jest
-      .fn<(organizationId: string) => Promise<unknown>>()
+      .fn<() => Promise<unknown>>()
       .mockResolvedValue({
         emittedAt: "2026-08-09T14:05:00.000Z",
         runs: [
@@ -37,7 +37,6 @@ describe("WorkspaceRuntimeEventsController", () => {
             eventId: "evt-1",
             sequence: 1,
             emittedAt: "2026-08-09T14:05:00.000Z",
-            organizationId: "org-1",
             assessmentId: "assessment-1",
             runId: "run-1",
             correlationId: "corr-1",
@@ -82,10 +81,10 @@ describe("WorkspaceRuntimeEventsController", () => {
     } as unknown as AssessmentRuntimeEventService);
 
     const event = await firstValueFrom(
-      controller.stream({ rbacContext: { organizationId: "org-1" } } as never),
+      controller.stream({ rbacContext: { userId: "user-1" } } as never),
     );
 
-    expect(buildWorkspaceSnapshot).toHaveBeenCalledWith("org-1");
+    expect(buildWorkspaceSnapshot).toHaveBeenCalledWith();
     expect(event.type).toBe("workspace.runtime");
     expect(event.data).toMatchObject({
       emitted_at: "2026-08-09T14:05:00.000Z",
@@ -143,7 +142,7 @@ describe("WorkspaceRuntimeEventsController", () => {
     jest.useFakeTimers();
     let resolveSnapshot: (value: unknown) => void = () => {};
     const buildWorkspaceSnapshot = jest
-      .fn<(organizationId: string) => Promise<unknown>>()
+      .fn<() => Promise<unknown>>()
       .mockImplementationOnce(
         () =>
           new Promise((resolve) => {
@@ -156,7 +155,7 @@ describe("WorkspaceRuntimeEventsController", () => {
     const events: unknown[] = [];
 
     const subscription = controller
-      .stream({ rbacContext: { organizationId: "org-1" } } as never)
+      .stream({ rbacContext: { userId: "user-1" } } as never)
       .subscribe((event) => events.push(event));
 
     expect(buildWorkspaceSnapshot).toHaveBeenCalledTimes(1);

@@ -81,7 +81,6 @@ interface TargetedReanalysisRequestBody {
 
 interface InternalTargetedReanalysisCreateBody extends TargetedReanalysisRequestBody {
   assessmentId: string;
-  organizationId: string;
   userId?: string;
 }
 
@@ -139,7 +138,6 @@ export class ScanController {
         new GetScanJobQuery(
           assessmentId,
           scanJobId,
-          context.organizationId,
           context.role,
           context.scope,
           request.correlationId,
@@ -326,7 +324,6 @@ export class InternalScanController {
             correlationId: resolvedCorrelationId,
             toolName: "request_targeted_reanalysis",
             assessmentId: body.assessmentId,
-            organizationId: body.organizationId,
             analyzerId: body.analyzerId,
             scope: body.scope,
           },
@@ -357,7 +354,6 @@ export class InternalScanController {
                 ? body.userId.trim()
                 : "worker-runtime",
             sessionId: "worker-runtime",
-            organizationId: body.organizationId,
             role: AUTH_USER_ROLES.customer,
             scope: body.assessmentId,
             grantedActions: [RBAC_ACTIONS.technicalEvidenceReanalyze],
@@ -709,7 +705,6 @@ export class InternalTargetedReanalysisController {
       const request = await tx.targetedReanalysisRequest.findUnique({
         where: { id: requestId },
         select: {
-          organizationId: true,
           assessmentId: true,
           correlationId: true,
           state: true,
@@ -723,11 +718,10 @@ export class InternalTargetedReanalysisController {
       }
 
       await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(hashtext(${request.organizationId}))
+        SELECT pg_advisory_xact_lock(hashtext(${request.assessmentId}))
       `;
       const runningCount = await tx.targetedReanalysisRequest.count({
         where: {
-          organizationId: request.organizationId,
           state: TARGETED_REANALYSIS_REQUEST_STATES.running,
         },
       });
@@ -760,7 +754,6 @@ export class InternalTargetedReanalysisController {
       return updated.count === 1
         ? {
             claimed: true as const,
-            organizationId: request.organizationId,
             assessmentId: request.assessmentId,
             correlationId: request.correlationId,
           }
@@ -870,14 +863,12 @@ export class InternalTargetedReanalysisController {
    * @returns Minimal audit context, or null when the request does not exist.
    */
   private async findRequestAuditContext(requestId: string): Promise<{
-    organizationId: string;
     assessmentId: string;
     correlationId: string;
   } | null> {
     return this.prisma.targetedReanalysisRequest.findUnique({
       where: { id: requestId },
       select: {
-        organizationId: true,
         assessmentId: true,
         correlationId: true,
       },
@@ -895,7 +886,6 @@ export class InternalTargetedReanalysisController {
   private async writeTransitionAudit(
     requestId: string,
     request: {
-      organizationId: string;
       assessmentId: string;
       correlationId: string;
     },
@@ -904,7 +894,6 @@ export class InternalTargetedReanalysisController {
     await this.auditWriter.write({
       eventType,
       actorId: AUDIT_ACTOR_IDS.scannerWorker,
-      organizationId: request.organizationId,
       assessmentId: request.assessmentId,
       resourceType: AUDIT_RESOURCE_TYPES.workerTask,
       resourceId: requestId,

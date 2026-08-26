@@ -53,7 +53,6 @@ export class CitationSetValidationController {
       await this.queryBus.execute(
         new ValidateCitationSetQuery(
           assessmentId,
-          request.rbacContext.organizationId,
           input,
           request.rbacContext.userId,
           correlationId,

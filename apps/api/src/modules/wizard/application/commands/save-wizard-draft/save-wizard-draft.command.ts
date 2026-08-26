@@ -11,7 +11,6 @@ export type ManagerOnlyAuthorizationContext = {
 export class SaveWizardDraftCommand extends Command<SaveWizardDraftResponse> {
   constructor(
     public readonly assessmentId: string,
-    public readonly organizationId: string,
     public readonly ownerId: string,
     public readonly answers: WizardAnswer[] = [],
     public readonly correlationId: string,

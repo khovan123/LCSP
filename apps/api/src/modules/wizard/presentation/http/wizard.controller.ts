@@ -50,7 +50,7 @@ export class WizardController {
     @Body() body: SaveWizardDraftRequest,
     @Req() req: AuthenticatedRequest,
   ) {
-    const { userId, organizationId } = req.rbacContext;
+    const { userId } = req.rbacContext;
     const rbacContext = req.rbacContext;
     const correlationId = req.correlationId || randomUUID();
 
@@ -58,7 +58,6 @@ export class WizardController {
       await this.commandBus.execute(
         new SaveWizardDraftCommand(
           assessmentId,
-          organizationId,
           userId,
           body.answers,
           correlationId,
@@ -80,7 +79,7 @@ export class WizardController {
     @Body() body: SubmitWizardRequest,
     @Req() req: AuthenticatedRequest,
   ) {
-    const { userId, organizationId } = req.rbacContext;
+    const { userId } = req.rbacContext;
     const rbacContext = req.rbacContext;
     const correlationId = req.correlationId || randomUUID();
 
@@ -88,7 +87,6 @@ export class WizardController {
       await this.commandBus.execute(
         new SubmitWizardCommand(
           assessmentId,
-          organizationId,
           userId,
           body.answers,
           correlationId,
@@ -125,22 +123,16 @@ export class WizardController {
     @Param("assessmentId") assessmentId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    const { userId, organizationId } = req.rbacContext;
+    const { userId } = req.rbacContext;
     const rbacContext = req.rbacContext;
     const correlationId = req.correlationId || randomUUID();
 
     return resultEnvelope(
       await this.queryBus.execute(
-        new GetReadinessQuery(
-          assessmentId,
-          organizationId,
-          userId,
-          correlationId,
-          {
-            subjectRole: rbacContext.role,
-            selectedAction: rbacContext.selectedAction,
-          },
-        ),
+        new GetReadinessQuery(assessmentId, userId, correlationId, {
+          subjectRole: rbacContext.role,
+          selectedAction: rbacContext.selectedAction,
+        }),
       ),
     );
   }
@@ -152,7 +144,7 @@ export class WizardController {
     @Param("assessmentId") assessmentId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    const { userId, organizationId } = req.rbacContext;
+    const { userId } = req.rbacContext;
     const rbacContext = req.rbacContext;
     const correlationId = req.correlationId || randomUUID();
 
@@ -160,7 +152,6 @@ export class WizardController {
       await this.commandBus.execute(
         new GenerateReadinessExportCommand(
           assessmentId,
-          organizationId,
           userId,
           correlationId,
           {
@@ -181,12 +172,11 @@ export class WizardController {
     @Req() req: AuthenticatedRequest,
     @Res() response: Response,
   ) {
-    const { userId, organizationId } = req.rbacContext;
+    const { userId } = req.rbacContext;
     const download = await this.queryBus.execute(
       new DownloadReadinessExportQuery(
         assessmentId,
         exportId,
-        organizationId,
         userId,
         req.correlationId || randomUUID(),
       ),

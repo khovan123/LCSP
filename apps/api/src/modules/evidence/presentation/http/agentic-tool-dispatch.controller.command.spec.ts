@@ -28,7 +28,6 @@ function commandPayload() {
   return {
     tool_name: "submit_classification_for_independent_review",
     assessment_id: "assessment-1",
-    organization_id: "org-1",
     user_id: "user-1",
     correlationId: "correlation-1",
     workflow_run_id: "run-1",

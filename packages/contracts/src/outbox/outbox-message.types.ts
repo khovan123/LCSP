@@ -61,7 +61,6 @@ export interface OutboxMessageInput {
   aggregateId: string;
   eventType: string;
   schemaVersion?: string;
-  organizationId?: string | null;
   assessmentId?: string | null;
   correlationId?: string;
   causationId?: string;
@@ -87,7 +86,6 @@ export type MaterialOutboxMessageInput = Omit<
   OutboxMessageInput,
   "schemaVersion" | "payload" | "redactionStatus"
 > & {
-  organizationId: string | null;
   correlationId: string;
   causationId: string;
   actor: AuditActorRef;
@@ -123,7 +121,6 @@ export function buildOutboxMessageInput(
     payload: {
       ...safePayload,
       schemaVersion: OUTBOX_MESSAGE_SCHEMA_VERSION,
-      organizationId: input.organizationId,
       ...(input.assessmentId ? { assessmentId: input.assessmentId } : {}),
       correlationId: input.correlationId,
       causationId: input.causationId,

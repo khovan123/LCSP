@@ -21,7 +21,6 @@ import type { AuditEvent } from "../../../domain/models/auth-workspace.models.ts
 export type AuthAuditEventInput = {
   eventType: AuthAuditEventType;
   actorId: string | null;
-  organizationId: string | null;
   correlationId: string;
   decision: AuditDecision | null;
   resourceType?: AuditResourceType | null;
@@ -85,7 +84,6 @@ export class AuthAuditService {
     return {
       eventType: normalized.eventType,
       actorId: normalized.actorId,
-      organizationId: normalized.organizationId,
       resourceType: normalized.resourceType ?? null,
       resourceId: normalized.resourceId ?? null,
       reasonCode: normalized.reasonCode ?? null,
@@ -103,7 +101,6 @@ export class AuthAuditService {
     return {
       eventType: normalizeLegacyAuthAuditEventType(eventType),
       actorId: authAuditReadNullableString(event, "actor_id"),
-      organizationId: authAuditReadNullableString(event, "organization_id"),
       resourceType: event.resource_type ?? null,
       resourceId: authAuditReadNullableString(event, "resource_id"),
       reasonCode: authAuditReadNullableString(event, "reason_code"),

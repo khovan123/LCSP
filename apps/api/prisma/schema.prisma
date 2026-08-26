@@ -7,38 +7,6 @@ datasource db {
   // Safe schema comment to force PR webhook build trigger
 }
 
-model AuthOrganization {
-  id                         String                        @id
-  slug                       String                        @unique
-  name                       String
-  mfaRequired                Boolean                       @default(false)
-  createdAt                  DateTime                      @default(now())
-  updatedAt                  DateTime                      @updatedAt
-  aiUsageFlows               AIUsageFlow[]
-  assessmentRuntimeEvents    AssessmentRuntimeEvent[]
-  assessments                Assessment[]
-  auditEvents                AuthAuditEvent[]
-  auditExportRequests        AuditExportRequest[]
-  classificationResults      ClassificationResult[]
-  classificationReviews      ClassificationReviewRequest[]
-  conflictRecords            ConflictRecord[]
-  decisions                  AuthDecisionLog[]
-  documentRequests           DocumentRequest[]
-  gitHubAppInstallStates     GitHubAppInstallState[]
-  legalRuleMatches           LegalRuleMatch[]
-  memberships                AuthMembership[]
-  readinessExports           ReadinessExport[]
-  repositoryConnections      RepositoryConnection[]
-  repositoryScanJobs         RepositoryScanJob[]
-  repositorySnapshots        RepositorySnapshot[]
-  sessions                   AuthSession[]
-  targetedReanalysisRequests TargetedReanalysisRequest[]
-  technicalEvidenceReports   TechnicalEvidenceReport[]
-  technicalProfiles          TechnicalProfile[]
-  verifiedProfiles           VerifiedProfile[]
-  wizardProfiles             WizardProfile[]
-}
-
 model AuthUser {
   id                        String                        @id
   email                     String                        @unique
@@ -60,7 +28,6 @@ model AuthUser {
   classificationReviews     ClassificationReviewRequest[] @relation("ClassificationReviewRequester")
   documentRequests          DocumentRequest[]             @relation("DocumentRequestRequester")
   gitHubAppInstallStates    GitHubAppInstallState[]       @relation("GitHubAppInstallStateUser")
-  memberships               AuthMembership[]
   mfaEnrollment             AuthUserMfa?
   mfaOtpUses                AuthMfaOtpUsed[]
   mfaRateLimit              AuthMfaRateLimit?
@@ -76,25 +43,9 @@ model AuthUser {
   wizardProfiles            WizardProfile[]               @relation("WizardProfileOwner")
 }
 
-model AuthMembership {
-  id             String               @id
-  userId         String
-  organizationId String
-  status         AuthMembershipStatus
-  revokedAt      DateTime?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  organization   AuthOrganization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           AuthUser             @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, organizationId])
-  @@index([organizationId])
-}
-
 model AuthSession {
   id                        String           @id
   userId                    String
-  organizationId            String
   tokenHash                 String
   tokenFingerprint          String           @unique
   expiresAt                 DateTime
@@ -103,11 +54,8 @@ model AuthSession {
   sensitiveActionVerifiedAt DateTime?
   createdAt                 DateTime         @default(now())
   updatedAt                 DateTime         @updatedAt
-  organization              AuthOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   oauthStates               AuthOAuthState[]
   user                      AuthUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([organizationId])
 }
 
 model AuthUserMfa {
@@ -203,42 +151,36 @@ model AuthOAuthIdentity {
 }
 
 model AuthAuditEvent {
-  id             String             @id
-  eventType      String
-  actorId        String?
-  organizationId String?
-  resourceType   AuditResourceType?
-  resourceId     String?
-  decision       AuthDecision?
-  reasonCode     String?
-  correlationId  String
-  sessionId      String?
-  payload        Json
-  createdAt      DateTime           @default(now())
-  organization   AuthOrganization?  @relation(fields: [organizationId], references: [id])
+  id            String             @id
+  eventType     String
+  actorId       String?
+  resourceType  AuditResourceType?
+  resourceId    String?
+  decision      AuthDecision?
+  reasonCode    String?
+  correlationId String
+  sessionId     String?
+  payload       Json
+  createdAt     DateTime           @default(now())
 
   @@index([correlationId])
-  @@index([organizationId, createdAt])
   @@index([actorId, createdAt])
   @@index([eventType, createdAt])
 }
 
 model AuthDecisionLog {
-  id             String                  @id
-  actorId        String?
-  sessionId      String?
-  organizationId String?
-  resourceType   AuditResourceType
-  resourceId     String
-  action         String
-  decision       AuthDecision
-  reasonCode     AuthorizationReasonCode
-  correlationId  String
-  payload        Json
-  createdAt      DateTime                @default(now())
-  organization   AuthOrganization?       @relation(fields: [organizationId], references: [id])
+  id            String                  @id
+  actorId       String?
+  sessionId     String?
+  resourceType  AuditResourceType
+  resourceId    String
+  action        String
+  decision      AuthDecision
+  reasonCode    AuthorizationReasonCode
+  correlationId String
+  payload       Json
+  createdAt     DateTime                @default(now())
 
-  @@index([organizationId])
   @@index([actorId])
   @@index([correlationId])
 }
@@ -263,7 +205,6 @@ model OutboxMessage {
 
 model Assessment {
   id                         String                        @id
-  organizationId             String
   ownerId                    String
   name                       String
   description                String?
@@ -277,7 +218,6 @@ model Assessment {
   documentRequests           DocumentRequest[]
   gitHubAppInstallStates     GitHubAppInstallState[]
   legalRuleMatches           LegalRuleMatch[]
-  organization               AuthOrganization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner                      AuthUser                      @relation("AssessmentOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   readinessExports           ReadinessExport[]
   repositoryConnections      RepositoryConnection[]
@@ -290,14 +230,12 @@ model Assessment {
   verifiedProfiles           VerifiedProfile[]
   wizardProfile              WizardProfile?
 
-  @@index([organizationId, status])
   @@index([ownerId])
 }
 
 model WizardProfile {
   id               String              @id
   assessmentId     String              @unique
-  organizationId   String
   ownerId          String
   version          Int                 @default(1)
   status           WizardProfileStatus @default(IN_PROGRESS)
@@ -306,36 +244,30 @@ model WizardProfile {
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   assessment       Assessment          @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  organization     AuthOrganization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   owner            AuthUser            @relation("WizardProfileOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   verifiedProfiles VerifiedProfile[]
 
   @@index([assessmentId])
-  @@index([organizationId])
 }
 
 model ReadinessExport {
-  id             String                @id
-  assessmentId   String
-  organizationId String
-  ownerId        String
-  version        Int                   @default(1)
-  status         ReadinessExportStatus
-  contentJson    Json?
-  blockedReason  String?
-  generatedAt    DateTime              @default(now())
-  assessment     Assessment            @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  organization   AuthOrganization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  owner          AuthUser              @relation("ReadinessExportOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  id            String                @id
+  assessmentId  String
+  ownerId       String
+  version       Int                   @default(1)
+  status        ReadinessExportStatus
+  contentJson   Json?
+  blockedReason String?
+  generatedAt   DateTime              @default(now())
+  assessment    Assessment            @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  owner         AuthUser              @relation("ReadinessExportOwner", fields: [ownerId], references: [id], onDelete: Restrict)
 
   @@index([assessmentId])
-  @@index([organizationId])
   @@index([assessmentId, version])
 }
 
 model AuditExportRequest {
   id             String            @id
-  organizationId String
   requestedById  String
   fromDate       DateTime
   toDate         DateTime
@@ -346,17 +278,7 @@ model AuditExportRequest {
   correlationId  String
   createdAt      DateTime          @default(now())
   completedAt    DateTime?
-  organization   AuthOrganization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   requestedBy    AuthUser          @relation("AuditExportRequester", fields: [requestedById], references: [id], onDelete: Restrict)
-
-  @@index([organizationId, createdAt])
-  @@index([organizationId, version])
-}
-
-enum AuthMembershipStatus {
-  INVITED
-  ACTIVE
-  REVOKED
 }
 
 enum AuthDecision {
@@ -375,9 +297,7 @@ enum AuditResourceType {
   ASSESSMENT_RECORD
   AUDIT_EXPORT_REQUEST
   AUTH_INVITATION
-  AUTH_MEMBERSHIP
   AUTH_MFA_RECOVERY_CODE
-  AUTH_ORGANIZATION
   AUTH_SESSION
   CLASSIFICATION_REVIEW_REQUEST
   CLASSIFICATION_RESULT
@@ -406,10 +326,7 @@ enum AuthorizationReasonCode {
   ACCOUNT_NOT_FOUND
   AUTHORIZED
   AUTHZ_EVALUATOR_FAILURE
-  AUTHZ_POLICY_UNAVAILABLE
   AUTHZ_STATE_GATE_BLOCKED
-  AUTHZ_SUBJECT_INCOMPLETE
-  AUTHZ_TENANT_SCOPE_MISMATCH
   AUTH_REQUIRED
   EMAIL_VERIFICATION_REQUIRED
   EVALUATOR_ERROR
@@ -417,22 +334,18 @@ enum AuthorizationReasonCode {
   INVALID_INVITE_STATE
   INVALID_REDIRECT_URI
   LOAD_ERROR
-  MEMBERSHIP_MISSING
   MFA_REQUIRED
   MFA_INVALID
   MFA_RATE_LIMITED
   OAUTH_CALLBACK_INVALID
   OAUTH_STATE_INVALID
-  ORGANIZATION_MISMATCH
   RBAC_DENIED
   RBAC_METADATA_MISSING
-  POLICY_NOT_FOUND
   REAUTH_REQUIRED
   RECOVERY_INVALID
   SESSION_INVALID
   STATE_GATE_FAILED
   SUBJECT_ROLE_MISMATCH
-  SUBJECT_ATTRIBUTE_MISSING
   TEMPORARY_LOCKED
   UNSUPPORTED_PROVIDER
   VALIDATION_FAILED
@@ -512,7 +425,6 @@ enum AuditExportStatus {
 model RepositoryConnection {
   id                 String                     @id
   assessmentId       String?
-  organizationId     String
   userId             String
   installationId     String
   repositoryId       String
@@ -524,19 +436,16 @@ model RepositoryConnection {
   connectedAt        DateTime                   @default(now())
   revokedAt          DateTime?
   assessment         Assessment?                @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
-  organization       AuthOrganization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   snapshots          RepositorySnapshot[]
   user               AuthUser                   @relation("RepositoryConnectionUser", fields: [userId], references: [id], onDelete: Restrict)
 
   @@unique([installationId, repositoryId])
-  @@index([organizationId])
   @@index([assessmentId])
 }
 
 model RepositorySnapshot {
   id                         String                      @id
   assessmentId               String
-  organizationId             String
   connectionId               String
   repositoryId               String
   repositoryFullName         String
@@ -550,7 +459,6 @@ model RepositorySnapshot {
   actor                      AuthUser                    @relation("RepositorySnapshotActor", fields: [actorId], references: [id], onDelete: Restrict)
   assessment                 Assessment                  @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   connection                 RepositoryConnection        @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  organization               AuthOrganization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   scanJobs                   RepositoryScanJob[]
   targetedReanalysisRequests TargetedReanalysisRequest[]
   technicalEvidenceReports   TechnicalEvidenceReport[]
@@ -564,7 +472,6 @@ model RepositoryScanJob {
   id                        String                      @id
   assessmentId              String
   snapshotId                String
-  organizationId            String
   idempotencyKey            String                      @unique
   triggerSource             RepositoryScanTriggerSource
   status                    RepositoryScanJobStatus     @default(QUEUED)
@@ -574,7 +481,6 @@ model RepositoryScanJob {
   createdAt                 DateTime                    @default(now())
   updatedAt                 DateTime                    @updatedAt
   assessment                Assessment                  @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  organization              AuthOrganization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   snapshot                  RepositorySnapshot          @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   targetedReanalysisRequest TargetedReanalysisRequest?
   technicalEvidenceReport   TechnicalEvidenceReport?
@@ -587,14 +493,13 @@ model TargetedReanalysisRequest {
   id                     String                         @id
   scanJobId              String                         @unique
   assessmentId           String
-  organizationId         String
   inputEvidenceReportId  String
   snapshotId             String
   commitSha              String
   analyzerId             String
   normalizedScope        Json
   reasonRequirementId    String
-  idempotencyKey         String
+  idempotencyKey         String                         @unique
   state                  TargetedReanalysisRequestState @default(QUEUED)
   apiPublishAttempts     Int                            @default(0)
   workerDeliveryAttempts Int                            @default(0)
@@ -607,13 +512,10 @@ model TargetedReanalysisRequest {
   updatedAt              DateTime                       @updatedAt
   assessment             Assessment                     @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   inputEvidenceReport    TechnicalEvidenceReport        @relation("TargetedReanalysisInputEvidence", fields: [inputEvidenceReportId], references: [id], onDelete: Cascade)
-  organization           AuthOrganization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   outputEvidenceReport   TechnicalEvidenceReport?       @relation("TargetedReanalysisOutputEvidence", fields: [outputEvidenceReportId], references: [id], onDelete: SetNull)
   scanJob                RepositoryScanJob              @relation(fields: [scanJobId], references: [id], onDelete: Cascade)
   snapshot               RepositorySnapshot             @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
 
-  @@unique([organizationId, idempotencyKey])
-  @@index([organizationId, state, createdAt])
   @@index([assessmentId, createdAt])
   @@index([inputEvidenceReportId])
   @@index([snapshotId])
@@ -639,7 +541,6 @@ model TechnicalEvidenceReport {
   id                        String                      @id
   scanJobId                 String                      @unique
   assessmentId              String
-  organizationId            String
   snapshotId                String
   toolsVersion              Json
   configHash                Json
@@ -650,7 +551,6 @@ model TechnicalEvidenceReport {
   rejectionReason           String?
   createdAt                 DateTime                    @default(now())
   assessment                Assessment                  @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  organization              AuthOrganization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   scanJob                   RepositoryScanJob           @relation(fields: [scanJobId], references: [id], onDelete: Cascade)
   snapshot                  RepositorySnapshot          @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
   targetedReanalysisInputs  TargetedReanalysisRequest[] @relation("TargetedReanalysisInputEvidence")
@@ -666,7 +566,6 @@ model TechnicalProfile {
   id               String                   @id @default(uuid())
   evidenceReportId String                   @unique
   assessmentId     String
-  organizationId   String
   schemaVersion    String
   providerVersion  String
   profileData      Json
@@ -677,7 +576,6 @@ model TechnicalProfile {
   aiUsageFlow      AIUsageFlow?
   assessment       Assessment               @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   evidenceReport   TechnicalEvidenceReport  @relation(fields: [evidenceReportId], references: [id], onDelete: Cascade)
-  organization     AuthOrganization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([assessmentId])
 }
@@ -686,7 +584,6 @@ model AIUsageFlow {
   id                 String                   @id @default(uuid())
   technicalProfileId String                   @unique
   assessmentId       String
-  organizationId     String
   schemaVersion      String
   providerVersion    String
   claims             Json
@@ -697,7 +594,6 @@ model AIUsageFlow {
   createdAt          DateTime                 @default(now())
   assessment         Assessment               @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   conflictRecords    ConflictRecord[]
-  organization       AuthOrganization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   technicalProfile   TechnicalProfile         @relation(fields: [technicalProfileId], references: [id], onDelete: Cascade)
   verifiedProfiles   VerifiedProfile[]
 
@@ -708,7 +604,6 @@ model ConflictRecord {
   id               String               @id @default(uuid())
   aiUsageFlowId    String
   assessmentId     String
-  organizationId   String
   conflictType     String
   conflictScore    Float
   scoreExplanation String
@@ -721,7 +616,6 @@ model ConflictRecord {
   createdAt        DateTime             @default(now())
   aiUsageFlow      AIUsageFlow          @relation(fields: [aiUsageFlowId], references: [id], onDelete: Cascade)
   assessment       Assessment           @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  organization     AuthOrganization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   resolvedBy       AuthUser?            @relation("ConflictRecordResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([assessmentId, status])
@@ -729,7 +623,6 @@ model ConflictRecord {
 
 model AssessmentRuntimeEvent {
   id                String                     @id @default(uuid())
-  organizationId    String
   assessmentId      String
   runId             String
   correlationId     String
@@ -749,12 +642,10 @@ model AssessmentRuntimeEvent {
   waitingReason     String?
   createdAt         DateTime                   @default(now())
   assessment        Assessment                 @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  organization      AuthOrganization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([runId, sequence])
   @@index([assessmentId, createdAt])
   @@index([runId, sequence])
-  @@index([organizationId, createdAt])
 }
 
 model VerifiedProfile {
@@ -766,7 +657,6 @@ model VerifiedProfile {
   reconciliationDecisionRefs Json?
   idempotencyKey             String?
   assessmentId               String
-  organizationId             String
   schemaVersion              String
   providerVersion            String
   profileData                Json
@@ -780,12 +670,10 @@ model VerifiedProfile {
   assessment                 Assessment               @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   classificationResults      ClassificationResult[]
   legalRuleMatches           LegalRuleMatch[]
-  organization               AuthOrganization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   technicalEvidenceReport    TechnicalEvidenceReport? @relation(fields: [technicalEvidenceReportId], references: [id], onDelete: SetNull)
   wizardProfile              WizardProfile?           @relation(fields: [wizardProfileId], references: [id], onDelete: SetNull)
 
   @@unique([assessmentId, version])
-  @@unique([organizationId, idempotencyKey])
   @@index([aiUsageFlowId])
   @@index([assessmentId])
   @@index([assessmentId, version])
@@ -796,7 +684,6 @@ model ClassificationResult {
   legalRuleMatchId   String?                       @unique
   verifiedProfileId  String?
   assessmentId       String
-  organizationId     String
   schemaVersion      String?
   classificationData Json?
   guardrailStatus    ClassificationGuardrailStatus @default(PASSED)
@@ -806,7 +693,6 @@ model ClassificationResult {
   assessment         Assessment                    @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   documentRequests   DocumentRequest[]
   legalRuleMatch     LegalRuleMatch?               @relation(fields: [legalRuleMatchId], references: [id], onDelete: SetNull)
-  organization       AuthOrganization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   verifiedProfile    VerifiedProfile?              @relation(fields: [verifiedProfileId], references: [id], onDelete: SetNull)
 
   @@index([assessmentId])
@@ -816,7 +702,6 @@ model ClassificationReviewRequest {
   id               String                            @id @default(uuid())
   legalRuleMatchId String
   assessmentId     String
-  organizationId   String
   proposalGateRef  String
   baselineRef      String
   candidateLabel   String
@@ -828,10 +713,8 @@ model ClassificationReviewRequest {
   createdAt        DateTime                          @default(now())
   assessment       Assessment                        @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   legalRuleMatch   LegalRuleMatch                    @relation(fields: [legalRuleMatchId], references: [id], onDelete: Cascade)
-  organization     AuthOrganization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   requestedBy      AuthUser                          @relation("ClassificationReviewRequester", fields: [requestedById], references: [id], onDelete: Restrict)
 
-  @@unique([organizationId, idempotencyKey])
   @@index([assessmentId, status])
   @@index([legalRuleMatchId])
 }
@@ -839,7 +722,6 @@ model ClassificationReviewRequest {
 model DocumentRequest {
   id                     String                @id
   assessmentId           String
-  organizationId         String
   requestedById          String
   classificationResultId String
   documentType           DocumentType
@@ -851,27 +733,19 @@ model DocumentRequest {
   updatedAt              DateTime              @updatedAt
   assessment             Assessment            @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   classificationResult   ClassificationResult  @relation(fields: [classificationResultId], references: [id], onDelete: Cascade)
-  organization           AuthOrganization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   requestedBy            AuthUser              @relation("DocumentRequestRequester", fields: [requestedById], references: [id], onDelete: Restrict)
-
-  @@index([assessmentId, organizationId, documentType, status, createdAt])
-  @@index([organizationId, createdAt])
 }
 
 model GitHubAppInstallState {
-  id             String           @id
-  state          String           @unique
-  assessmentId   String?
-  organizationId String
-  userId         String
-  redirectUri    String
-  expiresAt      DateTime
-  createdAt      DateTime         @default(now())
-  assessment     Assessment?      @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
-  organization   AuthOrganization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           AuthUser         @relation("GitHubAppInstallStateUser", fields: [userId], references: [id], onDelete: Restrict)
-
-  @@index([organizationId])
+  id           String      @id
+  state        String      @unique
+  assessmentId String?
+  userId       String
+  redirectUri  String
+  expiresAt    DateTime
+  createdAt    DateTime    @default(now())
+  assessment   Assessment? @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  user         AuthUser    @relation("GitHubAppInstallStateUser", fields: [userId], references: [id], onDelete: Restrict)
 }
 
 model LegalRuleCatalogVersion {
@@ -1038,7 +912,6 @@ model LegalRuleMatch {
   id                        String                        @id @default(uuid())
   verifiedProfileId         String
   assessmentId              String
-  organizationId            String
   corpusVersionId           String
   legalRuleCatalogVersionId String
   schemaVersion             String
@@ -1054,7 +927,6 @@ model LegalRuleMatch {
   classificationResult      ClassificationResult?
   classificationReviews     ClassificationReviewRequest[]
   corpusVersion             LegalCorpusVersion            @relation(fields: [corpusVersionId], references: [id], onDelete: Restrict)
-  organization              AuthOrganization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   verifiedProfile           VerifiedProfile               @relation(fields: [verifiedProfileId], references: [id], onDelete: Cascade)
 
   @@index([assessmentId])

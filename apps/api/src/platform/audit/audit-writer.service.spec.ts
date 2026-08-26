@@ -39,7 +39,6 @@ function makeEvent(overrides: Partial<AuditEventInput> = {}): AuditEventInput {
   return {
     eventType: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
     actorId: "user-1",
-    organizationId: "org-1",
     correlationId: "corr-1",
     decision: AUDIT_DECISIONS.allow,
     ...overrides,
@@ -61,7 +60,6 @@ describe("AuditWriterService", () => {
     expect(data).toMatchObject({
       eventType: event.eventType,
       actorId: event.actorId,
-      organizationId: event.organizationId,
       correlationId: event.correlationId,
       decision: event.decision,
       payload: {
@@ -169,7 +167,7 @@ describe("AuditWriterService", () => {
     );
   });
 
-  it("preserves optional auth audit metadata columns", async () => {
+  it("preserves optional auth audit reason and session metadata", async () => {
     const { client, create } = makePrisma();
     const service = new AuditWriterService(client);
 
@@ -177,8 +175,6 @@ describe("AuditWriterService", () => {
       makeEvent({
         reasonCode: RBAC_REASON_CODE.authorized,
         sessionId: "session-1",
-        policyId: "policy-1",
-        policyVersion: "v1",
       }),
     );
 
@@ -188,8 +184,6 @@ describe("AuditWriterService", () => {
     expect(data).toMatchObject({
       reasonCode: RBAC_REASON_CODE.authorized,
       sessionId: "session-1",
-      policyId: "policy-1",
-      policyVersion: "v1",
     });
   });
 

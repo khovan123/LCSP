@@ -123,7 +123,6 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
         {
           eventType: LEGAL_RULE_EVENT_TYPES.catalogVersionApproved,
           actorId: command.approvedBy,
-          organizationId: null,
           resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
           resourceId: command.legalRuleCatalogVersionId,
           decision: AUDIT_DECISIONS.allow,
@@ -157,7 +156,6 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
     await this.auditWriter.write({
       eventType: LEGAL_RULE_EVENT_TYPES.catalogVersionApproved,
       actorId: command.approvedBy,
-      organizationId: null,
       resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
       resourceId: command.legalRuleCatalogVersionId,
       decision: AUDIT_DECISIONS.deny,

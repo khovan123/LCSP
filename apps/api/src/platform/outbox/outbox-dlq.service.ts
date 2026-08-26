@@ -55,14 +55,12 @@ export class OutboxDlqService {
    *
    * @param id - Outbox message identifier to replay.
    * @param actorId - Operator user identifier performing the replay.
-   * @param organizationId - Organization context of the operator action.
    * @param correlationId - Correlation identifier used for errors and audit tracing.
    * @returns A promise that resolves after the message is reset and audited.
    */
   async replayMessage(
     id: string,
     actorId: string,
-    organizationId: string,
     correlationId: string,
   ): Promise<void> {
     const message = await this.outboxRepository.findMessageById(id);
@@ -82,7 +80,6 @@ export class OutboxDlqService {
       await this.auditWriter.write({
         eventType: OUTBOX_AUDIT_EVENT_TYPES.dlqReplayDenied,
         actorId,
-        organizationId,
         resourceType: AUDIT_RESOURCE_TYPES.outbox,
         resourceId: id,
         decision: AUDIT_DECISIONS.deny,
@@ -101,7 +98,6 @@ export class OutboxDlqService {
     await this.auditWriter.write({
       eventType: OUTBOX_AUDIT_EVENT_TYPES.dlqReplayed,
       actorId,
-      organizationId,
       resourceType: AUDIT_RESOURCE_TYPES.outbox,
       resourceId: id,
       decision: AUDIT_DECISIONS.allow,
@@ -119,14 +115,12 @@ export class OutboxDlqService {
    *
    * @param id - Outbox message identifier to delete.
    * @param actorId - Operator user identifier performing the deletion.
-   * @param organizationId - Organization context of the operator action.
    * @param correlationId - Correlation identifier used for errors and audit tracing.
    * @returns A promise that resolves after deletion and audit persistence complete.
    */
   async deleteMessage(
     id: string,
     actorId: string,
-    organizationId: string,
     correlationId: string,
   ): Promise<void> {
     const message = await this.outboxRepository.findMessageById(id);
@@ -145,7 +139,6 @@ export class OutboxDlqService {
     await this.auditWriter.write({
       eventType: OUTBOX_AUDIT_EVENT_TYPES.dlqDiscarded,
       actorId,
-      organizationId,
       resourceType: AUDIT_RESOURCE_TYPES.outbox,
       resourceId: id,
       decision: AUDIT_DECISIONS.allow,

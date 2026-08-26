@@ -14,9 +14,7 @@ import { ReconciliationController } from "./reconciliation.controller.js";
 function request(): AuthenticatedRequest {
   return {
     correlationId: "corr-1",
-    rbacContext: {
-      organizationId: "org-1",
-    },
+    rbacContext: {},
   } as AuthenticatedRequest;
 }
 

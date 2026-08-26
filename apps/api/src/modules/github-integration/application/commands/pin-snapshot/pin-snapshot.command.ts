@@ -8,10 +8,9 @@ export class PinSnapshotCommand {
    * Creates a repository snapshot pinning command.
    *
    * @param assessmentId - Assessment that will own the pinned snapshot.
-   * @param organizationId - Organization boundary for the assessment and repository connection.
    * @param actorId - Authenticated user requesting the snapshot.
    * @param subjectRole - RBAC subject role used for ownership/scope enforcement.
-   * @param scope - Optional RBAC assessment scope for non-manager callers.
+   * @param scope - Optional RBAC assessment scope from the request context.
    * @param connectionId - Repository connection from which the snapshot should be resolved.
    * @param branch - Optional branch name to resolve when an explicit commit/ref is not supplied.
    * @param ref - Optional Git ref to resolve.
@@ -20,7 +19,6 @@ export class PinSnapshotCommand {
    */
   constructor(
     public readonly assessmentId: string,
-    public readonly organizationId: string,
     public readonly actorId: string,
     public readonly subjectRole: AuthUserRole,
     public readonly scope: string | undefined,

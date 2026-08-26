@@ -14,7 +14,6 @@ import { RequestTargetedReanalysisCommand } from "../../../scan/application/comm
 export type AgenticToolInternalDispatchArgs = {
   toolName: string;
   assessmentId: string;
-  organizationId: string;
   userId: string;
   correlationId: string;
   artifactVersions: Record<string, unknown>;
@@ -85,7 +84,6 @@ export function request_targeted_reanalysis(
       {
         userId: args.userId,
         sessionId: AGENT_RUNTIME_SESSION_ID,
-        organizationId: args.organizationId,
         role: AUTH_USER_ROLES.customer,
         scope: args.assessmentId,
         grantedActions: [RBAC_ACTIONS.technicalEvidenceReanalyze],

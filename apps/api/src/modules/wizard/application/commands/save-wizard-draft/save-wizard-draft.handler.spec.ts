@@ -1,6 +1,7 @@
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 /* eslint-disable @typescript-eslint/unbound-method */
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
@@ -62,7 +63,6 @@ describe("SaveWizardDraftHandler", () => {
   describe("execute", () => {
     const command = new SaveWizardDraftCommand(
       "assessment-123",
-      "org-1",
       "owner-1",
       [
         {
@@ -74,10 +74,8 @@ describe("SaveWizardDraftHandler", () => {
       ],
       "corr-id-1",
       {
-        subjectRole: SUBJECT_ROLES.manager,
+        subjectRole: AUTH_USER_ROLES.customer,
         selectedAction: RBAC_ACTIONS.wizardWrite,
-        policyId: "policy-manager-workspace",
-        policyVersion: "2026-06-26",
       },
     );
 
@@ -100,7 +98,6 @@ describe("SaveWizardDraftHandler", () => {
 
       expect(wizardRepository.verifyAssessmentOwnership).toHaveBeenCalledWith(
         "assessment-123",
-        "org-1",
         "owner-1",
       );
       expect(wizardRepository.findByAssessmentId).toHaveBeenCalledWith(
@@ -123,7 +120,6 @@ describe("SaveWizardDraftHandler", () => {
       expect(auditWriter.write).toHaveBeenCalledWith({
         eventType: WIZARD_EVENT_TYPES.draftSaved,
         actorId: "owner-1",
-        organizationId: "org-1",
         resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
         resourceId: "wizard-id-1",
         decision: AUDIT_DECISIONS.allow,
@@ -133,8 +129,6 @@ describe("SaveWizardDraftHandler", () => {
           version: 1,
         },
         correlationId: "corr-id-1",
-        policyId: "policy-manager-workspace",
-        policyVersion: "2026-06-26",
       });
 
       expect(result.wizard_profile_id).toBe("wizard-id-1");
@@ -149,7 +143,6 @@ describe("SaveWizardDraftHandler", () => {
         WizardProfileEntity.rehydrate({
           id: "wizard-id-2",
           assessmentId: "assessment-123",
-          organizationId: "org-1",
           ownerId: "owner-1",
           version: 2,
           status: WIZARD_STATUS_CODES.inProgress,
@@ -254,7 +247,6 @@ describe("SaveWizardDraftHandler", () => {
         handler.execute(
           new SaveWizardDraftCommand(
             "assessment-123",
-            "org-1",
             "system-admin-1",
             [
               {
@@ -266,10 +258,8 @@ describe("SaveWizardDraftHandler", () => {
             ],
             "corr-deny",
             {
-              subjectRole: SUBJECT_ROLES.systemAdmin,
+              subjectRole: AUTH_USER_ROLES.admin,
               selectedAction: RBAC_ACTIONS.wizardWrite,
-              policyId: "policy-system-admin",
-              policyVersion: "2026-06-26",
             },
           ),
         ),
@@ -281,14 +271,11 @@ describe("SaveWizardDraftHandler", () => {
         expect.objectContaining({
           eventType: WIZARD_EVENT_TYPES.draftSaved,
           actorId: "system-admin-1",
-          organizationId: "org-1",
           resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
           resourceId: null,
           decision: AUDIT_DECISIONS.deny,
           reasonCode: AUTH_ERROR_CODES.rbacDenied,
           correlationId: "corr-deny",
-          policyId: "policy-system-admin",
-          policyVersion: "2026-06-26",
         }),
       );
     });

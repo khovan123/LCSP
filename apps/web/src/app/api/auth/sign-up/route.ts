@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const response = successJson({ authenticated: true }, { status: 201 });
     response.cookies.set(
       SESSION_COOKIE_NAME,
-      "mock-session:manager",
+      "mock-session:customer",
       sessionCookieOptions,
     );
     return response;

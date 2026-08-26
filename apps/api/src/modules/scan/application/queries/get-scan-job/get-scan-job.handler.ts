@@ -32,14 +32,13 @@ export class GetScanJobHandler implements IQueryHandler<GetScanJobQuery> {
    *
    * @param query - Scan-job identity, tenant/role/scope, and correlation context.
    * @returns Normalized scan-job status DTO.
-   * @throws A job-not-found problem when the job is missing from the organization assessment scope.
+   * @throws A job-not-found problem when the job is missing from the assessment scope.
    */
   async execute(query: GetScanJobQuery): Promise<ScanJobStatusDto> {
     const job = await this.prisma.repositoryScanJob.findFirst({
       where: {
         id: query.scanJobId,
         assessmentId: query.assessmentId,
-        organizationId: query.organizationId,
       },
       select: {
         id: true,

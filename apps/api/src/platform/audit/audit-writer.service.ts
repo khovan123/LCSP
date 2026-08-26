@@ -93,7 +93,6 @@ export class AuditWriterService {
           id: crypto.randomUUID(),
           eventType: event.eventType,
           actorId: event.actorId,
-          organizationId: event.organizationId,
           resourceType: event.resourceType
             ? toPrismaAuditResourceType(event.resourceType)
             : null,

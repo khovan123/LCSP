@@ -96,7 +96,6 @@ export class ReconciliationController {
       await this.queryBus.execute(
         new ListConflictsQuery(
           assessmentId,
-          rbacContext.organizationId,
           rbacContext.userId,
           rbacContext.role,
           page !== undefined ? Number(page) : undefined,
@@ -132,7 +131,6 @@ export class ReconciliationController {
       await this.queryBus.execute(
         new GetArtifactChainQuery(
           assessmentId,
-          rbacContext.organizationId,
           request.correlationId as string,
           artifactRef,
           requiredStages,
@@ -169,7 +167,6 @@ export class ReconciliationController {
       await this.queryBus.execute(
         new GetReconciliationContextQuery(
           assessmentId,
-          rbacContext.organizationId,
           correlationId,
           flowId,
           conflictIds,
@@ -207,7 +204,6 @@ export class ReconciliationController {
       await this.queryBus.execute(
         new ProposeMissingTargetsQuery(
           assessmentId,
-          request.rbacContext.organizationId,
           wizardProfileId,
           evidenceReportId,
           candidateKinds,
@@ -241,7 +237,6 @@ export class ReconciliationController {
       await this.queryBus.execute(
         new GetAssessmentContextQuery(
           assessmentId,
-          request.rbacContext.organizationId,
           wizardProfileId,
           includes,
           answerFields,
@@ -267,7 +262,6 @@ export class ReconciliationController {
         new ResolveConflictCommand(
           assessmentId,
           conflictId,
-          rbacContext.organizationId,
           rbacContext.userId,
           rbacContext.role,
           body.resolution,

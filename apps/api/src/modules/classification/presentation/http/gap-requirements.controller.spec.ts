@@ -2,7 +2,7 @@ import { HttpException } from "@nestjs/common";
 import { jest } from "@jest/globals";
 import { AGENTIC_TOOL_STATUSES } from "@lcsp/contracts/evidence";
 import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
-import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { QueryBus } from "@nestjs/cqrs";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
@@ -15,8 +15,7 @@ function request(): AuthenticatedRequest {
     rbacContext: {
       userId: "user-1",
       sessionId: "session-1",
-      organizationId: "organization-1",
-      subjectRole: SUBJECT_ROLES.manager,
+      subjectRole: AUTH_USER_ROLES.customer,
       scope: null,
       grantedActions: [RBAC_ACTIONS.gapRequirementsRead],
       selectedAction: RBAC_ACTIONS.gapRequirementsRead,

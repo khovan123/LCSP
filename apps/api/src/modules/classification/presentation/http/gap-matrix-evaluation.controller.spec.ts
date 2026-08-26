@@ -13,7 +13,6 @@ function request(): AuthenticatedRequest {
     rbacContext: {
       userId: "user-1",
       sessionId: "session-1",
-      organizationId: "organization-1",
       subjectRole: "Manager",
       scope: null,
       grantedActions: [RBAC_ACTIONS.gapMatrixEvaluate],

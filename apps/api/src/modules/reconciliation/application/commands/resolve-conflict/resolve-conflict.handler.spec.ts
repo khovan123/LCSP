@@ -1,7 +1,8 @@
 import { ForbiddenException } from "@nestjs/common";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   CONFLICT_RECORD_STATUSES,
   SCAN_EVENT_TYPES,
@@ -18,7 +19,7 @@ import { jest } from "@jest/globals";
 /* eslint-disable @typescript-eslint/unbound-method */
 
 describe("ResolveConflictHandler", () => {
-  it("audits service-level deny before resolving a Manager-only conflict action", async () => {
+  it("audits service-level deny before resolving a customer-only conflict action", async () => {
     const prisma = {} as jest.Mocked<PrismaService>;
     const auditWriter = {
       write: jest.fn<AuditWriterService["write"]>(),
@@ -35,16 +36,13 @@ describe("ResolveConflictHandler", () => {
         new ResolveConflictCommand(
           "assessment-1",
           "conflict-1",
-          "org-1",
           "system-admin-1",
-          SUBJECT_ROLES.systemAdmin,
+          AUTH_USER_ROLES.admin,
           CONFLICT_RECORD_STATUSES.resolved,
           null,
           "corr-conflict-deny",
           {
             selectedAction: RBAC_ACTIONS.conflictResolve,
-            policyId: "policy-system-admin",
-            policyVersion: "2026-06-26",
           },
         ),
       ),
@@ -53,15 +51,12 @@ describe("ResolveConflictHandler", () => {
     expect(auditWriter.write).toHaveBeenCalledWith({
       eventType: SCAN_EVENT_TYPES.conflictResolvedAudit,
       actorId: "system-admin-1",
-      organizationId: "org-1",
       assessmentId: "assessment-1",
       resourceType: AUDIT_RESOURCE_TYPES.conflictRecord,
       resourceId: "conflict-1",
       correlationId: "corr-conflict-deny",
       decision: AUDIT_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.rbacDenied,
-      policyId: "policy-system-admin",
-      policyVersion: "2026-06-26",
       payload: {
         assessmentId: "assessment-1",
         conflictId: "conflict-1",

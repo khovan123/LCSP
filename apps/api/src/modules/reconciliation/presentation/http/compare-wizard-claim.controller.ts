@@ -54,7 +54,6 @@ export class CompareWizardClaimController {
       await this.queryBus.execute(
         new CompareWizardClaimQuery(
           assessmentId,
-          request.rbacContext.organizationId,
           wizardProfileId,
           evidenceReportId,
           parsedTargetId,

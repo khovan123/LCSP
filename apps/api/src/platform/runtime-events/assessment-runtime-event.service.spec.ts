@@ -134,7 +134,6 @@ describe("AssessmentRuntimeEventService", () => {
           Promise.resolve({
             id: "scan-1",
             assessmentId: "assessment-1",
-            organizationId: "org-1",
             correlationId: "corr-1",
             status: "RUNNING",
           }),
@@ -168,7 +167,6 @@ describe("AssessmentRuntimeEventService", () => {
 
     expect(assessmentRuntimeEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        organizationId: "org-1",
         assessmentId: "assessment-1",
         runId: "scan-1",
         correlationId: "corr-1",
@@ -210,7 +208,6 @@ describe("AssessmentRuntimeEventService", () => {
           Promise.resolve({
             id: "scan-1",
             assessmentId: "assessment-1",
-            organizationId: "org-1",
             correlationId: "corr-1",
             status: "RUNNING",
           }),
@@ -263,7 +260,6 @@ describe("AssessmentRuntimeEventService", () => {
           Promise.resolve({
             id: "scan-1",
             assessmentId: "assessment-1",
-            organizationId: "org-1",
             correlationId: "corr-1",
             status: "COMPLETED",
           }),
@@ -304,7 +300,6 @@ describe("AssessmentRuntimeEventService", () => {
           Promise.resolve({
             id: "scan-1",
             assessmentId: "assessment-1",
-            organizationId: "org-1",
             correlationId: "corr-1",
             status: "COMPLETED",
           }),
@@ -333,7 +328,6 @@ describe("AssessmentRuntimeEventService", () => {
 
     expect(assessmentRuntimeEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        organizationId: "org-1",
         assessmentId: "assessment-1",
         runId: "scan-1",
         correlationId: "corr-1",
@@ -352,7 +346,6 @@ describe("AssessmentRuntimeEventService", () => {
         findMany: jest.fn<() => Promise<unknown[]>>().mockResolvedValue([
           {
             id: "evt-1",
-            organizationId: "org-1",
             assessmentId: "assessment-1",
             runId: "scan-1",
             correlationId: "corr-1",

@@ -47,7 +47,7 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
   /**
    * Validates pagination/status filters, applies role-aware visibility, and returns enriched assessment summaries.
    *
-   * @param query - Organization, RBAC scope, pagination, status, and correlation context for the list request.
+   * @param query - User role, pagination, status, and correlation context for the list request.
    * @returns Paginated assessment summaries visible to the caller.
    * @throws An invalid-request problem when an unknown assessment status is supplied.
    */
@@ -83,7 +83,6 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
     }
 
     const criteria: AssessmentListCriteria = {
-      organizationId: query.organizationId,
       status,
       page,
       pageSize,

@@ -14,7 +14,6 @@ export type RbacDecision = (typeof RBAC_DECISION)[keyof typeof RBAC_DECISION];
 
 export interface RbacSubject {
   role: AuthUserRole;
-  scope?: string;
 }
 
 export interface RbacEvaluationContext {

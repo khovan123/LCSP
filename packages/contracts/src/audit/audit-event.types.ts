@@ -44,9 +44,7 @@ export const AUDIT_RESOURCE_TYPES = {
   assessmentRecord: "ASSESSMENT_RECORD",
   auditExportRequest: "AUDIT_EXPORT_REQUEST",
   authInvitation: "AUTH_INVITATION",
-  authMembership: "AUTH_MEMBERSHIP",
   authMfaRecoveryCode: "AUTH_MFA_RECOVERY_CODE",
-  authOrganization: "AUTH_ORGANIZATION",
   authSession: "AUTH_SESSION",
   classificationReviewRequest: "CLASSIFICATION_REVIEW_REQUEST",
   classificationResult: "CLASSIFICATION_RESULT",
@@ -81,7 +79,6 @@ export interface AuditActorRef {
 export interface AuditEventInput {
   eventType: string;
   actorId: string | null;
-  organizationId: string | null;
   assessmentId?: string | null;
   resourceType?: AuditResourceType | null;
   resourceId?: string | null;

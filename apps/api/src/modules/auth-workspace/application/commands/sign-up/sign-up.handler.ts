@@ -1,16 +1,13 @@
-import * as crypto from "node:crypto";
-
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   AUTH_AUDIT_EVENT_TYPES,
-  AUTH_MEMBERSHIP_STATUSES,
   AUTH_USER_ROLES,
   SIGN_UP_ERROR_CODES,
 } from "@lcsp/contracts/auth";
 import { actionsForRole } from "@lcsp/contracts/rbac";
 import { HttpStatus } from "@nestjs/common";
+import * as crypto from "node:crypto";
 
-import { toPrismaAuthMembershipStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.ts";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import {
@@ -26,7 +23,6 @@ import { SignUpCommand } from "./sign-up.command.ts";
 const SESSION_TTL_MS = 8 * 60 * 60_000;
 const MIN_PASSWORD_LENGTH = 12;
 const MAX_DISPLAY_NAME_LENGTH = 100;
-const MAX_ORGANIZATION_NAME_LENGTH = 120;
 
 export class SignUpHandler {
   constructor(
@@ -35,14 +31,10 @@ export class SignUpHandler {
   ) {}
 
   async execute(command: SignUpCommand): Promise<SignUpResponse> {
-    const { email, displayName, organizationName, password } = command.input;
+    const { email, displayName, password } = command.input;
     const correlationId = command.input.correlationId ?? createCorrelationId();
 
-    if (
-      !isValidEmail(email) ||
-      !isValidDisplayName(displayName) ||
-      !isValidOrganizationName(organizationName)
-    ) {
+    if (!isValidEmail(email) || !isValidDisplayName(displayName)) {
       await this.recordFailure(
         correlationId,
         SIGN_UP_ERROR_CODES.invalidRequest,
@@ -72,15 +64,12 @@ export class SignUpHandler {
 
     const normalizedEmail = email.trim().toLowerCase();
     const trimmedDisplayName = displayName.trim();
-    const trimmedOrganizationName = organizationName.trim();
-    const organizationId = crypto.randomUUID();
-    const userId = crypto.randomUUID();
-    const membershipId = crypto.randomUUID();
-    const sessionId = crypto.randomUUID();
     const sessionToken = issueOpaqueToken();
     const sessionExpiresAt = new Date(Date.now() + SESSION_TTL_MS);
     const role = AUTH_USER_ROLES.customer;
     const allowedActions = uniqueActions(actionsForRole(role));
+    const newUserId = crypto.randomUUID();
+    const newSessionId = crypto.randomUUID();
 
     const existingUser = await this.prisma.authUser.findUnique({
       where: { email: normalizedEmail },
@@ -97,20 +86,13 @@ export class SignUpHandler {
       );
     }
 
+    let userId = "";
+    let sessionId = "";
     try {
       await this.prisma.$transaction(async (tx) => {
-        await tx.authOrganization.create({
+        const user = await tx.authUser.create({
           data: {
-            id: organizationId,
-            slug: organizationSlug(trimmedOrganizationName, organizationId),
-            name: trimmedOrganizationName,
-            mfaRequired: false,
-          },
-        });
-
-        await tx.authUser.create({
-          data: {
-            id: userId,
+            id: newUserId,
             email: normalizedEmail,
             passwordHash: hashSecret(password),
             emailVerified: true,
@@ -120,44 +102,32 @@ export class SignUpHandler {
             role,
           },
         });
+        userId = user.id;
 
-        await tx.authMembership.create({
+        const session = await tx.authSession.create({
           data: {
-            id: membershipId,
+            id: newSessionId,
             userId,
-            organizationId,
-            status: toPrismaAuthMembershipStatus(
-              AUTH_MEMBERSHIP_STATUSES.active,
-            ),
-          },
-        });
-
-        await tx.authSession.create({
-          data: {
-            id: sessionId,
-            userId,
-            organizationId,
             tokenHash: hashSecret(sessionToken),
             tokenFingerprint: fingerprintToken(sessionToken),
             expiresAt: sessionExpiresAt,
             revokedAt: null,
           },
         });
+        sessionId = session.id;
 
         await this.authAudit.writeInTx(
           {
             eventType: AUTH_AUDIT_EVENT_TYPES.authSignUpSuccess,
             actorId: userId,
-            organizationId,
-            resourceType: AUDIT_RESOURCE_TYPES.workspace,
-            resourceId: organizationId,
+            resourceType: AUDIT_RESOURCE_TYPES.authSession,
+            resourceId: sessionId,
             decision: AUDIT_DECISIONS.allow,
             correlationId,
             sessionId,
             payload: {
               event_type: AUTH_AUDIT_EVENT_TYPES.authSignUpSuccess,
               actor_id: userId,
-              organization_id: organizationId,
               decision: AUDIT_DECISIONS.allow,
               correlationId,
               session_id: sessionId,
@@ -186,7 +156,6 @@ export class SignUpHandler {
       user_id: userId,
       session_token: sessionToken,
       expires_at: sessionExpiresAt.toISOString(),
-      organization_id: organizationId,
       allowed_actions: allowedActions,
       correlationId,
     };
@@ -196,8 +165,7 @@ export class SignUpHandler {
     return this.authAudit.write({
       eventType: AUTH_AUDIT_EVENT_TYPES.authSignUpFailed,
       actorId: null,
-      organizationId: null,
-      resourceType: AUDIT_RESOURCE_TYPES.authOrganization,
+      resourceType: AUDIT_RESOURCE_TYPES.authSession,
       resourceId: null,
       decision: AUDIT_DECISIONS.deny,
       correlationId,
@@ -228,25 +196,6 @@ function isValidDisplayName(value: unknown): value is string {
     value.trim().length >= 1 &&
     value.trim().length <= MAX_DISPLAY_NAME_LENGTH
   );
-}
-
-function isValidOrganizationName(value: unknown): value is string {
-  return (
-    isNonEmptyString(value) &&
-    value.trim().length >= 1 &&
-    value.trim().length <= MAX_ORGANIZATION_NAME_LENGTH
-  );
-}
-
-function organizationSlug(name: string, organizationId: string): string {
-  const slug = name
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-  return `${slug || "workspace"}-${organizationId.slice(0, 8)}`;
 }
 
 function uniqueActions(actions: readonly string[]): string[] {

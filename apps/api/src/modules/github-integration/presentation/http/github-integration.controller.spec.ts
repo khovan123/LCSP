@@ -6,11 +6,8 @@ import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
-import {
-  RBAC_ACTIONS,
-  RBAC_METADATA_TYPES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS, RBAC_METADATA_TYPES } from "@lcsp/contracts/rbac";
 
 import { RBAC_METADATA_KEY } from "../../../../platform/rbac/decorators/rbac-metadata.js";
 import { PinSnapshotCommand } from "../../application/commands/pin-snapshot/pin-snapshot.command.js";
@@ -49,9 +46,8 @@ describe("GitHubIntegrationController.pinSnapshot", () => {
       {
         correlationId: "corr-1",
         rbacContext: {
-          organizationId: "org-1",
           userId: "manager-1",
-          subjectRole: SUBJECT_ROLES.manager,
+          subjectRole: AUTH_USER_ROLES.customer,
           scope: null,
         },
       } as never,
@@ -61,7 +57,6 @@ describe("GitHubIntegrationController.pinSnapshot", () => {
     expect(execute.mock.calls[0][0]).toBeInstanceOf(PinSnapshotCommand);
     expect(execute.mock.calls[0][0]).toMatchObject({
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       actorId: "manager-1",
       connectionId: "connection-1",
       branch: "main",
@@ -108,9 +103,8 @@ describe("GitHubIntegrationController.triggerScan", () => {
         correlationId: "corr-1",
         scanTriggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
         rbacContext: {
-          organizationId: "org-1",
           userId: "manager-1",
-          subjectRole: SUBJECT_ROLES.manager,
+          subjectRole: AUTH_USER_ROLES.customer,
           scope: null,
         },
       } as never,
@@ -123,7 +117,6 @@ describe("GitHubIntegrationController.triggerScan", () => {
       snapshotId: "snapshot-1",
       triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
       actorId: "manager-1",
-      organizationId: "org-1",
     });
     expect(status).toHaveBeenCalledWith(HttpStatus.CREATED);
   });

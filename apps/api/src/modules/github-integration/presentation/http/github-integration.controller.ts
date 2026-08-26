@@ -80,7 +80,6 @@ export class GitHubIntegrationController {
     return resultEnvelope(
       await this.commandBus.execute(
         new GitHubAppStartCommand(
-          rbacContext.organizationId,
           rbacContext.userId,
           redirectUri,
           assessmentId,
@@ -128,7 +127,7 @@ export class GitHubIntegrationController {
    *
    * @param assessmentId - Assessment that will own the snapshot.
    * @param body - Repository connection plus optional branch/ref/commit selectors.
-   * @param request - RBAC-authenticated request containing actor, tenant, scope, and correlation context.
+   * @param request - RBAC-authenticated request containing actor, scope, and correlation context.
    * @returns Standard result envelope containing persisted snapshot metadata.
    */
   @Post("assessments/:assessmentId/snapshots")
@@ -144,7 +143,6 @@ export class GitHubIntegrationController {
       await this.commandBus.execute<PinSnapshotCommand, PinSnapshotDto>(
         new PinSnapshotCommand(
           assessmentId,
-          context.organizationId,
           context.userId,
           context.role,
           context.scope ?? undefined,
@@ -187,7 +185,6 @@ export class GitHubIntegrationController {
         request.scanTriggerSource as TriggerScanCommand["triggerSource"],
         body.idempotency_key,
         context?.userId ?? null,
-        context?.organizationId ?? null,
         context?.role ?? null,
         context?.scope ?? undefined,
         request.correlationId ?? createCorrelationId(),

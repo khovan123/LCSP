@@ -18,7 +18,7 @@ import { GitHubAppStartHandler } from "./github-app-start.handler.js";
 const ALLOWED_REDIRECT_URI = "http://localhost:3000/api/github/app/callback";
 
 function buildHandler(options?: {
-  assessment?: { id: string; organizationId: string } | null;
+  assessment?: { id: string } | null;
   repositoryConnection?: { assessmentId: string | null } | null;
 }) {
   const save = jest
@@ -59,7 +59,7 @@ function buildHandler(options?: {
   const configService = { get } as unknown as ConfigService;
 
   const findUnique = jest
-    .fn<() => Promise<{ id: string; organizationId: string } | null>>()
+    .fn<() => Promise<{ id: string } | null>>()
     .mockResolvedValue(
       options?.assessment === undefined ? null : options.assessment,
     );
@@ -93,7 +93,6 @@ describe("GitHubAppStartHandler", () => {
 
     const result = await handler.execute(
       new GitHubAppStartCommand(
-        "org-1",
         "user-1",
         ALLOWED_REDIRECT_URI,
         undefined,
@@ -117,7 +116,6 @@ describe("GitHubAppStartHandler", () => {
     await expect(
       handler.execute(
         new GitHubAppStartCommand(
-          "org-1",
           "user-1",
           "https://evil.example/callback",
           undefined,
@@ -130,7 +128,6 @@ describe("GitHubAppStartHandler", () => {
     try {
       await handler.execute(
         new GitHubAppStartCommand(
-          "org-1",
           "user-1",
           "https://evil.example/callback",
           undefined,
@@ -156,7 +153,6 @@ describe("GitHubAppStartHandler", () => {
     await expect(
       handler.execute(
         new GitHubAppStartCommand(
-          "org-1",
           "user-1",
           undefined,
           undefined,
@@ -169,15 +165,12 @@ describe("GitHubAppStartHandler", () => {
   });
 
   // T04
-  it("throws BadRequestException with ASSESSMENT_NOT_FOUND when assessment_id is not in the org", async () => {
-    const { handler, save } = buildHandler({
-      assessment: { id: "assessment-1", organizationId: "org-other" },
-    });
+  it("throws BadRequestException with ASSESSMENT_NOT_FOUND when assessment_id cannot be found", async () => {
+    const { handler, save } = buildHandler({ assessment: null });
 
     await expect(
       handler.execute(
         new GitHubAppStartCommand(
-          "org-1",
           "user-1",
           ALLOWED_REDIRECT_URI,
           "assessment-1",
@@ -190,7 +183,6 @@ describe("GitHubAppStartHandler", () => {
     try {
       await handler.execute(
         new GitHubAppStartCommand(
-          "org-1",
           "user-1",
           ALLOWED_REDIRECT_URI,
           "assessment-1",
@@ -217,7 +209,6 @@ describe("GitHubAppStartHandler", () => {
 
     await handler.execute(
       new GitHubAppStartCommand(
-        "org-1",
         "user-1",
         ALLOWED_REDIRECT_URI,
         undefined,
@@ -227,7 +218,6 @@ describe("GitHubAppStartHandler", () => {
     );
 
     const savedState = save.mock.calls[0][0];
-    expect(savedState.organizationId).toBe("org-1");
     expect(savedState.userId).toBe("user-1");
     expect(savedState.redirectUri).toBe(ALLOWED_REDIRECT_URI);
     const ttlMs = savedState.expiresAt.getTime() - before;
@@ -238,12 +228,11 @@ describe("GitHubAppStartHandler", () => {
   it("starts a managed installation update when installation belongs to the actor workspace", async () => {
     const { handler, save, findFirst } = buildHandler({
       repositoryConnection: { assessmentId: "assessment-1" },
-      assessment: { id: "assessment-1", organizationId: "org-1" },
+      assessment: { id: "assessment-1" },
     });
 
     await handler.execute(
       new GitHubAppStartCommand(
-        "org-1",
         "user-1",
         ALLOWED_REDIRECT_URI,
         undefined,
@@ -256,7 +245,6 @@ describe("GitHubAppStartHandler", () => {
     expect(findFirst).toHaveBeenCalledWith({
       where: {
         installationId: "installation-1",
-        organizationId: "org-1",
         userId: "user-1",
         revokedAt: null,
       },
@@ -271,7 +259,6 @@ describe("GitHubAppStartHandler", () => {
     await expect(
       handler.execute(
         new GitHubAppStartCommand(
-          "org-1",
           "user-1",
           ALLOWED_REDIRECT_URI,
           undefined,
@@ -285,7 +272,6 @@ describe("GitHubAppStartHandler", () => {
     try {
       await handler.execute(
         new GitHubAppStartCommand(
-          "org-1",
           "user-1",
           ALLOWED_REDIRECT_URI,
           undefined,
@@ -312,7 +298,6 @@ describe("GitHubAppStartHandler", () => {
 
     const result = await handler.execute(
       new GitHubAppStartCommand(
-        "org-1",
         "user-1",
         ALLOWED_REDIRECT_URI,
         undefined,
@@ -330,7 +315,6 @@ describe("GitHubAppStartHandler", () => {
 
     await handler.execute(
       new GitHubAppStartCommand(
-        "org-1",
         "user-1",
         ALLOWED_REDIRECT_URI,
         undefined,
@@ -346,7 +330,6 @@ describe("GitHubAppStartHandler", () => {
       GITHUB_INTEGRATION_EVENT_TYPES.appInstallStarted,
     );
     expect(event.actorId).toBe("user-1");
-    expect(event.organizationId).toBe("org-1");
     expect(event.correlationId).toBe("corr-1");
     expect(event.decision).toBe(RBAC_DECISION.allow);
     expect(JSON.stringify(event.payload)).not.toMatch(savedState.state);

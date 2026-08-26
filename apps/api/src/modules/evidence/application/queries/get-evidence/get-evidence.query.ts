@@ -5,7 +5,6 @@ import type { EvidenceDetailDto } from "../../contracts/evidence/evidence-detail
 export class GetEvidenceQuery extends Query<EvidenceDetailDto> {
   constructor(
     public readonly assessmentId: string,
-    public readonly organizationId: string,
     public readonly scope: string | null,
     public readonly selectedAction: string | null,
     public readonly correlationId: string,

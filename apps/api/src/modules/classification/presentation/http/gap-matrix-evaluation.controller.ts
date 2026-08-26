@@ -48,7 +48,6 @@ export class GapMatrixEvaluationController {
       await this.queryBus.execute(
         new EvaluateGapMatrixQuery(
           assessmentId,
-          request.rbacContext.organizationId,
           input,
           request.rbacContext.userId,
           correlationId,

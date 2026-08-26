@@ -40,7 +40,6 @@ export class RerunClassificationHandler implements ICommandHandler<RerunClassifi
     const evidenceReport = await this.prisma.technicalEvidenceReport.findFirst({
       where: {
         assessmentId: command.assessmentId,
-        organizationId: command.rbacContext.organizationId,
         status: toPrismaEvidenceAcceptanceStatus(
           TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
         ),
@@ -65,7 +64,6 @@ export class RerunClassificationHandler implements ICommandHandler<RerunClassifi
       aggregateType: OUTBOX_AGGREGATE_TYPES.technicalEvidenceReport,
       aggregateId: evidenceReport.id,
       eventType: SCAN_EVENT_TYPES.evidenceAccepted,
-      organizationId: command.rbacContext.organizationId,
       assessmentId: command.assessmentId,
       correlationId: command.correlationId,
       causationId: evidenceReport.id,
@@ -94,7 +92,6 @@ export class RerunClassificationHandler implements ICommandHandler<RerunClassifi
         {
           eventType: SCAN_EVENT_TYPES.classificationRerunTriggeredAudit,
           actorId: command.rbacContext.userId,
-          organizationId: command.rbacContext.organizationId,
           assessmentId: command.assessmentId,
           resourceType: AUDIT_RESOURCE_TYPES.technicalEvidenceReport,
           resourceId: evidenceReport.id,

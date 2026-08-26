@@ -50,7 +50,6 @@ export class LegalBasisRetrievalController {
       await this.queryBus.execute(
         new RetrieveLegalBasisQuery(
           assessmentId,
-          request.rbacContext.organizationId,
           input,
           request.rbacContext.userId,
           correlationId,

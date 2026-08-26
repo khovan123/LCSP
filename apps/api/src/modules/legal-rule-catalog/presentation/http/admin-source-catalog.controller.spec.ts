@@ -13,7 +13,6 @@ function request(): AuthenticatedRequest {
     rbacContext: {
       userId: "user-1",
       sessionId: "session-1",
-      organizationId: "organization-1",
       subjectRole: "Manager",
       scope: null,
       grantedActions: [RBAC_ACTIONS.legalCorpusRead],
@@ -42,7 +41,6 @@ describe("AdminSourceCatalogController", () => {
     expect(execute).toHaveBeenCalledWith(
       expect.objectContaining({
         assessmentId: "assessment-1",
-        organizationId: "organization-1",
         input: { catalogId: "catalog_vbpl_vn" },
       }) as GetAdminSourceCatalogQuery,
     );

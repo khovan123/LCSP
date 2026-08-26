@@ -68,7 +68,6 @@ export class DocumentController {
       await this.commandBus.execute(
         new RequestFinalReportCommand(
           assessmentId,
-          request.rbacContext.organizationId,
           request.rbacContext.userId,
           correlationId,
         ),
@@ -100,7 +99,6 @@ export class DocumentController {
       await this.commandBus.execute(
         new RequestGapAnalysisCommand(
           assessmentId,
-          request.rbacContext.organizationId,
           request.rbacContext.userId,
           correlationId,
         ),
@@ -133,7 +131,6 @@ export class DocumentController {
         new GetDocumentQuery(
           assessmentId,
           documentRequestId,
-          context.organizationId,
           context.scope,
           context.selectedAction,
           request.correlationId as string,
@@ -164,7 +161,6 @@ export class DocumentController {
       await this.queryBus.execute(
         new ListDocumentsQuery(
           assessmentId,
-          context.organizationId,
           context.scope,
           context.selectedAction,
           request.correlationId as string,

@@ -3,9 +3,8 @@ import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
-import { SUBJECT_ROLES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES, type AuthUserRole } from "@lcsp/contracts/auth";
 import { SCAN_ERROR_CODES, SCAN_JOB_GUIDANCE } from "@lcsp/contracts/scan";
-import { NotFoundException } from "@nestjs/common";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { GetScanJobHandler } from "./get-scan-job.handler.js";
@@ -33,8 +32,7 @@ function query(
   overrides: Partial<{
     assessmentId: string;
     scanJobId: string;
-    organizationId: string;
-    subjectRole: (typeof SUBJECT_ROLES)[keyof typeof SUBJECT_ROLES];
+    subjectRole: AuthUserRole;
     scope: string | null;
     correlationId: string;
   }> = {},
@@ -42,8 +40,7 @@ function query(
   return new GetScanJobQuery(
     overrides.assessmentId ?? "assessment-1",
     overrides.scanJobId ?? "scan-job-1",
-    overrides.organizationId ?? "org-1",
-    overrides.subjectRole ?? SUBJECT_ROLES.manager,
+    overrides.subjectRole ?? AUTH_USER_ROLES.customer,
     overrides.scope ?? null,
     overrides.correlationId ?? "request-corr-1",
   );
@@ -69,7 +66,6 @@ describe("GetScanJobHandler", () => {
       where: {
         id: "scan-job-1",
         assessmentId: "assessment-1",
-        organizationId: "org-1",
       },
       select: {
         id: true,
@@ -151,7 +147,7 @@ describe("GetScanJobHandler", () => {
     await expect(
       handler.execute(
         query({
-          subjectRole: SUBJECT_ROLES.systemAdmin,
+          subjectRole: AUTH_USER_ROLES.admin,
           scope: "assessment-other",
         }),
       ),
@@ -164,7 +160,7 @@ describe("GetScanJobHandler", () => {
 
     const result = await handler.execute(
       query({
-        subjectRole: SUBJECT_ROLES.systemAdmin,
+        subjectRole: AUTH_USER_ROLES.admin,
         scope: "assessment-1",
       }),
     );

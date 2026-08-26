@@ -5,13 +5,9 @@ import {
   ASSESSMENT_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
 import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
-import {
-  RBAC_ACTIONS,
-  RBAC_DECISION,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
+import { RBAC_ACTIONS, RBAC_DECISION } from "@lcsp/contracts/rbac";
 import {
   ForbiddenException,
   UnprocessableEntityException,
@@ -87,16 +83,13 @@ describe("CreateAssessmentHandler", () => {
 
     const result = await handler.execute(
       new CreateAssessmentCommand(
-        "org-1",
         "user-1",
         "My AI System Assessment",
         undefined,
         "corr-1",
         {
-          subjectRole: SUBJECT_ROLES.manager,
+          subjectRole: AUTH_USER_ROLES.customer,
           selectedAction: RBAC_ACTIONS.assessmentCreate,
-          policyId: "policy-manager-workspace",
-          policyVersion: "2026-06-26",
         },
       ),
     );
@@ -113,37 +106,19 @@ describe("CreateAssessmentHandler", () => {
 
     await expect(
       handler.execute(
-        new CreateAssessmentCommand(
-          "org-1",
-          "user-1",
-          undefined,
-          undefined,
-          "corr-1",
-          {
-            subjectRole: SUBJECT_ROLES.manager,
-            selectedAction: RBAC_ACTIONS.assessmentCreate,
-            policyId: "policy-manager-workspace",
-            policyVersion: "2026-06-26",
-          },
-        ),
+        new CreateAssessmentCommand("user-1", undefined, undefined, "corr-1", {
+          subjectRole: AUTH_USER_ROLES.customer,
+          selectedAction: RBAC_ACTIONS.assessmentCreate,
+        }),
       ),
     ).rejects.toThrow(UnprocessableEntityException);
 
     try {
       await handler.execute(
-        new CreateAssessmentCommand(
-          "org-1",
-          "user-1",
-          undefined,
-          undefined,
-          "corr-1",
-          {
-            subjectRole: SUBJECT_ROLES.manager,
-            selectedAction: RBAC_ACTIONS.assessmentCreate,
-            policyId: "policy-manager-workspace",
-            policyVersion: "2026-06-26",
-          },
-        ),
+        new CreateAssessmentCommand("user-1", undefined, undefined, "corr-1", {
+          subjectRole: AUTH_USER_ROLES.customer,
+          selectedAction: RBAC_ACTIONS.assessmentCreate,
+        }),
       );
     } catch (error) {
       expect(
@@ -165,19 +140,10 @@ describe("CreateAssessmentHandler", () => {
 
     await expect(
       handler.execute(
-        new CreateAssessmentCommand(
-          "org-1",
-          "user-1",
-          longName,
-          undefined,
-          "corr-1",
-          {
-            subjectRole: SUBJECT_ROLES.manager,
-            selectedAction: RBAC_ACTIONS.assessmentCreate,
-            policyId: "policy-manager-workspace",
-            policyVersion: "2026-06-26",
-          },
-        ),
+        new CreateAssessmentCommand("user-1", longName, undefined, "corr-1", {
+          subjectRole: AUTH_USER_ROLES.customer,
+          selectedAction: RBAC_ACTIONS.assessmentCreate,
+        }),
       ),
     ).rejects.toThrow(UnprocessableEntityException);
     expect(saveInTx).not.toHaveBeenCalled();
@@ -190,16 +156,13 @@ describe("CreateAssessmentHandler", () => {
     await expect(
       handler.execute(
         new CreateAssessmentCommand(
-          "org-1",
           "user-1",
           "Valid name",
           longDescription,
           "corr-1",
           {
-            subjectRole: SUBJECT_ROLES.manager,
+            subjectRole: AUTH_USER_ROLES.customer,
             selectedAction: RBAC_ACTIONS.assessmentCreate,
-            policyId: "policy-manager-workspace",
-            policyVersion: "2026-06-26",
           },
         ),
       ),
@@ -208,28 +171,18 @@ describe("CreateAssessmentHandler", () => {
   });
 
   // T05, T06
-  it("sets ownerId and organizationId from the command", async () => {
+  it("sets ownerId from the command", async () => {
     const { handler, saveInTx } = buildHandler();
 
     await handler.execute(
-      new CreateAssessmentCommand(
-        "org-42",
-        "user-42",
-        "Name",
-        undefined,
-        "corr-1",
-        {
-          subjectRole: SUBJECT_ROLES.manager,
-          selectedAction: RBAC_ACTIONS.assessmentCreate,
-          policyId: "policy-manager-workspace",
-          policyVersion: "2026-06-26",
-        },
-      ),
+      new CreateAssessmentCommand("user-42", "Name", undefined, "corr-1", {
+        subjectRole: AUTH_USER_ROLES.customer,
+        selectedAction: RBAC_ACTIONS.assessmentCreate,
+      }),
     );
 
     const savedAssessment = saveInTx.mock.calls[0][0];
     expect(savedAssessment.ownerId).toBe("user-42");
-    expect(savedAssessment.organizationId).toBe("org-42");
   });
 
   // T07
@@ -238,16 +191,13 @@ describe("CreateAssessmentHandler", () => {
 
     await handler.execute(
       new CreateAssessmentCommand(
-        "org-1",
         "user-1",
         "Secret Project Name",
         "Sensitive description",
         "corr-1",
         {
-          subjectRole: SUBJECT_ROLES.manager,
+          subjectRole: AUTH_USER_ROLES.customer,
           selectedAction: RBAC_ACTIONS.assessmentCreate,
-          policyId: "policy-manager-workspace",
-          policyVersion: "2026-06-26",
         },
       ),
     );
@@ -256,12 +206,9 @@ describe("CreateAssessmentHandler", () => {
     const event = writeInTx.mock.calls[0][0];
     expect(event.eventType).toBe(ASSESSMENT_EVENT_TYPES.created);
     expect(event.actorId).toBe("user-1");
-    expect(event.organizationId).toBe("org-1");
     expect(event.resourceType).toBe(AUDIT_RESOURCE_TYPES.assessment);
     expect(event.resourceId).toBeTruthy();
     expect(event.correlationId).toBe("corr-1");
-    expect(event.policyId).toBe("policy-manager-workspace");
-    expect(event.policyVersion).toBe("2026-06-26");
     expect(event.decision).toBe(RBAC_DECISION.allow);
     expect(JSON.stringify(event.payload)).not.toMatch(/Secret Project Name/);
     expect(JSON.stringify(event.payload)).not.toMatch(/Sensitive description/);
@@ -271,19 +218,10 @@ describe("CreateAssessmentHandler", () => {
     const { handler, enqueue, tx } = buildHandler();
 
     await handler.execute(
-      new CreateAssessmentCommand(
-        "org-1",
-        "user-1",
-        "Name",
-        undefined,
-        "corr-1",
-        {
-          subjectRole: SUBJECT_ROLES.manager,
-          selectedAction: RBAC_ACTIONS.assessmentCreate,
-          policyId: "policy-manager-workspace",
-          policyVersion: "2026-06-26",
-        },
-      ),
+      new CreateAssessmentCommand("user-1", "Name", undefined, "corr-1", {
+        subjectRole: AUTH_USER_ROLES.customer,
+        selectedAction: RBAC_ACTIONS.assessmentCreate,
+      }),
     );
 
     expect(enqueue).toHaveBeenCalledTimes(1);
@@ -292,13 +230,11 @@ describe("CreateAssessmentHandler", () => {
     expect(input.aggregateType).toBe(OUTBOX_AGGREGATE_TYPES.assessment);
     expect(input.correlationId).toBe("corr-1");
     expect(input.causationId).toBe("corr-1");
-    expect(input.organizationId).toBe("org-1");
     expect(input.assessmentId).toBeTruthy();
     expect(input.payload).toEqual(
       expect.objectContaining({
         correlationId: "corr-1",
         causationId: "corr-1",
-        organizationId: "org-1",
       }),
     );
     expect(enqueue.mock.calls[0][1]).toBe(tx);
@@ -309,19 +245,10 @@ describe("CreateAssessmentHandler", () => {
       buildHandler();
 
     await handler.execute(
-      new CreateAssessmentCommand(
-        "org-1",
-        "user-1",
-        "Name",
-        undefined,
-        "corr-1",
-        {
-          subjectRole: SUBJECT_ROLES.manager,
-          selectedAction: RBAC_ACTIONS.assessmentCreate,
-          policyId: "policy-manager-workspace",
-          policyVersion: "2026-06-26",
-        },
-      ),
+      new CreateAssessmentCommand("user-1", "Name", undefined, "corr-1", {
+        subjectRole: AUTH_USER_ROLES.customer,
+        selectedAction: RBAC_ACTIONS.assessmentCreate,
+      }),
     );
 
     expect(transaction).toHaveBeenCalledTimes(1);
@@ -336,16 +263,13 @@ describe("CreateAssessmentHandler", () => {
     await expect(
       handler.execute(
         new CreateAssessmentCommand(
-          "org-1",
           "system-admin-1",
           "Denied",
           undefined,
           "corr-deny",
           {
-            subjectRole: SUBJECT_ROLES.systemAdmin,
+            subjectRole: AUTH_USER_ROLES.admin,
             selectedAction: RBAC_ACTIONS.assessmentCreate,
-            policyId: "policy-system-admin",
-            policyVersion: "2026-06-26",
           },
         ),
       ),
@@ -357,14 +281,11 @@ describe("CreateAssessmentHandler", () => {
       expect.objectContaining({
         eventType: ASSESSMENT_EVENT_TYPES.created,
         actorId: "system-admin-1",
-        organizationId: "org-1",
         resourceType: AUDIT_RESOURCE_TYPES.assessment,
         resourceId: null,
         correlationId: "corr-deny",
         decision: RBAC_DECISION.deny,
         reasonCode: AUTH_ERROR_CODES.rbacDenied,
-        policyId: "policy-system-admin",
-        policyVersion: "2026-06-26",
       }),
     );
   });

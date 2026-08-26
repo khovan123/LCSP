@@ -1,10 +1,7 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
-import {
-  RBAC_ACTIONS,
-  RBAC_METADATA_TYPES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { RBAC_ACTIONS, RBAC_METADATA_TYPES } from "@lcsp/contracts/rbac";
 import { RBAC_METADATA_KEY } from "../../../../platform/rbac/decorators/rbac-metadata.js";
 import { GetDocumentQuery } from "../../application/queries/get-document/get-document.query.js";
 import { RequestGapAnalysisCommand } from "../../application/commands/request-gap-analysis/request-gap-analysis.command.js";
@@ -62,7 +59,7 @@ describe("DocumentController dispatch", () => {
       { verifySignedDownloadToken: jest.fn() } as never,
     );
     const req = {
-      rbacContext: { organizationId: "org-1", userId: "user-1" },
+      rbacContext: { userId: "user-1" },
       correlationId: "corr-1",
     } as unknown as Parameters<DocumentController["requestGapAnalysis"]>[1];
 
@@ -87,8 +84,7 @@ describe("DocumentController dispatch", () => {
       rbacContext: {
         userId: "system-admin-1",
         sessionId: "session-1",
-        organizationId: "org-1",
-        subjectRole: SUBJECT_ROLES.systemAdmin,
+        subjectRole: AUTH_USER_ROLES.admin,
         scope: "assessment-1",
         grantedActions: [RBAC_ACTIONS.documentReadRedacted],
         selectedAction: RBAC_ACTIONS.documentReadRedacted,
@@ -102,7 +98,6 @@ describe("DocumentController dispatch", () => {
     expect(execute.mock.calls[0]?.[0]).toMatchObject({
       assessmentId: "assessment-1",
       documentRequestId: "doc-1",
-      organizationId: "org-1",
       scope: "assessment-1",
       selectedAction: RBAC_ACTIONS.documentReadRedacted,
       correlationId: "corr-1",

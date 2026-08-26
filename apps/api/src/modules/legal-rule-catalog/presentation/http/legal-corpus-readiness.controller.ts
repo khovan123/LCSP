@@ -45,7 +45,6 @@ export class LegalCorpusReadinessController {
       await this.queryBus.execute(
         new GetLegalCorpusReadinessQuery(
           assessmentId,
-          request.rbacContext.organizationId,
           input.effectiveDate,
           input.pinnedCorpusVersionId,
           request.rbacContext.userId,

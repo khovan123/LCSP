@@ -3,13 +3,9 @@ export type AuthMessages = {
     authRequired: { title: string; detail: string };
     invalidCredentials: { title: string; detail: string };
     invalidInviteState: { title: string; detail: string };
-    membershipMissing: { title: string; detail: string };
     emailVerificationRequired: { title: string; detail: string };
     sessionInvalid: { title: string; detail: string };
     temporaryLock: { title: string; detail: string };
-    authzPolicyUnavailable: { title: string; detail: string };
-    authzSubjectIncomplete: { title: string; detail: string };
-    authzTenantScopeMismatch: { title: string; detail: string };
     authzStateGateBlocked: { title: string; detail: string };
     authzEvaluatorFailure: { title: string; detail: string };
     validationFailed: { title: string; detail: string };
@@ -156,8 +152,6 @@ export type PagesMessages = {
     formDescription: string;
     displayNameLabel: string;
     displayNameDescription: string;
-    organizationNameLabel: string;
-    organizationNameDescription: string;
     emailLabel: string;
     emailDescription: string;
     passwordLabel: string;
@@ -170,7 +164,6 @@ export type PagesMessages = {
     signInInstead: string;
     errors: {
       displayNameRequired: string;
-      organizationNameRequired: string;
       emailRequired: string;
       emailInvalid: string;
       passwordRequired: string;
@@ -374,6 +367,7 @@ export type PagesMessages = {
         primaryEmail: string;
         organization: string;
         membershipRole: string;
+        accountRole: string;
         createdAt: string;
         updatedAt: string;
         recoveryEmail: string;

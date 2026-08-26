@@ -40,12 +40,11 @@ export class ReadinessExportDocumentController {
   ) {
     const format = parseFormat(requestedFormat);
     const locale = parseLocale(requestedLocale);
-    const { userId, organizationId } = req.rbacContext;
+    const { userId } = req.rbacContext;
     const download = await this.queryBus.execute(
       new DownloadReadinessExportQuery(
         assessmentId,
         exportId,
-        organizationId,
         userId,
         req.correlationId || randomUUID(),
         format,

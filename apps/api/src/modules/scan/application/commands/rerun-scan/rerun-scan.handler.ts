@@ -81,8 +81,7 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
     if (existing) {
       if (
         existing.assessmentId !== command.assessmentId ||
-        existing.snapshotId !== command.snapshotId ||
-        existing.organizationId !== rbac.organizationId
+        existing.snapshotId !== command.snapshotId
       ) {
         throw problemException(
           GITHUB_INTEGRATION_ERROR_CODES.scanIdempotencyConflict,
@@ -103,16 +102,11 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
       select: {
         id: true,
         assessmentId: true,
-        organizationId: true,
         commitSha: true,
       },
     });
 
-    if (
-      !snapshot ||
-      snapshot.organizationId !== rbac.organizationId ||
-      snapshot.assessmentId !== command.assessmentId
-    ) {
+    if (!snapshot || snapshot.assessmentId !== command.assessmentId) {
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
         command.correlationId,
@@ -122,10 +116,10 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
 
     const assessment = await this.prisma.assessment.findUnique({
       where: { id: command.assessmentId },
-      select: { id: true, organizationId: true, ownerId: true, status: true },
+      select: { id: true, ownerId: true, status: true },
     });
 
-    if (!assessment || assessment.organizationId !== rbac.organizationId) {
+    if (!assessment) {
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
         command.correlationId,
@@ -210,7 +204,6 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
           aggregateType: OUTBOX_AGGREGATE_TYPES.repositoryScanJob,
           aggregateId: newScanJobId,
           eventType: GITHUB_INTEGRATION_EVENT_TYPES.scanTriggered,
-          organizationId: rbac.organizationId,
           assessmentId: command.assessmentId,
           correlationId: command.correlationId,
           causationId: command.correlationId,
@@ -224,7 +217,6 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
             assessmentId: command.assessmentId,
             snapshotId: command.snapshotId,
             commitSha: snapshot.commitSha,
-            organizationId: rbac.organizationId,
             triggerSource,
             idempotencyKey: command.idempotencyKey,
             correlationId: command.correlationId,
@@ -237,7 +229,6 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
             id: newScanJobId,
             assessmentId: command.assessmentId,
             snapshotId: command.snapshotId,
-            organizationId: rbac.organizationId,
             idempotencyKey: command.idempotencyKey,
             triggerSource: toPrismaRepositoryScanTriggerSource(triggerSource),
             status: toPrismaRepositoryScanJobStatus(status),
@@ -265,7 +256,6 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
     await this.auditWriter.write({
       eventType: SCAN_EVENT_TYPES.scanRerunTriggeredAudit,
       actorId: rbac.userId,
-      organizationId: rbac.organizationId,
       assessmentId: command.assessmentId,
       resourceType: AUDIT_RESOURCE_TYPES.repositoryScanJob,
       resourceId: newScanJobId,
