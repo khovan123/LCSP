@@ -10,7 +10,6 @@ export type SignUpResponse = {
   user_id: string;
   session_token: string;
   expires_at: string;
-  allowed_actions: string[];
   correlationId: string;
 };
 

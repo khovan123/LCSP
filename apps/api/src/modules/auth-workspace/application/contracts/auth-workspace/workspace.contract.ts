@@ -13,7 +13,6 @@ export type WorkspaceAuthorization =
       ok: true;
       decision: AuthorizationDecision;
       role: AuthUserRole;
-      granted_actions: string[];
     };
 
 export type WorkspaceSuccess = {
@@ -21,7 +20,6 @@ export type WorkspaceSuccess = {
   user_id: string;
   display_name: string;
   role: AuthUserRole;
-  granted_actions: string[];
   session_expires_at: string;
   mfa_verified: boolean;
   correlationId: string;

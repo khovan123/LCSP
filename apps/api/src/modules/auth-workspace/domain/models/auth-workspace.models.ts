@@ -18,7 +18,6 @@ export type AuthorizationDecision = {
   session_id?: string | null;
   resource_type: AuditResourceType;
   resource_id: string;
-  action: string;
   decision: RbacDecisionValue;
   reason_code: AuthErrorCode | RbacReasonCode;
   correlationId: string;

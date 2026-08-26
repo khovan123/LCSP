@@ -5,6 +5,4 @@ export interface RbacRequestContext {
   sessionId: string;
   role: AuthUserRole;
   scope: string | null;
-  grantedActions: readonly string[];
-  selectedAction: string | null;
 }

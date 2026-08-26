@@ -246,7 +246,6 @@ export class PrismaAuthorizationDecisionRepository implements AuthorizationDecis
         sessionId: decision.session_id ?? null,
         resourceType: toPrismaAuditResourceType(decision.resource_type),
         resourceId: decision.resource_id,
-        action: decision.action,
         decision: toPrismaAuthDecision(decision.decision),
         reasonCode: toPrismaAuthorizationReasonCode(decision.reason_code),
         correlationId: decision.correlationId,

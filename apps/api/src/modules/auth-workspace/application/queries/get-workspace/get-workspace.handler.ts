@@ -116,7 +116,6 @@ export class GetWorkspaceHandler {
       user_id: user.id,
       display_name: user.displayName ?? user.email.toString(),
       role: authorization.role,
-      granted_actions: authorization.granted_actions,
       session_expires_at: new Date(session.expiresAt).toISOString(),
       mfa_verified: session.isMfaVerified(),
       correlationId: correlationId,

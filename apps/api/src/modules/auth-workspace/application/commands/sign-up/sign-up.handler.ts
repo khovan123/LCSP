@@ -66,7 +66,6 @@ export class SignUpHandler {
     const sessionToken = issueOpaqueToken();
     const sessionExpiresAt = new Date(Date.now() + SESSION_TTL_MS);
     const role = AUTH_USER_ROLES.customer;
-    const allowedActions: string[] = [];
     const newUserId = crypto.randomUUID();
     const newSessionId = crypto.randomUUID();
 
@@ -155,7 +154,6 @@ export class SignUpHandler {
       user_id: userId,
       session_token: sessionToken,
       expires_at: sessionExpiresAt.toISOString(),
-      allowed_actions: allowedActions,
       correlationId,
     };
   }

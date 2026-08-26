@@ -4,9 +4,6 @@ import {
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
   createProblemResult,
 } from "@lcsp/contracts/auth";
-const RBAC_ACTIONS = {
-  workspaceRead: "workspace:read",
-} as const;
 
 const RBAC_DECISION = {
   allow: "ALLOW",
@@ -187,7 +184,6 @@ export class AuthWorkspaceSupportService {
         session_id: null,
         resource_type: AUDIT_RESOURCE_TYPES.workspace,
         resource_id: resourceId,
-        action: RBAC_ACTIONS.workspaceRead,
         decision: RBAC_DECISION.deny,
         reason_code: AUTH_ERROR_CODES.sessionInvalid,
         correlationId: correlationId,
@@ -200,7 +196,6 @@ export class AuthWorkspaceSupportService {
       session_id: null,
       resource_type: AUDIT_RESOURCE_TYPES.workspace,
       resource_id: resourceId,
-      action: RBAC_ACTIONS.workspaceRead,
       decision: RBAC_DECISION.allow,
       reason_code: RBAC_REASON_CODE.authorized,
       correlationId: correlationId,
@@ -210,7 +205,6 @@ export class AuthWorkspaceSupportService {
       ok: true,
       decision: allowed,
       role: user.role,
-      granted_actions: [],
     };
   }
 

@@ -174,7 +174,6 @@ model AuthDecisionLog {
   sessionId     String?
   resourceType  AuditResourceType
   resourceId    String
-  action        String
   decision      AuthDecision
   reasonCode    AuthorizationReasonCode
   correlationId String

@@ -99,7 +99,6 @@ export class RbacPreflightService {
         session_id: null,
         resource_type: DECISION_LOG_RESOURCE_TYPE,
         resource_id: input.requiredRoles.join(","),
-        action: `roles:${input.requiredRoles.join(",")}`,
         decision,
         reason_code: reasonCode,
         correlationId: input.correlationId,
