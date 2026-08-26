@@ -22,6 +22,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositorySnapshotGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
@@ -181,17 +182,19 @@ function triggerRerun(app: INestApplication, token: string) {
 }
 
 async function createSnapshot(prisma: PrismaClient, id: string): Promise<void> {
-  await prisma.repositorySnapshot.create({
+  await seedRepositorySnapshotGraph(prisma, {
+    assessmentId: "assessment-1",
+    userId: "user-1",
+    connectionId: "connection-1",
+    snapshotId: id,
+    repositoryId: "repo-1",
+  });
+  await prisma.repositorySnapshot.update({
+    where: { id },
     data: {
-      id,
-      assessmentId: "assessment-1",
-      connectionId: "connection-1",
-      repositoryId: "repo-1",
-      repositoryFullName: "acme/example-repo",
       branch: "main",
       commitSha: "a".repeat(40),
       providerMetadata: { requestedRevision: "main" },
-      actorId: "user-1",
       status: REPOSITORY_SNAPSHOT_STATUSES.ready,
     },
   });

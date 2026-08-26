@@ -11,6 +11,8 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedLegalClassificationParents,
+  seedVerifiedProfileGraph,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, successBody } from "./support/http.js";
 
@@ -45,12 +47,13 @@ describe("Citation set validation endpoint (e2e)", () => {
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-    await prisma.assessment.create({
-      data: {
-        id: ASSESSMENT_ID,
-        ownerId: "user-1",
-        name: "Citation validation assessment",
-      },
+    await seedVerifiedProfileGraph(prisma, {
+      assessmentId: ASSESSMENT_ID,
+      verifiedProfileId: "verified-profile-1",
+    });
+    await prisma.assessment.update({
+      where: { id: ASSESSMENT_ID },
+      data: { name: "Citation validation assessment" },
     });
     await seedCorpusAndMatch(prisma);
     managerToken = await signIn(app);
@@ -114,11 +117,14 @@ describe("Citation set validation endpoint (e2e)", () => {
 });
 
 async function seedCorpusAndMatch(prisma: PrismaClient): Promise<void> {
-  await prisma.legalCorpusVersion.create({
+  await seedLegalClassificationParents(prisma, {
+    corpusVersionId: CORPUS_ID,
+    catalogVersionId: "catalog-1",
+  });
+  await prisma.legalCorpusVersion.update({
+    where: { id: CORPUS_ID },
     data: {
-      id: CORPUS_ID,
       version: "corpus-citation-v1",
-      status: "APPROVED",
       sourceManifest: {},
     },
   });
