@@ -1,7 +1,4 @@
-import {
-  ASSESSMENT_ERROR_CODES,
-  ASSESSMENT_STATUS_CODES,
-} from "@lcsp/contracts/assessment";
+import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
