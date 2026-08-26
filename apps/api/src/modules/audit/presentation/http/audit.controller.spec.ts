@@ -1,5 +1,5 @@
 import { AUDIT_ERROR_CODES } from "@lcsp/contracts/audit";
-import { RBAC_ACTIONS, RBAC_METADATA_TYPES } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { jest } from "@jest/globals";
 import type { CommandBus, QueryBus } from "@nestjs/cqrs";
 import type { Response } from "express";
@@ -13,17 +13,16 @@ import { AuditExportStorageService } from "../../infrastructure/storage/audit-ex
 import { AuditController } from "./audit.controller.js";
 
 describe("AuditController", () => {
-  it("requires the audit:read RBAC action", () => {
+  it("requires the ADMIN role to read audit events", () => {
     const metadata = Reflect.getMetadata(
       RBAC_METADATA_KEY,
-      // Reading decorator metadata requires the unbound prototype method.
       // eslint-disable-next-line @typescript-eslint/unbound-method
       AuditController.prototype.listAuditEvents,
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: RBAC_METADATA_TYPES.action,
-      action: RBAC_ACTIONS.auditRead,
+      type: "roles",
+      roles: [AUTH_USER_ROLES.admin],
     });
   });
 
@@ -61,7 +60,7 @@ describe("AuditController", () => {
     });
   });
 
-  it("requires the audit:export RBAC action for export request", () => {
+  it("requires the ADMIN role to request an audit export", () => {
     const metadata = Reflect.getMetadata(
       RBAC_METADATA_KEY,
       // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -69,8 +68,8 @@ describe("AuditController", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: RBAC_METADATA_TYPES.action,
-      action: RBAC_ACTIONS.auditExport,
+      type: "roles",
+      roles: [AUTH_USER_ROLES.admin],
     });
   });
 
