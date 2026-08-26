@@ -12,6 +12,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositoryScanGraph,
 } from "./support/auth-workspace-test-helpers.js";
 
 import {
@@ -952,6 +953,13 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         },
       });
 
+      await seedRepositoryScanGraph(prisma, {
+        assessmentId,
+        userId: "user-1",
+        connectionId: "connection-readiness-1",
+        snapshotId: "snap-1",
+        scanJobId: "job-1",
+      });
       await prisma.technicalEvidenceReport.create({
         data: {
           id: "ter-1",
@@ -1101,6 +1109,13 @@ describe("Wizard Endpoints (e2e) [MW-wiz-001, MW-wiz-002, MW-wiz-003]", () => {
         },
       });
 
+      await seedRepositoryScanGraph(prisma, {
+        assessmentId,
+        userId: "user-1",
+        connectionId: "connection-readiness-2",
+        snapshotId: "snap-2",
+        scanJobId: "job-2",
+      });
       await prisma.technicalEvidenceReport.create({
         data: {
           id: "ter-unlocked",

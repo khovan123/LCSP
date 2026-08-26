@@ -30,6 +30,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositorySnapshotGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
@@ -66,15 +67,14 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-    await prisma.assessment.create({
+    await createSnapshot(prisma, "snapshot-1");
+    await prisma.assessment.update({
+      where: { id: "assessment-1" },
       data: {
-        id: "assessment-1",
-        ownerId: "user-1",
         name: "Scan assessment",
         status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
       },
     });
-    await createSnapshot(prisma, "snapshot-1");
 
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "manager@acme.test",
@@ -312,18 +312,16 @@ function triggerManual(app: INestApplication, token: string) {
 }
 
 async function createSnapshot(prisma: PrismaClient, id: string): Promise<void> {
-  await prisma.repositorySnapshot.create({
-    data: {
-      id,
-      assessmentId: "assessment-1",
-      connectionId: "connection-1",
-      repositoryId: "repo-1",
-      repositoryFullName: "acme/example-repo",
-      branch: "main",
-      commitSha: "a".repeat(40),
-      providerMetadata: { requestedRevision: "main" },
-      actorId: "user-1",
-      status: REPOSITORY_SNAPSHOT_STATUSES.ready,
-    },
+  await seedRepositorySnapshotGraph(prisma, {
+    assessmentId: "assessment-1",
+    userId: "user-1",
+    connectionId: "connection-1",
+    snapshotId: id,
+    installationId: "installation-1",
+    repositoryId: "repo-1",
+  });
+  await prisma.repositorySnapshot.update({
+    where: { id },
+    data: { status: REPOSITORY_SNAPSHOT_STATUSES.ready },
   });
 }

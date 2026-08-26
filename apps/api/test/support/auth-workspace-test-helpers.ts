@@ -82,6 +82,57 @@ export type LegalClassificationParentsInput = {
   catalogVersionId?: string;
 };
 
+async function ensureAuthUser(
+  prisma: PrismaClient,
+  input: {
+    userId: string;
+    email: string;
+    role: (typeof AUTH_USER_ROLES)[keyof typeof AUTH_USER_ROLES];
+    displayName?: string;
+  },
+): Promise<void> {
+  await prisma.authUser.upsert({
+    where: { id: input.userId },
+    update: {
+      emailVerified: true,
+      failedLoginCount: 0,
+      role: input.role,
+      ...(input.displayName ? { displayName: input.displayName } : {}),
+    },
+    create: {
+      id: input.userId,
+      email: input.email,
+      displayName: input.displayName,
+      passwordHash: hashSecret("CorrectHorseBatteryStaple!"),
+      emailVerified: true,
+      failedLoginCount: 0,
+      role: input.role,
+    },
+  });
+}
+
+async function ensureAssessment(
+  prisma: PrismaClient,
+  input: {
+    assessmentId: string;
+    ownerId: string;
+    name?: string;
+  },
+): Promise<void> {
+  await prisma.assessment.upsert({
+    where: { id: input.assessmentId },
+    update: {
+      ownerId: input.ownerId,
+      name: input.name ?? "Fixture assessment",
+    },
+    create: {
+      id: input.assessmentId,
+      ownerId: input.ownerId,
+      name: input.name ?? "Fixture assessment",
+    },
+  });
+}
+
 export async function seedRepositorySnapshotGraph(
   prisma: PrismaClient,
   input: RepositorySnapshotGraphFixtureInput = {},
@@ -92,6 +143,17 @@ export async function seedRepositorySnapshotGraph(
   const snapshotId = input.snapshotId ?? "snapshot-1";
   const installationId = input.installationId ?? `installation-${connectionId}`;
   const repositoryId = input.repositoryId ?? `repo-${connectionId}`;
+
+  await ensureAuthUser(prisma, {
+    userId,
+    email: `${userId}@fixture.test`,
+    displayName: "Fixture User",
+    role: AUTH_USER_ROLES.customer,
+  });
+  await ensureAssessment(prisma, {
+    assessmentId,
+    ownerId: userId,
+  });
 
   await prisma.repositoryConnection.upsert({
     where: { installationId_repositoryId: { installationId, repositoryId } },
@@ -191,6 +253,16 @@ export async function seedVerifiedProfileGraph(
     ...input,
     scanJobId,
     snapshotId,
+  });
+  await ensureAuthUser(prisma, {
+    userId: input.userId ?? "user-1",
+    email: `${input.userId ?? "user-1"}@fixture.test`,
+    displayName: "Fixture User",
+    role: AUTH_USER_ROLES.customer,
+  });
+  await ensureAssessment(prisma, {
+    assessmentId,
+    ownerId: input.userId ?? "user-1",
   });
 
   await prisma.technicalEvidenceReport.upsert({
@@ -359,6 +431,18 @@ export function pushPrismaSchema(): void {
 export async function resetAuthWorkspaceDatabase(
   prisma: PrismaClient,
 ): Promise<void> {
+  await prisma.conflictRecord.deleteMany();
+  await prisma.verifiedProfile.deleteMany();
+  await prisma.aIUsageFlow.deleteMany();
+  await prisma.wizardProfile.deleteMany();
+  await prisma.technicalProfile.deleteMany();
+  await prisma.technicalEvidenceReport.deleteMany();
+  await prisma.repositoryScanJob.deleteMany();
+  await prisma.repositorySnapshot.deleteMany();
+  await prisma.repositoryConnection.deleteMany();
+  await prisma.documentRequest.deleteMany();
+  await prisma.classificationResult.deleteMany();
+  await prisma.legalRuleMatch.deleteMany();
   await prisma.assessment.deleteMany();
   await prisma.authDecisionLog.deleteMany();
   await prisma.authAuditEvent.deleteMany();

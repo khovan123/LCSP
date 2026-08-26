@@ -33,6 +33,8 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedLegalClassificationParents,
+  seedVerifiedProfileGraph,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
 
@@ -80,13 +82,12 @@ describe("Request Gap Analysis Endpoint (e2e) [LCSP-80]", () => {
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
+    await seedLegalClassificationParents(prisma);
+    await seedVerifiedProfileGraph(prisma, { verifiedProfileId: "vp-1" });
 
-    await prisma.assessment.create({
-      data: {
-        id: "assessment-1",
-        ownerId: "user-1",
-        name: "Gap analysis assessment",
-      },
+    await prisma.assessment.update({
+      where: { id: "assessment-1" },
+      data: { name: "Gap analysis assessment" },
     });
 
     const signIn = await httpRequest(app).post("/auth/sign-in").send({

@@ -23,6 +23,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositoryScanGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
@@ -179,17 +180,21 @@ async function createJob(
   blockedReason: string | null = null,
   overrides: { assessmentId?: string } = {},
 ) {
-  await prisma.repositoryScanJob.create({
+  await seedRepositoryScanGraph(prisma, {
+    assessmentId: overrides.assessmentId ?? "assessment-1",
+    userId: "user-1",
+    connectionId: "connection-1",
+    snapshotId: "snapshot-1",
+    scanJobId: "scan-job-1",
+    scanJobStatus: status,
+  });
+  await prisma.repositoryScanJob.update({
+    where: { id: "scan-job-1" },
     data: {
-      id: "scan-job-1",
-      assessmentId: overrides.assessmentId ?? "assessment-1",
-      snapshotId: "snapshot-1",
-      idempotencyKey: "scan-request:assessment-1:snapshot-1:status",
-      triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
-      status,
+      blockedReason,
       attemptCount: 1,
       correlationId: "job-corr-1",
-      blockedReason,
+      triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
     },
   });
 }

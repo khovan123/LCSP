@@ -32,6 +32,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositoryScanGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
@@ -272,6 +273,13 @@ async function createAIUsageFlow(
   prisma: PrismaClient,
   status: AIUsageFlowStatus,
 ): Promise<void> {
+  await seedRepositoryScanGraph(prisma, {
+    assessmentId: "assessment-1",
+    userId: "user-1",
+    connectionId: "connection-1",
+    snapshotId: "snapshot-1",
+    scanJobId: "scan-job-1",
+  });
   await prisma.technicalEvidenceReport.create({
     data: {
       id: "evidence-report-1",

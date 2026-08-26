@@ -29,6 +29,8 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedLegalClassificationParents,
+  seedVerifiedProfileGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, successBody } from "./support/http.js";
@@ -68,13 +70,12 @@ describe("Document List Endpoint (e2e)", () => {
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
     enableManagerDocumentRead(prisma);
+    await seedLegalClassificationParents(prisma);
+    await seedVerifiedProfileGraph(prisma, { verifiedProfileId: "vp-1" });
 
-    await prisma.assessment.create({
-      data: {
-        id: "assessment-1",
-        ownerId: "user-1",
-        name: "Document list assessment",
-      },
+    await prisma.assessment.update({
+      where: { id: "assessment-1" },
+      data: { name: "Document list assessment" },
     });
 
     const signIn = await httpRequest(app).post("/auth/sign-in").send({

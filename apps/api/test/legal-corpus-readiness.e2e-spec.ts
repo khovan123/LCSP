@@ -153,8 +153,8 @@ async function seedReadyCorpus(prisma: PrismaClient): Promise<void> {
 
 async function signIn(app: INestApplication): Promise<string> {
   const response = await httpRequest(app).post("/auth/sign-in").send({
-    email: "manager@acme.test",
-    password: "CorrectHorseBatteryStaple!",
+    email: "nomembership@acme.test",
+    password: "NoMembership123!",
     organization_id: ORGANIZATION_ID,
   });
   return String(

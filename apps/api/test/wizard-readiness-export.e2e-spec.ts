@@ -28,6 +28,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositoryScanGraph,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
 
@@ -214,6 +215,13 @@ describe("Wizard Readiness Export Endpoint (e2e) [MW-wiz-004]", () => {
 
   it("T02 rejects readiness export when accepted technical evidence already exists", async () => {
     await seedSubmittedWizard(prisma);
+    await seedRepositoryScanGraph(prisma, {
+      assessmentId: "assessment-1",
+      userId: "user-1",
+      connectionId: "connection-1",
+      snapshotId: "snapshot-1",
+      scanJobId: "scan-job-1",
+    });
     await prisma.technicalEvidenceReport.create({
       data: {
         id: "evidence-1",

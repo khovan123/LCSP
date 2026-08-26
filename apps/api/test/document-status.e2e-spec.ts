@@ -34,6 +34,8 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedLegalClassificationParents,
+  seedVerifiedProfileGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
@@ -82,13 +84,12 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
     enableManagerDocumentRead(prisma);
+    await seedLegalClassificationParents(prisma);
+    await seedVerifiedProfileGraph(prisma, { verifiedProfileId: "vp-1" });
 
-    await prisma.assessment.create({
-      data: {
-        id: "assessment-1",
-        ownerId: "user-1",
-        name: "Document status assessment",
-      },
+    await prisma.assessment.update({
+      where: { id: "assessment-1" },
+      data: { name: "Document status assessment" },
     });
 
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
@@ -177,9 +178,17 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     assert.doesNotMatch(JSON.stringify(body), /private|generator\.ts|stack/i);
   });
 
-  it("T06 hides a document outside the session organization", async () => {
+  it("T06 hides a document outside the caller assessment scope", async () => {
+    await prisma.assessment.create({
+      data: {
+        id: "assessment-other",
+        ownerId: "user-2",
+        name: "Other assessment",
+      },
+    });
     await seedDocumentRequest(prisma, {
       id: "doc-other-org-1",
+      assessmentId: "assessment-other",
       status: DOCUMENT_REQUEST_STATUSES.queued,
       documentType: DOCUMENT_TYPES.gapAnalysis,
     });
@@ -194,7 +203,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     assert.equal(problemCode(response), DOCUMENT_ERROR_CODES.documentNotFound);
   });
 
-  it("T07 denies a SystemAdmin with redacted read when accessing FinalReport", async () => {
+  it("T07 hides a FinalReport from a scoped SystemAdmin without access", async () => {
     await seedDocumentRequest(prisma, {
       id: "doc-final-report-1",
       status: DOCUMENT_REQUEST_STATUSES.ready,
@@ -216,8 +225,8 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
       "doc-final-report-1",
     );
 
-    assert.equal(response.status, 403);
-    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
+    assert.equal(response.status, 404);
+    assert.equal(problemCode(response), DOCUMENT_ERROR_CODES.documentNotFound);
   });
 
   it("allows a scoped SystemAdmin with redacted read to view GapAnalysis and download it", async () => {
@@ -253,9 +262,10 @@ function getDocumentStatus(
   app: INestApplication,
   token: string,
   documentRequestId: string,
+  assessmentId = "assessment-1",
 ) {
   return httpRequest(app)
-    .get(`/assessments/assessment-1/documents/${documentRequestId}`)
+    .get(`/assessments/${assessmentId}/documents/${documentRequestId}`)
     .set("Authorization", `Bearer ${token}`)
     .set("X-Correlation-Id", "doc-status-corr-1");
 }
@@ -281,6 +291,7 @@ async function seedDocumentRequest(
   prisma: PrismaClient,
   input: {
     id: string;
+    assessmentId?: string;
     status: DocumentRequestStatus;
     documentType: DocumentType;
     organizationId?: string;
@@ -295,7 +306,7 @@ async function seedDocumentRequest(
     data: {
       id: matchId,
       verifiedProfileId: "vp-1",
-      assessmentId: "assessment-1",
+      assessmentId: input.assessmentId ?? "assessment-1",
       corpusVersionId: "LCSP-LEGAL-CORPUS-v0.1.0",
       legalRuleCatalogVersionId: "LCSP-RULE-CATALOG-v0.1.0",
       schemaVersion: "1.0.0",
@@ -314,7 +325,7 @@ async function seedDocumentRequest(
       id: classificationResultId,
       legalRuleMatchId: matchId,
       verifiedProfileId: "vp-1",
-      assessmentId: "assessment-1",
+      assessmentId: input.assessmentId ?? "assessment-1",
       schemaVersion: "1.0.0",
       classificationData: {
         system_type: "HIGH_IMPACT_AI",
@@ -330,7 +341,7 @@ async function seedDocumentRequest(
   await prisma.documentRequest.create({
     data: {
       id: input.id,
-      assessmentId: "assessment-1",
+      assessmentId: input.assessmentId ?? "assessment-1",
       requestedById: "user-1",
       classificationResultId,
       documentType: toPrismaDocumentType(input.documentType),

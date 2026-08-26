@@ -24,6 +24,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositoryScanGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
@@ -272,6 +273,13 @@ async function seedAssessmentChain(
       name: `Assessment ${assessmentId}`,
       status: ASSESSMENT_STATUS_CODES.scanInProgress,
     },
+  });
+  await seedRepositoryScanGraph(prisma, {
+    assessmentId,
+    userId: "user-1",
+    connectionId: `connection-${assessmentId}`,
+    snapshotId: `snapshot-${assessmentId}`,
+    scanJobId: `scan-job-${assessmentId}`,
   });
   await prisma.technicalEvidenceReport.create({
     data: {

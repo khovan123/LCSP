@@ -23,6 +23,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedRepositoryScanGraph,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
 
@@ -123,7 +124,7 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
         decision: AUDIT_DECISIONS.allow,
       },
     });
-    assert.equal(decision.resourceId, ASSESSMENT_ID);
+    assert.equal(decision.resourceId, `assessment:${ASSESSMENT_ID}`);
   });
 
   it("T03: missing accepted evidence returns safe EVIDENCE_NOT_FOUND", async () => {
@@ -222,6 +223,13 @@ describe("Get Technical Evidence Report Endpoint (e2e) [MW-evid-001]", () => {
     } = {},
   ): Promise<void> {
     const id = overrides.id ?? "report-evidence-1";
+    await seedRepositoryScanGraph(prisma, {
+      assessmentId: ASSESSMENT_ID,
+      userId: "user-1",
+      connectionId: `connection-${id}`,
+      snapshotId: `snapshot-${id}`,
+      scanJobId: `scan-job-${id}`,
+    });
     await prisma.technicalEvidenceReport.create({
       data: {
         id,
