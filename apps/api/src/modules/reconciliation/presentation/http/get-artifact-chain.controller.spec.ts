@@ -47,7 +47,6 @@ describe("ReconciliationController.getArtifactChain", () => {
     expect(queryBus.execute).toHaveBeenCalledWith(
       new GetArtifactChainQuery(
         "assessment-1",
-        "org-1",
         "corr-1",
         "ter:report-1",
         requiredStages,
