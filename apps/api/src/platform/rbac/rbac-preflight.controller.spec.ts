@@ -1,9 +1,10 @@
 import { jest } from "@jest/globals";
-import { RBAC_DECISION, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { UnauthorizedException } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 
 import { RbacPreflightController } from "./rbac-preflight.controller.js";
+import { LOCAL_RBAC_REASON_CODES } from "./rbac-reason-codes.js";
 import type { RbacPreflightService } from "./rbac-preflight.service.js";
 
 const VALID_KEY = "correct-worker-api-key-value-1234";
@@ -19,34 +20,31 @@ function makeController(
       overrides.evaluateImpl ??
         (() =>
           Promise.resolve({
-            decision: RBAC_DECISION.allow,
+            decision: "ALLOW",
             reasonCode: null,
             correlationId: "corr-1",
           })),
     );
   const preflightService = { evaluate } as unknown as RbacPreflightService;
-
   const configService = {
     get: (_key: string, fallback?: unknown) => VALID_KEY ?? fallback,
   } as unknown as ConfigService;
 
-  const controller = new RbacPreflightController(
-    preflightService,
-    configService,
-  );
-
-  return { controller, evaluate };
+  return {
+    controller: new RbacPreflightController(preflightService, configService),
+    evaluate,
+  };
 }
 
 describe("RbacPreflightController", () => {
-  it("T04: missing X-Worker-Api-Key returns 401", async () => {
+  it("rejects a missing worker API key", async () => {
     const { controller } = makeController();
 
     await expect(
       controller.preflight(
         {
           user_id: "u",
-          action: "a",
+          required_roles: [AUTH_USER_ROLES.customer],
           correlationId: "c",
         },
         undefined,
@@ -54,14 +52,14 @@ describe("RbacPreflightController", () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it("T04: invalid X-Worker-Api-Key returns 401", async () => {
+  it("rejects an invalid worker API key", async () => {
     const { controller } = makeController();
 
     await expect(
       controller.preflight(
         {
           user_id: "u",
-          action: "a",
+          required_roles: [AUTH_USER_ROLES.customer],
           correlationId: "c",
         },
         "wrong-key",
@@ -69,65 +67,78 @@ describe("RbacPreflightController", () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it("returns the decision with camelCase correlationId when the key is valid", async () => {
-    const { controller } = makeController();
+  it("passes required roles to the role-only preflight service", async () => {
+    const { controller, evaluate } = makeController();
 
     const response = await controller.preflight(
-      { user_id: "u", action: "a", correlationId: "c" },
+      {
+        user_id: "u",
+        required_roles: [AUTH_USER_ROLES.customer],
+        correlationId: "camel-corr-1",
+      },
       VALID_KEY,
     );
 
+    expect(evaluate).toHaveBeenCalledWith({
+      userId: "u",
+      requiredRoles: [AUTH_USER_ROLES.customer],
+      correlationId: "camel-corr-1",
+    });
     expect(response).toEqual({
       ok: true,
       data: {
-        decision: RBAC_DECISION.allow,
+        decision: "ALLOW",
         reason_code: null,
         correlationId: "corr-1",
       },
     });
   });
 
-  it("always returns 200 (no exception) for a deny decision", async () => {
+  it("returns a deny decision without throwing", async () => {
     const { controller } = makeController({
       evaluateImpl: () =>
         Promise.resolve({
-          decision: RBAC_DECISION.deny,
-          reasonCode: RBAC_REASON_CODE.actionNotGranted,
+          decision: "DENY",
+          reasonCode: LOCAL_RBAC_REASON_CODES.denied,
           correlationId: "corr-1",
         }),
     });
 
-    const response = await controller.preflight(
-      { user_id: "u", action: "a", correlationId: "c" },
-      VALID_KEY,
-    );
-
-    expect(response).toEqual({
+    await expect(
+      controller.preflight(
+        {
+          user_id: "u",
+          required_roles: [AUTH_USER_ROLES.admin],
+          correlationId: "c",
+        },
+        VALID_KEY,
+      ),
+    ).resolves.toEqual({
       ok: true,
       data: {
-        decision: RBAC_DECISION.deny,
-        reason_code: RBAC_REASON_CODE.actionNotGranted,
+        decision: "DENY",
+        reason_code: LOCAL_RBAC_REASON_CODES.denied,
         correlationId: "corr-1",
       },
     });
   });
 
-  it("accepts camelCase correlationId from runtime callers", async () => {
+  it("drops invalid role values before evaluation", async () => {
     const { controller, evaluate } = makeController();
 
     await controller.preflight(
       {
         user_id: "u",
-        action: "a",
-        correlationId: "camel-corr-1",
+        required_roles: [AUTH_USER_ROLES.customer, "MANAGER", 123],
+        correlationId: "corr-2",
       },
       VALID_KEY,
     );
 
-    expect(evaluate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        correlationId: "camel-corr-1",
-      }),
-    );
+    expect(evaluate).toHaveBeenCalledWith({
+      userId: "u",
+      requiredRoles: [AUTH_USER_ROLES.customer],
+      correlationId: "corr-2",
+    });
   });
 });
