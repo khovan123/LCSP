@@ -15,13 +15,13 @@ import {
   reauthenticateWithPassword,
   revokeAuthSession,
   requestPasswordRecovery,
-  signIn,
   signUp,
   signOut,
   updateProfile,
   verifyMfaRecoveryCode,
   verifyMfaOtp,
 } from "./auth-client";
+import { signIn } from "./sign-in-client";
 import { API_OUTCOME_KINDS } from "./outcome-kinds";
 import { apiQueryKeys } from "./query-keys";
 
