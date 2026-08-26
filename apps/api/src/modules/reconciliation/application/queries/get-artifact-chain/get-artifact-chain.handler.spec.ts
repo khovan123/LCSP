@@ -174,11 +174,7 @@ describe("GetArtifactChainHandler", () => {
     });
 
     const response = await handler.execute(
-      new GetArtifactChainQuery(
-        "assessment-1",
-        "corr-3",
-        "ter:report-anchor",
-      ),
+      new GetArtifactChainQuery("assessment-1", "corr-3", "ter:report-anchor"),
     );
 
     expect(response.result.anchor_artifact_ref).toBe("ter:report-anchor");
