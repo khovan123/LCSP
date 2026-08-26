@@ -1,5 +1,8 @@
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES, AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_LEGACY_AUDIT_EVENT_TYPES,
+} from "@lcsp/contracts/auth";
 /* eslint-disable @typescript-eslint/unbound-method */
 import { jest } from "@jest/globals";
 

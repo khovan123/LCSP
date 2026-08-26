@@ -7,7 +7,10 @@ import {
 } from "@lcsp/contracts/assessment";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { WIZARD_EVENT_TYPES, type WizardAnswer } from "@lcsp/contracts/wizard";
-import { ConflictException, UnprocessableEntityException } from "@nestjs/common";
+import {
+  ConflictException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import type { RepositorySnapshot } from "@prisma/client";
 import { jest } from "@jest/globals";
@@ -75,7 +78,10 @@ describe("SubmitWizardHandler", () => {
         { provide: AuditWriterService, useValue: auditWriter },
         { provide: PrismaService, useValue: prismaService },
         { provide: OutboxRepository, useValue: outboxRepository },
-        { provide: WizardValidatorService, useValue: new WizardValidatorService() },
+        {
+          provide: WizardValidatorService,
+          useValue: new WizardValidatorService(),
+        },
       ],
     }).compile();
 
@@ -83,18 +89,78 @@ describe("SubmitWizardHandler", () => {
   });
 
   const validAnswers = [
-    { questionId: "businessProcess", value: "Process", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "useCase", value: "Use case", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "primaryActors", value: "Manager, user, AI service", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "businessTrigger", value: "User request starts the flow", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "expectedOutcome", value: "Human-approved output", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "aiPurpose", value: "Purpose", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "autonomyLevel", value: "HUMAN_APPROVAL_REQUIRED", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "dataTypes", value: ["Type"], answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "affectedSubjects", value: ["Group"], answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "decisionRole", value: "Role", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "humanReview", value: "Oversight", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
-    { questionId: "externalLlmUsage", value: "no", answerState: "ANSWERED", updatedAt: "2026-07-31T00:00:00.000Z" },
+    {
+      questionId: "businessProcess",
+      value: "Process",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "useCase",
+      value: "Use case",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "primaryActors",
+      value: "Manager, user, AI service",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "businessTrigger",
+      value: "User request starts the flow",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "expectedOutcome",
+      value: "Human-approved output",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "aiPurpose",
+      value: "Purpose",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "autonomyLevel",
+      value: "HUMAN_APPROVAL_REQUIRED",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "dataTypes",
+      value: ["Type"],
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "affectedSubjects",
+      value: ["Group"],
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "decisionRole",
+      value: "Role",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "humanReview",
+      value: "Oversight",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
+    {
+      questionId: "externalLlmUsage",
+      value: "no",
+      answerState: "ANSWERED",
+      updatedAt: "2026-07-31T00:00:00.000Z",
+    },
   ] as WizardAnswer[];
 
   const command = new SubmitWizardCommand(
@@ -115,7 +181,9 @@ describe("SubmitWizardHandler", () => {
     expect(auditWriter.writeInTx).toHaveBeenCalled();
     expect(outboxRepository.enqueue).toHaveBeenCalled();
     expect(result.status).toBe(WIZARD_STATUS_CODES.submitted);
-    expect(result.assessment_status).toBe(ASSESSMENT_STATUS_CODES.wizardSubmitted);
+    expect(result.assessment_status).toBe(
+      ASSESSMENT_STATUS_CODES.wizardSubmitted,
+    );
     expect(result.version).toBe(1);
     expect(result.correlationId).toBe("corr-id-1");
   });
@@ -128,7 +196,9 @@ describe("SubmitWizardHandler", () => {
       command.assessmentId,
       command.ownerId,
       validAnswers.map((answer) =>
-        answer.questionId === "businessProcess" ? { ...answer, value: "" } : answer,
+        answer.questionId === "businessProcess"
+          ? { ...answer, value: "" }
+          : answer,
       ),
       command.correlationId,
       command.authorization,
@@ -170,9 +240,11 @@ describe("SubmitWizardHandler", () => {
     const mockTx: MockTransactionClient = {
       wizardProfile: { upsert: jest.fn() },
       assessment: {
-        update: jest.fn().mockImplementation((arg: { data: { status: string } }) => {
-          assessmentUpdateArg = arg;
-        }),
+        update: jest
+          .fn()
+          .mockImplementation((arg: { data: { status: string } }) => {
+            assessmentUpdateArg = arg;
+          }),
       },
     };
     (prismaService.$transaction as jest.Mock).mockImplementation(
