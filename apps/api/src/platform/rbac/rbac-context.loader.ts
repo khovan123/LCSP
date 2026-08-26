@@ -1,5 +1,4 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { actionsForRole, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import type {
   Session,
   User,
@@ -16,18 +15,16 @@ import {
 import type { MfaEnrollmentRepository } from "../../modules/auth-workspace/application/ports/persistence/mfa.repository.js";
 import type { SessionRepository } from "../../modules/auth-workspace/application/ports/persistence/session.repository.js";
 import type { UserRepository } from "../../modules/auth-workspace/application/ports/persistence/user.repository.js";
-
-export type RbacContextDenialReason =
-  | typeof RBAC_REASON_CODE.sessionInvalid
-  | typeof RBAC_REASON_CODE.mfaRequired
-  | typeof RBAC_REASON_CODE.loadError;
+import {
+  LOCAL_RBAC_REASON_CODES,
+  type RbacContextDenialReason,
+} from "./rbac-reason-codes.js";
 
 export type RbacContextResult =
   | {
       ok: true;
       session: Session;
       user: User;
-      grantedActions: readonly string[];
     }
   | {
       ok: false;
@@ -62,7 +59,7 @@ export class RbacContextLoader {
         !verifySecret(token, session.tokenHash) ||
         !session.isActive(now)
       ) {
-        return { ok: false, reason: RBAC_REASON_CODE.sessionInvalid };
+        return { ok: false, reason: LOCAL_RBAC_REASON_CODES.sessionInvalid };
       }
 
       const mfaEnrollment = await this.mfaEnrollments.findByUserId(
@@ -76,24 +73,23 @@ export class RbacContextLoader {
       ) {
         return {
           ok: false,
-          reason: RBAC_REASON_CODE.mfaRequired,
+          reason: LOCAL_RBAC_REASON_CODES.mfaRequired,
           mfaEnrolled: true,
         };
       }
 
       const user = await this.users.findById(session.userId);
       if (!user) {
-        return { ok: false, reason: RBAC_REASON_CODE.loadError };
+        return { ok: false, reason: LOCAL_RBAC_REASON_CODES.loadError };
       }
 
       return {
         ok: true,
         session,
         user,
-        grantedActions: actionsForRole(user.role),
       };
     } catch {
-      return { ok: false, reason: RBAC_REASON_CODE.loadError };
+      return { ok: false, reason: LOCAL_RBAC_REASON_CODES.loadError };
     }
   }
 }

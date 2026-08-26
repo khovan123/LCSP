@@ -1,6 +1,7 @@
-import { RBAC_DECISION } from "../rbac/decisions.ts";
-
-export const AUDIT_DECISIONS = RBAC_DECISION;
+export const AUDIT_DECISIONS = {
+  allow: "ALLOW",
+  deny: "DENY",
+} as const;
 
 export type AuditDecision =
   (typeof AUDIT_DECISIONS)[keyof typeof AUDIT_DECISIONS];

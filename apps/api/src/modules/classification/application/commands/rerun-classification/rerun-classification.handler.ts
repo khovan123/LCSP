@@ -1,3 +1,4 @@
+import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import {
   AUDIT_ACTOR_TYPES,
   AUDIT_DECISIONS,
@@ -8,7 +9,7 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   CLASSIFICATION_RERUN_STATUSES,
   SCAN_ERROR_CODES,

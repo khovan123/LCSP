@@ -1,8 +1,8 @@
+import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { HttpStatus } from "@nestjs/common";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   LEGAL_RULE_EVENT_TYPES,
   LEGAL_RULE_ERROR_CODES,

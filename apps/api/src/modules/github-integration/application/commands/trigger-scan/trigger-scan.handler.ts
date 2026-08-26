@@ -1,3 +1,4 @@
+import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import {
   BadRequestException,
   ConflictException,
@@ -27,7 +28,6 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import { fromPrismaAssessmentStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";

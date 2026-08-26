@@ -5,7 +5,7 @@ from .governance.authorization import (
     AgenticAuthorizationResult,
     AgenticToolAuthorizer,
     ApiRbacToolAuthorizer,
-    TOOL_RBAC_ACTIONS,
+    TOOL_RBAC_ROLES,
 )
 from .governance.catalog import (
     AgenticToolSpec,
@@ -75,7 +75,7 @@ __all__ = [
     "ENGINEERING_RULE_AGENTIC_TOOL_BINDINGS",
     "ScannerToolDispatcher",
     "ScannerToolExecutionContext",
-    "TOOL_RBAC_ACTIONS",
+    "TOOL_RBAC_ROLES",
     "ToolBinding",
     "ToolRuntimeTarget",
     "bind_runtime_handlers",

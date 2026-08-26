@@ -1,21 +1,13 @@
 import { Query } from "@nestjs/cqrs";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 
 /**
  * Requests all document status views visible to the caller for one assessment.
  */
 export class ListDocumentsQuery extends Query<unknown[]> {
-  /**
-   * Creates the document-list query.
-   *
-   * @param assessmentId - Assessment whose document requests should be listed.
-   * @param scope - RBAC resource scope used for redacted reads.
-   * @param selectedAction - RBAC action selected by the authorization guard.
-   * @param correlationId - Correlation identifier propagated to authorization and lookup errors.
-   */
   constructor(
     public readonly assessmentId: string,
-    public readonly scope: string | null,
-    public readonly selectedAction: string | null,
+    public readonly actorRole: AuthUserRole,
     public readonly correlationId: string,
   ) {
     super();

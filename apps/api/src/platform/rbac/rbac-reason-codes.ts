@@ -1,9 +1,4 @@
-export const RBAC_DECISION = {
-  allow: "ALLOW",
-  deny: "DENY",
-} as const;
-
-export const RBAC_REASON_CODE = {
+export const LOCAL_RBAC_REASON_CODES = {
   actionNotGranted: "ACTION_NOT_GRANTED",
   authorized: "AUTHORIZED",
   denied: "RBAC_DENIED",
@@ -16,8 +11,10 @@ export const RBAC_REASON_CODE = {
   subjectRoleMismatch: "SUBJECT_ROLE_MISMATCH",
 } as const;
 
-export type RbacDecisionValue =
-  (typeof RBAC_DECISION)[keyof typeof RBAC_DECISION];
+export type RbacContextDenialReason =
+  | typeof LOCAL_RBAC_REASON_CODES.sessionInvalid
+  | typeof LOCAL_RBAC_REASON_CODES.mfaRequired
+  | typeof LOCAL_RBAC_REASON_CODES.loadError;
 
-export type RbacReasonCode =
-  (typeof RBAC_REASON_CODE)[keyof typeof RBAC_REASON_CODE];
+export type LocalRbacReasonCode =
+  (typeof LOCAL_RBAC_REASON_CODES)[keyof typeof LOCAL_RBAC_REASON_CODES];

@@ -1,3 +1,4 @@
+import { RBAC_ACTIONS } from "../rbac/rbac.constants.js";
 import { Injectable, HttpStatus } from "@nestjs/common";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
@@ -7,7 +8,7 @@ import {
   OUTBOX_ERROR_CODES,
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { OutboxRepository } from "./outbox.repository.js";
 import { AuditWriterService } from "../audit/audit-writer.service.js";
@@ -105,7 +106,7 @@ export class OutboxDlqService {
       payload: {
         originalEventType: message.eventType,
         aggregateId: message.aggregateId,
-        replayAuthority: RBAC_ACTIONS.outboxReplay,
+        replayAuthority: "outbox:replay",
       },
     });
   }

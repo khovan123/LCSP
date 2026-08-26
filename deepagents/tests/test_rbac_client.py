@@ -11,7 +11,7 @@ def test_check_reads_allow_decision_from_api_result_envelope():
         decision = RbacClient("http://api", "worker-key").check(
             user_id="user-1",
             organization_id="org-1",
-            action="scan:trigger",
+            required_roles=("CUSTOMER",),
             correlationId="corr-1",
         )
 
@@ -27,7 +27,7 @@ def test_check_denies_missing_or_non_allow_decision():
         decision = RbacClient("http://api", "worker-key").check(
             user_id="user-1",
             organization_id="org-1",
-            action="scan:trigger",
+            required_roles=("CUSTOMER",),
             correlationId="corr-1",
         )
 

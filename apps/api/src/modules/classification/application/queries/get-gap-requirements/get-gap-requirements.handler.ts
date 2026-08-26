@@ -17,7 +17,7 @@ import {
   GET_GAP_REQUIREMENTS_TOOL,
   type GetGapRequirementsResponse,
 } from "@lcsp/contracts/evidence";
-import { RBAC_ACTIONS, roleCanUseAction } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -176,7 +176,7 @@ export class GetGapRequirementsHandler implements IQueryHandler<
     return (
       query.input.policyProfileVersionId ===
         roleProfileVersionRef(query.actorRole) &&
-      roleCanUseAction(query.actorRole, RBAC_ACTIONS.gapRequirementsRead)
+      query.actorRole === AUTH_USER_ROLES.customer
     );
   }
 

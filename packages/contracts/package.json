@@ -38,10 +38,7 @@
     "./evidence/codes": "./src/evidence/codes.ts",
     "./outbox": "./src/outbox/index.ts",
     "./outbox/outbox-message.types": "./src/outbox/outbox-message.types.ts",
-    "./rbac": "./src/rbac/index.ts",
-    "./rbac/actions": "./src/rbac/actions.ts",
-    "./rbac/policy.types": "./src/rbac/policy.types.ts",
-    "./rbac/types": "./src/rbac/types.ts",
+
     "./scan": "./src/scan/index.ts",
     "./scan/callback": "./src/scan/callback.ts",
     "./scan/codes": "./src/scan/codes.ts",

@@ -1,4 +1,4 @@
-import type { AuthUserRole } from "../rbac.types.js";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 
 export interface RbacRequestContext {
   userId: string;

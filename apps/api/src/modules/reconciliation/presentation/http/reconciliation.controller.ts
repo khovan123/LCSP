@@ -15,7 +15,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   ARTIFACT_CHAIN_STAGES,
   ASSESSMENT_CONTEXT_ANSWER_FIELDS,
@@ -27,7 +27,7 @@ import {
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
@@ -82,7 +82,7 @@ export class ReconciliationController {
 
   @Get(":assessmentId/conflicts")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.conflictRead)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async listConflicts(
     @Param("assessmentId") assessmentId: string,
     @Query("status") status: string | undefined,
@@ -109,7 +109,7 @@ export class ReconciliationController {
 
   @Get(":assessmentId/artifact-chain")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.assessmentRead)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   async getArtifactChain(
     @Param("assessmentId") assessmentId: string,
     @Query("artifact_ref") artifactRefRaw: string | undefined,
@@ -142,7 +142,7 @@ export class ReconciliationController {
 
   @Get(":assessmentId/reconciliation-context")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.conflictRead)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async getReconciliationContext(
     @Param("assessmentId") assessmentId: string,
     @Query("flow_ref") flowRef: string | undefined,
@@ -180,7 +180,7 @@ export class ReconciliationController {
 
   @Get(":assessmentId/missing-targets")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.assessmentRead)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   async proposeMissingTargets(
     @Param("assessmentId") assessmentId: string,
     @Query("wizard_profile_id") wizardProfileId: string,
@@ -218,7 +218,7 @@ export class ReconciliationController {
 
   @Get(":assessmentId/assessment-context")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.assessmentRead)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   async getAssessmentContext(
     @Param("assessmentId") assessmentId: string,
     @Query("wizard_profile_id") wizardProfileId: string,
@@ -248,7 +248,7 @@ export class ReconciliationController {
 
   @Patch(":assessmentId/conflicts/:conflictId/resolve")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.conflictResolve)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async resolveConflict(
     @Param("assessmentId") assessmentId: string,
     @Param("conflictId") conflictId: string,

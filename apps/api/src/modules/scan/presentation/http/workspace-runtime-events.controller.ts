@@ -1,6 +1,6 @@
 import { Controller, Logger, Req, Sse, UseGuards } from "@nestjs/common";
 import type { MessageEvent } from "@nestjs/common";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   EMPTY,
   catchError,
@@ -12,7 +12,7 @@ import {
 } from "rxjs";
 
 import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 
@@ -42,7 +42,7 @@ export class WorkspaceRuntimeEventsController {
    */
   @Sse()
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.workspaceRead)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   stream(@Req() request: WorkspaceRuntimeRequest) {
     return interval(2_000).pipe(
       startWith(0),

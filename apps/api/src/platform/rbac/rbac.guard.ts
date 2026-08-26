@@ -2,14 +2,6 @@ import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import type { AuthErrorCode } from "@lcsp/contracts/auth";
 import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
-  RBAC_ACTIONS,
-  RBAC_DECISION,
-  RBAC_METADATA_TYPES,
-  RBAC_REASON_CODE,
-  type RbacDecisionValue,
-  type RbacReasonCode,
-} from "@lcsp/contracts/rbac";
-import {
   HttpStatus,
   Inject,
   Injectable,
@@ -32,17 +24,18 @@ import {
   RBAC_METADATA_KEY,
   type RbacMetadata,
 } from "./decorators/rbac-metadata.js";
+import { RbacContextLoader } from "./rbac-context.loader.js";
 import {
-  RbacContextLoader,
+  LOCAL_RBAC_REASON_CODES,
   type RbacContextDenialReason,
-} from "./rbac-context.loader.js";
-import { RbacEvaluatorService } from "./rbac-evaluator.service.js";
-import type {
-  RbacDecisionResult,
-  RbacEvaluationContext,
-} from "./rbac.types.js";
+} from "./rbac-reason-codes.js";
 
 const DECISION_LOG_RESOURCE_TYPE = AUDIT_RESOURCE_TYPES.httpRoute;
+
+export const LOCAL_RBAC_DECISIONS = {
+  allow: "ALLOW",
+  deny: "DENY",
+} as const;
 
 @Injectable()
 export class RbacGuard implements CanActivate {
@@ -51,7 +44,6 @@ export class RbacGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly loader: RbacContextLoader,
-    private readonly evaluator: RbacEvaluatorService,
     @Inject(PrismaAuthorizationDecisionRepository)
     private readonly decisions: AuthorizationDecisionRepository,
   ) {}
@@ -67,27 +59,22 @@ export class RbacGuard implements CanActivate {
       createCorrelationId();
     request.correlationId = correlationId;
 
+    const action = requestMethodAndPath(request);
+    const resourceId = requestResourceId(request, action);
+
     if (!metadata) {
       await this.recordDecision({
         actorId: null,
         sessionId: null,
-        resourceId: requestResourceId(request, RBAC_ACTIONS.metadataCheck),
-        action: RBAC_ACTIONS.metadataCheck,
-        decision: RBAC_DECISION.deny,
-        reasonCode: RBAC_REASON_CODE.metadataMissing,
+        resourceId,
+        action,
+        decision: LOCAL_RBAC_DECISIONS.deny,
+        reasonCode: LOCAL_RBAC_REASON_CODES.metadataMissing,
         correlationId,
       });
       throw this.rbacDenied(correlationId);
     }
 
-    const candidateActions =
-      metadata.type === RBAC_METADATA_TYPES.action
-        ? [metadata.action]
-        : metadata.type === RBAC_METADATA_TYPES.actionAny
-          ? metadata.actions
-          : [];
-    const action = candidateActions[0] ?? RBAC_ACTIONS.sessionVerify;
-    const resourceId = requestResourceId(request, action);
     const token = this.extractToken(request);
 
     if (!token) {
@@ -96,8 +83,8 @@ export class RbacGuard implements CanActivate {
         sessionId: null,
         resourceId,
         action,
-        decision: RBAC_DECISION.deny,
-        reasonCode: RBAC_REASON_CODE.sessionInvalid,
+        decision: LOCAL_RBAC_DECISIONS.deny,
+        reasonCode: LOCAL_RBAC_REASON_CODES.sessionInvalid,
         correlationId,
       });
       throw problemException(AUTH_ERROR_CODES.sessionInvalid, correlationId, {
@@ -119,21 +106,21 @@ export class RbacGuard implements CanActivate {
         sessionId: null,
         resourceId,
         action,
-        decision: RBAC_DECISION.deny,
+        decision: LOCAL_RBAC_DECISIONS.deny,
         reasonCode: loaderResult.reason,
         correlationId,
       });
       throw this.exceptionFor(loaderResult, correlationId);
     }
 
-    const { session, user, grantedActions } = loaderResult;
+    const { session, user } = loaderResult;
     const requiresSensitiveReauth =
       this.reflector.getAllAndOverride<boolean | undefined>(
         RE_AUTH_FOR_SENSITIVE_ROUTE_METADATA_KEY,
         [context.getHandler(), context.getClass()],
       ) === true;
 
-    if (metadata.type === RBAC_METADATA_TYPES.session) {
+    if (metadata.type === "session") {
       await this.enforceSensitiveReauth({
         required: requiresSensitiveReauth,
         session,
@@ -146,53 +133,35 @@ export class RbacGuard implements CanActivate {
         sessionId: session.id,
         role: user.role,
         scope: resourceId,
-        grantedActions,
-        selectedAction: null,
+        grantedActions: [],
+        selectedAction: "session:verify",
       };
       await this.recordDecision({
         actorId: session.userId,
         sessionId: session.id,
         resourceId,
         action,
-        decision: RBAC_DECISION.allow,
-        reasonCode: RBAC_REASON_CODE.authorized,
+        decision: LOCAL_RBAC_DECISIONS.allow,
+        reasonCode: LOCAL_RBAC_REASON_CODES.authorized,
         correlationId,
       });
       return true;
     }
 
-    const deniedDecisions: Array<{
-      action: string;
-      decision: RbacDecisionResult;
-    }> = [];
-    let allowed: { action: string; decision: RbacDecisionResult } | undefined;
+    // Handle "roles" metadata check
+    const allowedRoles = metadata.roles;
+    const hasRole = allowedRoles.includes(user.role);
 
-    for (const candidateAction of candidateActions) {
-      const evaluationContext: RbacEvaluationContext = {
-        action: candidateAction,
-        subject: { role: user.role },
-        grantedActions,
-      };
-      const decision = this.evaluator.evaluate(evaluationContext);
-      if (decision.decision === RBAC_DECISION.allow) {
-        allowed = { action: candidateAction, decision };
-        break;
-      }
-      deniedDecisions.push({ action: candidateAction, decision });
-    }
-
-    if (!allowed) {
-      for (const denied of deniedDecisions) {
-        await this.recordDecision({
-          actorId: session.userId,
-          sessionId: session.id,
-          resourceId,
-          action: denied.action,
-          decision: RBAC_DECISION.deny,
-          reasonCode: denied.decision.reasonCode ?? RBAC_REASON_CODE.denied,
-          correlationId,
-        });
-      }
+    if (!hasRole) {
+      await this.recordDecision({
+        actorId: session.userId,
+        sessionId: session.id,
+        resourceId,
+        action,
+        decision: LOCAL_RBAC_DECISIONS.deny,
+        reasonCode: LOCAL_RBAC_REASON_CODES.denied,
+        correlationId,
+      });
       throw this.rbacDenied(correlationId);
     }
 
@@ -200,7 +169,7 @@ export class RbacGuard implements CanActivate {
       required: requiresSensitiveReauth,
       session,
       resourceId,
-      action: allowed.action,
+      action,
       correlationId,
     });
     request.rbacContext = {
@@ -208,16 +177,16 @@ export class RbacGuard implements CanActivate {
       sessionId: session.id,
       role: user.role,
       scope: resourceId,
-      grantedActions,
-      selectedAction: allowed.action,
+      grantedActions: [],
+      selectedAction: action,
     };
     await this.recordDecision({
       actorId: session.userId,
       sessionId: session.id,
       resourceId,
-      action: allowed.action,
-      decision: RBAC_DECISION.allow,
-      reasonCode: RBAC_REASON_CODE.authorized,
+      action,
+      decision: LOCAL_RBAC_DECISIONS.allow,
+      reasonCode: LOCAL_RBAC_REASON_CODES.authorized,
       correlationId,
     });
     return true;
@@ -257,7 +226,7 @@ export class RbacGuard implements CanActivate {
       sessionId: input.session.id,
       resourceId: input.resourceId,
       action: input.action,
-      decision: RBAC_DECISION.deny,
+      decision: LOCAL_RBAC_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.reauthRequired,
       correlationId: input.correlationId,
     });
@@ -276,13 +245,13 @@ export class RbacGuard implements CanActivate {
   ): HttpException {
     const reason = typeof denial === "string" ? denial : denial.reason;
     switch (reason) {
-      case RBAC_REASON_CODE.sessionInvalid:
+      case LOCAL_RBAC_REASON_CODES.sessionInvalid:
         return problemException(
           AUTH_ERROR_CODES.sessionInvalid,
           correlationId,
           { status: HttpStatus.UNAUTHORIZED },
         );
-      case RBAC_REASON_CODE.mfaRequired:
+      case LOCAL_RBAC_REASON_CODES.mfaRequired:
         return problemException(AUTH_ERROR_CODES.mfaRequired, correlationId, {
           meta:
             typeof denial === "string"
@@ -290,7 +259,7 @@ export class RbacGuard implements CanActivate {
               : { mfaEnrolled: denial.mfaEnrolled === true },
           status: HttpStatus.UNAUTHORIZED,
         });
-      case RBAC_REASON_CODE.loadError:
+      case LOCAL_RBAC_REASON_CODES.loadError:
         return this.rbacDenied(correlationId);
     }
   }
@@ -306,8 +275,10 @@ export class RbacGuard implements CanActivate {
     sessionId: string | null;
     resourceId: string;
     action: string;
-    decision: RbacDecisionValue;
-    reasonCode: AuthErrorCode | RbacReasonCode;
+    decision: (typeof LOCAL_RBAC_DECISIONS)[keyof typeof LOCAL_RBAC_DECISIONS];
+    reasonCode:
+      | AuthErrorCode
+      | (typeof LOCAL_RBAC_REASON_CODES)[keyof typeof LOCAL_RBAC_REASON_CODES];
     correlationId: string;
   }): Promise<void> {
     try {
@@ -339,6 +310,17 @@ function readStringAttribute(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function requestMethodAndPath(request: AuthenticatedRequest): string {
+  const method = request.method;
+  const routePath = readStringAttribute(request.route?.path);
+  if (method && routePath) return `${method} ${routePath}`;
+
+  const originalUrl = request.originalUrl;
+  if (method && originalUrl) return `${method} ${originalUrl.split("?")[0]}`;
+
+  return "unknown:request";
+}
+
 function requestResourceId(
   request: AuthenticatedRequest,
   fallbackAction: string,
@@ -352,13 +334,6 @@ function requestResourceId(
     return `assessment:${assessmentId}:conflict:${conflictId}`;
   if (assessmentId) return `assessment:${assessmentId}`;
   if (userId) return `user:${userId}`;
-
-  const method = request.method;
-  const routePath = readStringAttribute(request.route?.path);
-  if (method && routePath) return `${method} ${routePath}`;
-
-  const originalUrl = request.originalUrl;
-  if (method && originalUrl) return `${method} ${originalUrl.split("?")[0]}`;
 
   return fallbackAction;
 }

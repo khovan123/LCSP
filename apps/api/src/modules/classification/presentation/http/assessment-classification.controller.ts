@@ -8,10 +8,10 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus } from "@nestjs/cqrs";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { RerunClassificationCommand } from "../../application/commands/rerun-classification/rerun-classification.command.js";
@@ -29,7 +29,7 @@ export class AssessmentClassificationController {
   @Post("rerun")
   @HttpCode(201)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.classificationRun)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async rerun(
     @Param("assessmentId") assessmentId: string,
     @Body() payload: RerunClassificationRequestDto,

@@ -1,6 +1,10 @@
 import * as crypto from "node:crypto";
 
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import {
+  AUTH_ERROR_CODES,
+  AUTH_USER_ROLES,
+  type AuthUserRole,
+} from "@lcsp/contracts/auth";
 import { Body, Controller, Headers, HttpStatus, Post } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
@@ -10,7 +14,7 @@ import { RbacPreflightService } from "./rbac-preflight.service.js";
 
 interface PreflightRequestBody {
   user_id?: string;
-  action?: string;
+  required_roles?: unknown;
   correlationId?: string;
 }
 
@@ -46,8 +50,8 @@ export class RbacPreflightController {
 
     const result = await this.preflightService.evaluate({
       userId: body.user_id ?? "",
-      action: body.action ?? "",
-      correlationId: body.correlationId ?? body.correlationId ?? "",
+      requiredRoles: parseRequiredRoles(body.required_roles),
+      correlationId: body.correlationId ?? "",
     });
 
     return resultEnvelope({
@@ -97,4 +101,16 @@ function timingSafeEqual(a: string, b: string): boolean {
   }
 
   return crypto.timingSafeEqual(bufA, bufB);
+}
+
+function parseRequiredRoles(value: unknown): readonly AuthUserRole[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(isAuthUserRole);
+}
+
+function isAuthUserRole(value: unknown): value is AuthUserRole {
+  return value === AUTH_USER_ROLES.admin || value === AUTH_USER_ROLES.customer;
 }

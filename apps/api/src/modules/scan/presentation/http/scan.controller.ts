@@ -1,3 +1,4 @@
+import { RBAC_ACTIONS } from "../../../../platform/rbac/rbac.constants.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -15,7 +16,6 @@ import {
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   ASSESSMENT_RUNTIME_EVENT_TYPES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
@@ -42,7 +42,7 @@ import {
   type TargetedReanalysisTerminalState,
 } from "@lcsp/contracts/scan";
 
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import type { ScanCallbackRequest } from "../../application/contracts/scan/scan-callback.contract.js";
@@ -126,7 +126,7 @@ export class ScanController {
    */
   @Get(":scanJobId")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.scanRead)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   async getScanJob(
     @Param("assessmentId") assessmentId: string,
     @Param("scanJobId") scanJobId: string,
@@ -157,7 +157,7 @@ export class ScanController {
   @Post("rerun")
   @HttpCode(201)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.scanTrigger)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async rerunScan(
     @Param("assessmentId") assessmentId: string,
     @Body() payload: RerunScanRequestDto,
@@ -190,7 +190,7 @@ export class ScanController {
   @Post(":assessmentId/evidence-reports/:evidenceReportId/targeted-reanalysis")
   @HttpCode(200)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.technicalEvidenceReanalyze)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async requestTargetedReanalysis(
     @Param("assessmentId") assessmentId: string,
     @Param("evidenceReportId") evidenceReportId: string,

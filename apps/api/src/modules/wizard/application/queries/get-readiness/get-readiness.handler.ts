@@ -1,8 +1,7 @@
+import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { WIZARD_EVENT_TYPES, type WizardAnswer } from "@lcsp/contracts/wizard";
 import { HttpStatus } from "@nestjs/common";

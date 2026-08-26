@@ -74,7 +74,8 @@ import {
   OUTBOX_STATUSES,
   type OutboxStatus,
 } from "@lcsp/contracts/outbox";
-import { RBAC_REASON_CODE, type RbacReasonCode } from "@lcsp/contracts/rbac";
+import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../../platform/rbac/rbac-reason-codes.js";
+type RbacReasonCode = (typeof RBAC_REASON_CODE)[keyof typeof RBAC_REASON_CODE];
 import {
   CONFLICT_RECORD_STATUSES,
   CLASSIFICATION_GUARDRAIL_STATUSES,

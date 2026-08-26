@@ -16,10 +16,10 @@ import {
   RETRIEVE_LEGAL_BASIS_TOOL,
   type RetrieveLegalBasisInput,
 } from "@lcsp/contracts/evidence";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
@@ -38,7 +38,7 @@ export class LegalBasisRetrievalController {
   @Post(":assessmentId/legal-basis")
   @HttpCode(HttpStatus.OK)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.legalCorpusRead)
+  @RequireRoles(AUTH_USER_ROLES.admin)
   async retrieveLegalBasis(
     @Param("assessmentId") assessmentId: string,
     @Body() body: unknown,

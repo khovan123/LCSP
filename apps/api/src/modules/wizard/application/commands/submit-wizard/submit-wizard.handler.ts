@@ -1,3 +1,4 @@
+import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import {
   ASSESSMENT_STATUS_CODES,
   WIZARD_STATUS_CODES,
@@ -8,13 +9,11 @@ import {
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { WIZARD_ERROR_CODES, WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import { HttpStatus, Inject } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";

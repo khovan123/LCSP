@@ -13,11 +13,11 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES, type AuthUserRole } from "@lcsp/contracts/auth";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
-import { RequireAnyAction } from "../../../../platform/rbac/decorators/require-any-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
@@ -31,17 +31,10 @@ export class EvidenceController {
 
   /**
    * Return the persisted evidence/report view only.
-   *
-   * Technical graph search, traversal, provider discovery, decision/data-path
-   * inspection and remediation processing are Python-worker capabilities. The old
-   * NestJS HTTP/CQRS analysis surface was removed so there is one processing owner.
    */
   @Get(":assessmentId/evidence")
   @UseGuards(RbacGuard)
-  @RequireAnyAction(
-    RBAC_ACTIONS.evidenceRead,
-    RBAC_ACTIONS.evidenceReadRedacted,
-  )
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   async getEvidence(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
@@ -51,8 +44,7 @@ export class EvidenceController {
       await this.queryBus.execute(
         new GetEvidenceQuery(
           assessmentId,
-          context.scope,
-          context.selectedAction,
+          context.role,
           request.correlationId as string,
         ),
       ),

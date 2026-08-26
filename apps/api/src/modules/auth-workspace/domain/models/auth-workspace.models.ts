@@ -1,6 +1,9 @@
 import type { AuditResourceType } from "@lcsp/contracts/audit";
 import type { AuthErrorCode } from "@lcsp/contracts/auth";
-import type { RbacDecisionValue, RbacReasonCode } from "@lcsp/contracts/rbac";
+import type {
+  RbacDecisionValue,
+  RbacReasonCode,
+} from "../../../../platform/rbac/rbac.constants.js";
 
 export { MfaEnrollment } from "../entities/mfa-enrollment.entity.ts";
 export { MfaRateLimit } from "../entities/mfa-rate-limit.entity.ts";

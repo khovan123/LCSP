@@ -11,7 +11,7 @@ import {
   Res,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { SaveWizardDraftRequest } from "../../application/contracts/wizard/wizard-draft.contract.js";
 import type { SubmitWizardRequest } from "../../application/contracts/wizard/wizard-submit.contract.js";
@@ -27,7 +27,7 @@ import { GetReadinessQuery } from "../../application/queries/get-readiness/get-r
 import { DownloadReadinessExportQuery } from "../../application/queries/download-readiness-export/download-readiness-export.query.js";
 import { WizardClarificationQuestionService } from "../../application/services/wizard/wizard-clarification-question.service.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { randomUUID } from "node:crypto";
 
@@ -44,7 +44,7 @@ export class WizardController {
 
   @Put(":assessmentId/wizard/draft")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.wizardWrite)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async saveWizardDraft(
     @Param("assessmentId") assessmentId: string,
     @Body() body: SaveWizardDraftRequest,
@@ -73,7 +73,7 @@ export class WizardController {
   @Post(":assessmentId/wizard/submit")
   @HttpCode(200)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.wizardSubmit)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async submitWizard(
     @Param("assessmentId") assessmentId: string,
     @Body() body: SubmitWizardRequest,
@@ -102,7 +102,7 @@ export class WizardController {
   @Post(":assessmentId/wizard/clarification-questions")
   @HttpCode(200)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.wizardWrite)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async generateClarificationQuestions(
     @Body() body: Partial<WizardClarificationQuestionRequest> | undefined,
   ) {
@@ -118,7 +118,7 @@ export class WizardController {
 
   @Get(":assessmentId/readiness")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.assessmentRead)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   async getReadiness(
     @Param("assessmentId") assessmentId: string,
     @Req() req: AuthenticatedRequest,
@@ -139,7 +139,7 @@ export class WizardController {
 
   @Post(":assessmentId/wizard/readiness-export")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.wizardExport)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async generateReadinessExport(
     @Param("assessmentId") assessmentId: string,
     @Req() req: AuthenticatedRequest,
@@ -165,7 +165,7 @@ export class WizardController {
 
   @Get(":assessmentId/wizard/readiness-exports/:exportId/download")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.wizardExport)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async downloadReadinessExport(
     @Param("assessmentId") assessmentId: string,
     @Param("exportId") exportId: string,

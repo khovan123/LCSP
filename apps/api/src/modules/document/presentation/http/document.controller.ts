@@ -12,11 +12,10 @@ import {
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { DOCUMENT_ERROR_CODES } from "@lcsp/contracts/document";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES, type AuthUserRole } from "@lcsp/contracts/auth";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
-import { RequireAnyAction } from "../../../../platform/rbac/decorators/require-any-action.decorator.js";
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
@@ -54,7 +53,7 @@ export class DocumentController {
   @Post(":assessmentId/documents/final-report")
   @HttpCode(202)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.documentGenerate)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async requestFinalReport(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
@@ -85,7 +84,7 @@ export class DocumentController {
   @Post(":assessmentId/documents/gap-analysis")
   @HttpCode(202)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.documentGenerate)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async requestGapAnalysis(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
@@ -116,10 +115,7 @@ export class DocumentController {
    */
   @Get(":assessmentId/documents/:documentRequestId")
   @UseGuards(RbacGuard)
-  @RequireAnyAction(
-    RBAC_ACTIONS.documentRead,
-    RBAC_ACTIONS.documentReadRedacted,
-  )
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   async getDocument(
     @Param("assessmentId") assessmentId: string,
     @Param("documentRequestId") documentRequestId: string,
@@ -131,8 +127,7 @@ export class DocumentController {
         new GetDocumentQuery(
           assessmentId,
           documentRequestId,
-          context.scope,
-          context.selectedAction,
+          context.role,
           request.correlationId as string,
         ),
       ),
@@ -148,10 +143,7 @@ export class DocumentController {
    */
   @Get(":assessmentId/documents")
   @UseGuards(RbacGuard)
-  @RequireAnyAction(
-    RBAC_ACTIONS.documentRead,
-    RBAC_ACTIONS.documentReadRedacted,
-  )
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   async listDocuments(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,
@@ -161,8 +153,7 @@ export class DocumentController {
       await this.queryBus.execute(
         new ListDocumentsQuery(
           assessmentId,
-          context.scope,
-          context.selectedAction,
+          context.role,
           request.correlationId as string,
         ),
       ),

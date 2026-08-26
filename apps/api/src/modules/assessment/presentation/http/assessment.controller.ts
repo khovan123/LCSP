@@ -9,9 +9,9 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 
@@ -46,7 +46,7 @@ export class AssessmentController {
    */
   @Post()
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.assessmentCreate)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async createAssessment(
     @Body() body: CreateAssessmentRequest,
     @Req() request: AuthenticatedRequest,
@@ -80,7 +80,7 @@ export class AssessmentController {
    */
   @Get()
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.assessmentList)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   async listAssessments(
     @Query("page") page: string | undefined,
     @Query("page_size") pageSize: string | undefined,
@@ -113,7 +113,7 @@ export class AssessmentController {
    */
   @Get(":assessmentId")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.assessmentRead)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
   async getAssessment(
     @Param("assessmentId") assessmentId: string,
     @Req() request: AuthenticatedRequest,

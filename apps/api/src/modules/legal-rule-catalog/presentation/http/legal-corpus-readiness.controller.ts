@@ -11,10 +11,10 @@ import {
 } from "@nestjs/common";
 import { QueryBus } from "@nestjs/cqrs";
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
@@ -33,7 +33,7 @@ export class LegalCorpusReadinessController {
 
   @Get(":assessmentId/legal-corpus-readiness")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.legalCorpusRead)
+  @RequireRoles(AUTH_USER_ROLES.admin)
   async getLegalCorpusReadiness(
     @Param("assessmentId") assessmentId: string,
     @Query() query: Record<string, unknown>,

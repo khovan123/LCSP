@@ -10,7 +10,7 @@ import {
   Query,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { DraftLegalRuleRequest } from "../../application/contracts/draft-legal-rule.contract.js";
 import type { ApproveRuleCatalogVersionRequest } from "../../application/contracts/approve-catalog-version.contract.js";
@@ -30,7 +30,7 @@ import { GetActiveRuleCatalogQuery } from "../../application/queries/get-active-
 import { GetActiveLegalCorpusQuery } from "../../application/queries/get-active-legal-corpus/get-active-legal-corpus.query.js";
 
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { randomUUID } from "node:crypto";
@@ -52,7 +52,7 @@ export class LegalRuleCatalogController {
   @Post("versions")
   @HttpCode(201)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.legalRuleCatalogAuthor)
+  @RequireRoles(AUTH_USER_ROLES.admin)
   async createVersion(
     @Body() body: CreateRuleCatalogVersionRequest,
     @Req() req: AuthenticatedRequest,
@@ -68,7 +68,7 @@ export class LegalRuleCatalogController {
   @Post("corpus")
   @HttpCode(201)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.legalCorpusIngest)
+  @RequireRoles(AUTH_USER_ROLES.admin)
   async ingestCorpus(@Body() body: IngestLegalCorpusRequest) {
     return resultEnvelope(
       await this.legalCorpus.ingestDraft({
@@ -156,7 +156,7 @@ export class LegalRuleCatalogController {
   @Post("rules")
   @HttpCode(201)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.legalRuleCatalogAuthor)
+  @RequireRoles(AUTH_USER_ROLES.admin)
   async draftRule(
     @Body() body: DraftLegalRuleRequest,
     @Req() req: AuthenticatedRequest,
@@ -265,7 +265,7 @@ export class LegalRuleCatalogController {
   @Post("versions/:versionId/approve")
   @HttpCode(200)
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.legalRuleCatalogApprove)
+  @RequireRoles(AUTH_USER_ROLES.admin)
   async approveVersion(
     @Param("versionId") versionId: string,
     @Body() body: ApproveRuleCatalogVersionRequest,

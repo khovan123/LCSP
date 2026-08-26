@@ -1,3 +1,4 @@
+import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import { HttpStatus, Inject } from "@nestjs/common";
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
@@ -12,7 +13,6 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import {

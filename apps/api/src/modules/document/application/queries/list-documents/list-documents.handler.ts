@@ -1,6 +1,5 @@
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
-  DOCUMENT_ACTIONS,
   DOCUMENT_ERROR_CODES,
   DOCUMENT_REQUEST_STATUSES,
   DOCUMENT_TYPES,
@@ -46,15 +45,10 @@ export class ListDocumentsHandler implements IQueryHandler<ListDocumentsQuery> {
    * @throws When the selected read action is unauthorized or the redacted caller is outside the assessment scope.
    */
   async execute(query: ListDocumentsQuery) {
-    const allowRedactedRead =
-      query.selectedAction === DOCUMENT_ACTIONS.readRedacted;
-    const allowFullRead = query.selectedAction === DOCUMENT_ACTIONS.read;
+    const allowRedactedRead = query.actorRole === AUTH_USER_ROLES.admin;
+    const allowFullRead = query.actorRole === AUTH_USER_ROLES.customer;
     if (!allowFullRead && !allowRedactedRead) {
       this.forbidden(query.correlationId);
-    }
-
-    if (allowRedactedRead && query.scope !== query.assessmentId) {
-      this.notFound(query.correlationId);
     }
 
     const rows = await this.prisma.documentRequest.findMany({

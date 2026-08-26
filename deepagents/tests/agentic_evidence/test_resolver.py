@@ -29,7 +29,7 @@ class AllowAuthorizer:
         assert organization_id == "org-1"
         assert isinstance(correlationId, UUID)
         self.calls.append(tool_name)
-        return AgenticAuthorizationResult(action="evidence:read")
+        return AgenticAuthorizationResult(role="CUSTOMER")
 
 
 def context() -> AgenticInvocationContext:

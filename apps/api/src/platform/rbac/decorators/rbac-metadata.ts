@@ -1,11 +1,6 @@
-import { RBAC_ACTIONS, RBAC_METADATA_TYPES } from "@lcsp/contracts/rbac";
+import type { AuthUserRole } from "@lcsp/contracts/auth";
 
-export const RBAC_METADATA_KEY = RBAC_ACTIONS.metadataCheck;
+export const RBAC_METADATA_KEY = "rbac:metadata";
 
 export type RbacMetadata =
-  | { type: typeof RBAC_METADATA_TYPES.session }
-  | { type: typeof RBAC_METADATA_TYPES.action; action: string }
-  | {
-      type: typeof RBAC_METADATA_TYPES.actionAny;
-      actions: readonly [string, ...string[]];
-    };
+  { type: "session" } | { type: "roles"; roles: readonly AuthUserRole[] };

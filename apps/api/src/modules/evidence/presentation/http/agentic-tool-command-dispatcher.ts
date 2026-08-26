@@ -1,5 +1,4 @@
 import { EVIDENCE_ERROR_CODES } from "@lcsp/contracts/evidence";
-import type { RbacAction } from "@lcsp/contracts/rbac";
 import { HttpStatus } from "@nestjs/common";
 
 import { problemException } from "../../../../platform/problems/problem-factory.js";
@@ -12,7 +11,7 @@ export type AgenticToolCommandDispatchArgs = {
   input: Record<string, unknown>;
 };
 
-const PROTECTED_COMMAND_ACTIONS: Readonly<Record<string, RbacAction>> = {};
+const PROTECTED_COMMAND_ACTIONS: Readonly<Record<string, string>> = {};
 
 /** Return true only for centrally registered protected mutation tools. */
 export function isAgenticToolCommand(toolName: string): boolean {
@@ -20,7 +19,7 @@ export function isAgenticToolCommand(toolName: string): boolean {
 }
 
 /** Resolve the mandatory RBAC action for one protected canonical tool. */
-export function agenticToolCommandRbacAction(toolName: string): RbacAction {
+export function agenticToolCommandRbacAction(toolName: string): string {
   const action = PROTECTED_COMMAND_ACTIONS[toolName];
   if (!action) {
     throw problemException(

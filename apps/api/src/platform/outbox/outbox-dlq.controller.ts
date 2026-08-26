@@ -7,12 +7,12 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import { OutboxDlqService } from "./outbox-dlq.service.js";
 
 import type { AuthenticatedRequest } from "../../common/interfaces/authenticated-request.interface.js";
-import { RequireAction } from "../rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../rbac/rbac.guard.js";
 import { resultEnvelope } from "../problems/result-envelope.js";
 
@@ -21,7 +21,7 @@ import { resultEnvelope } from "../problems/result-envelope.js";
  */
 @Controller("internal/outbox/dlq")
 @UseGuards(RbacGuard)
-@RequireAction(RBAC_ACTIONS.outboxReplay)
+@RequireRoles(AUTH_USER_ROLES.admin)
 export class OutboxDlqController {
   /**
    * Creates the controller with the DLQ application service.

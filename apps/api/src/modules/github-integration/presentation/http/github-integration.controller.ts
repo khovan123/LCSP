@@ -11,11 +11,11 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus } from "@nestjs/cqrs";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import type { Response } from "express";
 
 import { createCorrelationId } from "../../../auth-workspace/infrastructure/security/security.utils.js";
-import { RequireAction } from "../../../../platform/rbac/decorators/require-action.decorator.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
@@ -62,7 +62,7 @@ export class GitHubIntegrationController {
    */
   @Get("github/app/start")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.githubConnect)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   @ReAuthForSensitiveRoute({
     routeId: SENSITIVE_ROUTE_IDS.githubAppStart,
     method: "GET",
@@ -132,7 +132,7 @@ export class GitHubIntegrationController {
    */
   @Post("assessments/:assessmentId/snapshots")
   @UseGuards(RbacGuard)
-  @RequireAction(RBAC_ACTIONS.snapshotCreate)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async pinSnapshot(
     @Param("assessmentId") assessmentId: string,
     @Body() body: PinSnapshotRequest,
@@ -167,7 +167,7 @@ export class GitHubIntegrationController {
    */
   @Post("assessments/:assessmentId/scan-jobs")
   @UseGuards(ScanTriggerGuard)
-  @RequireAction(RBAC_ACTIONS.scanTrigger)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async triggerScan(
     @Param("assessmentId") assessmentId: string,
     @Body() body: TriggerScanRequest,

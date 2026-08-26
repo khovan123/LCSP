@@ -4,7 +4,6 @@ import {
   AUTH_USER_ROLES,
   SIGN_UP_ERROR_CODES,
 } from "@lcsp/contracts/auth";
-import { actionsForRole } from "@lcsp/contracts/rbac";
 import { HttpStatus } from "@nestjs/common";
 import * as crypto from "node:crypto";
 
@@ -67,7 +66,7 @@ export class SignUpHandler {
     const sessionToken = issueOpaqueToken();
     const sessionExpiresAt = new Date(Date.now() + SESSION_TTL_MS);
     const role = AUTH_USER_ROLES.customer;
-    const allowedActions = uniqueActions(actionsForRole(role));
+    const allowedActions: string[] = [];
     const newUserId = crypto.randomUUID();
     const newSessionId = crypto.randomUUID();
 

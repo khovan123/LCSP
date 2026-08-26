@@ -4,12 +4,18 @@ import {
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
   createProblemResult,
 } from "@lcsp/contracts/auth";
-import {
-  actionsForRole,
-  RBAC_ACTIONS,
-  RBAC_DECISION,
-  RBAC_REASON_CODE,
-} from "@lcsp/contracts/rbac";
+const RBAC_ACTIONS = {
+  workspaceRead: "workspace:read",
+} as const;
+
+const RBAC_DECISION = {
+  allow: "ALLOW",
+  deny: "DENY",
+} as const;
+
+const RBAC_REASON_CODE = {
+  authorized: "AUTHORIZED",
+} as const;
 
 import type {
   AuditEvent,
@@ -204,7 +210,7 @@ export class AuthWorkspaceSupportService {
       ok: true,
       decision: allowed,
       role: user.role,
-      granted_actions: [...actionsForRole(user.role)],
+      granted_actions: [],
     };
   }
 

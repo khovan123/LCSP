@@ -1,4 +1,4 @@
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   AGENTIC_TOOL_NAMES,
   AGENTIC_TOOL_STATUSES,
@@ -7,7 +7,10 @@ import {
   type AssessmentRuntimeStageCode,
   EVIDENCE_ERROR_CODES,
 } from "@lcsp/contracts/evidence";
-import { RBAC_DECISION } from "@lcsp/contracts/rbac";
+const RBAC_DECISION = {
+  allow: "ALLOW",
+  deny: "DENY",
+} as const;
 import {
   Body,
   Controller,
@@ -36,7 +39,6 @@ import {
 } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import {
-  agenticToolCommandRbacAction,
   buildAgenticToolCommand,
   isAgenticToolCommand,
 } from "./agentic-tool-command-dispatcher.js";
@@ -245,7 +247,7 @@ export class InternalAgenticToolDispatchController {
 
     const authorization = await this.rbacPreflight.evaluate({
       userId: args.userId,
-      action: agenticToolCommandRbacAction(args.toolName),
+      requiredRoles: [AUTH_USER_ROLES.customer],
       correlationId: args.correlationId,
     });
 

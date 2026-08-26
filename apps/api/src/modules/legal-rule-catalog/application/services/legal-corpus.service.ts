@@ -1,3 +1,4 @@
+import { RBAC_ACTIONS } from "../../../../platform/rbac/rbac.constants.js";
 import { createHash, randomUUID } from "node:crypto";
 
 import { HttpStatus, Injectable } from "@nestjs/common";
@@ -25,7 +26,7 @@ import {
   OUTBOX_AGGREGATE_TYPES,
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { LegalRetrievalIndexStatus, Prisma } from "@prisma/client";
 import { VERIFIED_PROFILE_STATUSES } from "@lcsp/contracts/scan";
 

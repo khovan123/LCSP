@@ -1,5 +1,6 @@
 """RBAC preflight client used by worker-side authorization boundaries."""
 
+from collections.abc import Sequence
 from typing import Literal
 
 import httpx
@@ -31,7 +32,7 @@ class RbacClient:
         self,
         user_id: str,
         organization_id: str,
-        action: str,
+        required_roles: Sequence[str],
         correlationId: str,
     ) -> Literal["allow", "deny"]:
         """Evaluate whether a worker action is allowed by RBAC.
@@ -43,7 +44,7 @@ class RbacClient:
         Args:
             user_id: User or technical principal requesting the action.
             organization_id: Tenant boundary for the authorization decision.
-            action: RBAC action identifier to evaluate.
+            required_roles: Roles that may execute the worker operation.
             correlationId: Correlation identifier propagated to the API.
 
         Returns:
@@ -59,7 +60,7 @@ class RbacClient:
                 "json": {
                     "user_id": user_id,
                     "organization_id": organization_id,
-                    "action": action,
+                    "required_roles": list(required_roles),
                     "correlationId": correlationId,
                 },
                 "headers": {"X-Worker-Api-Key": self._api_key},
