@@ -188,7 +188,7 @@ function safePersistenceDiagnostic(error: unknown): Record<string, unknown> {
     };
   }
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    const meta = error.meta as Record<string, unknown> | undefined;
+    const meta = error.meta;
     return {
       errorClass: "PrismaClientKnownRequestError",
       prismaCode: error.code,

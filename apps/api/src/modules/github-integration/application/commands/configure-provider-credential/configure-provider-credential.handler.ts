@@ -78,7 +78,7 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
         mapProviderFailure(error, command.correlationId);
       }
       const context: CredentialStorageContext = {
-        provider: command.provider as CredentialStorageContext["provider"],
+        provider: command.provider,
         providerCredentialId: credentialId,
         organizationId: command.organizationId,
         ownerUserId: command.userId,
