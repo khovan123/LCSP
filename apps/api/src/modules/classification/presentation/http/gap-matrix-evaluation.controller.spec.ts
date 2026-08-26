@@ -1,6 +1,6 @@
 import { HttpException } from "@nestjs/common";
 import { jest } from "@jest/globals";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { QueryBus } from "@nestjs/cqrs";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
@@ -13,10 +13,8 @@ function request(): AuthenticatedRequest {
     rbacContext: {
       userId: "user-1",
       sessionId: "session-1",
-      subjectRole: "Manager",
+      role: AUTH_USER_ROLES.customer,
       scope: null,
-      grantedActions: [RBAC_ACTIONS.gapMatrixEvaluate],
-      selectedAction: RBAC_ACTIONS.gapMatrixEvaluate,
     },
   } as AuthenticatedRequest;
 }
@@ -24,9 +22,7 @@ function request(): AuthenticatedRequest {
 describe("GapMatrixEvaluationController", () => {
   it("TC-02: rejects unexpected payload keys before dispatch", async () => {
     const execute = jest.fn<QueryBus["execute"]>();
-    const controller = new GapMatrixEvaluationController({
-      execute,
-    } as unknown as QueryBus);
+    const controller = new GapMatrixEvaluationController({ execute } as unknown as QueryBus);
 
     await expect(
       controller.evaluateGapMatrix(
@@ -43,12 +39,8 @@ describe("GapMatrixEvaluationController", () => {
   });
 
   it("TC-01: dispatches only stable gap-matrix inputs", async () => {
-    const execute = jest
-      .fn<QueryBus["execute"]>()
-      .mockResolvedValue({ status: "READY" });
-    const controller = new GapMatrixEvaluationController({
-      execute,
-    } as unknown as QueryBus);
+    const execute = jest.fn<QueryBus["execute"]>().mockResolvedValue({ status: "READY" });
+    const controller = new GapMatrixEvaluationController({ execute } as unknown as QueryBus);
 
     await controller.evaluateGapMatrix(
       "assessment-1",
@@ -66,6 +58,8 @@ describe("GapMatrixEvaluationController", () => {
           matrixRef: "matrix:classification-1",
           evidenceRefs: ["citation:chunk_allow_1"],
         },
+        actorId: "user-1",
+        correlationId: "correlation-1",
       }) as EvaluateGapMatrixQuery,
     );
   });
