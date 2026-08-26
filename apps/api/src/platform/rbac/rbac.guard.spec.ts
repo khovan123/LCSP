@@ -1,11 +1,5 @@
 import { jest } from "@jest/globals";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import {
-  actionsForRole,
-  RBAC_ACTIONS,
-  RBAC_DECISION,
-  RBAC_REASON_CODE,
-} from "@lcsp/contracts/rbac";
+import { AUTH_USER_ROLES, type AuthUserRole } from "@lcsp/contracts/auth";
 import {
   HttpStatus,
   type ExecutionContext,
@@ -17,30 +11,28 @@ import type { AuthorizationDecisionRepository } from "../../modules/auth-workspa
 import { Session } from "../../modules/auth-workspace/domain/entities/session.entity.js";
 import { User } from "../../modules/auth-workspace/domain/entities/user.entity.js";
 import type { AuthorizationDecision } from "../../modules/auth-workspace/domain/models/auth-workspace.models.js";
-import { RequireAction } from "./decorators/require-action.decorator.js";
-import { RequireAnyAction } from "./decorators/require-any-action.decorator.js";
+import { RequireRoles } from "./decorators/require-roles.decorator.js";
 import { RequireSession } from "./decorators/require-session.decorator.js";
 import type { RbacRequestContext } from "./interfaces/rbac-request.interface.js";
 import type {
   RbacContextLoader,
   RbacContextResult,
 } from "./rbac-context.loader.js";
-import type { RbacEvaluatorService } from "./rbac-evaluator.service.js";
+import { LOCAL_RBAC_REASON_CODES } from "./rbac-reason-codes.js";
 import { RbacGuard } from "./rbac.guard.js";
-import type { RbacDecisionResult } from "./rbac.types.js";
 
 class DummyController {
-  @RequireAction(RBAC_ACTIONS.workspaceRead)
-  getWorkspaceRead(this: void): void {}
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  customerOnly(this: void): void {}
+
+  @RequireRoles(AUTH_USER_ROLES.admin)
+  adminOnly(this: void): void {}
+
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
+  shared(this: void): void {}
 
   @RequireSession()
-  getWorkspace(this: void): void {}
-
-  @RequireAnyAction(
-    RBAC_ACTIONS.evidenceRead,
-    RBAC_ACTIONS.evidenceReadRedacted,
-  )
-  getEvidence(this: void): void {}
+  sessionOnly(this: void): void {}
 
   noDecorator(this: void): void {}
 }
@@ -75,14 +67,14 @@ function makeSession(): Session {
   });
 }
 
-function makeUser(): User {
+function makeUser(role: AuthUserRole = AUTH_USER_ROLES.customer): User {
   return User.rehydrate({
     id: "user-1",
     email: "user@example.com",
     passwordHash: "hash",
     emailVerified: true,
     failedLoginCount: 0,
-    role: AUTH_USER_ROLES.customer,
+    role,
   });
 }
 
@@ -92,15 +84,12 @@ function makeOkLoadResult(): RbacContextResult {
     ok: true,
     session: makeSession(),
     user,
-    grantedActions: actionsForRole(user.role),
   };
 }
 
 function makeGuard(
   overrides: {
     loadResult?: RbacContextResult;
-    evaluateResult?: RbacDecisionResult;
-    evaluateImpl?: RbacEvaluatorService["evaluate"];
     appendImpl?: (decision: AuthorizationDecision) => Promise<void>;
   } = {},
 ) {
@@ -109,22 +98,14 @@ function makeGuard(
     .mockResolvedValue(overrides.loadResult ?? makeOkLoadResult());
   const loader = { load } as unknown as RbacContextLoader;
 
-  const evaluateResult: RbacDecisionResult = overrides.evaluateResult ?? {
-    decision: RBAC_DECISION.allow,
-  };
-  const evaluate = jest
-    .fn<RbacEvaluatorService["evaluate"]>()
-    .mockImplementation(overrides.evaluateImpl ?? (() => evaluateResult));
-  const evaluator = { evaluate } as unknown as RbacEvaluatorService;
-
   const append = jest
     .fn<AuthorizationDecisionRepository["append"]>()
     .mockImplementation(overrides.appendImpl ?? (() => Promise.resolve()));
   const decisions = { append } as unknown as AuthorizationDecisionRepository;
 
-  const guard = new RbacGuard(new Reflector(), loader, evaluator, decisions);
+  const guard = new RbacGuard(new Reflector(), loader, decisions);
 
-  return { guard, load, evaluate, append };
+  return { guard, load, append };
 }
 
 async function captureError(promise: Promise<unknown>): Promise<HttpException> {
@@ -132,10 +113,10 @@ async function captureError(promise: Promise<unknown>): Promise<HttpException> {
 }
 
 describe("RbacGuard", () => {
-  it("allows when the session loads and the action is granted", async () => {
+  it("allows when the authenticated user's role is required", async () => {
     const { guard, append } = makeGuard();
     const { context, request } = makeContext({
-      handler: DummyController.prototype.getWorkspaceRead,
+      handler: DummyController.prototype.customerOnly,
       authorization: "Bearer valid-token",
     });
 
@@ -145,8 +126,8 @@ describe("RbacGuard", () => {
       expect.objectContaining({
         actor_id: "user-1",
         session_id: "session-1",
-        decision: RBAC_DECISION.allow,
-        action: RBAC_ACTIONS.workspaceRead,
+        decision: "ALLOW",
+        reason_code: LOCAL_RBAC_REASON_CODES.authorized,
       }),
     );
     expect(
@@ -155,14 +136,13 @@ describe("RbacGuard", () => {
       userId: "user-1",
       sessionId: "session-1",
       role: AUTH_USER_ROLES.customer,
-      selectedAction: RBAC_ACTIONS.workspaceRead,
     });
   });
 
   it("returns 401 SESSION_INVALID when the Authorization header is missing", async () => {
     const { guard, load } = makeGuard();
     const { context } = makeContext({
-      handler: DummyController.prototype.getWorkspaceRead,
+      handler: DummyController.prototype.customerOnly,
     });
 
     const error = await captureError(guard.canActivate(context));
@@ -170,17 +150,17 @@ describe("RbacGuard", () => {
     expect(error.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
     expect(error.getResponse()).toMatchObject({
       ok: false,
-      problem: { code: RBAC_REASON_CODE.sessionInvalid },
+      problem: { code: LOCAL_RBAC_REASON_CODES.sessionInvalid },
     });
     expect(load).not.toHaveBeenCalled();
   });
 
   it("returns 401 SESSION_INVALID when the loader rejects the session", async () => {
     const { guard } = makeGuard({
-      loadResult: { ok: false, reason: RBAC_REASON_CODE.sessionInvalid },
+      loadResult: { ok: false, reason: LOCAL_RBAC_REASON_CODES.sessionInvalid },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.getWorkspaceRead,
+      handler: DummyController.prototype.customerOnly,
       authorization: "Bearer expired-token",
     });
 
@@ -189,7 +169,7 @@ describe("RbacGuard", () => {
     expect(error.getStatus()).toBe(HttpStatus.UNAUTHORIZED);
     expect(error.getResponse()).toMatchObject({
       ok: false,
-      problem: { code: RBAC_REASON_CODE.sessionInvalid },
+      problem: { code: LOCAL_RBAC_REASON_CODES.sessionInvalid },
     });
   });
 
@@ -197,12 +177,12 @@ describe("RbacGuard", () => {
     const { guard } = makeGuard({
       loadResult: {
         ok: false,
-        reason: RBAC_REASON_CODE.mfaRequired,
+        reason: LOCAL_RBAC_REASON_CODES.mfaRequired,
         mfaEnrolled: true,
       },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.getWorkspaceRead,
+      handler: DummyController.prototype.customerOnly,
       authorization: "Bearer token",
     });
 
@@ -212,7 +192,7 @@ describe("RbacGuard", () => {
     expect(error.getResponse()).toMatchObject({
       ok: false,
       problem: {
-        code: RBAC_REASON_CODE.mfaRequired,
+        code: LOCAL_RBAC_REASON_CODES.mfaRequired,
         meta: { mfaEnrolled: true },
       },
     });
@@ -220,10 +200,10 @@ describe("RbacGuard", () => {
 
   it("returns 403 RBAC_DENIED on loader load errors", async () => {
     const { guard } = makeGuard({
-      loadResult: { ok: false, reason: RBAC_REASON_CODE.loadError },
+      loadResult: { ok: false, reason: LOCAL_RBAC_REASON_CODES.loadError },
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.getWorkspaceRead,
+      handler: DummyController.prototype.customerOnly,
       authorization: "Bearer token",
     });
 
@@ -232,19 +212,14 @@ describe("RbacGuard", () => {
     expect(error.getStatus()).toBe(HttpStatus.FORBIDDEN);
     expect(error.getResponse()).toMatchObject({
       ok: false,
-      problem: { code: RBAC_REASON_CODE.denied },
+      problem: { code: LOCAL_RBAC_REASON_CODES.denied },
     });
   });
 
-  it("returns 403 RBAC_DENIED and logs the evaluator reason when action evaluation denies", async () => {
-    const { guard, append } = makeGuard({
-      evaluateResult: {
-        decision: RBAC_DECISION.deny,
-        reasonCode: RBAC_REASON_CODE.actionNotGranted,
-      },
-    });
+  it("returns 403 RBAC_DENIED when the user role is not allowed", async () => {
+    const { guard, append } = makeGuard();
     const { context } = makeContext({
-      handler: DummyController.prototype.getWorkspaceRead,
+      handler: DummyController.prototype.adminOnly,
       authorization: "Bearer token",
     });
 
@@ -253,39 +228,43 @@ describe("RbacGuard", () => {
     expect(error.getStatus()).toBe(HttpStatus.FORBIDDEN);
     expect(error.getResponse()).toMatchObject({
       ok: false,
-      problem: { code: RBAC_REASON_CODE.denied },
+      problem: { code: LOCAL_RBAC_REASON_CODES.denied },
     });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: RBAC_DECISION.deny,
-        reason_code: RBAC_REASON_CODE.actionNotGranted,
+        decision: "DENY",
+        reason_code: LOCAL_RBAC_REASON_CODES.denied,
       }),
     );
   });
 
-  it("@RequireSession passes without action evaluation", async () => {
-    const { guard, evaluate, append } = makeGuard();
+  it("@RequireSession passes for an authenticated user regardless of role", async () => {
+    const { guard, append } = makeGuard({
+      loadResult: {
+        ok: true,
+        session: makeSession(),
+        user: makeUser(AUTH_USER_ROLES.admin),
+      },
+    });
     const { context, request } = makeContext({
-      handler: DummyController.prototype.getWorkspace,
+      handler: DummyController.prototype.sessionOnly,
       authorization: "Bearer token",
     });
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
 
-    expect(evaluate).not.toHaveBeenCalled();
     expect(
       (request as { rbacContext?: RbacRequestContext }).rbacContext,
     ).toMatchObject({
-      role: AUTH_USER_ROLES.customer,
-      selectedAction: null,
+      role: AUTH_USER_ROLES.admin,
     });
     expect(append).toHaveBeenCalledWith(
-      expect.objectContaining({ decision: RBAC_DECISION.allow }),
+      expect.objectContaining({ decision: "ALLOW" }),
     );
   });
 
   it("defaults to deny when no RBAC metadata is present", async () => {
-    const { guard, load, evaluate, append } = makeGuard();
+    const { guard, load, append } = makeGuard();
     const { context } = makeContext({
       handler: DummyController.prototype.noDecorator,
       authorization: "Bearer token",
@@ -295,71 +274,54 @@ describe("RbacGuard", () => {
 
     expect(error.getStatus()).toBe(HttpStatus.FORBIDDEN);
     expect(load).not.toHaveBeenCalled();
-    expect(evaluate).not.toHaveBeenCalled();
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: RBAC_DECISION.deny,
-        reason_code: RBAC_REASON_CODE.metadataMissing,
+        decision: "DENY",
+        reason_code: LOCAL_RBAC_REASON_CODES.metadataMissing,
       }),
     );
   });
 
-  it("selects and records the first allowed action from @RequireAnyAction", async () => {
-    const { guard, evaluate, append } = makeGuard({
-      evaluateImpl: (context) => ({
-        decision:
-          context.action === RBAC_ACTIONS.evidenceReadRedacted
-            ? RBAC_DECISION.allow
-            : RBAC_DECISION.deny,
-        reasonCode:
-          context.action === RBAC_ACTIONS.evidenceReadRedacted
-            ? undefined
-            : RBAC_REASON_CODE.actionNotGranted,
-      }),
+  it("allows when any role declared by @RequireRoles matches", async () => {
+    const { guard, append } = makeGuard({
+      loadResult: {
+        ok: true,
+        session: makeSession(),
+        user: makeUser(AUTH_USER_ROLES.admin),
+      },
     });
     const { context, request } = makeContext({
-      handler: DummyController.prototype.getEvidence,
+      handler: DummyController.prototype.shared,
       authorization: "Bearer token",
     });
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
 
-    expect(evaluate).toHaveBeenCalledTimes(2);
     expect(
-      (request as { rbacContext?: RbacRequestContext }).rbacContext
-        ?.selectedAction,
-    ).toBe(RBAC_ACTIONS.evidenceReadRedacted);
+      (request as { rbacContext?: RbacRequestContext }).rbacContext,
+    ).toMatchObject({ role: AUTH_USER_ROLES.admin });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: RBAC_ACTIONS.evidenceReadRedacted,
-        decision: RBAC_DECISION.allow,
+        decision: "ALLOW",
+        reason_code: LOCAL_RBAC_REASON_CODES.authorized,
       }),
     );
   });
 
-  it("denies and records every candidate when @RequireAnyAction has no allowed action", async () => {
-    const { guard, append } = makeGuard({
-      evaluateResult: {
-        decision: RBAC_DECISION.deny,
-        reasonCode: RBAC_REASON_CODE.actionNotGranted,
-      },
-    });
-    const { context } = makeContext({
-      handler: DummyController.prototype.getEvidence,
+  it("also allows the other role declared by @RequireRoles", async () => {
+    const { guard, append } = makeGuard();
+    const { context, request } = makeContext({
+      handler: DummyController.prototype.shared,
       authorization: "Bearer token",
     });
 
-    const error = await captureError(guard.canActivate(context));
+    await expect(guard.canActivate(context)).resolves.toBe(true);
 
-    expect(error.getStatus()).toBe(HttpStatus.FORBIDDEN);
-    expect(append).toHaveBeenCalledTimes(2);
-    expect(append).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ action: RBAC_ACTIONS.evidenceRead }),
-    );
-    expect(append).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ action: RBAC_ACTIONS.evidenceReadRedacted }),
+    expect(
+      (request as { rbacContext?: RbacRequestContext }).rbacContext,
+    ).toMatchObject({ role: AUTH_USER_ROLES.customer });
+    expect(append).toHaveBeenCalledWith(
+      expect.objectContaining({ decision: "ALLOW" }),
     );
   });
 
@@ -368,7 +330,7 @@ describe("RbacGuard", () => {
       appendImpl: () => Promise.reject(new Error("db down")),
     });
     const { context } = makeContext({
-      handler: DummyController.prototype.getWorkspaceRead,
+      handler: DummyController.prototype.customerOnly,
       authorization: "Bearer token",
     });
 
@@ -378,7 +340,7 @@ describe("RbacGuard", () => {
   it("records a domain resource id from route params when present", async () => {
     const { guard, append } = makeGuard();
     const { context } = makeContext({
-      handler: DummyController.prototype.getWorkspaceRead,
+      handler: DummyController.prototype.customerOnly,
       authorization: "Bearer token",
       params: { assessmentId: "assessment-1", conflictId: "conflict-1" },
     });

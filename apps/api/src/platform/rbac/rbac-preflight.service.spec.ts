@@ -1,16 +1,11 @@
 import { jest } from "@jest/globals";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import {
-  RBAC_ACTIONS,
-  RBAC_DECISION,
-  RBAC_REASON_CODE,
-} from "@lcsp/contracts/rbac";
 
 import type { UserRepository } from "../../modules/auth-workspace/application/ports/persistence/user.repository.js";
 import type { AuthorizationDecisionRepository } from "../../modules/auth-workspace/application/ports/persistence/authorization-decision.repository.js";
 import { User } from "../../modules/auth-workspace/domain/entities/user.entity.js";
 import type { AuthorizationDecision } from "../../modules/auth-workspace/domain/models/auth-workspace.models.js";
-import { RbacEvaluatorService } from "./rbac-evaluator.service.js";
+import { LOCAL_RBAC_REASON_CODES } from "./rbac-reason-codes.js";
 import {
   RbacPreflightService,
   type RbacPreflightInput,
@@ -35,7 +30,7 @@ function makeInput(
 ): RbacPreflightInput {
   return {
     userId: "user-1",
-    action: RBAC_ACTIONS.scanTrigger,
+    requiredRoles: [AUTH_USER_ROLES.customer],
     correlationId: "corr-1",
     ...overrides,
   };
@@ -70,22 +65,17 @@ function makeService(
     .fn<AuthorizationDecisionRepository["append"]>()
     .mockImplementation(overrides.appendImpl ?? (() => Promise.resolve()));
   const decisions = { append } as unknown as AuthorizationDecisionRepository;
-
-  const service = new RbacPreflightService(
-    users,
-    new RbacEvaluatorService(),
-    decisions,
-  );
+  const service = new RbacPreflightService(users, decisions);
 
   return { service, findById, append };
 }
 
 describe("RbacPreflightService", () => {
-  it("allows and logs when the user's role grants the action", async () => {
+  it("allows and logs when the user's role is required", async () => {
     const { service, append } = makeService();
 
     await expect(service.evaluate(makeInput())).resolves.toEqual({
-      decision: RBAC_DECISION.allow,
+      decision: "ALLOW",
       reasonCode: null,
       correlationId: "corr-1",
     });
@@ -93,40 +83,45 @@ describe("RbacPreflightService", () => {
       expect.objectContaining({
         actor_id: "user-1",
         session_id: null,
-        resource_id: RBAC_ACTIONS.scanTrigger,
-        decision: RBAC_DECISION.allow,
-        reason_code: RBAC_REASON_CODE.authorized,
+        resource_id: AUTH_USER_ROLES.customer,
+        decision: "ALLOW",
+        reason_code: LOCAL_RBAC_REASON_CODES.authorized,
       }),
     );
   });
 
-  it("denies and logs when the user's role does not grant the action", async () => {
+  it("denies and logs when the user's role is not required", async () => {
     const { service, append } = makeService();
 
     await expect(
-      service.evaluate(makeInput({ action: RBAC_ACTIONS.outboxReplay })),
+      service.evaluate(makeInput({ requiredRoles: [AUTH_USER_ROLES.admin] })),
     ).resolves.toEqual({
-      decision: RBAC_DECISION.deny,
-      reasonCode: RBAC_REASON_CODE.actionNotGranted,
+      decision: "DENY",
+      reasonCode: LOCAL_RBAC_REASON_CODES.denied,
       correlationId: "corr-1",
     });
     expect(append).toHaveBeenCalledWith(
       expect.objectContaining({
-        decision: RBAC_DECISION.deny,
-        reason_code: RBAC_REASON_CODE.actionNotGranted,
+        resource_id: AUTH_USER_ROLES.admin,
+        decision: "DENY",
+        reason_code: LOCAL_RBAC_REASON_CODES.denied,
       }),
     );
   });
 
-  it("allows admin-only actions for admin users", async () => {
+  it("allows admin users when admin is one of the required roles", async () => {
     const { service } = makeService({
       user: makeUser({ role: AUTH_USER_ROLES.admin }),
     });
 
     await expect(
-      service.evaluate(makeInput({ action: RBAC_ACTIONS.outboxReplay })),
+      service.evaluate(
+        makeInput({
+          requiredRoles: [AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin],
+        }),
+      ),
     ).resolves.toEqual({
-      decision: RBAC_DECISION.allow,
+      decision: "ALLOW",
       reasonCode: null,
       correlationId: "corr-1",
     });
@@ -136,8 +131,8 @@ describe("RbacPreflightService", () => {
     const { service } = makeService({ user: null });
 
     await expect(service.evaluate(makeInput())).resolves.toEqual({
-      decision: RBAC_DECISION.deny,
-      reasonCode: RBAC_REASON_CODE.loadError,
+      decision: "DENY",
+      reasonCode: LOCAL_RBAC_REASON_CODES.loadError,
       correlationId: "corr-1",
     });
   });
@@ -148,8 +143,8 @@ describe("RbacPreflightService", () => {
     });
 
     await expect(service.evaluate(makeInput())).resolves.toEqual({
-      decision: RBAC_DECISION.deny,
-      reasonCode: RBAC_REASON_CODE.loadError,
+      decision: "DENY",
+      reasonCode: LOCAL_RBAC_REASON_CODES.loadError,
       correlationId: "corr-1",
     });
   });
@@ -160,7 +155,7 @@ describe("RbacPreflightService", () => {
     });
 
     await expect(service.evaluate(makeInput())).resolves.toEqual({
-      decision: RBAC_DECISION.allow,
+      decision: "ALLOW",
       reasonCode: null,
       correlationId: "corr-1",
     });

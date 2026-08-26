@@ -1,6 +1,5 @@
 import { jest } from "@jest/globals";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import { actionsForRole, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 
 import type { MfaEnrollmentRepository } from "../../modules/auth-workspace/application/ports/persistence/mfa.repository.js";
 import type { SessionRepository } from "../../modules/auth-workspace/application/ports/persistence/session.repository.js";
@@ -10,6 +9,7 @@ import { Session } from "../../modules/auth-workspace/domain/entities/session.en
 import { User } from "../../modules/auth-workspace/domain/entities/user.entity.js";
 import { hashSecret } from "../../modules/auth-workspace/infrastructure/security/security.utils.js";
 import { RbacContextLoader } from "./rbac-context.loader.js";
+import { LOCAL_RBAC_REASON_CODES } from "./rbac-reason-codes.js";
 
 const NOW = 1_700_000_000_000;
 
@@ -86,7 +86,7 @@ function makeLoader(
 }
 
 describe("RbacContextLoader", () => {
-  it("resolves session, user role, and granted actions on the happy path", async () => {
+  it("resolves the active session and user role on the happy path", async () => {
     const loader = makeLoader();
 
     const result = await loader.load("raw-token", NOW, {
@@ -97,9 +97,7 @@ describe("RbacContextLoader", () => {
     if (result.ok) {
       expect(result.session.id).toBe("session-1");
       expect(result.user.id).toBe("user-1");
-      expect(result.grantedActions).toEqual(
-        actionsForRole(AUTH_USER_ROLES.customer),
-      );
+      expect(result.user.role).toBe(AUTH_USER_ROLES.customer);
     }
   });
 
@@ -114,7 +112,7 @@ describe("RbacContextLoader", () => {
 
     await expect(loader.load("raw-token", NOW)).resolves.toEqual({
       ok: false,
-      reason: RBAC_REASON_CODE.sessionInvalid,
+      reason: LOCAL_RBAC_REASON_CODES.sessionInvalid,
     });
   });
 
@@ -134,7 +132,7 @@ describe("RbacContextLoader", () => {
 
       await expect(loader.load("raw-token", NOW)).resolves.toEqual({
         ok: false,
-        reason: RBAC_REASON_CODE.sessionInvalid,
+        reason: LOCAL_RBAC_REASON_CODES.sessionInvalid,
       });
     }
   });
@@ -177,7 +175,7 @@ describe("RbacContextLoader", () => {
 
     await expect(loader.load("raw-token", NOW)).resolves.toEqual({
       ok: false,
-      reason: RBAC_REASON_CODE.mfaRequired,
+      reason: LOCAL_RBAC_REASON_CODES.mfaRequired,
       mfaEnrolled: true,
     });
   });
@@ -217,7 +215,7 @@ describe("RbacContextLoader", () => {
 
     await expect(loader.load("raw-token", NOW)).resolves.toEqual({
       ok: false,
-      reason: RBAC_REASON_CODE.loadError,
+      reason: LOCAL_RBAC_REASON_CODES.loadError,
     });
   });
 
@@ -232,7 +230,7 @@ describe("RbacContextLoader", () => {
 
     await expect(loader.load("raw-token", NOW)).resolves.toEqual({
       ok: false,
-      reason: RBAC_REASON_CODE.loadError,
+      reason: LOCAL_RBAC_REASON_CODES.loadError,
     });
   });
 });
