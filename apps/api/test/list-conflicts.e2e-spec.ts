@@ -21,6 +21,7 @@ import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
   seedAuthWorkspaceFixture,
+  seedVerifiedProfileGraph,
   TEST_DATABASE_URL,
 } from "./support/auth-workspace-test-helpers.js";
 import { httpRequest, problemCode, successBody } from "./support/http.js";
@@ -29,7 +30,6 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
   let managerToken: string;
-  const orgId = "org-1";
 
   beforeAll(async () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -47,14 +47,16 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
   });
 
   beforeEach(async () => {
-    await prisma.conflictRecord.deleteMany();
-    await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-    await prisma.assessment.create({
+    await seedVerifiedProfileGraph(prisma, {
+      assessmentId: "assessment-conflicts-1",
+      aiUsageFlowId: "ai-flow-conflict-list",
+      verifiedProfileId: "verified-profile-conflict-list",
+    });
+    await prisma.assessment.update({
+      where: { id: "assessment-conflicts-1" },
       data: {
-        id: "assessment-conflicts-1",
-        ownerId: "user-1",
         name: "Conflict review assessment",
         status: ASSESSMENT_STATUS_CODES.scanInProgress,
       },
@@ -63,7 +65,6 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "manager@acme.test",
       password: "CorrectHorseBatteryStaple!",
-      organization_id: orgId,
     });
     managerToken =
       successBody<{ session_token?: string }>(signIn).session_token ?? "";
@@ -74,7 +75,6 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     await prisma.$disconnect();
   });
 
-  // T01
   it("T01: pending conflicts exist -> 200 list returned", async () => {
     await seedConflict({ id: "conflict-pending-1" });
     await seedConflict({
@@ -126,7 +126,6 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     });
   });
 
-  // T02
   it("T02: no conflicts -> 200 empty list", async () => {
     const result = await listConflicts();
     const body = successBody<ConflictListDto>(result);
@@ -136,7 +135,6 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     assert.equal(body.total, 0);
   });
 
-  // T03
   it("T03: status filter returns only resolved conflicts", async () => {
     await seedConflict({ id: "conflict-pending-1" });
     await seedConflict({
@@ -155,26 +153,15 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     assert.equal(body.conflicts[0]?.status, CONFLICT_RECORD_STATUSES.resolved);
   });
 
-  // T05
-  it("T05: assessment not in org -> 404 ASSESSMENT_NOT_FOUND", async () => {
-    await prisma.assessment.create({
-      data: {
-        id: "assessment-other-org",
-        ownerId: "user-2",
-        name: "Other org assessment",
-        status: ASSESSMENT_STATUS_CODES.scanInProgress,
-      },
-    });
-
+  it("T05: missing assessment -> 404 ASSESSMENT_NOT_FOUND", async () => {
     const result = await httpRequest(app)
-      .get("/assessments/assessment-other-org/conflicts")
+      .get("/assessments/assessment-missing/conflicts")
       .set("Authorization", `Bearer ${managerToken}`);
 
     assert.equal(result.status, 404);
     assert.equal(problemCode(result), ASSESSMENT_ERROR_CODES.notFound);
   });
 
-  // T06
   it("T06: evidence_refs are IDs only, not finding or source content", async () => {
     await seedConflict({
       id: "conflict-privacy-1",
@@ -210,7 +197,6 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     overrides: Partial<{
       id: string;
       assessmentId: string;
-      organizationId: string;
       conflictType: string;
       conflictScore: number;
       scoreExplanation: string;
