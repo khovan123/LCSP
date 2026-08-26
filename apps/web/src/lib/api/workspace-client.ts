@@ -3,7 +3,7 @@ import {
   WIZARD_STATUS_CODES,
   type WizardStatusCode,
 } from "@lcsp/contracts/assessment";
-import { AUTH_ERROR_CODES, WORKSPACE_ERROR_CODES } from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import type { MessageKey } from "@lcsp/i18n";
 
@@ -26,7 +26,6 @@ import { getMfaRedirectLocation, getProblemCode } from "./problem-envelope.ts";
 
 export const WORKSPACE_ROUTES = Object.freeze({
   mfaVerify: "/mfa/verify",
-  workspaceSelect: "/workspace/select",
 });
 
 const workspaceApiPaths = Object.freeze({
@@ -35,9 +34,9 @@ const workspaceApiPaths = Object.freeze({
 });
 
 type WorkspaceApiPayload = {
-  organization_id: string;
-  organization_name: string;
-  subject_role: string;
+  user_id: string;
+  display_name: string;
+  role: string;
   granted_actions: string[];
 };
 
