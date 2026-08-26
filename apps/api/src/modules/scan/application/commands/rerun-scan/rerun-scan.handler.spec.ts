@@ -1,22 +1,21 @@
-import { describe, expect, it, jest, beforeEach } from "@jest/globals";
-import { Test, type TestingModule } from "@nestjs/testing";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
+import { Test, type TestingModule } from "@nestjs/testing";
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
-import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
+import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
 import { OutboxRepository } from "../../../../../platform/outbox/outbox.repository.js";
-import { RerunScanHandler } from "./rerun-scan.handler.js";
 import { RerunScanCommand } from "./rerun-scan.command.js";
+import { RerunScanHandler } from "./rerun-scan.handler.js";
 
 describe("RerunScanHandler", () => {
   let handler: RerunScanHandler;
@@ -27,12 +26,8 @@ describe("RerunScanHandler", () => {
   const defaultRbac = {
     userId: "user-1",
     sessionId: "sess",
-    subjectRole: AUTH_USER_ROLES.customer,
+    role: AUTH_USER_ROLES.customer,
     scope: "assessment-1",
-    grantedActions: [],
-    selectedAction: RBAC_ACTIONS.scanTrigger,
-    policyId: "pol",
-    policyVersion: "1",
   };
 
   const defaultCommand = new RerunScanCommand(

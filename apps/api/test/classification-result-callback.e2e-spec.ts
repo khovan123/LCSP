@@ -94,7 +94,6 @@ describe("Direct EngineeringRule Result Callback (e2e)", () => {
     assert.equal(result?.legalRuleMatchId, null);
     assert.equal(result?.verifiedProfileId, null);
     assert.equal(result?.assessmentId, "assessment-1");
-    assert.equal(result?.organizationId, "org-1");
     assert.equal(result?.schemaVersion, "2.0.0");
     assert.equal(result?.status, CLASSIFICATION_RESULT_STATUSES.accepted);
     assert.equal(
@@ -331,7 +330,6 @@ async function seedAssessmentAndEvidence(prisma: PrismaClient): Promise<void> {
   await prisma.assessment.create({
     data: {
       id: "assessment-1",
-      organizationId: "org-1",
       ownerId: "user-1",
       name: "Direct Engineering Assessment",
       status: ASSESSMENT_STATUS_CODES.scanInProgress,
@@ -346,7 +344,6 @@ async function seedAssessmentAndEvidence(prisma: PrismaClient): Promise<void> {
       id: "ter-1",
       scanJobId: "scan-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       snapshotId: "snapshot-1",
       toolsVersion: { scanner: "test" },
       configHash: { scanner: "sha256:test" },

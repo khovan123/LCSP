@@ -68,7 +68,6 @@ describe("Conflict Detection Callback Endpoint (e2e) [MW-rec-001]", () => {
     await prisma.assessment.create({
       data: {
         id: "assessment-1",
-        organizationId: "org-1",
         ownerId: "user-1",
         name: "Conflict callback assessment",
         status: ASSESSMENT_STATUS_CODES.scanInProgress,
@@ -279,7 +278,6 @@ async function createAIUsageFlow(
       scanJobId: "scan-job-1",
       assessmentId: "assessment-1",
       snapshotId: "snapshot-1",
-      organizationId: "org-1",
       toolsVersion: { semgrep: "1.0.0" },
       configHash: { semgrep: "sha256:abc" },
       evidencePayload: { findings: [{ finding_id: "finding-1" }] },
@@ -293,7 +291,6 @@ async function createAIUsageFlow(
       id: "technical-profile-1",
       evidenceReportId: "evidence-report-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       schemaVersion: "1.0.0",
       providerVersion: "technical-profile-worker@1.0.0",
       profileData: { aiDetected: "confirmed" },
@@ -306,7 +303,6 @@ async function createAIUsageFlow(
       id: "ai-flow-1",
       technicalProfileId: "technical-profile-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       schemaVersion: "1.0.0",
       providerVersion: "ai-usage-flow-worker@1.0.0",
       claims: [{ claim_id: "claim-1" }],

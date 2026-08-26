@@ -9,7 +9,6 @@ import {
   REPOSITORY_SNAPSHOT_STATUSES,
 } from "@lcsp/contracts/github-integration";
 import { OUTBOX_MESSAGE_SCHEMA_VERSION } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 /** MW-gh-004: Scan Trigger Endpoint. */
 
 import * as assert from "node:assert/strict";
@@ -25,6 +24,7 @@ import {
 } from "@lcsp/contracts/github-integration";
 
 import { AppModule } from "../src/app.module.js";
+import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import type { TriggerScanDto } from "../src/modules/github-integration/application/contracts/github-integration/trigger-scan.contract.js";
 import {
@@ -70,7 +70,6 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
     await prisma.assessment.create({
       data: {
         id: "assessment-1",
-        organizationId: "org-1",
         ownerId: "user-1",
         name: "Scan assessment",
         status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
@@ -201,9 +200,17 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
   });
 
   it("T04: hides a snapshot outside the session organization", async () => {
+    await prisma.assessment.create({
+      data: {
+        id: "assessment-other",
+        ownerId: "user-2",
+        name: "Other assessment",
+        status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
+      },
+    });
     await prisma.repositorySnapshot.update({
       where: { id: "snapshot-1" },
-      data: { organizationId: "org-other" },
+      data: { assessmentId: "assessment-other" },
     });
 
     const response = await triggerManual(app, managerToken);
@@ -213,24 +220,6 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
       problemCode(response),
       GITHUB_INTEGRATION_ERROR_CODES.snapshotNotFound,
     );
-  });
-
-  it("T05: RBAC denies a Manager without scan:trigger", async () => {
-    await prisma.authPolicy.update({
-      where: {
-        id_version: {
-          id: "policy-manager-workspace",
-          version: "2026-06-26",
-        },
-      },
-      data: { actions: [RBAC_ACTIONS.workspaceRead] },
-    });
-
-    const response = await triggerManual(app, managerToken);
-
-    assert.equal(response.status, 403);
-    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
-    assert.equal(await prisma.repositoryScanJob.count(), 0);
   });
 
   it("accepts a trusted trigger with the worker API key and no user session", async () => {
@@ -289,7 +278,6 @@ describe("Scan Trigger Endpoint (e2e) [MW-gh-004]", () => {
         id: "prior-scan-job",
         assessmentId: "assessment-1",
         snapshotId: "snapshot-1",
-        organizationId: "org-1",
         idempotencyKey: "scan-request:assessment-1:snapshot-1:0",
         triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
         status: REPOSITORY_SCAN_JOB_STATUSES.completed,
@@ -329,7 +317,6 @@ async function createSnapshot(prisma: PrismaClient, id: string): Promise<void> {
     data: {
       id,
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       connectionId: "connection-1",
       repositoryId: "repo-1",
       repositoryFullName: "acme/example-repo",

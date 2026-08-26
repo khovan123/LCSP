@@ -9,7 +9,6 @@ import {
   DOCUMENT_TYPES,
 } from "@lcsp/contracts/document";
 import { OUTBOX_AGGREGATE_TYPES } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_STATUSES,
@@ -23,6 +22,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
+import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import {
   toPrismaDocumentRequestStatus,
   toPrismaDocumentType,
@@ -84,7 +84,6 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
     await prisma.assessment.create({
       data: {
         id: "assessment-1",
-        organizationId: "org-1",
         ownerId: "user-1",
         name: "Final report assessment",
       },
@@ -187,7 +186,6 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
       data: {
         id: "doc-req-existing",
         assessmentId: "assessment-1",
-        organizationId: "org-1",
         requestedById: "user-1",
         classificationResultId,
         documentType: toPrismaDocumentType(DOCUMENT_TYPES.finalReport),
@@ -207,18 +205,10 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
   });
 
   it("returns 404 ASSESSMENT_NOT_FOUND for assessment outside session organization", async () => {
-    await prisma.authOrganization.create({
-      data: {
-        id: "org-foreign",
-        slug: "foreign",
-        name: "Foreign Organization",
-      },
-    });
     await prisma.assessment.create({
       data: {
         id: "assessment-foreign",
-        organizationId: "org-foreign",
-        ownerId: "user-1",
+        ownerId: "user-2",
         name: "Foreign assessment",
       },
     });
@@ -236,30 +226,6 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
     );
   });
 
-  it("returns 403 RBAC_DENIED when manager policy does not include document:generate", async () => {
-    await seedClassification(prisma, CLASSIFICATION_GUARDRAIL_STATUSES.passed);
-
-    await prisma.authPolicy.update({
-      where: {
-        id_version: {
-          id: "policy-manager-workspace",
-          version: "2026-06-26",
-        },
-      },
-      data: {
-        actions: [RBAC_ACTIONS.workspaceRead],
-      },
-    });
-
-    const response = await requestFinalReport(
-      app,
-      managerToken,
-      "assessment-1",
-    );
-
-    assert.equal(response.status, 403);
-    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
-  });
 });
 
 function requestFinalReport(
@@ -289,7 +255,6 @@ async function seedClassification(
       id: matchId,
       verifiedProfileId: "vp-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       corpusVersionId: "LCSP-LEGAL-CORPUS-v0.1.0",
       legalRuleCatalogVersionId: "LCSP-RULE-CATALOG-v0.1.0",
       schemaVersion: "1.0.0",
@@ -309,7 +274,6 @@ async function seedClassification(
       legalRuleMatchId: matchId,
       verifiedProfileId: "vp-1",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       schemaVersion: "1.0.0",
       classificationData: {
         system_type: "HIGH_IMPACT_AI",

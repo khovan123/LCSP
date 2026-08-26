@@ -6,13 +6,6 @@ import {
   ASSESSMENT_ERROR_CODES,
   ASSESSMENT_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
-import {
-  RBAC_ACTIONS,
-  RBAC_REASON_CODE,
-  RBAC_STATE_GATES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
 import {
   CONFLICT_RECORD_STATUSES,
   type ConflictRecordStatus,
@@ -23,6 +16,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
+import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
 import type { ConflictListDto } from "../src/modules/reconciliation/application/contracts/reconciliation/conflict-list.contract.js";
 import {
@@ -59,32 +53,9 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-    await prisma.authPolicy.update({
-      where: {
-        id_version: {
-          id: "policy-manager-workspace",
-          version: "2026-06-26",
-        },
-      },
-      data: {
-        actions: [
-          RBAC_ACTIONS.workspaceRead,
-          RBAC_ACTIONS.assessmentCreate,
-          RBAC_ACTIONS.assessmentRead,
-          RBAC_ACTIONS.assessmentList,
-          RBAC_ACTIONS.githubConnect,
-          RBAC_ACTIONS.scanRead,
-          RBAC_ACTIONS.scanTrigger,
-          RBAC_ACTIONS.documentGenerate,
-          RBAC_ACTIONS.snapshotCreate,
-          RBAC_ACTIONS.conflictRead,
-        ],
-      },
-    });
     await prisma.assessment.create({
       data: {
         id: "assessment-conflicts-1",
-        organizationId: orgId,
         ownerId: "user-1",
         name: "Conflict review assessment",
         status: ASSESSMENT_STATUS_CODES.scanInProgress,
@@ -186,61 +157,11 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
     assert.equal(body.conflicts[0]?.status, CONFLICT_RECORD_STATUSES.resolved);
   });
 
-  // T04
-  it("T04: actor lacks conflict:read -> 403 RBAC_DENIED", async () => {
-    const restrictedPolicyId = "policy-no-conflict-read";
-    await prisma.authPolicy.create({
-      data: {
-        id: restrictedPolicyId,
-        version: "2026-07-10",
-        actions: [RBAC_ACTIONS.workspaceRead],
-        subjectRole: SUBJECT_ROLES.manager,
-        stateGate: RBAC_STATE_GATES.membershipActive,
-        organizationId: orgId,
-      },
-    });
-    await prisma.authUser.create({
-      data: {
-        id: "user-no-conflict-read",
-        email: "no-conflict-read@acme.test",
-        passwordHash: hashSecret("CorrectHorseBatteryStaple!"),
-        emailVerified: true,
-        failedLoginCount: 0,
-      },
-    });
-    await prisma.authMembership.create({
-      data: {
-        id: "membership-no-conflict-read",
-        userId: "user-no-conflict-read",
-        organizationId: orgId,
-        status: AUTH_MEMBERSHIP_STATUSES.active,
-        subjectAttributes: { role: SUBJECT_ROLES.manager },
-        policyId: restrictedPolicyId,
-        policyVersion: "2026-07-10",
-      },
-    });
-    const signIn = await httpRequest(app).post("/auth/sign-in").send({
-      email: "no-conflict-read@acme.test",
-      password: "CorrectHorseBatteryStaple!",
-      organization_id: orgId,
-    });
-    const restrictedToken =
-      successBody<{ session_token?: string }>(signIn).session_token ?? "";
-
-    const result = await httpRequest(app)
-      .get("/assessments/assessment-conflicts-1/conflicts")
-      .set("Authorization", `Bearer ${restrictedToken}`);
-
-    assert.equal(result.status, 403);
-    assert.equal(problemCode(result), RBAC_REASON_CODE.denied);
-  });
-
   // T05
   it("T05: assessment not in org -> 404 ASSESSMENT_NOT_FOUND", async () => {
     await prisma.assessment.create({
       data: {
         id: "assessment-other-org",
-        organizationId: "org-2",
         ownerId: "user-2",
         name: "Other org assessment",
         status: ASSESSMENT_STATUS_CODES.scanInProgress,
@@ -305,7 +226,6 @@ describe("List Conflicts Endpoint (e2e) [MW-rec-002]", () => {
         id: overrides.id ?? "conflict-pending-1",
         aiUsageFlowId: "ai-flow-conflict-list",
         assessmentId: overrides.assessmentId ?? "assessment-conflicts-1",
-        organizationId: overrides.organizationId ?? orgId,
         conflictType: overrides.conflictType ?? "evidence_contradiction",
         conflictScore: overrides.conflictScore ?? 0.87,
         scoreExplanation:

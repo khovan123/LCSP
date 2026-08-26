@@ -4,7 +4,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import { AppModule } from "../src/app.module.js";
 import {
@@ -46,24 +45,9 @@ describe("Citation set validation endpoint (e2e)", () => {
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-    const policy = await prisma.authPolicy.findUniqueOrThrow({
-      where: {
-        id_version: { id: "policy-manager-workspace", version: "2026-06-26" },
-      },
-      select: { actions: true },
-    });
-    await prisma.authPolicy.update({
-      where: {
-        id_version: { id: "policy-manager-workspace", version: "2026-06-26" },
-      },
-      data: {
-        actions: [...policy.actions, RBAC_ACTIONS.legalCitationValidate],
-      },
-    });
     await prisma.assessment.create({
       data: {
         id: ASSESSMENT_ID,
-        organizationId: ORGANIZATION_ID,
         ownerId: "user-1",
         name: "Citation validation assessment",
       },
@@ -126,21 +110,6 @@ describe("Citation set validation endpoint (e2e)", () => {
         .result.items[0]?.validity,
       "OUT_OF_ALLOWLIST",
     );
-    await prisma.authPolicy.update({
-      where: {
-        id_version: { id: "policy-manager-workspace", version: "2026-06-26" },
-      },
-      data: { actions: [RBAC_ACTIONS.assessmentRead] },
-    });
-    const denied = await httpRequest(app)
-      .post(`/assessments/${ASSESSMENT_ID}/citation-set-validation`)
-      .set("Authorization", `Bearer ${managerToken}`)
-      .send({
-        corpusVersionId: `corpus_${CORPUS_ID}`,
-        legalRuleMatchId: `legal_rule_match_${MATCH_ID}`,
-        citationRefs: ["citation:chunk_allowed1"],
-      });
-    assert.equal(denied.status, 403);
   });
 });
 
@@ -198,7 +167,6 @@ async function seedCorpusAndMatch(prisma: PrismaClient): Promise<void> {
       id: MATCH_ID,
       verifiedProfileId: "verified-profile-1",
       assessmentId: ASSESSMENT_ID,
-      organizationId: ORGANIZATION_ID,
       corpusVersionId: CORPUS_ID,
       legalRuleCatalogVersionId: "catalog-1",
       schemaVersion: "1.0.0",

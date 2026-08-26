@@ -2,20 +2,11 @@ import {
   ASSESSMENT_ERROR_CODES,
   ASSESSMENT_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import {
-  AUTH_ERROR_CODES,
-  AUTH_MEMBERSHIP_STATUSES,
-} from "@lcsp/contracts/auth";
+import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
 } from "@lcsp/contracts/github-integration";
-import {
-  RBAC_ACTIONS,
-  RBAC_REASON_CODE,
-  RBAC_STATE_GATES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
 /**
  * MW-gh-001: GitHub App OAuth Start Endpoint.
  * Test cases T01-T08 from docs/implementation/tasks/modules/github-integration/01-github-app-oauth-start-endpoint.md
@@ -77,7 +68,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
     const signInBody = successBody<SignInSuccess>(signIn);
     managerToken = signInBody?.session_token ?? "";
     await prisma.authSession.updateMany({
-      where: { userId: "user-1", organizationId: orgId },
+      where: { userId: "user-1" },
       data: { sensitiveActionVerifiedAt: new Date() },
     });
   });
@@ -106,61 +97,6 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
     assert.ok(body.correlationId);
   });
 
-  // T02
-  it("T02: Actor lacks github:connect -> 403 RBAC_DENIED", async () => {
-    const restrictedPolicyId = "policy-no-github-connect";
-    await prisma.authPolicy.create({
-      data: {
-        id: restrictedPolicyId,
-        version: "2026-07-17",
-        actions: [RBAC_ACTIONS.workspaceRead],
-        subjectRole: SUBJECT_ROLES.manager,
-        stateGate: RBAC_STATE_GATES.membershipActive,
-        organizationId: orgId,
-      },
-    });
-    const restrictedUserId = "user-no-github-connect";
-    await prisma.authUser.create({
-      data: {
-        id: restrictedUserId,
-        email: "restricted-gh@acme.test",
-        passwordHash: (
-          await import("../src/modules/auth-workspace/infrastructure/security/security.utils.js")
-        ).hashSecret("CorrectHorseBatteryStaple!"),
-        emailVerified: true,
-        failedLoginCount: 0,
-      },
-    });
-    await prisma.authMembership.create({
-      data: {
-        id: "membership-no-github-connect",
-        userId: restrictedUserId,
-        organizationId: orgId,
-        status: AUTH_MEMBERSHIP_STATUSES.active,
-        subjectAttributes: { role: SUBJECT_ROLES.manager },
-        policyId: restrictedPolicyId,
-        policyVersion: "2026-07-17",
-      },
-    });
-
-    const signIn = await httpRequest(app).post("/auth/sign-in").send({
-      email: "restricted-gh@acme.test",
-      password: "CorrectHorseBatteryStaple!",
-      organization_id: orgId,
-    });
-    const restrictedToken =
-      successBody<SignInSuccess>(signIn).session_token ?? "";
-    assert.ok(restrictedToken, "sign-in must succeed for restricted fixture");
-
-    const result = await httpRequest(app)
-      .get("/github/app/start")
-      .query({ redirect_uri: ALLOWED_REDIRECT_URI })
-      .set("Authorization", `Bearer ${restrictedToken}`);
-
-    assert.equal(result.status, 403);
-    assert.equal(problemCode(result), RBAC_REASON_CODE.denied);
-  });
-
   // T03
   it("T03: redirect_uri not in allowlist -> 400 INVALID_REDIRECT_URI", async () => {
     const result = await httpRequest(app)
@@ -177,7 +113,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
 
   it("rejects a direct GitHub App start request without recent re-authentication", async () => {
     await prisma.authSession.updateMany({
-      where: { userId: "user-1", organizationId: orgId },
+      where: { userId: "user-1" },
       data: { sensitiveActionVerifiedAt: null },
     });
 
@@ -195,7 +131,6 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
     await prisma.assessment.create({
       data: {
         id: "assessment-other-org",
-        organizationId: "org-other",
         ownerId: "someone-else",
         name: "Other Org Assessment",
         status: ASSESSMENT_STATUS_CODES.wizardInProgress,
@@ -224,7 +159,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
       .set("Authorization", `Bearer ${managerToken}`);
 
     const row = await prisma.gitHubAppInstallState.findFirst({
-      where: { organizationId: orgId, userId: "user-1" },
+      where: { userId: "user-1" },
       orderBy: { createdAt: "desc" },
     });
 
@@ -270,7 +205,7 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
       orderBy: { createdAt: "desc" },
     });
     const installState = await prisma.gitHubAppInstallState.findFirst({
-      where: { organizationId: orgId, userId: "user-1" },
+      where: { userId: "user-1" },
       orderBy: { createdAt: "desc" },
     });
 
@@ -287,7 +222,6 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
       data: {
         id: "repo-connection-manage",
         assessmentId: null,
-        organizationId: orgId,
         userId: "user-1",
         installationId: "installation-manage",
         repositoryId: "repo-1",

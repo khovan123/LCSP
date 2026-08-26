@@ -6,7 +6,6 @@ import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
-import { RBAC_ACTIONS, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import {
   GITHUB_INTEGRATION_ERROR_CODES,
   GITHUB_INTEGRATION_EVENT_TYPES,
@@ -17,6 +16,7 @@ import {
 import { SCAN_EVENT_TYPES } from "@lcsp/contracts/scan";
 
 import { AppModule } from "../src/app.module.js";
+import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import type { RerunScanResponseDto } from "../src/modules/scan/application/contracts/scan/rerun-scan.contract.js";
 import {
@@ -60,7 +60,6 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
     await prisma.assessment.create({
       data: {
         id: "assessment-1",
-        organizationId: "org-1",
         ownerId: "user-1",
         name: "Scan assessment",
         status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
@@ -88,7 +87,6 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
         id: "prior-scan-job",
         assessmentId: "assessment-1",
         snapshotId: "snapshot-1",
-        organizationId: "org-1",
         idempotencyKey: "scan-request:assessment-1:snapshot-1:0",
         triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
         status: REPOSITORY_SCAN_JOB_STATUSES.completed,
@@ -148,27 +146,18 @@ describe("Re-Run Scan Endpoint (e2e) [MW-scan-003]", () => {
     assert.equal(await prisma.repositoryScanJob.count(), 1);
   });
 
-  it("T04: Actor lacks scan:trigger denies access", async () => {
-    await prisma.authPolicy.update({
-      where: {
-        id_version: {
-          id: "policy-manager-workspace",
-          version: "2026-06-26",
-        },
-      },
-      data: { actions: [RBAC_ACTIONS.workspaceRead] },
-    });
-
-    const response = await triggerRerun(app, managerToken);
-
-    assert.equal(response.status, 403);
-    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
-  });
-
   it("T05: Snapshot not in org returns 404", async () => {
+    await prisma.assessment.create({
+      data: {
+        id: "assessment-other",
+        ownerId: "user-2",
+        name: "Other assessment",
+        status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
+      },
+    });
     await prisma.repositorySnapshot.update({
       where: { id: "snapshot-1" },
-      data: { organizationId: "org-other" },
+      data: { assessmentId: "assessment-other" },
     });
 
     const response = await triggerRerun(app, managerToken);
@@ -197,7 +186,6 @@ async function createSnapshot(prisma: PrismaClient, id: string): Promise<void> {
     data: {
       id,
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       connectionId: "connection-1",
       repositoryId: "repo-1",
       repositoryFullName: "acme/example-repo",

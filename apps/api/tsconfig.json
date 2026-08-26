@@ -18,6 +18,9 @@
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": ".",
+    "paths": {
+      "@lcsp/contracts/rbac": ["../../packages/contracts/src/rbac/index.ts"]
+    },
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
@@ -30,6 +33,7 @@
   },
   "include": [
     "src/**/*.ts",
+    "test/**/*.ts",
     "src/**/*.json",
     "scripts/**/*.ts",
     "src/**/**/**/*.html"
@@ -37,8 +41,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "test/**/*.ts",
-    "src/**/*.spec.ts",
     "scripts/demo-readiness-export-pdf.ts"
   ],
   "references": [

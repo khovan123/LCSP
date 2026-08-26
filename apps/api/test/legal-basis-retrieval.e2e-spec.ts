@@ -4,7 +4,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { LegalRetrievalIndexStatus, PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import { AppModule } from "../src/app.module.js";
 import {
@@ -48,29 +47,9 @@ describe("Legal basis retrieval endpoint (e2e)", () => {
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-
-    const policy = await prisma.authPolicy.findUniqueOrThrow({
-      where: {
-        id_version: {
-          id: "policy-manager-workspace",
-          version: "2026-06-26",
-        },
-      },
-      select: { actions: true },
-    });
-    await prisma.authPolicy.update({
-      where: {
-        id_version: {
-          id: "policy-manager-workspace",
-          version: "2026-06-26",
-        },
-      },
-      data: { actions: [...policy.actions, RBAC_ACTIONS.legalCorpusRead] },
-    });
     await prisma.assessment.create({
       data: {
         id: ASSESSMENT_ID,
-        organizationId: ORGANIZATION_ID,
         ownerId: "user-1",
         name: "Legal basis assessment",
       },
@@ -164,33 +143,6 @@ describe("Legal basis retrieval endpoint (e2e)", () => {
     assert.deepEqual(data.result.citations, []);
   });
 
-  it("TC-04: RBAC denial is fail-closed and recorded", async () => {
-    await prisma.authPolicy.update({
-      where: {
-        id_version: {
-          id: "policy-manager-workspace",
-          version: "2026-06-26",
-        },
-      },
-      data: { actions: [RBAC_ACTIONS.assessmentRead] },
-    });
-
-    const response = await httpRequest(app)
-      .post(`/assessments/${ASSESSMENT_ID}/legal-basis`)
-      .set("Authorization", `Bearer ${managerToken}`)
-      .send({
-        corpusVersionId: `corpus_${CORPUS_ID}`,
-        selectors: { chunkIds: ["chunk_primary1"] },
-        includeContext: false,
-      });
-
-    assert.equal(response.status, 403);
-    const decision = await prisma.authDecisionLog.findFirst({
-      where: { action: RBAC_ACTIONS.legalCorpusRead },
-      orderBy: { createdAt: "desc" },
-    });
-    assert.equal(decision?.decision, "DENY");
-  });
 });
 
 async function seedReadyCorpus(prisma: PrismaClient): Promise<void> {

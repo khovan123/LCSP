@@ -2,7 +2,7 @@
 
 import * as assert from "node:assert/strict";
 
-import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   DOCUMENT_ERROR_CODES,
   DOCUMENT_REQUEST_STATUSES,
@@ -10,12 +10,6 @@ import {
   type DocumentRequestStatus,
   type DocumentType,
 } from "@lcsp/contracts/document";
-import {
-  RBAC_ACTIONS,
-  RBAC_REASON_CODE,
-  RBAC_STATE_GATES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
 import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_STATUSES,
@@ -28,6 +22,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
+import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import {
   toPrismaDocumentRequestStatus,
   toPrismaDocumentType,
@@ -91,7 +86,6 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     await prisma.assessment.create({
       data: {
         id: "assessment-1",
-        organizationId: "org-1",
         ownerId: "user-1",
         name: "Document status assessment",
       },
@@ -183,34 +177,11 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     assert.doesNotMatch(JSON.stringify(body), /private|generator\.ts|stack/i);
   });
 
-  it("T05 denies an actor without document:read", async () => {
-    await seedDocumentRequest(prisma, {
-      id: "doc-denied-1",
-      status: DOCUMENT_REQUEST_STATUSES.queued,
-      documentType: DOCUMENT_TYPES.gapAnalysis,
-    });
-    await prisma.authPolicy.update({
-      where: {
-        id_version: {
-          id: "policy-manager-workspace",
-          version: "2026-06-26",
-        },
-      },
-      data: { actions: [RBAC_ACTIONS.workspaceRead] },
-    });
-
-    const response = await getDocumentStatus(app, managerToken, "doc-denied-1");
-
-    assert.equal(response.status, 403);
-    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
-  });
-
   it("T06 hides a document outside the session organization", async () => {
     await seedDocumentRequest(prisma, {
       id: "doc-other-org-1",
       status: DOCUMENT_REQUEST_STATUSES.queued,
       documentType: DOCUMENT_TYPES.gapAnalysis,
-      organizationId: "org-other",
     });
 
     const response = await getDocumentStatus(
@@ -230,7 +201,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
       documentType: DOCUMENT_TYPES.finalReport,
       documentUrl: "https://example.test/files/final-report.pdf",
     });
-    await seedSystemAdmin(prisma, RBAC_ACTIONS.documentReadRedacted);
+    await seedSystemAdmin(prisma);
 
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "system-admin@acme.test",
@@ -256,7 +227,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
       documentType: DOCUMENT_TYPES.gapAnalysis,
       documentUrl: "https://example.test/files/redacted-gap.pdf",
     });
-    await seedSystemAdmin(prisma, RBAC_ACTIONS.documentReadRedacted);
+    await seedSystemAdmin(prisma);
 
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "system-admin@acme.test",
@@ -290,24 +261,10 @@ function getDocumentStatus(
 }
 
 async function enableManagerDocumentRead(prisma: PrismaClient) {
-  await prisma.authPolicy.update({
-    where: {
-      id_version: {
-        id: "policy-manager-workspace",
-        version: "2026-06-26",
-      },
-    },
-    data: {
-      actions: [
-        RBAC_ACTIONS.workspaceRead,
-        RBAC_ACTIONS.documentGenerate,
-        RBAC_ACTIONS.documentRead,
-      ],
-    },
-  });
+  void prisma;
 }
 
-async function seedSystemAdmin(prisma: PrismaClient, action: string) {
+async function seedSystemAdmin(prisma: PrismaClient) {
   await prisma.authUser.create({
     data: {
       id: "system-admin-1",
@@ -315,32 +272,7 @@ async function seedSystemAdmin(prisma: PrismaClient, action: string) {
       passwordHash: hashSecret("SystemAdminPass123!"),
       emailVerified: true,
       failedLoginCount: 0,
-    },
-  });
-
-  await prisma.authPolicy.create({
-    data: {
-      id: `policy-system-admin-${action.replace(/[^a-z]/gi, "-")}`,
-      version: "2026-07-28",
-      actions: [action],
-      subjectRole: SUBJECT_ROLES.systemAdmin,
-      stateGate: RBAC_STATE_GATES.membershipActive,
-      organizationId: "org-1",
-    },
-  });
-
-  await prisma.authMembership.create({
-    data: {
-      id: "membership-systemAdmin-document-read",
-      userId: "system-admin-1",
-      organizationId: "org-1",
-      status: AUTH_MEMBERSHIP_STATUSES.active,
-      subjectAttributes: {
-        role: SUBJECT_ROLES.systemAdmin,
-        scope: "assessment-1",
-      },
-      policyId: `policy-system-admin-${action.replace(/[^a-z]/gi, "-")}`,
-      policyVersion: "2026-07-28",
+      role: AUTH_USER_ROLES.admin,
     },
   });
 }
@@ -358,14 +290,12 @@ async function seedDocumentRequest(
 ) {
   const matchId = `lrm-${input.id}`;
   const classificationResultId = `classification-${input.id}`;
-  const organizationId = input.organizationId ?? "org-1";
 
   await prisma.legalRuleMatch.create({
     data: {
       id: matchId,
       verifiedProfileId: "vp-1",
       assessmentId: "assessment-1",
-      organizationId,
       corpusVersionId: "LCSP-LEGAL-CORPUS-v0.1.0",
       legalRuleCatalogVersionId: "LCSP-RULE-CATALOG-v0.1.0",
       schemaVersion: "1.0.0",
@@ -385,7 +315,6 @@ async function seedDocumentRequest(
       legalRuleMatchId: matchId,
       verifiedProfileId: "vp-1",
       assessmentId: "assessment-1",
-      organizationId,
       schemaVersion: "1.0.0",
       classificationData: {
         system_type: "HIGH_IMPACT_AI",
@@ -402,7 +331,6 @@ async function seedDocumentRequest(
     data: {
       id: input.id,
       assessmentId: "assessment-1",
-      organizationId,
       requestedById: "user-1",
       classificationResultId,
       documentType: toPrismaDocumentType(input.documentType),

@@ -12,7 +12,6 @@ import {
   type DocumentRequestStatus,
   type DocumentType,
 } from "@lcsp/contracts/document";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   CLASSIFICATION_GUARDRAIL_STATUSES,
   CLASSIFICATION_RESULT_STATUSES,
@@ -73,7 +72,6 @@ describe("Document List Endpoint (e2e)", () => {
     await prisma.assessment.create({
       data: {
         id: "assessment-1",
-        organizationId: "org-1",
         ownerId: "user-1",
         name: "Document list assessment",
       },
@@ -137,21 +135,7 @@ describe("Document List Endpoint (e2e)", () => {
 });
 
 async function enableManagerDocumentRead(prisma: PrismaClient) {
-  await prisma.authPolicy.update({
-    where: {
-      id_version: {
-        id: "policy-manager-workspace",
-        version: "2026-06-26",
-      },
-    },
-    data: {
-      actions: [
-        RBAC_ACTIONS.workspaceRead,
-        RBAC_ACTIONS.documentGenerate,
-        RBAC_ACTIONS.documentRead,
-      ],
-    },
-  });
+  void prisma;
 }
 
 async function seedDocumentRequest(
@@ -167,14 +151,12 @@ async function seedDocumentRequest(
 ) {
   const matchId = `lrm-${input.id}`;
   const classificationResultId = `classification-${input.id}`;
-  const organizationId = input.organizationId ?? "org-1";
 
   await prisma.legalRuleMatch.create({
     data: {
       id: matchId,
       verifiedProfileId: "vp-1",
       assessmentId: "assessment-1",
-      organizationId,
       corpusVersionId: "LCSP-LEGAL-CORPUS-v0.1.0",
       legalRuleCatalogVersionId: "LCSP-RULE-CATALOG-v0.1.0",
       schemaVersion: "1.0.0",
@@ -194,7 +176,6 @@ async function seedDocumentRequest(
       legalRuleMatchId: matchId,
       verifiedProfileId: "vp-1",
       assessmentId: "assessment-1",
-      organizationId,
       schemaVersion: "1.0.0",
       classificationData: {
         system_type: "HIGH_IMPACT_AI",
@@ -211,7 +192,6 @@ async function seedDocumentRequest(
     data: {
       id: input.id,
       assessmentId: "assessment-1",
-      organizationId,
       requestedById: "user-1",
       classificationResultId,
       documentType: toPrismaDocumentType(input.documentType),

@@ -5,7 +5,7 @@ import {
   GITHUB_REPOSITORY_PERMISSION_LEVELS,
   REPOSITORY_SNAPSHOT_STATUSES,
 } from "@lcsp/contracts/github-integration";
-import { RBAC_DECISION } from "@lcsp/contracts/rbac";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import {
   BadRequestException,
   ForbiddenException,
@@ -181,7 +181,7 @@ describe("PinSnapshotHandler", () => {
     expect(write).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotCreatedAudit,
-        decision: RBAC_DECISION.allow,
+        decision: AUDIT_DECISIONS.allow,
       }),
     );
   });
@@ -277,7 +277,7 @@ describe("PinSnapshotHandler", () => {
     expect(write).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: GITHUB_INTEGRATION_EVENT_TYPES.snapshotPinFailedAudit,
-        decision: RBAC_DECISION.deny,
+        decision: AUDIT_DECISIONS.deny,
         payload: expect.not.objectContaining({ source: expect.anything() }),
       }),
     );

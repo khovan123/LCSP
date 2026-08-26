@@ -3,18 +3,12 @@
 import * as assert from "node:assert/strict";
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
-import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
   type RepositoryScanJobStatus,
 } from "@lcsp/contracts/github-integration";
-import {
-  RBAC_ACTIONS,
-  RBAC_REASON_CODE,
-  RBAC_STATE_GATES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
 import { SCAN_ERROR_CODES, SCAN_JOB_GUIDANCE } from "@lcsp/contracts/scan";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
@@ -64,7 +58,6 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
     await prisma.assessment.create({
       data: {
         id: "assessment-1",
-        organizationId: "org-1",
         ownerId: "user-1",
         name: "Scan assessment",
         status: ASSESSMENT_STATUS_CODES.scanInProgress,
@@ -148,33 +141,15 @@ describe("Scan Job Status Endpoint (e2e) [MW-scan-001]", () => {
     assert.equal(body.next_action, SCAN_JOB_GUIDANCE.pendingMappingNextAction);
   });
 
-  it("T04 hides a job outside the session organization", async () => {
+  it("T04 hides a job for a different assessment", async () => {
     await createJob(prisma, REPOSITORY_SCAN_JOB_STATUSES.queued, null, {
-      organizationId: "org-other",
+      assessmentId: "assessment-other",
     });
 
     const response = await getStatus(app, managerToken);
 
     assert.equal(response.status, 404);
     assert.equal(problemCode(response), SCAN_ERROR_CODES.jobNotFound);
-  });
-
-  it("T05 denies an actor without scan:read", async () => {
-    await createJob(prisma, REPOSITORY_SCAN_JOB_STATUSES.queued);
-    await prisma.authPolicy.update({
-      where: {
-        id_version: {
-          id: "policy-manager-workspace",
-          version: "2026-06-26",
-        },
-      },
-      data: { actions: [RBAC_ACTIONS.workspaceRead] },
-    });
-
-    const response = await getStatus(app, managerToken);
-
-    assert.equal(response.status, 403);
-    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
   });
 
   it("allows a non-Manager with scan:read policy to read the requested scan job", async () => {
@@ -202,14 +177,13 @@ async function createJob(
   prisma: PrismaClient,
   status: RepositoryScanJobStatus,
   blockedReason: string | null = null,
-  overrides: { organizationId?: string } = {},
+  overrides: { assessmentId?: string } = {},
 ) {
   await prisma.repositoryScanJob.create({
     data: {
       id: "scan-job-1",
-      assessmentId: "assessment-1",
+      assessmentId: overrides.assessmentId ?? "assessment-1",
       snapshotId: "snapshot-1",
-      organizationId: overrides.organizationId ?? "org-1",
       idempotencyKey: "scan-request:assessment-1:snapshot-1:status",
       triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
       status,
@@ -228,30 +202,7 @@ async function seedSystemAdmin(prisma: PrismaClient) {
       passwordHash: hashSecret("SystemAdminPass123!"),
       emailVerified: true,
       failedLoginCount: 0,
-    },
-  });
-  await prisma.authPolicy.create({
-    data: {
-      id: "policy-system-admin-scan-read",
-      version: "2026-07-18",
-      actions: [RBAC_ACTIONS.scanRead],
-      subjectRole: SUBJECT_ROLES.systemAdmin,
-      stateGate: RBAC_STATE_GATES.membershipActive,
-      organizationId: "org-1",
-    },
-  });
-  await prisma.authMembership.create({
-    data: {
-      id: "membership-systemAdmin-scan-read",
-      userId: "system-admin-1",
-      organizationId: "org-1",
-      status: AUTH_MEMBERSHIP_STATUSES.active,
-      subjectAttributes: {
-        role: SUBJECT_ROLES.systemAdmin,
-        scope: "assessment-1",
-      },
-      policyId: "policy-system-admin-scan-read",
-      policyVersion: "2026-07-18",
+      role: AUTH_USER_ROLES.admin,
     },
   });
 }

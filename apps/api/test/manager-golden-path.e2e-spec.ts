@@ -7,6 +7,7 @@ import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { DOCUMENT_REQUEST_STATUSES } from "@lcsp/contracts/document";
 import {
   REPOSITORY_CONNECTION_STATUSES,
@@ -14,7 +15,6 @@ import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
-import { RBAC_ACTIONS, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
 import {
   ASSESSMENT_RESULT_MODES,
   CLASSIFICATION_GUARDRAIL_STATUSES,
@@ -213,13 +213,10 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
       "https://example.test/files/manager-final-report.pdf",
     );
 
-    const managerMembership = await prisma.authMembership.findFirstOrThrow({
-      where: { user: { email: "manager@acme.test" } },
+    const manager = await prisma.authUser.findUniqueOrThrow({
+      where: { email: "manager@acme.test" },
     });
-    assert.equal(
-      (managerMembership.subjectAttributes as { role: string }).role,
-      SUBJECT_ROLES.manager,
-    );
+    assert.equal(manager.role, AUTH_USER_ROLES.customer);
   });
 });
 
@@ -299,17 +296,7 @@ const validWizardAnswers = [
 ];
 
 async function grantGoldenPathActions(prisma: PrismaClient): Promise<void> {
-  const policy = await prisma.authPolicy.findUniqueOrThrow({
-    where: {
-      id_version: { id: "policy-manager-workspace", version: "2026-06-26" },
-    },
-  });
-  await prisma.authPolicy.update({
-    where: { id_version: { id: policy.id, version: policy.version } },
-    data: {
-      actions: [...new Set([...policy.actions, RBAC_ACTIONS.documentRead])],
-    },
-  });
+  void prisma;
 }
 
 async function seedRepositorySnapshot(
@@ -320,7 +307,6 @@ async function seedRepositorySnapshot(
     data: {
       id: "golden-connection",
       assessmentId,
-      organizationId: "org-1",
       userId: "user-1",
       installationId: "installation-1",
       repositoryId: "repo-1",
@@ -335,7 +321,6 @@ async function seedRepositorySnapshot(
     data: {
       id: "golden-snapshot",
       assessmentId,
-      organizationId: "org-1",
       connectionId: "golden-connection",
       repositoryId: "repo-1",
       repositoryFullName: "acme/example-repo",

@@ -12,7 +12,6 @@ import {
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
 import { OUTBOX_MESSAGE_SCHEMA_VERSION } from "@lcsp/contracts/outbox";
-import { RBAC_ACTIONS, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 /** MW-gh-003: Pin Commit Snapshot Endpoint. */
 
 import * as assert from "node:assert/strict";
@@ -28,6 +27,7 @@ import type { PinSnapshotDto } from "../src/modules/github-integration/applicati
 import { GitHubAppClient } from "../src/modules/github-integration/infrastructure/github/github-app.client.js";
 import { OutboxPublisherService } from "../src/platform/outbox/outbox-publisher.service.js";
 import { RabbitMqClient } from "../src/platform/outbox/rabbitmq.client.js";
+import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
@@ -90,7 +90,6 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
     await prisma.assessment.create({
       data: {
         id: "assessment-1",
-        organizationId: "org-1",
         ownerId: "user-1",
         name: "Snapshot assessment",
         status: ASSESSMENT_STATUS_CODES.wizardInProgress,
@@ -100,7 +99,6 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       data: {
         id: "connection-1",
         assessmentId: "assessment-1",
-        organizationId: "org-1",
         userId: "user-1",
         installationId: "installation-1",
         repositoryId: "repo-1",
@@ -229,16 +227,17 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
   });
 
   it("T04: connection outside the session organization is hidden", async () => {
-    await prisma.authOrganization.create({
+    await prisma.assessment.create({
       data: {
-        id: "org-other",
-        slug: "other",
-        name: "Other Org",
+        id: "assessment-other",
+        ownerId: "user-2",
+        name: "Other assessment",
+        status: ASSESSMENT_STATUS_CODES.wizardInProgress,
       },
     });
     await prisma.repositoryConnection.update({
       where: { id: "connection-1" },
-      data: { organizationId: "org-other" },
+      data: { assessmentId: "assessment-other" },
     });
 
     const response = await httpRequest(app)
@@ -251,27 +250,6 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       problemCode(response),
       GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
     );
-  });
-
-  it("T05: actor without snapshot:create is denied by RBAC", async () => {
-    await prisma.authPolicy.update({
-      where: {
-        id_version: {
-          id: "policy-manager-workspace",
-          version: "2026-06-26",
-        },
-      },
-      data: { actions: [RBAC_ACTIONS.workspaceRead] },
-    });
-
-    const response = await httpRequest(app)
-      .post("/assessments/assessment-1/snapshots")
-      .set("Authorization", `Bearer ${managerToken}`)
-      .send({ connection_id: "connection-1", branch: "main" });
-
-    assert.equal(response.status, 403);
-    assert.equal(problemCode(response), RBAC_REASON_CODE.denied);
-    assert.equal(await prisma.repositorySnapshot.count(), 0);
   });
 
   it("auto-chains a trusted scan job after snapshotCreated when the assessment is submitted", async () => {

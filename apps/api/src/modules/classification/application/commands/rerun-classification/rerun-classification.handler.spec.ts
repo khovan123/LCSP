@@ -1,6 +1,5 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import {
   CLASSIFICATION_RERUN_STATUSES,
   SCAN_EVENT_TYPES,
@@ -23,12 +22,8 @@ describe("RerunClassificationHandler", () => {
   const rbacContext = {
     userId: "user-1",
     sessionId: "session-1",
-    subjectRole: AUTH_USER_ROLES.customer,
+    role: AUTH_USER_ROLES.customer,
     scope: "assessment-1",
-    grantedActions: [RBAC_ACTIONS.classificationRun],
-    selectedAction: RBAC_ACTIONS.classificationRun,
-    policyId: "policy-1",
-    policyVersion: "1",
   };
 
   function createHandler(options?: { evidenceReport?: EvidenceReportFixture }) {

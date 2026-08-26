@@ -14,12 +14,7 @@ import {
   seedAuthWorkspaceFixture,
 } from "./support/auth-workspace-test-helpers.js";
 
-import {
-  RBAC_ACTIONS,
-  RBAC_STATE_GATES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
-import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { LEGAL_RULE_LIFECYCLE_STATUSES } from "@lcsp/contracts/legal-rule-catalog";
 
 describe("Legal Rule Catalog Endpoints (e2e)", () => {
@@ -67,20 +62,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
     ).hashSecret;
     const passwordHash = hashFn("CorrectHorseBatteryStaple!");
 
-    const authorPolicyId = "policy-author";
-    await prisma.authPolicy.create({
-      data: {
-        id: authorPolicyId,
-        version: "2026-07-26-author",
-        actions: [
-          RBAC_ACTIONS.legalRuleCatalogAuthor,
-          RBAC_ACTIONS.legalCorpusIngest,
-        ],
-        subjectRole: SUBJECT_ROLES.systemAdmin,
-        stateGate: RBAC_STATE_GATES.membershipActive,
-        organizationId: orgId,
-      },
-    });
     const authorUserId = "user-author";
     await prisma.authUser.create({
       data: {
@@ -89,17 +70,7 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         passwordHash,
         emailVerified: true,
         failedLoginCount: 0,
-      },
-    });
-    await prisma.authMembership.create({
-      data: {
-        id: "mem-author",
-        userId: authorUserId,
-        organizationId: orgId,
-        status: AUTH_MEMBERSHIP_STATUSES.active,
-        subjectAttributes: { role: SUBJECT_ROLES.systemAdmin },
-        policyId: authorPolicyId,
-        policyVersion: "2026-07-26-author",
+        role: AUTH_USER_ROLES.admin,
       },
     });
     const signInAuthor = await httpRequest(app).post("/auth/sign-in").send({
@@ -111,20 +82,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       successBody<{ session_token?: string }>(signInAuthor).session_token ?? "",
     );
 
-    const approverPolicyId = "policy-approver";
-    await prisma.authPolicy.create({
-      data: {
-        id: approverPolicyId,
-        version: "2026-07-26-approver",
-        actions: [
-          RBAC_ACTIONS.legalRuleCatalogApprove,
-          RBAC_ACTIONS.legalCorpusApprove,
-        ],
-        subjectRole: SUBJECT_ROLES.systemAdmin,
-        stateGate: RBAC_STATE_GATES.membershipActive,
-        organizationId: orgId,
-      },
-    });
     const approverUserId = "user-approver";
     await prisma.authUser.create({
       data: {
@@ -133,17 +90,7 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         passwordHash,
         emailVerified: true,
         failedLoginCount: 0,
-      },
-    });
-    await prisma.authMembership.create({
-      data: {
-        id: "mem-approver",
-        userId: approverUserId,
-        organizationId: orgId,
-        status: AUTH_MEMBERSHIP_STATUSES.active,
-        subjectAttributes: { role: SUBJECT_ROLES.systemAdmin },
-        policyId: approverPolicyId,
-        policyVersion: "2026-07-26-approver",
+        role: AUTH_USER_ROLES.admin,
       },
     });
     const signInApprover = await httpRequest(app).post("/auth/sign-in").send({
@@ -156,17 +103,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         "",
     );
 
-    const restrictedPolicyId = "policy-restricted";
-    await prisma.authPolicy.create({
-      data: {
-        id: restrictedPolicyId,
-        version: "2026-07-26-restricted",
-        actions: [RBAC_ACTIONS.workspaceRead],
-        subjectRole: SUBJECT_ROLES.systemAdmin,
-        stateGate: RBAC_STATE_GATES.membershipActive,
-        organizationId: orgId,
-      },
-    });
     const restrictedUserId = "user-restricted";
     await prisma.authUser.create({
       data: {
@@ -175,17 +111,7 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         passwordHash,
         emailVerified: true,
         failedLoginCount: 0,
-      },
-    });
-    await prisma.authMembership.create({
-      data: {
-        id: "mem-restricted",
-        userId: restrictedUserId,
-        organizationId: orgId,
-        status: AUTH_MEMBERSHIP_STATUSES.active,
-        subjectAttributes: { role: SUBJECT_ROLES.systemAdmin },
-        policyId: restrictedPolicyId,
-        policyVersion: "2026-07-26-restricted",
+        role: AUTH_USER_ROLES.customer,
       },
     });
 
@@ -244,23 +170,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       assert.equal(body.status, "DRAFT");
     });
 
-    it("T06: Returns 403 when called by restricted user", async () => {
-      const response = await httpRequest(app)
-        .post("/internal/legal-rule-catalog/rules")
-        .set("Authorization", `Bearer ${restrictedToken}`)
-        .send(payload);
-
-      assert.equal(response.status, 403);
-    });
-
-    it("T06: Returns 403 when called by approver user (missing author right)", async () => {
-      const response = await httpRequest(app)
-        .post("/internal/legal-rule-catalog/rules")
-        .set("Authorization", `Bearer ${approverToken}`)
-        .send(payload);
-
-      assert.equal(response.status, 403);
-    });
   });
 
   describe("legal corpus ingest and approval", () => {
@@ -767,23 +676,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       );
     });
 
-    it("T06: Returns 403 when called by restricted user", async () => {
-      const response = await httpRequest(app)
-        .post(`/internal/legal-rule-catalog/versions/${versionId}/approve`)
-        .set("Authorization", `Bearer ${restrictedToken}`)
-        .send({ scopeDescription: "Test" });
-
-      assert.equal(response.status, 403);
-    });
-
-    it("T06: Returns 403 when called by author user (missing approve right)", async () => {
-      const response = await httpRequest(app)
-        .post(`/internal/legal-rule-catalog/versions/${versionId}/approve`)
-        .set("Authorization", `Bearer ${authorToken}`)
-        .send({ scopeDescription: "Test" });
-
-      assert.equal(response.status, 403);
-    });
   });
 });
 

@@ -65,7 +65,6 @@ describe("Worker runtime input endpoints (e2e) [LCSP-155]", () => {
         id: "report-runtime-1",
         scanJobId: "scan-runtime-1",
         assessmentId: "assessment-runtime-1",
-        organizationId: "org-runtime-1",
         snapshotId: "snapshot-runtime-1",
         toolsVersion: { semgrep: "1.0" },
         configHash: { semgrep: "sha256:test" },
@@ -94,7 +93,6 @@ describe("Worker runtime input endpoints (e2e) [LCSP-155]", () => {
         id: "profile-runtime-1",
         evidenceReportId: "report-runtime-1",
         assessmentId: "assessment-runtime-1",
-        organizationId: "org-runtime-1",
         schemaVersion: "1.0.0",
         providerVersion: "technical-profile-worker@1",
         profileData: {
@@ -110,7 +108,6 @@ describe("Worker runtime input endpoints (e2e) [LCSP-155]", () => {
       data: {
         id: "wizard-runtime-1",
         assessmentId: "assessment-runtime-1",
-        organizationId: "org-runtime-1",
         ownerId: "user-runtime-1",
         version: 1,
         status: WizardProfileStatus.SUBMITTED,

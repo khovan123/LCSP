@@ -359,6 +359,7 @@ export function pushPrismaSchema(): void {
 export async function resetAuthWorkspaceDatabase(
   prisma: PrismaClient,
 ): Promise<void> {
+  await prisma.assessment.deleteMany();
   await prisma.authDecisionLog.deleteMany();
   await prisma.authAuditEvent.deleteMany();
   await prisma.authRecoveryRequest.deleteMany();

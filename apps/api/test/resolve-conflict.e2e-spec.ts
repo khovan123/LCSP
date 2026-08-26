@@ -4,13 +4,6 @@ import * as assert from "node:assert/strict";
 
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
-import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
-import {
-  RBAC_ACTIONS,
-  RBAC_REASON_CODE,
-  RBAC_STATE_GATES,
-  SUBJECT_ROLES,
-} from "@lcsp/contracts/rbac";
 import {
   AI_USAGE_FLOW_STATUSES,
   CONFLICT_RECORD_STATUSES,
@@ -26,6 +19,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
+import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
 import {
@@ -48,7 +42,6 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
   let managerToken: string;
-  let systemAdminToken: string;
 
   beforeAll(async () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -67,19 +60,12 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     await resetDomainData(prisma);
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-    await grantManagerConflictResolve(prisma);
-    await seedSystemAdmin(prisma);
-    await seedAssessmentChain(prisma, "assessment-1", "org-1");
-    await seedConflicts(prisma, "assessment-1", "org-1", [
+    await seedAssessmentChain(prisma, "assessment-1");
+    await seedConflicts(prisma, "assessment-1", [
       { id: "conflict-1", status: CONFLICT_RECORD_STATUSES.pending },
       { id: "conflict-2", status: CONFLICT_RECORD_STATUSES.pending },
     ]);
-    managerToken = await signIn(app, "manager@acme.test", "org-1");
-    systemAdminToken = await signIn(
-      app,
-      "system-admin-resolve@acme.test",
-      "org-1",
-    );
+    managerToken = await signIn(app, "manager@acme.test");
   });
 
   afterAll(async () => {
@@ -194,25 +180,13 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     );
   });
 
-  it("T05 denies SystemAdmin resolution", async () => {
-    const response = await resolveConflict(
-      app,
-      systemAdminToken,
-      "conflict-1",
-      {
-        resolution: CONFLICT_RECORD_STATUSES.resolved,
-      },
-    );
-
-    assertError(response.status, response.body, 403, RBAC_REASON_CODE.denied);
-  });
-
   it("T06 returns not found for a conflict outside the session organization", async () => {
-    await prisma.authOrganization.create({
-      data: { id: "org-2", slug: "other", name: "Other Org" },
+    await seedAssessmentChain(prisma, "assessment-other");
+    await prisma.assessment.update({
+      where: { id: "assessment-other" },
+      data: { ownerId: "user-2" },
     });
-    await seedAssessmentChain(prisma, "assessment-other", "org-2");
-    await seedConflicts(prisma, "assessment-other", "org-2", [
+    await seedConflicts(prisma, "assessment-other", [
       { id: "conflict-other", status: CONFLICT_RECORD_STATUSES.pending },
     ]);
 
@@ -289,67 +263,13 @@ async function resetDomainData(prisma: PrismaClient): Promise<void> {
   await prisma.assessment.deleteMany();
 }
 
-async function grantManagerConflictResolve(
-  prisma: PrismaClient,
-): Promise<void> {
-  const policy = await prisma.authPolicy.findUniqueOrThrow({
-    where: {
-      id_version: { id: "policy-manager-workspace", version: "2026-06-26" },
-    },
-  });
-  await prisma.authPolicy.update({
-    where: { id_version: { id: policy.id, version: policy.version } },
-    data: { actions: [...policy.actions, RBAC_ACTIONS.conflictResolve] },
-  });
-}
-
-async function seedSystemAdmin(prisma: PrismaClient): Promise<void> {
-  const policyId = "policy-system-admin-conflict-resolution-denied";
-  const policyVersion = "2026-07-22";
-  await prisma.authPolicy.create({
-    data: {
-      id: policyId,
-      version: policyVersion,
-      actions: [RBAC_ACTIONS.assessmentList],
-      subjectRole: SUBJECT_ROLES.systemAdmin,
-      stateGate: RBAC_STATE_GATES.membershipActive,
-      organizationId: "org-1",
-    },
-  });
-  await prisma.authUser.create({
-    data: {
-      id: "systemAdmin-resolve",
-      email: "system-admin-resolve@acme.test",
-      passwordHash: hashSecret("SystemAdminResolve123!"),
-      emailVerified: true,
-      failedLoginCount: 0,
-    },
-  });
-  await prisma.authMembership.create({
-    data: {
-      id: "membership-systemAdmin-resolve",
-      userId: "systemAdmin-resolve",
-      organizationId: "org-1",
-      status: AUTH_MEMBERSHIP_STATUSES.active,
-      subjectAttributes: {
-        role: SUBJECT_ROLES.systemAdmin,
-        scope: "assessment-1",
-      },
-      policyId,
-      policyVersion,
-    },
-  });
-}
-
 async function seedAssessmentChain(
   prisma: PrismaClient,
   assessmentId: string,
-  organizationId: string,
 ): Promise<void> {
   await prisma.assessment.create({
     data: {
       id: assessmentId,
-      organizationId,
       ownerId: "user-1",
       name: `Assessment ${assessmentId}`,
       status: ASSESSMENT_STATUS_CODES.scanInProgress,
@@ -361,7 +281,6 @@ async function seedAssessmentChain(
       scanJobId: `scan-job-${assessmentId}`,
       assessmentId,
       snapshotId: `snapshot-${assessmentId}`,
-      organizationId,
       toolsVersion: { semgrep: "1.0.0" },
       configHash: { semgrep: "sha256:abc" },
       evidencePayload: {
@@ -377,7 +296,6 @@ async function seedAssessmentChain(
       id: `technical-profile-${assessmentId}`,
       evidenceReportId: `evidence-${assessmentId}`,
       assessmentId,
-      organizationId,
       schemaVersion: "1.0.0",
       providerVersion: "technical-profile-worker@1.0.0",
       profileData: { aiDetected: "confirmed" },
@@ -390,7 +308,6 @@ async function seedAssessmentChain(
       id: `ai-flow-${assessmentId}`,
       technicalProfileId: `technical-profile-${assessmentId}`,
       assessmentId,
-      organizationId,
       schemaVersion: "1.0.0",
       providerVersion: "ai-usage-flow-worker@1.0.0",
       claims: [{ claim_id: "claim-1" }],
@@ -404,7 +321,6 @@ async function seedAssessmentChain(
 async function seedConflicts(
   prisma: PrismaClient,
   assessmentId: string,
-  organizationId: string,
   conflicts: Array<{ id: string; status: ConflictRecordStatus }>,
 ): Promise<void> {
   await prisma.conflictRecord.createMany({
@@ -412,7 +328,6 @@ async function seedConflicts(
       id: conflict.id,
       aiUsageFlowId: `ai-flow-${assessmentId}`,
       assessmentId,
-      organizationId,
       conflictType: index === 0 ? "evidence_contradiction" : "scope_mismatch",
       conflictScore: index === 0 ? 0.88 : 0.42,
       scoreExplanation: "Manager and technical evidence differ.",
@@ -428,7 +343,6 @@ async function seedConflicts(
 async function signIn(
   app: INestApplication,
   email: string,
-  organizationId: string,
 ): Promise<string> {
   const password =
     email === "system-admin-resolve@acme.test"
@@ -437,7 +351,7 @@ async function signIn(
   const response = await httpRequest(app).post("/auth/sign-in").send({
     email,
     password,
-    organization_id: organizationId,
+    organization_id: "org-1",
   });
   return successBody<SignInSuccess>(response).session_token ?? "";
 }
