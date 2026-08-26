@@ -1,8 +1,7 @@
-import { AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
-import { RBAC_DECISION } from "@lcsp/contracts/rbac";
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
+import { AUTH_ERROR_CODES, AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
 /* eslint-disable @typescript-eslint/unbound-method */
 import { jest } from "@jest/globals";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 
 import type { ConfigService } from "@nestjs/config";
 import type { OAuthProvider } from "../../../infrastructure/oauth/oauth-provider.interface.ts";
@@ -108,12 +107,11 @@ describe("OAuthStartHandler", () => {
 
     expect(result.ok).toBe(false);
     expect(result.problem.code).toBe(AUTH_ERROR_CODES.unsupportedProvider);
-
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
       mockRepositories,
       expect.objectContaining({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartFailed,
-        decision: RBAC_DECISION.deny,
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.unsupportedProvider,
         correlationId: "corr-1",
       }),
@@ -129,12 +127,11 @@ describe("OAuthStartHandler", () => {
 
     expect(result.ok).toBe(false);
     expect(result.problem.code).toBe(AUTH_ERROR_CODES.invalidRedirectUri);
-
     expect(mockSupportService.recordAudit).toHaveBeenCalledWith(
       mockRepositories,
       expect.objectContaining({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartFailed,
-        decision: RBAC_DECISION.deny,
+        decision: AUDIT_DECISIONS.deny,
         reason_code: AUTH_ERROR_CODES.invalidRedirectUri,
       }),
     );
@@ -166,7 +163,7 @@ describe("OAuthStartHandler", () => {
       mockRepositories,
       expect.objectContaining({
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.oauthStartSucceeded,
-        decision: RBAC_DECISION.allow,
+        decision: AUDIT_DECISIONS.allow,
         provider: "google",
         correlationId: "corr-1",
       }),
@@ -182,7 +179,6 @@ describe("OAuthStartHandler", () => {
 
     const savedState = mockRepositories.oauthStates.save.mock.calls[0][0];
     const auditPayload = mockSupportService.recordAudit.mock.calls[0][1];
-
     const auditStr = JSON.stringify(auditPayload);
     expect(auditStr).not.toContain(savedState.state);
     expect(auditStr).not.toContain(savedState.nonce);
