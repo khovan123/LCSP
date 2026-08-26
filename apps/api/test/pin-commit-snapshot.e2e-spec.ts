@@ -189,7 +189,10 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       .send({ connection_id: "connection-1", commit_sha: "b".repeat(40) });
 
     assert.equal(response.status, 201);
-    assert.equal(successBody<PinSnapshotDto>(response).commit_sha, RESOLVED_SHA);
+    assert.equal(
+      successBody<PinSnapshotDto>(response).commit_sha,
+      RESOLVED_SHA,
+    );
   });
 
   it("T03: unresolvable ref is audited and creates no snapshot or outbox event", async () => {
@@ -259,7 +262,10 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       orderBy: { createdAt: "desc" },
     });
     assert.ok(scanJob);
-    assert.equal(scanJob.triggerSource, REPOSITORY_SCAN_TRIGGER_SOURCES.trusted);
+    assert.equal(
+      scanJob.triggerSource,
+      REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
+    );
     assert.equal(
       scanJob.idempotencyKey,
       `snapshot-auto:assessment-1:${body.snapshot_id}`,

@@ -129,7 +129,9 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     assert.equal(body.all_conflicts_resolved, true);
     assert.equal(
       await prisma.outboxMessage.count({
-        where: { eventType: SCAN_EVENT_TYPES.reconciliationAllConflictsResolved },
+        where: {
+          eventType: SCAN_EVENT_TYPES.reconciliationAllConflictsResolved,
+        },
       }),
       1,
     );
@@ -179,7 +181,9 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     });
     assert.equal(
       await prisma.outboxMessage.count({
-        where: { eventType: SCAN_EVENT_TYPES.reconciliationAllConflictsResolved },
+        where: {
+          eventType: SCAN_EVENT_TYPES.reconciliationAllConflictsResolved,
+        },
       }),
       0,
     );
@@ -190,7 +194,9 @@ describe("Resolve Conflict Endpoint (e2e) [MW-rec-003]", () => {
     });
     assert.equal(
       await prisma.outboxMessage.count({
-        where: { eventType: SCAN_EVENT_TYPES.reconciliationAllConflictsResolved },
+        where: {
+          eventType: SCAN_EVENT_TYPES.reconciliationAllConflictsResolved,
+        },
       }),
       1,
     );
@@ -259,7 +265,9 @@ async function seedAssessmentChain(
       snapshotId: `snapshot-${assessmentId}`,
       toolsVersion: { semgrep: "1.0.0" },
       configHash: { semgrep: "sha256:abc" },
-      evidencePayload: { findings: [{ finding_id: `finding-${assessmentId}` }] },
+      evidencePayload: {
+        findings: [{ finding_id: `finding-${assessmentId}` }],
+      },
       privacyFlags: { containsSourceCode: false, secretsRedacted: true },
       schemaVersion: "1.0.0",
       status: TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,

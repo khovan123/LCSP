@@ -97,7 +97,11 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
 
   it("returns QUEUED and writes document request, outbox, and audit when guardrail passed", async () => {
     await seedClassification(prisma, CLASSIFICATION_GUARDRAIL_STATUSES.passed);
-    const response = await requestFinalReport(app, managerToken, "assessment-1");
+    const response = await requestFinalReport(
+      app,
+      managerToken,
+      "assessment-1",
+    );
     const body = successBody<SuccessResponse>(response);
     assert.equal(response.status, 202);
     assert.ok(body.document_request_id);
@@ -106,7 +110,9 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
     assert.ok(body.correlationId);
 
     const [docRequest, outbox, auditCount] = await Promise.all([
-      prisma.documentRequest.findUnique({ where: { id: body.document_request_id } }),
+      prisma.documentRequest.findUnique({
+        where: { id: body.document_request_id },
+      }),
       prisma.outboxMessage.findFirst({
         where: {
           eventType: DOCUMENT_EVENT_TYPES.finalReportRequested,
@@ -135,8 +141,15 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
   });
 
   it("returns 409 CLASSIFICATION_GUARDRAIL_NOT_PASSED when latest classification is degraded", async () => {
-    await seedClassification(prisma, CLASSIFICATION_GUARDRAIL_STATUSES.degraded);
-    const response = await requestFinalReport(app, managerToken, "assessment-1");
+    await seedClassification(
+      prisma,
+      CLASSIFICATION_GUARDRAIL_STATUSES.degraded,
+    );
+    const response = await requestFinalReport(
+      app,
+      managerToken,
+      "assessment-1",
+    );
     assert.equal(response.status, 409);
     assert.equal(
       problemCode(response),
@@ -167,7 +180,11 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
         correlationId: "corr-existing",
       },
     });
-    const response = await requestFinalReport(app, managerToken, "assessment-1");
+    const response = await requestFinalReport(
+      app,
+      managerToken,
+      "assessment-1",
+    );
     assert.equal(response.status, 409);
     assert.equal(problemCode(response), DOCUMENT_ERROR_CODES.alreadyQueued);
   });
