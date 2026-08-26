@@ -51,7 +51,6 @@ describe("ReconciliationController.getAssessmentContext", () => {
     expect(queryBus.execute).toHaveBeenCalledWith(
       new GetAssessmentContextQuery(
         "assessment-1",
-        "org-1",
         "wizard-1",
         [
           ASSESSMENT_CONTEXT_INCLUDES.submittedAnswers,
@@ -120,7 +119,6 @@ describe("ReconciliationController.proposeMissingTargets", () => {
     expect(queryBus.execute).toHaveBeenCalledWith(
       new ProposeMissingTargetsQuery(
         "assessment-1",
-        "org-1",
         "wizard-1",
         "report-1",
         [
