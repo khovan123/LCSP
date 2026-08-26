@@ -1,8 +1,6 @@
-import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { HttpStatus } from "@nestjs/common";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   LEGAL_RULE_EVENT_TYPES,
   LEGAL_RULE_ERROR_CODES,
@@ -34,8 +32,6 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
   async execute(
     command: ApproveRuleCatalogVersionCommand,
   ): Promise<ApproveRuleCatalogVersionResponse> {
-    await this.assertApproveAction(command);
-
     const version = await this.prisma.legalRuleCatalogVersion.findUnique({
       where: { id: command.legalRuleCatalogVersionId },
     });
@@ -142,33 +138,5 @@ export class ApproveRuleCatalogVersionHandler implements ICommandHandler<
       status: LEGAL_RULE_LIFECYCLE_STATUSES.approved,
       approvedAt: approvedAt.toISOString(),
     };
-  }
-
-  private async assertApproveAction(
-    command: ApproveRuleCatalogVersionCommand,
-  ): Promise<void> {
-    const allowed =
-      command.authorization.selectedAction ===
-      RBAC_ACTIONS.legalRuleCatalogApprove;
-
-    if (allowed) return;
-
-    await this.auditWriter.write({
-      eventType: LEGAL_RULE_EVENT_TYPES.catalogVersionApproved,
-      actorId: command.approvedBy,
-      resourceType: AUDIT_RESOURCE_TYPES.legalRuleCatalogVersion,
-      resourceId: command.legalRuleCatalogVersionId,
-      decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.rbacDenied,
-      correlationId: command.correlationId,
-      payload: {
-        action: RBAC_ACTIONS.legalRuleCatalogApprove,
-        result: AUDIT_DECISIONS.deny,
-      },
-    });
-
-    throw problemException(AUTH_ERROR_CODES.rbacDenied, command.correlationId, {
-      status: HttpStatus.FORBIDDEN,
-    });
   }
 }
