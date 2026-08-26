@@ -1,4 +1,3 @@
-import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import {
   ASSESSMENT_STATUS_CODES,
   WIZARD_STATUS_CODES,
@@ -9,7 +8,6 @@ import {
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
@@ -52,8 +50,6 @@ export class SubmitWizardHandler implements ICommandHandler<
 
   async execute(command: SubmitWizardCommand): Promise<SubmitWizardResponse> {
     const { assessmentId, ownerId, answers, correlationId } = command;
-
-    await this.assertManagerOnlyAction(command);
 
     // 1. Verify assessment ownership
     const isOwned = await this.wizardRepository.verifyAssessmentOwnership(
@@ -190,34 +186,5 @@ export class SubmitWizardHandler implements ICommandHandler<
       assessment_status: ASSESSMENT_STATUS_CODES.wizardSubmitted,
       correlationId: correlationId,
     };
-  }
-
-  private async assertManagerOnlyAction(
-    command: SubmitWizardCommand,
-  ): Promise<void> {
-    const allowed =
-      command.authorization.subjectRole === AUTH_USER_ROLES.customer &&
-      command.authorization.selectedAction === RBAC_ACTIONS.wizardSubmit;
-
-    if (allowed) return;
-
-    await this.auditWriter.write({
-      eventType: WIZARD_EVENT_TYPES.submitted,
-      actorId: command.ownerId,
-      resourceType: AUDIT_RESOURCE_TYPES.wizardProfile,
-      resourceId: null,
-      decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.rbacDenied,
-      correlationId: command.correlationId,
-      payload: {
-        assessmentId: command.assessmentId,
-        action: RBAC_ACTIONS.wizardSubmit,
-        result: AUDIT_DECISIONS.deny,
-      },
-    });
-
-    throw problemException(AUTH_ERROR_CODES.rbacDenied, command.correlationId, {
-      status: HttpStatus.FORBIDDEN,
-    });
   }
 }

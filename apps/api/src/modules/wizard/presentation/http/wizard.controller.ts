@@ -63,7 +63,6 @@ export class WizardController {
           correlationId,
           {
             subjectRole: rbacContext.role,
-            selectedAction: rbacContext.selectedAction,
           },
         ),
       ),
@@ -92,7 +91,6 @@ export class WizardController {
           correlationId,
           {
             subjectRole: rbacContext.role,
-            selectedAction: rbacContext.selectedAction,
           },
         ),
       ),
@@ -131,7 +129,6 @@ export class WizardController {
       await this.queryBus.execute(
         new GetReadinessQuery(assessmentId, userId, correlationId, {
           subjectRole: rbacContext.role,
-          selectedAction: rbacContext.selectedAction,
         }),
       ),
     );
@@ -156,7 +153,6 @@ export class WizardController {
           correlationId,
           {
             subjectRole: rbacContext.role,
-            selectedAction: rbacContext.selectedAction,
           },
         ),
       ),

@@ -1,4 +1,3 @@
-import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import * as crypto from "node:crypto";
 
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
@@ -7,7 +6,6 @@ import {
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import {
   READINESS_CLASSIFICATION_STATUSES,
@@ -55,8 +53,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
   async execute(
     command: GenerateReadinessExportCommand,
   ): Promise<ReadinessExportResponse> {
-    await this.assertManagerExportAction(command);
-
     const assessment = await this.prisma.assessment.findFirst({
       where: {
         id: command.assessmentId,
@@ -301,36 +297,6 @@ export class GenerateReadinessExportHandler implements ICommandHandler<
         "Review unresolved unknown items with the assessment owner.",
       ],
     };
-  }
-
-  private async assertManagerExportAction(
-    command: GenerateReadinessExportCommand,
-  ): Promise<void> {
-    const allowed =
-      command.authorization.subjectRole === AUTH_USER_ROLES.customer &&
-      command.authorization.selectedAction === RBAC_ACTIONS.wizardExport;
-
-    if (allowed) return;
-
-    await this.auditWriter.write({
-      eventType: WIZARD_EVENT_TYPES.readinessExportGenerated,
-      actorId: command.ownerId,
-      resourceType: AUDIT_RESOURCE_TYPES.readinessExport,
-      resourceId: null,
-      assessmentId: command.assessmentId,
-      decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.rbacDenied,
-      correlationId: command.correlationId,
-      payload: {
-        assessmentId: command.assessmentId,
-        action: RBAC_ACTIONS.wizardExport,
-        result: AUDIT_DECISIONS.deny,
-      },
-    });
-
-    throw problemException(AUTH_ERROR_CODES.rbacDenied, command.correlationId, {
-      status: HttpStatus.FORBIDDEN,
-    });
   }
 }
 

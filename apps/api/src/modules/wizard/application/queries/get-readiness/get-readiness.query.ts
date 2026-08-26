@@ -3,7 +3,6 @@ import type { ReadinessResponse } from "../../contracts/wizard/readiness.contrac
 
 export interface ReadinessAuthorizationContext {
   subjectRole: string;
-  selectedAction: string | null;
 }
 
 export class GetReadinessQuery extends Query<ReadinessResponse> {

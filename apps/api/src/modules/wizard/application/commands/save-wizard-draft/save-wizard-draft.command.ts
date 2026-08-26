@@ -5,7 +5,6 @@ import type { SaveWizardDraftResponse } from "../../contracts/wizard/wizard-draf
 
 export type ManagerOnlyAuthorizationContext = {
   subjectRole: AuthUserRole;
-  selectedAction: string | null;
 };
 
 export class SaveWizardDraftCommand extends Command<SaveWizardDraftResponse> {

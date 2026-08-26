@@ -1,18 +1,12 @@
-import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import { WIZARD_STATUS_CODES } from "@lcsp/contracts/assessment";
-import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
-import { WIZARD_EVENT_TYPES, type WizardAnswer } from "@lcsp/contracts/wizard";
-import { HttpStatus } from "@nestjs/common";
+import { type WizardAnswer } from "@lcsp/contracts/wizard";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 import {
   fromPrismaWizardStatus,
   toPrismaEvidenceAcceptanceStatus,
 } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
-import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
-import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { AssessmentNotFoundException } from "../../../domain/exceptions/wizard.exceptions.js";
 import type { ReadinessResponse } from "../../contracts/wizard/readiness.contract.js";
 import { ReadinessEvaluatorService } from "../../services/wizard/readiness-evaluator.service.js";
@@ -25,13 +19,10 @@ export class GetReadinessHandler implements IQueryHandler<
 > {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly auditWriter: AuditWriterService,
     private readonly readinessEvaluator: ReadinessEvaluatorService,
   ) {}
 
   async execute(query: GetReadinessQuery): Promise<ReadinessResponse> {
-    await this.assertReadAction(query);
-
     const { assessmentId } = query;
 
     // Verify assessment exists.
@@ -91,36 +82,5 @@ export class GetReadinessHandler implements IQueryHandler<
       updated_at: new Date().toISOString(),
       correlationId: query.correlationId,
     };
-  }
-
-  private async assertReadAction(query: GetReadinessQuery): Promise<void> {
-    const { authorization } = query;
-    const isManager = authorization.subjectRole === AUTH_USER_ROLES.customer;
-    const hasReadAction =
-      authorization.selectedAction === RBAC_ACTIONS.assessmentRead;
-
-    if (isManager && hasReadAction) {
-      return;
-    }
-
-    // Write audit log on denial
-    await this.auditWriter.write({
-      eventType: WIZARD_EVENT_TYPES.readinessRead,
-      actorId: query.userId,
-      resourceType: AUDIT_RESOURCE_TYPES.assessmentRecord,
-      resourceId: query.assessmentId,
-      decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.rbacDenied,
-      correlationId: query.correlationId,
-      payload: {
-        assessmentId: query.assessmentId,
-        action: RBAC_ACTIONS.assessmentRead,
-        result: AUDIT_DECISIONS.deny,
-      },
-    });
-
-    throw problemException(AUTH_ERROR_CODES.rbacDenied, query.correlationId, {
-      status: HttpStatus.FORBIDDEN,
-    });
   }
 }
