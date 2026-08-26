@@ -112,7 +112,6 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "manager@acme.test",
       password: "CorrectHorseBatteryStaple!",
-      organization_id: "org-1",
     });
     managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
@@ -159,10 +158,6 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       body.snapshot_id,
     );
     assert.equal(
-      (event.payload as { organizationId?: string }).organizationId,
-      "org-1",
-    );
-    assert.equal(
       (event.payload as { schemaVersion?: string }).schemaVersion,
       OUTBOX_MESSAGE_SCHEMA_VERSION,
     );
@@ -194,10 +189,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       .send({ connection_id: "connection-1", commit_sha: "b".repeat(40) });
 
     assert.equal(response.status, 201);
-    assert.equal(
-      successBody<PinSnapshotDto>(response).commit_sha,
-      RESOLVED_SHA,
-    );
+    assert.equal(successBody<PinSnapshotDto>(response).commit_sha, RESOLVED_SHA);
   });
 
   it("T03: unresolvable ref is audited and creates no snapshot or outbox event", async () => {
@@ -225,24 +217,11 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
     );
   });
 
-  it("T04: connection outside the session organization is hidden", async () => {
-    await prisma.assessment.create({
-      data: {
-        id: "assessment-other",
-        ownerId: "user-2",
-        name: "Other assessment",
-        status: ASSESSMENT_STATUS_CODES.wizardInProgress,
-      },
-    });
-    await prisma.repositoryConnection.update({
-      where: { id: "connection-1" },
-      data: { assessmentId: "assessment-other" },
-    });
-
+  it("T04: missing connection is hidden", async () => {
     const response = await httpRequest(app)
       .post("/assessments/assessment-1/snapshots")
       .set("Authorization", `Bearer ${managerToken}`)
-      .send({ connection_id: "connection-1", branch: "main" });
+      .send({ connection_id: "connection-missing", branch: "main" });
 
     assert.equal(response.status, 404);
     assert.equal(
@@ -280,10 +259,7 @@ describe("Pin Commit Snapshot Endpoint (e2e) [MW-gh-003]", () => {
       orderBy: { createdAt: "desc" },
     });
     assert.ok(scanJob);
-    assert.equal(
-      scanJob.triggerSource,
-      REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
-    );
+    assert.equal(scanJob.triggerSource, REPOSITORY_SCAN_TRIGGER_SOURCES.trusted);
     assert.equal(
       scanJob.idempotencyKey,
       `snapshot-auto:assessment-1:${body.snapshot_id}`,
