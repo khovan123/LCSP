@@ -72,6 +72,14 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public
 
+      - name: Start PostgreSQL test database
+        run: node apps/api/test/scripts/ensure-test-postgres.mjs
+
+      - name: Apply Prisma migrations
+        run: pnpm --filter @lcsp/api exec prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public
+
       - name: Test API
         run: pnpm --filter @lcsp/api test
 
