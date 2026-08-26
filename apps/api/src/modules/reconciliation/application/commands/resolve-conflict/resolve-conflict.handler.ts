@@ -1,11 +1,9 @@
-import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import {
   AUDIT_ACTOR_TYPES,
   AUDIT_DECISIONS,
   AUDIT_REDACTION_STATUSES,
   AUDIT_RESOURCE_TYPES,
 } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
@@ -50,7 +48,6 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
   ) {}
 
   async execute(command: ResolveConflictCommand): Promise<ResolveConflictDto> {
-    await this.assertManagerOnly(command);
     const resolution = parseResolution(
       command.resolution,
       command.correlationId,
@@ -154,37 +151,6 @@ export class ResolveConflictHandler implements ICommandHandler<ResolveConflictCo
       all_conflicts_resolved: result,
       correlationId: command.correlationId,
     };
-  }
-
-  private async assertManagerOnly(
-    command: ResolveConflictCommand,
-  ): Promise<void> {
-    const allowed =
-      command.subjectRole === AUTH_USER_ROLES.customer &&
-      command.authorization.selectedAction === RBAC_ACTIONS.conflictResolve;
-
-    if (allowed) return;
-
-    await this.auditWriter.write({
-      eventType: SCAN_EVENT_TYPES.conflictResolvedAudit,
-      actorId: command.resolvedById,
-      assessmentId: command.assessmentId,
-      resourceType: AUDIT_RESOURCE_TYPES.conflictRecord,
-      resourceId: command.conflictId,
-      correlationId: command.correlationId,
-      decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.rbacDenied,
-      payload: {
-        assessmentId: command.assessmentId,
-        conflictId: command.conflictId,
-        action: RBAC_ACTIONS.conflictResolve,
-        result: AUDIT_DECISIONS.deny,
-      },
-    });
-
-    throw problemException(AUTH_ERROR_CODES.rbacDenied, command.correlationId, {
-      status: HttpStatus.FORBIDDEN,
-    });
   }
 
   private async enqueueAllResolvedEvent(

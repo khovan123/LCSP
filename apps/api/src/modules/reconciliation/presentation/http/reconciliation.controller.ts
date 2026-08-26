@@ -1,20 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import {
-  Body,
-  Controller,
-  Get,
-  Headers,
-  HttpStatus,
-  HttpCode,
-  Param,
-  Patch,
-  Post,
-  Query,
-  Req,
-  UseGuards,
-} from "@nestjs/common";
-import { CommandBus, QueryBus } from "@nestjs/cqrs";
+import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   ARTIFACT_CHAIN_STAGES,
@@ -24,27 +10,41 @@ import {
   type AssessmentContextAnswerField,
   type AssessmentContextInclude,
 } from "@lcsp/contracts/evidence";
-import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import { CommandBus, QueryBus } from "@nestjs/cqrs";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
+import { problemException } from "../../../../platform/problems/problem-factory.js";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
-import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
-import { problemException } from "../../../../platform/problems/problem-factory.js";
 import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AcceptConflictCommand } from "../../application/commands/accept-conflict/accept-conflict.command.js";
 import { ResolveConflictCommand } from "../../application/commands/resolve-conflict/resolve-conflict.command.js";
+import { TARGET_CANDIDATE_KINDS } from "../../application/contracts/missing-target-proposal.contract.js";
 import type { ConflictDetectionCallbackRequest } from "../../application/contracts/reconciliation/conflict-detection-callback.contract.js";
-import { ListConflictsQuery } from "../../application/queries/list-conflicts/list-conflicts.query.js";
-import { GetArtifactChainQuery } from "../../application/queries/get-artifact-chain/get-artifact-chain.query.js";
-import { GetAssessmentContextQuery } from "../../application/queries/get-assessment-context/get-assessment-context.query.js";
-import { GetReconciliationContextQuery } from "../../application/queries/get-reconciliation-context/get-reconciliation-context.query.js";
-import { ProposeMissingTargetsQuery } from "../../application/queries/propose-missing-targets/propose-missing-targets.query.js";
 import {
   RECONCILIATION_CONTEXT_STATUSES,
   type ReconciliationContextStatus,
 } from "../../application/contracts/reconciliation/reconciliation-context.contract.js";
-import { TARGET_CANDIDATE_KINDS } from "../../application/contracts/missing-target-proposal.contract.js";
+import { GetArtifactChainQuery } from "../../application/queries/get-artifact-chain/get-artifact-chain.query.js";
+import { GetAssessmentContextQuery } from "../../application/queries/get-assessment-context/get-assessment-context.query.js";
+import { GetReconciliationContextQuery } from "../../application/queries/get-reconciliation-context/get-reconciliation-context.query.js";
+import { ListConflictsQuery } from "../../application/queries/list-conflicts/list-conflicts.query.js";
+import { ProposeMissingTargetsQuery } from "../../application/queries/propose-missing-targets/propose-missing-targets.query.js";
 
 type ResolveConflictRequest = {
   resolution?: unknown;
@@ -117,7 +117,6 @@ export class ReconciliationController {
     @Query("exact_versions") exactVersionsRaw: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    const rbacContext = request.rbacContext;
     const artifactRef = parseArtifactRefQuery(
       artifactRefRaw,
       request.correlationId as string,
@@ -152,7 +151,6 @@ export class ReconciliationController {
     @Query("max_results") maxResultsRaw: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
-    const rbacContext = request.rbacContext;
     const correlationId = request.correlationId as string;
     const flowId = parseOptionalFlowRef(flowRef, correlationId);
     const conflictIds = parseConflictIds(conflictIdsRaw, correlationId);
@@ -263,13 +261,9 @@ export class ReconciliationController {
           assessmentId,
           conflictId,
           rbacContext.userId,
-          rbacContext.role,
           body.resolution,
           body.resolution_note,
           request.correlationId as string,
-          {
-            selectedAction: rbacContext.selectedAction,
-          },
         ),
       ),
     );
