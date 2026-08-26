@@ -365,6 +365,7 @@ model RepositoryConnection {
   id                 String                     @id
   assessmentId       String?
   userId             String
+  provider           CredentialProvider         @default(GITHUB)
   installationId     String?
   authenticationMode RepositoryAuthenticationMode @default(GITHUB_APP)
   credentialAuthorizationId String? @unique
@@ -880,6 +881,7 @@ enum RepositoryConnectionStatus {
 
 enum CredentialProvider {
   GITHUB
+  GITLAB
 }
 
 enum ProviderCredentialStatus {
@@ -901,6 +903,7 @@ enum CredentialAuthorizationStatus {
 enum RepositoryAuthenticationMode {
   GITHUB_APP
   GITHUB_CLI_CREDENTIAL
+  GITLAB_CLI_CREDENTIAL
 }
 
 enum RepositorySnapshotStatus {
