@@ -10,11 +10,9 @@ import { API_OUTCOME_KINDS } from "../../../lib/api/outcome-kinds.ts";
 export type WorkspaceAction = AssessmentAction | (string & {});
 
 export type WorkspaceContext = {
-  organization: {
+  user: {
     id: string;
-    name: string;
-  };
-  membership: {
+    display_name: string;
     role: string;
   };
   granted_actions: WorkspaceAction[];
