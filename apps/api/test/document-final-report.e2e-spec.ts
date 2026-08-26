@@ -22,7 +22,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
-import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import {
   toPrismaDocumentRequestStatus,
   toPrismaDocumentType,

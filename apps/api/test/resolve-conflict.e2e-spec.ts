@@ -19,9 +19,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
-import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
-import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
 import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,

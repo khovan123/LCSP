@@ -217,7 +217,7 @@ export class InternalAgenticToolDispatchController {
     }
 
     if (isAgenticToolCommand(args.toolName)) {
-      const policy = await this.authorizeProtectedCommand(args);
+      await this.authorizeProtectedCommand(args);
       return this.requireCommandBus(args.correlationId).execute(
         buildAgenticToolCommand({
           toolName: args.toolName,
@@ -234,7 +234,7 @@ export class InternalAgenticToolDispatchController {
 
   private async authorizeProtectedCommand(
     args: ToolExecutionArgs,
-  ): Promise<{}> {
+  ): Promise<object> {
     if (!this.rbacPreflight) {
       throw problemException(
         EVIDENCE_ERROR_CODES.notFound,

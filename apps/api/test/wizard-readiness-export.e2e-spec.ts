@@ -11,7 +11,6 @@ import {
   type AssessmentStatusCode,
   WIZARD_STATUS_CODES,
 } from "@lcsp/contracts/assessment";
-import { AUTH_ERROR_CODES } from "@lcsp/contracts/auth";
 import { WIZARD_EVENT_TYPES } from "@lcsp/contracts/wizard";
 import {
   READINESS_CLASSIFICATION_STATUSES,

@@ -13,7 +13,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { AUTH_USER_ROLES, type AuthUserRole } from "@lcsp/contracts/auth";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";

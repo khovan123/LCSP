@@ -27,7 +27,6 @@ import type { PinSnapshotDto } from "../src/modules/github-integration/applicati
 import { GitHubAppClient } from "../src/modules/github-integration/infrastructure/github/github-app.client.js";
 import { OutboxPublisherService } from "../src/platform/outbox/outbox-publisher.service.js";
 import { RabbitMqClient } from "../src/platform/outbox/rabbitmq.client.js";
-import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,

@@ -8,7 +8,6 @@ import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
 } from "@lcsp/contracts/outbox";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   CLASSIFICATION_RERUN_STATUSES,
   SCAN_ERROR_CODES,

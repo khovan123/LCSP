@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, type TestingModule } from "@nestjs/testing";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {

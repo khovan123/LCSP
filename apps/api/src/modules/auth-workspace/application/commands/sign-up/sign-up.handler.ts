@@ -195,10 +195,6 @@ function isValidDisplayName(value: unknown): value is string {
   );
 }
 
-function uniqueActions(actions: readonly string[]): string[] {
-  return [...new Set(actions)];
-}
-
 function isUniqueConstraintViolation(error: unknown): boolean {
   return (
     typeof error === "object" &&

@@ -25,7 +25,6 @@ import {
   OUTBOX_AGGREGATE_TYPES,
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { LegalRetrievalIndexStatus, Prisma } from "@prisma/client";
 import { VERIFIED_PROFILE_STATUSES } from "@lcsp/contracts/scan";
 

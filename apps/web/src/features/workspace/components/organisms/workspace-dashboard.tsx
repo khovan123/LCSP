@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { resolveMessage } from "@lcsp/i18n";
+import { resolveMessage, type MessageKey } from "@lcsp/i18n";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { canCreateAssessment } from "@/lib/api/workspace-client";
@@ -64,12 +64,12 @@ export function WorkspaceDashboard() {
             )}
             organizationLabel={resolveMessage(
               appLocale,
-              "pages.workspace.organizationLabel",
+              "pages.workspace.organizationLabel" as MessageKey,
             )}
             organizationName={workspace.user.display_name}
             membershipRoleLabel={resolveMessage(
               appLocale,
-              "pages.workspace.membershipRoleLabel",
+              "pages.workspace.membershipRoleLabel" as MessageKey,
             )}
             membershipRole={workspace.user.role}
             createAssessmentLabel={resolveMessage(

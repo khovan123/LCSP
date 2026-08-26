@@ -16,8 +16,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
-import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
-import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
 import type { ConflictListDto } from "../src/modules/reconciliation/application/contracts/reconciliation/conflict-list.contract.js";
 import {
   pushPrismaSchema,

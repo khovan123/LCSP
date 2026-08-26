@@ -19,11 +19,9 @@ import {
   AUTH_ERROR_CODES,
   MFA_RECOVERY_CODE_ACCESS_ACTIONS,
   type MfaRecoveryCodeAccessAction,
-  AUTH_USER_ROLES,
 } from "@lcsp/contracts/auth";
 
 import { AllowPendingMfa } from "../../../../platform/rbac/decorators/allow-pending-mfa.decorator.js";
-import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RequireSession } from "../../../../platform/rbac/decorators/require-session.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
 import { problemException } from "../../../../platform/problems/problem-factory.js";

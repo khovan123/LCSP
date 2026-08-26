@@ -22,7 +22,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
-import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import {
   toPrismaDocumentRequestStatus,
   toPrismaDocumentType,
@@ -30,6 +29,7 @@ import {
 } from "../src/infrastructure/prisma/prisma-enum-mappers.js";
 import type { SignInSuccess } from "../src/modules/auth-workspace/application/contracts/auth-workspace/sign-in.contract.js";
 import { hashSecret } from "../src/modules/auth-workspace/infrastructure/security/security.utils.js";
+import { LOCAL_RBAC_REASON_CODES as RBAC_REASON_CODE } from "../src/platform/rbac/rbac-reason-codes.js";
 import {
   pushPrismaSchema,
   resetAuthWorkspaceDatabase,
@@ -81,7 +81,7 @@ describe("Document Status Endpoint (e2e) [MW-doc-003]", () => {
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-    await enableManagerDocumentRead(prisma);
+    enableManagerDocumentRead(prisma);
 
     await prisma.assessment.create({
       data: {
@@ -260,7 +260,7 @@ function getDocumentStatus(
     .set("X-Correlation-Id", "doc-status-corr-1");
 }
 
-async function enableManagerDocumentRead(prisma: PrismaClient) {
+function enableManagerDocumentRead(prisma: PrismaClient) {
   void prisma;
 }
 

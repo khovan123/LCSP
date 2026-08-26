@@ -286,7 +286,6 @@ describe("OutboxPublisherService", () => {
       message.payload,
       {
         user_id: "user-1",
-        action: "scan:trigger",
         "x-correlation-id": "corr-1",
       },
     );
@@ -476,7 +475,6 @@ describe("OutboxPublisherService", () => {
       message.payload,
       {
         user_id: "user-1",
-        action: "scan:trigger",
         "x-correlation-id": "corr-1",
       },
     );

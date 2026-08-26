@@ -1,38 +1,38 @@
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
-  Controller,
-  Put,
-  Post,
-  Get,
-  Param,
   Body,
-  UseGuards,
-  Req,
+  Controller,
+  Get,
   HttpCode,
+  Param,
+  Post,
+  Put,
+  Req,
   Res,
+  UseGuards,
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
-import type { SaveWizardDraftRequest } from "../../application/contracts/wizard/wizard-draft.contract.js";
-import type { SubmitWizardRequest } from "../../application/contracts/wizard/wizard-submit.contract.js";
 import {
   WIZARD_CLARIFICATION_ASK_MODES,
   type WizardClarificationAskMode,
   type WizardClarificationQuestionRequest,
 } from "@lcsp/contracts/wizard";
+import { randomUUID } from "node:crypto";
+import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
+import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
+import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
+import { GenerateReadinessExportCommand } from "../../application/commands/generate-readiness-export/generate-readiness-export.command.js";
 import { SaveWizardDraftCommand } from "../../application/commands/save-wizard-draft/save-wizard-draft.command.js";
 import { SubmitWizardCommand } from "../../application/commands/submit-wizard/submit-wizard.command.js";
-import { GenerateReadinessExportCommand } from "../../application/commands/generate-readiness-export/generate-readiness-export.command.js";
-import { GetReadinessQuery } from "../../application/queries/get-readiness/get-readiness.query.js";
+import type { SaveWizardDraftRequest } from "../../application/contracts/wizard/wizard-draft.contract.js";
+import type { SubmitWizardRequest } from "../../application/contracts/wizard/wizard-submit.contract.js";
 import { DownloadReadinessExportQuery } from "../../application/queries/download-readiness-export/download-readiness-export.query.js";
+import { GetReadinessQuery } from "../../application/queries/get-readiness/get-readiness.query.js";
 import { WizardClarificationQuestionService } from "../../application/services/wizard/wizard-clarification-question.service.js";
-import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
-import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
-import { resultEnvelope } from "../../../../platform/problems/result-envelope.js";
-import { randomUUID } from "node:crypto";
 
-import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import type { Response } from "express";
+import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 
 @Controller("assessments")
 export class WizardController {
@@ -101,7 +101,7 @@ export class WizardController {
   @HttpCode(200)
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.customer)
-  async generateClarificationQuestions(
+  generateClarificationQuestions(
     @Body() body: Partial<WizardClarificationQuestionRequest> | undefined,
   ) {
     const answers = Array.isArray(body?.answers) ? body.answers : [];

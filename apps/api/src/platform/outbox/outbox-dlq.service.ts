@@ -7,7 +7,6 @@ import {
   OUTBOX_ERROR_CODES,
   OUTBOX_STATUSES,
 } from "@lcsp/contracts/outbox";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { TECHNICAL_EVIDENCE_REPORT_STATUSES } from "@lcsp/contracts/scan";
 import { OutboxRepository } from "./outbox.repository.js";
 import { AuditWriterService } from "../audit/audit-writer.service.js";

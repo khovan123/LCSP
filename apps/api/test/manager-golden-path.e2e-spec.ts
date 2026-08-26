@@ -2,24 +2,24 @@
 
 import * as assert from "node:assert/strict";
 
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
-import type { INestApplication } from "@nestjs/common";
-import { Test, type TestingModule } from "@nestjs/testing";
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { DOCUMENT_REQUEST_STATUSES } from "@lcsp/contracts/document";
 import {
   REPOSITORY_CONNECTION_STATUSES,
-  REPOSITORY_SNAPSHOT_STATUSES,
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SCAN_TRIGGER_SOURCES,
+  REPOSITORY_SNAPSHOT_STATUSES,
 } from "@lcsp/contracts/github-integration";
 import {
   ASSESSMENT_RESULT_MODES,
   CLASSIFICATION_GUARDRAIL_STATUSES,
   SCAN_CALLBACK_STATUSES,
 } from "@lcsp/contracts/scan";
+import type { INestApplication } from "@nestjs/common";
+import { Test, type TestingModule } from "@nestjs/testing";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
 import { toPrismaDocumentRequestStatus } from "../src/infrastructure/prisma/prisma-enum-mappers.js";
@@ -54,7 +54,7 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
     await resetDomainData(prisma);
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-    await grantGoldenPathActions(prisma);
+    grantGoldenPathActions(prisma);
   });
 
   afterAll(async () => {
@@ -295,7 +295,7 @@ const validWizardAnswers = [
   },
 ];
 
-async function grantGoldenPathActions(prisma: PrismaClient): Promise<void> {
+function grantGoldenPathActions(prisma: PrismaClient): void {
   void prisma;
 }
 

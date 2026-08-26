@@ -131,7 +131,7 @@ export function AppSidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        {workspace && workspace.membership.role !== AUTH_USER_ROLES.customer ? (
+        {workspace && workspace.user.role !== AUTH_USER_ROLES.customer ? (
           <div className="px-2 pb-2">
             <p className="mb-1 px-2 text-xs font-semibold tracking-widest text-sidebar-foreground/55 uppercase">
               {t("pages.appShell.currentWorkspace")}

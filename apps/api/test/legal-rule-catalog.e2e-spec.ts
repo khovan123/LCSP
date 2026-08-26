@@ -1,9 +1,9 @@
-import * as assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
 import type { INestApplication } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
+import * as assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { httpRequest, successBody } from "./support/http.js";
 
 import { AppModule } from "../src/app.module.js";
@@ -24,7 +24,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
   let prisma: PrismaClient;
   let authorToken: string;
   let approverToken: string;
-  let restrictedToken: string;
   const orgId = "org-1";
 
   beforeAll(async () => {
@@ -129,10 +128,8 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       password: "CorrectHorseBatteryStaple!",
       organization_id: orgId,
     });
-    restrictedToken = String(
-      successBody<{ session_token?: string }>(signInRestricted).session_token ??
-        "",
-    );
+    void successBody<{ session_token?: string }>(signInRestricted)
+      .session_token;
   });
 
   afterAll(async () => {

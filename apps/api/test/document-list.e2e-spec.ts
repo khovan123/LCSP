@@ -2,10 +2,6 @@
 
 import * as assert from "node:assert/strict";
 
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
-import type { INestApplication } from "@nestjs/common";
-import { Test, type TestingModule } from "@nestjs/testing";
 import {
   DOCUMENT_REQUEST_STATUSES,
   DOCUMENT_TYPES,
@@ -18,6 +14,10 @@ import {
   LEGAL_RULE_MATCH_GUARDRAIL_STATUSES,
   OVERALL_COVERAGE_STATUSES,
 } from "@lcsp/contracts/scan";
+import type { INestApplication } from "@nestjs/common";
+import { Test, type TestingModule } from "@nestjs/testing";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "@prisma/client";
 
 import { AppModule } from "../src/app.module.js";
 import {
@@ -67,7 +67,7 @@ describe("Document List Endpoint (e2e)", () => {
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-    await enableManagerDocumentRead(prisma);
+    enableManagerDocumentRead(prisma);
 
     await prisma.assessment.create({
       data: {
@@ -134,7 +134,7 @@ describe("Document List Endpoint (e2e)", () => {
   });
 });
 
-async function enableManagerDocumentRead(prisma: PrismaClient) {
+function enableManagerDocumentRead(prisma: PrismaClient) {
   void prisma;
 }
 

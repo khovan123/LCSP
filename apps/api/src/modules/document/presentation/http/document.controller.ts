@@ -12,7 +12,7 @@ import {
 } from "@nestjs/common";
 import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { DOCUMENT_ERROR_CODES } from "@lcsp/contracts/document";
-import { AUTH_USER_ROLES, type AuthUserRole } from "@lcsp/contracts/auth";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { CONFLICT_RECORD_STATUSES } from "@lcsp/contracts/scan";
 import { describe, expect, it, jest } from "@jest/globals";

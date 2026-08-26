@@ -1,13 +1,8 @@
 import { createHash } from "node:crypto";
 
-import { HttpStatus } from "@nestjs/common";
-import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
-import {
-  ClassificationGuardrailStatus,
-  EvidenceAcceptanceStatus,
-} from "@prisma/client";
 import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   AGENTIC_TOOL_COVERAGE_STATES,
   AGENTIC_TOOL_EVENT_TYPES,
@@ -17,7 +12,12 @@ import {
   GET_GAP_REQUIREMENTS_TOOL,
   type GetGapRequirementsResponse,
 } from "@lcsp/contracts/evidence";
-import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { HttpStatus } from "@nestjs/common";
+import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
+import {
+  ClassificationGuardrailStatus,
+  EvidenceAcceptanceStatus,
+} from "@prisma/client";
 
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -62,22 +62,20 @@ export class GetGapRequirementsHandler implements IQueryHandler<
       query.input.classificationRef,
       CLASSIFICATION_REF_PREFIX,
     );
-    const [classification, policyOk] = await Promise.all([
-      this.prisma.classificationResult.findFirst({
-        where: {
-          id: classificationId,
-          assessmentId: assessment.id,
-          status: EvidenceAcceptanceStatus.ACCEPTED,
-        },
-        select: {
-          id: true,
-          classificationData: true,
-          guardrailStatus: true,
-          blockedReason: true,
-        },
-      }),
-      this.policyMatchesInput(query),
-    ]);
+    const classification = await this.prisma.classificationResult.findFirst({
+      where: {
+        id: classificationId,
+        assessmentId: assessment.id,
+        status: EvidenceAcceptanceStatus.ACCEPTED,
+      },
+      select: {
+        id: true,
+        classificationData: true,
+        guardrailStatus: true,
+        blockedReason: true,
+      },
+    });
+    const policyOk = this.policyMatchesInput(query);
 
     if (!policyOk) {
       return this.writeAndReturn(
@@ -170,9 +168,7 @@ export class GetGapRequirementsHandler implements IQueryHandler<
     return this.writeAndReturn(query, assessment.id, response);
   }
 
-  private async policyMatchesInput(
-    query: GetGapRequirementsQuery,
-  ): Promise<boolean> {
+  private policyMatchesInput(query: GetGapRequirementsQuery): boolean {
     return (
       query.input.policyProfileVersionId ===
         roleProfileVersionRef(query.actorRole) &&
