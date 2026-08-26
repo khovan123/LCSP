@@ -60,10 +60,6 @@ export class AssessmentController {
           body.name,
           body.description,
           request.correlationId as string,
-          {
-            subjectRole: rbacContext.role,
-            selectedAction: rbacContext.selectedAction,
-          },
         ),
       ),
     );

@@ -1,4 +1,3 @@
-import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import { HttpStatus, Inject } from "@nestjs/common";
 import { CommandHandler } from "@nestjs/cqrs";
 import type { ICommandHandler } from "@nestjs/cqrs";
@@ -8,7 +7,6 @@ import {
   AUDIT_RESOURCE_TYPES,
   AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
-import { AUTH_ERROR_CODES, AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   buildOutboxMessageInput,
   OUTBOX_AGGREGATE_TYPES,
@@ -64,7 +62,6 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
   async execute(
     command: CreateAssessmentCommand,
   ): Promise<CreateAssessmentDto> {
-    await this.assertAssessmentCreateAllowed(command);
     this.assertValid(command);
 
     const assessment = Assessment.create({
@@ -116,42 +113,6 @@ export class CreateAssessmentHandler implements ICommandHandler<CreateAssessment
     });
 
     return AssessmentMapper.toCreateDto(assessment, command.correlationId);
-  }
-
-  /**
-   * Enforces the assessment-create action and records a deny audit event before rejecting unauthorized requests.
-   *
-   * @param command - Creation command containing the evaluated RBAC context.
-   * @returns A promise that resolves only when role and action requirements are satisfied.
-   * @throws A RBAC-denied problem when the authorization context is incomplete or not approved.
-   */
-  private async assertAssessmentCreateAllowed(
-    command: CreateAssessmentCommand,
-  ): Promise<void> {
-    const allowed =
-      command.authorization.subjectRole === AUTH_USER_ROLES.customer &&
-      command.authorization.selectedAction === RBAC_ACTIONS.assessmentCreate;
-
-    if (allowed) return;
-
-    await this.auditWriter.write({
-      eventType: ASSESSMENT_EVENT_TYPES.created,
-      actorId: command.ownerId,
-      resourceType: AUDIT_RESOURCE_TYPES.assessment,
-      resourceId: null,
-      correlationId: command.correlationId,
-      decision: AUDIT_DECISIONS.deny,
-      reasonCode: AUTH_ERROR_CODES.rbacDenied,
-      payload: {
-        action: RBAC_ACTIONS.assessmentCreate,
-        result: AUDIT_DECISIONS.deny,
-        correlationId: command.correlationId,
-      },
-    });
-
-    throw problemException(AUTH_ERROR_CODES.rbacDenied, command.correlationId, {
-      status: HttpStatus.FORBIDDEN,
-    });
   }
 
   /**
