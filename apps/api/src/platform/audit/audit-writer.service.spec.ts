@@ -5,12 +5,12 @@ import {
   AUDIT_ACTOR_TYPES,
 } from "@lcsp/contracts/audit";
 import { AUTH_LEGACY_AUDIT_EVENT_TYPES } from "@lcsp/contracts/auth";
-import { RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import { jest } from "@jest/globals";
 import type { Prisma } from "@prisma/client";
 import type { AuditEventInput } from "@lcsp/contracts/audit";
 
 import type { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
+import { LOCAL_RBAC_REASON_CODES } from "../rbac/rbac-reason-codes.js";
 import { AuditWriterService } from "./audit-writer.service.ts";
 
 type CreateFn = (args: { data: Record<string, unknown> }) => Promise<unknown>;
@@ -173,7 +173,7 @@ describe("AuditWriterService", () => {
 
     await service.write(
       makeEvent({
-        reasonCode: RBAC_REASON_CODE.authorized,
+        reasonCode: LOCAL_RBAC_REASON_CODES.authorized,
         sessionId: "session-1",
       }),
     );
@@ -182,7 +182,7 @@ describe("AuditWriterService", () => {
       { data: Record<string, unknown> },
     ];
     expect(data).toMatchObject({
-      reasonCode: RBAC_REASON_CODE.authorized,
+      reasonCode: LOCAL_RBAC_REASON_CODES.authorized,
       sessionId: "session-1",
     });
   });
