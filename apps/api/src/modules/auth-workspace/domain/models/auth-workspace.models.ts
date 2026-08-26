@@ -1,9 +1,6 @@
-import type { AuditResourceType } from "@lcsp/contracts/audit";
+import type { AuditDecision, AuditResourceType } from "@lcsp/contracts/audit";
 import type { AuthErrorCode } from "@lcsp/contracts/auth";
-import type {
-  RbacDecisionValue,
-  RbacReasonCode,
-} from "../../../../platform/rbac/rbac.constants.js";
+import type { LocalRbacReasonCode } from "../../../../platform/rbac/rbac-reason-codes.js";
 
 export { MfaEnrollment } from "../entities/mfa-enrollment.entity.ts";
 export { MfaRateLimit } from "../entities/mfa-rate-limit.entity.ts";
@@ -18,8 +15,8 @@ export type AuthorizationDecision = {
   session_id?: string | null;
   resource_type: AuditResourceType;
   resource_id: string;
-  decision: RbacDecisionValue;
-  reason_code: AuthErrorCode | RbacReasonCode;
+  decision: AuditDecision;
+  reason_code: AuthErrorCode | LocalRbacReasonCode;
   correlationId: string;
 };
 
