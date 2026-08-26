@@ -1,5 +1,4 @@
-import { RBAC_STATE_GATES, SUBJECT_ROLES } from "@lcsp/contracts/rbac";
-import { AUTH_MEMBERSHIP_STATUSES } from "@lcsp/contracts/auth";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   GITHUB_REPOSITORY_PERMISSION_LEVELS,
   REPOSITORY_CONNECTION_STATUSES,
@@ -19,8 +18,6 @@ import {
   PrismaClient,
   VerifiedProfileStatus,
 } from "@prisma/client";
-
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import {
   encryptMfaSecret,
@@ -90,7 +87,6 @@ export async function seedRepositorySnapshotGraph(
   input: RepositorySnapshotGraphFixtureInput = {},
 ): Promise<void> {
   const assessmentId = input.assessmentId ?? "assessment-1";
-  const organizationId = input.organizationId ?? "org-1";
   const userId = input.userId ?? "user-1";
   const connectionId = input.connectionId ?? "connection-1";
   const snapshotId = input.snapshotId ?? "snapshot-1";
@@ -101,7 +97,6 @@ export async function seedRepositorySnapshotGraph(
     where: { installationId_repositoryId: { installationId, repositoryId } },
     update: {
       assessmentId,
-      organizationId,
       userId,
       repositoryName: "example-repo",
       repositoryFullName: "acme/example-repo",
@@ -113,7 +108,6 @@ export async function seedRepositorySnapshotGraph(
     create: {
       id: connectionId,
       assessmentId,
-      organizationId,
       userId,
       installationId,
       repositoryId,
@@ -129,7 +123,6 @@ export async function seedRepositorySnapshotGraph(
     where: { id: snapshotId },
     update: {
       assessmentId,
-      organizationId,
       connectionId,
       repositoryId,
       repositoryFullName: "acme/example-repo",
@@ -139,7 +132,6 @@ export async function seedRepositorySnapshotGraph(
     create: {
       id: snapshotId,
       assessmentId,
-      organizationId,
       connectionId,
       repositoryId,
       repositoryFullName: "acme/example-repo",
@@ -160,7 +152,6 @@ export async function seedRepositoryScanGraph(
   const scanJobId = input.scanJobId ?? "scan-job-1";
   const assessmentId = input.assessmentId ?? "assessment-1";
   const snapshotId = input.snapshotId ?? "snapshot-1";
-  const organizationId = input.organizationId ?? "org-1";
 
   await seedRepositorySnapshotGraph(prisma, input);
 
@@ -169,14 +160,12 @@ export async function seedRepositoryScanGraph(
     update: {
       assessmentId,
       snapshotId,
-      organizationId,
       status: input.scanJobStatus ?? REPOSITORY_SCAN_JOB_STATUSES.completed,
     },
     create: {
       id: scanJobId,
       assessmentId,
       snapshotId,
-      organizationId,
       idempotencyKey: `scan-request:${assessmentId}:${snapshotId}:${scanJobId}`,
       triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.trusted,
       status: input.scanJobStatus ?? REPOSITORY_SCAN_JOB_STATUSES.completed,
@@ -195,7 +184,6 @@ export async function seedVerifiedProfileGraph(
   const aiUsageFlowId = input.aiUsageFlowId ?? "ai-usage-flow-1";
   const verifiedProfileId = input.verifiedProfileId ?? "vp-1";
   const assessmentId = input.assessmentId ?? "assessment-1";
-  const organizationId = input.organizationId ?? "org-1";
   const scanJobId = input.scanJobId ?? "scan-job-1";
   const snapshotId = input.snapshotId ?? "snapshot-1";
 
@@ -210,7 +198,6 @@ export async function seedVerifiedProfileGraph(
     update: {
       scanJobId,
       assessmentId,
-      organizationId,
       snapshotId,
       status: EvidenceAcceptanceStatus.ACCEPTED,
     },
@@ -218,7 +205,6 @@ export async function seedVerifiedProfileGraph(
       id: evidenceReportId,
       scanJobId,
       assessmentId,
-      organizationId,
       snapshotId,
       toolsVersion: { semgrep: "1.0.0" },
       configHash: { semgrep: "sha256:test" },
@@ -234,14 +220,12 @@ export async function seedVerifiedProfileGraph(
     update: {
       evidenceReportId,
       assessmentId,
-      organizationId,
       status: EvidenceAcceptanceStatus.ACCEPTED,
     },
     create: {
       id: technicalProfileId,
       evidenceReportId,
       assessmentId,
-      organizationId,
       schemaVersion: "1.0.0",
       providerVersion: "technical-profile-worker@fixture",
       profileData: { aiDetected: "confirmed" },
@@ -255,14 +239,12 @@ export async function seedVerifiedProfileGraph(
     update: {
       technicalProfileId,
       assessmentId,
-      organizationId,
       status: EvidenceAcceptanceStatus.ACCEPTED,
     },
     create: {
       id: aiUsageFlowId,
       technicalProfileId,
       assessmentId,
-      organizationId,
       schemaVersion: "1.0.0",
       providerVersion: "ai-usage-flow-worker@fixture",
       claims: [],
@@ -278,7 +260,6 @@ export async function seedVerifiedProfileGraph(
       aiUsageFlowId,
       technicalEvidenceReportId: evidenceReportId,
       assessmentId,
-      organizationId,
       status: VerifiedProfileStatus.APPROVED,
     },
     create: {
@@ -286,7 +267,6 @@ export async function seedVerifiedProfileGraph(
       aiUsageFlowId,
       technicalEvidenceReportId: evidenceReportId,
       assessmentId,
-      organizationId,
       schemaVersion: "1.0.0",
       providerVersion: "reconciliation@fixture",
       profileData: { source: "e2e-fixture" },
@@ -385,12 +365,10 @@ export async function resetAuthWorkspaceDatabase(
   await prisma.authMfaOtpUsed.deleteMany();
   await prisma.authMfaRateLimit.deleteMany();
   await prisma.authUserMfa.deleteMany();
+  await prisma.authMfaRecoveryCode.deleteMany();
   await prisma.authOAuthState.deleteMany();
   await prisma.authOAuthIdentity.deleteMany();
   await prisma.authSession.deleteMany();
-  await prisma.authMembership.deleteMany();
-  await prisma.authPolicy.deleteMany();
-  await prisma.authOrganization.deleteMany();
   await prisma.authUser.deleteMany();
 }
 
@@ -417,16 +395,6 @@ export async function seedAuthWorkspaceFixture(
   const unverifiedUserId = "user-2";
   const noMembershipUserId = "user-3";
   const revokedMembershipUserId = "user-4";
-  const policyId = "policy-manager-workspace";
-  const policyVersion = "2026-06-26";
-
-  await prisma.authOrganization.create({
-    data: {
-      id: organizationId,
-      slug: "acme",
-      name: "Acme Legal",
-    },
-  });
 
   await prisma.authUser.createMany({
     data: [
@@ -437,6 +405,7 @@ export async function seedAuthWorkspaceFixture(
         passwordHash: hashSecret("CorrectHorseBatteryStaple!"),
         emailVerified: true,
         failedLoginCount: 0,
+        role: AUTH_USER_ROLES.customer,
       },
       {
         id: unverifiedUserId,
@@ -444,6 +413,7 @@ export async function seedAuthWorkspaceFixture(
         passwordHash: hashSecret("VerifyMe123!"),
         emailVerified: false,
         failedLoginCount: 0,
+        role: AUTH_USER_ROLES.customer,
       },
       {
         id: noMembershipUserId,
@@ -451,6 +421,7 @@ export async function seedAuthWorkspaceFixture(
         passwordHash: hashSecret("NoMembership123!"),
         emailVerified: true,
         failedLoginCount: 0,
+        role: AUTH_USER_ROLES.admin,
       },
       {
         id: revokedMembershipUserId,
@@ -458,68 +429,7 @@ export async function seedAuthWorkspaceFixture(
         passwordHash: hashSecret("RevokedMembership123!"),
         emailVerified: true,
         failedLoginCount: 0,
-      },
-    ],
-  });
-
-  await prisma.authPolicy.create({
-    data: {
-      id: policyId,
-      version: policyVersion,
-      actions: [
-        RBAC_ACTIONS.workspaceRead,
-        RBAC_ACTIONS.assessmentCreate,
-        RBAC_ACTIONS.assessmentRead,
-        RBAC_ACTIONS.assessmentList,
-        RBAC_ACTIONS.githubConnect,
-        RBAC_ACTIONS.scanRead,
-        RBAC_ACTIONS.scanTrigger,
-        RBAC_ACTIONS.documentGenerate,
-        RBAC_ACTIONS.snapshotCreate,
-        RBAC_ACTIONS.wizardWrite,
-        RBAC_ACTIONS.wizardSubmit,
-        RBAC_ACTIONS.wizardExport,
-      ],
-      subjectRole: SUBJECT_ROLES.manager,
-      stateGate: RBAC_STATE_GATES.membershipActive,
-      organizationId,
-    },
-  });
-
-  await prisma.authMembership.createMany({
-    data: [
-      {
-        id: "membership-1",
-        userId: approvedUserId,
-        organizationId,
-        status: AUTH_MEMBERSHIP_STATUSES.active,
-        subjectAttributes: { role: SUBJECT_ROLES.manager, department: "Legal" },
-        policyId,
-        policyVersion,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-      {
-        id: "membership-2",
-        userId: unverifiedUserId,
-        organizationId,
-        status: AUTH_MEMBERSHIP_STATUSES.active,
-        subjectAttributes: { role: SUBJECT_ROLES.manager },
-        policyId,
-        policyVersion,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-      {
-        id: "membership-3",
-        userId: revokedMembershipUserId,
-        organizationId,
-        status: AUTH_MEMBERSHIP_STATUSES.revoked,
-        subjectAttributes: { role: SUBJECT_ROLES.manager },
-        policyId,
-        policyVersion,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        role: AUTH_USER_ROLES.admin,
       },
     ],
   });
@@ -529,7 +439,6 @@ export async function seedAuthWorkspaceFixture(
     data: {
       id: "session-0",
       userId: approvedUserId,
-      organizationId,
       tokenHash: hashSecret(revokedSessionToken),
       tokenFingerprint: fingerprintToken(revokedSessionToken),
       expiresAt: new Date(Date.now() + 30 * 60_000),
