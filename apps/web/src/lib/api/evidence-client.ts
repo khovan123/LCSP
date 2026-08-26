@@ -111,3 +111,67 @@ function isSeverity(value: unknown): value is DeveloperFinding["severity"] {
     value === EVIDENCE_SEVERITIES.high
   );
 }
+
+import type { SystemGraphDto } from "@lcsp/contracts/evidence";
+
+export async function getSystemGraph(assessmentId: string): Promise<SystemGraphDto | null> {
+  const { payload, ok } = await apiRequest(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/scan-jobs/evidence/graph`,
+    { cache: "no-store" },
+  );
+
+  if (ok && payload) {
+    return payload as SystemGraphDto;
+  }
+  return null;
+}
+
+export async function getArchitectureScope(assessmentId: string) {
+  const { payload, ok } = await apiRequest(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/architecture-scope`,
+    { cache: "no-store" },
+  );
+
+  if (ok && payload) {
+    return payload as { globalDeclaration: string; repositories: any[] };
+  }
+  return null;
+}
+
+export async function saveArchitectureScope(
+  assessmentId: string,
+  data: {
+    globalDeclaration: string;
+    repositories: { connectionId: string; declaration: string }[];
+  }
+) {
+  const { ok, payload } = await apiRequest(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/architecture-scope`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
+
+  if (!ok) {
+    throw new Error("Failed to save architecture scope");
+  }
+
+  return payload;
+}
+
+export async function triggerMultiRepoScan(assessmentId: string) {
+  const { ok, payload } = await apiRequest(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/scan`,
+    {
+      method: "POST",
+    },
+  );
+
+  if (!ok) {
+    throw new Error("Failed to trigger multi-repo scan");
+  }
+
+  return payload;
+}
+

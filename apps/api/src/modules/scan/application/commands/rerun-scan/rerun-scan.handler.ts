@@ -229,6 +229,8 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
             idempotencyKey: command.idempotencyKey,
             correlationId: command.correlationId,
             replacesScanJobId: replacedScanJobId,
+            includePaths: command.includePaths,
+            excludePaths: command.excludePaths,
           },
         });
 

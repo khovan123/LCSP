@@ -26,6 +26,7 @@
     "@lcsp/i18n": "file:../../packages/i18n",
     "@tanstack/react-query": "^5.66.0",
     "@tanstack/react-table": "^8.21.3",
+    "@xyflow/react": "^12.11.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "input-otp": "^1.4.2",

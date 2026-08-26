@@ -109,6 +109,8 @@ function buildHandler() {
       auditWriter as never,
       storageService as never,
       runtimeEvents as never,
+      {} as never, // graphBuilder
+      {} as never, // reconciliationEngine
     ),
     targetedReanalysisRequest,
     repositoryScanJob,

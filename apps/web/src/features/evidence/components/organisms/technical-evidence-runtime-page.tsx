@@ -23,12 +23,21 @@ import type {
   WizardClarificationScope,
 } from "@lcsp/contracts/wizard";
 import { resolveMessage } from "@lcsp/i18n";
-import { ActivityIcon, BotIcon, RotateCcwIcon } from "lucide-react";
+import { ActivityIcon, BotIcon, RotateCcwIcon, SettingsIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   buildRuntimeConsoleModel,
   isActiveRuntimeStatus,
@@ -43,8 +52,12 @@ import {
   type WorkspaceRuntimeConnectionState,
   type WorkspaceRuntimeSummaryValue,
 } from "@/features/workspace/types/workspace-runtime.types";
-import { useRerunRepositoryScanMutation } from "@/lib/api/assessment-queries";
+import { useStartMultiRepoScanMutation, useSystemGraphQuery } from "@/lib/api/assessment-queries";
 import { appLocale } from "@/lib/locale";
+import { GraphVisualization } from "./graph-visualization";
+import { MultiRepoScopeSetup } from "./multi-repo-scope-setup";
+
+
 
 type SummaryRecord = {
   tool?: string;
@@ -406,6 +419,12 @@ export function TechnicalEvidenceRuntimePage({
   );
   const rerunDisabled =
     hasActiveScan || rerunSnapshotId === undefined || rerunMutation.isPending;
+  const triggerMultiRepoScanMutation = useStartMultiRepoScanMutation(assessmentId);
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [includePaths, setIncludePaths] = useState("");
+  const [excludePaths, setExcludePaths] = useState("");
+  const [declaration, setDeclaration] = useState("");
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:px-6">
@@ -443,64 +462,85 @@ export function TechnicalEvidenceRuntimePage({
         </div>
       </header>
 
-      {showOrchestration ? (
+      {/* SETUP & DECLARATION PANEL */}
+      <section className="mb-2">
+        <MultiRepoScopeSetup assessmentId={assessmentId} />
+      </section>
+
+      {/* GRAPH VISUALIZATION */}
+      <section className="flex flex-col rounded-lg border overflow-hidden">
+        <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+          <h2 className="text-sm font-medium">System Architecture Graph</h2>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={triggerMultiRepoScanMutation.isPending}
+            onClick={() => {
+              triggerMultiRepoScanMutation.mutate();
+            }}
+            type="button"
+          >
+            <RotateCcwIcon className="mr-2 size-4" />
+            Build Graph (Scan)
+          </Button>
+        </div>
+        <ArchitectureGraphTab assessmentId={assessmentId} />
+      </section>
+
+      {/* SCAN JOBS & RUNTIME CONSOLE */}
+      <section className="flex flex-col gap-6">
+        {showOrchestration ? (
+          <section className="overflow-hidden rounded-lg border">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <ActivityIcon className="size-4 text-muted-foreground" />
+                <h2 className="text-sm font-medium">
+                  {t("pages.technicalEvidence.orchestrationTitle")}
+                </h2>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {timeline.lastEmittedAt === null
+                  ? t("pages.technicalEvidence.awaitingEvent")
+                  : `${t("pages.technicalEvidence.lastUpdated")}: ${formatDate(timeline.lastEmittedAt)}`}
+              </span>
+            </div>
+
+            {consoleModel.steps.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-muted-foreground">
+                {t("pages.technicalEvidence.noOrchestrationActivity")}
+              </p>
+            ) : (
+              <RuntimeConsole model={consoleModel} />
+            )}
+          </section>
+        ) : null}
+
         <section className="overflow-hidden rounded-lg border">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <ActivityIcon className="size-4 text-muted-foreground" />
-              <h2 className="text-sm font-medium">
-                {t("pages.technicalEvidence.orchestrationTitle")}
-              </h2>
-            </div>
+            <h2 className="text-sm font-medium">
+              {t("pages.technicalEvidence.scanJobsTitle")}
+            </h2>
             <span className="text-xs text-muted-foreground">
-              {timeline.lastEmittedAt === null
+              {runtime.emittedAt === null
                 ? t("pages.technicalEvidence.awaitingEvent")
-                : `${t("pages.technicalEvidence.lastUpdated")}: ${formatDate(timeline.lastEmittedAt)}`}
+                : `${t("pages.technicalEvidence.lastUpdated")}: ${formatDate(runtime.emittedAt)}`}
             </span>
           </div>
-
-          {consoleModel.steps.length === 0 ? (
+          
+          {scanJobs.length === 0 ? (
             <p className="px-4 py-6 text-sm text-muted-foreground">
-              {t("pages.technicalEvidence.noOrchestrationActivity")}
+              {t("pages.technicalEvidence.noScanJobs")}
             </p>
           ) : (
-            <RuntimeConsole model={consoleModel} />
-          )}
-        </section>
-      ) : null}
-
-      <section className="overflow-hidden rounded-lg border">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
-          <h2 className="text-sm font-medium">
-            {t("pages.technicalEvidence.scanJobsTitle")}
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            {runtime.emittedAt === null
-              ? t("pages.technicalEvidence.awaitingEvent")
-              : `${t("pages.technicalEvidence.lastUpdated")}: ${formatDate(runtime.emittedAt)}`}
-          </span>
-        </div>
-        {rerunMutation.isError && (
-          <p className="border-b px-4 py-3 text-sm text-destructive">
-            {t("pages.technicalEvidence.rerunError")}
-          </p>
-        )}
-        {scanJobs.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">
-            {t("pages.technicalEvidence.noScanJobs")}
-          </p>
-        ) : (
-          <ul className="max-h-80 divide-y overflow-y-auto">
-            {scanJobs.map((scanJob, index) => {
-              return (
+            <ul className="max-h-80 divide-y overflow-y-auto">
+              {scanJobs.map((scanJob, index) => (
                 <li
                   className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                   key={scanJob.id}
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium">
-                      {t("pages.technicalEvidence.scanJobLabel")} #
-                      {scanJobs.length - index}
+                      {t("pages.technicalEvidence.scanJobLabel")} #{scanJobs.length - index}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {t("pages.technicalEvidence.updatedAt")}:{" "}
@@ -516,59 +556,103 @@ export function TechnicalEvidenceRuntimePage({
                     {scanStatusLabel(scanJob.status)}
                   </Badge>
                 </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+              ))}
+            </ul>
+          )}
+        </section>
 
-      <section className="overflow-hidden rounded-lg border">
-        <div className="border-b bg-muted/30 px-4 py-3">
-          <h2 className="text-sm font-medium">
-            {t("pages.technicalEvidence.evidenceReportsTitle")}
-          </h2>
-        </div>
-        {reports.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">
-            {t("pages.technicalEvidence.noEvidenceReports")}
-          </p>
-        ) : (
-          <ul className="max-h-80 divide-y overflow-y-auto">
-            {reports.map((report, index) => (
-              <li
-                className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                key={report.id}
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">
-                    {t("pages.technicalEvidence.evidenceReportLabel")} #
-                    {reports.length - index}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {t("pages.technicalEvidence.createdAt")}:{" "}
-                    {formatDate(report.createdAt)}
-                  </p>
-                  {report.rejectionReason !== null && (
-                    <p className="mt-1 text-xs text-destructive">
-                      {report.rejectionReason}
-                    </p>
-                  )}
-                </div>
-                <Badge
-                  variant={
-                    report.status ===
-                    TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted
-                      ? "default"
-                      : "destructive"
-                  }
+        <section className="overflow-hidden rounded-lg border">
+          <div className="border-b bg-muted/30 px-4 py-3">
+            <h2 className="text-sm font-medium">
+              {t("pages.technicalEvidence.evidenceReportsTitle")}
+            </h2>
+          </div>
+          {reports.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-muted-foreground">
+              {t("pages.technicalEvidence.noEvidenceReports")}
+            </p>
+          ) : (
+            <ul className="max-h-80 divide-y overflow-y-auto">
+              {reports.map((report, index) => (
+                <li
+                  className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                  key={report.id}
                 >
-                  {reportStatusLabel(report.status)}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">
+                      {t("pages.technicalEvidence.evidenceReportLabel")} #
+                      {reports.length - index}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("pages.technicalEvidence.createdAt")}:{" "}
+                      {formatDate(report.createdAt)}
+                    </p>
+                    {report.rejectionReason !== null && (
+                      <p className="mt-1 text-xs text-destructive">
+                        {report.rejectionReason}
+                      </p>
+                    )}
+                  </div>
+                  <Badge
+                    variant={
+                      report.status ===
+                      TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted
+                        ? "default"
+                        : "destructive"
+                    }
+                  >
+                    {reportStatusLabel(report.status)}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </section>
+      </section>
+    </div>
+  );
+}
+
+function ArchitectureGraphTab({ assessmentId }: { assessmentId: string }) {
+  const { data: graph, isLoading, error } = useSystemGraphQuery(assessmentId);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[600px] w-full items-center justify-center rounded-lg border bg-zinc-50">
+        <div className="flex flex-col items-center gap-2">
+          <ActivityIcon className="size-8 animate-pulse text-blue-500" />
+          <p className="text-sm text-muted-foreground">Loading architecture graph...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !graph) {
+    return (
+      <div className="flex h-[600px] w-full items-center justify-center rounded-lg border bg-zinc-50">
+        <p className="text-sm text-destructive">Failed to load graph data.</p>
+      </div>
+    );
+  }
+
+  if (graph.nodes.length === 0) {
+    return (
+      <div className="flex h-[600px] w-full items-center justify-center rounded-lg border bg-zinc-50">
+        <div className="flex flex-col items-center gap-2 max-w-sm text-center">
+          <BotIcon className="size-8 text-muted-foreground" />
+          <h3 className="font-medium text-gray-900">No architecture found</h3>
+          <p className="text-sm text-muted-foreground">
+            The system graph is empty. Please run the scanner to generate the architecture visualization.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full">
+      <GraphVisualization data={graph} />
     </div>
   );
 }

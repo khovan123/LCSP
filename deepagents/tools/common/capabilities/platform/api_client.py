@@ -345,8 +345,8 @@ class WorkerApiClient:
                 logger.warning(
                     "SCAN_RUNTIME_EVENT_REJECTED",
                     scan_job_id=scan_job_id,
-                    status_code=response.status_code,
-                    error_code=self._response_error_code(response),
+                    http_status=response.status_code,
+                    http_error_code=self._response_error_code(response),
                 )
         except Exception as exc:
             logger.warning(

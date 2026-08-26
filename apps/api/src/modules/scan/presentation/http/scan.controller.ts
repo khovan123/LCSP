@@ -48,6 +48,7 @@ import { PbacGuard } from "../../../../platform/pbac/pbac.guard.js";
 import type { ScanCallbackRequest } from "../../application/contracts/scan/scan-callback.contract.js";
 import { ProcessScanCallbackCommand } from "../../application/commands/process-scan-callback/process-scan-callback.command.js";
 import { GetScanJobQuery } from "../../application/queries/get-scan-job/get-scan-job.query.js";
+import { GetSystemGraphQuery } from "../../application/queries/get-system-graph/get-system-graph.query.js";
 import { RerunScanCommand } from "../../application/commands/rerun-scan/rerun-scan.command.js";
 import { RequestTargetedReanalysisCommand } from "../../application/commands/request-targeted-reanalysis/request-targeted-reanalysis.command.js";
 import type { RerunScanRequestDto } from "../../application/contracts/scan/rerun-scan.contract.js";
@@ -106,6 +107,20 @@ interface WorkerRuntimeEventRequest {
  */
 @Controller("assessments/:assessmentId/scan-jobs")
 export class ScanController {
+  @Get("evidence/graph")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.scanRead)
+  async getSystemGraph(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: ScanStatusRequest,
+  ) {
+    const context = request.pbacContext;
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetSystemGraphQuery(context.organizationId, assessmentId),
+      ),
+    );
+  }
   /**
    * Creates the scan controller with CQRS read and mutation dispatchers.
    *

@@ -24,6 +24,8 @@ type ScanPayload = {
 
 export type RerunRepositoryScanInput = {
   snapshotId: string;
+  includePaths?: string[];
+  excludePaths?: string[];
 };
 
 export type RerunRepositoryScanResult = {
@@ -93,6 +95,8 @@ export async function rerunRepositoryScan(
       body: JSON.stringify({
         snapshot_id: input.snapshotId,
         idempotency_key: crypto.randomUUID(),
+        include_paths: input.includePaths,
+        exclude_paths: input.excludePaths,
       }),
     },
   );

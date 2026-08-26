@@ -189,9 +189,10 @@ export function ReadinessStatusPage({
           </p>
         </section>
 
-        {needsRepositoryConnection ? (
-          <RepositoryReadinessAction assessmentId={assessmentId} />
-        ) : null}
+        <RepositoryReadinessAction 
+          assessmentId={assessmentId} 
+          isConnected={!needsRepositoryConnection} 
+        />
 
         <div className="flex flex-wrap gap-3">
           {viewModel.classificationLocked && (

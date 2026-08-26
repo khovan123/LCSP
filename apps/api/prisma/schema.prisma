@@ -280,14 +280,19 @@ model User {
 }
 
 model Assessment {
-  id             String           @id
-  organizationId String
-  ownerId        String
-  name           String
-  description    String?
-  status         AssessmentStatus @default(WIZARD_IN_PROGRESS)
+  id                            String           @id
+  organizationId                String
+  ownerId                       String
+  name                          String
+  description                   String?
+  globalArchitectureDeclaration String?
+  status                        AssessmentStatus @default(WIZARD_IN_PROGRESS)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
+
+  evidenceGraphNodes         EvidenceGraphNode[]
+  graphReconciliationResults GraphReconciliationResult[]
+  repositoryScopes           AssessmentRepositoryScope[]
 
   @@index([organizationId, status])
   @@index([ownerId])
@@ -519,6 +524,8 @@ model RepositoryConnection {
   connectedAt        DateTime                   @default(now())
   revokedAt          DateTime?
 
+  assessmentScopes   AssessmentRepositoryScope[]
+
   @@unique([installationId, repositoryId])
   @@index([organizationId])
   @@index([assessmentId])
@@ -563,27 +570,27 @@ model RepositoryScanJob {
 }
 
 model TargetedReanalysisRequest {
-  id                    String                         @id
-  scanJobId             String                         @unique
-  assessmentId          String
-  organizationId        String
-  inputEvidenceReportId String
-  snapshotId            String
-  commitSha             String
-  analyzerId            String
-  normalizedScope       Json
-  reasonRequirementId   String
-  idempotencyKey        String
-  state                 TargetedReanalysisRequestState @default(QUEUED)
-  apiPublishAttempts    Int                            @default(0)
-  workerDeliveryAttempts Int                           @default(0)
-  checkpointRef         String
+  id                     String                         @id
+  scanJobId              String                         @unique
+  assessmentId           String
+  organizationId         String
+  inputEvidenceReportId  String
+  snapshotId             String
+  commitSha              String
+  analyzerId             String
+  normalizedScope        Json
+  reasonRequirementId    String
+  idempotencyKey         String
+  state                  TargetedReanalysisRequestState @default(QUEUED)
+  apiPublishAttempts     Int                            @default(0)
+  workerDeliveryAttempts Int                            @default(0)
+  checkpointRef          String
   outputEvidenceReportId String?
-  safeFailureCode       String?
-  correlationId         String
-  checkpoint            TargetedReanalysisCheckpoint?
-  createdAt             DateTime                       @default(now())
-  updatedAt             DateTime                       @updatedAt
+  safeFailureCode        String?
+  correlationId          String
+  checkpoint             TargetedReanalysisCheckpoint?
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
 
   @@unique([organizationId, idempotencyKey])
   @@index([organizationId, state, createdAt])
@@ -680,26 +687,26 @@ model ConflictRecord {
 }
 
 model AssessmentRuntimeEvent {
-  id               String                      @id @default(uuid())
-  organizationId   String
-  assessmentId     String
-  runId            String
-  correlationId    String
-  sequence         Int
-  eventType        AssessmentRuntimeEventType
-  runStatus        AssessmentRuntimeRunStatus
-  stage            AssessmentRuntimeStage
-  toolName         String?
-  summary          String
-  inputSummaryJson Json?
+  id                String                     @id @default(uuid())
+  organizationId    String
+  assessmentId      String
+  runId             String
+  correlationId     String
+  sequence          Int
+  eventType         AssessmentRuntimeEventType
+  runStatus         AssessmentRuntimeRunStatus
+  stage             AssessmentRuntimeStage
+  toolName          String?
+  summary           String
+  inputSummaryJson  Json?
   outputSummaryJson Json?
-  errorSummary     String?
-  startedAt        DateTime?
-  completedAt      DateTime?
-  durationMs       Int?
-  attempt          Int?
-  waitingReason    String?
-  createdAt        DateTime                    @default(now())
+  errorSummary      String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  durationMs        Int?
+  attempt           Int?
+  waitingReason     String?
+  createdAt         DateTime                   @default(now())
 
   @@unique([runId, sequence])
   @@index([assessmentId, createdAt])
@@ -708,29 +715,29 @@ model AssessmentRuntimeEvent {
 }
 
 model VerifiedProfile {
-  id              String                @id @default(uuid())
-  aiUsageFlowId   String
-  version         Int                   @default(1)
-  wizardProfileId String?
-  technicalEvidenceReportId String?
+  id                         String                @id @default(uuid())
+  aiUsageFlowId              String
+  version                    Int                   @default(1)
+  wizardProfileId            String?
+  technicalEvidenceReportId  String?
   reconciliationDecisionRefs Json?
-  idempotencyKey String?
-  assessmentId    String
-  organizationId  String
-  schemaVersion   String
-  providerVersion String
-  profileData     Json
-  gatesPassedAt   Json
-  status          VerifiedProfileStatus @default(PENDING_APPROVAL)
-  approvedAt      DateTime?
-  approvedById    String?
-  createdAt       DateTime              @default(now())
+  idempotencyKey             String?
+  assessmentId               String
+  organizationId             String
+  schemaVersion              String
+  providerVersion            String
+  profileData                Json
+  gatesPassedAt              Json
+  status                     VerifiedProfileStatus @default(PENDING_APPROVAL)
+  approvedAt                 DateTime?
+  approvedById               String?
+  createdAt                  DateTime              @default(now())
 
+  @@unique([assessmentId, version])
+  @@unique([organizationId, idempotencyKey])
   @@index([aiUsageFlowId])
   @@index([assessmentId])
   @@index([assessmentId, version])
-  @@unique([assessmentId, version])
-  @@unique([organizationId, idempotencyKey])
 }
 
 model ClassificationResult {
@@ -750,23 +757,23 @@ model ClassificationResult {
 }
 
 model ClassificationReviewRequest {
-  id                 String                            @id @default(uuid())
-  legalRuleMatchId   String
-  assessmentId       String
-  organizationId     String
-  proposalGateRef    String
-  baselineRef        String
-  candidateLabel     String
-  citationRefs       Json
-  requestedById      String
-  idempotencyKey     String
-  status             ClassificationReviewRequestStatus @default(PENDING_INDEPENDENT_REVIEW)
-  expiresAt          DateTime
-  createdAt          DateTime                          @default(now())
+  id               String                            @id @default(uuid())
+  legalRuleMatchId String
+  assessmentId     String
+  organizationId   String
+  proposalGateRef  String
+  baselineRef      String
+  candidateLabel   String
+  citationRefs     Json
+  requestedById    String
+  idempotencyKey   String
+  status           ClassificationReviewRequestStatus @default(PENDING_INDEPENDENT_REVIEW)
+  expiresAt        DateTime
+  createdAt        DateTime                          @default(now())
 
+  @@unique([organizationId, idempotencyKey])
   @@index([assessmentId, status])
   @@index([legalRuleMatchId])
-  @@unique([organizationId, idempotencyKey])
 }
 
 model DocumentRequest {
@@ -812,17 +819,17 @@ model LegalRuleCatalogVersion {
 }
 
 model LegalCorpusVersion {
-  id             String                   @id @default(uuid())
-  version        String                   @unique
-  status         LegalRuleLifecycleStatus @default(DRAFT)
-  sourceManifest Json
+  id                   String                   @id @default(uuid())
+  version              String                   @unique
+  status               LegalRuleLifecycleStatus @default(DRAFT)
+  sourceManifest       Json
   integrityManifestRef String?
-  createdAt      DateTime                 @default(now())
-  approvedAt     DateTime?
-  documents      LegalSourceDocument[]
-  chunks         LegalDocumentChunk[]
-  approvals      CorpusApprovalRecord[]
-  retrievalIndexes LegalRetrievalIndex[]
+  createdAt            DateTime                 @default(now())
+  approvedAt           DateTime?
+  documents            LegalSourceDocument[]
+  chunks               LegalDocumentChunk[]
+  approvals            CorpusApprovalRecord[]
+  retrievalIndexes     LegalRetrievalIndex[]
 
   @@index([status, createdAt])
 }
@@ -843,7 +850,7 @@ model LegalRetrievalIndex {
 }
 
 model LegalSourceDocument {
-  id                   String             @id @default(uuid())
+  id                   String               @id @default(uuid())
   legalCorpusVersionId String
   documentId           String
   title                String
@@ -852,8 +859,8 @@ model LegalSourceDocument {
   effectiveDate        DateTime?
   sourceEffectStatus   String
   snapshotPath         String?
-  createdAt            DateTime           @default(now())
-  corpusVersion        LegalCorpusVersion @relation(fields: [legalCorpusVersionId], references: [id], onDelete: Cascade)
+  createdAt            DateTime             @default(now())
+  corpusVersion        LegalCorpusVersion   @relation(fields: [legalCorpusVersionId], references: [id], onDelete: Cascade)
   chunks               LegalDocumentChunk[]
 
   @@unique([legalCorpusVersionId, documentId])
@@ -909,21 +916,21 @@ model LegalDocumentChunk {
 }
 
 model CorpusApprovalRecord {
-  id                   String             @id @default(uuid())
-  legalCorpusVersionId String
-  approvedBy           String
-  status               LegalRuleLifecycleStatus
-  idempotencyKey       String?
-  integrityManifestRef String?
+  id                     String                   @id @default(uuid())
+  legalCorpusVersionId   String
+  approvedBy             String
+  status                 LegalRuleLifecycleStatus
+  idempotencyKey         String?
+  integrityManifestRef   String?
   retrievalValidationRef String?
-  outboxEventId        String?
-  scopeDescription     String
-  comments             String?
-  approvalDate         DateTime           @default(now())
-  corpusVersion        LegalCorpusVersion @relation(fields: [legalCorpusVersionId], references: [id], onDelete: Cascade)
+  outboxEventId          String?
+  scopeDescription       String
+  comments               String?
+  approvalDate           DateTime                 @default(now())
+  corpusVersion          LegalCorpusVersion       @relation(fields: [legalCorpusVersionId], references: [id], onDelete: Cascade)
 
-  @@index([legalCorpusVersionId])
   @@unique([idempotencyKey])
+  @@index([legalCorpusVersionId])
 }
 
 model LegalRule {
@@ -1099,3 +1106,146 @@ enum LegalRetrievalIndexStatus {
   VALID
   INVALID
 }
+
+enum GraphNodeType {
+  SERVICE
+  MESSAGE_BROKER
+  DATABASE
+  TOPIC
+  QUEUE
+  EXTERNAL_API
+  CONTROLLER
+}
+
+enum GraphEdgeType {
+  CALLS
+  PUBLISHES
+  CONSUMES
+  READS
+  WRITES
+  SHARES_DATA_WITH
+}
+
+enum GraphSource {
+  OBSERVED
+  DECLARED
+}
+
+enum EvidenceType {
+  STATIC
+  CONTRACT
+  CONFIG
+  DOCUMENTATION
+  RUNTIME
+}
+
+model EvidenceGraphNode {
+  id            String        @id @default(uuid())
+  assessmentId  String
+  snapshotId    String?
+  source        GraphSource
+  type          GraphNodeType
+  canonicalName String
+  properties    Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  outgoingEdges EvidenceGraphEdge[]   @relation("SourceNode")
+  incomingEdges EvidenceGraphEdge[]   @relation("TargetNode")
+  evidences     IntegrationEvidence[]
+
+  @@index([assessmentId])
+  @@index([canonicalName])
+}
+
+model EvidenceGraphEdge {
+  id           String        @id @default(uuid())
+  assessmentId String
+  sourceId     String
+  targetId     String
+  sourceType   GraphSource
+  type         GraphEdgeType
+  confidence   Float
+  properties   Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sourceNode EvidenceGraphNode     @relation("SourceNode", fields: [sourceId], references: [id], onDelete: Cascade)
+  targetNode EvidenceGraphNode     @relation("TargetNode", fields: [targetId], references: [id], onDelete: Cascade)
+  evidences  IntegrationEvidence[]
+
+  @@index([assessmentId])
+  @@index([sourceId])
+  @@index([targetId])
+}
+
+model IntegrationEvidence {
+  id           String       @id @default(uuid())
+  nodeId       String?
+  edgeId       String?
+  evidenceType EvidenceType
+  repositoryId String?
+  commitSha    String?
+  filePath     String?
+  lineStart    Int?
+  lineEnd      Int?
+  extractor    String
+  hash         String?
+  rawValue     String?
+
+  createdAt DateTime @default(now())
+
+  node EvidenceGraphNode? @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  edge EvidenceGraphEdge? @relation(fields: [edgeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId])
+  @@index([edgeId])
+}
+
+enum ReconciliationStatus {
+  CONFIRMED
+  MISSING_IN_OBSERVED
+  ORPHANED_IN_OBSERVED
+  CONFLICT
+}
+
+model GraphReconciliationResult {
+  id           String               @id @default(uuid())
+  assessmentId String
+  status       ReconciliationStatus
+
+  declaredNodeId String?
+  observedNodeId String?
+  declaredEdgeId String?
+  observedEdgeId String?
+
+  conflictDetails Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@index([assessmentId])
+}
+
+model AssessmentRepositoryScope {
+  id                      String               @id @default(uuid())
+  assessmentId            String
+  repositoryConnectionId  String
+  repoArchitectureDeclaration String?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+
+  assessment              Assessment           @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  repositoryConnection    RepositoryConnection @relation(fields: [repositoryConnectionId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, repositoryConnectionId])
+  @@index([assessmentId])
+  @@index([repositoryConnectionId])
+}
+

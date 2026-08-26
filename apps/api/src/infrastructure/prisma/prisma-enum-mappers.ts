@@ -20,6 +20,7 @@ import {
   OutboxAggregateType as PrismaOutboxAggregateType,
   OutboxStatus as PrismaOutboxStatus,
   ReadinessExportStatus as PrismaReadinessExportStatus,
+  ReconciliationStatus as PrismaReconciliationStatus,
   RepositoryConnectionStatus as PrismaRepositoryConnectionStatus,
   RepositoryScanTriggerSource as PrismaRepositoryScanTriggerSource,
   RepositoryScanJobStatus as PrismaRepositoryScanJobStatus,
@@ -60,6 +61,10 @@ import {
   type DocumentRequestStatus,
   type DocumentType,
 } from "@lcsp/contracts/document";
+import {
+  RECONCILIATION_STATUSES,
+  type ReconciliationStatus,
+} from "@lcsp/contracts/evidence";
 import {
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_CONNECTION_STATUSES,
@@ -236,6 +241,24 @@ const PRISMA_READINESS_EXPORT_STATUS_TO_CONTRACT = {
   [PrismaReadinessExportStatus.GENERATED]: READINESS_EXPORT_STATUSES.generated,
   [PrismaReadinessExportStatus.BLOCKED]: READINESS_EXPORT_STATUSES.blocked,
 } as const satisfies Record<PrismaReadinessExportStatus, ReadinessExportStatus>;
+
+const RECONCILIATION_STATUS_TO_PRISMA = {
+  [RECONCILIATION_STATUSES.confirmed]: PrismaReconciliationStatus.CONFIRMED,
+  [RECONCILIATION_STATUSES.missingInObserved]:
+    PrismaReconciliationStatus.MISSING_IN_OBSERVED,
+  [RECONCILIATION_STATUSES.orphanedInObserved]:
+    PrismaReconciliationStatus.ORPHANED_IN_OBSERVED,
+  [RECONCILIATION_STATUSES.conflict]: PrismaReconciliationStatus.CONFLICT,
+} as const satisfies Record<ReconciliationStatus, PrismaReconciliationStatus>;
+
+const PRISMA_RECONCILIATION_STATUS_TO_CONTRACT = {
+  [PrismaReconciliationStatus.CONFIRMED]: RECONCILIATION_STATUSES.confirmed,
+  [PrismaReconciliationStatus.MISSING_IN_OBSERVED]:
+    RECONCILIATION_STATUSES.missingInObserved,
+  [PrismaReconciliationStatus.ORPHANED_IN_OBSERVED]:
+    RECONCILIATION_STATUSES.orphanedInObserved,
+  [PrismaReconciliationStatus.CONFLICT]: RECONCILIATION_STATUSES.conflict,
+} as const satisfies Record<PrismaReconciliationStatus, ReconciliationStatus>;
 
 const AUDIT_EXPORT_STATUS_TO_PRISMA = {
   [AUDIT_EXPORT_STATUSES.queued]: PrismaAuditExportStatus.QUEUED,
@@ -931,6 +954,18 @@ export function fromPrismaReadinessExportStatus(
   status: PrismaReadinessExportStatus,
 ): ReadinessExportStatus {
   return PRISMA_READINESS_EXPORT_STATUS_TO_CONTRACT[status];
+}
+
+export function toPrismaReconciliationStatus(
+  status: ReconciliationStatus,
+): PrismaReconciliationStatus {
+  return RECONCILIATION_STATUS_TO_PRISMA[status];
+}
+
+export function fromPrismaReconciliationStatus(
+  status: PrismaReconciliationStatus,
+): ReconciliationStatus {
+  return PRISMA_RECONCILIATION_STATUS_TO_CONTRACT[status];
 }
 
 /** Maps audit-export status from the contract layer to Prisma. @param status - Contract audit-export status. @returns Prisma audit-export status. */

@@ -70,7 +70,7 @@ class SnapshotServiceClient:
                     "X-Worker-Api-Key": self._worker_api_key,
                     "X-Correlation-Id": request.correlationId,
                 },
-                timeout=30.0,
+                timeout=300.0,
             )
 
             if response.status_code != HTTPStatus.TOO_MANY_REQUESTS:
