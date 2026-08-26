@@ -54,7 +54,6 @@ describe("GitHubIntegrationController.pinSnapshot", () => {
     expect(execute.mock.calls[0][0]).toMatchObject({
       assessmentId: "assessment-1",
       actorId: "customer-1",
-      actorRole: AUTH_USER_ROLES.customer,
       connectionId: "connection-1",
       branch: "main",
       correlationId: "corr-1",
