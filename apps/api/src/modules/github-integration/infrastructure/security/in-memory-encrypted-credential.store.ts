@@ -23,9 +23,12 @@ type EncryptedCredentialRecord = {
 
 /** Stable, locator-free and secret-free credential-store failure. */
 export class CredentialStoreError extends Error {
-  constructor() {
-    super("credential_store_operation_failed");
+  readonly operation?: string;
+
+  constructor(options?: { cause?: unknown; operation?: string }) {
+    super("credential_store_operation_failed", { cause: options?.cause });
     this.name = "CredentialStoreError";
+    this.operation = options?.operation;
   }
 }
 

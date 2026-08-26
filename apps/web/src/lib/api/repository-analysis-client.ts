@@ -5,6 +5,33 @@ export type StartRepositoryAnalysisInput = {
   branch: string;
 };
 
+export type AssessmentRepositoryConnection = {
+  connectionId: string;
+  provider: string;
+  repositoryId: string;
+  repositoryFullName: string;
+  defaultBranch: string;
+  status: string;
+};
+
+export async function connectAssessmentRepository(
+  assessmentId: string,
+  repositoryUrl: string,
+): Promise<AssessmentRepositoryConnection> {
+  const response = await apiRequest(
+    `/api/assessments/${encodeURIComponent(assessmentId)}/repository-connection`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repositoryUrl }),
+    },
+  );
+  if (!response.ok || !isAssessmentConnection(response.payload)) {
+    throw new Error(response.problemCode ?? "repository-connection-failed");
+  }
+  return response.payload;
+}
+
 export type StartRepositoryAnalysisResult = {
   snapshotId: string;
   commitSha: string;

@@ -1,4 +1,4 @@
-import { HttpStatus, Inject } from "@nestjs/common";
+import { HttpStatus, Inject, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import {
@@ -26,6 +26,8 @@ import {
   type GitHubIdentity,
   type GitHubRepositoryMetadata,
   type GitHubRepositoryProviderPort,
+  REPOSITORY_PROVIDER_REGISTRY,
+  type RepositoryProviderRegistry,
 } from "../../ports/github-repository-provider.port.js";
 import type { CredentialStorageContext } from "../../ports/security/credential-store.port.js";
 import { CredentialLease } from "../../security/credential-lease.js";
@@ -33,7 +35,10 @@ import { PrismaCredentialPersistenceUnitOfWork } from "../../../infrastructure/p
 import {
   assertCredential,
   GITHUB_REPOSITORY_PATTERN,
+  GITLAB_REPOSITORY_PATTERN,
   mapProviderFailure,
+  parseGitHubRepositoryUrl,
+  parseGitLabRepositoryUrl,
 } from "../github-cli-connect.support.js";
 import { ConnectGitHubCliRepositoryCommand } from "./connect-github-cli-repository.command.js";
 
@@ -49,6 +54,9 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
     private readonly prisma: PrismaService,
     private readonly unitOfWork: PrismaCredentialPersistenceUnitOfWork,
     private readonly auditWriter: AuditWriterService,
+    @Optional()
+    @Inject(REPOSITORY_PROVIDER_REGISTRY)
+    private readonly providerRegistry?: RepositoryProviderRegistry,
   ) {}
 
   async execute(
@@ -56,9 +64,29 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
   ): Promise<GitHubCliRepositoryConnectionDto> {
     this.assertEnabledAndManager(command.subjectRole, command.correlationId);
     assertCredential(command.credential, command.correlationId);
-    const repositoryFullName = command.repositoryFullName.trim();
-    if (!GITHUB_REPOSITORY_PATTERN.test(repositoryFullName))
+    const provider = command.provider ?? CREDENTIAL_PROVIDERS.github;
+    if (
+      provider !== CREDENTIAL_PROVIDERS.github &&
+      provider !== CREDENTIAL_PROVIDERS.gitlab
+    ) {
       this.invalid(command.correlationId);
+    }
+    const providerAdapter =
+      this.providerRegistry?.get(provider) ?? this.provider;
+    const repositoryFullName =
+      command.repositoryUrl !== undefined
+        ? provider === CREDENTIAL_PROVIDERS.github
+          ? parseGitHubRepositoryUrl(command.repositoryUrl)?.repositoryFullName
+          : parseGitLabRepositoryUrl(command.repositoryUrl)?.repositoryFullName
+        : command.repositoryFullName?.trim();
+    if (
+      !repositoryFullName ||
+      !(provider === CREDENTIAL_PROVIDERS.github
+        ? GITHUB_REPOSITORY_PATTERN.test(repositoryFullName)
+        : GITLAB_REPOSITORY_PATTERN.test(repositoryFullName))
+    ) {
+      this.invalid(command.correlationId);
+    }
     const declaredExpiresAt = this.parseExpiry(
       command.credentialExpiresAt,
       command.correlationId,
@@ -89,9 +117,13 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
     });
     try {
       const { identity, repository } = await this.validateProviderSource(
+        providerAdapter,
         lease,
         repositoryFullName,
         command.correlationId,
+        command.credential,
+        providerCredentialId,
+        command.repositoryUrl !== undefined,
       );
 
       const duplicate = await this.prisma.repositoryConnection.findFirst({
@@ -101,7 +133,9 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
           repositoryId: repository.id,
           assessmentId: command.assessmentId ?? null,
           authenticationMode:
-            RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
+            provider === CREDENTIAL_PROVIDERS.github
+              ? RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL
+              : RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL,
           status: RepositoryConnectionStatus.ACTIVE,
         },
         select: { id: true },
@@ -118,7 +152,7 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
       const connectionId = crypto.randomUUID();
       const validatedAt = new Date();
       const storageContext: CredentialStorageContext = {
-        provider: CREDENTIAL_PROVIDERS.github,
+        provider,
         providerCredentialId,
         organizationId: command.organizationId,
         ownerUserId: command.userId,
@@ -128,7 +162,7 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
       await this.unitOfWork.execute(async (transaction) => {
         await transaction.providerCredentials.create({
           id: providerCredentialId,
-          provider: CREDENTIAL_PROVIDERS.github,
+          provider,
           organizationId: command.organizationId,
           ownerUserId: command.userId,
           providerAccountId: BigInt(identity.id),
@@ -160,9 +194,12 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
             assessmentId: command.assessmentId ?? null,
             organizationId: command.organizationId,
             userId: command.userId,
+            provider,
             installationId: null,
             authenticationMode:
-              RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
+              provider === CREDENTIAL_PROVIDERS.github
+                ? RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL
+                : RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL,
             credentialAuthorizationId: authorizationId,
             repositoryId: repository.id,
             repositoryName: repository.name,
@@ -232,30 +269,45 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
   }
 
   private async validateProviderSource(
+    provider: GitHubRepositoryProviderPort,
     lease: CredentialLease,
     repositoryFullName: string,
     correlationId: string,
+    credential: string,
+    providerCredentialId: string,
+    allowCanonicalRename: boolean,
   ): Promise<{
     identity: GitHubIdentity;
     repository: GitHubRepositoryMetadata;
   }> {
     try {
-      const identity = await this.provider.validateIdentity(lease);
-      const repository = await this.provider.validateRepositoryAccess(
+      const identity = await provider.validateIdentity(lease);
+      const repository = await provider.validateRepositoryAccess(
         lease,
         repositoryFullName,
+        allowCanonicalRename,
       );
-      if (
-        repository.fullName !== repositoryFullName ||
-        !repository.defaultBranch
-      ) {
+      if (!repository.defaultBranch) {
         this.invalid(correlationId);
       }
-      await this.provider.resolveCommit(
-        lease,
-        repository.fullName,
-        repository.defaultBranch,
-      );
+      const resolutionLease =
+        repository.fullName === repositoryFullName
+          ? lease
+          : new CredentialLease(credential, {
+              internalCredentialId: providerCredentialId,
+              credentialVersion: lease.credentialVersion,
+              repositoryFullName: repository.fullName,
+              expiresAt: lease.expiresAt,
+            });
+      try {
+        await provider.resolveCommit(
+          resolutionLease,
+          repository.fullName,
+          repository.defaultBranch,
+        );
+      } finally {
+        if (resolutionLease !== lease) resolutionLease.dispose();
+      }
       return { identity, repository };
     } catch (error: unknown) {
       mapProviderFailure(error, correlationId);

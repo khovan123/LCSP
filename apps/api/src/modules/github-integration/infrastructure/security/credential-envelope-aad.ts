@@ -43,7 +43,8 @@ function assertContext(context: CredentialStorageContext): void {
     context.ownerUserId,
   ];
   if (
-    context.provider !== CREDENTIAL_PROVIDERS.github ||
+    (context.provider !== CREDENTIAL_PROVIDERS.github &&
+      context.provider !== CREDENTIAL_PROVIDERS.gitlab) ||
     !Number.isSafeInteger(context.credentialVersion) ||
     context.credentialVersion < 1 ||
     context.envelopeVersion !== 1 ||

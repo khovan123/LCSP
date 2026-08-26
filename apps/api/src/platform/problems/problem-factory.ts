@@ -93,8 +93,8 @@ export function problemException<TCode extends string>(
  */
 export function internalServerProblem(
   correlationId: string,
-): ProblemResult<AuthErrorCode> {
-  return createProblemResult(AUTH_ERROR_CODES.validationFailed, correlationId, {
+): ProblemResult<string> {
+  return problemResult("INTERNAL_ERROR", correlationId, {
     status: HttpStatus.INTERNAL_SERVER_ERROR,
   });
 }

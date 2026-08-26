@@ -96,6 +96,13 @@ export const configValidationSchema = Joi.object({
     .integer()
     .positive()
     .default(2),
+  GITLAB_CLI_EXECUTABLE_PATH: Joi.string().trim().allow("").default(""),
+  GITLAB_PROVIDER_ENABLED: Joi.boolean().default(false),
+  GITLAB_CLI_TIMEOUT_MS: Joi.number().integer().positive().default(30000),
+  GITLAB_CLI_MAX_JSON_OUTPUT_BYTES: Joi.number()
+    .integer()
+    .positive()
+    .default(1048576),
   GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED: Joi.boolean().default(false),
   GITHUB_CLI_SNAPSHOT_PINNING_ENABLED: Joi.boolean().default(false),
   GITHUB_CLI_ARCHIVE_RETRIEVAL_ENABLED: Joi.boolean().default(false),
@@ -294,6 +301,15 @@ export function config(): AppConfig {
       ),
       maxConcurrentArchiveProcesses: Number(
         env.GITHUB_CLI_MAX_CONCURRENT_ARCHIVE_PROCESSES ?? 2,
+      ),
+    },
+    gitlabCli: {
+      enabled:
+        (env.GITLAB_PROVIDER_ENABLED ?? "false").toLowerCase() === "true",
+      executablePath: env.GITLAB_CLI_EXECUTABLE_PATH?.trim() ?? "",
+      timeoutMs: Number(env.GITLAB_CLI_TIMEOUT_MS ?? 30000),
+      maxJsonOutputBytes: Number(
+        env.GITLAB_CLI_MAX_JSON_OUTPUT_BYTES ?? 1048576,
       ),
     },
     rabbitmq: {

@@ -6,6 +6,7 @@ import {
   GITHUB_ARCHIVE_REDIRECT_VALIDATION_STATUSES,
   GITHUB_ARCHIVE_TRANSPORT_ERROR_CODES,
   GITHUB_CREDENTIAL_ERROR_CODES,
+  CREDENTIAL_PROVIDERS,
   REPOSITORY_CONNECTION_STATUSES,
   REPOSITORY_SCAN_JOB_STATUSES,
   REPOSITORY_SNAPSHOT_STATUSES,
@@ -56,6 +57,7 @@ describe("StreamSnapshotArchiveHandler CLI archive routing", () => {
       repositoryConnection: {
         findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
           id: "connection-1",
+          provider: CREDENTIAL_PROVIDERS.github,
           installationId: null,
           organizationId: "org-1",
           status: REPOSITORY_CONNECTION_STATUSES.active,

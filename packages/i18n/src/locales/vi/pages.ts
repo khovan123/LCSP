@@ -397,7 +397,7 @@ export const viPages = {
         updatePassword: "Cập nhật mật khẩu",
         revoke: "Thu hồi",
         linkGoogle: "Liên kết Google",
-        connectGitHubRepository: "Kết nối GitHub repository",
+        connectGitHubRepository: "Kết nối repository",
         manageGitHubRepositoryAccess: "Quản lý quyền",
       },
       account: {
@@ -526,22 +526,30 @@ export const viPages = {
         title: "Repository",
         description:
           "Xem các repository đã liên kết với tài khoản này thông qua tích hợp GitHub hiện tại của LCSP.",
-        connectTitle: "Kết nối GitHub App",
+        connectTitle: "Kết nối repository",
         connectDescription:
-          "Bắt đầu flow GitHub App read-only và chọn repository được ủy quyền cho bằng chứng scan tin cậy.",
+          "Chọn provider, nhập URL repository và xác minh quyền đọc cho bằng chứng scan tin cậy.",
         connectSuccessTitle: "Đã kết nối repository",
         connectSuccessDescription:
           "LCSP đã lưu metadata repository mà không lưu raw GitHub token.",
         connectFailedTitle: "Kết nối repository thất bại",
         connectFailedDescription:
           "Không thể hoàn tất ủy quyền GitHub App cho workspace này.",
-        dialogTitle: "Kết nối GitHub",
-        dialogClose: "Đóng hộp thoại kết nối GitHub",
+        dialogTitle: "Kết nối repository",
+        dialogClose: "Đóng hộp thoại kết nối repository",
         discoveryDescription:
-          "Nhập personal access token giới hạn quyền đọc. LCSP chỉ dùng token này để tìm repository có thể truy cập.",
+          "Chọn provider, nhập URL repository và cung cấp credential chỉ đọc để xác minh truy cập.",
         connectCredentialDescription:
           "Chọn repository, sau đó nhập lại credential để cấp quyền cho kết nối này.",
+        providerLabel: "Provider",
+        githubProvider: "GitHub",
+        gitlabProvider: "GitLab",
+        repositoryUrlLabel: "URL repository",
+        repositoryUrlPlaceholder: "https://github.com/owner/repository",
+        gitlabRepositoryUrlPlaceholder: "https://gitlab.com/group/project",
+        repositoryUrlRequired: "Hãy nhập URL repository GitHub HTTPS hợp lệ.",
         credentialLabel: "GitHub personal access token",
+        gitlabCredentialLabel: "GitLab access token",
         credentialRequired: "Hãy nhập GitHub personal access token.",
         repositoryLabel: "Repository",
         discoverAction: "Xác thực và tìm repository",
@@ -1017,6 +1025,8 @@ export const viPages = {
     updatedAtLabel: "Cập nhật",
     noMissingEvidence: "Hiện không còn mục readiness nào bị thiếu.",
     noCompletedSteps: "Chưa có mốc readiness nào được xác nhận.",
+    repositoryConnectedTitle: "Đã kết nối repository",
+    snapshotReady: "Snapshot đã sẵn sàng cho assessment này.",
     unresolvedTitle: "Bối cảnh nghiệp vụ chưa rõ",
     unresolvedDescription:
       "Những mục này cần được làm rõ thêm trước khi có thể phân loại.",

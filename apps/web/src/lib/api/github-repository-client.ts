@@ -1,8 +1,10 @@
 import { apiRequest } from "./api-request.ts";
 import {
+  CREDENTIAL_PROVIDERS,
   GITHUB_CREDENTIAL_ERROR_CODES,
   GITHUB_INTEGRATION_ERROR_CODES,
 } from "@lcsp/contracts/github-integration";
+import type { CredentialProvider } from "@lcsp/contracts/github-integration";
 import type { MessageKey } from "@lcsp/i18n";
 
 export type GitHubRepositorySummary = {
@@ -27,8 +29,17 @@ export type GitHubRepositoryConnection = {
   connected_at: string;
 };
 
+export type ProviderCredentialStatus = {
+  provider: CredentialProvider;
+  configured: boolean;
+  account: { id: string; username: string } | null;
+};
+
 export class GitHubRepositoryRequestError extends Error {
-  constructor(readonly problemCode: string | undefined) {
+  constructor(
+    readonly problemCode: string | undefined,
+    readonly requiredAction?: string,
+  ) {
     super("github-repository-request-failed");
   }
 }
@@ -65,14 +76,18 @@ export async function discoverGitHubRepositories(input: {
     body: JSON.stringify(input),
   });
   if (!response.ok || !isDiscovery(response.payload)) {
-    throw new GitHubRepositoryRequestError(response.problemCode);
+    throw new GitHubRepositoryRequestError(
+      response.problemCode,
+      response.requiredAction,
+    );
   }
   return response.payload;
 }
 
 export async function connectGitHubRepository(input: {
   credential: string;
-  repository_full_name: string;
+  provider: CredentialProvider;
+  repository_url: string;
   assessment_id?: string;
 }): Promise<GitHubRepositoryConnection> {
   const response = await apiRequest("/api/github/repository-connections", {
@@ -81,9 +96,40 @@ export async function connectGitHubRepository(input: {
     body: JSON.stringify(input),
   });
   if (!response.ok || !isConnection(response.payload)) {
-    throw new GitHubRepositoryRequestError(response.problemCode);
+    throw new GitHubRepositoryRequestError(
+      response.problemCode,
+      response.requiredAction,
+    );
   }
   return response.payload;
+}
+
+export async function configureProviderCredential(input: {
+  provider: CredentialProvider;
+  credential: string;
+}): Promise<ProviderCredentialStatus> {
+  const response = await apiRequest("/api/provider-credentials", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok || !isCredentialStatus(response.payload)) {
+    throw new GitHubRepositoryRequestError(
+      response.problemCode,
+      response.requiredAction,
+    );
+  }
+  return response.payload;
+}
+
+export async function getProviderCredentialStatuses(): Promise<
+  ProviderCredentialStatus[]
+> {
+  const response = await apiRequest("/api/provider-credentials");
+  if (!response.ok || !Array.isArray(response.payload)) {
+    throw new GitHubRepositoryRequestError(response.problemCode);
+  }
+  return response.payload as ProviderCredentialStatus[];
 }
 
 function isRepository(value: unknown): value is GitHubRepositorySummary {
@@ -120,5 +166,19 @@ function isConnection(value: unknown): value is GitHubRepositoryConnection {
     typeof result.connection_status === "string" &&
     typeof result.credential_status === "string" &&
     typeof result.connected_at === "string"
+  );
+}
+
+function isCredentialStatus(value: unknown): value is ProviderCredentialStatus {
+  if (typeof value !== "object" || value === null) return false;
+  const item = value as Record<string, unknown>;
+  const account = item.account as Record<string, unknown>;
+  return (
+    (item.provider === CREDENTIAL_PROVIDERS.github ||
+      item.provider === CREDENTIAL_PROVIDERS.gitlab) &&
+    (item.configured === false ||
+      (item.configured === true &&
+        typeof account?.id === "string" &&
+        typeof account.username === "string"))
   );
 }

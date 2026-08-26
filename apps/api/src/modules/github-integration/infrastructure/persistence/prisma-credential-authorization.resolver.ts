@@ -52,7 +52,12 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
         id: connectionId,
         organizationId: context.organizationId,
         status: RepositoryConnectionStatus.ACTIVE,
-        authenticationMode: RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
+        authenticationMode: {
+          in: [
+            RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
+            RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL,
+          ],
+        },
       },
       include: {
         credentialAuthorization: {
@@ -134,7 +139,12 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
     const connection = await this.prisma.repositoryConnection.findFirst({
       where: {
         id: connectionId,
-        authenticationMode: RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
+        authenticationMode: {
+          in: [
+            RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
+            RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL,
+          ],
+        },
       },
       select: { credentialAuthorization: true },
     });
@@ -201,8 +211,12 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
           is: {
             id: connectionId,
             organizationId: context.organizationId,
-            authenticationMode:
-              RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
+            authenticationMode: {
+              in: [
+                RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
+                RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL,
+              ],
+            },
           },
         },
         providerCredential: {

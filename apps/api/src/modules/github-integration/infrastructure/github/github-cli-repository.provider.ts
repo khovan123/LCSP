@@ -176,6 +176,7 @@ export class GitHubCliRepositoryProvider implements GitHubRepositoryProviderPort
   async validateRepositoryAccess(
     credential: CredentialLease,
     repositoryFullName: string,
+    allowCanonicalRename = false,
   ): Promise<GitHubRepositoryMetadata> {
     const repository = validateRepositoryScope(credential, repositoryFullName);
     const body = await this.runJson(
@@ -185,7 +186,7 @@ export class GitHubCliRepositoryProvider implements GitHubRepositoryProviderPort
       this.options.maxJsonOutputBytes,
     );
     const metadata = projectRepository(body);
-    if (metadata.fullName !== repository) {
+    if (!allowCanonicalRename && metadata.fullName !== repository) {
       throw providerResponseInvalid();
     }
     return metadata;

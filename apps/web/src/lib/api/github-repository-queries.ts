@@ -1,11 +1,24 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  configureProviderCredential,
+  getProviderCredentialStatuses,
   connectGitHubRepository,
   discoverGitHubRepositories,
 } from "./github-repository-client";
+
+export function useConfigureProviderCredentialMutation() {
+  return useMutation({ mutationFn: configureProviderCredential });
+}
+
+export function useProviderCredentialStatusesQuery() {
+  return useQuery({
+    queryKey: ["provider-credentials"],
+    queryFn: getProviderCredentialStatuses,
+  });
+}
 import { apiQueryKeys } from "./query-keys";
 
 export function useDiscoverGitHubRepositoriesMutation() {

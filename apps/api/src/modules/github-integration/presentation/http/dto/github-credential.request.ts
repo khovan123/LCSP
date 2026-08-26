@@ -6,7 +6,9 @@ export class GitHubRepositoryDiscoveryRequest {
 
 export class GitHubCliRepositoryConnectionRequest {
   credential!: string;
-  repository_full_name!: string;
+  provider?: string;
+  repository_url?: string;
+  repository_full_name?: string;
   assessment_id?: string;
   credential_expires_at?: string;
 }

@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import { CredentialProvider, type Prisma } from "@prisma/client";
-import { Injectable, Optional } from "@nestjs/common";
+import {
+  CredentialProvider,
+  Prisma,
+  type Prisma as PrismaTypes,
+} from "@prisma/client";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 
 import {
@@ -15,11 +19,12 @@ import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.
 import { CredentialStoreError } from "../security/in-memory-encrypted-credential.store.js";
 import {
   EnvelopeEncryptionService,
+  EnvelopeEncryptionError,
   type EncryptedSecretEnvelope,
 } from "../security/envelope-encryption.service.js";
 
 type CredentialPersistenceClient = Pick<
-  Prisma.TransactionClient,
+  PrismaTypes.TransactionClient,
   "providerCredential" | "providerCredentialSecret"
 >;
 
@@ -35,7 +40,7 @@ export class PrismaDatabaseCredentialStore implements CredentialStorePort {
 
   /** Creates a transaction-scoped view for a future atomic connect unit of work. */
   withTransaction(
-    transaction: Prisma.TransactionClient,
+    transaction: PrismaTypes.TransactionClient,
   ): PrismaDatabaseCredentialStore {
     return new PrismaDatabaseCredentialStore(
       this.prisma,
@@ -48,10 +53,13 @@ export class PrismaDatabaseCredentialStore implements CredentialStorePort {
     secret: string,
     context: CredentialStorageContext,
   ): Promise<SecretLocator> {
+    let operation = "context_validation";
     try {
       await this.assertCredentialContext(context);
+      operation = "encryption";
       const envelope = await this.encryption.encryptSecret(secret, context);
       const id = randomUUID();
+      operation = "provider_credential_secret_create";
       await this.client.providerCredentialSecret.create({
         data: {
           id,
@@ -73,8 +81,19 @@ export class PrismaDatabaseCredentialStore implements CredentialStorePort {
         },
       });
       return id as SecretLocator;
-    } catch {
-      throw new CredentialStoreError();
+    } catch (error: unknown) {
+      if (process.env.NODE_ENV !== "production") {
+        Logger.error(
+          JSON.stringify({
+            message: "Credential store operation failed",
+            operation,
+            ...safePersistenceDiagnostic(error),
+          }),
+          undefined,
+          PrismaDatabaseCredentialStore.name,
+        );
+      }
+      throw new CredentialStoreError({ cause: error, operation });
     }
   }
 
@@ -143,13 +162,56 @@ export class PrismaDatabaseCredentialStore implements CredentialStorePort {
         id: context.providerCredentialId,
         organizationId: context.organizationId,
         ownerUserId: context.ownerUserId,
-        provider: CredentialProvider.GITHUB,
+        provider: {
+          in: [CredentialProvider.GITHUB, CredentialProvider.GITLAB],
+        },
       },
       select: { id: true },
     });
-    if (!row || context.provider !== CREDENTIAL_PROVIDERS.github)
+    if (
+      !row ||
+      (context.provider !== CREDENTIAL_PROVIDERS.github &&
+        context.provider !== CREDENTIAL_PROVIDERS.gitlab)
+    )
       throw new CredentialStoreError();
   }
+}
+
+function safePersistenceDiagnostic(error: unknown): Record<string, unknown> {
+  if (error instanceof EnvelopeEncryptionError) {
+    const cause = error.cause;
+    return {
+      errorClass: "EnvelopeEncryptionError",
+      envelopeReason: error.reason,
+      innerErrorClass:
+        cause instanceof Error ? cause.constructor.name : undefined,
+    };
+  }
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    const meta = error.meta as Record<string, unknown> | undefined;
+    return {
+      errorClass: "PrismaClientKnownRequestError",
+      prismaCode: error.code,
+      prismaModel:
+        typeof meta?.modelName === "string" ? meta.modelName : undefined,
+      prismaTarget: Array.isArray(meta?.target)
+        ? meta.target.filter(
+            (value): value is string => typeof value === "string",
+          )
+        : undefined,
+      prismaField:
+        typeof meta?.field_name === "string" ? meta.field_name : undefined,
+    };
+  }
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    return { errorClass: "PrismaClientValidationError" };
+  }
+  if (error instanceof Prisma.PrismaClientUnknownRequestError) {
+    return { errorClass: "PrismaClientUnknownRequestError" };
+  }
+  return {
+    errorClass: error instanceof Error ? error.constructor.name : "Unknown",
+  };
 }
 
 function contextFromRow(
@@ -162,10 +224,17 @@ function contextFromRow(
   credentialVersion: number,
   envelopeVersion: number,
 ): CredentialStorageContext {
-  if (row.provider !== CredentialProvider.GITHUB)
+  if (
+    row.provider !== CredentialProvider.GITHUB &&
+    row.provider !== CredentialProvider.GITLAB
+  )
     throw new CredentialStoreError();
+  const provider =
+    row.provider === CredentialProvider.GITLAB
+      ? CREDENTIAL_PROVIDERS.gitlab
+      : CREDENTIAL_PROVIDERS.github;
   return {
-    provider: CREDENTIAL_PROVIDERS.github,
+    provider,
     providerCredentialId: row.id,
     organizationId: row.organizationId,
     ownerUserId: row.ownerUserId,

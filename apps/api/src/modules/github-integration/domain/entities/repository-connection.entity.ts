@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   REPOSITORY_CONNECTION_STATUSES,
   REPOSITORY_AUTHENTICATION_MODES,
+  CREDENTIAL_PROVIDERS,
+  type CredentialProvider,
   type RepositoryAuthenticationMode,
   type RepositoryConnectionStatus,
 } from "@lcsp/contracts/github-integration";
@@ -10,6 +12,7 @@ type RepositoryConnectionProps = {
   id: string;
   assessmentId: string | null;
   userId: string;
+  provider?: CredentialProvider;
   installationId: string | null;
   authenticationMode?: RepositoryAuthenticationMode;
   credentialAuthorizationId?: string | null;
@@ -49,6 +52,7 @@ export class RepositoryConnection {
   static create(input: {
     assessmentId: string | null;
     userId: string;
+    provider?: CredentialProvider;
     installationId: string;
     repositoryId: string;
     repositoryName: string;
@@ -59,6 +63,7 @@ export class RepositoryConnection {
     return new RepositoryConnection({
       assessmentId: input.assessmentId,
       userId: input.userId,
+      provider: input.provider ?? CREDENTIAL_PROVIDERS.github,
       installationId: input.installationId,
       authenticationMode: REPOSITORY_AUTHENTICATION_MODES.githubApp,
       credentialAuthorizationId: null,
@@ -100,6 +105,10 @@ export class RepositoryConnection {
   /** @returns The user that established the connection. */
   get userId(): string {
     return this.props.userId;
+  }
+
+  get provider(): CredentialProvider {
+    return this.props.provider ?? CREDENTIAL_PROVIDERS.github;
   }
 
   /** @returns The GitHub App installation identifier used for authenticated API access. */

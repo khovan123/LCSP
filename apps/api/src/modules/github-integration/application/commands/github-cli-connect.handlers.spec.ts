@@ -1,6 +1,9 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
-import { GITHUB_INTEGRATION_EVENT_TYPES } from "@lcsp/contracts/github-integration";
+import {
+  CREDENTIAL_PROVIDERS,
+  GITHUB_INTEGRATION_EVENT_TYPES,
+} from "@lcsp/contracts/github-integration";
 
 import { DiscoverGitHubRepositoriesHandler } from "./discover-github-repositories/discover-github-repositories.handler.js";
 import { DiscoverGitHubRepositoriesCommand } from "./discover-github-repositories/discover-github-repositories.command.js";
@@ -150,10 +153,12 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
         SUBJECT_ROLES.manager,
         "session",
         FAKE_PAT,
-        "owner/repo",
+        undefined,
         "assessment",
         undefined,
         "corr",
+        CREDENTIAL_PROVIDERS.github,
+        "https://github.com/owner/repo.git/",
       ),
     );
     expect(github.resolveCommit.mock.calls).toContainEqual([
@@ -177,6 +182,36 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
     );
     expect(JSON.stringify(result)).not.toContain(FAKE_PAT);
     expect(JSON.stringify(audit.write.mock.calls)).not.toContain(FAKE_PAT);
+  });
+
+  it("rejects a provider/URL mismatch before provider access", async () => {
+    const github = provider();
+    const handler = new ConnectGitHubCliRepositoryHandler(
+      github,
+      config as never,
+      { assessment: { findFirst: jest.fn() } } as never,
+      { execute: jest.fn() } as never,
+      audit as never,
+    );
+
+    await expect(
+      handler.execute(
+        new ConnectGitHubCliRepositoryCommand(
+          "org",
+          "user",
+          SUBJECT_ROLES.manager,
+          "session",
+          FAKE_PAT,
+          undefined,
+          undefined,
+          undefined,
+          "corr",
+          `${CREDENTIAL_PROVIDERS.github}_UNSUPPORTED`,
+          "https://gitlab.com/owner/repo",
+        ),
+      ),
+    ).rejects.toThrow();
+    expect(github.validateIdentity).not.toHaveBeenCalled();
   });
 
   it("does not enter persistence when source-read validation fails", async () => {

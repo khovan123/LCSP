@@ -23,6 +23,11 @@ export type ProviderCredentialRecord = {
 
 export interface ProviderCredentialRepository {
   create(record: ProviderCredentialRecord): Promise<void>;
+  deactivateActive(
+    organizationId: string,
+    ownerUserId: string,
+    provider: CredentialProvider,
+  ): Promise<void>;
   findByIdForOrganization(
     id: string,
     organizationId: string,

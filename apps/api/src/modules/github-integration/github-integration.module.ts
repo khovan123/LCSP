@@ -16,6 +16,7 @@ import { REPOSITORY_SCAN_JOB_REPOSITORY } from "./application/ports/persistence/
 import { PROVIDER_CREDENTIAL_REPOSITORY } from "./application/ports/persistence/provider-credential.repository.js";
 import { CREDENTIAL_AUTHORIZATION_REPOSITORY } from "./application/ports/persistence/credential-authorization.repository.js";
 import { CREDENTIAL_STORE } from "./application/ports/security/credential-store.port.js";
+import { ACTIVE_PROVIDER_CREDENTIAL_RESOLVER } from "./application/ports/security/active-provider-credential.resolver.js";
 import { CREDENTIAL_AUTHORIZATION_RESOLVER } from "./application/ports/security/credential-authorization-resolver.port.js";
 import { KEY_ENCRYPTION_KEY_PROVIDER } from "./application/ports/security/key-encryption-key-provider.port.js";
 import type { AppConfig } from "../../config/config.types.js";
@@ -31,6 +32,7 @@ import {
 } from "./infrastructure/persistence/prisma-credential.repositories.js";
 import { PrismaDatabaseCredentialStore } from "./infrastructure/persistence/prisma-database-credential.store.js";
 import { PrismaCredentialAuthorizationResolver } from "./infrastructure/persistence/prisma-credential-authorization.resolver.js";
+import { PrismaActiveProviderCredentialResolver } from "./infrastructure/persistence/prisma-active-provider-credential.resolver.js";
 import { PrismaCredentialPersistenceUnitOfWork } from "./infrastructure/persistence/prisma-credential-persistence.unit-of-work.js";
 import { EnvelopeEncryptionService } from "./infrastructure/security/envelope-encryption.service.js";
 import { createCredentialKeyEncryptionKeyProvider } from "./infrastructure/security/credential-key-encryption-key-provider.factory.js";
@@ -40,9 +42,13 @@ import { ScanTriggerGuard } from "./presentation/http/scan-trigger.guard.js";
 import { GitHubCredentialRequestGuard } from "./presentation/http/github-credential-request.guard.js";
 import { DiscoverGitHubRepositoriesHandler } from "./application/commands/discover-github-repositories/discover-github-repositories.handler.js";
 import { ConnectGitHubCliRepositoryHandler } from "./application/commands/connect-github-cli-repository/connect-github-cli-repository.handler.js";
+import { ConfigureProviderCredentialHandler } from "./application/commands/configure-provider-credential/configure-provider-credential.handler.js";
+import { ConnectAssessmentRepositoryHandler } from "./application/commands/connect-assessment-repository/connect-assessment-repository.handler.js";
 import {
   GITHUB_REPOSITORY_PROVIDER,
+  REPOSITORY_PROVIDER_REGISTRY,
   type GitHubRepositoryProviderPort,
+  type RepositoryProviderAdapter,
 } from "./application/ports/github-repository-provider.port.js";
 import {
   GitHubCliProviderError,
@@ -51,10 +57,16 @@ import {
 import { GITHUB_CREDENTIAL_ERROR_CODES } from "@lcsp/contracts/github-integration";
 import {
   GITHUB_ARCHIVE_TRANSPORT,
+  REPOSITORY_ARCHIVE_TRANSPORT_REGISTRY,
   type GitHubArchiveTransportPort,
 } from "./application/ports/github-archive-transport.port.js";
 import { GitHubSecureArchiveHttpTransport } from "./infrastructure/github/github-secure-archive-http.transport.js";
 import { assertGitHubCliRuntime } from "./infrastructure/github/github-cli-runtime.validator.js";
+import { GitLabCliRepositoryProvider } from "./infrastructure/gitlab/gitlab-cli-repository.provider.js";
+import { ConfiguredRepositoryProviderRegistry } from "./infrastructure/repository-provider.registry.js";
+import { GitLabSecureArchiveHttpTransport } from "./infrastructure/gitlab/gitlab-secure-archive-http.transport.js";
+import { assertGitLabCliRuntime } from "./infrastructure/gitlab/gitlab-cli-runtime.validator.js";
+import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 
 /**
  * Wires GitHub App connectivity, immutable snapshot pinning/streaming, and repository scan triggering across HTTP, CQRS, and Prisma adapters.
@@ -70,6 +82,47 @@ import { assertGitHubCliRuntime } from "./infrastructure/github/github-cli-runti
     StreamSnapshotArchiveHandler,
     DiscoverGitHubRepositoriesHandler,
     ConnectGitHubCliRepositoryHandler,
+    ConfigureProviderCredentialHandler,
+    ConnectAssessmentRepositoryHandler,
+    {
+      provide: REPOSITORY_PROVIDER_REGISTRY,
+      inject: [GITHUB_REPOSITORY_PROVIDER, ConfigService],
+      useFactory: (
+        githubProvider: GitHubRepositoryProviderPort,
+        configService: ConfigService<AppConfig, true>,
+      ) => {
+        const gitlab = configService.get("gitlabCli", { infer: true });
+        let gitlabProvider: RepositoryProviderAdapter;
+        if (!gitlab.enabled) {
+          gitlabProvider = {
+            validateIdentity: async () => {
+              throw new Error("gitlab_cli_unavailable");
+            },
+            listAccessibleRepositories: async () => {
+              throw new Error("gitlab_cli_unavailable");
+            },
+            validateRepositoryAccess: async () => {
+              throw new Error("gitlab_cli_unavailable");
+            },
+            resolveCommit: async () => {
+              throw new Error("gitlab_cli_unavailable");
+            },
+            downloadArchive: async () => {
+              throw new Error("gitlab_cli_unavailable");
+            },
+          };
+        } else {
+          assertGitLabCliRuntime(gitlab.executablePath);
+          gitlabProvider = new GitLabCliRepositoryProvider(gitlab);
+        }
+        return new ConfiguredRepositoryProviderRegistry(
+          new Map([
+            [CREDENTIAL_PROVIDERS.github, githubProvider],
+            [CREDENTIAL_PROVIDERS.gitlab, gitlabProvider],
+          ]),
+        );
+      },
+    },
     GitHubAppClient,
     SnapshotArchiveCache,
     WorkerApiKeyGuard,
@@ -128,6 +181,30 @@ import { assertGitHubCliRuntime } from "./infrastructure/github/github-cli-runti
       },
     },
     {
+      provide: REPOSITORY_ARCHIVE_TRANSPORT_REGISTRY,
+      inject: [GITHUB_ARCHIVE_TRANSPORT, ConfigService],
+      useFactory: (
+        githubTransport: GitHubArchiveTransportPort,
+        configService: ConfigService<AppConfig, true>,
+      ) => {
+        const cli = configService.get("githubCli", { infer: true });
+        const gitlab = new GitLabSecureArchiveHttpTransport({
+          timeoutMs: cli.archiveTimeoutMs,
+          maxArchiveBytes: cli.maxArchiveBytes,
+        });
+        return {
+          get(provider: string): GitHubArchiveTransportPort {
+            if (provider === CREDENTIAL_PROVIDERS.github)
+              return githubTransport;
+            if (provider === CREDENTIAL_PROVIDERS.gitlab) return gitlab;
+            throw new Error(
+              `repository_archive_transport_unavailable:${provider}`,
+            );
+          },
+        };
+      },
+    },
+    {
       provide: GITHUB_APP_INSTALL_STATE_REPOSITORY,
       useExisting: PrismaGitHubAppInstallStateRepository,
     },
@@ -162,6 +239,10 @@ import { assertGitHubCliRuntime } from "./infrastructure/github/github-cli-runti
       },
     },
     { provide: CREDENTIAL_STORE, useExisting: PrismaDatabaseCredentialStore },
+    {
+      provide: ACTIVE_PROVIDER_CREDENTIAL_RESOLVER,
+      useClass: PrismaActiveProviderCredentialResolver,
+    },
     {
       provide: CREDENTIAL_AUTHORIZATION_RESOLVER,
       useExisting: PrismaCredentialAuthorizationResolver,

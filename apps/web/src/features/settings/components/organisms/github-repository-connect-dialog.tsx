@@ -1,9 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 import { resolveMessage } from "@lcsp/i18n";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -30,11 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  useConnectGitHubRepositoryMutation,
-  useDiscoverGitHubRepositoriesMutation,
-} from "@/lib/api/github-repository-queries";
-import type { GitHubRepositoryDiscovery } from "@/lib/api/github-repository-client";
+import { useConfigureProviderCredentialMutation } from "@/lib/api/github-repository-queries";
 import { githubRepositoryProblemMessageKey } from "@/lib/api/github-repository-client";
 import { appLocale } from "@/lib/locale";
 
@@ -74,41 +70,34 @@ function GitHubRepositoryConnectDialogContent({
   onOpenChange,
   onConnected,
 }: Omit<GitHubRepositoryConnectDialogProps, "open">) {
-  const [discovery, setDiscovery] = useState<GitHubRepositoryDiscovery | null>(
-    null,
-  );
-  const [repositoryFullName, setRepositoryFullName] = useState("");
-  const discoveryMutation = useDiscoverGitHubRepositoriesMutation();
-  const connectMutation = useConnectGitHubRepositoryMutation();
+  const connectMutation = useConfigureProviderCredentialMutation();
   const form = useForm<GitHubRepositoryCredentialValues>({
     resolver: zodResolver(githubRepositoryCredentialSchema),
-    defaultValues: { credential: "" },
+    defaultValues: {
+      provider: CREDENTIAL_PROVIDERS.github,
+      credential: "",
+    },
   });
-  const failed = discoveryMutation.isError || connectMutation.isError;
-  const requestError = discoveryMutation.error ?? connectMutation.error;
-
+  const failed = connectMutation.isError;
+  const requestError = connectMutation.error;
   async function submit(values: GitHubRepositoryCredentialValues) {
     try {
-      if (!discovery) {
-        const result = await discoveryMutation.mutateAsync({
-          credential: values.credential,
-          limit: 50,
-        });
-        setDiscovery(result);
-        setRepositoryFullName(result.repositories[0]?.full_name ?? "");
-        form.reset({ credential: "" });
-        return;
-      }
       await connectMutation.mutateAsync({
         credential: values.credential,
-        repository_full_name: repositoryFullName,
-        ...(assessmentId ? { assessment_id: assessmentId } : {}),
+        provider: values.provider,
       });
       form.reset({ credential: "" });
       onConnected();
       onOpenChange(false);
+    } catch {
+      // React Query exposes the sanitized failure through mutation state;
+      // keep the rejection inside the form handler so it is not reported as
+      // an unhandled browser/Next.js rejection.
     } finally {
-      if (discovery) form.reset({ credential: "" });
+      form.reset({
+        provider: CREDENTIAL_PROVIDERS.github,
+        credential: "",
+      });
     }
   }
 
@@ -129,46 +118,46 @@ function GitHubRepositoryConnectDialogContent({
         <DialogDescription>
           {resolveMessage(
             appLocale,
-            discovery
-              ? "pages.workspace.settingsHub.repositories.connectCredentialDescription"
-              : "pages.workspace.settingsHub.repositories.discoveryDescription",
+            "pages.workspace.settingsHub.repositories.connectDescription",
           )}
         </DialogDescription>
       </DialogHeader>
       <DialogBody>
-        {discovery ? (
-          <Field>
-            <FieldLabel htmlFor="github-repository-selection">
-              {resolveMessage(
-                appLocale,
-                "pages.workspace.settingsHub.repositories.repositoryLabel",
-              )}
-            </FieldLabel>
-            <Select
-              value={repositoryFullName}
-              onValueChange={(value) => setRepositoryFullName(value ?? "")}
-            >
-              <SelectTrigger
-                id="github-repository-selection"
-                className="w-full"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {discovery.repositories.map((repository) => (
-                  <SelectItem
-                    key={repository.repository_id}
-                    value={repository.full_name}
-                  >
-                    {repository.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        ) : null}
         <form onSubmit={form.handleSubmit(submit)} noValidate>
           <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="github-provider">
+                {resolveMessage(
+                  appLocale,
+                  "pages.workspace.settingsHub.repositories.providerLabel",
+                )}
+              </FieldLabel>
+              <Controller
+                control={form.control}
+                name="provider"
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger id="github-provider" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={CREDENTIAL_PROVIDERS.github}>
+                        {resolveMessage(
+                          appLocale,
+                          "pages.workspace.settingsHub.repositories.githubProvider",
+                        )}
+                      </SelectItem>
+                      <SelectItem value={CREDENTIAL_PROVIDERS.gitlab}>
+                        {resolveMessage(
+                          appLocale,
+                          "pages.workspace.settingsHub.repositories.gitlabProvider",
+                        )}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </Field>
             <Field
               data-invalid={
                 Boolean(form.formState.errors.credential) || undefined
@@ -212,21 +201,13 @@ function GitHubRepositoryConnectDialogContent({
                 </AlertDescription>
               </Alert>
             ) : null}
-            <Button
-              type="submit"
-              disabled={
-                form.formState.isSubmitting ||
-                (Boolean(discovery) && !repositoryFullName)
-              }
-            >
+            <Button type="submit" disabled={form.formState.isSubmitting}>
               {form.formState.isSubmitting ? (
                 <Spinner data-icon="inline-start" />
               ) : null}
               {resolveMessage(
                 appLocale,
-                discovery
-                  ? "pages.workspace.settingsHub.repositories.connectAction"
-                  : "pages.workspace.settingsHub.repositories.discoverAction",
+                "pages.workspace.settingsHub.repositories.connectAction",
               )}
             </Button>
           </FieldGroup>

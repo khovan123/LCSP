@@ -12,7 +12,9 @@ import {
   SIGN_UP_ERROR_CODES,
 } from "@lcsp/contracts/auth";
 import {
+  CREDENTIAL_PROVIDERS,
   REPOSITORY_AUTHENTICATION_MODES,
+  type CredentialProvider,
   type RepositoryAuthenticationMode,
 } from "@lcsp/contracts/github-integration";
 import type { MessageKey } from "@lcsp/i18n";
@@ -203,6 +205,7 @@ export type AuthSessionSummary = {
 
 export type AuthRepositorySummary = {
   id: string;
+  provider: CredentialProvider;
   authentication_mode: RepositoryAuthenticationMode;
   installation_id: string | null;
   repository_name: string;
@@ -848,6 +851,9 @@ function isAuthSessionsPayload(
       const candidate = session as Record<string, unknown>;
       return (
         typeof candidate.id === "string" &&
+        Object.values(CREDENTIAL_PROVIDERS).includes(
+          candidate.provider as CredentialProvider,
+        ) &&
         typeof candidate.created_at === "string" &&
         typeof candidate.updated_at === "string" &&
         typeof candidate.expires_at === "string" &&

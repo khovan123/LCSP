@@ -17,6 +17,7 @@ export type ApiRequestResult = {
   ok: boolean;
   status: number;
   problemCode?: string;
+  requiredAction?: RequiredAction;
 };
 
 export async function apiRequest(
@@ -40,6 +41,7 @@ export async function apiRequest(
     ok: response.ok && result?.ok === true,
     status: response.status,
     problemCode,
+    requiredAction,
   };
 }
 

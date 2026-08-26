@@ -527,7 +527,15 @@ export type PagesMessages = {
         dialogClose: string;
         discoveryDescription: string;
         connectCredentialDescription: string;
+        providerLabel: string;
+        githubProvider: string;
+        gitlabProvider: string;
+        repositoryUrlLabel: string;
+        repositoryUrlPlaceholder: string;
+        gitlabRepositoryUrlPlaceholder: string;
+        repositoryUrlRequired: string;
         credentialLabel: string;
+        gitlabCredentialLabel: string;
         credentialRequired: string;
         repositoryLabel: string;
         discoverAction: string;
@@ -988,6 +996,8 @@ export type PagesMessages = {
     updatedAtLabel: string;
     noMissingEvidence: string;
     noCompletedSteps: string;
+    repositoryConnectedTitle: string;
+    snapshotReady: string;
     unresolvedTitle: string;
     unresolvedDescription: string;
     noUnresolvedItems: string;

@@ -10,6 +10,7 @@ import {
   CREDENTIAL_PROVIDERS,
   PROVIDER_CREDENTIAL_STATUSES,
   type CredentialAuthorizationStatus,
+  type CredentialProvider,
   type ProviderCredentialStatus,
 } from "@lcsp/contracts/github-integration";
 
@@ -41,9 +42,29 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
     await this.client.providerCredential.create({
       data: {
         ...record,
-        provider: PrismaCredentialProvider.GITHUB,
+        provider:
+          record.provider === CREDENTIAL_PROVIDERS.gitlab
+            ? PrismaCredentialProvider.GITLAB
+            : PrismaCredentialProvider.GITHUB,
         status: toCredentialStatus(record.status),
+        isActive: true,
       },
+    });
+  }
+
+  async deactivateActive(
+    organizationId: string,
+    ownerUserId: string,
+    provider: CredentialProvider,
+  ): Promise<void> {
+    await this.client.providerCredential.updateMany({
+      where: {
+        organizationId,
+        ownerUserId,
+        provider: toPrismaCredentialProvider(provider),
+        isActive: true,
+      },
+      data: { isActive: false },
     });
   }
 
@@ -57,7 +78,10 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
     return row
       ? {
           id: row.id,
-          provider: CREDENTIAL_PROVIDERS.github,
+          provider:
+            row.provider === PrismaCredentialProvider.GITLAB
+              ? CREDENTIAL_PROVIDERS.gitlab
+              : CREDENTIAL_PROVIDERS.github,
           organizationId: row.organizationId,
           ownerUserId: row.ownerUserId,
           providerAccountId: row.providerAccountId,
@@ -226,6 +250,14 @@ function authorizationRecord(row: {
   validatedAt: Date | null;
 }): CredentialAuthorizationRecord {
   return { ...row, status: fromAuthorizationStatus(row.status) };
+}
+
+function toPrismaCredentialProvider(
+  provider: CredentialProvider,
+): PrismaCredentialProvider {
+  return provider === CREDENTIAL_PROVIDERS.gitlab
+    ? PrismaCredentialProvider.GITLAB
+    : PrismaCredentialProvider.GITHUB;
 }
 
 function toCredentialStatus(

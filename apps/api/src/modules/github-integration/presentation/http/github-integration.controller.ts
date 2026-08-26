@@ -1,6 +1,8 @@
 import {
   Body,
   Controller,
+  Inject,
+  Optional,
   Get,
   Headers,
   HttpCode,
@@ -38,6 +40,14 @@ import {
 import { GitHubCredentialRequestGuard } from "./github-credential-request.guard.js";
 import { DiscoverGitHubRepositoriesCommand } from "../../application/commands/discover-github-repositories/discover-github-repositories.command.js";
 import { ConnectGitHubCliRepositoryCommand } from "../../application/commands/connect-github-cli-repository/connect-github-cli-repository.command.js";
+import { ConfigureProviderCredentialCommand } from "../../application/commands/configure-provider-credential/configure-provider-credential.command.js";
+import { ProviderCredentialRequest } from "./dto/provider-credential.request.js";
+import { AssessmentRepositoryConnectionRequest } from "./dto/assessment-repository-connection.request.js";
+import { ConnectAssessmentRepositoryCommand } from "../../application/commands/connect-assessment-repository/connect-assessment-repository.command.js";
+import {
+  ACTIVE_PROVIDER_CREDENTIAL_RESOLVER,
+  type ActiveProviderCredentialResolver,
+} from "../../application/ports/security/active-provider-credential.resolver.js";
 import {
   ScanTriggerGuard,
   type ScanTriggerRequestContext,
@@ -58,7 +68,47 @@ export class GitHubIntegrationController {
    *
    * @param commandBus - Command bus used to start/complete App installation, pin snapshots, and trigger scans.
    */
-  constructor(private readonly commandBus: CommandBus) {}
+  constructor(
+    private readonly commandBus: CommandBus,
+    @Optional()
+    @Inject(ACTIVE_PROVIDER_CREDENTIAL_RESOLVER)
+    private readonly activeCredentials?: ActiveProviderCredentialResolver,
+  ) {}
+
+  @Get("provider-credentials")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.githubConnect)
+  async listProviderCredentials(@Req() request: GitHubIntegrationRequest) {
+    const context = request.pbacContext as PbacRequestContext;
+    if (!this.activeCredentials)
+      throw new Error("provider_credentials_unavailable");
+    const activeCredentials = this.activeCredentials;
+    const providers = [
+      CREDENTIAL_PROVIDERS.github,
+      CREDENTIAL_PROVIDERS.gitlab,
+    ];
+    return resultEnvelope(
+      await Promise.all(
+        providers.map(async (provider) => {
+          const metadata = await activeCredentials.findMetadata({
+            organizationId: context.organizationId,
+            userId: context.userId,
+            provider,
+          });
+          return {
+            provider,
+            configured: metadata !== null,
+            account: metadata
+              ? {
+                  id: metadata.providerAccountId,
+                  username: metadata.providerLogin,
+                }
+              : null,
+          };
+        }),
+      ),
+    );
+  }
 
   @Post("github/repository-discoveries")
   @HttpCode(HttpStatus.OK)
@@ -120,6 +170,60 @@ export class GitHubIntegrationController {
           body.repository_full_name,
           body.assessment_id,
           body.credential_expires_at,
+          request.correlationId as string,
+          body.provider ?? CREDENTIAL_PROVIDERS.github,
+          body.repository_url,
+        ),
+      ),
+    );
+  }
+
+  @Post("provider-credentials")
+  @UseGuards(PbacGuard, GitHubCredentialRequestGuard)
+  @RequireAction(PBAC_ACTIONS.githubConnect)
+  @ReAuthForSensitiveRoute({
+    routeId: SENSITIVE_ROUTE_IDS.githubCliRepositoryConnect,
+    method: "POST",
+    pathTemplate: "/provider-credentials",
+    aliases: [{ method: "POST", pathTemplate: "/api/provider-credentials" }],
+  })
+  async configureProviderCredential(
+    @Body() body: ProviderCredentialRequest,
+    @Req() request: GitHubIntegrationRequest,
+  ) {
+    const context = request.pbacContext as PbacRequestContext;
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ConfigureProviderCredentialCommand(
+          context.organizationId,
+          context.userId,
+          context.subjectRole,
+          context.sessionId,
+          body.provider,
+          body.credential,
+          request.correlationId as string,
+        ),
+      ),
+    );
+  }
+
+  @Post("assessments/:assessmentId/repository-connection")
+  @UseGuards(PbacGuard)
+  @RequireAction(PBAC_ACTIONS.githubConnect)
+  async connectAssessmentRepository(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: AssessmentRepositoryConnectionRequest,
+    @Req() request: GitHubIntegrationRequest,
+  ) {
+    const context = request.pbacContext as PbacRequestContext;
+    return resultEnvelope(
+      await this.commandBus.execute(
+        new ConnectAssessmentRepositoryCommand(
+          assessmentId,
+          context.organizationId,
+          context.userId,
+          context.subjectRole,
+          body.repositoryUrl,
           request.correlationId as string,
         ),
       ),

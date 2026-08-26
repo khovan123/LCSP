@@ -12,6 +12,7 @@ export type RepositoryConnectionStatus =
 
 export const CREDENTIAL_PROVIDERS = {
   github: "GITHUB",
+  gitlab: "GITLAB",
 } as const;
 
 export type CredentialProvider =
@@ -42,6 +43,7 @@ export type CredentialAuthorizationStatus =
 export const REPOSITORY_AUTHENTICATION_MODES = {
   githubApp: "GITHUB_APP",
   githubCliCredential: "GITHUB_CLI_CREDENTIAL",
+  gitlabCliCredential: "GITLAB_CLI_CREDENTIAL",
 } as const;
 
 export type RepositoryAuthenticationMode =

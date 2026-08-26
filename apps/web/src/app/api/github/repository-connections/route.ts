@@ -22,7 +22,9 @@ export async function POST(request: NextRequest) {
 
 function isConnectionBody(value: unknown): value is {
   credential: string;
-  repository_full_name: string;
+  provider?: string;
+  repository_url?: string;
+  repository_full_name?: string;
   assessment_id?: string;
   credential_expires_at?: string;
 } {
@@ -30,7 +32,9 @@ function isConnectionBody(value: unknown): value is {
   const body = value as Record<string, unknown>;
   return (
     typeof body.credential === "string" &&
-    typeof body.repository_full_name === "string" &&
+    (typeof body.repository_url === "string" ||
+      typeof body.repository_full_name === "string") &&
+    (body.provider === undefined || typeof body.provider === "string") &&
     (body.assessment_id === undefined ||
       typeof body.assessment_id === "string") &&
     (body.credential_expires_at === undefined ||

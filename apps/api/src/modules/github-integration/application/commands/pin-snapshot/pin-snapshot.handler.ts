@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Logger } from "@nestjs/common";
+import { HttpStatus, Inject, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 
@@ -51,6 +51,8 @@ import {
   GITHUB_REPOSITORY_PROVIDER,
   type GitHubRepositoryProviderPort,
   type GitHubResolvedCommit,
+  REPOSITORY_PROVIDER_REGISTRY,
+  type RepositoryProviderRegistry,
 } from "../../ports/github-repository-provider.port.js";
 import { CredentialResolutionError } from "../../../infrastructure/persistence/prisma-credential-authorization.resolver.js";
 import type { CredentialLease } from "../../security/credential-lease.js";
@@ -84,6 +86,9 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
     private readonly configService: ConfigService<AppConfig, true>,
     private readonly prisma: PrismaService,
     private readonly auditWriter: AuditWriterService,
+    @Inject(REPOSITORY_PROVIDER_REGISTRY)
+    @Optional()
+    private readonly providerRegistry?: RepositoryProviderRegistry,
   ) {}
 
   /**
@@ -312,6 +317,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
         }
 
       case REPOSITORY_AUTHENTICATION_MODES.githubCliCredential:
+      case REPOSITORY_AUTHENTICATION_MODES.gitlabCliCredential:
         if (
           connection.installationIdOrNull !== null ||
           connection.credentialAuthorizationId === null
@@ -360,7 +366,10 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
         connection.id,
         connection.repositoryFullName,
       );
-      return await this.githubRepositoryProvider.resolveCommit(
+      const provider =
+        this.providerRegistry?.get(connection.provider) ??
+        this.githubRepositoryProvider;
+      return await provider.resolveCommit(
         lease,
         connection.repositoryFullName,
         revision,
@@ -484,6 +493,7 @@ function cliFailureCategory(error: unknown): GitHubCredentialErrorCode {
 
 function cliFailureStatus(category: GitHubCredentialErrorCode): number {
   const statuses: Record<GitHubCredentialErrorCode, number> = {
+    [GITHUB_CREDENTIAL_ERROR_CODES.credentialRequired]: HttpStatus.BAD_REQUEST,
     [GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid]: HttpStatus.UNAUTHORIZED,
     [GITHUB_CREDENTIAL_ERROR_CODES.credentialExpired]: HttpStatus.UNAUTHORIZED,
     [GITHUB_CREDENTIAL_ERROR_CODES.credentialApprovalRequired]:

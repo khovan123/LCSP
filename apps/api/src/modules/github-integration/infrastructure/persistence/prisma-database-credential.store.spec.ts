@@ -18,7 +18,7 @@ const CONTEXT = {
   envelopeVersion: 1,
 };
 
-function fixture() {
+function fixture(options: { failSecretCreate?: boolean } = {}) {
   const records = new Map<string, Record<string, unknown>>();
   const credential = {
     id: CONTEXT.providerCredentialId,
@@ -44,6 +44,9 @@ function fixture() {
     },
     providerCredentialSecret: {
       create: ({ data }: { data: Record<string, unknown> }) => {
+        if (options.failSecretCreate) {
+          return Promise.reject(new Error("simulated persistence failure"));
+        }
         records.set(String(data.id), {
           ...data,
           destroyedAt: null,
@@ -110,6 +113,22 @@ describe("PrismaDatabaseCredentialStore", () => {
       await store.read(locator);
     } catch (error: unknown) {
       expect(String(error)).not.toContain(String(locator));
+      expect(String(error)).not.toContain(SECRET);
+    }
+  });
+
+  it("retains the safe failing operation and cause for local diagnostics", async () => {
+    const { store } = fixture({ failSecretCreate: true });
+
+    try {
+      await store.store(SECRET, CONTEXT);
+      throw new Error("expected store to fail");
+    } catch (error: unknown) {
+      expect(error).toMatchObject({
+        name: "CredentialStoreError",
+        operation: "provider_credential_secret_create",
+      });
+      expect((error as Error).cause).toBeInstanceOf(Error);
       expect(String(error)).not.toContain(SECRET);
     }
   });

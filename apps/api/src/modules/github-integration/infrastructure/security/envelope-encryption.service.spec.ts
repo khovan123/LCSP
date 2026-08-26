@@ -63,6 +63,19 @@ describe("EnvelopeEncryptionService", () => {
     expect(envelope.wrappedDataEncryptionKey.keyVersion).toBe("kek-v1");
   });
 
+  it("round-trips GitLab credentials with the same envelope protection", async () => {
+    const encryption = new EnvelopeEncryptionService(provider());
+    const context = {
+      ...STORAGE_CONTEXT,
+      provider: CREDENTIAL_PROVIDERS.gitlab,
+    };
+    const envelope = await encryption.encryptSecret(SECRET, context);
+
+    await expect(encryption.decryptSecret(envelope, context)).resolves.toBe(
+      SECRET,
+    );
+  });
+
   it("uses fresh DEKs and nonces for identical plaintext", async () => {
     const encryption = new EnvelopeEncryptionService(provider());
     const first = await encryption.encryptSecret(SECRET);

@@ -23,6 +23,7 @@ export const GITHUB_INTEGRATION_ERROR_CODES = {
 
 /** Safe categories emitted by credential and GitHub CLI infrastructure. */
 export const GITHUB_CREDENTIAL_ERROR_CODES = {
+  credentialRequired: "PROVIDER_CREDENTIAL_REQUIRED",
   credentialInvalid: "CREDENTIAL_INVALID",
   credentialExpired: "CREDENTIAL_EXPIRED",
   repositoryAccessDenied: "REPOSITORY_ACCESS_DENIED",

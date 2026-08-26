@@ -37,6 +37,13 @@ export interface GithubCliConfig {
   maxConcurrentArchiveProcesses: number;
 }
 
+export interface GitlabCliConfig {
+  enabled: boolean;
+  executablePath: string;
+  timeoutMs: number;
+  maxJsonOutputBytes: number;
+}
+
 export interface RabbitMqConfig {
   url: string;
   exchange: string;
@@ -89,6 +96,7 @@ export interface AppConfig {
   oauth: OAuthConfig;
   github: GithubConfig;
   githubCli: GithubCliConfig;
+  gitlabCli: GitlabCliConfig;
   rabbitmq: RabbitMqConfig;
   outbox: OutboxConfig;
   crypto: CryptoConfig;

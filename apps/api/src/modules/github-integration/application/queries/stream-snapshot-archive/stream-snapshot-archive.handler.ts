@@ -1,4 +1,4 @@
-import { HttpStatus, Inject, Logger } from "@nestjs/common";
+import { HttpStatus, Inject, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 
@@ -10,6 +10,7 @@ import {
   GITHUB_ARCHIVE_TRANSPORT_ERROR_CODES,
   REPOSITORY_CONNECTION_STATUSES,
   REPOSITORY_SCAN_JOB_STATUSES,
+  CREDENTIAL_PROVIDERS,
 } from "@lcsp/contracts/github-integration";
 import { RepositoryAuthenticationMode } from "@prisma/client";
 
@@ -33,7 +34,9 @@ import {
 } from "../../../application/ports/security/credential-authorization-resolver.port.js";
 import {
   GITHUB_ARCHIVE_TRANSPORT,
+  REPOSITORY_ARCHIVE_TRANSPORT_REGISTRY,
   type GitHubArchiveTransportPort,
+  type RepositoryArchiveTransportRegistry,
 } from "../../../application/ports/github-archive-transport.port.js";
 import { GitHubArchiveTransportError } from "../../../infrastructure/github/github-secure-archive-http.transport.js";
 import { CredentialResolutionError } from "../../../infrastructure/persistence/prisma-credential-authorization.resolver.js";
@@ -71,6 +74,9 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
     @Inject(GITHUB_ARCHIVE_TRANSPORT)
     private readonly githubArchiveTransport: GitHubArchiveTransportPort,
     private readonly configService: ConfigService<AppConfig, true>,
+    @Optional()
+    @Inject(REPOSITORY_ARCHIVE_TRANSPORT_REGISTRY)
+    private readonly archiveTransportRegistry?: RepositoryArchiveTransportRegistry,
   ) {}
 
   /**
@@ -166,6 +172,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
         installationId: true,
         status: true,
         authenticationMode: true,
+        provider: true,
         credentialAuthorizationId: true,
         repositoryId: true,
         repositoryFullName: true,
@@ -204,8 +211,10 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
     }
 
     if (
-      connection.authenticationMode ===
-        RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL &&
+      (connection.authenticationMode ===
+        RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL ||
+        connection.authenticationMode ===
+          RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL) &&
       !this.configService.get("githubCredentialPersistence", { infer: true })
         .archiveRetrievalEnabled
     ) {
@@ -239,8 +248,12 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
                   connection.id,
                   snapshot.repositoryFullName,
                 );
-              const result = await this.githubArchiveTransport.downloadArchive({
+              const transport =
+                this.archiveTransportRegistry?.get(connection.provider) ??
+                this.githubArchiveTransport;
+              const result = await transport.downloadArchive({
                 credentialLease: leaseHolder.lease,
+                repositoryId: snapshot.repositoryId,
                 repositoryFullName: snapshot.repositoryFullName,
                 commitSha: snapshot.commitSha,
               });
@@ -414,17 +427,29 @@ function archiveFailureStatus(error: unknown): number | null {
 
 function hasValidAuthenticationShape(connection: {
   authenticationMode: RepositoryAuthenticationMode;
+  provider: string;
   installationId: string | null;
   credentialAuthorizationId: string | null;
 }): boolean {
-  return connection.authenticationMode ===
-    RepositoryAuthenticationMode.GITHUB_APP
-    ? connection.installationId !== null &&
-        connection.credentialAuthorizationId === null
-    : connection.authenticationMode ===
-        RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL &&
-        connection.installationId === null &&
-        connection.credentialAuthorizationId !== null;
+  if (
+    connection.authenticationMode === RepositoryAuthenticationMode.GITHUB_APP
+  ) {
+    return (
+      connection.provider === CREDENTIAL_PROVIDERS.github &&
+      connection.installationId !== null &&
+      connection.credentialAuthorizationId === null
+    );
+  }
+  return (
+    ((connection.authenticationMode ===
+      RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL &&
+      connection.provider === CREDENTIAL_PROVIDERS.github) ||
+      (connection.authenticationMode ===
+        RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL &&
+        connection.provider === CREDENTIAL_PROVIDERS.gitlab)) &&
+    connection.installationId === null &&
+    connection.credentialAuthorizationId !== null
+  );
 }
 
 /** Returns a cache failure type without logging paths, raw source, or error payloads. */

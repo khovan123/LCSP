@@ -230,7 +230,7 @@ const groups = {
   dev: ["api", "web", "managed_agent", "managed_agent_events", "phoenix"],
 };
 
-const selection = process.argv[2] ?? "help";
+const selection = requestedSelection;
 await main();
 
 async function main() {

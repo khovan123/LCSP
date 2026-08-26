@@ -1,5 +1,6 @@
 import * as assert from "node:assert/strict";
 import { test } from "node:test";
+import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 
 import {
   connectGitHubRepository,
@@ -62,7 +63,8 @@ test("GitHub connect exposes no credential in its sanitized result", async () =>
   try {
     const result = await connectGitHubRepository({
       credential: TEST_CREDENTIAL,
-      repository_full_name: "owner/repo",
+      provider: CREDENTIAL_PROVIDERS.github,
+      repository_url: "https://github.com/owner/repo",
       assessment_id: "assessment",
     });
     assert.equal(JSON.stringify(result).includes(TEST_CREDENTIAL), false);

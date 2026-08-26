@@ -17,7 +17,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { appLocale } from "@/lib/locale";
 import {
   useDisableMfaMutation,
-  useAuthRepositoriesQuery,
   useAuthSessionsQuery,
   useAuthSettingsProfileQuery,
   useMfaEnrollMutation,
@@ -27,6 +26,7 @@ import {
   useRevokeAuthSessionMutation,
   useUpdateProfileMutation,
 } from "@/lib/api/auth-queries";
+import { useProviderCredentialStatusesQuery } from "@/lib/api/github-repository-queries";
 import { runSensitiveRouteAction } from "@/lib/api/sensitive-route-action";
 import {
   API_OUTCOME_KINDS,
@@ -65,6 +65,7 @@ const SETTINGS_SENSITIVE_ACTIONS = {
   revokeSession: "revoke_session",
   connectGitHubRepository: "connect_github_repository",
   manageGitHubInstallation: "manage_github_installation",
+  reauthenticateProviderCredential: "reauthenticate_provider_credential",
 } as const;
 
 type SettingsSensitiveAction = {
@@ -99,6 +100,9 @@ type SettingsSensitiveAction = {
       kind: typeof SETTINGS_SENSITIVE_ACTIONS.manageGitHubInstallation;
       installationId: string;
     }
+  | {
+      kind: typeof SETTINGS_SENSITIVE_ACTIONS.reauthenticateProviderCredential;
+    }
 );
 
 export function SettingsPage() {
@@ -118,7 +122,6 @@ export function SettingsPage() {
 
   const profileQuery = useAuthSettingsProfileQuery();
   const sessionsQuery = useAuthSessionsQuery();
-  const repositoriesQuery = useAuthRepositoriesQuery();
   const updateProfileMutation = useUpdateProfileMutation();
   const enrollMutation = useMfaEnrollMutation();
   const disableMfaMutation = useDisableMfaMutation();
@@ -126,6 +129,7 @@ export function SettingsPage() {
   const passwordReauthMutation = usePasswordReauthMutation();
   const revokeSessionMutation = useRevokeAuthSessionMutation();
   const requestRecoveryMutation = useRequestRecoveryMutation();
+  const providerCredentialStatusesQuery = useProviderCredentialStatusesQuery();
 
   const [totpUri, setTotpUri] = useState<string | null>(null);
   const [mfaEditorOpen, setMfaEditorOpen] = useState(false);
@@ -151,9 +155,6 @@ export function SettingsPage() {
 
   const profile = profileQuery.data;
   const sessions = sessionsQuery.data ?? [];
-  const repositories = repositoriesQuery.data ?? [];
-
-  const repositoryCount = repositories.length;
   const activeSessionsCount = sessions.filter(
     (session) => session.revoked_at === null,
   ).length;
@@ -161,8 +162,7 @@ export function SettingsPage() {
     ? "pages.workspace.settingsHub.badges.verified"
     : "pages.workspace.settingsHub.badges.unverified";
 
-  const profileLoadFailed =
-    profileQuery.isError || sessionsQuery.isError || repositoriesQuery.isError;
+  const profileLoadFailed = profileQuery.isError || sessionsQuery.isError;
 
   function openSensitiveAction(action: SettingsSensitiveAction) {
     setConfirmAccessMfaError(null);
@@ -372,7 +372,7 @@ export function SettingsPage() {
   function handleConnectGitHubRepository() {
     void runSensitiveRouteAction({
       method: "POST",
-      path: "/api/github/repository-discoveries",
+      path: "/api/github/repository-connections",
       onReauthRequired: () => {
         openSensitiveAction({
           kind: SETTINGS_SENSITIVE_ACTIONS.connectGitHubRepository,
@@ -415,6 +415,8 @@ export function SettingsPage() {
         return true;
       case SETTINGS_SENSITIVE_ACTIONS.manageGitHubInstallation:
         redirectToGitHubAppStart(action.installationId);
+        return true;
+      case SETTINGS_SENSITIVE_ACTIONS.reauthenticateProviderCredential:
         return true;
       default:
         return false;
@@ -765,9 +767,7 @@ export function SettingsPage() {
                 open={githubConnectOpen}
                 assessmentId={searchParams.get("assessment_id") ?? undefined}
                 onOpenChange={setGitHubConnectOpen}
-                onConnected={() => {
-                  void repositoriesQuery.refetch();
-                }}
+                onConnected={() => undefined}
               />
             </>
           ) : null}
@@ -870,12 +870,14 @@ export function SettingsPage() {
 
           {activeSection === SETTINGS_SECTION_IDS.repositories ? (
             <RepositoriesSettingsSection
-              repositories={repositories}
-              repositoryCount={repositoryCount}
-              githubConnectionStatus={githubConnectionStatus}
-              onConnectGitHub={handleConnectGitHubRepository}
-              onManageGitHubInstallation={handleManageGitHubInstallation}
-              onReconnectGitHubRepository={handleConnectGitHubRepository}
+              providerCredentialStatuses={
+                providerCredentialStatusesQuery.data ?? []
+              }
+              onReauthenticate={() =>
+                openSensitiveAction({
+                  kind: SETTINGS_SENSITIVE_ACTIONS.reauthenticateProviderCredential,
+                })
+              }
             />
           ) : null}
         </div>

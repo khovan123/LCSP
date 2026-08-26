@@ -29,9 +29,12 @@ export type EncryptedSecretEnvelope = {
 
 /** Stable, secret-free envelope-crypto failure. */
 export class EnvelopeEncryptionError extends Error {
-  constructor() {
-    super("credential_encryption_failed");
+  readonly reason?: string;
+
+  constructor(options?: { cause?: unknown; reason?: string }) {
+    super("credential_encryption_failed", { cause: options?.cause });
     this.name = "EnvelopeEncryptionError";
+    this.reason = options?.reason;
   }
 }
 
@@ -72,8 +75,12 @@ export class EnvelopeEncryptionService {
         authenticationTag: authenticationTag.toString("base64"),
         wrappedDataEncryptionKey,
       };
-    } catch {
-      throw new EnvelopeEncryptionError();
+    } catch (error: unknown) {
+      if (error instanceof EnvelopeEncryptionError) throw error;
+      throw new EnvelopeEncryptionError({
+        cause: error,
+        reason: safeEncryptionReason(error),
+      });
     } finally {
       plaintext.fill(0);
       dataEncryptionKey.fill(0);
@@ -115,8 +122,12 @@ export class EnvelopeEncryptionService {
         decipher.final(),
       ]);
       return plaintext.toString("utf8");
-    } catch {
-      throw new EnvelopeEncryptionError();
+    } catch (error: unknown) {
+      if (error instanceof EnvelopeEncryptionError) throw error;
+      throw new EnvelopeEncryptionError({
+        cause: error,
+        reason: safeEncryptionReason(error),
+      });
     } finally {
       dataEncryptionKey?.fill(0);
       plaintext?.fill(0);
@@ -167,4 +178,17 @@ function decodeBase64(value: string, expectedBytes?: number): Buffer {
     throw new EnvelopeEncryptionError();
   }
   return decoded;
+}
+
+function safeEncryptionReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  if (
+    message === "credential_key_version_unavailable" ||
+    message === "credential_key_material_invalid" ||
+    message === "credential_key_wrap_failed" ||
+    message === "credential_key_unwrap_failed"
+  ) {
+    return message;
+  }
+  return "crypto_operation_failed";
 }
