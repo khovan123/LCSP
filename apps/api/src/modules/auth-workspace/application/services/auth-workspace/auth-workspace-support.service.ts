@@ -65,10 +65,7 @@ export class AuthWorkspaceSupportService {
     };
   }
 
-  isMfaRequired(
-    user: User,
-    mfaEnrollment: MfaEnrollment | null,
-  ): boolean {
+  isMfaRequired(user: User, mfaEnrollment: MfaEnrollment | null): boolean {
     return (
       user.mfaRequired ||
       (mfaEnrollment !== null && mfaEnrollment.verifiedAt !== null)
