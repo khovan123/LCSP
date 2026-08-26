@@ -1,3 +1,5 @@
+import type { MessageKey } from "@lcsp/i18n";
+
 import {
   type SignInOutcome,
   type SignInRequest,
@@ -8,12 +10,22 @@ import { API_OUTCOME_KINDS } from "./outcome-kinds.ts";
 
 const SERVER_ERROR_STATUS = 500;
 
+type SafeSignInOutcome =
+  | Exclude<SignInOutcome, { kind: typeof API_OUTCOME_KINDS.error }>
+  | {
+      kind: typeof API_OUTCOME_KINDS.error;
+      titleKey: MessageKey;
+      detailKey: MessageKey;
+      lockedUntil?: string;
+      retryAfterSeconds?: number;
+    };
+
 export function toSafeSignInOutcome(
   payload: unknown,
   ok: boolean,
   status: number,
   problemCode?: string,
-): SignInOutcome {
+): SafeSignInOutcome {
   if (!ok && status >= SERVER_ERROR_STATUS) {
     return {
       kind: API_OUTCOME_KINDS.error,
@@ -27,7 +39,7 @@ export function toSafeSignInOutcome(
 
 export async function signIn(
   credentials: SignInRequest,
-): Promise<SignInOutcome> {
+): Promise<SafeSignInOutcome> {
   const { payload, ok, status, problemCode } = await apiRequest(
     "/api/auth/sign-in",
     {
