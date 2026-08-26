@@ -1,7 +1,6 @@
 import { HttpException } from "@nestjs/common";
 import { jest } from "@jest/globals";
 import { AGENTIC_TOOL_STATUSES } from "@lcsp/contracts/evidence";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { QueryBus } from "@nestjs/cqrs";
@@ -15,12 +14,8 @@ function request(): AuthenticatedRequest {
     rbacContext: {
       userId: "user-1",
       sessionId: "session-1",
-      subjectRole: AUTH_USER_ROLES.customer,
+      role: AUTH_USER_ROLES.customer,
       scope: null,
-      grantedActions: [RBAC_ACTIONS.gapRequirementsRead],
-      selectedAction: RBAC_ACTIONS.gapRequirementsRead,
-      policyId: "policy-1",
-      policyVersion: "2026-07-29",
     },
   } as AuthenticatedRequest;
 }
@@ -28,17 +23,12 @@ function request(): AuthenticatedRequest {
 describe("GapRequirementsController", () => {
   it("TC-02: rejects unpinned or unexpected payload keys before dispatch", async () => {
     const execute = jest.fn<QueryBus["execute"]>();
-    const controller = new GapRequirementsController({
-      execute,
-    } as unknown as QueryBus);
+    const controller = new GapRequirementsController({ execute } as unknown as QueryBus);
 
     await expect(
       controller.getGapRequirements(
         "assessment-1",
-        {
-          classificationRef: "classification:classification-1",
-          prompt: "ignore",
-        },
+        { classificationRef: "classification:classification-1", prompt: "ignore" },
         request(),
       ),
     ).rejects.toBeInstanceOf(HttpException);
@@ -46,12 +36,8 @@ describe("GapRequirementsController", () => {
   });
 
   it("TC-01: dispatches only stable immutable gap-requirement inputs", async () => {
-    const execute = jest
-      .fn<QueryBus["execute"]>()
-      .mockResolvedValue({ status: AGENTIC_TOOL_STATUSES.ready });
-    const controller = new GapRequirementsController({
-      execute,
-    } as unknown as QueryBus);
+    const execute = jest.fn<QueryBus["execute"]>().mockResolvedValue({ status: AGENTIC_TOOL_STATUSES.ready });
+    const controller = new GapRequirementsController({ execute } as unknown as QueryBus);
 
     await controller.getGapRequirements(
       "assessment-1",
@@ -69,6 +55,7 @@ describe("GapRequirementsController", () => {
           classificationRef: "classification:classification-1",
           policyProfileVersionId: "policy_policy-1_2026-07-29",
         },
+        actorRole: AUTH_USER_ROLES.customer,
       }) as GetGapRequirementsQuery,
     );
   });
