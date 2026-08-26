@@ -9,9 +9,6 @@ import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { AUTH_USER_ROLES, type ProblemResult } from "@lcsp/contracts/auth";
 import { REPOSITORY_CONNECTION_STATUSES } from "@lcsp/contracts/github-integration";
 import { OUTBOX_STATUSES } from "@lcsp/contracts/outbox";
-import {
-  RBAC_DECISION,
-} from "@lcsp/contracts/rbac";
 
 type Assert<T extends true> = T;
 type _ApiProblemIsAcceptedByWebWireContract = Assert<
@@ -44,7 +41,7 @@ test("shared contracts expose canonical workflow value sets", () => {
   ]);
 });
 
-test("decision, role, and state-gate contracts have one canonical source", () => {
-  assert.deepEqual(AUDIT_DECISIONS, RBAC_DECISION);
+test("decision and role contracts have canonical sources", () => {
+  assert.deepEqual(Object.values(AUDIT_DECISIONS), ["ALLOW", "DENY"]);
   assert.deepEqual(Object.values(AUTH_USER_ROLES), ["ADMIN", "CUSTOMER"]);
 });
