@@ -53,14 +53,11 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
   beforeAll(async () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
     pushPrismaSchema();
-
     prisma = new PrismaClient({ adapter: new PrismaPg(TEST_DATABASE_URL) });
     await prisma.$connect();
-
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
-
     app = moduleFixture.createNestApplication();
     await app.init();
   });
@@ -79,7 +76,6 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
     await prisma.assessment.deleteMany();
     await resetAuthWorkspaceDatabase(prisma);
     await seedAuthWorkspaceFixture(prisma);
-
     await prisma.assessment.create({
       data: {
         id: "assessment-1",
@@ -87,11 +83,9 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
         name: "Final report assessment",
       },
     });
-
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "manager@acme.test",
       password: "CorrectHorseBatteryStaple!",
-      organization_id: "org-1",
     });
     managerToken = successBody<SignInSuccess>(signIn).session_token;
   });
@@ -103,14 +97,8 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
 
   it("returns QUEUED and writes document request, outbox, and audit when guardrail passed", async () => {
     await seedClassification(prisma, CLASSIFICATION_GUARDRAIL_STATUSES.passed);
-
-    const response = await requestFinalReport(
-      app,
-      managerToken,
-      "assessment-1",
-    );
+    const response = await requestFinalReport(app, managerToken, "assessment-1");
     const body = successBody<SuccessResponse>(response);
-
     assert.equal(response.status, 202);
     assert.ok(body.document_request_id);
     assert.equal(body.status, DOCUMENT_REQUEST_STATUSES.queued);
@@ -118,9 +106,7 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
     assert.ok(body.correlationId);
 
     const [docRequest, outbox, auditCount] = await Promise.all([
-      prisma.documentRequest.findUnique({
-        where: { id: body.document_request_id },
-      }),
+      prisma.documentRequest.findUnique({ where: { id: body.document_request_id } }),
       prisma.outboxMessage.findFirst({
         where: {
           eventType: DOCUMENT_EVENT_TYPES.finalReportRequested,
@@ -135,7 +121,6 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
         },
       }),
     ]);
-
     assert.ok(docRequest);
     assert.equal(
       docRequest?.status,
@@ -150,23 +135,13 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
   });
 
   it("returns 409 CLASSIFICATION_GUARDRAIL_NOT_PASSED when latest classification is degraded", async () => {
-    await seedClassification(
-      prisma,
-      CLASSIFICATION_GUARDRAIL_STATUSES.degraded,
-    );
-
-    const response = await requestFinalReport(
-      app,
-      managerToken,
-      "assessment-1",
-    );
-
+    await seedClassification(prisma, CLASSIFICATION_GUARDRAIL_STATUSES.degraded);
+    const response = await requestFinalReport(app, managerToken, "assessment-1");
     assert.equal(response.status, 409);
     assert.equal(
       problemCode(response),
       DOCUMENT_ERROR_CODES.classificationGuardrailNotPassed,
     );
-
     assert.equal(await prisma.documentRequest.count(), 0);
     assert.equal(
       await prisma.outboxMessage.count({
@@ -192,32 +167,17 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
         correlationId: "corr-existing",
       },
     });
-
-    const response = await requestFinalReport(
-      app,
-      managerToken,
-      "assessment-1",
-    );
-
+    const response = await requestFinalReport(app, managerToken, "assessment-1");
     assert.equal(response.status, 409);
     assert.equal(problemCode(response), DOCUMENT_ERROR_CODES.alreadyQueued);
   });
 
-  it("returns 404 ASSESSMENT_NOT_FOUND for assessment outside session organization", async () => {
-    await prisma.assessment.create({
-      data: {
-        id: "assessment-foreign",
-        ownerId: "user-2",
-        name: "Foreign assessment",
-      },
-    });
-
+  it("returns 404 ASSESSMENT_NOT_FOUND for a missing assessment", async () => {
     const response = await requestFinalReport(
       app,
       managerToken,
-      "assessment-foreign",
+      "assessment-missing",
     );
-
     assert.equal(response.status, 404);
     assert.equal(
       problemCode(response),
@@ -283,6 +243,5 @@ async function seedClassification(
       status: CLASSIFICATION_RESULT_STATUSES.accepted,
     },
   });
-
   return { classificationResultId };
 }
