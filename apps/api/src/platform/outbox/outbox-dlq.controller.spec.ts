@@ -55,11 +55,7 @@ describe("OutboxDlqController", () => {
       } as ControllerRequest;
       const result = await controller.replayMessage("1", req);
 
-      expect(replayMessage).toHaveBeenCalledWith(
-        "1",
-        "user-123",
-        "corr-1",
-      );
+      expect(replayMessage).toHaveBeenCalledWith("1", "user-123", "corr-1");
       expect(result).toEqual({
         ok: true,
         data: {
@@ -78,11 +74,7 @@ describe("OutboxDlqController", () => {
       } as ControllerRequest;
       const result = await controller.deleteMessage("1", req);
 
-      expect(deleteMessage).toHaveBeenCalledWith(
-        "1",
-        "user-123",
-        "corr-2",
-      );
+      expect(deleteMessage).toHaveBeenCalledWith("1", "user-123", "corr-2");
       expect(result).toEqual({
         ok: true,
         data: {

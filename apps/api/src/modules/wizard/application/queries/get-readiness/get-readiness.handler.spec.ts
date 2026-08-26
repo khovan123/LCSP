@@ -62,15 +62,10 @@ describe("GetReadinessHandler", () => {
     handler = module.get<GetReadinessHandler>(GetReadinessHandler);
   });
 
-  const query = new GetReadinessQuery(
-    "assessment-123",
-    "user-1",
-    "corr-1",
-    {
-      subjectRole: AUTH_USER_ROLES.customer,
-      selectedAction: RBAC_ACTIONS.assessmentRead,
-    },
-  );
+  const query = new GetReadinessQuery("assessment-123", "user-1", "corr-1", {
+    subjectRole: AUTH_USER_ROLES.customer,
+    selectedAction: RBAC_ACTIONS.assessmentRead,
+  });
 
   it("T07: Assessment not owned by caller -> 404 ASSESSMENT_NOT_FOUND", async () => {
     prismaService.assessment.findFirst.mockResolvedValue(null);
