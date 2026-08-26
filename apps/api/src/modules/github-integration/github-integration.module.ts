@@ -95,21 +95,16 @@ import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
         let gitlabProvider: RepositoryProviderAdapter;
         if (!gitlab.enabled) {
           gitlabProvider = {
-            validateIdentity: async () => {
-              throw new Error("gitlab_cli_unavailable");
-            },
-            listAccessibleRepositories: async () => {
-              throw new Error("gitlab_cli_unavailable");
-            },
-            validateRepositoryAccess: async () => {
-              throw new Error("gitlab_cli_unavailable");
-            },
-            resolveCommit: async () => {
-              throw new Error("gitlab_cli_unavailable");
-            },
-            downloadArchive: async () => {
-              throw new Error("gitlab_cli_unavailable");
-            },
+            validateIdentity: () =>
+              Promise.reject(new Error("gitlab_cli_unavailable")),
+            listAccessibleRepositories: () =>
+              Promise.reject(new Error("gitlab_cli_unavailable")),
+            validateRepositoryAccess: () =>
+              Promise.reject(new Error("gitlab_cli_unavailable")),
+            resolveCommit: () =>
+              Promise.reject(new Error("gitlab_cli_unavailable")),
+            downloadArchive: () =>
+              Promise.reject(new Error("gitlab_cli_unavailable")),
           };
         } else {
           assertGitLabCliRuntime(gitlab.executablePath);

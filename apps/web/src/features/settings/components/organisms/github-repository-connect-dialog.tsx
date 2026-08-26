@@ -41,14 +41,12 @@ import {
 
 type GitHubRepositoryConnectDialogProps = {
   open: boolean;
-  assessmentId?: string;
   onOpenChange: (open: boolean) => void;
   onConnected: () => void;
 };
 
 export function GitHubRepositoryConnectDialog({
   open,
-  assessmentId,
   onOpenChange,
   onConnected,
 }: GitHubRepositoryConnectDialogProps) {
@@ -56,7 +54,6 @@ export function GitHubRepositoryConnectDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {open ? (
         <GitHubRepositoryConnectDialogContent
-          assessmentId={assessmentId}
           onOpenChange={onOpenChange}
           onConnected={onConnected}
         />
@@ -66,7 +63,6 @@ export function GitHubRepositoryConnectDialog({
 }
 
 function GitHubRepositoryConnectDialogContent({
-  assessmentId,
   onOpenChange,
   onConnected,
 }: Omit<GitHubRepositoryConnectDialogProps, "open">) {

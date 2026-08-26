@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { describe, expect, it } from "@jest/globals";
 import { GITHUB_ARCHIVE_REDIRECT_VALIDATION_STATUSES } from "@lcsp/contracts/github-integration";
 

@@ -7,13 +7,13 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Readable } from "node:stream";
-import { RepositoryAuthenticationMode } from "@prisma/client";
-
 import {
-  REPOSITORY_CONNECTION_STATUSES,
-  REPOSITORY_SCAN_JOB_STATUSES,
-  REPOSITORY_SNAPSHOT_STATUSES,
-} from "@lcsp/contracts/github-integration";
+  RepositoryScanJobStatus,
+  RepositoryConnectionStatus,
+  RepositoryAuthenticationMode,
+} from "@prisma/client";
+
+import { REPOSITORY_SNAPSHOT_STATUSES } from "@lcsp/contracts/github-integration";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import {
@@ -28,9 +28,6 @@ import type {
 } from "../../../infrastructure/github/snapshot-archive-cache.js";
 import { StreamSnapshotArchiveHandler } from "./stream-snapshot-archive.handler.js";
 import { StreamSnapshotArchiveQuery } from "./stream-snapshot-archive.query.js";
-
-type RepositoryScanJobStatus =
-  (typeof REPOSITORY_SCAN_JOB_STATUSES)[keyof typeof REPOSITORY_SCAN_JOB_STATUSES];
 
 type ScanJobFixture = {
   id: string;
@@ -240,7 +237,7 @@ describe("StreamSnapshotArchiveHandler", () => {
     const { handler, claimScanJobMock } = buildHandler({
       scanJob: {
         ...scanJob,
-        status: REPOSITORY_SCAN_JOB_STATUSES.completed,
+        status: RepositoryScanJobStatus.COMPLETED,
       },
     });
 

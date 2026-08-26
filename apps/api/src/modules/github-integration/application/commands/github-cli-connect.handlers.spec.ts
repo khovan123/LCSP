@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, jest } from "@jest/globals";
 import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
 import {

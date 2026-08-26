@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { describe, expect, it, jest } from "@jest/globals";
 
 import { CredentialLease } from "../../application/security/credential-lease.js";

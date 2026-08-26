@@ -28,6 +28,7 @@ import {
 } from "../../ports/security/active-provider-credential.resolver.js";
 import {
   REPOSITORY_PROVIDER_REGISTRY,
+  type GitHubRepositoryMetadata,
   type RepositoryProviderRegistry,
 } from "../../ports/github-repository-provider.port.js";
 import {
@@ -119,7 +120,7 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
     });
     try {
       const adapter = this.providers.get(provider);
-      let repository;
+      let repository: GitHubRepositoryMetadata;
       try {
         repository = await adapter.validateRepositoryAccess(
           lease,

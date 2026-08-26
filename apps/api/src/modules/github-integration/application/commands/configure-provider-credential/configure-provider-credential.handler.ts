@@ -14,6 +14,7 @@ import { PrismaCredentialPersistenceUnitOfWork } from "../../../infrastructure/p
 import {
   GITHUB_REPOSITORY_PROVIDER,
   REPOSITORY_PROVIDER_REGISTRY,
+  type GitHubIdentity,
   type GitHubRepositoryProviderPort,
   type RepositoryProviderRegistry,
 } from "../../ports/github-repository-provider.port.js";
@@ -71,7 +72,7 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
       expiresAt: new Date(Date.now() + 2 * 60_000),
     });
     try {
-      let identity;
+      let identity: GitHubIdentity;
       try {
         identity = await provider.validateIdentity(lease);
       } catch (error: unknown) {

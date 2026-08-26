@@ -27,7 +27,6 @@ import {
   useUpdateProfileMutation,
 } from "@/lib/api/auth-queries";
 import { useProviderCredentialStatusesQuery } from "@/lib/api/github-repository-queries";
-import { runSensitiveRouteAction } from "@/lib/api/sensitive-route-action";
 import {
   API_OUTCOME_KINDS,
   API_REDIRECT_LOCATIONS,
@@ -53,7 +52,6 @@ import type {
   RecoveryEmailFormValues,
   SettingsAlertMessage,
 } from "../../types/settings-page.types";
-import { GITHUB_CONNECTION_STATUSES } from "../../types/settings-page.types";
 import { isSettingsSectionId } from "../../utils/settings-page.utils";
 
 const SETTINGS_SENSITIVE_ACTIONS = {
@@ -110,12 +108,6 @@ export function SettingsPage() {
   const searchParams = useSearchParams();
   const requestedSection = searchParams.get("section");
   const oauthLinkStatus = searchParams.get("oauth_link");
-  const githubConnectionParam = searchParams.get("github_connection");
-  const githubConnectionStatus =
-    githubConnectionParam === GITHUB_CONNECTION_STATUSES.success ||
-    githubConnectionParam === GITHUB_CONNECTION_STATUSES.failed
-      ? githubConnectionParam
-      : null;
   const activeSection = isSettingsSectionId(requestedSection)
     ? requestedSection
     : SETTINGS_SECTION_IDS.passwordAndAuthentication;
@@ -351,47 +343,6 @@ export function SettingsPage() {
       : "/api/github/app/start";
 
     window.location.href = startUrl;
-  }
-
-  async function confirmSensitiveRouteBeforeRedirect(
-    path: string,
-    action: SettingsSensitiveAction,
-  ) {
-    await runSensitiveRouteAction({
-      method: "GET",
-      path,
-      onReauthRequired: () => {
-        openSensitiveAction(action);
-      },
-      onAllowed: async () => {
-        await executeSensitiveAction(action);
-      },
-    });
-  }
-
-  function handleConnectGitHubRepository() {
-    void runSensitiveRouteAction({
-      method: "POST",
-      path: "/api/github/repository-connections",
-      onReauthRequired: () => {
-        openSensitiveAction({
-          kind: SETTINGS_SENSITIVE_ACTIONS.connectGitHubRepository,
-        });
-      },
-      onAllowed: () => {
-        setGitHubConnectOpen(true);
-      },
-    });
-  }
-
-  function handleManageGitHubInstallation(installationId: string) {
-    const startPath = `/api/github/app/start?installation_id=${encodeURIComponent(
-      installationId,
-    )}`;
-    void confirmSensitiveRouteBeforeRedirect(startPath, {
-      kind: SETTINGS_SENSITIVE_ACTIONS.manageGitHubInstallation,
-      installationId,
-    });
   }
 
   async function executeSensitiveAction(
@@ -765,7 +716,6 @@ export function SettingsPage() {
               />
               <GitHubRepositoryConnectDialog
                 open={githubConnectOpen}
-                assessmentId={searchParams.get("assessment_id") ?? undefined}
                 onOpenChange={setGitHubConnectOpen}
                 onConnected={() => undefined}
               />

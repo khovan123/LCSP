@@ -291,6 +291,12 @@ describe("config()", () => {
         maxConcurrentMetadataProcesses: 8,
         maxConcurrentArchiveProcesses: 2,
       },
+      gitlabCli: {
+        executablePath: "",
+        timeoutMs: 30000,
+        maxJsonOutputBytes: 1048576,
+        enabled: false,
+      },
       rabbitmq: {
         url: VALID_ENV.RABBITMQ_URL,
         exchange: VALID_ENV.RABBITMQ_EXCHANGE,

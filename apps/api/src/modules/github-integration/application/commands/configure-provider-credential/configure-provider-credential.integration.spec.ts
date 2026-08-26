@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await */
 import { PrismaPg } from "@prisma/adapter-pg";
 import {
   CredentialProvider,

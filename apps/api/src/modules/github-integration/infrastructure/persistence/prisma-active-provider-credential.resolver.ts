@@ -3,10 +3,9 @@ import { CredentialProvider, ProviderCredentialStatus } from "@prisma/client";
 import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
-import {
-  ACTIVE_PROVIDER_CREDENTIAL_RESOLVER,
-  type ActiveProviderCredentialMetadata,
-  type ActiveProviderCredentialResolver,
+import type {
+  ActiveProviderCredentialMetadata,
+  ActiveProviderCredentialResolver,
 } from "../../application/ports/security/active-provider-credential.resolver.js";
 import {
   CREDENTIAL_STORE,

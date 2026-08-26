@@ -10,7 +10,6 @@ import {
   UnprocessableEntityException,
 } from "@nestjs/common";
 import {
-  AUTH_ERROR_CODES,
   PROBLEM_DEFAULTS,
   PROBLEM_KEYS,
   REQUIRED_ACTIONS,

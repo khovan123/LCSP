@@ -9,7 +9,6 @@ import {
 } from "@lcsp/contracts/github-integration";
 
 import type {
-  GitHubArchiveStream,
   GitHubIdentity,
   GitHubRepositoryMetadata,
   GitHubRepositoryPagePolicy,
@@ -136,9 +135,11 @@ export class GitLabCliRepositoryProvider implements GitHubRepositoryProviderPort
     };
   }
 
-  async downloadArchive(): Promise<GitHubArchiveStream> {
-    throw new GitLabCliProviderError(
-      GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+  downloadArchive(): Promise<never> {
+    return Promise.reject(
+      new GitLabCliProviderError(
+        GITHUB_CREDENTIAL_ERROR_CODES.providerClientUnavailable,
+      ),
     );
   }
 
@@ -285,6 +286,7 @@ function validateProjectPath(value: string): string {
 }
 
 function validateRevision(value: string): string {
+  // eslint-disable-next-line no-control-regex
   if (!value || value.length > 256 || /[\u0000-\u001f]/u.test(value)) {
     throw new GitLabCliProviderError(
       GITHUB_CREDENTIAL_ERROR_CODES.providerResponseInvalid,

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
 import { PrismaPg } from "@prisma/adapter-pg";
 import {
   AssessmentStatus,

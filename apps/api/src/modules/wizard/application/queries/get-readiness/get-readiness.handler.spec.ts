@@ -27,6 +27,7 @@ describe("GetReadinessHandler", () => {
     prismaService = {
       assessment: { findFirst: jest.fn() },
       wizardProfile: { findUnique: jest.fn() },
+      repositoryConnection: { findFirst: jest.fn() },
       repositorySnapshot: { findFirst: jest.fn() },
       technicalEvidenceReport: { findFirst: jest.fn() },
     } as unknown as jest.Mocked<PrismaService>;
@@ -76,6 +77,9 @@ describe("GetReadinessHandler", () => {
     prismaService.repositorySnapshot.findFirst.mockResolvedValue({
       id: "snapshot-1",
     } as RepositorySnapshot);
+    prismaService.repositoryConnection.findFirst.mockResolvedValue({
+      id: "connection-1",
+    } as never);
     prismaService.technicalEvidenceReport.findFirst.mockResolvedValue(null);
 
     const result = await handler.execute(query);

@@ -2,7 +2,7 @@
 import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 import { resolveMessage } from "@lcsp/i18n";
 import React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { KeyRoundIcon } from "lucide-react";
 import { SectionHeading } from "@/components/molecules/section-heading";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,6 @@ export function RepositoriesSettingsSection({
     () => providerCredentialStatuses.find((item) => item.provider === provider),
     [providerCredentialStatuses, provider],
   );
-  useEffect(() => setCredential(""), [provider]);
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!credential.trim() || mutation.isPending) return;
@@ -100,7 +99,10 @@ export function RepositoriesSettingsSection({
                 id="repository-provider"
                 value={provider}
                 onChange={(event) =>
-                  setProvider(event.target.value as typeof provider)
+                  (() => {
+                    setProvider(event.target.value as typeof provider);
+                    setCredential("");
+                  })()
                 }
               >
                 <option value={CREDENTIAL_PROVIDERS.github}>GitHub</option>
