@@ -1,6 +1,6 @@
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { HttpException } from "@nestjs/common";
 import { jest } from "@jest/globals";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { QueryBus } from "@nestjs/cqrs";
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
@@ -13,12 +13,8 @@ function request(): AuthenticatedRequest {
     rbacContext: {
       userId: "user-1",
       sessionId: "session-1",
-      subjectRole: "Manager",
-      scope: null,
-      grantedActions: [RBAC_ACTIONS.legalCitationValidate],
-      selectedAction: RBAC_ACTIONS.legalCitationValidate,
-      policyId: "policy-1",
-      policyVersion: "1",
+      role: AUTH_USER_ROLES.customer,
+      scope: "assessment-1",
     },
   } as AuthenticatedRequest;
 }
