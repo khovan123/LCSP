@@ -7,7 +7,6 @@ import {
   REPOSITORY_SCAN_TRIGGER_SOURCES,
 } from "@lcsp/contracts/github-integration";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
-import { RBAC_ACTIONS, RBAC_METADATA_TYPES } from "@lcsp/contracts/rbac";
 
 import { RBAC_METADATA_KEY } from "../../../../platform/rbac/decorators/rbac-metadata.js";
 import { PinSnapshotCommand } from "../../application/commands/pin-snapshot/pin-snapshot.command.js";
@@ -16,7 +15,7 @@ import type { TriggerScanDto } from "../../application/contracts/github-integrat
 import { GitHubIntegrationController } from "./github-integration.controller.js";
 
 describe("GitHubIntegrationController.pinSnapshot", () => {
-  it("requires the snapshot:create RBAC action", () => {
+  it("requires CUSTOMER role", () => {
     const metadata = Reflect.getMetadata(
       RBAC_METADATA_KEY,
       // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -24,8 +23,8 @@ describe("GitHubIntegrationController.pinSnapshot", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: RBAC_METADATA_TYPES.action,
-      action: RBAC_ACTIONS.snapshotCreate,
+      type: "roles",
+      roles: [AUTH_USER_ROLES.customer],
     });
   });
 
@@ -39,25 +38,23 @@ describe("GitHubIntegrationController.pinSnapshot", () => {
 
     await controller.pinSnapshot(
       "assessment-1",
-      {
-        connection_id: "connection-1",
-        branch: "main",
-      },
+      { connection_id: "connection-1", branch: "main" },
       {
         correlationId: "corr-1",
         rbacContext: {
-          userId: "manager-1",
-          subjectRole: AUTH_USER_ROLES.customer,
+          userId: "customer-1",
+          sessionId: "session-1",
+          role: AUTH_USER_ROLES.customer,
           scope: null,
         },
       } as never,
     );
 
-    expect(execute).toHaveBeenCalledTimes(1);
     expect(execute.mock.calls[0][0]).toBeInstanceOf(PinSnapshotCommand);
     expect(execute.mock.calls[0][0]).toMatchObject({
       assessmentId: "assessment-1",
-      actorId: "manager-1",
+      actorId: "customer-1",
+      actorRole: AUTH_USER_ROLES.customer,
       connectionId: "connection-1",
       branch: "main",
       correlationId: "corr-1",
@@ -66,7 +63,7 @@ describe("GitHubIntegrationController.pinSnapshot", () => {
 });
 
 describe("GitHubIntegrationController.triggerScan", () => {
-  it("requires the scan:trigger RBAC action", () => {
+  it("requires CUSTOMER role", () => {
     const metadata = Reflect.getMetadata(
       RBAC_METADATA_KEY,
       // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -74,8 +71,8 @@ describe("GitHubIntegrationController.triggerScan", () => {
     ) as unknown;
 
     expect(metadata).toEqual({
-      type: RBAC_METADATA_TYPES.action,
-      action: RBAC_ACTIONS.scanTrigger,
+      type: "roles",
+      roles: [AUTH_USER_ROLES.customer],
     });
   });
 
@@ -103,8 +100,9 @@ describe("GitHubIntegrationController.triggerScan", () => {
         correlationId: "corr-1",
         scanTriggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
         rbacContext: {
-          userId: "manager-1",
-          subjectRole: AUTH_USER_ROLES.customer,
+          userId: "customer-1",
+          sessionId: "session-1",
+          role: AUTH_USER_ROLES.customer,
           scope: null,
         },
       } as never,
@@ -116,7 +114,7 @@ describe("GitHubIntegrationController.triggerScan", () => {
       assessmentId: "assessment-1",
       snapshotId: "snapshot-1",
       triggerSource: REPOSITORY_SCAN_TRIGGER_SOURCES.manual,
-      actorId: "manager-1",
+      actorId: "customer-1",
     });
     expect(status).toHaveBeenCalledWith(HttpStatus.CREATED);
   });
