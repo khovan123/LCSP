@@ -59,15 +59,14 @@ export class RbacGuard implements CanActivate {
       createCorrelationId();
     request.correlationId = correlationId;
 
-    const action = requestMethodAndPath(request);
-    const resourceId = requestResourceId(request, action);
+    const requestKey = requestMethodAndPath(request);
+    const resourceId = requestResourceId(request, requestKey);
 
     if (!metadata) {
       await this.recordDecision({
         actorId: null,
         sessionId: null,
         resourceId,
-        action,
         decision: LOCAL_RBAC_DECISIONS.deny,
         reasonCode: LOCAL_RBAC_REASON_CODES.metadataMissing,
         correlationId,
@@ -82,7 +81,6 @@ export class RbacGuard implements CanActivate {
         actorId: null,
         sessionId: null,
         resourceId,
-        action,
         decision: LOCAL_RBAC_DECISIONS.deny,
         reasonCode: LOCAL_RBAC_REASON_CODES.sessionInvalid,
         correlationId,
@@ -105,7 +103,6 @@ export class RbacGuard implements CanActivate {
         actorId: null,
         sessionId: null,
         resourceId,
-        action,
         decision: LOCAL_RBAC_DECISIONS.deny,
         reasonCode: loaderResult.reason,
         correlationId,
@@ -125,7 +122,6 @@ export class RbacGuard implements CanActivate {
         required: requiresSensitiveReauth,
         session,
         resourceId,
-        action,
         correlationId,
       });
       request.rbacContext = {
@@ -133,14 +129,11 @@ export class RbacGuard implements CanActivate {
         sessionId: session.id,
         role: user.role,
         scope: resourceId,
-        grantedActions: [],
-        selectedAction: "session:verify",
       };
       await this.recordDecision({
         actorId: session.userId,
         sessionId: session.id,
         resourceId,
-        action,
         decision: LOCAL_RBAC_DECISIONS.allow,
         reasonCode: LOCAL_RBAC_REASON_CODES.authorized,
         correlationId,
@@ -157,7 +150,6 @@ export class RbacGuard implements CanActivate {
         actorId: session.userId,
         sessionId: session.id,
         resourceId,
-        action,
         decision: LOCAL_RBAC_DECISIONS.deny,
         reasonCode: LOCAL_RBAC_REASON_CODES.denied,
         correlationId,
@@ -169,7 +161,6 @@ export class RbacGuard implements CanActivate {
       required: requiresSensitiveReauth,
       session,
       resourceId,
-      action,
       correlationId,
     });
     request.rbacContext = {
@@ -177,14 +168,11 @@ export class RbacGuard implements CanActivate {
       sessionId: session.id,
       role: user.role,
       scope: resourceId,
-      grantedActions: [],
-      selectedAction: action,
     };
     await this.recordDecision({
       actorId: session.userId,
       sessionId: session.id,
       resourceId,
-      action,
       decision: LOCAL_RBAC_DECISIONS.allow,
       reasonCode: LOCAL_RBAC_REASON_CODES.authorized,
       correlationId,
@@ -208,7 +196,6 @@ export class RbacGuard implements CanActivate {
       sensitiveActionVerifiedAt: number | null;
     };
     resourceId: string;
-    action: string;
     correlationId: string;
   }): Promise<void> {
     if (
@@ -225,7 +212,6 @@ export class RbacGuard implements CanActivate {
       actorId: input.session.userId,
       sessionId: input.session.id,
       resourceId: input.resourceId,
-      action: input.action,
       decision: LOCAL_RBAC_DECISIONS.deny,
       reasonCode: AUTH_ERROR_CODES.reauthRequired,
       correlationId: input.correlationId,
@@ -274,7 +260,6 @@ export class RbacGuard implements CanActivate {
     actorId: string | null;
     sessionId: string | null;
     resourceId: string;
-    action: string;
     decision: (typeof LOCAL_RBAC_DECISIONS)[keyof typeof LOCAL_RBAC_DECISIONS];
     reasonCode:
       | AuthErrorCode
@@ -287,14 +272,13 @@ export class RbacGuard implements CanActivate {
         session_id: input.sessionId,
         resource_type: DECISION_LOG_RESOURCE_TYPE,
         resource_id: input.resourceId,
-        action: input.action,
         decision: input.decision,
         reason_code: input.reasonCode,
         correlationId: input.correlationId,
       });
     } catch (error) {
       this.logger.error(
-        `Failed to write AuthDecisionLog (action=${input.action}, decision=${input.decision}): ${(error as Error).message}`,
+        `Failed to write AuthDecisionLog (decision=${input.decision}): ${(error as Error).message}`,
       );
     }
   }
@@ -323,7 +307,7 @@ function requestMethodAndPath(request: AuthenticatedRequest): string {
 
 function requestResourceId(
   request: AuthenticatedRequest,
-  fallbackAction: string,
+  fallbackRequestKey: string,
 ): string {
   const params = request.params;
   const assessmentId = readStringAttribute(params.assessmentId);
@@ -335,5 +319,5 @@ function requestResourceId(
   if (assessmentId) return `assessment:${assessmentId}`;
   if (userId) return `user:${userId}`;
 
-  return fallbackAction;
+  return fallbackRequestKey;
 }
