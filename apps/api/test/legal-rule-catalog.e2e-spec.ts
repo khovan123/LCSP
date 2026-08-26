@@ -169,7 +169,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
       assert.equal(body.legalRuleId, "RULE-TEST-001");
       assert.equal(body.status, "DRAFT");
     });
-
   });
 
   describe("legal corpus ingest and approval", () => {
@@ -675,7 +674,6 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
         LEGAL_RULE_LIFECYCLE_STATUSES.approved,
       );
     });
-
   });
 });
 

@@ -340,10 +340,7 @@ async function seedConflicts(
   });
 }
 
-async function signIn(
-  app: INestApplication,
-  email: string,
-): Promise<string> {
+async function signIn(app: INestApplication, email: string): Promise<string> {
   const password =
     email === "system-admin-resolve@acme.test"
       ? "SystemAdminResolve123!"

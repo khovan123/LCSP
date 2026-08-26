@@ -225,7 +225,6 @@ describe("Request Final Report Endpoint (e2e) [LCSP-81]", () => {
       DOCUMENT_ERROR_CODES.assessmentNotFound,
     );
   });
-
 });
 
 function requestFinalReport(

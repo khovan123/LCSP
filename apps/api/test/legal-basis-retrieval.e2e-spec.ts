@@ -142,7 +142,6 @@ describe("Legal basis retrieval endpoint (e2e)", () => {
     assert.equal(data.limitations[0]?.code, "NO_EFFECTIVE_CHUNK_FOR_SELECTOR");
     assert.deepEqual(data.result.citations, []);
   });
-
 });
 
 async function seedReadyCorpus(prisma: PrismaClient): Promise<void> {

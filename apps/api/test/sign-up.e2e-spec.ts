@@ -1,7 +1,5 @@
 import { SIGN_UP_ERROR_CODES } from "@lcsp/contracts/auth";
-import {
-  AUTH_USER_ROLES,
-} from "@lcsp/contracts/auth";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import * as assert from "node:assert/strict";
 
 import type { INestApplication } from "@nestjs/common";
