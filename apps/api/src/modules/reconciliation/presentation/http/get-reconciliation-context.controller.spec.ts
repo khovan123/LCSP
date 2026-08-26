@@ -50,7 +50,6 @@ describe("ReconciliationController.getReconciliationContext", () => {
     expect(queryBus.execute).toHaveBeenCalledWith(
       new GetReconciliationContextQuery(
         "assessment-1",
-        "org-1",
         "corr-1",
         "flow-1",
         ["conflict-1", "conflict-2"],
