@@ -1,7 +1,7 @@
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { HttpException } from "@nestjs/common";
 import { jest } from "@jest/globals";
 import type { QueryBus } from "@nestjs/cqrs";
-import { RBAC_ACTIONS } from "@lcsp/contracts/rbac";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
 import { GetAdminSourceCatalogQuery } from "../../application/queries/get-admin-source-catalog/get-admin-source-catalog.query.js";
@@ -13,12 +13,8 @@ function request(): AuthenticatedRequest {
     rbacContext: {
       userId: "user-1",
       sessionId: "session-1",
-      subjectRole: "Manager",
-      scope: null,
-      grantedActions: [RBAC_ACTIONS.legalCorpusRead],
-      selectedAction: RBAC_ACTIONS.legalCorpusRead,
-      policyId: "policy-1",
-      policyVersion: "1",
+      role: AUTH_USER_ROLES.customer,
+      scope: "assessment-1",
     },
   } as AuthenticatedRequest;
 }
