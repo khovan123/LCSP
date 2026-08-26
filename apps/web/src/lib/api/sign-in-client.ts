@@ -26,6 +26,7 @@ export function toSafeSignInOutcome(
   status: number,
   problemCode?: string,
 ): SafeSignInOutcome {
+  // Server failures are operational errors, not evidence of invalid credentials.
   if (!ok && status >= SERVER_ERROR_STATUS) {
     return {
       kind: API_OUTCOME_KINDS.error,
