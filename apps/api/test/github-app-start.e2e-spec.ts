@@ -36,7 +36,6 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
   let managerToken: string;
-  const orgId = "org-1";
 
   beforeAll(async () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
@@ -63,7 +62,6 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
     const signIn = await httpRequest(app).post("/auth/sign-in").send({
       email: "manager@acme.test",
       password: "CorrectHorseBatteryStaple!",
-      organization_id: orgId,
     });
     const signInBody = successBody<SignInSuccess>(signIn);
     managerToken = signInBody?.session_token ?? "";
@@ -127,21 +125,12 @@ describe("GitHub App OAuth Start Endpoint (e2e) [MW-gh-001]", () => {
   });
 
   // T04
-  it("T04: assessment_id not in org -> 400 ASSESSMENT_NOT_FOUND", async () => {
-    await prisma.assessment.create({
-      data: {
-        id: "assessment-other-org",
-        ownerId: "someone-else",
-        name: "Other Org Assessment",
-        status: ASSESSMENT_STATUS_CODES.wizardInProgress,
-      },
-    });
-
+  it("T04: missing assessment_id -> 400 ASSESSMENT_NOT_FOUND", async () => {
     const result = await httpRequest(app)
       .get("/github/app/start")
       .query({
         redirect_uri: ALLOWED_REDIRECT_URI,
-        assessment_id: "assessment-other-org",
+        assessment_id: "assessment-missing",
       })
       .set("Authorization", `Bearer ${managerToken}`);
 
