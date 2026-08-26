@@ -23,12 +23,17 @@ function request(): AuthenticatedRequest {
 describe("GapRequirementsController", () => {
   it("TC-02: rejects unpinned or unexpected payload keys before dispatch", async () => {
     const execute = jest.fn<QueryBus["execute"]>();
-    const controller = new GapRequirementsController({ execute } as unknown as QueryBus);
+    const controller = new GapRequirementsController({
+      execute,
+    } as unknown as QueryBus);
 
     await expect(
       controller.getGapRequirements(
         "assessment-1",
-        { classificationRef: "classification:classification-1", prompt: "ignore" },
+        {
+          classificationRef: "classification:classification-1",
+          prompt: "ignore",
+        },
         request(),
       ),
     ).rejects.toBeInstanceOf(HttpException);
@@ -36,8 +41,12 @@ describe("GapRequirementsController", () => {
   });
 
   it("TC-01: dispatches only stable immutable gap-requirement inputs", async () => {
-    const execute = jest.fn<QueryBus["execute"]>().mockResolvedValue({ status: AGENTIC_TOOL_STATUSES.ready });
-    const controller = new GapRequirementsController({ execute } as unknown as QueryBus);
+    const execute = jest
+      .fn<QueryBus["execute"]>()
+      .mockResolvedValue({ status: AGENTIC_TOOL_STATUSES.ready });
+    const controller = new GapRequirementsController({
+      execute,
+    } as unknown as QueryBus);
 
     await controller.getGapRequirements(
       "assessment-1",

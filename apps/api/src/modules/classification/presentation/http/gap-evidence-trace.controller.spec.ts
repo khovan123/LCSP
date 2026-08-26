@@ -22,7 +22,9 @@ function request(): AuthenticatedRequest {
 describe("GapEvidenceTraceController", () => {
   it("TC-02: rejects unexpected payload keys before dispatch", async () => {
     const execute = jest.fn<QueryBus["execute"]>();
-    const controller = new GapEvidenceTraceController({ execute } as unknown as QueryBus);
+    const controller = new GapEvidenceTraceController({
+      execute,
+    } as unknown as QueryBus);
 
     await expect(
       controller.getGapEvidenceTrace(
@@ -35,8 +37,12 @@ describe("GapEvidenceTraceController", () => {
   });
 
   it("TC-01: dispatches only stable gap row inputs", async () => {
-    const execute = jest.fn<QueryBus["execute"]>().mockResolvedValue({ status: "READY" });
-    const controller = new GapEvidenceTraceController({ execute } as unknown as QueryBus);
+    const execute = jest
+      .fn<QueryBus["execute"]>()
+      .mockResolvedValue({ status: "READY" });
+    const controller = new GapEvidenceTraceController({
+      execute,
+    } as unknown as QueryBus);
 
     await controller.getGapEvidenceTrace(
       "assessment-1",

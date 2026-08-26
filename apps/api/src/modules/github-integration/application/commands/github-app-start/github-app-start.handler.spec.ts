@@ -21,11 +21,17 @@ function buildHandler(options?: {
   assessment?: { id: string } | null;
   repositoryConnection?: { assessmentId: string | null } | null;
 }) {
-  const save = jest.fn<GitHubAppInstallStateRepository["save"]>().mockResolvedValue(undefined);
+  const save = jest
+    .fn<GitHubAppInstallStateRepository["save"]>()
+    .mockResolvedValue(undefined);
   const installStateRepository = {
     save,
-    findByState: jest.fn<GitHubAppInstallStateRepository["findByState"]>().mockResolvedValue(null),
-    deleteById: jest.fn<GitHubAppInstallStateRepository["deleteById"]>().mockResolvedValue(undefined),
+    findByState: jest
+      .fn<GitHubAppInstallStateRepository["findByState"]>()
+      .mockResolvedValue(null),
+    deleteById: jest
+      .fn<GitHubAppInstallStateRepository["deleteById"]>()
+      .mockResolvedValue(undefined),
   } as GitHubAppInstallStateRepository;
   const buildInstallationUrl = jest
     .fn<GitHubAppClient["buildInstallationUrl"]>()
@@ -33,21 +39,33 @@ function buildHandler(options?: {
       (input) =>
         `https://github.com/apps/lcsp-app/installations/new?state=${input.state}&redirect_uri=${encodeURIComponent(input.redirectUri)}`,
     );
-  const githubAppClient = { buildInstallationUrl } as unknown as GitHubAppClient;
-  const write = jest.fn<AuditWriterService["write"]>().mockResolvedValue(undefined);
+  const githubAppClient = {
+    buildInstallationUrl,
+  } as unknown as GitHubAppClient;
+  const write = jest
+    .fn<AuditWriterService["write"]>()
+    .mockResolvedValue(undefined);
   const auditWriter = { write } as unknown as AuditWriterService;
   const configService = {
-    get: jest.fn().mockImplementation((key: string) =>
-      key === "github.allowedRedirectUris" ? [ALLOWED_REDIRECT_URI] : undefined,
-    ),
+    get: jest
+      .fn()
+      .mockImplementation((key: string) =>
+        key === "github.allowedRedirectUris"
+          ? [ALLOWED_REDIRECT_URI]
+          : undefined,
+      ),
   } as unknown as ConfigService;
-  const findUnique = jest.fn<() => Promise<{ id: string } | null>>().mockResolvedValue(
-    options?.assessment === undefined ? null : options.assessment,
-  );
+  const findUnique = jest
+    .fn<() => Promise<{ id: string } | null>>()
+    .mockResolvedValue(
+      options?.assessment === undefined ? null : options.assessment,
+    );
   const findFirst = jest
     .fn<(args: unknown) => Promise<{ assessmentId: string | null } | null>>()
     .mockResolvedValue(
-      options?.repositoryConnection === undefined ? null : options.repositoryConnection,
+      options?.repositoryConnection === undefined
+        ? null
+        : options.repositoryConnection,
     );
   const prisma = {
     assessment: { findUnique },
@@ -83,7 +101,9 @@ describe("GitHubAppStartHandler", () => {
       ),
     );
 
-    expect(result.installation_url).toContain("https://github.com/apps/lcsp-app/installations/new");
+    expect(result.installation_url).toContain(
+      "https://github.com/apps/lcsp-app/installations/new",
+    );
     expect(result.correlationId).toBe("corr-1");
     expect(save).toHaveBeenCalledTimes(1);
     expect(buildInstallationUrl).toHaveBeenCalledTimes(1);
@@ -173,7 +193,9 @@ describe("GitHubAppStartHandler", () => {
 
     const savedState = save.mock.calls[0][0];
     const event = write.mock.calls[0][0];
-    expect(event.eventType).toBe(GITHUB_INTEGRATION_EVENT_TYPES.appInstallStarted);
+    expect(event.eventType).toBe(
+      GITHUB_INTEGRATION_EVENT_TYPES.appInstallStarted,
+    );
     expect(event.actorId).toBe("user-1");
     expect(event.correlationId).toBe("corr-1");
     expect(event.decision).toBe(AUDIT_DECISIONS.allow);

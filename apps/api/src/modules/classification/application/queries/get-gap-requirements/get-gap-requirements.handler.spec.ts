@@ -18,24 +18,31 @@ function createHandler(input?: {
 }) {
   const prisma = {
     assessment: {
-      findFirst: jest.fn<() => Promise<object | null>>().mockResolvedValue(
-        input?.assessment === undefined ? { id: "assessment-1" } : input.assessment,
-      ),
+      findFirst: jest
+        .fn<() => Promise<object | null>>()
+        .mockResolvedValue(
+          input?.assessment === undefined
+            ? { id: "assessment-1" }
+            : input.assessment,
+        ),
     },
     classificationResult: {
-      findFirst: jest.fn<() => Promise<object | null>>().mockResolvedValue(
-        input?.classification === undefined
-          ? acceptedClassification()
-          : input.classification,
-      ),
+      findFirst: jest
+        .fn<() => Promise<object | null>>()
+        .mockResolvedValue(
+          input?.classification === undefined
+            ? acceptedClassification()
+            : input.classification,
+        ),
     },
   } as unknown as PrismaService;
-  const write = jest.fn<AuditWriterService["write"]>().mockResolvedValue(undefined);
+  const write = jest
+    .fn<AuditWriterService["write"]>()
+    .mockResolvedValue(undefined);
   return {
-    handler: new GetGapRequirementsHandler(
-      prisma,
-      { write } as unknown as AuditWriterService,
-    ),
+    handler: new GetGapRequirementsHandler(prisma, {
+      write,
+    } as unknown as AuditWriterService),
     write,
   };
 }
@@ -157,7 +164,9 @@ describe("GetGapRequirementsHandler", () => {
 
   it("TC-05: reports deterministic-unavailable classifications as typed input", async () => {
     const { handler } = createHandler({
-      classification: acceptedClassification({ classificationData: { nested: true } }),
+      classification: acceptedClassification({
+        classificationData: { nested: true },
+      }),
     });
 
     const response = await handler.execute(query());
@@ -171,6 +180,8 @@ describe("GetGapRequirementsHandler", () => {
   it("TC-06: rejects inaccessible assessment before reading classification", async () => {
     const { handler } = createHandler({ assessment: null });
 
-    await expect(handler.execute(query())).rejects.toBeInstanceOf(HttpException);
+    await expect(handler.execute(query())).rejects.toBeInstanceOf(
+      HttpException,
+    );
   });
 });

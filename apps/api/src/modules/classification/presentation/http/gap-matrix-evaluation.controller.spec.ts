@@ -22,7 +22,9 @@ function request(): AuthenticatedRequest {
 describe("GapMatrixEvaluationController", () => {
   it("TC-02: rejects unexpected payload keys before dispatch", async () => {
     const execute = jest.fn<QueryBus["execute"]>();
-    const controller = new GapMatrixEvaluationController({ execute } as unknown as QueryBus);
+    const controller = new GapMatrixEvaluationController({
+      execute,
+    } as unknown as QueryBus);
 
     await expect(
       controller.evaluateGapMatrix(
@@ -39,8 +41,12 @@ describe("GapMatrixEvaluationController", () => {
   });
 
   it("TC-01: dispatches only stable gap-matrix inputs", async () => {
-    const execute = jest.fn<QueryBus["execute"]>().mockResolvedValue({ status: "READY" });
-    const controller = new GapMatrixEvaluationController({ execute } as unknown as QueryBus);
+    const execute = jest
+      .fn<QueryBus["execute"]>()
+      .mockResolvedValue({ status: "READY" });
+    const controller = new GapMatrixEvaluationController({
+      execute,
+    } as unknown as QueryBus);
 
     await controller.evaluateGapMatrix(
       "assessment-1",
