@@ -1,4 +1,3 @@
-import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import {
   AUDIT_ACTOR_TYPES,
   AUDIT_DECISIONS,
@@ -74,7 +73,6 @@ export class RerunClassificationHandler implements ICommandHandler<RerunClassifi
       },
       result: SCAN_EVENT_TYPES.classificationRerunTriggeredAudit,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
-      authorizationAction: RBAC_ACTIONS.classificationRun,
       idempotencyKey: `${evidenceReport.id}:${command.correlationId}:engineering-assessment-rerun`,
       payload: {
         evidenceReportId: evidenceReport.id,

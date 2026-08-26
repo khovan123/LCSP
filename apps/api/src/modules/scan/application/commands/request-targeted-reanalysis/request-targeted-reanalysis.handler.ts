@@ -1,4 +1,3 @@
-import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import { randomUUID } from "node:crypto";
 import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
@@ -250,7 +249,6 @@ export class RequestTargetedReanalysisHandler implements ICommandHandler<Request
           actor: { id: rbacContext.userId, type: AUDIT_ACTOR_TYPES.user },
           result: SCAN_EVENT_TYPES.targetedReanalysisQueuedAudit,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
-          authorizationAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
           idempotencyKey: input.idempotencyKey,
           payload: {
             requestId,

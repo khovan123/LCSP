@@ -1,4 +1,3 @@
-import { RBAC_ACTIONS } from "../../../../platform/rbac/rbac.constants.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -356,8 +355,6 @@ export class InternalScanController {
             sessionId: "worker-runtime",
             role: AUTH_USER_ROLES.customer,
             scope: body.assessmentId,
-            grantedActions: [RBAC_ACTIONS.technicalEvidenceReanalyze],
-            selectedAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
           },
           resolvedCorrelationId,
         ),

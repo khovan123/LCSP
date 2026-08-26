@@ -1,4 +1,3 @@
-import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import { HttpStatus } from "@nestjs/common";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { randomUUID } from "node:crypto";
@@ -210,7 +209,6 @@ export class RerunScanHandler implements ICommandHandler<RerunScanCommand> {
           actor: { id: rbac.userId, type: AUDIT_ACTOR_TYPES.user },
           result: SCAN_EVENT_TYPES.scanRerunTriggeredAudit,
           redactionStatus: AUDIT_REDACTION_STATUSES.none,
-          authorizationAction: RBAC_ACTIONS.scanTrigger,
           idempotencyKey: command.idempotencyKey,
           payload: {
             scanJobId: newScanJobId,

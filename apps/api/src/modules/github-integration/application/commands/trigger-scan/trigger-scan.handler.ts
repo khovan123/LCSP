@@ -1,4 +1,3 @@
-import { RBAC_ACTIONS } from "../../../../../platform/rbac/rbac.constants.js";
 import {
   BadRequestException,
   ConflictException,
@@ -217,7 +216,6 @@ export class TriggerScanHandler implements ICommandHandler<TriggerScanCommand> {
       },
       result: GITHUB_INTEGRATION_EVENT_TYPES.scanJobTriggeredAudit,
       redactionStatus: AUDIT_REDACTION_STATUSES.none,
-      authorizationAction: RBAC_ACTIONS.scanTrigger,
       idempotencyKey: job.idempotencyKey,
       payload: {
         scanJobId: job.id,

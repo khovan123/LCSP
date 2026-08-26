@@ -1,4 +1,3 @@
-import { RBAC_ACTIONS } from "../rbac/rbac.constants.js";
 import { Injectable, HttpStatus } from "@nestjs/common";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import { REPOSITORY_SCAN_JOB_STATUSES } from "@lcsp/contracts/github-integration";
@@ -89,7 +88,6 @@ export class OutboxDlqService {
         payload: {
           originalEventType: message.eventType,
           aggregateId: message.aggregateId,
-          replayAuthority: RBAC_ACTIONS.outboxReplay,
         },
       });
       throw error;
@@ -106,7 +104,6 @@ export class OutboxDlqService {
       payload: {
         originalEventType: message.eventType,
         aggregateId: message.aggregateId,
-        replayAuthority: "outbox:replay",
       },
     });
   }

@@ -130,7 +130,7 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
 
             try {
               await this.snapshotCreatedAutoScanService.handle(message);
-              const headers = authorizationHeaders(message.payload);
+              const headers = contextHeaders(message.payload);
               if (headers) {
                 await this.rabbitMqClient.publish(
                   exchange,
@@ -289,12 +289,12 @@ function retryAt(now: Date, attempts: number): Date {
 }
 
 /**
- * Extracts authorization context from an outbox payload for propagation through RabbitMQ headers.
+ * Extracts actor and correlation context from an outbox payload for RabbitMQ headers.
  *
- * @param payload - Event payload that may contain actor, action, and correlation context.
- * @returns RabbitMQ headers when all required authorization fields are present; otherwise undefined.
+ * @param payload - Event payload that may contain actor and correlation context.
+ * @returns RabbitMQ headers when all required context fields are present; otherwise undefined.
  */
-function authorizationHeaders(
+function contextHeaders(
   payload: Record<string, unknown>,
 ): RabbitMqMessageHeaders | undefined {
   const actor = payload.actor;
@@ -302,16 +302,14 @@ function authorizationHeaders(
     actor && typeof actor === "object"
       ? readString((actor as Record<string, unknown>).id)
       : undefined;
-  const action = readString(payload.authorizationAction);
   const correlationId = readString(payload.correlationId);
 
-  if (!actorId || !action || !correlationId) {
+  if (!actorId || !correlationId) {
     return undefined;
   }
 
   return {
     user_id: actorId,
-    action,
     "x-correlation-id": correlationId,
   };
 }

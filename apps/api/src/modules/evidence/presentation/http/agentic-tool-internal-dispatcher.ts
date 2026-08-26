@@ -1,4 +1,3 @@
-import { RBAC_ACTIONS } from "../../../../platform/rbac/rbac.constants.js";
 import {
   AGENTIC_TOOL_NAMES,
   EVIDENCE_ERROR_CODES,
@@ -86,8 +85,6 @@ export function request_targeted_reanalysis(
         sessionId: AGENT_RUNTIME_SESSION_ID,
         role: AUTH_USER_ROLES.customer,
         scope: args.assessmentId,
-        grantedActions: [RBAC_ACTIONS.technicalEvidenceReanalyze],
-        selectedAction: RBAC_ACTIONS.technicalEvidenceReanalyze,
       },
       args.correlationId,
     ),
