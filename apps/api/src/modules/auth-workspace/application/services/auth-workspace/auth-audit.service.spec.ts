@@ -1,12 +1,13 @@
+import { AUDIT_DECISIONS } from "@lcsp/contracts/audit";
 import { jest } from "@jest/globals";
 import {
   AUTH_AUDIT_EVENT_TYPES,
   AUTH_LEGACY_AUDIT_EVENT_TYPES,
 } from "@lcsp/contracts/auth";
-import { RBAC_DECISION, RBAC_REASON_CODE } from "@lcsp/contracts/rbac";
 import type { Prisma } from "@prisma/client";
 
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
+import { LOCAL_RBAC_REASON_CODES } from "../../../../../platform/rbac/rbac-reason-codes.js";
 import { AuthAuditService } from "./auth-audit.service.ts";
 
 function makeService(
@@ -28,14 +29,14 @@ function makeService(
 }
 
 describe("AuthAuditService", () => {
-  it("T01: write() with clean payload delegates a normalized event to the platform audit writer", async () => {
+  it("delegates a normalized event to the platform audit writer", async () => {
     const { service, write } = makeService();
 
     await service.write({
       eventType: AUTH_AUDIT_EVENT_TYPES.authSignInSuccess,
       actorId: "user-1",
       correlationId: "corr-1",
-      decision: RBAC_DECISION.allow,
+      decision: AUDIT_DECISIONS.allow,
       payload: { email_domain: "example.test" },
     });
 
@@ -47,12 +48,12 @@ describe("AuthAuditService", () => {
       reasonCode: null,
       correlationId: "corr-1",
       sessionId: null,
-      decision: RBAC_DECISION.allow,
+      decision: AUDIT_DECISIONS.allow,
       payload: { email_domain: "example.test" },
     });
   });
 
-  it("T02/T03/T04: strips sensitive password/token/secret/key/nonce/code/hash payload fields before writing", async () => {
+  it("strips sensitive payload fields before writing", async () => {
     const { service, write } = makeService();
     const warnSpy = jest.spyOn(
       Reflect.get(service, "logger") as { warn: (msg: string) => void },
@@ -63,7 +64,7 @@ describe("AuthAuditService", () => {
       eventType: AUTH_AUDIT_EVENT_TYPES.authMfaEnrolled,
       actorId: "user-1",
       correlationId: "corr-1",
-      decision: RBAC_DECISION.allow,
+      decision: AUDIT_DECISIONS.allow,
       payload: {
         password: "p",
         sessionToken: "t",
@@ -86,7 +87,7 @@ describe("AuthAuditService", () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("mfaSecret"));
   });
 
-  it("T05: writer failure is logged and rethrown so required audit is not silently dropped", async () => {
+  it("rethrows writer failures", async () => {
     const { service } = makeService({
       write: () => Promise.reject(new Error("db unavailable")),
     });
@@ -100,16 +101,15 @@ describe("AuthAuditService", () => {
         eventType: AUTH_AUDIT_EVENT_TYPES.authSignInFailed,
         actorId: null,
         correlationId: "corr-1",
-        decision: RBAC_DECISION.deny,
+        decision: AUDIT_DECISIONS.deny,
       }),
     ).rejects.toThrow("db unavailable");
-
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("db unavailable"),
     );
   });
 
-  it("T06: writeInTx() delegates through the platform transaction writer", async () => {
+  it("delegates transactional writes through the platform writer", async () => {
     const { service, write, writeInTx } = makeService();
     const tx = {} as Prisma.TransactionClient;
 
@@ -118,7 +118,7 @@ describe("AuthAuditService", () => {
         eventType: AUTH_AUDIT_EVENT_TYPES.authSessionRevoked,
         actorId: "manager-1",
         correlationId: "corr-1",
-        decision: RBAC_DECISION.allow,
+        decision: AUDIT_DECISIONS.allow,
       },
       tx,
     );
@@ -127,7 +127,7 @@ describe("AuthAuditService", () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  it("T07: all auth-workspace audit event types are accepted", async () => {
+  it("accepts all auth-workspace audit event types", async () => {
     const { service, write } = makeService();
     const eventTypes = Object.values(AUTH_AUDIT_EVENT_TYPES);
 
@@ -136,21 +136,21 @@ describe("AuthAuditService", () => {
         eventType,
         actorId: null,
         correlationId: "corr-1",
-        decision: RBAC_DECISION.allow,
+        decision: AUDIT_DECISIONS.allow,
       });
     }
 
     expect(write).toHaveBeenCalledTimes(eventTypes.length);
   });
 
-  it("T08: actorId can be null for unauthenticated events", async () => {
+  it("accepts null actors for unauthenticated events", async () => {
     const { service, write } = makeService();
 
     await service.write({
       eventType: AUTH_AUDIT_EVENT_TYPES.authSignInFailed,
       actorId: null,
       correlationId: "corr-1",
-      decision: RBAC_DECISION.deny,
+      decision: AUDIT_DECISIONS.deny,
     });
 
     expect(write).toHaveBeenCalledWith(
@@ -158,7 +158,7 @@ describe("AuthAuditService", () => {
     );
   });
 
-  it("normalizes legacy auth-workspace snake_case audit events and preserves legacy payload shape", async () => {
+  it("normalizes legacy snake_case audit events and preserves nonsensitive payload", async () => {
     const { service, write } = makeService();
     const warnSpy = jest.spyOn(
       Reflect.get(service, "logger") as { warn: (msg: string) => void },
@@ -168,9 +168,9 @@ describe("AuthAuditService", () => {
     await service.write({
       event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
       actor_id: "user-1",
-      decision: RBAC_DECISION.allow,
+      decision: AUDIT_DECISIONS.allow,
       correlationId: "corr-1",
-      reason_code: RBAC_REASON_CODE.authorized,
+      reason_code: LOCAL_RBAC_REASON_CODES.authorized,
       session_id: "session-1",
       session_token: "must-strip",
       email_domain: "example.test",
@@ -181,16 +181,16 @@ describe("AuthAuditService", () => {
       actorId: "user-1",
       resourceType: null,
       resourceId: null,
-      reasonCode: RBAC_REASON_CODE.authorized,
+      reasonCode: LOCAL_RBAC_REASON_CODES.authorized,
       correlationId: "corr-1",
       sessionId: "session-1",
-      decision: RBAC_DECISION.allow,
+      decision: AUDIT_DECISIONS.allow,
       payload: {
         event_type: AUTH_LEGACY_AUDIT_EVENT_TYPES.loginSucceeded,
         actor_id: "user-1",
-        decision: RBAC_DECISION.allow,
+        decision: AUDIT_DECISIONS.allow,
         correlationId: "corr-1",
-        reason_code: RBAC_REASON_CODE.authorized,
+        reason_code: LOCAL_RBAC_REASON_CODES.authorized,
         session_id: "session-1",
         email_domain: "example.test",
       },
