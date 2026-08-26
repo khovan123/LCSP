@@ -230,8 +230,6 @@ const PRISMA_AUTH_USER_ROLE_TO_CONTRACT = {
 } as const satisfies Record<PrismaAuthUserRole, AuthUserRole>;
 
 const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
-  [RBAC_REASON_CODE.actionNotGranted]:
-    PrismaAuthorizationReasonCode.ACTION_NOT_GRANTED,
   [AUTH_ERROR_CODES.accountNotFound]:
     PrismaAuthorizationReasonCode.ACCOUNT_NOT_FOUND,
   [RBAC_REASON_CODE.authorized]: PrismaAuthorizationReasonCode.AUTHORIZED,
@@ -242,8 +240,6 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
   [AUTH_ERROR_CODES.authRequired]: PrismaAuthorizationReasonCode.AUTH_REQUIRED,
   [AUTH_ERROR_CODES.emailVerificationRequired]:
     PrismaAuthorizationReasonCode.EMAIL_VERIFICATION_REQUIRED,
-  [RBAC_REASON_CODE.evaluatorError]:
-    PrismaAuthorizationReasonCode.EVALUATOR_ERROR,
   [AUTH_ERROR_CODES.invalidCredentials]:
     PrismaAuthorizationReasonCode.INVALID_CREDENTIALS,
   [AUTH_ERROR_CODES.invalidInviteState]:
@@ -268,10 +264,6 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
     PrismaAuthorizationReasonCode.RECOVERY_INVALID,
   [RBAC_REASON_CODE.sessionInvalid]:
     PrismaAuthorizationReasonCode.SESSION_INVALID,
-  [RBAC_REASON_CODE.stateGateFailed]:
-    PrismaAuthorizationReasonCode.STATE_GATE_FAILED,
-  [RBAC_REASON_CODE.subjectRoleMismatch]:
-    PrismaAuthorizationReasonCode.SUBJECT_ROLE_MISMATCH,
   [AUTH_ERROR_CODES.temporaryLock]:
     PrismaAuthorizationReasonCode.TEMPORARY_LOCKED,
   [AUTH_ERROR_CODES.unsupportedProvider]:
@@ -285,7 +277,7 @@ const AUTHORIZATION_REASON_CODE_TO_PRISMA = {
 
 const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
   [PrismaAuthorizationReasonCode.ACTION_NOT_GRANTED]:
-    RBAC_REASON_CODE.actionNotGranted,
+    RBAC_REASON_CODE.denied,
   [PrismaAuthorizationReasonCode.ACCOUNT_NOT_FOUND]:
     AUTH_ERROR_CODES.accountNotFound,
   [PrismaAuthorizationReasonCode.AUTHORIZED]: RBAC_REASON_CODE.authorized,
@@ -297,7 +289,7 @@ const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
   [PrismaAuthorizationReasonCode.EMAIL_VERIFICATION_REQUIRED]:
     AUTH_ERROR_CODES.emailVerificationRequired,
   [PrismaAuthorizationReasonCode.EVALUATOR_ERROR]:
-    RBAC_REASON_CODE.evaluatorError,
+    RBAC_REASON_CODE.loadError,
   [PrismaAuthorizationReasonCode.INVALID_CREDENTIALS]:
     AUTH_ERROR_CODES.invalidCredentials,
   [PrismaAuthorizationReasonCode.INVALID_INVITE_STATE]:
@@ -323,9 +315,9 @@ const PRISMA_AUTHORIZATION_REASON_CODE_TO_CONTRACT = {
   [PrismaAuthorizationReasonCode.SESSION_INVALID]:
     RBAC_REASON_CODE.sessionInvalid,
   [PrismaAuthorizationReasonCode.STATE_GATE_FAILED]:
-    RBAC_REASON_CODE.stateGateFailed,
+    RBAC_REASON_CODE.denied,
   [PrismaAuthorizationReasonCode.SUBJECT_ROLE_MISMATCH]:
-    RBAC_REASON_CODE.subjectRoleMismatch,
+    RBAC_REASON_CODE.denied,
   [PrismaAuthorizationReasonCode.TEMPORARY_LOCKED]:
     AUTH_ERROR_CODES.temporaryLock,
   [PrismaAuthorizationReasonCode.UNSUPPORTED_PROVIDER]:
