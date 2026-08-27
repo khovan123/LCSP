@@ -80,7 +80,7 @@ class LegalRuleTriageService:
             source_fingerprint: str | None = None
             triage_completed = False
             if ready_for_triage:
-                _, source_fingerprint = self.rule_service._context_and_fingerprint(
+                _, source_fingerprint = self.rule_service.resolve_source_identity(
                     legal_rule=rule,
                     legal_corpus_version_id=corpus_version_id,
                 )
