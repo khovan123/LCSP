@@ -40,11 +40,27 @@ def _api_client() -> MagicMock:
     return api
 
 
+def _rule_service() -> MagicMock:
+    service = MagicMock()
+
+    def resolve_source_identity(*, legal_rule, legal_corpus_version_id):
+        rule_id = str(legal_rule["legalRuleId"])
+        chunk_id = str(legal_rule["citationLocatorRefs"][0]["chunkId"])
+        return (
+            [{"id": chunk_id}],
+            f"sha256:{legal_corpus_version_id}:{rule_id}",
+        )
+
+    service.resolve_source_identity.side_effect = resolve_source_identity
+    return service
+
+
 def test_work_items_include_only_approved_rules_and_exact_chunks() -> None:
     service = LegalRuleTriageService(
         api_client=_api_client(),
         retriever=MagicMock(),
-        rule_service=MagicMock(),
+        rule_service=_rule_service(),
+        triage_completion_lookup=lambda _fingerprint: False,
     )
 
     result = service.get_work_items()
@@ -59,19 +75,56 @@ def test_work_items_include_only_approved_rules_and_exact_chunks() -> None:
         {"id": "LAW:A1", "content": "Provider shall maintain human review."}
     ]
     assert all(item["readyForTriage"] for item in result["workItems"])
+    assert result["pendingRuleCount"] == 2
+    assert result["completedRuleCount"] == 0
 
 
 def test_work_items_can_be_bounded_to_affected_rule_ids() -> None:
     service = LegalRuleTriageService(
         api_client=_api_client(),
         retriever=MagicMock(),
-        rule_service=MagicMock(),
+        rule_service=_rule_service(),
+        triage_completion_lookup=lambda _fingerprint: False,
     )
 
     result = service.get_work_items(affected_rule_ids=["RULE-2"])
 
     assert [item["legalRuleId"] for item in result["workItems"]] == ["RULE-2"]
     assert result["workItems"][0]["sourceChunkIds"] == ["LAW:A2"]
+
+
+def test_completed_work_items_are_skipped_by_default() -> None:
+    service = LegalRuleTriageService(
+        api_client=_api_client(),
+        retriever=MagicMock(),
+        rule_service=_rule_service(),
+        triage_completion_lookup=lambda fingerprint: fingerprint.endswith(":RULE-1"),
+    )
+
+    result = service.get_work_items()
+
+    assert [item["legalRuleId"] for item in result["workItems"]] == ["RULE-2"]
+    assert result["completedRuleCount"] == 1
+    assert result["pendingRuleCount"] == 1
+
+
+def test_completed_work_items_can_be_included_for_explicit_review() -> None:
+    service = LegalRuleTriageService(
+        api_client=_api_client(),
+        retriever=MagicMock(),
+        rule_service=_rule_service(),
+        triage_completion_lookup=lambda fingerprint: fingerprint.endswith(":RULE-1"),
+    )
+
+    result = service.get_work_items(include_completed=True)
+
+    assert [item["legalRuleId"] for item in result["workItems"]] == [
+        "RULE-1",
+        "RULE-2",
+    ]
+    assert result["workItems"][0]["triageCompleted"] is True
+    assert result["workItems"][1]["triageCompleted"] is False
+    assert result["completedRuleCount"] == 1
 
 
 def test_work_item_marks_missing_citation_chunk_not_ready() -> None:
