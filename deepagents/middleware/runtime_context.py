@@ -29,11 +29,21 @@ def inject_lcsp_runtime_context(
     if not lines:
         return handler(request)
 
+    routing_rule = ""
+    if context is not None and context.legal_rule_ids and context.idempotency_key:
+        routing_rule = (
+            "\nThis invocation is MANUAL_ENGINEERING_RULE_NOT_READY recovery. "
+            "Route it to LEGAL_MAINTENANCE and delegate to the `triage` subagent using only "
+            "the supplied legal_rule_ids. assessment_id is correlation metadata only; do not "
+            "enter the Assessment workflow and do not use customer context as Triage evidence."
+        )
+
     context_block = (
         "LCSP runtime context (immutable identifiers; not evidence):\n"
         + "\n".join(f"- {line}" for line in lines)
         + "\nUse these identifiers when delegating and calling governed tools. "
         "Do not alter them or treat them as proof of compliance."
+        + routing_rule
     )
     new_content: list[Any] = list(request.system_message.content_blocks)
     new_content.append({"type": "text", "text": context_block})
