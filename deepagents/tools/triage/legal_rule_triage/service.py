@@ -7,13 +7,14 @@ persists READY EngineeringRules. It never calls an LLM.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.config import load_config
-from tools.legal.corpus.engineering_rules.compilation.compiler import EngineeringRuleCompiler
 from tools.legal.corpus.engineering_rules.orchestration.service import EngineeringRuleService
 from tools.legal.retrieval.legal_basis.chromadb_citation_retriever import ChromaDbCitationRetriever
+from tools.legal.sources.recovery.artifact_store import recovery_artifact_exists
 
 
 class LegalRuleTriageService:
@@ -25,6 +26,7 @@ class LegalRuleTriageService:
         api_client: WorkerApiClient | None = None,
         retriever: ChromaDbCitationRetriever | None = None,
         rule_service: EngineeringRuleService | None = None,
+        triage_completion_lookup: Callable[[str], bool] | None = None,
     ) -> None:
         if api_client is None:
             config = load_config()
@@ -35,14 +37,20 @@ class LegalRuleTriageService:
         self.api_client = api_client
         self.retriever = retriever or ChromaDbCitationRetriever()
         self.rule_service = rule_service or EngineeringRuleService(
-            compiler=EngineeringRuleCompiler(),
             retriever=self.retriever,
+        )
+        self._triage_completion_lookup = triage_completion_lookup or (
+            lambda fingerprint: recovery_artifact_exists(
+                "legal-rule-triage",
+                fingerprint,
+            )
         )
 
     def get_work_items(
         self,
         *,
         affected_rule_ids: list[str] | None = None,
+        include_completed: bool = False,
     ) -> dict[str, Any]:
         catalog, catalog_version_id, corpus_version_id, chunks, rules = self._load_sources()
         requested = {
@@ -51,12 +59,15 @@ class LegalRuleTriageService:
         if requested:
             rules = [rule for rule in rules if self._rule_id(rule) in requested]
 
+        active_chunks = [chunk for chunk in chunks if isinstance(chunk, dict)]
+        self.retriever.index_corpus(corpus_version_id, active_chunks)
         chunk_by_id = {
             str(chunk.get("id")): chunk
-            for chunk in chunks
-            if isinstance(chunk, dict) and chunk.get("id")
+            for chunk in active_chunks
+            if chunk.get("id")
         }
         work_items: list[dict[str, Any]] = []
+        completed_count = 0
         for rule in rules:
             chunk_ids = EngineeringRuleService._chunk_ids(rule)
             legal_context = [
@@ -65,6 +76,20 @@ class LegalRuleTriageService:
             missing_chunk_ids = [
                 value for value in chunk_ids if value not in chunk_by_id
             ]
+            ready_for_triage = bool(chunk_ids) and not missing_chunk_ids
+            source_fingerprint: str | None = None
+            triage_completed = False
+            if ready_for_triage:
+                _, source_fingerprint = self.rule_service._context_and_fingerprint(
+                    legal_rule=rule,
+                    legal_corpus_version_id=corpus_version_id,
+                )
+                triage_completed = self._triage_completion_lookup(source_fingerprint)
+                if triage_completed:
+                    completed_count += 1
+                    if not include_completed:
+                        continue
+
             work_items.append(
                 {
                     "legalRuleId": self._rule_id(rule),
@@ -72,7 +97,9 @@ class LegalRuleTriageService:
                     "legalContext": legal_context,
                     "sourceChunkIds": chunk_ids,
                     "missingChunkIds": missing_chunk_ids,
-                    "readyForTriage": bool(chunk_ids) and not missing_chunk_ids,
+                    "readyForTriage": ready_for_triage,
+                    "sourceFingerprint": source_fingerprint,
+                    "triageCompleted": triage_completed,
                 }
             )
 
@@ -81,6 +108,9 @@ class LegalRuleTriageService:
             "legalRuleCatalogVersionId": catalog_version_id,
             "legalCorpusVersionId": corpus_version_id,
             "catalogRuleCount": len(catalog.get("rules") or []),
+            "approvedRuleCount": len(rules),
+            "completedRuleCount": completed_count,
+            "pendingRuleCount": len(work_items),
             "workItems": work_items,
         }
 
