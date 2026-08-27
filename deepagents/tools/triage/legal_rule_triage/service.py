@@ -7,7 +7,6 @@ persists READY EngineeringRules. It never calls an LLM.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from tools.common.capabilities.platform.api_client import WorkerApiClient
@@ -46,7 +45,9 @@ class LegalRuleTriageService:
         affected_rule_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         catalog, catalog_version_id, corpus_version_id, chunks, rules = self._load_sources()
-        requested = {str(value) for value in (affected_rule_ids or []) if str(value).strip()}
+        requested = {
+            str(value) for value in (affected_rule_ids or []) if str(value).strip()
+        }
         if requested:
             rules = [rule for rule in rules if self._rule_id(rule) in requested]
 
@@ -58,8 +59,12 @@ class LegalRuleTriageService:
         work_items: list[dict[str, Any]] = []
         for rule in rules:
             chunk_ids = EngineeringRuleService._chunk_ids(rule)
-            legal_context = [chunk_by_id[value] for value in chunk_ids if value in chunk_by_id]
-            missing_chunk_ids = [value for value in chunk_ids if value not in chunk_by_id]
+            legal_context = [
+                chunk_by_id[value] for value in chunk_ids if value in chunk_by_id
+            ]
+            missing_chunk_ids = [
+                value for value in chunk_ids if value not in chunk_by_id
+            ]
             work_items.append(
                 {
                     "legalRuleId": self._rule_id(rule),
