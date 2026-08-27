@@ -61,7 +61,7 @@ class EngineeringRuleService:
         A cache miss therefore means the legal-preparation workflow has not produced a
         READY EngineeringRule yet.
         """
-        context, fingerprint = self._context_and_fingerprint(
+        context, fingerprint = self.resolve_source_identity(
             legal_rule=legal_rule,
             legal_corpus_version_id=legal_corpus_version_id,
         )
@@ -102,20 +102,10 @@ class EngineeringRuleService:
         for source identity, normative eligibility, schema, graph vocabulary, cache and
         recovery artifacts.
         """
-        context, fingerprint = self._context_and_fingerprint(
+        context, fingerprint = self.resolve_source_identity(
             legal_rule=legal_rule,
             legal_corpus_version_id=legal_corpus_version_id,
         )
-        existing = self.cache.get(fingerprint)
-        if existing:
-            return self._retarget_cached_rules(
-                existing,
-                legal_rule=legal_rule,
-                legal_rule_catalog_version_id=legal_rule_catalog_version_id,
-                legal_corpus_version_id=legal_corpus_version_id,
-                legal_context=context,
-            ), True
-
         decisions = LegalChunkEngineeringRuleTriage._parse_decisions(
             {"chunkAnalyses": chunk_analyses},
             context,
@@ -124,20 +114,20 @@ class EngineeringRuleService:
             context,
             decisions,
         )
-        self._store_triage_artifact(
-            fingerprint=fingerprint,
-            legal_rule=legal_rule,
-            legal_rule_catalog_version_id=legal_rule_catalog_version_id,
-            legal_corpus_version_id=legal_corpus_version_id,
-            chunk_analyses=chunk_analyses,
-            compile_context=compile_context,
-        )
 
         if not compile_context:
             if engineering_rule_rows:
                 raise ValueError(
                     "EngineeringRules cannot be persisted when triage produced no candidates"
                 )
+            self._store_triage_artifact(
+                fingerprint=fingerprint,
+                legal_rule=legal_rule,
+                legal_rule_catalog_version_id=legal_rule_catalog_version_id,
+                legal_corpus_version_id=legal_corpus_version_id,
+                chunk_analyses=chunk_analyses,
+                compile_context=compile_context,
+            )
             logger.info(
                 "ENGINEERING_RULE_PREPARATION_SKIPPED",
                 legal_rule_id=self._legal_rule_id(legal_rule),
@@ -150,6 +140,32 @@ class EngineeringRuleService:
             raise ValueError(
                 "triage candidates require at least one EngineeringRule proposal"
             )
+
+        existing = self.cache.get(fingerprint)
+        if existing:
+            prepared = self._retarget_cached_rules(
+                existing,
+                legal_rule=legal_rule,
+                legal_rule_catalog_version_id=legal_rule_catalog_version_id,
+                legal_corpus_version_id=legal_corpus_version_id,
+                legal_context=context,
+            )
+            self._store_engineering_rule_artifact(
+                fingerprint=fingerprint,
+                rules=prepared,
+                legal_rule=legal_rule,
+                legal_rule_catalog_version_id=legal_rule_catalog_version_id,
+                legal_corpus_version_id=legal_corpus_version_id,
+            )
+            self._store_triage_artifact(
+                fingerprint=fingerprint,
+                legal_rule=legal_rule,
+                legal_rule_catalog_version_id=legal_rule_catalog_version_id,
+                legal_corpus_version_id=legal_corpus_version_id,
+                chunk_analyses=chunk_analyses,
+                compile_context=compile_context,
+            )
+            return prepared, True
 
         prepared = self._materialize_engineering_rules(
             legal_rule=legal_rule,
@@ -167,6 +183,14 @@ class EngineeringRuleService:
             legal_rule_catalog_version_id=legal_rule_catalog_version_id,
             legal_corpus_version_id=legal_corpus_version_id,
         )
+        self._store_triage_artifact(
+            fingerprint=fingerprint,
+            legal_rule=legal_rule,
+            legal_rule_catalog_version_id=legal_rule_catalog_version_id,
+            legal_corpus_version_id=legal_corpus_version_id,
+            chunk_analyses=chunk_analyses,
+            compile_context=compile_context,
+        )
         logger.info(
             "ENGINEERING_RULE_PREPARED_BY_TRIAGE",
             legal_rule_id=self._legal_rule_id(legal_rule),
@@ -177,12 +201,13 @@ class EngineeringRuleService:
         )
         return prepared, False
 
-    def _context_and_fingerprint(
+    def resolve_source_identity(
         self,
         *,
         legal_rule: dict[str, Any],
         legal_corpus_version_id: str,
     ) -> tuple[list[dict[str, Any]], str]:
+        """Resolve exact active citation context and its governed source fingerprint."""
         chunk_ids = self._chunk_ids(legal_rule)
         if not chunk_ids:
             raise ValueError("approved legal rule has no resolvable citation chunk IDs")
@@ -225,6 +250,19 @@ class EngineeringRuleService:
             compiler_version=fingerprint_compiler_version,
         )
         return context, fingerprint
+
+    # Temporary compatibility for callers/tests outside the LCSP-263 branch. New code
+    # must use the public source-identity contract above rather than a private helper.
+    def _context_and_fingerprint(
+        self,
+        *,
+        legal_rule: dict[str, Any],
+        legal_corpus_version_id: str,
+    ) -> tuple[list[dict[str, Any]], str]:
+        return self.resolve_source_identity(
+            legal_rule=legal_rule,
+            legal_corpus_version_id=legal_corpus_version_id,
+        )
 
     @staticmethod
     def _materialize_engineering_rules(
