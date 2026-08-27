@@ -29,7 +29,7 @@ def _snapshot_client_unavailable() -> MagicMock:
     return snapshot_client
 
 
-def test_classification_callback_4xx_is_terminal_and_not_outer_retryable() -> None:
+def _api_client() -> MagicMock:
     api_client = MagicMock()
     api_client.get_accepted_technical_evidence_report.return_value = {
         "id": "ter-1",
@@ -37,6 +37,12 @@ def test_classification_callback_4xx_is_terminal_and_not_outer_retryable() -> No
         "snapshot_id": "snapshot-1",
         "scan_job_id": "scan-1",
     }
+    api_client.get_wizard_profile_for_assessment.return_value = None
+    return api_client
+
+
+def test_classification_callback_4xx_is_terminal_and_not_outer_retryable() -> None:
+    api_client = _api_client()
     api_client.get_wizard_profile_for_assessment.side_effect = RuntimeError(
         "optional wizard unavailable"
     )
@@ -75,14 +81,7 @@ def test_classification_callback_4xx_is_terminal_and_not_outer_retryable() -> No
 
 
 def test_retryable_callback_failure_is_preserved_for_outer_retry_policy() -> None:
-    api_client = MagicMock()
-    api_client.get_accepted_technical_evidence_report.return_value = {
-        "id": "ter-1",
-        "assessment_id": "assessment-1",
-        "snapshot_id": "snapshot-1",
-        "scan_job_id": "scan-1",
-    }
-    api_client.get_wizard_profile_for_assessment.return_value = None
+    api_client = _api_client()
     api_client.post_classification_callback.side_effect = WorkerCallbackError(
         "Callback failed after 3 attempts with server error 503."
     )
@@ -114,16 +113,8 @@ def test_retryable_callback_failure_is_preserved_for_outer_retry_policy() -> Non
         )
 
 
-def test_waiting_investigation_submits_blocked_classification_callback() -> None:
-    api_client = MagicMock()
-    api_client.get_accepted_technical_evidence_report.return_value = {
-        "id": "ter-1",
-        "assessment_id": "assessment-1",
-        "snapshot_id": "snapshot-1",
-        "scan_job_id": "scan-1",
-    }
-    api_client.get_wizard_profile_for_assessment.return_value = None
-
+def test_waiting_legal_source_is_a_legal_preparation_request_not_wizard_input() -> None:
+    api_client = _api_client()
     pipeline = MagicMock()
     pipeline.run.return_value = EngineeringInvestigationResult(
         status="WAITING",
@@ -149,43 +140,82 @@ def test_waiting_investigation_submits_blocked_classification_callback() -> None
 
     api_client.post_scan_runtime_event.assert_called_once()
     runtime_payload = api_client.post_scan_runtime_event.call_args.args[1]
-    assert runtime_payload["output_summary"]["kind"] == "WIZARD_CONTEXT_REQUEST"
-    assert runtime_payload["output_summary"]["scope"] == "POST_GRAPH"
-    assert runtime_payload["output_summary"]["requestedBy"] == "PLANNER"
+    assert runtime_payload["stage"] == "LEGAL_RETRIEVAL"
+    assert runtime_payload["tool_name"] == "engineering_rule_readiness"
+    assert runtime_payload["waiting_reason"] == "NO_ENGINEERING_RULE_SOURCE_RULES"
+    assert runtime_payload["output_summary"]["kind"] == "LEGAL_PREPARATION_REQUEST"
+    assert runtime_payload["output_summary"]["scope"] == "LEGAL_MAINTENANCE"
+    assert runtime_payload["output_summary"]["requestedBy"] == "ASSESSMENT"
     assert runtime_payload["output_summary"]["reasonCode"] == (
         "NO_ENGINEERING_RULE_SOURCE_RULES"
     )
-    assert runtime_payload["output_summary"]["questionIds"] == [
-        "MISSING_RULE_SCOPE",
-        "MISSING_GRAPH_CONTEXT",
-        "MISSING_HUMAN_REVIEW_BOUNDARY",
-    ]
-    assert [
-        question["targetFieldName"]
-        for question in runtime_payload["output_summary"]["questions"]
-    ] == [
-        "postGraphRuleScope",
-        "postGraphContext",
-        "postGraphHumanReviewBoundary",
-    ]
+    assert "questions" not in runtime_payload["output_summary"]
+
     api_client.post_classification_callback.assert_called_once()
     payload = api_client.post_classification_callback.call_args.args[0]
     assert payload.guardrail_status == "BLOCKED"
     assert payload.classification_data["status"] == "WAITING"
-    assert payload.classification_data["limitations"] == [
-        "NO_ENGINEERING_RULE_SOURCE_RULES"
-    ]
 
 
-def test_boundary_forwards_source_crawl_requests_to_pipeline() -> None:
-    api_client = MagicMock()
-    api_client.get_accepted_technical_evidence_report.return_value = {
-        "id": "ter-1",
-        "assessment_id": "assessment-1",
-        "snapshot_id": "snapshot-1",
-        "scan_job_id": "scan-1",
+def test_missing_ready_engineering_rules_expose_bounded_manual_triage_request() -> None:
+    api_client = _api_client()
+    pipeline = MagicMock()
+    pipeline.run.return_value = EngineeringInvestigationResult(
+        status="BLOCKED",
+        legal_rule_catalog_version_id="catalog-v2",
+        legal_corpus_version_id="corpus-v3",
+        rules_considered=2,
+        engineering_rules_executed=0,
+        engineering_rule_cache_hits=0,
+        limitations=("NO_ENGINEERING_RULE_CANDIDATES",),
+        observability={
+            "engineering_rule_preparation": {
+                "compile_skipped_legal_rule_ids": ["RULE-2", "RULE-1", "RULE-2"],
+            }
+        },
+    )
+
+    boundary = EngineeringAssessmentBoundary(
+        _config(),
+        api_client=api_client,
+        investigation_pipeline=pipeline,
+        snapshot_client=_snapshot_client_unavailable(),
+    )
+
+    boundary.handle(
+        {"evidenceReportId": "ter-1", "workflowRunId": "scan-1"},
+        "corr-manual-1",
+    )
+
+    runtime_payload = api_client.post_scan_runtime_event.call_args.args[1]
+    assert runtime_payload["waiting_reason"] == "ENGINEERING_RULE_NOT_READY"
+    assert runtime_payload["stage"] == "LEGAL_RETRIEVAL"
+    summary = runtime_payload["output_summary"]
+    assert summary["kind"] == "LEGAL_PREPARATION_REQUEST"
+    assert summary["missingLegalRuleIds"] == ["RULE-2", "RULE-1"]
+    manual = summary["manualTriageRequest"]
+    assert manual["mode"] == "LEGAL_MAINTENANCE"
+    assert manual["trigger"] == "MANUAL_ENGINEERING_RULE_NOT_READY"
+    assert manual["assessmentId"] == "assessment-1"
+    assert manual["affectedLegalRuleIds"] == ["RULE-2", "RULE-1"]
+    assert manual["legalRuleCatalogVersionId"] == "catalog-v2"
+    assert manual["legalCorpusVersionId"] == "corpus-v3"
+    assert manual["idempotencyKey"].startswith("legal-triage:")
+    assert len(manual["idempotencyKey"]) == len("legal-triage:") + 64
+
+    payload = api_client.post_classification_callback.call_args.args[0]
+    assert payload.guardrail_status == "BLOCKED"
+    assert payload.classification_data["status"] == "WAITING"
+    assert payload.classification_data["observability"]["legal_preparation"] == {
+        "status": "WAITING",
+        "reason": "ENGINEERING_RULE_NOT_READY",
+        "trigger": "MANUAL_ENGINEERING_RULE_NOT_READY",
+        "missing_legal_rule_ids": ["RULE-2", "RULE-1"],
     }
-    api_client.get_wizard_profile_for_assessment.return_value = None
+
+
+def test_boundary_forwards_source_crawl_requests_to_pipeline_for_input_compatibility() -> None:
+    api_client = _api_client()
 
     result = MagicMock()
     result.status = "COMPLETE"
