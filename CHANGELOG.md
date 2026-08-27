@@ -5,6 +5,42 @@ do not rewrite older entries unless correcting a factual error.
 
 ## Unreleased
 
+### 2026-08-27 - Legal Corpus Recovery and Artifact Management
+
+#### Added
+
+- Added bounded official-source crawl recovery driven by `sourceCrawlRequests` / `LEGAL_SOURCE_CRAWL_REQUESTS` instead of relying on pre-reviewed local files.
+- Added content-addressed legal corpus versioning from crawler manifests and source text artifacts.
+- Added the `OFFICIAL_SOURCE_AUTO_TRUSTED` corpus trust policy for verified official-source recovery payloads.
+- Added partial-update context generation by comparing freshly crawled source snapshots with previously stored snapshots.
+- Added durable `.corpus` recovery artifacts for legal corpus ingest payloads, retrieval index metadata, corpus activation metadata, legal rule catalog state, and EngineeringRule bundles.
+- Added API and worker recovery utilities for restoring legal corpus, catalog, retrieval index, and EngineeringRule state after database/runtime loss.
+
+#### Changed
+
+- Refactored legal corpus recovery to build ingest payloads directly from official crawler manifests and text artifacts.
+- Moved recovery artifact ownership into `deepagents/tools/legal/sources/recovery` so recovery implementation stays inside the legal-source recovery capability boundary.
+- Updated legal corpus activation scope and recovery tests for the official-source crawl path.
+- Standardized Managed Deep Agent skill discovery on the single canonical `deepagents/skills/lcsp/SKILL.md` path.
+
+#### Removed
+
+- Removed the duplicate legacy `deepagents/skills/deep_agent_skills/lcsp` skill tree and stale test references to that path.
+- Removed the root `deepagents/scripts` recovery utility location; the EngineeringRule restore utility now lives under the legal recovery capability.
+- Removed the root-level `deepagents/tools/legal/corpus/artifact_store.py` implementation in favor of the recovery-owned module.
+
+#### Fixed
+
+- Restored the canonical LCSP Managed Deep Agent skill contract after the recovery refactor.
+- Added project-layout coverage so `deepagents/skills` is constrained to the canonical `lcsp` skill directory and duplicate skill trees cannot be reintroduced silently.
+
+#### Verification
+
+- GitHub Actions `EngineeringRule managed runtime` ✅
+- GitHub Actions `autofix.ci` ✅
+- GitHub Actions `Jira PR Link` ✅
+- GitHub Actions `Tests` rerun on the latest PR head after skill-path cleanup.
+
 ### 2026-08-25 - Remove Legacy User Table
 
 #### Removed
