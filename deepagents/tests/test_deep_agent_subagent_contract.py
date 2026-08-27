@@ -73,7 +73,11 @@ def test_subagents_follow_deep_agents_dictionary_contract() -> None:
 def test_pipeline_roles_do_not_bypass_context_wizard_hydration() -> None:
     by_name = {item["name"]: item for item in FLOW_SUBAGENTS}
 
-    assert _tool_names(by_name["triage"]) == ("maintain_legal_catalog",)
+    assert _tool_names(by_name["triage"]) == (
+        "maintain_legal_catalog",
+        "get_legal_rule_triage_work_items",
+        "persist_legal_rule_triage_result",
+    )
     assert _tool_names(by_name["context_wizard"]) == (
         "get_assessment_context",
         "get_legal_corpus_readiness",
@@ -98,9 +102,10 @@ def test_triage_is_not_an_assessment_pipeline_role() -> None:
     )
 
     assert "triage" not in assessment_roles
-    assert "LEGAL_MAINTENANCE" in triage_prompt
-    assert "approved source manifests" in triage_prompt
-    assert "Never select law for a customer assessment" in triage_prompt
+    assert "Legal Rule Triage" in triage_prompt
+    assert "ENGINEERING_RULE_CANDIDATE" in triage_prompt
+    assert "persist_legal_rule_triage_result" in triage_prompt
+    assert "Never use Assessment business context" in triage_prompt
 
 
 def test_context_wizard_output_is_typed_ready_or_needs_input_question_round() -> None:
@@ -217,7 +222,6 @@ def test_root_agent_uses_managed_instructions_context_and_todos() -> None:
     source = (PROJECT_ROOT / "agent.py").read_text(encoding="utf-8")
     instructions = (PROJECT_ROOT / "instructions.md").read_text(encoding="utf-8")
 
-    # Managed Deep Agents owns the system prompt through instructions.md.
     assert "system_prompt=" not in source
     assert "context_schema=LCSPRunContext" in source
     assert "TodoListMiddleware()" in source
