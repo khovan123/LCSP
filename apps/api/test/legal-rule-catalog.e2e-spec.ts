@@ -293,8 +293,7 @@ describe("Legal Rule Catalog Endpoints (e2e)", () => {
           version: "corpus-official-auto-trusted-v1",
           sourceManifest: {
             reviewRequired: false,
-            trustPolicy:
-              LEGAL_CORPUS_TRUST_POLICIES.officialSourceAutoTrusted,
+            trustPolicy: LEGAL_CORPUS_TRUST_POLICIES.officialSourceAutoTrusted,
             normalizationWarnings: [],
             sourceArtifacts: [],
           },
