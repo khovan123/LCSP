@@ -216,8 +216,32 @@ def test_triage_preparation_persists_candidate_engineering_rules() -> None:
     registry.materialize.assert_not_called()
 
 
+def test_triage_candidate_without_rule_proposal_does_not_mark_completed() -> None:
+    service, _, cache, _ = _service(cached=[])
+    store_triage_artifact = MagicMock()
+    service._store_triage_artifact = store_triage_artifact
+
+    with pytest.raises(
+        ValueError,
+        match="triage candidates require at least one EngineeringRule proposal",
+    ):
+        service.prepare_from_triage(
+            legal_rule=_legal_rule(),
+            legal_rule_catalog_version_id="catalog-1",
+            legal_corpus_version_id="corpus-1",
+            chunk_analyses=_candidate_analysis(),
+            engineering_rule_rows=[],
+            workflow_run_id="triage-run-1",
+        )
+
+    cache.put.assert_not_called()
+    store_triage_artifact.assert_not_called()
+
+
 def test_triage_context_only_result_does_not_create_rule() -> None:
     service, _, cache, _ = _service(cached=[])
+    store_triage_artifact = MagicMock()
+    service._store_triage_artifact = store_triage_artifact
     analyses = [
         {
             "chunkId": "LAW:A1",
@@ -240,10 +264,13 @@ def test_triage_context_only_result_does_not_create_rule() -> None:
     assert rules == []
     assert cache_hit is False
     cache.put.assert_not_called()
+    store_triage_artifact.assert_called_once()
 
 
 def test_triage_cannot_persist_rules_without_candidates() -> None:
     service, _, cache, _ = _service(cached=[])
+    store_triage_artifact = MagicMock()
+    service._store_triage_artifact = store_triage_artifact
     analyses = [
         {
             "chunkId": "LAW:A1",
@@ -268,3 +295,4 @@ def test_triage_cannot_persist_rules_without_candidates() -> None:
         )
 
     cache.put.assert_not_called()
+    store_triage_artifact.assert_not_called()
