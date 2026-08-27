@@ -77,7 +77,10 @@ def _service(
             "legalStatus": "ACTIVE",
             "contentSha256": "sha256:chunk",
             "locator": "art-1::cl-1",
-            "content": "The provider shall maintain human review before final action.",
+            "content": (
+                "Nhà cung cấp hệ thống trí tuệ nhân tạo phải duy trì cơ chế "
+                "con người xem xét trước khi thực hiện quyết định cuối cùng."
+            ),
             "hierarchy": {"normativeClass": "ENGINEERING_RULE_CANDIDATE"},
         }
     ]
