@@ -1,6 +1,8 @@
 """Consume accepted repository evidence and persist direct EngineeringRule evaluation results."""
 from __future__ import annotations
 
+import hashlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,17 @@ from .planned_pipeline import PlannedEngineeringInvestigationPipeline
 
 logger = get_logger(__name__)
 WAITING_ENGINEERING_INVESTIGATION_STATUSES = {"WAITING"}
+
+
+class _AssessmentLegalPreparationDeferredDriver:
+    """Prevent Assessment from performing legal preparation as a side effect."""
+
+    def run(self, message: dict[str, Any], correlation_id: str) -> dict[str, Any]:
+        _ = message, correlation_id
+        return {
+            "status": "DEFERRED_TO_TRIAGE",
+            "resumedRunCount": 0,
+        }
 
 
 class EngineeringAssessmentBoundary(AgentBoundaryBase):
@@ -62,6 +75,7 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
                 api_client=self._api_client,
                 model=model,
                 planner_model=planner_model,
+                corpus_recovery_driver=_AssessmentLegalPreparationDeferredDriver(),
             )
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
@@ -100,8 +114,11 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
         finally:
             if workspace_path is not None:
                 self._code_workspace.cleanup(workspace_job_id)
+
+        result = self._as_waiting_for_manual_triage(result)
         if result.status in WAITING_ENGINEERING_INVESTIGATION_STATUSES:
             self._emit_investigation_waiting_runtime_event(
+                assessment_id=assessment_id,
                 scan_job_id=str(
                     evidence_report.get("scan_job_id")
                     or evidence_report.get("scanJobId")
@@ -155,7 +172,7 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
 
     @staticmethod
     def _source_crawl_requests(message: dict[str, Any]) -> list[dict[str, Any]] | None:
-        """Forward bounded legal-source crawl requests to corpus recovery."""
+        """Retain input compatibility without allowing Assessment to run legal recovery."""
         value = message.get("sourceCrawlRequests", message.get("source_crawl_requests"))
         if value is None:
             return None
@@ -271,9 +288,41 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
             return "DEGRADED"
         return "BLOCKED"
 
+    @staticmethod
+    def _missing_legal_rule_ids(result) -> tuple[str, ...]:
+        observability = getattr(result, "observability", {}) or {}
+        preparation = (
+            observability.get("engineering_rule_preparation")
+            if isinstance(observability, dict)
+            else None
+        )
+        if not isinstance(preparation, dict):
+            return ()
+        values = preparation.get("compile_skipped_legal_rule_ids") or []
+        if not isinstance(values, list):
+            return ()
+        return tuple(dict.fromkeys(str(value) for value in values if str(value)))
+
+    @classmethod
+    def _as_waiting_for_manual_triage(cls, result):
+        missing_rule_ids = cls._missing_legal_rule_ids(result)
+        if not missing_rule_ids:
+            return result
+        observability = dict(getattr(result, "observability", {}) or {})
+        observability["legal_preparation"] = {
+            "status": "WAITING",
+            "reason": "ENGINEERING_RULE_NOT_READY",
+            "trigger": "MANUAL_ENGINEERING_RULE_NOT_READY",
+            "missing_legal_rule_ids": list(missing_rule_ids),
+        }
+        if str(getattr(result, "status", "")).upper() == "WAITING":
+            return replace(result, observability=observability)
+        return replace(result, status="WAITING", observability=observability)
+
     def _emit_investigation_waiting_runtime_event(
         self,
         *,
+        assessment_id: str,
         scan_job_id: str | None,
         result,
         correlation_id: str,
@@ -283,33 +332,80 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
         post_runtime_event = getattr(self._api_client, "post_scan_runtime_event", None)
         if post_runtime_event is None:
             return
+
+        missing_rule_ids = self._missing_legal_rule_ids(result)
+        waiting_reason = (
+            "ENGINEERING_RULE_NOT_READY"
+            if missing_rule_ids
+            else "NO_ENGINEERING_RULE_SOURCE_RULES"
+        )
+        base_summary: dict[str, Any] = {
+            "status": str(getattr(result, "status", "WAITING")),
+            "legalRuleCatalogVersionId": str(
+                getattr(result, "legal_rule_catalog_version_id", "")
+            ),
+            "legalCorpusVersionId": str(
+                getattr(result, "legal_corpus_version_id", "")
+            ),
+            "limitations": list(getattr(result, "limitations", ())),
+            "correlationId": correlation_id,
+        }
+        if missing_rule_ids:
+            base_summary["missingLegalRuleIds"] = list(missing_rule_ids)
+            base_summary["manualTriageRequest"] = {
+                "mode": "LEGAL_MAINTENANCE",
+                "trigger": "MANUAL_ENGINEERING_RULE_NOT_READY",
+                "assessmentId": assessment_id,
+                "affectedLegalRuleIds": list(missing_rule_ids),
+                "legalRuleCatalogVersionId": base_summary[
+                    "legalRuleCatalogVersionId"
+                ],
+                "legalCorpusVersionId": base_summary["legalCorpusVersionId"],
+                "idempotencyKey": self._manual_triage_idempotency_key(
+                    assessment_id=assessment_id,
+                    catalog_version_id=str(base_summary["legalRuleCatalogVersionId"]),
+                    corpus_version_id=str(base_summary["legalCorpusVersionId"]),
+                    legal_rule_ids=missing_rule_ids,
+                ),
+            }
+
         post_runtime_event(
             scan_job_id,
             {
                 "event_type": "TOOL_WAITING_INPUT",
                 "run_status": "WAITING",
-                "stage": "SCAN",
-                "tool_name": "engineering_rule_planner",
+                "stage": "LEGAL_RETRIEVAL",
+                "tool_name": "engineering_rule_readiness",
                 "summary": (
-                    "Engineering rule source catalog is empty; waiting for "
-                    "corpus chunk triage and EngineeringRule rebuild"
+                    "Assessment is waiting for READY EngineeringRules; use the explicit "
+                    "manual Legal Rule Triage trigger."
+                    if missing_rule_ids
+                    else "Engineering rule source catalog is not ready; legal preparation is required."
                 ),
-                "waiting_reason": "NO_ENGINEERING_RULE_SOURCE_RULES",
+                "waiting_reason": waiting_reason,
                 "output_summary": engineering_rule_source_clarification_summary(
-                    base_summary={
-                        "status": str(getattr(result, "status", "WAITING")),
-                        "legalRuleCatalogVersionId": str(
-                            getattr(result, "legal_rule_catalog_version_id", "")
-                        ),
-                        "legalCorpusVersionId": str(
-                            getattr(result, "legal_corpus_version_id", "")
-                        ),
-                        "limitations": list(getattr(result, "limitations", ())),
-                        "correlationId": correlation_id,
-                    },
+                    base_summary=base_summary,
                 ),
             },
         )
+
+    @staticmethod
+    def _manual_triage_idempotency_key(
+        *,
+        assessment_id: str,
+        catalog_version_id: str,
+        corpus_version_id: str,
+        legal_rule_ids: tuple[str, ...],
+    ) -> str:
+        payload = "|".join(
+            [
+                assessment_id,
+                catalog_version_id,
+                corpus_version_id,
+                *sorted(legal_rule_ids),
+            ]
+        )
+        return "legal-triage:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _evidence_report_id(message: dict[str, Any]) -> str:
