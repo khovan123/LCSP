@@ -11,9 +11,6 @@ from tools.common.capabilities.platform.api_client import WorkerApiClient, Worke
 from tools.common.capabilities.platform.callback_schemas import ClassificationCallbackPayload
 from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.managed.boundary import AgentBoundaryBase, NonRetryableAgentBoundaryError
-from tools.common.capabilities.platform.wizard_clarification import (
-    engineering_rule_source_clarification_summary,
-)
 from tools.common.capabilities.evidence.scanner.snapshot.snapshot_service_client import (
     SnapshotArchiveRequest,
     SnapshotServiceClient,
@@ -339,7 +336,11 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
             if missing_rule_ids
             else "NO_ENGINEERING_RULE_SOURCE_RULES"
         )
-        base_summary: dict[str, Any] = {
+        output_summary: dict[str, Any] = {
+            "kind": "LEGAL_PREPARATION_REQUEST",
+            "scope": "LEGAL_MAINTENANCE",
+            "requestedBy": "ASSESSMENT",
+            "reasonCode": waiting_reason,
             "status": str(getattr(result, "status", "WAITING")),
             "legalRuleCatalogVersionId": str(
                 getattr(result, "legal_rule_catalog_version_id", "")
@@ -351,20 +352,20 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
             "correlationId": correlation_id,
         }
         if missing_rule_ids:
-            base_summary["missingLegalRuleIds"] = list(missing_rule_ids)
-            base_summary["manualTriageRequest"] = {
+            output_summary["missingLegalRuleIds"] = list(missing_rule_ids)
+            output_summary["manualTriageRequest"] = {
                 "mode": "LEGAL_MAINTENANCE",
                 "trigger": "MANUAL_ENGINEERING_RULE_NOT_READY",
                 "assessmentId": assessment_id,
                 "affectedLegalRuleIds": list(missing_rule_ids),
-                "legalRuleCatalogVersionId": base_summary[
+                "legalRuleCatalogVersionId": output_summary[
                     "legalRuleCatalogVersionId"
                 ],
-                "legalCorpusVersionId": base_summary["legalCorpusVersionId"],
+                "legalCorpusVersionId": output_summary["legalCorpusVersionId"],
                 "idempotencyKey": self._manual_triage_idempotency_key(
                     assessment_id=assessment_id,
-                    catalog_version_id=str(base_summary["legalRuleCatalogVersionId"]),
-                    corpus_version_id=str(base_summary["legalCorpusVersionId"]),
+                    catalog_version_id=str(output_summary["legalRuleCatalogVersionId"]),
+                    corpus_version_id=str(output_summary["legalCorpusVersionId"]),
                     legal_rule_ids=missing_rule_ids,
                 ),
             }
@@ -380,12 +381,10 @@ class EngineeringAssessmentBoundary(AgentBoundaryBase):
                     "Assessment is waiting for READY EngineeringRules; use the explicit "
                     "manual Legal Rule Triage trigger."
                     if missing_rule_ids
-                    else "Engineering rule source catalog is not ready; legal preparation is required."
+                    else "Legal preparation is required before this Assessment can continue."
                 ),
                 "waiting_reason": waiting_reason,
-                "output_summary": engineering_rule_source_clarification_summary(
-                    base_summary=base_summary,
-                ),
+                "output_summary": output_summary,
             },
         )
 
