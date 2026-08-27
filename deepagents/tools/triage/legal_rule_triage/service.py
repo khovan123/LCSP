@@ -1,0 +1,182 @@
+"""Authoritative data access and persistence for Legal Rule Triage.
+
+The Managed Deep Agent performs the business reasoning. This service only provides
+approved LegalRule/chunk inputs, validates the agent handoff, fingerprints it, and
+persists READY EngineeringRules. It never calls an LLM.
+"""
+
+from __future__ import annotations
+
+import os
+from typing import Any
+
+from tools.common.capabilities.platform.api_client import WorkerApiClient
+from tools.common.capabilities.platform.config import load_config
+from tools.legal.corpus.engineering_rules.compilation.compiler import EngineeringRuleCompiler
+from tools.legal.corpus.engineering_rules.orchestration.service import EngineeringRuleService
+from tools.legal.retrieval.legal_basis.chromadb_citation_retriever import ChromaDbCitationRetriever
+
+
+class LegalRuleTriageService:
+    """Load approved triage work and persist only validated agent decisions."""
+
+    def __init__(
+        self,
+        *,
+        api_client: WorkerApiClient | None = None,
+        retriever: ChromaDbCitationRetriever | None = None,
+        rule_service: EngineeringRuleService | None = None,
+    ) -> None:
+        if api_client is None:
+            config = load_config()
+            api_client = WorkerApiClient(
+                config.nestjs_api_base_url,
+                config.worker_api_key,
+            )
+        self.api_client = api_client
+        self.retriever = retriever or ChromaDbCitationRetriever()
+        self.rule_service = rule_service or EngineeringRuleService(
+            compiler=EngineeringRuleCompiler(),
+            retriever=self.retriever,
+        )
+
+    def get_work_items(
+        self,
+        *,
+        affected_rule_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        catalog, catalog_version_id, corpus_version_id, chunks, rules = self._load_sources()
+        requested = {str(value) for value in (affected_rule_ids or []) if str(value).strip()}
+        if requested:
+            rules = [rule for rule in rules if self._rule_id(rule) in requested]
+
+        chunk_by_id = {
+            str(chunk.get("id")): chunk
+            for chunk in chunks
+            if isinstance(chunk, dict) and chunk.get("id")
+        }
+        work_items: list[dict[str, Any]] = []
+        for rule in rules:
+            chunk_ids = EngineeringRuleService._chunk_ids(rule)
+            legal_context = [chunk_by_id[value] for value in chunk_ids if value in chunk_by_id]
+            missing_chunk_ids = [value for value in chunk_ids if value not in chunk_by_id]
+            work_items.append(
+                {
+                    "legalRuleId": self._rule_id(rule),
+                    "legalRule": rule,
+                    "legalContext": legal_context,
+                    "sourceChunkIds": chunk_ids,
+                    "missingChunkIds": missing_chunk_ids,
+                    "readyForTriage": bool(chunk_ids) and not missing_chunk_ids,
+                }
+            )
+
+        return {
+            "status": "READY",
+            "legalRuleCatalogVersionId": catalog_version_id,
+            "legalCorpusVersionId": corpus_version_id,
+            "catalogRuleCount": len(catalog.get("rules") or []),
+            "workItems": work_items,
+        }
+
+    def persist_result(
+        self,
+        *,
+        legal_rule_id: str,
+        legal_rule_catalog_version_id: str,
+        legal_corpus_version_id: str,
+        chunk_analyses: list[dict[str, Any]],
+        engineering_rules: list[dict[str, Any]],
+        workflow_run_id: str,
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        _, active_catalog_id, active_corpus_id, chunks, rules = self._load_sources()
+        if legal_rule_catalog_version_id != active_catalog_id:
+            raise ValueError("triage result targets a stale LegalRule catalog version")
+        if legal_corpus_version_id != active_corpus_id:
+            raise ValueError("triage result targets a stale legal corpus version")
+
+        legal_rule = next(
+            (rule for rule in rules if self._rule_id(rule) == legal_rule_id),
+            None,
+        )
+        if legal_rule is None:
+            raise ValueError("approved LegalRule is not available for triage")
+
+        self.retriever.index_corpus(
+            active_corpus_id,
+            [chunk for chunk in chunks if isinstance(chunk, dict)],
+        )
+        prepared, _ = self.rule_service.prepare_from_triage(
+            legal_rule=legal_rule,
+            legal_rule_catalog_version_id=active_catalog_id,
+            legal_corpus_version_id=active_corpus_id,
+            chunk_analyses=chunk_analyses,
+            engineering_rule_rows=engineering_rules,
+            workflow_run_id=workflow_run_id,
+            correlation_id=correlation_id,
+        )
+        return {
+            "status": "READY",
+            "legalRuleId": legal_rule_id,
+            "legalRuleCatalogVersionId": active_catalog_id,
+            "legalCorpusVersionId": active_corpus_id,
+            "triageDecisionCount": len(chunk_analyses),
+            "engineeringRuleCount": len(prepared),
+            "engineeringRuleIds": [rule.engineering_rule_id for rule in prepared],
+        }
+
+    def _load_sources(
+        self,
+    ) -> tuple[dict[str, Any], str, str, list[dict[str, Any]], list[dict[str, Any]]]:
+        catalog = self.api_client.get_active_legal_rule_catalog()
+        corpus = self.api_client.get_active_legal_corpus()
+        catalog_version_id = self._required_id(
+            catalog,
+            "versionId",
+            "version_id",
+            "id",
+            label="legal rule catalog version",
+        )
+        corpus_version_id = self._required_id(
+            corpus,
+            "versionId",
+            "version_id",
+            "corpusVersionId",
+            "corpus_version_id",
+            "id",
+            label="legal corpus version",
+        )
+        corpus_index = self.api_client.get_legal_corpus_chunks(corpus_version_id)
+        chunks = corpus_index.get("chunks") or []
+        if not isinstance(chunks, list):
+            raise ValueError("active legal corpus chunks are invalid")
+        rules = [
+            rule
+            for rule in (catalog.get("rules") or [])
+            if isinstance(rule, dict) and self._is_approved_rule(rule)
+        ]
+        return catalog, catalog_version_id, corpus_version_id, chunks, rules
+
+    @staticmethod
+    def _required_id(payload: dict[str, Any], *keys: str, label: str) -> str:
+        for key in keys:
+            value = payload.get(key)
+            if value:
+                return str(value)
+        raise ValueError(f"missing {label}")
+
+    @staticmethod
+    def _rule_id(rule: dict[str, Any]) -> str:
+        value = rule.get("legalRuleId") or rule.get("legal_rule_id") or rule.get("id")
+        return str(value or "")
+
+    @staticmethod
+    def _is_approved_rule(rule: dict[str, Any]) -> bool:
+        status = str(
+            rule.get("status")
+            or rule.get("lifecycleState")
+            or rule.get("lifecycle_state")
+            or ""
+        ).upper()
+        return status in {"", "ACTIVE", "APPROVED", "PUBLISHED"}
