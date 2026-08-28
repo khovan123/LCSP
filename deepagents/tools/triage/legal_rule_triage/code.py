@@ -49,7 +49,7 @@ def get_legal_rule_triage_work_items(
     assessment_id: str | None = None,
     triage_execution_id: str | None = None,
 ) -> dict[str, Any]:
-    """Queue/claim singleton triage work and load authoritative LegalRule chunks."""
+    """Claim owner scope or join requested LegalRules into the execution already RUNNING."""
     return LegalRuleTriageService().get_work_items(
         affected_rule_ids=list(affected_rule_ids or []),
         include_completed=include_completed,
@@ -88,7 +88,7 @@ def persist_legal_rule_triage_result(
 def finish_legal_rule_triage_execution(
     triage_execution_id: str,
 ) -> dict[str, Any]:
-    """Drain requests queued during the active run or release the singleton lease."""
+    """Continue joined active scope or release the singleton when no more scope remains."""
     return LegalRuleTriageService().finish_or_drain(
         triage_execution_id=triage_execution_id,
     )
