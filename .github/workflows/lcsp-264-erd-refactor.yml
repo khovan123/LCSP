@@ -30,6 +30,53 @@ jobs:
       - name: Apply deterministic refactor
         run: python3 scripts/lcsp264_apply_optimized_erd.py
 
+      - name: Preserve auth contracts and align fixtures
+        shell: bash
+        run: |
+          git checkout HEAD -- apps/api/src/modules/auth-workspace/application/services/auth-workspace/auth-audit.service.ts
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          repo = Path('apps/api/src/modules/auth-workspace/infrastructure/persistence/prisma-auth-workspace.repositories.ts')
+          text = repo.read_text().replace('normalizeLegacyAuditEventType', 'normalizeLegacyAuthAuditEventType')
+          repo.write_text(text)
+
+          helper = Path('apps/api/test/support/auth-workspace-test-helpers.ts')
+          text = helper.read_text()
+          text = re.sub(
+              r'''  await prisma\.userMfa\.create\(\{\n    data: \{\n      userId,\n      encryptedSecret: encryptMfaSecret\(totpSecret\),\n      enrolledAt: new Date\(\),\n    \},\n  \}\);''',
+              '''  await prisma.user.update({\n    where: { id: userId },\n    data: {\n      mfaEncryptedSecret: encryptMfaSecret(totpSecret),\n      mfaEnrolledAt: new Date(),\n      mfaVerifiedAt: null,\n    },\n  });''',
+              text,
+              count=1,
+          )
+          helper.write_text(text)
+
+          auth = Path('apps/api/test/auth-workspace.e2e-spec.ts')
+          text = auth.read_text()
+          text = re.sub(
+              r'''    await prisma\.userMfa\.deleteMany\(\{\n      where: \{ userId: fixture\.approvedUser\.id \},\n    \}\);''',
+              '''    await prisma.user.update({\n      where: { id: fixture.approvedUser.id },\n      data: {\n        mfaEncryptedSecret: null,\n        mfaEnrolledAt: null,\n        mfaVerifiedAt: null,\n      },\n    });''',
+              text,
+              count=1,
+          )
+          auth.write_text(text)
+
+          oauth = Path('apps/api/test/oauth-login.e2e-spec.ts')
+          text = oauth.read_text().replace(
+              '    assert.ok(stateRow.expiresAt > new Date());',
+              '    assert.ok(stateRow.expiresAt);\n    assert.ok(stateRow.expiresAt > new Date());',
+          )
+          oauth.write_text(text)
+
+          signup = Path('apps/api/test/sign-up.e2e-spec.ts')
+          text = signup.read_text().replace(
+              '    assert.equal(Number.isNaN(session.expiresAt.getTime()), false);',
+              '    assert.ok(session.expiresAt);\n    assert.equal(Number.isNaN(session.expiresAt.getTime()), false);',
+          )
+          signup.write_text(text)
+          PY
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
