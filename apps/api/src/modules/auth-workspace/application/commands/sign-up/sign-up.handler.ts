@@ -38,10 +38,17 @@ export class SignUpHandler {
     const correlationId = command.input.correlationId ?? createCorrelationId();
 
     if (!isValidEmail(email) || !isValidDisplayName(displayName)) {
-      await this.recordFailure(correlationId, SIGN_UP_ERROR_CODES.invalidRequest);
-      throw problemException(SIGN_UP_ERROR_CODES.invalidRequest, correlationId, {
-        status: HttpStatus.BAD_REQUEST,
-      });
+      await this.recordFailure(
+        correlationId,
+        SIGN_UP_ERROR_CODES.invalidRequest,
+      );
+      throw problemException(
+        SIGN_UP_ERROR_CODES.invalidRequest,
+        correlationId,
+        {
+          status: HttpStatus.BAD_REQUEST,
+        },
+      );
     }
 
     if (!isNonEmptyString(password) || password.length < MIN_PASSWORD_LENGTH) {

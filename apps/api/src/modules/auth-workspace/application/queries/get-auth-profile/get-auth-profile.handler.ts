@@ -67,7 +67,9 @@ export class GetAuthProfileHandler {
       updated_at: user.updatedAt.toISOString(),
       role: query.context.role,
       mfa_enrolled: mfaEnrolled,
-      mfa_enrolled_at: mfaEnrolled ? user.mfaVerifiedAt?.toISOString() ?? null : null,
+      mfa_enrolled_at: mfaEnrolled
+        ? (user.mfaVerifiedAt?.toISOString() ?? null)
+        : null,
       mfa_verified: sessionMfaVerifiedAt !== null,
       mfa_verified_at: sessionMfaVerifiedAt?.toISOString() ?? null,
       current_session_id: session.id,

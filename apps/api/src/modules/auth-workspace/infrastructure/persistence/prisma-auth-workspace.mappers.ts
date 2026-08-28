@@ -40,9 +40,7 @@ export function mapUserRecord(record: PrismaUser): User {
   });
 }
 
-export function mapRecoveryRequestRecord(
-  record: AuthRecord,
-): RecoveryRequest {
+export function mapRecoveryRequestRecord(record: AuthRecord): RecoveryRequest {
   return RecoveryRequest.rehydrate({
     id: record.id,
     userId: required(record.userId, "Recovery request userId"),

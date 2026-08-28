@@ -247,9 +247,7 @@ export class PrismaAuditEventRepository implements AuditEventRepository {
 }
 
 @Injectable()
-export class PrismaAuthorizationDecisionRepository
-  implements AuthorizationDecisionRepository
-{
+export class PrismaAuthorizationDecisionRepository implements AuthorizationDecisionRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async append(decision: AuthorizationDecision): Promise<void> {
@@ -264,7 +262,7 @@ export class PrismaAuthorizationDecisionRepository
         decision: toPrismaAuthDecision(decision.decision),
         reasonCode: decision.reason_code,
         correlationId: decision.correlationId,
-        payload: decision as Prisma.InputJsonValue,
+        payload: decision,
       },
     });
   }
@@ -425,9 +423,7 @@ export class PrismaMfaOtpUsedRepository implements MfaOtpUsedRepository {
 }
 
 @Injectable()
-export class PrismaMfaRecoveryCodeRepository
-  implements MfaRecoveryCodeRepository
-{
+export class PrismaMfaRecoveryCodeRepository implements MfaRecoveryCodeRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   nextId(): string {
@@ -521,9 +517,7 @@ export class PrismaMfaRecoveryCodeRepository
 }
 
 @Injectable()
-export class PrismaRecoveryRequestRepository
-  implements RecoveryRequestRepository
-{
+export class PrismaRecoveryRequestRepository implements RecoveryRequestRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   nextId(): string {
@@ -607,7 +601,10 @@ export class PrismaOAuthStateRepository implements OAuthStateRepository {
         id: state.id,
         userId: state.userId,
         type: AUTH_RECORD_TYPES.oauthState,
-        lookupKey: authRecordLookupKey(AUTH_RECORD_TYPES.oauthState, state.state),
+        lookupKey: authRecordLookupKey(
+          AUTH_RECORD_TYPES.oauthState,
+          state.state,
+        ),
         expiresAt: dateFromEpochMsRequired(state.expiresAt),
         metadata: {
           state: state.state,
@@ -640,9 +637,7 @@ export class PrismaOAuthStateRepository implements OAuthStateRepository {
 }
 
 @Injectable()
-export class PrismaOAuthIdentityRepository
-  implements OAuthIdentityRepository
-{
+export class PrismaOAuthIdentityRepository implements OAuthIdentityRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findByProviderAccount(

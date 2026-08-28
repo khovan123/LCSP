@@ -35,7 +35,7 @@ export function authRecordMetadata(
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return {};
   }
-  return metadata as Record<string, unknown>;
+  return metadata;
 }
 
 export function authRecordMetadataString(

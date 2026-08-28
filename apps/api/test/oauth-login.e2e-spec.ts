@@ -170,8 +170,14 @@ describe("OAuth login (e2e)", () => {
 
     const auditEvents = await prisma.auditEvent.findMany();
     const serialized = JSON.stringify(auditEvents.map((e) => e.payload));
-    assert.doesNotMatch(serialized, new RegExp(authRecordMetadataString(stateRow, "state") ?? ""));
-    assert.doesNotMatch(serialized, new RegExp(authRecordMetadataString(stateRow, "nonce") ?? ""));
+    assert.doesNotMatch(
+      serialized,
+      new RegExp(authRecordMetadataString(stateRow, "state") ?? ""),
+    );
+    assert.doesNotMatch(
+      serialized,
+      new RegExp(authRecordMetadataString(stateRow, "nonce") ?? ""),
+    );
     assert.match(serialized, /auth\.oauth\.start\.succeeded/);
   });
 

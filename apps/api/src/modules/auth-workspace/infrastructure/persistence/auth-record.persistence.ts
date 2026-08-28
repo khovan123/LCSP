@@ -48,8 +48,6 @@ export function authRecordMetadataDate(
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function authRecordDateMetadata(
-  value: number | null,
-): string | null {
+export function authRecordDateMetadata(value: number | null): string | null {
   return value === null ? null : new Date(value).toISOString();
 }

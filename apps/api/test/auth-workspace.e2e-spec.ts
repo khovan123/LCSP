@@ -184,7 +184,10 @@ describe("Auth workspace (e2e)", () => {
     const body = successBody<PasswordReauthSuccess>(result);
     assert.equal(body.verified, true);
 
-    const session = await findLatestAuthSession(prisma, fixture.approvedUser.id);
+    const session = await findLatestAuthSession(
+      prisma,
+      fixture.approvedUser.id,
+    );
     assert.ok(session);
     assert.ok(authRecordMetadataString(session, "sensitiveActionVerifiedAt"));
 
@@ -273,7 +276,10 @@ describe("Auth workspace (e2e)", () => {
     assert.equal("workspace" in result.body, false);
 
     const decision = await prisma.auditEvent.findFirstOrThrow({
-      where: { eventType: "AUTHORIZATION_DECISION", correlationId: "corr-workspace-no-session" },
+      where: {
+        eventType: "AUTHORIZATION_DECISION",
+        correlationId: "corr-workspace-no-session",
+      },
     });
     assert.equal(decision.decision, AUDIT_DECISIONS.deny);
   });
@@ -412,7 +418,10 @@ describe("Auth workspace (e2e)", () => {
       .expect(200);
 
     const allowDecision = await prisma.auditEvent.findFirstOrThrow({
-      where: { eventType: "AUTHORIZATION_DECISION", correlationId: "corr-workspace-allow" },
+      where: {
+        eventType: "AUTHORIZATION_DECISION",
+        correlationId: "corr-workspace-allow",
+      },
     });
     assert.equal(allowDecision.decision, AUDIT_DECISIONS.allow);
 

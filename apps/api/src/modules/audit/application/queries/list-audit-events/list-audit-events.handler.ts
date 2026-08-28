@@ -47,10 +47,16 @@ export class ListAuditEventsHandler implements IQueryHandler<ListAuditEventsQuer
     if (fromDate && toDate) {
       const range = toDate.getTime() - fromDate.getTime();
       if (range < 0) {
-        this.badRequest(AUDIT_ERROR_CODES.invalidDateRange, query.correlationId);
+        this.badRequest(
+          AUDIT_ERROR_CODES.invalidDateRange,
+          query.correlationId,
+        );
       }
       if (range > MAX_DATE_RANGE_MS) {
-        this.badRequest(AUDIT_ERROR_CODES.dateRangeExceeded, query.correlationId);
+        this.badRequest(
+          AUDIT_ERROR_CODES.dateRangeExceeded,
+          query.correlationId,
+        );
       }
     }
 
