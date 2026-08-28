@@ -57,27 +57,21 @@ class LegalRuleTriageService:
         include_completed: bool = False,
         idempotency_key: str | None = None,
         trigger: str = "LEGAL_MAINTENANCE",
-        assessment_id: str | None = None,
         triage_execution_id: str | None = None,
     ) -> dict[str, Any]:
         lease = self.coordinator.submit_or_continue(
             affected_rule_ids=affected_rule_ids,
             idempotency_key=idempotency_key,
             trigger=trigger,
-            assessment_id=assessment_id,
             include_completed=include_completed,
             execution_id=triage_execution_id,
         )
-        if lease.status == "RUNNING":
+        if lease.status == "ALREADY_RUNNING":
             return {
-                "status": "RUNNING",
+                "status": "ALREADY_RUNNING",
                 "triageExecutionId": lease.execution_id,
-                "joinedExistingExecution": True,
-                "requestCount": lease.request_count,
-                "affectedLegalRuleIds": list(lease.affected_rule_ids),
-                "fullBacklog": lease.full_backlog,
                 "workItems": [],
-                "limitations": ["TRIAGE_SINGLETON_ALREADY_RUNNING"],
+                "limitations": ["TRIAGE_SINGLETON_ACTIVE"],
             }
         if not lease.execution_id:
             raise RuntimeError("triage singleton owner is missing execution id")
@@ -150,7 +144,6 @@ class LegalRuleTriageService:
             "status": "READY",
             "triageExecutionId": lease.execution_id,
             "singletonOwner": True,
-            "requestCount": lease.request_count,
             "fullBacklog": lease.full_backlog,
             "effectiveAffectedLegalRuleIds": effective_rule_ids,
             "legalRuleCatalogVersionId": catalog_version_id,
@@ -217,7 +210,7 @@ class LegalRuleTriageService:
         }
 
     def finish_or_drain(self, *, triage_execution_id: str) -> dict[str, Any]:
-        """Keep the same shared triage owner alive while joined scope remains."""
+        """Finish the active batch and release the singleton; no request queue exists."""
         result = self.coordinator.finish_or_drain(execution_id=triage_execution_id)
         return result.to_dict()
 
