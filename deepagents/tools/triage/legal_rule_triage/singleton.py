@@ -55,7 +55,11 @@ class TriageSingletonCoordinator:
         root = storage_root
         if root is None:
             configured = os.getenv("LEGAL_SOURCE_STORAGE_ROOT")
-            root = Path(configured) if configured else Path(default_legal_source_storage_root())
+            root = (
+                Path(configured)
+                if configured
+                else Path(default_legal_source_storage_root())
+            )
         self.runtime_root = root.resolve() / TRIAGE_RUNTIME_DIR
         self.pending_root = self.runtime_root / TRIAGE_PENDING_DIR
         self.lock_path = self.runtime_root / TRIAGE_LOCK_FILE
@@ -73,10 +77,8 @@ class TriageSingletonCoordinator:
         """Queue one request or continue the already-owned singleton execution."""
         self._ensure_dirs()
         if execution_id:
-            self._assert_local_owner(execution_id)
+            self.assert_owner(execution_id)
             state = self._read_active_state()
-            if state.get("executionId") != execution_id:
-                raise RuntimeError("triage execution no longer owns the global lease")
             return self._lease_result("OWNER", state)
 
         request = self._request_payload(
@@ -104,11 +106,16 @@ class TriageSingletonCoordinator:
             self._write_active_state(state)
             return self._lease_result("OWNER", state)
 
-    def set_batch_work(self, *, execution_id: str, legal_rule_ids: list[str]) -> None:
-        """Record the exact rule IDs the active owner must finish before release."""
+    def assert_owner(self, execution_id: str) -> None:
+        """Fail before any protected work when the caller is not the singleton owner."""
         self._assert_local_owner(execution_id)
         state = self._read_active_state()
         self._assert_execution_state(state, execution_id)
+
+    def set_batch_work(self, *, execution_id: str, legal_rule_ids: list[str]) -> None:
+        """Record the exact rule IDs the active owner must finish before release."""
+        self.assert_owner(execution_id)
+        state = self._read_active_state()
         state["remainingLegalRuleIds"] = sorted(
             dict.fromkeys(str(value) for value in legal_rule_ids if str(value).strip())
         )
@@ -116,9 +123,8 @@ class TriageSingletonCoordinator:
 
     def mark_rule_completed(self, *, execution_id: str, legal_rule_id: str) -> None:
         """Mark one persisted LegalRule result complete without releasing the lease."""
-        self._assert_local_owner(execution_id)
+        self.assert_owner(execution_id)
         state = self._read_active_state()
-        self._assert_execution_state(state, execution_id)
         remaining = [
             value
             for value in (state.get("remainingLegalRuleIds") or [])
@@ -129,9 +135,8 @@ class TriageSingletonCoordinator:
 
     def finish_or_drain(self, *, execution_id: str) -> TriageLeaseResult:
         """Drain newly queued requests or release the singleton lease when fully idle."""
-        self._assert_local_owner(execution_id)
+        self.assert_owner(execution_id)
         state = self._read_active_state()
-        self._assert_execution_state(state, execution_id)
         remaining = [str(value) for value in (state.get("remainingLegalRuleIds") or [])]
         if remaining:
             raise RuntimeError(
@@ -142,21 +147,19 @@ class TriageSingletonCoordinator:
         claimed = set(str(value) for value in (state.get("requestKeys") or []))
         all_requests = self._pending_requests()
         newly_queued = [
-            request for request in all_requests if str(request.get("requestKey")) not in claimed
+            request
+            for request in all_requests
+            if str(request.get("requestKey")) not in claimed
         ]
         if newly_queued:
-            request_keys = [*claimed]
-            request_keys.extend(str(item["requestKey"]) for item in newly_queued)
-            state["requestKeys"] = sorted(dict.fromkeys(request_keys))
-            scope = self._scope_from_requests(
-                [
-                    request
-                    for request in all_requests
-                    if str(request.get("requestKey")) in set(state["requestKeys"])
-                ]
+            for request_key in claimed:
+                (self.pending_root / f"{request_key}.json").unlink(missing_ok=True)
+            state["requestKeys"] = sorted(
+                str(item["requestKey"]) for item in newly_queued
             )
-            state["affectedLegalRuleIds"] = list(scope[0])
-            state["fullBacklog"] = scope[1]
+            scope, full_backlog = self._scope_from_requests(newly_queued)
+            state["affectedLegalRuleIds"] = list(scope)
+            state["fullBacklog"] = full_backlog
             state["remainingLegalRuleIds"] = []
             state["updatedAt"] = _now()
             self._write_active_state(state)
@@ -195,7 +198,9 @@ class TriageSingletonCoordinator:
         pending = self._pending_requests()
         return TriageLeaseResult(
             status="QUEUED",
-            execution_id=(str(state.get("executionId")) if state.get("executionId") else None),
+            execution_id=(
+                str(state.get("executionId")) if state.get("executionId") else None
+            ),
             affected_rule_ids=(),
             full_backlog=False,
             request_count=len(pending),
@@ -223,13 +228,19 @@ class TriageSingletonCoordinator:
     ) -> dict[str, Any]:
         normalized_ids = sorted(
             dict.fromkeys(
-                str(value) for value in (affected_rule_ids or []) if str(value).strip()
+                str(value)
+                for value in (affected_rule_ids or [])
+                if str(value).strip()
             )
         )
         canonical_key = str(idempotency_key or "").strip()
         if not canonical_key:
             canonical_key = "|".join(
-                [str(trigger or "LEGAL_MAINTENANCE"), str(assessment_id or ""), *normalized_ids]
+                [
+                    str(trigger or "LEGAL_MAINTENANCE"),
+                    str(assessment_id or ""),
+                    *normalized_ids,
+                ]
             )
         request_key = hashlib.sha256(canonical_key.encode("utf-8")).hexdigest()
         return {
@@ -270,7 +281,9 @@ class TriageSingletonCoordinator:
         return requests
 
     @staticmethod
-    def _scope_from_requests(requests: list[dict[str, Any]]) -> tuple[tuple[str, ...], bool]:
+    def _scope_from_requests(
+        requests: list[dict[str, Any]],
+    ) -> tuple[tuple[str, ...], bool]:
         full_backlog = any(bool(item.get("fullBacklog")) for item in requests)
         if full_backlog:
             return (), True
