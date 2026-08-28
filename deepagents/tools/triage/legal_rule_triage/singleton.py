@@ -1,6 +1,6 @@
 """Durable singleton coordination for the shared Legal Rule Triage agent.
 
-There is no Triage job queue. The first trigger owns one global execution lease.
+There is no Triage job queue. The first trigger reserves one global execution lease.
 While that execution is RUNNING, later scheduled/manual requests join the active
 state by coalescing their LegalRule scope and idempotency key. The current owner
 drains that merged scope before releasing the lease.
@@ -34,7 +34,7 @@ _ACTIVE_LEASES: dict[str, TextIO] = {}
 
 @dataclass(frozen=True)
 class TriageLeaseResult:
-    """Bounded singleton state returned to the triage tool boundary."""
+    """Bounded singleton state returned to orchestration/tool boundaries."""
 
     status: str
     execution_id: str | None
@@ -71,7 +71,7 @@ class TriageSingletonCoordinator:
         self.state_lock_path = self.runtime_root / TRIAGE_STATE_LOCK_FILE
         self.active_path = self.runtime_root / TRIAGE_ACTIVE_FILE
 
-    def submit_or_continue(
+    def reserve_or_join(
         self,
         *,
         affected_rule_ids: list[str] | None,
@@ -79,17 +79,9 @@ class TriageSingletonCoordinator:
         trigger: str,
         assessment_id: str | None = None,
         include_completed: bool = False,
-        execution_id: str | None = None,
     ) -> TriageLeaseResult:
-        """Own pending scope or join it into the one execution already RUNNING."""
+        """Reserve the one Triage execution or merge into the execution already RUNNING."""
         self._ensure_runtime_dir()
-        if execution_id:
-            self.assert_owner(execution_id)
-            with self._locked_state():
-                state = self._read_active_state_unlocked()
-                self._assert_execution_state(state, execution_id)
-                return self._claim_pending_scope_unlocked(state)
-
         request = self._request_payload(
             affected_rule_ids=affected_rule_ids,
             idempotency_key=idempotency_key,
@@ -125,12 +117,53 @@ class TriageSingletonCoordinator:
                     )
                     self._merge_request_unlocked(state, request)
                     self._write_active_state_unlocked(state)
-                    return self._claim_pending_scope_unlocked(state)
+                    return TriageLeaseResult(
+                        status="OWNER",
+                        execution_id=execution_id,
+                        affected_rule_ids=tuple(request["affectedLegalRuleIds"]),
+                        full_backlog=bool(request["fullBacklog"]),
+                        include_completed=bool(request["includeCompleted"]),
+                        request_count=len(state.get("requestKeys") or []),
+                    )
             except Exception:
                 self._release_file_lease(execution_id)
                 raise
 
         raise RuntimeError("could not resolve active triage singleton execution")
+
+    def claim_pending_scope(self, *, execution_id: str) -> TriageLeaseResult:
+        """Claim the currently coalesced scope for the already-reserved singleton owner."""
+        self.assert_owner(execution_id)
+        with self._locked_state():
+            state = self._read_active_state_unlocked()
+            self._assert_execution_state(state, execution_id)
+            return self._claim_pending_scope_unlocked(state)
+
+    def submit_or_continue(
+        self,
+        *,
+        affected_rule_ids: list[str] | None,
+        idempotency_key: str | None,
+        trigger: str,
+        assessment_id: str | None = None,
+        include_completed: bool = False,
+        execution_id: str | None = None,
+    ) -> TriageLeaseResult:
+        """Compatibility helper: reserve+claim initially, or claim joined scope as owner."""
+        if execution_id:
+            return self.claim_pending_scope(execution_id=execution_id)
+        reservation = self.reserve_or_join(
+            affected_rule_ids=affected_rule_ids,
+            idempotency_key=idempotency_key,
+            trigger=trigger,
+            assessment_id=assessment_id,
+            include_completed=include_completed,
+        )
+        if reservation.status == "RUNNING":
+            return reservation
+        if not reservation.execution_id:
+            raise RuntimeError("triage singleton reservation is missing execution id")
+        return self.claim_pending_scope(execution_id=reservation.execution_id)
 
     def assert_owner(self, execution_id: str) -> None:
         """Fail before protected work when caller is not the singleton owner."""
