@@ -1,4 +1,9 @@
-"""Bounded tools exposed only to the Legal Rule Triage subagent."""
+"""Bounded tools exposed only to the Legal Rule Triage subagent.
+
+`assessment_id` is intentionally not accepted by these legal reasoning tools. An
+Assessment may correlate a manual request in runtime metadata, but that identity must
+not cross the Legal Rule Triage tool boundary or influence legal reasoning.
+"""
 
 from __future__ import annotations
 
