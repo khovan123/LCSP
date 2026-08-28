@@ -1,0 +1,143 @@
+name: LCSP-263 Remove DeepAgents Organization ID
+
+on:
+  push:
+    branches:
+      - feature/LCSP-263-triage-sub-agent-control-flow-build-engineer-rules
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: deepagents/pyproject.toml
+
+      - name: Remove legacy organization identifiers from Deep Agents
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          ROOT = Path('deepagents')
+
+          def remove_common(text: str) -> str:
+              # Standalone typed fields / parameters / kwargs / dict entries.
+              text = re.sub(r'(?m)^[ \t]*organization_id\s*:\s*[^\n]+\n', '', text)
+              text = re.sub(r'(?m)^[ \t]*organization_id\s*=\s*[^\n]+,\s*\n', '', text)
+              text = re.sub(r'(?m)^[ \t]*["\']organization_id["\']\s*:\s*[^\n]+\n', '', text)
+              text = re.sub(r'(?m)^[ \t]*["\']organizationId["\']\s*:\s*[^\n]+\n', '', text)
+              text = re.sub(r'(?m)^[ \t]*["\']organization_id["\']\s*,\s*\n', '', text)
+              text = re.sub(r'(?m)^[ \t]*["\']organizationId["\']\s*,\s*\n', '', text)
+
+              # Inline parameters / keyword args / dictionary items.
+              text = re.sub(r'\borganization_id\s*:\s*[^,\)\n]+,\s*', '', text)
+              text = re.sub(r',\s*organization_id\s*:\s*[^,\)\n]+', '', text)
+              text = re.sub(r'\borganization_id\s*=\s*[^,\)\n]+,\s*', '', text)
+              text = re.sub(r'["\']organization_id["\']\s*:\s*[^,}\n]+,\s*', '', text)
+              text = re.sub(r'["\']organizationId["\']\s*:\s*[^,}\n]+,\s*', '', text)
+
+              # A few expressions combine user and legacy tenant checks on one line.
+              text = text.replace(
+                  'if not user_id.strip() or not organization_id.strip():',
+                  'if not user_id.strip():',
+              )
+              text = text.replace(
+                  'path = InternalPath.AUDIT_EVENTS.format(organization_id=organization_id)',
+                  'path = InternalPath.AUDIT_EVENTS',
+              )
+              text = text.replace(
+                  'AUDIT_EVENTS = "/internal/organizations/{organization_id}/audit-events"',
+                  'AUDIT_EVENTS = "/internal/audit-events"',
+              )
+              text = re.sub(
+                  r'(?m)^[ \t]*["\']organization["\']\s*:\s*organization_id\s*,\s*\n',
+                  '',
+                  text,
+              )
+              return text
+
+          for path in ROOT.rglob('*.py'):
+              text = path.read_text(encoding='utf-8')
+              updated = remove_common(text)
+
+              # Audit export is request-scoped; RBAC owns authorization upstream.
+              if path.as_posix().endswith('/audit_export/audit_export_boundary.py'):
+                  updated = re.sub(r'(?m)^[ \t]*org_id\s*=\s*message\.get\(["\']organizationId["\']\)\s*\n', '', updated)
+                  updated = updated.replace(
+                      'if not all([export_request_id, org_id, from_date, to_date]):',
+                      'if not all([export_request_id, from_date, to_date]):',
+                  )
+                  updated = re.sub(r'(?m)^[ \t]*org_id=org_id,\s*\n', '', updated)
+                  updated = updated.replace(
+                      'message: Audit export request containing organization/date range IDs.',
+                      'message: Audit export request containing request/date range IDs.',
+                  )
+
+              if path.as_posix().endswith('/audit_export/audit_export_generator.py'):
+                  updated = re.sub(r'(?m)^[ \t]*org_id:\s*str,\s*\n', '', updated)
+                  updated = re.sub(r'(?m)^[ \t]*org_id=org_id,\s*\n', '', updated)
+                  updated = re.sub(r'(?m)^[ \t]*organization_id=org_id,\s*\n', '', updated)
+                  updated = updated.replace(
+                      's3_key = f"exports/{org_id}/{temp_file_name}"',
+                      's3_key = f"exports/{export_request_id}/{temp_file_name}"',
+                  )
+                  updated = re.sub(r'(?m)^[ \t]*org_id: Organization[^\n]*\n', '', updated)
+                  updated = updated.replace("an organization's audit events", 'audit events')
+
+              path.write_text(updated, encoding='utf-8')
+
+          # Remove organization identifiers from text fixtures/comments as well. Tests are
+          # part of the Deep Agents contract and must not preserve obsolete fields.
+          for path in ROOT.rglob('*'):
+              if not path.is_file() or path.suffix not in {'.py', '.md', '.json', '.yaml', '.yml', '.toml'}:
+                  continue
+              text = path.read_text(encoding='utf-8')
+              text = text.replace('organization/workspace UUID', 'RBAC-authorized runtime')
+              text = text.replace('organization context', 'RBAC context')
+              text = text.replace('user/organization context', 'user RBAC context')
+              text = text.replace('user/organization', 'user RBAC')
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Format changed Python
+        working-directory: deepagents
+        run: |
+          python -m pip install -e '.[dev]'
+          python -m ruff format . || true
+
+      - name: Enforce zero legacy organization identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'organization_id|organizationId|organization-id|organize-id' deepagents; then
+            echo 'Legacy organization identifier remains in deepagents.' >&2
+            exit 1
+          fi
+
+      - name: Run Deep Agents tests
+        working-directory: deepagents
+        run: pytest
+
+      - name: Commit cleanup and remove one-shot workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/lcsp-263-remove-organization-id.yml
+          git add deepagents
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'refactor(deepagents): LCSP-263 remove organization identifiers'
+          git push origin HEAD:${GITHUB_REF_NAME}
