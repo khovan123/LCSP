@@ -65,20 +65,28 @@ class LegalRuleTriageService:
             idempotency_key=idempotency_key,
             trigger=trigger,
             assessment_id=assessment_id,
+            include_completed=include_completed,
             execution_id=triage_execution_id,
         )
-        if lease.status == "QUEUED":
+        if lease.status == "RUNNING":
             return {
-                "status": "QUEUED",
+                "status": "RUNNING",
                 "triageExecutionId": lease.execution_id,
+                "joinedExistingExecution": True,
                 "requestCount": lease.request_count,
+                "affectedLegalRuleIds": list(lease.affected_rule_ids),
+                "fullBacklog": lease.full_backlog,
                 "workItems": [],
-                "limitations": ["TRIAGE_SINGLETON_BUSY"],
+                "limitations": ["TRIAGE_SINGLETON_ALREADY_RUNNING"],
             }
         if not lease.execution_id:
             raise RuntimeError("triage singleton owner is missing execution id")
 
         effective_rule_ids = [] if lease.full_backlog else list(lease.affected_rule_ids)
+        effective_include_completed = bool(include_completed or lease.include_completed)
+        if not lease.full_backlog and not effective_rule_ids:
+            raise RuntimeError("triage singleton owner received empty bounded scope")
+
         catalog, catalog_version_id, corpus_version_id, chunks, rules = self._load_sources()
         requested = {
             str(value) for value in effective_rule_ids if str(value).strip()
@@ -114,7 +122,7 @@ class LegalRuleTriageService:
                 triage_completed = self._triage_completion_lookup(source_fingerprint)
                 if triage_completed:
                     completed_count += 1
-                    if not include_completed:
+                    if not effective_include_completed:
                         continue
 
             work_items.append(
@@ -209,7 +217,7 @@ class LegalRuleTriageService:
         }
 
     def finish_or_drain(self, *, triage_execution_id: str) -> dict[str, Any]:
-        """Keep the shared triage agent alive while queued requests remain."""
+        """Keep the same shared triage owner alive while joined scope remains."""
         result = self.coordinator.finish_or_drain(execution_id=triage_execution_id)
         return result.to_dict()
 
