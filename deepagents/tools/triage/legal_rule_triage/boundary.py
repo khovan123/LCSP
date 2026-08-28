@@ -12,18 +12,23 @@ from tools.common.capabilities.platform.logging import get_logger
 
 from .contracts import LEGAL_RULE_TRIAGE_REQUEST_COMMAND
 from .singleton import TriageSingletonCoordinator
+from .waiting_assessments import WaitingAssessmentRegistry
 
 
 logger = get_logger(__name__)
 
 
 class LegalRuleTriageBoundary(AgentBoundaryBase):
-    """Run the shared Triage agent for one automatic readiness request, then re-check Assessment."""
+    """Run the shared Triage agent for one automatic readiness request."""
 
     boundary_source = "legal.engineering-rule-readiness"
     source_event = LEGAL_RULE_TRIAGE_REQUEST_COMMAND
     requires_rbac = False
     retry_delays_seconds = (30, 120, 600)
+
+    def __init__(self, config, rbac_client=None, waiting_registry=None) -> None:
+        super().__init__(config, rbac_client)
+        self._waiting_registry = waiting_registry or WaitingAssessmentRegistry()
 
     def handle(self, message: dict[str, Any], correlationId: str) -> None:
         trigger = str(message.get("trigger") or "")
@@ -41,6 +46,16 @@ class LegalRuleTriageBoundary(AgentBoundaryBase):
             message.get("resumeWorkflowRunId") or evidence_report_id
         ).strip()
 
+        # Persist only the orchestration checkpoint needed to re-run the Assessment
+        # readiness gate. This is intentionally separate from the Triage singleton:
+        # no incoming LegalRule scope is queued, merged, or exposed to Triage when a
+        # different execution already owns the singleton.
+        self._waiting_registry.register(
+            evidence_report_id=evidence_report_id,
+            workflow_run_id=workflow_run_id,
+            source_correlation_id=correlationId,
+        )
+
         coordinator = TriageSingletonCoordinator()
         reservation = coordinator.claim_or_observe(
             affected_rule_ids=legal_rule_ids,
@@ -52,11 +67,12 @@ class LegalRuleTriageBoundary(AgentBoundaryBase):
                 "LEGAL_RULE_TRIAGE_ALREADY_RUNNING",
                 active_execution_id=reservation.execution_id,
                 requested_rule_count=len(legal_rule_ids),
+                waiting_assessment_checkpointed=True,
                 correlationId=correlationId,
             )
-            # Strict singleton policy: do not queue, merge, or persist the incoming
-            # request. The Assessment stays WAITING and a later orchestration attempt
-            # may re-check readiness after the active Triage execution finishes.
+            # Strict singleton policy remains intact: do not queue, merge, or persist
+            # the incoming LegalRule scope. The Assessment checkpoint is reconciled
+            # after whichever Triage execution currently owns the singleton finishes.
             return
         if reservation.status != "OWNER" or not reservation.execution_id:
             raise RuntimeError(
@@ -110,19 +126,15 @@ class LegalRuleTriageBoundary(AgentBoundaryBase):
                 "Triage agent returned before finish_legal_rule_triage_execution"
             )
 
-        # Keep Assessment identity outside Triage reasoning. Only after legal
-        # preparation releases the singleton do we re-enter the existing assessment
-        # boundary with the previously accepted evidence report so it re-checks the
-        # same EngineeringRule readiness condition.
-        from tools.common.capabilities.managed.invocation import invoke_boundary
-
-        invoke_boundary(
-            "engineering_assessment_requested",
-            {
-                "evidenceReportId": evidence_report_id,
-                "workflowRunId": workflow_run_id,
-            },
-            correlationId,
+        # finish_legal_rule_triage_execution is the deterministic reconciliation
+        # point. It releases the singleton first, then re-enters every Assessment
+        # checkpoint currently waiting on EngineeringRule readiness. Do not resume
+        # only this originating Assessment here, otherwise it would be duplicated.
+        logger.info(
+            "LEGAL_RULE_TRIAGE_OWNER_COMPLETED",
+            triage_execution_id=execution_id,
+            assessment_reconciliation="delegated_to_finish_tool",
+            correlationId=correlationId,
         )
 
     @staticmethod

@@ -14,6 +14,7 @@ from langchain.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
 
 from .service import LegalRuleTriageService
+from .waiting_assessments import WaitingAssessmentRegistry
 
 
 class GetLegalRuleTriageWorkItemsInput(BaseModel):
@@ -91,7 +92,12 @@ def persist_legal_rule_triage_result(
 def finish_legal_rule_triage_execution(
     triage_execution_id: str,
 ) -> dict[str, Any]:
-    """Release the singleton after the current owner finishes its active batch."""
-    return LegalRuleTriageService().finish_or_drain(
+    """Release singleton, then reconcile every Assessment waiting on READY rules."""
+    result = LegalRuleTriageService().finish_or_drain(
         triage_execution_id=triage_execution_id,
     )
+    reconciliation = WaitingAssessmentRegistry().reconcile_all()
+    return {
+        **result,
+        "assessmentReconciliation": reconciliation,
+    }

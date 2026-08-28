@@ -25,7 +25,7 @@ def _message() -> dict:
     }
 
 
-def test_owner_runs_triage_without_assessment_context_then_rechecks_assessment(monkeypatch) -> None:
+def test_owner_checkpoints_assessment_runs_triage_and_delegates_reconciliation(monkeypatch) -> None:
     coordinator = MagicMock()
     coordinator.claim_or_observe.return_value = SimpleNamespace(
         status="OWNER",
@@ -40,21 +40,24 @@ def test_owner_runs_triage_without_assessment_context_then_rechecks_assessment(m
 
     agent = MagicMock()
     monkeypatch.setattr(triage_boundary, "create_agent", lambda **_kwargs: agent)
+    waiting_registry = MagicMock()
 
-    resumed = []
     from tools.common.capabilities.managed import invocation
 
-    monkeypatch.setattr(
-        invocation,
-        "invoke_boundary",
-        lambda name, message, correlation_id: resumed.append(
-            (name, message, correlation_id)
-        ),
-    )
+    direct_resume = MagicMock()
+    monkeypatch.setattr(invocation, "invoke_boundary", direct_resume)
 
-    boundary = triage_boundary.LegalRuleTriageBoundary(_config())
+    boundary = triage_boundary.LegalRuleTriageBoundary(
+        _config(),
+        waiting_registry=waiting_registry,
+    )
     boundary.handle(_message(), "corr-1")
 
+    waiting_registry.register.assert_called_once_with(
+        evidence_report_id="ter-1",
+        workflow_run_id="scan-1",
+        source_correlation_id="corr-1",
+    )
     coordinator.claim_or_observe.assert_called_once_with(
         affected_rule_ids=["RULE-2", "RULE-1"],
         idempotency_key="legal-triage:abc123",
@@ -69,16 +72,12 @@ def test_owner_runs_triage_without_assessment_context_then_rechecks_assessment(m
     assert "ter-1" not in instruction
     assert "scan-1" not in instruction
 
-    assert resumed == [
-        (
-            "engineering_assessment_requested",
-            {"evidenceReportId": "ter-1", "workflowRunId": "scan-1"},
-            "corr-1",
-        )
-    ]
+    # The finish tool reconciles all waiting Assessments after releasing the singleton;
+    # the boundary must not duplicate only the originating Assessment here.
+    direct_resume.assert_not_called()
 
 
-def test_running_singleton_drops_incoming_request_without_queue_or_resume(monkeypatch) -> None:
+def test_running_singleton_keeps_resume_checkpoint_without_queue_merge_or_agent(monkeypatch) -> None:
     coordinator = MagicMock()
     coordinator.claim_or_observe.return_value = SimpleNamespace(
         status="ALREADY_RUNNING",
@@ -91,21 +90,24 @@ def test_running_singleton_drops_incoming_request_without_queue_or_resume(monkey
     )
     create_agent = MagicMock()
     monkeypatch.setattr(triage_boundary, "create_agent", create_agent)
+    waiting_registry = MagicMock()
 
-    from tools.common.capabilities.managed import invocation
-
-    resume = MagicMock()
-    monkeypatch.setattr(invocation, "invoke_boundary", resume)
-
-    boundary = triage_boundary.LegalRuleTriageBoundary(_config())
+    boundary = triage_boundary.LegalRuleTriageBoundary(
+        _config(),
+        waiting_registry=waiting_registry,
+    )
     boundary.handle(_message(), "corr-1")
 
+    waiting_registry.register.assert_called_once_with(
+        evidence_report_id="ter-1",
+        workflow_run_id="scan-1",
+        source_correlation_id="corr-1",
+    )
     create_agent.assert_not_called()
-    resume.assert_not_called()
     coordinator.set_batch_work.assert_not_called()
 
 
-def test_triage_failure_releases_owner_and_is_retryable(monkeypatch) -> None:
+def test_triage_failure_releases_owner_and_preserves_waiting_checkpoint(monkeypatch) -> None:
     coordinator = MagicMock()
     coordinator.claim_or_observe.return_value = SimpleNamespace(
         status="OWNER",
@@ -119,17 +121,22 @@ def test_triage_failure_releases_owner_and_is_retryable(monkeypatch) -> None:
     agent = MagicMock()
     agent.invoke.side_effect = RuntimeError("model failure")
     monkeypatch.setattr(triage_boundary, "create_agent", lambda **_kwargs: agent)
+    waiting_registry = MagicMock()
 
-    boundary = triage_boundary.LegalRuleTriageBoundary(_config())
+    boundary = triage_boundary.LegalRuleTriageBoundary(
+        _config(),
+        waiting_registry=waiting_registry,
+    )
     with pytest.raises(RuntimeError, match="model failure"):
         boundary.handle(_message(), "corr-1")
 
+    waiting_registry.register.assert_called_once()
     coordinator.abandon_execution.assert_called_once_with(
         execution_id="triage:owner"
     )
 
 
-def test_triage_must_finish_singleton_before_assessment_resume(monkeypatch) -> None:
+def test_triage_must_finish_singleton_before_reconciliation_can_happen(monkeypatch) -> None:
     coordinator = MagicMock()
     coordinator.claim_or_observe.return_value = SimpleNamespace(
         status="OWNER",
@@ -146,8 +153,12 @@ def test_triage_must_finish_singleton_before_assessment_resume(monkeypatch) -> N
     )
     agent = MagicMock()
     monkeypatch.setattr(triage_boundary, "create_agent", lambda **_kwargs: agent)
+    waiting_registry = MagicMock()
 
-    boundary = triage_boundary.LegalRuleTriageBoundary(_config())
+    boundary = triage_boundary.LegalRuleTriageBoundary(
+        _config(),
+        waiting_registry=waiting_registry,
+    )
     with pytest.raises(RuntimeError, match="returned before finish"):
         boundary.handle(_message(), "corr-1")
 
@@ -156,10 +167,16 @@ def test_triage_must_finish_singleton_before_assessment_resume(monkeypatch) -> N
     )
 
 
-def test_automatic_boundary_rejects_manual_trigger() -> None:
+def test_automatic_boundary_rejects_manual_trigger_before_checkpointing() -> None:
     message = _message()
     message["trigger"] = "MANUAL_ENGINEERING_RULE_NOT_READY"
+    waiting_registry = MagicMock()
 
-    boundary = triage_boundary.LegalRuleTriageBoundary(_config())
+    boundary = triage_boundary.LegalRuleTriageBoundary(
+        _config(),
+        waiting_registry=waiting_registry,
+    )
     with pytest.raises(ValueError, match="ENGINEERING_RULE_NOT_READY"):
         boundary.handle(message, "corr-1")
+
+    waiting_registry.register.assert_not_called()
