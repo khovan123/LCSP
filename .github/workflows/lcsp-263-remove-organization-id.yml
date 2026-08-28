@@ -103,6 +103,20 @@ jobs:
                   updated = re.sub(r'(?m)^[ \t]*org_id: Organization[^\n]*\n', '', updated)
                   updated = updated.replace("an organization's audit events", 'audit events')
 
+              if path.as_posix().endswith('/tests/test_reporting/test_audit_export_worker.py'):
+                  updated = updated.replace(
+                      'generator.generate_export("req_123", "org_1", "2023-01-01", "2023-01-31")',
+                      'generator.generate_export("req_123", "2023-01-01", "2023-01-31")',
+                  )
+                  updated = updated.replace(
+                      '"exports/org_1/audit_export_req_123.jsonl"',
+                      '"exports/req_123/audit_export_req_123.jsonl"',
+                  )
+                  updated = updated.replace(
+                      '"s3://test-bucket/exports/org_1/audit_export_req_123.jsonl"',
+                      '"s3://test-bucket/exports/req_123/audit_export_req_123.jsonl"',
+                  )
+
               path.write_text(updated, encoding='utf-8')
 
           # Clean obsolete wording from Deep Agents docs/fixtures too.
