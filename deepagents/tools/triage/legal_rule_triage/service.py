@@ -16,6 +16,8 @@ from tools.legal.corpus.engineering_rules.orchestration.service import Engineeri
 from tools.legal.retrieval.legal_basis.chromadb_citation_retriever import ChromaDbCitationRetriever
 from tools.legal.sources.recovery.artifact_store import recovery_artifact_exists
 
+from .singleton import TriageSingletonCoordinator
+
 
 class LegalRuleTriageService:
     """Load approved triage work and persist only validated agent decisions."""
@@ -27,6 +29,7 @@ class LegalRuleTriageService:
         retriever: ChromaDbCitationRetriever | None = None,
         rule_service: EngineeringRuleService | None = None,
         triage_completion_lookup: Callable[[str], bool] | None = None,
+        coordinator: TriageSingletonCoordinator | None = None,
     ) -> None:
         if api_client is None:
             config = load_config()
@@ -39,6 +42,7 @@ class LegalRuleTriageService:
         self.rule_service = rule_service or EngineeringRuleService(
             retriever=self.retriever,
         )
+        self.coordinator = coordinator or TriageSingletonCoordinator()
         self._triage_completion_lookup = triage_completion_lookup or (
             lambda fingerprint: recovery_artifact_exists(
                 "legal-rule-triage",
@@ -51,10 +55,33 @@ class LegalRuleTriageService:
         *,
         affected_rule_ids: list[str] | None = None,
         include_completed: bool = False,
+        idempotency_key: str | None = None,
+        trigger: str = "LEGAL_MAINTENANCE",
+        assessment_id: str | None = None,
+        triage_execution_id: str | None = None,
     ) -> dict[str, Any]:
+        lease = self.coordinator.submit_or_continue(
+            affected_rule_ids=affected_rule_ids,
+            idempotency_key=idempotency_key,
+            trigger=trigger,
+            assessment_id=assessment_id,
+            execution_id=triage_execution_id,
+        )
+        if lease.status == "QUEUED":
+            return {
+                "status": "QUEUED",
+                "triageExecutionId": lease.execution_id,
+                "requestCount": lease.request_count,
+                "workItems": [],
+                "limitations": ["TRIAGE_SINGLETON_BUSY"],
+            }
+        if not lease.execution_id:
+            raise RuntimeError("triage singleton owner is missing execution id")
+
+        effective_rule_ids = [] if lease.full_backlog else list(lease.affected_rule_ids)
         catalog, catalog_version_id, corpus_version_id, chunks, rules = self._load_sources()
         requested = {
-            str(value) for value in (affected_rule_ids or []) if str(value).strip()
+            str(value) for value in effective_rule_ids if str(value).strip()
         }
         if requested:
             rules = [rule for rule in rules if self._rule_id(rule) in requested]
@@ -103,8 +130,21 @@ class LegalRuleTriageService:
                 }
             )
 
+        self.coordinator.set_batch_work(
+            execution_id=lease.execution_id,
+            legal_rule_ids=[
+                str(item["legalRuleId"])
+                for item in work_items
+                if item.get("readyForTriage")
+            ],
+        )
         return {
             "status": "READY",
+            "triageExecutionId": lease.execution_id,
+            "singletonOwner": True,
+            "requestCount": lease.request_count,
+            "fullBacklog": lease.full_backlog,
+            "effectiveAffectedLegalRuleIds": effective_rule_ids,
             "legalRuleCatalogVersionId": catalog_version_id,
             "legalCorpusVersionId": corpus_version_id,
             "catalogRuleCount": len(catalog.get("rules") or []),
@@ -117,6 +157,7 @@ class LegalRuleTriageService:
     def persist_result(
         self,
         *,
+        triage_execution_id: str,
         legal_rule_id: str,
         legal_rule_catalog_version_id: str,
         legal_corpus_version_id: str,
@@ -125,6 +166,7 @@ class LegalRuleTriageService:
         workflow_run_id: str,
         correlation_id: str | None = None,
     ) -> dict[str, Any]:
+        self.coordinator.active_status()
         _, active_catalog_id, active_corpus_id, chunks, rules = self._load_sources()
         if legal_rule_catalog_version_id != active_catalog_id:
             raise ValueError("triage result targets a stale LegalRule catalog version")
@@ -151,8 +193,13 @@ class LegalRuleTriageService:
             workflow_run_id=workflow_run_id,
             correlation_id=correlation_id,
         )
+        self.coordinator.mark_rule_completed(
+            execution_id=triage_execution_id,
+            legal_rule_id=legal_rule_id,
+        )
         return {
             "status": "READY",
+            "triageExecutionId": triage_execution_id,
             "legalRuleId": legal_rule_id,
             "legalRuleCatalogVersionId": active_catalog_id,
             "legalCorpusVersionId": active_corpus_id,
@@ -160,6 +207,11 @@ class LegalRuleTriageService:
             "engineeringRuleCount": len(prepared),
             "engineeringRuleIds": [rule.engineering_rule_id for rule in prepared],
         }
+
+    def finish_or_drain(self, *, triage_execution_id: str) -> dict[str, Any]:
+        """Keep the shared triage agent alive while queued requests remain."""
+        result = self.coordinator.finish_or_drain(execution_id=triage_execution_id)
+        return result.to_dict()
 
     def _load_sources(
         self,
