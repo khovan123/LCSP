@@ -1,9 +1,9 @@
 """Durable singleton coordination for the shared Legal Rule Triage agent.
 
-The triage model is logically long-lived and shared by every scheduled/manual trigger.
-Only one execution may own the global triage lease at a time. Concurrent requests are
-persisted as small, non-sensitive queue records and are drained by the active owner
-before it releases the lease.
+There is no Triage job queue. The first trigger owns one global execution lease.
+While that execution is RUNNING, later scheduled/manual requests join the active
+state by coalescing their LegalRule scope and idempotency key. The current owner
+drains that merged scope before releasing the lease.
 """
 
 from __future__ import annotations
@@ -12,19 +12,21 @@ import fcntl
 import hashlib
 import json
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-from typing import Any, TextIO
+from time import sleep
+from typing import Any, Iterator, TextIO
 from uuid import uuid4
 
 from tools.common.capabilities.platform.config import default_legal_source_storage_root
 
 
 TRIAGE_RUNTIME_DIR = "triage-runtime"
-TRIAGE_PENDING_DIR = "pending"
-TRIAGE_LOCK_FILE = "singleton.lock"
+TRIAGE_EXECUTION_LOCK_FILE = "singleton.lock"
+TRIAGE_STATE_LOCK_FILE = "state.lock"
 TRIAGE_ACTIVE_FILE = "active.json"
 _LOCAL_GUARD = RLock()
 _ACTIVE_LEASES: dict[str, TextIO] = {}
@@ -32,10 +34,13 @@ _ACTIVE_LEASES: dict[str, TextIO] = {}
 
 @dataclass(frozen=True)
 class TriageLeaseResult:
+    """Bounded singleton state returned to the triage tool boundary."""
+
     status: str
     execution_id: str | None
     affected_rule_ids: tuple[str, ...]
     full_backlog: bool
+    include_completed: bool
     request_count: int
 
     def to_dict(self) -> dict[str, Any]:
@@ -44,12 +49,13 @@ class TriageLeaseResult:
             "triageExecutionId": self.execution_id,
             "affectedLegalRuleIds": list(self.affected_rule_ids),
             "fullBacklog": self.full_backlog,
+            "includeCompleted": self.include_completed,
             "requestCount": self.request_count,
         }
 
 
 class TriageSingletonCoordinator:
-    """Serialize all Legal Rule Triage work through one durable global lease."""
+    """Guarantee one active Legal Rule Triage execution per shared runtime store."""
 
     def __init__(self, *, storage_root: Path | None = None) -> None:
         root = storage_root
@@ -61,8 +67,8 @@ class TriageSingletonCoordinator:
                 else Path(default_legal_source_storage_root())
             )
         self.runtime_root = root.resolve() / TRIAGE_RUNTIME_DIR
-        self.pending_root = self.runtime_root / TRIAGE_PENDING_DIR
-        self.lock_path = self.runtime_root / TRIAGE_LOCK_FILE
+        self.execution_lock_path = self.runtime_root / TRIAGE_EXECUTION_LOCK_FILE
+        self.state_lock_path = self.runtime_root / TRIAGE_STATE_LOCK_FILE
         self.active_path = self.runtime_root / TRIAGE_ACTIVE_FILE
 
     def submit_or_continue(
@@ -72,138 +78,240 @@ class TriageSingletonCoordinator:
         idempotency_key: str | None,
         trigger: str,
         assessment_id: str | None = None,
+        include_completed: bool = False,
         execution_id: str | None = None,
     ) -> TriageLeaseResult:
-        """Queue one request or continue the already-owned singleton execution."""
-        self._ensure_dirs()
+        """Own pending scope or join it into the one execution already RUNNING."""
+        self._ensure_runtime_dir()
         if execution_id:
             self.assert_owner(execution_id)
-            state = self._read_active_state()
-            return self._lease_result("OWNER", state)
+            with self._locked_state():
+                state = self._read_active_state_unlocked()
+                self._assert_execution_state(state, execution_id)
+                return self._claim_pending_scope_unlocked(state)
 
         request = self._request_payload(
             affected_rule_ids=affected_rule_ids,
             idempotency_key=idempotency_key,
             trigger=trigger,
             assessment_id=assessment_id,
+            include_completed=include_completed,
         )
-        self._write_pending_once(request)
 
-        with _LOCAL_GUARD:
-            if _ACTIVE_LEASES:
-                return self._queued_result()
-
-            lease_file = self.lock_path.open("a+", encoding="utf-8")
+        # The execution lock is authoritative. If another process owns it, this
+        # request modifies only active.json under the separate state lock; it never
+        # creates another queue/job or another Triage model execution.
+        for _attempt in range(50):
+            lease_file = self.execution_lock_path.open("a+", encoding="utf-8")
             try:
                 fcntl.flock(lease_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 lease_file.close()
-                return self._queued_result()
+                joined = self._merge_into_running(request)
+                if joined is not None:
+                    return joined
+                sleep(0.01)
+                continue
 
             execution_id = f"triage:{uuid4()}"
-            _ACTIVE_LEASES[execution_id] = lease_file
-            state = self._build_active_state(execution_id)
-            self._write_active_state(state)
-            return self._lease_result("OWNER", state)
+            with _LOCAL_GUARD:
+                _ACTIVE_LEASES[execution_id] = lease_file
+            try:
+                with self._locked_state():
+                    stale = self._read_active_state_unlocked()
+                    state = self._recover_or_initialize_state(
+                        stale=stale,
+                        execution_id=execution_id,
+                    )
+                    self._merge_request_unlocked(state, request)
+                    self._write_active_state_unlocked(state)
+                    return self._claim_pending_scope_unlocked(state)
+            except Exception:
+                self._release_file_lease(execution_id)
+                raise
+
+        raise RuntimeError("could not resolve active triage singleton execution")
 
     def assert_owner(self, execution_id: str) -> None:
-        """Fail before any protected work when the caller is not the singleton owner."""
+        """Fail before protected work when caller is not the singleton owner."""
         self._assert_local_owner(execution_id)
-        state = self._read_active_state()
-        self._assert_execution_state(state, execution_id)
+        with self._locked_state():
+            state = self._read_active_state_unlocked()
+            self._assert_execution_state(state, execution_id)
 
     def set_batch_work(self, *, execution_id: str, legal_rule_ids: list[str]) -> None:
-        """Record the exact rule IDs the active owner must finish before release."""
-        self.assert_owner(execution_id)
-        state = self._read_active_state()
-        state["remainingLegalRuleIds"] = sorted(
-            dict.fromkeys(str(value) for value in legal_rule_ids if str(value).strip())
-        )
-        self._write_active_state(state)
+        """Record exact ready LegalRules assigned to the active owner batch."""
+        self._assert_local_owner(execution_id)
+        with self._locked_state():
+            state = self._read_active_state_unlocked()
+            self._assert_execution_state(state, execution_id)
+            state["activeBatchLegalRuleIds"] = sorted(
+                dict.fromkeys(
+                    str(value) for value in legal_rule_ids if str(value).strip()
+                )
+            )
+            self._write_active_state_unlocked(state)
 
     def mark_rule_completed(self, *, execution_id: str, legal_rule_id: str) -> None:
-        """Mark one persisted LegalRule result complete without releasing the lease."""
-        self.assert_owner(execution_id)
-        state = self._read_active_state()
-        remaining = [
-            value
-            for value in (state.get("remainingLegalRuleIds") or [])
-            if str(value) != str(legal_rule_id)
-        ]
-        state["remainingLegalRuleIds"] = remaining
-        self._write_active_state(state)
+        """Remove one successfully persisted LegalRule from the owner batch."""
+        self._assert_local_owner(execution_id)
+        with self._locked_state():
+            state = self._read_active_state_unlocked()
+            self._assert_execution_state(state, execution_id)
+            state["activeBatchLegalRuleIds"] = [
+                value
+                for value in (state.get("activeBatchLegalRuleIds") or [])
+                if str(value) != str(legal_rule_id)
+            ]
+            completed = list(state.get("completedLegalRuleIds") or [])
+            completed.append(str(legal_rule_id))
+            state["completedLegalRuleIds"] = sorted(dict.fromkeys(completed))
+            self._write_active_state_unlocked(state)
 
     def finish_or_drain(self, *, execution_id: str) -> TriageLeaseResult:
-        """Drain newly queued requests or release the singleton lease when fully idle."""
-        self.assert_owner(execution_id)
-        state = self._read_active_state()
-        remaining = [str(value) for value in (state.get("remainingLegalRuleIds") or [])]
-        if remaining:
-            raise RuntimeError(
-                "triage execution cannot finish while LegalRule work remains: "
-                + ",".join(remaining)
-            )
+        """Continue the same owner for joined scope, otherwise release the lease."""
+        self._assert_local_owner(execution_id)
+        should_release = False
+        with self._locked_state():
+            state = self._read_active_state_unlocked()
+            self._assert_execution_state(state, execution_id)
+            remaining = [
+                str(value) for value in (state.get("activeBatchLegalRuleIds") or [])
+            ]
+            if remaining:
+                raise RuntimeError(
+                    "triage execution cannot finish while LegalRule work remains: "
+                    + ",".join(remaining)
+                )
 
-        claimed = set(str(value) for value in (state.get("requestKeys") or []))
-        all_requests = self._pending_requests()
-        newly_queued = [
-            request
-            for request in all_requests
-            if str(request.get("requestKey")) not in claimed
-        ]
-        if newly_queued:
-            for request_key in claimed:
-                (self.pending_root / f"{request_key}.json").unlink(missing_ok=True)
-            state["requestKeys"] = sorted(
-                str(item["requestKey"]) for item in newly_queued
-            )
-            scope, full_backlog = self._scope_from_requests(newly_queued)
-            state["affectedLegalRuleIds"] = list(scope)
-            state["fullBacklog"] = full_backlog
-            state["remainingLegalRuleIds"] = []
-            state["updatedAt"] = _now()
-            self._write_active_state(state)
-            return self._lease_result("CONTINUE", state)
+            if self._has_pending_scope(state):
+                return self._lease_result_from_pending("CONTINUE", state)
 
-        result = self._lease_result("COMPLETE", state)
-        self._release(execution_id=execution_id, state=state)
+            result = self._lease_result("COMPLETE", state)
+            self.active_path.unlink(missing_ok=True)
+            should_release = True
+
+        if should_release:
+            self._release_file_lease(execution_id)
         return result
 
     def active_status(self) -> dict[str, Any]:
-        """Return privacy-safe singleton state for tests/observability."""
-        state = self._read_active_state()
+        """Return privacy-safe singleton state for observability/tests."""
+        self._ensure_runtime_dir()
+        with self._locked_state():
+            state = self._read_active_state_unlocked()
         return {
             "active": bool(state.get("executionId")),
+            "status": state.get("status"),
             "triageExecutionId": state.get("executionId"),
             "requestCount": len(state.get("requestKeys") or []),
-            "remainingLegalRuleIds": list(state.get("remainingLegalRuleIds") or []),
+            "activeBatchLegalRuleIds": list(state.get("activeBatchLegalRuleIds") or []),
+            "joinedLegalRuleIds": list(state.get("pendingLegalRuleIds") or []),
+            "joinedFullBacklog": bool(state.get("pendingFullBacklog")),
         }
 
-    def _build_active_state(self, execution_id: str) -> dict[str, Any]:
-        requests = self._pending_requests()
-        scope, full_backlog = self._scope_from_requests(requests)
+    def _merge_into_running(
+        self,
+        request: dict[str, Any],
+    ) -> TriageLeaseResult | None:
+        with self._locked_state():
+            state = self._read_active_state_unlocked()
+            if not state.get("executionId") or state.get("status") != "RUNNING":
+                return None
+            self._merge_request_unlocked(state, request)
+            self._write_active_state_unlocked(state)
+            return TriageLeaseResult(
+                status="RUNNING",
+                execution_id=str(state["executionId"]),
+                affected_rule_ids=tuple(request["affectedLegalRuleIds"]),
+                full_backlog=bool(request["fullBacklog"]),
+                include_completed=bool(request["includeCompleted"]),
+                request_count=len(state.get("requestKeys") or []),
+            )
+
+    def _claim_pending_scope_unlocked(
+        self,
+        state: dict[str, Any],
+    ) -> TriageLeaseResult:
+        if not self._has_pending_scope(state):
+            raise RuntimeError("triage singleton owner has no joined scope to drain")
+        result = self._lease_result_from_pending("OWNER", state)
+        state["pendingLegalRuleIds"] = []
+        state["pendingFullBacklog"] = False
+        state["pendingIncludeCompleted"] = False
+        self._write_active_state_unlocked(state)
+        return result
+
+    def _recover_or_initialize_state(
+        self,
+        *,
+        stale: dict[str, Any],
+        execution_id: str,
+    ) -> dict[str, Any]:
+        # A crashed process loses its OS lock automatically. Preserve any unfinished
+        # active/pending scope so the next singleton owner can safely retry it; READY
+        # completion fingerprints make replay idempotent.
+        recovered_ids = [
+            *[str(value) for value in (stale.get("activeBatchLegalRuleIds") or [])],
+            *[str(value) for value in (stale.get("pendingLegalRuleIds") or [])],
+        ]
         now = _now()
         return {
             "executionId": execution_id,
-            "requestKeys": sorted(str(item["requestKey"]) for item in requests),
-            "affectedLegalRuleIds": list(scope),
-            "fullBacklog": full_backlog,
-            "remainingLegalRuleIds": [],
+            "status": "RUNNING",
+            "requestKeys": list(stale.get("requestKeys") or []),
+            "pendingLegalRuleIds": sorted(dict.fromkeys(recovered_ids)),
+            "pendingFullBacklog": bool(stale.get("pendingFullBacklog")),
+            "pendingIncludeCompleted": bool(stale.get("pendingIncludeCompleted")),
+            "activeBatchLegalRuleIds": [],
+            "completedLegalRuleIds": list(stale.get("completedLegalRuleIds") or []),
             "startedAt": now,
             "updatedAt": now,
         }
 
-    def _queued_result(self) -> TriageLeaseResult:
-        state = self._read_active_state()
-        pending = self._pending_requests()
+    def _merge_request_unlocked(
+        self,
+        state: dict[str, Any],
+        request: dict[str, Any],
+    ) -> None:
+        keys = list(state.get("requestKeys") or [])
+        keys.append(str(request["requestKey"]))
+        state["requestKeys"] = sorted(dict.fromkeys(keys))
+
+        if request["fullBacklog"]:
+            state["pendingFullBacklog"] = True
+            state["pendingLegalRuleIds"] = []
+        elif not state.get("pendingFullBacklog"):
+            values = list(state.get("pendingLegalRuleIds") or [])
+            values.extend(str(value) for value in request["affectedLegalRuleIds"])
+            active = {str(value) for value in (state.get("activeBatchLegalRuleIds") or [])}
+            state["pendingLegalRuleIds"] = sorted(
+                value for value in dict.fromkeys(values) if value not in active
+            )
+
+        if request["includeCompleted"]:
+            state["pendingIncludeCompleted"] = True
+
+    @staticmethod
+    def _has_pending_scope(state: dict[str, Any]) -> bool:
+        return bool(state.get("pendingFullBacklog")) or bool(
+            state.get("pendingLegalRuleIds")
+        )
+
+    @staticmethod
+    def _lease_result_from_pending(
+        status: str,
+        state: dict[str, Any],
+    ) -> TriageLeaseResult:
         return TriageLeaseResult(
-            status="QUEUED",
-            execution_id=(
-                str(state.get("executionId")) if state.get("executionId") else None
+            status=status,
+            execution_id=str(state.get("executionId") or "") or None,
+            affected_rule_ids=tuple(
+                str(value) for value in (state.get("pendingLegalRuleIds") or [])
             ),
-            affected_rule_ids=(),
-            full_backlog=False,
-            request_count=len(pending),
+            full_backlog=bool(state.get("pendingFullBacklog")),
+            include_completed=bool(state.get("pendingIncludeCompleted")),
+            request_count=len(state.get("requestKeys") or []),
         )
 
     @staticmethod
@@ -211,10 +319,9 @@ class TriageSingletonCoordinator:
         return TriageLeaseResult(
             status=status,
             execution_id=str(state.get("executionId") or "") or None,
-            affected_rule_ids=tuple(
-                str(value) for value in (state.get("affectedLegalRuleIds") or [])
-            ),
-            full_backlog=bool(state.get("fullBacklog")),
+            affected_rule_ids=(),
+            full_backlog=False,
+            include_completed=False,
             request_count=len(state.get("requestKeys") or []),
         )
 
@@ -225,6 +332,7 @@ class TriageSingletonCoordinator:
         idempotency_key: str | None,
         trigger: str,
         assessment_id: str | None,
+        include_completed: bool,
     ) -> dict[str, Any]:
         normalized_ids = sorted(
             dict.fromkeys(
@@ -240,72 +348,30 @@ class TriageSingletonCoordinator:
                     str(trigger or "LEGAL_MAINTENANCE"),
                     str(assessment_id or ""),
                     *normalized_ids,
+                    "include-completed" if include_completed else "pending-only",
                 ]
             )
-        request_key = hashlib.sha256(canonical_key.encode("utf-8")).hexdigest()
         return {
-            "requestKey": request_key,
-            "idempotencyKey": canonical_key,
-            "trigger": str(trigger or "LEGAL_MAINTENANCE"),
-            "assessmentId": str(assessment_id) if assessment_id else None,
+            "requestKey": hashlib.sha256(canonical_key.encode("utf-8")).hexdigest(),
             "affectedLegalRuleIds": normalized_ids,
             "fullBacklog": not normalized_ids,
-            "enqueuedAt": _now(),
+            "includeCompleted": bool(include_completed),
         }
 
-    def _write_pending_once(self, request: dict[str, Any]) -> None:
-        path = self.pending_root / f"{request['requestKey']}.json"
-        if path.exists():
-            return
-        temporary = path.with_suffix(f".{os.getpid()}.tmp")
-        temporary.write_text(
-            json.dumps(request, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-            encoding="utf-8",
-        )
+    @contextmanager
+    def _locked_state(self) -> Iterator[None]:
+        self._ensure_runtime_dir()
+        lock_file = self.state_lock_path.open("a+", encoding="utf-8")
         try:
-            os.link(temporary, path)
-        except FileExistsError:
-            pass
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            yield
         finally:
-            temporary.unlink(missing_ok=True)
-
-    def _pending_requests(self) -> list[dict[str, Any]]:
-        requests: list[dict[str, Any]] = []
-        for path in sorted(self.pending_root.glob("*.json")):
             try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            if isinstance(payload, dict) and payload.get("requestKey"):
-                requests.append(payload)
-        return requests
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            finally:
+                lock_file.close()
 
-    @staticmethod
-    def _scope_from_requests(
-        requests: list[dict[str, Any]],
-    ) -> tuple[tuple[str, ...], bool]:
-        full_backlog = any(bool(item.get("fullBacklog")) for item in requests)
-        if full_backlog:
-            return (), True
-        values: list[str] = []
-        for item in requests:
-            values.extend(
-                str(value)
-                for value in (item.get("affectedLegalRuleIds") or [])
-                if str(value).strip()
-            )
-        return tuple(sorted(dict.fromkeys(values))), False
-
-    def _write_active_state(self, state: dict[str, Any]) -> None:
-        state = {**state, "updatedAt": _now()}
-        temporary = self.active_path.with_suffix(f".{os.getpid()}.tmp")
-        temporary.write_text(
-            json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        temporary.replace(self.active_path)
-
-    def _read_active_state(self) -> dict[str, Any]:
+    def _read_active_state_unlocked(self) -> dict[str, Any]:
         if not self.active_path.is_file():
             return {}
         try:
@@ -314,17 +380,23 @@ class TriageSingletonCoordinator:
             return {}
         return value if isinstance(value, dict) else {}
 
-    def _release(self, *, execution_id: str, state: dict[str, Any]) -> None:
-        for request_key in state.get("requestKeys") or []:
-            (self.pending_root / f"{request_key}.json").unlink(missing_ok=True)
-        self.active_path.unlink(missing_ok=True)
+    def _write_active_state_unlocked(self, state: dict[str, Any]) -> None:
+        state["updatedAt"] = _now()
+        temporary = self.active_path.with_suffix(f".{os.getpid()}.tmp")
+        temporary.write_text(
+            json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(self.active_path)
+
+    def _release_file_lease(self, execution_id: str) -> None:
         with _LOCAL_GUARD:
             lease_file = _ACTIVE_LEASES.pop(execution_id, None)
-            if lease_file is not None:
-                try:
-                    fcntl.flock(lease_file.fileno(), fcntl.LOCK_UN)
-                finally:
-                    lease_file.close()
+        if lease_file is not None:
+            try:
+                fcntl.flock(lease_file.fileno(), fcntl.LOCK_UN)
+            finally:
+                lease_file.close()
 
     def _assert_local_owner(self, execution_id: str) -> None:
         with _LOCAL_GUARD:
@@ -333,12 +405,13 @@ class TriageSingletonCoordinator:
 
     @staticmethod
     def _assert_execution_state(state: dict[str, Any], execution_id: str) -> None:
-        if state.get("executionId") != execution_id:
+        if state.get("executionId") != execution_id or state.get("status") != "RUNNING":
             raise RuntimeError("triage execution does not match the durable active lease")
 
-    def _ensure_dirs(self) -> None:
-        self.pending_root.mkdir(parents=True, exist_ok=True)
-        self.lock_path.touch(exist_ok=True)
+    def _ensure_runtime_dir(self) -> None:
+        self.runtime_root.mkdir(parents=True, exist_ok=True)
+        self.execution_lock_path.touch(exist_ok=True)
+        self.state_lock_path.touch(exist_ok=True)
 
 
 def _now() -> str:
