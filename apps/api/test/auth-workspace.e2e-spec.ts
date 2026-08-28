@@ -749,8 +749,6 @@ describe("Auth workspace (e2e)", () => {
 
   it("expired session is denied access with audit event recorded", async () => {
     const expiredToken = "expired-session-token";
-    const { hashSecret, fingerprintToken } =
-      await import("../src/modules/auth-workspace/infrastructure/security/security.utils.js");
     await createAuthSessionRecord(prisma, {
       id: "session-expired",
       userId: fixture.approvedUser.id,

@@ -21,7 +21,6 @@ import {
 
 import {
   encryptMfaSecret,
-  fingerprintToken,
   generateTotpSecret,
   hashSecret,
   totpForTime,
@@ -446,7 +445,6 @@ export async function resetAuthWorkspaceDatabase(
   await prisma.classificationResult.deleteMany();
   await prisma.legalRuleMatch.deleteMany();
   await prisma.assessment.deleteMany();
-  await prisma.auditEvent.deleteMany();
   await prisma.auditEvent.deleteMany();
   await prisma.authRecord.deleteMany();
   await prisma.user.deleteMany();
