@@ -77,6 +77,7 @@ def test_pipeline_roles_do_not_bypass_context_wizard_hydration() -> None:
         "maintain_legal_catalog",
         "get_legal_rule_triage_work_items",
         "persist_legal_rule_triage_result",
+        "finish_legal_rule_triage_execution",
     )
     assert _tool_names(by_name["context_wizard"]) == (
         "get_assessment_context",
@@ -106,6 +107,9 @@ def test_triage_is_not_an_assessment_pipeline_role() -> None:
     assert "ENGINEERING_RULE_CANDIDATE" in triage_prompt
     assert "persist_legal_rule_triage_result" in triage_prompt
     assert "Never use Assessment business context" in triage_prompt
+    assert "single shared, logically long-lived" in triage_prompt
+    assert "do not create queue items" in triage_prompt
+    assert "finish_legal_rule_triage_execution" in triage_prompt
 
 
 def test_context_wizard_output_is_typed_ready_or_needs_input_question_round() -> None:
