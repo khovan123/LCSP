@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from tools.triage.legal_rule_triage.service import LegalRuleTriageService
+from tools.triage.legal_rule_triage.singleton import TriageSingletonCoordinator
 
 
 class FakeCoordinator:
@@ -20,11 +21,10 @@ class FakeCoordinator:
         affected_rule_ids=None,
         idempotency_key=None,
         trigger="LEGAL_MAINTENANCE",
-        assessment_id=None,
         include_completed=False,
         execution_id=None,
     ):
-        _ = idempotency_key, trigger, assessment_id
+        _ = idempotency_key, trigger
         values = tuple(str(value) for value in (affected_rule_ids or []))
         return SimpleNamespace(
             status="OWNER",
@@ -32,7 +32,6 @@ class FakeCoordinator:
             affected_rule_ids=values,
             full_backlog=not bool(values),
             include_completed=include_completed,
-            request_count=1,
         )
 
     def set_batch_work(self, *, execution_id: str, legal_rule_ids: list[str]) -> None:
@@ -215,12 +214,11 @@ def test_running_singleton_returns_without_loading_legal_sources() -> None:
     coordinator = FakeCoordinator()
     coordinator.submit_or_continue = MagicMock(
         return_value=SimpleNamespace(
-            status="RUNNING",
+            status="ALREADY_RUNNING",
             execution_id="triage:active",
-            affected_rule_ids=("RULE-2",),
+            affected_rule_ids=(),
             full_backlog=False,
             include_completed=False,
-            request_count=3,
         )
     )
     api = _api_client()
@@ -236,10 +234,70 @@ def test_running_singleton_returns_without_loading_legal_sources() -> None:
         idempotency_key="manual:assessment-2",
     )
 
-    assert result["status"] == "RUNNING"
-    assert result["joinedExistingExecution"] is True
-    assert result["workItems"] == []
+    assert result == {
+        "status": "ALREADY_RUNNING",
+        "triageExecutionId": "triage:active",
+        "workItems": [],
+        "limitations": ["TRIAGE_SINGLETON_ACTIVE"],
+    }
     api.get_active_legal_rule_catalog.assert_not_called()
+
+
+def test_real_singleton_does_not_queue_or_merge_requests_while_running(tmp_path) -> None:
+    owner = TriageSingletonCoordinator(storage_root=tmp_path)
+    observer = TriageSingletonCoordinator(storage_root=tmp_path)
+
+    first = owner.claim_or_observe(
+        affected_rule_ids=["RULE-1"],
+        idempotency_key="request-1",
+        trigger="MANUAL_ENGINEERING_RULE_NOT_READY",
+    )
+    assert first.status == "OWNER"
+    assert first.execution_id
+
+    state_before = observer.active_status()
+    second = observer.claim_or_observe(
+        affected_rule_ids=["RULE-2"],
+        idempotency_key="request-2",
+        trigger="MANUAL_ENGINEERING_RULE_NOT_READY",
+    )
+    state_after = observer.active_status()
+
+    assert second.status == "ALREADY_RUNNING"
+    assert second.execution_id == first.execution_id
+    assert second.affected_rule_ids == ()
+    assert state_after == state_before
+    assert not (tmp_path / "triage-runtime" / "pending").exists()
+
+    owner.set_batch_work(execution_id=first.execution_id, legal_rule_ids=[])
+    completed = owner.finish_or_drain(execution_id=first.execution_id)
+    assert completed.status == "COMPLETE"
+    assert observer.active_status()["status"] == "IDLE"
+
+
+def test_next_request_can_claim_after_active_singleton_finishes(tmp_path) -> None:
+    coordinator = TriageSingletonCoordinator(storage_root=tmp_path)
+    first = coordinator.claim_or_observe(
+        affected_rule_ids=["RULE-1"],
+        idempotency_key="request-1",
+        trigger="LEGAL_MAINTENANCE",
+    )
+    assert first.execution_id
+    coordinator.set_batch_work(execution_id=first.execution_id, legal_rule_ids=[])
+    coordinator.finish_or_drain(execution_id=first.execution_id)
+
+    second = coordinator.claim_or_observe(
+        affected_rule_ids=["RULE-2"],
+        idempotency_key="request-2",
+        trigger="MANUAL_ENGINEERING_RULE_NOT_READY",
+    )
+    try:
+        assert second.status == "OWNER"
+        assert second.execution_id != first.execution_id
+        assert second.affected_rule_ids == ("RULE-2",)
+    finally:
+        if second.execution_id:
+            coordinator.abandon_execution(execution_id=second.execution_id)
 
 
 def test_persist_rejects_stale_catalog_or_corpus_version() -> None:
