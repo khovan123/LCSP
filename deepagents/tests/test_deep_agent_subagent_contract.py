@@ -103,6 +103,7 @@ def test_triage_is_not_an_assessment_pipeline_role() -> None:
     assessment_roles = {"context_wizard", "planner", "investigator", "resolver"}
     triage = next(item for item in FLOW_SUBAGENTS if item["name"] == "triage")
     triage_prompt = str(triage["system_prompt"])
+    normalized_prompt = " ".join(triage_prompt.split())
 
     assert "triage" not in assessment_roles
     assert "Legal Rule Triage" in triage_prompt
@@ -110,7 +111,7 @@ def test_triage_is_not_an_assessment_pipeline_role() -> None:
     assert "persist_legal_rule_triage_result" in triage_prompt
     assert "Never use Assessment business context" in triage_prompt
     assert "single shared, logically long-lived" in triage_prompt
-    assert "do not create queue items" in triage_prompt
+    assert "do not create queue items" in normalized_prompt
     assert "finish_legal_rule_triage_execution" in triage_prompt
     assert inject_lcsp_runtime_context not in triage["middleware"]
 
