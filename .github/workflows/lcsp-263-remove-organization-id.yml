@@ -34,22 +34,28 @@ jobs:
           ROOT = Path('deepagents')
 
           def remove_common(text: str) -> str:
-              # Standalone typed fields / parameters / kwargs / dict entries.
+              # Standalone fields, parameters, kwargs and dictionary entries.
               text = re.sub(r'(?m)^[ \t]*organization_id\s*:\s*[^\n]+\n', '', text)
-              text = re.sub(r'(?m)^[ \t]*organization_id\s*=\s*[^\n]+,\s*\n', '', text)
+              text = re.sub(r'(?m)^[ \t]*organization_id\s*=\s*[^\n]+,?\s*\n', '', text)
               text = re.sub(r'(?m)^[ \t]*["\']organization_id["\']\s*:\s*[^\n]+\n', '', text)
               text = re.sub(r'(?m)^[ \t]*["\']organizationId["\']\s*:\s*[^\n]+\n', '', text)
               text = re.sub(r'(?m)^[ \t]*["\']organization_id["\']\s*,\s*\n', '', text)
               text = re.sub(r'(?m)^[ \t]*["\']organizationId["\']\s*,\s*\n', '', text)
 
-              # Inline parameters / keyword args / dictionary items.
+              # Inline parameters/kwargs, including the last argument before `)`.
               text = re.sub(r'\borganization_id\s*:\s*[^,\)\n]+,\s*', '', text)
-              text = re.sub(r',\s*organization_id\s*:\s*[^,\)\n]+', '', text)
+              text = re.sub(r',\s*organization_id\s*:\s*[^,\)\n]+(?=\))', '', text)
               text = re.sub(r'\borganization_id\s*=\s*[^,\)\n]+,\s*', '', text)
+              text = re.sub(r',\s*organization_id\s*=\s*[^,\)\n]+(?=\))', '', text)
               text = re.sub(r'["\']organization_id["\']\s*:\s*[^,}\n]+,\s*', '', text)
               text = re.sub(r'["\']organizationId["\']\s*:\s*[^,}\n]+,\s*', '', text)
 
-              # A few expressions combine user and legacy tenant checks on one line.
+              # Assertions against the removed contract are obsolete rather than renamed.
+              text = re.sub(r'(?m)^[ \t]*assert\s+(?:context\.)?organization_id\b[^\n]*\n', '', text)
+              text = re.sub(r'(?m)^[ \t]*assert\s+payload\[["\']organization_id["\']\][^\n]*\n', '', text)
+              text = re.sub(r'(?m)^[ \t]*assert\s+payload\[["\']organizationId["\']\][^\n]*\n', '', text)
+
+              # Expressions that combined principal and the old tenant field.
               text = text.replace(
                   'if not user_id.strip() or not organization_id.strip():',
                   'if not user_id.strip():',
@@ -73,7 +79,7 @@ jobs:
               text = path.read_text(encoding='utf-8')
               updated = remove_common(text)
 
-              # Audit export is request-scoped; RBAC owns authorization upstream.
+              # Audit export becomes request-scoped. Authorization is already RBAC-owned.
               if path.as_posix().endswith('/audit_export/audit_export_boundary.py'):
                   updated = re.sub(r'(?m)^[ \t]*org_id\s*=\s*message\.get\(["\']organizationId["\']\)\s*\n', '', updated)
                   updated = updated.replace(
@@ -99,8 +105,7 @@ jobs:
 
               path.write_text(updated, encoding='utf-8')
 
-          # Remove organization identifiers from text fixtures/comments as well. Tests are
-          # part of the Deep Agents contract and must not preserve obsolete fields.
+          # Clean obsolete wording from Deep Agents docs/fixtures too.
           for path in ROOT.rglob('*'):
               if not path.is_file() or path.suffix not in {'.py', '.md', '.json', '.yaml', '.yml', '.toml'}:
                   continue
@@ -112,11 +117,9 @@ jobs:
               path.write_text(text, encoding='utf-8')
           PY
 
-      - name: Format changed Python
+      - name: Install Deep Agents dependencies
         working-directory: deepagents
-        run: |
-          python -m pip install -e '.[dev]'
-          python -m ruff format . || true
+        run: python -m pip install -e '.[dev]'
 
       - name: Enforce zero legacy organization identifiers
         shell: bash
