@@ -166,7 +166,7 @@ class LegalRuleTriageService:
         workflow_run_id: str,
         correlation_id: str | None = None,
     ) -> dict[str, Any]:
-        self.coordinator.active_status()
+        self.coordinator.assert_owner(triage_execution_id)
         _, active_catalog_id, active_corpus_id, chunks, rules = self._load_sources()
         if legal_rule_catalog_version_id != active_catalog_id:
             raise ValueError("triage result targets a stale LegalRule catalog version")
