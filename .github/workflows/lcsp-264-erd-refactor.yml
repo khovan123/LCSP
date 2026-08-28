@@ -41,8 +41,8 @@ jobs:
       - name: Validate optimized schema
         run: pnpm --filter @lcsp/api exec prisma validate --schema prisma/schema.prisma
 
-      - name: API typecheck
-        run: pnpm --filter @lcsp/api exec tsc -p tsconfig.json --noEmit --emitDeclarationOnly false
+      - name: API dependency build and typecheck
+        run: pnpm exec tsc -b packages/contracts packages/i18n apps/api
 
       - name: LikeC4 check
         run: pnpm likec4:check
