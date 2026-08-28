@@ -14,11 +14,17 @@ class GetLegalRuleTriageWorkItemsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     affected_rule_ids: list[str] = Field(default_factory=list, max_length=500)
+    include_completed: bool = False
+    idempotency_key: str | None = Field(default=None, max_length=240)
+    trigger: str = Field(default="LEGAL_MAINTENANCE", min_length=1, max_length=120)
+    assessment_id: str | None = Field(default=None, max_length=240)
+    triage_execution_id: str | None = Field(default=None, max_length=240)
 
 
 class PersistLegalRuleTriageResultInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    triage_execution_id: str = Field(min_length=1, max_length=240)
     legal_rule_id: str = Field(min_length=1, max_length=240)
     legal_rule_catalog_version_id: str = Field(min_length=1, max_length=240)
     legal_corpus_version_id: str = Field(min_length=1, max_length=240)
@@ -28,18 +34,35 @@ class PersistLegalRuleTriageResultInput(BaseModel):
     correlation_id: str | None = Field(default=None, max_length=160)
 
 
+class FinishLegalRuleTriageExecutionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    triage_execution_id: str = Field(min_length=1, max_length=240)
+
+
 @tool(args_schema=GetLegalRuleTriageWorkItemsInput)
 def get_legal_rule_triage_work_items(
     affected_rule_ids: list[str] | None = None,
+    include_completed: bool = False,
+    idempotency_key: str | None = None,
+    trigger: str = "LEGAL_MAINTENANCE",
+    assessment_id: str | None = None,
+    triage_execution_id: str | None = None,
 ) -> dict[str, Any]:
-    """Load approved LegalRules and their exact active legal chunks for agent triage."""
+    """Queue/claim singleton triage work and load authoritative LegalRule chunks."""
     return LegalRuleTriageService().get_work_items(
         affected_rule_ids=list(affected_rule_ids or []),
+        include_completed=include_completed,
+        idempotency_key=idempotency_key,
+        trigger=trigger,
+        assessment_id=assessment_id,
+        triage_execution_id=triage_execution_id,
     )
 
 
 @tool(args_schema=PersistLegalRuleTriageResultInput)
 def persist_legal_rule_triage_result(
+    triage_execution_id: str,
     legal_rule_id: str,
     legal_rule_catalog_version_id: str,
     legal_corpus_version_id: str,
@@ -48,8 +71,9 @@ def persist_legal_rule_triage_result(
     workflow_run_id: str,
     correlation_id: str | None = None,
 ) -> dict[str, Any]:
-    """Validate and persist the triage agent's decisions and EngineeringRule proposals."""
+    """Persist decisions only for the current singleton triage execution owner."""
     return LegalRuleTriageService().persist_result(
+        triage_execution_id=triage_execution_id,
         legal_rule_id=legal_rule_id,
         legal_rule_catalog_version_id=legal_rule_catalog_version_id,
         legal_corpus_version_id=legal_corpus_version_id,
@@ -57,4 +81,14 @@ def persist_legal_rule_triage_result(
         engineering_rules=engineering_rules,
         workflow_run_id=workflow_run_id,
         correlation_id=correlation_id,
+    )
+
+
+@tool(args_schema=FinishLegalRuleTriageExecutionInput)
+def finish_legal_rule_triage_execution(
+    triage_execution_id: str,
+) -> dict[str, Any]:
+    """Drain requests queued during the active run or release the singleton lease."""
+    return LegalRuleTriageService().finish_or_drain(
+        triage_execution_id=triage_execution_id,
     )
