@@ -64,8 +64,8 @@ jobs:
 
           oauth = Path('apps/api/test/oauth-login.e2e-spec.ts')
           text = oauth.read_text().replace(
-              '    assert.ok(stateRow.expiresAt > new Date());',
-              '    assert.ok(stateRow.expiresAt);\n    assert.ok(stateRow.expiresAt > new Date());',
+              '    const ttlMs = stateRow.expiresAt.getTime() - Date.now();',
+              '    assert.ok(stateRow.expiresAt);\n    const ttlMs = stateRow.expiresAt.getTime() - Date.now();',
           )
           oauth.write_text(text)
 
@@ -94,5 +94,21 @@ jobs:
       - name: LikeC4 check
         run: pnpm likec4:check
 
+      - name: Remove temporary materialization files
+        run: rm -f .env .github/workflows/lcsp-264-erd-refactor.yml scripts/lcsp264_apply_optimized_erd.py
+
       - name: Diff guard
         run: git diff --check
+
+      - name: Commit materialized ERD refactor
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No materialized changes to commit"
+            exit 0
+          fi
+          git commit -m "refactor(schema): LCSP-264 materialize optimized auth ERD"
+          git push origin HEAD:refactor/LCSP-264-optimized-erd
