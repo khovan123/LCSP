@@ -17,7 +17,6 @@ class GetLegalRuleTriageWorkItemsInput(BaseModel):
     include_completed: bool = False
     idempotency_key: str | None = Field(default=None, max_length=240)
     trigger: str = Field(default="LEGAL_MAINTENANCE", min_length=1, max_length=120)
-    assessment_id: str | None = Field(default=None, max_length=240)
     triage_execution_id: str | None = Field(default=None, max_length=240)
 
 
@@ -46,16 +45,14 @@ def get_legal_rule_triage_work_items(
     include_completed: bool = False,
     idempotency_key: str | None = None,
     trigger: str = "LEGAL_MAINTENANCE",
-    assessment_id: str | None = None,
     triage_execution_id: str | None = None,
 ) -> dict[str, Any]:
-    """Claim owner scope or join requested LegalRules into the execution already RUNNING."""
+    """Claim singleton triage work or return ALREADY_RUNNING without creating a queue."""
     return LegalRuleTriageService().get_work_items(
         affected_rule_ids=list(affected_rule_ids or []),
         include_completed=include_completed,
         idempotency_key=idempotency_key,
         trigger=trigger,
-        assessment_id=assessment_id,
         triage_execution_id=triage_execution_id,
     )
 
@@ -88,7 +85,7 @@ def persist_legal_rule_triage_result(
 def finish_legal_rule_triage_execution(
     triage_execution_id: str,
 ) -> dict[str, Any]:
-    """Continue joined active scope or release the singleton when no more scope remains."""
+    """Release the singleton after the current owner finishes its active batch."""
     return LegalRuleTriageService().finish_or_drain(
         triage_execution_id=triage_execution_id,
     )
