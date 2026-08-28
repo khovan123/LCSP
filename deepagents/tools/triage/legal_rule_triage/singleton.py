@@ -228,13 +228,41 @@ class TriageSingletonCoordinator:
             self._release_file_lease(execution_id)
         return result
 
+    def abandon_execution(self, *, execution_id: str) -> None:
+        """Release a failed owner while preserving unfinished scope for safe replay."""
+        with _LOCAL_GUARD:
+            owns_local_lease = execution_id in _ACTIVE_LEASES
+        if not owns_local_lease:
+            return
+
+        with self._locked_state():
+            state = self._read_active_state_unlocked()
+            if state.get("executionId") == execution_id:
+                active = [
+                    str(value)
+                    for value in (state.get("activeBatchLegalRuleIds") or [])
+                    if str(value).strip()
+                ]
+                if active and not state.get("pendingFullBacklog"):
+                    pending = [
+                        str(value)
+                        for value in (state.get("pendingLegalRuleIds") or [])
+                        if str(value).strip()
+                    ]
+                    pending.extend(active)
+                    state["pendingLegalRuleIds"] = sorted(dict.fromkeys(pending))
+                state["activeBatchLegalRuleIds"] = []
+                state["status"] = "RECOVERABLE"
+                self._write_active_state_unlocked(state)
+        self._release_file_lease(execution_id)
+
     def active_status(self) -> dict[str, Any]:
         """Return privacy-safe singleton state for observability/tests."""
         self._ensure_runtime_dir()
         with self._locked_state():
             state = self._read_active_state_unlocked()
         return {
-            "active": bool(state.get("executionId")),
+            "active": bool(state.get("executionId")) and state.get("status") == "RUNNING",
             "status": state.get("status"),
             "triageExecutionId": state.get("executionId"),
             "requestCount": len(state.get("requestKeys") or []),
@@ -281,7 +309,7 @@ class TriageSingletonCoordinator:
         stale: dict[str, Any],
         execution_id: str,
     ) -> dict[str, Any]:
-        # A crashed process loses its OS lock automatically. Preserve any unfinished
+        # A crashed/abandoned process loses its OS lock. Preserve any unfinished
         # active/pending scope so the next singleton owner can safely retry it; READY
         # completion fingerprints make replay idempotent.
         recovered_ids = [
