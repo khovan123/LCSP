@@ -72,6 +72,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/lcsp_api_test?schema=public
         run: pnpm --filter @lcsp/api prisma:generate
 
+      - name: Auto-fix API lint and formatting
+        run: pnpm --filter @lcsp/api exec eslint "{src,test,scripts}/**/*.ts" --fix
+
       - name: Lint API
         run: pnpm --filter @lcsp/api lint
 
