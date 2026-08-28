@@ -1,9 +1,9 @@
-"""Persist orchestration-only checkpoints for Assessments waiting on EngineeringRules.
+"""Root-owned checkpoints for Assessments waiting on EngineeringRules.
 
-This registry is deliberately separate from the Legal Rule Triage singleton scope. A
-request that arrives while Triage is RUNNING still does not queue, merge, or persist
-LegalRule work for the active agent. Only the accepted evidence/workflow checkpoint
-needed to re-run the Assessment readiness gate is retained here.
+The registry belongs to Root Orchestration, not to the Legal Rule Triage specialist.
+It intentionally stores only the accepted evidence/workflow checkpoint required to
+re-enter the Assessment readiness gate. Triage never reads these records and incoming
+LegalRule scope is never queued, merged, or persisted here.
 """
 
 from __future__ import annotations
@@ -20,8 +20,7 @@ from uuid import uuid4
 
 from tools.common.capabilities.platform.config import default_legal_source_storage_root
 from tools.common.capabilities.platform.logging import get_logger
-
-from .singleton import TRIAGE_RUNTIME_DIR
+from tools.triage.legal_rule_triage.singleton import TRIAGE_RUNTIME_DIR
 
 
 logger = get_logger(__name__)
@@ -30,7 +29,7 @@ WAITING_ASSESSMENTS_LOCK_FILE = "waiting-assessments.lock"
 
 
 class WaitingAssessmentRegistry:
-    """Store and reconcile Assessment checkpoints without exposing them to Triage."""
+    """Store and reconcile Assessment checkpoints under Root Orchestration ownership."""
 
     def __init__(self, *, storage_root: Path | None = None) -> None:
         root = storage_root
@@ -41,6 +40,9 @@ class WaitingAssessmentRegistry:
                 if configured
                 else Path(default_legal_source_storage_root())
             )
+        # Keep the on-disk location stable across this ownership refactor so a deploy
+        # cannot orphan checkpoints written by the previous implementation. The file
+        # is now read/written only by Root Orchestration code.
         self.runtime_root = root.resolve() / TRIAGE_RUNTIME_DIR
         self.state_path = self.runtime_root / WAITING_ASSESSMENTS_FILE
         self.lock_path = self.runtime_root / WAITING_ASSESSMENTS_LOCK_FILE
@@ -81,7 +83,7 @@ class WaitingAssessmentRegistry:
         return checkpoint_id
 
     def pending(self) -> list[dict[str, str]]:
-        """Return the currently registered orchestration checkpoints."""
+        """Return the currently registered root-orchestration checkpoints."""
         with self._locked_state():
             state = self._read_state_unlocked()
         return self._ordered_checkpoints(state)
@@ -100,13 +102,13 @@ class WaitingAssessmentRegistry:
         invoker: Callable[[str, dict[str, Any], str], dict[str, Any]] | None = None,
         correlation_id_factory: Callable[[], str] | None = None,
     ) -> dict[str, Any]:
-        """Re-run every waiting Assessment after Triage releases the singleton.
+        """Re-enter every waiting Assessment from its accepted-evidence checkpoint.
 
-        Failures are re-registered instead of aborting the completed Triage execution,
-        allowing a later Triage completion (including the daily schedule) to retry them.
-        A fresh correlation ID is used for every resume so the new readiness result is a
-        new Assessment run rather than an idempotent redelivery of the previous WAITING
-        classification.
+        Root Orchestration calls this only after the active Triage specialist has
+        returned and its singleton is already IDLE. Failures are re-registered instead
+        of aborting the completed specialist transition. A fresh correlation ID is used
+        so the readiness re-check is a new Assessment run rather than an idempotent
+        redelivery of the prior WAITING classification.
         """
         checkpoints = self.take_all()
         if invoker is None:

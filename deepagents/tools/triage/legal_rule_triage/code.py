@@ -3,7 +3,7 @@
 `assessment_id` is intentionally not accepted by these legal reasoning tools. An
 Assessment readiness gate may emit an automatic ENGINEERING_RULE_NOT_READY request,
 but customer identity must not cross the Legal Rule Triage tool boundary or influence
-legal reasoning.
+legal reasoning. Root Orchestration owns every cross-agent workflow transition.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from langchain.tools import tool
 from pydantic import BaseModel, ConfigDict, Field
 
 from .service import LegalRuleTriageService
-from .waiting_assessments import WaitingAssessmentRegistry
 
 
 class GetLegalRuleTriageWorkItemsInput(BaseModel):
@@ -92,12 +91,11 @@ def persist_legal_rule_triage_result(
 def finish_legal_rule_triage_execution(
     triage_execution_id: str,
 ) -> dict[str, Any]:
-    """Release singleton, then reconcile every Assessment waiting on READY rules."""
-    result = LegalRuleTriageService().finish_or_drain(
+    """Finish the Triage-owned batch and release its singleton lease only.
+
+    Root Orchestration observes the specialist return and owns any subsequent workflow
+    transition, including reconciliation of Assessments waiting on EngineeringRules.
+    """
+    return LegalRuleTriageService().finish_or_drain(
         triage_execution_id=triage_execution_id,
     )
-    reconciliation = WaitingAssessmentRegistry().reconcile_all()
-    return {
-        **result,
-        "assessmentReconciliation": reconciliation,
-    }

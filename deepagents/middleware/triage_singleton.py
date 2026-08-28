@@ -1,4 +1,4 @@
-"""Prevent parallel Legal Rule Triage subagent executions at supervisor dispatch."""
+"""Apply Triage's singleton policy at Root Orchestration specialist dispatch."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from langchain.tools.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 from orchestration.context import LCSPRunContext
+from orchestration.lifecycle import RootOrchestrationLifecycle
+from orchestration.waiting_assessments import WaitingAssessmentRegistry
 from tools.triage.legal_rule_triage.singleton import TriageSingletonCoordinator
 
 
@@ -20,11 +22,12 @@ def guard_triage_singleton_task(
     request: ToolCallRequest,
     handler: Callable[[ToolCallRequest], ToolMessage | Command],
 ) -> ToolMessage | Command:
-    """Claim Triage before Deep Agents can start the `triage` subagent."""
+    """Let Root Orchestration enforce Triage policy around the built-in task tool."""
     return _guard_triage_task_call(
         request,
         handler,
         coordinator=TriageSingletonCoordinator(),
+        waiting_registry=WaitingAssessmentRegistry(),
     )
 
 
@@ -33,6 +36,7 @@ def _guard_triage_task_call(
     handler: Callable[[ToolCallRequest], ToolMessage | Command],
     *,
     coordinator: TriageSingletonCoordinator,
+    waiting_registry: WaitingAssessmentRegistry | None = None,
 ) -> ToolMessage | Command:
     tool_call = request.tool_call
     args = tool_call.get("args")
@@ -45,8 +49,13 @@ def _guard_triage_task_call(
     legal_rule_ids = list(context.legal_rule_ids) if context else []
     idempotency_key = context.idempotency_key if context else None
     trigger = "ENGINEERING_RULE_NOT_READY" if idempotency_key else "SCHEDULED"
+    lifecycle = RootOrchestrationLifecycle(
+        triage_coordinator=coordinator,
+        waiting_registry=waiting_registry or WaitingAssessmentRegistry(),
+    )
 
-    reservation = coordinator.claim_or_observe(
+    reservation = lifecycle.reserve_subagent(
+        subagent_type="triage",
         affected_rule_ids=legal_rule_ids,
         idempotency_key=idempotency_key,
         trigger=trigger,
@@ -62,8 +71,9 @@ def _guard_triage_task_call(
                     "scopeMerged": False,
                     "subagentStarted": False,
                     "message": (
-                        "Legal Rule Triage is already running. The incoming request was "
-                        "not queued, persisted, or merged into the active execution."
+                        "Legal Rule Triage is already running. Root Orchestration did "
+                        "not start a second specialist or queue, persist, or merge the "
+                        "incoming LegalRule scope."
                     ),
                 },
                 ensure_ascii=False,
@@ -72,28 +82,14 @@ def _guard_triage_task_call(
             tool_call_id=str(tool_call.get("id") or "triage-singleton"),
         )
 
-    if reservation.status != "OWNER":
+    if reservation.status != "OWNER" or not reservation.execution_id:
         raise RuntimeError(
             f"unexpected triage singleton reservation status: {reservation.status}"
         )
 
-    execution_id = str(reservation.execution_id or "")
-    if not execution_id:
-        raise RuntimeError("triage singleton reservation did not return an execution id")
-
     guarded_args = dict(args)
     description = str(guarded_args.get("description") or "").strip()
-    owner_instruction = (
-        "GLOBAL TRIAGE SINGLETON CLAIMED. "
-        f"triageExecutionId={execution_id}. "
-        "You are the only active Triage owner. Your first "
-        "get_legal_rule_triage_work_items call MUST pass this exact "
-        "triage_execution_id so it reads only the scope already claimed by the supervisor. "
-        "Process only that claimed batch, then call finish_legal_rule_triage_execution once "
-        "all returned work items are persisted. Concurrent requests return ALREADY_RUNNING; "
-        "they are never queued, persisted for later, merged into this scope, or drained by "
-        "this execution."
-    )
+    owner_instruction = lifecycle.owner_instruction(reservation)
     guarded_args["description"] = (
         f"{owner_instruction}\n\n{description}" if description else owner_instruction
     )
@@ -102,19 +98,13 @@ def _guard_triage_task_call(
     try:
         result = handler(request.override(tool_call=guarded_call))
     except Exception:
-        coordinator.abandon_execution(execution_id=execution_id)
+        lifecycle.fail_subagent(reservation)
         raise
 
-    # A correctly completed triage execution releases itself through
-    # finish_legal_rule_triage_execution. If the subagent returns early, release the
-    # process lease without manufacturing a hidden retry queue. A later
-    # scheduled/readiness trigger may claim a fresh execution.
-    active = coordinator.active_status()
-    if (
-        active.get("active")
-        and active.get("triageExecutionId") == execution_id
-    ):
-        coordinator.abandon_execution(execution_id=execution_id)
+    # Triage itself only finishes/releases its singleton. Once the specialist returns,
+    # Root Orchestration verifies that protocol and owns all cross-agent transitions,
+    # including reconciliation of Assessments waiting on EngineeringRule readiness.
+    lifecycle.complete_subagent(reservation)
     return result
 
 

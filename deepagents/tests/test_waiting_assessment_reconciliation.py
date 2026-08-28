@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tools.triage.legal_rule_triage.waiting_assessments import WaitingAssessmentRegistry
+from orchestration.waiting_assessments import WaitingAssessmentRegistry
 
 
 def test_waiting_registry_deduplicates_same_assessment_checkpoint(tmp_path) -> None:
