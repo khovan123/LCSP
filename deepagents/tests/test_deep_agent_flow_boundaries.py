@@ -29,6 +29,7 @@ TRIAGE_TOOL_NAMES: tuple[str, ...] = (
     "maintain_legal_catalog",
     "get_legal_rule_triage_work_items",
     "persist_legal_rule_triage_result",
+    "finish_legal_rule_triage_execution",
 )
 TRIAGE_TOOL_PACKAGES: set[str] = {
     "maintain_legal_catalog",
@@ -214,11 +215,15 @@ def test_triage_rule_tools_are_bounded_to_authoritative_legal_inputs() -> None:
 
     assert "GetLegalRuleTriageWorkItemsInput" in source
     assert "PersistLegalRuleTriageResultInput" in source
+    assert "FinishLegalRuleTriageExecutionInput" in source
     assert "affected_rule_ids" in source
     assert "legal_rule_id" in source
     assert "legal_rule_catalog_version_id" in source
     assert "legal_corpus_version_id" in source
-    assert "assessment_id" not in source
+    assert "triage_execution_id" in source
+    assert "idempotency_key" in source
+    assert "assessment_id" in source
+    assert "source_code" not in source
     assert "repository" not in source
 
     module = importlib.import_module("tools.triage.legal_rule_triage.code")
@@ -229,6 +234,10 @@ def test_triage_rule_tools_are_bounded_to_authoritative_legal_inputs() -> None:
     assert (
         getattr(module.persist_legal_rule_triage_result, "name")
         == "persist_legal_rule_triage_result"
+    )
+    assert (
+        getattr(module.finish_legal_rule_triage_execution, "name")
+        == "finish_legal_rule_triage_execution"
     )
 
 
