@@ -64,10 +64,13 @@ def test_subagents_follow_deep_agents_dictionary_contract() -> None:
         assert "Tool guidance:" in str(subagent["system_prompt"])
         assert "Output contract:" in str(subagent["system_prompt"])
         assert len(str(subagent["description"])) >= 80
-        assert subagent["middleware"] == [
-            inject_lcsp_runtime_context,
-            *MODEL_GOVERNANCE_MIDDLEWARE,
-        ]
+        expected_middleware = [*MODEL_GOVERNANCE_MIDDLEWARE]
+        if name != "triage":
+            expected_middleware = [
+                inject_lcsp_runtime_context,
+                *MODEL_GOVERNANCE_MIDDLEWARE,
+            ]
+        assert subagent["middleware"] == expected_middleware
 
 
 def test_pipeline_roles_do_not_bypass_context_wizard_hydration() -> None:
@@ -98,9 +101,8 @@ def test_pipeline_roles_do_not_bypass_context_wizard_hydration() -> None:
 
 def test_triage_is_not_an_assessment_pipeline_role() -> None:
     assessment_roles = {"context_wizard", "planner", "investigator", "resolver"}
-    triage_prompt = str(
-        next(item for item in FLOW_SUBAGENTS if item["name"] == "triage")["system_prompt"]
-    )
+    triage = next(item for item in FLOW_SUBAGENTS if item["name"] == "triage")
+    triage_prompt = str(triage["system_prompt"])
 
     assert "triage" not in assessment_roles
     assert "Legal Rule Triage" in triage_prompt
@@ -110,6 +112,7 @@ def test_triage_is_not_an_assessment_pipeline_role() -> None:
     assert "single shared, logically long-lived" in triage_prompt
     assert "do not create queue items" in triage_prompt
     assert "finish_legal_rule_triage_execution" in triage_prompt
+    assert inject_lcsp_runtime_context not in triage["middleware"]
 
 
 def test_context_wizard_output_is_typed_ready_or_needs_input_question_round() -> None:

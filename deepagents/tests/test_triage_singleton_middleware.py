@@ -18,7 +18,7 @@ class FakeRequest:
             "id": "call-1",
             "args": {
                 "subagent_type": "triage",
-                "description": "Run manual legal preparation.",
+                "description": "Run automatic legal preparation.",
             },
         }
 
@@ -31,17 +31,16 @@ class FakeRequest:
 
 def test_running_triage_short_circuits_before_second_subagent_start() -> None:
     coordinator = MagicMock()
-    coordinator.reserve_or_join.return_value = SimpleNamespace(
-        status="RUNNING",
+    coordinator.claim_or_observe.return_value = SimpleNamespace(
+        status="ALREADY_RUNNING",
         execution_id="triage:active",
-        request_count=4,
     )
     handler = MagicMock()
     request = FakeRequest(
         context=LCSPRunContext(
             assessment_id="assessment-2",
             legal_rule_ids=("RULE-2",),
-            idempotency_key="manual:assessment-2",
+            idempotency_key="readiness:rule-2",
         )
     )
 
@@ -52,24 +51,23 @@ def test_running_triage_short_circuits_before_second_subagent_start() -> None:
     )
 
     assert isinstance(result, ToolMessage)
-    assert '"status": "RUNNING"' in str(result.content)
+    assert '"status": "ALREADY_RUNNING"' in str(result.content)
     assert '"queueCreated": false' in str(result.content)
+    assert '"scopeMerged": false' in str(result.content)
     assert '"subagentStarted": false' in str(result.content)
     handler.assert_not_called()
-    coordinator.reserve_or_join.assert_called_once_with(
+    coordinator.claim_or_observe.assert_called_once_with(
         affected_rule_ids=["RULE-2"],
-        idempotency_key="manual:assessment-2",
-        trigger="MANUAL_ENGINEERING_RULE_NOT_READY",
-        assessment_id="assessment-2",
+        idempotency_key="readiness:rule-2",
+        trigger="ENGINEERING_RULE_NOT_READY",
     )
 
 
-def test_first_triage_dispatch_injects_reserved_execution_id_into_task() -> None:
+def test_first_readiness_triage_dispatch_injects_claimed_execution_id() -> None:
     coordinator = MagicMock()
-    coordinator.reserve_or_join.return_value = SimpleNamespace(
+    coordinator.claim_or_observe.return_value = SimpleNamespace(
         status="OWNER",
         execution_id="triage:owner",
-        request_count=1,
     )
     coordinator.active_status.return_value = {"active": False}
     captured = []
@@ -82,7 +80,7 @@ def test_first_triage_dispatch_injects_reserved_execution_id_into_task() -> None
         context=LCSPRunContext(
             assessment_id="assessment-1",
             legal_rule_ids=("RULE-1",),
-            idempotency_key="manual:assessment-1",
+            idempotency_key="readiness:rule-1",
         )
     )
 
@@ -96,16 +94,66 @@ def test_first_triage_dispatch_injects_reserved_execution_id_into_task() -> None
     assert captured
     description = captured[0]["args"]["description"]
     assert "triageExecutionId=triage:owner" in description
-    assert "Requests arriving while you run do not create queue items" in description
+    assert "Concurrent requests return ALREADY_RUNNING" in description
+    assert "never queued" in description
+    assert "merged into this scope" in description
+    coordinator.claim_or_observe.assert_called_once_with(
+        affected_rule_ids=["RULE-1"],
+        idempotency_key="readiness:rule-1",
+        trigger="ENGINEERING_RULE_NOT_READY",
+    )
     coordinator.abandon_execution.assert_not_called()
 
 
-def test_failed_owner_dispatch_releases_lease_as_recoverable() -> None:
+def test_full_backlog_readiness_trigger_is_not_misclassified_as_scheduled() -> None:
     coordinator = MagicMock()
-    coordinator.reserve_or_join.return_value = SimpleNamespace(
+    coordinator.claim_or_observe.return_value = SimpleNamespace(
         status="OWNER",
         execution_id="triage:owner",
-        request_count=1,
+    )
+    coordinator.active_status.return_value = {"active": False}
+    handler = MagicMock(
+        return_value=ToolMessage(content="done", tool_call_id="call-1")
+    )
+    request = FakeRequest(
+        context=LCSPRunContext(idempotency_key="readiness:full-backlog")
+    )
+
+    _guard_triage_task_call(request, handler, coordinator=coordinator)
+
+    coordinator.claim_or_observe.assert_called_once_with(
+        affected_rule_ids=[],
+        idempotency_key="readiness:full-backlog",
+        trigger="ENGINEERING_RULE_NOT_READY",
+    )
+
+
+def test_scheduled_triage_without_readiness_key_uses_scheduled_trigger() -> None:
+    coordinator = MagicMock()
+    coordinator.claim_or_observe.return_value = SimpleNamespace(
+        status="OWNER",
+        execution_id="triage:owner",
+    )
+    coordinator.active_status.return_value = {"active": False}
+    handler = MagicMock(
+        return_value=ToolMessage(content="done", tool_call_id="call-1")
+    )
+    request = FakeRequest(context=LCSPRunContext())
+
+    _guard_triage_task_call(request, handler, coordinator=coordinator)
+
+    coordinator.claim_or_observe.assert_called_once_with(
+        affected_rule_ids=[],
+        idempotency_key=None,
+        trigger="SCHEDULED",
+    )
+
+
+def test_failed_owner_dispatch_releases_lease_without_queue() -> None:
+    coordinator = MagicMock()
+    coordinator.claim_or_observe.return_value = SimpleNamespace(
+        status="OWNER",
+        execution_id="triage:owner",
     )
     request = FakeRequest(context=LCSPRunContext())
 
@@ -148,4 +196,4 @@ def test_non_triage_task_is_not_intercepted() -> None:
 
     assert result is expected
     handler.assert_called_once()
-    coordinator.reserve_or_join.assert_not_called()
+    coordinator.claim_or_observe.assert_not_called()

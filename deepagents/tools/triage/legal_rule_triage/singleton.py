@@ -1,9 +1,10 @@
 """Global singleton coordination for the shared Legal Rule Triage agent.
 
 At most one Legal Rule Triage execution may be RUNNING at any time. Scheduled and
-manual callers share the same long-lived logical agent. If a request arrives while
-triage is already active, the request is not queued, merged, or persisted for later;
-it receives ALREADY_RUNNING and must retry readiness after the active execution ends.
+readiness-triggered callers share the same long-lived logical agent. If a request
+arrives while triage is already active, the request is not queued, merged, or persisted
+for later; it receives ALREADY_RUNNING and may re-check readiness after the active
+execution ends.
 """
 
 from __future__ import annotations
@@ -119,8 +120,6 @@ class TriageSingletonCoordinator:
                     "startedAt": now,
                     "updatedAt": now,
                 }
-                # If a previous process crashed, its OS lock is gone. The new owner
-                # intentionally replaces stale state rather than reviving a hidden queue.
                 self._write_active_state_unlocked(state)
                 return self._lease_result("OWNER", state)
         except Exception:
@@ -226,8 +225,6 @@ class TriageSingletonCoordinator:
         }
 
     def _observe_running(self) -> TriageLeaseResult:
-        # The execution lock may be acquired a few milliseconds before active.json is
-        # written. Read-only retry is allowed; never merge or persist the incoming request.
         for _attempt in range(50):
             with self._locked_state():
                 state = self._read_active_state_unlocked()

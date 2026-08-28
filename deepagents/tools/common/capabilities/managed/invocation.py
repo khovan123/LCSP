@@ -20,6 +20,9 @@ from tools.common.capabilities.managed.boundary import AgentBoundaryBase
 from tools.legal.sources.recovery.legal_corpus_recovery_driver import (
     LEGAL_CORPUS_RECOVERY_COMMAND,
 )
+from tools.triage.legal_rule_triage.contracts import (
+    LEGAL_RULE_TRIAGE_REQUEST_COMMAND,
+)
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,12 @@ AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
         "tools.common.capabilities.assessment.investigation.engineering_rule.engineering_assessment_boundary:EngineeringAssessmentBoundary",
         "investigation.evidence-accepted",
         "event.technical-evidence.accepted.v1",
+    ),
+    AgentInvocationBoundary(
+        "legal_rule_triage_requested",
+        "tools.triage.legal_rule_triage.boundary:LegalRuleTriageBoundary",
+        "legal.engineering-rule-readiness",
+        LEGAL_RULE_TRIAGE_REQUEST_COMMAND,
     ),
     AgentInvocationBoundary(
         "legal_change_detection_requested",

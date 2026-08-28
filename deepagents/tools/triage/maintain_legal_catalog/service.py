@@ -71,7 +71,8 @@ class MaintainLegalCatalogService:
 
         ``max_runs`` remains accepted for compatibility but legal maintenance never
         resumes assessment work directly. Triage must first persist READY
-        EngineeringRules; an operator may then explicitly retry a waiting Assessment.
+        EngineeringRules; assessment orchestration then re-checks readiness and resumes
+        the same waiting checkpoint automatically.
         """
         _ = max_runs
         manifests = sorted(
