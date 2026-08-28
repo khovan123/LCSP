@@ -219,7 +219,6 @@ def build_boundary(target: str) -> AgentBoundaryBase:
             registry,
             api_client=api_client,
             user_id="managed-deep-agent-runtime",
-            organization_id="managed-deep-agent-runtime",
         )
         kwargs["agentic_tool_resolver"] = AgenticToolResolver(
             registry,

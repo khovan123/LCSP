@@ -15,7 +15,6 @@ class LCSPRunContext:
     """Immutable runtime context propagated from root to every subagent."""
 
     assessment_id: str | None = None
-    organization_id: str | None = None
     user_id: str | None = None
     workflow_run_id: str | None = None
     checkpoint_id: str | None = None
@@ -33,7 +32,6 @@ def bounded_context_lines(context: LCSPRunContext | None) -> tuple[str, ...]:
     lines: list[str] = []
     for name in (
         "assessment_id",
-        "organization_id",
         "workflow_run_id",
         "checkpoint_id",
         "idempotency_key",
