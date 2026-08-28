@@ -96,7 +96,6 @@ def test_first_triage_dispatch_injects_reserved_execution_id_into_task() -> None
     assert captured
     description = captured[0]["args"]["description"]
     assert "triageExecutionId=triage:owner" in description
-    assert "do not create queue items" not in description.lower()
     assert "Requests arriving while you run do not create queue items" in description
     coordinator.abandon_execution.assert_not_called()
 
