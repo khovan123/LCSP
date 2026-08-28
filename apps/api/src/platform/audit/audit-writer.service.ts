@@ -14,17 +14,37 @@ import {
 import { PrismaService } from "../../infrastructure/prisma/prisma.service.js";
 import { AuditSanitizer } from "./audit-sanitizer.js";
 
-/** Persists normalized and sanitized audit events through Prisma. */
+/**
+ * Persists normalized and sanitized audit events to the canonical AuditEvent store through Prisma.
+ */
 @Injectable()
 export class AuditWriterService {
   private readonly logger = new Logger(AuditWriterService.name);
 
+  /**
+   * Creates an audit writer backed by the application Prisma client.
+   *
+   * @param prisma - Prisma service used for non-transactional AuditEvent writes.
+   */
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Persists an audit event using the default Prisma client.
+   *
+   * @param event - Audit event to sanitize, normalize, and persist.
+   * @returns A promise that resolves after the audit event has been stored.
+   */
   async write(event: AuditEventInput): Promise<void> {
     await this.persist(this.prisma, event);
   }
 
+  /**
+   * Persists an audit event within an existing Prisma transaction.
+   *
+   * @param event - Audit event to sanitize, normalize, and persist.
+   * @param tx - Active Prisma transaction client that owns the AuditEvent write.
+   * @returns A promise that resolves after the audit event has been stored.
+   */
   async writeInTx(
     event: AuditEventInput,
     tx: Prisma.TransactionClient,
@@ -32,6 +52,13 @@ export class AuditWriterService {
     await this.persist(tx, event);
   }
 
+  /**
+   * Sanitizes an audit event, enriches its payload envelope, and writes it using the supplied client.
+   *
+   * @param client - Prisma transaction-compatible client used to persist the canonical AuditEvent record.
+   * @param event - Audit event to normalize and persist.
+   * @returns A promise that resolves when persistence completes.
+   */
   private async persist(
     client: Prisma.TransactionClient,
     event: AuditEventInput,
