@@ -8,7 +8,7 @@ import {
   WizardProfileStatus,
 } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, jest } from "@jest/globals";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 import { GITHUB_CREDENTIAL_ERROR_CODES } from "@lcsp/contracts/github-integration";
 
@@ -68,16 +68,16 @@ run("ConnectAssessmentRepository credential provenance", () => {
     prisma = new PrismaClient({ adapter: new PrismaPg(databaseUrl!) });
     await prisma.$connect();
     await prisma.repositoryConnection.deleteMany({
-      where: { organizationId: "provenance-org" },
+      where: { userId: "provenance-user" },
     });
     await prisma.credentialAuthorization.deleteMany({
       where: { organizationId: "provenance-org" },
     });
     await prisma.wizardProfile.deleteMany({
-      where: { organizationId: "provenance-org" },
+      where: { ownerId: "provenance-user" },
     });
     await prisma.assessment.deleteMany({
-      where: { organizationId: "provenance-org" },
+      where: { ownerId: "provenance-user" },
     });
     await prisma.providerCredentialSecret.deleteMany();
     await prisma.providerCredential.deleteMany({
@@ -136,7 +136,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
     new ConfigureProviderCredentialCommand(
       "provenance-org",
       "provenance-user",
-      SUBJECT_ROLES.manager,
+      AUTH_USER_ROLES.customer,
       "synthetic-session",
       CREDENTIAL_PROVIDERS.gitlab,
       credential,
@@ -152,7 +152,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
     new ConfigureProviderCredentialCommand(
       organizationId,
       userId,
-      SUBJECT_ROLES.manager,
+      AUTH_USER_ROLES.customer,
       "synthetic-session",
       providerName,
       credential,
@@ -164,7 +164,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
       assessmentId,
       "provenance-org",
       "provenance-user",
-      SUBJECT_ROLES.manager,
+      AUTH_USER_ROLES.customer,
       "https://gitlab.com/group/project",
       "synthetic-correlation",
     );
@@ -173,7 +173,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
     await prisma.assessment.create({
       data: {
         id,
-        organizationId: "provenance-org",
         ownerId: "provenance-user",
         name: id,
         status: AssessmentStatus.WIZARD_SUBMITTED,
@@ -183,7 +182,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
       data: {
         id: `${id}-wizard`,
         assessmentId: id,
-        organizationId: "provenance-org",
         ownerId: "provenance-user",
         status: WizardProfileStatus.SUBMITTED,
         answers: {},
@@ -268,7 +266,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
     await prisma.assessment.create({
       data: {
         id: assessmentId,
-        organizationId: "missing-org",
         ownerId: "missing-user",
         name: assessmentId,
         status: AssessmentStatus.WIZARD_SUBMITTED,
@@ -281,7 +278,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
           assessmentId,
           "missing-org",
           "missing-user",
-          SUBJECT_ROLES.manager,
+          AUTH_USER_ROLES.customer,
           "https://gitlab.com/group/project",
           "synthetic-correlation",
         ),
@@ -322,14 +319,14 @@ run("ConnectAssessmentRepository credential provenance", () => {
     await createAssessment("scope-assessment");
     await prisma.assessment.update({
       where: { id: "scope-assessment" },
-      data: { organizationId: "scope-org", ownerId: "scope-user" },
+      data: { ownerId: "scope-user" },
     });
     const result = await connect.execute(
       new ConnectAssessmentRepositoryCommand(
         "scope-assessment",
         "scope-org",
         "scope-user",
-        SUBJECT_ROLES.manager,
+        AUTH_USER_ROLES.customer,
         "https://gitlab.com/group/project",
         "synthetic-correlation",
       ),
@@ -457,9 +454,8 @@ run("ConnectAssessmentRepository credential provenance", () => {
     await pin.execute(
       new PinSnapshotCommand(
         assessmentId,
-        "provenance-org",
         "provenance-user",
-        SUBJECT_ROLES.manager,
+        AUTH_USER_ROLES.customer,
         undefined,
         result.connectionId,
         undefined,
@@ -495,7 +491,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
     await prisma.assessment.create({
       data: {
         id: assessmentId,
-        organizationId,
         ownerId: userId,
         name: assessmentId,
         status: AssessmentStatus.WIZARD_SUBMITTED,
@@ -506,7 +501,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
         assessmentId,
         organizationId,
         userId,
-        SUBJECT_ROLES.manager,
+        AUTH_USER_ROLES.customer,
         "https://github.com/acme/example-repo",
         "synthetic-correlation",
       ),
@@ -548,9 +543,8 @@ run("ConnectAssessmentRepository credential provenance", () => {
     await pin.execute(
       new PinSnapshotCommand(
         assessmentId,
-        organizationId,
         userId,
-        SUBJECT_ROLES.manager,
+        AUTH_USER_ROLES.customer,
         undefined,
         connectionResult.connectionId,
         undefined,

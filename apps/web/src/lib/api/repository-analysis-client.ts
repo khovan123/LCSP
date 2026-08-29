@@ -32,6 +32,21 @@ export async function connectAssessmentRepository(
   return response.payload;
 }
 
+function isAssessmentConnection(
+  payload: unknown,
+): payload is AssessmentRepositoryConnection {
+  if (typeof payload !== "object" || payload === null) return false;
+  const value = payload as Record<string, unknown>;
+  return (
+    typeof value.connectionId === "string" &&
+    typeof value.provider === "string" &&
+    typeof value.repositoryId === "string" &&
+    typeof value.repositoryFullName === "string" &&
+    typeof value.defaultBranch === "string" &&
+    typeof value.status === "string"
+  );
+}
+
 export type StartRepositoryAnalysisResult = {
   snapshotId: string;
   commitSha: string;

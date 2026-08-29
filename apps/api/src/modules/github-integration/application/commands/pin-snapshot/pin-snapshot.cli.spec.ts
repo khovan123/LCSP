@@ -6,7 +6,7 @@ import {
   REPOSITORY_AUTHENTICATION_MODES,
   REPOSITORY_CONNECTION_STATUSES,
 } from "@lcsp/contracts/github-integration";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import type { AuditWriterService } from "../../../../../platform/audit/audit-writer.service.js";
@@ -27,7 +27,6 @@ function cliConnection(assessmentId: string | null = "assessment-1") {
   return RepositoryConnection.rehydrate({
     id: "connection-1",
     assessmentId,
-    organizationId: "org-1",
     userId: "manager-1",
     installationId: null,
     authenticationMode: REPOSITORY_AUTHENTICATION_MODES.githubCliCredential,
@@ -46,9 +45,8 @@ function cliConnection(assessmentId: string | null = "assessment-1") {
 function command(overrides: Partial<PinSnapshotCommand> = {}) {
   return new PinSnapshotCommand(
     overrides.assessmentId ?? "assessment-1",
-    overrides.organizationId ?? "org-1",
     overrides.actorId ?? "manager-1",
-    overrides.subjectRole ?? SUBJECT_ROLES.manager,
+    overrides.subjectRole ?? AUTH_USER_ROLES.customer,
     overrides.scope,
     overrides.connectionId ?? "connection-1",
     overrides.branch,
@@ -117,7 +115,6 @@ function build(
       findUnique: jest.fn(() =>
         Promise.resolve({
           id: "assessment-1",
-          organizationId: "org-1",
           ownerId: "manager-1",
         }),
       ),
@@ -176,16 +173,18 @@ describe("PinSnapshotHandler CLI routing", () => {
     expect(() => fixture.lease.withSecret((value) => value)).toThrow();
   });
 
-  it("allows a scoped Developer to consume the approved assessment connection", async () => {
+  it("denies an admin because snapshot pinning remains customer-owner scoped", async () => {
     const fixture = build();
-    await fixture.handler.execute(
-      command({
-        actorId: "developer-1",
-        subjectRole: SUBJECT_ROLES.developer,
-        scope: "assessment-1",
-      }),
-    );
-    expect(fixture.resolveForConnection).toHaveBeenCalledTimes(1);
+    await expect(
+      fixture.handler.execute(
+        command({
+          actorId: "admin-1",
+          subjectRole: AUTH_USER_ROLES.admin,
+          scope: "assessment-1",
+        }),
+      ),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(fixture.resolveForConnection).not.toHaveBeenCalled();
   });
 
   it("denies an unscoped Developer before resolving a credential", async () => {
@@ -194,7 +193,7 @@ describe("PinSnapshotHandler CLI routing", () => {
       fixture.handler.execute(
         command({
           actorId: "developer-1",
-          subjectRole: SUBJECT_ROLES.developer,
+          subjectRole: AUTH_USER_ROLES.admin,
           scope: "assessment-2",
         }),
       ),
@@ -211,18 +210,18 @@ describe("PinSnapshotHandler CLI routing", () => {
   });
 
   it.each([
-    ["cross-tenant connection", cliConnection(), "org-2"],
-    ["inactive connection", cliConnection(), "org-1"],
+    ["cross-user connection", cliConnection(), "other-user"],
+    ["inactive connection", cliConnection(), "manager-1"],
   ])(
     "denies %s before credential resolution",
-    async (_label, row, organizationId) => {
+    async (_label, row, userId) => {
       if (_label === "inactive connection") {
         Object.defineProperty(row, "status", {
           get: () => REPOSITORY_CONNECTION_STATUSES.revoked,
         });
       } else {
-        Object.defineProperty(row, "organizationId", {
-          get: () => organizationId,
+        Object.defineProperty(row, "userId", {
+          get: () => userId,
         });
       }
       const fixture = build({ connection: row });
@@ -287,7 +286,6 @@ describe("PinSnapshotHandler CLI routing", () => {
     const invalid = RepositoryConnection.rehydrate({
       id: "bad",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       userId: "manager-1",
       installationId: "unexpected-installation",
       authenticationMode: REPOSITORY_AUTHENTICATION_MODES.githubCliCredential,
@@ -312,7 +310,6 @@ describe("PinSnapshotHandler CLI routing", () => {
     const invalid = RepositoryConnection.rehydrate({
       id: "unknown",
       assessmentId: "assessment-1",
-      organizationId: "org-1",
       userId: "manager-1",
       installationId: null,
       authenticationMode: "UNKNOWN_MODE" as never,

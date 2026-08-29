@@ -13,7 +13,12 @@ import {
   RepositoryAuthenticationMode,
 } from "@prisma/client";
 
-import { REPOSITORY_SNAPSHOT_STATUSES } from "@lcsp/contracts/github-integration";
+import {
+  CREDENTIAL_PROVIDERS,
+  REPOSITORY_CONNECTION_STATUSES,
+  REPOSITORY_SCAN_JOB_STATUSES,
+  REPOSITORY_SNAPSHOT_STATUSES,
+} from "@lcsp/contracts/github-integration";
 
 import type { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import {
@@ -54,6 +59,8 @@ describe("StreamSnapshotArchiveHandler", () => {
 
   const connection = {
     id: "connection-1",
+    userId: "user-1",
+    provider: CREDENTIAL_PROVIDERS.github,
     installationId: "installation-1",
     status: REPOSITORY_CONNECTION_STATUSES.active,
     authenticationMode: RepositoryAuthenticationMode.GITHUB_APP,

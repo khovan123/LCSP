@@ -15,14 +15,17 @@ test("Settings repository section contains credential status only", async () => 
   assert.equal(source.includes("providerCredentialStatuses"), true);
 });
 
-test("Readiness repository action sends URL-only input", async () => {
+test("Readiness repository action selects an existing connection without credentials", async () => {
   const source = await read(
     "../src/features/readiness/components/molecules/repository-readiness-action.tsx",
   );
-  assert.equal(source.includes("repositoryUrl"), true);
+  assert.equal(source.includes("useAuthRepositoriesQuery"), true);
+  assert.equal(source.includes("useStartRepositoryAnalysisMutation"), true);
+  assert.equal(source.includes("selectedRepository"), true);
+  assert.equal(source.includes("repositoryUrl"), false);
   assert.equal(source.includes("type=\"password\""), false);
   assert.equal(source.includes("PAT"), false);
-  assert.equal(source.includes("useConnectAssessmentRepositoryMutation"), true);
+  assert.equal(source.includes("credential"), false);
 });
 
 test("provider credential BFF validates and forwards only provider and credential", async () => {

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { describe, expect, it, jest } from "@jest/globals";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   CREDENTIAL_PROVIDERS,
   GITHUB_INTEGRATION_EVENT_TYPES,
@@ -71,7 +71,7 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
       new DiscoverGitHubRepositoriesCommand(
         "org",
         "user",
-        SUBJECT_ROLES.manager,
+        AUTH_USER_ROLES.customer,
         "session",
         FAKE_PAT,
         50,
@@ -103,7 +103,7 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
         new DiscoverGitHubRepositoriesCommand(
           "org",
           "user",
-          SUBJECT_ROLES.manager,
+          AUTH_USER_ROLES.customer,
           "session",
           FAKE_PAT,
           1,
@@ -151,7 +151,7 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
       new ConnectGitHubCliRepositoryCommand(
         "org",
         "user",
-        SUBJECT_ROLES.manager,
+        AUTH_USER_ROLES.customer,
         "session",
         FAKE_PAT,
         undefined,
@@ -200,7 +200,7 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
         new ConnectGitHubCliRepositoryCommand(
           "org",
           "user",
-          SUBJECT_ROLES.manager,
+          AUTH_USER_ROLES.customer,
           "session",
           FAKE_PAT,
           undefined,
@@ -234,7 +234,7 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
         new ConnectGitHubCliRepositoryCommand(
           "org",
           "user",
-          SUBJECT_ROLES.manager,
+          AUTH_USER_ROLES.customer,
           "session",
           FAKE_PAT,
           "owner/repo",

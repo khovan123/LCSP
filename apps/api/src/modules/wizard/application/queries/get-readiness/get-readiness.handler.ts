@@ -43,7 +43,7 @@ export class GetReadinessHandler implements IQueryHandler<
           where: { assessmentId },
         }),
         this.prisma.repositoryConnection.findFirst({
-          where: { assessmentId, organizationId, userId: query.userId },
+          where: { assessmentId, userId: query.userId },
           orderBy: { connectedAt: "desc" },
           select: {
             id: true,

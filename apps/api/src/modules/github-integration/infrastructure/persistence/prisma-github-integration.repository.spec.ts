@@ -18,7 +18,6 @@ describe("PrismaRepositoryConnectionRepository authentication mode", () => {
     } as unknown as PrismaService);
     const connection = RepositoryConnection.create({
       assessmentId: null,
-      organizationId: "organization-1",
       userId: "manager-1",
       installationId: "installation-1",
       repositoryId: "100",
@@ -44,8 +43,7 @@ describe("PrismaRepositoryConnectionRepository authentication mode", () => {
       Promise.resolve({
         id: "connection-1",
         assessmentId: null,
-        organizationId: "organization-1",
-        userId: "manager-1",
+          userId: "manager-1",
         installationId: "installation-1",
         authenticationMode: RepositoryAuthenticationMode.GITHUB_APP,
         credentialAuthorizationId: null,

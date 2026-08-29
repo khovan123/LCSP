@@ -1,7 +1,7 @@
 import { HttpStatus, Inject } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
   CREDENTIAL_PROVIDERS,
   GITHUB_INTEGRATION_ERROR_CODES,
@@ -42,7 +42,7 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
 
   async execute(command: ConfigureProviderCredentialCommand) {
     if (
-      command.subjectRole !== SUBJECT_ROLES.manager ||
+      command.subjectRole !== AUTH_USER_ROLES.customer ||
       !this.config.get("githubCredentialPersistence", { infer: true }).enabled
     ) {
       throw problemException(

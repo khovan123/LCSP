@@ -11,6 +11,7 @@ import {
   GITHUB_CREDENTIAL_ERROR_CODES,
   GITHUB_INTEGRATION_ERROR_CODES,
   CREDENTIAL_AUTHORIZATION_STATUSES,
+  REPOSITORY_CONNECTION_STATUSES,
 } from "@lcsp/contracts/github-integration";
 import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { fromPrismaAssessmentStatus } from "../../../../../infrastructure/prisma/prisma-enum-mappers.js";
@@ -63,7 +64,6 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
     const assessment = await this.prisma.assessment.findFirst({
       where: {
         id: command.assessmentId,
-        organizationId: command.organizationId,
         ownerId: command.userId,
       },
       select: { id: true, status: true },
@@ -137,7 +137,7 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
       const existing = await this.prisma.repositoryConnection.findFirst({
         where: {
           assessmentId: command.assessmentId,
-          organizationId: command.organizationId,
+          userId: command.userId,
           repositoryId: repository.id,
           authenticationMode: mode,
           status: RepositoryConnectionStatus.ACTIVE,
@@ -151,7 +151,7 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
           repositoryId: repository.id,
           repositoryFullName: repository.fullName,
           defaultBranch: repository.defaultBranch,
-          status: "ACTIVE",
+          status: REPOSITORY_CONNECTION_STATUSES.active,
         };
       const authorizationId = crypto.randomUUID();
       const connectionId = crypto.randomUUID();
@@ -172,7 +172,6 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
         await this.persistRepositoryConnection(transaction, {
           id: connectionId,
           assessmentId: command.assessmentId,
-          organizationId: command.organizationId,
           userId: command.userId,
           provider,
           installationId: null,
@@ -193,7 +192,7 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
         repositoryId: repository.id,
         repositoryFullName: repository.fullName,
         defaultBranch: repository.defaultBranch,
-        status: "ACTIVE",
+        status: REPOSITORY_CONNECTION_STATUSES.active,
       };
     } finally {
       lease.dispose();

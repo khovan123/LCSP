@@ -50,7 +50,7 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
     const connection = await this.prisma.repositoryConnection.findFirst({
       where: {
         id: connectionId,
-        organizationId: context.organizationId,
+        userId: context.organizationId,
         status: RepositoryConnectionStatus.ACTIVE,
         authenticationMode: {
           in: [
@@ -210,7 +210,7 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
         repositoryConnection: {
           is: {
             id: connectionId,
-            organizationId: context.organizationId,
+            userId: context.organizationId,
             authenticationMode: {
               in: [
                 RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,

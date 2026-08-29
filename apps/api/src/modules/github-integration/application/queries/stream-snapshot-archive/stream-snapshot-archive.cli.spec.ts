@@ -57,6 +57,7 @@ describe("StreamSnapshotArchiveHandler CLI archive routing", () => {
       repositoryConnection: {
         findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
           id: "connection-1",
+          userId: "user-1",
           provider: CREDENTIAL_PROVIDERS.github,
           installationId: null,
           organizationId: "org-1",
@@ -144,7 +145,7 @@ describe("StreamSnapshotArchiveHandler CLI archive routing", () => {
     expect(f.appDownload).not.toHaveBeenCalled();
     expect(f.resolveForConnection).toHaveBeenCalledWith(
       expect.objectContaining({
-        organizationId: "org-1",
+        organizationId: "user-1",
         assessmentId: "assessment-1",
       }),
       "connection-1",

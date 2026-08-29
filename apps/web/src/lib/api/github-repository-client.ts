@@ -36,11 +36,13 @@ export type ProviderCredentialStatus = {
 };
 
 export class GitHubRepositoryRequestError extends Error {
-  constructor(
-    readonly problemCode: string | undefined,
-    readonly requiredAction?: string,
-  ) {
+  readonly problemCode: string | undefined;
+  readonly requiredAction: string | undefined;
+
+  constructor(problemCode: string | undefined, requiredAction?: string) {
     super("github-repository-request-failed");
+    this.problemCode = problemCode;
+    this.requiredAction = requiredAction;
   }
 }
 

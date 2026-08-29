@@ -6,7 +6,7 @@ import {
   ProviderCredentialStatus,
 } from "@prisma/client";
 import { describe, expect, it, beforeAll, afterAll, jest } from "@jest/globals";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 
 import type { AppConfig } from "../../../../../config/config.types.js";
@@ -73,7 +73,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
     new ConfigureProviderCredentialCommand(
       "integration-org",
       "integration-user",
-      SUBJECT_ROLES.manager,
+      AUTH_USER_ROLES.customer,
       "integration-session",
       CREDENTIAL_PROVIDERS.gitlab,
       credential,
@@ -188,7 +188,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
         new ConfigureProviderCredentialCommand(
           organizationId,
           userId,
-          SUBJECT_ROLES.manager,
+          AUTH_USER_ROLES.customer,
           "integration-session",
           providerName,
           `synthetic-${organizationId}-${userId}-${providerName}-credential`,
@@ -200,7 +200,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
       new ConfigureProviderCredentialCommand(
         "scope-org-1",
         "scope-user-1",
-        SUBJECT_ROLES.manager,
+        AUTH_USER_ROLES.customer,
         "integration-session",
         CREDENTIAL_PROVIDERS.gitlab,
         "synthetic-scope-rotation-credential",
@@ -238,7 +238,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
       new ConfigureProviderCredentialCommand(
         organizationId,
         "same-secret-user",
-        SUBJECT_ROLES.manager,
+        AUTH_USER_ROLES.customer,
         "integration-session",
         CREDENTIAL_PROVIDERS.gitlab,
         "synthetic-same-secret-credential",
@@ -252,7 +252,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
       new ConfigureProviderCredentialCommand(
         organizationId,
         "same-secret-user",
-        SUBJECT_ROLES.manager,
+        AUTH_USER_ROLES.customer,
         "integration-session",
         CREDENTIAL_PROVIDERS.gitlab,
         "synthetic-same-secret-credential",
@@ -274,7 +274,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
       new ConfigureProviderCredentialCommand(
         organizationId,
         "rollback-user",
-        SUBJECT_ROLES.manager,
+        AUTH_USER_ROLES.customer,
         "integration-session",
         CREDENTIAL_PROVIDERS.gitlab,
         "synthetic-rollback-original-credential",
@@ -303,7 +303,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
         new ConfigureProviderCredentialCommand(
           organizationId,
           "rollback-user",
-          SUBJECT_ROLES.manager,
+          AUTH_USER_ROLES.customer,
           "integration-session",
           CREDENTIAL_PROVIDERS.gitlab,
           "synthetic-rollback-replacement-credential",

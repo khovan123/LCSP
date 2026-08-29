@@ -1,12 +1,19 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "@jest/globals";
 
-const migrationPath = resolve(
-  process.cwd(),
-  "prisma/migrations/20260824120000_add_provider_credentials/migration.sql",
-);
+function resolveMigrationPath(relativePath: string): string {
+  const candidates = [
+    resolve(process.cwd(), "prisma/migrations", relativePath),
+    resolve(process.cwd(), "apps/api/prisma/migrations", relativePath),
+  ];
+  const match = candidates.find((candidate) => existsSync(candidate));
+  if (!match) throw new Error(`migration_not_found:${relativePath}`);
+  return match;
+}
+
+const migrationPath = resolveMigrationPath("20260824120000_add_provider_credentials/migration.sql");
 
 describe("provider credential migration", () => {
   it("explicitly backfills existing connections before enforcing the mode", () => {

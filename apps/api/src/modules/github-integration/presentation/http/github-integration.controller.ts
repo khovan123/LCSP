@@ -16,6 +16,7 @@ import {
 } from "@nestjs/common";
 import { CommandBus } from "@nestjs/cqrs";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
+import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 import type { Response } from "express";
 
 import { createCorrelationId } from "../../../auth-workspace/infrastructure/security/security.utils.js";
@@ -76,10 +77,10 @@ export class GitHubIntegrationController {
   ) {}
 
   @Get("provider-credentials")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.githubConnect)
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async listProviderCredentials(@Req() request: GitHubIntegrationRequest) {
-    const context = request.pbacContext as PbacRequestContext;
+    const context = request.rbacContext as RbacRequestContext;
     if (!this.activeCredentials)
       throw new Error("provider_credentials_unavailable");
     const activeCredentials = this.activeCredentials;
@@ -91,7 +92,7 @@ export class GitHubIntegrationController {
       await Promise.all(
         providers.map(async (provider) => {
           const metadata = await activeCredentials.findMetadata({
-            organizationId: context.organizationId,
+            organizationId: context.userId,
             userId: context.userId,
             provider,
           });
@@ -112,8 +113,8 @@ export class GitHubIntegrationController {
 
   @Post("github/repository-discoveries")
   @HttpCode(HttpStatus.OK)
-  @UseGuards(PbacGuard, GitHubCredentialRequestGuard)
-  @RequireAction(PBAC_ACTIONS.githubConnect)
+  @UseGuards(RbacGuard, GitHubCredentialRequestGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   @ReAuthForSensitiveRoute({
     routeId: SENSITIVE_ROUTE_IDS.githubCliRepositoryDiscovery,
     method: "POST",
@@ -126,13 +127,13 @@ export class GitHubIntegrationController {
     @Body() body: GitHubRepositoryDiscoveryRequest,
     @Req() request: GitHubIntegrationRequest,
   ) {
-    const context = request.pbacContext as PbacRequestContext;
+    const context = request.rbacContext as RbacRequestContext;
     return resultEnvelope(
       await this.commandBus.execute(
         new DiscoverGitHubRepositoriesCommand(
-          context.organizationId,
           context.userId,
-          context.subjectRole,
+          context.userId,
+          context.role,
           context.sessionId,
           body.credential,
           body.limit,
@@ -144,8 +145,8 @@ export class GitHubIntegrationController {
   }
 
   @Post("github/repository-connections")
-  @UseGuards(PbacGuard, GitHubCredentialRequestGuard)
-  @RequireAction(PBAC_ACTIONS.githubConnect)
+  @UseGuards(RbacGuard, GitHubCredentialRequestGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   @ReAuthForSensitiveRoute({
     routeId: SENSITIVE_ROUTE_IDS.githubCliRepositoryConnect,
     method: "POST",
@@ -158,13 +159,13 @@ export class GitHubIntegrationController {
     @Body() body: GitHubCliRepositoryConnectionRequest,
     @Req() request: GitHubIntegrationRequest,
   ) {
-    const context = request.pbacContext as PbacRequestContext;
+    const context = request.rbacContext as RbacRequestContext;
     return resultEnvelope(
       await this.commandBus.execute(
         new ConnectGitHubCliRepositoryCommand(
-          context.organizationId,
           context.userId,
-          context.subjectRole,
+          context.userId,
+          context.role,
           context.sessionId,
           body.credential,
           body.repository_full_name,
@@ -179,8 +180,8 @@ export class GitHubIntegrationController {
   }
 
   @Post("provider-credentials")
-  @UseGuards(PbacGuard, GitHubCredentialRequestGuard)
-  @RequireAction(PBAC_ACTIONS.githubConnect)
+  @UseGuards(RbacGuard, GitHubCredentialRequestGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   @ReAuthForSensitiveRoute({
     routeId: SENSITIVE_ROUTE_IDS.githubCliRepositoryConnect,
     method: "POST",
@@ -191,13 +192,13 @@ export class GitHubIntegrationController {
     @Body() body: ProviderCredentialRequest,
     @Req() request: GitHubIntegrationRequest,
   ) {
-    const context = request.pbacContext as PbacRequestContext;
+    const context = request.rbacContext as RbacRequestContext;
     return resultEnvelope(
       await this.commandBus.execute(
         new ConfigureProviderCredentialCommand(
-          context.organizationId,
           context.userId,
-          context.subjectRole,
+          context.userId,
+          context.role,
           context.sessionId,
           body.provider,
           body.credential,
@@ -208,21 +209,21 @@ export class GitHubIntegrationController {
   }
 
   @Post("assessments/:assessmentId/repository-connection")
-  @UseGuards(PbacGuard)
-  @RequireAction(PBAC_ACTIONS.githubConnect)
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
   async connectAssessmentRepository(
     @Param("assessmentId") assessmentId: string,
     @Body() body: AssessmentRepositoryConnectionRequest,
     @Req() request: GitHubIntegrationRequest,
   ) {
-    const context = request.pbacContext as PbacRequestContext;
+    const context = request.rbacContext as RbacRequestContext;
     return resultEnvelope(
       await this.commandBus.execute(
         new ConnectAssessmentRepositoryCommand(
           assessmentId,
-          context.organizationId,
           context.userId,
-          context.subjectRole,
+          context.userId,
+          context.role,
           body.repositoryUrl,
           request.correlationId as string,
         ),

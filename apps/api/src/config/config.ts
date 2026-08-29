@@ -312,6 +312,20 @@ export function config(): AppConfig {
         env.GITLAB_CLI_MAX_JSON_OUTPUT_BYTES ?? 1048576,
       ),
     },
+    githubCredentialPersistence: {
+      enabled:
+        (env.GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED ?? "false").toLowerCase() ===
+        "true",
+      snapshotPinningEnabled:
+        (env.GITHUB_CLI_SNAPSHOT_PINNING_ENABLED ?? "false").toLowerCase() ===
+        "true",
+      archiveRetrievalEnabled:
+        (env.GITHUB_CLI_ARCHIVE_RETRIEVAL_ENABLED ?? "false").toLowerCase() ===
+        "true",
+      activeKekVersion:
+        env.GITHUB_CLI_CREDENTIAL_KEK_ACTIVE_VERSION?.trim() ?? "",
+      encodedKekKeyring: env.GITHUB_CLI_CREDENTIAL_KEK_KEYRING ?? "{}",
+    },
     rabbitmq: {
       url: env.RABBITMQ_URL ?? "",
       exchange: env.RABBITMQ_EXCHANGE ?? "lcsp.events",

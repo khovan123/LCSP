@@ -169,6 +169,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
       where: { id: snapshot.connectionId },
       select: {
         id: true,
+        userId: true,
         installationId: true,
         status: true,
         authenticationMode: true,
@@ -240,7 +241,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
                 await this.credentialResolver.resolveForConnection(
                   {
                     actorId: null,
-                    organizationId: snapshot.organizationId,
+                    organizationId: connection.userId,
                     assessmentId: snapshot.assessmentId,
                     operation: GITHUB_CREDENTIAL_OPERATIONS.retrieveArchive,
                     correlationId: query.correlationId,

@@ -5,7 +5,7 @@ import {
   RepositoryAuthenticationMode,
   RepositoryConnectionStatus,
 } from "@prisma/client";
-import { SUBJECT_ROLES } from "@lcsp/contracts/pbac";
+import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { AUDIT_DECISIONS, AUDIT_RESOURCE_TYPES } from "@lcsp/contracts/audit";
 import {
   CREDENTIAL_AUTHORIZATION_STATUSES,
@@ -95,7 +95,6 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
       const assessment = await this.prisma.assessment.findFirst({
         where: {
           id: command.assessmentId,
-          organizationId: command.organizationId,
           ownerId: command.userId,
         },
         select: { id: true },
@@ -128,7 +127,6 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
 
       const duplicate = await this.prisma.repositoryConnection.findFirst({
         where: {
-          organizationId: command.organizationId,
           userId: command.userId,
           repositoryId: repository.id,
           assessmentId: command.assessmentId ?? null,
@@ -192,7 +190,6 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
           data: {
             id: connectionId,
             assessmentId: command.assessmentId ?? null,
-            organizationId: command.organizationId,
             userId: command.userId,
             provider,
             installationId: null,
@@ -214,7 +211,6 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
       await this.auditWriter.write({
         eventType: GITHUB_INTEGRATION_EVENT_TYPES.cliRepositoryConnected,
         actorId: command.userId,
-        organizationId: command.organizationId,
         assessmentId: command.assessmentId ?? null,
         resourceType: AUDIT_RESOURCE_TYPES.repositoryConnection,
         resourceId: connectionId,
@@ -259,7 +255,7 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
         { status: HttpStatus.NOT_FOUND },
       );
     }
-    if (role !== SUBJECT_ROLES.manager) {
+    if (role !== AUTH_USER_ROLES.customer) {
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
         correlationId,

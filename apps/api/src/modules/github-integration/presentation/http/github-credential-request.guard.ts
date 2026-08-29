@@ -3,7 +3,7 @@ import type { CanActivate, ExecutionContext } from "@nestjs/common";
 import { GITHUB_INTEGRATION_ERROR_CODES } from "@lcsp/contracts/github-integration";
 
 import { problemException } from "../../../../platform/problems/problem-factory.js";
-import type { PbacRequestContext } from "../../../../platform/pbac/interfaces/pbac-request.interface.js";
+import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 
 const MAX_REQUEST_BYTES = 16 * 1024;
 const WINDOW_MS = 60_000;
@@ -11,12 +11,12 @@ const MAX_REQUESTS_PER_WINDOW = 10;
 
 type GuardRequest = {
   headers: Record<string, string | string[] | undefined>;
-  pbacContext?: PbacRequestContext;
+  rbacContext?: RbacRequestContext;
   correlationId?: string;
   body?: unknown;
 };
 
-/** Applies a small secret-bearing body boundary after PBAC authentication. */
+/** Applies a small secret-bearing body boundary after RBAC authentication. */
 @Injectable()
 export class GitHubCredentialRequestGuard implements CanActivate {
   private readonly windows = new Map<
@@ -44,9 +44,9 @@ export class GitHubCredentialRequestGuard implements CanActivate {
         { status: HttpStatus.BAD_REQUEST },
       );
     }
-    const pbac = request.pbacContext;
-    if (!pbac) return false;
-    const key = `${pbac.organizationId}:${pbac.userId}`;
+    const rbac = request.rbacContext;
+    if (!rbac) return false;
+    const key = rbac.userId;
     const now = Date.now();
     const current = this.windows.get(key);
     if (!current || now - current.startsAt >= WINDOW_MS) {

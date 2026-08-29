@@ -197,7 +197,7 @@ export class PrismaCredentialAuthorizationRepository implements CredentialAuthor
         repositoryFullName: input.repositoryFullName,
         status: PrismaAuthorizationStatus.ACTIVE,
         repositoryConnection: {
-          is: { id: input.connectionId, organizationId: input.organizationId },
+          is: { id: input.connectionId, userId: input.organizationId },
         },
         OR: [{ assessmentId: null }, { assessmentId: input.assessmentId }],
       },

@@ -1,4 +1,5 @@
 "use client";
+import { REQUIRED_ACTIONS } from "@lcsp/contracts/auth";
 import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 import { resolveMessage } from "@lcsp/i18n";
 import React from "react";
@@ -43,7 +44,7 @@ export function RepositoriesSettingsSection({
           if (
             error instanceof Error &&
             "requiredAction" in error &&
-            error.requiredAction === "reauthenticate"
+            error.requiredAction === REQUIRED_ACTIONS.reauthenticate
           ) {
             setCredential("");
             setReauthRequired(true);

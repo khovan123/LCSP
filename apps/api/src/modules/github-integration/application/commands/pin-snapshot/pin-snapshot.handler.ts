@@ -104,7 +104,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       where: { id: command.assessmentId },
       select: { id: true, ownerId: true },
     });
-    if (!assessment || assessment.organizationId !== command.organizationId) {
+    if (!assessment) {
       await this.auditDenied(
         command,
         GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
@@ -134,9 +134,11 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       ? await this.connectionRepository.findById(connectionId)
       : null;
     if (
-      !assessment ||
       !connection ||
-      connection.status !== REPOSITORY_CONNECTION_STATUSES.active
+      connection.status !== REPOSITORY_CONNECTION_STATUSES.active ||
+      connection.userId !== command.actorId ||
+      (connection.assessmentId !== null &&
+        connection.assessmentId !== command.assessmentId)
     ) {
       await this.auditDenied(
         command,
@@ -144,18 +146,6 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       );
       throw problemException(
         GITHUB_INTEGRATION_ERROR_CODES.connectionNotFound,
-        command.correlationId,
-        { status: HttpStatus.NOT_FOUND },
-      );
-    }
-
-    const isCustomerOwner =
-      command.subjectRole === AUTH_USER_ROLES.customer &&
-      assessment.ownerId === command.actorId;
-    if (!isCustomerOwner) {
-      await this.auditDenied(command, AUTH_ERROR_CODES.rbacDenied);
-      throw problemException(
-        AUTH_ERROR_CODES.rbacDenied,
         command.correlationId,
         { status: HttpStatus.NOT_FOUND },
       );
@@ -358,7 +348,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       lease = await this.credentialResolver.resolveForConnection(
         {
           actorId: command.actorId,
-          organizationId: command.organizationId,
+          organizationId: command.actorId,
           assessmentId: command.assessmentId,
           operation: GITHUB_CREDENTIAL_OPERATIONS.pinSnapshot,
           correlationId: command.correlationId,

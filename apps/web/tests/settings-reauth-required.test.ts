@@ -10,7 +10,7 @@ test("provider credential reauthentication is routed to the existing Settings fl
     ),
     "utf8",
   );
-  assert.match(source, /requiredAction === "reauthenticate"/);
+  assert.match(source, /requiredAction === REQUIRED_ACTIONS\.reauthenticate/);
   assert.match(source, /onReauthenticate\?\./);
   assert.match(source, /setCredential\(""\)/);
 });
