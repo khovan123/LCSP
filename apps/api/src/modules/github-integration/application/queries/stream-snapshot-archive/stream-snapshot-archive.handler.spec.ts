@@ -9,7 +9,6 @@ import {
 import { Readable } from "node:stream";
 import {
   RepositoryScanJobStatus,
-  RepositoryConnectionStatus,
   RepositoryAuthenticationMode,
 } from "@prisma/client";
 
