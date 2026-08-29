@@ -233,7 +233,7 @@ const groups = {
   dev: ["api", "web", "managed_agent", "managed_agent_events", "phoenix"],
 };
 
-const selection = requestedSelection;
+const selection = process.argv[2] ?? "help";
 await main();
 
 async function main() {
@@ -303,7 +303,7 @@ function prepareTsJsAnalyzer() {
       cwd: tsJsAnalyzerRoot,
       env: process.env,
       stdio: "inherit",
-      shell: false,
+      shell: isWindows,
     });
     if (result.status !== 0) {
       process.exit(result.status ?? 1);
