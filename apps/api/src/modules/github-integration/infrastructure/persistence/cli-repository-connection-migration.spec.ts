@@ -14,7 +14,9 @@ function resolveMigrationPath(relativePath: string): string {
 }
 
 const sql = readFileSync(
-  resolveMigrationPath("20260824160000_allow_cli_repository_connections/migration.sql"),
+  resolveMigrationPath(
+    "20260824160000_allow_cli_repository_connections/migration.sql",
+  ),
   "utf8",
 );
 

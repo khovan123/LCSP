@@ -13,7 +13,9 @@ function resolveMigrationPath(relativePath: string): string {
   return match;
 }
 
-const migrationPath = resolveMigrationPath("20260824120000_add_provider_credentials/migration.sql");
+const migrationPath = resolveMigrationPath(
+  "20260824120000_add_provider_credentials/migration.sql",
+);
 
 describe("provider credential migration", () => {
   it("explicitly backfills existing connections before enforcing the mode", () => {

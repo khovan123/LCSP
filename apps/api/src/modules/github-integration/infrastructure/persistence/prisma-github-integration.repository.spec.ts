@@ -43,7 +43,7 @@ describe("PrismaRepositoryConnectionRepository authentication mode", () => {
       Promise.resolve({
         id: "connection-1",
         assessmentId: null,
-          userId: "manager-1",
+        userId: "manager-1",
         installationId: "installation-1",
         authenticationMode: RepositoryAuthenticationMode.GITHUB_APP,
         credentialAuthorizationId: null,

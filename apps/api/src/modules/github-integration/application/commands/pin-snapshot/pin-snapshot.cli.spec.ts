@@ -212,25 +212,22 @@ describe("PinSnapshotHandler CLI routing", () => {
   it.each([
     ["cross-user connection", cliConnection(), "other-user"],
     ["inactive connection", cliConnection(), "manager-1"],
-  ])(
-    "denies %s before credential resolution",
-    async (_label, row, userId) => {
-      if (_label === "inactive connection") {
-        Object.defineProperty(row, "status", {
-          get: () => REPOSITORY_CONNECTION_STATUSES.revoked,
-        });
-      } else {
-        Object.defineProperty(row, "userId", {
-          get: () => userId,
-        });
-      }
-      const fixture = build({ connection: row });
-      await expect(fixture.handler.execute(command())).rejects.toBeInstanceOf(
-        HttpException,
-      );
-      expect(fixture.resolveForConnection).not.toHaveBeenCalled();
-    },
-  );
+  ])("denies %s before credential resolution", async (_label, row, userId) => {
+    if (_label === "inactive connection") {
+      Object.defineProperty(row, "status", {
+        get: () => REPOSITORY_CONNECTION_STATUSES.revoked,
+      });
+    } else {
+      Object.defineProperty(row, "userId", {
+        get: () => userId,
+      });
+    }
+    const fixture = build({ connection: row });
+    await expect(fixture.handler.execute(command())).rejects.toBeInstanceOf(
+      HttpException,
+    );
+    expect(fixture.resolveForConnection).not.toHaveBeenCalled();
+  });
 
   it("denies a Manager who does not own the assessment before loading a secret", async () => {
     const fixture = build();

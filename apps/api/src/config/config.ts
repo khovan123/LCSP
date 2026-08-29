@@ -314,8 +314,9 @@ export function config(): AppConfig {
     },
     githubCredentialPersistence: {
       enabled:
-        (env.GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED ?? "false").toLowerCase() ===
-        "true",
+        (
+          env.GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED ?? "false"
+        ).toLowerCase() === "true",
       snapshotPinningEnabled:
         (env.GITHUB_CLI_SNAPSHOT_PINNING_ENABLED ?? "false").toLowerCase() ===
         "true",
