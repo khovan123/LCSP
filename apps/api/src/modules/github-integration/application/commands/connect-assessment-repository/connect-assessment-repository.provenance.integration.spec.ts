@@ -183,10 +183,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
     });
   };
 
-  const createAssessment = async (
-    id: string,
-    ownerId = "provenance-user",
-  ) => {
+  const createAssessment = async (id: string, ownerId = "provenance-user") => {
     await ensureUser(ownerId);
     await prisma.assessment.create({
       data: {
