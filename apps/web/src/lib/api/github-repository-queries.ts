@@ -8,18 +8,27 @@ import {
   connectGitHubRepository,
   discoverGitHubRepositories,
 } from "./github-repository-client";
+import { apiQueryKeys } from "./query-keys";
 
 export function useConfigureProviderCredentialMutation() {
-  return useMutation({ mutationFn: configureProviderCredential });
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: configureProviderCredential,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: apiQueryKeys.githubIntegration.providerCredentials(),
+      });
+    },
+  });
 }
 
 export function useProviderCredentialStatusesQuery() {
   return useQuery({
-    queryKey: ["provider-credentials"],
+    queryKey: apiQueryKeys.githubIntegration.providerCredentials(),
     queryFn: getProviderCredentialStatuses,
   });
 }
-import { apiQueryKeys } from "./query-keys";
 
 export function useDiscoverGitHubRepositoriesMutation() {
   return useMutation({ mutationFn: discoverGitHubRepositories });
