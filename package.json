@@ -28,6 +28,7 @@
     "lint": "pnpm run check:imports && pnpm run check:contracts && pnpm run check:agentic-tools && pnpm run typecheck",
     "prepare": "husky",
     "test": "pnpm run test:web && pnpm --filter @lcsp/api test:e2e",
+    "pretest:web": "pnpm run build:runtime-packages",
     "test:web": "node --test tests/*.web.test.ts apps/web/tests/*.test.ts",
     "prisma:generate": "pnpm --filter @lcsp/api prisma:generate",
     "typecheck": "pnpm run prisma:generate && pnpm exec tsc -b",

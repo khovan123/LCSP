@@ -169,11 +169,29 @@ run("ConnectAssessmentRepository credential provenance", () => {
       "synthetic-correlation",
     );
 
-  const createAssessment = async (id: string) => {
+  const ensureUser = async (userId: string) => {
+    await prisma.user.upsert({
+      where: { id: userId },
+      update: {},
+      create: {
+        id: userId,
+        email: `${userId}@example.test`,
+        passwordHash: "synthetic-password-hash",
+        emailVerified: true,
+        failedLoginCount: 0,
+      },
+    });
+  };
+
+  const createAssessment = async (
+    id: string,
+    ownerId = "provenance-user",
+  ) => {
+    await ensureUser(ownerId);
     await prisma.assessment.create({
       data: {
         id,
-        ownerId: "provenance-user",
+        ownerId,
         name: id,
         status: AssessmentStatus.WIZARD_SUBMITTED,
       },
@@ -182,7 +200,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
       data: {
         id: `${id}-wizard`,
         assessmentId: id,
-        ownerId: "provenance-user",
+        ownerId,
         status: WizardProfileStatus.SUBMITTED,
         answers: {},
         submittedAt: new Date(),
@@ -263,14 +281,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
 
   it("does not persist when the provider credential is missing", async () => {
     const assessmentId = "provenance-missing";
-    await prisma.assessment.create({
-      data: {
-        id: assessmentId,
-        ownerId: "missing-user",
-        name: assessmentId,
-        status: AssessmentStatus.WIZARD_SUBMITTED,
-      },
-    });
+    await createAssessment(assessmentId, "missing-user");
     provider.validateRepositoryAccess.mockClear();
     await expect(
       connect.execute(
@@ -316,11 +327,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
         "synthetic-other-user-credential",
       ),
     );
-    await createAssessment("scope-assessment");
-    await prisma.assessment.update({
-      where: { id: "scope-assessment" },
-      data: { ownerId: "scope-user" },
-    });
+    await createAssessment("scope-assessment", "scope-user");
     const result = await connect.execute(
       new ConnectAssessmentRepositoryCommand(
         "scope-assessment",
@@ -488,14 +495,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
         "synthetic-github-snapshot-credential",
       ),
     );
-    await prisma.assessment.create({
-      data: {
-        id: assessmentId,
-        ownerId: userId,
-        name: assessmentId,
-        status: AssessmentStatus.WIZARD_SUBMITTED,
-      },
-    });
+    await createAssessment(assessmentId, userId);
     const connectionResult = await connect.execute(
       new ConnectAssessmentRepositoryCommand(
         assessmentId,
