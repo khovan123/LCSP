@@ -998,6 +998,27 @@ export type PagesMessages = {
     noCompletedSteps: string;
     repositoryConnectedTitle: string;
     snapshotReady: string;
+    repository: {
+      title: string;
+      urlLabel: string;
+      urlPlaceholder: string;
+      urlDescription: string;
+      urlRequired: string;
+      urlInvalid: string;
+      connectAndAnalyze: string;
+      connecting: string;
+      startingAnalysis: string;
+      connected: string;
+      retryAnalysis: string;
+      analysisStarted: string;
+      connectFailedTitle: string;
+      analysisFailedTitle: string;
+      credentialRequired: string;
+      configureCredential: string;
+      unsupportedUrl: string;
+      accessFailed: string;
+      analysisFailed: string;
+    };
     unresolvedTitle: string;
     unresolvedDescription: string;
     noUnresolvedItems: string;

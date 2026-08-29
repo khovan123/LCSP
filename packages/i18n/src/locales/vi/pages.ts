@@ -1027,6 +1027,31 @@ export const viPages = {
     noCompletedSteps: "Chưa có mốc readiness nào được xác nhận.",
     repositoryConnectedTitle: "Đã kết nối repository",
     snapshotReady: "Snapshot đã sẵn sàng cho assessment này.",
+    repository: {
+      title: "Phân tích repository",
+      urlLabel: "URL repository",
+      urlPlaceholder: "https://github.com/to-chuc/repository",
+      urlDescription: "Nhập URL repository GitHub hoặc GitLab.",
+      urlRequired: "URL repository là bắt buộc.",
+      urlInvalid: "Hãy nhập URL repository hợp lệ.",
+      connectAndAnalyze: "Kết nối và phân tích",
+      connecting: "Đang kết nối repository...",
+      startingAnalysis: "Đang bắt đầu phân tích repository...",
+      connected: "Đã kết nối repository",
+      retryAnalysis: "Thử lại phân tích",
+      analysisStarted:
+        "Phân tích repository đã bắt đầu. Readiness sẽ tự động cập nhật.",
+      connectFailedTitle: "Không thể kết nối repository",
+      analysisFailedTitle: "Không thể bắt đầu phân tích repository",
+      credentialRequired:
+        "Repository này yêu cầu Provider Credential phù hợp.",
+      configureCredential: "Cấu hình credential trong Repository Settings",
+      unsupportedUrl: "URL repository hoặc provider này chưa được hỗ trợ.",
+      accessFailed:
+        "Không thể truy cập repository. Hãy kiểm tra credential và quyền repository.",
+      analysisFailed:
+        "Phân tích repository thất bại. Bạn có thể thử lại với connection hiện tại.",
+    },
     unresolvedTitle: "Bối cảnh nghiệp vụ chưa rõ",
     unresolvedDescription:
       "Những mục này cần được làm rõ thêm trước khi có thể phân loại.",

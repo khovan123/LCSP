@@ -1033,6 +1033,31 @@ export const enPages = {
     noCompletedSteps: "No readiness milestones have been confirmed yet.",
     repositoryConnectedTitle: "Repository connected",
     snapshotReady: "Snapshot is ready for this assessment.",
+    repository: {
+      title: "Repository analysis",
+      urlLabel: "Repository URL",
+      urlPlaceholder: "https://github.com/organization/repository",
+      urlDescription: "Enter a GitHub or GitLab repository URL.",
+      urlRequired: "Repository URL is required.",
+      urlInvalid: "Enter a valid repository URL.",
+      connectAndAnalyze: "Connect and analyze",
+      connecting: "Connecting repository...",
+      startingAnalysis: "Starting repository analysis...",
+      connected: "Repository connected",
+      retryAnalysis: "Retry analysis",
+      analysisStarted:
+        "Repository analysis has started. Readiness will update automatically.",
+      connectFailedTitle: "Unable to connect repository",
+      analysisFailedTitle: "Unable to start repository analysis",
+      credentialRequired:
+        "A provider credential is required for this repository.",
+      configureCredential: "Configure repository credential in Settings",
+      unsupportedUrl: "This repository URL or provider is not supported.",
+      accessFailed:
+        "Repository access failed. Check the configured credential and repository permissions.",
+      analysisFailed:
+        "Repository analysis failed. You can retry with the same connection.",
+    },
     unresolvedTitle: "Unresolved Business Context",
     unresolvedDescription:
       "These items need further clarification before classification can proceed.",
