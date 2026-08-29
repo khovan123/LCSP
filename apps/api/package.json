@@ -6,6 +6,7 @@
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
+    "prebuild": "pnpm --dir ../.. run build:runtime-packages",
     "build": "pnpm run prisma:generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "prisma:generate": "cross-env XDG_CACHE_HOME=.cache prisma generate",
