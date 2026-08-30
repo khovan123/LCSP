@@ -5,6 +5,8 @@ const image = "postgres:16-alpine";
 const host = "127.0.0.1";
 const hostPort = Number(process.env.LCSP_TEST_POSTGRES_PORT ?? 55432);
 const databaseName = process.env.LCSP_TEST_POSTGRES_DB ?? "lcsp_api_test";
+const databaseUser = process.env.LCSP_TEST_POSTGRES_USER ?? "postgres";
+const databasePassword = process.env.LCSP_TEST_POSTGRES_PASSWORD ?? "postgres";
 const containerPort = 5432;
 const containerName = `lcsp-api-test-postgres-${hostPort}-${databaseName}`;
 
@@ -43,9 +45,9 @@ function ensureContainer() {
       "--name",
       containerName,
       "-e",
-      "POSTGRES_USER=postgres",
+      `POSTGRES_USER=${databaseUser}`,
       "-e",
-      "POSTGRES_PASSWORD=postgres",
+      `POSTGRES_PASSWORD=${databasePassword}`,
       "-e",
       `POSTGRES_DB=${databaseName}`,
       "-p",
@@ -63,7 +65,22 @@ function ensureContainer() {
 
 function isAuthenticated() {
   try {
-    run(["exec", containerName, "psql", "-U", "postgres", "-d", databaseName, "-c", "SELECT 1"]);
+    run([
+      "exec",
+      "-e",
+      `PGPASSWORD=${databasePassword}`,
+      containerName,
+      "psql",
+      "-h",
+      host,
+      "-U",
+      databaseUser,
+      "-d",
+      databaseName,
+      "-w",
+      "-c",
+      "SELECT 1",
+    ]);
     return true;
   } catch {
     return false;
@@ -95,7 +112,7 @@ function waitUntilReady() {
         containerName,
         "pg_isready",
         "-U",
-        "postgres",
+        databaseUser,
         "-d",
         databaseName,
       ]);
