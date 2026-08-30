@@ -5,7 +5,7 @@ import {
   type CredentialStorageContext,
   type CredentialStoreHealth,
   type CredentialStorePort,
-  type SecretLocator,
+  type CredentialLocator,
 } from "../../application/ports/security/credential-store.port.js";
 import {
   EnvelopeEncryptionError,
@@ -33,11 +33,11 @@ export class CredentialStoreError extends Error {
 
 /**
  * Encrypted in-memory adapter for Phase 1 tests only.
- * Database persistence of the same envelope representation belongs to Phase 2.
+ * Database persistence uses the same envelope representation on ProviderCredential.
  */
 export class InMemoryEncryptedCredentialStore implements CredentialStorePort {
   private readonly records = new Map<
-    SecretLocator,
+    CredentialLocator,
     EncryptedCredentialRecord
   >();
 
@@ -46,24 +46,24 @@ export class InMemoryEncryptedCredentialStore implements CredentialStorePort {
   async store(
     secret: string,
     context: CredentialStorageContext,
-  ): Promise<SecretLocator> {
+  ): Promise<CredentialLocator> {
     try {
-      const secretLocator = randomUUID() as SecretLocator;
+      const credentialLocator = randomUUID() as CredentialLocator;
       const envelope = await this.encryption.encryptSecret(secret, context);
-      this.records.set(secretLocator, {
+      this.records.set(credentialLocator, {
         envelope,
         ownerUserId: context.ownerUserId,
         context,
         createdAt: new Date(),
       });
-      return secretLocator;
+      return credentialLocator;
     } catch {
       throw new CredentialStoreError();
     }
   }
 
-  async read(secretLocator: SecretLocator): Promise<string> {
-    const record = this.records.get(secretLocator);
+  async read(credentialLocator: CredentialLocator): Promise<string> {
+    const record = this.records.get(credentialLocator);
     if (!record) {
       throw new CredentialStoreError();
     }
@@ -81,20 +81,20 @@ export class InMemoryEncryptedCredentialStore implements CredentialStorePort {
   }
 
   async replace(
-    oldSecretLocator: SecretLocator,
+    oldCredentialLocator: CredentialLocator,
     newSecret: string,
     context: CredentialStorageContext,
-  ): Promise<SecretLocator> {
-    if (!this.records.has(oldSecretLocator)) {
+  ): Promise<CredentialLocator> {
+    if (!this.records.has(oldCredentialLocator)) {
       throw new CredentialStoreError();
     }
-    const newSecretLocator = await this.store(newSecret, context);
-    this.records.delete(oldSecretLocator);
-    return newSecretLocator;
+    const newCredentialLocator = await this.store(newSecret, context);
+    this.records.delete(oldCredentialLocator);
+    return newCredentialLocator;
   }
 
-  destroy(secretLocator: SecretLocator): Promise<void> {
-    this.records.delete(secretLocator);
+  destroy(credentialLocator: CredentialLocator): Promise<void> {
+    this.records.delete(credentialLocator);
     return Promise.resolve();
   }
 

@@ -34,6 +34,7 @@ describe("PrismaActiveProviderCredentialResolver", () => {
         isActive: true,
       },
       orderBy: [{ validatedAt: "desc" }, { id: "desc" }],
+      select: expect.objectContaining({ id: true, currentVersion: true }),
     });
   });
 });

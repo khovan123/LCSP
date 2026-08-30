@@ -90,7 +90,6 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
     });
 
   it("configures initially and rotates to a new active credential", async () => {
-    await prisma.providerCredentialSecret.deleteMany();
     await prisma.providerCredential.deleteMany({
       where: { ownerUserId: "integration-user" },
     });

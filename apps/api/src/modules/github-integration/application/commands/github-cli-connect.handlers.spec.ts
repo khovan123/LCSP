@@ -169,12 +169,15 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
       FAKE_PAT,
       expect.objectContaining({ ownerUserId: "user" }),
     );
-    expect(createAuthorization).toHaveBeenCalledTimes(1);
+    expect(createAuthorization).not.toHaveBeenCalled();
     expect(createConnection).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           installationId: null,
-          credentialAuthorizationId: expect.any(String),
+          providerCredentialId: expect.any(String),
+          credentialVersion: 1,
+          credentialAuthorizationStatus: "ACTIVE",
+          credentialAuthorizedByUserId: "user",
         }),
       }),
     );

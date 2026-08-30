@@ -14,7 +14,6 @@ import { REPOSITORY_CONNECTION_REPOSITORY } from "./application/ports/persistenc
 import { REPOSITORY_SNAPSHOT_REPOSITORY } from "./application/ports/persistence/repository-snapshot.repository.js";
 import { REPOSITORY_SCAN_JOB_REPOSITORY } from "./application/ports/persistence/repository-scan-job.repository.js";
 import { PROVIDER_CREDENTIAL_REPOSITORY } from "./application/ports/persistence/provider-credential.repository.js";
-import { CREDENTIAL_AUTHORIZATION_REPOSITORY } from "./application/ports/persistence/credential-authorization.repository.js";
 import { CREDENTIAL_STORE } from "./application/ports/security/credential-store.port.js";
 import { ACTIVE_PROVIDER_CREDENTIAL_RESOLVER } from "./application/ports/security/active-provider-credential.resolver.js";
 import { CREDENTIAL_AUTHORIZATION_RESOLVER } from "./application/ports/security/credential-authorization-resolver.port.js";
@@ -26,10 +25,7 @@ import { PrismaGitHubAppInstallStateRepository } from "./infrastructure/persiste
 import { PrismaRepositoryConnectionRepository } from "./infrastructure/persistence/prisma-github-integration.repository.js";
 import { PrismaRepositorySnapshotRepository } from "./infrastructure/persistence/prisma-repository-snapshot.repository.js";
 import { PrismaRepositoryScanJobRepository } from "./infrastructure/persistence/prisma-repository-scan-job.repository.js";
-import {
-  PrismaCredentialAuthorizationRepository,
-  PrismaProviderCredentialRepository,
-} from "./infrastructure/persistence/prisma-credential.repositories.js";
+import { PrismaProviderCredentialRepository } from "./infrastructure/persistence/prisma-credential.repositories.js";
 import { PrismaDatabaseCredentialStore } from "./infrastructure/persistence/prisma-database-credential.store.js";
 import { PrismaCredentialAuthorizationResolver } from "./infrastructure/persistence/prisma-credential-authorization.resolver.js";
 import { PrismaActiveProviderCredentialResolver } from "./infrastructure/persistence/prisma-active-provider-credential.resolver.js";
@@ -138,7 +134,6 @@ import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
     PrismaRepositorySnapshotRepository,
     PrismaRepositoryScanJobRepository,
     PrismaProviderCredentialRepository,
-    PrismaCredentialAuthorizationRepository,
     EnvelopeEncryptionService,
     PrismaDatabaseCredentialStore,
     PrismaCredentialAuthorizationResolver,
@@ -233,10 +228,6 @@ import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
     {
       provide: PROVIDER_CREDENTIAL_REPOSITORY,
       useExisting: PrismaProviderCredentialRepository,
-    },
-    {
-      provide: CREDENTIAL_AUTHORIZATION_REPOSITORY,
-      useExisting: PrismaCredentialAuthorizationRepository,
     },
     {
       provide: KEY_ENCRYPTION_KEY_PROVIDER,

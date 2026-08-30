@@ -63,7 +63,6 @@ describe("StreamSnapshotArchiveHandler", () => {
     installationId: "installation-1",
     status: REPOSITORY_CONNECTION_STATUSES.active,
     authenticationMode: RepositoryAuthenticationMode.GITHUB_APP,
-    credentialAuthorizationId: null,
     repositoryId: "repository-1",
     repositoryFullName: "acme/example-repo",
   };

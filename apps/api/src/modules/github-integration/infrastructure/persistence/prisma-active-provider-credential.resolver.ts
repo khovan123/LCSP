@@ -10,7 +10,7 @@ import type {
 import {
   CREDENTIAL_STORE,
   type CredentialStorePort,
-  type SecretLocator,
+  type CredentialLocator,
 } from "../../application/ports/security/credential-store.port.js";
 import { CredentialLease } from "../../application/security/credential-lease.js";
 import { CredentialResolutionError } from "./prisma-credential-authorization.resolver.js";
@@ -35,6 +35,13 @@ export class PrismaActiveProviderCredentialResolver implements ActiveProviderCre
         isActive: true,
       },
       orderBy: [{ validatedAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        provider: true,
+        providerAccountId: true,
+        providerLogin: true,
+        currentVersion: true,
+      },
     });
     return row
       ? {
@@ -60,18 +67,18 @@ export class PrismaActiveProviderCredentialResolver implements ActiveProviderCre
       throw new CredentialResolutionError(
         GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid,
       );
-    const row = await this.prisma.providerCredentialSecret.findFirst({
-      where: {
-        providerCredentialId: metadata.id,
-        credentialVersion: metadata.currentVersion,
-        destroyedAt: null,
-      },
+    const row = await this.prisma.providerCredential.findUnique({
+      where: { id: metadata.id },
     });
-    if (!row)
+    if (
+      !row ||
+      row.currentVersion !== metadata.currentVersion ||
+      !row.ciphertext
+    )
       throw new CredentialResolutionError(
         GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid,
       );
-    const secret = await this.store.read(row.id as SecretLocator);
+    const secret = await this.store.read(row.id as CredentialLocator);
     return new CredentialLease(secret, {
       internalCredentialId: metadata.id,
       credentialVersion: metadata.currentVersion,

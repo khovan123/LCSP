@@ -174,7 +174,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
         status: true,
         authenticationMode: true,
         provider: true,
-        credentialAuthorizationId: true,
+        providerCredentialId: true,
         repositoryId: true,
         repositoryFullName: true,
       },
@@ -430,7 +430,7 @@ function hasValidAuthenticationShape(connection: {
   authenticationMode: RepositoryAuthenticationMode;
   provider: string;
   installationId: string | null;
-  credentialAuthorizationId: string | null;
+  providerCredentialId: string | null;
 }): boolean {
   if (
     connection.authenticationMode === RepositoryAuthenticationMode.GITHUB_APP
@@ -438,7 +438,7 @@ function hasValidAuthenticationShape(connection: {
     return (
       connection.provider === CREDENTIAL_PROVIDERS.github &&
       connection.installationId !== null &&
-      connection.credentialAuthorizationId === null
+      connection.providerCredentialId == null
     );
   }
   return (
@@ -449,7 +449,7 @@ function hasValidAuthenticationShape(connection: {
         RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL &&
         connection.provider === CREDENTIAL_PROVIDERS.gitlab)) &&
     connection.installationId === null &&
-    connection.credentialAuthorizationId !== null
+    connection.providerCredentialId != null
   );
 }
 

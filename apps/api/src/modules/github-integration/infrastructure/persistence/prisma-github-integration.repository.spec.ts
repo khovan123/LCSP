@@ -32,7 +32,6 @@ describe("PrismaRepositoryConnectionRepository authentication mode", () => {
         create: expect.objectContaining({
           installationId: "installation-1",
           authenticationMode: RepositoryAuthenticationMode.GITHUB_APP,
-          credentialAuthorizationId: null,
         }),
       }),
     );
@@ -46,7 +45,6 @@ describe("PrismaRepositoryConnectionRepository authentication mode", () => {
         userId: "manager-1",
         installationId: "installation-1",
         authenticationMode: RepositoryAuthenticationMode.GITHUB_APP,
-        credentialAuthorizationId: null,
         repositoryId: "100",
         repositoryName: "repo",
         repositoryFullName: "owner/repo",
@@ -62,6 +60,5 @@ describe("PrismaRepositoryConnectionRepository authentication mode", () => {
     } as unknown as PrismaService);
     const connection = await repository.findById("connection-1");
     expect(connection?.installationId).toBe("installation-1");
-    expect(connection?.credentialAuthorizationId).toBeNull();
   });
 });

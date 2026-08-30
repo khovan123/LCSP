@@ -232,7 +232,7 @@ export class GitHubIntegrationController {
    * @param redirectUri - Allowlisted client redirect URI to restore after GitHub callback.
    * @param assessmentId - Optional assessment to bind to the resulting repository connection.
    * @param installationId - Optional existing installation identifier for reconnect/resume flows.
-   * @param request - RBAC-authenticated request containing tenant, user, session, and correlation context.
+   * @param request - RBAC-authenticated request containing user, session, and correlation context.
    * @returns Standard result envelope containing the GitHub installation URL.
    */
   @Get("github/app/start")

@@ -69,16 +69,12 @@ run("ConnectAssessmentRepository credential provenance", () => {
     await prisma.repositoryConnection.deleteMany({
       where: { userId: "provenance-user" },
     });
-    await prisma.credentialAuthorization.deleteMany({
-      where: { authorizedByUserId: "provenance-user" },
-    });
     await prisma.wizardProfile.deleteMany({
       where: { ownerId: "provenance-user" },
     });
     await prisma.assessment.deleteMany({
       where: { ownerId: "provenance-user" },
     });
-    await prisma.providerCredentialSecret.deleteMany();
     await prisma.providerCredential.deleteMany({
       where: { ownerUserId: "provenance-user" },
     });
@@ -201,9 +197,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
   };
 
   const countForAssessment = async (assessmentId: string) => ({
-    authorizations: await prisma.credentialAuthorization.count({
-      where: { assessmentId },
-    }),
+    authorizations: 0,
     connections: await prisma.repositoryConnection.count({
       where: { assessmentId },
     }),
@@ -216,37 +210,30 @@ run("ConnectAssessmentRepository credential provenance", () => {
     const firstConnection = await prisma.repositoryConnection.findUniqueOrThrow(
       {
         where: { id: first.connectionId },
-        include: { credentialAuthorization: true },
       },
     );
-    const authorizationA = firstConnection.credentialAuthorization!;
-    const credentialA = authorizationA.providerCredentialId;
+    const credentialA = firstConnection.providerCredentialId!;
     expect(firstConnection.authenticationMode).toBe(
       RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL,
     );
-    expect(authorizationA.authorizedByUserId).toBe("provenance-user");
+    expect(firstConnection.credentialAuthorizedByUserId).toBe(
+      "provenance-user",
+    );
 
     await configure.execute(configureCommand("synthetic-provenance-b"));
     const historical = await prisma.repositoryConnection.findUniqueOrThrow({
       where: { id: first.connectionId },
-      include: { credentialAuthorization: true },
     });
-    expect(historical.credentialAuthorizationId).toBe(authorizationA.id);
-    expect(historical.credentialAuthorization?.providerCredentialId).toBe(
-      credentialA,
-    );
+    expect(historical.providerCredentialId).toBe(credentialA);
 
     await createAssessment("provenance-a2");
     const second = await connect.execute(connectCommand("provenance-a2"));
     const secondConnection =
       await prisma.repositoryConnection.findUniqueOrThrow({
         where: { id: second.connectionId },
-        include: { credentialAuthorization: true },
       });
-    expect(
-      secondConnection.credentialAuthorization?.providerCredentialId,
-    ).not.toBe(credentialA);
-    expect(secondConnection.credentialAuthorization?.providerCredentialId).toBe(
+    expect(secondConnection.providerCredentialId).not.toBe(credentialA);
+    expect(secondConnection.providerCredentialId).toBe(
       (
         await prisma.providerCredential.findFirstOrThrow({
           where: {
@@ -261,11 +248,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
     await connect.execute(connectCommand("provenance-a2"));
     expect(
       await prisma.repositoryConnection.count({
-        where: { assessmentId: "provenance-a2" },
-      }),
-    ).toBe(1);
-    expect(
-      await prisma.credentialAuthorization.count({
         where: { assessmentId: "provenance-a2" },
       }),
     ).toBe(1);
@@ -327,16 +309,9 @@ run("ConnectAssessmentRepository credential provenance", () => {
     );
     const connection = await prisma.repositoryConnection.findUniqueOrThrow({
       where: { id: result.connectionId },
-      include: {
-        credentialAuthorization: { include: { providerCredential: true } },
-      },
     });
-    expect(
-      connection.credentialAuthorization?.providerCredential.provider,
-    ).toBe(CredentialProvider.GITLAB);
-    expect(
-      connection.credentialAuthorization?.providerCredential.ownerUserId,
-    ).toBe("scope-user");
+    expect(connection.provider).toBe(CredentialProvider.GITLAB);
+    expect(connection.userId).toBe("scope-user");
   });
 
   it("does not persist access-denied or invalid-provider failures", async () => {

@@ -37,8 +37,9 @@ describe("provider credential migration", () => {
 
   it("stores encrypted material as bytea and never adds a plaintext column", () => {
     const sql = readFileSync(migrationPath, "utf8");
-    expect(sql).toContain('"ciphertext" BYTEA NOT NULL');
-    expect(sql).toContain('"wrappedDekCiphertext" BYTEA NOT NULL');
+    expect(sql).toContain('"ciphertext" BYTEA');
+    expect(sql).toContain('"wrappedDekCiphertext" BYTEA');
+    expect(sql).not.toContain('CREATE TABLE "ProviderCredentialSecret"');
     expect(sql).not.toMatch(/"(plaintext|token|pat|secret)"\s/iu);
   });
 });

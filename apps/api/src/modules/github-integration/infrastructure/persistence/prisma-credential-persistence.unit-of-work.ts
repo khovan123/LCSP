@@ -3,17 +3,13 @@ import type { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { EnvelopeEncryptionService } from "../security/envelope-encryption.service.js";
-import {
-  PrismaCredentialAuthorizationRepository,
-  PrismaProviderCredentialRepository,
-} from "./prisma-credential.repositories.js";
+import { PrismaProviderCredentialRepository } from "./prisma-credential.repositories.js";
 import { PrismaDatabaseCredentialStore } from "./prisma-database-credential.store.js";
 
 export type CredentialPersistenceTransaction = {
   database: Prisma.TransactionClient;
   credentialStore: PrismaDatabaseCredentialStore;
   providerCredentials: PrismaProviderCredentialRepository;
-  authorizations: PrismaCredentialAuthorizationRepository;
 };
 
 /** Coordinates future credential metadata, encrypted envelope, authorization and connection writes in one DB transaction. */
@@ -36,10 +32,6 @@ export class PrismaCredentialPersistenceUnitOfWork {
           tx,
         ),
         providerCredentials: new PrismaProviderCredentialRepository(
-          this.prisma,
-          tx,
-        ),
-        authorizations: new PrismaCredentialAuthorizationRepository(
           this.prisma,
           tx,
         ),

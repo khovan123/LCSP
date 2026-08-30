@@ -146,7 +146,6 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
         );
       }
 
-      const authorizationId = crypto.randomUUID();
       const connectionId = crypto.randomUUID();
       const validatedAt = new Date();
       const storageContext: CredentialStorageContext = {
@@ -172,17 +171,6 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
           command.credential,
           storageContext,
         );
-        await transaction.authorizations.create({
-          id: authorizationId,
-          providerCredentialId,
-          repositoryId: repository.id,
-          repositoryFullName: repository.fullName,
-          assessmentId: command.assessmentId ?? null,
-          authorizedByUserId: command.userId,
-          status: CREDENTIAL_AUTHORIZATION_STATUSES.active,
-          credentialVersion: INITIAL_CREDENTIAL_VERSION,
-          validatedAt,
-        });
         await transaction.database.repositoryConnection.create({
           data: {
             id: connectionId,
@@ -194,7 +182,13 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
               provider === CREDENTIAL_PROVIDERS.github
                 ? RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL
                 : RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL,
-            credentialAuthorizationId: authorizationId,
+            providerCredentialId,
+            credentialVersion: INITIAL_CREDENTIAL_VERSION,
+            credentialAuthorizedByUserId: command.userId,
+            credentialAuthorizationStatus:
+              CREDENTIAL_AUTHORIZATION_STATUSES.active,
+            credentialValidatedAt: validatedAt,
+            credentialRevokedAt: null,
             repositoryId: repository.id,
             repositoryName: repository.name,
             repositoryFullName: repository.fullName,

@@ -34,23 +34,26 @@ function fixture(options: { failSecretCreate?: boolean } = {}) {
             : null,
         ),
       count: () => Promise.resolve(1),
-    },
-    providerCredentialSecret: {
-      create: ({ data }: { data: Record<string, unknown> }) => {
+      update: ({ data }: { data: Record<string, unknown> }) => {
         if (options.failSecretCreate) {
           return Promise.reject(new Error("simulated persistence failure"));
         }
-        records.set(String(data.id), {
-          ...data,
-          destroyedAt: null,
-          providerCredential: credential,
-        });
-        return Promise.resolve(data);
+        records.set(credential.id, { ...credential, ...data });
+        return Promise.resolve(records.get(credential.id));
       },
       findUnique: ({ where }: { where: { id: string } }) =>
         Promise.resolve(records.get(where.id) ?? null),
-      deleteMany: ({ where }: { where: { id: string } }) =>
-        Promise.resolve({ count: records.delete(where.id) ? 1 : 0 }),
+      updateMany: ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
+        if (!records.has(where.id)) return Promise.resolve({ count: 0 });
+        records.set(where.id, { ...records.get(where.id), ...data });
+        return Promise.resolve({ count: 1 });
+      },
     },
   } as unknown as Prisma.TransactionClient;
   const encryption = new EnvelopeEncryptionService(
@@ -73,7 +76,7 @@ describe("PrismaDatabaseCredentialStore", () => {
   it("persists only encrypted bytes and reads through an opaque locator", async () => {
     const { records, store } = fixture();
     const locator = await store.store(SECRET, CONTEXT);
-    expect(locator).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(locator).toBe(CONTEXT.providerCredentialId);
     expect(JSON.stringify([...records.values()])).not.toContain(SECRET);
     await expect(store.read(locator)).resolves.toBe(SECRET);
   });
@@ -85,9 +88,7 @@ describe("PrismaDatabaseCredentialStore", () => {
       ...CONTEXT,
       credentialVersion: 2,
     });
-    await expect(store.read(oldLocator)).rejects.toThrow(
-      "credential_store_operation_failed",
-    );
+    expect(newLocator).toBe(oldLocator);
     await expect(store.read(newLocator)).resolves.toBe(`${SECRET}-rotated`);
     await store.destroy(newLocator);
     await store.destroy(newLocator);
@@ -119,7 +120,7 @@ describe("PrismaDatabaseCredentialStore", () => {
     } catch (error: unknown) {
       expect(error).toMatchObject({
         name: "CredentialStoreError",
-        operation: "provider_credential_secret_create",
+        operation: "provider_credential_envelope_update",
       });
       expect((error as Error).cause).toBeInstanceOf(Error);
       expect(String(error)).not.toContain(SECRET);

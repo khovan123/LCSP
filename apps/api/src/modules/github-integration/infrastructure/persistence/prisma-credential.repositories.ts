@@ -1,24 +1,17 @@
 import { Injectable, Optional } from "@nestjs/common";
 import {
-  CredentialAuthorizationStatus as PrismaAuthorizationStatus,
   CredentialProvider as PrismaCredentialProvider,
   ProviderCredentialStatus as PrismaCredentialStatus,
-  type Prisma,
+  Prisma,
 } from "@prisma/client";
 import {
-  CREDENTIAL_AUTHORIZATION_STATUSES,
   CREDENTIAL_PROVIDERS,
   PROVIDER_CREDENTIAL_STATUSES,
-  type CredentialAuthorizationStatus,
   type CredentialProvider,
   type ProviderCredentialStatus,
 } from "@lcsp/contracts/github-integration";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
-import type {
-  CredentialAuthorizationRepository,
-  CredentialAuthorizationRecord,
-} from "../../application/ports/persistence/credential-authorization.repository.js";
 import type {
   ProviderCredentialRecord,
   ProviderCredentialRepository,
@@ -72,6 +65,17 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
   ): Promise<ProviderCredentialRecord | null> {
     const row = await this.client.providerCredential.findFirst({
       where: { id, ownerUserId },
+      select: {
+        id: true,
+        provider: true,
+        ownerUserId: true,
+        providerAccountId: true,
+        providerLogin: true,
+        status: true,
+        currentVersion: true,
+        declaredExpiresAt: true,
+        validatedAt: true,
+      },
     });
     return row
       ? {
@@ -159,98 +163,6 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
   }
 }
 
-@Injectable()
-export class PrismaCredentialAuthorizationRepository implements CredentialAuthorizationRepository {
-  constructor(
-    private readonly prisma: PrismaService,
-    @Optional()
-    private readonly client: Prisma.TransactionClient = prisma,
-  ) {}
-
-  withTransaction(
-    transaction: Prisma.TransactionClient,
-  ): PrismaCredentialAuthorizationRepository {
-    return new PrismaCredentialAuthorizationRepository(
-      this.prisma,
-      transaction,
-    );
-  }
-
-  async create(record: CredentialAuthorizationRecord): Promise<void> {
-    await this.client.credentialAuthorization.create({
-      data: { ...record, status: toAuthorizationStatus(record.status) },
-    });
-  }
-
-  async findActiveForConnection(input: {
-    connectionId: string;
-    ownerUserId: string;
-    repositoryFullName: string;
-    assessmentId: string | null;
-  }): Promise<CredentialAuthorizationRecord | null> {
-    const row = await this.client.credentialAuthorization.findFirst({
-      where: {
-        repositoryFullName: input.repositoryFullName,
-        status: PrismaAuthorizationStatus.ACTIVE,
-        repositoryConnection: {
-          is: { id: input.connectionId, userId: input.ownerUserId },
-        },
-        OR: [{ assessmentId: null }, { assessmentId: input.assessmentId }],
-      },
-    });
-    return row ? authorizationRecord(row) : null;
-  }
-
-  async updateVersion(
-    id: string,
-    ownerUserId: string,
-    expectedVersion: number,
-    newVersion: number,
-  ): Promise<boolean> {
-    return (
-      (
-        await this.client.credentialAuthorization.updateMany({
-          where: {
-            id,
-            authorizedByUserId: ownerUserId,
-            credentialVersion: expectedVersion,
-          },
-          data: { credentialVersion: newVersion },
-        })
-      ).count === 1
-    );
-  }
-
-  async revoke(id: string, ownerUserId: string, at: Date): Promise<boolean> {
-    return (
-      (
-        await this.client.credentialAuthorization.updateMany({
-          where: {
-            id,
-            authorizedByUserId: ownerUserId,
-            status: PrismaAuthorizationStatus.ACTIVE,
-          },
-          data: { status: PrismaAuthorizationStatus.REVOKED, revokedAt: at },
-        })
-      ).count === 1
-    );
-  }
-}
-
-function authorizationRecord(row: {
-  id: string;
-  providerCredentialId: string;
-  authorizedByUserId: string;
-  repositoryId: string;
-  repositoryFullName: string;
-  assessmentId: string | null;
-  status: PrismaAuthorizationStatus;
-  credentialVersion: number;
-  validatedAt: Date | null;
-}): CredentialAuthorizationRecord {
-  return { ...row, status: fromAuthorizationStatus(row.status) };
-}
-
 function toPrismaCredentialProvider(
   provider: CredentialProvider,
 ): PrismaCredentialProvider {
@@ -286,38 +198,6 @@ function fromCredentialStatus(
     [PrismaCredentialStatus.REVOKED]: PROVIDER_CREDENTIAL_STATUSES.revoked,
     [PrismaCredentialStatus.STORAGE_ERROR]:
       PROVIDER_CREDENTIAL_STATUSES.storageError,
-  };
-  return values[status];
-}
-function toAuthorizationStatus(
-  status: CredentialAuthorizationStatus,
-): PrismaAuthorizationStatus {
-  const values: Record<
-    CredentialAuthorizationStatus,
-    PrismaAuthorizationStatus
-  > = {
-    [CREDENTIAL_AUTHORIZATION_STATUSES.active]:
-      PrismaAuthorizationStatus.ACTIVE,
-    [CREDENTIAL_AUTHORIZATION_STATUSES.revoking]:
-      PrismaAuthorizationStatus.REVOKING,
-    [CREDENTIAL_AUTHORIZATION_STATUSES.revoked]:
-      PrismaAuthorizationStatus.REVOKED,
-  };
-  return values[status];
-}
-function fromAuthorizationStatus(
-  status: PrismaAuthorizationStatus,
-): CredentialAuthorizationStatus {
-  const values: Record<
-    PrismaAuthorizationStatus,
-    CredentialAuthorizationStatus
-  > = {
-    [PrismaAuthorizationStatus.ACTIVE]:
-      CREDENTIAL_AUTHORIZATION_STATUSES.active,
-    [PrismaAuthorizationStatus.REVOKING]:
-      CREDENTIAL_AUTHORIZATION_STATUSES.revoking,
-    [PrismaAuthorizationStatus.REVOKED]:
-      CREDENTIAL_AUTHORIZATION_STATUSES.revoked,
   };
   return values[status];
 }

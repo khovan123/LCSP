@@ -151,21 +151,9 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
           defaultBranch: repository.defaultBranch,
           status: REPOSITORY_CONNECTION_STATUSES.active,
         };
-      const authorizationId = crypto.randomUUID();
       const connectionId = crypto.randomUUID();
       const now = new Date();
       await this.unitOfWork.execute(async (transaction) => {
-        await transaction.authorizations.create({
-          id: authorizationId,
-          providerCredentialId: metadata.id,
-          repositoryId: repository.id,
-          repositoryFullName: repository.fullName,
-          assessmentId: command.assessmentId,
-          authorizedByUserId: command.userId,
-          status: CREDENTIAL_AUTHORIZATION_STATUSES.active,
-          credentialVersion: metadata.currentVersion,
-          validatedAt: now,
-        });
         await this.persistRepositoryConnection(transaction, {
           id: connectionId,
           assessmentId: command.assessmentId,
@@ -173,7 +161,13 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
           provider,
           installationId: null,
           authenticationMode: mode,
-          credentialAuthorizationId: authorizationId,
+          providerCredentialId: metadata.id,
+          credentialVersion: metadata.currentVersion,
+          credentialAuthorizedByUserId: command.userId,
+          credentialAuthorizationStatus:
+            CREDENTIAL_AUTHORIZATION_STATUSES.active,
+          credentialValidatedAt: now,
+          credentialRevokedAt: null,
           repositoryId: repository.id,
           repositoryName: repository.name,
           repositoryFullName: repository.fullName,

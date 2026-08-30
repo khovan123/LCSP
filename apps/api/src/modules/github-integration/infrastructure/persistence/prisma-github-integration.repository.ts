@@ -50,7 +50,13 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
         provider: PrismaCredentialProvider.GITHUB,
         installationId: connection.installationId,
         authenticationMode: PrismaRepositoryAuthenticationMode.GITHUB_APP,
-        credentialAuthorizationId: null,
+        providerCredentialId: connection.providerCredentialId,
+        credentialVersion: connection.credentialVersion,
+        credentialAuthorizedByUserId: connection.credentialAuthorizedByUserId,
+        credentialAuthorizationStatus: connection.credentialAuthorizationStatus
+          ? (connection.credentialAuthorizationStatus as never)
+          : null,
+        credentialValidatedAt: connection.credentialValidatedAt,
         repositoryId: connection.repositoryId,
         repositoryName: connection.repositoryName,
         repositoryFullName: connection.repositoryFullName,
@@ -58,6 +64,7 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
         permissions: connection.permissions,
         status: toPrismaRepositoryConnectionStatus(connection.status),
         connectedAt: connection.connectedAt,
+        credentialRevokedAt: connection.credentialRevokedAt,
         revokedAt: connection.revokedAt,
       },
       update: {
@@ -68,6 +75,14 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
         defaultBranch: connection.defaultBranch,
         permissions: connection.permissions,
         status: toPrismaRepositoryConnectionStatus(connection.status),
+        providerCredentialId: connection.providerCredentialId,
+        credentialVersion: connection.credentialVersion,
+        credentialAuthorizedByUserId: connection.credentialAuthorizedByUserId,
+        credentialAuthorizationStatus: connection.credentialAuthorizationStatus
+          ? (connection.credentialAuthorizationStatus as never)
+          : null,
+        credentialValidatedAt: connection.credentialValidatedAt,
+        credentialRevokedAt: connection.credentialRevokedAt,
         revokedAt: connection.revokedAt,
       },
     });
@@ -92,7 +107,14 @@ export class PrismaRepositoryConnectionRepository implements RepositoryConnectio
       provider: fromPrismaCredentialProvider(row.provider),
       installationId: row.installationId,
       authenticationMode: fromPrismaAuthenticationMode(row.authenticationMode),
-      credentialAuthorizationId: row.credentialAuthorizationId,
+      providerCredentialId: row.providerCredentialId,
+      credentialVersion: row.credentialVersion,
+      credentialAuthorizedByUserId: row.credentialAuthorizedByUserId,
+      credentialAuthorizationStatus: row.credentialAuthorizationStatus
+        ? row.credentialAuthorizationStatus
+        : null,
+      credentialValidatedAt: row.credentialValidatedAt,
+      credentialRevokedAt: row.credentialRevokedAt,
       repositoryId: row.repositoryId,
       repositoryName: row.repositoryName,
       repositoryFullName: row.repositoryFullName,

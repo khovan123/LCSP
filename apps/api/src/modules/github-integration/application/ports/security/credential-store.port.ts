@@ -1,7 +1,7 @@
 export const CREDENTIAL_STORE = Symbol("CREDENTIAL_STORE");
 
-export type SecretLocator = string & {
-  readonly __secretLocator: unique symbol;
+export type CredentialLocator = string & {
+  readonly __credentialLocator: unique symbol;
 };
 
 import type { CredentialProvider } from "@lcsp/contracts/github-integration";
@@ -31,13 +31,13 @@ export interface CredentialStorePort {
   store(
     secret: string,
     context: CredentialStorageContext,
-  ): Promise<SecretLocator>;
-  read(secretLocator: SecretLocator): Promise<string>;
+  ): Promise<CredentialLocator>;
+  read(credentialLocator: CredentialLocator): Promise<string>;
   replace(
-    oldSecretLocator: SecretLocator,
+    oldCredentialLocator: CredentialLocator,
     newSecret: string,
     context: CredentialStorageContext,
-  ): Promise<SecretLocator>;
-  destroy(secretLocator: SecretLocator): Promise<void>;
+  ): Promise<CredentialLocator>;
+  destroy(credentialLocator: CredentialLocator): Promise<void>;
   health(): Promise<CredentialStoreHealth>;
 }

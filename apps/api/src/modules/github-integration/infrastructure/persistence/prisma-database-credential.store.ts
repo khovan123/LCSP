@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import {
   CredentialProvider,
   Prisma,
@@ -13,7 +11,7 @@ import {
   type CredentialStorageContext,
   type CredentialStoreHealth,
   type CredentialStorePort,
-  type SecretLocator,
+  type CredentialLocator,
 } from "../../application/ports/security/credential-store.port.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { CredentialStoreError } from "../security/in-memory-encrypted-credential.store.js";
@@ -25,7 +23,7 @@ import {
 
 type CredentialPersistenceClient = Pick<
   PrismaTypes.TransactionClient,
-  "providerCredential" | "providerCredentialSecret"
+  "providerCredential"
 >;
 
 /** Database envelope store. It encrypts values but intentionally performs no actor authorization. */
@@ -52,19 +50,17 @@ export class PrismaDatabaseCredentialStore implements CredentialStorePort {
   async store(
     secret: string,
     context: CredentialStorageContext,
-  ): Promise<SecretLocator> {
+  ): Promise<CredentialLocator> {
     let operation = "context_validation";
     try {
       await this.assertCredentialContext(context);
       operation = "encryption";
       const envelope = await this.encryption.encryptSecret(secret, context);
-      const id = randomUUID();
-      operation = "provider_credential_secret_create";
-      await this.client.providerCredentialSecret.create({
+      operation = "provider_credential_envelope_update";
+      await this.client.providerCredential.update({
+        where: { id: context.providerCredentialId },
         data: {
-          id,
-          providerCredentialId: context.providerCredentialId,
-          credentialVersion: context.credentialVersion,
+          currentVersion: context.credentialVersion,
           envelopeVersion: envelope.version,
           encryptionAlgorithm: envelope.algorithm,
           ciphertext: decode(envelope.ciphertext),
@@ -80,7 +76,7 @@ export class PrismaDatabaseCredentialStore implements CredentialStorePort {
           kekVersion: envelope.wrappedDataEncryptionKey.keyVersion,
         },
       });
-      return id as SecretLocator;
+      return context.providerCredentialId as CredentialLocator;
     } catch (error: unknown) {
       if (process.env.NODE_ENV !== "production") {
         Logger.error(
@@ -97,48 +93,74 @@ export class PrismaDatabaseCredentialStore implements CredentialStorePort {
     }
   }
 
-  async read(secretLocator: SecretLocator): Promise<string> {
+  async read(credentialLocator: CredentialLocator): Promise<string> {
     try {
-      const row = await this.client.providerCredentialSecret.findUnique({
-        where: { id: secretLocator },
-        include: { providerCredential: true },
+      const row = await this.client.providerCredential.findUnique({
+        where: { id: credentialLocator },
       });
-      if (!row || row.destroyedAt) throw new CredentialStoreError();
+      if (
+        !row ||
+        !row.ciphertext ||
+        !row.credentialNonce ||
+        !row.credentialAuthenticationTag ||
+        !row.wrappedDekCiphertext ||
+        !row.wrappingNonce ||
+        !row.wrappingAuthenticationTag ||
+        !row.envelopeVersion ||
+        !row.encryptionAlgorithm ||
+        !row.kekVersion
+      )
+        throw new CredentialStoreError();
       const context = contextFromRow(
-        row.providerCredential,
-        row.credentialVersion,
+        row,
+        row.currentVersion,
         row.envelopeVersion,
       );
-      return await this.encryption.decryptSecret(envelopeFromRow(row), context);
+      return await this.encryption.decryptSecret(
+        envelopeFromRow({
+          envelopeVersion: row.envelopeVersion,
+          encryptionAlgorithm: row.encryptionAlgorithm,
+          ciphertext: row.ciphertext,
+          credentialNonce: row.credentialNonce,
+          credentialAuthenticationTag: row.credentialAuthenticationTag,
+          wrappedDekCiphertext: row.wrappedDekCiphertext,
+          wrappingNonce: row.wrappingNonce,
+          wrappingAuthenticationTag: row.wrappingAuthenticationTag,
+          kekVersion: row.kekVersion,
+        }),
+        context,
+      );
     } catch {
       throw new CredentialStoreError();
     }
   }
 
   async replace(
-    oldLocator: SecretLocator,
+    oldLocator: CredentialLocator,
     secret: string,
     context: CredentialStorageContext,
-  ): Promise<SecretLocator> {
-    const old = await this.client.providerCredentialSecret.findUnique({
-      where: { id: oldLocator },
-    });
-    if (
-      !old ||
-      old.destroyedAt ||
-      old.providerCredentialId !== context.providerCredentialId
-    ) {
+  ): Promise<CredentialLocator> {
+    if (oldLocator !== context.providerCredentialId) {
       throw new CredentialStoreError();
     }
-    const locator = await this.store(secret, context);
-    await this.destroy(oldLocator);
-    return locator;
+    return this.store(secret, context);
   }
 
-  async destroy(secretLocator: SecretLocator): Promise<void> {
+  async destroy(credentialLocator: CredentialLocator): Promise<void> {
     try {
-      await this.client.providerCredentialSecret.deleteMany({
-        where: { id: secretLocator },
+      await this.client.providerCredential.updateMany({
+        where: { id: credentialLocator },
+        data: {
+          ciphertext: null,
+          credentialNonce: null,
+          credentialAuthenticationTag: null,
+          wrappedDekCiphertext: null,
+          wrappingNonce: null,
+          wrappingAuthenticationTag: null,
+          envelopeVersion: null,
+          encryptionAlgorithm: null,
+          kekVersion: null,
+        },
       });
     } catch {
       throw new CredentialStoreError();

@@ -58,40 +58,40 @@ describeDatabase("PrismaDatabaseCredentialStore PostgreSQL integration", () => {
       envelopeVersion: 1,
     };
     const locator = await store.store(SECRET, context);
-    const persisted = await prisma.providerCredentialSecret.findUniqueOrThrow({
+    const persisted = await prisma.providerCredential.findUniqueOrThrow({
       where: { id: locator },
     });
     const serializedMetadata = JSON.stringify({
       id: persisted.id,
-      providerCredentialId: persisted.providerCredentialId,
-      credentialVersion: persisted.credentialVersion,
+      providerCredentialId: persisted.id,
+      credentialVersion: context.credentialVersion,
       envelopeVersion: persisted.envelopeVersion,
       encryptionAlgorithm: persisted.encryptionAlgorithm,
       kekVersion: persisted.kekVersion,
     });
     const encryptedBytes = Buffer.concat([
-      Buffer.from(persisted.ciphertext),
-      Buffer.from(persisted.credentialNonce),
-      Buffer.from(persisted.credentialAuthenticationTag),
-      Buffer.from(persisted.wrappedDekCiphertext),
-      Buffer.from(persisted.wrappingNonce),
-      Buffer.from(persisted.wrappingAuthenticationTag),
+      Buffer.from(persisted.ciphertext!),
+      Buffer.from(persisted.credentialNonce!),
+      Buffer.from(persisted.credentialAuthenticationTag!),
+      Buffer.from(persisted.wrappedDekCiphertext!),
+      Buffer.from(persisted.wrappingNonce!),
+      Buffer.from(persisted.wrappingAuthenticationTag!),
     ]);
     expect(serializedMetadata).not.toContain(SECRET);
     expect(String(locator)).not.toContain(SECRET);
     expect(encryptedBytes.includes(Buffer.from(SECRET, "utf8"))).toBe(false);
     await expect(store.read(locator)).resolves.toBe(SECRET);
 
-    const tamperedTag = Uint8Array.from(persisted.credentialAuthenticationTag);
+    const tamperedTag = Uint8Array.from(persisted.credentialAuthenticationTag!);
     tamperedTag[0] ^= 0xff;
-    await prisma.providerCredentialSecret.update({
+    await prisma.providerCredential.update({
       where: { id: locator },
       data: { credentialAuthenticationTag: tamperedTag },
     });
     await expect(store.read(locator)).rejects.toThrow(
       "credential_store_operation_failed",
     );
-    await prisma.providerCredentialSecret.update({
+    await prisma.providerCredential.update({
       where: { id: locator },
       data: {
         credentialAuthenticationTag: persisted.credentialAuthenticationTag,

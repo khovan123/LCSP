@@ -7,6 +7,7 @@ import {
   type RepositoryAuthenticationMode,
   type RepositoryConnectionStatus,
 } from "@lcsp/contracts/github-integration";
+import type { CredentialAuthorizationStatus } from "@lcsp/contracts/github-integration";
 
 type RepositoryConnectionProps = {
   id: string;
@@ -15,7 +16,12 @@ type RepositoryConnectionProps = {
   provider?: CredentialProvider;
   installationId: string | null;
   authenticationMode?: RepositoryAuthenticationMode;
-  credentialAuthorizationId?: string | null;
+  providerCredentialId?: string | null;
+  credentialVersion?: number | null;
+  credentialAuthorizedByUserId?: string | null;
+  credentialAuthorizationStatus?: CredentialAuthorizationStatus | null;
+  credentialValidatedAt?: Date | null;
+  credentialRevokedAt?: Date | null;
   repositoryId: string;
   repositoryName: string;
   repositoryFullName: string;
@@ -29,7 +35,7 @@ type RepositoryConnectionProps = {
 type NewRepositoryConnectionProps = Omit<RepositoryConnectionProps, "id">;
 
 /**
- * Represents one organization-owned GitHub repository connection created through an App installation.
+ * Represents one assessment repository connection created through an App installation or provider credential.
  */
 export class RepositoryConnection {
   private props: RepositoryConnectionProps;
@@ -46,7 +52,7 @@ export class RepositoryConnection {
   /**
    * Creates an active repository connection from GitHub installation and repository metadata.
    *
-   * @param input - Assessment/tenant/user binding, GitHub installation/repository identity, branch, and granted permissions.
+   * @param input - Assessment/user binding, GitHub installation/repository identity, branch, and granted permissions.
    * @returns Newly connected repository aggregate in the active lifecycle state.
    */
   static create(input: {
@@ -66,7 +72,12 @@ export class RepositoryConnection {
       provider: input.provider ?? CREDENTIAL_PROVIDERS.github,
       installationId: input.installationId,
       authenticationMode: REPOSITORY_AUTHENTICATION_MODES.githubApp,
-      credentialAuthorizationId: null,
+      providerCredentialId: null,
+      credentialVersion: null,
+      credentialAuthorizedByUserId: null,
+      credentialAuthorizationStatus: null,
+      credentialValidatedAt: null,
+      credentialRevokedAt: null,
       repositoryId: input.repositoryId,
       repositoryName: input.repositoryName,
       repositoryFullName: input.repositoryFullName,
@@ -130,8 +141,24 @@ export class RepositoryConnection {
     );
   }
 
-  get credentialAuthorizationId(): string | null {
-    return this.props.credentialAuthorizationId ?? null;
+  get providerCredentialId(): string | null {
+    return this.props.providerCredentialId ?? null;
+  }
+
+  get credentialVersion(): number | null {
+    return this.props.credentialVersion ?? null;
+  }
+  get credentialAuthorizedByUserId(): string | null {
+    return this.props.credentialAuthorizedByUserId ?? null;
+  }
+  get credentialAuthorizationStatus(): CredentialAuthorizationStatus | null {
+    return this.props.credentialAuthorizationStatus ?? null;
+  }
+  get credentialValidatedAt(): Date | null {
+    return this.props.credentialValidatedAt ?? null;
+  }
+  get credentialRevokedAt(): Date | null {
+    return this.props.credentialRevokedAt ?? null;
   }
 
   /** @returns The GitHub repository identifier. */

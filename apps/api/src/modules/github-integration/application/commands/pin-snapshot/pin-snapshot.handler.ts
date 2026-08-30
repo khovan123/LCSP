@@ -280,7 +280,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       case REPOSITORY_AUTHENTICATION_MODES.githubApp:
         if (
           connection.installationIdOrNull === null ||
-          connection.credentialAuthorizationId !== null
+          connection.providerCredentialId != null
         ) {
           return this.failClosedMode(command);
         }
@@ -310,7 +310,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       case REPOSITORY_AUTHENTICATION_MODES.gitlabCliCredential:
         if (
           connection.installationIdOrNull !== null ||
-          connection.credentialAuthorizationId === null
+          connection.providerCredentialId == null
         ) {
           return this.failClosedMode(command);
         }

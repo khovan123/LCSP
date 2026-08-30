@@ -21,7 +21,7 @@ import type {
 import {
   CREDENTIAL_STORE,
   type CredentialStorePort,
-  type SecretLocator,
+  type CredentialLocator,
 } from "../../application/ports/security/credential-store.port.js";
 import { CredentialLease } from "../../application/security/credential-lease.js";
 
@@ -59,26 +59,20 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
           ],
         },
       },
-      include: {
-        credentialAuthorization: {
-          include: { providerCredential: { include: { secrets: true } } },
-        },
-      },
+      include: { providerCredential: true },
     });
-    const authorization = connection?.credentialAuthorization;
-    const credential = authorization?.providerCredential;
+    const credential = connection?.providerCredential;
     const now = new Date();
     if (
       !connection ||
-      !authorization ||
       !credential ||
       connection.repositoryFullName !== expectedRepositoryFullName ||
-      authorization.repositoryId !== connection.repositoryId ||
-      authorization.repositoryFullName !== expectedRepositoryFullName ||
-      authorization.status !== CredentialAuthorizationStatus.ACTIVE ||
-      (authorization.assessmentId !== null &&
-        authorization.assessmentId !== context.assessmentId) ||
-      authorization.credentialVersion !== credential.currentVersion ||
+      connection.providerCredentialId === null ||
+      connection.credentialAuthorizationStatus !==
+        CredentialAuthorizationStatus.ACTIVE ||
+      connection.credentialVersion !== credential.currentVersion ||
+      (connection.assessmentId !== null &&
+        connection.assessmentId !== context.assessmentId) ||
       credential.ownerUserId !== context.userId ||
       (!isConnectionConsumption(context.operation) &&
         context.actorId !== null &&
@@ -102,17 +96,10 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
         GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid,
       );
     }
-    const secret = credential.secrets.find(
-      (candidate) =>
-        candidate.credentialVersion === credential.currentVersion &&
-        candidate.destroyedAt === null,
-    );
-    if (!secret)
-      throw new CredentialResolutionError(
-        GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid,
-      );
     try {
-      const plaintext = await this.store.read(secret.id as SecretLocator);
+      const plaintext = await this.store.read(
+        credential.id as CredentialLocator,
+      );
       const credentialExpiry =
         credential.declaredExpiresAt?.getTime() ?? now.getTime() + 300_000;
       return new CredentialLease(plaintext, {
@@ -145,17 +132,19 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
           ],
         },
       },
-      include: {
-        credentialAuthorization: { include: { providerCredential: true } },
-      },
+      include: { providerCredential: true },
     });
-    const authorization = connection?.credentialAuthorization;
-    if (!authorization || authorization.credentialVersion !== credentialVersion)
+    const credential = connection?.providerCredential;
+    if (
+      !connection ||
+      !credential ||
+      connection.credentialVersion !== credentialVersion
+    )
       return;
     await this.prisma.providerCredential.updateMany({
       where: {
-        id: authorization.providerCredentialId,
-        ownerUserId: authorization.providerCredential.ownerUserId,
+        id: credential.id,
+        ownerUserId: credential.ownerUserId,
         currentVersion: credentialVersion,
       },
       data: {
@@ -175,7 +164,7 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
       connectionId,
       userId: context.userId,
       repositoryFullNames: [row.repositoryFullName],
-      expectedCredentialVersion: row.credentialVersion,
+      expectedCredentialVersion: row.credentialVersion!,
     };
   }
 
@@ -184,18 +173,20 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
     connectionId: string,
   ): Promise<CredentialRevocationPlan> {
     const row = await this.authorizedBinding(context, connectionId);
-    await this.prisma.credentialAuthorization.updateMany({
+    await this.prisma.repositoryConnection.updateMany({
       where: {
-        id: row.id,
-        status: CredentialAuthorizationStatus.ACTIVE,
+        id: connectionId,
+        credentialAuthorizationStatus: CredentialAuthorizationStatus.ACTIVE,
       },
-      data: { status: CredentialAuthorizationStatus.REVOKING },
+      data: {
+        credentialAuthorizationStatus: CredentialAuthorizationStatus.REVOKING,
+      },
     });
     return {
       connectionId,
       userId: context.userId,
       repositoryFullNames: [row.repositoryFullName],
-      expectedCredentialVersion: row.credentialVersion,
+      expectedCredentialVersion: row.credentialVersion!,
       affectedConnectionIds: [connectionId],
     };
   }
@@ -204,27 +195,28 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
     context: CredentialOperationContext,
     connectionId: string,
   ) {
-    const row = await this.prisma.credentialAuthorization.findFirst({
+    const row = await this.prisma.repositoryConnection.findFirst({
       where: {
-        repositoryConnection: {
-          is: {
-            id: connectionId,
-            userId: context.userId,
-            authenticationMode: {
-              in: [
-                RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
-                RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL,
-              ],
-            },
-          },
+        id: connectionId,
+        userId: context.userId,
+        authenticationMode: {
+          in: [
+            RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
+            RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL,
+          ],
         },
+        credentialAuthorizationStatus: CredentialAuthorizationStatus.ACTIVE,
         providerCredential: {
           ownerUserId: context.userId,
         },
-        status: CredentialAuthorizationStatus.ACTIVE,
+      },
+      select: {
+        id: true,
+        repositoryFullName: true,
+        credentialVersion: true,
       },
     });
-    if (!row)
+    if (!row || row.credentialVersion === null)
       throw new CredentialResolutionError(
         GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid,
       );

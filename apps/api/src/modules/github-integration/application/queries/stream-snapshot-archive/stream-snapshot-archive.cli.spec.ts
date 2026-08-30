@@ -61,7 +61,7 @@ describe("StreamSnapshotArchiveHandler CLI archive routing", () => {
           status: REPOSITORY_CONNECTION_STATUSES.active,
           authenticationMode:
             RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
-          credentialAuthorizationId: "authorization-1",
+          providerCredentialId: "credential-1",
           repositoryId: "repo-1",
           repositoryFullName: "acme/repo",
         }),

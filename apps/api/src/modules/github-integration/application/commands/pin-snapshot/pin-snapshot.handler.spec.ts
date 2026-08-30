@@ -43,7 +43,6 @@ function connection(overrides?: {
     userId: "manager-1",
     installationId: "installation-1",
     authenticationMode: REPOSITORY_AUTHENTICATION_MODES.githubApp,
-    credentialAuthorizationId: null,
     repositoryId: "repo-1",
     repositoryName: "example-repo",
     repositoryFullName: "acme/example-repo",

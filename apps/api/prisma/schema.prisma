@@ -341,7 +341,12 @@ model RepositoryConnection {
   provider                  CredentialProvider           @default(GITHUB)
   installationId            String?
   authenticationMode        RepositoryAuthenticationMode @default(GITHUB_APP)
-  credentialAuthorizationId String?                      @unique
+  providerCredentialId     String?
+  credentialVersion        Int?
+  credentialAuthorizedByUserId String?
+  credentialAuthorizationStatus CredentialAuthorizationStatus?
+  credentialValidatedAt     DateTime?
+  credentialRevokedAt       DateTime?
   repositoryId              String
   repositoryName            String
   repositoryFullName        String
@@ -351,13 +356,14 @@ model RepositoryConnection {
   connectedAt               DateTime                     @default(now())
   revokedAt                 DateTime?
   assessment                Assessment?                  @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
-  credentialAuthorization   CredentialAuthorization?     @relation(fields: [credentialAuthorizationId], references: [id], onDelete: SetNull)
+  providerCredential        ProviderCredential?          @relation(fields: [providerCredentialId], references: [id], onDelete: Restrict)
   snapshots                 RepositorySnapshot[]
   user                      User                         @relation("RepositoryConnectionUser", fields: [userId], references: [id], onDelete: Restrict)
 
   @@unique([installationId, repositoryId])
   @@index([assessmentId])
   @@index([userId, provider, status])
+  @@index([providerCredentialId])
 }
 
 model ProviderCredential {
@@ -378,52 +384,19 @@ model ProviderCredential {
   revocationRequestedAt DateTime?
   revokedAt             DateTime?
   lastFailureCode       String?
-  authorizations        CredentialAuthorization[]
-  secrets               ProviderCredentialSecret[]
+  envelopeVersion             Int?
+  encryptionAlgorithm         String?
+  ciphertext                  Bytes?
+  credentialNonce             Bytes?
+  credentialAuthenticationTag Bytes?
+  wrappedDekCiphertext        Bytes?
+  wrappingNonce               Bytes?
+  wrappingAuthenticationTag   Bytes?
+  kekVersion                  String?
+  repositoryConnections RepositoryConnection[]
 
   @@index([ownerUserId, isActive])
   @@index([ownerUserId, provider, providerAccountId])
-}
-
-model ProviderCredentialSecret {
-  id                          String             @id
-  providerCredentialId        String
-  credentialVersion           Int
-  envelopeVersion             Int
-  encryptionAlgorithm         String
-  ciphertext                  Bytes
-  credentialNonce             Bytes
-  credentialAuthenticationTag Bytes
-  wrappedDekCiphertext        Bytes
-  wrappingNonce               Bytes
-  wrappingAuthenticationTag   Bytes
-  kekVersion                  String
-  createdAt                   DateTime           @default(now())
-  destroyedAt                 DateTime?
-  providerCredential          ProviderCredential @relation(fields: [providerCredentialId], references: [id], onDelete: Restrict)
-
-  @@unique([providerCredentialId, credentialVersion])
-  @@index([providerCredentialId, destroyedAt])
-}
-
-model CredentialAuthorization {
-  id                   String                        @id
-  providerCredentialId String
-  repositoryId         String
-  repositoryFullName   String
-  assessmentId         String?
-  authorizedByUserId   String
-  status               CredentialAuthorizationStatus
-  credentialVersion    Int
-  createdAt            DateTime                      @default(now())
-  validatedAt          DateTime?
-  revokedAt            DateTime?
-  providerCredential   ProviderCredential            @relation(fields: [providerCredentialId], references: [id], onDelete: Restrict)
-  repositoryConnection RepositoryConnection?
-
-  @@index([repositoryId, status])
-  @@index([providerCredentialId, credentialVersion, status])
-  @@index([assessmentId])
 }
 
 model RepositorySnapshot {

@@ -20,33 +20,31 @@ const context = {
 };
 
 function binding(overrides: Record<string, unknown> = {}) {
+  const authorization =
+    (overrides.authorization as Record<string, unknown> | undefined) ?? {};
   const credential = {
     id: "credential-1",
     ownerUserId: "manager-1",
     status: ProviderCredentialStatus.ACTIVE,
     currentVersion: 1,
     declaredExpiresAt: new Date(Date.now() + 60_000),
-    secrets: [
-      { id: "opaque-locator", credentialVersion: 1, destroyedAt: null },
-    ],
     ...(overrides.credential as object | undefined),
-  };
-  const authorization = {
-    id: "authorization-1",
-    providerCredentialId: credential.id,
-    repositoryId: "100",
-    repositoryFullName: "owner/repo",
-    assessmentId: "assessment-1",
-    status: CredentialAuthorizationStatus.ACTIVE,
-    credentialVersion: 1,
-    providerCredential: credential,
-    ...(overrides.authorization as object | undefined),
   };
   return {
     id: "connection-1",
-    repositoryId: "100",
-    repositoryFullName: "owner/repo",
-    credentialAuthorization: authorization,
+    assessmentId: authorization.assessmentId ?? "assessment-1",
+    repositoryId: authorization.repositoryId ?? "100",
+    repositoryFullName: authorization.repositoryFullName ?? "owner/repo",
+    userId: "manager-1",
+    status: "ACTIVE",
+    authenticationMode: "GITHUB_CLI_CREDENTIAL",
+    providerCredentialId: credential.id,
+    credentialVersion: authorization.credentialVersion ?? 1,
+    credentialAuthorizationStatus:
+      authorization.status ?? CredentialAuthorizationStatus.ACTIVE,
+    credentialAuthorizedByUserId: "manager-1",
+    credentialValidatedAt: new Date(),
+    providerCredential: credential,
     ...overrides,
   };
 }
@@ -81,7 +79,7 @@ describe("PrismaCredentialAuthorizationResolver", () => {
 
   it.each([
     ["cross account", { credential: { ownerUserId: "other-user" } }],
-    ["repository mismatch", { authorization: { repositoryId: "200" } }],
+    ["repository mismatch", { repositoryFullName: "other/repo" }],
     [
       "assessment mismatch",
       { authorization: { assessmentId: "assessment-2" } },
@@ -137,7 +135,7 @@ describe("PrismaCredentialAuthorizationResolver", () => {
   it("does not grant a Developer credential stewardship authority", async () => {
     const findFirst = jest.fn(() => Promise.resolve(null));
     const prisma = {
-      credentialAuthorization: { findFirst },
+      repositoryConnection: { findFirst },
     } as unknown as PrismaService;
     const instance = new PrismaCredentialAuthorizationResolver(prisma, {
       read: jest.fn(),
@@ -169,11 +167,11 @@ describe("PrismaCredentialAuthorizationResolver", () => {
       repositoryConnection: {
         findFirst: jest.fn(() =>
           Promise.resolve({
-            credentialAuthorization: {
-              providerCredentialId: "credential-1",
-              authorizedByUserId: "manager-1",
-              credentialVersion: 2,
+            providerCredential: {
+              id: "credential-1",
+              ownerUserId: "manager-1",
             },
+            credentialVersion: 2,
           }),
         ),
       },
