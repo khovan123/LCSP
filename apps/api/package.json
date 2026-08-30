@@ -12,7 +12,7 @@
     "prisma:generate": "cross-env XDG_CACHE_HOME=.cache prisma generate",
     "prisma:migrate:deploy": "cross-env XDG_CACHE_HOME=.cache prisma migrate deploy",
     "start": "nest start",
-    "start:dev": "nest start --watch",
+    "start:dev": "cross-env NODE_OPTIONS=--experimental-strip-types nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main.js",
     "seed:google-admins": "cross-env DOTENV_CONFIG_PATH=../../.env tsx scripts/seed-google-admins.ts",
