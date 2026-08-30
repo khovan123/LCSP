@@ -41,7 +41,6 @@ function cloneEnvelope(
 }
 
 describe("EnvelopeEncryptionService", () => {
-
   it("redacts development KEK provider inspection", () => {
     const key = Buffer.alloc(32, 7);
     const keyProvider = provider("kek-v1", key);
