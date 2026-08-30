@@ -61,7 +61,10 @@ import {
   type GitHubArchiveTransportPort,
 } from "./application/ports/github-archive-transport.port.js";
 import { GitHubSecureArchiveHttpTransport } from "./infrastructure/github/github-secure-archive-http.transport.js";
-import { assertGitHubCliRuntime } from "./infrastructure/github/github-cli-runtime.validator.js";
+import {
+  assertGitHubCliRuntime,
+  resolveGitHubCliExecutablePath,
+} from "./infrastructure/github/github-cli-runtime.validator.js";
 import { GitLabCliRepositoryProvider } from "./infrastructure/gitlab/gitlab-cli-repository.provider.js";
 import { ConfiguredRepositoryProviderRegistry } from "./infrastructure/repository-provider.registry.js";
 import { GitLabSecureArchiveHttpTransport } from "./infrastructure/gitlab/gitlab-secure-archive-http.transport.js";
@@ -171,8 +174,11 @@ import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
             downloadArchive: unavailable,
           };
         }
-        assertGitHubCliRuntime(cli.executablePath);
-        return new GitHubCliRepositoryProvider(cli);
+        const executablePath = resolveGitHubCliExecutablePath(
+          cli.executablePath,
+        );
+        assertGitHubCliRuntime(executablePath);
+        return new GitHubCliRepositoryProvider({ ...cli, executablePath });
       },
     },
     {

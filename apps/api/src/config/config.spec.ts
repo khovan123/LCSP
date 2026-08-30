@@ -127,7 +127,7 @@ describe("configValidationSchema", () => {
     expect(result.error?.message).not.toContain(recognizableKey);
   });
 
-  it("fails closed when credential persistence lacks an absolute CLI executable path", () => {
+  it("allows credential persistence without an explicit CLI executable path", () => {
     const result = validate({
       ...VALID_ENV,
       GITHUB_CLI_EXECUTABLE_PATH: "",
@@ -138,9 +138,7 @@ describe("configValidationSchema", () => {
       }),
     });
 
-    expect(result.error?.message).toContain(
-      "requires an absolute GITHUB_CLI_EXECUTABLE_PATH",
-    );
+    expect(result.error).toBeUndefined();
   });
 
   it("accepts a versioned 32-byte keyring when persistence is enabled", () => {

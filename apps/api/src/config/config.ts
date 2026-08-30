@@ -163,12 +163,6 @@ export const configValidationSchema = Joi.object({
       return helpers.error("credentialKek.archiveRetrieval");
     }
     if (env.GITHUB_CLI_CREDENTIAL_PERSISTENCE_ENABLED !== true) return env;
-    if (
-      typeof env.GITHUB_CLI_EXECUTABLE_PATH !== "string" ||
-      env.GITHUB_CLI_EXECUTABLE_PATH.length === 0
-    ) {
-      return helpers.error("githubCli.executablePath");
-    }
     const activeVersion = env.GITHUB_CLI_CREDENTIAL_KEK_ACTIVE_VERSION;
     const encodedKeyring = env.GITHUB_CLI_CREDENTIAL_KEK_KEYRING;
     if (typeof activeVersion !== "string" || activeVersion.length === 0) {
@@ -193,8 +187,6 @@ export const configValidationSchema = Joi.object({
       "GitHub CLI snapshot pinning requires credential persistence",
     "credentialKek.archiveRetrieval":
       "GitHub CLI archive retrieval requires credential persistence and snapshot pinning",
-    "githubCli.executablePath":
-      "GitHub CLI credential persistence requires an absolute GITHUB_CLI_EXECUTABLE_PATH",
   });
 
 function isValidKekKeyring(value: unknown, activeVersion: string): boolean {
