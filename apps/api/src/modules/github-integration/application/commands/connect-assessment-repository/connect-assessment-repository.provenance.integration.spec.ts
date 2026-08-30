@@ -29,8 +29,7 @@ import { PinSnapshotHandler } from "../pin-snapshot/pin-snapshot.handler.js";
 import { PinSnapshotCommand } from "../pin-snapshot/pin-snapshot.command.js";
 import { CredentialLease } from "../../security/credential-lease.js";
 
-const databaseUrl =
-  process.env.PHASE25_DATABASE_URL ?? process.env.DATABASE_URL;
+const databaseUrl = process.env.PHASE25_DATABASE_URL;
 const run = databaseUrl ? describe : describe.skip;
 
 run("ConnectAssessmentRepository credential provenance", () => {
@@ -71,7 +70,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
       where: { userId: "provenance-user" },
     });
     await prisma.credentialAuthorization.deleteMany({
-      where: { organizationId: "provenance-org" },
+      where: { authorizedByUserId: "provenance-user" },
     });
     await prisma.wizardProfile.deleteMany({
       where: { ownerId: "provenance-user" },
@@ -81,7 +80,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
     });
     await prisma.providerCredentialSecret.deleteMany();
     await prisma.providerCredential.deleteMany({
-      where: { organizationId: "provenance-org" },
+      where: { ownerUserId: "provenance-user" },
     });
     const prismaService = prisma as never;
     const encryption = new EnvelopeEncryptionService(
@@ -134,7 +133,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
 
   const configureCommand = (credential: string) =>
     new ConfigureProviderCredentialCommand(
-      "provenance-org",
       "provenance-user",
       AUTH_USER_ROLES.customer,
       "synthetic-session",
@@ -144,13 +142,11 @@ run("ConnectAssessmentRepository credential provenance", () => {
     );
 
   const configureFor = (
-    organizationId: string,
     userId: string,
     providerName: string,
     credential: string,
   ) =>
     new ConfigureProviderCredentialCommand(
-      organizationId,
       userId,
       AUTH_USER_ROLES.customer,
       "synthetic-session",
@@ -162,7 +158,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
   const connectCommand = (assessmentId: string) =>
     new ConnectAssessmentRepositoryCommand(
       assessmentId,
-      "provenance-org",
       "provenance-user",
       AUTH_USER_ROLES.customer,
       "https://gitlab.com/group/project",
@@ -229,7 +224,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
     expect(firstConnection.authenticationMode).toBe(
       RepositoryAuthenticationMode.GITLAB_CLI_CREDENTIAL,
     );
-    expect(authorizationA.organizationId).toBe("provenance-org");
+    expect(authorizationA.authorizedByUserId).toBe("provenance-user");
 
     await configure.execute(configureCommand("synthetic-provenance-b"));
     const historical = await prisma.repositoryConnection.findUniqueOrThrow({
@@ -255,7 +250,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
       (
         await prisma.providerCredential.findFirstOrThrow({
           where: {
-            organizationId: "provenance-org",
+            ownerUserId: "provenance-user",
             isActive: true,
             provider: CredentialProvider.GITLAB,
           },
@@ -284,7 +279,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
       connect.execute(
         new ConnectAssessmentRepositoryCommand(
           assessmentId,
-          "missing-org",
           "missing-user",
           AUTH_USER_ROLES.customer,
           "https://gitlab.com/group/project",
@@ -302,7 +296,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
   it("selects credentials by provider and owner scope", async () => {
     await configure.execute(
       configureFor(
-        "scope-org",
         "scope-user",
         CREDENTIAL_PROVIDERS.github,
         "synthetic-github-scope-credential",
@@ -310,7 +303,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
     );
     await configure.execute(
       configureFor(
-        "scope-org",
         "scope-user",
         CREDENTIAL_PROVIDERS.gitlab,
         "synthetic-gitlab-scope-credential",
@@ -318,7 +310,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
     );
     await configure.execute(
       configureFor(
-        "scope-org",
         "other-user",
         CREDENTIAL_PROVIDERS.gitlab,
         "synthetic-other-user-credential",
@@ -328,7 +319,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
     const result = await connect.execute(
       new ConnectAssessmentRepositoryCommand(
         "scope-assessment",
-        "scope-org",
         "scope-user",
         AUTH_USER_ROLES.customer,
         "https://gitlab.com/group/project",
@@ -394,7 +384,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
     expect(
       await prisma.providerCredential.count({
         where: {
-          organizationId: "provenance-org",
           ownerUserId: "provenance-user",
           provider: CredentialProvider.GITLAB,
           isActive: true,
@@ -481,12 +470,10 @@ run("ConnectAssessmentRepository credential provenance", () => {
   });
 
   it("pins a snapshot from the readiness-created GitHub CLI connection", async () => {
-    const organizationId = "github-snapshot-org";
     const userId = "github-snapshot-user";
     const assessmentId = "github-snapshot-assessment";
     await configure.execute(
       configureFor(
-        organizationId,
         userId,
         CREDENTIAL_PROVIDERS.github,
         "synthetic-github-snapshot-credential",
@@ -496,7 +483,6 @@ run("ConnectAssessmentRepository credential provenance", () => {
     const connectionResult = await connect.execute(
       new ConnectAssessmentRepositoryCommand(
         assessmentId,
-        organizationId,
         userId,
         AUTH_USER_ROLES.customer,
         "https://github.com/acme/example-repo",

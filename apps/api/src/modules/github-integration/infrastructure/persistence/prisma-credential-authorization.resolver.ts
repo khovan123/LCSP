@@ -50,7 +50,7 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
     const connection = await this.prisma.repositoryConnection.findFirst({
       where: {
         id: connectionId,
-        userId: context.organizationId,
+        userId: context.userId,
         status: RepositoryConnectionStatus.ACTIVE,
         authenticationMode: {
           in: [
@@ -75,12 +75,11 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
       connection.repositoryFullName !== expectedRepositoryFullName ||
       authorization.repositoryId !== connection.repositoryId ||
       authorization.repositoryFullName !== expectedRepositoryFullName ||
-      authorization.organizationId !== context.organizationId ||
       authorization.status !== CredentialAuthorizationStatus.ACTIVE ||
       (authorization.assessmentId !== null &&
         authorization.assessmentId !== context.assessmentId) ||
       authorization.credentialVersion !== credential.currentVersion ||
-      credential.organizationId !== context.organizationId ||
+      credential.ownerUserId !== context.userId ||
       (!isConnectionConsumption(context.operation) &&
         context.actorId !== null &&
         credential.ownerUserId !== context.actorId)
@@ -146,7 +145,9 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
           ],
         },
       },
-      select: { credentialAuthorization: true },
+      include: {
+        credentialAuthorization: { include: { providerCredential: true } },
+      },
     });
     const authorization = connection?.credentialAuthorization;
     if (!authorization || authorization.credentialVersion !== credentialVersion)
@@ -154,7 +155,7 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
     await this.prisma.providerCredential.updateMany({
       where: {
         id: authorization.providerCredentialId,
-        organizationId: authorization.organizationId,
+        ownerUserId: authorization.providerCredential.ownerUserId,
         currentVersion: credentialVersion,
       },
       data: {
@@ -172,7 +173,7 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
     const row = await this.authorizedBinding(context, connectionId);
     return {
       connectionId,
-      organizationId: context.organizationId,
+      userId: context.userId,
       repositoryFullNames: [row.repositoryFullName],
       expectedCredentialVersion: row.credentialVersion,
     };
@@ -186,14 +187,13 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
     await this.prisma.credentialAuthorization.updateMany({
       where: {
         id: row.id,
-        organizationId: context.organizationId,
         status: CredentialAuthorizationStatus.ACTIVE,
       },
       data: { status: CredentialAuthorizationStatus.REVOKING },
     });
     return {
       connectionId,
-      organizationId: context.organizationId,
+      userId: context.userId,
       repositoryFullNames: [row.repositoryFullName],
       expectedCredentialVersion: row.credentialVersion,
       affectedConnectionIds: [connectionId],
@@ -206,11 +206,10 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
   ) {
     const row = await this.prisma.credentialAuthorization.findFirst({
       where: {
-        organizationId: context.organizationId,
         repositoryConnection: {
           is: {
             id: connectionId,
-            userId: context.organizationId,
+            userId: context.userId,
             authenticationMode: {
               in: [
                 RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
@@ -220,8 +219,7 @@ export class PrismaCredentialAuthorizationResolver implements CredentialAuthoriz
           },
         },
         providerCredential: {
-          ownerUserId: context.actorId ?? "",
-          organizationId: context.organizationId,
+          ownerUserId: context.userId,
         },
         status: CredentialAuthorizationStatus.ACTIVE,
       },

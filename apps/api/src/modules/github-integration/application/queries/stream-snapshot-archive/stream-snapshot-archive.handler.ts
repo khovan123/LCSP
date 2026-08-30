@@ -241,7 +241,7 @@ export class StreamSnapshotArchiveHandler implements IQueryHandler<StreamSnapsho
                 await this.credentialResolver.resolveForConnection(
                   {
                     actorId: null,
-                    organizationId: connection.userId,
+                    userId: connection.userId,
                     assessmentId: snapshot.assessmentId,
                     operation: GITHUB_CREDENTIAL_OPERATIONS.retrieveArchive,
                     correlationId: query.correlationId,

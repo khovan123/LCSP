@@ -34,7 +34,6 @@ describeDatabase("PrismaDatabaseCredentialStore PostgreSQL integration", () => {
       data: {
         id: credentialId,
         provider: CredentialProvider.GITHUB,
-        organizationId: "organization-a",
         ownerUserId: "manager-a",
         providerAccountId: 9876543210n,
         providerLogin: "manager-a-gh",
@@ -54,7 +53,6 @@ describeDatabase("PrismaDatabaseCredentialStore PostgreSQL integration", () => {
     const context = {
       provider: CREDENTIAL_PROVIDERS.github,
       providerCredentialId: credentialId,
-      organizationId: "organization-a",
       ownerUserId: "manager-a",
       credentialVersion: 1,
       envelopeVersion: 1,
@@ -102,14 +100,14 @@ describeDatabase("PrismaDatabaseCredentialStore PostgreSQL integration", () => {
 
     await prisma.providerCredential.update({
       where: { id: credentialId },
-      data: { organizationId: "organization-tampered" },
+      data: { ownerUserId: "owner-tampered" },
     });
     await expect(store.read(locator)).rejects.toThrow(
       "credential_store_operation_failed",
     );
     await prisma.providerCredential.update({
       where: { id: credentialId },
-      data: { organizationId: "organization-a" },
+      data: { ownerUserId: "manager-a" },
     });
 
     await store.destroy(locator);

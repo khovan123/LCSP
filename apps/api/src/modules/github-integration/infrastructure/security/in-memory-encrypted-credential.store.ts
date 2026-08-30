@@ -15,7 +15,6 @@ import {
 
 type EncryptedCredentialRecord = {
   envelope: EncryptedSecretEnvelope;
-  organizationId: string;
   ownerUserId: string;
   context: CredentialStorageContext;
   createdAt: Date;
@@ -53,7 +52,6 @@ export class InMemoryEncryptedCredentialStore implements CredentialStorePort {
       const envelope = await this.encryption.encryptSecret(secret, context);
       this.records.set(secretLocator, {
         envelope,
-        organizationId: context.organizationId,
         ownerUserId: context.ownerUserId,
         context,
         createdAt: new Date(),

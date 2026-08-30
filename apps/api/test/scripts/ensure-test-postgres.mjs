@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
 import net from "node:net";
 
-const containerName = "lcsp-api-test-postgres";
 const image = "postgres:16-alpine";
 const host = "127.0.0.1";
-const hostPort = 55432;
+const hostPort = Number(process.env.LCSP_TEST_POSTGRES_PORT ?? 55432);
+const databaseName = process.env.LCSP_TEST_POSTGRES_DB ?? "lcsp_api_test";
 const containerPort = 5432;
+const containerName = `lcsp-api-test-postgres-${hostPort}-${databaseName}`;
 
 /**
  * @param {string[]} args
@@ -46,7 +47,7 @@ function ensureContainer() {
       "-e",
       "POSTGRES_PASSWORD=postgres",
       "-e",
-      "POSTGRES_DB=lcsp_api_test",
+      `POSTGRES_DB=${databaseName}`,
       "-p",
       `${host}:${hostPort}:${containerPort}`,
       "-d",
@@ -57,6 +58,15 @@ function ensureContainer() {
 
   if (!status.startsWith("Up ")) {
     run(["start", containerName]);
+  }
+}
+
+function isAuthenticated() {
+  try {
+    run(["exec", containerName, "psql", "-U", "postgres", "-d", databaseName, "-c", "SELECT 1"]);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -87,7 +97,7 @@ function waitUntilReady() {
         "-U",
         "postgres",
         "-d",
-        "lcsp_api_test",
+        databaseName,
       ]);
       return;
     } catch {
@@ -100,6 +110,15 @@ function waitUntilReady() {
 
 ensureContainer();
 waitUntilReady();
+
+if (!isAuthenticated()) {
+  run(["rm", "-f", containerName]);
+  ensureContainer();
+  waitUntilReady();
+  if (!isAuthenticated()) {
+    throw new Error(`PostgreSQL test container authentication failed for ${host}:${hostPort}/${databaseName} as postgres`);
+  }
+}
 
 if (!(await isPortOpen(hostPort, host))) {
   throw new Error(

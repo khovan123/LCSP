@@ -348,7 +348,7 @@ export class PinSnapshotHandler implements ICommandHandler<PinSnapshotCommand> {
       lease = await this.credentialResolver.resolveForConnection(
         {
           actorId: command.actorId,
-          organizationId: command.actorId,
+          userId: command.actorId,
           assessmentId: command.assessmentId,
           operation: GITHUB_CREDENTIAL_OPERATIONS.pinSnapshot,
           correlationId: command.correlationId,

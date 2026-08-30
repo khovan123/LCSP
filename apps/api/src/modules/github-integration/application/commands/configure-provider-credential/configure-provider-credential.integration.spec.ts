@@ -18,7 +18,7 @@ import { PrismaDatabaseCredentialStore } from "../../../infrastructure/persisten
 import { EnvelopeEncryptionService } from "../../../infrastructure/security/envelope-encryption.service.js";
 import { DevelopmentStaticKeyEncryptionKeyProvider } from "../../../infrastructure/security/development-static-key-encryption-key.provider.js";
 
-const url = process.env.PHASE25_DATABASE_URL ?? process.env.DATABASE_URL;
+const url = process.env.PHASE25_DATABASE_URL;
 const run = url ? describe : describe.skip;
 
 run("ConfigureProviderCredential Prisma replacement integration", () => {
@@ -71,7 +71,6 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
 
   const command = (credential: string) =>
     new ConfigureProviderCredentialCommand(
-      "integration-org",
       "integration-user",
       AUTH_USER_ROLES.customer,
       "integration-session",
@@ -83,7 +82,6 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
   const activeCount = () =>
     prisma.providerCredential.count({
       where: {
-        organizationId: "integration-org",
         ownerUserId: "integration-user",
         provider: CredentialProvider.GITLAB,
         status: ProviderCredentialStatus.ACTIVE,
@@ -94,19 +92,18 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
   it("configures initially and rotates to a new active credential", async () => {
     await prisma.providerCredentialSecret.deleteMany();
     await prisma.providerCredential.deleteMany({
-      where: { organizationId: "integration-org" },
+      where: { ownerUserId: "integration-user" },
     });
 
     await handler.execute(command("synthetic-gitlab-credential-a"));
     const first = await prisma.providerCredential.findFirstOrThrow({
-      where: { organizationId: "integration-org" },
+      where: { ownerUserId: "integration-user" },
     });
     expect(first.status).toBe(ProviderCredentialStatus.ACTIVE);
     expect(first.isActive).toBe(true);
     expect(await activeCount()).toBe(1);
     await expect(
       resolver.findMetadata({
-        organizationId: "integration-org",
         userId: "integration-user",
         provider: CredentialProvider.GITLAB,
       }),
@@ -114,7 +111,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
 
     await handler.execute(command("synthetic-gitlab-credential-b"));
     const rows = await prisma.providerCredential.findMany({
-      where: { organizationId: "integration-org" },
+      where: { ownerUserId: "integration-user" },
       orderBy: { createdAt: "asc" },
     });
     expect(rows).toHaveLength(2);
@@ -124,7 +121,6 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
     expect(await activeCount()).toBe(1);
     await expect(
       resolver.findMetadata({
-        organizationId: "integration-org",
         userId: "integration-user",
         provider: CredentialProvider.GITLAB,
       }),
@@ -133,7 +129,6 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
 
   it("keeps the existing active credential when identity validation fails", async () => {
     const before = await resolver.findMetadata({
-      organizationId: "integration-org",
       userId: "integration-user",
       provider: CredentialProvider.GITLAB,
     });
@@ -146,7 +141,6 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
     expect(await activeCount()).toBe(1);
     await expect(
       resolver.findMetadata({
-        organizationId: "integration-org",
         userId: "integration-user",
         provider: CredentialProvider.GITLAB,
       }),
@@ -155,14 +149,13 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
 
   it("enforces the PostgreSQL partial unique index", async () => {
     const current = await prisma.providerCredential.findFirstOrThrow({
-      where: { organizationId: "integration-org", isActive: true },
+      where: { ownerUserId: "integration-user", isActive: true },
     });
     await expect(
       prisma.providerCredential.create({
         data: {
           id: "synthetic-conflicting-active",
           provider: current.provider,
-          organizationId: current.organizationId,
           ownerUserId: current.ownerUserId,
           providerAccountId: 99n,
           providerLogin: "conflict",
@@ -176,67 +169,43 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
     expect(await activeCount()).toBe(1);
   });
 
-  it("isolates replacement by organization, owner, and provider", async () => {
-    const scopes = [
-      ["scope-org-1", "scope-user-1", CREDENTIAL_PROVIDERS.gitlab],
-      ["scope-org-1", "scope-user-1", CREDENTIAL_PROVIDERS.github],
-      ["scope-org-1", "scope-user-2", CREDENTIAL_PROVIDERS.gitlab],
-      ["scope-org-2", "scope-user-1", CREDENTIAL_PROVIDERS.gitlab],
-    ] as const;
-    for (const [organizationId, userId, providerName] of scopes) {
+  it("isolates replacement by account and provider", async () => {
+    for (const [userId, providerName] of [
+      ["scope-user-1", CREDENTIAL_PROVIDERS.gitlab],
+      ["scope-user-1", CREDENTIAL_PROVIDERS.github],
+      ["scope-user-2", CREDENTIAL_PROVIDERS.gitlab],
+    ] as const) {
       await handler.execute(
         new ConfigureProviderCredentialCommand(
-          organizationId,
           userId,
           AUTH_USER_ROLES.customer,
           "integration-session",
           providerName,
-          `synthetic-${organizationId}-${userId}-${providerName}-credential`,
+          `synthetic-${userId}-${providerName}-credential`,
           "integration-correlation",
         ),
       );
     }
-    await handler.execute(
-      new ConfigureProviderCredentialCommand(
-        "scope-org-1",
-        "scope-user-1",
-        AUTH_USER_ROLES.customer,
-        "integration-session",
-        CREDENTIAL_PROVIDERS.gitlab,
-        "synthetic-scope-rotation-credential",
-        "integration-correlation",
-      ),
-    );
-    const unchanged = await prisma.providerCredential.findMany({
-      where: {
-        OR: [
-          {
-            organizationId: "scope-org-1",
-            ownerUserId: "scope-user-1",
-            provider: CredentialProvider.GITHUB,
-          },
-          {
-            organizationId: "scope-org-1",
-            ownerUserId: "scope-user-2",
-            provider: CredentialProvider.GITLAB,
-          },
-          {
-            organizationId: "scope-org-2",
-            ownerUserId: "scope-user-1",
-            provider: CredentialProvider.GITLAB,
-          },
-        ],
-        isActive: true,
-      },
+    const rows = await prisma.providerCredential.findMany({
+      where: { ownerUserId: "scope-user-1", isActive: true },
     });
-    expect(unchanged).toHaveLength(3);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.provider)).toEqual(
+      expect.arrayContaining([
+        CredentialProvider.GITHUB,
+        CredentialProvider.GITLAB,
+      ]),
+    );
+    await expect(
+      prisma.providerCredential.count({
+        where: { ownerUserId: "scope-user-2", isActive: true },
+      }),
+    ).resolves.toBe(1);
   });
 
   it("treats same-secret resubmission as a retained-row rotation", async () => {
-    const organizationId = "same-secret-org";
     await handler.execute(
       new ConfigureProviderCredentialCommand(
-        organizationId,
         "same-secret-user",
         AUTH_USER_ROLES.customer,
         "integration-session",
@@ -246,11 +215,10 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
       ),
     );
     const first = await prisma.providerCredential.findFirstOrThrow({
-      where: { organizationId },
+      where: { ownerUserId: "same-secret-user" },
     });
     await handler.execute(
       new ConfigureProviderCredentialCommand(
-        organizationId,
         "same-secret-user",
         AUTH_USER_ROLES.customer,
         "integration-session",
@@ -260,7 +228,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
       ),
     );
     const rows = await prisma.providerCredential.findMany({
-      where: { organizationId },
+      where: { ownerUserId: "same-secret-user" },
       orderBy: { createdAt: "asc" },
     });
     expect(rows).toHaveLength(2);
@@ -269,10 +237,8 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
   });
 
   it("rolls back deactivation when secret persistence fails", async () => {
-    const organizationId = "rollback-org";
     await handler.execute(
       new ConfigureProviderCredentialCommand(
-        organizationId,
         "rollback-user",
         AUTH_USER_ROLES.customer,
         "integration-session",
@@ -282,7 +248,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
       ),
     );
     const original = await prisma.providerCredential.findFirstOrThrow({
-      where: { organizationId },
+      where: { ownerUserId: "rollback-user" },
     });
     const failingUnitOfWork = new PrismaCredentialPersistenceUnitOfWork(
       prisma as never,
@@ -301,7 +267,6 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
     await expect(
       failingHandler.execute(
         new ConfigureProviderCredentialCommand(
-          organizationId,
           "rollback-user",
           AUTH_USER_ROLES.customer,
           "integration-session",
@@ -317,7 +282,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
     expect(restored.isActive).toBe(true);
     expect(
       await prisma.providerCredential.count({
-        where: { organizationId, isActive: true },
+        where: { ownerUserId: "rollback-user", isActive: true },
       }),
     ).toBe(1);
   });

@@ -9,7 +9,6 @@ import type { CredentialProvider } from "@lcsp/contracts/github-integration";
 export type CredentialStorageContext = {
   provider: CredentialProvider;
   providerCredentialId: string;
-  organizationId: string;
   ownerUserId: string;
   credentialVersion: number;
   envelopeVersion: number;

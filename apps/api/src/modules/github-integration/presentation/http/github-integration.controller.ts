@@ -92,7 +92,6 @@ export class GitHubIntegrationController {
       await Promise.all(
         providers.map(async (provider) => {
           const metadata = await activeCredentials.findMetadata({
-            organizationId: context.userId,
             userId: context.userId,
             provider,
           });
@@ -132,7 +131,6 @@ export class GitHubIntegrationController {
       await this.commandBus.execute(
         new DiscoverGitHubRepositoriesCommand(
           context.userId,
-          context.userId,
           context.role,
           context.sessionId,
           body.credential,
@@ -163,7 +161,6 @@ export class GitHubIntegrationController {
     return resultEnvelope(
       await this.commandBus.execute(
         new ConnectGitHubCliRepositoryCommand(
-          context.userId,
           context.userId,
           context.role,
           context.sessionId,
@@ -197,7 +194,6 @@ export class GitHubIntegrationController {
       await this.commandBus.execute(
         new ConfigureProviderCredentialCommand(
           context.userId,
-          context.userId,
           context.role,
           context.sessionId,
           body.provider,
@@ -221,7 +217,6 @@ export class GitHubIntegrationController {
       await this.commandBus.execute(
         new ConnectAssessmentRepositoryCommand(
           assessmentId,
-          context.userId,
           context.userId,
           context.role,
           body.repositoryUrl,

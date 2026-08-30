@@ -363,7 +363,6 @@ model RepositoryConnection {
 model ProviderCredential {
   id                    String                     @id
   provider              CredentialProvider
-  organizationId        String
   ownerUserId           String
   providerAccountId     BigInt
   providerLogin         String
@@ -382,8 +381,8 @@ model ProviderCredential {
   authorizations        CredentialAuthorization[]
   secrets               ProviderCredentialSecret[]
 
-  @@index([organizationId, ownerUserId, isActive])
-  @@index([organizationId, provider, providerAccountId])
+  @@index([ownerUserId, isActive])
+  @@index([ownerUserId, provider, providerAccountId])
 }
 
 model ProviderCredentialSecret {
@@ -410,7 +409,6 @@ model ProviderCredentialSecret {
 model CredentialAuthorization {
   id                   String                        @id
   providerCredentialId String
-  organizationId       String
   repositoryId         String
   repositoryFullName   String
   assessmentId         String?
@@ -423,7 +421,7 @@ model CredentialAuthorization {
   providerCredential   ProviderCredential            @relation(fields: [providerCredentialId], references: [id], onDelete: Restrict)
   repositoryConnection RepositoryConnection?
 
-  @@index([organizationId, repositoryId, status])
+  @@index([repositoryId, status])
   @@index([providerCredentialId, credentialVersion, status])
   @@index([assessmentId])
 }

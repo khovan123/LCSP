@@ -1,6 +1,5 @@
 export class ConfigureProviderCredentialCommand {
   constructor(
-    public readonly organizationId: string,
     public readonly userId: string,
     public readonly subjectRole: string,
     public readonly sessionId: string,

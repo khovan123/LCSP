@@ -81,7 +81,6 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
       const context: CredentialStorageContext = {
         provider: command.provider,
         providerCredentialId: credentialId,
-        organizationId: command.organizationId,
         ownerUserId: command.userId,
         credentialVersion: CREDENTIAL_VERSION,
         envelopeVersion: ENVELOPE_VERSION,
@@ -89,14 +88,12 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
       const validatedAt = new Date();
       await this.unitOfWork.execute(async (transaction) => {
         await transaction.providerCredentials.deactivateActive(
-          command.organizationId,
           command.userId,
           command.provider as CredentialStorageContext["provider"],
         );
         await transaction.providerCredentials.create({
           id: credentialId,
           provider: context.provider,
-          organizationId: command.organizationId,
           ownerUserId: command.userId,
           providerAccountId: BigInt(identity.id),
           providerLogin: identity.login,

@@ -69,7 +69,6 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
     );
     const result = await handler.execute(
       new DiscoverGitHubRepositoriesCommand(
-        "org",
         "user",
         AUTH_USER_ROLES.customer,
         "session",
@@ -101,7 +100,6 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
     await expect(
       handler.execute(
         new DiscoverGitHubRepositoriesCommand(
-          "org",
           "user",
           AUTH_USER_ROLES.customer,
           "session",
@@ -149,7 +147,6 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
     );
     const result = await handler.execute(
       new ConnectGitHubCliRepositoryCommand(
-        "org",
         "user",
         AUTH_USER_ROLES.customer,
         "session",
@@ -170,7 +167,7 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
     expect(createCredential).toHaveBeenCalledTimes(1);
     expect(store).toHaveBeenCalledWith(
       FAKE_PAT,
-      expect.objectContaining({ organizationId: "org", ownerUserId: "user" }),
+      expect.objectContaining({ ownerUserId: "user" }),
     );
     expect(createAuthorization).toHaveBeenCalledTimes(1);
     expect(createConnection).toHaveBeenCalledWith(
@@ -198,7 +195,6 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
     await expect(
       handler.execute(
         new ConnectGitHubCliRepositoryCommand(
-          "org",
           "user",
           AUTH_USER_ROLES.customer,
           "session",
@@ -232,7 +228,6 @@ describe("GitHub CLI Manager lifecycle handlers", () => {
     await expect(
       handler.execute(
         new ConnectGitHubCliRepositoryCommand(
-          "org",
           "user",
           AUTH_USER_ROLES.customer,
           "session",

@@ -101,7 +101,6 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
       );
     }
     const metadata = await this.credentials.findMetadata({
-      organizationId: command.organizationId,
       userId: command.userId,
       provider,
     });
@@ -113,7 +112,6 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
       );
     }
     const lease = await this.credentials.resolveLease({
-      organizationId: command.organizationId,
       userId: command.userId,
       provider,
       repositoryFullName: locator.repositoryFullName,
@@ -160,7 +158,6 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
         await transaction.authorizations.create({
           id: authorizationId,
           providerCredentialId: metadata.id,
-          organizationId: command.organizationId,
           repositoryId: repository.id,
           repositoryFullName: repository.fullName,
           assessmentId: command.assessmentId,

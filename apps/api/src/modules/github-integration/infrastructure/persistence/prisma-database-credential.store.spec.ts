@@ -12,7 +12,6 @@ const SECRET = "phase-two-recognizable-secret";
 const CONTEXT = {
   provider: CREDENTIAL_PROVIDERS.github,
   providerCredentialId: "credential-1",
-  organizationId: "organization-1",
   ownerUserId: "manager-1",
   credentialVersion: 1,
   envelopeVersion: 1,
@@ -23,19 +22,13 @@ function fixture(options: { failSecretCreate?: boolean } = {}) {
   const credential = {
     id: CONTEXT.providerCredentialId,
     provider: CredentialProvider.GITHUB,
-    organizationId: CONTEXT.organizationId,
     ownerUserId: CONTEXT.ownerUserId,
   };
   const client = {
     providerCredential: {
-      findFirst: ({
-        where,
-      }: {
-        where: { id: string; organizationId: string; ownerUserId: string };
-      }) =>
+      findFirst: ({ where }: { where: { id: string; ownerUserId: string } }) =>
         Promise.resolve(
           where.id === credential.id &&
-            where.organizationId === credential.organizationId &&
             where.ownerUserId === credential.ownerUserId
             ? { id: credential.id }
             : null,

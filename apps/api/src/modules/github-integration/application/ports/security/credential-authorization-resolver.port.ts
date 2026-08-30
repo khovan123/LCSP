@@ -11,7 +11,7 @@ export const CREDENTIAL_AUTHORIZATION_RESOLVER = Symbol(
 
 export type CredentialOperationContext = {
   actorId: string | null;
-  organizationId: string;
+  userId: string;
   assessmentId: string | null;
   operation: GitHubCredentialOperation;
   correlationId: string;
@@ -19,7 +19,7 @@ export type CredentialOperationContext = {
 
 export type RotationAuthority = {
   connectionId: string;
-  organizationId: string;
+  userId: string;
   repositoryFullNames: readonly string[];
   expectedCredentialVersion: number;
 };

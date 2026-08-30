@@ -21,7 +21,6 @@ describe("PrismaActiveProviderCredentialResolver", () => {
     );
 
     const metadata = await resolver.findMetadata({
-      organizationId: "org-1",
       userId: "user-1",
       provider: CredentialProvider.GITLAB,
     });
@@ -29,7 +28,6 @@ describe("PrismaActiveProviderCredentialResolver", () => {
     expect(metadata?.id).toBe("credential-b");
     expect(findFirst).toHaveBeenCalledWith({
       where: {
-        organizationId: "org-1",
         ownerUserId: "user-1",
         provider: CredentialProvider.GITLAB,
         status: ProviderCredentialStatus.ACTIVE,

@@ -15,12 +15,10 @@ export const ACTIVE_PROVIDER_CREDENTIAL_RESOLVER = Symbol(
 
 export interface ActiveProviderCredentialResolver {
   findMetadata(input: {
-    organizationId: string;
     userId: string;
     provider: CredentialProvider;
   }): Promise<ActiveProviderCredentialMetadata | null>;
   resolveLease(input: {
-    organizationId: string;
     userId: string;
     provider: CredentialProvider;
     repositoryFullName: string;

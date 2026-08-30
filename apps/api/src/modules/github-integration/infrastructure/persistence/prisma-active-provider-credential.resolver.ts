@@ -24,13 +24,11 @@ export class PrismaActiveProviderCredentialResolver implements ActiveProviderCre
   ) {}
 
   async findMetadata(input: {
-    organizationId: string;
     userId: string;
     provider: CredentialProvider;
   }): Promise<ActiveProviderCredentialMetadata | null> {
     const row = await this.prisma.providerCredential.findFirst({
       where: {
-        organizationId: input.organizationId,
         ownerUserId: input.userId,
         provider: input.provider,
         status: ProviderCredentialStatus.ACTIVE,
@@ -53,7 +51,6 @@ export class PrismaActiveProviderCredentialResolver implements ActiveProviderCre
   }
 
   async resolveLease(input: {
-    organizationId: string;
     userId: string;
     provider: CredentialProvider;
     repositoryFullName: string;

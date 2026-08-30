@@ -152,7 +152,6 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
       const storageContext: CredentialStorageContext = {
         provider,
         providerCredentialId,
-        organizationId: command.organizationId,
         ownerUserId: command.userId,
         credentialVersion: INITIAL_CREDENTIAL_VERSION,
         envelopeVersion: ENVELOPE_VERSION,
@@ -161,7 +160,6 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
         await transaction.providerCredentials.create({
           id: providerCredentialId,
           provider,
-          organizationId: command.organizationId,
           ownerUserId: command.userId,
           providerAccountId: BigInt(identity.id),
           providerLogin: identity.login,
@@ -177,7 +175,6 @@ export class ConnectGitHubCliRepositoryHandler implements ICommandHandler<Connec
         await transaction.authorizations.create({
           id: authorizationId,
           providerCredentialId,
-          organizationId: command.organizationId,
           repositoryId: repository.id,
           repositoryFullName: repository.fullName,
           assessmentId: command.assessmentId ?? null,

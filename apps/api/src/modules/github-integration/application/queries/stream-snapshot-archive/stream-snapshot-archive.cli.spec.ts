@@ -37,7 +37,6 @@ describe("StreamSnapshotArchiveHandler CLI archive routing", () => {
         findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
           id: "job-1",
           snapshotId: "snapshot-1",
-          organizationId: "org-1",
           status: REPOSITORY_SCAN_JOB_STATUSES.running,
         }),
         updateMany: jest.fn(),
@@ -45,7 +44,6 @@ describe("StreamSnapshotArchiveHandler CLI archive routing", () => {
       repositorySnapshot: {
         findUnique: jest.fn<() => Promise<unknown>>().mockResolvedValue({
           id: "snapshot-1",
-          organizationId: "org-1",
           connectionId: "connection-1",
           assessmentId: "assessment-1",
           repositoryId: "repo-1",
@@ -60,7 +58,6 @@ describe("StreamSnapshotArchiveHandler CLI archive routing", () => {
           userId: "user-1",
           provider: CREDENTIAL_PROVIDERS.github,
           installationId: null,
-          organizationId: "org-1",
           status: REPOSITORY_CONNECTION_STATUSES.active,
           authenticationMode:
             RepositoryAuthenticationMode.GITHUB_CLI_CREDENTIAL,
@@ -145,7 +142,6 @@ describe("StreamSnapshotArchiveHandler CLI archive routing", () => {
     expect(f.appDownload).not.toHaveBeenCalled();
     expect(f.resolveForConnection).toHaveBeenCalledWith(
       expect.objectContaining({
-        organizationId: "user-1",
         assessmentId: "assessment-1",
       }),
       "connection-1",

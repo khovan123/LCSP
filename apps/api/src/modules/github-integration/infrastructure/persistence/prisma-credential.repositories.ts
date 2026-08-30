@@ -53,13 +53,11 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
   }
 
   async deactivateActive(
-    organizationId: string,
     ownerUserId: string,
     provider: CredentialProvider,
   ): Promise<void> {
     await this.client.providerCredential.updateMany({
       where: {
-        organizationId,
         ownerUserId,
         provider: toPrismaCredentialProvider(provider),
         isActive: true,
@@ -68,12 +66,12 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
     });
   }
 
-  async findByIdForOrganization(
+  async findByIdForOwner(
     id: string,
-    organizationId: string,
+    ownerUserId: string,
   ): Promise<ProviderCredentialRecord | null> {
     const row = await this.client.providerCredential.findFirst({
-      where: { id, organizationId },
+      where: { id, ownerUserId },
     });
     return row
       ? {
@@ -82,7 +80,6 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
             row.provider === PrismaCredentialProvider.GITLAB
               ? CREDENTIAL_PROVIDERS.gitlab
               : CREDENTIAL_PROVIDERS.github,
-          organizationId: row.organizationId,
           ownerUserId: row.ownerUserId,
           providerAccountId: row.providerAccountId,
           providerLogin: row.providerLogin,
@@ -96,13 +93,13 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
 
   async updateLifecycle(
     id: string,
-    organizationId: string,
+    ownerUserId: string,
     status: ProviderCredentialStatus,
     safeFailureCode?: string,
   ): Promise<boolean> {
     const now = new Date();
     const result = await this.client.providerCredential.updateMany({
-      where: { id, organizationId },
+      where: { id, ownerUserId },
       data: {
         status: toCredentialStatus(status),
         lastFailureCode: safeFailureCode,
@@ -119,12 +116,12 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
 
   async updateVersion(
     id: string,
-    organizationId: string,
+    ownerUserId: string,
     expectedVersion: number,
     newVersion: number,
   ): Promise<boolean> {
     const result = await this.client.providerCredential.updateMany({
-      where: { id, organizationId, currentVersion: expectedVersion },
+      where: { id, ownerUserId, currentVersion: expectedVersion },
       data: { currentVersion: newVersion },
     });
     return result.count === 1;
@@ -132,13 +129,13 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
 
   async markValidated(
     id: string,
-    organizationId: string,
+    ownerUserId: string,
     at: Date,
   ): Promise<boolean> {
     return (
       (
         await this.client.providerCredential.updateMany({
-          where: { id, organizationId },
+          where: { id, ownerUserId },
           data: { validatedAt: at },
         })
       ).count === 1
@@ -147,14 +144,14 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
 
   async markUsed(
     id: string,
-    organizationId: string,
+    ownerUserId: string,
     version: number,
     at: Date,
   ): Promise<boolean> {
     return (
       (
         await this.client.providerCredential.updateMany({
-          where: { id, organizationId, currentVersion: version },
+          where: { id, ownerUserId, currentVersion: version },
           data: { lastUsedAt: at },
         })
       ).count === 1
@@ -187,17 +184,16 @@ export class PrismaCredentialAuthorizationRepository implements CredentialAuthor
 
   async findActiveForConnection(input: {
     connectionId: string;
-    organizationId: string;
+    ownerUserId: string;
     repositoryFullName: string;
     assessmentId: string | null;
   }): Promise<CredentialAuthorizationRecord | null> {
     const row = await this.client.credentialAuthorization.findFirst({
       where: {
-        organizationId: input.organizationId,
         repositoryFullName: input.repositoryFullName,
         status: PrismaAuthorizationStatus.ACTIVE,
         repositoryConnection: {
-          is: { id: input.connectionId, userId: input.organizationId },
+          is: { id: input.connectionId, userId: input.ownerUserId },
         },
         OR: [{ assessmentId: null }, { assessmentId: input.assessmentId }],
       },
@@ -207,27 +203,31 @@ export class PrismaCredentialAuthorizationRepository implements CredentialAuthor
 
   async updateVersion(
     id: string,
-    organizationId: string,
+    ownerUserId: string,
     expectedVersion: number,
     newVersion: number,
   ): Promise<boolean> {
     return (
       (
         await this.client.credentialAuthorization.updateMany({
-          where: { id, organizationId, credentialVersion: expectedVersion },
+          where: {
+            id,
+            authorizedByUserId: ownerUserId,
+            credentialVersion: expectedVersion,
+          },
           data: { credentialVersion: newVersion },
         })
       ).count === 1
     );
   }
 
-  async revoke(id: string, organizationId: string, at: Date): Promise<boolean> {
+  async revoke(id: string, ownerUserId: string, at: Date): Promise<boolean> {
     return (
       (
         await this.client.credentialAuthorization.updateMany({
           where: {
             id,
-            organizationId,
+            authorizedByUserId: ownerUserId,
             status: PrismaAuthorizationStatus.ACTIVE,
           },
           data: { status: PrismaAuthorizationStatus.REVOKED, revokedAt: at },
@@ -240,11 +240,10 @@ export class PrismaCredentialAuthorizationRepository implements CredentialAuthor
 function authorizationRecord(row: {
   id: string;
   providerCredentialId: string;
-  organizationId: string;
+  authorizedByUserId: string;
   repositoryId: string;
   repositoryFullName: string;
   assessmentId: string | null;
-  authorizedByUserId: string;
   status: PrismaAuthorizationStatus;
   credentialVersion: number;
   validatedAt: Date | null;

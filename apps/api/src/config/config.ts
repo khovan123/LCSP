@@ -96,7 +96,18 @@ export const configValidationSchema = Joi.object({
     .integer()
     .positive()
     .default(2),
-  GITLAB_CLI_EXECUTABLE_PATH: Joi.string().trim().allow("").default(""),
+  GITLAB_CLI_EXECUTABLE_PATH: Joi.string()
+    .trim()
+    .allow("")
+    .default("")
+    .custom((value: string, helpers): string =>
+      !value || isAbsolute(value)
+        ? value
+        : (helpers.error("string.absolutePath") as unknown as string),
+    )
+    .messages({
+      "string.absolutePath": '"GITLAB_CLI_EXECUTABLE_PATH" must be absolute',
+    }),
   GITLAB_PROVIDER_ENABLED: Joi.boolean().default(false),
   GITLAB_CLI_TIMEOUT_MS: Joi.number().integer().positive().default(30000),
   GITLAB_CLI_MAX_JSON_OUTPUT_BYTES: Joi.number()

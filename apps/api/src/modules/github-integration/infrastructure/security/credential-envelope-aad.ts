@@ -28,7 +28,6 @@ export function encodeCredentialEnvelopeAad(
       `envelopeVersion=${context.envelopeVersion}`,
       `provider=${context.provider}`,
       `providerCredentialId=${context.providerCredentialId}`,
-      `organizationId=${context.organizationId}`,
       `ownerUserId=${context.ownerUserId}`,
       `credentialVersion=${context.credentialVersion}`,
     ].join("\n"),
@@ -37,11 +36,7 @@ export function encodeCredentialEnvelopeAad(
 }
 
 function assertContext(context: CredentialStorageContext): void {
-  const ids = [
-    context.providerCredentialId,
-    context.organizationId,
-    context.ownerUserId,
-  ];
+  const ids = [context.providerCredentialId, context.ownerUserId];
   if (
     (context.provider !== CREDENTIAL_PROVIDERS.github &&
       context.provider !== CREDENTIAL_PROVIDERS.gitlab) ||

@@ -11,7 +11,6 @@ export const PROVIDER_CREDENTIAL_REPOSITORY = Symbol(
 export type ProviderCredentialRecord = {
   id: string;
   provider: CredentialProvider;
-  organizationId: string;
   ownerUserId: string;
   providerAccountId: bigint;
   providerLogin: string;
@@ -24,30 +23,29 @@ export type ProviderCredentialRecord = {
 export interface ProviderCredentialRepository {
   create(record: ProviderCredentialRecord): Promise<void>;
   deactivateActive(
-    organizationId: string,
     ownerUserId: string,
     provider: CredentialProvider,
   ): Promise<void>;
-  findByIdForOrganization(
+  findByIdForOwner(
     id: string,
-    organizationId: string,
+    ownerUserId: string,
   ): Promise<ProviderCredentialRecord | null>;
   updateLifecycle(
     id: string,
-    organizationId: string,
+    ownerUserId: string,
     status: ProviderCredentialStatus,
     safeFailureCode?: GitHubCredentialErrorCode,
   ): Promise<boolean>;
   updateVersion(
     id: string,
-    organizationId: string,
+    ownerUserId: string,
     expectedVersion: number,
     newVersion: number,
   ): Promise<boolean>;
-  markValidated(id: string, organizationId: string, at: Date): Promise<boolean>;
+  markValidated(id: string, ownerUserId: string, at: Date): Promise<boolean>;
   markUsed(
     id: string,
-    organizationId: string,
+    ownerUserId: string,
     version: number,
     at: Date,
   ): Promise<boolean>;

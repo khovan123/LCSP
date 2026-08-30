@@ -160,7 +160,6 @@ export class PrismaDatabaseCredentialStore implements CredentialStorePort {
     const row = await this.client.providerCredential.findFirst({
       where: {
         id: context.providerCredentialId,
-        organizationId: context.organizationId,
         ownerUserId: context.ownerUserId,
         provider: {
           in: [CredentialProvider.GITHUB, CredentialProvider.GITLAB],
@@ -217,7 +216,6 @@ function safePersistenceDiagnostic(error: unknown): Record<string, unknown> {
 function contextFromRow(
   row: {
     id: string;
-    organizationId: string;
     ownerUserId: string;
     provider: CredentialProvider;
   },
@@ -236,7 +234,6 @@ function contextFromRow(
   return {
     provider,
     providerCredentialId: row.id,
-    organizationId: row.organizationId,
     ownerUserId: row.ownerUserId,
     credentialVersion,
     envelopeVersion,

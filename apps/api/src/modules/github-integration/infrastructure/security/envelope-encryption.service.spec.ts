@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { createCipheriv } from "node:crypto";
 import { inspect } from "node:util";
 
 import { describe, expect, it } from "@jest/globals";
@@ -16,7 +17,6 @@ const SECRET = "recognizable-test-envelope-secret";
 const STORAGE_CONTEXT = {
   provider: CREDENTIAL_PROVIDERS.github,
   providerCredentialId: "credential-1",
-  organizationId: "organization-1",
   ownerUserId: "manager-1",
   credentialVersion: 1,
   envelopeVersion: 1,
@@ -42,6 +42,40 @@ function cloneEnvelope(
 }
 
 describe("EnvelopeEncryptionService", () => {
+  it("does not decrypt envelopes written with the legacy organization-bound AAD", async () => {
+    const key = randomBytes(32);
+    const keyProvider = provider("kek-v1", key);
+    const dek = randomBytes(32);
+    const nonce = randomBytes(12);
+    const legacyContext = `${["aadSchemaVersion=1", "layer=CREDENTIAL", "envelopeVersion=1", "provider=GITHUB", "providerCredentialId=credential-1", "organizationId=organization-1", "ownerUserId=manager-1", "credentialVersion=1"].join("\\n")}`;
+    const cipher = createCipheriv("aes-256-gcm", dek, nonce);
+    cipher.setAAD(Buffer.from(legacyContext, "utf8"));
+    const ciphertext = Buffer.concat([
+      cipher.update(Buffer.from(SECRET)),
+      cipher.final(),
+    ]);
+    const envelope = {
+      algorithm: "AES_256_GCM" as const,
+      version: 1 as const,
+      ciphertext: ciphertext.toString("base64"),
+      nonce: nonce.toString("base64"),
+      authenticationTag: cipher.getAuthTag().toString("base64"),
+      wrappedDataEncryptionKey: await keyProvider.wrapKey(
+        dek,
+        Buffer.from(
+          legacyContext.replace("layer=CREDENTIAL", "layer=DEK_WRAP"),
+          "utf8",
+        ),
+      ),
+    };
+    await expect(
+      new EnvelopeEncryptionService(keyProvider).decryptSecret(
+        envelope,
+        STORAGE_CONTEXT,
+      ),
+    ).rejects.toThrow("credential_encryption_failed");
+  });
+
   it("redacts development KEK provider inspection", () => {
     const key = Buffer.alloc(32, 7);
     const keyProvider = provider("kek-v1", key);
@@ -91,7 +125,6 @@ describe("EnvelopeEncryptionService", () => {
 
   it.each([
     ["providerCredentialId", "credential-2"],
-    ["organizationId", "organization-2"],
     ["ownerUserId", "manager-2"],
     ["credentialVersion", 2],
   ] as const)("binds encrypted data to %s", async (field, value) => {

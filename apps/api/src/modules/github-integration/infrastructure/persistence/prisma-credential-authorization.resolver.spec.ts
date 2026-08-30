@@ -13,7 +13,7 @@ import { PrismaCredentialAuthorizationResolver } from "./prisma-credential-autho
 
 const context = {
   actorId: "manager-1",
-  organizationId: "organization-1",
+  userId: "manager-1",
   assessmentId: "assessment-1",
   operation: GITHUB_CREDENTIAL_OPERATIONS.pinSnapshot,
   correlationId: "correlation-1",
@@ -22,7 +22,6 @@ const context = {
 function binding(overrides: Record<string, unknown> = {}) {
   const credential = {
     id: "credential-1",
-    organizationId: "organization-1",
     ownerUserId: "manager-1",
     status: ProviderCredentialStatus.ACTIVE,
     currentVersion: 1,
@@ -35,7 +34,6 @@ function binding(overrides: Record<string, unknown> = {}) {
   const authorization = {
     id: "authorization-1",
     providerCredentialId: credential.id,
-    organizationId: "organization-1",
     repositoryId: "100",
     repositoryFullName: "owner/repo",
     assessmentId: "assessment-1",
@@ -46,7 +44,6 @@ function binding(overrides: Record<string, unknown> = {}) {
   };
   return {
     id: "connection-1",
-    organizationId: "organization-1",
     repositoryId: "100",
     repositoryFullName: "owner/repo",
     credentialAuthorization: authorization,
@@ -70,7 +67,7 @@ function resolver(row: ReturnType<typeof binding> | null) {
 }
 
 describe("PrismaCredentialAuthorizationResolver", () => {
-  it("resolves only through a tenant/repository/assessment-bound connection", async () => {
+  it("resolves only through an account/repository/assessment-bound connection", async () => {
     const fixture = resolver(binding());
     const lease = await fixture.resolver.resolveForConnection(
       context,
@@ -83,7 +80,7 @@ describe("PrismaCredentialAuthorizationResolver", () => {
   });
 
   it.each([
-    ["cross tenant", { authorization: { organizationId: "organization-2" } }],
+    ["cross account", { credential: { ownerUserId: "other-user" } }],
     ["repository mismatch", { authorization: { repositoryId: "200" } }],
     [
       "assessment mismatch",
@@ -124,17 +121,17 @@ describe("PrismaCredentialAuthorizationResolver", () => {
     expect(fixture.read).not.toHaveBeenCalled();
   });
 
-  it("allows an already-authorized scoped Developer to consume the connection", async () => {
+  it("rejects a different account from consuming the connection", async () => {
     const fixture = resolver(
       binding({ credential: { ownerUserId: "manager-owner" } }),
     );
-    const lease = await fixture.resolver.resolveForConnection(
-      { ...context, actorId: "developer-1" },
-      "connection-1",
-      "owner/repo",
-    );
-    expect(lease.withSecret((secret) => secret)).toBe("resolved-secret");
-    lease.dispose();
+    await expect(
+      fixture.resolver.resolveForConnection(
+        { ...context, actorId: "developer-1" },
+        "connection-1",
+        "owner/repo",
+      ),
+    ).rejects.toThrow("CREDENTIAL_INVALID");
   });
 
   it("does not grant a Developer credential stewardship authority", async () => {
@@ -159,7 +156,7 @@ describe("PrismaCredentialAuthorizationResolver", () => {
       expect.objectContaining({
         where: expect.objectContaining({
           providerCredential: expect.objectContaining({
-            ownerUserId: "developer-1",
+            ownerUserId: "manager-1",
           }),
         }),
       }),
@@ -174,7 +171,7 @@ describe("PrismaCredentialAuthorizationResolver", () => {
           Promise.resolve({
             credentialAuthorization: {
               providerCredentialId: "credential-1",
-              organizationId: "organization-1",
+              authorizedByUserId: "manager-1",
               credentialVersion: 2,
             },
           }),

@@ -68,7 +68,10 @@ import {
 import { GitLabCliRepositoryProvider } from "./infrastructure/gitlab/gitlab-cli-repository.provider.js";
 import { ConfiguredRepositoryProviderRegistry } from "./infrastructure/repository-provider.registry.js";
 import { GitLabSecureArchiveHttpTransport } from "./infrastructure/gitlab/gitlab-secure-archive-http.transport.js";
-import { assertGitLabCliRuntime } from "./infrastructure/gitlab/gitlab-cli-runtime.validator.js";
+import {
+  assertGitLabCliRuntime,
+  resolveGitLabCliExecutablePath,
+} from "./infrastructure/gitlab/gitlab-cli-runtime.validator.js";
 import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
 
 /**
@@ -110,8 +113,14 @@ import { CREDENTIAL_PROVIDERS } from "@lcsp/contracts/github-integration";
               Promise.reject(new Error("gitlab_cli_unavailable")),
           };
         } else {
-          assertGitLabCliRuntime(gitlab.executablePath);
-          gitlabProvider = new GitLabCliRepositoryProvider(gitlab);
+          const executablePath = resolveGitLabCliExecutablePath(
+            gitlab.executablePath,
+          );
+          assertGitLabCliRuntime(executablePath);
+          gitlabProvider = new GitLabCliRepositoryProvider({
+            ...gitlab,
+            executablePath,
+          });
         }
         return new ConfiguredRepositoryProviderRegistry(
           new Map([
