@@ -57,6 +57,8 @@ jobs:
     env:
       LCSP_TEST_POSTGRES_PORT: 55435
       LCSP_TEST_POSTGRES_DB: lcsp_api_test
+      LCSP_TEST_POSTGRES_USER: postgres
+      LCSP_TEST_POSTGRES_PASSWORD: postgres
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55435/lcsp_api_test?schema=public
     steps:
       - uses: actions/checkout@v4
