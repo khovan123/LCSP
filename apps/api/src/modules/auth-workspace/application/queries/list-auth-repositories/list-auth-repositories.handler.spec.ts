@@ -11,7 +11,6 @@ import { ListAuthRepositoriesQuery } from "./list-auth-repositories.query.js";
 describe("ListAuthRepositoriesHandler authentication coexistence", () => {
   it("returns App and CLI connections without exposing credential internals", async () => {
     const base = {
-      organizationId: "org",
       userId: "manager",
       repositoryName: "repo",
       repositoryFullName: "owner/repo",
@@ -47,7 +46,6 @@ describe("ListAuthRepositoriesHandler authentication coexistence", () => {
       prisma as never,
     ).execute(
       new ListAuthRepositoriesQuery({
-        organizationId: "org",
         userId: "manager",
       } as never),
     );

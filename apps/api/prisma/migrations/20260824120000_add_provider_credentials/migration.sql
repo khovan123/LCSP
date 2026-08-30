@@ -5,7 +5,7 @@ CREATE TYPE "RepositoryAuthenticationMode" AS ENUM ('GITHUB_APP', 'GITHUB_CLI_CR
 
 CREATE TABLE "ProviderCredential" (
   "id" TEXT NOT NULL, "provider" "CredentialProvider" NOT NULL,
-  "organizationId" TEXT NOT NULL, "ownerUserId" TEXT NOT NULL,
+  "ownerUserId" TEXT NOT NULL,
   "providerAccountId" BIGINT NOT NULL, "providerLogin" TEXT NOT NULL,
   "status" "ProviderCredentialStatus" NOT NULL, "currentVersion" INTEGER NOT NULL,
   "declaredExpiresAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -25,7 +25,7 @@ CREATE TABLE "ProviderCredentialSecret" (
 );
 
 CREATE TABLE "CredentialAuthorization" (
-  "id" TEXT NOT NULL, "providerCredentialId" TEXT NOT NULL, "organizationId" TEXT NOT NULL,
+  "id" TEXT NOT NULL, "providerCredentialId" TEXT NOT NULL,
   "repositoryId" TEXT NOT NULL, "repositoryFullName" TEXT NOT NULL, "assessmentId" TEXT,
   "authorizedByUserId" TEXT NOT NULL, "status" "CredentialAuthorizationStatus" NOT NULL,
   "credentialVersion" INTEGER NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -39,11 +39,11 @@ UPDATE "RepositoryConnection" SET "authenticationMode" = 'GITHUB_APP' WHERE "aut
 ALTER TABLE "RepositoryConnection" ALTER COLUMN "authenticationMode" SET NOT NULL;
 ALTER TABLE "RepositoryConnection" ALTER COLUMN "authenticationMode" SET DEFAULT 'GITHUB_APP';
 
-CREATE INDEX "ProviderCredential_organizationId_ownerUserId_status_idx" ON "ProviderCredential"("organizationId", "ownerUserId", "status");
-CREATE INDEX "ProviderCredential_organizationId_provider_providerAccountId_idx" ON "ProviderCredential"("organizationId", "provider", "providerAccountId");
+CREATE INDEX "ProviderCredential_ownerUserId_status_idx" ON "ProviderCredential"("ownerUserId", "status");
+CREATE INDEX "ProviderCredential_ownerUserId_provider_providerAccountId_idx" ON "ProviderCredential"("ownerUserId", "provider", "providerAccountId");
 CREATE UNIQUE INDEX "ProviderCredentialSecret_providerCredentialId_credentialVersion_key" ON "ProviderCredentialSecret"("providerCredentialId", "credentialVersion");
 CREATE INDEX "ProviderCredentialSecret_providerCredentialId_destroyedAt_idx" ON "ProviderCredentialSecret"("providerCredentialId", "destroyedAt");
-CREATE INDEX "CredentialAuthorization_organizationId_repositoryId_status_idx" ON "CredentialAuthorization"("organizationId", "repositoryId", "status");
+CREATE INDEX "CredentialAuthorization_repositoryId_status_idx" ON "CredentialAuthorization"("repositoryId", "status");
 CREATE INDEX "CredentialAuthorization_providerCredentialId_credentialVersion_status_idx" ON "CredentialAuthorization"("providerCredentialId", "credentialVersion", "status");
 CREATE INDEX "CredentialAuthorization_assessmentId_idx" ON "CredentialAuthorization"("assessmentId");
 CREATE UNIQUE INDEX "RepositoryConnection_credentialAuthorizationId_key" ON "RepositoryConnection"("credentialAuthorizationId");
