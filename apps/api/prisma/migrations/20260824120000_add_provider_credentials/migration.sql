@@ -29,5 +29,4 @@ UPDATE "RepositoryConnection" SET "authenticationMode" = 'GITHUB_APP' WHERE "aut
 ALTER TABLE "RepositoryConnection" ALTER COLUMN "authenticationMode" SET NOT NULL;
 ALTER TABLE "RepositoryConnection" ALTER COLUMN "authenticationMode" SET DEFAULT 'GITHUB_APP';
 
-CREATE INDEX "ProviderCredential_ownerUserId_status_idx" ON "ProviderCredential"("ownerUserId", "status");
 CREATE INDEX "ProviderCredential_ownerUserId_provider_providerAccountId_idx" ON "ProviderCredential"("ownerUserId", "provider", "providerAccountId");

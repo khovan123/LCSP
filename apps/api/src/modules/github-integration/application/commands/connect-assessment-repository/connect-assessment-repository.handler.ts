@@ -100,22 +100,12 @@ export class ConnectAssessmentRepositoryHandler implements ICommandHandler<Conne
         { status: HttpStatus.BAD_REQUEST },
       );
     }
-    const metadata = await this.credentials.findMetadata({
-      userId: command.userId,
-      provider,
-    });
-    if (!metadata) {
-      throw problemException(
-        GITHUB_CREDENTIAL_ERROR_CODES.credentialRequired,
-        command.correlationId,
-        { status: HttpStatus.BAD_REQUEST },
-      );
-    }
-    const lease = await this.credentials.resolveLease({
+    const resolved = await this.credentials.resolveActiveCredential({
       userId: command.userId,
       provider,
       repositoryFullName: locator.repositoryFullName,
     });
+    const { metadata, lease } = resolved;
     try {
       const adapter = this.providers.get(provider);
       let repository: GitHubRepositoryMetadata;

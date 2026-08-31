@@ -395,7 +395,7 @@ model ProviderCredential {
   kekVersion                  String?
   repositoryConnections RepositoryConnection[]
 
-  @@index([ownerUserId, isActive])
+  @@index([ownerUserId, provider, isActive])
   @@index([ownerUserId, provider, providerAccountId])
 }
 

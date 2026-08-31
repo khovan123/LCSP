@@ -6,6 +6,7 @@ import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.
 import type {
   ActiveProviderCredentialMetadata,
   ActiveProviderCredentialResolver,
+  ResolvedActiveProviderCredential,
 } from "../../application/ports/security/active-provider-credential.resolver.js";
 import {
   CREDENTIAL_STORE,
@@ -22,6 +23,47 @@ export class PrismaActiveProviderCredentialResolver implements ActiveProviderCre
     private readonly prisma: PrismaService,
     @Inject(CREDENTIAL_STORE) private readonly store: CredentialStorePort,
   ) {}
+
+  async resolveActiveCredential(input: {
+    userId: string;
+    provider: CredentialProvider;
+    repositoryFullName: string;
+  }): Promise<ResolvedActiveProviderCredential> {
+    const row = await this.prisma.providerCredential.findFirst({
+      where: {
+        ownerUserId: input.userId,
+        provider: input.provider,
+        status: ProviderCredentialStatus.ACTIVE,
+        isActive: true,
+      },
+      orderBy: [{ validatedAt: "desc" }, { id: "desc" }],
+    });
+    if (!row || !row.ciphertext) {
+      throw new CredentialResolutionError(
+        GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid,
+      );
+    }
+    const metadata: ActiveProviderCredentialMetadata = {
+      id: row.id,
+      provider:
+        row.provider === CredentialProvider.GITLAB
+          ? CREDENTIAL_PROVIDERS.gitlab
+          : CREDENTIAL_PROVIDERS.github,
+      providerAccountId: row.providerAccountId.toString(),
+      providerLogin: row.providerLogin,
+      currentVersion: row.currentVersion,
+    };
+    const secret = await this.store.read(row.id as CredentialLocator);
+    return {
+      metadata,
+      lease: new CredentialLease(secret, {
+        internalCredentialId: row.id,
+        credentialVersion: row.currentVersion,
+        repositoryFullName: input.repositoryFullName,
+        expiresAt: new Date(Date.now() + 5 * 60_000),
+      }),
+    };
+  }
 
   async findMetadata(input: {
     userId: string;
@@ -62,28 +104,6 @@ export class PrismaActiveProviderCredentialResolver implements ActiveProviderCre
     provider: CredentialProvider;
     repositoryFullName: string;
   }): Promise<CredentialLease> {
-    const metadata = await this.findMetadata(input);
-    if (!metadata)
-      throw new CredentialResolutionError(
-        GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid,
-      );
-    const row = await this.prisma.providerCredential.findUnique({
-      where: { id: metadata.id },
-    });
-    if (
-      !row ||
-      row.currentVersion !== metadata.currentVersion ||
-      !row.ciphertext
-    )
-      throw new CredentialResolutionError(
-        GITHUB_CREDENTIAL_ERROR_CODES.credentialInvalid,
-      );
-    const secret = await this.store.read(row.id as CredentialLocator);
-    return new CredentialLease(secret, {
-      internalCredentialId: metadata.id,
-      credentialVersion: metadata.currentVersion,
-      repositoryFullName: input.repositoryFullName,
-      expiresAt: new Date(Date.now() + 5 * 60_000),
-    });
+    return (await this.resolveActiveCredential(input)).lease;
   }
 }
