@@ -99,21 +99,23 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
       try {
         await this.unitOfWork.execute(async (transaction) => {
           if (existing) {
-            const updated = await transaction.providerCredentials.updateForRotation(
-              existing.id,
-              command.userId,
-              existing.currentVersion,
-              {
-                ...existing,
-                provider: context.provider,
-                providerAccountId: BigInt(identity.id),
-                providerLogin: identity.login,
-                status: PROVIDER_CREDENTIAL_STATUSES.active,
-                currentVersion: credentialVersion,
-                validatedAt,
-              },
-            );
-            if (!updated) throw new Error("provider_credential_version_conflict");
+            const updated =
+              await transaction.providerCredentials.updateForRotation(
+                existing.id,
+                command.userId,
+                existing.currentVersion,
+                {
+                  ...existing,
+                  provider: context.provider,
+                  providerAccountId: BigInt(identity.id),
+                  providerLogin: identity.login,
+                  status: PROVIDER_CREDENTIAL_STATUSES.active,
+                  currentVersion: credentialVersion,
+                  validatedAt,
+                },
+              );
+            if (!updated)
+              throw new Error("provider_credential_version_conflict");
             await transaction.credentialStore.replace(
               existing.id as CredentialLocator,
               command.credential,
@@ -131,7 +133,10 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
               declaredExpiresAt: null,
               validatedAt,
             });
-            await transaction.credentialStore.store(command.credential, context);
+            await transaction.credentialStore.store(
+              command.credential,
+              context,
+            );
           }
         });
       } catch (error: unknown) {
@@ -143,7 +148,8 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
             provider: command.provider,
             credentialIdPresent: credentialId.length > 0,
             credentialVersion,
-            errorClass: error instanceof Error ? error.constructor.name : "Unknown",
+            errorClass:
+              error instanceof Error ? error.constructor.name : "Unknown",
             errorCode:
               typeof error === "object" && error !== null && "code" in error
                 ? String((error as { code?: unknown }).code)

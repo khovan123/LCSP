@@ -57,9 +57,15 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
       },
       orderBy: [{ validatedAt: "desc" }, { id: "desc" }],
       select: {
-        id: true, provider: true, ownerUserId: true, providerAccountId: true,
-        providerLogin: true, status: true, currentVersion: true,
-        declaredExpiresAt: true, validatedAt: true,
+        id: true,
+        provider: true,
+        ownerUserId: true,
+        providerAccountId: true,
+        providerLogin: true,
+        status: true,
+        currentVersion: true,
+        declaredExpiresAt: true,
+        validatedAt: true,
       },
     });
     return row ? toRecord(row) : null;
@@ -208,15 +214,22 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
 }
 
 function toRecord(row: {
-  id: string; provider: PrismaCredentialProvider; ownerUserId: string;
-  providerAccountId: bigint; providerLogin: string;
-  status: PrismaCredentialStatus; currentVersion: number;
-  declaredExpiresAt: Date | null; validatedAt: Date | null;
+  id: string;
+  provider: PrismaCredentialProvider;
+  ownerUserId: string;
+  providerAccountId: bigint;
+  providerLogin: string;
+  status: PrismaCredentialStatus;
+  currentVersion: number;
+  declaredExpiresAt: Date | null;
+  validatedAt: Date | null;
 }): ProviderCredentialRecord {
   return {
     id: row.id,
-    provider: row.provider === PrismaCredentialProvider.GITLAB
-      ? CREDENTIAL_PROVIDERS.gitlab : CREDENTIAL_PROVIDERS.github,
+    provider:
+      row.provider === PrismaCredentialProvider.GITLAB
+        ? CREDENTIAL_PROVIDERS.gitlab
+        : CREDENTIAL_PROVIDERS.github,
     ownerUserId: row.ownerUserId,
     providerAccountId: row.providerAccountId,
     providerLogin: row.providerLogin,

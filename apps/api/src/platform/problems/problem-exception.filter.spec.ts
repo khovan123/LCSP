@@ -55,6 +55,7 @@ describe("ProblemExceptionFilter", () => {
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
         ok: false,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         problem: expect.objectContaining({
           code: "INTERNAL_ERROR",
           requiredAction: "none",

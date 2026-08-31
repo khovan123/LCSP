@@ -22,7 +22,7 @@ describe("ConnectAssessmentRepositoryHandler credential snapshot", () => {
       repositoryFullName: "acme/example-repo",
       expiresAt: new Date(Date.now() + 60_000),
     });
-    const resolveActiveCredential = jest.fn(async () => ({
+    const resolveActiveCredential = jest.fn(() => ({
       metadata: {
         id: "credential-1",
         provider: CREDENTIAL_PROVIDERS.github,
@@ -32,12 +32,12 @@ describe("ConnectAssessmentRepositoryHandler credential snapshot", () => {
       },
       lease,
     }));
-    const findMetadata = jest.fn(async () => {
+    const findMetadata = jest.fn(() => {
       throw new Error("a second active credential lookup is not allowed");
     });
     const validationVersions: number[] = [];
     const provider = {
-      validateRepositoryAccess: jest.fn(async (receivedLease: CredentialLease) => {
+      validateRepositoryAccess: jest.fn((receivedLease: CredentialLease) => {
         validationVersions.push(receivedLease.credentialVersion);
         // A rotation may happen after resolution; the returned snapshot remains v1.
         return {
@@ -55,7 +55,7 @@ describe("ConnectAssessmentRepositoryHandler credential snapshot", () => {
         work({
           database: {
             repositoryConnection: {
-              create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+              create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
                 persisted.push(data);
                 return data;
               }),
@@ -65,13 +65,13 @@ describe("ConnectAssessmentRepositoryHandler credential snapshot", () => {
     };
     const prisma = {
       assessment: {
-        findFirst: jest.fn(async () => ({
+        findFirst: jest.fn(() => ({
           id: "assessment-1",
           status: AssessmentStatus.WIZARD_SUBMITTED,
         })),
       },
       repositoryConnection: {
-        findFirst: jest.fn(async () => null),
+        findFirst: jest.fn(() => null),
       },
     };
     const config = { get: () => ({ enabled: true }) };
@@ -85,7 +85,7 @@ describe("ConnectAssessmentRepositoryHandler credential snapshot", () => {
 
     // Rotate the underlying credential after the single snapshot has resolved.
     let currentVersion = 1;
-    resolveActiveCredential.mockImplementationOnce(async () => {
+    resolveActiveCredential.mockImplementationOnce(() => {
       const snapshot = {
         metadata: {
           id: "credential-1",

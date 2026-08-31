@@ -115,7 +115,7 @@ function toProblemResult(
     };
   }
 
-  if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+  if (status >= Number(HttpStatus.INTERNAL_SERVER_ERROR)) {
     return internalServerProblem(correlationId);
   }
 
