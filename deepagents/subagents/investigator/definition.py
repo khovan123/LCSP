@@ -58,6 +58,7 @@ Boundary rules:
 Output contract:
 Return exactly one JSON object matching `InvestigatorResult`:
 - `status`: READY or NEEDS_INPUT
+- `artifact_versions`: unchanged pinned artifact versions for this investigation
 - `claims`: criterion-scoped technical claims in the existing EvidenceClaim shape
 - `limitations`: bounded coverage/unresolved-frontier limitation codes
 - `missing_input`: the exact fact requiring Resolver when NEEDS_INPUT

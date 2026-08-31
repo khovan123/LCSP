@@ -192,8 +192,7 @@ class RootSubagentDispatcher:
                 "managed root agent is required for root re-entry; "
                 "call with reenter_root=False for explicit direct dispatch"
             )
-        definition = self._subagents.get(subagent_type)
-        if definition is None:
+        if subagent_type not in self._subagents:
             raise ValueError(f"unknown LCSP subagent type: {subagent_type}")
 
         root_thread_id = (
@@ -221,25 +220,6 @@ class RootSubagentDispatcher:
             config=config,
             context=context,
         )
-        response_format = definition.get("response_format")
-        validation_graph = None
-        if (
-            subagent_type == "investigator"
-            and context is not None
-            and self._program_graph_loader is not None
-        ):
-            validation_graph = self._program_graph_loader(context, dict(metadata or {}))
-        handoff = self._validated_handoff(
-            subagent_type=subagent_type,
-            response_format=response_format,
-            invocation_result=result,
-            graph=validation_graph,
-            pinned_rule_ids=tuple(affected_rule_ids or ()),
-            pinned_versions=dict(
-                (context.artifact_versions if context is not None else {})
-                or (metadata or {}).get("artifact_versions", {})
-            ),
-        )
         return {
             "status": "ROOT_REENTERED",
             "subagentType": subagent_type,
@@ -250,7 +230,6 @@ class RootSubagentDispatcher:
                 "enabled": bool(root_thread_id),
             },
             "result": result,
-            "handoff": handoff,
             "episode": {"captured": False},
         }
 

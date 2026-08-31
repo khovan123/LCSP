@@ -316,6 +316,7 @@ def test_root_agent_uses_managed_instructions_context_and_todos() -> None:
     assert "context_schema=LCSPRunContext" in source
     assert "TodoListMiddleware()" in source
     assert "inject_lcsp_runtime_context" in source
+    assert "validate_lcsp_specialist_task_handoff" in source
     assert "MODEL_GOVERNANCE_MIDDLEWARE" in source
 
     assert "LEGAL_MAINTENANCE" in instructions
