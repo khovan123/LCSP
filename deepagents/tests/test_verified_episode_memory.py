@@ -9,6 +9,7 @@ from memory_policy.episodes import (
     EpisodeStoreError,
     JsonlVerifiedEpisodeStore,
     build_verified_episode,
+    capture_verified_episode,
     consolidate_verified_episodes,
 )
 from memory_policy.models import VerifiedEpisode
@@ -79,6 +80,16 @@ def test_verified_episode_missing_trust_metadata_fails_closed() -> None:
     missing_trust.pop("trust_level")
     with pytest.raises(EpisodeStoreError, match="trust_level is required"):
         VerifiedEpisode.from_dict(missing_trust)
+
+
+def test_capture_verified_episode_requires_auditable_provenance_metadata() -> None:
+    with pytest.raises(EpisodeStoreError, match="requires prompt_version"):
+        capture_verified_episode(
+            owner_agent="investigator",
+            handoff={"status": "DETERMINISTIC_OUTCOME_READY", "claims": []},
+            assessment_id="assessment-1",
+            user_id="user-1",
+        )
 
 
 def test_retrieve_verified_episodes_tool_is_disabled_by_default(monkeypatch) -> None:

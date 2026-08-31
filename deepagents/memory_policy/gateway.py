@@ -280,7 +280,21 @@ def capture_verified_episode(
     user_id: str | None = None,
     engineering_rule_ids: tuple[str, ...] = (),
     artifact_versions: dict[str, str] | None = None,
+    domain_key: str | None = None,
+    input_signature: str | None = None,
+    successful_strategy_summary: str | None = None,
+    evidence_refs: tuple[str, ...] = (),
+    prompt_version: str | None = None,
+    model_id: str | None = None,
 ) -> VerifiedEpisode | None:
+    if not prompt_version:
+        raise EpisodeStoreError("verified episode capture requires prompt_version.")
+    if not model_id:
+        raise EpisodeStoreError("verified episode capture requires model_id.")
+    if not successful_strategy_summary:
+        raise EpisodeStoreError(
+            "verified episode capture requires successful_strategy_summary."
+        )
     episode = build_verified_episode(
         owner_agent=owner_agent,
         handoff=handoff,
@@ -289,6 +303,12 @@ def capture_verified_episode(
         user_id=user_id,
         engineering_rule_ids=engineering_rule_ids,
         artifact_versions=artifact_versions,
+        domain_key=domain_key,
+        input_signature=input_signature,
+        successful_strategy_summary=successful_strategy_summary,
+        evidence_refs=evidence_refs,
+        prompt_version=prompt_version,
+        model_id=model_id,
     )
     if episode_backend() == "api":
         if not user_id:

@@ -623,6 +623,7 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 engineering_rule=engineering_rule,
                 claims=rule_claims,
                 evaluation=evaluation,
+                graph=graph,
                 evidence_report=evidence_report,
                 workflow_run_id=workflow_run_id,
                 assessment_id=assessment_id,

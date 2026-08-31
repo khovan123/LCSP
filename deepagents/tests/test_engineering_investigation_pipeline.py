@@ -21,9 +21,23 @@ def _evidence_report() -> dict:
                 "graph_id": "graph-1",
                 "snapshot_id": "snapshot-1",
                 "commit_sha": "abc123",
-                "node_count": 0,
+                "node_count": 1,
                 "edge_count": 0,
-                "nodes": [],
+                "nodes": [
+                    {
+                        "node_id": "node:review-control",
+                        "node_type": "CONTROL",
+                        "label": "human oversight review controls",
+                        "source": {
+                            "file_path": "app/review.py",
+                            "start_line": 10,
+                            "end_line": 20,
+                            "symbol_ref": "review_control",
+                            "source_hash": "sha256:source",
+                        },
+                        "evidence_refs": ["evidence:finding-1"],
+                    }
+                ],
                 "edges": [],
                 "source_anchors": [],
                 "indexes": {},
@@ -31,7 +45,7 @@ def _evidence_report() -> dict:
                 "coverage_state": "SUFFICIENT",
                 "coverage_notes": [],
                 "provenance": {"scan_job_id": "scan-1"},
-                "evidence_refs": [],
+                "evidence_refs": ["evidence:finding-1"],
                 "graph_hash": "sha256:graph",
                 "schema_version": "2.0.0",
             }
@@ -85,6 +99,7 @@ def test_pipeline_returns_direct_compliant_rule_evaluation() -> None:
         value=True,
         evidence_refs=("evidence:finding-1",),
         confidence=0.95,
+        criterion="HUMAN_OVERSIGHT",
     )
     investigator = MagicMock()
     investigator.investigate.return_value = [claim]
@@ -143,9 +158,18 @@ def test_pipeline_captures_verified_episode_after_deterministic_evaluation(
         value=True,
         evidence_refs=("evidence:finding-1",),
         confidence=0.95,
+        criterion="HUMAN_OVERSIGHT",
+    )
+    unvalidated_claim = EvidenceClaim(
+        claim_id="claim-unvalidated",
+        engineering_rule_id="eng-1",
+        claim_type="UNRESOLVED_ENGINEERING_FACT",
+        value=None,
+        evidence_refs=(),
+        confidence=0.0,
     )
     investigator = MagicMock()
-    investigator.investigate.return_value = [claim]
+    investigator.investigate.return_value = [claim, unvalidated_claim]
 
     EngineeringInvestigationPipeline(
         api_client=api_client,
@@ -172,6 +196,17 @@ def test_pipeline_captures_verified_episode_after_deterministic_evaluation(
         "legalCorpusVersionId": "corpus-v1",
     }
     assert captured[0]["handoff"]["status"] == "DETERMINISTIC_OUTCOME_READY"
+    assert [item["claim_id"] for item in captured[0]["handoff"]["claims"]] == [
+        "claim-1"
+    ]
+    assert captured[0]["handoff"]["omitted_unvalidated_claim_count"] == 1
+    assert captured[0]["prompt_version"] == "engineering-rule-investigation.v1"
+    assert captured[0]["model_id"] == "test:model"
+    assert captured[0]["successful_strategy_summary"] == (
+        "validated engineering investigation rule=eng-1 outcome=COMPLIANT "
+        "validated_claims=1 evidence_refs=1"
+    )
+    assert captured[0]["evidence_refs"] == ("evidence:finding-1",)
 
 
 def test_pipeline_does_not_capture_episode_after_investigator_failure(
