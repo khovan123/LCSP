@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from contracts.handoffs import InvestigatorResult, TriageResult
-from memory_policy import episodes
 from orchestration.context import LCSPRunContext
 from orchestration.dispatcher import RootSubagentDispatcher
 from orchestration.lifecycle import RootSubagentReservation
@@ -140,7 +139,22 @@ def test_root_dispatcher_owns_triage_begin_and_complete_transitions() -> None:
 
 def test_root_dispatcher_prefers_reentering_managed_root_thread() -> None:
     root = MagicMock()
-    root.invoke.return_value = {"messages": [{"role": "assistant", "content": "queued"}]}
+    root.invoke.return_value = {
+        "structured_response": {
+            "status": "READY",
+            "triage_execution_id": "triage:owner",
+            "trigger": "ENGINEERING_RULE_NOT_READY",
+            "idempotency_key": "legal-triage:key",
+            "legal_rule_catalog_version_id": "catalog-1",
+            "legal_corpus_version_id": "corpus-1",
+            "triaged_rule_ids": ["RULE-1"],
+            "candidate_chunk_ids": ["chunk-1"],
+            "context_only_chunk_ids": [],
+            "rejected_chunk_ids": [],
+            "engineering_rule_ids": ["ENG-1"],
+            "limitations": [],
+        }
+    }
     lifecycle = MagicMock()
     factory = MagicMock()
     dispatcher = RootSubagentDispatcher(
@@ -168,10 +182,59 @@ def test_root_dispatcher_prefers_reentering_managed_root_thread() -> None:
     assert result["status"] == "ROOT_REENTERED"
     assert result["rootReentry"] is True
     assert result["checkpointing"] == {"threadId": "workflow-1", "enabled": True}
+    assert result["handoff"]["engineering_rule_ids"] == ["ENG-1"]
+    assert result["episode"] == {"captured": False}
     factory.assert_not_called()
     lifecycle.reserve_subagent.assert_not_called()
     root.invoke.assert_called_once()
     assert root.invoke.call_args.kwargs["context"] is context
+
+
+def test_root_reentry_validates_investigator_handoff_on_managed_path() -> None:
+    root = MagicMock()
+    root.invoke.return_value = {
+        "structured_response": {
+            "status": "READY",
+            "artifact_versions": {"technicalEvidenceReportId": "ter-1"},
+            "claims": [
+                {
+                    "claim_id": "claim-1",
+                    "engineering_rule_id": "ENG-1",
+                    "claim_type": "UNRESOLVED_ENGINEERING_FACT",
+                    "value": None,
+                    "evidence_refs": [],
+                    "graph_path_refs": ["node:missing"],
+                    "source_anchor_refs": [],
+                    "confidence": 0.9,
+                    "limitations": [],
+                    "criterion": "AI invocation exists",
+                }
+            ],
+            "limitations": [],
+            "missing_input": None,
+            "next_step": "GATE",
+        }
+    }
+    dispatcher = RootSubagentDispatcher(
+        lifecycle=MagicMock(),
+        root_agent=root,
+        subagents={"investigator": _investigator_definition()},
+        program_graph_loader=lambda _context, _metadata: _program_graph(),
+    )
+    context = LCSPRunContext(
+        assessment_id="assessment-1",
+        user_id="user-1",
+        workflow_run_id="workflow-1",
+        artifact_versions={"technicalEvidenceReportId": "ter-1"},
+    )
+
+    with pytest.raises(RuntimeError, match="evidence-claim"):
+        dispatcher.dispatch(
+            subagent_type="investigator",
+            instruction="Investigate one pinned rule.",
+            affected_rule_ids=["ENG-1"],
+            context=context,
+        )
 
 
 def test_root_dispatcher_requires_managed_root_for_default_reentry() -> None:
@@ -341,12 +404,7 @@ def test_direct_investigator_hydrates_program_graph_from_pinned_api_metadata() -
     api_client.get_accepted_technical_evidence_report.assert_called_once_with("ter-1")
 
 
-def test_root_dispatcher_captures_verified_episode_when_configured(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    capture_path = tmp_path / "episodes.jsonl"
-    monkeypatch.setenv(episodes.CAPTURE_PATH_ENV, str(capture_path))
+def test_root_dispatcher_does_not_auto_promote_verified_episode() -> None:
     lifecycle = MagicMock()
     reservation = RootSubagentReservation(
         subagent_type="triage",
@@ -393,12 +451,7 @@ def test_root_dispatcher_captures_verified_episode_when_configured(
         reenter_root=False,
     )
 
-    assert result["episode"]["captured"] is True
-    stored = episodes.JsonlVerifiedEpisodeStore(capture_path).read_all()
-    assert len(stored) == 1
-    assert stored[0].workflow_run_id == "workflow-1"
-    assert stored[0].assessment_id == "assessment-1"
-    assert stored[0].engineering_rule_ids == ("RULE-1",)
+    assert result["episode"] == {"captured": False}
 
 
 def test_root_dispatcher_does_not_create_second_triage_when_policy_reports_running() -> None:

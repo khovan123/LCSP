@@ -15,8 +15,6 @@ from langchain.agents import create_agent
 
 from subagents import FLOW_SUBAGENTS
 
-from memory_policy.episodes import capture_verified_episode
-
 from .context import LCSPRunContext
 from .lifecycle import RootOrchestrationLifecycle
 from .result_validation import validate_specialist_handoff
@@ -162,33 +160,6 @@ class RootSubagentDispatcher:
             raise
 
         completion = self._lifecycle.complete_subagent(reservation)
-        captured_episode = None
-        if handoff is not None:
-            captured_episode = capture_verified_episode(
-                owner_agent=subagent_type,
-                handoff=handoff,
-                workflow_run_id=(
-                    context.workflow_run_id if context is not None else thread_id
-                ),
-                assessment_id=(
-                    context.assessment_id
-                    if context is not None
-                    else (metadata or {}).get("assessment_id")
-                ),
-                user_id=(
-                    context.user_id
-                    if context is not None
-                    else (metadata or {}).get("user_id")
-                ),
-                engineering_rule_ids=tuple(affected_rule_ids or ()),
-                artifact_versions={
-                    str(key): str(value)
-                    for key, value in (
-                        (context.artifact_versions if context is not None else None)
-                        or (metadata or {}).get("artifact_versions", {})
-                    ).items()
-                },
-            )
         return {
             "status": "COMPLETED",
             "subagentType": subagent_type,
@@ -200,14 +171,7 @@ class RootSubagentDispatcher:
                 "threadId": thread_id,
                 "enabled": bool(thread_id and self._enable_thread_checkpointing),
             },
-            "episode": (
-                {
-                    "recordId": captured_episode.record_id,
-                    "captured": True,
-                }
-                if captured_episode is not None
-                else {"captured": False}
-            ),
+            "episode": {"captured": False},
         }
 
     def _dispatch_via_root(
@@ -228,6 +192,9 @@ class RootSubagentDispatcher:
                 "managed root agent is required for root re-entry; "
                 "call with reenter_root=False for explicit direct dispatch"
             )
+        definition = self._subagents.get(subagent_type)
+        if definition is None:
+            raise ValueError(f"unknown LCSP subagent type: {subagent_type}")
 
         root_thread_id = (
             context.workflow_run_id if context is not None and context.workflow_run_id else thread_id
@@ -254,6 +221,25 @@ class RootSubagentDispatcher:
             config=config,
             context=context,
         )
+        response_format = definition.get("response_format")
+        validation_graph = None
+        if (
+            subagent_type == "investigator"
+            and context is not None
+            and self._program_graph_loader is not None
+        ):
+            validation_graph = self._program_graph_loader(context, dict(metadata or {}))
+        handoff = self._validated_handoff(
+            subagent_type=subagent_type,
+            response_format=response_format,
+            invocation_result=result,
+            graph=validation_graph,
+            pinned_rule_ids=tuple(affected_rule_ids or ()),
+            pinned_versions=dict(
+                (context.artifact_versions if context is not None else {})
+                or (metadata or {}).get("artifact_versions", {})
+            ),
+        )
         return {
             "status": "ROOT_REENTERED",
             "subagentType": subagent_type,
@@ -264,6 +250,8 @@ class RootSubagentDispatcher:
                 "enabled": bool(root_thread_id),
             },
             "result": result,
+            "handoff": handoff,
+            "episode": {"captured": False},
         }
 
     @staticmethod

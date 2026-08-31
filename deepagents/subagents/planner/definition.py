@@ -46,7 +46,6 @@ Return exactly one JSON object matching `PlannerResult`:
 - `engineering_rule_ids`: the unchanged supplied rule identifiers
 - `coverage_state`: COMPLETE, LIMITED, OUT_OF_COVERAGE, or UNKNOWN for the overall selected scope
 - `selected_scope`: criterion-scoped graph seeds with `ref`, `criterion`, and optional `rationale`
-- `coverage`: bounded scan/graph coverage items with `scope_ref`, `coverage_state`, and limitation codes
 - `unresolved_facts`: exact missing facts, required when NEEDS_INPUT
 - `next_step`: INVESTIGATE when ready, otherwise RESOLVE
 
