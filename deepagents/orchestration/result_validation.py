@@ -22,17 +22,13 @@ class SpecialistHandoffValidationError(RuntimeError):
 
 
 FORBIDDEN_FINAL_VERDICTS = frozenset({"COMPLIANT", "NON_COMPLIANT", "UNKNOWN"})
-CONTROLLED_NON_VERDICT_FIELDS = frozenset(
+CONTROLLED_NON_VERDICT_PATHS = frozenset(
     {
-        "coverage_state",
-        "coverageState",
-        "status",
-        "next_step",
-        "nextStep",
-        "claim_type",
-        "claimType",
-        "source_kind",
-        "sourceKind",
+        ("status",),
+        ("coverage_state",),
+        ("coverageState",),
+        ("next_step",),
+        ("nextStep",),
     }
 )
 
@@ -48,8 +44,20 @@ def _response_model(subagent_type: str) -> type[BaseModel]:
         ) from exc
 
 
-def _assert_no_final_verdict(value: Any, *, field_name: str | None = None) -> None:
-    if field_name in CONTROLLED_NON_VERDICT_FIELDS:
+def _is_controlled_non_verdict_path(path: tuple[str, ...]) -> bool:
+    if path in CONTROLLED_NON_VERDICT_PATHS:
+        return True
+    if path[-1:] in {("claim_type",), ("claimType",)} and "claims" in path:
+        return True
+    if path[-1:] in {("source",)} and "conflicting_values" in path:
+        return True
+    if path[-1:] in {("source_kind",), ("sourceKind",)}:
+        return True
+    return False
+
+
+def _assert_no_final_verdict(value: Any, *, path: tuple[str, ...] = ()) -> None:
+    if path and _is_controlled_non_verdict_path(path):
         return
     if isinstance(value, str):
         tokens = {
@@ -64,11 +72,11 @@ def _assert_no_final_verdict(value: Any, *, field_name: str | None = None) -> No
         return
     if isinstance(value, dict):
         for key, child in value.items():
-            _assert_no_final_verdict(child, field_name=str(key))
+            _assert_no_final_verdict(child, path=(*path, str(key)))
         return
     if isinstance(value, (list, tuple, set)):
         for child in value:
-            _assert_no_final_verdict(child, field_name=field_name)
+            _assert_no_final_verdict(child, path=path)
 
 
 def validate_specialist_handoff(

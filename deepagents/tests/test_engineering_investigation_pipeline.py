@@ -172,6 +172,57 @@ def test_pipeline_captures_verified_episode_after_deterministic_evaluation(
     assert captured[0]["handoff"]["status"] == "DETERMINISTIC_OUTCOME_READY"
 
 
+def test_pipeline_does_not_capture_episode_after_investigator_failure(
+    monkeypatch,
+) -> None:
+    captured = []
+    monkeypatch.setattr(
+        pipeline,
+        "capture_verified_episode",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    api_client = _api_client()
+    engineering_rule = _rule()
+    rule_service = MagicMock()
+    rule_service.get_or_compile.return_value = ([engineering_rule], True)
+    query_executor = MagicMock()
+    query_executor.execute.return_value = InvestigationPacket(
+        engineering_rule_id="eng-1",
+        concept="HUMAN_OVERSIGHT",
+        investigation_goals=("Find review controls",),
+        initial_results=(),
+    )
+    investigator = MagicMock()
+    investigator.investigate.side_effect = RuntimeError("model failed")
+    evaluator = MagicMock()
+    evaluator.evaluate.return_value = SimpleNamespace(
+        engineering_rule_id="eng-1",
+        status="UNKNOWN",
+        evidence_refs=(),
+    )
+
+    result = EngineeringInvestigationPipeline(
+        api_client=api_client,
+        model="test:model",
+        retriever=MagicMock(),
+        rule_service=rule_service,
+        query_executor=query_executor,
+        investigator=investigator,
+        evaluator=evaluator,
+    ).run(
+        evidence_report=_evidence_report(),
+        workflow_run_id="workflow-1",
+        assessment_id="assessment-1",
+        user_id="user-1",
+    )
+
+    assert result.status == "PARTIAL"
+    assert result.claims[0].limitations == (
+        ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"],
+    )
+    assert captured == []
+
+
 def test_pipeline_treats_unknown_as_valid_complete_evaluation() -> None:
     api_client = _api_client()
     engineering_rule = _rule()

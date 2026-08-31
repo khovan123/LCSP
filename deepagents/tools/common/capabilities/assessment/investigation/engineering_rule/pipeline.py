@@ -373,7 +373,14 @@ class EngineeringInvestigationPipeline:
             or evidence_report.get("technical_evidence_report_id")
             or ""
         )
-        if not assessment_id or not user_id or not evidence_report_id:
+        if (
+            not assessment_id
+            or not user_id
+            or not evidence_report_id
+            or not EngineeringInvestigationPipeline._is_verified_episode_capture_eligible(
+                claims
+            )
+        ):
             return
         try:
             capture_verified_episode(
@@ -399,6 +406,18 @@ class EngineeringInvestigationPipeline:
                 error_type=type(error).__name__,
                 workflow_run_id=workflow_run_id,
             )
+
+    @staticmethod
+    def _is_verified_episode_capture_eligible(claims: list[EvidenceClaim]) -> bool:
+        if not claims:
+            return False
+        failed_code = ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+        for claim in claims:
+            if claim.claim_id.startswith("claim:failed:"):
+                return False
+            if failed_code in claim.limitations:
+                return False
+        return True
 
     @staticmethod
     def _technical_evidence_displays(

@@ -168,3 +168,40 @@ def test_planner_handoff_allows_unknown_coverage_state() -> None:
     )
 
     assert handoff.coverage_state == "UNKNOWN"
+
+
+def test_resolver_handoff_allows_unknown_conflict_source() -> None:
+    handoff = validate_specialist_handoff(
+        "resolver",
+        {
+            "status": "CONFLICT",
+            "fact_key": "business_context.ai_usage_scope",
+            "resolved_value": None,
+            "conflicting_values": [
+                {
+                    "source": "UNKNOWN",
+                    "value": "unresolved business context",
+                    "source_refs": [],
+                }
+            ],
+            "source_refs": [],
+            "can_resume_existing_plan": False,
+        },
+    )
+
+    assert handoff.conflicting_values[0].source == "UNKNOWN"
+
+
+def test_resolver_handoff_rejects_nested_final_verdict_in_free_value() -> None:
+    with pytest.raises(SpecialistHandoffValidationError, match="forbidden"):
+        validate_specialist_handoff(
+            "resolver",
+            {
+                "status": "RESOLVED",
+                "fact_key": "business_context.ai_usage_scope",
+                "resolved_value": {"status": "COMPLIANT"},
+                "conflicting_values": [],
+                "source_refs": [],
+                "can_resume_existing_plan": True,
+            },
+        )
