@@ -203,7 +203,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
     }),
   });
 
-  it("binds historical connections to A and new connections to B", async () => {
+  it("keeps historical connections on the stable credential and versions new ones", async () => {
     await configure.execute(configureCommand("synthetic-provenance-a"));
     await createAssessment("provenance-a1");
     const first = await connect.execute(connectCommand("provenance-a1"));
@@ -225,6 +225,7 @@ run("ConnectAssessmentRepository credential provenance", () => {
       where: { id: first.connectionId },
     });
     expect(historical.providerCredentialId).toBe(credentialA);
+    expect(historical.credentialVersion).toBe(1);
 
     await createAssessment("provenance-a2");
     const second = await connect.execute(connectCommand("provenance-a2"));
@@ -232,7 +233,8 @@ run("ConnectAssessmentRepository credential provenance", () => {
       await prisma.repositoryConnection.findUniqueOrThrow({
         where: { id: second.connectionId },
       });
-    expect(secondConnection.providerCredentialId).not.toBe(credentialA);
+    expect(secondConnection.providerCredentialId).toBe(credentialA);
+    expect(secondConnection.credentialVersion).toBe(2);
     expect(secondConnection.providerCredentialId).toBe(
       (
         await prisma.providerCredential.findFirstOrThrow({

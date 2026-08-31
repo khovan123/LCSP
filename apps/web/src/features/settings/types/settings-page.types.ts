@@ -70,5 +70,5 @@ export type SessionsSettingsSectionProps = {
 
 export type RepositoriesSettingsSectionProps = {
   providerCredentialStatuses?: ProviderCredentialStatus[];
-  onReauthenticate?: () => void;
+  onReauthenticate?: (retry: () => void) => void;
 };

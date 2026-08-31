@@ -10,10 +10,7 @@ const queriesPath = new URL(
   "../src/lib/api/github-repository-queries.ts",
   import.meta.url,
 );
-const queryKeysPath = new URL(
-  "../src/lib/api/query-keys.ts",
-  import.meta.url,
-);
+const queryKeysPath = new URL("../src/lib/api/query-keys.ts", import.meta.url);
 
 async function source() {
   return readFile(componentPath, "utf8");
@@ -49,9 +46,8 @@ test("initial configure and rotation refresh the shared provider credential stat
     /providerCredentials:\s*\(\)\s*=>\s*\["provider-credentials"\]\s*as const/,
   );
   assert.equal(
-    queries.match(
-      /apiQueryKeys\.githubIntegration\.providerCredentials\(\)/g,
-    )?.length,
+    queries.match(/apiQueryKeys\.githubIntegration\.providerCredentials\(\)/g)
+      ?.length,
     2,
   );
   assert.match(
@@ -62,10 +58,16 @@ test("initial configure and rotation refresh the shared provider credential stat
 
 test("successful credential submission clears the plaintext PAT without exposing it", async () => {
   const component = await source();
-  assert.match(
-    component,
-    /onSuccess:\s*\(\)\s*=>\s*{\s*setCredential\(""\)/,
-  );
+  assert.match(component, /onSuccess:\s*\(\)\s*=>\s*{\s*setCredential\(""\)/);
   assert.match(component, /type="password"/);
   assert.doesNotMatch(component, /setCredential\([^"e]/);
+});
+
+test("reauthentication retries the pending credential update", async () => {
+  const component = await source();
+  assert.match(component, /onReauthenticate\?\.\(\(\)\s*=>\s*{/);
+  assert.match(
+    component,
+    /queueMicrotask\(\(\)\s*=>\s*{[\s\S]*?mutation\.mutate\(\{\s*provider,\s*credential\s*\}\)/,
+  );
 });

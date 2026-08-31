@@ -48,7 +48,11 @@ export function RepositoriesSettingsSection({
           ) {
             setCredential("");
             setReauthRequired(true);
-            onReauthenticate?.();
+            onReauthenticate?.(() => {
+              queueMicrotask(() => {
+                mutation.mutate({ provider, credential });
+              });
+            });
           }
         },
       },

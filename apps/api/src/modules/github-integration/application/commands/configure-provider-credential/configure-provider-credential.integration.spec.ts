@@ -113,9 +113,10 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
       where: { ownerUserId: "integration-user" },
       orderBy: { createdAt: "asc" },
     });
-    expect(rows).toHaveLength(2);
-    expect(rows.find((row) => row.id === first.id)?.isActive).toBe(false);
-    const replacement = rows.find((row) => row.id !== first.id)!;
+    expect(rows).toHaveLength(1);
+    const replacement = rows[0];
+    expect(replacement.id).toBe(first.id);
+    expect(replacement.currentVersion).toBe(2);
     expect(replacement.isActive).toBe(true);
     expect(await activeCount()).toBe(1);
     await expect(
@@ -123,7 +124,7 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
         userId: "integration-user",
         provider: CredentialProvider.GITLAB,
       }),
-    ).resolves.toMatchObject({ id: replacement.id });
+    ).resolves.toMatchObject({ id: first.id, currentVersion: 2 });
   });
 
   it("keeps the existing active credential when identity validation fails", async () => {
@@ -203,6 +204,9 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
   });
 
   it("treats same-secret resubmission as a retained-row rotation", async () => {
+    await prisma.providerCredential.deleteMany({
+      where: { ownerUserId: "same-secret-user" },
+    });
     await handler.execute(
       new ConfigureProviderCredentialCommand(
         "same-secret-user",
@@ -230,9 +234,10 @@ run("ConfigureProviderCredential Prisma replacement integration", () => {
       where: { ownerUserId: "same-secret-user" },
       orderBy: { createdAt: "asc" },
     });
-    expect(rows).toHaveLength(2);
-    expect(rows.find((row) => row.id === first.id)?.isActive).toBe(false);
-    expect(rows.filter((row) => row.isActive)).toHaveLength(1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(first.id);
+    expect(rows[0].currentVersion).toBe(first.currentVersion + 1);
+    expect(rows[0].isActive).toBe(true);
   });
 
   it("rolls back deactivation when secret persistence fails", async () => {

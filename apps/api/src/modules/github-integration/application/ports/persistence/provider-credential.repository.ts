@@ -22,6 +22,18 @@ export type ProviderCredentialRecord = {
 
 export interface ProviderCredentialRepository {
   create(record: ProviderCredentialRecord): Promise<void>;
+  findActiveByOwnerProvider(
+    ownerUserId: string,
+    provider: CredentialProvider,
+  ): Promise<ProviderCredentialRecord | null>;
+  updateForRotation(
+    id: string,
+    ownerUserId: string,
+    expectedVersion: number,
+    record: Omit<ProviderCredentialRecord, "id" | "currentVersion"> & {
+      currentVersion: number;
+    },
+  ): Promise<boolean>;
   deactivateActive(
     ownerUserId: string,
     provider: CredentialProvider,

@@ -45,6 +45,50 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
     });
   }
 
+  async findActiveByOwnerProvider(
+    ownerUserId: string,
+    provider: CredentialProvider,
+  ): Promise<ProviderCredentialRecord | null> {
+    const row = await this.client.providerCredential.findFirst({
+      where: {
+        ownerUserId,
+        provider: toPrismaCredentialProvider(provider),
+        isActive: true,
+      },
+      orderBy: [{ validatedAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true, provider: true, ownerUserId: true, providerAccountId: true,
+        providerLogin: true, status: true, currentVersion: true,
+        declaredExpiresAt: true, validatedAt: true,
+      },
+    });
+    return row ? toRecord(row) : null;
+  }
+
+  async updateForRotation(
+    id: string,
+    ownerUserId: string,
+    expectedVersion: number,
+    record: Omit<ProviderCredentialRecord, "id" | "currentVersion"> & {
+      currentVersion: number;
+    },
+  ): Promise<boolean> {
+    const result = await this.client.providerCredential.updateMany({
+      where: { id, ownerUserId, currentVersion: expectedVersion },
+      data: {
+        providerAccountId: record.providerAccountId,
+        providerLogin: record.providerLogin,
+        status: toCredentialStatus(record.status),
+        currentVersion: record.currentVersion,
+        isActive: true,
+        validatedAt: record.validatedAt,
+        invalidatedAt: null,
+        lastFailureCode: null,
+      },
+    });
+    return result.count === 1;
+  }
+
   async deactivateActive(
     ownerUserId: string,
     provider: CredentialProvider,
@@ -161,6 +205,26 @@ export class PrismaProviderCredentialRepository implements ProviderCredentialRep
       ).count === 1
     );
   }
+}
+
+function toRecord(row: {
+  id: string; provider: PrismaCredentialProvider; ownerUserId: string;
+  providerAccountId: bigint; providerLogin: string;
+  status: PrismaCredentialStatus; currentVersion: number;
+  declaredExpiresAt: Date | null; validatedAt: Date | null;
+}): ProviderCredentialRecord {
+  return {
+    id: row.id,
+    provider: row.provider === PrismaCredentialProvider.GITLAB
+      ? CREDENTIAL_PROVIDERS.gitlab : CREDENTIAL_PROVIDERS.github,
+    ownerUserId: row.ownerUserId,
+    providerAccountId: row.providerAccountId,
+    providerLogin: row.providerLogin,
+    status: fromCredentialStatus(row.status),
+    currentVersion: row.currentVersion,
+    declaredExpiresAt: row.declaredExpiresAt,
+    validatedAt: row.validatedAt,
+  };
 }
 
 function toPrismaCredentialProvider(

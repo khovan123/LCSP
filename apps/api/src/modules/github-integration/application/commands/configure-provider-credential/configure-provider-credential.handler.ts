@@ -1,4 +1,4 @@
-import { HttpStatus, Inject } from "@nestjs/common";
+import { HttpStatus, Inject, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CommandHandler, type ICommandHandler } from "@nestjs/cqrs";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
@@ -18,7 +18,10 @@ import {
   type GitHubRepositoryProviderPort,
   type RepositoryProviderRegistry,
 } from "../../ports/github-repository-provider.port.js";
-import type { CredentialStorageContext } from "../../ports/security/credential-store.port.js";
+import type {
+  CredentialLocator,
+  CredentialStorageContext,
+} from "../../ports/security/credential-store.port.js";
 import { CredentialLease } from "../../security/credential-lease.js";
 import {
   assertCredential,
@@ -26,11 +29,11 @@ import {
 } from "../github-cli-connect.support.js";
 import { ConfigureProviderCredentialCommand } from "./configure-provider-credential.command.js";
 
-const CREDENTIAL_VERSION = 1;
 const ENVELOPE_VERSION = 1;
 
 @CommandHandler(ConfigureProviderCredentialCommand)
 export class ConfigureProviderCredentialHandler implements ICommandHandler<ConfigureProviderCredentialCommand> {
+  private readonly logger = new Logger(ConfigureProviderCredentialHandler.name);
   constructor(
     @Inject(GITHUB_REPOSITORY_PROVIDER)
     private readonly fallbackProvider: GitHubRepositoryProviderPort,
@@ -64,10 +67,17 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
     }
     const provider =
       this.registry.get(command.provider) ?? this.fallbackProvider;
-    const credentialId = crypto.randomUUID();
+    const existing = await this.unitOfWork.execute((transaction) =>
+      transaction.providerCredentials.findActiveByOwnerProvider(
+        command.userId,
+        command.provider as CredentialStorageContext["provider"],
+      ),
+    );
+    const credentialId = existing?.id ?? crypto.randomUUID();
+    const credentialVersion = existing ? existing.currentVersion + 1 : 1;
     const lease = new CredentialLease(command.credential, {
       internalCredentialId: credentialId,
-      credentialVersion: CREDENTIAL_VERSION,
+      credentialVersion,
       repositoryFullName: "provider-account",
       expiresAt: new Date(Date.now() + 2 * 60_000),
     });
@@ -82,28 +92,66 @@ export class ConfigureProviderCredentialHandler implements ICommandHandler<Confi
         provider: command.provider,
         providerCredentialId: credentialId,
         ownerUserId: command.userId,
-        credentialVersion: CREDENTIAL_VERSION,
+        credentialVersion,
         envelopeVersion: ENVELOPE_VERSION,
       };
       const validatedAt = new Date();
-      await this.unitOfWork.execute(async (transaction) => {
-        await transaction.providerCredentials.deactivateActive(
-          command.userId,
-          command.provider as CredentialStorageContext["provider"],
-        );
-        await transaction.providerCredentials.create({
-          id: credentialId,
-          provider: context.provider,
-          ownerUserId: command.userId,
-          providerAccountId: BigInt(identity.id),
-          providerLogin: identity.login,
-          status: PROVIDER_CREDENTIAL_STATUSES.active,
-          currentVersion: CREDENTIAL_VERSION,
-          declaredExpiresAt: null,
-          validatedAt,
+      try {
+        await this.unitOfWork.execute(async (transaction) => {
+          if (existing) {
+            const updated = await transaction.providerCredentials.updateForRotation(
+              existing.id,
+              command.userId,
+              existing.currentVersion,
+              {
+                ...existing,
+                provider: context.provider,
+                providerAccountId: BigInt(identity.id),
+                providerLogin: identity.login,
+                status: PROVIDER_CREDENTIAL_STATUSES.active,
+                currentVersion: credentialVersion,
+                validatedAt,
+              },
+            );
+            if (!updated) throw new Error("provider_credential_version_conflict");
+            await transaction.credentialStore.replace(
+              existing.id as CredentialLocator,
+              command.credential,
+              context,
+            );
+          } else {
+            await transaction.providerCredentials.create({
+              id: credentialId,
+              provider: context.provider,
+              ownerUserId: command.userId,
+              providerAccountId: BigInt(identity.id),
+              providerLogin: identity.login,
+              status: PROVIDER_CREDENTIAL_STATUSES.active,
+              currentVersion: credentialVersion,
+              declaredExpiresAt: null,
+              validatedAt,
+            });
+            await transaction.credentialStore.store(command.credential, context);
+          }
         });
-        await transaction.credentialStore.store(command.credential, context);
-      });
+      } catch (error: unknown) {
+        this.logger.error(
+          JSON.stringify({
+            event: "provider_credential_persistence_failed",
+            correlationId: command.correlationId,
+            userIdPresent: command.userId.length > 0,
+            provider: command.provider,
+            credentialIdPresent: credentialId.length > 0,
+            credentialVersion,
+            errorClass: error instanceof Error ? error.constructor.name : "Unknown",
+            errorCode:
+              typeof error === "object" && error !== null && "code" in error
+                ? String((error as { code?: unknown }).code)
+                : undefined,
+          }),
+        );
+        throw error;
+      }
       return {
         provider: command.provider,
         configured: true,

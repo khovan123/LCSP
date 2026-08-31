@@ -100,6 +100,7 @@ type SettingsSensitiveAction = {
     }
   | {
       kind: typeof SETTINGS_SENSITIVE_ACTIONS.reauthenticateProviderCredential;
+      retry: () => void;
     }
 );
 
@@ -368,6 +369,7 @@ export function SettingsPage() {
         redirectToGitHubAppStart(action.installationId);
         return true;
       case SETTINGS_SENSITIVE_ACTIONS.reauthenticateProviderCredential:
+        action.retry();
         return true;
       default:
         return false;
@@ -823,9 +825,10 @@ export function SettingsPage() {
               providerCredentialStatuses={
                 providerCredentialStatusesQuery.data ?? []
               }
-              onReauthenticate={() =>
+              onReauthenticate={(retry) =>
                 openSensitiveAction({
                   kind: SETTINGS_SENSITIVE_ACTIONS.reauthenticateProviderCredential,
+                  retry,
                 })
               }
             />
