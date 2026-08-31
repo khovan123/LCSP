@@ -146,3 +146,25 @@ def test_specialist_handoff_rejects_forbidden_final_verdicts() -> None:
 
     with pytest.raises(SpecialistHandoffValidationError, match="forbidden"):
         validate_specialist_handoff("investigator", payload)
+
+
+def test_planner_handoff_allows_unknown_coverage_state() -> None:
+    handoff = validate_specialist_handoff(
+        "planner",
+        {
+            "status": "INVESTIGATE",
+            "engineering_rule_ids": ["ENG-1"],
+            "artifact_versions": {"technicalEvidenceReportId": "ter-1"},
+            "coverage_state": "UNKNOWN",
+            "selected_scope": [
+                {
+                    "ref": "node:ai",
+                    "criterion": "AI invocation exists",
+                }
+            ],
+            "unresolved_facts": [],
+            "next_step": "INVESTIGATE",
+        },
+    )
+
+    assert handoff.coverage_state == "UNKNOWN"

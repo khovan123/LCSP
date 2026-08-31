@@ -13,6 +13,7 @@ from model_policy import INVESTIGATOR_MODEL_SPEC, PLANNER_MODEL_SPEC
 from tools.common.capabilities.platform.api_client import WorkerApiClient
 from tools.common.capabilities.platform.logging import get_logger
 from tools.common.capabilities.evidence.graph.schema.models import ProgramEvidenceGraph
+from memory_policy.episodes import capture_verified_episode
 
 from tools.common.capabilities.assessment.investigation.engineering_rule.code_context import CodeContextSession
 from tools.common.capabilities.assessment.investigation.engineering_rule.code_context_investigator import CodeContextLawGuidedInvestigator
@@ -164,6 +165,8 @@ class EngineeringInvestigationPipeline:
         correlation_id: str | None = None,
         wizard_context: dict[str, Any] | None = None,
         workspace_path: str | Path | None = None,
+        assessment_id: str | None = None,
+        user_id: str | None = None,
     ) -> EngineeringInvestigationResult:
         graph = self._graph(evidence_report)
         code_context = CodeContextSession(graph, workspace_path=workspace_path)
@@ -318,6 +321,15 @@ class EngineeringInvestigationPipeline:
                     technical_evidence_by_rule[evaluation.engineering_rule_id] = tuple(
                         self._technical_evidence_displays(graph, evaluation.evidence_refs)
                     )
+                    self._capture_verified_episode_after_evaluation(
+                        engineering_rule=engineering_rule,
+                        claims=rule_claims,
+                        evaluation=evaluation,
+                        evidence_report=evidence_report,
+                        workflow_run_id=workflow_run_id,
+                        assessment_id=assessment_id,
+                        user_id=user_id,
+                    )
                     executed += 1
 
         # Pipeline status describes execution integrity, not the compliance outcome
@@ -342,6 +354,51 @@ class EngineeringInvestigationPipeline:
             limitations=tuple(dict.fromkeys(limitations)),
             technical_evidence_by_rule=technical_evidence_by_rule,
         )
+
+    @staticmethod
+    def _capture_verified_episode_after_evaluation(
+        *,
+        engineering_rule: Any,
+        claims: list[EvidenceClaim],
+        evaluation: EngineeringRuleEvaluation,
+        evidence_report: dict[str, Any],
+        workflow_run_id: str,
+        assessment_id: str | None,
+        user_id: str | None,
+    ) -> None:
+        """Capture reusable memory only after deterministic rule evaluation succeeds."""
+        evidence_report_id = str(
+            evidence_report.get("id")
+            or evidence_report.get("technicalEvidenceReportId")
+            or evidence_report.get("technical_evidence_report_id")
+            or ""
+        )
+        if not assessment_id or not user_id or not evidence_report_id:
+            return
+        try:
+            capture_verified_episode(
+                owner_agent="investigator",
+                handoff={
+                    "status": "DETERMINISTIC_OUTCOME_READY",
+                    "engineering_rule_id": evaluation.engineering_rule_id,
+                    "legal_rule_id": evaluation.legal_rule_id,
+                    "concept": evaluation.concept,
+                    "claims": [claim.to_dict() for claim in claims],
+                    "evaluation": evaluation.to_dict(),
+                },
+                workflow_run_id=workflow_run_id,
+                assessment_id=assessment_id,
+                user_id=user_id,
+                engineering_rule_ids=(str(engineering_rule.engineering_rule_id),),
+                artifact_versions={"technicalEvidenceReportId": evidence_report_id},
+            )
+        except Exception as error:
+            logger.warning(
+                "VERIFIED_EPISODE_CAPTURE_SKIPPED",
+                engineering_rule_id=evaluation.engineering_rule_id,
+                error_type=type(error).__name__,
+                workflow_run_id=workflow_run_id,
+            )
 
     @staticmethod
     def _technical_evidence_displays(

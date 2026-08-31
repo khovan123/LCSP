@@ -22,6 +22,19 @@ class SpecialistHandoffValidationError(RuntimeError):
 
 
 FORBIDDEN_FINAL_VERDICTS = frozenset({"COMPLIANT", "NON_COMPLIANT", "UNKNOWN"})
+CONTROLLED_NON_VERDICT_FIELDS = frozenset(
+    {
+        "coverage_state",
+        "coverageState",
+        "status",
+        "next_step",
+        "nextStep",
+        "claim_type",
+        "claimType",
+        "source_kind",
+        "sourceKind",
+    }
+)
 
 
 def _response_model(subagent_type: str) -> type[BaseModel]:
@@ -35,7 +48,9 @@ def _response_model(subagent_type: str) -> type[BaseModel]:
         ) from exc
 
 
-def _assert_no_final_verdict(value: Any) -> None:
+def _assert_no_final_verdict(value: Any, *, field_name: str | None = None) -> None:
+    if field_name in CONTROLLED_NON_VERDICT_FIELDS:
+        return
     if isinstance(value, str):
         tokens = {
             token.strip(".,:;()[]{}").upper()
@@ -45,15 +60,15 @@ def _assert_no_final_verdict(value: Any) -> None:
         if verdicts:
             raise SpecialistHandoffValidationError(
                 f"specialist handoff contains forbidden compliance verdict: {verdicts}"
-            )
+        )
         return
     if isinstance(value, dict):
-        for child in value.values():
-            _assert_no_final_verdict(child)
+        for key, child in value.items():
+            _assert_no_final_verdict(child, field_name=str(key))
         return
     if isinstance(value, (list, tuple, set)):
         for child in value:
-            _assert_no_final_verdict(child)
+            _assert_no_final_verdict(child, field_name=field_name)
 
 
 def validate_specialist_handoff(

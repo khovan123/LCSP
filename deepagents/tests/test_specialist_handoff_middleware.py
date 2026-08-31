@@ -8,6 +8,7 @@ import pytest
 from langchain.messages import ToolMessage
 from langgraph.types import Command
 
+from middleware import specialist_handoff_validation
 from middleware.specialist_handoff_validation import (
     _validate_lcsp_specialist_task_handoff,
 )
@@ -146,6 +147,52 @@ def test_task_middleware_rejects_invalid_investigator_graph_ref() -> None:
 
     with pytest.raises(RuntimeError, match="evidence-claim"):
         _validate_lcsp_specialist_task_handoff(request, handler)
+
+
+def test_task_middleware_loads_program_graph_from_env_backed_api_client(
+    monkeypatch,
+) -> None:
+    class FakeApiClient:
+        def __init__(self, base_url: str, api_key: str) -> None:
+            self.base_url = base_url
+            self.api_key = api_key
+
+        def get_accepted_technical_evidence_report(self, report_id: str) -> dict:
+            assert report_id == "ter-1"
+            return {"evidence_payload": {"evidence_graph": _program_graph()}}
+
+    monkeypatch.setenv("NESTJS_API_BASE_URL", "https://api.internal")
+    monkeypatch.setenv("WORKER_API_KEY", "worker-key")
+    monkeypatch.setattr(
+        specialist_handoff_validation,
+        "WorkerApiClient",
+        FakeApiClient,
+    )
+    request = FakeRequest(
+        context=LCSPRunContext(
+            assessment_id="assessment-1",
+            user_id="user-1",
+            workflow_run_id="workflow-1",
+            artifact_versions={"technicalEvidenceReportId": "ter-1"},
+            engineering_rule_ids=("ENG-1",),
+        )
+    )
+    handler = MagicMock(
+        return_value=Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        content=json.dumps(_investigator_handoff()),
+                        tool_call_id="call-1",
+                    )
+                ]
+            }
+        )
+    )
+
+    result = _validate_lcsp_specialist_task_handoff(request, handler)
+
+    assert isinstance(result, Command)
 
 
 def test_task_middleware_requires_json_structured_subagent_handoff() -> None:

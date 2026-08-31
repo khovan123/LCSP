@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -13,6 +14,7 @@ from langgraph.types import Command
 
 from orchestration.context import LCSPRunContext
 from orchestration.result_validation import validate_specialist_handoff
+from tools.common.capabilities.platform.api_client import WorkerApiClient
 
 
 @wrap_tool_call
@@ -124,7 +126,7 @@ def _load_program_graph(
     graph = metadata.get("program_graph") or metadata.get("evidence_graph")
     if graph is not None:
         return graph
-    api_client = metadata.get("api_client")
+    api_client = metadata.get("api_client") or _worker_api_client_from_env()
     report_id = context.artifact_versions.get("technicalEvidenceReportId")
     if api_client is None or not report_id:
         return None
@@ -138,6 +140,14 @@ def _load_program_graph(
     if not isinstance(payload, dict):
         return None
     return payload.get("evidence_graph") or payload.get("evidenceGraph")
+
+
+def _worker_api_client_from_env() -> WorkerApiClient | None:
+    base_url = (os.environ.get("NESTJS_API_BASE_URL") or "").strip()
+    api_key = (os.environ.get("WORKER_API_KEY") or "").strip()
+    if not base_url or not api_key:
+        return None
+    return WorkerApiClient(base_url, api_key)
 
 
 __all__ = [
