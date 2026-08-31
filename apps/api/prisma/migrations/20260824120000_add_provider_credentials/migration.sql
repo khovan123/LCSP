@@ -25,7 +25,6 @@ CREATE TABLE "ProviderCredential" (
 );
 
 ALTER TABLE "RepositoryConnection" ADD COLUMN "authenticationMode" "RepositoryAuthenticationMode";
-ALTER TABLE "RepositoryConnection" ADD COLUMN "credentialAuthorizationId" TEXT;
 UPDATE "RepositoryConnection" SET "authenticationMode" = 'GITHUB_APP' WHERE "authenticationMode" IS NULL;
 ALTER TABLE "RepositoryConnection" ALTER COLUMN "authenticationMode" SET NOT NULL;
 ALTER TABLE "RepositoryConnection" ALTER COLUMN "authenticationMode" SET DEFAULT 'GITHUB_APP';

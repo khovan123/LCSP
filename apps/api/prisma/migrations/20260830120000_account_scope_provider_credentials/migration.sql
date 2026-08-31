@@ -10,8 +10,6 @@ ALTER TABLE "RepositoryConnection"
 CREATE INDEX "RepositoryConnection_providerCredentialId_idx" ON "RepositoryConnection"("providerCredentialId");
 ALTER TABLE "RepositoryConnection" ADD CONSTRAINT "RepositoryConnection_providerCredentialId_fkey" FOREIGN KEY ("providerCredentialId") REFERENCES "ProviderCredential"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
-ALTER TABLE "RepositoryConnection" DROP COLUMN "credentialAuthorizationId";
-
 ALTER TABLE "RepositoryConnection" DROP CONSTRAINT IF EXISTS "RepositoryConnection_authentication_shape_check";
 ALTER TABLE "RepositoryConnection"
   ADD CONSTRAINT "RepositoryConnection_authentication_shape_check"

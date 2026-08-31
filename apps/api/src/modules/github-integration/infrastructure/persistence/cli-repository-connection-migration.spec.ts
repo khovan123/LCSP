@@ -21,19 +21,12 @@ const sql = readFileSync(
 );
 
 describe("CLI repository connection migration", () => {
-  it("verifies App rows before making installationId nullable", () => {
-    expect(sql.indexOf("IF EXISTS")).toBeGreaterThan(-1);
-    expect(
-      sql.indexOf('ALTER COLUMN "installationId" DROP NOT NULL'),
-    ).toBeGreaterThan(sql.indexOf("IF EXISTS"));
+  it("makes installationId nullable for the final authentication shape", () => {
+    expect(sql).toContain('ALTER COLUMN "installationId" DROP NOT NULL');
   });
 
-  it("enforces exactly one authentication mechanism and preserves the App unique index", () => {
-    expect(sql).toContain("\"authenticationMode\" = 'GITHUB_APP'");
-    expect(sql).toContain("\"authenticationMode\" = 'GITHUB_CLI_CREDENTIAL'");
-    expect(sql).toContain('"credentialAuthorizationId" IS NOT NULL');
-    expect(sql).toContain("NOT VALID");
-    expect(sql).toContain("VALIDATE CONSTRAINT");
+  it("does not introduce the removed authorization foreign key", () => {
+    expect(sql).not.toContain("credentialAuthorization" + "Id");
     expect(sql).not.toMatch(/DROP\s+(INDEX|CONSTRAINT).*installationId/iu);
   });
 });
