@@ -82,6 +82,8 @@ class JsonlVerifiedEpisodeStore:
         self,
         *,
         owner_agent: str,
+        assessment_id: str | None = None,
+        user_id: str | None = None,
         engineering_rule_ids: tuple[str, ...] = (),
         artifact_versions: dict[str, str] | None = None,
         limit: int = 5,
@@ -90,6 +92,10 @@ class JsonlVerifiedEpisodeStore:
         candidates: list[VerifiedEpisode] = []
         for episode in self.read_all():
             if episode.owner_agent != owner_agent or not episode.is_active:
+                continue
+            if assessment_id is not None and episode.assessment_id != assessment_id:
+                continue
+            if user_id is not None and episode.user_id != user_id:
                 continue
             if engineering_rule_ids and not set(engineering_rule_ids).issubset(
                 set(episode.engineering_rule_ids)
@@ -180,6 +186,7 @@ def build_verified_episode(
     handoff: dict[str, Any],
     workflow_run_id: str | None = None,
     assessment_id: str | None = None,
+    user_id: str | None = None,
     engineering_rule_ids: tuple[str, ...] = (),
     artifact_versions: dict[str, str] | None = None,
     expires_at: str | None = None,
@@ -210,6 +217,7 @@ def build_verified_episode(
         owner_agent=owner_agent,
         workflow_run_id=workflow_run_id,
         assessment_id=assessment_id,
+        user_id=user_id,
         engineering_rule_ids=engineering_rule_ids,
         artifact_versions=versions,
         trust_level="VERIFIED_EXAMPLE",
@@ -278,6 +286,7 @@ def capture_verified_episode(
         handoff=handoff,
         workflow_run_id=workflow_run_id,
         assessment_id=assessment_id,
+        user_id=user_id,
         engineering_rule_ids=engineering_rule_ids,
         artifact_versions=artifact_versions,
     )
@@ -319,6 +328,8 @@ def retrieve_verified_episodes_from_gateway(
         return ()
     return JsonlVerifiedEpisodeStore(path).retrieve(
         owner_agent=owner_agent,
+        assessment_id=assessment_id,
+        user_id=user_id,
         engineering_rule_ids=engineering_rule_ids,
         artifact_versions=artifact_versions,
         limit=limit,

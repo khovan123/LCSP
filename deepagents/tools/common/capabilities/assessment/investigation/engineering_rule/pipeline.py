@@ -329,6 +329,8 @@ class EngineeringInvestigationPipeline:
                         workflow_run_id=workflow_run_id,
                         assessment_id=assessment_id,
                         user_id=user_id,
+                        legal_rule_catalog_version_id=catalog_version_id,
+                        legal_corpus_version_id=corpus_version_id,
                     )
                     executed += 1
 
@@ -365,6 +367,8 @@ class EngineeringInvestigationPipeline:
         workflow_run_id: str,
         assessment_id: str | None,
         user_id: str | None,
+        legal_rule_catalog_version_id: str,
+        legal_corpus_version_id: str,
     ) -> None:
         """Capture reusable memory only after deterministic rule evaluation succeeds."""
         evidence_report_id = str(
@@ -397,7 +401,11 @@ class EngineeringInvestigationPipeline:
                 assessment_id=assessment_id,
                 user_id=user_id,
                 engineering_rule_ids=(str(engineering_rule.engineering_rule_id),),
-                artifact_versions={"technicalEvidenceReportId": evidence_report_id},
+                artifact_versions={
+                    "technicalEvidenceReportId": evidence_report_id,
+                    "legalRuleCatalogVersionId": legal_rule_catalog_version_id,
+                    "legalCorpusVersionId": legal_corpus_version_id,
+                },
             )
         except Exception as error:
             logger.warning(
@@ -412,12 +420,19 @@ class EngineeringInvestigationPipeline:
         if not claims:
             return False
         failed_code = ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
+        provenance_backed = False
         for claim in claims:
             if claim.claim_id.startswith("claim:failed:"):
                 return False
             if failed_code in claim.limitations:
                 return False
-        return True
+            if (
+                claim.evidence_refs
+                or claim.graph_path_refs
+                or claim.source_anchor_refs
+            ):
+                provenance_backed = True
+        return provenance_backed
 
     @staticmethod
     def _technical_evidence_displays(

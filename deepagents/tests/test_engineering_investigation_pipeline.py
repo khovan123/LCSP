@@ -167,7 +167,9 @@ def test_pipeline_captures_verified_episode_after_deterministic_evaluation(
     assert captured[0]["user_id"] == "user-1"
     assert captured[0]["engineering_rule_ids"] == ("eng-1",)
     assert captured[0]["artifact_versions"] == {
-        "technicalEvidenceReportId": "ter-1"
+        "technicalEvidenceReportId": "ter-1",
+        "legalRuleCatalogVersionId": "catalog-v1",
+        "legalCorpusVersionId": "corpus-v1",
     }
     assert captured[0]["handoff"]["status"] == "DETERMINISTIC_OUTCOME_READY"
 
@@ -220,6 +222,59 @@ def test_pipeline_does_not_capture_episode_after_investigator_failure(
     assert result.claims[0].limitations == (
         ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"],
     )
+    assert captured == []
+
+
+def test_pipeline_does_not_capture_episode_without_validated_claim_provenance(
+    monkeypatch,
+) -> None:
+    captured = []
+    monkeypatch.setattr(
+        pipeline,
+        "capture_verified_episode",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    api_client = _api_client()
+    engineering_rule = _rule()
+    rule_service = MagicMock()
+    rule_service.get_or_compile.return_value = ([engineering_rule], True)
+    query_executor = MagicMock()
+    query_executor.execute.return_value = InvestigationPacket(
+        engineering_rule_id="eng-1",
+        concept="HUMAN_OVERSIGHT",
+        investigation_goals=("Find review controls",),
+        initial_results=(),
+    )
+    investigator = MagicMock()
+    investigator.investigate.return_value = [
+        EvidenceClaim(
+            claim_id="claim-unresolved",
+            engineering_rule_id="eng-1",
+            claim_type="UNRESOLVED_ENGINEERING_FACT",
+            value=None,
+            evidence_refs=(),
+            graph_path_refs=(),
+            source_anchor_refs=(),
+            confidence=0.0,
+        )
+    ]
+
+    result = EngineeringInvestigationPipeline(
+        api_client=api_client,
+        model="test:model",
+        retriever=MagicMock(),
+        rule_service=rule_service,
+        query_executor=query_executor,
+        investigator=investigator,
+    ).run(
+        evidence_report=_evidence_report(),
+        workflow_run_id="workflow-1",
+        assessment_id="assessment-1",
+        user_id="user-1",
+    )
+
+    assert result.status == "COMPLETE"
+    assert result.evaluations[0].status == "UNKNOWN"
     assert captured == []
 
 

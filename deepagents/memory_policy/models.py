@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 EPISODE_SCHEMA_VERSION = "lcsp.verified_episode.v1"
 VERIFIED_EPISODE_VALIDATION_STATUS = "VERIFIED"
+VERIFIED_EPISODE_TRUST_LEVEL = "VERIFIED_EXAMPLE"
 CAPTURE_PATH_ENV = "LCSP_VERIFIED_EPISODE_CAPTURE_PATH"
 RETRIEVAL_ENABLED_ENV = "LCSP_VERIFIED_EPISODE_RETRIEVAL_ENABLED"
 STORE_PATH_ENV = "LCSP_VERIFIED_EPISODE_STORE_PATH"
@@ -32,6 +33,7 @@ class VerifiedEpisode:
     owner_agent: str
     workflow_run_id: str | None
     assessment_id: str | None
+    user_id: str | None
     engineering_rule_ids: tuple[str, ...]
     artifact_versions: dict[str, str]
     trust_level: str
@@ -56,6 +58,7 @@ class VerifiedEpisode:
             "owner_agent": self.owner_agent,
             "workflow_run_id": self.workflow_run_id,
             "assessment_id": self.assessment_id,
+            "user_id": self.user_id,
             "engineering_rule_ids": list(self.engineering_rule_ids),
             "artifact_versions": dict(self.artifact_versions),
             "trust_level": self.trust_level,
@@ -82,6 +85,7 @@ class VerifiedEpisode:
             owner_agent=str(value["owner_agent"]),
             workflow_run_id=optional_str(value.get("workflow_run_id")),
             assessment_id=optional_str(value.get("assessment_id")),
+            user_id=optional_str(value.get("user_id")),
             engineering_rule_ids=tuple(
                 str(item) for item in value.get("engineering_rule_ids") or ()
             ),
@@ -89,7 +93,7 @@ class VerifiedEpisode:
                 str(key): str(item)
                 for key, item in (value.get("artifact_versions") or {}).items()
             },
-            trust_level=str(value.get("trust_level") or "VERIFIED_EXAMPLE"),
+            trust_level=normalize_trust_level(value.get("trust_level")),
             validation_status=normalize_validation_status(
                 value.get("validation_status")
             ),
@@ -131,10 +135,19 @@ def optional_str(value: Any) -> str | None:
 def normalize_validation_status(value: Any) -> VerifiedEpisodeValidationStatus:
     text = optional_str(value)
     if text is None:
-        return VERIFIED_EPISODE_VALIDATION_STATUS
+        raise EpisodeStoreError("verified episode validation_status is required")
     if text == VERIFIED_EPISODE_VALIDATION_STATUS:
         return VERIFIED_EPISODE_VALIDATION_STATUS
     raise EpisodeStoreError("verified episode validation_status must be VERIFIED")
+
+
+def normalize_trust_level(value: Any) -> str:
+    text = optional_str(value)
+    if text is None:
+        raise EpisodeStoreError("verified episode trust_level is required")
+    if text == VERIFIED_EPISODE_TRUST_LEVEL:
+        return VERIFIED_EPISODE_TRUST_LEVEL
+    raise EpisodeStoreError("verified episode trust_level must be VERIFIED_EXAMPLE")
 
 
 def now() -> datetime:
@@ -153,10 +166,12 @@ __all__ = [
     "RETRIEVAL_ENABLED_ENV",
     "STORE_PATH_ENV",
     "VERIFIED_EPISODE_VALIDATION_STATUS",
+    "VERIFIED_EPISODE_TRUST_LEVEL",
     "VerifiedEpisode",
     "VerifiedEpisodeValidationStatus",
     "now",
     "normalize_validation_status",
+    "normalize_trust_level",
     "optional_str",
     "parse_datetime",
 ]

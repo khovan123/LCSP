@@ -627,6 +627,8 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                 workflow_run_id=workflow_run_id,
                 assessment_id=assessment_id,
                 user_id=user_id,
+                legal_rule_catalog_version_id=catalog_version_id,
+                legal_corpus_version_id=corpus_version_id,
             )
             executed += 1
 
