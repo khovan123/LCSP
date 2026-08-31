@@ -87,6 +87,16 @@ function isAuthenticated() {
   }
 }
 
+function waitForAuthentication() {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    if (isAuthenticated()) {
+      return true;
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+  }
+  return false;
+}
+
 /**
  * @param {number} port
  * @param {string} host
@@ -128,11 +138,11 @@ function waitUntilReady() {
 ensureContainer();
 waitUntilReady();
 
-if (!isAuthenticated()) {
+if (!waitForAuthentication()) {
   run(["rm", "-f", containerName]);
   ensureContainer();
   waitUntilReady();
-  if (!isAuthenticated()) {
+  if (!waitForAuthentication()) {
     throw new Error(`PostgreSQL test container authentication failed for ${host}:${hostPort}/${databaseName} as postgres`);
   }
 }
