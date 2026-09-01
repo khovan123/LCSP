@@ -323,17 +323,24 @@ class EngineeringInvestigationPipeline:
                             ]
                         )
 
-                    claims.extend(rule_claims)
-                    evaluation = self._evaluator.evaluate(engineering_rule, rule_claims)
+                    validated_rule_claims = self._validated_claims_for_evaluation(
+                        rule_claims,
+                        graph,
+                    )
+                    claims.extend(validated_rule_claims)
+                    evaluation = self._evaluator.evaluate(
+                        engineering_rule,
+                        validated_rule_claims,
+                    )
                     evaluations.append(evaluation)
                     technical_evidence_by_rule[evaluation.engineering_rule_id] = tuple(
                         self._technical_evidence_displays(graph, evaluation.evidence_refs)
                     )
                     self._capture_verified_episode_after_evaluation(
                         engineering_rule=engineering_rule,
-                        claims=rule_claims,
+                        claims=validated_rule_claims,
+                        raw_claim_count=len(rule_claims),
                         evaluation=evaluation,
-                        graph=graph,
                         evidence_report=evidence_report,
                         workflow_run_id=workflow_run_id,
                         assessment_id=assessment_id,
@@ -370,9 +377,9 @@ class EngineeringInvestigationPipeline:
         self,
         *,
         engineering_rule: Any,
-        claims: list[EvidenceClaim],
+        claims: tuple[EvidenceClaim, ...],
+        raw_claim_count: int,
         evaluation: EngineeringRuleEvaluation,
-        graph: ProgramEvidenceGraph,
         evidence_report: dict[str, Any],
         workflow_run_id: str,
         assessment_id: str | None,
@@ -387,23 +394,14 @@ class EngineeringInvestigationPipeline:
             or evidence_report.get("technical_evidence_report_id")
             or ""
         )
-        validated_claims = (
-            self._validated_claims_for_episode(
-                claims,
-                graph,
-            )
-        )
         if (
             not assessment_id
             or not user_id
             or not evidence_report_id
-            or not validated_claims
+            or not claims
         ):
             return
-        evidence_refs = self._episode_evidence_refs(
-            validated_claims,
-            evaluation,
-        )
+        evidence_refs = self._episode_evidence_refs(claims)
         try:
             capture_verified_episode(
                 owner_agent="investigator",
@@ -412,9 +410,9 @@ class EngineeringInvestigationPipeline:
                     "engineering_rule_id": evaluation.engineering_rule_id,
                     "legal_rule_id": evaluation.legal_rule_id,
                     "concept": evaluation.concept,
-                    "claims": [claim.to_dict() for claim in validated_claims],
+                    "claims": [claim.to_dict() for claim in claims],
                     "omitted_unvalidated_claim_count": (
-                        len(claims) - len(validated_claims)
+                        raw_claim_count - len(claims)
                     ),
                     "evaluation": evaluation.to_dict(),
                 },
@@ -440,7 +438,7 @@ class EngineeringInvestigationPipeline:
                     "validated engineering investigation "
                     f"rule={evaluation.engineering_rule_id} "
                     f"outcome={evaluation.status} "
-                    f"validated_claims={len(validated_claims)} "
+                    f"validated_claims={len(claims)} "
                     f"evidence_refs={len(evidence_refs)}"
                 ),
                 evidence_refs=evidence_refs,
@@ -456,7 +454,7 @@ class EngineeringInvestigationPipeline:
             )
 
     @staticmethod
-    def _validated_claims_for_episode(
+    def _validated_claims_for_evaluation(
         claims: list[EvidenceClaim],
         graph: ProgramEvidenceGraph,
     ) -> tuple[EvidenceClaim, ...]:
@@ -483,7 +481,6 @@ class EngineeringInvestigationPipeline:
     @staticmethod
     def _episode_evidence_refs(
         claims: tuple[EvidenceClaim, ...],
-        evaluation: EngineeringRuleEvaluation,
     ) -> tuple[str, ...]:
         refs = {
             ref
@@ -495,7 +492,6 @@ class EngineeringInvestigationPipeline:
             )
             if ref
         }
-        refs.update(ref for ref in evaluation.evidence_refs if ref)
         return tuple(sorted(refs))
 
     @staticmethod

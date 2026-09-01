@@ -160,18 +160,19 @@ def test_pipeline_captures_verified_episode_after_deterministic_evaluation(
         confidence=0.95,
         criterion="HUMAN_OVERSIGHT",
     )
-    unvalidated_claim = EvidenceClaim(
-        claim_id="claim-unvalidated",
+    invalid_claim = EvidenceClaim(
+        claim_id="claim-invalid-ref",
         engineering_rule_id="eng-1",
-        claim_type="UNRESOLVED_ENGINEERING_FACT",
-        value=None,
-        evidence_refs=(),
-        confidence=0.0,
+        claim_type="RULE_REQUIREMENT_NOT_MET",
+        value=False,
+        evidence_refs=("evidence:invented",),
+        confidence=0.99,
+        criterion="HUMAN_OVERSIGHT",
     )
     investigator = MagicMock()
-    investigator.investigate.return_value = [claim, unvalidated_claim]
+    investigator.investigate.return_value = [claim, invalid_claim]
 
-    EngineeringInvestigationPipeline(
+    result = EngineeringInvestigationPipeline(
         api_client=api_client,
         model="test:model",
         retriever=MagicMock(),
@@ -185,6 +186,9 @@ def test_pipeline_captures_verified_episode_after_deterministic_evaluation(
         user_id="user-1",
     )
 
+    assert result.claims == (claim,)
+    assert result.evaluations[0].status == "COMPLIANT"
+    assert result.evaluations[0].evidence_refs == ("evidence:finding-1",)
     assert len(captured) == 1
     assert captured[0]["owner_agent"] == "investigator"
     assert captured[0]["assessment_id"] == "assessment-1"
@@ -200,6 +204,11 @@ def test_pipeline_captures_verified_episode_after_deterministic_evaluation(
         "claim-1"
     ]
     assert captured[0]["handoff"]["omitted_unvalidated_claim_count"] == 1
+    assert captured[0]["handoff"]["evaluation"]["status"] == "COMPLIANT"
+    assert captured[0]["handoff"]["evaluation"]["evidence_refs"] == (
+        "evidence:finding-1",
+    )
+    assert "evidence:invented" not in str(captured[0])
     assert captured[0]["prompt_version"] == "engineering-rule-investigation.v1"
     assert captured[0]["model_id"] == "test:model"
     assert captured[0]["successful_strategy_summary"] == (
@@ -254,7 +263,8 @@ def test_pipeline_does_not_capture_episode_after_investigator_failure(
     )
 
     assert result.status == "PARTIAL"
-    assert result.claims[0].limitations == (
+    assert result.claims == ()
+    assert result.limitations == (
         ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"],
     )
     assert captured == []
@@ -383,13 +393,14 @@ def test_pipeline_keeps_other_rules_when_one_compilation_fails() -> None:
     investigator.investigate.return_value = [
         EvidenceClaim(
             claim_id="claim-good",
-            engineering_rule_id="eng-good",
-            claim_type="RULE_REQUIREMENT_NOT_MET",
-            value=False,
-            evidence_refs=("graph:path:1",),
-            confidence=0.9,
-        )
-    ]
+                engineering_rule_id="eng-good",
+                claim_type="RULE_REQUIREMENT_NOT_MET",
+                value=False,
+                evidence_refs=("evidence:finding-1",),
+                confidence=0.9,
+                criterion="HUMAN_OVERSIGHT",
+            )
+        ]
 
     result = EngineeringInvestigationPipeline(
         api_client=api_client,

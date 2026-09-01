@@ -613,17 +613,24 @@ class PlannedEngineeringInvestigationPipeline(EngineeringInvestigationPipeline):
                     ENGINEERING_LIMITATION_CODES["engineering_investigation_failed"]
                 )
 
-            claims.extend(rule_claims)
-            evaluation = self._evaluator.evaluate(engineering_rule, rule_claims)
+            validated_rule_claims = self._validated_claims_for_evaluation(
+                rule_claims,
+                graph,
+            )
+            claims.extend(validated_rule_claims)
+            evaluation = self._evaluator.evaluate(
+                engineering_rule,
+                validated_rule_claims,
+            )
             evaluations.append(evaluation)
             technical_evidence_by_rule[evaluation.engineering_rule_id] = tuple(
                 self._technical_evidence_displays(graph, evaluation.evidence_refs)
             )
             self._capture_verified_episode_after_evaluation(
                 engineering_rule=engineering_rule,
-                claims=rule_claims,
+                claims=validated_rule_claims,
+                raw_claim_count=len(rule_claims),
                 evaluation=evaluation,
-                graph=graph,
                 evidence_report=evidence_report,
                 workflow_run_id=workflow_run_id,
                 assessment_id=assessment_id,
