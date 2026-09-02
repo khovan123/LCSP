@@ -12,12 +12,13 @@ import {
   primaryNavigation,
 } from "../../config/app-shell-navigation";
 import type {
-  AppShellProps,
   AppShellNavigationItem,
   AppShellNavigationSection,
+  AppShellProps,
 } from "../../types/app-shell.types";
 import { AppHeader } from "../molecules/app-header";
 import { AppSidebar } from "./app-sidebar";
+import { AssessmentAppShell } from "./assessment-app-shell";
 import { WorkspaceRuntimeProvider } from "./workspace-runtime-provider";
 
 export function AppShell({ children }: AppShellProps) {
@@ -39,6 +40,20 @@ export function AppShell({ children }: AppShellProps) {
     assessmentId,
     items: localizeNavigation(getAssessmentNavigation(assessmentId)),
   });
+
+  if (pathname === "/assessments" || pathname.startsWith("/assessments/")) {
+    return (
+      <WorkspaceRuntimeProvider>
+        <AssessmentAppShell
+          key={assessmentId ?? "assessment-directory"}
+          sections={sections}
+          assessmentId={assessmentId}
+        >
+          {children}
+        </AssessmentAppShell>
+      </WorkspaceRuntimeProvider>
+    );
+  }
 
   return (
     <SidebarProvider
