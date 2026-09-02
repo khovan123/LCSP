@@ -2,9 +2,7 @@
 
 import { resolveMessage } from "@lcsp/i18n";
 import { usePathname } from "next/navigation";
-import { Suspense, type CSSProperties } from "react";
 
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { appLocale } from "@/lib/locale";
 
 import {
@@ -16,8 +14,6 @@ import type {
   AppShellNavigationSection,
   AppShellProps,
 } from "../../types/app-shell.types";
-import { AppHeader } from "../molecules/app-header";
-import { AppSidebar } from "./app-sidebar";
 import { AssessmentAppShell } from "./assessment-app-shell";
 import { WorkspaceRuntimeProvider } from "./workspace-runtime-provider";
 
@@ -41,11 +37,18 @@ export function AppShell({ children }: AppShellProps) {
     items: localizeNavigation(getAssessmentNavigation(assessmentId)),
   });
 
-  if (pathname === "/assessments" || pathname.startsWith("/assessments/")) {
+  if (
+    pathname === "/workspace" ||
+    pathname.startsWith("/workspace/") ||
+    pathname === "/assessments" ||
+    pathname.startsWith("/assessments/") ||
+    pathname === "/laws" ||
+    pathname.startsWith("/laws/")
+  ) {
     return (
       <WorkspaceRuntimeProvider>
         <AssessmentAppShell
-          key={assessmentId ?? "assessment-directory"}
+          key={assessmentId ?? getAppShellKey(pathname)}
           sections={sections}
           assessmentId={assessmentId}
         >
@@ -55,28 +58,7 @@ export function AppShell({ children }: AppShellProps) {
     );
   }
 
-  return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 14)",
-        } as CSSProperties
-      }
-    >
-      <WorkspaceRuntimeProvider>
-        <Suspense fallback={null}>
-          <AppSidebar sections={sections} />
-        </Suspense>
-        <SidebarInset>
-          <AppHeader />
-          <div className="@container/main flex min-h-0 flex-1 flex-col">
-            {children}
-          </div>
-        </SidebarInset>
-      </WorkspaceRuntimeProvider>
-    </SidebarProvider>
-  );
+  return <WorkspaceRuntimeProvider>{children}</WorkspaceRuntimeProvider>;
 }
 
 function localizeNavigation(
@@ -102,4 +84,10 @@ function localizeNavigation(
 
 function t(key: string) {
   return resolveMessage(appLocale, key as Parameters<typeof resolveMessage>[1]);
+}
+
+function getAppShellKey(pathname: string) {
+  if (pathname === "/workspace") return "workspace";
+  if (pathname === "/assessments/new") return "assessment-create";
+  return "assessment-directory";
 }

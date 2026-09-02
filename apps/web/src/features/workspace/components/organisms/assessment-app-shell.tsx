@@ -44,6 +44,12 @@ import {
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
+import {
+  ASSESSMENT_LEFT_SIDEBAR_STATES,
+  ASSESSMENT_RIGHT_PANEL_STATES,
+  ASSESSMENT_SHELL_SCREENS,
+  type AssessmentShellState,
+} from "../../types/assessment-shell-state.types";
 import type {
   AppShellNavigationItem,
   AppShellNavigationSection,
@@ -55,6 +61,11 @@ import {
   runStatusLabel,
   stageLabel,
 } from "../../utils/assessment-runtime-formatter";
+import {
+  AssessmentRightPanelSlot,
+  CenterContentSlot,
+  LeftSidebarSlot,
+} from "./assessment-shell-slots";
 import { useWorkspaceRuntime } from "./workspace-runtime-provider";
 
 type AssessmentAppShellProps = {
@@ -69,8 +80,14 @@ export function AssessmentAppShell({
   sections,
 }: AssessmentAppShellProps) {
   const pathname = usePathname();
-  const [leftOpen, setLeftOpen] = useState(true);
-  const [rightOpen, setRightOpen] = useState(Boolean(assessmentId));
+  const routeScreen = getRouteScreen(pathname, assessmentId);
+  const [shellState, setShellState] = useState<AssessmentShellState>(() => ({
+    screen: routeScreen,
+    leftSidebar: ASSESSMENT_LEFT_SIDEBAR_STATES.open,
+    rightPanel: assessmentId
+      ? ASSESSMENT_RIGHT_PANEL_STATES.open
+      : ASSESSMENT_RIGHT_PANEL_STATES.closed,
+  }));
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const [mobileRuntimeOpen, setMobileRuntimeOpen] = useState(false);
   const signOutMutation = useSignOutMutation();
@@ -88,24 +105,69 @@ export function AssessmentAppShell({
   const assessmentSection = sections.find(
     (section) => section.kind === "assessment",
   );
+  const workspaceSection = sections.find(
+    (section) => section.kind === "workspace",
+  );
   const assessment = assessmentId
     ? assessments.find((item) => item.id === assessmentId)
     : undefined;
   const activeAssessmentItem = assessmentSection?.items.find((item) =>
     isNavigationItemActive(pathname, item),
   );
-  const headerEyebrow = assessment?.name ?? t("pages.appShell.assessmentTitle");
+  const activeWorkspaceItem = workspaceSection?.items.find((item) =>
+    isNavigationItemActive(pathname, item),
+  );
+  const headerEyebrow =
+    assessment?.name ??
+    workspaceSection?.label ??
+    t("pages.appShell.workspaceNavigation");
   const headerTitle =
-    activeAssessmentItem?.label ?? t("pages.appShell.assessments");
+    activeAssessmentItem?.label ??
+    activeWorkspaceItem?.label ??
+    getFallbackHeaderTitle(pathname);
+  const effectiveShellState: AssessmentShellState = {
+    ...shellState,
+    screen: routeScreen,
+    rightPanel: assessmentId
+      ? shellState.rightPanel
+      : ASSESSMENT_RIGHT_PANEL_STATES.closed,
+  };
+  const leftCollapsed =
+    effectiveShellState.leftSidebar ===
+    ASSESSMENT_LEFT_SIDEBAR_STATES.collapsed;
+  const rightPanelOpen =
+    Boolean(assessmentId) &&
+    effectiveShellState.rightPanel === ASSESSMENT_RIGHT_PANEL_STATES.open;
 
   async function handleSignOut() {
     await signOutMutation.mutateAsync();
     window.location.assign("/sign-in");
   }
 
+  function toggleLeftSidebar() {
+    setShellState((current) => ({
+      ...current,
+      leftSidebar:
+        current.leftSidebar === ASSESSMENT_LEFT_SIDEBAR_STATES.open
+          ? ASSESSMENT_LEFT_SIDEBAR_STATES.collapsed
+          : ASSESSMENT_LEFT_SIDEBAR_STATES.open,
+    }));
+  }
+
+  function toggleRightPanel() {
+    setShellState((current) => ({
+      ...current,
+      rightPanel:
+        current.rightPanel === ASSESSMENT_RIGHT_PANEL_STATES.open
+          ? ASSESSMENT_RIGHT_PANEL_STATES.closed
+          : ASSESSMENT_RIGHT_PANEL_STATES.open,
+    }));
+  }
+
   const navigation = (
     <AssessmentShellNavigation
       assessments={assessments}
+      collapsed={false}
       onNavigate={() => setMobileNavigationOpen(false)}
       onSignOut={() => void handleSignOut()}
       pathname={pathname}
@@ -115,22 +177,22 @@ export function AssessmentAppShell({
   );
 
   return (
-    <div className="flex h-svh min-h-0 w-full overflow-hidden bg-background">
-      <aside
-        data-slot="assessment-left-sidebar"
-        className={cn(
-          "hidden shrink-0 overflow-hidden bg-sidebar text-sidebar-foreground transition-[width,border-color] duration-200 motion-reduce:transition-none lg:flex",
-          leftOpen ? "w-55 border-r border-border/70" : "w-0 border-r-0",
-        )}
-      >
+    <div
+      className="flex h-svh min-h-0 w-full overflow-hidden bg-background"
+      data-shell-screen={effectiveShellState.screen}
+      data-left-sidebar={effectiveShellState.leftSidebar}
+      data-right-panel={effectiveShellState.rightPanel}
+    >
+      <LeftSidebarSlot collapsed={leftCollapsed}>
         <AssessmentShellNavigation
           assessments={assessments}
+          collapsed={leftCollapsed}
           onSignOut={() => void handleSignOut()}
           pathname={pathname}
           signOutPending={signOutMutation.isPending}
           userName={workspace?.user.display_name}
         />
-      </aside>
+      </LeftSidebarSlot>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-13 shrink-0 items-center border-b border-border/70 bg-background/95 px-3 backdrop-blur sm:px-4 lg:px-5">
@@ -149,9 +211,9 @@ export function AssessmentAppShell({
             type="button"
             variant="ghost"
             size="icon-sm"
-            onClick={() => setLeftOpen((current) => !current)}
+            onClick={toggleLeftSidebar}
             aria-label={t("pages.appShell.sidebarToggle")}
-            aria-pressed={leftOpen}
+            aria-pressed={!leftCollapsed}
             className="hidden lg:inline-flex"
           >
             <PanelLeftIcon />
@@ -180,11 +242,11 @@ export function AssessmentAppShell({
               </Button>
               <Button
                 type="button"
-                variant={rightOpen ? "secondary" : "ghost"}
+                variant={rightPanelOpen ? "secondary" : "ghost"}
                 size="icon-sm"
-                onClick={() => setRightOpen((current) => !current)}
+                onClick={toggleRightPanel}
                 aria-label={t("pages.appShell.runtimePanelTitle")}
-                aria-pressed={rightOpen}
+                aria-pressed={rightPanelOpen}
                 className="hidden xl:inline-flex"
               >
                 <PanelRightIcon />
@@ -194,29 +256,12 @@ export function AssessmentAppShell({
         </header>
 
         <div className="flex min-h-0 flex-1 bg-muted/10">
-          <section
-            data-slot="assessment-center-content"
-            className="flex min-w-0 flex-1 flex-col bg-background"
-          >
-            <div
-              data-slot="assessment-center-scroll"
-              className="min-h-0 flex-1 overflow-y-auto"
-            >
-              {assessmentId ? (
-                <div className="mx-auto min-h-full w-full max-w-190">
-                  {children}
-                </div>
-              ) : (
-                children
-              )}
-            </div>
-          </section>
+          <CenterContentSlot assessmentId={assessmentId}>
+            {children}
+          </CenterContentSlot>
 
-          {assessmentId && rightOpen ? (
-            <aside
-              data-slot="assessment-right-panel"
-              className="hidden w-105 shrink-0 border-l border-border/70 bg-muted/20 xl:flex"
-            >
+          {assessmentId ? (
+            <AssessmentRightPanelSlot open={rightPanelOpen}>
               <AssessmentRuntimePanel
                 assessmentId={assessmentId}
                 assessmentName={assessment?.name}
@@ -225,7 +270,7 @@ export function AssessmentAppShell({
                 workflowItems={assessmentSection?.items ?? []}
                 workflowLabel={assessmentSection?.label}
               />
-            </aside>
+            </AssessmentRightPanelSlot>
           ) : null}
         </div>
       </div>
@@ -266,6 +311,7 @@ export function AssessmentAppShell({
 
 function AssessmentShellNavigation({
   assessments,
+  collapsed,
   onNavigate,
   onSignOut,
   pathname,
@@ -273,6 +319,7 @@ function AssessmentShellNavigation({
   userName,
 }: {
   assessments: AssessmentSummary[];
+  collapsed: boolean;
   onNavigate?: () => void;
   onSignOut: () => void;
   pathname: string;
@@ -300,41 +347,53 @@ function AssessmentShellNavigation({
         <Link
           href="/workspace"
           onClick={onNavigate}
-          className="flex min-w-0 items-center gap-2.5 rounded-lg px-1.5 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className={cn(
+            "flex min-w-0 items-center rounded-lg px-1.5 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+            collapsed ? "justify-center" : "gap-2.5",
+          )}
           title={t("pages.appShell.productName")}
         >
           <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
             <ShieldCheckIcon className="size-4" />
           </span>
-          <span className="truncate text-sm font-semibold">
-            {t("pages.appShell.productName")}
-          </span>
+          {collapsed ? null : (
+            <span className="truncate text-sm font-semibold">
+              {t("pages.appShell.productName")}
+            </span>
+          )}
         </Link>
 
         <Link
           href="/assessments/new"
           onClick={onNavigate}
-          className="mt-4 flex h-9 items-center gap-2 rounded-lg px-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className={cn(
+            "mt-4 flex h-9 items-center rounded-lg px-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+            collapsed ? "justify-center" : "gap-2",
+          )}
+          title={collapsed ? t("pages.appShell.new") : undefined}
         >
           <PlusIcon className="size-4 shrink-0" />
-          <span>{t("pages.appShell.new")}</span>
+          {collapsed ? null : <span>{t("pages.appShell.new")}</span>}
         </Link>
 
         <button
           type="button"
           aria-disabled="true"
           title={t("pages.appShell.artifactsUnavailable")}
-          className="mt-1 flex h-9 w-full cursor-default items-center gap-2 rounded-lg px-2 text-sm font-medium text-sidebar-foreground/70"
+          className={cn(
+            "mt-1 flex h-9 w-full cursor-default items-center rounded-lg px-2 text-sm font-medium text-sidebar-foreground/70",
+            collapsed ? "justify-center" : "gap-2",
+          )}
         >
           <BoxesIcon className="size-4 shrink-0" />
-          <span>{t("pages.appShell.artifacts")}</span>
+          {collapsed ? null : <span>{t("pages.appShell.artifacts")}</span>}
         </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-3">
         {recentAssessmentItems.length > 0 ? (
           <NavigationGroup
-            collapsed={false}
+            collapsed={collapsed}
             label={t("pages.appShell.recents")}
             items={recentAssessmentItems}
             onNavigate={onNavigate}
@@ -349,7 +408,10 @@ function AssessmentShellNavigation({
             render={
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1.5 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                className={cn(
+                  "flex w-full items-center rounded-lg px-1.5 py-1.5 text-left outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                  collapsed ? "justify-center" : "gap-2",
+                )}
                 aria-label={t("pages.appShell.accountMenu")}
               />
             }
@@ -357,10 +419,14 @@ function AssessmentShellNavigation({
             <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
               {userInitial}
             </span>
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">
-              {resolvedUserName}
-            </span>
-            <ChevronsUpDownIcon className="size-3.5 shrink-0 text-sidebar-foreground/55" />
+            {collapsed ? null : (
+              <>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                  {resolvedUserName}
+                </span>
+                <ChevronsUpDownIcon className="size-3.5 shrink-0 text-sidebar-foreground/55" />
+              </>
+            )}
           </DropdownMenuTrigger>
           <DropdownMenuContent
             side="top"
@@ -588,12 +654,13 @@ function AssessmentRuntimePanel({
       </div>
 
       <div className="shrink-0 border-t border-border/70 p-3">
-        <Link
-          href={`/assessments/${encodeURIComponent(assessmentId)}/technical-evidence`}
-          className="flex h-9 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+        <button
+          type="button"
+          disabled
+          className="flex h-9 w-full cursor-not-allowed items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-semibold text-muted-foreground"
         >
           {t("pages.appShell.runtimePanelViewFull")}
-        </Link>
+        </button>
       </div>
     </div>
   );
@@ -637,18 +704,22 @@ function AssessmentWorkflowTimeline({
               >
                 <Icon className="size-3.5" />
               </span>
-              <Link
-                href={item.href}
+              <button
+                type="button"
+                disabled={item.disabled}
                 aria-current={active ? "step" : undefined}
                 className={cn(
-                  "min-w-0 flex-1 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "min-w-0 flex-1 rounded-lg px-2 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   active
                     ? "font-semibold text-foreground"
-                    : "font-medium text-muted-foreground hover:text-foreground",
+                    : "font-medium text-muted-foreground",
+                  item.disabled
+                    ? "cursor-not-allowed opacity-45"
+                    : "hover:bg-muted/70 hover:text-foreground",
                 )}
               >
                 <span className="block truncate">{item.label}</span>
-              </Link>
+              </button>
             </li>
           );
         })}
@@ -668,4 +739,30 @@ function isNavigationItemActive(
 
 function t(key: string) {
   return resolveMessage(appLocale, key as Parameters<typeof resolveMessage>[1]);
+}
+
+function getRouteScreen(
+  pathname: string,
+  assessmentId?: string,
+): AssessmentShellState["screen"] {
+  if (assessmentId) return ASSESSMENT_SHELL_SCREENS.assessment;
+  if (pathname === "/laws" || pathname.startsWith("/laws/")) {
+    return ASSESSMENT_SHELL_SCREENS.legal;
+  }
+  if (pathname === "/workspace" || pathname.startsWith("/workspace/")) {
+    return ASSESSMENT_SHELL_SCREENS.workspace;
+  }
+  if (pathname === "/assessments/new") return ASSESSMENT_SHELL_SCREENS.create;
+  return ASSESSMENT_SHELL_SCREENS.directory;
+}
+
+function getFallbackHeaderTitle(pathname: string) {
+  if (pathname === "/workspace/settings") return t("pages.appShell.settings");
+  if (pathname === "/laws" || pathname.startsWith("/laws/")) {
+    return t("pages.appShell.legalLibrary");
+  }
+  if (pathname === "/workspace" || pathname.startsWith("/workspace/")) {
+    return t("pages.appShell.overview");
+  }
+  return t("pages.appShell.assessments");
 }
