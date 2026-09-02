@@ -5,20 +5,6 @@ import type { ReactNode } from "react";
 import { appLocale } from "@/lib/locale";
 import { cn } from "@/lib/utils";
 
-const MARKETING_PAGE_KEYS = {
-  product: "product",
-  features: "features",
-  pricing: "pricing",
-} as const;
-
-type MarketingPageKey =
-  (typeof MARKETING_PAGE_KEYS)[keyof typeof MARKETING_PAGE_KEYS];
-
-type MarketingShellProps = {
-  active: MarketingPageKey;
-  children: ReactNode;
-};
-
 const navigation = [
   {
     key: "product" as const,
@@ -36,6 +22,13 @@ const navigation = [
     labelKey: "pages.marketing.nav.pricing",
   },
 ];
+
+type MarketingPageKey = (typeof navigation)[number]["key"];
+
+type MarketingShellProps = {
+  active: MarketingPageKey;
+  children: ReactNode;
+};
 
 export function MarketingShell({ active, children }: MarketingShellProps) {
   return (
