@@ -17,6 +17,7 @@ from harness import (
 )
 from subagents import (
     FLOW_SUBAGENTS,
+    INTERVIEW_TOOLS,
     INVESTIGATOR_TOOLS,
     PLANNER_TOOLS,
     TRIAGE_TOOLS,
@@ -93,16 +94,19 @@ def _assessment_authored_tool_layout() -> dict[str, tuple[str, ...]]:
 
 def test_subagents_receive_fixed_minimal_tool_surfaces() -> None:
     assert _names(TRIAGE_TOOLS) == TRIAGE_TOOL_NAMES
+    assert _names(INTERVIEW_TOOLS) == ()
     assert _names(PLANNER_TOOLS) == EXPECTED_ROLE_TOOL_NAMES["planner"]
     assert _names(INVESTIGATOR_TOOLS) == EXPECTED_ROLE_TOOL_NAMES["investigator"]
 
     by_name = {item["name"]: item for item in FLOW_SUBAGENTS}
     assert tuple(by_name) == (
         "triage",
+        "interview",
         "planner",
         "investigator",
     )
     assert _names(by_name["triage"]["tools"]) == TRIAGE_TOOL_NAMES
+    assert _names(by_name["interview"]["tools"]) == ()
     for role in ("planner", "investigator"):
         assert _names(by_name[role]["tools"]) == EXPECTED_ROLE_TOOL_NAMES[role]
 
@@ -122,11 +126,12 @@ def test_subagent_definitions_are_owned_by_role_directories() -> None:
     subagents_root = PROJECT_ROOT / "subagents"
     assert _directory_names(subagents_root) == {
         "triage",
+        "interview",
         "planner",
         "investigator",
     }
     assert not (PROJECT_ROOT / "subagents.py").exists()
-    for role in ("triage", "planner", "investigator"):
+    for role in ("triage", "interview", "planner", "investigator"):
         assert (subagents_root / role / "definition.py").is_file()
 
 

@@ -1042,9 +1042,7 @@ function publicState(
   return {
     ...state,
     confirmedContext: undefined,
-    pendingDraft: state.pendingDraft
-      ? PUBLIC_REDACTED_DRAFT_SUMMARY
-      : undefined,
+    pendingDraft: state.pendingDraft,
     answerHistory: state.answerHistory?.map((item) => ({
       ...item,
       summary: item.summary,

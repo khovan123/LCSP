@@ -187,6 +187,13 @@ export class InternalAssessmentInterviewController {
     private readonly interviewRuntime: AssessmentInterviewRuntimeService,
   ) {}
 
+  @Get(":assessmentId/state")
+  async getWorkerState(@Param("assessmentId") assessmentId: string) {
+    return resultEnvelope(
+      await this.interviewRuntime.getWorkerStateForWorker(assessmentId),
+    );
+  }
+
   @Get(":assessmentId/private-context/:contextRevision")
   async getPrivateContext(
     @Param("assessmentId") assessmentId: string,

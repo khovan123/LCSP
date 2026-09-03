@@ -27,6 +27,13 @@ const RAW_ANSWER = "Payment assistant recommends review actions.";
 const RAW_DRAFT = "Need internal legal owner confirmation.";
 const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
 
+function jsonRecord(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
 describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
   let app: INestApplication;
   let prisma: PrismaClient;
@@ -131,13 +138,18 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       /Payment assistant/u,
     );
 
+    const resumePayload = jsonRecord(resumeCommand.payload);
     const privateRevision = await httpRequest(app)
       .get("/internal/assessment-interviews/assessment-1/private-context/1")
       .query({
-        source_version: JSON.parse(JSON.stringify(resumeCommand.payload))
-          .sourceVersion,
-        pge_version: JSON.parse(JSON.stringify(resumeCommand.payload))
-          .pgeVersion,
+        source_version:
+          typeof resumePayload.sourceVersion === "string"
+            ? resumePayload.sourceVersion
+            : undefined,
+        pge_version:
+          typeof resumePayload.pgeVersion === "string"
+            ? resumePayload.pgeVersion
+            : undefined,
       })
       .set("x-worker-api-key", WORKER_KEY);
     assert.equal(
@@ -241,7 +253,9 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     });
     assert.equal(thread.contextRevision, 1);
     assert.equal(
-      JSON.parse(JSON.stringify(thread.privateContextJson)).length,
+      Array.isArray(thread.privateContextJson)
+        ? thread.privateContextJson.length
+        : 0,
       1,
     );
   });

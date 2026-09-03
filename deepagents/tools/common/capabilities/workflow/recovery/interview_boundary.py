@@ -168,6 +168,27 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 correlationId,
             )
             return
+        if outcome == "CONTEXT_READY":
+            evidence_report_id = pge_version.split(":", 1)[0].strip()
+            if not evidence_report_id:
+                raise ValueError("guarded CONTEXT_READY is missing technical evidence report provenance")
+            from tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary import (
+                InterviewGatedEngineeringAssessmentBoundary,
+            )
+
+            InterviewGatedEngineeringAssessmentBoundary(
+                self._config,
+                api_client=self._api_client,
+            ).handle(
+                {
+                    "assessmentId": assessment_id,
+                    "evidenceReportId": evidence_report_id,
+                    "workflowRunId": thread_id,
+                },
+                correlationId,
+            )
+            return
+
         root = self._root_agent or self._load_root_agent()
         root.invoke(
             {

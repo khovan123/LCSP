@@ -50,7 +50,7 @@ AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
     ),
     AgentInvocationBoundary(
         "engineering_assessment_requested",
-        "tools.common.capabilities.assessment.investigation.engineering_rule.engineering_assessment_boundary:EngineeringAssessmentBoundary",
+        "tools.common.capabilities.assessment.investigation.engineering_rule.interview_gated_boundary:InterviewGatedEngineeringAssessmentBoundary",
         "investigation.evidence-accepted",
         "event.technical-evidence.accepted.v1",
     ),
