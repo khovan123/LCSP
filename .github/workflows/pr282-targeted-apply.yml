@@ -1,0 +1,46 @@
+name: PR 282 targeted Interview patch
+
+on:
+  push:
+    branches:
+      - feat/LCSP-278-add-responsive-interaction-regression-coverage
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/LCSP-278-add-responsive-interaction-regression-coverage
+          fetch-depth: 0
+
+      - name: Apply server-owned targeted Interview patch
+        run: python scripts/pr282_targeted_fix.py
+
+      - name: Validate patch shape
+        run: |
+          git diff --check
+          python -m py_compile \
+            deepagents/contracts/handoffs.py \
+            deepagents/middleware/specialist_handoff_validation.py \
+            deepagents/tools/common/capabilities/platform/api_client.py \
+            deepagents/tools/common/capabilities/workflow/recovery/interview_boundary.py \
+            deepagents/tests/test_targeted_interview_registration.py
+          git status --short
+
+      - name: Commit patch
+        run: |
+          if git diff --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+            echo "No patch changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: LCSP-278 persist server-owned targeted Interview continuation"
+          git push origin HEAD:feat/LCSP-278-add-responsive-interaction-regression-coverage
