@@ -1006,6 +1006,13 @@ export type PagesMessages = {
     blockedCheckInternally: string;
     blockedSaveExit: string;
     whyAsking: string;
+    whyAskingDetail: string;
+    submitAnswer: string;
+    answerSavedForRuntime: string;
+    draftSavedForResume: string;
+    blockedActionRecorded: string;
+    runtimeWaitingForAgent: string;
+    noActiveInterviewQuestion: string;
     modules: {
       readiness: string;
       classification: string;

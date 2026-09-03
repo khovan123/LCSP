@@ -74,6 +74,7 @@ class InvestigationPacket:
     unresolved_frontiers: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = ()
     customer_context: dict[str, Any] = field(default_factory=dict)
+    confirmed_customer_context: dict[str, Any] = field(default_factory=dict)
     required_evidence: tuple[str, ...] = ()
     supporting_evidence: tuple[str, ...] = ()
     negative_evidence: tuple[str, ...] = ()

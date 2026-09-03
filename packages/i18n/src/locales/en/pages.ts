@@ -985,6 +985,14 @@ export const enPages = {
     blockedCheckInternally: "I need to check internally",
     blockedSaveExit: "Save & Exit",
     whyAsking: "Why are we asking?",
+    whyAskingDetail: "The Interview Agent linked this question to evidence refs:",
+    submitAnswer: "Send answer",
+    answerSavedForRuntime:
+      "Answer captured for the runtime thread. The Interview Agent will evaluate sufficiency before downstream resume.",
+    draftSavedForResume: "Draft saved. Return to this assessment to resume the same interview thread.",
+    blockedActionRecorded: "Choice recorded for the unresolved interview thread.",
+    runtimeWaitingForAgent: "Waiting for runtime activity for this assessment.",
+    noActiveInterviewQuestion: "No active Interview Agent question is waiting right now.",
     modules: {
       readiness: "Review completed conditions and the evidence still needed.",
       classification:

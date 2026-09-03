@@ -982,6 +982,14 @@ export const viPages = {
     blockedCheckInternally: "Tôi cần kiểm tra nội bộ",
     blockedSaveExit: "Lưu và thoát",
     whyAsking: "Vì sao cần hỏi?",
+    whyAskingDetail: "Interview Agent gắn câu hỏi này với các evidence ref:",
+    submitAnswer: "Gửi câu trả lời",
+    answerSavedForRuntime:
+      "Câu trả lời đã được ghi cho thread runtime. Interview Agent sẽ đánh giá đủ bối cảnh trước khi resume downstream.",
+    draftSavedForResume: "Đã lưu draft. Quay lại assessment này để tiếp tục đúng interview thread.",
+    blockedActionRecorded: "Lựa chọn đã được ghi cho interview thread chưa resolve.",
+    runtimeWaitingForAgent: "Đang chờ hoạt động runtime cho assessment này.",
+    noActiveInterviewQuestion: "Hiện chưa có câu hỏi Interview Agent nào đang chờ.",
     modules: {
       readiness: "Kiểm tra các điều kiện đã sẵn sàng và evidence còn thiếu.",
       classification:

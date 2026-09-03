@@ -120,6 +120,39 @@ class InvestigatorResult(BaseModel):
         return self
 
 
+class ResolverConflictValue(BaseModel):
+    """One source value participating in a Resolver handoff."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["CUSTOMER_CONTEXT", "PROGRAM_GRAPH", "INVESTIGATOR", "UNKNOWN"]
+    value: Any = None
+    source_refs: list[str] = Field(default_factory=list, max_length=100)
+
+
+class ResolverResult(BaseModel):
+    """Typed Resolver-to-root handoff for pre-Interview unresolved context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["RESOLVED", "CONFLICT", "NEEDS_INPUT"]
+    fact_key: str = Field(min_length=1, max_length=240)
+    resolved_value: Any = None
+    conflicting_values: list[ResolverConflictValue] = Field(default_factory=list, max_length=50)
+    source_refs: list[str] = Field(default_factory=list, max_length=100)
+    can_resume_existing_plan: bool = False
+
+    @model_validator(mode="after")
+    def validate_transition(self) -> Self:
+        if self.status == "CONFLICT" and not self.conflicting_values:
+            raise ValueError("CONFLICT Resolver output requires conflicting_values")
+        if self.status == "RESOLVED" and self.resolved_value is None:
+            raise ValueError("RESOLVED Resolver output requires resolved_value")
+        if self.status == "NEEDS_INPUT" and self.can_resume_existing_plan:
+            raise ValueError("NEEDS_INPUT Resolver output cannot resume existing plan")
+        return self
+
+
 class TriageResult(BaseModel):
     """Typed Legal Triage-to-root handoff."""
 
@@ -162,6 +195,8 @@ __all__ = [
     "InvestigatorResult",
     "PlannerResult",
     "ProvenanceRef",
+    "ResolverConflictValue",
+    "ResolverResult",
     "SPECIALIST_RESPONSE_FORMATS",
     "TriageResult",
 ]

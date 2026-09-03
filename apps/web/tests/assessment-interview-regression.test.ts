@@ -169,7 +169,12 @@ test("workflow run renders dynamic interview controls through shared workspace c
   assert.match(overviewSource, /AssessmentTranscript/);
   assert.match(overviewSource, /AssessmentComposer/);
   assert.match(overviewSource, /AssessmentQuestionTurn/);
-  assert.doesNotMatch(overviewSource, /Card|modules\.map|\/wizard|\/readiness/);
+  assert.match(overviewSource, /deriveInterviewState/);
+  assert.match(overviewSource, /useWorkspaceRuntime/);
+  assert.doesNotMatch(
+    overviewSource,
+    /initialInterviewQuestion|targetedClarificationQuestion|Card|modules\.map|\/wizard|\/readiness/,
+  );
 
   assert.match(questionSource, /priorAnswerSummary/);
   assert.match(questionSource, /requiresFreeText/);

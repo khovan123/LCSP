@@ -27,6 +27,10 @@ class ClassificationDossierBuilder:
         snapshot = self._record(generation_context, "repository_snapshot")
         legal_match = self._record(generation_context, "legal_rule_match")
         ai_usage_flow = self._record(generation_context, "ai_usage_flow")
+        confirmed_context = self._json_record(
+            generation_context.get("confirmed_customer_context")
+        )
+        answers = self._json_record(confirmed_context.get("answers"))
         technical_data = self._json_record(technical.get("profile_data"))
         verified_data = self._json_record(verified.get("profile_data"))
         merged = self._json_record(verified_data.get("merged_profile"))

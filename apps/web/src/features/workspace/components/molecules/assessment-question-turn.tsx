@@ -14,7 +14,7 @@ import {
   SaveIcon,
   TextCursorInputIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,15 +28,47 @@ type AssessmentQuestionTurnProps = {
   question: AssessmentInterviewQuestion;
   blockedActions?: AssessmentInterviewBlockedAction[];
   className?: string;
+  initialDraft?: string;
+  onDraftChange?: (value: string) => void;
+  onSubmitAnswer?: (input: AssessmentQuestionAnswerInput) => void;
+  onBlockedAction?: (action: AssessmentInterviewBlockedAction) => void;
+};
+
+export type AssessmentQuestionAnswerInput = {
+  questionId: string;
+  freeText?: string;
+  selectedChoiceIds?: string[];
+  otherText?: string;
+  confirmed?: boolean;
+  adjusted?: boolean;
 };
 
 export function AssessmentQuestionTurn({
   question,
   blockedActions = [],
   className,
+  initialDraft = "",
+  onDraftChange,
+  onSubmitAnswer,
+  onBlockedAction,
 }: AssessmentQuestionTurnProps) {
+  const [freeText, setFreeText] = useState(initialDraft);
   const [singleValue, setSingleValue] = useState<string>();
   const [multiValues, setMultiValues] = useState<Set<string>>(() => new Set());
+  const [otherText, setOtherText] = useState("");
+  const [showWhy, setShowWhy] = useState(false);
+
+  const selectedChoiceIds = useMemo(() => Array.from(multiValues), [multiValues]);
+  const selectedChoiceRequiresText = (question.choices ?? []).some(
+    (choice) =>
+      choice.requiresFreeText &&
+      (choice.id === singleValue || multiValues.has(choice.id)),
+  );
+
+  function updateFreeText(value: string) {
+    setFreeText(value);
+    onDraftChange?.(value);
+  }
 
   function toggleMultiValue(value: string) {
     setMultiValues((current) => {
@@ -47,6 +79,19 @@ export function AssessmentQuestionTurn({
         next.add(value);
       }
       return next;
+    });
+  }
+
+  function submitAnswer(input: Partial<AssessmentQuestionAnswerInput> = {}) {
+    onSubmitAnswer?.({
+      questionId: question.id,
+      freeText: freeText.trim() || undefined,
+      selectedChoiceIds:
+        question.control === ASSESSMENT_INTERVIEW_CONTROLS.singleSelect && singleValue
+          ? [singleValue]
+          : selectedChoiceIds,
+      otherText: otherText.trim() || undefined,
+      ...input,
     });
   }
 
@@ -73,6 +118,8 @@ export function AssessmentQuestionTurn({
               aria-label={question.prompt}
               className="min-h-24 resize-y"
               placeholder={t("pages.appShell.chatComposerPlaceholder")}
+              value={freeText}
+              onChange={(event) => updateFreeText(event.target.value)}
             />
           ) : null}
 
@@ -133,33 +180,67 @@ export function AssessmentQuestionTurn({
 
           {question.control === ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust ? (
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => submitAnswer({ confirmed: true })}
+              >
                 <CheckIcon />
                 {t("pages.assessment.confirm")}
               </Button>
-              <Button type="button" size="sm" variant="outline">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => submitAnswer({ adjusted: true })}
+              >
                 <Edit3Icon />
                 {t("pages.assessment.adjust")}
               </Button>
             </div>
           ) : null}
 
-          {(question.choices ?? []).some(
-            (choice) => choice.requiresFreeText,
-          ) ? (
+          {selectedChoiceRequiresText ? (
             <Textarea
               aria-label={t("pages.assessment.otherDescribe")}
               className="mt-3 min-h-20"
               placeholder={t("pages.assessment.otherDescribe")}
+              value={otherText}
+              onChange={(event) => setOtherText(event.target.value)}
             />
           ) : null}
         </div>
 
-        {question.whyEvidenceRefs && question.whyEvidenceRefs.length > 0 ? (
-          <Button type="button" size="sm" variant="ghost" className="mt-3">
-            <HelpCircleIcon />
-            {t("pages.assessment.whyAsking")}
+        {question.control !== ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust ? (
+          <Button
+            type="button"
+            size="sm"
+            className="mt-3"
+            onClick={() => submitAnswer()}
+          >
+            <CheckIcon />
+            {t("pages.assessment.submitAnswer")}
           </Button>
+        ) : null}
+
+        {question.whyEvidenceRefs && question.whyEvidenceRefs.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-expanded={showWhy}
+              onClick={() => setShowWhy((current) => !current)}
+            >
+              <HelpCircleIcon />
+              {t("pages.assessment.whyAsking")}
+            </Button>
+            {showWhy ? (
+              <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                {t("pages.assessment.whyAskingDetail")} {question.whyEvidenceRefs.join(", ")}
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
@@ -178,6 +259,7 @@ export function AssessmentQuestionTurn({
                   ? "outline"
                   : "secondary"
               }
+              onClick={() => onBlockedAction?.(action)}
             >
               {action === ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit ? (
                 <SaveIcon />

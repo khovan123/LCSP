@@ -8,6 +8,7 @@ from pydantic import BaseModel, ValidationError
 
 from contracts.handoffs import (
     InvestigatorResult,
+    ResolverResult,
     SPECIALIST_RESPONSE_FORMATS,
 )
 from tools.common.capabilities.assessment.claims.evidence_claim.evidence_claim_validator import (
@@ -33,6 +34,8 @@ CONTROLLED_NON_VERDICT_PATHS = frozenset(
 
 
 def _response_model(subagent_type: str) -> type[BaseModel]:
+    if subagent_type == "resolver":
+        return ResolverResult
     try:
         return SPECIALIST_RESPONSE_FORMATS[subagent_type]
     except KeyError as exc:

@@ -2,6 +2,7 @@
 
 import * as assert from "node:assert/strict";
 
+import { ASSESSMENT_STATUS_CODES } from "@lcsp/contracts/assessment";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import { DOCUMENT_REQUEST_STATUSES } from "@lcsp/contracts/document";
 import {
@@ -85,6 +86,10 @@ describe("Manager Golden Path (e2e) [MW-qa-003]", () => {
     ).assessment_id;
     assert.ok(assessmentId);
 
+    await prisma.assessment.update({
+      where: { id: assessmentId },
+      data: { status: ASSESSMENT_STATUS_CODES.wizardSubmitted },
+    });
     await seedRepositorySnapshot(prisma, assessmentId);
     const scan = await httpRequest(app)
       .post(`/assessments/${assessmentId}/scan-jobs`)
