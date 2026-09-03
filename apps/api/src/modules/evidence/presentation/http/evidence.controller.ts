@@ -16,6 +16,7 @@ import { CommandBus, QueryBus } from "@nestjs/cqrs";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 
 import type { AuthenticatedRequest } from "../../../../common/interfaces/authenticated-request.interface.js";
+import { isRecord } from "../../../../common/utils/index.js";
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
 import { RequireRoles } from "../../../../platform/rbac/decorators/require-roles.decorator.js";
 import { RbacGuard } from "../../../../platform/rbac/rbac.guard.js";
@@ -171,6 +172,3 @@ export class InternalEvidenceController {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}

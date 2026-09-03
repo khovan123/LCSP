@@ -25,6 +25,7 @@ import type { AuditExportArtifact } from "../../application/contracts/audit/audi
 import { ExportAuditTrailCommand } from "../../application/commands/export-audit-trail/export-audit-trail.command.js";
 import { GetAuditExportArtifactQuery } from "../../application/queries/get-audit-export-artifact/get-audit-export-artifact.query.js";
 import { GetAuditExportQuery } from "../../application/queries/get-audit-export/get-audit-export.query.js";
+import { GetInterviewAuditTrailQuery } from "../../application/queries/get-interview-audit-trail/get-interview-audit-trail.query.js";
 import { ListAuditEventsQuery } from "../../application/queries/list-audit-events/list-audit-events.query.js";
 import { AuditExportStorageService } from "../../infrastructure/storage/audit-export-storage.service.js";
 
@@ -84,6 +85,35 @@ export class AuditController {
           toDate,
           page === undefined ? undefined : Number(page),
           pageSize === undefined ? undefined : Number(pageSize),
+          request.correlationId as string,
+        ),
+      ),
+    );
+  }
+
+  /**
+   * Retrieves the chronological Interview audit trail and material provenance for an assessment.
+   *
+   * @param assessmentId - Target assessment identifier.
+   * @param request - Authenticated request containing RBAC context and correlation ID.
+   * @returns The standard result envelope containing the interview audit trail.
+   */
+  @Get("assessments/:assessmentId/interview")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
+  async getAssessmentInterviewAudit(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const rbacContext = request.rbacContext;
+
+    return resultEnvelope(
+      await this.queryBus.execute(
+        new GetInterviewAuditTrailQuery(
+          assessmentId,
+          rbacContext.userId,
+          rbacContext.role,
+          rbacContext.scope,
           request.correlationId as string,
         ),
       ),

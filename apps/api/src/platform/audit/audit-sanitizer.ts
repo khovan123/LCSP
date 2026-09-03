@@ -1,3 +1,5 @@
+import { isRecord } from "../../common/utils/index.js";
+
 const SAFE_CODE_KEYS = new Set(["reason_code", "reasonCode"]);
 const SENSITIVE_KEY_PATTERN = /password|token|secret|key|nonce|code|hash/i;
 
@@ -81,12 +83,3 @@ function sanitizeValue(
   return isRecord(value) ? sanitizeRecord(value, path, removedKeys) : value;
 }
 
-/**
- * Determines whether a value is a non-array object that can be sanitized as a record.
- *
- * @param value - Value to inspect.
- * @returns True when the value is a record-like object.
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}

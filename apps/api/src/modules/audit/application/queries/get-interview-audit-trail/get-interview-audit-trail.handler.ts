@@ -10,6 +10,7 @@ import {
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { QueryHandler, type IQueryHandler } from "@nestjs/cqrs";
 
+import { cleanString, isRecord } from "../../../../../common/utils/type-guards.js";
 import { PrismaService } from "../../../../../infrastructure/prisma/prisma.service.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 import { AuditRedactorService } from "../../services/audit/audit-redactor.service.js";
@@ -151,18 +152,3 @@ export class GetInterviewAuditTrailHandler
   }
 }
 
-/**
- * Checks if a value is a non-null object record.
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Normalizes a string value by trimming whitespace.
- */
-function cleanString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0
-    ? value.trim()
-    : null;
-}

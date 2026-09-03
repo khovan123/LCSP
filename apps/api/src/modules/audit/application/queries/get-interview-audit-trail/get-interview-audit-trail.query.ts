@@ -15,7 +15,7 @@ export class GetInterviewAuditTrailQuery {
     public readonly assessmentId: string,
     public readonly sessionUserId: string,
     public readonly subjectRole: string,
-    public readonly subjectScope: string | undefined,
+    public readonly subjectScope: string | null | undefined,
     public readonly correlationId: string,
   ) {}
 }

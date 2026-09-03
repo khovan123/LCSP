@@ -4,6 +4,7 @@ import {
   ENGINEERING_RULE_EVALUATION_STATUSES,
   SCAN_ERROR_CODES,
 } from "@lcsp/contracts/scan";
+import { isRecord } from "../../../../../common/utils/index.js";
 import { problemException } from "../../../../../platform/problems/problem-factory.js";
 
 const PROHIBITED_OVERCLAIM_TERMS = [
@@ -120,6 +121,3 @@ function collectNarrativeStrings(value: unknown, path = "$"): NarrativeValue[] {
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
