@@ -865,7 +865,8 @@ function assertGuardedDecision(
   correlationId: string,
 ): void {
   const isBlockedFollowup =
-    thread.state.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved &&
+    thread.state.outcome ===
+      ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved &&
     decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
   if (!privateRevision && !isBlockedFollowup) {
     throw problemException(
@@ -878,17 +879,25 @@ function assertGuardedDecision(
     decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
     !decision.activeQuestion
   ) {
-    throw problemException("INTERVIEW_WAITING_REQUIRES_QUESTION", correlationId, {
-      status: HttpStatus.CONFLICT,
-    });
+    throw problemException(
+      "INTERVIEW_WAITING_REQUIRES_QUESTION",
+      correlationId,
+      {
+        status: HttpStatus.CONFLICT,
+      },
+    );
   }
   if (
     decision.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
     decision.activeQuestion
   ) {
-    throw problemException("INTERVIEW_ACTIVE_QUESTION_OUTCOME_INVALID", correlationId, {
-      status: HttpStatus.CONFLICT,
-    });
+    throw problemException(
+      "INTERVIEW_ACTIVE_QUESTION_OUTCOME_INVALID",
+      correlationId,
+      {
+        status: HttpStatus.CONFLICT,
+      },
+    );
   }
   if (
     decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady &&
@@ -904,9 +913,13 @@ function assertGuardedDecision(
   }
   if (decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved) {
     if (decision.mode !== "TARGETED_INTERVIEW") {
-      throw problemException("INTERVIEW_CONTEXT_RESOLVED_REQUIRES_TARGETED_MODE", correlationId, {
-        status: HttpStatus.CONFLICT,
-      });
+      throw problemException(
+        "INTERVIEW_CONTEXT_RESOLVED_REQUIRES_TARGETED_MODE",
+        correlationId,
+        {
+          status: HttpStatus.CONFLICT,
+        },
+      );
     }
     if (!isAuthoritative(decision.contextAuthority)) {
       throw problemException(
@@ -952,9 +965,13 @@ function assertGuardedDecision(
       });
     }
     if (!decision.continuation.affectedRuleIds?.length) {
-      throw problemException("INTERVIEW_CONTINUATION_SCOPE_REQUIRED", correlationId, {
-        status: HttpStatus.CONFLICT,
-      });
+      throw problemException(
+        "INTERVIEW_CONTINUATION_SCOPE_REQUIRED",
+        correlationId,
+        {
+          status: HttpStatus.CONFLICT,
+        },
+      );
     }
     const context = decision.confirmedContext ?? {};
     const missing = decision.resolutionCriteria.filter(
