@@ -20,7 +20,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply guarded Interview fixes
-        run: python scripts/pr282_apply.py
+        run: |
+          python scripts/pr282_apply.py
+          sed -i 's/): $/):/' deepagents/tests/test_deep_agent_flow_boundaries.py
 
       - name: Validate patch shape
         run: |
