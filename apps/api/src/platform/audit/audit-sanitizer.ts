@@ -1,6 +1,13 @@
 import { isRecord } from "../../common/utils/index.js";
 
-const SAFE_CODE_KEYS = new Set(["reason_code", "reasonCode"]);
+const SAFE_CODE_KEYS = new Set([
+  "reason_code",
+  "reasonCode",
+  "statement_key",
+  "statementKey",
+  "claim_key",
+  "claimKey",
+]);
 const SENSITIVE_KEY_PATTERN = /password|token|secret|key|nonce|code|hash/i;
 
 export interface SanitizeResult {
