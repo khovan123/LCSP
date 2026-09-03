@@ -1,0 +1,40 @@
+name: PR 282 guarded interview patch
+
+on:
+  push:
+    branches:
+      - feat/LCSP-278-add-responsive-interaction-regression-coverage
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/LCSP-278-add-responsive-interaction-regression-coverage
+          fetch-depth: 0
+
+      - name: Apply guarded Interview fixes
+        run: python scripts/pr282_apply.py
+
+      - name: Validate patch shape
+        run: |
+          git diff --check
+          git status --short
+
+      - name: Commit patch
+        run: |
+          if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+            echo "No patch changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(LCSP-278): enforce guarded Interview production flow"
+          git push origin HEAD:feat/LCSP-278-add-responsive-interaction-regression-coverage
