@@ -7,7 +7,11 @@ import {
   type AssessmentInterviewBlockedInput,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   AssessmentRuntimeEventType,
   AssessmentRuntimeRunStatus,
@@ -49,12 +53,17 @@ export class AssessmentInterviewRuntimeService {
       threadId: this.threadId(input.assessmentId),
       contextRevision,
       orchestrationRequested: true,
-      audit: this.auditRef(input.assessmentId, input.actor.userId, input.correlationId, {
-        contextRevision,
-        priorRevision: priorState.contextRevision,
-        newRevision: contextRevision,
-        relatedQuestionId: answer.questionId,
-      }),
+      audit: this.auditRef(
+        input.assessmentId,
+        input.actor.userId,
+        input.correlationId,
+        {
+          contextRevision,
+          priorRevision: priorState.contextRevision,
+          newRevision: contextRevision,
+          relatedQuestionId: answer.questionId,
+        },
+      ),
     };
 
     await this.recordInterviewEvent({
@@ -62,7 +71,8 @@ export class AssessmentInterviewRuntimeService {
       correlationId: input.correlationId,
       eventType: AssessmentRuntimeEventType.TOOL_COMPLETED,
       runStatus: AssessmentRuntimeRunStatus.RUNNING,
-      summary: "Customer interview answer persisted; orchestration resume requested.",
+      summary:
+        "Customer interview answer persisted; orchestration resume requested.",
       inputSummaryJson: toJson({ answer }),
       outputSummaryJson: toJson({ assessmentInterview: state }),
     });
@@ -85,10 +95,16 @@ export class AssessmentInterviewRuntimeService {
       threadId: this.threadId(input.assessmentId),
       blockedActions: Object.values(ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS),
       orchestrationRequested:
-        blocked.action === ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
-      audit: this.auditRef(input.assessmentId, input.actor.userId, input.correlationId, {
-        contextRevision: current.contextRevision ?? 0,
-      }),
+        blocked.action ===
+        ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+      audit: this.auditRef(
+        input.assessmentId,
+        input.actor.userId,
+        input.correlationId,
+        {
+          contextRevision: current.contextRevision ?? 0,
+        },
+      ),
     };
 
     await this.recordInterviewEvent({
@@ -115,7 +131,10 @@ export class AssessmentInterviewRuntimeService {
     if (!assessment) {
       throw new NotFoundException({ code: ASSESSMENT_ERROR_CODES.notFound });
     }
-    if (actor.role === AUTH_USER_ROLES.customer && assessment.ownerId !== actor.userId) {
+    if (
+      actor.role === AUTH_USER_ROLES.customer &&
+      assessment.ownerId !== actor.userId
+    ) {
       throw new NotFoundException({ code: ASSESSMENT_ERROR_CODES.notFound });
     }
   }
@@ -132,11 +151,13 @@ export class AssessmentInterviewRuntimeService {
     event: Awaited<ReturnType<typeof this.latestInterviewEvent>>,
   ): AssessmentInterviewRuntimeState {
     const state = parseState(event?.outputSummaryJson);
-    return state ?? {
-      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
-      threadId: this.threadId(assessmentId),
-      contextRevision: 0,
-    };
+    return (
+      state ?? {
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        threadId: this.threadId(assessmentId),
+        contextRevision: 0,
+      }
+    );
   }
 
   private async recordInterviewEvent(input: {
@@ -214,11 +235,16 @@ function parseAnswer(value: unknown): AssessmentInterviewAnswerInput {
     questionId: record.questionId,
     freeText: typeof record.freeText === "string" ? record.freeText : undefined,
     selectedChoiceIds: Array.isArray(record.selectedChoiceIds)
-      ? record.selectedChoiceIds.filter((item): item is string => typeof item === "string")
+      ? record.selectedChoiceIds.filter(
+          (item): item is string => typeof item === "string",
+        )
       : undefined,
-    otherText: typeof record.otherText === "string" ? record.otherText : undefined,
-    confirmed: typeof record.confirmed === "boolean" ? record.confirmed : undefined,
-    adjusted: typeof record.adjusted === "boolean" ? record.adjusted : undefined,
+    otherText:
+      typeof record.otherText === "string" ? record.otherText : undefined,
+    confirmed:
+      typeof record.confirmed === "boolean" ? record.confirmed : undefined,
+    adjusted:
+      typeof record.adjusted === "boolean" ? record.adjusted : undefined,
   };
 }
 
@@ -226,7 +252,9 @@ function parseBlockedAction(value: unknown): AssessmentInterviewBlockedInput {
   const record = objectRecord(value);
   if (
     !record ||
-    !Object.values(ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS).includes(record.action as never)
+    !Object.values(ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS).includes(
+      record.action as never,
+    )
   ) {
     throw new BadRequestException({ code: "INTERVIEW_BLOCKED_ACTION_INVALID" });
   }
@@ -238,8 +266,14 @@ function parseBlockedAction(value: unknown): AssessmentInterviewBlockedInput {
 
 function parseState(value: unknown): AssessmentInterviewRuntimeState | null {
   const record = objectRecord(value);
-  const candidate = objectRecord(record?.assessmentInterview) ?? objectRecord(record);
-  if (!candidate || !Object.values(ASSESSMENT_INTERVIEW_OUTCOMES).includes(candidate.outcome as never)) {
+  const candidate =
+    objectRecord(record?.assessmentInterview) ?? objectRecord(record);
+  if (
+    !candidate ||
+    !Object.values(ASSESSMENT_INTERVIEW_OUTCOMES).includes(
+      candidate.outcome as never,
+    )
+  ) {
     return null;
   }
   return candidate as AssessmentInterviewRuntimeState;
