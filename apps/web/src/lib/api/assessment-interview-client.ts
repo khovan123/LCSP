@@ -69,6 +69,11 @@ export function sanitizeAssessmentInterviewState(
       typeof record.orchestrationRequested === "boolean"
         ? record.orchestrationRequested
         : undefined,
+    pendingDraft:
+      typeof record.pendingDraft === "string" ? record.pendingDraft : undefined,
+    answerHistory: Array.isArray(record.answerHistory)
+      ? record.answerHistory.filter(isAnswerHistoryItem)
+      : undefined,
     audit: objectRecord(record.audit)
       ? (record.audit as AssessmentInterviewRuntimeState["audit"])
       : undefined,
@@ -102,6 +107,19 @@ function sanitizeQuestion(value: unknown): AssessmentInterviewQuestion | null {
       ? record.whyEvidenceRefs.filter((item): item is string => typeof item === "string")
       : undefined,
   };
+}
+
+function isAnswerHistoryItem(
+  value: unknown,
+): value is NonNullable<AssessmentInterviewRuntimeState["answerHistory"]>[number] {
+  const record = objectRecord(value);
+  return (
+    !!record &&
+    typeof record.questionId === "string" &&
+    typeof record.answeredAt === "string" &&
+    typeof record.actorId === "string" &&
+    typeof record.summary === "string"
+  );
 }
 
 function isQuestionChoice(

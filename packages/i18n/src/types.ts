@@ -1014,6 +1014,7 @@ export type PagesMessages = {
     runtimeWaitingForAgent: string;
     noActiveInterviewQuestion: string;
     loadingInterviewState: string;
+    answerHistoryPrefix: string;
     modules: {
       readiness: string;
       classification: string;

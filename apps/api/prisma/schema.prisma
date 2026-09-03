@@ -135,6 +135,7 @@ model Assessment {
   repositoryScanJobs         RepositoryScanJob[]
   repositorySnapshots        RepositorySnapshot[]
   runtimeEvents              AssessmentRuntimeEvent[]
+  interviewThreads           AssessmentInterviewThread[]
   targetedReanalysisRequests TargetedReanalysisRequest[]
   technicalEvidenceReports   TechnicalEvidenceReport[]
   technicalProfiles          TechnicalProfile[]
@@ -549,6 +550,18 @@ model ConflictRecord {
   resolvedBy       User?                @relation("ConflictRecordResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([assessmentId, status])
+}
+
+model AssessmentInterviewThread {
+  id           String     @id
+  assessmentId String
+  stateJson    Json
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId])
+  @@index([assessmentId, updatedAt])
 }
 
 model AssessmentRuntimeEvent {

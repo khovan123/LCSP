@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { CqrsModule } from "@nestjs/cqrs";
 
 import { RbacModule } from "../../platform/rbac/rbac.module.js";
+import { AssessmentRuntimeEventService } from "../../platform/runtime-events/assessment-runtime-event.service.js";
 import { CreateAssessmentHandler } from "./application/commands/create-assessment/create-assessment.handler.js";
 import { GetAssessmentHandler } from "./application/queries/get-assessment/get-assessment.handler.js";
 import { AssessmentInterviewRuntimeService } from "./application/services/assessment-interview-runtime.service.js";
@@ -18,6 +19,7 @@ import { AssessmentController } from "./presentation/http/assessment.controller.
   controllers: [AssessmentController],
   providers: [
     AssessmentInterviewRuntimeService,
+    AssessmentRuntimeEventService,
     CreateAssessmentHandler,
     GetAssessmentHandler,
     ListAssessmentsHandler,

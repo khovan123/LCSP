@@ -105,6 +105,13 @@ export type AssessmentInterviewAuditRef = {
   governedEvidenceRefs?: string[];
 };
 
+export type AssessmentInterviewAnswerHistoryItem = {
+  questionId: string;
+  answeredAt: string;
+  actorId: string;
+  summary: string;
+};
+
 export type AssessmentInterviewRuntimeState = {
   outcome: AssessmentInterviewOutcome;
   activeQuestion?: AssessmentInterviewQuestion;
@@ -115,6 +122,8 @@ export type AssessmentInterviewRuntimeState = {
   threadId?: string;
   contextRevision?: number;
   orchestrationRequested?: boolean;
+  pendingDraft?: string;
+  answerHistory?: AssessmentInterviewAnswerHistoryItem[];
 };
 
 export type AssessmentInterviewAnswerInput = {

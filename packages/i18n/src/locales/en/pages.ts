@@ -994,6 +994,7 @@ export const enPages = {
     runtimeWaitingForAgent: "Waiting for runtime activity for this assessment.",
     noActiveInterviewQuestion: "No active Interview Agent question is waiting right now.",
     loadingInterviewState: "Loading Interview Agent state.",
+    answerHistoryPrefix: "Prior answer:",
     modules: {
       readiness: "Review completed conditions and the evidence still needed.",
       classification:

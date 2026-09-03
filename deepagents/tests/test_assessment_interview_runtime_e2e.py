@@ -261,7 +261,21 @@ def test_e2e_b_targeted_clarification_validates_then_resumes_exact_investigator(
         continuation=continuation,
         current_artifact_versions={"technicalEvidenceReportId": "ter-7"},
     )
-    with pytest.raises(ValueError, match="duplicate"):
+    with pytest.raises(ValueError, match="resolution criteria"):
+        targeted_interview(
+            need=need,
+            continuation=consumed,
+            customer_revisions=(
+                CustomerContextRevision(
+                    revision=4,
+                    facts={"unrelated_confirmed_fact": "yes"},
+                    authority="CUSTOMER_CONFIRMED",
+                    confirmed_by_actor_id="actor-customer-2",
+                ),
+            ),
+            agent_decision=InterviewAgentDecision(outcome="CONTEXT_RESOLVED"),
+        )
+    with pytest.raises(ValueError, match="duplicate"): 
         validate_continuation(
             need=need,
             continuation=consumed,

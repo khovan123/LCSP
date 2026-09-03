@@ -5,6 +5,7 @@ import {
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   type AssessmentInterviewBlockedAction,
+  type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
 import { useState } from "react";
@@ -36,10 +37,11 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
     useAssessmentInterviewBlockedActionMutation(assessmentId);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [lastSavedMessage, setLastSavedMessage] = useState<string | null>(null);
-  const draft = drafts[assessmentId] ?? "";
-  const interviewState = interviewQuery.data ?? {
+  const interviewState: AssessmentInterviewRuntimeState = interviewQuery.data ?? {
     outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
   };
+  const draft = drafts[assessmentId] ?? interviewState.pendingDraft ?? "";
+  const answerHistory = interviewState.answerHistory ?? [];
 
   function persistDraft(value: string) {
     setDrafts((current) => ({ ...current, [assessmentId]: value }));
@@ -136,6 +138,14 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
         {runtime.recentActivity.slice(0, 4).map((event) => (
           <AgentTurn key={event.eventId}>
             <p className="text-sm text-muted-foreground">{event.summary}</p>
+          </AgentTurn>
+        ))}
+
+        {answerHistory.map((answer) => (
+          <AgentTurn key={`${answer.questionId}:${answer.answeredAt}`}>
+            <p className="text-sm text-muted-foreground">
+              {t("pages.assessment.answerHistoryPrefix")} {answer.summary}
+            </p>
           </AgentTurn>
         ))}
 

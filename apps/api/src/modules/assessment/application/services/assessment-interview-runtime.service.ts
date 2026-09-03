@@ -1,40 +1,61 @@
-import { ASSESSMENT_ERROR_CODES } from "@lcsp/contracts/assessment";
+import {
+  ASSESSMENT_ERROR_CODES,
+  ASSESSMENT_EVENT_TYPES,
+} from "@lcsp/contracts/assessment";
+import {
+  AUDIT_ACTOR_TYPES,
+  AUDIT_REDACTION_STATUSES,
+} from "@lcsp/contracts/audit";
 import { AUTH_USER_ROLES } from "@lcsp/contracts/auth";
 import {
+  ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
+  ASSESSMENT_RUNTIME_STAGE_CODES,
+  type AssessmentInterviewAnswerHistoryItem,
   type AssessmentInterviewAnswerInput,
   type AssessmentInterviewBlockedInput,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
 import {
+  buildOutboxMessageInput,
+  OUTBOX_AGGREGATE_TYPES,
+} from "@lcsp/contracts/outbox";
+import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import {
-  AssessmentRuntimeEventType,
-  AssessmentRuntimeRunStatus,
-  AssessmentRuntimeStage,
-  type Prisma,
-} from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import { PrismaService } from "../../../../infrastructure/prisma/prisma.service.js";
+import { OutboxRepository } from "../../../../platform/outbox/outbox.repository.js";
+import { AssessmentRuntimeEventService } from "../../../../platform/runtime-events/assessment-runtime-event.service.js";
 import type { RbacRequestContext } from "../../../../platform/rbac/interfaces/rbac-request.interface.js";
 
 const INTERVIEW_TOOL_NAME = "assessment_interview";
+const INTERVIEW_SOURCE_VERSION = "assessment-interview-runtime-v1";
+const MISSING_SOURCE_VERSION = "NO_REPOSITORY_SNAPSHOT";
+const MISSING_PGE_VERSION = "NO_TECHNICAL_EVIDENCE_REPORT";
+const PUBLIC_REDACTED_ANSWER_SUMMARY =
+  "Customer answer persisted in governed Interview state.";
+const PUBLIC_REDACTED_DRAFT_SUMMARY =
+  "Customer draft persisted for Interview resume.";
 
 @Injectable()
 export class AssessmentInterviewRuntimeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly runtimeEvents: AssessmentRuntimeEventService,
+    private readonly outboxRepository: OutboxRepository,
+  ) {}
 
   async getState(
     assessmentId: string,
     actor: RbacRequestContext,
   ): Promise<AssessmentInterviewRuntimeState> {
     await this.assertAssessmentVisible(assessmentId, actor);
-    const latest = await this.latestInterviewEvent(assessmentId);
-    return this.stateFromEvent(assessmentId, latest);
+    return this.readThreadState(assessmentId);
   }
 
   async submitAnswer(input: {
@@ -45,38 +66,65 @@ export class AssessmentInterviewRuntimeService {
   }): Promise<AssessmentInterviewRuntimeState> {
     const answer = parseAnswer(input.answer);
     await this.assertAssessmentVisible(input.assessmentId, input.actor);
-    const latest = await this.latestInterviewEvent(input.assessmentId);
-    const priorState = this.stateFromEvent(input.assessmentId, latest);
-    const contextRevision = (priorState.contextRevision ?? 0) + 1;
-    const state: AssessmentInterviewRuntimeState = {
-      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
-      threadId: this.threadId(input.assessmentId),
-      contextRevision,
+    const current = await this.readThreadState(input.assessmentId);
+    if (!current.activeQuestion || current.activeQuestion.id !== answer.questionId) {
+      throw new BadRequestException({ code: "INTERVIEW_QUESTION_STALE_OR_UNKNOWN" });
+    }
+
+    const historyItem: AssessmentInterviewAnswerHistoryItem = {
+      questionId: answer.questionId,
+      actorId: input.actor.userId,
+      answeredAt: new Date().toISOString(),
+      summary: summarizeAnswer(answer),
+    };
+    const nextRevision = (current.contextRevision ?? 0) + 1;
+    const nextState: AssessmentInterviewRuntimeState = {
+      ...current,
+      outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+      contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+      contextRevision: nextRevision,
+      activeQuestion: undefined,
+      pendingDraft: undefined,
+      answerHistory: [...(current.answerHistory ?? []), historyItem],
       orchestrationRequested: true,
-      audit: this.auditRef(
+      audit: await this.auditRef(
         input.assessmentId,
         input.actor.userId,
         input.correlationId,
         {
-          contextRevision,
-          priorRevision: priorState.contextRevision,
-          newRevision: contextRevision,
+          contextRevision: nextRevision,
+          priorRevision: current.contextRevision,
+          newRevision: nextRevision,
           relatedQuestionId: answer.questionId,
         },
       ),
     };
 
-    await this.recordInterviewEvent({
+    await this.persistThreadState(input.assessmentId, nextState);
+    await this.runtimeEvents.recordToolWaitingInput({
       assessmentId: input.assessmentId,
+      runId: this.threadId(input.assessmentId),
       correlationId: input.correlationId,
-      eventType: AssessmentRuntimeEventType.TOOL_COMPLETED,
-      runStatus: AssessmentRuntimeRunStatus.RUNNING,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+      toolName: INTERVIEW_TOOL_NAME,
       summary:
-        "Customer interview answer persisted; orchestration resume requested.",
-      inputSummaryJson: toJson({ answer }),
-      outputSummaryJson: toJson({ assessmentInterview: state }),
+        "Customer interview answer persisted; Interview Agent sufficiency decision required.",
+      inputSummary: {
+        questionId: answer.questionId,
+        answer: PUBLIC_REDACTED_ANSWER_SUMMARY,
+      },
+      outputSummary: { assessmentInterview: publicState(nextState) },
+      waitingReason: "INTERVIEW_AGENT_DECISION_REQUIRED",
+      startedAt: new Date(),
     });
-    return state;
+    await this.enqueueInterviewAgentResume({
+      assessmentId: input.assessmentId,
+      actorId: input.actor.userId,
+      correlationId: input.correlationId,
+      contextRevision: nextRevision,
+      questionId: answer.questionId,
+    });
+    return nextState;
   }
 
   async recordBlockedAction(input: {
@@ -87,17 +135,19 @@ export class AssessmentInterviewRuntimeService {
   }): Promise<AssessmentInterviewRuntimeState> {
     const blocked = parseBlockedAction(input.blocked);
     await this.assertAssessmentVisible(input.assessmentId, input.actor);
-    const latest = await this.latestInterviewEvent(input.assessmentId);
-    const current = this.stateFromEvent(input.assessmentId, latest);
-    const state: AssessmentInterviewRuntimeState = {
+    const current = await this.readThreadState(input.assessmentId);
+    const nextState: AssessmentInterviewRuntimeState = {
       ...current,
       outcome: ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
       threadId: this.threadId(input.assessmentId),
       blockedActions: Object.values(ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS),
+      pendingDraft:
+        blocked.action === ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit
+          ? (blocked.draft ?? current.pendingDraft)
+          : current.pendingDraft,
       orchestrationRequested:
-        blocked.action ===
-        ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
-      audit: this.auditRef(
+        blocked.action === ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+      audit: await this.auditRef(
         input.assessmentId,
         input.actor.userId,
         input.correlationId,
@@ -107,17 +157,57 @@ export class AssessmentInterviewRuntimeService {
       ),
     };
 
-    await this.recordInterviewEvent({
+    await this.persistThreadState(input.assessmentId, nextState);
+    await this.runtimeEvents.recordToolWaitingInput({
       assessmentId: input.assessmentId,
+      runId: this.threadId(input.assessmentId),
       correlationId: input.correlationId,
-      eventType: AssessmentRuntimeEventType.TOOL_WAITING_INPUT,
-      runStatus: AssessmentRuntimeRunStatus.WAITING,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+      toolName: INTERVIEW_TOOL_NAME,
       summary: "Customer selected an unresolved Interview action.",
-      inputSummaryJson: toJson({ blocked }),
-      outputSummaryJson: toJson({ assessmentInterview: state }),
+      inputSummary: {
+        action: blocked.action,
+        draft: blocked.draft ? PUBLIC_REDACTED_DRAFT_SUMMARY : undefined,
+      },
+      outputSummary: { assessmentInterview: publicState(nextState) },
       waitingReason: blocked.action,
+      startedAt: new Date(),
     });
-    return state;
+    return nextState;
+  }
+
+  async recordAgentDecision(input: {
+    assessmentId: string;
+    actor: RbacRequestContext;
+    correlationId: string;
+    state: AssessmentInterviewRuntimeState;
+  }): Promise<AssessmentInterviewRuntimeState> {
+    await this.assertAssessmentVisible(input.assessmentId, input.actor);
+    const current = await this.readThreadState(input.assessmentId);
+    const nextState: AssessmentInterviewRuntimeState = {
+      ...current,
+      ...sanitizeAgentDecision(input.state),
+      threadId: this.threadId(input.assessmentId),
+      orchestrationRequested: false,
+    };
+    await this.persistThreadState(input.assessmentId, nextState);
+    await this.runtimeEvents.recordToolWaitingInput({
+      assessmentId: input.assessmentId,
+      runId: this.threadId(input.assessmentId),
+      correlationId: input.correlationId,
+      stage: ASSESSMENT_RUNTIME_STAGE_CODES.interview,
+      toolName: INTERVIEW_TOOL_NAME,
+      summary:
+        "Interview Agent decision persisted for customer or orchestration continuation.",
+      inputSummary: { decisionOutcome: nextState.outcome },
+      outputSummary: { assessmentInterview: publicState(nextState) },
+      waitingReason:
+        nextState.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer
+          ? "WAITING_FOR_CUSTOMER"
+          : null,
+      startedAt: new Date(),
+    });
+    return nextState;
   }
 
   private async assertAssessmentVisible(
@@ -139,66 +229,68 @@ export class AssessmentInterviewRuntimeService {
     }
   }
 
-  private async latestInterviewEvent(assessmentId: string) {
-    return this.prisma.assessmentRuntimeEvent.findFirst({
-      where: { assessmentId, toolName: INTERVIEW_TOOL_NAME },
-      orderBy: [{ createdAt: "desc" }, { sequence: "desc" }],
-    });
-  }
-
-  private stateFromEvent(
+  private async readThreadState(
     assessmentId: string,
-    event: Awaited<ReturnType<typeof this.latestInterviewEvent>>,
-  ): AssessmentInterviewRuntimeState {
-    const state = parseState(event?.outputSummaryJson);
+  ): Promise<AssessmentInterviewRuntimeState> {
+    const thread = await this.prisma.assessmentInterviewThread.findUnique({
+      where: { assessmentId },
+    });
+    const state = parseState(thread?.stateJson);
     return (
       state ?? {
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
         threadId: this.threadId(assessmentId),
         contextRevision: 0,
+        answerHistory: [],
       }
     );
   }
 
-  private async recordInterviewEvent(input: {
-    assessmentId: string;
-    correlationId: string;
-    eventType: AssessmentRuntimeEventType;
-    runStatus: AssessmentRuntimeRunStatus;
-    summary: string;
-    inputSummaryJson: Prisma.InputJsonValue;
-    outputSummaryJson: Prisma.InputJsonValue;
-    waitingReason?: string;
-  }): Promise<void> {
-    const runId = this.threadId(input.assessmentId);
-    const latest = await this.prisma.assessmentRuntimeEvent.aggregate({
-      where: { runId },
-      _max: { sequence: true },
-    });
-    await this.prisma.assessmentRuntimeEvent.create({
-      data: {
-        assessmentId: input.assessmentId,
-        runId,
-        correlationId: input.correlationId,
-        sequence: (latest._max.sequence ?? 0) + 1,
-        eventType: input.eventType,
-        runStatus: input.runStatus,
-        stage: AssessmentRuntimeStage.INTERVIEW,
-        toolName: INTERVIEW_TOOL_NAME,
-        summary: input.summary,
-        inputSummaryJson: input.inputSummaryJson,
-        outputSummaryJson: input.outputSummaryJson,
-        waitingReason: input.waitingReason,
-        startedAt: new Date(),
-        completedAt:
-          input.eventType === AssessmentRuntimeEventType.TOOL_COMPLETED
-            ? new Date()
-            : null,
+  private async persistThreadState(
+    assessmentId: string,
+    state: AssessmentInterviewRuntimeState,
+  ): Promise<void> {
+    await this.prisma.assessmentInterviewThread.upsert({
+      where: { assessmentId },
+      update: { stateJson: toJson(state) },
+      create: {
+        id: this.threadId(assessmentId),
+        assessmentId,
+        stateJson: toJson(state),
       },
     });
   }
 
-  private auditRef(
+  private async enqueueInterviewAgentResume(input: {
+    assessmentId: string;
+    actorId: string;
+    correlationId: string;
+    contextRevision: number;
+    questionId: string;
+  }): Promise<void> {
+    await this.outboxRepository.enqueue(
+      buildOutboxMessageInput({
+        aggregateType: OUTBOX_AGGREGATE_TYPES.assessment,
+        aggregateId: input.assessmentId,
+        eventType: ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox,
+        assessmentId: input.assessmentId,
+        correlationId: input.correlationId,
+        causationId: input.correlationId,
+        actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
+        result: ASSESSMENT_EVENT_TYPES.interviewAnswerSubmitted,
+        redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
+        idempotencyKey: `${input.assessmentId}:${input.contextRevision}:${ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox}`,
+        payload: {
+          assessmentId: input.assessmentId,
+          threadId: this.threadId(input.assessmentId),
+          contextRevision: input.contextRevision,
+          questionId: input.questionId,
+        },
+      }),
+    );
+  }
+
+  private async auditRef(
     assessmentId: string,
     actorId: string,
     correlationId: string,
@@ -209,15 +301,49 @@ export class AssessmentInterviewRuntimeService {
       relatedQuestionId?: string;
     },
   ) {
+    const provenance = await this.assessmentProvenance(assessmentId);
     return {
       authenticatedActorId: actorId,
       timestamp: new Date().toISOString(),
       assessmentId,
-      sourceVersion: "assessment-interview-runtime-v1",
-      pgeVersion: "runtime",
+      sourceVersion: provenance.sourceVersion,
+      pgeVersion: provenance.pgeVersion,
       sessionId: this.threadId(assessmentId),
       turnId: correlationId,
+      governedEvidenceRefs: provenance.governedEvidenceRefs,
       ...input,
+    };
+  }
+
+  private async assessmentProvenance(assessmentId: string): Promise<{
+    sourceVersion: string;
+    pgeVersion: string;
+    governedEvidenceRefs: string[];
+  }> {
+    const [snapshot, report] = await Promise.all([
+      this.prisma.repositorySnapshot.findFirst({
+        where: { assessmentId },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, commitSha: true },
+      }),
+      this.prisma.technicalEvidenceReport.findFirst({
+        where: { assessmentId },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, schemaVersion: true },
+      }),
+    ]);
+    return {
+      sourceVersion: snapshot
+        ? `${snapshot.id}:${snapshot.commitSha}`
+        : MISSING_SOURCE_VERSION,
+      pgeVersion: report
+        ? `${report.id}:${report.schemaVersion}`
+        : MISSING_PGE_VERSION,
+      governedEvidenceRefs: [
+        ...(snapshot ? [`repositorySnapshot:${snapshot.id}`] : []),
+        ...(report ? [`technicalEvidenceReport:${report.id}`] : []),
+        `interviewRuntime:${INTERVIEW_SOURCE_VERSION}`,
+      ],
     };
   }
 
@@ -266,17 +392,52 @@ function parseBlockedAction(value: unknown): AssessmentInterviewBlockedInput {
 
 function parseState(value: unknown): AssessmentInterviewRuntimeState | null {
   const record = objectRecord(value);
-  const candidate =
-    objectRecord(record?.assessmentInterview) ?? objectRecord(record);
   if (
-    !candidate ||
+    !record ||
     !Object.values(ASSESSMENT_INTERVIEW_OUTCOMES).includes(
-      candidate.outcome as never,
+      record.outcome as never,
     )
   ) {
     return null;
   }
-  return candidate as AssessmentInterviewRuntimeState;
+  return record as AssessmentInterviewRuntimeState;
+}
+
+function sanitizeAgentDecision(
+  state: AssessmentInterviewRuntimeState,
+): AssessmentInterviewRuntimeState {
+  if (
+    !Object.values(ASSESSMENT_INTERVIEW_OUTCOMES).includes(state.outcome as never)
+  ) {
+    throw new BadRequestException({ code: "INTERVIEW_AGENT_DECISION_INVALID" });
+  }
+  return state;
+}
+
+function summarizeAnswer(answer: AssessmentInterviewAnswerInput): string {
+  if (answer.confirmed) {
+    return "Customer confirmed prior material context.";
+  }
+  if (answer.adjusted) {
+    return "Customer requested adjustment to prior material context.";
+  }
+  if (answer.selectedChoiceIds?.length) {
+    return `Customer selected ${answer.selectedChoiceIds.length} option(s).`;
+  }
+  return "Customer supplied free-text Interview context.";
+}
+
+function publicState(
+  state: AssessmentInterviewRuntimeState,
+): AssessmentInterviewRuntimeState {
+  return {
+    ...state,
+    pendingDraft: state.pendingDraft ? PUBLIC_REDACTED_DRAFT_SUMMARY : undefined,
+    answerHistory: state.answerHistory?.map((item) => ({
+      ...item,
+      summary: item.summary,
+    })),
+  };
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | null {

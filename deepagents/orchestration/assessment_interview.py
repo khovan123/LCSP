@@ -161,6 +161,7 @@ def targeted_interview(
 
     if agent_decision.outcome == "CONTEXT_RESOLVED":
         _assert_authoritative_revision(latest, "CONTEXT_RESOLVED")
+        _assert_resolution_criteria_satisfied(need, latest)
         return InterviewRuntimeState(
             outcome="CONTEXT_RESOLVED",
             confirmed_context=dict(latest.facts if latest else agent_decision.confirmed_context),
@@ -205,6 +206,22 @@ def _assert_authoritative_revision(
 ) -> None:
     if revision is None or revision.authority not in {"CUSTOMER_CONFIRMED", "CONFIRMED"}:
         raise ValueError(f"{outcome} requires an authoritative Customer context revision")
+
+
+def _assert_resolution_criteria_satisfied(
+    need: BusinessContextNeed,
+    revision: CustomerContextRevision | None,
+) -> None:
+    facts = revision.facts if revision else {}
+    missing = [
+        str(item)
+        for item in need.resolution_criteria
+        if str(item) not in {str(key) for key in facts}
+    ]
+    if missing:
+        raise ValueError(
+            f"CONTEXT_RESOLVED requires satisfied resolution criteria: missing={missing}"
+        )
 
 
 def _waiting_or_blocked(

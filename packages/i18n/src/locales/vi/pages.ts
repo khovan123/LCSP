@@ -991,6 +991,7 @@ export const viPages = {
     runtimeWaitingForAgent: "Đang chờ hoạt động runtime cho assessment này.",
     noActiveInterviewQuestion: "Hiện chưa có câu hỏi Interview Agent nào đang chờ.",
     loadingInterviewState: "Đang tải trạng thái Interview Agent.",
+    answerHistoryPrefix: "Câu trả lời trước:",
     modules: {
       readiness: "Kiểm tra các điều kiện đã sẵn sàng và evidence còn thiếu.",
       classification:
