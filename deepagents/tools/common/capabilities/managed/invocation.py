@@ -55,6 +55,12 @@ AGENT_INVOCATION_BOUNDARIES: tuple[AgentInvocationBoundary, ...] = (
         "event.technical-evidence.accepted.v1",
     ),
     AgentInvocationBoundary(
+        "assessment_interview_resume_requested",
+        "tools.common.capabilities.workflow.recovery.interview_boundary:AssessmentInterviewResumeBoundary",
+        "assessment.interview-answer-submitted",
+        "command.assessment-interview.resume-agent.v1",
+    ),
+    AgentInvocationBoundary(
         "legal_rule_triage_requested",
         "tools.triage.legal_rule_triage.boundary:LegalRuleTriageBoundary",
         "legal.engineering-rule-readiness",
