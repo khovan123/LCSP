@@ -404,12 +404,18 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       targetedNeed: { needId: string; resolutionCriteria: string[] };
     }>(privateTarget);
     assert.equal(privateTargetState.status, "DUPLICATE");
-    assert.equal(privateTargetState.targetedNeed.needId, "need-decision-authority");
+    assert.equal(
+      privateTargetState.targetedNeed.needId,
+      "need-decision-authority",
+    );
     assert.deepEqual(privateTargetState.targetedNeed.resolutionCriteria, [
       "decision_authority",
     ]);
     assert.doesNotMatch(JSON.stringify(privateTarget.body), /checkpoint-1/u);
-    assert.doesNotMatch(JSON.stringify(privateTarget.body), /investigator-run-1/u);
+    assert.doesNotMatch(
+      JSON.stringify(privateTarget.body),
+      /investigator-run-1/u,
+    );
 
     const question = await httpRequest(app)
       .post("/internal/assessment-interviews/assessment-1/agent-decisions")
@@ -435,7 +441,11 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         questionId: "target-question-1",
         freeText: "The human operations lead has final approval.",
       });
-    assert.equal(targetedAnswer.status, 201, JSON.stringify(targetedAnswer.body));
+    assert.equal(
+      targetedAnswer.status,
+      201,
+      JSON.stringify(targetedAnswer.body),
+    );
 
     const forged = await httpRequest(app)
       .post("/internal/assessment-interviews/assessment-1/agent-decisions")

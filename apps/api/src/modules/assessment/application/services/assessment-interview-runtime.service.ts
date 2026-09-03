@@ -406,17 +406,22 @@ export class AssessmentInterviewRuntimeService {
           { status: HttpStatus.CONFLICT },
         );
       }
-      const provenance = await this.assessmentProvenance(input.assessmentId, tx);
+      const provenance = await this.assessmentProvenance(
+        input.assessmentId,
+        tx,
+      );
       const targetedNeed: TargetedInterviewNeed = {
         needId: target.needId,
         businessContextNeed: target.businessContextNeed,
         resolutionCriteria: target.resolutionCriteria,
-        originatingInvestigationReference: target.originatingInvestigationReference,
+        originatingInvestigationReference:
+          target.originatingInvestigationReference,
         sourceVersion: provenance.sourceVersion,
         pgeVersion: provenance.pgeVersion,
       };
       const targetedContinuation: TargetedInterviewContinuation = {
-        originatingInvestigationReference: target.originatingInvestigationReference,
+        originatingInvestigationReference:
+          target.originatingInvestigationReference,
         investigatorExecutionId: target.investigatorExecutionId,
         checkpointId: target.checkpointId,
         affectedRuleIds: target.affectedRuleIds,
@@ -472,7 +477,9 @@ export class AssessmentInterviewRuntimeService {
     correlationId: string;
     decision: AgentDecisionInput;
   }): Promise<
-    AssessmentInterviewRuntimeState & { continuation?: TargetedInterviewContinuation }
+    AssessmentInterviewRuntimeState & {
+      continuation?: TargetedInterviewContinuation;
+    }
   > {
     const decision = parseAgentDecision(input.decision);
     const result = await this.prisma.$transaction(async (tx) => {
@@ -495,7 +502,8 @@ export class AssessmentInterviewRuntimeService {
       const isTargetedBootstrap =
         decision.mode === "TARGETED_INTERVIEW" &&
         decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
-        thread.state.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+        thread.state.outcome ===
+          ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
         !thread.activeQuestionId &&
         !!thread.privateStore.targetedNeed;
       assertGuardedDecision(
@@ -559,7 +567,8 @@ export class AssessmentInterviewRuntimeService {
       inputSummary: { decisionOutcome: result.state.outcome },
       outputSummary: { assessmentInterview: publicState(result.state) },
       waitingReason:
-        result.state.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer
+        result.state.outcome ===
+        ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer
           ? "WAITING_FOR_CUSTOMER"
           : null,
       startedAt: new Date(),
@@ -880,12 +889,14 @@ function parseTargetedNeedRegistration(
   const record = objectRecord(value);
   const criteria = Array.isArray(record?.resolutionCriteria)
     ? record.resolutionCriteria.filter(
-        (item): item is string => typeof item === "string" && item.trim().length > 0,
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
       )
     : [];
   const affectedRuleIds = Array.isArray(record?.affectedRuleIds)
     ? record.affectedRuleIds.filter(
-        (item): item is string => typeof item === "string" && item.trim().length > 0,
+        (item): item is string =>
+          typeof item === "string" && item.trim().length > 0,
       )
     : [];
   if (
@@ -987,7 +998,9 @@ function parsePrivateStore(value: unknown): PrivateInterviewStore {
   return { revisions, targetedNeed, targetedContinuation };
 }
 
-function parseStoredTargetedNeed(value: unknown): TargetedInterviewNeed | undefined {
+function parseStoredTargetedNeed(
+  value: unknown,
+): TargetedInterviewNeed | undefined {
   const record = objectRecord(value);
   if (
     !record ||
@@ -1055,7 +1068,11 @@ function assertGuardedDecision(
   correlationId: string,
   followup: { isBlockedFollowup: boolean; isTargetedBootstrap: boolean },
 ): void {
-  if (!privateRevision && !followup.isBlockedFollowup && !followup.isTargetedBootstrap) {
+  if (
+    !privateRevision &&
+    !followup.isBlockedFollowup &&
+    !followup.isTargetedBootstrap
+  ) {
     throw problemException(
       "INTERVIEW_PRIVATE_REVISION_NOT_FOUND",
       correlationId,
