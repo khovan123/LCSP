@@ -165,7 +165,9 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
             <p className="text-sm text-muted-foreground">
               {interviewQuery.isLoading
                 ? t("pages.assessment.loadingInterviewState")
-                : t("pages.assessment.noActiveInterviewQuestion")}
+                : interviewState.orchestrationRequested
+                  ? t("pages.assessment.runtimeWaitingForAgent")
+                  : t("pages.assessment.noActiveInterviewQuestion")}
             </p>
           </AgentTurn>
         )}

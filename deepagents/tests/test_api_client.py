@@ -366,6 +366,48 @@ def test_create_targeted_reanalysis_request_uses_internal_api_endpoint(client):
         )
 
 
+def test_interview_private_context_uses_internal_worker_endpoint(client):
+    with patch("tools.common.capabilities.platform.api_client.httpx.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"ok": True, "data": {"status": "CURRENT"}}
+        mock_get.return_value = mock_resp
+
+        response = client.get_interview_private_context(
+            "assessment-1",
+            3,
+            source_version="snapshot-1:abc",
+            pge_version="ter-1:v1",
+        )
+
+        assert response["status"] == "CURRENT"
+        assert mock_get.call_args.args[0] == (
+            "http://testserver/internal/assessment-interviews/assessment-1/private-context/3"
+        )
+        assert mock_get.call_args.kwargs["params"] == {
+            "source_version": "snapshot-1:abc",
+            "pge_version": "ter-1:v1",
+        }
+
+
+def test_interview_agent_decision_uses_internal_worker_endpoint(client):
+    with patch("tools.common.capabilities.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = {"ok": True, "data": {"outcome": "CONTEXT_READY"}}
+        mock_post.return_value = mock_resp
+
+        response = client.post_interview_agent_decision(
+            "assessment-1",
+            {"expectedContextRevision": 3, "outcome": "CONTEXT_READY"},
+        )
+
+        assert response["outcome"] == "CONTEXT_READY"
+        assert mock_post.call_args.args[0] == (
+            "http://testserver/internal/assessment-interviews/assessment-1/agent-decisions"
+        )
+
+
 def test_resume_waiting_runs_uses_internal_legal_catalog_endpoint(client):
     with patch("tools.common.capabilities.platform.api_client.httpx.post") as mock_post:
         mock_resp = MagicMock()

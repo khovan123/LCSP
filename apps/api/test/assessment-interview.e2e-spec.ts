@@ -25,6 +25,7 @@ import { httpRequest, successBody } from "./support/http.js";
 const QUESTION_ID = "agent-question-1";
 const RAW_ANSWER = "Payment assistant recommends review actions.";
 const RAW_DRAFT = "Need internal legal owner confirmation.";
+const WORKER_KEY = "test-only-worker-api-key-at-least-32-chars";
 
 describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
   let app: INestApplication;
@@ -33,6 +34,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
 
   beforeAll(async () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
+    process.env.WORKER_API_KEY = WORKER_KEY;
     pushPrismaSchema();
     prisma = new PrismaClient({ adapter: new PrismaPg(TEST_DATABASE_URL) });
     await prisma.$connect();
@@ -67,7 +69,7 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .post("/assessments/assessment-1/interview/answers")
       .set("Authorization", `Bearer ${token}`)
       .send({ questionId: "anything" });
-    assert.equal(shortcut.status, 400, JSON.stringify(shortcut.body));
+    assert.equal(shortcut.status, 409, JSON.stringify(shortcut.body));
 
     await seedWaitingQuestion(prisma);
     const answered = await httpRequest(app)
@@ -127,6 +129,25 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     assert.doesNotMatch(
       JSON.stringify(resumeCommand.payload),
       /Payment assistant/u,
+    );
+
+    const privateRevision = await httpRequest(app)
+      .get("/internal/assessment-interviews/assessment-1/private-context/1")
+      .query({
+        source_version: JSON.parse(JSON.stringify(resumeCommand.payload)).sourceVersion,
+        pge_version: JSON.parse(JSON.stringify(resumeCommand.payload)).pgeVersion,
+      })
+      .set("x-worker-api-key", WORKER_KEY);
+    assert.equal(privateRevision.status, 200, JSON.stringify(privateRevision.body));
+    const privateState = successBody<{
+      status: string;
+      privateRevision: { answer: { freeText: string }; authority: string };
+    }>(privateRevision);
+    assert.equal(privateState.status, "CURRENT");
+    assert.equal(privateState.privateRevision.answer.freeText, RAW_ANSWER);
+    assert.equal(
+      privateState.privateRevision.authority,
+      ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
     );
   });
 
@@ -192,12 +213,173 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       /Need internal/u,
     );
   });
+
+  it("rejects stale duplicate submissions for the same active question revision", async () => {
+    await seedWaitingQuestion(prisma);
+    const first = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ questionId: QUESTION_ID, freeText: RAW_ANSWER });
+    const stale = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ questionId: QUESTION_ID, freeText: "Contradictory second answer." });
+
+    assert.equal(first.status, 201, JSON.stringify(first.body));
+    assert.equal(stale.status, 409, JSON.stringify(stale.body));
+    const thread = await prisma.assessmentInterviewThread.findUniqueOrThrow({
+      where: { assessmentId: "assessment-1" },
+    });
+    assert.equal(thread.contextRevision, 1);
+    assert.equal(JSON.parse(JSON.stringify(thread.privateContextJson)).length, 1);
+  });
+
+  it("uses internal guarded decision write-back and blocks false ready", async () => {
+    await seedWaitingQuestion(prisma);
+    await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ questionId: QUESTION_ID, freeText: RAW_ANSWER });
+
+    const falseReady = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 1,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
+      });
+    assert.equal(falseReady.status, 409, JSON.stringify(falseReady.body));
+
+    const ready = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 1,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        confirmedContext: { decision_authority: "human approval required" },
+      });
+    assert.equal(ready.status, 201, JSON.stringify(ready.body));
+    assert.equal(
+      successBody<{ outcome: string }>(ready).outcome,
+      ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+    );
+
+    const duplicate = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 1,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+      });
+    assert.equal(duplicate.status, 409, JSON.stringify(duplicate.body));
+  });
+
+  it("persists an Interview Agent-authored initial question through the worker entry", async () => {
+    const seeded = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/initial-question")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: {
+          id: QUESTION_ID,
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+          prompt: "Agent-authored runtime question",
+        },
+      });
+    assert.equal(seeded.status, 201, JSON.stringify(seeded.body));
+
+    const publicState = await httpRequest(app)
+      .get("/assessments/assessment-1/interview")
+      .set("Authorization", `Bearer ${token}`);
+    assert.equal(publicState.status, 200, JSON.stringify(publicState.body));
+    const state = successBody<{
+      outcome: string;
+      activeQuestion: { id: string; control: string; prompt: string };
+    }>(publicState);
+    assert.equal(state.outcome, ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer);
+    assert.equal(state.activeQuestion.id, QUESTION_ID);
+    assert.equal(state.activeQuestion.control, ASSESSMENT_INTERVIEW_CONTROLS.boolean);
+    assert.equal(state.activeQuestion.prompt, "Agent-authored runtime question");
+  });
+
+  it("detects stale source and PGE versions before worker resume", async () => {
+    await seedWaitingQuestion(prisma);
+    await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ questionId: QUESTION_ID, freeText: RAW_ANSWER });
+
+    const stale = await httpRequest(app)
+      .get("/internal/assessment-interviews/assessment-1/private-context/1")
+      .query({ source_version: "snapshot-old", pge_version: "ter-old" })
+      .set("x-worker-api-key", WORKER_KEY);
+    assert.equal(stale.status, 200, JSON.stringify(stale.body));
+    assert.equal(successBody<{ status: string }>(stale).status, "STALE_PROVENANCE");
+  });
+
+  it("blocks targeted false resolved decisions that do not satisfy criteria", async () => {
+    await seedWaitingQuestion(prisma);
+    await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ questionId: QUESTION_ID, freeText: RAW_ANSWER });
+
+    const unresolved = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 1,
+        mode: "TARGETED_INTERVIEW",
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        confirmedContext: { unrelated: "yes" },
+        resolutionCriteria: ["decision_authority"],
+        originatingInvestigationReference: "investigation:one",
+        continuation: {
+          originatingInvestigationReference: "investigation:one",
+          consumed: false,
+          investigatorExecutionId: "investigator-run-1",
+          affectedRuleIds: ["ENG-1"],
+          artifactVersions: { technicalEvidenceReportId: "ter-1" },
+        },
+      });
+    assert.equal(unresolved.status, 409, JSON.stringify(unresolved.body));
+  });
+
+  it("re-enters Interview when Customer chooses Provide More Context", async () => {
+    await prisma.outboxMessage.deleteMany({ where: { aggregateId: "assessment-1" } });
+    await seedWaitingQuestion(prisma);
+    const blocked = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/blocked-actions")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext });
+    assert.equal(blocked.status, 201, JSON.stringify(blocked.body));
+    assert.equal(
+      successBody<{ orchestrationRequested: boolean }>(blocked).orchestrationRequested,
+      true,
+    );
+    const resumeCommand = await prisma.outboxMessage.findFirstOrThrow({
+      where: {
+        aggregateId: "assessment-1",
+        eventType: ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox,
+      },
+    });
+    assert.match(JSON.stringify(resumeCommand.payload), /PROVIDE_MORE_CONTEXT/u);
+  });
 });
 
 async function seedWaitingQuestion(prisma: PrismaClient): Promise<void> {
   await prisma.assessmentInterviewThread.upsert({
     where: { assessmentId: "assessment-1" },
     update: {
+      contextRevision: 0,
+      activeQuestionId: QUESTION_ID,
+      processedRevision: 0,
+      privateContextJson: [],
       stateJson: {
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
         threadId: "interview:assessment-1",
@@ -214,6 +396,10 @@ async function seedWaitingQuestion(prisma: PrismaClient): Promise<void> {
     create: {
       id: "interview:assessment-1",
       assessmentId: "assessment-1",
+      contextRevision: 0,
+      activeQuestionId: QUESTION_ID,
+      processedRevision: 0,
+      privateContextJson: [],
       stateJson: {
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
         threadId: "interview:assessment-1",

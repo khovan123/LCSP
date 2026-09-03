@@ -26,6 +26,9 @@ class InternalPath(StrEnum):
     TARGETED_REANALYSIS_CREATE = "/internal/scan-jobs/targeted-reanalysis"
     AI_USAGE_FLOW = "/internal/ai-usage-flow/{ai_usage_flow_id}"
     TARGETED_REANALYSIS_REQUEST = "/internal/targeted-reanalysis/{request_id}"
+    INTERVIEW_PRIVATE_CONTEXT = "/internal/assessment-interviews/{assessment_id}/private-context/{context_revision}"
+    INTERVIEW_AGENT_DECISION = "/internal/assessment-interviews/{assessment_id}/agent-decisions"
+    INTERVIEW_INITIAL_QUESTION = "/internal/assessment-interviews/{assessment_id}/initial-question"
     LEGAL_SOURCE_SNAPSHOTS = "/internal/legal-rule-catalog/source-snapshots"
 
 

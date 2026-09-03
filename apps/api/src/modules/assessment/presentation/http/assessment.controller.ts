@@ -19,6 +19,7 @@ import type { AuthenticatedRequest } from "../../../../common/interfaces/authent
 import { CreateAssessmentCommand } from "../../application/commands/create-assessment/create-assessment.command.js";
 import { GetAssessmentQuery } from "../../application/queries/get-assessment/get-assessment.query.js";
 import { ListAssessmentsQuery } from "../../application/queries/list-assessments/list-assessments.query.js";
+import { WorkerApiKeyGuard } from "../../../scan/presentation/http/worker-api-key.guard.js";
 import { AssessmentInterviewRuntimeService } from "../../application/services/assessment-interview-runtime.service.js";
 import { CreateAssessmentRequest } from "./dto/create-assessment.request.js";
 
@@ -61,7 +62,7 @@ export class AssessmentController {
           rbacContext.userId,
           body.name,
           body.description,
-          request.correlationId as string,
+          ((request.correlationId as string | undefined) ?? "worker-interview-context"),
         ),
       ),
     );
@@ -96,7 +97,7 @@ export class AssessmentController {
           page !== undefined ? Number(page) : undefined,
           pageSize !== undefined ? Number(pageSize) : undefined,
           status,
-          request.correlationId as string,
+          ((request.correlationId as string | undefined) ?? "worker-interview-context"),
         ),
       ),
     );
@@ -133,7 +134,7 @@ export class AssessmentController {
       await this.interviewRuntime.submitAnswer({
         assessmentId,
         actor: request.rbacContext,
-        correlationId: request.correlationId as string,
+        correlationId: ((request.correlationId as string | undefined) ?? "worker-interview-context"),
         answer: body as never,
       }),
     );
@@ -151,7 +152,7 @@ export class AssessmentController {
       await this.interviewRuntime.recordBlockedAction({
         assessmentId,
         actor: request.rbacContext,
-        correlationId: request.correlationId as string,
+        correlationId: ((request.correlationId as string | undefined) ?? "worker-interview-context"),
         blocked: body as never,
       }),
     );
@@ -172,9 +173,62 @@ export class AssessmentController {
           assessmentId,
           rbacContext.userId,
           rbacContext.role,
-          request.correlationId as string,
+          ((request.correlationId as string | undefined) ?? "worker-interview-context"),
         ),
       ),
+    );
+  }
+}
+
+@Controller("internal/assessment-interviews")
+@UseGuards(WorkerApiKeyGuard)
+export class InternalAssessmentInterviewController {
+  constructor(private readonly interviewRuntime: AssessmentInterviewRuntimeService) {}
+
+  @Get(":assessmentId/private-context/:contextRevision")
+  async getPrivateContext(
+    @Param("assessmentId") assessmentId: string,
+    @Param("contextRevision") contextRevision: string,
+    @Query("source_version") sourceVersion: string | undefined,
+    @Query("pge_version") pgeVersion: string | undefined,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.getPrivateContextForWorker({
+        assessmentId,
+        contextRevision: Number(contextRevision),
+        sourceVersion,
+        pgeVersion,
+      }),
+    );
+  }
+
+  @Post(":assessmentId/agent-decisions")
+  async recordAgentDecision(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.recordAgentDecision({
+        assessmentId,
+        correlationId: ((request.correlationId as string | undefined) ?? "worker-interview-context"),
+        decision: body as never,
+      }),
+    );
+  }
+
+  @Post(":assessmentId/initial-question")
+  async seedInitialQuestion(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.seedInitialQuestionForWorker({
+        assessmentId,
+        correlationId: ((request.correlationId as string | undefined) ?? "worker-interview-context"),
+        state: body as never,
+      }),
     );
   }
 }

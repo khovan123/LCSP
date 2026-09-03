@@ -215,6 +215,12 @@ def build_boundary(target: str) -> AgentBoundaryBase:
             config.worker_api_key,
         )
 
+    if "api_client" in constructor.parameters:
+        kwargs["api_client"] = WorkerApiClient(
+            config.nestjs_api_base_url,
+            config.worker_api_key,
+        )
+
     if "agentic_tool_resolver" in constructor.parameters:
         api_client = WorkerApiClient(
             config.nestjs_api_base_url,

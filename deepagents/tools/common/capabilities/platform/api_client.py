@@ -512,6 +512,52 @@ class WorkerApiClient:
                     pass
         return data
 
+    def get_interview_private_context(
+        self,
+        assessment_id: str,
+        context_revision: int,
+        *,
+        source_version: str | None = None,
+        pge_version: str | None = None,
+    ) -> dict:
+        """Fetch governed private Interview context for a worker resume command."""
+        path = InternalPath.INTERVIEW_PRIVATE_CONTEXT.format(
+            assessment_id=assessment_id,
+            context_revision=context_revision,
+        )
+        params = {
+            key: value
+            for key, value in {
+                "source_version": source_version,
+                "pge_version": pge_version,
+            }.items()
+            if value
+        }
+        data = self._get_with_retry(path, params=params)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Interview private context response was invalid.")
+        return data
+
+    def post_interview_agent_decision(self, assessment_id: str, payload: dict) -> dict:
+        """Persist a guarded Interview Agent decision through the internal API."""
+        path = InternalPath.INTERVIEW_AGENT_DECISION.format(
+            assessment_id=assessment_id,
+        )
+        data = self._post_with_retry(path, payload)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Interview Agent decision response was invalid.")
+        return data
+
+    def post_interview_initial_question(self, assessment_id: str, payload: dict) -> dict:
+        """Persist an Interview Agent-authored initial question through the internal API."""
+        path = InternalPath.INTERVIEW_INITIAL_QUESTION.format(
+            assessment_id=assessment_id,
+        )
+        data = self._post_with_retry(path, payload)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Interview initial question response was invalid.")
+        return data
+
     def dispatch_agentic_tool(self, payload: dict) -> dict:
         """Dispatch one already validated/authorized agentic tool to the trusted API."""
         path = InternalPath.AGENTIC_TOOL_DISPATCH

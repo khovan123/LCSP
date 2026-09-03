@@ -172,6 +172,10 @@ test("workflow run renders dynamic interview controls through shared workspace c
   assert.match(overviewSource, /useAssessmentInterviewStateQuery/);
   assert.match(overviewSource, /useSubmitAssessmentInterviewAnswerMutation/);
   assert.match(overviewSource, /useAssessmentInterviewBlockedActionMutation/);
+  assert.match(overviewSource, /pendingDraft/);
+  assert.match(overviewSource, /answerHistory/);
+  assert.match(overviewSource, /orchestrationRequested/);
+  assert.match(overviewSource, /runtimeWaitingForAgent/);
   assert.doesNotMatch(
     overviewSource,
     /initialInterviewQuestion|targetedClarificationQuestion|localStorage|Card|modules\.map|\/wizard|\/readiness/,

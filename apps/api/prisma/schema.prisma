@@ -553,14 +553,22 @@ model ConflictRecord {
 }
 
 model AssessmentInterviewThread {
-  id           String     @id
-  assessmentId String
-  stateJson    Json
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  id                 String     @id
+  assessmentId       String
+  stateJson          Json
+  privateContextJson Json       @default("[]")
+  contextRevision    Int        @default(0)
+  activeQuestionId   String?
+  processedRevision  Int        @default(0)
+  sourceVersion      String?
+  pgeVersion         String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  assessment         Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 
   @@unique([assessmentId])
+  @@index([assessmentId, contextRevision])
+  @@index([assessmentId, activeQuestionId, contextRevision])
   @@index([assessmentId, updatedAt])
 }
 
