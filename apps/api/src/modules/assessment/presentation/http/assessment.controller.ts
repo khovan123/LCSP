@@ -62,7 +62,7 @@ export class AssessmentController {
           rbacContext.userId,
           body.name,
           body.description,
-          ((request.correlationId as string | undefined) ?? "worker-interview-context"),
+          request.correlationId ?? "worker-interview-context",
         ),
       ),
     );
@@ -97,7 +97,7 @@ export class AssessmentController {
           page !== undefined ? Number(page) : undefined,
           pageSize !== undefined ? Number(pageSize) : undefined,
           status,
-          ((request.correlationId as string | undefined) ?? "worker-interview-context"),
+          request.correlationId ?? "worker-interview-context",
         ),
       ),
     );
@@ -134,7 +134,7 @@ export class AssessmentController {
       await this.interviewRuntime.submitAnswer({
         assessmentId,
         actor: request.rbacContext,
-        correlationId: ((request.correlationId as string | undefined) ?? "worker-interview-context"),
+        correlationId: request.correlationId ?? "worker-interview-context",
         answer: body as never,
       }),
     );
@@ -152,7 +152,7 @@ export class AssessmentController {
       await this.interviewRuntime.recordBlockedAction({
         assessmentId,
         actor: request.rbacContext,
-        correlationId: ((request.correlationId as string | undefined) ?? "worker-interview-context"),
+        correlationId: request.correlationId ?? "worker-interview-context",
         blocked: body as never,
       }),
     );
@@ -173,7 +173,7 @@ export class AssessmentController {
           assessmentId,
           rbacContext.userId,
           rbacContext.role,
-          ((request.correlationId as string | undefined) ?? "worker-interview-context"),
+          request.correlationId ?? "worker-interview-context",
         ),
       ),
     );
@@ -183,7 +183,9 @@ export class AssessmentController {
 @Controller("internal/assessment-interviews")
 @UseGuards(WorkerApiKeyGuard)
 export class InternalAssessmentInterviewController {
-  constructor(private readonly interviewRuntime: AssessmentInterviewRuntimeService) {}
+  constructor(
+    private readonly interviewRuntime: AssessmentInterviewRuntimeService,
+  ) {}
 
   @Get(":assessmentId/private-context/:contextRevision")
   async getPrivateContext(
@@ -211,7 +213,7 @@ export class InternalAssessmentInterviewController {
     return resultEnvelope(
       await this.interviewRuntime.recordAgentDecision({
         assessmentId,
-        correlationId: ((request.correlationId as string | undefined) ?? "worker-interview-context"),
+        correlationId: request.correlationId ?? "worker-interview-context",
         decision: body as never,
       }),
     );
@@ -226,7 +228,7 @@ export class InternalAssessmentInterviewController {
     return resultEnvelope(
       await this.interviewRuntime.seedInitialQuestionForWorker({
         assessmentId,
-        correlationId: ((request.correlationId as string | undefined) ?? "worker-interview-context"),
+        correlationId: request.correlationId ?? "worker-interview-context",
         state: body as never,
       }),
     );

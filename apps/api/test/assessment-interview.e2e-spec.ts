@@ -134,11 +134,17 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     const privateRevision = await httpRequest(app)
       .get("/internal/assessment-interviews/assessment-1/private-context/1")
       .query({
-        source_version: JSON.parse(JSON.stringify(resumeCommand.payload)).sourceVersion,
-        pge_version: JSON.parse(JSON.stringify(resumeCommand.payload)).pgeVersion,
+        source_version: JSON.parse(JSON.stringify(resumeCommand.payload))
+          .sourceVersion,
+        pge_version: JSON.parse(JSON.stringify(resumeCommand.payload))
+          .pgeVersion,
       })
       .set("x-worker-api-key", WORKER_KEY);
-    assert.equal(privateRevision.status, 200, JSON.stringify(privateRevision.body));
+    assert.equal(
+      privateRevision.status,
+      200,
+      JSON.stringify(privateRevision.body),
+    );
     const privateState = successBody<{
       status: string;
       privateRevision: { answer: { freeText: string }; authority: string };
@@ -223,7 +229,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     const stale = await httpRequest(app)
       .post("/assessments/assessment-1/interview/answers")
       .set("Authorization", `Bearer ${token}`)
-      .send({ questionId: QUESTION_ID, freeText: "Contradictory second answer." });
+      .send({
+        questionId: QUESTION_ID,
+        freeText: "Contradictory second answer.",
+      });
 
     assert.equal(first.status, 201, JSON.stringify(first.body));
     assert.equal(stale.status, 409, JSON.stringify(stale.body));
@@ -231,7 +240,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       where: { assessmentId: "assessment-1" },
     });
     assert.equal(thread.contextRevision, 1);
-    assert.equal(JSON.parse(JSON.stringify(thread.privateContextJson)).length, 1);
+    assert.equal(
+      JSON.parse(JSON.stringify(thread.privateContextJson)).length,
+      1,
+    );
   });
 
   it("uses internal guarded decision write-back and blocks false ready", async () => {
@@ -257,7 +269,8 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .send({
         expectedContextRevision: 1,
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
-        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        contextAuthority:
+          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
         confirmedContext: { decision_authority: "human approval required" },
       });
     assert.equal(ready.status, 201, JSON.stringify(ready.body));
@@ -272,7 +285,8 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .send({
         expectedContextRevision: 1,
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
-        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        contextAuthority:
+          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
       });
     assert.equal(duplicate.status, 409, JSON.stringify(duplicate.body));
   });
@@ -300,10 +314,19 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       outcome: string;
       activeQuestion: { id: string; control: string; prompt: string };
     }>(publicState);
-    assert.equal(state.outcome, ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer);
+    assert.equal(
+      state.outcome,
+      ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+    );
     assert.equal(state.activeQuestion.id, QUESTION_ID);
-    assert.equal(state.activeQuestion.control, ASSESSMENT_INTERVIEW_CONTROLS.boolean);
-    assert.equal(state.activeQuestion.prompt, "Agent-authored runtime question");
+    assert.equal(
+      state.activeQuestion.control,
+      ASSESSMENT_INTERVIEW_CONTROLS.boolean,
+    );
+    assert.equal(
+      state.activeQuestion.prompt,
+      "Agent-authored runtime question",
+    );
   });
 
   it("detects stale source and PGE versions before worker resume", async () => {
@@ -318,7 +341,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       .query({ source_version: "snapshot-old", pge_version: "ter-old" })
       .set("x-worker-api-key", WORKER_KEY);
     assert.equal(stale.status, 200, JSON.stringify(stale.body));
-    assert.equal(successBody<{ status: string }>(stale).status, "STALE_PROVENANCE");
+    assert.equal(
+      successBody<{ status: string }>(stale).status,
+      "STALE_PROVENANCE",
+    );
   });
 
   it("blocks targeted false resolved decisions that do not satisfy criteria", async () => {
@@ -335,7 +361,8 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         expectedContextRevision: 1,
         mode: "TARGETED_INTERVIEW",
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
-        contextAuthority: ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        contextAuthority:
+          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
         confirmedContext: { unrelated: "yes" },
         resolutionCriteria: ["decision_authority"],
         originatingInvestigationReference: "investigation:one",
@@ -351,15 +378,20 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
   });
 
   it("re-enters Interview when Customer chooses Provide More Context", async () => {
-    await prisma.outboxMessage.deleteMany({ where: { aggregateId: "assessment-1" } });
+    await prisma.outboxMessage.deleteMany({
+      where: { aggregateId: "assessment-1" },
+    });
     await seedWaitingQuestion(prisma);
     const blocked = await httpRequest(app)
       .post("/assessments/assessment-1/interview/blocked-actions")
       .set("Authorization", `Bearer ${token}`)
-      .send({ action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext });
+      .send({
+        action: ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+      });
     assert.equal(blocked.status, 201, JSON.stringify(blocked.body));
     assert.equal(
-      successBody<{ orchestrationRequested: boolean }>(blocked).orchestrationRequested,
+      successBody<{ orchestrationRequested: boolean }>(blocked)
+        .orchestrationRequested,
       true,
     );
     const resumeCommand = await prisma.outboxMessage.findFirstOrThrow({
@@ -368,7 +400,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
         eventType: ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox,
       },
     });
-    assert.match(JSON.stringify(resumeCommand.payload), /PROVIDE_MORE_CONTEXT/u);
+    assert.match(
+      JSON.stringify(resumeCommand.payload),
+      /PROVIDE_MORE_CONTEXT/u,
+    );
   });
 });
 
