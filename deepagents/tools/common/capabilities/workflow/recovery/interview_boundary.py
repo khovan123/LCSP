@@ -64,7 +64,10 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                 root=self._root_agent or self._load_root_agent(),
             )
             return
-        if resume_reason != "PROVIDE_MORE_CONTEXT":
+        targeted_need = context.get("targetedNeed")
+        targeted_mode = isinstance(targeted_need, dict)
+        same_revision_resume = resume_reason == "PROVIDE_MORE_CONTEXT" or targeted_mode
+        if not same_revision_resume:
             if status == DUPLICATE_CONTEXT or status == STALE_CONTEXT:
                 return
             if status != CURRENT_CONTEXT:
@@ -137,6 +140,16 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
         if not isinstance(handoff, dict):
             raise ValueError("Interview specialist did not return a validated handoff")
         handoff["expectedContextRevision"] = context_revision
+        targeted_need = context.get("targetedNeed")
+        if isinstance(targeted_need, dict):
+            if handoff.get("mode") != "TARGETED_INTERVIEW":
+                raise ValueError("Targeted Interview specialist must return TARGETED_INTERVIEW mode")
+            question = handoff.get("activeQuestion")
+            if isinstance(question, dict) and question.get("needId") not in {
+                None,
+                targeted_need.get("needId"),
+            }:
+                raise ValueError("Targeted Interview question escaped its registered need")
         return handoff
 
     def _continue_after_guard(
@@ -189,6 +202,10 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
             )
             return
 
+        continuation = guarded_state.get("continuation")
+        if outcome == "CONTEXT_RESOLVED" and not isinstance(continuation, dict):
+            raise ValueError("guarded CONTEXT_RESOLVED is missing server-owned continuation")
+
         root = self._root_agent or self._load_root_agent()
         root.invoke(
             {
@@ -201,6 +218,7 @@ class AssessmentInterviewResumeBoundary(AgentBoundaryBase):
                             context_revision=context_revision,
                             pge_version=pge_version,
                             outcome=outcome,
+                            continuation=continuation if isinstance(continuation, dict) else None,
                         ),
                     }
                 ]
@@ -295,6 +313,7 @@ def _interview_instruction(
         "pgeVersion": context.get("pgeVersion"),
         "publicThreadState": public_state,
         "privateCustomerRevision": private_revision,
+        "targetedNeed": context.get("targetedNeed"),
     }
     return (
         "Evaluate exactly one governed Assessment Interview turn. The JSON below is a "
@@ -314,6 +333,7 @@ def _guarded_downstream_prompt(
     context_revision: int,
     pge_version: str,
     outcome: str,
+    continuation: dict[str, Any] | None = None,
 ) -> str:
     if outcome == "CONTEXT_READY":
         action = (
@@ -325,10 +345,17 @@ def _guarded_downstream_prompt(
             "Continue only the persisted targeted clarification path and resume the exact "
             "Investigator after validating its server-owned origin, scope and artifact pins."
         )
+    continuation_clause = (
+        " Resume only the exact server-owned Investigator continuation: "
+        + json.dumps(continuation, ensure_ascii=False, sort_keys=True)
+        if continuation is not None
+        else ""
+    )
     return (
         f"{action} Do not re-evaluate Customer text in Root and do not bypass the persisted "
         f"Interview guard. Assessment: {assessment_id}. Thread: {thread_id}. "
         f"Context revision: {context_revision}. PGE version: {pge_version}."
+        + continuation_clause
     )
 
 

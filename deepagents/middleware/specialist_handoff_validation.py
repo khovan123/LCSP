@@ -61,7 +61,60 @@ def _validate_lcsp_specialist_task_handoff(
         pinned_rule_ids=tuple(context.engineering_rule_ids if context is not None else ()),
         pinned_versions=dict(context.artifact_versions if context is not None else {}),
     )
+    _persist_targeted_interview_need(
+        subagent_type=subagent_type,
+        payload=payload,
+        context=context,
+        metadata=metadata,
+    )
     return result
+
+
+def _persist_targeted_interview_need(
+    *,
+    subagent_type: str,
+    payload: dict[str, Any],
+    context: LCSPRunContext | None,
+    metadata: dict[str, Any],
+) -> None:
+    if subagent_type != "investigator" or payload.get("status") != "NEEDS_INPUT":
+        return
+    if context is None or not context.assessment_id or not context.user_id:
+        raise RuntimeError("Targeted Interview registration requires trusted assessment/user context")
+    execution_id = context.checkpoint_id or context.workflow_run_id
+    if not execution_id:
+        raise RuntimeError("Targeted Interview registration requires a trusted Investigator execution reference")
+    affected_rule_ids = tuple(context.engineering_rule_ids)
+    if not affected_rule_ids:
+        raise RuntimeError("Targeted Interview registration requires pinned EngineeringRule scope")
+    need = payload.get("business_context_need")
+    if not isinstance(need, dict):
+        raise RuntimeError("Investigator NEEDS_INPUT handoff is missing business_context_need")
+    need_id = str(need.get("need_id") or "").strip()
+    business_need = str(need.get("business_context_need") or "").strip()
+    criteria = need.get("resolution_criteria")
+    if not need_id or not business_need or not isinstance(criteria, list) or not criteria:
+        raise RuntimeError("Investigator business_context_need is incomplete")
+    api_client = metadata.get("api_client") or _worker_api_client_from_env()
+    if api_client is None:
+        raise RuntimeError("Targeted Interview registration requires WorkerApiClient")
+    register = getattr(api_client, "post_interview_targeted_need", None)
+    if not callable(register):
+        raise RuntimeError("WorkerApiClient cannot register Targeted Interview needs")
+    originating_reference = f"investigator:{execution_id}:{need_id}"
+    register(
+        context.assessment_id,
+        {
+            "actorId": context.user_id,
+            "needId": need_id,
+            "businessContextNeed": business_need,
+            "resolutionCriteria": [str(item) for item in criteria],
+            "originatingInvestigationReference": originating_reference,
+            "investigatorExecutionId": execution_id,
+            "checkpointId": context.checkpoint_id,
+            "affectedRuleIds": list(affected_rule_ids),
+        },
+    )
 
 
 def _task_tool_message_content(result: ToolMessage | Command) -> str | None:

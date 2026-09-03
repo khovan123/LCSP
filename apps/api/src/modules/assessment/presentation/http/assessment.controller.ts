@@ -211,6 +211,21 @@ export class InternalAssessmentInterviewController {
     );
   }
 
+  @Post(":assessmentId/targeted-needs")
+  async registerTargetedNeed(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.registerTargetedNeedForWorker({
+        assessmentId,
+        correlationId: request.correlationId ?? "worker-interview-context",
+        target: body as never,
+      }),
+    );
+  }
+
   @Post(":assessmentId/agent-decisions")
   async recordAgentDecision(
     @Param("assessmentId") assessmentId: string,

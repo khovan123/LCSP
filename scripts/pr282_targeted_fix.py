@@ -213,26 +213,46 @@ replace(
     '''        "privateCustomerRevision": private_revision,\n    }\n''',
     '''        "privateCustomerRevision": private_revision,\n        "targetedNeed": context.get("targetedNeed"),\n    }\n''',
 )
-# Update helper signature/body near bottom without relying on exact prose body.
-content = read(boundary)
-old_sig = '''def _guarded_downstream_prompt(\n    *,\n    assessment_id: str,\n    thread_id: str,\n    context_revision: int,\n    pge_version: str,\n    outcome: str,\n) -> str:\n'''
-if old_sig not in content:
-    raise RuntimeError("guarded downstream signature not found")
-content = content.replace(
-    old_sig,
-    '''def _guarded_downstream_prompt(\n    *,\n    assessment_id: str,\n    thread_id: str,\n    context_revision: int,\n    pge_version: str,\n    outcome: str,\n    continuation: dict[str, Any] | None = None,\n) -> str:\n''',
-    1,
+# Replace the exact current guarded downstream helper with a continuation-aware version.
+replace_between(
+    boundary,
+    "def _guarded_downstream_prompt(\n",
+    "def _required_text(",
+    '''def _guarded_downstream_prompt(
+    *,
+    assessment_id: str,
+    thread_id: str,
+    context_revision: int,
+    pge_version: str,
+    outcome: str,
+    continuation: dict[str, Any] | None = None,
+) -> str:
+    if outcome == "CONTEXT_READY":
+        action = (
+            "Continue from the already-accepted guarded Initial Interview state into the "
+            "existing EngineeringRule readiness/Planner flow."
+        )
+    else:
+        action = (
+            "Continue only the persisted targeted clarification path and resume the exact "
+            "Investigator after validating its server-owned origin, scope and artifact pins."
+        )
+    continuation_clause = (
+        " Resume only the exact server-owned Investigator continuation: "
+        + json.dumps(continuation, ensure_ascii=False, sort_keys=True)
+        if continuation is not None
+        else ""
+    )
+    return (
+        f"{action} Do not re-evaluate Customer text in Root and do not bypass the persisted "
+        f"Interview guard. Assessment: {assessment_id}. Thread: {thread_id}. "
+        f"Context revision: {context_revision}. PGE version: {pge_version}."
+        + continuation_clause
+    )
+
+
+''',
 )
-marker = '''    return (\n        "Interview Agent decision has passed the protected persistence guard. "'''
-pos = content.find(marker)
-if pos < 0:
-    raise RuntimeError("guarded downstream body marker not found")
-# Add continuation suffix just before this function's return closes by replacing its known final clause.
-old_clause = '''        f"Persisted outcome: {outcome}. "\n        "Do not reuse raw Customer answer text; downstream work may use only persisted guarded context."\n    )\n'''
-new_clause = '''        f"Persisted outcome: {outcome}. "\n        "Do not reuse raw Customer answer text; downstream work may use only persisted guarded context. "\n        + (\n            "Resume only the exact server-owned Investigator continuation: "\n            + json.dumps(continuation, ensure_ascii=False, sort_keys=True)\n            if continuation is not None\n            else ""\n        )\n    )\n'''
-if old_clause not in content:
-    raise RuntimeError("guarded downstream final clause not found")
-write(boundary, content.replace(old_clause, new_clause, 1))
 
 # ---------------------------------------------------------------------------
 # API E2E: private store compatibility + prove forged worker criteria/continuation

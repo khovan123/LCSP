@@ -173,6 +173,16 @@ class InvestigatorClaim(BaseModel):
         )
 
 
+class BusinessContextNeed(BaseModel):
+    """Bounded Investigator-authored business-context need for Targeted Interview."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    need_id: str = Field(min_length=1, max_length=240)
+    business_context_need: str = Field(min_length=1, max_length=2_000)
+    resolution_criteria: list[str] = Field(min_length=1, max_length=20)
+
+
 class InvestigatorResult(BaseModel):
     """Typed Investigator-to-deterministic-gate handoff."""
 
@@ -183,6 +193,7 @@ class InvestigatorResult(BaseModel):
     claims: list[InvestigatorClaim] = Field(default_factory=list, max_length=200)
     limitations: list[str] = Field(default_factory=list, max_length=100)
     missing_input: str | None = Field(default=None, max_length=1_000)
+    business_context_need: BusinessContextNeed | None = None
     next_step: Literal["GATE", "RESOLVE"]
 
     @model_validator(mode="after")
@@ -192,13 +203,13 @@ class InvestigatorResult(BaseModel):
                 raise ValueError("READY Investigator output must transition to GATE")
             if not self.claims:
                 raise ValueError("READY Investigator output requires claims")
-            if self.missing_input:
-                raise ValueError("READY Investigator output cannot carry missing_input")
+            if self.missing_input or self.business_context_need is not None:
+                raise ValueError("READY Investigator output cannot carry business-context input")
             return self
         if self.next_step != "RESOLVE":
             raise ValueError("NEEDS_INPUT Investigator output must transition to RESOLVE")
-        if not self.missing_input:
-            raise ValueError("NEEDS_INPUT Investigator output requires missing_input")
+        if not self.missing_input or self.business_context_need is None:
+            raise ValueError("NEEDS_INPUT Investigator output requires a bounded business_context_need")
         return self
 
 
@@ -273,6 +284,7 @@ SPECIALIST_RESPONSE_FORMATS: dict[str, type[BaseModel]] = {
 
 
 __all__ = [
+    "BusinessContextNeed",
     "GraphSeed",
     "InterviewQuestionChoice",
     "InterviewQuestionResult",

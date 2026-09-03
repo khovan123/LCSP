@@ -566,6 +566,14 @@ class WorkerApiClient:
             raise WorkerCallbackError("Interview initial question response was invalid.")
         return data
 
+    def post_interview_targeted_need(self, assessment_id: str, payload: dict) -> dict:
+        """Persist a server-guarded Targeted Interview need and opaque continuation."""
+        path = InternalPath.INTERVIEW_TARGETED_NEED.format(assessment_id=assessment_id)
+        data = self._post_with_retry(path, payload)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Interview targeted need response was invalid.")
+        return data
+
     def dispatch_agentic_tool(self, payload: dict) -> dict:
         """Dispatch one already validated/authorized agentic tool to the trusted API."""
         path = InternalPath.AGENTIC_TOOL_DISPATCH

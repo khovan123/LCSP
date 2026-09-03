@@ -60,6 +60,40 @@ export type PrivateInterviewAnswerRevision = {
   processedAt?: string;
 };
 
+type TargetedInterviewNeed = {
+  needId: string;
+  businessContextNeed: string;
+  resolutionCriteria: string[];
+  originatingInvestigationReference: string;
+  sourceVersion: string;
+  pgeVersion: string;
+};
+
+type TargetedInterviewContinuation = {
+  originatingInvestigationReference: string;
+  investigatorExecutionId: string;
+  checkpointId?: string;
+  affectedRuleIds: string[];
+  artifactVersions: { sourceVersion: string; pgeVersion: string };
+};
+
+type PrivateInterviewStore = {
+  revisions: PrivateInterviewAnswerRevision[];
+  targetedNeed?: TargetedInterviewNeed;
+  targetedContinuation?: TargetedInterviewContinuation;
+};
+
+type TargetedNeedRegistrationInput = {
+  actorId: string;
+  needId: string;
+  businessContextNeed: string;
+  resolutionCriteria: string[];
+  originatingInvestigationReference: string;
+  investigatorExecutionId: string;
+  checkpointId?: string;
+  affectedRuleIds: string[];
+};
+
 type WorkerPrivateContext = {
   status: "CURRENT" | "DUPLICATE" | "STALE" | "STALE_PROVENANCE";
   assessmentId: string;
@@ -71,6 +105,7 @@ type WorkerPrivateContext = {
   pgeVersion: string;
   publicState: AssessmentInterviewRuntimeState;
   privateRevision?: PrivateInterviewAnswerRevision;
+  targetedNeed?: TargetedInterviewNeed;
 };
 
 type AgentDecisionInput = {
@@ -80,15 +115,6 @@ type AgentDecisionInput = {
   activeQuestion?: AssessmentInterviewRuntimeState["activeQuestion"];
   contextAuthority?: AssessmentContextAuthorityStatus;
   confirmedContext?: Record<string, unknown>;
-  resolutionCriteria?: string[];
-  originatingInvestigationReference?: string;
-  continuation?: {
-    originatingInvestigationReference?: string;
-    consumed?: boolean;
-    investigatorExecutionId?: string;
-    affectedRuleIds?: string[];
-    artifactVersions?: Record<string, string>;
-  };
   blockedActions?: AssessmentInterviewRuntimeState["blockedActions"];
   flags?: AssessmentInterviewRuntimeState["flags"];
 };
@@ -187,10 +213,10 @@ export class AssessmentInterviewRuntimeService {
         },
         data: {
           stateJson: toJson(nextState),
-          privateContextJson: toJson([
-            ...thread.privateRevisions,
-            privateRevision,
-          ]),
+          privateContextJson: toJson({
+            ...thread.privateStore,
+            revisions: [...thread.privateRevisions, privateRevision],
+          }),
           contextRevision: nextRevision,
           activeQuestionId: null,
           processedRevision: thread.processedRevision,
@@ -289,7 +315,7 @@ export class AssessmentInterviewRuntimeService {
         contextRevision: current.contextRevision,
         activeQuestionId: null,
         processedRevision: current.processedRevision,
-        privateRevisions: current.privateRevisions,
+        privateStore: current.privateStore,
         sourceVersion: provenance.sourceVersion,
         pgeVersion: provenance.pgeVersion,
       });
@@ -361,7 +387,78 @@ export class AssessmentInterviewRuntimeService {
       pgeVersion: thread.pgeVersion ?? MISSING_PGE_VERSION,
       publicState: thread.state,
       privateRevision,
+      targetedNeed: thread.privateStore.targetedNeed,
     };
+  }
+
+  async registerTargetedNeedForWorker(input: {
+    assessmentId: string;
+    correlationId: string;
+    target: TargetedNeedRegistrationInput;
+  }): Promise<AssessmentInterviewRuntimeState> {
+    const target = parseTargetedNeedRegistration(input.target);
+    return this.prisma.$transaction(async (tx) => {
+      const thread = await this.readThread(input.assessmentId, tx);
+      if (thread.state.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.contextReady) {
+        throw problemException(
+          "INTERVIEW_TARGETED_NEED_REQUIRES_READY_CONTEXT",
+          input.correlationId,
+          { status: HttpStatus.CONFLICT },
+        );
+      }
+      const provenance = await this.assessmentProvenance(input.assessmentId, tx);
+      const targetedNeed: TargetedInterviewNeed = {
+        needId: target.needId,
+        businessContextNeed: target.businessContextNeed,
+        resolutionCriteria: target.resolutionCriteria,
+        originatingInvestigationReference: target.originatingInvestigationReference,
+        sourceVersion: provenance.sourceVersion,
+        pgeVersion: provenance.pgeVersion,
+      };
+      const targetedContinuation: TargetedInterviewContinuation = {
+        originatingInvestigationReference: target.originatingInvestigationReference,
+        investigatorExecutionId: target.investigatorExecutionId,
+        checkpointId: target.checkpointId,
+        affectedRuleIds: target.affectedRuleIds,
+        artifactVersions: {
+          sourceVersion: provenance.sourceVersion,
+          pgeVersion: provenance.pgeVersion,
+        },
+      };
+      const nextState: AssessmentInterviewRuntimeState = {
+        ...thread.state,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: undefined,
+        orchestrationRequested: true,
+      };
+      const privateStore: PrivateInterviewStore = {
+        ...thread.privateStore,
+        targetedNeed,
+        targetedContinuation,
+      };
+      await this.persistThreadState(input.assessmentId, nextState, tx, {
+        contextRevision: thread.contextRevision,
+        activeQuestionId: null,
+        processedRevision: thread.processedRevision,
+        privateStore,
+        sourceVersion: provenance.sourceVersion,
+        pgeVersion: provenance.pgeVersion,
+      });
+      await this.outboxRepository.enqueue(
+        this.interviewAgentResumeCommand({
+          assessmentId: input.assessmentId,
+          actorId: target.actorId,
+          correlationId: input.correlationId,
+          contextRevision: thread.contextRevision,
+          questionId: target.needId,
+          sourceVersion: provenance.sourceVersion,
+          pgeVersion: provenance.pgeVersion,
+          resumeReason: "TARGETED_INTERVIEW_REQUIRED",
+        }),
+        tx,
+      );
+      return nextState;
+    });
   }
 
   async getWorkerStateForWorker(
@@ -374,17 +471,17 @@ export class AssessmentInterviewRuntimeService {
     assessmentId: string;
     correlationId: string;
     decision: AgentDecisionInput;
-  }): Promise<AssessmentInterviewRuntimeState> {
+  }): Promise<
+    AssessmentInterviewRuntimeState & { continuation?: TargetedInterviewContinuation }
+  > {
     const decision = parseAgentDecision(input.decision);
-    const nextState = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const thread = await this.readThread(input.assessmentId, tx);
       if (decision.expectedContextRevision !== thread.contextRevision) {
         throw problemException(
           "INTERVIEW_DECISION_STALE_REVISION",
           input.correlationId,
-          {
-            status: HttpStatus.CONFLICT,
-          },
+          { status: HttpStatus.CONFLICT },
         );
       }
       const latestPrivate = thread.privateRevisions.find(
@@ -395,46 +492,60 @@ export class AssessmentInterviewRuntimeService {
         thread.state.outcome ===
           ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved &&
         decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
+      const isTargetedBootstrap =
+        decision.mode === "TARGETED_INTERVIEW" &&
+        decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+        thread.state.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+        !thread.activeQuestionId &&
+        !!thread.privateStore.targetedNeed;
       assertGuardedDecision(
         decision,
         latestPrivate,
         thread,
         input.correlationId,
+        { isBlockedFollowup, isTargetedBootstrap },
       );
       const state = decisionState(thread.state, decision);
+      const revisions = thread.privateRevisions.map((revision) =>
+        revision.contextRevision === decision.expectedContextRevision
+          ? { ...revision, processedAt: new Date().toISOString() }
+          : revision,
+      );
       const updated = await tx.assessmentInterviewThread.updateMany({
         where: {
           assessmentId: input.assessmentId,
           contextRevision: decision.expectedContextRevision,
           activeQuestionId: thread.activeQuestionId,
-          processedRevision: isBlockedFollowup
-            ? thread.processedRevision
-            : { lt: decision.expectedContextRevision },
+          processedRevision:
+            isBlockedFollowup || isTargetedBootstrap
+              ? thread.processedRevision
+              : { lt: decision.expectedContextRevision },
         },
         data: {
           stateJson: toJson(state),
           contextRevision: thread.contextRevision,
           activeQuestionId: state.activeQuestion?.id ?? null,
           processedRevision: decision.expectedContextRevision,
-          privateContextJson: toJson(
-            thread.privateRevisions.map((revision) =>
-              revision.contextRevision === decision.expectedContextRevision
-                ? { ...revision, processedAt: new Date().toISOString() }
-                : revision,
-            ),
-          ),
+          privateContextJson: toJson({
+            ...thread.privateStore,
+            revisions,
+          }),
         },
       });
       if (updated.count !== 1) {
         throw problemException(
           "INTERVIEW_DECISION_ALREADY_PROCESSED",
           input.correlationId,
-          {
-            status: HttpStatus.CONFLICT,
-          },
+          { status: HttpStatus.CONFLICT },
         );
       }
-      return state;
+      return {
+        state,
+        continuation:
+          decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved
+            ? thread.privateStore.targetedContinuation
+            : undefined,
+      };
     });
 
     await this.runtimeEvents.recordToolWaitingInput({
@@ -445,15 +556,17 @@ export class AssessmentInterviewRuntimeService {
       toolName: INTERVIEW_TOOL_NAME,
       summary:
         "Interview Agent guarded decision persisted for customer or orchestration continuation.",
-      inputSummary: { decisionOutcome: nextState.outcome },
-      outputSummary: { assessmentInterview: publicState(nextState) },
+      inputSummary: { decisionOutcome: result.state.outcome },
+      outputSummary: { assessmentInterview: publicState(result.state) },
       waitingReason:
-        nextState.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer
+        result.state.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer
           ? "WAITING_FOR_CUSTOMER"
           : null,
       startedAt: new Date(),
     });
-    return nextState;
+    return result.continuation
+      ? { ...result.state, continuation: result.continuation }
+      : result.state;
   }
 
   async seedInitialQuestionForWorker(input: {
@@ -487,7 +600,7 @@ export class AssessmentInterviewRuntimeService {
       contextRevision: nextState.contextRevision ?? 0,
       activeQuestionId,
       processedRevision: 0,
-      privateRevisions: [],
+      privateStore: { revisions: [] },
       sourceVersion: provenance.sourceVersion,
       pgeVersion: provenance.pgeVersion,
     });
@@ -529,6 +642,7 @@ export class AssessmentInterviewRuntimeService {
     tx?: Prisma.TransactionClient,
   ): Promise<{
     state: AssessmentInterviewRuntimeState;
+    privateStore: PrivateInterviewStore;
     privateRevisions: PrivateInterviewAnswerRevision[];
     contextRevision: number;
     activeQuestionId: string | null;
@@ -547,9 +661,11 @@ export class AssessmentInterviewRuntimeService {
       answerHistory: [],
     };
     if (!thread) {
+      const privateStore: PrivateInterviewStore = { revisions: [] };
       return {
         state: fallbackState,
-        privateRevisions: [],
+        privateStore,
+        privateRevisions: privateStore.revisions,
         contextRevision: 0,
         activeQuestionId: null,
         processedRevision: 0,
@@ -558,9 +674,11 @@ export class AssessmentInterviewRuntimeService {
       };
     }
     const state = parsePublicInterviewState(thread.stateJson) ?? fallbackState;
+    const privateStore = parsePrivateStore(thread.privateContextJson);
     return {
       state,
-      privateRevisions: parsePrivateRevisions(thread.privateContextJson),
+      privateStore,
+      privateRevisions: privateStore.revisions,
       contextRevision: thread.contextRevision,
       activeQuestionId: thread.activeQuestionId,
       processedRevision: thread.processedRevision,
@@ -577,7 +695,7 @@ export class AssessmentInterviewRuntimeService {
       contextRevision: number;
       activeQuestionId: string | null;
       processedRevision: number;
-      privateRevisions: PrivateInterviewAnswerRevision[];
+      privateStore: PrivateInterviewStore;
       sourceVersion: string;
       pgeVersion: string;
     },
@@ -589,7 +707,7 @@ export class AssessmentInterviewRuntimeService {
         stateJson: toJson(state),
         ...(input
           ? {
-              privateContextJson: toJson(input.privateRevisions),
+              privateContextJson: toJson(input.privateStore),
               contextRevision: input.contextRevision,
               activeQuestionId: input.activeQuestionId,
               processedRevision: input.processedRevision,
@@ -602,7 +720,7 @@ export class AssessmentInterviewRuntimeService {
         id: this.threadId(assessmentId),
         assessmentId,
         stateJson: toJson(state),
-        privateContextJson: toJson(input?.privateRevisions ?? []),
+        privateContextJson: toJson(input?.privateStore ?? { revisions: [] }),
         contextRevision: input?.contextRevision ?? state.contextRevision ?? 0,
         activeQuestionId: input?.activeQuestionId ?? state.activeQuestion?.id,
         processedRevision: input?.processedRevision ?? 0,
@@ -632,7 +750,7 @@ export class AssessmentInterviewRuntimeService {
       actor: { id: input.actorId, type: AUDIT_ACTOR_TYPES.user },
       result: ASSESSMENT_EVENT_TYPES.interviewAnswerSubmitted,
       redactionStatus: AUDIT_REDACTION_STATUSES.redacted,
-      idempotencyKey: `${input.assessmentId}:${input.contextRevision}:${ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox}`,
+      idempotencyKey: `${input.assessmentId}:${input.contextRevision}:${input.resumeReason}:${input.questionId}:${ASSESSMENT_EVENT_TYPES.interviewAgentResumeRequestedOutbox}`,
       payload: {
         assessmentId: input.assessmentId,
         threadId: this.threadId(input.assessmentId),
@@ -756,6 +874,45 @@ function parseBlockedAction(value: unknown): AssessmentInterviewBlockedInput {
   };
 }
 
+function parseTargetedNeedRegistration(
+  value: unknown,
+): TargetedNeedRegistrationInput {
+  const record = objectRecord(value);
+  const criteria = Array.isArray(record?.resolutionCriteria)
+    ? record.resolutionCriteria.filter(
+        (item): item is string => typeof item === "string" && item.trim().length > 0,
+      )
+    : [];
+  const affectedRuleIds = Array.isArray(record?.affectedRuleIds)
+    ? record.affectedRuleIds.filter(
+        (item): item is string => typeof item === "string" && item.trim().length > 0,
+      )
+    : [];
+  if (
+    !record ||
+    typeof record.actorId !== "string" ||
+    typeof record.needId !== "string" ||
+    typeof record.businessContextNeed !== "string" ||
+    !criteria.length ||
+    typeof record.originatingInvestigationReference !== "string" ||
+    typeof record.investigatorExecutionId !== "string" ||
+    !affectedRuleIds.length
+  ) {
+    throw new BadRequestException({ code: "INTERVIEW_TARGETED_NEED_INVALID" });
+  }
+  return {
+    actorId: record.actorId,
+    needId: record.needId,
+    businessContextNeed: record.businessContextNeed,
+    resolutionCriteria: criteria,
+    originatingInvestigationReference: record.originatingInvestigationReference,
+    investigatorExecutionId: record.investigatorExecutionId,
+    checkpointId:
+      typeof record.checkpointId === "string" ? record.checkpointId : undefined,
+    affectedRuleIds,
+  };
+}
+
 function parseAgentDecision(value: unknown): AgentDecisionInput {
   const record = objectRecord(value);
   if (
@@ -784,18 +941,6 @@ function parseAgentDecision(value: unknown): AgentDecisionInput {
       ? (record.contextAuthority as AssessmentContextAuthorityStatus)
       : undefined,
     confirmedContext: objectRecord(record.confirmedContext) ?? undefined,
-    resolutionCriteria: Array.isArray(record.resolutionCriteria)
-      ? record.resolutionCriteria.filter(
-          (item): item is string => typeof item === "string",
-        )
-      : undefined,
-    originatingInvestigationReference:
-      typeof record.originatingInvestigationReference === "string"
-        ? record.originatingInvestigationReference
-        : undefined,
-    continuation: objectRecord(record.continuation)
-      ? (record.continuation as AgentDecisionInput["continuation"])
-      : undefined,
     blockedActions: Array.isArray(record.blockedActions)
       ? record.blockedActions.filter((item): item is never =>
           Object.values(ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS).includes(
@@ -824,13 +969,57 @@ function parsePublicInterviewState(
   return record as AssessmentInterviewRuntimeState;
 }
 
-function parsePrivateRevisions(
-  value: unknown,
-): PrivateInterviewAnswerRevision[] {
-  if (!Array.isArray(value)) {
-    return [];
+function parsePrivateStore(value: unknown): PrivateInterviewStore {
+  if (Array.isArray(value)) {
+    return { revisions: value.filter(isPrivateRevision) };
   }
-  return value.filter(isPrivateRevision);
+  const record = objectRecord(value);
+  if (!record) {
+    return { revisions: [] };
+  }
+  const revisions = Array.isArray(record.revisions)
+    ? record.revisions.filter(isPrivateRevision)
+    : [];
+  const targetedNeed = parseStoredTargetedNeed(record.targetedNeed);
+  const targetedContinuation = parseStoredTargetedContinuation(
+    record.targetedContinuation,
+  );
+  return { revisions, targetedNeed, targetedContinuation };
+}
+
+function parseStoredTargetedNeed(value: unknown): TargetedInterviewNeed | undefined {
+  const record = objectRecord(value);
+  if (
+    !record ||
+    typeof record.needId !== "string" ||
+    typeof record.businessContextNeed !== "string" ||
+    !Array.isArray(record.resolutionCriteria) ||
+    typeof record.originatingInvestigationReference !== "string" ||
+    typeof record.sourceVersion !== "string" ||
+    typeof record.pgeVersion !== "string"
+  ) {
+    return undefined;
+  }
+  return record as TargetedInterviewNeed;
+}
+
+function parseStoredTargetedContinuation(
+  value: unknown,
+): TargetedInterviewContinuation | undefined {
+  const record = objectRecord(value);
+  const artifactVersions = objectRecord(record?.artifactVersions);
+  if (
+    !record ||
+    typeof record.originatingInvestigationReference !== "string" ||
+    typeof record.investigatorExecutionId !== "string" ||
+    !Array.isArray(record.affectedRuleIds) ||
+    !artifactVersions ||
+    typeof artifactVersions.sourceVersion !== "string" ||
+    typeof artifactVersions.pgeVersion !== "string"
+  ) {
+    return undefined;
+  }
+  return record as TargetedInterviewContinuation;
 }
 
 function isPrivateRevision(
@@ -861,14 +1050,12 @@ function assertGuardedDecision(
     state: AssessmentInterviewRuntimeState;
     sourceVersion: string | null;
     pgeVersion: string | null;
+    privateStore: PrivateInterviewStore;
   },
   correlationId: string,
+  followup: { isBlockedFollowup: boolean; isTargetedBootstrap: boolean },
 ): void {
-  const isBlockedFollowup =
-    thread.state.outcome ===
-      ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved &&
-    decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
-  if (!privateRevision && !isBlockedFollowup) {
+  if (!privateRevision && !followup.isBlockedFollowup && !followup.isTargetedBootstrap) {
     throw problemException(
       "INTERVIEW_PRIVATE_REVISION_NOT_FOUND",
       correlationId,
@@ -882,9 +1069,7 @@ function assertGuardedDecision(
     throw problemException(
       "INTERVIEW_WAITING_REQUIRES_QUESTION",
       correlationId,
-      {
-        status: HttpStatus.CONFLICT,
-      },
+      { status: HttpStatus.CONFLICT },
     );
   }
   if (
@@ -894,9 +1079,7 @@ function assertGuardedDecision(
     throw problemException(
       "INTERVIEW_ACTIVE_QUESTION_OUTCOME_INVALID",
       correlationId,
-      {
-        status: HttpStatus.CONFLICT,
-      },
+      { status: HttpStatus.CONFLICT },
     );
   }
   if (
@@ -906,87 +1089,75 @@ function assertGuardedDecision(
     throw problemException(
       "INTERVIEW_CONTEXT_READY_REQUIRES_AUTHORITY",
       correlationId,
-      {
-        status: HttpStatus.CONFLICT,
-      },
+      { status: HttpStatus.CONFLICT },
     );
   }
-  if (decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved) {
-    if (decision.mode !== "TARGETED_INTERVIEW") {
-      throw problemException(
-        "INTERVIEW_CONTEXT_RESOLVED_REQUIRES_TARGETED_MODE",
-        correlationId,
-        {
-          status: HttpStatus.CONFLICT,
-        },
-      );
-    }
-    if (!isAuthoritative(decision.contextAuthority)) {
-      throw problemException(
-        "INTERVIEW_CONTEXT_RESOLVED_REQUIRES_AUTHORITY",
-        correlationId,
-        {
-          status: HttpStatus.CONFLICT,
-        },
-      );
-    }
-    if (!decision.continuation || decision.continuation.consumed) {
-      throw problemException("INTERVIEW_CONTINUATION_INVALID", correlationId, {
-        status: HttpStatus.CONFLICT,
-      });
-    }
-    if (
-      !decision.originatingInvestigationReference ||
-      decision.continuation.originatingInvestigationReference !==
-        decision.originatingInvestigationReference
-    ) {
-      throw problemException(
-        "INTERVIEW_CONTINUATION_ORIGIN_MISMATCH",
-        correlationId,
-        {
-          status: HttpStatus.CONFLICT,
-        },
-      );
-    }
-    if (!decision.resolutionCriteria?.length) {
-      throw problemException(
-        "INTERVIEW_RESOLUTION_CRITERIA_REQUIRED",
-        correlationId,
-        { status: HttpStatus.CONFLICT },
-      );
-    }
-    const artifactVersions = decision.continuation.artifactVersions ?? {};
-    if (
-      artifactVersions.sourceVersion !== thread.sourceVersion ||
-      artifactVersions.pgeVersion !== thread.pgeVersion
-    ) {
-      throw problemException("INTERVIEW_CONTINUATION_STALE", correlationId, {
-        status: HttpStatus.CONFLICT,
-      });
-    }
-    if (!decision.continuation.affectedRuleIds?.length) {
-      throw problemException(
-        "INTERVIEW_CONTINUATION_SCOPE_REQUIRED",
-        correlationId,
-        {
-          status: HttpStatus.CONFLICT,
-        },
-      );
-    }
-    const context = decision.confirmedContext ?? {};
-    const missing = decision.resolutionCriteria.filter(
-      (criterion) => !(criterion in context),
+  if (decision.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved) {
+    return;
+  }
+  if (decision.mode !== "TARGETED_INTERVIEW") {
+    throw problemException(
+      "INTERVIEW_CONTEXT_RESOLVED_REQUIRES_TARGETED_MODE",
+      correlationId,
+      { status: HttpStatus.CONFLICT },
     );
-    if (missing.length > 0) {
-      throw problemException(
-        "INTERVIEW_RESOLUTION_CRITERIA_UNSATISFIED",
-        correlationId,
-        {
-          status: HttpStatus.CONFLICT,
-          meta: { missing: missing.join(",") },
-        },
-      );
-    }
+  }
+  if (!isAuthoritative(decision.contextAuthority)) {
+    throw problemException(
+      "INTERVIEW_CONTEXT_RESOLVED_REQUIRES_AUTHORITY",
+      correlationId,
+      { status: HttpStatus.CONFLICT },
+    );
+  }
+  const target = thread.privateStore.targetedNeed;
+  const continuation = thread.privateStore.targetedContinuation;
+  if (!target || !continuation) {
+    throw problemException(
+      "INTERVIEW_TARGETED_CONTEXT_NOT_REGISTERED",
+      correlationId,
+      { status: HttpStatus.CONFLICT },
+    );
+  }
+  if (
+    target.originatingInvestigationReference !==
+    continuation.originatingInvestigationReference
+  ) {
+    throw problemException(
+      "INTERVIEW_CONTINUATION_ORIGIN_MISMATCH",
+      correlationId,
+      { status: HttpStatus.CONFLICT },
+    );
+  }
+  if (
+    target.sourceVersion !== thread.sourceVersion ||
+    target.pgeVersion !== thread.pgeVersion ||
+    continuation.artifactVersions.sourceVersion !== thread.sourceVersion ||
+    continuation.artifactVersions.pgeVersion !== thread.pgeVersion
+  ) {
+    throw problemException("INTERVIEW_CONTINUATION_STALE", correlationId, {
+      status: HttpStatus.CONFLICT,
+    });
+  }
+  if (!continuation.affectedRuleIds.length) {
+    throw problemException(
+      "INTERVIEW_CONTINUATION_SCOPE_REQUIRED",
+      correlationId,
+      { status: HttpStatus.CONFLICT },
+    );
+  }
+  const context = decision.confirmedContext ?? {};
+  const missing = target.resolutionCriteria.filter(
+    (criterion) => !(criterion in context),
+  );
+  if (missing.length > 0) {
+    throw problemException(
+      "INTERVIEW_RESOLUTION_CRITERIA_UNSATISFIED",
+      correlationId,
+      {
+        status: HttpStatus.CONFLICT,
+        meta: { missing: missing.join(",") },
+      },
+    );
   }
 }
 

@@ -252,12 +252,11 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       where: { assessmentId: "assessment-1" },
     });
     assert.equal(thread.contextRevision, 1);
-    assert.equal(
-      Array.isArray(thread.privateContextJson)
-        ? thread.privateContextJson.length
-        : 0,
-      1,
-    );
+    const privateStore = jsonRecord(thread.privateContextJson);
+    const revisions = Array.isArray(privateStore.revisions)
+      ? privateStore.revisions
+      : [];
+    assert.equal(revisions.length, 1);
   });
 
   it("uses internal guarded decision write-back and blocks false ready", async () => {
@@ -361,34 +360,139 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     );
   });
 
-  it("blocks targeted false resolved decisions that do not satisfy criteria", async () => {
+  it("uses server-owned targeted criteria and continuation before exact resume", async () => {
     await seedWaitingQuestion(prisma);
     await httpRequest(app)
       .post("/assessments/assessment-1/interview/answers")
       .set("Authorization", `Bearer ${token}`)
       .send({ questionId: QUESTION_ID, freeText: RAW_ANSWER });
 
-    const unresolved = await httpRequest(app)
+    const ready = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 1,
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextReady,
+        contextAuthority:
+          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        confirmedContext: { baseline: "confirmed" },
+      });
+    assert.equal(ready.status, 201, JSON.stringify(ready.body));
+
+    const registered = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/targeted-needs")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        actorId: "user-1",
+        needId: "need-decision-authority",
+        businessContextNeed: "Who has final decision authority?",
+        resolutionCriteria: ["decision_authority"],
+        originatingInvestigationReference:
+          "investigator:investigator-run-1:need-decision-authority",
+        investigatorExecutionId: "investigator-run-1",
+        checkpointId: "checkpoint-1",
+        affectedRuleIds: ["ENG-1"],
+      });
+    assert.equal(registered.status, 201, JSON.stringify(registered.body));
+
+    const privateTarget = await httpRequest(app)
+      .get("/internal/assessment-interviews/assessment-1/private-context/1")
+      .set("x-worker-api-key", WORKER_KEY);
+    assert.equal(privateTarget.status, 200, JSON.stringify(privateTarget.body));
+    const privateTargetState = successBody<{
+      status: string;
+      targetedNeed: { needId: string; resolutionCriteria: string[] };
+    }>(privateTarget);
+    assert.equal(privateTargetState.status, "DUPLICATE");
+    assert.equal(privateTargetState.targetedNeed.needId, "need-decision-authority");
+    assert.deepEqual(privateTargetState.targetedNeed.resolutionCriteria, [
+      "decision_authority",
+    ]);
+    assert.doesNotMatch(JSON.stringify(privateTarget.body), /checkpoint-1/u);
+    assert.doesNotMatch(JSON.stringify(privateTarget.body), /investigator-run-1/u);
+
+    const question = await httpRequest(app)
       .post("/internal/assessment-interviews/assessment-1/agent-decisions")
       .set("x-worker-api-key", WORKER_KEY)
       .send({
         expectedContextRevision: 1,
         mode: "TARGETED_INTERVIEW",
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+        activeQuestion: {
+          id: "target-question-1",
+          needId: "need-decision-authority",
+          intent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
+          control: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+          prompt: "Who has final decision authority?",
+        },
+      });
+    assert.equal(question.status, 201, JSON.stringify(question.body));
+
+    const targetedAnswer = await httpRequest(app)
+      .post("/assessments/assessment-1/interview/answers")
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        questionId: "target-question-1",
+        freeText: "The human operations lead has final approval.",
+      });
+    assert.equal(targetedAnswer.status, 201, JSON.stringify(targetedAnswer.body));
+
+    const forged = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 2,
+        mode: "TARGETED_INTERVIEW",
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
         contextAuthority:
           ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
         confirmedContext: { unrelated: "yes" },
-        resolutionCriteria: ["decision_authority"],
-        originatingInvestigationReference: "investigation:one",
+        resolutionCriteria: ["unrelated"],
+        originatingInvestigationReference: "forged-origin",
         continuation: {
-          originatingInvestigationReference: "investigation:one",
-          consumed: false,
-          investigatorExecutionId: "investigator-run-1",
-          affectedRuleIds: ["ENG-1"],
-          artifactVersions: { technicalEvidenceReportId: "ter-1" },
+          investigatorExecutionId: "forged-run",
+          affectedRuleIds: ["FORGED"],
         },
       });
-    assert.equal(unresolved.status, 409, JSON.stringify(unresolved.body));
+    assert.equal(forged.status, 409, JSON.stringify(forged.body));
+
+    const resolved = await httpRequest(app)
+      .post("/internal/assessment-interviews/assessment-1/agent-decisions")
+      .set("x-worker-api-key", WORKER_KEY)
+      .send({
+        expectedContextRevision: 2,
+        mode: "TARGETED_INTERVIEW",
+        outcome: ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+        contextAuthority:
+          ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerConfirmed,
+        confirmedContext: { decision_authority: "human operations lead" },
+        resolutionCriteria: ["forged"],
+        continuation: { investigatorExecutionId: "forged-run" },
+      });
+    assert.equal(resolved.status, 201, JSON.stringify(resolved.body));
+    const resolvedState = successBody<{
+      outcome: string;
+      continuation: {
+        originatingInvestigationReference: string;
+        investigatorExecutionId: string;
+        checkpointId: string;
+        affectedRuleIds: string[];
+      };
+    }>(resolved);
+    assert.equal(
+      resolvedState.outcome,
+      ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved,
+    );
+    assert.equal(
+      resolvedState.continuation.originatingInvestigationReference,
+      "investigator:investigator-run-1:need-decision-authority",
+    );
+    assert.equal(
+      resolvedState.continuation.investigatorExecutionId,
+      "investigator-run-1",
+    );
+    assert.equal(resolvedState.continuation.checkpointId, "checkpoint-1");
+    assert.deepEqual(resolvedState.continuation.affectedRuleIds, ["ENG-1"]);
   });
 
   it("re-enters Interview when Customer chooses Provide More Context", async () => {
