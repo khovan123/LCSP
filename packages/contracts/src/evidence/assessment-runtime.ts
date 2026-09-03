@@ -30,6 +30,7 @@ export const ASSESSMENT_RUNTIME_STAGE_CODES = {
   technicalProfile: "TECHNICAL_PROFILE",
   aiUsageFlow: "AI_USAGE_FLOW",
   reconciliation: "RECONCILIATION",
+  interview: "INTERVIEW",
   classification: "CLASSIFICATION",
   conflicts: "CONFLICTS",
   documents: "DOCUMENTS",

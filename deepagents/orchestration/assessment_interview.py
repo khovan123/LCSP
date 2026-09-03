@@ -1,8 +1,9 @@
 """Canonical Assessment Interview runtime contract helpers.
 
-This module is intentionally deterministic. Runtime Interview owns Customer-facing
-questions and context authority, while Root Orchestration owns recovery, stale-state
-validation, downstream re-evaluation, and specialist resume.
+This module contains orchestration guardrails around Interview Agent decisions.
+The Interview Agent owns Customer-facing question selection, clarification strategy,
+and sufficiency reasoning; these helpers only validate false-ready/false-resolved
+states, stale continuation tokens, and Root-owned recovery boundaries.
 """
 
 from __future__ import annotations
@@ -74,6 +75,17 @@ class InvestigatorContinuation:
 
 
 @dataclass(frozen=True)
+class InterviewAgentDecision:
+    outcome: InterviewOutcome
+    active_question: InterviewQuestion | None = None
+    confirmed_context: dict[str, Any] = field(default_factory=dict)
+    context_revision: int = 0
+    flags: tuple[str, ...] = ()
+    blocked_actions: tuple[str, ...] = ()
+    rationale: str | None = None
+
+
+@dataclass(frozen=True)
 class InterviewRuntimeState:
     outcome: InterviewOutcome
     active_question: InterviewQuestion | None = None
@@ -94,59 +106,34 @@ def initial_interview(
     *,
     coverage: TechnicalCoverage,
     customer_revisions: tuple[CustomerContextRevision, ...],
+    agent_decision: InterviewAgentDecision | None = None,
 ) -> InterviewRuntimeState:
-    """Advance Minimal Setup/PGE through Initial Interview and Planner readiness."""
+    """Apply protected initial-Interview guardrails to an agent-authored decision."""
     if coverage.state == "UNAVAILABLE":
-        return InterviewRuntimeState(
-            outcome="FAILED",
-            orchestration_recovery_required=True,
-            coverage_limitations=coverage.limitations,
-        )
+        raise ValueError("UNAVAILABLE coverage requires Root Orchestration recovery before Interview")
 
     latest = customer_revisions[-1] if customer_revisions else None
-    if latest is None:
+    if agent_decision is None:
         return InterviewRuntimeState(
             outcome="WAITING_FOR_CUSTOMER",
-            active_question=InterviewQuestion(
-                id="initial-context",
-                intent="ASK",
-                prompt="Describe the assessed system and where AI is involved.",
-            ),
             coverage_limitations=coverage.limitations,
+            flags=("INTERVIEW_AGENT_DECISION_REQUIRED",),
         )
 
-    if latest.authority in {"UNCERTAIN", "CONFLICTED"}:
+    if agent_decision.outcome == "CONTEXT_READY":
+        _assert_authoritative_revision(latest, "CONTEXT_READY")
         return InterviewRuntimeState(
-            outcome="WAITING_FOR_CUSTOMER",
-            active_question=InterviewQuestion(
-                id="initial-context-clarify",
-                intent="CLARIFY",
-                prompt="Clarify the ambiguous or conflicting Customer context.",
-            ),
+            outcome="CONTEXT_READY",
+            confirmed_context=dict(latest.facts if latest else agent_decision.confirmed_context),
+            context_revision=latest.revision if latest else agent_decision.context_revision,
             coverage_limitations=coverage.limitations,
+            missing_evidence_is_absence_proof=False,
+            planner_can_start=True,
+            engineering_rule_can_start=True,
+            interview_payload=_decision_payload(agent_decision),
         )
 
-    if latest.authority not in {"CUSTOMER_CONFIRMED", "CONFIRMED"}:
-        return InterviewRuntimeState(
-            outcome="WAITING_FOR_CUSTOMER",
-            active_question=InterviewQuestion(
-                id="initial-context-confirm",
-                intent="ASK",
-                prompt="Confirm the Customer context before it is used downstream.",
-                control="CONFIRM_ADJUST",
-            ),
-            coverage_limitations=coverage.limitations,
-        )
-
-    return InterviewRuntimeState(
-        outcome="CONTEXT_READY",
-        confirmed_context=dict(latest.facts),
-        context_revision=latest.revision,
-        coverage_limitations=coverage.limitations,
-        missing_evidence_is_absence_proof=False,
-        planner_can_start=True,
-        engineering_rule_can_start=True,
-    )
+    return _waiting_or_blocked(agent_decision, coverage_limitations=coverage.limitations)
 
 
 def targeted_interview(
@@ -154,9 +141,9 @@ def targeted_interview(
     need: BusinessContextNeed,
     continuation: InvestigatorContinuation,
     customer_revisions: tuple[CustomerContextRevision, ...],
-    customer_blocked: bool = False,
+    agent_decision: InterviewAgentDecision | None = None,
 ) -> InterviewRuntimeState:
-    """Resolve one Investigator-originated business-context need only."""
+    """Apply targeted-Interview guardrails to an agent-authored sufficiency decision."""
     latest = customer_revisions[-1] if customer_revisions else None
     payload = {
         "needId": need.need_id,
@@ -165,65 +152,30 @@ def targeted_interview(
         "originatingInvestigationReference": need.originating_investigation_reference,
     }
 
-    if customer_blocked:
-        return InterviewRuntimeState(
-            outcome="BLOCKED_OR_UNRESOLVED",
-            blocked_actions=(
-                "PROVIDE_MORE_CONTEXT",
-                "CHECK_INTERNALLY",
-                "SAVE_AND_EXIT",
-            ),
-            interview_payload=payload,
-        )
-
-    if latest is None:
+    if agent_decision is None:
         return InterviewRuntimeState(
             outcome="WAITING_FOR_CUSTOMER",
-            active_question=InterviewQuestion(
-                id=f"{need.need_id}:ask",
-                intent="ASK",
-                prompt=need.business_context_need,
-                need_id=need.need_id,
-            ),
+            flags=("INTERVIEW_AGENT_DECISION_REQUIRED",),
             interview_payload=payload,
         )
 
-    if latest.authority in {"UNCERTAIN", "CONFLICTED", "CUSTOMER_STATED"}:
+    if agent_decision.outcome == "CONTEXT_RESOLVED":
+        _assert_authoritative_revision(latest, "CONTEXT_RESOLVED")
         return InterviewRuntimeState(
-            outcome="WAITING_FOR_CUSTOMER",
-            active_question=InterviewQuestion(
-                id=f"{need.need_id}:clarify",
-                intent="CLARIFY",
-                prompt="Clarify this supplied Customer context before resume.",
-                need_id=need.need_id,
-            ),
-            interview_payload=payload,
+            outcome="CONTEXT_RESOLVED",
+            confirmed_context=dict(latest.facts if latest else agent_decision.confirmed_context),
+            context_revision=latest.revision if latest else agent_decision.context_revision,
+            flags=tuple(sorted({"DOWNSTREAM_IMPACT", *agent_decision.flags})),
+            interview_payload={**payload, **_decision_payload(agent_decision)},
+            resume={
+                "investigatorExecutionId": continuation.investigator_execution_id,
+                "originatingInvestigationReference": continuation.originating_investigation_reference,
+                "affectedRuleIds": list(continuation.affected_rule_ids),
+            },
         )
 
-    if not _criteria_satisfied(need, latest):
-        return InterviewRuntimeState(
-            outcome="WAITING_FOR_CUSTOMER",
-            active_question=InterviewQuestion(
-                id=f"{need.need_id}:criteria",
-                intent="CLARIFY",
-                prompt="Provide the remaining context required by the resolution criteria.",
-                need_id=need.need_id,
-            ),
-            interview_payload=payload,
-        )
-
-    return InterviewRuntimeState(
-        outcome="CONTEXT_RESOLVED",
-        confirmed_context=dict(latest.facts),
-        context_revision=latest.revision,
-        flags=("DOWNSTREAM_IMPACT",),
-        interview_payload=payload,
-        resume={
-            "investigatorExecutionId": continuation.investigator_execution_id,
-            "originatingInvestigationReference": continuation.originating_investigation_reference,
-            "affectedRuleIds": list(continuation.affected_rule_ids),
-        },
-    )
+    state = _waiting_or_blocked(agent_decision)
+    return replace(state, interview_payload={**payload, **state.interview_payload})
 
 
 def validate_continuation(
@@ -247,19 +199,48 @@ def validate_continuation(
     return replace(continuation, consumed=True)
 
 
-def _criteria_satisfied(
-    need: BusinessContextNeed,
-    revision: CustomerContextRevision,
-) -> bool:
-    if revision.authority not in {"CUSTOMER_CONFIRMED", "CONFIRMED"}:
-        return False
-    normalized = {str(key) for key in revision.facts}
-    return all(str(item) in normalized for item in need.resolution_criteria)
+def _assert_authoritative_revision(
+    revision: CustomerContextRevision | None,
+    outcome: str,
+) -> None:
+    if revision is None or revision.authority not in {"CUSTOMER_CONFIRMED", "CONFIRMED"}:
+        raise ValueError(f"{outcome} requires an authoritative Customer context revision")
+
+
+def _waiting_or_blocked(
+    decision: InterviewAgentDecision,
+    *,
+    coverage_limitations: tuple[str, ...] = (),
+) -> InterviewRuntimeState:
+    if decision.outcome == "BLOCKED_OR_UNRESOLVED":
+        return InterviewRuntimeState(
+            outcome="BLOCKED_OR_UNRESOLVED",
+            blocked_actions=decision.blocked_actions
+            or ("PROVIDE_MORE_CONTEXT", "CHECK_INTERNALLY", "SAVE_AND_EXIT"),
+            coverage_limitations=coverage_limitations,
+            interview_payload=_decision_payload(decision),
+        )
+    if decision.outcome != "WAITING_FOR_CUSTOMER" or decision.active_question is None:
+        raise ValueError("Interview Agent must ask, block, or provide guarded authoritative context")
+    return InterviewRuntimeState(
+        outcome="WAITING_FOR_CUSTOMER",
+        active_question=decision.active_question,
+        coverage_limitations=coverage_limitations,
+        interview_payload=_decision_payload(decision),
+    )
+
+
+def _decision_payload(decision: InterviewAgentDecision) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if decision.rationale:
+        payload["agentRationale"] = decision.rationale
+    return payload
 
 
 __all__ = [
     "BusinessContextNeed",
     "CustomerContextRevision",
+    "InterviewAgentDecision",
     "InterviewQuestion",
     "InterviewRuntimeState",
     "InvestigatorContinuation",

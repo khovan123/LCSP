@@ -990,6 +990,7 @@ export const viPages = {
     blockedActionRecorded: "Lựa chọn đã được ghi cho interview thread chưa resolve.",
     runtimeWaitingForAgent: "Đang chờ hoạt động runtime cho assessment này.",
     noActiveInterviewQuestion: "Hiện chưa có câu hỏi Interview Agent nào đang chờ.",
+    loadingInterviewState: "Đang tải trạng thái Interview Agent.",
     modules: {
       readiness: "Kiểm tra các điều kiện đã sẵn sàng và evidence còn thiếu.",
       classification:

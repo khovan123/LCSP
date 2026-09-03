@@ -993,6 +993,7 @@ export const enPages = {
     blockedActionRecorded: "Choice recorded for the unresolved interview thread.",
     runtimeWaitingForAgent: "Waiting for runtime activity for this assessment.",
     noActiveInterviewQuestion: "No active Interview Agent question is waiting right now.",
+    loadingInterviewState: "Loading Interview Agent state.",
     modules: {
       readiness: "Review completed conditions and the evidence still needed.",
       classification:

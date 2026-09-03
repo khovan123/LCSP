@@ -112,6 +112,23 @@ export type AssessmentInterviewRuntimeState = {
   contextAuthority?: AssessmentContextAuthorityStatus;
   blockedActions?: AssessmentInterviewBlockedAction[];
   audit?: AssessmentInterviewAuditRef;
+  threadId?: string;
+  contextRevision?: number;
+  orchestrationRequested?: boolean;
+};
+
+export type AssessmentInterviewAnswerInput = {
+  questionId: string;
+  freeText?: string;
+  selectedChoiceIds?: string[];
+  otherText?: string;
+  confirmed?: boolean;
+  adjusted?: boolean;
+};
+
+export type AssessmentInterviewBlockedInput = {
+  action: AssessmentInterviewBlockedAction;
+  draft?: string;
 };
 
 const INTERVIEW_OUTCOME_SET = new Set<string>(

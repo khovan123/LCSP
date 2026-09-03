@@ -734,12 +734,6 @@ function RuntimeDetailList({ item }: { item: WorkspaceRuntimeActivityItem }) {
   );
 }
 
-function isSummaryRecord(
-  value: WorkspaceRuntimeSummaryValue | null,
-): value is Record<string, WorkspaceRuntimeSummaryValue> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function AnimatedDots() {
   return (
     <span aria-hidden="true" className="inline-flex w-6 overflow-hidden">

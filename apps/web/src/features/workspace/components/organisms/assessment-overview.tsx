@@ -5,20 +5,19 @@ import {
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_RUNTIME_RUN_STATUSES,
   type AssessmentInterviewBlockedAction,
-  type AssessmentInterviewQuestion,
-  type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
 import { resolveMessage } from "@lcsp/i18n";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
+import {
+  useAssessmentInterviewBlockedActionMutation,
+  useAssessmentInterviewStateQuery,
+  useSubmitAssessmentInterviewAnswerMutation,
+} from "@/lib/api/assessment-queries";
 import { appLocale } from "@/lib/locale";
 
 import type { AssessmentOverviewProps } from "../../types/assessment-overview.types";
 import { TOOL_ACTIVITY_STATUSES } from "../../types/assessment-chat.types";
-import type {
-  WorkspaceRuntimeActivityItem,
-  WorkspaceRuntimeSummaryValue,
-} from "../../types/workspace-runtime.types";
 import { AgentTurn } from "../molecules/agent-turn";
 import {
   AssessmentQuestionTurn,
@@ -29,25 +28,29 @@ import { AssessmentComposer } from "./assessment-composer";
 import { AssessmentTranscript } from "./assessment-transcript";
 import { useWorkspaceRuntime } from "./workspace-runtime-provider";
 
-const DRAFT_STORAGE_PREFIX = "lcsp:assessment-interview-draft:";
-
 export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
   const runtime = useWorkspaceRuntime().getAssessmentRuntime(assessmentId);
-  const interviewState = useMemo(
-    () => deriveInterviewState(runtime.recentActivity),
-    [runtime.recentActivity],
-  );
-  const [draft, setDraft] = useState("");
+  const interviewQuery = useAssessmentInterviewStateQuery(assessmentId);
+  const submitAnswer = useSubmitAssessmentInterviewAnswerMutation(assessmentId);
+  const recordBlockedAction =
+    useAssessmentInterviewBlockedActionMutation(assessmentId);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [lastSavedMessage, setLastSavedMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraft(window.localStorage.getItem(draftStorageKey(assessmentId)) ?? "");
-    setLastSavedMessage(null);
-  }, [assessmentId]);
+  const draft = drafts[assessmentId] ?? "";
+  const interviewState = interviewQuery.data ?? {
+    outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+  };
 
   function persistDraft(value: string) {
-    setDraft(value);
-    window.localStorage.setItem(draftStorageKey(assessmentId), value);
+    setDrafts((current) => ({ ...current, [assessmentId]: value }));
+  }
+
+  function clearDraft() {
+    setDrafts((current) => {
+      const next = { ...current };
+      delete next[assessmentId];
+      return next;
+    });
   }
 
   function handleSubmit() {
@@ -61,21 +64,34 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
   }
 
   function handleQuestionAnswer(input: AssessmentQuestionAnswerInput) {
-    window.localStorage.setItem(
-      draftStorageKey(assessmentId),
-      JSON.stringify({ questionId: input.questionId, input }),
-    );
-    setDraft("");
-    setLastSavedMessage(t("pages.assessment.answerSavedForRuntime"));
+    submitAnswer.mutate(input, {
+      onSuccess: () => {
+        clearDraft();
+        setLastSavedMessage(t("pages.assessment.answerSavedForRuntime"));
+      },
+    });
   }
 
   function handleBlockedAction(action: AssessmentInterviewBlockedAction) {
-    if (action === ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit) {
-      window.localStorage.setItem(draftStorageKey(assessmentId), draft);
-      setLastSavedMessage(t("pages.assessment.draftSavedForResume"));
-      return;
-    }
-    setLastSavedMessage(t("pages.assessment.blockedActionRecorded"));
+    recordBlockedAction.mutate(
+      {
+        action,
+        draft:
+          action === ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit
+            ? draft
+            : undefined,
+      },
+      {
+        onSuccess: () => {
+          if (action === ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit) {
+            clearDraft();
+            setLastSavedMessage(t("pages.assessment.draftSavedForResume"));
+            return;
+          }
+          setLastSavedMessage(t("pages.assessment.blockedActionRecorded"));
+        },
+      },
+    );
   }
 
   return (
@@ -137,7 +153,9 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
         ) : (
           <AgentTurn>
             <p className="text-sm text-muted-foreground">
-              {t("pages.assessment.noActiveInterviewQuestion")}
+              {interviewQuery.isLoading
+                ? t("pages.assessment.loadingInterviewState")
+                : t("pages.assessment.noActiveInterviewQuestion")}
             </p>
           </AgentTurn>
         )}
@@ -158,114 +176,6 @@ export function AssessmentOverview({ assessmentId }: AssessmentOverviewProps) {
   );
 }
 
-function deriveInterviewState(
-  activity: WorkspaceRuntimeActivityItem[],
-): AssessmentInterviewRuntimeState {
-  for (const event of activity) {
-    const state = findInterviewState(event.outputSummary) ?? findInterviewState(event.inputSummary);
-    if (state?.activeQuestion) {
-      return state;
-    }
-    if (state?.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved) {
-      return state;
-    }
-  }
-  return { outcome: ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer };
-}
-
-function findInterviewState(
-  value: WorkspaceRuntimeSummaryValue | null,
-): AssessmentInterviewRuntimeState | null {
-  const record = summaryRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  const candidates = [
-    record.assessmentInterview,
-    record.interview,
-    record.interviewRuntime,
-    record.assessment_interview,
-    record,
-  ];
-
-  for (const candidate of candidates) {
-    const state = toInterviewState(candidate);
-    if (state) {
-      return state;
-    }
-  }
-  return null;
-}
-
-function toInterviewState(value: unknown): AssessmentInterviewRuntimeState | null {
-  const record = summaryRecord(value);
-  if (!record || typeof record.outcome !== "string") {
-    return null;
-  }
-
-  const activeQuestion = toInterviewQuestion(record.activeQuestion ?? record.active_question);
-  return {
-    outcome: record.outcome as AssessmentInterviewRuntimeState["outcome"],
-    activeQuestion: activeQuestion ?? undefined,
-    blockedActions: Array.isArray(record.blockedActions)
-      ? record.blockedActions.filter(isBlockedAction)
-      : Array.isArray(record.blocked_actions)
-        ? record.blocked_actions.filter(isBlockedAction)
-        : undefined,
-  };
-}
-
-function toInterviewQuestion(value: unknown): AssessmentInterviewQuestion | null {
-  const record = summaryRecord(value);
-  if (
-    !record ||
-    typeof record.id !== "string" ||
-    typeof record.intent !== "string" ||
-    typeof record.control !== "string" ||
-    typeof record.prompt !== "string"
-  ) {
-    return null;
-  }
-
-  return {
-    id: record.id,
-    intent: record.intent as AssessmentInterviewQuestion["intent"],
-    control: record.control as AssessmentInterviewQuestion["control"],
-    prompt: record.prompt,
-    choices: Array.isArray(record.choices)
-      ? record.choices.filter(isQuestionChoice)
-      : undefined,
-    priorAnswerSummary:
-      typeof record.priorAnswerSummary === "string"
-        ? record.priorAnswerSummary
-        : undefined,
-    whyEvidenceRefs: Array.isArray(record.whyEvidenceRefs)
-      ? record.whyEvidenceRefs.filter((item): item is string => typeof item === "string")
-      : undefined,
-  };
-}
-
-function isQuestionChoice(
-  value: unknown,
-): value is NonNullable<AssessmentInterviewQuestion["choices"]>[number] {
-  const record = summaryRecord(value);
-  return !!record && typeof record.id === "string" && typeof record.label === "string";
-}
-
-function isBlockedAction(value: unknown): value is AssessmentInterviewBlockedAction {
-  return Object.values(ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS).includes(
-    value as AssessmentInterviewBlockedAction,
-  );
-}
-
-function summaryRecord(value: unknown): Record<string, unknown> | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-  return value as Record<string, unknown>;
-}
-
 function runtimeToolStatus(status: string) {
   if (status === ASSESSMENT_RUNTIME_RUN_STATUSES.completed) {
     return TOOL_ACTIVITY_STATUSES.completed;
@@ -277,10 +187,6 @@ function runtimeToolStatus(status: string) {
     return TOOL_ACTIVITY_STATUSES.running;
   }
   return TOOL_ACTIVITY_STATUSES.pending;
-}
-
-function draftStorageKey(assessmentId: string) {
-  return `${DRAFT_STORAGE_PREFIX}${assessmentId}`;
 }
 
 function t(key: string) {

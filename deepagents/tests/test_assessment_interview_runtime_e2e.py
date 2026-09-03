@@ -8,6 +8,8 @@ from contracts.handoffs import InvestigatorResult, PlannerResult
 from orchestration.assessment_interview import (
     BusinessContextNeed,
     CustomerContextRevision,
+    InterviewAgentDecision,
+    InterviewQuestion,
     InvestigatorContinuation,
     TechnicalCoverage,
     initial_interview,
@@ -69,13 +71,11 @@ def _program_graph() -> dict:
 
 
 def test_e2e_a_initial_interview_reaches_planner_after_guarded_context_ready() -> None:
-    unavailable = initial_interview(
-        coverage=TechnicalCoverage(state="UNAVAILABLE", limitations=("PGE_UNAVAILABLE",)),
-        customer_revisions=(),
-    )
-    assert unavailable.outcome == "FAILED"
-    assert unavailable.orchestration_recovery_required is True
-    assert unavailable.planner_can_start is False
+    with pytest.raises(ValueError, match="recovery before Interview"):
+        initial_interview(
+            coverage=TechnicalCoverage(state="UNAVAILABLE", limitations=("PGE_UNAVAILABLE",)),
+            customer_revisions=(),
+        )
 
     waiting = initial_interview(
         coverage=TechnicalCoverage(
@@ -86,8 +86,8 @@ def test_e2e_a_initial_interview_reaches_planner_after_guarded_context_ready() -
         customer_revisions=(),
     )
     assert waiting.outcome == "WAITING_FOR_CUSTOMER"
-    assert waiting.active_question is not None
-    assert waiting.active_question.intent == "ASK"
+    assert waiting.active_question is None
+    assert waiting.flags == ("INTERVIEW_AGENT_DECISION_REQUIRED",)
     assert waiting.coverage_limitations == ("dynamic_path_unresolved",)
     assert waiting.missing_evidence_is_absence_proof is False
 
@@ -98,6 +98,14 @@ def test_e2e_a_initial_interview_reaches_planner_after_guarded_context_ready() -
                 revision=1,
                 facts={"ai_use": "maybe customer support"},
                 authority="UNCERTAIN",
+            ),
+        ),
+        agent_decision=InterviewAgentDecision(
+            outcome="WAITING_FOR_CUSTOMER",
+            active_question=InterviewQuestion(
+                id="agent-authored-clarify",
+                intent="CLARIFY",
+                prompt="Agent-authored clarification question",
             ),
         ),
     )
@@ -115,6 +123,7 @@ def test_e2e_a_initial_interview_reaches_planner_after_guarded_context_ready() -
                 confirmed_by_actor_id="actor-customer-1",
             ),
         ),
+        agent_decision=InterviewAgentDecision(outcome="CONTEXT_READY"),
     )
     assert ready.outcome == "CONTEXT_READY"
     assert ready.confirmed_context == {
@@ -184,9 +193,8 @@ def test_e2e_b_targeted_clarification_validates_then_resumes_exact_investigator(
         customer_revisions=(),
     )
     assert waiting.outcome == "WAITING_FOR_CUSTOMER"
-    assert waiting.active_question is not None
-    assert waiting.active_question.need_id == "need-human-review"
-    assert waiting.active_question.intent == "ASK"
+    assert waiting.active_question is None
+    assert waiting.flags == ("INTERVIEW_AGENT_DECISION_REQUIRED",)
     assert "opaque" not in str(waiting.interview_payload)
     assert "ENG-7" not in str(waiting.interview_payload)
     assert "checkpoint" not in str(waiting.interview_payload).lower()
@@ -201,6 +209,15 @@ def test_e2e_b_targeted_clarification_validates_then_resumes_exact_investigator(
                 authority="CUSTOMER_STATED",
             ),
         ),
+        agent_decision=InterviewAgentDecision(
+            outcome="WAITING_FOR_CUSTOMER",
+            active_question=InterviewQuestion(
+                id="agent-targeted-clarify",
+                intent="CLARIFY",
+                prompt="Agent-authored targeted clarification",
+                need_id="need-human-review",
+            ),
+        ),
     )
     assert unresolved.outcome == "WAITING_FOR_CUSTOMER"
     assert unresolved.active_question is not None
@@ -210,7 +227,7 @@ def test_e2e_b_targeted_clarification_validates_then_resumes_exact_investigator(
         need=need,
         continuation=continuation,
         customer_revisions=(),
-        customer_blocked=True,
+        agent_decision=InterviewAgentDecision(outcome="BLOCKED_OR_UNRESOLVED"),
     )
     assert blocked.outcome == "BLOCKED_OR_UNRESOLVED"
     assert blocked.blocked_actions == (
@@ -265,6 +282,7 @@ def test_e2e_b_targeted_clarification_validates_then_resumes_exact_investigator(
                 confirmed_by_actor_id="actor-customer-2",
             ),
         ),
+        agent_decision=InterviewAgentDecision(outcome="CONTEXT_RESOLVED"),
     )
     assert resolved.outcome == "CONTEXT_RESOLVED"
     assert resolved.flags == ("DOWNSTREAM_IMPACT",)

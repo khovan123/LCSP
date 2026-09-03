@@ -19,6 +19,7 @@ import type { AuthenticatedRequest } from "../../../../common/interfaces/authent
 import { CreateAssessmentCommand } from "../../application/commands/create-assessment/create-assessment.command.js";
 import { GetAssessmentQuery } from "../../application/queries/get-assessment/get-assessment.query.js";
 import { ListAssessmentsQuery } from "../../application/queries/list-assessments/list-assessments.query.js";
+import { AssessmentInterviewRuntimeService } from "../../application/services/assessment-interview-runtime.service.js";
 import { CreateAssessmentRequest } from "./dto/create-assessment.request.js";
 
 /**
@@ -35,6 +36,7 @@ export class AssessmentController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
+    private readonly interviewRuntime: AssessmentInterviewRuntimeService,
   ) {}
 
   /**
@@ -107,6 +109,54 @@ export class AssessmentController {
    * @param request - Authenticated request containing user, role, and correlation context.
    * @returns The standard result envelope containing assessment readiness and pipeline detail.
    */
+  @Get(":assessmentId/interview")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)
+  async getInterviewState(
+    @Param("assessmentId") assessmentId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.getState(assessmentId, request.rbacContext),
+    );
+  }
+
+  @Post(":assessmentId/interview/answers")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async submitInterviewAnswer(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.submitAnswer({
+        assessmentId,
+        actor: request.rbacContext,
+        correlationId: request.correlationId as string,
+        answer: body as never,
+      }),
+    );
+  }
+
+  @Post(":assessmentId/interview/blocked-actions")
+  @UseGuards(RbacGuard)
+  @RequireRoles(AUTH_USER_ROLES.customer)
+  async recordInterviewBlockedAction(
+    @Param("assessmentId") assessmentId: string,
+    @Body() body: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return resultEnvelope(
+      await this.interviewRuntime.recordBlockedAction({
+        assessmentId,
+        actor: request.rbacContext,
+        correlationId: request.correlationId as string,
+        blocked: body as never,
+      }),
+    );
+  }
+
   @Get(":assessmentId")
   @UseGuards(RbacGuard)
   @RequireRoles(AUTH_USER_ROLES.customer, AUTH_USER_ROLES.admin)

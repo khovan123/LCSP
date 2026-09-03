@@ -3,6 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  getAssessmentInterviewState,
+  recordAssessmentInterviewBlockedAction,
+  submitAssessmentInterviewAnswer,
+} from "./assessment-interview-client";
+import {
   getClassificationStatus,
   rerunClassification,
 } from "./classification-client";
@@ -27,6 +32,46 @@ import {
   type StartRepositoryAnalysisInput,
 } from "./repository-analysis-client";
 import { apiQueryKeys } from "./query-keys";
+import type {
+  AssessmentInterviewAnswerInput,
+  AssessmentInterviewBlockedInput,
+} from "@lcsp/contracts/evidence";
+
+export function useAssessmentInterviewStateQuery(assessmentId: string) {
+  return useQuery({
+    queryKey: apiQueryKeys.assessment.interview(assessmentId),
+    queryFn: () => getAssessmentInterviewState(assessmentId),
+    enabled: assessmentId.length > 0,
+  });
+}
+
+export function useSubmitAssessmentInterviewAnswerMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: AssessmentInterviewAnswerInput) =>
+      submitAssessmentInterviewAnswer(assessmentId, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: apiQueryKeys.assessment.interview(assessmentId),
+      });
+    },
+  });
+}
+
+export function useAssessmentInterviewBlockedActionMutation(assessmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: AssessmentInterviewBlockedInput) =>
+      recordAssessmentInterviewBlockedAction(assessmentId, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: apiQueryKeys.assessment.interview(assessmentId),
+      });
+    },
+  });
+}
 
 export function useConnectAssessmentRepositoryMutation(assessmentId: string) {
   return useMutation({

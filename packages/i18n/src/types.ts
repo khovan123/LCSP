@@ -1013,6 +1013,7 @@ export type PagesMessages = {
     blockedActionRecorded: string;
     runtimeWaitingForAgent: string;
     noActiveInterviewQuestion: string;
+    loadingInterviewState: string;
     modules: {
       readiness: string;
       classification: string;
