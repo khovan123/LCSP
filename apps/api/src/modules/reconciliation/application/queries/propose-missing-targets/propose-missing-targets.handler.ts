@@ -39,15 +39,15 @@ export class ProposeMissingTargetsHandler implements IQueryHandler<
     query: ProposeMissingTargetsQuery,
   ): Promise<MissingTargetProposalResponse> {
     const report = await this.prisma.technicalEvidenceReport.findFirst({
-        where: {
-          id: query.evidenceReportId,
-          assessmentId: query.assessmentId,
-          status: toPrismaEvidenceAcceptanceStatus(
-            TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
-          ),
-        },
-        select: { id: true, evidencePayload: true },
-      });
+      where: {
+        id: query.evidenceReportId,
+        assessmentId: query.assessmentId,
+        status: toPrismaEvidenceAcceptanceStatus(
+          TECHNICAL_EVIDENCE_REPORT_STATUSES.accepted,
+        ),
+      },
+      select: { id: true, evidencePayload: true },
+    });
 
     if (!report) {
       throw problemException(

@@ -78,14 +78,13 @@ export class GetDocumentGenerationContextHandler implements IQueryHandler<GetDoc
       });
     if (!technicalEvidenceReport) this.notFound("TechnicalEvidenceReport");
 
-    const repositorySnapshot =
-      await this.prisma.repositorySnapshot.findFirst({
-        where: {
-          id: technicalEvidenceReport.snapshotId,
-          assessmentId: documentRequest.assessmentId,
-        },
-        select: { id: true, commitSha: true },
-      });
+    const repositorySnapshot = await this.prisma.repositorySnapshot.findFirst({
+      where: {
+        id: technicalEvidenceReport.snapshotId,
+        assessmentId: documentRequest.assessmentId,
+      },
+      select: { id: true, commitSha: true },
+    });
     if (!repositorySnapshot) this.notFound("RepositorySnapshot");
 
     return {

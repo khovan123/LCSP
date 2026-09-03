@@ -105,7 +105,6 @@ export class ListAssessmentsHandler implements IQueryHandler<ListAssessmentsQuer
       correlationId: query.correlationId,
     };
   }
-
 }
 
 /**

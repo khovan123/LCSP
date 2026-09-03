@@ -16,10 +16,7 @@ import {
 
 @Module({
   imports: [CqrsModule, RbacModule],
-  controllers: [
-    InternalReconciliationController,
-    ReconciliationController,
-  ],
+  controllers: [InternalReconciliationController, ReconciliationController],
   providers: [
     AcceptConflictHandler,
     GetArtifactChainHandler,

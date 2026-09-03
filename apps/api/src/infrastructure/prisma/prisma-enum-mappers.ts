@@ -69,10 +69,7 @@ import {
   OUTBOX_STATUSES,
   type OutboxStatus,
 } from "@lcsp/contracts/outbox";
-import {
-  RBAC_REASON_CODES,
-  type RbacReasonCode,
-} from "@lcsp/contracts/rbac";
+import { RBAC_REASON_CODES, type RbacReasonCode } from "@lcsp/contracts/rbac";
 import {
   CONFLICT_RECORD_STATUSES,
   CLASSIFICATION_GUARDRAIL_STATUSES,
@@ -387,7 +384,9 @@ const PRISMA_AUDIT_RESOURCE_TYPE_TO_CONTRACT = {
     AUDIT_RESOURCE_TYPES.verifiedProfile,
   [PrismaAuditResourceType.WORKER_TASK]: AUDIT_RESOURCE_TYPES.workerTask,
   [PrismaAuditResourceType.WORKSPACE]: AUDIT_RESOURCE_TYPES.workspace,
-} as const satisfies Partial<Record<PrismaAuditResourceType, AuditResourceType>>;
+} as const satisfies Partial<
+  Record<PrismaAuditResourceType, AuditResourceType>
+>;
 
 const OUTBOX_AGGREGATE_TYPE_TO_PRISMA = {
   [OUTBOX_AGGREGATE_TYPES.aiUsageFlow]: PrismaOutboxAggregateType.AI_USAGE_FLOW,
@@ -443,7 +442,9 @@ const PRISMA_OUTBOX_AGGREGATE_TYPE_TO_CONTRACT = {
     OUTBOX_AGGREGATE_TYPES.targetedReanalysisRequest,
   [PrismaOutboxAggregateType.VERIFIED_PROFILE]:
     OUTBOX_AGGREGATE_TYPES.verifiedProfile,
-} as const satisfies Partial<Record<PrismaOutboxAggregateType, OutboxAggregateType>>;
+} as const satisfies Partial<
+  Record<PrismaOutboxAggregateType, OutboxAggregateType>
+>;
 
 const OUTBOX_STATUS_TO_PRISMA = {
   [OUTBOX_STATUSES.pending]: PrismaOutboxStatus.PENDING,
@@ -858,7 +859,9 @@ export function fromPrismaOutboxAggregateType(
 ): OutboxAggregateType {
   const mapped = PRISMA_OUTBOX_AGGREGATE_TYPE_TO_CONTRACT[aggregateType];
   if (!mapped) {
-    throw new Error(`Unsupported legacy outbox aggregate type: ${aggregateType}`);
+    throw new Error(
+      `Unsupported legacy outbox aggregate type: ${aggregateType}`,
+    );
   }
   return mapped;
 }
