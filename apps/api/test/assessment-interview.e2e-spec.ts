@@ -1,8 +1,6 @@
 import * as assert from "node:assert/strict";
 
-import {
-  ASSESSMENT_EVENT_TYPES,
-} from "@lcsp/contracts/assessment";
+import { ASSESSMENT_EVENT_TYPES } from "@lcsp/contracts/assessment";
 import {
   ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
   ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS,
@@ -85,7 +83,10 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       answerHistory: Array<{ questionId: string; summary: string }>;
       audit: { authenticatedActorId: string; relatedQuestionId: string };
     }>(answered);
-    assert.equal(state.outcome, ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer);
+    assert.equal(
+      state.outcome,
+      ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer,
+    );
     assert.equal(
       state.contextAuthority,
       ASSESSMENT_CONTEXT_AUTHORITY_STATUSES.customerStated,
@@ -103,8 +104,14 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     });
     assert.equal(event.stage, "INTERVIEW");
     assert.equal(event.runStatus, "WAITING");
-    assert.doesNotMatch(JSON.stringify(event.inputSummaryJson), /Payment assistant/u);
-    assert.doesNotMatch(JSON.stringify(event.outputSummaryJson), /Payment assistant/u);
+    assert.doesNotMatch(
+      JSON.stringify(event.inputSummaryJson),
+      /Payment assistant/u,
+    );
+    assert.doesNotMatch(
+      JSON.stringify(event.outputSummaryJson),
+      /Payment assistant/u,
+    );
 
     const resumeCommand = await prisma.outboxMessage.findFirstOrThrow({
       where: {
@@ -113,8 +120,14 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
       },
     });
     assert.match(JSON.stringify(resumeCommand.payload), /assessment-1/u);
-    assert.match(JSON.stringify(resumeCommand.payload), /INTERVIEW_ANSWER_SUBMITTED/u);
-    assert.doesNotMatch(JSON.stringify(resumeCommand.payload), /Payment assistant/u);
+    assert.match(
+      JSON.stringify(resumeCommand.payload),
+      /INTERVIEW_ANSWER_SUBMITTED/u,
+    );
+    assert.doesNotMatch(
+      JSON.stringify(resumeCommand.payload),
+      /Payment assistant/u,
+    );
   });
 
   it("persists Save & Exit draft and answer history in the Interview read model", async () => {
@@ -170,8 +183,14 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     const runtimeEvent = await prisma.assessmentRuntimeEvent.findFirstOrThrow({
       where: { assessmentId: "assessment-1", waitingReason: "SAVE_AND_EXIT" },
     });
-    assert.doesNotMatch(JSON.stringify(runtimeEvent.inputSummaryJson), /Need internal/u);
-    assert.doesNotMatch(JSON.stringify(runtimeEvent.outputSummaryJson), /Need internal/u);
+    assert.doesNotMatch(
+      JSON.stringify(runtimeEvent.inputSummaryJson),
+      /Need internal/u,
+    );
+    assert.doesNotMatch(
+      JSON.stringify(runtimeEvent.outputSummaryJson),
+      /Need internal/u,
+    );
   });
 });
 

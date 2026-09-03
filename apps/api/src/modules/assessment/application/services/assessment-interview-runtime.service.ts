@@ -67,8 +67,13 @@ export class AssessmentInterviewRuntimeService {
     const answer = parseAnswer(input.answer);
     await this.assertAssessmentVisible(input.assessmentId, input.actor);
     const current = await this.readThreadState(input.assessmentId);
-    if (!current.activeQuestion || current.activeQuestion.id !== answer.questionId) {
-      throw new BadRequestException({ code: "INTERVIEW_QUESTION_STALE_OR_UNKNOWN" });
+    if (
+      !current.activeQuestion ||
+      current.activeQuestion.id !== answer.questionId
+    ) {
+      throw new BadRequestException({
+        code: "INTERVIEW_QUESTION_STALE_OR_UNKNOWN",
+      });
     }
 
     const historyItem: AssessmentInterviewAnswerHistoryItem = {
@@ -146,7 +151,8 @@ export class AssessmentInterviewRuntimeService {
           ? (blocked.draft ?? current.pendingDraft)
           : current.pendingDraft,
       orchestrationRequested:
-        blocked.action === ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
+        blocked.action ===
+        ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.provideMoreContext,
       audit: await this.auditRef(
         input.assessmentId,
         input.actor.userId,
@@ -406,9 +412,7 @@ function parseState(value: unknown): AssessmentInterviewRuntimeState | null {
 function sanitizeAgentDecision(
   state: AssessmentInterviewRuntimeState,
 ): AssessmentInterviewRuntimeState {
-  if (
-    !Object.values(ASSESSMENT_INTERVIEW_OUTCOMES).includes(state.outcome as never)
-  ) {
+  if (!Object.values(ASSESSMENT_INTERVIEW_OUTCOMES).includes(state.outcome)) {
     throw new BadRequestException({ code: "INTERVIEW_AGENT_DECISION_INVALID" });
   }
   return state;
@@ -432,7 +436,9 @@ function publicState(
 ): AssessmentInterviewRuntimeState {
   return {
     ...state,
-    pendingDraft: state.pendingDraft ? PUBLIC_REDACTED_DRAFT_SUMMARY : undefined,
+    pendingDraft: state.pendingDraft
+      ? PUBLIC_REDACTED_DRAFT_SUMMARY
+      : undefined,
     answerHistory: state.answerHistory?.map((item) => ({
       ...item,
       summary: item.summary,
