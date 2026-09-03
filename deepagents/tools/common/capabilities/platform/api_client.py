@@ -512,6 +512,14 @@ class WorkerApiClient:
                     pass
         return data
 
+    def get_interview_worker_state(self, assessment_id: str) -> dict:
+        """Fetch private worker Interview state, including guarded confirmed context."""
+        path = InternalPath.INTERVIEW_WORKER_STATE.format(assessment_id=assessment_id)
+        data = self._get_with_retry(path)
+        if not isinstance(data, dict):
+            raise WorkerCallbackError("Interview worker state response was invalid.")
+        return data
+
     def get_interview_private_context(
         self,
         assessment_id: str,

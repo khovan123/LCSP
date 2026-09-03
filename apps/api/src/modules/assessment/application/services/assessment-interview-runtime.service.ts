@@ -45,8 +45,6 @@ const PUBLIC_REDACTED_ANSWER_SUMMARY =
 const PUBLIC_REDACTED_DRAFT_SUMMARY =
   "Customer draft persisted for Interview resume.";
 const INTERVIEW_AGENT_DECISION_REQUIRED = "INTERVIEW_AGENT_DECISION_REQUIRED";
-const INTERVIEW_RESUME_REVALIDATION_REQUIRED =
-  "INTERVIEW_RESUME_REVALIDATION_REQUIRED";
 
 export type PrivateInterviewAnswerRevision = {
   questionId: string;
@@ -108,7 +106,7 @@ export class AssessmentInterviewRuntimeService {
     actor: RbacRequestContext,
   ): Promise<AssessmentInterviewRuntimeState> {
     await this.assertAssessmentVisible(assessmentId, actor);
-    return (await this.readThread(assessmentId)).state;
+    return publicState((await this.readThread(assessmentId)).state);
   }
 
   async submitAnswer(input: {
@@ -270,6 +268,7 @@ export class AssessmentInterviewRuntimeService {
         ...current.state,
         outcome: ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
         threadId: this.threadId(input.assessmentId),
+        activeQuestion: undefined,
         blockedActions: Object.values(ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS),
         pendingDraft:
           blocked.action === ASSESSMENT_INTERVIEW_BLOCKED_ACTIONS.saveAndExit
@@ -288,7 +287,7 @@ export class AssessmentInterviewRuntimeService {
       };
       await this.persistThreadState(input.assessmentId, nextState, tx, {
         contextRevision: current.contextRevision,
-        activeQuestionId: current.activeQuestionId,
+        activeQuestionId: null,
         processedRevision: current.processedRevision,
         privateRevisions: current.privateRevisions,
         sourceVersion: provenance.sourceVersion,
@@ -365,6 +364,12 @@ export class AssessmentInterviewRuntimeService {
     };
   }
 
+  async getWorkerStateForWorker(
+    assessmentId: string,
+  ): Promise<AssessmentInterviewRuntimeState> {
+    return (await this.readThread(assessmentId)).state;
+  }
+
   async recordAgentDecision(input: {
     assessmentId: string;
     correlationId: string;
@@ -386,13 +391,25 @@ export class AssessmentInterviewRuntimeService {
         (revision) =>
           revision.contextRevision === decision.expectedContextRevision,
       );
-      assertGuardedDecision(decision, latestPrivate, input.correlationId);
+      const isBlockedFollowup =
+        thread.state.outcome ===
+          ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved &&
+        decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
+      assertGuardedDecision(
+        decision,
+        latestPrivate,
+        thread,
+        input.correlationId,
+      );
       const state = decisionState(thread.state, decision);
       const updated = await tx.assessmentInterviewThread.updateMany({
         where: {
           assessmentId: input.assessmentId,
           contextRevision: decision.expectedContextRevision,
-          processedRevision: { lt: decision.expectedContextRevision },
+          activeQuestionId: thread.activeQuestionId,
+          processedRevision: isBlockedFollowup
+            ? thread.processedRevision
+            : { lt: decision.expectedContextRevision },
         },
         data: {
           stateJson: toJson(state),
@@ -840,16 +857,38 @@ function isPrivateRevision(
 function assertGuardedDecision(
   decision: AgentDecisionInput,
   privateRevision: PrivateInterviewAnswerRevision | undefined,
+  thread: {
+    state: AssessmentInterviewRuntimeState;
+    sourceVersion: string | null;
+    pgeVersion: string | null;
+  },
   correlationId: string,
 ): void {
-  if (!privateRevision) {
+  const isBlockedFollowup =
+    thread.state.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved &&
+    decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer;
+  if (!privateRevision && !isBlockedFollowup) {
     throw problemException(
       "INTERVIEW_PRIVATE_REVISION_NOT_FOUND",
       correlationId,
-      {
-        status: HttpStatus.CONFLICT,
-      },
+      { status: HttpStatus.CONFLICT },
     );
+  }
+  if (
+    decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+    !decision.activeQuestion
+  ) {
+    throw problemException("INTERVIEW_WAITING_REQUIRES_QUESTION", correlationId, {
+      status: HttpStatus.CONFLICT,
+    });
+  }
+  if (
+    decision.outcome !== ASSESSMENT_INTERVIEW_OUTCOMES.waitingForCustomer &&
+    decision.activeQuestion
+  ) {
+    throw problemException("INTERVIEW_ACTIVE_QUESTION_OUTCOME_INVALID", correlationId, {
+      status: HttpStatus.CONFLICT,
+    });
   }
   if (
     decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextReady &&
@@ -864,6 +903,11 @@ function assertGuardedDecision(
     );
   }
   if (decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.contextResolved) {
+    if (decision.mode !== "TARGETED_INTERVIEW") {
+      throw problemException("INTERVIEW_CONTEXT_RESOLVED_REQUIRES_TARGETED_MODE", correlationId, {
+        status: HttpStatus.CONFLICT,
+      });
+    }
     if (!isAuthoritative(decision.contextAuthority)) {
       throw problemException(
         "INTERVIEW_CONTEXT_RESOLVED_REQUIRES_AUTHORITY",
@@ -891,8 +935,29 @@ function assertGuardedDecision(
         },
       );
     }
+    if (!decision.resolutionCriteria?.length) {
+      throw problemException(
+        "INTERVIEW_RESOLUTION_CRITERIA_REQUIRED",
+        correlationId,
+        { status: HttpStatus.CONFLICT },
+      );
+    }
+    const artifactVersions = decision.continuation.artifactVersions ?? {};
+    if (
+      artifactVersions.sourceVersion !== thread.sourceVersion ||
+      artifactVersions.pgeVersion !== thread.pgeVersion
+    ) {
+      throw problemException("INTERVIEW_CONTINUATION_STALE", correlationId, {
+        status: HttpStatus.CONFLICT,
+      });
+    }
+    if (!decision.continuation.affectedRuleIds?.length) {
+      throw problemException("INTERVIEW_CONTINUATION_SCOPE_REQUIRED", correlationId, {
+        status: HttpStatus.CONFLICT,
+      });
+    }
     const context = decision.confirmedContext ?? {};
-    const missing = (decision.resolutionCriteria ?? []).filter(
+    const missing = decision.resolutionCriteria.filter(
       (criterion) => !(criterion in context),
     );
     if (missing.length > 0) {
@@ -920,6 +985,10 @@ function decisionState(
         ? decision.activeQuestion
         : undefined,
     contextAuthority: decision.contextAuthority ?? current.contextAuthority,
+    confirmedContext:
+      isAuthoritative(decision.contextAuthority) && decision.confirmedContext
+        ? decision.confirmedContext
+        : current.confirmedContext,
     blockedActions:
       decision.outcome === ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved
         ? (decision.blockedActions ??
@@ -955,6 +1024,7 @@ function publicState(
 ): AssessmentInterviewRuntimeState {
   return {
     ...state,
+    confirmedContext: undefined,
     pendingDraft: state.pendingDraft
       ? PUBLIC_REDACTED_DRAFT_SUMMARY
       : undefined,

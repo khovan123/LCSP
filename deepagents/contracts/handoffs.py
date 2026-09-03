@@ -28,6 +28,88 @@ class ProvenanceRef(BaseModel):
     source_anchor_ref: str | None = Field(default=None, max_length=240)
 
 
+class InterviewQuestionChoice(BaseModel):
+    """One bounded Customer-facing Interview choice."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=160)
+    label: str = Field(min_length=1, max_length=500)
+    description: str | None = Field(default=None, max_length=1_000)
+    requiresFreeText: bool = False
+
+
+class InterviewQuestionResult(BaseModel):
+    """Interview Agent-authored bounded Customer-facing question."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=240)
+    intent: Literal["ASK", "CLARIFY"]
+    control: Literal["FREE_TEXT", "BOOLEAN", "SINGLE_SELECT", "MULTI_SELECT", "CONFIRM_ADJUST"]
+    prompt: str = Field(min_length=1, max_length=2_000)
+    choices: list[InterviewQuestionChoice] = Field(default_factory=list, max_length=20)
+    priorAnswerSummary: str | None = Field(default=None, max_length=1_000)
+    whyEvidenceRefs: list[str] = Field(default_factory=list, max_length=50)
+    needId: str | None = Field(default=None, max_length=240)
+
+    @model_validator(mode="after")
+    def validate_control_shape(self) -> Self:
+        if self.control in {"SINGLE_SELECT", "MULTI_SELECT"} and not self.choices:
+            raise ValueError("select Interview controls require choices")
+        if self.control == "BOOLEAN" and self.choices:
+            raise ValueError("BOOLEAN Interview controls must not carry custom choices")
+        return self
+
+
+class InterviewResult(BaseModel):
+    """Typed Interview Agent candidate decision before protected API guard persistence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expectedContextRevision: int = Field(ge=0)
+    mode: Literal["INITIAL_INTERVIEW", "TARGETED_INTERVIEW"] = "INITIAL_INTERVIEW"
+    outcome: Literal[
+        "WAITING_FOR_CUSTOMER",
+        "CONTEXT_READY",
+        "CONTEXT_RESOLVED",
+        "BLOCKED_OR_UNRESOLVED",
+        "FAILED",
+    ]
+    activeQuestion: InterviewQuestionResult | None = None
+    contextAuthority: Literal[
+        "CUSTOMER_STATED",
+        "UNCERTAIN",
+        "CONFLICTED",
+        "CUSTOMER_CONFIRMED",
+        "CONFIRMED",
+        "SUPERSEDED",
+    ] | None = None
+    confirmedContext: dict[str, Any] = Field(default_factory=dict)
+    flags: list[Literal["DOWNSTREAM_IMPACT"]] = Field(default_factory=list, max_length=10)
+    blockedActions: list[
+        Literal["PROVIDE_MORE_CONTEXT", "CHECK_INTERNALLY", "SAVE_AND_EXIT"]
+    ] = Field(default_factory=list, max_length=3)
+    targetedResolution: dict[str, Any] = Field(default_factory=dict)
+    rationale: str | None = Field(default=None, max_length=2_000)
+
+    @model_validator(mode="after")
+    def validate_transition_shape(self) -> Self:
+        if self.activeQuestion is not None and self.outcome != "WAITING_FOR_CUSTOMER":
+            raise ValueError("activeQuestion requires WAITING_FOR_CUSTOMER outcome")
+        if self.outcome == "WAITING_FOR_CUSTOMER" and self.activeQuestion is None:
+            raise ValueError("WAITING_FOR_CUSTOMER requires activeQuestion")
+        if self.outcome == "BLOCKED_OR_UNRESOLVED" and not self.blockedActions:
+            self.blockedActions = [
+                "PROVIDE_MORE_CONTEXT",
+                "CHECK_INTERNALLY",
+                "SAVE_AND_EXIT",
+            ]
+        if self.outcome == "CONTEXT_RESOLVED" and self.mode != "TARGETED_INTERVIEW":
+            raise ValueError("CONTEXT_RESOLVED is only valid for TARGETED_INTERVIEW")
+        return self
+
+
 class PlannerResult(BaseModel):
     """Typed Planner-to-root handoff."""
 
@@ -183,6 +265,7 @@ class TriageResult(BaseModel):
 
 
 SPECIALIST_RESPONSE_FORMATS: dict[str, type[BaseModel]] = {
+    "interview": InterviewResult,
     "planner": PlannerResult,
     "investigator": InvestigatorResult,
     "triage": TriageResult,
@@ -191,6 +274,9 @@ SPECIALIST_RESPONSE_FORMATS: dict[str, type[BaseModel]] = {
 
 __all__ = [
     "GraphSeed",
+    "InterviewQuestionChoice",
+    "InterviewQuestionResult",
+    "InterviewResult",
     "InvestigatorClaim",
     "InvestigatorResult",
     "PlannerResult",

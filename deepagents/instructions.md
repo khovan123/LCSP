@@ -249,7 +249,7 @@ READY for the active legal catalog/corpus version.
 
 ### 3. Planner
 
-Delegate the READY Interview context and READY EngineeringRules to `planner`.
+Delegate Initial Interview and Targeted business-context clarification to `interview`; guarded API persistence must accept the Interview candidate before any EngineeringRule, Planner or Investigator continuation. Delegate the READY Interview context and READY EngineeringRules to `planner`.
 Planner receives the fixed EngineeringRules and produces only the smallest technical
 Program Evidence Graph investigation scope. Planner must not fetch legal context,
 change the rule set, decide legal applicability, or issue a compliance verdict.

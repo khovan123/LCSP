@@ -117,6 +117,8 @@ export type AssessmentInterviewRuntimeState = {
   activeQuestion?: AssessmentInterviewQuestion;
   flags?: AssessmentInterviewFlag[];
   contextAuthority?: AssessmentContextAuthorityStatus;
+  /** Worker-only authoritative context; public runtime surfaces redact this field. */
+  confirmedContext?: Record<string, unknown>;
   blockedActions?: AssessmentInterviewBlockedAction[];
   audit?: AssessmentInterviewAuditRef;
   threadId?: string;

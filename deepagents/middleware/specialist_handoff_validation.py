@@ -36,7 +36,7 @@ def _validate_lcsp_specialist_task_handoff(
         return handler(request)
 
     subagent_type = str(args.get("subagent_type") or "")
-    if subagent_type not in {"planner", "investigator", "triage"}:
+    if subagent_type not in {"interview", "planner", "investigator", "triage"}:
         return handler(request)
 
     result = handler(request)

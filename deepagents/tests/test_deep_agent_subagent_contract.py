@@ -7,10 +7,12 @@ from middleware.model_governance import MODEL_GOVERNANCE_MIDDLEWARE
 from middleware.runtime_context import inject_lcsp_runtime_context
 from model_policy import (
     ALL_LCSP_MODEL_SPECS,
+    DEFAULT_INTERVIEW_MODEL_SPEC,
     DEFAULT_INVESTIGATOR_MODEL_SPEC,
     DEFAULT_PLANNER_MODEL_SPEC,
     DEFAULT_ROOT_MODEL_SPEC,
     DEFAULT_TRIAGE_MODEL_SPEC,
+    INTERVIEW_MODEL_SPEC,
     INVESTIGATOR_MODEL_SPEC,
     PLANNER_MODEL_SPEC,
     ROOT_MODEL_SPEC,
@@ -18,6 +20,7 @@ from model_policy import (
 )
 from subagents import FLOW_SUBAGENTS
 from contracts.handoffs import (
+    InterviewResult,
     InvestigatorClaim,
     InvestigatorResult,
     PlannerResult,
@@ -36,10 +39,11 @@ def _tool_names(subagent: dict[str, object]) -> tuple[str, ...]:
 
 def test_subagents_follow_deep_agents_dictionary_contract() -> None:
     by_name = {item["name"]: item for item in FLOW_SUBAGENTS}
-    assert tuple(by_name) == ("triage", "planner", "investigator")
+    assert tuple(by_name) == ("triage", "interview", "planner", "investigator")
 
     expected_models = {
         "triage": TRIAGE_MODEL_SPEC,
+        "interview": INTERVIEW_MODEL_SPEC,
         "planner": PLANNER_MODEL_SPEC,
         "investigator": INVESTIGATOR_MODEL_SPEC,
     }
@@ -75,6 +79,7 @@ def test_pipeline_roles_do_not_receive_customer_context_or_resolver_tools() -> N
         "persist_legal_rule_triage_result",
         "finish_legal_rule_triage_execution",
     )
+    assert _tool_names(by_name["interview"]) == ()
     assert _tool_names(by_name["planner"]) == (
         "retrieve_verified_episodes",
         "search_program_graph",
@@ -98,9 +103,11 @@ def test_all_specialists_expose_pydantic_response_formats() -> None:
     by_name = {item["name"]: item for item in FLOW_SUBAGENTS}
 
     assert by_name["triage"]["response_format"] is TriageResult
+    assert by_name["interview"]["response_format"] is InterviewResult
     assert by_name["planner"]["response_format"] is PlannerResult
     assert by_name["investigator"]["response_format"] is InvestigatorResult
     assert SPECIALIST_RESPONSE_FORMATS == {
+        "interview": InterviewResult,
         "planner": PlannerResult,
         "investigator": InvestigatorResult,
         "triage": TriageResult,
@@ -166,11 +173,13 @@ def test_default_role_models_match_lcsp_cost_and_reasoning_policy() -> None:
     assert DEFAULT_ROOT_MODEL_SPEC == "openai:gpt-5.6-terra"
     assert DEFAULT_TRIAGE_MODEL_SPEC == "openai:gpt-5.6-sol"
     assert DEFAULT_PLANNER_MODEL_SPEC == "openai:gpt-5.6-sol"
+    assert DEFAULT_INTERVIEW_MODEL_SPEC == "openai:gpt-5.6-sol"
     assert DEFAULT_INVESTIGATOR_MODEL_SPEC == "openai:gpt-5.6-terra"
 
     assert ROOT_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert TRIAGE_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert PLANNER_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
+    assert INTERVIEW_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
     assert INVESTIGATOR_MODEL_SPEC in ALL_LCSP_MODEL_SPECS
 
 
