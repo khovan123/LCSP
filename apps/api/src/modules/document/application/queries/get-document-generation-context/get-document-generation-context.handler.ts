@@ -78,19 +78,14 @@ export class GetDocumentGenerationContextHandler implements IQueryHandler<GetDoc
       });
     if (!technicalEvidenceReport) this.notFound("TechnicalEvidenceReport");
 
-    const [repositorySnapshot, wizardProfile] = await Promise.all([
-      this.prisma.repositorySnapshot.findFirst({
+    const repositorySnapshot =
+      await this.prisma.repositorySnapshot.findFirst({
         where: {
           id: technicalEvidenceReport.snapshotId,
           assessmentId: documentRequest.assessmentId,
         },
         select: { id: true, commitSha: true },
-      }),
-      this.prisma.wizardProfile.findUnique({
-        where: { assessmentId: documentRequest.assessmentId },
-        select: { id: true, version: true, answers: true },
-      }),
-    ]);
+      });
     if (!repositorySnapshot) this.notFound("RepositorySnapshot");
 
     return {
@@ -121,13 +116,6 @@ export class GetDocumentGenerationContextHandler implements IQueryHandler<GetDoc
         id: repositorySnapshot.id,
         commit_sha: repositorySnapshot.commitSha,
       },
-      wizard_profile: wizardProfile
-        ? {
-            id: wizardProfile.id,
-            version: wizardProfile.version,
-            answers: wizardProfile.answers,
-          }
-        : null,
       matrix_ref: `engineering-matrix:${classification.id}`,
     };
   }

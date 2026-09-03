@@ -591,21 +591,6 @@ class WorkerApiClient:
             raise WorkerCallbackError("Legal corpus activation response was invalid.")
         return data
 
-    def get_wizard_profile_for_assessment(self, assessment_id: str) -> dict | None:
-        """Fetch an assessment wizard profile, treating 404 as an optional absence."""
-        path = InternalPath.WIZARD_PROFILE.format(assessment_id=assessment_id)
-        try:
-            data = self._get_with_retry(path)
-        except WorkerCallbackError as exc:
-            if "client error 404" in str(exc):
-                return None
-            raise
-        if data is None:
-            return None
-        if not isinstance(data, dict):
-            raise WorkerCallbackError("Wizard profile response was invalid.")
-        return data
-
     def get_active_legal_rule_catalog(self) -> dict:
         """Fetch the active legal rule catalog/version metadata."""
         path = "/internal/legal-rule-catalog/active"

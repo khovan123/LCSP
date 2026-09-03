@@ -19,8 +19,6 @@ export const apiQueryKeys = {
       ["assessment", assessmentId, "classification"] as const,
     readiness: (assessmentId: string) =>
       ["assessment", assessmentId, "readiness"] as const,
-    wizard: (assessmentId: string) =>
-      ["assessment", assessmentId, "wizard"] as const,
     conflicts: (assessmentId: string) =>
       ["assessment", assessmentId, "conflicts", "pending"] as const,
     evidence: (assessmentId: string) =>

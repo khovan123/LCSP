@@ -18,10 +18,7 @@ import {
   requestGapAnalysis,
 } from "./document-client";
 import { getTechnicalEvidence } from "./evidence-client";
-import {
-  generateReadinessExport,
-  getReadinessStatus,
-} from "./readiness-client";
+import { getReadinessStatus } from "./readiness-client";
 import {
   connectAssessmentRepository,
   rerunRepositoryScan,
@@ -29,14 +26,7 @@ import {
   type RerunRepositoryScanInput,
   type StartRepositoryAnalysisInput,
 } from "./repository-analysis-client";
-import {
-  generateWizardClarificationQuestions,
-  getWizardAssessment,
-  saveWizardDraft,
-  submitWizard,
-} from "./wizard-client";
 import { apiQueryKeys } from "./query-keys";
-import type { WizardAnswer } from "@lcsp/contracts/wizard";
 
 export function useConnectAssessmentRepositoryMutation(assessmentId: string) {
   return useMutation({
@@ -109,43 +99,6 @@ export function useRerunRepositoryScanMutation(assessmentId: string) {
         }),
       ]);
     },
-  });
-}
-
-export function useGenerateReadinessExportMutation(assessmentId: string) {
-  return useMutation({
-    mutationFn: () => generateReadinessExport(assessmentId),
-  });
-}
-
-export function useWizardAssessmentQuery(assessmentId: string) {
-  return useQuery({
-    queryKey: apiQueryKeys.assessment.wizard(assessmentId),
-    queryFn: () => getWizardAssessment(assessmentId),
-    enabled: assessmentId.length > 0,
-  });
-}
-
-export function useSaveWizardDraftMutation(assessmentId: string) {
-  return useMutation({
-    mutationFn: (answers: WizardAnswer[]) =>
-      saveWizardDraft(assessmentId, answers),
-  });
-}
-
-export function useSubmitWizardMutation(assessmentId: string) {
-  return useMutation({
-    mutationFn: (answers: WizardAnswer[]) =>
-      submitWizard(assessmentId, answers),
-  });
-}
-
-export function useGenerateWizardClarificationQuestionsMutation(
-  assessmentId: string,
-) {
-  return useMutation({
-    mutationFn: (answers: WizardAnswer[]) =>
-      generateWizardClarificationQuestions(assessmentId, answers),
   });
 }
 

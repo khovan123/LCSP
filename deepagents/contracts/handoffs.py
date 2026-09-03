@@ -23,7 +23,7 @@ class ProvenanceRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ref: str = Field(min_length=1, max_length=240)
-    source_kind: Literal["PROGRAM_GRAPH", "SOURCE_ANCHOR", "WIZARD", "LEGAL_CHUNK", "SYSTEM"]
+    source_kind: Literal["PROGRAM_GRAPH", "SOURCE_ANCHOR", "CUSTOMER_CONTEXT", "LEGAL_CHUNK", "SYSTEM"]
     artifact_version: str | None = Field(default=None, max_length=240)
     source_anchor_ref: str | None = Field(default=None, max_length=240)
 
@@ -120,39 +120,6 @@ class InvestigatorResult(BaseModel):
         return self
 
 
-class ResolverConflict(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    source: Literal["WIZARD", "REPOSITORY", "USER_CONFIRMATION", "UNKNOWN"]
-    value: Any | None = None
-    source_refs: list[str] = Field(default_factory=list, max_length=50)
-
-
-class ResolverResult(BaseModel):
-    """Typed Resolver-to-root handoff."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    status: Literal["RESOLVED", "CONFLICT", "NEEDS_INPUT"]
-    fact_key: str = Field(min_length=1, max_length=240)
-    resolved_value: Any | None = None
-    conflicting_values: list[ResolverConflict] = Field(default_factory=list, max_length=20)
-    source_refs: list[str] = Field(default_factory=list, max_length=50)
-    can_resume_existing_plan: bool
-
-    @model_validator(mode="after")
-    def validate_resolution(self) -> Self:
-        if self.status == "RESOLVED" and self.resolved_value is None:
-            raise ValueError("RESOLVED Resolver output requires resolved_value")
-        if self.status == "RESOLVED" and not self.can_resume_existing_plan:
-            raise ValueError("RESOLVED Resolver output must resume the existing plan")
-        if self.status == "CONFLICT" and not self.conflicting_values:
-            raise ValueError("CONFLICT Resolver output requires conflicting_values")
-        if self.status == "NEEDS_INPUT" and self.can_resume_existing_plan:
-            raise ValueError("NEEDS_INPUT Resolver output cannot resume the existing plan")
-        return self
-
-
 class TriageResult(BaseModel):
     """Typed Legal Triage-to-root handoff."""
 
@@ -185,7 +152,6 @@ class TriageResult(BaseModel):
 SPECIALIST_RESPONSE_FORMATS: dict[str, type[BaseModel]] = {
     "planner": PlannerResult,
     "investigator": InvestigatorResult,
-    "resolver": ResolverResult,
     "triage": TriageResult,
 }
 
@@ -196,8 +162,6 @@ __all__ = [
     "InvestigatorResult",
     "PlannerResult",
     "ProvenanceRef",
-    "ResolverConflict",
-    "ResolverResult",
     "SPECIALIST_RESPONSE_FORMATS",
     "TriageResult",
 ]

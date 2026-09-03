@@ -476,15 +476,6 @@ def test_get_accepted_technical_profile_rejects_non_accepted(client):
             client.get_accepted_technical_profile("tp-1")
 
 
-def test_get_wizard_profile_returns_none_for_404(client):
-    with patch("tools.common.capabilities.platform.api_client.httpx.get") as mock_get:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 404
-        mock_get.return_value = mock_resp
-
-        assert client.get_wizard_profile_for_assessment("assessment-1") is None
-
-
 def test_get_official_source_snapshot_uses_query_params(client):
     with patch("tools.common.capabilities.platform.api_client.httpx.get") as mock_get:
         mock_resp = MagicMock()

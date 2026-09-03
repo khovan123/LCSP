@@ -10,7 +10,6 @@ from contracts.handoffs import (
     InvestigatorResult,
     SPECIALIST_RESPONSE_FORMATS,
 )
-from subagents.context_wizard.definition import ContextWizardQuestionRound
 from tools.common.capabilities.assessment.claims.evidence_claim.evidence_claim_validator import (
     EvidenceClaimValidationError,
     EvidenceClaimValidator,
@@ -34,8 +33,6 @@ CONTROLLED_NON_VERDICT_PATHS = frozenset(
 
 
 def _response_model(subagent_type: str) -> type[BaseModel]:
-    if subagent_type == "context_wizard":
-        return ContextWizardQuestionRound
     try:
         return SPECIALIST_RESPONSE_FORMATS[subagent_type]
     except KeyError as exc:

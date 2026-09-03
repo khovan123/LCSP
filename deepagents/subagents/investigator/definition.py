@@ -44,7 +44,8 @@ Tool guidance:
    delegated EngineeringRule criterion.
 
 Boundary rules:
-- Do not fetch Wizard context or legal basis; those were hydrated before planning.
+- Do not fetch Customer context or legal basis; runtime Interview and Orchestration own context
+  authority before planning.
 - Do not change the EngineeringRule set or investigation plan unless the root explicitly delegates
   a resumed plan after NEEDS_INPUT.
 - Treat truncation, unresolved frontiers, missing coverage and tool limits as limitations.
