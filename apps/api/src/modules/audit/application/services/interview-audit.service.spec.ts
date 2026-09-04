@@ -8,6 +8,7 @@ import {
 } from "@lcsp/contracts/audit";
 import {
   ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
+  ASSESSMENT_INTERVIEW_ANSWER_ACTIONS,
   ASSESSMENT_INTERVIEW_CONTROLS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
@@ -190,8 +191,8 @@ describe("InterviewAuditService", () => {
         },
         questionId: "q-1",
         questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.clarify,
-        responseMode: "FREE_TEXT",
-        responseAction: "ANSWER",
+        responseMode: ASSESSMENT_INTERVIEW_CONTROLS.freeText,
+        responseAction: ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.confirm,
         answerValue: "Stored in AWS RDS PostgreSQL with KMS encryption.",
         interviewContextRevision: "rev-1",
         threadId: "thread-1",
@@ -213,7 +214,7 @@ describe("InterviewAuditService", () => {
       expect(event.payload).toMatchObject({
         questionId: "q-1",
         questionIntent: "CLARIFY",
-        responseAction: "ANSWER",
+        responseAction: ASSESSMENT_INTERVIEW_ANSWER_ACTIONS.confirm,
         answerValue: "Stored in AWS RDS PostgreSQL with KMS encryption.",
       });
     });
@@ -546,4 +547,3 @@ describe("InterviewAuditService", () => {
     });
   });
 });
-

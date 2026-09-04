@@ -84,8 +84,8 @@ export type RecordCustomerAnswerAuditInput = {
   respondentRef: InterviewAuditActorRef;
   questionId: string;
   questionIntent?: AssessmentInterviewQuestionIntent;
-  responseMode?: AssessmentInterviewControl | string;
-  responseAction?: AssessmentInterviewAnswerAction | string;
+  responseMode?: AssessmentInterviewControl;
+  responseAction?: AssessmentInterviewAnswerAction;
   answerValue: unknown;
   interviewContextRevision: string;
   sessionId?: string;

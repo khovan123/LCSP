@@ -16,74 +16,142 @@ import type { AssessmentRuntimeEventService } from "../../../../platform/runtime
 import type { InterviewAuditService } from "../../../audit/application/services/interview-audit.service.js";
 import { AssessmentInterviewRuntimeService } from "./assessment-interview-runtime.service.js";
 
+type MockPrismaDelegates = {
+  assessment: {
+    findUnique: jest.Mock<() => Promise<{ id: string; ownerId: string }>>;
+  };
+  assessmentInterviewThread: {
+    findUnique: jest.Mock<() => Promise<unknown>>;
+    updateMany: jest.Mock<() => Promise<{ count: number }>>;
+    upsert: jest.Mock<() => Promise<Record<string, unknown>>>;
+  };
+  repositorySnapshot: {
+    findFirst: jest.Mock<() => Promise<{ id: string; commitSha: string }>>;
+  };
+  technicalEvidenceReport: {
+    findFirst: jest.Mock<
+      () => Promise<{
+        id: string;
+        schemaVersion: string;
+        evidencePayload: {
+          technicalCoverageState: string;
+          coverageLimitations: string[];
+        };
+      }>
+    >;
+  };
+};
+
+type MockInterviewAudit = {
+  recordQuestionPersisted: jest.Mock<(...args: unknown[]) => Promise<void>>;
+  recordCustomerAnswer: jest.Mock<(...args: unknown[]) => Promise<void>>;
+  recordContextRevisionCreated: jest.Mock<
+    (...args: unknown[]) => Promise<void>
+  >;
+  recordInterviewOutcome: jest.Mock<(...args: unknown[]) => Promise<void>>;
+  recordTargetedClarification: jest.Mock<(...args: unknown[]) => Promise<void>>;
+  recordDownstreamImpact: jest.Mock<(...args: unknown[]) => Promise<void>>;
+};
+
 describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => {
   let service: AssessmentInterviewRuntimeService;
-  let mockPrisma: any;
-  let mockOutboxRepository: any;
-  let mockRuntimeEvents: any;
-  let mockInterviewAudit: any;
-  let mockTx: any;
+  let mockTx: MockPrismaDelegates;
+  let mockInterviewAudit: MockInterviewAudit;
 
   beforeEach(() => {
     mockTx = {
       assessment: {
-        findUnique: jest.fn<any>().mockResolvedValue({
-          id: "assessment-1",
-          ownerId: "user-1",
-        }),
+        findUnique: jest
+          .fn<() => Promise<{ id: string; ownerId: string }>>()
+          .mockResolvedValue({
+            id: "assessment-1",
+            ownerId: "user-1",
+          }),
       },
       assessmentInterviewThread: {
-        findUnique: jest.fn<any>(),
-        updateMany: jest.fn<any>().mockResolvedValue({ count: 1 }),
-        upsert: jest.fn<any>().mockResolvedValue({}),
+        findUnique: jest.fn<() => Promise<unknown>>(),
+        updateMany: jest
+          .fn<() => Promise<{ count: number }>>()
+          .mockResolvedValue({ count: 1 }),
+        upsert: jest
+          .fn<() => Promise<Record<string, unknown>>>()
+          .mockResolvedValue({}),
       },
       repositorySnapshot: {
-        findFirst: jest.fn<any>().mockResolvedValue({
-          id: "snap-1",
-          commitSha: "sha-123456",
-        }),
+        findFirst: jest
+          .fn<() => Promise<{ id: string; commitSha: string }>>()
+          .mockResolvedValue({
+            id: "snap-1",
+            commitSha: "sha-123456",
+          }),
       },
       technicalEvidenceReport: {
-        findFirst: jest.fn<any>().mockResolvedValue({
-          id: "report-1",
-          schemaVersion: "v1",
-          evidencePayload: {
-            technicalCoverageState: "READY",
-            coverageLimitations: [],
-          },
-        }),
+        findFirst: jest
+          .fn<
+            () => Promise<{
+              id: string;
+              schemaVersion: string;
+              evidencePayload: {
+                technicalCoverageState: string;
+                coverageLimitations: string[];
+              };
+            }>
+          >()
+          .mockResolvedValue({
+            id: "report-1",
+            schemaVersion: "v1",
+            evidencePayload: {
+              technicalCoverageState: "READY",
+              coverageLimitations: [],
+            },
+          }),
       },
     };
 
-    mockPrisma = {
+    const mockPrisma = {
       ...mockTx,
-      $transaction: jest.fn(async (cb: (tx: any) => Promise<any>) =>
-        cb(mockTx),
+      $transaction: jest.fn(
+        async <T>(cb: (tx: MockPrismaDelegates) => Promise<T>): Promise<T> =>
+          cb(mockTx),
       ),
     };
 
-    mockOutboxRepository = {
-      enqueue: jest.fn<any>().mockResolvedValue("outbox-1"),
+    const mockOutboxRepository = {
+      enqueue: jest.fn<() => Promise<string>>().mockResolvedValue("outbox-1"),
     };
 
-    mockRuntimeEvents = {
-      recordToolWaitingInput: jest.fn<any>().mockResolvedValue(undefined),
+    const mockRuntimeEvents = {
+      recordToolWaitingInput: jest
+        .fn<() => Promise<void>>()
+        .mockResolvedValue(undefined),
     };
 
     mockInterviewAudit = {
-      recordQuestionPersisted: jest.fn<any>().mockResolvedValue(undefined),
-      recordCustomerAnswer: jest.fn<any>().mockResolvedValue(undefined),
-      recordContextRevisionCreated: jest.fn<any>().mockResolvedValue(undefined),
-      recordInterviewOutcome: jest.fn<any>().mockResolvedValue(undefined),
-      recordTargetedClarification: jest.fn<any>().mockResolvedValue(undefined),
-      recordDownstreamImpact: jest.fn<any>().mockResolvedValue(undefined),
+      recordQuestionPersisted: jest
+        .fn<(...args: unknown[]) => Promise<void>>()
+        .mockResolvedValue(undefined),
+      recordCustomerAnswer: jest
+        .fn<(...args: unknown[]) => Promise<void>>()
+        .mockResolvedValue(undefined),
+      recordContextRevisionCreated: jest
+        .fn<(...args: unknown[]) => Promise<void>>()
+        .mockResolvedValue(undefined),
+      recordInterviewOutcome: jest
+        .fn<(...args: unknown[]) => Promise<void>>()
+        .mockResolvedValue(undefined),
+      recordTargetedClarification: jest
+        .fn<(...args: unknown[]) => Promise<void>>()
+        .mockResolvedValue(undefined),
+      recordDownstreamImpact: jest
+        .fn<(...args: unknown[]) => Promise<void>>()
+        .mockResolvedValue(undefined),
     };
 
     service = new AssessmentInterviewRuntimeService(
-      mockPrisma as PrismaService,
-      mockRuntimeEvents as AssessmentRuntimeEventService,
-      mockOutboxRepository as OutboxRepository,
-      mockInterviewAudit as InterviewAuditService,
+      mockPrisma as unknown as PrismaService,
+      mockRuntimeEvents as unknown as AssessmentRuntimeEventService,
+      mockOutboxRepository as unknown as OutboxRepository,
+      mockInterviewAudit as unknown as InterviewAuditService,
     );
   });
 
@@ -206,7 +274,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       expect(result.outcome).toBe(
         ASSESSMENT_INTERVIEW_OUTCOMES.blockedOrUnresolved,
       );
-      expect(mockInterviewAudit.recordInterviewOutcome).toHaveBeenCalledTimes(1);
+      expect(mockInterviewAudit.recordInterviewOutcome).toHaveBeenCalledTimes(
+        1,
+      );
       expect(mockInterviewAudit.recordInterviewOutcome).toHaveBeenCalledWith(
         expect.objectContaining({
           assessmentId: "assessment-1",
@@ -327,7 +397,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         },
       });
 
-      expect(mockInterviewAudit.recordInterviewOutcome).toHaveBeenCalledTimes(1);
+      expect(mockInterviewAudit.recordInterviewOutcome).toHaveBeenCalledTimes(
+        1,
+      );
       expect(mockInterviewAudit.recordInterviewOutcome).toHaveBeenCalledWith(
         expect.objectContaining({
           assessmentId: "assessment-1",
@@ -352,7 +424,9 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         mockTx,
       );
 
-      expect(mockInterviewAudit.recordDownstreamImpact).toHaveBeenCalledTimes(1);
+      expect(mockInterviewAudit.recordDownstreamImpact).toHaveBeenCalledTimes(
+        1,
+      );
       expect(mockInterviewAudit.recordDownstreamImpact).toHaveBeenCalledWith(
         expect.objectContaining({
           assessmentId: "assessment-1",

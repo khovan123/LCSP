@@ -20,11 +20,9 @@ import {
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
   ASSESSMENT_RUNTIME_STAGE_CODES,
   type AssessmentContextAuthorityStatus,
-  type AssessmentInterviewAnswerAction,
   type AssessmentInterviewAnswerHistoryItem,
   type AssessmentInterviewAnswerInput,
   type AssessmentInterviewBlockedInput,
-  type AssessmentInterviewControl,
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
 import {
@@ -1732,4 +1730,3 @@ function readTechnicalCoverageState(
   }
   return undefined;
 }
-
