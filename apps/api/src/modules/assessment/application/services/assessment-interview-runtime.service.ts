@@ -359,7 +359,9 @@ export class AssessmentInterviewRuntimeService {
         action: blocked.action,
         draft: blocked.draft ? PUBLIC_REDACTED_DRAFT_SUMMARY : undefined,
       },
-      outputSummary: { assessmentInterview: publicState(result) },
+      outputSummary: {
+        assessmentInterview: publicState({ ...result, pendingDraft: undefined }),
+      },
       waitingReason: blocked.action,
       startedAt: now,
     });

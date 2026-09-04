@@ -424,10 +424,14 @@ describe("Assessment Interview Runtime (e2e) [LCSP-278]", () => {
     assert.deepEqual(privateTargetState.targetedNeed.resolutionCriteria, [
       "decision_authority",
     ]);
-    assert.doesNotMatch(JSON.stringify(privateTarget.body), /checkpoint-1/u);
-    assert.doesNotMatch(
-      JSON.stringify(privateTarget.body),
-      /investigator-run-1/u,
+    const serializedPrivateTarget = JSON.stringify(privateTarget.body);
+    assert.doesNotMatch(serializedPrivateTarget, /checkpoint-1/u);
+    assert.doesNotMatch(serializedPrivateTarget, /"checkpointId"/u);
+    assert.doesNotMatch(serializedPrivateTarget, /"investigatorExecutionId"/u);
+    assert.doesNotMatch(serializedPrivateTarget, /"targetedContinuation"/u);
+    assert.match(
+      serializedPrivateTarget,
+      /investigator:investigator-run-1:need-decision-authority/u,
     );
 
     const question = await httpRequest(app)
