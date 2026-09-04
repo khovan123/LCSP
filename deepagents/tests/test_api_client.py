@@ -406,6 +406,34 @@ def test_interview_agent_decision_uses_internal_worker_endpoint(client):
         assert mock_post.call_args.args[0] == (
             "http://testserver/internal/assessment-interviews/assessment-1/agent-decisions"
         )
+        assert mock_post.call_args.kwargs["json"] == {
+            "expectedContextRevision": 3,
+            "outcome": "CONTEXT_READY",
+        }
+
+
+def test_interview_agent_decision_preserves_context_authority(client):
+    with patch("tools.common.capabilities.platform.api_client.httpx.post") as mock_post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = {"ok": True, "data": {"outcome": "CONTEXT_READY"}}
+        mock_post.return_value = mock_resp
+
+        response = client.post_interview_agent_decision(
+            "assessment-1",
+            {
+                "expectedContextRevision": 3,
+                "outcome": "CONTEXT_READY",
+                "contextAuthority": "CONFIRMED",
+                "confirmedContext": {"system_purpose": "recommendation"},
+            },
+        )
+
+        assert response["outcome"] == "CONTEXT_READY"
+        assert mock_post.call_args.kwargs["json"]["contextAuthority"] == "CONFIRMED"
+        assert mock_post.call_args.kwargs["json"]["confirmedContext"] == {
+            "system_purpose": "recommendation"
+        }
 
 
 def test_resume_waiting_runs_uses_internal_legal_catalog_endpoint(client):

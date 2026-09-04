@@ -62,7 +62,7 @@ class WorkerApiClient:
         self._timeout = 30.0
         self._max_retries = 3
 
-    def _post_with_retry(self, path: str, payload: dict) -> dict:
+    def _post_with_retry(self, path: str, payload: dict, *, redact: bool = True) -> dict:
         """POST a sanitized payload with exponential retry for network/5xx failures.
 
         Known 409 duplicate codes are treated as idempotent success. Other 4xx
@@ -75,7 +75,7 @@ class WorkerApiClient:
             WORKER_API_KEY_HEADER: self._api_key,
             correlationId_HEADER: cid,
         }
-        safe_payload = self._redact_callback_payload(payload)
+        safe_payload = self._redact_callback_payload(payload) if redact else dict(payload)
 
         for attempt in range(self._max_retries):
             try:
@@ -551,7 +551,7 @@ class WorkerApiClient:
         path = InternalPath.INTERVIEW_AGENT_DECISION.format(
             assessment_id=assessment_id,
         )
-        data = self._post_with_retry(path, payload)
+        data = self._post_with_retry(path, payload, redact=False)
         if not isinstance(data, dict):
             raise WorkerCallbackError("Interview Agent decision response was invalid.")
         return data
@@ -561,7 +561,7 @@ class WorkerApiClient:
         path = InternalPath.INTERVIEW_INITIAL_QUESTION.format(
             assessment_id=assessment_id,
         )
-        data = self._post_with_retry(path, payload)
+        data = self._post_with_retry(path, payload, redact=False)
         if not isinstance(data, dict):
             raise WorkerCallbackError("Interview initial question response was invalid.")
         return data
@@ -569,7 +569,7 @@ class WorkerApiClient:
     def post_interview_targeted_need(self, assessment_id: str, payload: dict) -> dict:
         """Persist a server-guarded Targeted Interview need and opaque continuation."""
         path = InternalPath.INTERVIEW_TARGETED_NEED.format(assessment_id=assessment_id)
-        data = self._post_with_retry(path, payload)
+        data = self._post_with_retry(path, payload, redact=False)
         if not isinstance(data, dict):
             raise WorkerCallbackError("Interview targeted need response was invalid.")
         return data
