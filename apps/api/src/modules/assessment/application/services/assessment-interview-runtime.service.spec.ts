@@ -42,6 +42,10 @@ type MockPrismaDelegates = {
   };
 };
 
+type MockOutboxRepository = {
+  enqueue: jest.Mock<(...args: unknown[]) => Promise<string>>;
+};
+
 type MockInterviewAudit = {
   recordQuestionPersisted: jest.Mock<(...args: unknown[]) => Promise<void>>;
   recordCustomerAnswer: jest.Mock<(...args: unknown[]) => Promise<void>>;
@@ -56,6 +60,7 @@ type MockInterviewAudit = {
 describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => {
   let service: AssessmentInterviewRuntimeService;
   let mockTx: MockPrismaDelegates;
+  let mockOutboxRepository: MockOutboxRepository;
   let mockInterviewAudit: MockInterviewAudit;
 
   beforeEach(() => {
@@ -116,8 +121,10 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
       ),
     };
 
-    const mockOutboxRepository = {
-      enqueue: jest.fn<() => Promise<string>>().mockResolvedValue("outbox-1"),
+    mockOutboxRepository = {
+      enqueue: jest
+        .fn<(...args: unknown[]) => Promise<string>>()
+        .mockResolvedValue("outbox-1"),
     };
 
     const mockRuntimeEvents = {
@@ -325,6 +332,14 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         },
       });
 
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledTimes(1);
+      expect(mockOutboxRepository.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: "command.assessment-interview.resume-agent.v1",
+        }),
+        mockTx,
+      );
+
       expect(
         mockInterviewAudit.recordTargetedClarification,
       ).toHaveBeenCalledTimes(1);
@@ -431,8 +446,8 @@ describe("AssessmentInterviewRuntimeService Audit & Provenance Emission", () => 
         expect.objectContaining({
           assessmentId: "assessment-1",
           interviewContextRevision: "2",
-          affectedActivities: ["reconciliation", "classification_review"],
           sessionId: "interview:assessment-1",
+          threadId: "interview:assessment-1",
         }),
         mockTx,
       );

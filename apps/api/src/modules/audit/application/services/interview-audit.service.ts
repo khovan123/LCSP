@@ -212,8 +212,8 @@ export type RecordDownstreamImpactAuditInput = {
   assessmentId: string;
   respondentRef?: InterviewAuditActorRef | null;
   interviewContextRevision: string;
-  affectedActivities: string[];
-  summary: string;
+  affectedActivities?: string[];
+  summary?: string;
   sessionId: string;
   threadId: string;
   runId: string;

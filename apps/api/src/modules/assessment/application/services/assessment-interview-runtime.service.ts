@@ -604,6 +604,7 @@ export class AssessmentInterviewRuntimeService {
           pgeVersion: thread.pgeVersion,
           resumeReason: "TARGETED_INTERVIEW_REQUIRED",
         }),
+        tx,
       );
       await this.interviewAudit.recordTargetedClarification(
         {
@@ -782,7 +783,6 @@ export class AssessmentInterviewRuntimeService {
           {
             assessmentId: input.assessmentId,
             interviewContextRevision: String(decision.expectedContextRevision),
-            affectedActivities: ["reconciliation", "classification_review"],
             summary: "Context changes impact downstream evaluation.",
             sessionId: this.threadId(input.assessmentId),
             threadId: this.threadId(input.assessmentId),
