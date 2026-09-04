@@ -80,6 +80,16 @@ jobs:
           if test_body.count(old_hint) != 1:
               raise SystemExit(f'expected one OpenWiki hint fixture, found {test_body.count(old_hint)}')
           test_body = test_body.replace(old_hint, new_hint, 1)
+          old_source = "                'source': {},"
+          new_source = (
+              "                'source': {"
+              "'file_path': 'src/service.py', "
+              "'symbol_ref': 'responses.create', "
+              "'start_line': 1, 'end_line': 3},"
+          )
+          if test_body.count(old_source) != 1:
+              raise SystemExit(f'expected one release-vertical graph source fixture, found {test_body.count(old_source)}')
+          test_body = test_body.replace(old_source, new_source, 1)
           Path('deepagents/tests/test_assessment_interview_release_vertical.py').write_text(
               test_body,
               encoding='utf-8',
