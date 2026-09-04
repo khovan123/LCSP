@@ -1,3 +1,5 @@
+import type { AuditActorType } from "./audit-event.types.ts";
+
 /**
  * Canonical audit event types emitted by the Interview Agent and related runtime components.
  *
@@ -38,8 +40,17 @@ export type InterviewAuditActorRef = {
   /** Display name if available from session profile. */
   name?: string;
   /** Explicit indicator confirming trusted authentication source. */
-  authenticated: boolean;
+  authenticated: true;
 };
+
+export const INTERVIEW_TECHNICAL_COVERAGE_STATES = {
+  ready: "READY",
+  partial: "PARTIAL",
+  unavailable: "UNAVAILABLE",
+} as const;
+
+export type InterviewTechnicalCoverageState =
+  (typeof INTERVIEW_TECHNICAL_COVERAGE_STATES)[keyof typeof INTERVIEW_TECHNICAL_COVERAGE_STATES];
 
 /**
  * Technical snapshot reference identifying the code analysis and guidance state at the time of context recording.
@@ -53,6 +64,12 @@ export type InterviewSourceSnapshotRef = {
   guidanceVersion?: string;
   /** Program Graph Engine version used for code analysis. */
   pgeVersion?: string;
+  /** Source/repository version label when distinct from the commit SHA. */
+  sourceVersion?: string;
+  /** Scanner/PGE coverage state pinned for this Interview activity. */
+  technicalCoverageState?: InterviewTechnicalCoverageState;
+  /** Coverage limitations active when the event was recorded. */
+  coverageLimitations?: string[];
 };
 
 /**
@@ -109,6 +126,19 @@ export type InterviewRuntimeEventCorrelation = {
   originatingInvestigationReference?: string | null;
   downstreamImpact?: boolean;
   rerunScope?: string[];
+  sourceSnapshot?: InterviewSourceSnapshotRef;
+};
+
+/**
+ * Preserved detail for a cross-respondent contradiction.
+ */
+export type InterviewAuditConflictDetail = {
+  firstRespondentRef: InterviewAuditActorRef;
+  firstStatementValue: unknown;
+  firstTurnId: string | number;
+  secondRespondentRef: InterviewAuditActorRef;
+  secondStatementValue: unknown;
+  secondTurnId: string | number;
 };
 
 /**
@@ -118,19 +148,35 @@ export type InterviewAuditTrailItem = {
   id: string;
   eventType: InterviewAuditEventType;
   actorId: string | null;
+  actorType: AuditActorType;
   actorRole: string | null;
   actorName: string | null;
+  respondentRef?: InterviewAuditActorRef;
   assessmentId: string;
-  interviewContextRevision: string;
+  interviewContextRevision: string | null;
+  correlationId: string;
+  sessionId: string | null;
+  threadId?: string;
+  turnId?: string | number;
+  runId?: string;
+  guidanceVersion?: string;
+  modelId?: string;
+  currentStage?: string;
+  sourceSnapshot?: InterviewSourceSnapshotRef;
   statementKey?: string;
   statementValue?: unknown;
   priorValue?: unknown;
   priorRevision?: string;
   isConflict: boolean;
+  conflict?: InterviewAuditConflictDetail;
   questionId?: string;
+  questionIntent?: string;
+  interpretation?: string;
   evidenceRefs: string[];
   originatingInvestigationReference?: string | null;
   downstreamImpact?: boolean;
+  affectedActivities: string[];
+  rerunScope: string[];
   occurredAt: string;
 };
 

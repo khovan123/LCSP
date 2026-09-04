@@ -1,5 +1,6 @@
 import { jest } from "@jest/globals";
 import {
+  AUDIT_ACTOR_IDS,
   AUDIT_ACTOR_TYPES,
   AUDIT_RESOURCE_TYPES,
   INTERVIEW_AUDIT_EVENT_TYPES,
@@ -46,7 +47,13 @@ describe("InterviewAuditService", () => {
           commitSha: "abc123456",
           guidanceVersion: "v1.2",
           pgeVersion: "pge-v2",
+          sourceVersion: "source-v7",
+          technicalCoverageState: "READY",
+          coverageLimitations: [],
         },
+        runId: "run-statement-1",
+        stage: "INITIAL_INTERVIEW",
+        modelId: "model-1",
         correlationId: "corr-statement-1",
       });
 
@@ -82,7 +89,13 @@ describe("InterviewAuditService", () => {
         commitSha: "abc123456",
         guidanceVersion: "v1.2",
         pgeVersion: "pge-v2",
+        sourceVersion: "source-v7",
+        technicalCoverageState: "READY",
+        coverageLimitations: [],
       });
+      expect(payload.runId).toBe("run-statement-1");
+      expect(payload.stage).toBe("INITIAL_INTERVIEW");
+      expect(payload.modelId).toBe("model-1");
     });
 
     it("enforces actor identity authority from trusted session, not prompt text", async () => {
@@ -112,6 +125,28 @@ describe("InterviewAuditService", () => {
           authenticated: true,
         }),
       );
+    });
+
+    it("rejects respondent provenance that is not authenticated runtime identity", async () => {
+      await expect(
+        service.recordStatement({
+          assessmentId: "assessment-123",
+          respondentRef: {
+            id: "self-asserted-user",
+            role: "CUSTOMER",
+            authenticated: false,
+          } as never,
+          interviewContextRevision: "rev-1",
+          sessionId: "session-1",
+          threadId: "thread-1",
+          turnId: 1,
+          statementKey: "business_role",
+          statementValue: "I am the Product Owner",
+          correlationId: "corr-untrusted-actor",
+        }),
+      ).rejects.toThrow("authenticated runtime context");
+
+      expect(writeMock).not.toHaveBeenCalled();
     });
   });
 
@@ -165,6 +200,8 @@ describe("InterviewAuditService", () => {
         threadId: "thread-abc",
         turnId: 5,
         questionId: "q-retention",
+        questionIntent: "CLARIFY",
+        interpretation: "Customer corrected the retention period to 90 days.",
         evidenceRefs: ["ev-retention-policy"],
         correlationId: "corr-super-1",
       });
@@ -181,6 +218,10 @@ describe("InterviewAuditService", () => {
       expect(payload.newValue).toBe(90);
       expect(payload.newRevision).toBe("rev-2");
       expect(payload.turnId).toBe(5);
+      expect(payload.questionIntent).toBe("CLARIFY");
+      expect(payload.interpretation).toBe(
+        "Customer corrected the retention period to 90 days.",
+      );
       expect(payload.evidenceRefs).toEqual(["ev-retention-policy"]);
     });
   });
@@ -249,6 +290,13 @@ describe("InterviewAuditService", () => {
       expect(writeMock).toHaveBeenCalledTimes(1);
       const event = writeMock.mock.calls[0][0];
       expect(event.eventType).toBe(INTERVIEW_AUDIT_EVENT_TYPES.targetedClarificationStarted);
+      expect(event.actor).toEqual(
+        expect.objectContaining({
+          id: AUDIT_ACTOR_IDS.assessmentOrchestrator,
+          type: AUDIT_ACTOR_TYPES.service,
+          authenticated: false,
+        }),
+      );
 
       const payload = event.payload as Record<string, unknown>;
       expect(payload.originatingInvestigationReference).toBe("inv-rule-9988");
@@ -274,6 +322,13 @@ describe("InterviewAuditService", () => {
       expect(writeMock).toHaveBeenCalledTimes(1);
       const impactEvent = writeMock.mock.calls[0][0];
       expect(impactEvent.eventType).toBe(INTERVIEW_AUDIT_EVENT_TYPES.downstreamImpactEmitted);
+      expect(impactEvent.actor).toEqual(
+        expect.objectContaining({
+          id: AUDIT_ACTOR_IDS.interviewAgent,
+          type: AUDIT_ACTOR_TYPES.service,
+          authenticated: false,
+        }),
+      );
       expect((impactEvent.payload as any).affectedActivities).toEqual([
         "reconciliation",
         "classification_review",
@@ -294,6 +349,13 @@ describe("InterviewAuditService", () => {
       const rerunEvent = writeMock.mock.calls[1][0];
       expect(rerunEvent.eventType).toBe(INTERVIEW_AUDIT_EVENT_TYPES.orchestrationRerunTriggered);
       expect(rerunEvent.actorId).toBe("system-orchestrator");
+      expect(rerunEvent.actor).toEqual(
+        expect.objectContaining({
+          id: "system-orchestrator",
+          type: AUDIT_ACTOR_TYPES.service,
+          authenticated: false,
+        }),
+      );
       expect((rerunEvent.payload as any).rerunScope).toEqual(["reconciliation"]);
     });
   });

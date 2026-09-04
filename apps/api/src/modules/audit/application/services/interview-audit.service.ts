@@ -1,7 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import {
+  AUDIT_ACTOR_IDS,
   AUDIT_ACTOR_TYPES,
   AUDIT_RESOURCE_TYPES,
+  type AuditActorType,
   type AuditDecision,
 } from "@lcsp/contracts/audit";
 import {
@@ -30,6 +32,10 @@ export type RecordStatementAuditInput = {
   interpretation?: string;
   evidenceRefs?: string[];
   sourceSnapshot?: InterviewSourceSnapshotRef;
+  runId?: string;
+  stage?: string;
+  guidanceVersion?: string;
+  modelId?: string;
   correlationId: string;
   causationId?: string | null;
   decision?: AuditDecision | null;
@@ -55,8 +61,14 @@ export type RecordSupersessionAuditInput = {
   threadId: string;
   turnId: string | number;
   questionId?: string;
+  questionIntent?: string;
+  interpretation?: string;
   evidenceRefs?: string[];
   sourceSnapshot?: InterviewSourceSnapshotRef;
+  runId?: string;
+  stage?: string;
+  guidanceVersion?: string;
+  modelId?: string;
   correlationId: string;
   causationId?: string | null;
 };
@@ -77,6 +89,12 @@ export type RecordCrossRespondentConflictAuditInput = {
   sessionId: string;
   threadId: string;
   questionId?: string;
+  evidenceRefs?: string[];
+  sourceSnapshot?: InterviewSourceSnapshotRef;
+  runId?: string;
+  stage?: string;
+  guidanceVersion?: string;
+  modelId?: string;
   correlationId: string;
   causationId?: string | null;
 };
@@ -112,6 +130,10 @@ export type RecordDownstreamImpactAuditInput = {
   sessionId: string;
   threadId: string;
   runId: string;
+  stage?: string;
+  guidanceVersion?: string;
+  modelId?: string;
+  sourceSnapshot?: InterviewSourceSnapshotRef;
   correlationId: string;
   causationId?: string | null;
 };
@@ -126,6 +148,12 @@ export type RecordOrchestrationRerunAuditInput = {
   rerunScope: string[];
   summary: string;
   runId: string;
+  sessionId?: string;
+  threadId?: string;
+  stage?: string;
+  guidanceVersion?: string;
+  modelId?: string;
+  sourceSnapshot?: InterviewSourceSnapshotRef;
   correlationId: string;
   causationId?: string | null;
 };
@@ -159,10 +187,12 @@ export class InterviewAuditService {
    * @param input Material statement audit input parameters.
    */
   async recordStatement(input: RecordStatementAuditInput): Promise<void> {
+    const actor = this.authenticatedRespondent(input.respondentRef);
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.statementRecorded,
       assessmentId: input.assessmentId,
-      actorRef: input.respondentRef,
+      actor,
+      respondentRef: input.respondentRef,
       correlationId: input.correlationId,
       causationId: input.causationId,
       decision: input.decision,
@@ -178,6 +208,10 @@ export class InterviewAuditService {
         interpretation: input.interpretation,
         evidenceRefs: input.evidenceRefs ?? [],
         sourceSnapshot: input.sourceSnapshot,
+        runId: input.runId,
+        stage: input.stage,
+        guidanceVersion: input.guidanceVersion,
+        modelId: input.modelId,
       },
     });
   }
@@ -188,10 +222,12 @@ export class InterviewAuditService {
    * @param input Statement confirmation audit input parameters.
    */
   async recordConfirmation(input: RecordConfirmationAuditInput): Promise<void> {
+    const actor = this.authenticatedRespondent(input.respondentRef);
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.statementConfirmed,
       assessmentId: input.assessmentId,
-      actorRef: input.respondentRef,
+      actor,
+      respondentRef: input.respondentRef,
       correlationId: input.correlationId,
       causationId: input.causationId,
       decision: input.decision,
@@ -207,6 +243,10 @@ export class InterviewAuditService {
         interpretation: input.interpretation,
         evidenceRefs: input.evidenceRefs ?? [],
         sourceSnapshot: input.sourceSnapshot,
+        runId: input.runId,
+        stage: input.stage,
+        guidanceVersion: input.guidanceVersion,
+        modelId: input.modelId,
       },
     });
   }
@@ -217,10 +257,12 @@ export class InterviewAuditService {
    * @param input Supersession audit input parameters.
    */
   async recordSupersession(input: RecordSupersessionAuditInput): Promise<void> {
+    const actor = this.authenticatedRespondent(input.respondentRef);
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.contextSuperseded,
       assessmentId: input.assessmentId,
-      actorRef: input.respondentRef,
+      actor,
+      respondentRef: input.respondentRef,
       correlationId: input.correlationId,
       causationId: input.causationId,
       sessionId: input.sessionId,
@@ -233,8 +275,14 @@ export class InterviewAuditService {
         threadId: input.threadId,
         turnId: input.turnId,
         questionId: input.questionId,
+        questionIntent: input.questionIntent,
+        interpretation: input.interpretation,
         evidenceRefs: input.evidenceRefs ?? [],
         sourceSnapshot: input.sourceSnapshot,
+        runId: input.runId,
+        stage: input.stage,
+        guidanceVersion: input.guidanceVersion,
+        modelId: input.modelId,
       },
     });
   }
@@ -248,10 +296,13 @@ export class InterviewAuditService {
   async recordCrossRespondentConflict(
     input: RecordCrossRespondentConflictAuditInput,
   ): Promise<void> {
+    const actor = this.authenticatedRespondent(input.secondRespondentRef);
+    this.authenticatedRespondent(input.firstRespondentRef);
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.contextConflicted,
       assessmentId: input.assessmentId,
-      actorRef: input.secondRespondentRef,
+      actor,
+      respondentRef: input.secondRespondentRef,
       correlationId: input.correlationId,
       causationId: input.causationId,
       sessionId: input.sessionId,
@@ -260,6 +311,12 @@ export class InterviewAuditService {
         interviewContextRevision: input.interviewContextRevision,
         threadId: input.threadId,
         questionId: input.questionId,
+        evidenceRefs: input.evidenceRefs ?? [],
+        sourceSnapshot: input.sourceSnapshot,
+        runId: input.runId,
+        stage: input.stage,
+        guidanceVersion: input.guidanceVersion,
+        modelId: input.modelId,
         conflict: {
           firstRespondent: input.firstRespondentRef,
           firstValue: input.firstStatementValue,
@@ -281,10 +338,12 @@ export class InterviewAuditService {
   async recordTargetedClarification(
     input: RecordTargetedClarificationAuditInput,
   ): Promise<void> {
+    const respondentRef = this.optionalAuthenticatedRespondent(input.respondentRef);
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.targetedClarificationStarted,
       assessmentId: input.assessmentId,
-      actorRef: input.respondentRef,
+      actor: this.serviceActor(AUDIT_ACTOR_IDS.assessmentOrchestrator),
+      respondentRef,
       correlationId: input.correlationId,
       causationId: input.causationId,
       sessionId: input.sessionId,
@@ -309,10 +368,12 @@ export class InterviewAuditService {
   async recordDownstreamImpact(
     input: RecordDownstreamImpactAuditInput,
   ): Promise<void> {
+    const respondentRef = this.optionalAuthenticatedRespondent(input.respondentRef);
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.downstreamImpactEmitted,
       assessmentId: input.assessmentId,
-      actorRef: input.respondentRef,
+      actor: this.serviceActor(AUDIT_ACTOR_IDS.interviewAgent),
+      respondentRef,
       correlationId: input.correlationId,
       causationId: input.causationId,
       sessionId: input.sessionId,
@@ -322,6 +383,10 @@ export class InterviewAuditService {
         summary: input.summary,
         threadId: input.threadId,
         runId: input.runId,
+        stage: input.stage,
+        guidanceVersion: input.guidanceVersion,
+        modelId: input.modelId,
+        sourceSnapshot: input.sourceSnapshot,
       },
     });
   }
@@ -337,18 +402,61 @@ export class InterviewAuditService {
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.orchestrationRerunTriggered,
       assessmentId: input.assessmentId,
-      actorRef: input.actorId
-        ? { id: input.actorId, authenticated: true }
-        : null,
+      actor: this.serviceActor(
+        input.actorId ?? AUDIT_ACTOR_IDS.assessmentOrchestrator,
+      ),
       correlationId: input.correlationId,
       causationId: input.causationId,
+      sessionId: input.sessionId,
       payload: {
         interviewContextRevision: input.interviewContextRevision,
         rerunScope: input.rerunScope,
         summary: input.summary,
         runId: input.runId,
+        threadId: input.threadId,
+        stage: input.stage,
+        guidanceVersion: input.guidanceVersion,
+        modelId: input.modelId,
+        sourceSnapshot: input.sourceSnapshot,
       },
     });
+  }
+
+  private authenticatedRespondent(
+    input: InterviewAuditActorRef,
+  ): InterviewAuditEventActor {
+    if (!input.id.trim() || input.authenticated !== true) {
+      throw new TypeError(
+        "Interview audit respondent must come from authenticated runtime context",
+      );
+    }
+    return {
+      id: input.id,
+      type: AUDIT_ACTOR_TYPES.user,
+      role: input.role,
+      name: input.name,
+      authenticated: true,
+    };
+  }
+
+  private optionalAuthenticatedRespondent(
+    input: InterviewAuditActorRef | null | undefined,
+  ): InterviewAuditActorRef | undefined {
+    if (!input) return undefined;
+    this.authenticatedRespondent(input);
+    return input;
+  }
+
+  private serviceActor(id: string): InterviewAuditEventActor {
+    const actorId = id.trim();
+    if (!actorId) {
+      throw new TypeError("Interview audit service actor id must not be empty");
+    }
+    return {
+      id: actorId,
+      type: AUDIT_ACTOR_TYPES.service,
+      authenticated: false,
+    };
   }
 
   /**
@@ -357,31 +465,21 @@ export class InterviewAuditService {
   private async writeInterviewEvent(params: {
     eventType: InterviewAuditEventType;
     assessmentId: string;
-    actorRef?: InterviewAuditActorRef | null;
+    actor: InterviewAuditEventActor;
+    respondentRef?: InterviewAuditActorRef;
     correlationId: string;
     causationId?: string | null;
     sessionId?: string | null;
     decision?: AuditDecision | null;
     payload: Record<string, unknown>;
   }): Promise<void> {
-    const actorId = params.actorRef?.id ?? null;
-    const actorType = actorId
-      ? AUDIT_ACTOR_TYPES.user
-      : AUDIT_ACTOR_TYPES.system;
-
-    const actorEnvelope = {
-      id: actorId,
-      type: actorType,
-      role: params.actorRef?.role,
-      name: params.actorRef?.name,
-      authenticated: params.actorRef?.authenticated ?? Boolean(actorId),
-    };
+    const actorId = params.actor.id;
 
     try {
       await this.auditWriter.write({
         eventType: params.eventType,
         actorId,
-        actor: actorEnvelope,
+        actor: params.actor,
         assessmentId: params.assessmentId,
         resourceType: AUDIT_RESOURCE_TYPES.assessment,
         resourceId: params.assessmentId,
@@ -392,7 +490,9 @@ export class InterviewAuditService {
         result: params.eventType,
         payload: {
           ...params.payload,
-          respondentRef: actorEnvelope,
+          ...(params.respondentRef
+            ? { respondentRef: params.respondentRef }
+            : {}),
         },
       });
     } catch (error) {
@@ -403,3 +503,11 @@ export class InterviewAuditService {
     }
   }
 }
+
+type InterviewAuditEventActor = {
+  id: string | null;
+  type: AuditActorType;
+  role?: string;
+  name?: string;
+  authenticated: boolean;
+};
