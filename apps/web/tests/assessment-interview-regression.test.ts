@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   ASSESSMENT_CONTEXT_AUTHORITY_STATUSES,
@@ -20,7 +21,7 @@ import {
   type AssessmentInterviewRuntimeState,
 } from "@lcsp/contracts/evidence";
 
-const workspaceRoot = new URL("../src/", import.meta.url);
+const workspaceRoot = fileURLToPath(new URL("../src/", import.meta.url));
 const contractsPath = new URL(
   "../../../packages/contracts/src/evidence/assessment-interview.ts",
   import.meta.url,
@@ -204,7 +205,7 @@ test("workflow run renders dynamic interview controls through shared workspace c
 
 test("web production cutover has no active wizard customer-context consumers", async () => {
   const assessmentQueries = await readFile(assessmentQueriesPath, "utf8");
-  const files = await collectFiles(new URL(".", workspaceRoot).pathname);
+  const files = await collectFiles(workspaceRoot);
   const activeFiles = files.filter((file) => !file.includes("/features/wizard/"));
   const wizardRouteFiles = activeFiles.filter((file) =>
     /\/app\/api\/assessments\/\[id\]\/wizard\//.test(file),
