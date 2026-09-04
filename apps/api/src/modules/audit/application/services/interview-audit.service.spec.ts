@@ -19,13 +19,20 @@ import { InterviewAuditService } from "./interview-audit.service.js";
 describe("InterviewAuditService", () => {
   let service: InterviewAuditService;
   let writeMock: jest.Mock<(event: AuditEventInput) => Promise<void>>;
+  let writeInTxMock: jest.Mock<
+    (event: AuditEventInput, tx: unknown) => Promise<void>
+  >;
 
   beforeEach(() => {
     writeMock = jest
       .fn<(event: AuditEventInput) => Promise<void>>()
       .mockResolvedValue(undefined);
+    writeInTxMock = jest
+      .fn<(event: AuditEventInput, tx: unknown) => Promise<void>>()
+      .mockResolvedValue(undefined);
     const auditWriter = {
       write: writeMock,
+      writeInTx: writeInTxMock,
     } as unknown as AuditWriterService;
     service = new InterviewAuditService(auditWriter);
   });
@@ -501,4 +508,42 @@ describe("InterviewAuditService", () => {
       });
     });
   });
+
+  describe("transactional writes", () => {
+    it("delegates to auditWriter.writeInTx when a transaction client is provided", async () => {
+      const mockTx = { auditEvent: { create: jest.fn() } };
+      await service.recordCustomerAnswer(
+        {
+          assessmentId: "assessment-123",
+          respondentRef: {
+            id: "user-456",
+            role: "CUSTOMER",
+            name: "Alice Owner",
+            authenticated: true,
+          },
+          questionId: "q-1",
+          questionIntent: ASSESSMENT_INTERVIEW_QUESTION_INTENTS.ask,
+          responseMode: ASSESSMENT_INTERVIEW_CONTROLS.confirmAdjust,
+          responseAction: "CONFIRM",
+          answerValue: "TypeScript",
+          interviewContextRevision: "1",
+          sessionId: "thread-abc",
+          threadId: "thread-abc",
+          turnId: 1,
+          sourceSnapshot: {
+            sourceVersion: "v1",
+            pgeVersion: "v1",
+          },
+          correlationId: "corr-tx-1",
+        },
+        mockTx as never,
+      );
+
+      expect(writeInTxMock).toHaveBeenCalledTimes(1);
+      expect(writeMock).not.toHaveBeenCalled();
+      expect(writeInTxMock.mock.calls[0][1]).toBe(mockTx);
+      expect(writeInTxMock.mock.calls[0][0].sessionId).toBe("thread-abc");
+    });
+  });
 });
+

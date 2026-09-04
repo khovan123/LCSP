@@ -1,4 +1,6 @@
 import type {
+  AssessmentInterviewAnswerAction,
+  AssessmentInterviewControl,
   AssessmentInterviewOutcome,
   AssessmentInterviewQuestionIntent,
 } from "../evidence/assessment-interview.ts";
@@ -183,6 +185,8 @@ export type InterviewAuditTrailItem = {
   conflict?: InterviewAuditConflictDetail;
   questionId?: string;
   questionIntent?: AssessmentInterviewQuestionIntent;
+  responseMode?: AssessmentInterviewControl;
+  responseAction?: AssessmentInterviewAnswerAction;
   outcome?: AssessmentInterviewOutcome;
   interpretation?: string;
   evidenceRefs: string[];

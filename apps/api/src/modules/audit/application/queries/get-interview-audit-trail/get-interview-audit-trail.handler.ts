@@ -14,8 +14,12 @@ import {
   type InterviewTechnicalCoverageState,
 } from "@lcsp/contracts/audit";
 import {
+  ASSESSMENT_INTERVIEW_ANSWER_ACTIONS,
+  ASSESSMENT_INTERVIEW_CONTROLS,
   ASSESSMENT_INTERVIEW_OUTCOMES,
   ASSESSMENT_INTERVIEW_QUESTION_INTENTS,
+  type AssessmentInterviewAnswerAction,
+  type AssessmentInterviewControl,
   type AssessmentInterviewOutcome,
   type AssessmentInterviewQuestionIntent,
 } from "@lcsp/contracts/evidence";
@@ -95,6 +99,30 @@ function readOutcome(value: unknown): AssessmentInterviewOutcome | undefined {
     cleaned as AssessmentInterviewOutcome,
   )
     ? (cleaned as AssessmentInterviewOutcome)
+    : undefined;
+}
+
+function readResponseMode(
+  value: unknown,
+): AssessmentInterviewControl | undefined {
+  const cleaned = cleanString(value);
+  if (!cleaned) return undefined;
+  return Object.values(ASSESSMENT_INTERVIEW_CONTROLS).includes(
+    cleaned as AssessmentInterviewControl,
+  )
+    ? (cleaned as AssessmentInterviewControl)
+    : undefined;
+}
+
+function readResponseAction(
+  value: unknown,
+): AssessmentInterviewAnswerAction | undefined {
+  const cleaned = cleanString(value);
+  if (!cleaned) return undefined;
+  return Object.values(ASSESSMENT_INTERVIEW_ANSWER_ACTIONS).includes(
+    cleaned as AssessmentInterviewAnswerAction,
+  )
+    ? (cleaned as AssessmentInterviewAnswerAction)
     : undefined;
 }
 
@@ -274,6 +302,8 @@ export class GetInterviewAuditTrailHandler implements IQueryHandler<
         conflict,
         questionId: cleanString(payloadRecord.questionId) ?? undefined,
         questionIntent: readQuestionIntent(payloadRecord.questionIntent),
+        responseMode: readResponseMode(payloadRecord.responseMode),
+        responseAction: readResponseAction(payloadRecord.responseAction),
         outcome: readOutcome(payloadRecord.outcome),
         interpretation: cleanString(payloadRecord.interpretation) ?? undefined,
         evidenceRefs,

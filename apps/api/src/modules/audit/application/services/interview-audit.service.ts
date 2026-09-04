@@ -13,9 +13,12 @@ import {
   type InterviewSourceSnapshotRef,
 } from "@lcsp/contracts/audit";
 import type {
+  AssessmentInterviewAnswerAction,
+  AssessmentInterviewControl,
   AssessmentInterviewOutcome,
   AssessmentInterviewQuestionIntent,
 } from "@lcsp/contracts/evidence";
+import type { Prisma } from "@prisma/client";
 
 import { AuditWriterService } from "../../../../platform/audit/audit-writer.service.js";
 
@@ -81,8 +84,8 @@ export type RecordCustomerAnswerAuditInput = {
   respondentRef: InterviewAuditActorRef;
   questionId: string;
   questionIntent?: AssessmentInterviewQuestionIntent;
-  responseMode?: string;
-  responseAction?: string;
+  responseMode?: AssessmentInterviewControl | string;
+  responseAction?: AssessmentInterviewAnswerAction | string;
   answerValue: unknown;
   interviewContextRevision: string;
   sessionId?: string;
@@ -256,6 +259,7 @@ export class InterviewAuditService {
    */
   async recordQuestionPersisted(
     input: RecordQuestionPersistedAuditInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.questionPersisted,
@@ -279,6 +283,7 @@ export class InterviewAuditService {
         guidanceVersion: input.guidanceVersion,
         modelId: input.modelId,
       },
+      tx,
     });
   }
 
@@ -287,6 +292,7 @@ export class InterviewAuditService {
    */
   async recordCustomerAnswer(
     input: RecordCustomerAnswerAuditInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     const actor = this.authenticatedRespondent(input.respondentRef);
     await this.writeInterviewEvent({
@@ -309,6 +315,7 @@ export class InterviewAuditService {
         sourceSnapshot: input.sourceSnapshot,
         evidenceRefs: input.evidenceRefs ?? [],
       },
+      tx,
     });
   }
 
@@ -317,6 +324,7 @@ export class InterviewAuditService {
    */
   async recordContextRevisionCreated(
     input: RecordContextRevisionCreatedAuditInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     const respondentRef = this.optionalAuthenticatedRespondent(
       input.respondentRef,
@@ -347,6 +355,7 @@ export class InterviewAuditService {
         sourceSnapshot: input.sourceSnapshot,
         evidenceRefs: input.governedEvidenceRefs ?? [],
       },
+      tx,
     });
   }
 
@@ -355,6 +364,7 @@ export class InterviewAuditService {
    */
   async recordInterviewOutcome(
     input: RecordInterviewOutcomeAuditInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     const respondentRef = this.optionalAuthenticatedRespondent(
       input.respondentRef,
@@ -377,13 +387,17 @@ export class InterviewAuditService {
             : undefined,
         threadId: input.threadId,
       },
+      tx,
     });
   }
 
   /**
    * Records a material Customer context statement in the canonical audit log.
    */
-  async recordStatement(input: RecordStatementAuditInput): Promise<void> {
+  async recordStatement(
+    input: RecordStatementAuditInput,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
     const actor = this.authenticatedRespondent(input.respondentRef);
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.statementRecorded,
@@ -410,13 +424,17 @@ export class InterviewAuditService {
         guidanceVersion: input.guidanceVersion,
         modelId: input.modelId,
       },
+      tx,
     });
   }
 
   /**
    * Records an explicit confirmation of a material statement by an authenticated respondent.
    */
-  async recordConfirmation(input: RecordConfirmationAuditInput): Promise<void> {
+  async recordConfirmation(
+    input: RecordConfirmationAuditInput,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
     const actor = this.authenticatedRespondent(input.respondentRef);
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.statementConfirmed,
@@ -443,13 +461,17 @@ export class InterviewAuditService {
         guidanceVersion: input.guidanceVersion,
         modelId: input.modelId,
       },
+      tx,
     });
   }
 
   /**
    * Records a context supersession where an existing context value is corrected or updated.
    */
-  async recordSupersession(input: RecordSupersessionAuditInput): Promise<void> {
+  async recordSupersession(
+    input: RecordSupersessionAuditInput,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
     const actor = this.authenticatedRespondent(input.respondentRef);
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.contextSuperseded,
@@ -477,6 +499,7 @@ export class InterviewAuditService {
         guidanceVersion: input.guidanceVersion,
         modelId: input.modelId,
       },
+      tx,
     });
   }
 
@@ -485,6 +508,7 @@ export class InterviewAuditService {
    */
   async recordCrossRespondentConflict(
     input: RecordCrossRespondentConflictAuditInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     const actor = this.authenticatedRespondent(input.secondRespondentRef);
     this.authenticatedRespondent(input.firstRespondentRef);
@@ -516,6 +540,7 @@ export class InterviewAuditService {
           secondTurnId: input.secondTurnId,
         },
       },
+      tx,
     });
   }
 
@@ -524,6 +549,7 @@ export class InterviewAuditService {
    */
   async recordTargetedClarification(
     input: RecordTargetedClarificationAuditInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     const respondentRef = this.optionalAuthenticatedRespondent(
       input.respondentRef,
@@ -547,6 +573,7 @@ export class InterviewAuditService {
         modelId: input.modelId,
         sourceSnapshot: input.sourceSnapshot,
       },
+      tx,
     });
   }
 
@@ -555,6 +582,7 @@ export class InterviewAuditService {
    */
   async recordDownstreamImpact(
     input: RecordDownstreamImpactAuditInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     const respondentRef = this.optionalAuthenticatedRespondent(
       input.respondentRef,
@@ -578,6 +606,7 @@ export class InterviewAuditService {
         modelId: input.modelId,
         sourceSnapshot: input.sourceSnapshot,
       },
+      tx,
     });
   }
 
@@ -586,6 +615,7 @@ export class InterviewAuditService {
    */
   async recordOrchestrationRerun(
     input: RecordOrchestrationRerunAuditInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     await this.writeInterviewEvent({
       eventType: INTERVIEW_AUDIT_EVENT_TYPES.orchestrationRerunTriggered,
@@ -607,6 +637,7 @@ export class InterviewAuditService {
         modelId: input.modelId,
         sourceSnapshot: input.sourceSnapshot,
       },
+      tx,
     });
   }
 
@@ -660,29 +691,38 @@ export class InterviewAuditService {
     sessionId?: string | null;
     decision?: AuditDecision | null;
     payload: Record<string, unknown>;
+    tx?: Prisma.TransactionClient;
   }): Promise<void> {
     const actorId = params.actor.id;
+    const eventInput = {
+      eventType: params.eventType,
+      actorId,
+      actor: params.actor,
+      assessmentId: params.assessmentId,
+      resourceType: AUDIT_RESOURCE_TYPES.assessment,
+      resourceId: params.assessmentId,
+      correlationId: params.correlationId,
+      causationId: params.causationId ?? null,
+      sessionId:
+        params.sessionId ??
+        (params.payload.threadId as string | undefined) ??
+        null,
+      decision: params.decision ?? null,
+      result: params.eventType,
+      payload: {
+        ...params.payload,
+        ...(params.respondentRef
+          ? { respondentRef: params.respondentRef }
+          : {}),
+      },
+    };
 
     try {
-      await this.auditWriter.write({
-        eventType: params.eventType,
-        actorId,
-        actor: params.actor,
-        assessmentId: params.assessmentId,
-        resourceType: AUDIT_RESOURCE_TYPES.assessment,
-        resourceId: params.assessmentId,
-        correlationId: params.correlationId,
-        causationId: params.causationId ?? null,
-        sessionId: params.sessionId ?? null,
-        decision: params.decision ?? null,
-        result: params.eventType,
-        payload: {
-          ...params.payload,
-          ...(params.respondentRef
-            ? { respondentRef: params.respondentRef }
-            : {}),
-        },
-      });
+      if (params.tx) {
+        await this.auditWriter.writeInTx(eventInput, params.tx);
+      } else {
+        await this.auditWriter.write(eventInput);
+      }
     } catch (error) {
       this.logger.error(
         `Failed to record interview audit event ${params.eventType} for assessment ${params.assessmentId}: ${(error as Error).message}`,
